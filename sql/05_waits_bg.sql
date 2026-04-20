@@ -6,18 +6,18 @@
 -- the top-N per window, and render them as a pivot table.
 --
 
-SET DEFINE ON
+SET DEFINE '~'
 
 INSERT INTO awr_trend_waits (run_id, week_offset, scope, event_name, wait_class,
                              total_waits, time_waited_us, avg_wait_ms, rank_in_window)
 WITH run AS (
     SELECT run_id, dbid, instance_number, top_n
-    FROM   awr_trend_runs WHERE run_id = &run_id
+    FROM   awr_trend_runs WHERE run_id = ~run_id
 ),
 wins AS (
     SELECT run_id, week_offset, begin_snap_id, end_snap_id
     FROM   awr_trend_windows
-    WHERE  run_id = &run_id AND valid_flag = 'Y'
+    WHERE  run_id = ~run_id AND valid_flag = 'Y'
 ),
 pairs AS (
     SELECT
@@ -79,8 +79,8 @@ DECLARE
     v_us         NUMBER;
     v_rank       NUMBER;
 BEGIN
-    SELECT weeks_back INTO v_weeks_back FROM awr_trend_runs WHERE run_id = &run_id;
-    SELECT COUNT(*) INTO v_cnt FROM awr_trend_waits WHERE run_id = &run_id AND scope = 'BG';
+    SELECT weeks_back INTO v_weeks_back FROM awr_trend_runs WHERE run_id = ~run_id;
+    SELECT COUNT(*) INTO v_cnt FROM awr_trend_waits WHERE run_id = ~run_id AND scope = 'BG';
 
     DBMS_OUTPUT.PUT_LINE('<section id="waits-bg"><h2>Background wait events</h2>');
 
@@ -104,7 +104,7 @@ BEGIN
                MAX(CASE WHEN week_offset = 0 THEN time_waited_us END)   AS cur_us,
                MAX(CASE WHEN week_offset = 0 THEN rank_in_window END)   AS cur_rnk
         FROM   awr_trend_waits
-        WHERE  run_id = &run_id AND scope = 'BG'
+        WHERE  run_id = ~run_id AND scope = 'BG'
         GROUP BY event_name
         ORDER BY
             CASE WHEN MAX(CASE WHEN week_offset = 0 THEN rank_in_window END) IS NULL THEN 1 ELSE 0 END,
@@ -125,7 +125,7 @@ BEGIN
             SELECT MAX(time_waited_us), MAX(rank_in_window)
             INTO   v_us, v_rank
             FROM   awr_trend_waits
-            WHERE  run_id = &run_id AND scope = 'BG'
+            WHERE  run_id = ~run_id AND scope = 'BG'
             AND    event_name = e.event_name AND week_offset = k;
 
             v_row := v_row || '<td class="num">' ||

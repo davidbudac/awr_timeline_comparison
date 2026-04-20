@@ -7,7 +7,7 @@
 -- show the full text.
 --
 
-SET DEFINE ON
+SET DEFINE '~'
 
 INSERT INTO awr_trend_top_sql (
     run_id, week_offset, dimension, rank_in_window,
@@ -18,12 +18,12 @@ INSERT INTO awr_trend_top_sql (
 )
 WITH run AS (
     SELECT run_id, dbid, instance_number, top_n
-    FROM   awr_trend_runs WHERE run_id = &run_id
+    FROM   awr_trend_runs WHERE run_id = ~run_id
 ),
 wins AS (
     SELECT run_id, week_offset, begin_snap_id, end_snap_id
     FROM   awr_trend_windows
-    WHERE  run_id = &run_id AND valid_flag = 'Y'
+    WHERE  run_id = ~run_id AND valid_flag = 'Y'
 ),
 agg AS (
     SELECT
@@ -47,10 +47,10 @@ agg AS (
 ),
 ranked AS (
     SELECT a.*,
-           RANK() OVER (PARTITION BY run_id, week_offset ORDER BY elapsed_time_delta_us DESC) AS r_ela,
-           RANK() OVER (PARTITION BY run_id, week_offset ORDER BY cpu_time_delta_us     DESC) AS r_cpu,
-           RANK() OVER (PARTITION BY run_id, week_offset ORDER BY buffer_gets_delta     DESC) AS r_gets,
-           RANK() OVER (PARTITION BY run_id, week_offset ORDER BY executions_delta      DESC) AS r_exec
+           ROW_NUMBER() OVER (PARTITION BY run_id, week_offset ORDER BY elapsed_time_delta_us DESC) AS r_ela,
+           ROW_NUMBER() OVER (PARTITION BY run_id, week_offset ORDER BY cpu_time_delta_us     DESC) AS r_cpu,
+           ROW_NUMBER() OVER (PARTITION BY run_id, week_offset ORDER BY buffer_gets_delta     DESC) AS r_gets,
+           ROW_NUMBER() OVER (PARTITION BY run_id, week_offset ORDER BY executions_delta      DESC) AS r_exec
     FROM   agg a
 ),
 picked AS (
@@ -80,10 +80,19 @@ SELECT
     p.sql_id, p.plan_hash_value,
     p.executions_delta, p.elapsed_time_delta_us, p.cpu_time_delta_us,
     p.buffer_gets_delta, p.disk_reads_delta, p.rows_processed_delta,
-    SUBSTR(NVL(t.sql_text, ''), 1, 400) AS sql_text_short
+    t.sql_text_short
 FROM   picked p
-LEFT JOIN dba_hist_sqltext t
-    ON t.dbid = (SELECT dbid FROM run)
+CROSS JOIN run r
+LEFT JOIN (
+    SELECT dbid, sql_id, sql_text_short
+    FROM (
+        SELECT dbid, sql_id,
+               DBMS_LOB.SUBSTR(sql_text, 400, 1) AS sql_text_short,
+               ROW_NUMBER() OVER (PARTITION BY dbid, sql_id ORDER BY ROWID) AS rn
+        FROM   dba_hist_sqltext
+    ) WHERE rn = 1
+) t
+    ON t.dbid = r.dbid
    AND t.sql_id = p.sql_id;
 
 COMMIT;
@@ -116,7 +125,7 @@ DECLARE
     v_dims t_dim_tab;
 BEGIN
     SELECT weeks_back, top_n INTO v_weeks_back, v_top_n
-    FROM   awr_trend_runs WHERE run_id = &run_id;
+    FROM   awr_trend_runs WHERE run_id = ~run_id;
 
     v_dims := t_dim_tab(
         t_dim('ELAPSED','By elapsed time','s',   'ELAPSED_TIME_DELTA_US', 1e6),
@@ -149,7 +158,7 @@ BEGIN
         FOR s IN (
             SELECT DISTINCT sql_id
             FROM   awr_trend_top_sql
-            WHERE  run_id = &run_id
+            WHERE  run_id = ~run_id
             AND    dimension = v_dims(i).code
             -- All SQLs that appeared in the top-N of this dimension in any window.
         ) LOOP
@@ -158,7 +167,7 @@ BEGIN
             SELECT MAX(plan_hash_value)
             INTO   v_phv_cur
             FROM   awr_trend_top_sql
-            WHERE  run_id = &run_id AND dimension = v_dims(i).code
+            WHERE  run_id = ~run_id AND dimension = v_dims(i).code
             AND    sql_id = s.sql_id AND week_offset = 0;
 
             v_row := '<tr>'
@@ -180,7 +189,7 @@ BEGIN
                     MAX(rank_in_window)
                 INTO v_cur, v_cur_rnk
                 FROM awr_trend_top_sql
-                WHERE run_id = &run_id AND dimension = v_dims(i).code
+                WHERE run_id = ~run_id AND dimension = v_dims(i).code
                   AND sql_id = s.sql_id AND week_offset = 0;
 
                 v_row := v_row || '<td class="num"><b>' ||
@@ -205,7 +214,7 @@ BEGIN
                         MAX(plan_hash_value)
                     INTO v_v, v_r, v_p
                     FROM awr_trend_top_sql
-                    WHERE run_id = &run_id AND dimension = v_dims(i).code
+                    WHERE run_id = ~run_id AND dimension = v_dims(i).code
                       AND sql_id = s.sql_id AND week_offset = k;
 
                     v_row := v_row || '<td class="num">' ||
@@ -227,7 +236,7 @@ BEGIN
                 SELECT MAX(sql_text_short)
                 INTO   v_snip
                 FROM   awr_trend_top_sql
-                WHERE  run_id = &run_id AND dimension = v_dims(i).code
+                WHERE  run_id = ~run_id AND dimension = v_dims(i).code
                 AND    sql_id = s.sql_id;
                 v_row := v_row || '<td class="mono" style="max-width:500px;">'
                     || DBMS_XMLGEN.CONVERT(SUBSTR(NVL(v_snip, ''), 1, 180))
@@ -246,18 +255,42 @@ BEGIN
     -- Full SQL text dump ---------------------------------------------------
     DBMS_OUTPUT.PUT_LINE('<details><summary>Full SQL text for all listed SQL_IDs</summary>');
     FOR t IN (
-        SELECT DISTINCT ts.sql_id, ht.sql_text
-        FROM   awr_trend_top_sql ts
-        LEFT JOIN dba_hist_sqltext ht
-            ON ht.dbid = (SELECT dbid FROM awr_trend_runs WHERE run_id = &run_id)
+        WITH r AS (SELECT dbid FROM awr_trend_runs WHERE run_id = ~run_id),
+        tx AS (
+            SELECT dbid, sql_id, sql_text
+            FROM (
+                SELECT dbid, sql_id, sql_text,
+                       ROW_NUMBER() OVER (PARTITION BY dbid, sql_id ORDER BY ROWID) AS rn
+                FROM   dba_hist_sqltext
+            ) WHERE rn = 1
+        )
+        SELECT ts.sql_id, ht.sql_text
+        FROM   (SELECT DISTINCT sql_id FROM awr_trend_top_sql WHERE run_id = ~run_id) ts
+        CROSS JOIN r
+        LEFT JOIN tx ht
+            ON ht.dbid = r.dbid
            AND ht.sql_id = ts.sql_id
-        WHERE  ts.run_id = &run_id
         ORDER BY ts.sql_id
     ) LOOP
-        DBMS_OUTPUT.PUT_LINE('<h3>' || t.sql_id || '</h3>');
-        DBMS_OUTPUT.PUT_LINE('<pre class="sql">'
-            || DBMS_XMLGEN.CONVERT(NVL(t.sql_text, '(text not in DBA_HIST_SQLTEXT)'))
-            || '</pre>');
+        DECLARE
+            v_full_len  NUMBER;
+            v_snip      VARCHAR2(8000);
+        BEGIN
+            IF t.sql_text IS NULL THEN
+                v_full_len := 0;
+                v_snip     := '(text not in DBA_HIST_SQLTEXT)';
+            ELSE
+                v_full_len := DBMS_LOB.GETLENGTH(t.sql_text);
+                v_snip     := DBMS_LOB.SUBSTR(t.sql_text, 8000, 1);
+            END IF;
+            DBMS_OUTPUT.PUT_LINE('<h3>' || t.sql_id || '</h3>');
+            DBMS_OUTPUT.PUT_LINE('<pre class="sql">'
+                || DBMS_XMLGEN.CONVERT(v_snip)
+                || CASE WHEN v_full_len > 8000
+                        THEN CHR(10) || '... (truncated, ' || v_full_len || ' chars total)'
+                        ELSE '' END
+                || '</pre>');
+        END;
     END LOOP;
     DBMS_OUTPUT.PUT_LINE('</details>');
 

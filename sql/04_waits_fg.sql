@@ -6,7 +6,7 @@
 -- keep the top-N per window, plus one row per wait_class for the rollup.
 --
 
-SET DEFINE ON
+SET DEFINE '~'
 
 --
 -- Per-event FG deltas (TOP-N per window).
@@ -15,12 +15,12 @@ INSERT INTO awr_trend_waits (run_id, week_offset, scope, event_name, wait_class,
                              total_waits, time_waited_us, avg_wait_ms, rank_in_window)
 WITH run AS (
     SELECT run_id, dbid, instance_number, top_n
-    FROM   awr_trend_runs WHERE run_id = &run_id
+    FROM   awr_trend_runs WHERE run_id = ~run_id
 ),
 wins AS (
     SELECT run_id, week_offset, begin_snap_id, end_snap_id
     FROM   awr_trend_windows
-    WHERE  run_id = &run_id AND valid_flag = 'Y'
+    WHERE  run_id = ~run_id AND valid_flag = 'Y'
 ),
 pairs AS (
     SELECT
@@ -74,11 +74,11 @@ WHERE  rnk <= (SELECT top_n FROM run);
 INSERT INTO awr_trend_waits (run_id, week_offset, scope, event_name, wait_class,
                              total_waits, time_waited_us, avg_wait_ms, rank_in_window)
 WITH run AS (
-    SELECT run_id, dbid, instance_number FROM awr_trend_runs WHERE run_id = &run_id
+    SELECT run_id, dbid, instance_number FROM awr_trend_runs WHERE run_id = ~run_id
 ),
 wins AS (
     SELECT run_id, week_offset, begin_snap_id, end_snap_id
-    FROM   awr_trend_windows WHERE run_id = &run_id AND valid_flag = 'Y'
+    FROM   awr_trend_windows WHERE run_id = ~run_id AND valid_flag = 'Y'
 ),
 pairs AS (
     SELECT
@@ -135,15 +135,17 @@ SET SERVEROUTPUT ON SIZE UNLIMITED
 
 DECLARE
     v_weeks_back NUMBER;
+    v_top_n      NUMBER;
     v_header     VARCHAR2(4000);
     v_row        VARCHAR2(32767);
     v_us         NUMBER;
     v_rank       NUMBER;
 BEGIN
-    SELECT weeks_back INTO v_weeks_back FROM awr_trend_runs WHERE run_id = &run_id;
+    SELECT weeks_back, top_n INTO v_weeks_back, v_top_n
+    FROM   awr_trend_runs WHERE run_id = ~run_id;
 
     DBMS_OUTPUT.PUT_LINE('<section id="waits-fg"><h2>Foreground wait events (top '
-        || (SELECT top_n FROM awr_trend_runs WHERE run_id = &run_id) || ' by time waited)</h2>');
+        || v_top_n || ' by time waited)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">Time waited shown in seconds. Rank in each window shown as a badge.</p>');
 
     -- Per-event pivot table ------------------------------------------------
@@ -159,7 +161,7 @@ BEGIN
                MAX(CASE WHEN week_offset = 0 THEN time_waited_us END) AS cur_us,
                MAX(CASE WHEN week_offset = 0 THEN rank_in_window END) AS cur_rnk
         FROM   awr_trend_waits
-        WHERE  run_id = &run_id AND scope = 'FG'
+        WHERE  run_id = ~run_id AND scope = 'FG'
         GROUP BY event_name
         ORDER BY
             CASE WHEN MAX(CASE WHEN week_offset = 0 THEN rank_in_window END) IS NULL THEN 1 ELSE 0 END,
@@ -180,7 +182,7 @@ BEGIN
             SELECT MAX(time_waited_us), MAX(rank_in_window)
             INTO   v_us, v_rank
             FROM   awr_trend_waits
-            WHERE  run_id = &run_id AND scope = 'FG'
+            WHERE  run_id = ~run_id AND scope = 'FG'
             AND    event_name = e.event_name AND week_offset = k;
 
             v_row := v_row || '<td class="num">' ||
@@ -208,7 +210,7 @@ BEGIN
         SELECT wait_class,
                MAX(CASE WHEN week_offset = 0 THEN time_waited_us END) AS cur_us
         FROM   awr_trend_waits
-        WHERE  run_id = &run_id AND scope = 'CLASS'
+        WHERE  run_id = ~run_id AND scope = 'CLASS'
         GROUP BY wait_class
         ORDER BY MAX(CASE WHEN week_offset = 0 THEN time_waited_us END) DESC NULLS LAST
     ) LOOP
@@ -222,7 +224,7 @@ BEGIN
             SELECT MAX(time_waited_us)
             INTO   v_us
             FROM   awr_trend_waits
-            WHERE  run_id = &run_id AND scope = 'CLASS'
+            WHERE  run_id = ~run_id AND scope = 'CLASS'
             AND    wait_class = c.wait_class AND week_offset = k;
             v_row := v_row || '<td class="num">' ||
                 CASE WHEN v_us IS NULL THEN '&mdash;'

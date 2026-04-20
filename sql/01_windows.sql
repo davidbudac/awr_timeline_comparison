@@ -1,19 +1,19 @@
 --
 -- 01_windows.sql
--- Resolve the current window and &weeks_back prior aligned windows (same
+-- Resolve the current window and ~weeks_back prior aligned windows (same
 -- day-of-week, same hour-of-day) into awr_trend_windows rows, then render
 -- them as an HTML table so the reader can see which snapshots were used.
 --
--- Algorithm per window k = 0..&weeks_back:
+-- Algorithm per window k = 0..~weeks_back:
 --   win_end   := target_end - 7*k (days)
---   win_start := win_end - &win_hours/24
+--   win_start := win_end - ~win_hours/24
 --   begin_snap_id := MAX(snap_id) WHERE end_interval_time <= win_start + 5min
 --   end_snap_id   := MIN(snap_id) WHERE end_interval_time >= win_end   - 5min
 -- A window is invalid if either snap cannot be found, or the startup_time of
 -- the two snapshots differs (instance restart happened inside the window).
 --
 
-SET DEFINE ON
+SET DEFINE '~'
 
 INSERT INTO awr_trend_windows (
     run_id, week_offset, win_start_ts, win_end_ts,
@@ -22,7 +22,7 @@ INSERT INTO awr_trend_windows (
 WITH run AS (
     SELECT run_id, dbid, instance_number, target_end_ts, win_hours, weeks_back
     FROM   awr_trend_runs
-    WHERE  run_id = &run_id
+    WHERE  run_id = ~run_id
 ),
 offsets AS (
     SELECT LEVEL - 1 AS week_offset
@@ -114,7 +114,7 @@ BEGIN
         SELECT week_offset, win_start_ts, win_end_ts,
                begin_snap_id, end_snap_id, valid_flag, skip_reason
         FROM   awr_trend_windows
-        WHERE  run_id = &run_id
+        WHERE  run_id = ~run_id
         ORDER BY week_offset
     ) LOOP
         DBMS_OUTPUT.PUT_LINE(

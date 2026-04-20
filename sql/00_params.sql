@@ -2,18 +2,18 @@
 -- 00_params.sql
 -- Resolves run parameters and emits the report header card.
 -- Expects the driver to have set these substitution variables:
---   &run_id         numeric, pre-allocated from awr_trend_run_seq
---   &target_end     'YYYY-MM-DD HH24:MI' (may be the sentinel 'AUTO')
---   &win_hours      number of hours in one window
---   &weeks_back     number of prior aligned windows
---   &top_n          top-N cap for SQL / waits
---   &inst_num       0 = aggregate across RAC, otherwise instance number
+--   ~run_id         numeric, pre-allocated from awr_trend_run_seq
+--   ~target_end     'YYYY-MM-DD HH24:MI' (may be the sentinel 'AUTO')
+--   ~win_hours      number of hours in one window
+--   ~weeks_back     number of prior aligned windows
+--   ~top_n          top-N cap for SQL / waits
+--   ~inst_num       0 = aggregate across RAC, otherwise instance number
 --
 -- Inserts the AWR_TREND_RUNS row with status='RUNNING' and emits a HTML
 -- <header> block describing the run.
 --
 
-SET DEFINE ON
+SET DEFINE '~'
 
 --
 -- Insert the RUNS row. Resolve AUTO -> prior-hour floor inside the INSERT so
@@ -25,21 +25,21 @@ INSERT INTO awr_trend_runs (
     generated_at, report_path, caller_user, status
 )
 SELECT
-    &run_id,
+    ~run_id,
     d.dbid,
     d.name,
-    CASE WHEN &inst_num = 0 THEN NULL ELSE &inst_num END,
+    CASE WHEN ~inst_num = 0 THEN NULL ELSE ~inst_num END,
     CAST(
         CASE
-            WHEN UPPER('&target_end') IN ('AUTO','NOW','')
+            WHEN UPPER('~target_end') IN ('AUTO','NOW','')
                 THEN TRUNC(SYSDATE, 'HH24')
-            ELSE TO_DATE('&target_end', 'YYYY-MM-DD HH24:MI')
+            ELSE TO_DATE('~target_end', 'YYYY-MM-DD HH24:MI')
         END AS TIMESTAMP
     ),
-    &win_hours, &weeks_back, &top_n,
-    CASE WHEN &inst_num = 0 THEN 'ALL' ELSE 'INSTANCE' END,
+    ~win_hours, ~weeks_back, ~top_n,
+    CASE WHEN ~inst_num = 0 THEN 'ALL' ELSE 'INSTANCE' END,
     SYSTIMESTAMP,
-    '&report_path',
+    '~report_path',
     USER,
     'RUNNING'
 FROM v$database d;
@@ -70,7 +70,7 @@ BEGIN
             (SELECT version FROM v$instance) AS db_version,
             (SELECT host_name FROM v$instance) AS host_name
         FROM awr_trend_runs r
-        WHERE r.run_id = &run_id
+        WHERE r.run_id = ~run_id
     ) LOOP
         DBMS_OUTPUT.PUT_LINE('<nav class="toc">'
             || '<b>Jump to:</b> '

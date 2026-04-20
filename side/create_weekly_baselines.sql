@@ -17,16 +17,16 @@
 SET SERVEROUTPUT ON SIZE UNLIMITED
 SET FEEDBACK OFF
 SET VERIFY OFF
-SET DEFINE ON
+SET DEFINE '~'
 
 DEFINE weeks_back  = 1
 DEFINE prefix      = 'WK_'
 DEFINE expire_days = 365
 
 DECLARE
-    v_weeks_back   NUMBER := &weeks_back;
-    v_prefix       VARCHAR2(20) := '&prefix';
-    v_expire_days  NUMBER := &expire_days;
+    v_weeks_back   NUMBER := ~weeks_back;
+    v_prefix       VARCHAR2(20) := '~prefix';
+    v_expire_days  NUMBER := ~expire_days;
     v_dbid         NUMBER;
     v_inst         NUMBER;
     v_name         VARCHAR2(128);

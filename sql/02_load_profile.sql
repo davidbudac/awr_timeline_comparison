@@ -9,7 +9,7 @@
 -- 'user rollbacks' delta (transactions).
 --
 
-SET DEFINE ON
+SET DEFINE '~'
 
 --
 -- Insert the facts.
@@ -18,12 +18,12 @@ INSERT INTO awr_trend_load_profile (run_id, week_offset, stat_name, stat_value, 
 WITH run AS (
     SELECT run_id, dbid, instance_number
     FROM   awr_trend_runs
-    WHERE  run_id = &run_id
+    WHERE  run_id = ~run_id
 ),
 wins AS (
     SELECT w.*, (CAST(w.win_end_ts AS DATE) - CAST(w.win_start_ts AS DATE)) * 86400 AS dur_sec
     FROM   awr_trend_windows w
-    WHERE  w.run_id = &run_id
+    WHERE  w.run_id = ~run_id
     AND    w.valid_flag = 'Y'
 ),
 targets AS (
@@ -117,7 +117,7 @@ DECLARE
     v_per_sec     NUMBER;
     v_per_txn     NUMBER;
 BEGIN
-    SELECT weeks_back INTO v_weeks_back FROM awr_trend_runs WHERE run_id = &run_id;
+    SELECT weeks_back INTO v_weeks_back FROM awr_trend_runs WHERE run_id = ~run_id;
 
     -- Units lookup: most stats shown as per-second; a few always as totals.
     DBMS_OUTPUT.PUT_LINE('<section id="load"><h2>Load profile &mdash; per-second rates</h2>');
@@ -139,7 +139,7 @@ BEGIN
                MAX(CASE WHEN week_offset = 0 THEN per_sec END) AS cur_ps,
                MAX(CASE WHEN week_offset = 0 THEN stat_value END) AS cur_val
         FROM   awr_trend_load_profile
-        WHERE  run_id = &run_id
+        WHERE  run_id = ~run_id
         GROUP BY stat_name
         ORDER BY CASE stat_name
             WHEN 'DB time'                    THEN 1
@@ -186,7 +186,7 @@ BEGIN
             SELECT MAX(per_sec)
             INTO   v_per_sec
             FROM   awr_trend_load_profile
-            WHERE  run_id = &run_id
+            WHERE  run_id = ~run_id
             AND    stat_name = m.stat_name
             AND    week_offset = k;
 

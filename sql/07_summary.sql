@@ -9,7 +9,7 @@
 -- parent, but we also emit a jump link from the nav bar.)
 --
 
-SET DEFINE ON
+SET DEFINE '~'
 
 --
 -- Build the union of metric rows across all three domains.
@@ -26,13 +26,13 @@ WITH unified AS (
            stat_name       AS metric_name,
            per_sec         AS value
     FROM   awr_trend_load_profile
-    WHERE  run_id = &run_id
+    WHERE  run_id = ~run_id
     AND    per_sec IS NOT NULL
     UNION ALL
     SELECT run_id, week_offset, 'METRIC',
            metric_name, avg_value
     FROM   awr_trend_sysmetric
-    WHERE  run_id = &run_id
+    WHERE  run_id = ~run_id
     AND    avg_value IS NOT NULL
     UNION ALL
     SELECT w.run_id, w.week_offset, 'WAIT',
@@ -44,7 +44,7 @@ WITH unified AS (
     FROM   awr_trend_waits w
     JOIN   awr_trend_windows win
         ON win.run_id = w.run_id AND win.week_offset = w.week_offset
-    WHERE  w.run_id = &run_id AND w.scope = 'CLASS'
+    WHERE  w.run_id = ~run_id AND w.scope = 'CLASS'
 ),
 pivoted AS (
     SELECT
@@ -87,7 +87,7 @@ COMMIT;
 --
 -- Mark the run OK.
 --
-UPDATE awr_trend_runs SET status = 'OK' WHERE run_id = &run_id;
+UPDATE awr_trend_runs SET status = 'OK' WHERE run_id = ~run_id;
 COMMIT;
 
 --
@@ -107,7 +107,7 @@ BEGIN
     SELECT COUNT(*), SUM(CASE WHEN severity = 'CRITICAL' THEN 1 ELSE 0 END),
                      SUM(CASE WHEN severity = 'WARN' THEN 1 ELSE 0 END)
     INTO   v_total, v_crit, v_warn
-    FROM   awr_trend_findings WHERE run_id = &run_id;
+    FROM   awr_trend_findings WHERE run_id = ~run_id;
 
     DBMS_OUTPUT.PUT_LINE('<section id="findings"><h2>Findings summary &mdash; ' ||
         '<span class="badge crit">' || NVL(v_crit, 0) || ' critical</span> '  ||
@@ -142,7 +142,7 @@ BEGIN
                    ELSE 5
                END AS sev_order
         FROM   awr_trend_findings f
-        WHERE  f.run_id = &run_id
+        WHERE  f.run_id = ~run_id
         ORDER BY sev_order,
                  ABS(NVL(z_score, 0)) DESC,
                  ABS(NVL(pct_delta, 0)) DESC,
@@ -184,7 +184,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'All raw facts are persisted in the scratch schema '
         || '(AWR_TREND_RUNS / _WINDOWS / _LOAD_PROFILE / _SYSMETRIC / _WAITS / _TOP_SQL / _FINDINGS) '
-        || 'keyed by run_id = ' || &run_id || '. Query them for deeper analysis.</p>');
+        || 'keyed by run_id = ' || ~run_id || '. Query them for deeper analysis.</p>');
     DBMS_OUTPUT.PUT_LINE('</section>');
 END;
 /

@@ -5,18 +5,18 @@
 -- just AVG(average) over the snapshots that fall inside each window.
 --
 
-SET DEFINE ON
+SET DEFINE '~'
 
 INSERT INTO awr_trend_sysmetric (run_id, week_offset, metric_name, metric_unit, avg_value, max_value)
 WITH run AS (
     SELECT run_id, dbid, instance_number
     FROM   awr_trend_runs
-    WHERE  run_id = &run_id
+    WHERE  run_id = ~run_id
 ),
 wins AS (
     SELECT w.run_id, w.week_offset, w.begin_snap_id, w.end_snap_id
     FROM   awr_trend_windows w
-    WHERE  w.run_id = &run_id
+    WHERE  w.run_id = ~run_id
     AND    w.valid_flag = 'Y'
 ),
 targets AS (
@@ -78,7 +78,7 @@ DECLARE
     v_val         NUMBER;
     v_fmt         VARCHAR2(40);
 BEGIN
-    SELECT weeks_back INTO v_weeks_back FROM awr_trend_runs WHERE run_id = &run_id;
+    SELECT weeks_back INTO v_weeks_back FROM awr_trend_runs WHERE run_id = ~run_id;
 
     DBMS_OUTPUT.PUT_LINE('<section id="metrics"><h2>System metrics (DBA_HIST_SYSMETRIC_SUMMARY)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">Averages over the snapshots inside each window. Values are already per-second where the metric name says so.</p>');
@@ -95,7 +95,7 @@ BEGIN
                MAX(metric_unit) AS metric_unit,
                MAX(CASE WHEN week_offset = 0 THEN avg_value END) AS cur_val
         FROM   awr_trend_sysmetric
-        WHERE  run_id = &run_id
+        WHERE  run_id = ~run_id
         GROUP BY metric_name
         ORDER BY CASE metric_name
             WHEN 'Average Active Sessions'                       THEN 1
@@ -134,7 +134,7 @@ BEGIN
             SELECT MAX(avg_value)
             INTO   v_val
             FROM   awr_trend_sysmetric
-            WHERE  run_id = &run_id
+            WHERE  run_id = ~run_id
             AND    metric_name = m.metric_name
             AND    week_offset = k;
 
