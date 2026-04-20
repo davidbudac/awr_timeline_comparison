@@ -47,10 +47,22 @@ agg AS (
 ),
 ranked AS (
     SELECT a.*,
-           ROW_NUMBER() OVER (PARTITION BY run_id, week_offset ORDER BY elapsed_time_delta_us DESC) AS r_ela,
-           ROW_NUMBER() OVER (PARTITION BY run_id, week_offset ORDER BY cpu_time_delta_us     DESC) AS r_cpu,
-           ROW_NUMBER() OVER (PARTITION BY run_id, week_offset ORDER BY buffer_gets_delta     DESC) AS r_gets,
-           ROW_NUMBER() OVER (PARTITION BY run_id, week_offset ORDER BY executions_delta      DESC) AS r_exec
+           ROW_NUMBER() OVER (
+               PARTITION BY run_id, week_offset
+               ORDER BY elapsed_time_delta_us DESC, sql_id
+           ) AS r_ela,
+           ROW_NUMBER() OVER (
+               PARTITION BY run_id, week_offset
+               ORDER BY cpu_time_delta_us DESC, sql_id
+           ) AS r_cpu,
+           ROW_NUMBER() OVER (
+               PARTITION BY run_id, week_offset
+               ORDER BY buffer_gets_delta DESC, sql_id
+           ) AS r_gets,
+           ROW_NUMBER() OVER (
+               PARTITION BY run_id, week_offset
+               ORDER BY executions_delta DESC, sql_id
+           ) AS r_exec
     FROM   agg a
 ),
 picked AS (
@@ -156,11 +168,29 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
 
         FOR s IN (
-            SELECT DISTINCT sql_id
-            FROM   awr_trend_top_sql
-            WHERE  run_id = ~run_id
-            AND    dimension = v_dims(i).code
+            SELECT sql_id
+            FROM (
+                SELECT sql_id,
+                       MIN(CASE WHEN week_offset = 0 THEN rank_in_window END) AS cur_rank,
+                       MIN(rank_in_window) AS best_rank,
+                       MAX(CASE v_dims(i).code
+                               WHEN 'ELAPSED' THEN elapsed_time_delta_us
+                               WHEN 'CPU'     THEN cpu_time_delta_us
+                               WHEN 'GETS'    THEN buffer_gets_delta
+                               WHEN 'EXEC'    THEN executions_delta
+                           END) AS best_value
+                FROM   awr_trend_top_sql
+                WHERE  run_id = ~run_id
+                AND    dimension = v_dims(i).code
+                GROUP BY sql_id
+            )
             -- All SQLs that appeared in the top-N of this dimension in any window.
+            ORDER BY
+                CASE WHEN cur_rank IS NULL THEN 1 ELSE 0 END,
+                cur_rank NULLS LAST,
+                best_rank,
+                best_value DESC,
+                sql_id
         ) LOOP
             -- Pull current week values + PHV for this SQL in this dimension.
             v_phv_cur := NULL;

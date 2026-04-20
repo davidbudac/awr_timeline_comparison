@@ -20,7 +20,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('html,body { margin:0; padding:0; background:var(--bg); color:var(--fg);'
         || ' font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;'
         || ' font-size:14px; line-height:1.5; }');
-    DBMS_OUTPUT.PUT_LINE('body { max-width:1400px; margin:0 auto; padding:24px; }');
+    DBMS_OUTPUT.PUT_LINE('body { max-width:1400px; margin:0 auto; padding:24px; display:flex; flex-direction:column; }');
     DBMS_OUTPUT.PUT_LINE('h1 { font-size:22px; margin:0 0 4px 0; }');
     DBMS_OUTPUT.PUT_LINE('h2 { font-size:18px; margin:28px 0 12px 0; border-bottom:2px solid var(--border); padding-bottom:4px; }');
     DBMS_OUTPUT.PUT_LINE('h3 { font-size:15px; margin:16px 0 8px 0; color:var(--muted); font-weight:600; }');
@@ -31,6 +31,16 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('header.report .meta b { color:var(--fg); }');
     DBMS_OUTPUT.PUT_LINE('nav.toc { position:sticky; top:0; background:var(--bg); padding:8px 0;'
         || ' border-bottom:1px solid var(--border); margin-bottom:8px; z-index:5; font-size:13px; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc { order:1; }');
+    DBMS_OUTPUT.PUT_LINE('header.report { order:2; }');
+    DBMS_OUTPUT.PUT_LINE('#findings { order:3; }');
+    DBMS_OUTPUT.PUT_LINE('#windows { order:4; }');
+    DBMS_OUTPUT.PUT_LINE('#load { order:5; }');
+    DBMS_OUTPUT.PUT_LINE('#metrics { order:6; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-fg { order:7; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-bg { order:8; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql { order:9; }');
+    DBMS_OUTPUT.PUT_LINE('footer.report { order:10; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc a { color:var(--accent); text-decoration:none; margin-right:14px; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc a:hover { text-decoration:underline; }');
     DBMS_OUTPUT.PUT_LINE('table { width:100%; border-collapse:collapse; margin:8px 0 16px 0; font-size:13px; }');

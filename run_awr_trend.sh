@@ -25,6 +25,7 @@ INST_NUM="${6:-0}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+mkdir -p reports
 
 # awr_trend.sql does not DEFINE defaults itself; we set them here and the
 # driver inherits them from this sqlplus session.
