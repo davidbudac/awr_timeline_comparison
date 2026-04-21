@@ -123,4 +123,9 @@ SQL> @apex_app/apex/f100.sql
 
 You can still use `page_sources.sql` as a readable reference when you want to modify pages in App Builder after import.
 
+The imported app now includes a dedicated run-level visual summary page:
+
+- Page `11` / `RUN_VISUALIZATIONS`
+  Native Oracle JET charts for findings mix, window health, key load trend, wait-class trend, and strongest deviations for a selected run.
+
 See `docs/page-map.md` for the page inventory.

@@ -76,6 +76,23 @@ Suggested application ID: `100`
 - Purpose: inspect execution progress and failures
 - Source: `AWR_APP_RUN_LOG_V`
 
+### Page 11: Run Visualizations
+
+- Type: Oracle JET chart page + Interactive Report
+- Purpose: give an at-a-glance visual summary for one collected run
+- Sources:
+  - `AWR_TREND_FINDINGS`
+  - `AWR_TREND_WINDOWS`
+  - `AWR_APP_METRIC_SERIES_V`
+  - `AWR_TREND_WAITS`
+  - `AWR_APP_RUN_SUMMARY_V`
+- Visuals:
+  - findings by domain
+  - aligned-window health
+  - key load trend across week offsets
+  - wait-class trend across week offsets
+  - strongest deviations by absolute z-score
+
 ## Key page items
 
 - `P1_TARGET_ID`
@@ -88,6 +105,8 @@ Suggested application ID: `100`
   Metric type filter on the metrics page.
 - `P7_DIMENSION`
   SQL ranking dimension on the top SQL page.
+- `P11_RUN_ID`
+  Run context item for the visual summary page.
 
 ## Main actions
 

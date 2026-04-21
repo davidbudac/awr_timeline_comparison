@@ -20,7 +20,7 @@ It now exists in three forms:
 2. A live imported APEX application in the local APEX instance
 3. A refreshed export at [f100.sql](/Users/davidbudac/.codex/worktrees/8778/awr_timeline_comparison/apex_app/apex/f100.sql) generated from the live instance after validation and page rebuilds
 
-The live APEX app uses native APEX Interactive Report regions for pages `1-10`. It is not yet a polished chart-heavy app. It is structurally real, importable, and functional.
+The live APEX app uses native APEX regions. Pages `1-10` are primarily Interactive Reports, and page `11` is now a real JET-chart visualization page for a selected run. It is structurally real, importable, and functional.
 
 ## Local Runtime Environment
 
@@ -110,6 +110,38 @@ The runtime flow is:
    - `COLLECT_TOP_SQL`
    - `COLLECT_FINDINGS`
 6. All APEX pages read only local repository data, never remote DB links directly
+
+## Current Page Inventory
+
+- `1` Home
+- `2` Runs
+- `3` Run Overview
+- `4` Findings Explorer
+- `5` Metrics Dashboard
+- `6` Waits Dashboard
+- `7` Top SQL Explorer
+- `8` Targets Admin
+- `9` Schedules Admin
+- `10` Run Log
+- `11` Run Visualizations
+
+### Page 11 details
+
+Page `11` / alias `RUN_VISUALIZATIONS` was added after the original `1-10` native-page rebuild.
+
+It contains:
+
+- `P11_RUN_ID` selector item
+- quick navigation buttons back to overview/findings/metrics/waits/top SQL/log
+- JET chart regions:
+  - `Findings By Domain`
+  - `Window Health`
+  - `Key Load Trend`
+  - `Wait Class Trend`
+  - `Strongest Deviations`
+- a `Run Snapshot` Interactive Report at the bottom
+
+Page `3` now includes an `OPEN_VISUALIZATIONS` button that redirects to page `11` for the current run.
 
 ### Important repository objects
 
