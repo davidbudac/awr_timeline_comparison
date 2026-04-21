@@ -74,6 +74,7 @@ BEGIN
     ) LOOP
         DBMS_OUTPUT.PUT_LINE('<nav class="toc">'
             || '<b>Jump to:</b> '
+            || '<a href="#overview">Overview</a>'
             || '<a href="#findings">Findings</a>'
             || '<a href="#windows">Windows</a>'
             || '<a href="#load">Load profile</a>'

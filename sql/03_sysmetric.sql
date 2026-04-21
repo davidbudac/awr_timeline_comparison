@@ -77,13 +77,15 @@ DECLARE
     v_row         VARCHAR2(32767);
     v_val         NUMBER;
     v_fmt         VARCHAR2(40);
+    v_row_max     NUMBER;
+    v_pct         NUMBER;
 BEGIN
     SELECT weeks_back INTO v_weeks_back FROM awr_trend_runs WHERE run_id = ~run_id;
 
     DBMS_OUTPUT.PUT_LINE('<section id="metrics"><h2>System metrics (DBA_HIST_SYSMETRIC_SUMMARY)</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">Averages over the snapshots inside each window. Values are already per-second where the metric name says so.</p>');
+    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">Averages over the snapshots inside each window. The <b>Trend</b> column plots the per-week series (oldest &rarr; current). Values are already per-second where the metric name says so.</p>');
 
-    v_header := '<thead><tr><th>Metric</th><th>Unit</th><th class="num">Current</th>';
+    v_header := '<thead><tr><th>Metric</th><th>Unit</th><th class="trend">Trend</th><th class="num">Current</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num">&minus;' || k || 'w</th>';
     END LOOP;
@@ -91,11 +93,32 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
 
     FOR m IN (
+        WITH all_weeks AS (
+            SELECT LEVEL - 1 AS week_offset
+            FROM   dual
+            CONNECT BY LEVEL <= (SELECT weeks_back + 1 FROM awr_trend_runs WHERE run_id = ~run_id)
+        ),
+        mets AS (
+            SELECT DISTINCT metric_name FROM awr_trend_sysmetric WHERE run_id = ~run_id
+        ),
+        grid AS (
+            SELECT m.metric_name, w.week_offset, sm.avg_value, sm.metric_unit
+            FROM   mets m
+            CROSS JOIN all_weeks w
+            LEFT JOIN awr_trend_sysmetric sm
+                   ON sm.run_id = ~run_id
+                  AND sm.metric_name = m.metric_name
+                  AND sm.week_offset = w.week_offset
+        )
         SELECT metric_name,
                MAX(metric_unit) AS metric_unit,
-               MAX(CASE WHEN week_offset = 0 THEN avg_value END) AS cur_val
-        FROM   awr_trend_sysmetric
-        WHERE  run_id = ~run_id
+               MAX(CASE WHEN week_offset = 0 THEN avg_value END) AS cur_val,
+               MAX(avg_value) AS row_max,
+               LISTAGG(CASE WHEN avg_value IS NULL THEN ''
+                            ELSE TO_CHAR(avg_value, 'FM99999999990D000000',
+                                         'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
+                   WITHIN GROUP (ORDER BY week_offset DESC) AS spark_vals
+        FROM   grid
         GROUP BY metric_name
         ORDER BY CASE metric_name
             WHEN 'Average Active Sessions'                       THEN 1
@@ -122,13 +145,33 @@ BEGIN
             ELSE 99 END,
             metric_name
     ) LOOP
-        v_fmt := 'FM999G999G999G990D00';
+        -- Adaptive precision: pick enough fractional digits so row_max is
+        -- at least visible.  A fixed 2-decimal format collapses tiny metrics
+        -- (e.g. AAS around 0.0006) to "0.00" across every cell even when
+        -- the sparkline shows real variation.
+        v_row_max := NVL(m.row_max, 0);
+        v_fmt := CASE
+            WHEN v_row_max = 0 OR v_row_max >= 1   THEN 'FM999G999G999G990D00'
+            WHEN v_row_max >= 0.01                  THEN 'FM990D0000'
+            WHEN v_row_max >= 0.0001                THEN 'FM990D000000'
+            ELSE                                         'FM0D00EEEE'
+        END;
+
+        IF v_row_max > 0 AND m.cur_val IS NOT NULL THEN
+            v_pct := LEAST(100, ABS(m.cur_val) / v_row_max * 100);
+        ELSE
+            v_pct := 0;
+        END IF;
 
         v_row := '<tr><td>' || DBMS_XMLGEN.CONVERT(m.metric_name) || '</td>'
               || '<td>' || DBMS_XMLGEN.CONVERT(NVL(m.metric_unit, '')) || '</td>'
-              || '<td class="num"><b>' ||
+              || '<td class="trend" data-spark="' || NVL(m.spark_vals, '')
+              || '" data-spark-title="' || DBMS_XMLGEN.CONVERT(m.metric_name) || '"></td>'
+              || '<td class="num cell-bar">'
+              || '<span class="bg" style="width:' || TO_CHAR(v_pct, 'FM990D0') || '%"></span>'
+              || '<span class="v"><b>' ||
                  CASE WHEN m.cur_val IS NULL THEN '&mdash;'
-                      ELSE TO_CHAR(m.cur_val, v_fmt) END || '</b></td>';
+                      ELSE TO_CHAR(m.cur_val, v_fmt) END || '</b></span></td>';
 
         FOR k IN 1 .. v_weeks_back LOOP
             SELECT MAX(avg_value)

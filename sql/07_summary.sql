@@ -100,9 +100,11 @@ COMMIT;
 SET SERVEROUTPUT ON SIZE UNLIMITED
 
 DECLARE
-    v_total NUMBER;
-    v_crit  NUMBER;
-    v_warn  NUMBER;
+    v_total      NUMBER;
+    v_crit       NUMBER;
+    v_warn       NUMBER;
+    v_heat_json  CLOB;
+    v_domains    VARCHAR2(200);
 BEGIN
     SELECT COUNT(*), SUM(CASE WHEN severity = 'CRITICAL' THEN 1 ELSE 0 END),
                      SUM(CASE WHEN severity = 'WARN' THEN 1 ELSE 0 END)
@@ -117,7 +119,69 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'z-score of the current window vs prior valid windows. '
         || '|z|&gt;3 = CRITICAL, |z|&gt;2 = WARN. '
-        || 'INSUFFICIENT_HISTORY (n&lt;3) shows only %-delta.</p>');
+        || 'INSUFFICIENT_HISTORY (n&lt;3) shows only %-delta. '
+        || 'Heatmap below: |z| magnitude per (domain &times; metric); gray = no baseline.</p>');
+
+    -- Findings heatmap container ------------------------------------------
+    DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-medium" id="findings-heatmap"></div>');
+
+    -- Build heatmap data: each finding as {x:metric, y:domain, z, sev}
+    v_heat_json := NULL;
+    FOR f IN (
+        SELECT metric_domain, metric_name, z_score, severity,
+               current_value, prior_mean, pct_delta
+        FROM   awr_trend_findings
+        WHERE  run_id = ~run_id
+        ORDER BY metric_domain, ABS(NVL(z_score, 0)) DESC, metric_name
+    ) LOOP
+        v_heat_json := CASE WHEN v_heat_json IS NULL THEN '' ELSE v_heat_json || ',' END
+            || '{"dom":"' || f.metric_domain
+            || '","m":"' || REPLACE(REPLACE(f.metric_name, '\', '\\'), '"', '\"')
+            || '","z":' || CASE WHEN f.z_score IS NULL THEN 'null'
+                                ELSE TO_CHAR(f.z_score, 'FMS99990D00',
+                                             'NLS_NUMERIC_CHARACTERS=''.,''') END
+            || ',"sev":"' || f.severity
+            || '","cur":' || CASE WHEN f.current_value IS NULL THEN 'null'
+                                  ELSE TO_CHAR(f.current_value, 'FM99999999990D000000',
+                                               'NLS_NUMERIC_CHARACTERS=''.,''') END
+            || ',"mu":' || CASE WHEN f.prior_mean IS NULL THEN 'null'
+                                ELSE TO_CHAR(f.prior_mean, 'FM99999999990D000000',
+                                             'NLS_NUMERIC_CHARACTERS=''.,''') END
+            || ',"pct":' || CASE WHEN f.pct_delta IS NULL THEN 'null'
+                                 ELSE TO_CHAR(f.pct_delta, 'FMS99990D0',
+                                              'NLS_NUMERIC_CHARACTERS=''.,''') END
+            || '}';
+    END LOOP;
+
+    IF v_heat_json IS NOT NULL THEN
+        DBMS_OUTPUT.PUT_LINE('<script>');
+        DBMS_OUTPUT.PUT_LINE('(function(){');
+        DBMS_OUTPUT.PUT_LINE('AWR_DATA.findings = [' || v_heat_json || '];');
+        DBMS_OUTPUT.PUT_LINE('if(!window.echarts) return;');
+        DBMS_OUTPUT.PUT_LINE('var el=document.getElementById("findings-heatmap"); if(!el) return;');
+        DBMS_OUTPUT.PUT_LINE('var raw=AWR_DATA.findings;');
+        DBMS_OUTPUT.PUT_LINE('var doms=[],mets=[],domIdx={},metIdx={};');
+        DBMS_OUTPUT.PUT_LINE('raw.forEach(function(f){if(!(f.dom in domIdx)){domIdx[f.dom]=doms.length;doms.push(f.dom);} if(!(f.m in metIdx)){metIdx[f.m]=mets.length;mets.push(f.m);}});');
+        DBMS_OUTPUT.PUT_LINE('var data=raw.map(function(f){var zval=f.z==null?null:Math.abs(f.z);return {value:[metIdx[f.m],domIdx[f.dom],zval],raw:f};});');
+        DBMS_OUTPUT.PUT_LINE('var maxAbs=3.5;');
+        DBMS_OUTPUT.PUT_LINE('var cs=getComputedStyle(document.body);');
+        DBMS_OUTPUT.PUT_LINE('var fg=cs.getPropertyValue("--fg").trim()||"#333";');
+        DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
+        DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
+        DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
+        DBMS_OUTPUT.PUT_LINE('chart.setOption({');
+        DBMS_OUTPUT.PUT_LINE('  tooltip:{formatter:function(p){var f=p.data.raw;var fmt=function(v){return v==null?"\u2014":(+v).toLocaleString(undefined,{maximumFractionDigits:3});};return "<b>"+f.m+"</b><br/>domain: "+f.dom+"<br/>severity: <b>"+f.sev+"</b><br/>current: "+fmt(f.cur)+"<br/>prior \u03BC: "+fmt(f.mu)+"<br/>z-score: "+(f.z==null?"\u2014":(+f.z).toFixed(2))+"<br/>% \u0394: "+(f.pct==null?"\u2014":f.pct+"%");}},');
+        DBMS_OUTPUT.PUT_LINE('  grid:{left:10,right:10,top:30,bottom:70,containLabel:true},');
+        DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"category",data:mets,axisLabel:{color:mu,rotate:55,fontSize:10,interval:0,formatter:function(v){return v.length>22?v.slice(0,22)+"\u2026":v;}},splitArea:{show:true}},');
+        DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"category",data:doms,axisLabel:{color:fg,fontWeight:600},splitArea:{show:true}},');
+        DBMS_OUTPUT.PUT_LINE('  visualMap:{min:0,max:maxAbs,calculable:true,orient:"horizontal",left:"center",bottom:8,itemWidth:12,itemHeight:160,textStyle:{color:mu,fontSize:10},inRange:{color:["#eaf6ea","#eef2ff","#fff4d6","#ffe5e5","#8a1c1c"]},text:["|z|\u22653","0"]},');
+        DBMS_OUTPUT.PUT_LINE('  series:[{name:"|z|",type:"heatmap",data:data,label:{show:false},emphasis:{itemStyle:{borderColor:fg,borderWidth:1.5}}}]');
+        DBMS_OUTPUT.PUT_LINE('});');
+        DBMS_OUTPUT.PUT_LINE('chart.on("click",function(p){if(!p.data||!p.data.raw)return;var row=document.querySelector("tr[data-metric=\""+CSS.escape(p.data.raw.m)+"\"]");if(row){row.scrollIntoView({behavior:"smooth",block:"center"});row.style.transition="outline 1.5s";row.style.outline="2px solid "+cs.getPropertyValue("--accent");setTimeout(function(){row.style.outline="none";},1600);}});');
+        DBMS_OUTPUT.PUT_LINE('new ResizeObserver(function(){chart.resize();}).observe(el);');
+        DBMS_OUTPUT.PUT_LINE('})();');
+        DBMS_OUTPUT.PUT_LINE('</script>');
+    END IF;
 
     DBMS_OUTPUT.PUT_LINE('<table>'
         || '<thead><tr>'
@@ -149,7 +213,8 @@ BEGIN
                  metric_name
     ) LOOP
         DBMS_OUTPUT.PUT_LINE(
-            '<tr class="' || CASE f.severity
+            '<tr data-metric="' || REPLACE(DBMS_XMLGEN.CONVERT(f.metric_name), '"', '&quot;') || '"'
+            || ' class="' || CASE f.severity
                     WHEN 'CRITICAL' THEN 'crit'
                     WHEN 'WARN'     THEN 'warn'
                     WHEN 'OK'       THEN 'ok'

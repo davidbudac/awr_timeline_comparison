@@ -116,6 +116,9 @@ DECLARE
     v_label       VARCHAR2(120);
     v_per_sec     NUMBER;
     v_per_txn     NUMBER;
+    v_row_max     NUMBER;
+    v_pct         NUMBER;
+    v_fmt         VARCHAR2(40);
 BEGIN
     SELECT weeks_back INTO v_weeks_back FROM awr_trend_runs WHERE run_id = ~run_id;
 
@@ -123,10 +126,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="load"><h2>Load profile &mdash; per-second rates</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'Cumulative DBA_HIST_SYSSTAT deltas divided by window duration. '
+        || 'The <b>Trend</b> column shows the per-week series (oldest &rarr; current); '
+        || 'the bar behind <b>Current</b> shows each value relative to its row max. '
         || 'Per-transaction rates available in the scratch table AWR_TREND_LOAD_PROFILE.per_txn.</p>');
 
     -- Build header row.
-    v_header := '<thead><tr><th>Metric</th><th class="num">Current</th>';
+    v_header := '<thead><tr><th>Metric</th><th class="trend">Trend</th><th class="num">Current</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num">&minus;' || k || 'w</th>';
     END LOOP;
@@ -134,12 +139,34 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
 
     FOR m IN (
-        -- One row per stat, with JSON-ish aggregation across week_offset values.
+        -- One row per stat.  Includes spark_vals: per-sec values for every
+        -- window (including missing ones, emitted as empty slots) joined by ','
+        -- in oldest-to-newest order so the JS sparkline renderer can plot them.
+        WITH all_weeks AS (
+            SELECT LEVEL - 1 AS week_offset
+            FROM   dual
+            CONNECT BY LEVEL <= (SELECT weeks_back + 1 FROM awr_trend_runs WHERE run_id = ~run_id)
+        ),
+        stats AS (
+            SELECT DISTINCT stat_name FROM awr_trend_load_profile WHERE run_id = ~run_id
+        ),
+        grid AS (
+            SELECT s.stat_name, w.week_offset, lp.per_sec
+            FROM   stats s
+            CROSS JOIN all_weeks w
+            LEFT JOIN awr_trend_load_profile lp
+                   ON lp.run_id = ~run_id
+                  AND lp.stat_name = s.stat_name
+                  AND lp.week_offset = w.week_offset
+        )
         SELECT stat_name,
                MAX(CASE WHEN week_offset = 0 THEN per_sec END) AS cur_ps,
-               MAX(CASE WHEN week_offset = 0 THEN stat_value END) AS cur_val
-        FROM   awr_trend_load_profile
-        WHERE  run_id = ~run_id
+               MAX(per_sec) AS row_max,
+               LISTAGG(CASE WHEN per_sec IS NULL THEN ''
+                            ELSE TO_CHAR(per_sec, 'FM99999999990D000000',
+                                         'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
+                   WITHIN GROUP (ORDER BY week_offset DESC) AS spark_vals
+        FROM   grid
         GROUP BY stat_name
         ORDER BY CASE stat_name
             WHEN 'DB time'                    THEN 1
@@ -179,8 +206,39 @@ BEGIN
         END IF;
 
         v_row := '<tr><td>' || DBMS_XMLGEN.CONVERT(v_label) || '</td>';
-        v_row := v_row || '<td class="num"><b>' ||
-            TO_CHAR(NVL(m.cur_ps, 0), 'FM999G999G999G990D00') || '</b></td>';
+
+        -- Trend column: data-spark attribute is rendered into an inline SVG
+        -- by the sparkline JS shipped in the prologue.  Fully inert when JS
+        -- is off; the per-week numeric cells still render beside it.
+        v_row := v_row || '<td class="trend" data-spark="'
+              || NVL(m.spark_vals, '') || '" data-spark-title="'
+              || DBMS_XMLGEN.CONVERT(v_label) || '"></td>';
+
+        -- Current-week cell with a bar-fill showing |current| relative to the
+        -- largest absolute value in this row (simple in-row magnitude cue).
+        v_row_max := NVL(m.row_max, 0);
+        -- Adaptive format: tiny-magnitude rows (parse count hard around
+        -- 0.003 /s, user commits around 0.02 /s) need extra decimals so the
+        -- reader can see the values the sparkline is actually tracking.
+        v_fmt := CASE
+            WHEN v_row_max = 0 OR v_row_max >= 1   THEN 'FM999G999G999G990D00'
+            WHEN v_row_max >= 0.01                  THEN 'FM990D0000'
+            WHEN v_row_max >= 0.0001                THEN 'FM990D000000'
+            ELSE                                         'FM0D00EEEE'
+        END;
+
+        IF v_row_max > 0 AND m.cur_ps IS NOT NULL THEN
+            v_pct := LEAST(100, ABS(m.cur_ps) / v_row_max * 100);
+        ELSE
+            v_pct := 0;
+        END IF;
+
+        v_row := v_row || '<td class="num cell-bar">'
+              || '<span class="bg" style="width:' || TO_CHAR(v_pct, 'FM990D0') || '%"></span>'
+              || '<span class="v"><b>' ||
+                CASE WHEN m.cur_ps IS NULL THEN '&mdash;'
+                     ELSE TO_CHAR(m.cur_ps, v_fmt) END
+              || '</b></span></td>';
 
         FOR k IN 1 .. v_weeks_back LOOP
             SELECT MAX(per_sec)
@@ -192,7 +250,7 @@ BEGIN
 
             v_row := v_row || '<td class="num">' ||
                 CASE WHEN v_per_sec IS NULL THEN '&mdash;'
-                     ELSE TO_CHAR(v_per_sec, 'FM999G999G999G990D00') END || '</td>';
+                     ELSE TO_CHAR(v_per_sec, v_fmt) END || '</td>';
         END LOOP;
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);

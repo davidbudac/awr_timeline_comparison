@@ -125,6 +125,8 @@ DECLARE
     v_phv_cur    NUMBER;
     v_metric     VARCHAR2(40);
     v_divisor    NUMBER;
+    v_weeks_json VARCHAR2(4000);
+    v_sql_json   CLOB;
 
     TYPE t_dim IS RECORD (
         code   VARCHAR2(10),
@@ -149,15 +151,115 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="topsql"><h2>Top SQL (top ' || v_top_n
         || ' per dimension, per window)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'Click a row to reveal full SQL text. The plan-hash column highlights plan changes '
-        || 'across weeks (same SQL_ID, different PHV).</p>');
+        || 'Bump chart below shows SQL rank movement across weeks (lower = heavier). '
+        || 'Red diamonds mark plan-hash changes vs current. '
+        || 'Detail tables are collapsed by default &mdash; click to expand.</p>');
+
+    -- Bump chart container (ELAPSED dimension) ----------------------------
+    DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-medium" id="topsql-bump"></div>');
+
+    SELECT '['
+        || LISTAGG('"' || TO_CHAR(win_end_ts, 'Mon DD') || '"', ',')
+               WITHIN GROUP (ORDER BY week_offset DESC)
+        || ']'
+    INTO   v_weeks_json
+    FROM   awr_trend_windows
+    WHERE  run_id = ~run_id;
+
+    -- Build one JSON object per SQL_ID (ELAPSED dimension) with per-week
+    -- rank + plan_hash_value arrays (oldest -> newest).
+    v_sql_json := NULL;
+    FOR s IN (
+        WITH all_weeks AS (
+            SELECT week_offset FROM awr_trend_windows WHERE run_id = ~run_id
+        ),
+        sqls AS (
+            SELECT DISTINCT sql_id
+            FROM   awr_trend_top_sql
+            WHERE  run_id = ~run_id AND dimension = 'ELAPSED'
+        ),
+        grid AS (
+            SELECT q.sql_id, w.week_offset,
+                   t.rank_in_window, t.plan_hash_value, t.elapsed_time_delta_us
+            FROM   sqls q
+            CROSS JOIN all_weeks w
+            LEFT JOIN awr_trend_top_sql t
+                   ON t.run_id = ~run_id AND t.dimension = 'ELAPSED'
+                  AND t.sql_id = q.sql_id AND t.week_offset = w.week_offset
+        ),
+        cur_phv AS (
+            SELECT sql_id, MAX(plan_hash_value) AS phv_cur
+            FROM   awr_trend_top_sql
+            WHERE  run_id = ~run_id AND dimension = 'ELAPSED' AND week_offset = 0
+            GROUP BY sql_id
+        )
+        SELECT g.sql_id,
+               MIN(CASE WHEN g.week_offset = 0 THEN g.rank_in_window END) AS cur_rank,
+               MIN(g.rank_in_window) AS best_rank,
+               LISTAGG(CASE WHEN g.rank_in_window IS NULL THEN 'null'
+                            ELSE TO_CHAR(g.rank_in_window) END, ',')
+                   WITHIN GROUP (ORDER BY g.week_offset DESC) AS ranks_csv,
+               LISTAGG(CASE
+                           WHEN g.plan_hash_value IS NULL THEN '0'
+                           WHEN cp.phv_cur IS NOT NULL AND g.plan_hash_value <> cp.phv_cur THEN '1'
+                           ELSE '0' END, ',')
+                   WITHIN GROUP (ORDER BY g.week_offset DESC) AS phv_flag_csv,
+               LISTAGG(CASE WHEN g.elapsed_time_delta_us IS NULL THEN 'null'
+                            ELSE TO_CHAR(g.elapsed_time_delta_us/1e6, 'FM99999999990D000000',
+                                         'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
+                   WITHIN GROUP (ORDER BY g.week_offset DESC) AS ela_csv
+        FROM   grid g
+        LEFT JOIN cur_phv cp ON cp.sql_id = g.sql_id
+        GROUP BY g.sql_id
+        ORDER BY CASE WHEN MIN(CASE WHEN g.week_offset = 0 THEN g.rank_in_window END) IS NULL THEN 1 ELSE 0 END,
+                 MIN(CASE WHEN g.week_offset = 0 THEN g.rank_in_window END) NULLS LAST,
+                 MIN(g.rank_in_window),
+                 g.sql_id
+    ) LOOP
+        v_sql_json := CASE WHEN v_sql_json IS NULL THEN '' ELSE v_sql_json || ',' END
+            || '{"sql_id":"' || s.sql_id
+            || '","cur":' || NVL(TO_CHAR(s.cur_rank), 'null')
+            || ',"ranks":[' || s.ranks_csv
+            || '],"phvChg":[' || s.phv_flag_csv
+            || '],"ela":[' || s.ela_csv || ']}';
+    END LOOP;
+
+    DBMS_OUTPUT.PUT_LINE('<script>');
+    DBMS_OUTPUT.PUT_LINE('(function(){');
+    DBMS_OUTPUT.PUT_LINE('AWR_DATA.topSql = {weeks:' || v_weeks_json
+        || ',topN:' || v_top_n || ',sqls:[' || NVL(v_sql_json, '') || ']};');
+    DBMS_OUTPUT.PUT_LINE('if(!window.echarts) return;');
+    DBMS_OUTPUT.PUT_LINE('var el=document.getElementById("topsql-bump"); if(!el) return;');
+    DBMS_OUTPUT.PUT_LINE('var d=AWR_DATA.topSql;');
+    DBMS_OUTPUT.PUT_LINE('var cs=getComputedStyle(document.body);');
+    DBMS_OUTPUT.PUT_LINE('var fg=cs.getPropertyValue("--fg").trim()||"#333";');
+    DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
+    DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
+    DBMS_OUTPUT.PUT_LINE('var cr=cs.getPropertyValue("--crit-fg").trim()||"#c00";');
+    DBMS_OUTPUT.PUT_LINE('var palette=["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1","#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"];');
+    DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
+    DBMS_OUTPUT.PUT_LINE('chart.setOption({');
+    DBMS_OUTPUT.PUT_LINE('  tooltip:{trigger:"item",formatter:function(p){var s=p.data;if(!s||!s.sql_id)return p.seriesName;return "<b>"+s.sql_id+"</b><br/>week "+p.name+"<br/>rank: "+(s.value[1]||"\u2014")+"<br/>ela: "+(s.ela==null?"\u2014":s.ela.toFixed(2)+"s")+(s.phvChg?"<br/><span style=\"color:"+cr+"\">\u25C6 plan changed</span>":"");}},');
+    DBMS_OUTPUT.PUT_LINE('  legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},');
+    DBMS_OUTPUT.PUT_LINE('  grid:{left:40,right:100,top:10,bottom:44,containLabel:true},');
+    DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"category",data:d.weeks,axisLabel:{color:fg,fontWeight:600},splitLine:{show:true,lineStyle:{color:gr}}},');
+    DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"value",inverse:true,min:1,max:d.topN,axisLabel:{color:mu,formatter:function(v){return "#"+v;}},splitLine:{lineStyle:{color:gr}}},');
+    DBMS_OUTPUT.PUT_LINE('  series:d.sqls.slice(0,d.topN).map(function(s,i){');
+    DBMS_OUTPUT.PUT_LINE('    var pts=s.ranks.map(function(r,j){return {value:[j,r],name:d.weeks[j],sql_id:s.sql_id,ela:s.ela[j],phvChg:!!s.phvChg[j]};});');
+    DBMS_OUTPUT.PUT_LINE('    var diamonds=s.phvChg.map(function(p,j){return p?{value:[j,s.ranks[j]],itemStyle:{color:cr},symbol:"diamond",symbolSize:12}:null;}).filter(Boolean);');
+    DBMS_OUTPUT.PUT_LINE('    return {name:s.sql_id,type:"line",connectNulls:false,showSymbol:true,symbolSize:8,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:2},emphasis:{focus:"series",lineStyle:{width:3}},endLabel:{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6},data:pts,markPoint:diamonds.length?{data:diamonds}:undefined};');
+    DBMS_OUTPUT.PUT_LINE('  })');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('new ResizeObserver(function(){chart.resize();}).observe(el);');
+    DBMS_OUTPUT.PUT_LINE('})();');
+    DBMS_OUTPUT.PUT_LINE('</script>');
 
     FOR i IN 1 .. v_dims.COUNT LOOP
         v_metric  := v_dims(i).label;
         v_divisor := v_dims(i).div;
 
-        DBMS_OUTPUT.PUT_LINE('<details' || CASE WHEN i = 1 THEN ' open' END || '>');
-        DBMS_OUTPUT.PUT_LINE('<summary>' || v_metric || '</summary>');
+        DBMS_OUTPUT.PUT_LINE('<details>');
+        DBMS_OUTPUT.PUT_LINE('<summary>' || v_metric || ' &mdash; detail table</summary>');
 
         v_header := '<thead><tr><th>SQL_ID</th><th class="num">PHV (cur)</th>'
             || '<th class="num">Current (' || v_dims(i).unit || ')</th>';

@@ -11,7 +11,19 @@ HTML report, and persists every fact into an `AWR_TREND_*` scratch schema
 for ad-hoc analysis.
 
 Requires Oracle 19c with Diagnostic + Tuning Pack. No Python, no shell
-beyond a thin `sqlplus` wrapper. Output is a single offline HTML file.
+beyond a thin `sqlplus` wrapper. Output is a single self-contained HTML file.
+
+**Note on offline rendering**: the HTML loads Apache ECharts from
+`cdn.jsdelivr.net` to render the larger visualizations (hero strip
+sparklines, wait-class stacked bars, findings heatmap, top-SQL bump
+chart, windows ribbon). When the CDN is unreachable, `<script onerror>`
+sets `body.no-charts` which hides chart divs — tables still render
+every number, and an amber "Charts hidden" banner tells the reader
+why. Inline-SVG sparklines in the Load/Metrics/Waits tables are
+rendered by a ~30-line pure-DOM JS block shipped in the prologue and
+do **not** depend on the CDN, so they still draw when offline. For
+strict air-gapped environments, remove the ECharts `<script>` tag in
+`awr_trend.sql` — every other element degrades gracefully.
 
 ## Entry points
 
@@ -166,7 +178,11 @@ ORDER BY r.target_end_ts;
 - Don't render from in-flight CTEs — break the compute→insert→render
   contract and the HTML/scratch tables can disagree.
 - Don't concat user strings into HTML without `DBMS_XMLGEN.CONVERT`.
-- Don't introduce external JS/CSS — the report must be self-contained
-  (emailable, works offline).
+- Don't introduce additional external JS/CSS beyond the single ECharts
+  CDN tag that's already in `awr_trend.sql`. The report is still one
+  HTML file and works offline (charts hide, tables remain) via the
+  `body.no-charts` fallback — any new dependency must degrade the
+  same way. Inline-SVG sparklines and the ribbon are CDN-free and must
+  stay that way.
 - Don't widen the grant list in `README.md` without a concrete reason —
   everything in there is actually needed by the current SQL.

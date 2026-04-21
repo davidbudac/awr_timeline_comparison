@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWR Timeline Comparison &mdash; run 14</title>
+<style>
+:root { --fg:#1a1a1a; --bg:#ffffff; --panel:#ffffff; --panel-2:#f6f8fb; --muted:#666; --border:#e0e0e0; --border-strong:#c8d0dc; --crit:#ffe5e5; --crit-fg:#8a1c1c; --warn:#fff4d6; --warn-fg:#7a5a00; --ok:#eaf6ea; --ok-fg:#245c24; --info:#eef2ff; --info-fg:#2c3a8a; --accent:#2563eb; --accent-2:#14b8a6; --spark:#2563eb; --spark-fill:rgba(37,99,235,.14); --shadow:0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.04); --wc-sysio:#2563eb; --wc-other:#a855f7; --wc-userio:#14b8a6; --wc-commit:#f59e0b; --wc-config:#ef4444; --wc-concurrency:#ec4899; --wc-network:#6366f1; --wc-application:#84cc16; --wc-cluster:#f97316; --wc-admin:#64748b; --wc-sched:#0ea5e9; --wc-queue:#d946ef; }
+@media (prefers-color-scheme: dark) {
+:root { --fg:#e6e6e6; --bg:#0f1320; --panel:#161b2b; --panel-2:#1c2336; --muted:#9aa3af; --border:#2a2f3a; --border-strong:#3b4658; --crit:#3a1717; --crit-fg:#ffb4b4; --warn:#3a3115; --warn-fg:#ffdb8a; --ok:#172a1c; --ok-fg:#a8e5b4; --info:#1b2140; --info-fg:#b4c0ff; --accent:#7aa2ff; --accent-2:#5eead4; --spark:#7aa2ff; --spark-fill:rgba(122,162,255,.18); --shadow:none; } }
+* { box-sizing:border-box; }
+html,body { margin:0; padding:0; background:var(--bg); color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; font-size:14px; line-height:1.5; }
+body { max-width:1400px; margin:0 auto; padding:24px; display:flex; flex-direction:column; gap:16px; }
+section { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:18px 20px; box-shadow:var(--shadow); }
+h1 { font-size:22px; margin:0 0 4px 0; }
+h2 { font-size:18px; margin:28px 0 12px 0; border-bottom:2px solid var(--border); padding-bottom:4px; }
+h3 { font-size:15px; margin:16px 0 8px 0; color:var(--muted); font-weight:600; }
+header.report { background:var(--info); color:var(--info-fg); padding:16px 20px; border-radius:8px; margin-bottom:20px; }
+header.report .meta { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:6px 24px; margin-top:8px; font-size:13px; }
+header.report .meta b { color:var(--fg); }
+nav.toc { position:sticky; top:0; background:var(--bg); padding:8px 0; border-bottom:1px solid var(--border); margin-bottom:8px; z-index:5; font-size:13px; }
+nav.toc { order:1; }
+header.report { order:2; }
+#overview { order:3; }
+#findings { order:4; }
+#windows { order:5; }
+#load { order:6; }
+#metrics { order:7; }
+#waits-fg { order:8; }
+#waits-bg { order:9; }
+#topsql { order:10; }
+footer.report { order:11; }
+nav.toc a { color:var(--accent); text-decoration:none; margin-right:14px; }
+nav.toc a:hover { text-decoration:underline; }
+table { width:100%; border-collapse:collapse; margin:8px 0 16px 0; font-size:13px; }
+thead th { background:var(--bg); position:sticky; top:38px; z-index:2; text-align:left; padding:8px 10px; border-bottom:2px solid var(--border); white-space:nowrap; }
+tbody td { padding:6px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+tbody tr:hover { background:rgba(127,127,127,0.08); }
+td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+td.mono, code, .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; }
+tr.crit   { background:var(--crit); }  tr.crit td:first-child { border-left:4px solid var(--crit-fg); }
+tr.warn   { background:var(--warn); }  tr.warn td:first-child { border-left:4px solid var(--warn-fg); }
+tr.ok     { background:transparent; }
+tr.info   { background:var(--info); color:var(--info-fg); }
+tr.skip   { color:var(--muted); font-style:italic; }
+.badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+.badge.crit { background:var(--crit-fg); color:#fff; }
+.badge.warn { background:var(--warn-fg); color:#fff; }
+.badge.ok   { background:var(--ok-fg);   color:#fff; }
+.badge.info { background:var(--accent);  color:#fff; }
+.badge.skip { background:var(--muted);   color:#fff; }
+.bar { display:block; height:4px; background:linear-gradient(90deg,var(--accent),var(--accent-2)); opacity:.55; border-radius:2px; margin-top:3px; }
+svg.spark { display:inline-block; vertical-align:middle; width:110px; height:24px; color:var(--spark); }
+svg.spark.warn { color:var(--warn-fg); }
+svg.spark.crit { color:var(--crit-fg); }
+svg.spark .fill { fill:var(--spark-fill); }
+svg.spark .line { fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+svg.spark .dot  { fill:currentColor; }
+th.trend, td.trend { width:130px; padding-left:8px; padding-right:8px; text-align:center; }
+td.cell-bar { position:relative; }
+td.cell-bar .bg { position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg, rgba(37,99,235,.10), rgba(20,184,166,.06)); border-right:2px solid var(--accent); pointer-events:none; }
+td.cell-bar .v { position:relative; z-index:1; }
+.chart-wrap { width:100%; }
+.chart-big    { height:360px; }
+.chart-medium { height:260px; }
+.chart-small  { height:180px; }
+body.no-charts .chart-wrap, body.no-charts .hero-card .mini { display:none; }
+body.no-charts .cdn-warn { display:block !important; }
+.cdn-warn { display:none; background:var(--warn); color:var(--warn-fg); padding:10px 14px; border-radius:8px; font-size:13px; margin:8px 0; }
+#overview .hero-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-top:6px; }
+.hero-card { border:1px solid var(--border); border-radius:10px; padding:12px 14px; background:var(--panel-2); display:flex; flex-direction:column; gap:4px; position:relative; }
+.hero-card .label { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:600; }
+.hero-card .value { font-size:22px; font-weight:700; letter-spacing:-0.02em; font-variant-numeric:tabular-nums; }
+.hero-card .value small { font-size:12px; font-weight:500; color:var(--muted); margin-left:4px; }
+.hero-card .mini { width:100%; height:38px; }
+.hero-card .foot { display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--muted); }
+.hero-card .delta.up   { color:var(--warn-fg); }
+.hero-card .delta.down { color:var(--ok-fg); }
+.ribbon { width:100%; height:72px; margin:6px 0 14px 0; position:relative; }
+.ribbon svg { width:100%; height:100%; display:block; }
+details { margin:4px 0; }
+details summary { cursor:pointer; padding:4px 0; font-weight:600; color:var(--accent); }
+pre.sql { background:rgba(127,127,127,.08); padding:10px; border-radius:6px; overflow-x:auto; white-space:pre-wrap; font-size:12px; font-family:ui-monospace,Consolas,monospace; }
+footer.report { color:var(--muted); font-size:12px; margin-top:40px; padding-top:12px; border-top:1px solid var(--border); }
+@media print { nav.toc { display:none; } thead th { position:static; } body { max-width:none; } }
+</style>
+</head><body>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" onerror="document.body.classList.add('no-charts')"></script>
+<div class="cdn-warn">Charts hidden: the ECharts CDN (cdn.jsdelivr.net) could not be reached. Tables still show every number.</div>
+<script>window.AWR_DATA = window.AWR_DATA || {};</script>
+<script>(function(){
+function esc(s){return String(s).replace(/[&<>]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;"})[c];});}
+function spark(raw, klass, title){
+  var W=110,H=24,PAD=2;
+  var arr=String(raw||"").split(",").map(function(s){s=s.trim();return s===""?null:+s;});
+  var vs=arr.filter(function(v){return v!=null&&!isNaN(v);});
+  if(vs.length===0)return "<svg class=\""+klass+"\" viewBox=\"0 0 "+W+" "+H+"\"></svg>";
+  var mn=Math.min.apply(null,vs), mx=Math.max.apply(null,vs);
+  var sum=0; vs.forEach(function(v){sum+=v;}); var mean=sum/vs.length;
+  var flat=(mx===mn)||(Math.abs(mean)>0 && (mx-mn)/Math.abs(mean)<0.02)||(mean===0 && mx-mn<1e-9);
+  var rng=flat?1:(mx-mn);
+  var step=(W-2*PAD)/Math.max(arr.length-1,1);
+  var pts=[];
+  arr.forEach(function(v,i){if(v==null||isNaN(v))return;var y=flat?(H/2):(H-PAD-(v-mn)/rng*(H-2*PAD));pts.push({x:PAD+i*step,y:y});});
+  if(pts.length===0)return "<svg class=\""+klass+"\" viewBox=\"0 0 "+W+" "+H+"\"></svg>";
+  var line=pts.map(function(p){return p.x.toFixed(1)+","+p.y.toFixed(1);}).join(" L ");
+  var fx=pts[0].x.toFixed(1), last=pts[pts.length-1];
+  var out="<svg class=\""+klass+"\" viewBox=\"0 0 "+W+" "+H+"\""+(title?" aria-label=\""+esc(title)+"\"":"")+">";
+  if(title) out+="<title>"+esc(title)+"</title>";
+  if(pts.length>=2){out+="<path class=\"fill\" d=\"M "+fx+","+(H-PAD)+" L "+line+" L "+last.x.toFixed(1)+","+(H-PAD)+" Z\"/>";}
+  out+="<path class=\"line\" d=\"M "+line+"\"/>";
+  out+="<circle class=\"dot\" cx=\""+last.x.toFixed(1)+"\" cy=\""+last.y.toFixed(1)+"\" r=\"2.5\"/>";
+  return out+"</svg>";
+}
+window.__awrSpark=spark;
+function render(){document.querySelectorAll("[data-spark]").forEach(function(el){
+  if(el.__sparked) return;
+  el.innerHTML=spark(el.getAttribute("data-spark"), el.getAttribute("data-spark-cls")||"spark", el.getAttribute("data-spark-title")||"");
+  el.__sparked=true;});}
+if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",render); else render();
+window.__awrRenderSparks=render;
+})();</script>
+<nav class="toc"><b>Jump to:</b> <a href="#overview">Overview</a><a href="#findings">Findings</a><a href="#windows">Windows</a><a href="#load">Load profile</a><a href="#metrics">System metrics</a><a href="#waits-fg">FG waits</a><a href="#waits-bg">BG waits</a><a href="#topsql">Top SQL</a></nav>
+<header class="report">
+  <h1>AWR Timeline Comparison &mdash; CDB1 <span class="badge info">run #14</span></h1>
+  <div>Comparing the current window against the 2 prior Thursday window(s) at the same hour-of-day.</div>
+  <div class="meta">
+    <div><b>DBID:</b> 1183716798</div>
+    <div><b>Host:</b> poug-dg1.localdomain</div>
+    <div><b>Version:</b> 19.0.0.0.0</div>
+    <div><b>Instance scope:</b> ALL (aggregated)</div>
+    <div><b>Current window:</b> 2026-04-09 15:00 &rarr; 2026-04-09 16:00 (1h)</div>
+    <div><b>Weeks back:</b> 2</div>
+    <div><b>Top-N:</b> 10</div>
+    <div><b>Generated:</b> 2026-04-21 19:09:59 +00:00</div>
+    <div><b>By:</b> SYS</div>
+  </div>
+</header>
+<section id="windows"><h2>Aligned windows</h2>
+<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">Ribbon shows valid vs skipped baseline windows at a glance. Skipped windows are excluded from the z-score baseline.</p>
+<div class="ribbon"><svg viewBox="0 0 1000 72" preserveAspectRatio="none" role="img" aria-label="Baseline windows timeline">
+<line x1="0" y1="56" x2="1000" y2="56" stroke="#c8d0dc" stroke-width="1"/>
+<g>
+<rect x="25.0" y="20" width="310.0" height="26" rx="4" fill="#2563eb" opacity="0.55"/>
+<text x="180.0" y="10" text-anchor="middle" font-size="10" fill="#666">Mar 26</text>
+<text x="180.0" y="68" text-anchor="middle" font-size="10" fill="#666">valid &middot; snaps 1277&rarr;1281</text>
+</g>
+<g>
+<rect x="345.0" y="20" width="310.0" height="26" rx="4" fill="#2563eb" opacity="0.55"/>
+<text x="500.0" y="10" text-anchor="middle" font-size="10" fill="#666">Apr 02</text>
+<text x="500.0" y="68" text-anchor="middle" font-size="10" fill="#666">valid &middot; snaps 1397&rarr;1401</text>
+</g>
+<g>
+<rect x="665.0" y="14" width="310.0" height="34" rx="4" fill="#2563eb" opacity="1.0"/>
+<text x="820.0" y="10" text-anchor="middle" font-size="10" fill="#666">Apr 09</text>
+<text x="820.0" y="35" text-anchor="middle" font-size="11" font-weight="600" fill="#ffffff">current</text>
+<text x="820.0" y="68" text-anchor="middle" font-size="10" fill="#666">valid &middot; snaps 1619&rarr;1623</text>
+</g>
+</svg></div>
+<table>
+<thead><tr><th>Week</th><th>Window start</th><th>Window end</th><th class="num">Begin snap</th><th class="num">End snap</th><th>Status</th><th>Detail</th></tr></thead><tbody>
+<tr class="ok"><td><b>Current</b></td><td>2026-04-09 Thu 15:00</td><td>2026-04-09 Thu 16:00</td><td class="num">1619</td><td class="num">1623</td><td><span class="badge ok">valid</span></td><td></td></tr>
+<tr class="ok"><td>&minus;1w</td><td>2026-04-02 Thu 15:00</td><td>2026-04-02 Thu 16:00</td><td class="num">1397</td><td class="num">1401</td><td><span class="badge ok">valid</span></td><td></td></tr>
+<tr class="ok"><td>&minus;2w</td><td>2026-03-26 Thu 15:00</td><td>2026-03-26 Thu 16:00</td><td class="num">1277</td><td class="num">1281</td><td><span class="badge ok">valid</span></td><td></td></tr>
+</tbody></table>
+<p style="font-size:12px;color:var(--muted)">Skipped windows are excluded from the baseline used to compute z-scores.</p>
+</section>
+<section id="load"><h2>Load profile &mdash; per-second rates</h2>
+<p style="font-size:12px;color:var(--muted)">Cumulative DBA_HIST_SYSSTAT deltas divided by window duration. The <b>Trend</b> column shows the per-week series (oldest &rarr; current); the bar behind <b>Current</b> shows each value relative to its row max. Per-transaction rates available in the scratch table AWR_TREND_LOAD_PROFILE.per_txn.</p>
+<table><thead><tr><th>Metric</th><th class="trend">Trend</th><th class="num">Current</th><th class="num">&minus;1w</th><th class="num">&minus;2w</th></tr></thead><tbody>
+<tr><td>DB time (cs/s, 1/100s)</td><td class="trend" data-spark="9.474722,9.609722,9.525833" data-spark-title="DB time (cs/s, 1/100s)"></td><td class="num cell-bar"><span class="bg" style="width:99.1%"></span><span class="v"><b>9.53</b></span></td><td class="num">9.61</td><td class="num">9.47</td></tr>
+<tr><td>redo size (bytes/s)</td><td class="trend" data-spark="5734.556667,5041.558889,5111.000000" data-spark-title="redo size (bytes/s)"></td><td class="num cell-bar"><span class="bg" style="width:89.1%"></span><span class="v"><b>5,111.00</b></span></td><td class="num">5,041.56</td><td class="num">5,734.56</td></tr>
+<tr><td>session logical reads (/s)</td><td class="trend" data-spark="43.179444,39.824167,36.925000" data-spark-title="session logical reads (/s)"></td><td class="num cell-bar"><span class="bg" style="width:85.5%"></span><span class="v"><b>36.92</b></span></td><td class="num">39.82</td><td class="num">43.18</td></tr>
+<tr><td>physical reads (/s)</td><td class="trend" data-spark="0.277778,0.294167,0.233889" data-spark-title="physical reads (/s)"></td><td class="num cell-bar"><span class="bg" style="width:79.5%"></span><span class="v"><b>0.2339</b></span></td><td class="num">0.2942</td><td class="num">0.2778</td></tr>
+<tr><td>physical read total bytes (bytes/s)</td><td class="trend" data-spark="108579.555556,91195.164444,76795.448889" data-spark-title="physical read total bytes (bytes/s)"></td><td class="num cell-bar"><span class="bg" style="width:70.7%"></span><span class="v"><b>76,795.45</b></span></td><td class="num">91,195.16</td><td class="num">108,579.56</td></tr>
+<tr><td>physical writes (/s)</td><td class="trend" data-spark="1.572778,1.535556,1.450278" data-spark-title="physical writes (/s)"></td><td class="num cell-bar"><span class="bg" style="width:92.2%"></span><span class="v"><b>1.45</b></span></td><td class="num">1.54</td><td class="num">1.57</td></tr>
+<tr><td>physical write total bytes (bytes/s)</td><td class="trend" data-spark="59351.608889,44307.200000,44565.333333" data-spark-title="physical write total bytes (bytes/s)"></td><td class="num cell-bar"><span class="bg" style="width:75.1%"></span><span class="v"><b>44,565.33</b></span></td><td class="num">44,307.20</td><td class="num">59,351.61</td></tr>
+<tr><td>user calls (/s)</td><td class="trend" data-spark="1.167500,1.216389,1.152222" data-spark-title="user calls (/s)"></td><td class="num cell-bar"><span class="bg" style="width:94.7%"></span><span class="v"><b>1.15</b></span></td><td class="num">1.22</td><td class="num">1.17</td></tr>
+<tr><td>execute count (/s)</td><td class="trend" data-spark="2.885278,2.554444,2.478889" data-spark-title="execute count (/s)"></td><td class="num cell-bar"><span class="bg" style="width:85.9%"></span><span class="v"><b>2.48</b></span></td><td class="num">2.55</td><td class="num">2.89</td></tr>
+<tr><td>user commits (/s)</td><td class="trend" data-spark="0.023611,0.023333,0.022778" data-spark-title="user commits (/s)"></td><td class="num cell-bar"><span class="bg" style="width:96.5%"></span><span class="v"><b>0.0228</b></span></td><td class="num">0.0233</td><td class="num">0.0236</td></tr>
+<tr><td>user rollbacks (/s)</td><td class="trend" data-spark="0.000000,0.000000,0.000000" data-spark-title="user rollbacks (/s)"></td><td class="num cell-bar"><span class="bg" style="width:0.0%"></span><span class="v"><b>0.00</b></span></td><td class="num">0.00</td><td class="num">0.00</td></tr>
+<tr><td>parse count (total) (/s)</td><td class="trend" data-spark="2.285833,2.062500,2.000000" data-spark-title="parse count (total) (/s)"></td><td class="num cell-bar"><span class="bg" style="width:87.5%"></span><span class="v"><b>2.00</b></span></td><td class="num">2.06</td><td class="num">2.29</td></tr>
+<tr><td>parse count (hard) (/s)</td><td class="trend" data-spark="0.016944,0.005278,0.003333" data-spark-title="parse count (hard) (/s)"></td><td class="num cell-bar"><span class="bg" style="width:19.7%"></span><span class="v"><b>0.0033</b></span></td><td class="num">0.0053</td><td class="num">0.0169</td></tr>
+<tr><td>parse count (failures) (/s)</td><td class="trend" data-spark="0.000000,0.000000,0.000000" data-spark-title="parse count (failures) (/s)"></td><td class="num cell-bar"><span class="bg" style="width:0.0%"></span><span class="v"><b>0.00</b></span></td><td class="num">0.00</td><td class="num">0.00</td></tr>
+<tr><td>logons cumulative (/s)</td><td class="trend" data-spark="0.046667,0.047222,0.046111" data-spark-title="logons cumulative (/s)"></td><td class="num cell-bar"><span class="bg" style="width:97.6%"></span><span class="v"><b>0.0461</b></span></td><td class="num">0.0472</td><td class="num">0.0467</td></tr>
+<tr><td>opened cursors cumulative (/s)</td><td class="trend" data-spark="2.878889,2.530278,2.448889" data-spark-title="opened cursors cumulative (/s)"></td><td class="num cell-bar"><span class="bg" style="width:85.1%"></span><span class="v"><b>2.45</b></span></td><td class="num">2.53</td><td class="num">2.88</td></tr>
+<tr><td>redo writes (/s)</td><td class="trend" data-spark="1.094722,1.090278,1.095833" data-spark-title="redo writes (/s)"></td><td class="num cell-bar"><span class="bg" style="width:100.0%"></span><span class="v"><b>1.10</b></span></td><td class="num">1.09</td><td class="num">1.09</td></tr>
+<tr><td>sorts (memory) (/s)</td><td class="trend" data-spark="0.948889,0.891944,0.863611" data-spark-title="sorts (memory) (/s)"></td><td class="num cell-bar"><span class="bg" style="width:91.0%"></span><span class="v"><b>0.8636</b></span></td><td class="num">0.8919</td><td class="num">0.9489</td></tr>
+<tr><td>sorts (disk) (/s)</td><td class="trend" data-spark="0.000000,0.000000,0.000000" data-spark-title="sorts (disk) (/s)"></td><td class="num cell-bar"><span class="bg" style="width:0.0%"></span><span class="v"><b>0.00</b></span></td><td class="num">0.00</td><td class="num">0.00</td></tr>
+<tr><td>sorts (rows) (/s)</td><td class="trend" data-spark="49.453611,45.551667,52.098056" data-spark-title="sorts (rows) (/s)"></td><td class="num cell-bar"><span class="bg" style="width:100.0%"></span><span class="v"><b>52.10</b></span></td><td class="num">45.55</td><td class="num">49.45</td></tr>
+<tr><td>table scans (long tables) (/s)</td><td class="trend" data-spark="0.000000,0.000000,0.000000" data-spark-title="table scans (long tables) (/s)"></td><td class="num cell-bar"><span class="bg" style="width:0.0%"></span><span class="v"><b>0.00</b></span></td><td class="num">0.00</td><td class="num">0.00</td></tr>
+<tr><td>table fetch by rowid (/s)</td><td class="trend" data-spark="5.752500,5.716944,3.726111" data-spark-title="table fetch by rowid (/s)"></td><td class="num cell-bar"><span class="bg" style="width:64.8%"></span><span class="v"><b>3.73</b></span></td><td class="num">5.72</td><td class="num">5.75</td></tr>
+<tr><td>CPU used by this session (cs/s, 1/100s)</td><td class="trend" data-spark="0.342222,0.336389,0.271944" data-spark-title="CPU used by this session (cs/s, 1/100s)"></td><td class="num cell-bar"><span class="bg" style="width:79.5%"></span><span class="v"><b>0.2719</b></span></td><td class="num">0.3364</td><td class="num">0.3422</td></tr>
+<tr><td>bytes received via SQL*Net from client (bytes/s)</td><td class="trend" data-spark="217.885000,222.817222,215.498611" data-spark-title="bytes received via SQL*Net from client (bytes/s)"></td><td class="num cell-bar"><span class="bg" style="width:96.7%"></span><span class="v"><b>215.50</b></span></td><td class="num">222.82</td><td class="num">217.89</td></tr>
+<tr><td>bytes sent via SQL*Net to client (bytes/s)</td><td class="trend" data-spark="126.178333,134.053333,114.903611" data-spark-title="bytes sent via SQL*Net to client (bytes/s)"></td><td class="num cell-bar"><span class="bg" style="width:85.7%"></span><span class="v"><b>114.90</b></span></td><td class="num">134.05</td><td class="num">126.18</td></tr>
+<tr><td>redo size for lost write detection (/s)</td><td class="trend" data-spark="8.174444,9.820000,6.805556" data-spark-title="redo size for lost write detection (/s)"></td><td class="num cell-bar"><span class="bg" style="width:69.3%"></span><span class="v"><b>6.81</b></span></td><td class="num">9.82</td><td class="num">8.17</td></tr>
+</tbody></table></section>
+<section id="metrics"><h2>System metrics (DBA_HIST_SYSMETRIC_SUMMARY)</h2>
+<p style="font-size:12px;color:var(--muted)">Averages over the snapshots inside each window. The <b>Trend</b> column plots the per-week series (oldest &rarr; current). Values are already per-second where the metric name says so.</p>
+<table><thead><tr><th>Metric</th><th>Unit</th><th class="trend">Trend</th><th class="num">Current</th><th class="num">&minus;1w</th><th class="num">&minus;2w</th></tr></thead><tbody>
+<tr><td>Average Active Sessions</td><td>Active Sessions</td><td class="trend" data-spark="0.000617,0.001177,0.000524" data-spark-title="Average Active Sessions"></td><td class="num cell-bar"><span class="bg" style="width:44.5%"></span><span class="v"><b>0.000524</b></span></td><td class="num">0.001177</td><td class="num">0.000617</td></tr>
+<tr><td>Host CPU Utilization (%)</td><td>% Busy/(Idle+Busy)</td><td class="trend" data-spark="0.799041,0.866673,0.951998" data-spark-title="Host CPU Utilization (%)"></td><td class="num cell-bar"><span class="bg" style="width:100.0%"></span><span class="v"><b>0.9520</b></span></td><td class="num">0.8667</td><td class="num">0.7990</td></tr>
+<tr><td>Database CPU Time Ratio</td><td>% Cpu/DB_Time</td><td class="trend" data-spark="105.567236,108.461522,107.132378" data-spark-title="Database CPU Time Ratio"></td><td class="num cell-bar"><span class="bg" style="width:98.8%"></span><span class="v"><b>107.13</b></span></td><td class="num">108.46</td><td class="num">105.57</td></tr>
+<tr><td>Database Wait Time Ratio</td><td>% Wait/DB_Time</td><td class="trend" data-spark="6.047244,10.200621,7.384741" data-spark-title="Database Wait Time Ratio"></td><td class="num cell-bar"><span class="bg" style="width:72.4%"></span><span class="v"><b>7.38</b></span></td><td class="num">10.20</td><td class="num">6.05</td></tr>
+<tr><td>Session Count</td><td>Sessions</td><td class="trend" data-spark="95.466667,98.716667,95.533333" data-spark-title="Session Count"></td><td class="num cell-bar"><span class="bg" style="width:96.8%"></span><span class="v"><b>95.53</b></span></td><td class="num">98.72</td><td class="num">95.47</td></tr>
+<tr><td>Redo Generated Per Sec</td><td>Bytes Per Second</td><td class="trend" data-spark="5709.008003,5069.147276,5086.400273" data-spark-title="Redo Generated Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:89.1%"></span><span class="v"><b>5,086.40</b></span></td><td class="num">5,069.15</td><td class="num">5,709.01</td></tr>
+<tr><td>Physical Read Total Bytes Per Sec</td><td>Bytes Per Second</td><td class="trend" data-spark="108546.501988,91445.578436,76761.798096" data-spark-title="Physical Read Total Bytes Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:70.7%"></span><span class="v"><b>76,761.80</b></span></td><td class="num">91,445.58</td><td class="num">108,546.50</td></tr>
+<tr><td>Physical Write Total Bytes Per Sec</td><td>Bytes Per Second</td><td class="trend" data-spark="59787.682780,44756.501172,44778.609621" data-spark-title="Physical Write Total Bytes Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:74.9%"></span><span class="v"><b>44,778.61</b></span></td><td class="num">44,756.50</td><td class="num">59,787.68</td></tr>
+<tr><td>Physical Read Total IO Requests Per Sec</td><td>Requests Per Second</td><td class="trend" data-spark="4.964040,4.923650,4.716284" data-spark-title="Physical Read Total IO Requests Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:95.0%"></span><span class="v"><b>4.72</b></span></td><td class="num">4.92</td><td class="num">4.96</td></tr>
+<tr><td>Physical Write Total IO Requests Per Sec</td><td>Requests Per Second</td><td class="trend" data-spark="2.925156,2.945506,2.898968" data-spark-title="Physical Write Total IO Requests Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:98.4%"></span><span class="v"><b>2.90</b></span></td><td class="num">2.95</td><td class="num">2.93</td></tr>
+<tr><td>Average Synchronous Single-Block Read Latency</td><td>Milliseconds</td><td class="trend" data-spark="0.000495,0.000455,0.000658" data-spark-title="Average Synchronous Single-Block Read Latency"></td><td class="num cell-bar"><span class="bg" style="width:100.0%"></span><span class="v"><b>0.000658</b></span></td><td class="num">0.000455</td><td class="num">0.000495</td></tr>
+<tr><td>Logical Reads Per Sec</td><td>Reads Per Second</td><td class="trend" data-spark="43.066603,40.130053,36.840567" data-spark-title="Logical Reads Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:85.5%"></span><span class="v"><b>36.84</b></span></td><td class="num">40.13</td><td class="num">43.07</td></tr>
+<tr><td>Executions Per Sec</td><td>Executes Per Second</td><td class="trend" data-spark="2.886932,2.563126,2.477534" data-spark-title="Executions Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:85.8%"></span><span class="v"><b>2.48</b></span></td><td class="num">2.56</td><td class="num">2.89</td></tr>
+<tr><td>User Calls Per Sec</td><td>Calls Per Second</td><td class="trend" data-spark="1.168096,1.214606,1.152217" data-spark-title="User Calls Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:94.9%"></span><span class="v"><b>1.15</b></span></td><td class="num">1.21</td><td class="num">1.17</td></tr>
+<tr><td>User Commits Per Sec</td><td>Commits Per Second</td><td class="trend" data-spark="0.023614,0.023492,0.022774" data-spark-title="User Commits Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:96.4%"></span><span class="v"><b>0.0228</b></span></td><td class="num">0.0235</td><td class="num">0.0236</td></tr>
+<tr><td>User Rollbacks Per Sec</td><td>Rollbacks Per Second</td><td class="trend" data-spark="0.000000,0.000000,0.000000" data-spark-title="User Rollbacks Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:0.0%"></span><span class="v"><b>0.00</b></span></td><td class="num">0.00</td><td class="num">0.00</td></tr>
+<tr><td>Hard Parse Count Per Sec</td><td>Parses Per Second</td><td class="trend" data-spark="0.016931,0.005333,0.003333" data-spark-title="Hard Parse Count Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:19.7%"></span><span class="v"><b>0.0033</b></span></td><td class="num">0.0053</td><td class="num">0.0169</td></tr>
+<tr><td>Total Parse Count Per Sec</td><td>Parses Per Second</td><td class="trend" data-spark="2.288107,2.071279,1.998691" data-spark-title="Total Parse Count Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:87.4%"></span><span class="v"><b>2.00</b></span></td><td class="num">2.07</td><td class="num">2.29</td></tr>
+<tr><td>Logons Per Sec</td><td>Logons Per Second</td><td class="trend" data-spark="0.046940,0.047450,0.046102" data-spark-title="Logons Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:97.2%"></span><span class="v"><b>0.0461</b></span></td><td class="num">0.0475</td><td class="num">0.0469</td></tr>
+<tr><td>Network Traffic Volume Per Sec</td><td>Bytes Per Second</td><td class="trend" data-spark="344.055223,355.758455,330.407021" data-spark-title="Network Traffic Volume Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:92.9%"></span><span class="v"><b>330.41</b></span></td><td class="num">355.76</td><td class="num">344.06</td></tr>
+<tr><td>SQL Service Response Time</td><td>CentiSeconds Per Call</td><td class="trend" data-spark="0.002794,0.004820,0.002310" data-spark-title="SQL Service Response Time"></td><td class="num cell-bar"><span class="bg" style="width:47.9%"></span><span class="v"><b>0.002310</b></span></td><td class="num">0.004820</td><td class="num">0.002794</td></tr>
+<tr><td>Physical Reads Per Sec</td><td>Reads Per Second</td><td class="trend" data-spark="0.267185,0.320473,0.228850" data-spark-title="Physical Reads Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:71.4%"></span><span class="v"><b>0.2289</b></span></td><td class="num">0.3205</td><td class="num">0.2672</td></tr>
+<tr><td>Physical Writes Per Sec</td><td>Writes Per Second</td><td class="trend" data-spark="1.572449,1.534049,1.450066" data-spark-title="Physical Writes Per Sec"></td><td class="num cell-bar"><span class="bg" style="width:92.2%"></span><span class="v"><b>1.45</b></span></td><td class="num">1.53</td><td class="num">1.57</td></tr>
+</tbody></table></section>
+<section id="waits-fg"><h2>Foreground wait events (top 10 by time waited)</h2>
+<p style="font-size:12px;color:var(--muted)">Chart: wait-class time breakdown per week (stacked). Table below: top-10 individual events, with a sparkline over the series.</p>
+<div class="chart-wrap chart-small" id="waits-fg-stack"></div>
+<script>
+(function(){
+AWR_DATA.waitsFg = {weeks:["Mar 26","Apr 02","Apr 09"],classes:[{"name":"System I/O","vals":[54.130551,51.578615,47.091980]},{"name":"Other","vals":[41.000205,48.895100,26.701568]},{"name":"User I/O","vals":[1.366684,1.469112,1.282360]},{"name":"Commit","vals":[0.571021,0.637833,0.471344]},{"name":"Network","vals":[0.031064,0.035275,0.027391]},{"name":"Application","vals":[0.013141,0.014861,0.012596]},{"name":"Concurrency","vals":[0.004717,0.003772,0.001357]},{"name":"Configuration","vals":[0.010062]}]};
+if(!window.echarts) return;
+var el=document.getElementById("waits-fg-stack"); if(!el) return;
+var d=AWR_DATA.waitsFg, palette=["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1","#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"];
+var cs=getComputedStyle(document.body);
+var fg=cs.getPropertyValue("--fg").trim()||"#333";
+var mu=cs.getPropertyValue("--muted").trim()||"#888";
+var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";
+var chart=echarts.init(el);
+chart.setOption({
+  tooltip:{trigger:"axis",axisPointer:{type:"shadow"},valueFormatter:function(v){return v==null?"\u2014":(+v).toFixed(2)+"s";}},
+  legend:{bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:12,itemHeight:8},
+  grid:{left:60,right:16,top:10,bottom:42,containLabel:true},
+  xAxis:{type:"value",axisLabel:{color:mu,formatter:"{value}s"},splitLine:{lineStyle:{color:gr}}},
+  yAxis:{type:"category",data:d.weeks,axisLabel:{color:fg,fontWeight:600}},
+  series:d.classes.map(function(c,i){return {name:c.name,type:"bar",stack:"total",barWidth:"55%",emphasis:{focus:"series"},itemStyle:{color:palette[i%palette.length]},data:c.vals.map(function(v){return v==null?0:v;})};})
+});
+new ResizeObserver(function(){chart.resize();}).observe(el);
+})();
+</script>
+<h3>Top 10 events by time waited</h3>
+<table><thead><tr><th>Event</th><th>Class</th><th class="trend">Trend</th><th class="num">Current (s)</th><th class="num">&minus;1w (s)</th><th class="num">&minus;2w (s)</th></tr></thead><tbody>
+<tr><td>log file parallel write</td><td>System I/O</td><td class="trend" data-spark="29.291779,29.171803,23.256031" data-spark-title="log file parallel write"></td><td class="num"><b>23.26 <span class="badge info">#1</span></b></td><td class="num">29.17 <span class="badge skip">#1</span></td><td class="num">29.29 <span class="badge skip">#1</span></td></tr>
+<tr><td>control file parallel write</td><td>System I/O</td><td class="trend" data-spark="21.732711,19.192567,21.226622" data-spark-title="control file parallel write"></td><td class="num"><b>21.23 <span class="badge info">#2</span></b></td><td class="num">19.19 <span class="badge skip">#4</span></td><td class="num">21.73 <span class="badge skip">#2</span></td></tr>
+<tr><td>Redo Transport MISC</td><td>Other</td><td class="trend" data-spark="20.580315,22.666789,13.509788" data-spark-title="Redo Transport MISC"></td><td class="num"><b>13.51 <span class="badge info">#3</span></b></td><td class="num">22.67 <span class="badge skip">#2</span></td><td class="num">20.58 <span class="badge skip">#3</span></td></tr>
+<tr><td>SYNC Remote Write</td><td>Other</td><td class="trend" data-spark="19.516737,21.743195,12.639199" data-spark-title="SYNC Remote Write"></td><td class="num"><b>12.64 <span class="badge info">#4</span></b></td><td class="num">21.74 <span class="badge skip">#3</span></td><td class="num">19.52 <span class="badge skip">#4</span></td></tr>
+<tr><td>db file async I/O submit</td><td>System I/O</td><td class="trend" data-spark="2.529701,2.716441,2.233697" data-spark-title="db file async I/O submit"></td><td class="num"><b>2.23 <span class="badge info">#5</span></b></td><td class="num">2.72 <span class="badge skip">#6</span></td><td class="num">2.53 <span class="badge skip">#5</span></td></tr>
+<tr><td>Disk file operations I/O</td><td>User I/O</td><td class="trend" data-spark="0.819601,0.820384,0.756462" data-spark-title="Disk file operations I/O"></td><td class="num"><b>0.76 <span class="badge info">#6</span></b></td><td class="num">0.82 <span class="badge skip">#7</span></td><td class="num">0.82 <span class="badge skip">#6</span></td></tr>
+<tr><td>log file sync</td><td>Commit</td><td class="trend" data-spark="0.571021,0.637833,0.471344" data-spark-title="log file sync"></td><td class="num"><b>0.47 <span class="badge info">#7</span></b></td><td class="num">0.64 <span class="badge skip">#8</span></td><td class="num">0.57 <span class="badge skip">#7</span></td></tr>
+<tr><td>DG Broker configuration file I/O</td><td>User I/O</td><td class="trend" data-spark="0.377877,0.487536,0.369185" data-spark-title="DG Broker configuration file I/O"></td><td class="num"><b>0.37 <span class="badge info">#8</span></b></td><td class="num">0.49 <span class="badge skip">#9</span></td><td class="num">0.38 <span class="badge skip">#9</span></td></tr>
+<tr><td>flashback log file write</td><td>System I/O</td><td class="trend" data-spark="0.504882,0.443963,0.328249" data-spark-title="flashback log file write"></td><td class="num"><b>0.33 <span class="badge info">#9</span></b></td><td class="num">0.44 <span class="badge skip">#10</span></td><td class="num">0.50 <span class="badge skip">#8</span></td></tr>
+<tr><td>oracle thread bootstrap</td><td>Other</td><td class="trend" data-spark="0.291154" data-spark-title="oracle thread bootstrap"></td><td class="num"><b>0.29 <span class="badge info">#10</span></b></td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+<tr><td>Failed Logon Delay</td><td>Other</td><td class="trend" data-spark="4.006120" data-spark-title="Failed Logon Delay"></td><td class="num"><b>&mdash;</b></td><td class="num">4.01 <span class="badge skip">#5</span></td><td class="num">&mdash;</td></tr>
+<tr><td>ADR block file write</td><td>Other</td><td class="trend" data-spark="0.287283" data-spark-title="ADR block file write"></td><td class="num"><b>&mdash;</b></td><td class="num">&mdash;</td><td class="num">0.29 <span class="badge skip">#10</span></td></tr>
+</tbody></table>
+<h3>Wait-class rollup</h3>
+<table><thead><tr><th>Wait class</th><th class="num">Current (s)</th><th class="num">&minus;1w (s)</th><th class="num">&minus;2w (s)</th></tr></thead><tbody>
+<tr><td>System I/O</td><td class="num"><b>47.09</b></td><td class="num">51.58</td><td class="num">54.13</td></tr>
+<tr><td>Other</td><td class="num"><b>26.70</b></td><td class="num">48.90</td><td class="num">41.00</td></tr>
+<tr><td>User I/O</td><td class="num"><b>1.28</b></td><td class="num">1.47</td><td class="num">1.37</td></tr>
+<tr><td>Commit</td><td class="num"><b>0.47</b></td><td class="num">0.64</td><td class="num">0.57</td></tr>
+<tr><td>Network</td><td class="num"><b>0.03</b></td><td class="num">0.04</td><td class="num">0.03</td></tr>
+<tr><td>Application</td><td class="num"><b>0.01</b></td><td class="num">0.01</td><td class="num">0.01</td></tr>
+<tr><td>Concurrency</td><td class="num"><b>0.00</b></td><td class="num">0.00</td><td class="num">0.00</td></tr>
+<tr><td>Configuration</td><td class="num"><b>&mdash;</b></td><td class="num">&mdash;</td><td class="num">0.01</td></tr>
+</tbody></table></section>
+<section id="waits-bg"><h2>Background wait events</h2>
+<p style="font-size:12px;color:var(--muted)">Chart: wait-class time breakdown per week (stacked). Table below: per-event with a sparkline over the series. From DBA_HIST_BG_EVENT_SUMMARY. Idle waits filtered out. Time in seconds.</p>
+<div class="chart-wrap chart-small" id="waits-bg-stack"></div>
+<script>
+(function(){
+AWR_DATA.waitsBg = {weeks:["Mar 26","Apr 02","Apr 09"],classes:[{"name":"System I/O","vals":[54.058966,51.524732,47.044867]},{"name":"Other","vals":[40.624935,46.633955,26.505357]},{"name":"User I/O","vals":[1.194577,1.298123,1.125132]}]};
+if(!window.echarts) return;
+var el=document.getElementById("waits-bg-stack"); if(!el) return;
+var d=AWR_DATA.waitsBg, palette=["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1","#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"];
+var cs=getComputedStyle(document.body);
+var fg=cs.getPropertyValue("--fg").trim()||"#333";
+var mu=cs.getPropertyValue("--muted").trim()||"#888";
+var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";
+var chart=echarts.init(el);
+chart.setOption({
+  tooltip:{trigger:"axis",axisPointer:{type:"shadow"},valueFormatter:function(v){return v==null?"\u2014":(+v).toFixed(2)+"s";}},
+  legend:{bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:12,itemHeight:8},
+  grid:{left:60,right:16,top:10,bottom:42,containLabel:true},
+  xAxis:{type:"value",axisLabel:{color:mu,formatter:"{value}s"},splitLine:{lineStyle:{color:gr}}},
+  yAxis:{type:"category",data:d.weeks,axisLabel:{color:fg,fontWeight:600}},
+  series:d.classes.map(function(c,i){return {name:c.name,type:"bar",stack:"total",barWidth:"55%",emphasis:{focus:"series"},itemStyle:{color:palette[i%palette.length]},data:c.vals.map(function(v){return v==null?0:v;})};})
+});
+new ResizeObserver(function(){chart.resize();}).observe(el);
+})();
+</script>
+<table><thead><tr><th>Event</th><th>Class</th><th class="trend">Trend</th><th class="num">Current (s)</th><th class="num">&minus;1w (s)</th><th class="num">&minus;2w (s)</th></tr></thead><tbody>
+<tr><td>log file parallel write</td><td>System I/O</td><td class="trend" data-spark="29.291672,29.171761,23.256299" data-spark-title="log file parallel write"></td><td class="num"><b>23.26 <span class="badge info">#1</span></b></td><td class="num">29.17 <span class="badge skip">#1</span></td><td class="num">29.29 <span class="badge skip">#1</span></td></tr>
+<tr><td>control file parallel write</td><td>System I/O</td><td class="trend" data-spark="21.732711,19.192567,21.226622" data-spark-title="control file parallel write"></td><td class="num"><b>21.23 <span class="badge info">#2</span></b></td><td class="num">19.19 <span class="badge skip">#4</span></td><td class="num">21.73 <span class="badge skip">#2</span></td></tr>
+<tr><td>Redo Transport MISC</td><td>Other</td><td class="trend" data-spark="20.582252,22.666910,13.510329" data-spark-title="Redo Transport MISC"></td><td class="num"><b>13.51 <span class="badge info">#3</span></b></td><td class="num">22.67 <span class="badge skip">#2</span></td><td class="num">20.58 <span class="badge skip">#3</span></td></tr>
+<tr><td>SYNC Remote Write</td><td>Other</td><td class="trend" data-spark="19.517518,21.743291,12.639479" data-spark-title="SYNC Remote Write"></td><td class="num"><b>12.64 <span class="badge info">#4</span></b></td><td class="num">21.74 <span class="badge skip">#3</span></td><td class="num">19.52 <span class="badge skip">#4</span></td></tr>
+<tr><td>db file async I/O submit</td><td>System I/O</td><td class="trend" data-spark="2.529701,2.716441,2.233697" data-spark-title="db file async I/O submit"></td><td class="num"><b>2.23 <span class="badge info">#5</span></b></td><td class="num">2.72 <span class="badge skip">#5</span></td><td class="num">2.53 <span class="badge skip">#5</span></td></tr>
+<tr><td>Disk file operations I/O</td><td>User I/O</td><td class="trend" data-spark="0.816700,0.810587,0.755947" data-spark-title="Disk file operations I/O"></td><td class="num"><b>0.76 <span class="badge info">#6</span></b></td><td class="num">0.81 <span class="badge skip">#7</span></td><td class="num">0.82 <span class="badge skip">#6</span></td></tr>
+<tr><td>DG Broker configuration file I/O</td><td>User I/O</td><td class="trend" data-spark="0.377877,0.487536,0.369185" data-spark-title="DG Broker configuration file I/O"></td><td class="num"><b>0.37 <span class="badge info">#7</span></b></td><td class="num">0.49 <span class="badge skip">#8</span></td><td class="num">0.38 <span class="badge skip">#8</span></td></tr>
+<tr><td>flashback log file write</td><td>System I/O</td><td class="trend" data-spark="0.504882,0.443963,0.328249" data-spark-title="flashback log file write"></td><td class="num"><b>0.33 <span class="badge info">#8</span></b></td><td class="num">0.44 <span class="badge skip">#9</span></td><td class="num">0.50 <span class="badge skip">#7</span></td></tr>
+<tr><td>oracle thread bootstrap</td><td>Other</td><td class="trend" data-spark="0.237882,0.220405,0.291154" data-spark-title="oracle thread bootstrap"></td><td class="num"><b>0.29 <span class="badge info">#9</span></b></td><td class="num">0.22 <span class="badge skip">#10</span></td><td class="num">0.24 <span class="badge skip">#10</span></td></tr>
+<tr><td>os thread creation</td><td>Other</td><td class="trend" data-spark="0.064395" data-spark-title="os thread creation"></td><td class="num"><b>0.06 <span class="badge info">#10</span></b></td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+<tr><td>Failed Logon Delay</td><td>Other</td><td class="trend" data-spark="2.003349" data-spark-title="Failed Logon Delay"></td><td class="num"><b>&mdash;</b></td><td class="num">2.00 <span class="badge skip">#6</span></td><td class="num">&mdash;</td></tr>
+<tr><td>ADR block file write</td><td>Other</td><td class="trend" data-spark="0.287283" data-spark-title="ADR block file write"></td><td class="num"><b>&mdash;</b></td><td class="num">&mdash;</td><td class="num">0.29 <span class="badge skip">#9</span></td></tr>
+</tbody></table></section>
+<section id="topsql"><h2>Top SQL (top 10 per dimension, per window)</h2>
+<p style="font-size:12px;color:var(--muted)">Bump chart below shows SQL rank movement across weeks (lower = heavier). Red diamonds mark plan-hash changes vs current. Detail tables are collapsed by default &mdash; click to expand.</p>
+<div class="chart-wrap chart-medium" id="topsql-bump"></div>
+<script>
+(function(){
+AWR_DATA.topSql = {weeks:["Mar 26","Apr 02","Apr 09"],topN:10,sqls:[{"sql_id":"fhf8upax5cxsz","cur":1,"ranks":[1,1,1],"phvChg":[0,0,0],"ela":[1.103474,0.983642,0.902750]},{"sql_id":"0w26sk6t6gq98","cur":2,"ranks":[2,2,2],"phvChg":[0,0,0],"ela":[0.967102,0.861908,0.795290]},{"sql_id":"0za9fv0j1vgkk","cur":3,"ranks":[3,3,3],"phvChg":[0,0,0],"ela":[0.781978,0.678410,0.641231]},{"sql_id":"22356bkgsdcnh","cur":4,"ranks":[4,4,4],"phvChg":[0,0,0],"ela":[0.591375,0.542563,0.556309]},{"sql_id":"7kub1nvw8wmq3","cur":5,"ranks":[9,6,5],"phvChg":[0,0,0],"ela":[0.217213,0.219394,0.218196]},{"sql_id":"1fvsn5j51ugz3","cur":6,"ranks":[5,8,6],"phvChg":[0,0,0],"ela":[0.254084,0.198486,0.200399]},{"sql_id":"f7b069b8zkhvu","cur":7,"ranks":[6,7,7],"phvChg":[0,0,0],"ela":[0.251027,0.207829,0.190823]},{"sql_id":"28bgqbzpa87xf","cur":8,"ranks":[7,5,8],"phvChg":[0,0,0],"ela":[0.246424,0.252034,0.188289]},{"sql_id":"dvu40a9avazf8","cur":9,"ranks":[8,9,9],"phvChg":[0,0,0],"ela":[0.222565,0.189923,0.176292]},{"sql_id":"49s332uhbnsma","cur":10,"ranks":[null,null,10],"phvChg":[0,0,0],"ela":[null,null,0.176238]},{"sql_id":"0bkjwu3swz0wy","cur":null,"ranks":[null,10,null],"phvChg":[0,0,0],"ela":[null,0.162531,null]},{"sql_id":"3rdvj2msrkpn0","cur":null,"ranks":[10,null,null],"phvChg":[0,0,0],"ela":[0.169285,null,null]}]};
+if(!window.echarts) return;
+var el=document.getElementById("topsql-bump"); if(!el) return;
+var d=AWR_DATA.topSql;
+var cs=getComputedStyle(document.body);
+var fg=cs.getPropertyValue("--fg").trim()||"#333";
+var mu=cs.getPropertyValue("--muted").trim()||"#888";
+var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";
+var cr=cs.getPropertyValue("--crit-fg").trim()||"#c00";
+var palette=["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1","#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"];
+var chart=echarts.init(el);
+chart.setOption({
+  tooltip:{trigger:"item",formatter:function(p){var s=p.data;if(!s||!s.sql_id)return p.seriesName;return "<b>"+s.sql_id+"</b><br/>week "+p.name+"<br/>rank: "+(s.value[1]||"\u2014")+"<br/>ela: "+(s.ela==null?"\u2014":s.ela.toFixed(2)+"s")+(s.phvChg?"<br/><span style=\"color:"+cr+"\">\u25C6 plan changed</span>":"");}},
+  legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},
+  grid:{left:40,right:100,top:10,bottom:44,containLabel:true},
+  xAxis:{type:"category",data:d.weeks,axisLabel:{color:fg,fontWeight:600},splitLine:{show:true,lineStyle:{color:gr}}},
+  yAxis:{type:"value",inverse:true,min:1,max:d.topN,axisLabel:{color:mu,formatter:function(v){return "#"+v;}},splitLine:{lineStyle:{color:gr}}},
+  series:d.sqls.slice(0,d.topN).map(function(s,i){
+    var pts=s.ranks.map(function(r,j){return {value:[j,r],name:d.weeks[j],sql_id:s.sql_id,ela:s.ela[j],phvChg:!!s.phvChg[j]};});
+    var diamonds=s.phvChg.map(function(p,j){return p?{value:[j,s.ranks[j]],itemStyle:{color:cr},symbol:"diamond",symbolSize:12}:null;}).filter(Boolean);
+    return {name:s.sql_id,type:"line",connectNulls:false,showSymbol:true,symbolSize:8,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:2},emphasis:{focus:"series",lineStyle:{width:3}},endLabel:{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6},data:pts,markPoint:diamonds.length?{data:diamonds}:undefined};
+  })
+});
+new ResizeObserver(function(){chart.resize();}).observe(el);
+})();
+</script>
+<details>
+<summary>By elapsed time &mdash; detail table</summary>
+<table><thead><tr><th>SQL_ID</th><th class="num">PHV (cur)</th><th class="num">Current (s)</th><th class="num">&minus;1w</th><th class="num">&minus;2w</th><th>SQL</th></tr></thead><tbody>
+<tr><td class="mono">fhf8upax5cxsz</td><td class="num mono">0</td><td class="num"><b>0.90 <span class="badge info">#1</span></b></td><td class="num">0.98 <span class="badge skip">#1</span></td><td class="num">1.10 <span class="badge skip">#1</span></td><td class="mono" style="max-width:500px;">BEGIN sys.dbms_auto_report_internal.i_save_report (:rep_ref, :snap_id, :pr_class,                                              :rep_id, :suc); END;</td></tr>
+<tr><td class="mono">0w26sk6t6gq98</td><td class="num mono">1388734953</td><td class="num"><b>0.80 <span class="badge info">#2</span></b></td><td class="num">0.86 <span class="badge skip">#2</span></td><td class="num">0.97 <span class="badge skip">#2</span></td><td class="mono" style="max-width:500px;">SELECT XMLTYPE(DBMS_REPORT.GET_REPORT_WITH_SUMMARY(:B1 )) FROM DUAL</td></tr>
+<tr><td class="mono">0za9fv0j1vgkk</td><td class="num mono">3205475971</td><td class="num"><b>0.64 <span class="badge info">#3</span></b></td><td class="num">0.68 <span class="badge skip">#3</span></td><td class="num">0.78 <span class="badge skip">#3</span></td><td class="mono" style="max-width:500px;">WITH MONITOR_DATA AS (SELECT * FROM TABLE(GV$(CURSOR( SELECT USERENV(&apos;instance&apos;) AS INST_ID, KEY, NVL2(PX_QCSID, NULL, STATUS) STATUS, FIRST_REFRESH_TIME, LAST_REFRESH_TIME, REFRES&hellip;</td></tr>
+<tr><td class="mono">22356bkgsdcnh</td><td class="num mono">585200625</td><td class="num"><b>0.56 <span class="badge info">#4</span></b></td><td class="num">0.54 <span class="badge skip">#4</span></td><td class="num">0.59 <span class="badge skip">#4</span></td><td class="mono" style="max-width:500px;">SELECT COUNT(*) FROM X$KSPPI A, X$KSPPCV2 B WHERE A.INDX + 1 = KSPFTCTXPN AND KSPPINM = &apos;_deferred_log_dest_is_valid&apos; AND UPPER(KSPFTCTXVL)=&apos;TRUE&apos;</td></tr>
+<tr><td class="mono">7kub1nvw8wmq3</td><td class="num mono">2243849280</td><td class="num"><b>0.22 <span class="badge info">#5</span></b></td><td class="num">0.22 <span class="badge skip">#6</span></td><td class="num">0.22 <span class="badge skip">#9</span></td><td class="mono" style="max-width:500px;">insert into  wrh$_mvparameter  (dbid, per_pdb, con_dbid, snap_id, instance_number, parameter_hash, ordinal, value, isdefault, ismodified)  select  :dbid,  sv.con_id, con_id_to_dbid&hellip;</td></tr>
+<tr><td class="mono">1fvsn5j51ugz3</td><td class="num mono">0</td><td class="num"><b>0.20 <span class="badge info">#6</span></b></td><td class="num">0.20 <span class="badge skip">#8</span></td><td class="num">0.25 <span class="badge skip">#5</span></td><td class="mono" style="max-width:500px;">      begin
+         dbms_rcvman.resetAll;
+      end;</td></tr>
+<tr><td class="mono">f7b069b8zkhvu</td><td class="num mono">4250213283</td><td class="num"><b>0.19 <span class="badge info">#7</span></b></td><td class="num">0.21 <span class="badge skip">#7</span></td><td class="num">0.25 <span class="badge skip">#6</span></td><td class="mono" style="max-width:500px;">SELECT to_number(value)
+         FROM sys.v$parameter
+         WHERE name = &apos;_qa_lrg_type&apos;</td></tr>
+<tr><td class="mono">28bgqbzpa87xf</td><td class="num mono">0</td><td class="num"><b>0.19 <span class="badge info">#8</span></b></td><td class="num">0.25 <span class="badge skip">#5</span></td><td class="num">0.25 <span class="badge skip">#7</span></td><td class="mono" style="max-width:500px;">      declare
+         policy        varchar2(512);
+         alldest       number  := dbms_rcvman.FALSE#;
+         rlgscn        number; 
+      begin
+         if (:alldest &gt; 0) the&hellip;</td></tr>
+<tr><td class="mono">dvu40a9avazf8</td><td class="num mono">1660022729</td><td class="num"><b>0.18 <span class="badge info">#9</span></b></td><td class="num">0.19 <span class="badge skip">#9</span></td><td class="num">0.22 <span class="badge skip">#8</span></td><td class="mono" style="max-width:500px;">select xmlagg(
+                        xmlelement(&quot;operation&quot;, 
+                          xmlattributes(operation as &quot;name&quot;,
+                                        options  as &quot;op&hellip;</td></tr>
+<tr><td class="mono">49s332uhbnsma</td><td class="num mono">0</td><td class="num"><b>0.18 <span class="badge info">#10</span></b></td><td class="num">&mdash;</td><td class="num">&mdash;</td><td class="mono" style="max-width:500px;">      declare
+         vsn  varchar2(20);
+            begin
+              vsn := dbms_rcvman.getPackageVersion;
+              :pkg_vsn:pkg_vsn_i := vsn;
+              if vsn is not&hellip;</td></tr>
+<tr><td class="mono">3rdvj2msrkpn0</td><td class="num mono">&mdash;</td><td class="num"><b>&mdash;</b></td><td class="num">&mdash;</td><td class="num">0.17 <span class="badge skip">#10</span></td><td class="mono" style="max-width:500px;">select T.*  from table(dbms_xplan.get_plan_rows(:tab_name, :stmt_id, :plan_id, :format, :fpreds, 1, null)) T</td></tr>
+<tr><td class="mono">0bkjwu3swz0wy</td><td class="num mono">&mdash;</td><td class="num"><b>&mdash;</b></td><td class="num">0.16 <span class="badge skip">#10</span></td><td class="num">&mdash;</td><td class="mono" style="max-width:500px;">SELECT value,type FROM v$parameter WHERE name = :1</td></tr>
+</tbody></table>
+</details>
+<details>
+<summary>By CPU time &mdash; detail table</summary>
+<table><thead><tr><th>SQL_ID</th><th class="num">PHV (cur)</th><th class="num">Current (s)</th><th class="num">&minus;1w</th><th class="num">&minus;2w</th><th>SQL</th></tr></thead><tbody>
+<tr><td class="mono">fhf8upax5cxsz</td><td class="num mono">0</td><td class="num"><b>0.89 <span class="badge info">#1</span></b></td><td class="num">0.95 <span class="badge skip">#1</span></td><td class="num">1.09 <span class="badge skip">#1</span></td><td class="mono" style="max-width:500px;">BEGIN sys.dbms_auto_report_internal.i_save_report (:rep_ref, :snap_id, :pr_class,                                              :rep_id, :suc); END;</td></tr>
+<tr><td class="mono">0w26sk6t6gq98</td><td class="num mono">1388734953</td><td class="num"><b>0.80 <span class="badge info">#2</span></b></td><td class="num">0.84 <span class="badge skip">#2</span></td><td class="num">0.98 <span class="badge skip">#2</span></td><td class="mono" style="max-width:500px;">SELECT XMLTYPE(DBMS_REPORT.GET_REPORT_WITH_SUMMARY(:B1 )) FROM DUAL</td></tr>
+<tr><td class="mono">0za9fv0j1vgkk</td><td class="num mono">3205475971</td><td class="num"><b>0.65 <span class="badge info">#3</span></b></td><td class="num">0.67 <span class="badge skip">#3</span></td><td class="num">0.80 <span class="badge skip">#3</span></td><td class="mono" style="max-width:500px;">WITH MONITOR_DATA AS (SELECT * FROM TABLE(GV$(CURSOR( SELECT USERENV(&apos;instance&apos;) AS INST_ID, KEY, NVL2(PX_QCSID, NULL, STATUS) STATUS, FIRST_REFRESH_TIME, LAST_REFRESH_TIME, REFRES&hellip;</td></tr>
+<tr><td class="mono">22356bkgsdcnh</td><td class="num mono">585200625</td><td class="num"><b>0.53 <span class="badge info">#4</span></b></td><td class="num">0.53 <span class="badge skip">#4</span></td><td class="num">0.60 <span class="badge skip">#4</span></td><td class="mono" style="max-width:500px;">SELECT COUNT(*) FROM X$KSPPI A, X$KSPPCV2 B WHERE A.INDX + 1 = KSPFTCTXPN AND KSPPINM = &apos;_deferred_log_dest_is_valid&apos; AND UPPER(KSPFTCTXVL)=&apos;TRUE&apos;</td></tr>
+<tr><td class="mono">7kub1nvw8wmq3</td><td class="num mono">2243849280</td><td class="num"><b>0.22 <span class="badge info">#5</span></b></td><td class="num">0.21 <span class="badge skip">#6</span></td><td class="num">0.22 <span class="badge skip">#9</span></td><td class="mono" style="max-width:500px;">insert into  wrh$_mvparameter  (dbid, per_pdb, con_dbid, snap_id, instance_number, parameter_hash, ordinal, value, isdefault, ismodified)  select  :dbid,  sv.con_id, con_id_to_dbid&hellip;</td></tr>
+<tr><td class="mono">1fvsn5j51ugz3</td><td class="num mono">0</td><td class="num"><b>0.20 <span class="badge info">#6</span></b></td><td class="num">0.20 <span class="badge skip">#7</span></td><td class="num">0.25 <span class="badge skip">#6</span></td><td class="mono" style="max-width:500px;">      begin
+         dbms_rcvman.resetAll;
+      end;</td></tr>
+<tr><td class="mono">f7b069b8zkhvu</td><td class="num mono">4250213283</td><td class="num"><b>0.20 <span class="badge info">#7</span></b></td><td class="num">0.17 <span class="badge skip">#8</span></td><td class="num">0.26 <span class="badge skip">#5</span></td><td class="mono" style="max-width:500px;">SELECT to_number(value)
+         FROM sys.v$parameter
+         WHERE name = &apos;_qa_lrg_type&apos;</td></tr>
+<tr><td class="mono">28bgqbzpa87xf</td><td class="num mono">0</td><td class="num"><b>0.19 <span class="badge info">#8</span></b></td><td class="num">0.25 <span class="badge skip">#5</span></td><td class="num">0.25 <span class="badge skip">#7</span></td><td class="mono" style="max-width:500px;">      declare
+         policy        varchar2(512);
+         alldest       number  := dbms_rcvman.FALSE#;
+         rlgscn        number; 
+      begin
+         if (:alldest &gt; 0) the&hellip;</td></tr>
+<tr><td class="mono">dvu40a9avazf8</td><td class="num mono">1660022729</td><td class="num"><b>0.18 <span class="badge info">#9</span></b></td><td class="num">&mdash;</td><td class="num">0.23 <span class="badge skip">#8</span></td><td class="mono" style="max-width:500px;">select xmlagg(
+                        xmlelement(&quot;operation&quot;, 
+                          xmlattributes(operation as &quot;name&quot;,
+                                        options  as &quot;op&hellip;</td></tr>
+<tr><td class="mono">49s332uhbnsma</td><td class="num mono">0</td><td class="num"><b>0.15 <span class="badge info">#10</span></b></td><td class="num">0.15 <span class="badge skip">#10</span></td><td class="num">&mdash;</td><td class="mono" style="max-width:500px;">      declare
+         vsn  varchar2(20);
+            begin
+              vsn := dbms_rcvman.getPackageVersion;
+              :pkg_vsn:pkg_vsn_i := vsn;
+              if vsn is not&hellip;</td></tr>
+<tr><td class="mono">aak3mmhp5a8ft</td><td class="num mono">&mdash;</td><td class="num"><b>&mdash;</b></td><td class="num">0.16 <span class="badge skip">#9</span></td><td class="num">&mdash;</td><td class="mono" style="max-width:500px;">BEGIN
+              sys.prvt_hdm.auto_execute(
+                db_id =&gt; :bind_dbid,
+                inst_id =&gt; :bind_inst,
+                end_snap =&gt; :bind_snap,
+                t&hellip;</td></tr>
+<tr><td class="mono">3rdvj2msrkpn0</td><td class="num mono">&mdash;</td><td class="num"><b>&mdash;</b></td><td class="num">&mdash;</td><td class="num">0.18 <span class="badge skip">#10</span></td><td class="mono" style="max-width:500px;">select T.*  from table(dbms_xplan.get_plan_rows(:tab_name, :stmt_id, :plan_id, :format, :fpreds, 1, null)) T</td></tr>
+</tbody></table>
+</details>
+<details>
+<summary>By buffer gets &mdash; detail table</summary>
+<table><thead><tr><th>SQL_ID</th><th class="num">PHV (cur)</th><th class="num">Current (gets)</th><th class="num">&minus;1w</th><th class="num">&minus;2w</th><th>SQL</th></tr></thead><tbody>
+<tr><td class="mono">dxh2b8padhfby</td><td class="num mono">3652932668</td><td class="num"><b>19,714.00 <span class="badge info">#1</span></b></td><td class="num">19,549.00 <span class="badge skip">#1</span></td><td class="num">19,889.00 <span class="badge skip">#1</span></td><td class="mono" style="max-width:500px;">insert into  WRH$_SYSSTAT  (dbid, per_pdb, con_dbid, snap_id, instance_number, stat_id, value)  select /*+ use_hash(v$sysstat) */  :dbid,  sysstat.con_id, con_id_to_dbid(sysstat.co&hellip;</td></tr>
+<tr><td class="mono">c5bvwj938bfcj</td><td class="num mono">841520493</td><td class="num"><b>9,995.00 <span class="badge info">#2</span></b></td><td class="num">9,910.00 <span class="badge skip">#2</span></td><td class="num">9,998.00 <span class="badge skip">#2</span></td><td class="mono" style="max-width:500px;">insert into  wrh$_latch_parent  (dbid, per_pdb, con_dbid, snap_id, instance_number, latch_hash, level#, gets, misses,    sleeps, immediate_gets, immediate_misses, spin_gets, sleep1&hellip;</td></tr>
+<tr><td class="mono">drgmqpr5n5ux4</td><td class="num mono">3102754926</td><td class="num"><b>9,777.00 <span class="badge info">#3</span></b></td><td class="num">9,739.00 <span class="badge skip">#3</span></td><td class="num">6,836.00 <span class="badge skip">#6</span></td><td class="mono" style="max-width:500px;">insert into  wrh$_latch  (dbid, per_pdb, con_dbid, snap_id, instance_number, latch_hash, level#, gets, misses,    sleeps, immediate_gets, immediate_misses, spin_gets, sleep1,    sl&hellip;</td></tr>
+<tr><td class="mono">aak3mmhp5a8ft</td><td class="num mono">0</td><td class="num"><b>7,963.00 <span class="badge info">#4</span></b></td><td class="num">8,008.00 <span class="badge skip">#4</span></td><td class="num">4,359.00 <span class="badge skip">#9</span></td><td class="mono" style="max-width:500px;">BEGIN
+              sys.prvt_hdm.auto_execute(
+                db_id =&gt; :bind_dbid,
+                inst_id =&gt; :bind_inst,
+                end_snap =&gt; :bind_snap,
+                t&hellip;</td></tr>
+<tr><td class="mono">7h6kvx22p1mvc</td><td class="num mono">1561607518</td><td class="num"><b>7,688.00 <span class="badge info">#5</span></b></td><td class="num">7,666.00 <span class="badge skip">#5</span></td><td class="num">7,646.00 <span class="badge skip">#5</span></td><td class="mono" style="max-width:500px;">SELECT TO_CHAR(current_timestamp AT TIME ZONE &apos;GMT&apos;, &apos;YYYY-MM-DD HH24:MI:SS TZD&apos;)  AS curr_timestamp, SUM(failed_count) AS failed_count ,   TO_CHAR(MIN(first_occur_time), &apos;yyyy-mm-&hellip;</td></tr>
+<tr><td class="mono">7dhg9ys7r45hx</td><td class="num mono">2758041994</td><td class="num"><b>7,528.00 <span class="badge info">#6</span></b></td><td class="num">7,506.00 <span class="badge skip">#6</span></td><td class="num">6,433.00 <span class="badge skip">#7</span></td><td class="mono" style="max-width:500px;">SELECT /*+ NO_STATEMENT_QUEUING RESULT_CACHE (SYSOBJ=TRUE SHELFLIFE=30) */ &quot;DBUSERNAME&quot;,&quot;EVENT_TIMESTAMP&quot;,&quot;ACTION_NAME&quot;,&quot;RETURN_CODE&quot; FROM &quot;AUDSYS&quot;.&quot;UNIFIED_AUDIT_TRAIL&quot; &quot;K&quot; WHERE &hellip;</td></tr>
+<tr><td class="mono">0pmbxw88n6jsz</td><td class="num mono">815229885</td><td class="num"><b>6,855.00 <span class="badge info">#7</span></b></td><td class="num">6,707.00 <span class="badge skip">#7</span></td><td class="num">8,551.00 <span class="badge skip">#3</span></td><td class="mono" style="max-width:500px;">  UPDATE  wrh$_seg_stat_obj  ob      SET (snap_id, owner, object_name, subobject_name, tablespace_name,         object_type, partition_type, index_type, base_obj#, base_object_name&hellip;</td></tr>
+<tr><td class="mono">fbjs6vqydm3xa</td><td class="num mono">2419380041</td><td class="num"><b>5,977.00 <span class="badge info">#8</span></b></td><td class="num">5,977.00 <span class="badge skip">#8</span></td><td class="num">5,977.00 <span class="badge skip">#8</span></td><td class="mono" style="max-width:500px;">select s.ts#, s.file#, s.block#, so.object_id, s.spare1, s.type#, s.hwmincr from seg$ s, sys_objects so where bitand(s.spare1,131072) = 0 and s.ts# = so.ts_number and s.file# = so.&hellip;</td></tr>
+<tr><td class="mono">fn0x5zx3hfm21</td><td class="num mono">1587278445</td><td class="num"><b>4,789.00 <span class="badge info">#9</span></b></td><td class="num">&mdash;</td><td class="num">&mdash;</td><td class="mono" style="max-width:500px;">SELECT snap_id , SQL_ID, CON_DBID FROM   (SELECT /*+ use_hash(t1 t2) */ t2.snap_id , t1.SQLID_KEWRSIE  SQL_ID, t1.CON_DBID_KEWRSIE  CON_DBID FROM X$KEWRSQLIDTAB t1, WRH$_SQLTEXT t2&hellip;</td></tr>
+<tr><td class="mono">6wm3n4d7bnddg</td><td class="num mono">2477876455</td><td class="num"><b>4,312.00 <span class="badge info">#10</span></b></td><td class="num">4,312.00 <span class="badge skip">#10</span></td><td class="num">&mdash;</td><td class="mono" style="max-width:500px;"> SELECT source,        (case when time_secs &lt; 1 then 1 else time_secs end) as time_secs,        operation  FROM   ( SELECT  1  as source,                 trunc((sysdate - cast(ll.l&hellip;</td></tr>
+<tr><td class="mono">1jb0rx0tq963n</td><td class="num mono">&mdash;</td><td class="num"><b>&mdash;</b></td><td class="num">&mdash;</td><td class="num">7,969.00 <span class="badge skip">#4</span></td><td class="mono" style="max-width:500px;">delete /* QOSH:PURGE_OLD_STS *//*+ dynamic_sampling(4) */ from sys.optstat_snapshot$                 where timestamp &lt; :1   and rownum &lt;=  :2   </td></tr>
+<tr><td class="mono">dqucusk8avvuh</td><td class="num mono">&mdash;</td><td class="num"><b>&mdash;</b></td><td class="num">5,186.00 <span class="badge skip">#9</span></td><td class="num">&mdash;</td><td class="mono" style="max-width:500px;">delete /* KSXM:CLEAN_COL_USAGE *//*+ dynamic_sampling(4) */    from sys.col_usage$ c   where ((timestamp &lt; sysdate - 367)          or not exists             (select /*+ unnest */ 1&hellip;</td></tr>
+<tr><td class="mono">9ux4hcnsp1q8z</td><td class="num mono">&mdash;</td><td class="num"><b>&mdash;</b></td><td class="num">&mdash;</td><td class="num">3,660.00 <span class="badge skip">#10</span></td><td class="mono" style="max-width:500px;">select /* QOSH:ANLYZ_TIME */     from_tz(      cast ((max(analyzetime) - 1) as timestamp),      to_char(systimestamp, &apos;TZH:TZM&apos;))  from sys.tab$ where analyzetime is not null</td></tr>
+</tbody></table>
+</details>
+<details>
+<summary>By executions &mdash; detail table</summary>
+<table><thead><tr><th>SQL_ID</th><th class="num">PHV (cur)</th><th class="num">Current (exec)</th><th class="num">&minus;1w</th><th class="num">&minus;2w</th><th>SQL</th></tr></thead><tbody>
+<tr><td class="mono">3dbzmtf9ahvzt</td><td class="num mono">3238164414</td><td class="num"><b>525.00 <span class="badge info">#1</span></b></td><td class="num">535.00 <span class="badge skip">#1</span></td><td class="num">536.00 <span class="badge skip">#1</span></td><td class="mono" style="max-width:500px;">merge /* KSXM:OPTIM_DML_INF */  into sys.mon_mods_all$ m                   using dual                                                                 on (m.obj# = :objn and        &hellip;</td></tr>
+<tr><td class="mono">f7xnvp44nukp7</td><td class="num mono">0</td><td class="num"><b>428.00 <span class="badge info">#2</span></b></td><td class="num">428.00 <span class="badge skip">#2</span></td><td class="num">428.00 <span class="badge skip">#2</span></td><td class="mono" style="max-width:500px;">insert into  wrm$_snapshot_details  (snap_id,dbid,instance_number,table_id,begin_time,end_time,step_id)    values (:snap_id,:dbid,:instance_number,:bind1,:bind2,:bind3,:step_id)</td></tr>
+<tr><td class="mono">a0qc12302fzfk</td><td class="num mono">0</td><td class="num"><b>406.00 <span class="badge info">#3</span></b></td><td class="num">412.00 <span class="badge skip">#3</span></td><td class="num">406.00 <span class="badge skip">#3</span></td><td class="mono" style="max-width:500px;">begin dbms_application_info.set_module(:1  , :2  ); end;
+</td></tr>
+<tr><td class="mono">97jpmfvvjkrck</td><td class="num mono">1388734953</td><td class="num"><b>318.00 <span class="badge info">#4</span></b></td><td class="num">320.00 <span class="badge skip">#4</span></td><td class="num">405.00 <span class="badge skip">#4</span></td><td class="mono" style="max-width:500px;">SELECT SUBSTR(DECODE(:B2 , NULL, &apos;NULL&apos;, 0, &apos;NEXT OBJECT&apos;, 1, &apos;INDEX&apos;, 2, &apos;TABLE&apos;, 3, &apos;CLUSTER&apos;, 4, &apos;VIEW&apos;, 5, &apos;SYNONYM&apos;, 6, &apos;SEQUENCE&apos;, 7, &apos;PROCEDURE&apos;, 8, &apos;FUNCTION&apos;, 9, &apos;PACKAGE&apos;&hellip;</td></tr>
+<tr><td class="mono">c398axtp4r62g</td><td class="num mono">4161125554</td><td class="num"><b>240.00 <span class="badge info">#5</span></b></td><td class="num">240.00 <span class="badge skip">#6</span></td><td class="num">240.00 <span class="badge skip">#6</span></td><td class="mono" style="max-width:500px;">SELECT nonprimarydb.name as pdbName
+,MAX(CASE WHEN takecdbstatus.open_mode LIKE &apos;MOUNT%&apos; THEN 1
+WHEN takecdbstatus.open_mode LIKE &apos;READ%&apos; THEN 1
+ELSE 0
+END) as state_num
+FROM gv$co&hellip;</td></tr>
+<tr><td class="mono">gj5r9jj2xad7f</td><td class="num mono">4175978637</td><td class="num"><b>240.00 <span class="badge info">#6</span></b></td><td class="num">241.00 <span class="badge skip">#5</span></td><td class="num">240.00 <span class="badge skip">#7</span></td><td class="mono" style="max-width:500px;">
+SELECT  1, status, &apos;&apos;,archiver, database_status, active_state FROM v$instance
+
+</td></tr>
+<tr><td class="mono">gjaap3w3qbf8c</td><td class="num mono">4233836756</td><td class="num"><b>240.00 <span class="badge info">#7</span></b></td><td class="num">240.00 <span class="badge skip">#7</span></td><td class="num">240.00 <span class="badge skip">#8</span></td><td class="mono" style="max-width:500px;">select count(*) from ilmobj$ where rownum = 1</td></tr>
+<tr><td class="mono">6n2qqv1brfhpp</td><td class="num mono">3848648847</td><td class="num"><b>170.00 <span class="badge info">#8</span></b></td><td class="num">159.00 <span class="badge skip">#8</span></td><td class="num">&mdash;</td><td class="mono" style="max-width:500px;">select ind.type#, ind.property,   base_obj.obj#, base_owner.name,  base_obj.name  from sys.ind$ ind, sys.user$ base_owner, sys.obj$  base_obj  where ind.obj#          = :oid    and&hellip;</td></tr>
+<tr><td class="mono">1rpgk59t8pvs6</td><td class="num mono">0</td><td class="num"><b>148.00 <span class="badge info">#9</span></b></td><td class="num">148.00 <span class="badge skip">#9</span></td><td class="num">266.00 <span class="badge skip">#5</span></td><td class="mono" style="max-width:500px;">      begin
+         dbms_output.get_line(:line, :status);
+      end;</td></tr>
+<tr><td class="mono">fdsrx9wqyqtmu</td><td class="num mono">0</td><td class="num"><b>144.00 <span class="badge info">#10</span></b></td><td class="num">144.00 <span class="badge skip">#10</span></td><td class="num">&mdash;</td><td class="mono" style="max-width:500px;">INSERT INTO wri$_adv_parameters(task_id,name,datatype,value,flags,description)
+       VALUES
+        (:task_id_num, :name, :datatype, :value, :flags, :description)</td></tr>
+<tr><td class="mono">fs4p95w7yg25b</td><td class="num mono">&mdash;</td><td class="num"><b>&mdash;</b></td><td class="num">&mdash;</td><td class="num">225.00 <span class="badge skip">#9</span></td><td class="mono" style="max-width:500px;">select pob.parttype from sys.tabpart$ tp, sys.partobj$ pob  where tp.bo# = pob.obj# and tp.obj# = :oid</td></tr>
+<tr><td class="mono">fkc81h2686aqc</td><td class="num mono">&mdash;</td><td class="num"><b>&mdash;</b></td><td class="num">&mdash;</td><td class="num">187.00 <span class="badge skip">#10</span></td><td class="mono" style="max-width:500px;">select pob.parttype from sys.indpart$ ip, sys.partobj$ pob  where ip.bo# = pob.obj# and ip.obj# = :oid</td></tr>
+</tbody></table>
+</details>
+<details><summary>Full SQL text for all listed SQL_IDs</summary>
+<h3>0bkjwu3swz0wy</h3>
+<pre class="sql">SELECT value,type FROM v$parameter WHERE name = :1</pre>
+<h3>0pmbxw88n6jsz</h3>
+<pre class="sql">  UPDATE  wrh$_seg_stat_obj  ob      SET (snap_id, owner, object_name, subobject_name, tablespace_name,         object_type, partition_type, index_type, base_obj#, base_object_name,           base_object_owner) =       (SELECT snap_id + 1,               nvl(ownername_kewrseg, owner),               nvl(objname_kewrseg, object_name),               nvl(subobjname_kewrseg, subobject_name),               nvl(tsname_kewrseg, tablespace_name),               decode(objtype_kewrseg, 0, object_type,               sys.dbms_swrf_internal.awr_decode_object_type(objtype_kewrseg, 18)),              decode(ptype_kewrseg, 0, partition_type,                      decode(ptype_kewrseg, 0, &apos;NONE&apos;, 1, &apos;RANGE&apos;, 2, &apos;HASH&apos;,                           3, &apos;SYSTEM&apos;, 4, &apos;LIST&apos;,  NULL, &apos;NONE&apos;, &apos;UNKNOWN&apos;)),               decode(indtype_kewrseg, 0, index_type,                   decode(indtype_kewrseg,                       1, &apos;NORMAL&apos;||                          decode(bitand(iprop_kewrseg, 4), 0, &apos;&apos;, 4, &apos;/REV&apos;),                       2, &apos;BITMAP&apos;, 3, &apos;CLUSTER&apos;, 4, &apos;IOT - TOP&apos;,                       5, &apos;IOT - NESTED&apos;, 6, &apos;SECONDARY&apos;, 7, &apos;ANSI&apos;,                       8, &apos;LOB&apos;, 9, &apos;DOMAIN&apos;)),               coalesce(nullif(bobjn_kewrseg,0), so.base_obj#),               case bobjname_kewrseg                 when NULL then so.base_object_name                 else case length(bobjname_kewrseg)                        when 0 then so.base_object_name                        else bobjname_kewrseg                      end                end,               case bowname_kewrseg                 when NULL then so.base_object_owner                 else case length(bowname_kewrseg)                        when 0 then so.base_object_owner                        else bowname_kewrseg                      end                end               FROM  wrh$_seg_stat_obj                      so JOIN  (select * from x$kewrtsegstat  where con_id = :con_id_01 or (   (:con_id_02 = 1        and con_id = 0)  or (:con_id_03 = 0        and con_id = 1))  )  io ON               (dbid = :dbid and con_dbid = con_dbid_kewrseg                and ts# = tsn_kewrseg and obj# = objn_kewrseg                and dataobj# = objd_kewrseg)          WHERE ob.dbid = so.dbid            AND ob.con_dbid = so.con_dbid            AND ob.ts#  = so.ts#            AND ob.obj# = so.obj#            AND ob.dataobj# = so.dataobj#)    WHERE dbid = :dbid      AND object_name NOT LIKE &apos;%MISSING%&apos;      AND object_name NOT LIKE &apos;%TRANSIENT%&apos;      AND (ts#, obj#, dataobj#, con_dbid) in           (SELECT tsn_kewrseg, objn_kewrseg, objd_kewrseg, con_dbid_kewrseg              FROM  (select * from x$kewrtsegstat  where con_id = :con_id_04 or (   (:con_id_05 = 1        and con_id = 0)  or (:con_id_06 = 0        and con_id = 1))  ) ) </pre>
+<h3>0w26sk6t6gq98</h3>
+<pre class="sql">SELECT XMLTYPE(DBMS_REPORT.GET_REPORT_WITH_SUMMARY(:B1 )) FROM DUAL</pre>
+<h3>0za9fv0j1vgkk</h3>
+<pre class="sql">WITH MONITOR_DATA AS (SELECT * FROM TABLE(GV$(CURSOR( SELECT USERENV(&apos;instance&apos;) AS INST_ID, KEY, NVL2(PX_QCSID, NULL, STATUS) STATUS, FIRST_REFRESH_TIME, LAST_REFRESH_TIME, REFRESH_COUNT, PROCESS_NAME, SID, SQL_ID, SQL_EXEC_START, SQL_EXEC_ID, DBOP_NAME, DBOP_EXEC_ID, SQL_PLAN_HASH_VALUE, SQL_FULL_PLAN_HASH_VALUE, SESSION_SERIAL#, SQL_TEXT, PX_SERVER#, PX_SERVER_GROUP, PX_SERVER_SET, PX_QCINST_ID, PX_QCSID, CASE WHEN ELAPSED_TIME &lt; (CPU_TIME+ APPLICATION_WAIT_TIME+ CONCURRENCY_WAIT_TIME+ CLUSTER_WAIT_TIME+ USER_IO_WAIT_TIME+ QUEUING_TIME) THEN (CPU_TIME+ APPLICATION_WAIT_TIME+ CONCURRENCY_WAIT_TIME+ CLUSTER_WAIT_TIME+ USER_IO_WAIT_TIME+ QUEUING_TIME) ELSE ELAPSED_TIME END ELAPSED_TIME, QUEUING_TIME, CPU_TIME, APPLICATION_WAIT_TIME, CONCURRENCY_WAIT_TIME, CLUSTER_WAIT_TIME, USER_IO_WAIT_TIME, CASE WHEN ELAPSED_TIME &lt; (CPU_TIME+ APPLICATION_WAIT_TIME+ CONCURRENCY_WAIT_TIME+ CLUSTER_WAIT_TIME+ USER_IO_WAIT_TIME+ QUEUING_TIME) THEN 0 ELSE ELAPSED_TIME - (CPU_TIME+ APPLICATION_WAIT_TIME+ CONCURRENCY_WAIT_TIME+ CLUSTER_WAIT_TIME+ USER_IO_WAIT_TIME+ QUEUING_TIME) END OTHER_WAIT_TIME, PLSQL_EXEC_TIME, JAVA_EXEC_TIME, FETCHES, BUFFER_GETS, IO_INTERCONNECT_BYTES IO_INTER_BYTES, PHYSICAL_READ_REQUESTS READ_REQS, PHYSICAL_READ_BYTES READ_BYTES, PHYSICAL_WRITE_REQUESTS WRITE_REQS, PHYSICAL_WRITE_BYTES WRITE_BYTES, NVL(PHYSICAL_READ_BYTES, 0) + NVL(PHYSICAL_WRITE_BYTES, 0) IO_BYTES, NVL(PHYSICAL_READ_REQUESTS, 0) + NVL(PHYSICAL_WRITE_REQUESTS, 0) IO_REQS, IO_CELL_UNCOMPRESSED_BYTES IO_UNC_BYTES, IO_CELL_OFFLOAD_ELIGIBLE_BYTES IO_ELIG_BYTES, IO_CELL_OFFLOAD_RETURNED_BYTES IO_RET_BYTES, USER# USERID, USERNAME, MODULE, ACTION, SERVICE_NAME, CLIENT_IDENTIFIER, CLIENT_INFO, PROGRAM, PLSQL_OBJECT_ID PL_OID, PLSQL_SUBPROGRAM_ID PL_PROGID, PLSQL_ENTRY_OBJECT_ID PL_ENTRY_OID, PLSQL_ENTRY_SUBPROGRAM_ID PL_ENTRY_PROGID, PX_MAXDOP MAX_DOP, PX_IS_CROSS_INSTANCE, PX_MAXDOP_INSTANCES MAX_DOP_INSTANCES, PX_SERVERS_REQUESTED SERVERS_REQUESTED, PX_SERVERS_ALLOCATED SERVERS_ALLOCATED, ERROR_NUMBER, ERROR_FACILITY, ERROR_MESSAGE, NVL2(OTHER_XML, &apos;Y&apos;, NULL) HAS_OTHER_XML, NVL2(BINDS_XML, &apos;Y&apos;, NULL) HAS_BINDS_XML, NVL2(RM_CONSUMER_GROUP, NVL2(RM_LAST_ACTION_TIME, TO_CHAR(RM_LAST_ACTION_TIME, :B12 ), &apos;00/00/0000 00:00:01&apos;) || XMLELEMENT( &quot;rminfo&quot;, XMLATTRIBUTES( RM_LAST_ACTION AS &quot;rmlastact&quot;, RM_LAST_ACTION_REASON AS &quot;rmlastreason&quot;, TO_CHAR(RM_LAST_ACTION_TIME, :B12 ) AS &quot;rmlasttime&quot;, RM_CONSUMER_GROUP AS &quot;rmcg&quot;)).GETSTRINGVAL(), &apos;00/00/0000 00:00:00&apos;) RM_INFO, CON_NAME, CON_ID FROM V$ALL_SQL_MONITOR MO1 WHERE USERENV(&apos;INSTANCE&apos;) BETWEEN :B11 AND :B10 AND MO1.SQL_ID = NVL(:B9 , MO1.SQL_ID) AND MO1.SQL_EXEC_START = NVL(:B8 , MO1.SQL_EXEC_START) AND MO1.SQL_EXEC_ID = NVL(:B7 , MO1.SQL_EXEC_ID) OR (MO1.DBOP_NAME = NVL(:B6 , MO1.DBOP_NAME) AND MO1.DBOP_EXEC_ID = NVL(:B5 , MO1.DBOP_EXEC_ID)) AND ((:B4 = 1 AND MO1.PX_QCSID IS NULL) OR (MO1.PX_SERVER_GROUP = NVL(:B3 , MO1.PX_SERVER_GROUP) AND MO1.PX_SERVER_SET = NVL(:B2 , MO1.PX_SERVER_SET) AND MO1.PX_SERVER# = NVL(:B1 , MO1.PX_SERVER#))) ))) ), MONITOR_AGG AS (SELECT MAX_PX_QCSID, MAX_KEY, MAX_INST_ID, MAX_SESSION_ID, MAX_SESSION_SERIAL, MAX_PX_DOP, MAX_PX_DOP_INSTANCES, MAX_PX_IS_CROSS_INSTANCE, SUM_SERVERS_REQUESTED, SUM_SERVERS_ALLOCATED, DIST_INST_COUNT, DIST_PX_GROUP_COUNT, DIST_PX_SET_COUNT, MAX_PLAN_HASH_VALUE, MAX_FULL_PLAN_HASH_VALUE, MAX_USERID, MAX_PROGRAM, MAX_USERNAME, MAX_MODULE, MAX_ACTION, MAX_SERVICE_NAME, MAX_CLIENT_ID, MAX_CLIENT_INFO, MAX_ERROR_NUMBER, MAX_ERROR_FACILITY, MAX_ERROR_MESSAGE, QC_HAS_OTHER_XML, QC_HAS_BINDS_XML, MAX_PL_OID, MAX_PL_PROGID, MAX_PL_ENTRY_OID, MAX_PL_ENTRY_PROGID, MAX_SQL_ID, MAX_SQL_EXEC_START, MAX_SQL_EXEC_ID, MAX_LAST_REFRESH_TIME, MAX_DBOP_NAME, MAX_DBOP_EXEC_ID, CASE WHEN MAX_PL_OID IS NOT NULL THEN NVL((SELECT P.OWNER || &apos;.&apos; || P.OBJECT_NAME || DECODE(P.PROCEDURE_NAME, NULL, &apos;&apos;, &apos;.&apos; || P.PROCEDURE_NAME) FROM ALL_PROCEDURES P WHERE P.OBJECT_ID = MAX_PL_OID AND P.SUBPROGRAM_ID = MAX_PL_PROGID AND ROWNUM = 1), &apos;Unavailable&apos;) END MAX_PL_NAME, CASE WHEN MAX_PL_ENTRY_OID IS NOT NULL THEN NVL((SELECT P.OWNER || &apos;.&apos; || P.OBJECT_NAME || DECODE(P.PROCEDURE_NAME, NULL, &apos;&apos;, &apos;.&apos; || P.PROCEDURE_NAME) FROM ALL_PROCEDURES P WHERE P.OBJECT_ID = MAX_PL_ENTRY_OID AND P.SUBPROGRAM_ID = MAX_PL_ENTRY_PROGID AND ROWNUM = 1), &apos;Unavailable&apos;) END MAX_PL_ENTRY_NAME, MAX_STATUS, SUM_REFRESH_COUNT, MIN_FIRST_REFRESH_TIME, SQLMON_TEXT, SUM_ELAPSED_TIME, MAX_ELAPSED_TIME, MAX_QUEUING_TIME, SUM_CPU_TIME, SUM_USER_IO_WAIT_TIME, SUM_APPLICATION_WAIT_TIME, SUM_CONCURRENCY_WAIT_TIME, SUM_CLUSTER_WAIT_TIME, SUM_PLSQL_EXEC_TIME, SUM_JAVA_EXEC_TIME, SUM_OTHER_WAIT_TIME, SUM_FETCHES, SUM_BUFFER_GETS, SUM_READ_REQS, SUM_READ_BYTES, SUM_WRITE_REQS, SUM_WRITE_BYTES, SUM_IO_BYTES, SUM_IO_INTER_BYTES, SUM_IO_UNC_BYTES, SUM_IO_ELIG_BYTES, SUM_IO_RET_BYTES, DECODE(:B14 , 1, &apos;db_name&apos;, SYS_CONTEXT(&apos;userenv&apos;, &apos;db_unique_name&apos;)) DB_UNIQUE_NAME, DECODE(:B14 , 1, &apos;platform_name&apos;, SYS.DBMS_UTILITY.PORT_STRING) PLATFORM_NAME, DECODE(:B14 , 1, &apos;host_name&apos;, SYS_CONTEXT(&apos;userenv&apos;, &apos;server_host&apos;)) HOST_NAME, AGG_RM_INFO MAX_RM_INFO, MAX_CON_NAME, DECODE(MAX_CON_ID, 0, NULL, MAX_CON_ID) MAX_CON_ID FROM (SELECT MAX(PX_QCSID) MAX_PX_QCSID, MAX(CASE WHEN PX_QCSID IS NULL THEN KEY ELSE NULL END) MAX_KEY, MAX(CASE WHEN PX_QCSID IS NULL THEN INST_ID ELSE NULL END) MAX_INST_ID, MAX(CASE WHEN PX_QCSID IS NULL THEN SID ELSE NULL END) MAX_SESSION_ID, MAX(CASE WHEN PX_QCSID IS NULL THEN SESSION_SERIAL# ELSE NULL END) MAX_SESSION_SERIAL, MAX(MAX_DOP) MAX_PX_DOP, MAX(MAX_DOP_INSTANCES) MAX_PX_DOP_INSTANCES, MAX(PX_IS_CROSS_INSTANCE) MAX_PX_IS_CROSS_INSTANCE, SUM(SERVERS_REQUESTED) SUM_SERVERS_REQUESTED, SUM(SERVERS_ALLOCATED) SUM_SERVERS_ALLOCATED, COUNT(DISTINCT INST_ID) DIST_INST_COUNT, COUNT(DISTINCT PX_SERVER_GROUP) DIST_PX_GROUP_COUNT, COUNT(DISTINCT PX_SERVER_SET) DIST_PX_SET_COUNT, MAX(SQL_PLAN_HASH_VALUE) MAX_PLAN_HASH_VALUE, MAX(SQL_FULL_PLAN_HASH_VALUE) MAX_FULL_PLAN_HASH_VALUE, MAX(USERID) MAX_USERID, MAX(PROGRAM) MAX_PROGRAM, MAX(USERNAME) MAX_USERNAME, MAX(MODULE) MAX_MODULE, MAX(ACTION) MAX_ACTION, MAX(SERVICE_NAME) MAX_SERVICE_NAME, MAX(CLIENT_IDENTIFIER) MAX_CLIENT_ID, MAX(CLIENT_INFO) MAX_CLIENT_INFO, MAX(ERROR_NUMBER) MAX_ERROR_NUMBER, MAX(ERROR_FACILITY) MAX_ERROR_FACILITY, MAX(ERROR_MESSAGE) MAX_ERROR_MESSAGE, MAX(NVL2(PX_QCSID, HAS_OTHER_XML, NULL)) QC_HAS_OTHER_XML, MAX(HAS_BINDS_XML) QC_HAS_BINDS_XML, MAX(PL_OID) MAX_PL_OID, MAX(PL_PROGID) MAX_PL_PROGID, MAX(PL_ENTRY_OID) MAX_PL_ENTRY_OID, MAX(PL_ENTRY_PROGID) MAX_PL_ENTRY_PROGID, MAX(SQL_ID) MAX_SQL_ID, MAX(SQL_EXEC_START) MAX_SQL_EXEC_START, MAX(SQL_EXEC_ID) MAX_SQL_EXEC_ID, MAX(LAST_REFRESH_TIME) MAX_LAST_REFRESH_TIME, MAX(STATUS) MAX_STATUS, SUM(REFRESH_COUNT) SUM_REFRESH_COUNT, MIN(FIRST_REFRESH_TIME) MIN_FIRST_REFRESH_TIME, MAX(DBOP_NAME) MAX_DBOP_NAME, MAX(DBOP_EXEC_ID) MAX_DBOP_EXEC_ID, CASE WHEN :B13 = 0 THEN NULL ELSE MAX(SQL_TEXT) END SQLMON_TEXT, SUM(ELAPSED_TIME) SUM_ELAPSED_TIME, MAX(ELAPSED_TIME) MAX_ELAPSED_TIME, MAX(QUEUING_TIME) MAX_QUEUING_TIME, SUM(CPU_TIME) SUM_CPU_TIME, SUM(USER_IO_WAIT_TIME) SUM_USER_IO_WAIT_TIME, SUM(APPLICATION_WAIT_TIME) SUM_APPLICATION_WAIT_TIME, SUM(CONCURRENCY_WAIT_TIME) SUM_CONCURRENCY_WAIT_TIME, SUM(CLUSTER_WAIT_TIME) SUM_CLUSTER_WAIT_TIME, SUM(PLSQL_EXEC_TIME) SUM_PLSQL_EXEC_TIME, SUM(JAVA_EXEC_TIME) SUM_JAVA_EXEC_TIME, SUM(OTHER_WAIT_TIME) SUM_OTHER_WAIT_TIME, SUM(FETCHES) SUM_FETCHES, SUM(BUFFER_GETS) SUM_BUFFER_GETS, SUM(READ_REQS) SUM_READ_REQS, SUM(READ_BYTES) SUM_READ_BYTES, SUM(WRITE_REQS) SUM_WRITE_REQS, SUM(WRITE_BYTES) SUM_WRITE_BYTES, NVL(SUM(READ_BYTES), 0) + NVL(SUM(WRITE_BYTES), 0) SUM_IO_BYTES, SUM(IO_INTER_BYTES) SUM_IO_INTER_BYTES, SUM(IO_UNC_BYTES) SUM_IO_UNC_BYTES, SUM(IO_ELIG_BYTES) SUM_IO_ELIG_BYTES, SUM(IO_RET_BYTES) SUM_IO_RET_BYTES, MAX(RM_INFO) AGG_RM_INFO, MAX(CON_NAME) MAX_CON_NAME, MAX(CON_ID) MAX_CON_ID FROM MONITOR_DATA) MD), ASH_DATA AS (SELECT AD0.INST_ID, AD0.SESSION_ID, AD0.PLAN_LINE_ID, AD0.PLSQL_OBJECT_ID, AD0.PLSQL_SUBPROGRAM_ID, AD0.ACTIVITY_BUCKET_NUM, AD0.PLAN_ACTIVITY_BUCKET_NUM, AD0.SQL, AD0.TOP_
+... (truncated, 92634 chars total)</pre>
+<h3>1fvsn5j51ugz3</h3>
+<pre class="sql">      begin
+         dbms_rcvman.resetAll;
+      end;</pre>
+<h3>1jb0rx0tq963n</h3>
+<pre class="sql">delete /* QOSH:PURGE_OLD_STS *//*+ dynamic_sampling(4) */ from sys.optstat_snapshot$                 where timestamp &lt; :1   and rownum &lt;=  :2   </pre>
+<h3>1rpgk59t8pvs6</h3>
+<pre class="sql">      begin
+         dbms_output.get_line(:line, :status);
+      end;</pre>
+<h3>22356bkgsdcnh</h3>
+<pre class="sql">SELECT COUNT(*) FROM X$KSPPI A, X$KSPPCV2 B WHERE A.INDX + 1 = KSPFTCTXPN AND KSPPINM = &apos;_deferred_log_dest_is_valid&apos; AND UPPER(KSPFTCTXVL)=&apos;TRUE&apos;</pre>
+<h3>28bgqbzpa87xf</h3>
+<pre class="sql">      declare
+         policy        varchar2(512);
+         alldest       number  := dbms_rcvman.FALSE#;
+         rlgscn        number; 
+      begin
+         if (:alldest &gt; 0) then
+            alldest := dbms_rcvman.TRUE#;
+         end if;
+         dbms_rcvman.setRecoveryDestFile(TRUE); 
+         dbms_rcvman.getRedoLogDeletionPolicy(policy  =&gt; policy);
+         dbms_rcvman.setRedoLogDeletionPolicy(policy  =&gt;  policy,
+                                              alldest =&gt;  alldest);
+         if ((policy like &apos;%APPLIED%&apos; OR 
+              policy like &apos;%SHIPPED%&apos;) AND 
+             policy not like &apos;%BACKED UP%&apos;) then
+            dbms_rcvman.getSCNForAppliedPolicy(
+               minscn     =&gt; :applied_scn
+              ,rlgscn     =&gt; rlgscn);
+         else
+            :applied_scn := 0;
+         end if;
+      end;</pre>
+<h3>3dbzmtf9ahvzt</h3>
+<pre class="sql">merge /* KSXM:OPTIM_DML_INF */  into sys.mon_mods_all$ m                   using dual                                                                 on (m.obj# = :objn and                                                         (:pobjn = 0 or                                                              m.obj# = :pobjn or                                                         m.obj# in (select obj#                                                                from tabpart$                                                              where bo# = :pobjn and obj# = :objn                                        union all                                                                  select obj#                                                                from tabcompart$                                                           where bo# = :pobjn and obj# = :objn                                        union all                                                                  select tsp.obj#                                                            from tabsubpart$ tsp, tabcompart$ tcp                                      where tsp.pobj# = tcp.obj#                                                   and (tcp.bo# = :pobjn or tcp.obj# = :pobjn)                                and tsp.obj# = :objn)))                                  when matched then                                                            update                                                                     set inserts = decode(:reset, 1, 0, inserts) + :ins,                            updates = decode(:reset, 1, 0, updates) + :upd,                            deletes = decode(:reset, 1, 0, deletes) + :del,                            flags =  decode(:reset, 1, 0, flags - bitand(flags, :flag)) + :flag,       drop_segments = decode(:reset, 1, 0, drop_segments) + :dropseg,            timestamp = :time                                                    when NOT matched then                                                        insert (obj#, inserts, updates, deletes,                                           timestamp, flags, drop_segments)                                   values (:objn, :ins, :upd, :del, :time, :flag, :dropseg)                   where :ins != 0 or :upd != 0 or :del != 0 or :flag != 0 or :dropseg !=0</pre>
+<h3>3rdvj2msrkpn0</h3>
+<pre class="sql">select T.*  from table(dbms_xplan.get_plan_rows(:tab_name, :stmt_id, :plan_id, :format, :fpreds, 1, null)) T</pre>
+<h3>49s332uhbnsma</h3>
+<pre class="sql">      declare
+         vsn  varchar2(20);
+            begin
+              vsn := dbms_rcvman.getPackageVersion;
+              :pkg_vsn:pkg_vsn_i := vsn;
+              if vsn is not null then
+                 :pkg_vsnub4 :=
+                   to_number(substr(vsn,1,2) || substr(vsn,4,2) ||
+                             substr(vsn,7,2) || nvl(substr(vsn,10,2),&apos;00&apos;));
+              end if;
+            end;</pre>
+<h3>6n2qqv1brfhpp</h3>
+<pre class="sql">select ind.type#, ind.property,   base_obj.obj#, base_owner.name,  base_obj.name  from sys.ind$ ind, sys.user$ base_owner, sys.obj$  base_obj  where ind.obj#          = :oid    and ind.dataobj#      = :doid    and ind.bo#         = base_obj.obj#    and base_obj.owner# = base_owner.user#</pre>
+<h3>6wm3n4d7bnddg</h3>
+<pre class="sql"> SELECT source,        (case when time_secs &lt; 1 then 1 else time_secs end) as time_secs,        operation  FROM   ( SELECT  1  as source,                 trunc((sysdate - cast(ll.log_date as date)) * 86400)                   as time_secs,                 decode(ll.operation,                        &apos;OPEN&apos;,  0                        ,  1 ) as operation,                 ll.log_id as log_id          FROM  DBA_SCHEDULER_WINDOW_LOG ll ,                 ( SELECT max(l.log_id) as max_log_id                   FROM  DBA_SCHEDULER_WINDOW_LOG l ,                         DBA_SCHEDULER_WINGROUP_MEMBERS m                   WHERE  l.window_name = m.window_name                     AND  m.window_group_name = &apos;MAINTENANCE_WINDOW_GROUP&apos;                     AND  l.operation in (&apos;OPEN&apos;, &apos;CLOSE&apos;)                     AND  CAST(l.log_date AS DATE) &lt; ( SELECT cast(min(end_interval_time) as date) as btime FROM  WRM$_SNAPSHOT bsi  WHERE  bsi.dbid = :dbid  AND bsi.instance_number = :inst  AND bsi.snap_id = :bid                                                     )               ) max_log          WHERE  ll.log_id = max_log.max_log_id          UNION ALL          SELECT  2  as source,                  trunc((sysdate - cast(l.log_date as date)) * 86400)                   as time_secs,                 decode(l.operation,                        &apos;OPEN&apos;,  0                        ,  1 ) as operation,                 l.log_id as log_id          FROM  DBA_SCHEDULER_WINDOW_LOG l ,                DBA_SCHEDULER_WINGROUP_MEMBERS m          WHERE  l.window_name = m.window_name            AND  m.window_group_name = &apos;MAINTENANCE_WINDOW_GROUP&apos;            AND  l.operation in (&apos;OPEN&apos;, &apos;CLOSE&apos;)            AND  CAST(l.log_date AS DATE) &lt;= ( SELECT cast(max(end_interval_time) as date) as etime FROM  WRM$_SNAPSHOT esi  WHERE  esi.dbid = :dbid  AND esi.instance_number = :inst  AND esi.snap_id = :eid                                             )           AND  CAST(l.log_date AS DATE) &gt;= ( SELECT cast(min(end_interval_time) as date) as btime FROM  WRM$_SNAPSHOT bsi  WHERE  bsi.dbid = :dbid  AND bsi.instance_number = :inst  AND bsi.snap_id = :bid                                             )         UNION ALL          SELECT  0  as source,                 trunc((sysdate - et.etime) * 86400) as time_secs,                  3  as operation,                 0 as log_id          FROM (  SELECT cast(max(end_interval_time) as date) as etime FROM  WRM$_SNAPSHOT esi  WHERE  esi.dbid = :dbid  AND esi.instance_number = :inst  AND esi.snap_id = :eid               ) et          UNION ALL          SELECT  0  as source,                 trunc((sysdate - bt.btime) * 86400) as time_secs,                  2  as operation,                 0 as log_id          FROM (  SELECT cast(min(end_interval_time) as date) as btime FROM  WRM$_SNAPSHOT bsi  WHERE  bsi.dbid = :dbid  AND bsi.instance_number = :inst  AND bsi.snap_id = :bid               ) bt        )  WHERE time_secs &gt;= 0  ORDER BY source ASC, time_secs DESC, log_id ASC </pre>
+<h3>7dhg9ys7r45hx</h3>
+<pre class="sql">SELECT /*+ NO_STATEMENT_QUEUING RESULT_CACHE (SYSOBJ=TRUE SHELFLIFE=30) */ &quot;DBUSERNAME&quot;,&quot;EVENT_TIMESTAMP&quot;,&quot;ACTION_NAME&quot;,&quot;RETURN_CODE&quot; FROM &quot;AUDSYS&quot;.&quot;UNIFIED_AUDIT_TRAIL&quot; &quot;K&quot; WHERE &quot;K&quot;.&quot;ACTION_NAME&quot;=&apos;LOGON&apos; AND &quot;K&quot;.&quot;RETURN_CODE&quot;&lt;&gt;0 AND SYS_EXTRACT_UTC(&quot;K&quot;.&quot;EVENT_TIMESTAMP&quot;)&gt;=SYS_EXTRACT_UTC(CURRENT_TIMESTAMP(6)-TO_DSINTERVAL(&apos;0 0:30:00&apos;))</pre>
+<h3>7h6kvx22p1mvc</h3>
+<pre class="sql">SELECT TO_CHAR(current_timestamp AT TIME ZONE &apos;GMT&apos;, &apos;YYYY-MM-DD HH24:MI:SS TZD&apos;)  AS curr_timestamp, SUM(failed_count) AS failed_count ,   TO_CHAR(MIN(first_occur_time), &apos;yyyy-mm-dd hh24:mi:ss&apos;) AS first_occur_time,    TO_CHAR(MAX(last_occur_time), &apos;yyyy-mm-dd hh24:mi:ss&apos;) AS last_occur_time,  name FROM (SELECT COUNT(DBUSERNAME) AS failed_count,  MIN(event_timestamp) AS first_occur_time, MAX(event_timestamp) AS last_occur_time, c.name  FROM cdb_unified_audit_trail a,  v$containers c  WHERE a.ACTION_NAME=&apos;LOGON&apos; and a.return_code &lt;&gt; 0  AND a.event_timestamp &gt;= current_timestamp - TO_DSINTERVAL(&apos;0 0:30:00&apos;)  AND a.con_id = c.con_id  GROUP BY c.name  UNION  SELECT COUNT(username) AS failed_count,  MIN(timestamp) AS first_occur_time,  MAX(timestamp) AS last_occur_time, c.name  FROM  sys.cdb_audit_session a, v$containers c  WHERE a.returncode != 0  AND  a.ACTION_NAME = &apos;LOGON&apos;  AND a.timestamp &gt;= current_timestamp - TO_DSINTERVAL(&apos;0 0:30:00&apos;)  AND a.con_id = c.con_id  GROUP BY c.name ) GROUP BY name </pre>
+<h3>7kub1nvw8wmq3</h3>
+<pre class="sql">insert into  wrh$_mvparameter  (dbid, per_pdb, con_dbid, snap_id, instance_number, parameter_hash, ordinal, value, isdefault, ismodified)  select  :dbid,  sv.con_id, con_id_to_dbid(sv.con_id)  con_dbid,  :snap_id, :instance_number, sv.hash, sv.ordinal, substr(sv.value, 1, 512), sv.isdefault, sv.ismodified  from v$system_parameter2    sv  where exists (select 1 from v$system_parameter4    i  where i.num = sv.num                    and bitand(i.param_flag,32) = 32) </pre>
+<h3>97jpmfvvjkrck</h3>
+<pre class="sql">SELECT SUBSTR(DECODE(:B2 , NULL, &apos;NULL&apos;, 0, &apos;NEXT OBJECT&apos;, 1, &apos;INDEX&apos;, 2, &apos;TABLE&apos;, 3, &apos;CLUSTER&apos;, 4, &apos;VIEW&apos;, 5, &apos;SYNONYM&apos;, 6, &apos;SEQUENCE&apos;, 7, &apos;PROCEDURE&apos;, 8, &apos;FUNCTION&apos;, 9, &apos;PACKAGE&apos;, 11, &apos;PACKAGE BODY&apos;, 12, &apos;TRIGGER&apos;, 13, &apos;TYPE&apos;, 14, &apos;TYPE BODY&apos;, 19, &apos;TABLE PARTITION&apos;, 20, &apos;INDEX PARTITION&apos;, 21, &apos;LOB&apos;, 22, &apos;LIBRARY&apos;, 23, &apos;DIRECTORY&apos;, 24, &apos;QUEUE&apos;, 28, &apos;JAVA SOURCE&apos;, 29, &apos;JAVA CLASS&apos;, 30, &apos;JAVA RESOURCE&apos;, 32, &apos;INDEXTYPE&apos;, 33, &apos;OPERATOR&apos;, 34, &apos;TABLE SUBPARTITION&apos;, 35, &apos;INDEX SUBPARTITION&apos;, 40, &apos;LOB PARTITION&apos;, 41, &apos;LOB SUBPARTITION&apos;, 42, &apos;MATERIALIZED VIEW&apos;, 43, &apos;DIMENSION&apos;, 44, &apos;CONTEXT&apos;, 47, &apos;RESOURCE PLAN&apos;, 48, &apos;CONSUMER GROUP&apos;, 51, &apos;SUBSCRIPTION&apos;, 52, &apos;LOCATION&apos;, 55, &apos;XML SCHEMA&apos;, 56, &apos;JAVA DATA&apos;, 57, &apos;SECURITY PROFILE&apos;, 255, &apos;UNDEFINED&apos;, &apos;UNDEFINED(&apos;||:B2 ||&apos;)&apos;), 1, :B1 ) FROM DUAL</pre>
+<h3>9ux4hcnsp1q8z</h3>
+<pre class="sql">select /* QOSH:ANLYZ_TIME */     from_tz(      cast ((max(analyzetime) - 1) as timestamp),      to_char(systimestamp, &apos;TZH:TZM&apos;))  from sys.tab$ where analyzetime is not null</pre>
+<h3>a0qc12302fzfk</h3>
+<pre class="sql">begin dbms_application_info.set_module(:1  , :2  ); end;
+</pre>
+<h3>aak3mmhp5a8ft</h3>
+<pre class="sql">BEGIN
+              sys.prvt_hdm.auto_execute(
+                db_id =&gt; :bind_dbid,
+                inst_id =&gt; :bind_inst,
+                end_snap =&gt; :bind_snap,
+                time_left_in_secs =&gt; :bind_time);
+            END;</pre>
+<h3>c398axtp4r62g</h3>
+<pre class="sql">SELECT nonprimarydb.name as pdbName
+,MAX(CASE WHEN takecdbstatus.open_mode LIKE &apos;MOUNT%&apos; THEN 1
+WHEN takecdbstatus.open_mode LIKE &apos;READ%&apos; THEN 1
+ELSE 0
+END) as state_num
+FROM gv$containers nonprimarydb
+,gv$containers takecdbstatus
+WHERE nonprimarydb.name &lt;&gt; &apos;PDB$SEED&apos;
+AND   takecdbstatus.name = &apos;CDB$ROOT&apos;
+AND ((sys_context(&apos;USERENV&apos;,&apos;CURRENT_USER&apos;) like &apos;SYS%&apos; AND takecdbstatus.open_mode LIKE &apos;MOUNT%&apos;) OR (takecdbstatus.open_mode LIKE &apos;READ%&apos;))
+AND EXISTS (SELECT 1
+FROM v$database
+WHERE database_role &lt;&gt; &apos;PRIMARY&apos;)
+GROUP BY nonprimarydb.name
+UNION ALL
+SELECT primarydb.name as pdbName
+,MAX(CASE WHEN primarydb.open_mode like &apos;READ%&apos; THEN 1 ELSE 0 END) as state_num
+FROM gv$containers primarydb
+WHERE primarydb.name &lt;&gt; &apos;PDB$SEED&apos;
+AND EXISTS (SELECT 1
+FROM v$database
+WHERE database_role = &apos;PRIMARY&apos;)
+GROUP BY primarydb.name
+</pre>
+<h3>c5bvwj938bfcj</h3>
+<pre class="sql">insert into  wrh$_latch_parent  (dbid, per_pdb, con_dbid, snap_id, instance_number, latch_hash, level#, gets, misses,    sleeps, immediate_gets, immediate_misses, spin_gets, sleep1,    sleep2, sleep3, sleep4, wait_time)  select  :dbid,  ltchp.con_id, con_id_to_dbid(ltchp.con_id)  con_dbid,  :snap_id, :instance_number, hash, level#, gets, misses,    sleeps, immediate_gets, immediate_misses, spin_gets, sleep1,    sleep2, sleep3, sleep4, wait_time   FROM v$latch_parent    ltchp  WHERE  (1 = 1)  AND ( ltchp.con_id &lt; 4099  ) </pre>
+<h3>dqucusk8avvuh</h3>
+<pre class="sql">delete /* KSXM:CLEAN_COL_USAGE *//*+ dynamic_sampling(4) */    from sys.col_usage$ c   where ((timestamp &lt; sysdate - 367)          or not exists             (select /*+ unnest */ 1 from sys.obj$ o where o.obj# = c.obj#))     and c.obj# &lt; :1  and rownum &lt;=  :2 </pre>
+<h3>drgmqpr5n5ux4</h3>
+<pre class="sql">insert into  wrh$_latch  (dbid, per_pdb, con_dbid, snap_id, instance_number, latch_hash, level#, gets, misses,    sleeps, immediate_gets, immediate_misses, spin_gets, sleep1,    sleep2, sleep3, sleep4, wait_time)  select  :dbid,  ltch.con_id, con_id_to_dbid(ltch.con_id)  con_dbid,  :snap_id, :instance_number,  hash, level#, gets,    misses, sleeps, immediate_gets, immediate_misses, spin_gets,    sleep1, sleep2, sleep3, sleep4, wait_time  FROM v$latch    ltch  WHERE  (1 = 1)  AND ( ltch.con_id &lt; 4099  ) </pre>
+<h3>dvu40a9avazf8</h3>
+<pre class="sql">select xmlagg(
+                        xmlelement(&quot;operation&quot;, 
+                          xmlattributes(operation as &quot;name&quot;,
+                                        options  as &quot;options&quot;,
+                                        id as &quot;id&quot;, 
+                                        depth as &quot;depth&quot;, 
+                                        position as &quot;pos&quot;),
+                          nvl2(object_name, 
+                               xmlelement(&quot;object&quot;, 
+                                          object_name), NULL),
+                          decode(:format, &apos;BASIC&apos;, null,
+                               nvl2(cardinality, xmlelement(&quot;card&quot;, cardinality),
+                               NULL)),
+                          decode(:format, &apos;BASIC&apos;, null,
+                               nvl2(bytes, xmlelement(&quot;bytes&quot;, bytes), NULL)),
+                          nvl2(temp_space, xmlelement(&quot;temp_space&quot;,temp_space),
+                               NULL),
+                          decode(:format, &apos;BASIC&apos;, null,
+                               nvl2(cost, xmlelement(&quot;cost&quot;, cost), NULL)),
+                          nvl2(io_cost, xmlelement(&quot;io_cost&quot;, io_cost), NULL),
+                          nvl2(cpu_cost, xmlelement(&quot;cpu_cost&quot;,cpu_cost),NULL),
+                          decode(:format, &apos;BASIC&apos;, null,
+                               nvl2(time, 
+                               xmlelement(&quot;time&quot;, 
+                                 sys.dbms_xplan.format_time_s(time)),
+                               NULL)),
+                          nvl2(partition_start, 
+                               xmlelement(&quot;partition&quot;, 
+                                 xmlattributes(partition_start as &quot;start&quot;, 
+                                               partition_stop as &quot;stop&quot;)),
+                               NULL),
+                          nvl2(object_node, xmlelement(&quot;node&quot;, object_node), 
+                               NULL),
+                          nvl2(distribution,xmlelement(&quot;distrib&quot;,distribution),
+                               NULL),
+                          nvl2(projection, 
+                            xmlelement(&quot;project&quot;, projection), NULL),
+                          nvl2(access_predicates, 
+                               xmlelement(&quot;predicates&quot;, 
+                                xmlattributes(decode(substr(options, 1, 8), 
+                                                     &apos;STORAGE &apos;, &apos;storage&apos;, 
+                                                     &apos;access&apos;) as &quot;type&quot;), 
+                                              access_predicates),
+                               NULL),
+                          nvl2(filter_predicates, 
+                               xmlelement(&quot;predicates&quot;, 
+                                           xmlattributes(&apos;filter&apos; as &quot;type&quot;),
+                                           filter_predicates),
+                               NULL),
+                          nvl2(qblock_name, 
+                               xmlelement(&quot;qblock&quot;, qblock_name), 
+                               NULL),
+                          nvl2(object_alias,
+                               xmlelement(&quot;object_alias&quot;, object_alias), 
+                               NULL),
+                         (case when other_xml is null then null 
+                                else xmltype(other_xml) end)
+                       )
+                     ) plan
+                 from (select id, parent_id, position, depth, operation, options,
+                     object_name, cardinality, bytes, temp_space, cost, 
+                     io_cost, cpu_cost, time, pstart as partition_start,
+                     pstop as partition_stop, object_node, other_tag,
+                     distrib as distribution, projection,
+                     access_pred as access_predicates, 
+                     filter_pred as filter_predicates, other, qblock_name,
+                     object_alias, other_xml, sql_profile,
+                     sql_plan_baseline, starts, outrows, crgets, cugets,
+                     reads, writes, etime, mem_opt, mem_one, last_mem_used, 
+                     last_mem_usage, mem_opt_cnt, mem_one_cnt, mem_multi_cnt,
+                     max_tmp_used, last_tmp_used from table(dbms_xplan.get_plan_rows(:tab_name, :stmt_id, :plan_id, :format, :fpreds, 1, null)))</pre>
+<h3>dxh2b8padhfby</h3>
+<pre class="sql">insert into  WRH$_SYSSTAT  (dbid, per_pdb, con_dbid, snap_id, instance_number, stat_id, value)  select /*+ use_hash(v$sysstat) */  :dbid,  sysstat.con_id, con_id_to_dbid(sysstat.con_id)  con_dbid,  :snap_id, :instance_number, stat_id, value  FROM v$sysstat    sysstat  WHERE  (1 = 1)  AND ( sysstat.con_id &lt; 4099  ) </pre>
+<h3>f7b069b8zkhvu</h3>
+<pre class="sql">SELECT to_number(value)
+         FROM sys.v$parameter
+         WHERE name = &apos;_qa_lrg_type&apos;</pre>
+<h3>f7xnvp44nukp7</h3>
+<pre class="sql">insert into  wrm$_snapshot_details  (snap_id,dbid,instance_number,table_id,begin_time,end_time,step_id)    values (:snap_id,:dbid,:instance_number,:bind1,:bind2,:bind3,:step_id)</pre>
+<h3>fbjs6vqydm3xa</h3>
+<pre class="sql">select s.ts#, s.file#, s.block#, so.object_id, s.spare1, s.type#, s.hwmincr from seg$ s, sys_objects so where bitand(s.spare1,131072) = 0 and s.ts# = so.ts_number and s.file# = so.header_file and s.block# = so.header_block order by s.file# asc</pre>
+<h3>fdsrx9wqyqtmu</h3>
+<pre class="sql">INSERT INTO wri$_adv_parameters(task_id,name,datatype,value,flags,description)
+       VALUES
+        (:task_id_num, :name, :datatype, :value, :flags, :description)</pre>
+<h3>fhf8upax5cxsz</h3>
+<pre class="sql">BEGIN sys.dbms_auto_report_internal.i_save_report (:rep_ref, :snap_id, :pr_class,                                              :rep_id, :suc); END;</pre>
+<h3>fkc81h2686aqc</h3>
+<pre class="sql">select pob.parttype from sys.indpart$ ip, sys.partobj$ pob  where ip.bo# = pob.obj# and ip.obj# = :oid</pre>
+<h3>fn0x5zx3hfm21</h3>
+<pre class="sql">SELECT snap_id , SQL_ID, CON_DBID FROM   (SELECT /*+ use_hash(t1 t2) */ t2.snap_id , t1.SQLID_KEWRSIE  SQL_ID, t1.CON_DBID_KEWRSIE  CON_DBID FROM X$KEWRSQLIDTAB t1, WRH$_SQLTEXT t2      WHERE t2.dbid(+)  = :dbid  AND t2.SQL_ID(+) = t1.SQLID_KEWRSIE AND t2.CON_DBID(+) = t1.CON_DBID_KEWRSIE) WHERE nvl(snap_id, 0) &lt; :snap_id</pre>
+<h3>fs4p95w7yg25b</h3>
+<pre class="sql">select pob.parttype from sys.tabpart$ tp, sys.partobj$ pob  where tp.bo# = pob.obj# and tp.obj# = :oid</pre>
+<h3>gj5r9jj2xad7f</h3>
+<pre class="sql">
+SELECT  1, status, &apos;&apos;,archiver, database_status, active_state FROM v$instance
+
+</pre>
+<h3>gjaap3w3qbf8c</h3>
+<pre class="sql">select count(*) from ilmobj$ where rownum = 1</pre>
+</details>
+</section>
+<section id="findings"><h2>Findings summary &mdash; <span class="badge crit">0 critical</span> <span class="badge warn">0 warn</span> <span class="badge ok">57 total</span></h2>
+<p style="font-size:12px;color:var(--muted)">z-score of the current window vs prior valid windows. |z|&gt;3 = CRITICAL, |z|&gt;2 = WARN. INSUFFICIENT_HISTORY (n&lt;3) shows only %-delta. Heatmap below: |z| magnitude per (domain &times; metric); gray = no baseline.</p>
+<div class="chart-wrap chart-medium" id="findings-heatmap"></div>
+<script>
+(function(){
+AWR_DATA.findings = [{"dom":"LOAD","m":"table fetch by rowid","z":-79.89,"sev":"INSUFFICIENT_HISTORY","cur":3.726111,"mu":5.734722,"pct":-35.0},{"dom":"LOAD","m":"CPU used by this session","z":-16.33,"sev":"INSUFFICIENT_HISTORY","cur":0.271944,"mu":0.339306,"pct":-19.9},{"dom":"LOAD","m":"physical reads","z":-4.49,"sev":"INSUFFICIENT_HISTORY","cur":0.233889,"mu":0.285972,"pct":-18.2},{"dom":"LOAD","m":"physical writes","z":-3.95,"sev":"INSUFFICIENT_HISTORY","cur":1.450278,"mu":1.554167,"pct":-6.7},{"dom":"LOAD","m":"user commits","z":-3.54,"sev":"INSUFFICIENT_HISTORY","cur":0.022778,"mu":0.023472,"pct":-3.0},{"dom":"LOAD","m":"bytes sent via SQL*Net to client","z":-2.73,"sev":"INSUFFICIENT_HISTORY","cur":114.903611,"mu":130.115833,"pct":-11.7},{"dom":"LOAD","m":"logons cumulative","z":-2.12,"sev":"INSUFFICIENT_HISTORY","cur":0.046111,"mu":0.046944,"pct":-1.8},{"dom":"LOAD","m":"session logical reads","z":-1.93,"sev":"INSUFFICIENT_HISTORY","cur":36.925000,"mu":41.501806,"pct":-11.0},{"dom":"LOAD","m":"redo size for lost write detection","z":-1.88,"sev":"INSUFFICIENT_HISTORY","cur":6.805556,"mu":8.997222,"pct":-24.4},{"dom":"LOAD","m":"physical read total bytes","z":-1.88,"sev":"INSUFFICIENT_HISTORY","cur":76795.448889,"mu":99887.360000,"pct":-23.1},{"dom":"LOAD","m":"sorts (rows)","z":+1.67,"sev":"INSUFFICIENT_HISTORY","cur":52.098056,"mu":47.502639,"pct":+9.7},{"dom":"LOAD","m":"sorts (memory)","z":-1.41,"sev":"INSUFFICIENT_HISTORY","cur":0.863611,"mu":0.920417,"pct":-6.2},{"dom":"LOAD","m":"bytes received via SQL*Net from client","z":-1.39,"sev":"INSUFFICIENT_HISTORY","cur":215.498611,"mu":220.351111,"pct":-2.2},{"dom":"LOAD","m":"user calls","z":-1.15,"sev":"INSUFFICIENT_HISTORY","cur":1.152222,"mu":1.191944,"pct":-3.3},{"dom":"LOAD","m":"parse count (total)","z":-1.10,"sev":"INSUFFICIENT_HISTORY","cur":2.000000,"mu":2.174167,"pct":-8.0},{"dom":"LOAD","m":"redo writes","z":+1.06,"sev":"INSUFFICIENT_HISTORY","cur":1.095833,"mu":1.092500,"pct":+0.3},{"dom":"LOAD","m":"opened cursors cumulative","z":-1.04,"sev":"INSUFFICIENT_HISTORY","cur":2.448889,"mu":2.704583,"pct":-9.5},{"dom":"LOAD","m":"execute count","z":-1.03,"sev":"INSUFFICIENT_HISTORY","cur":2.478889,"mu":2.719861,"pct":-8.9},{"dom":"LOAD","m":"parse count (hard)","z":-0.94,"sev":"INSUFFICIENT_HISTORY","cur":0.003333,"mu":0.011111,"pct":-70.0},{"dom":"LOAD","m":"physical write total bytes","z":-0.68,"sev":"INSUFFICIENT_HISTORY","cur":44565.333333,"mu":51829.404444,"pct":-14.0},{"dom":"LOAD","m":"redo size","z":-0.57,"sev":"INSUFFICIENT_HISTORY","cur":5111.000000,"mu":5388.057778,"pct":-5.1},{"dom":"LOAD","m":"DB time","z":-0.17,"sev":"INSUFFICIENT_HISTORY","cur":9.525833,"mu":9.542222,"pct":-0.2},{"dom":"LOAD","m":"parse count (failures)","z":null,"sev":"INSUFFICIENT_HISTORY","cur":0.000000,"mu":0.000000,"pct":null},{"dom":"LOAD","m":"sorts (disk)","z":null,"sev":"INSUFFICIENT_HISTORY","cur":0.000000,"mu":0.000000,"pct":null},{"dom":"LOAD","m":"table scans (long tables)","z":null,"sev":"INSUFFICIENT_HISTORY","cur":0.000000,"mu":0.000000,"pct":null},{"dom":"LOAD","m":"user rollbacks","z":null,"sev":"INSUFFICIENT_HISTORY","cur":0.000000,"mu":0.000000,"pct":null},{"dom":"METRIC","m":"User Commits Per Sec","z":-9.03,"sev":"INSUFFICIENT_HISTORY","cur":0.022774,"mu":0.023553,"pct":-3.3},{"dom":"METRIC","m":"Physical Read Total IO Requests Per Sec","z":-7.97,"sev":"INSUFFICIENT_HISTORY","cur":4.716284,"mu":4.943845,"pct":-4.6},{"dom":"METRIC","m":"Average Synchronous Single-Block Read Latency","z":+6.59,"sev":"INSUFFICIENT_HISTORY","cur":0.000658,"mu":0.000475,"pct":+38.6},{"dom":"METRIC","m":"Physical Writes Per Sec","z":-3.80,"sev":"INSUFFICIENT_HISTORY","cur":1.450066,"mu":1.553249,"pct":-6.6},{"dom":"METRIC","m":"Logons Per Sec","z":-3.03,"sev":"INSUFFICIENT_HISTORY","cur":0.046102,"mu":0.047195,"pct":-2.3},{"dom":"METRIC","m":"Physical Write Total IO Requests Per Sec","z":-2.53,"sev":"INSUFFICIENT_HISTORY","cur":2.898968,"mu":2.935331,"pct":-1.2},{"dom":"METRIC","m":"Host CPU Utilization (%)","z":+2.49,"sev":"INSUFFICIENT_HISTORY","cur":0.951998,"mu":0.832857,"pct":+14.3},{"dom":"METRIC","m":"Network Traffic Volume Per Sec","z":-2.36,"sev":"INSUFFICIENT_HISTORY","cur":330.407021,"mu":349.906839,"pct":-5.6},{"dom":"METRIC","m":"Logical Reads Per Sec","z":-2.29,"sev":"INSUFFICIENT_HISTORY","cur":36.840567,"mu":41.598328,"pct":-11.4},{"dom":"METRIC","m":"Physical Read Total Bytes Per Sec","z":-1.92,"sev":"INSUFFICIENT_HISTORY","cur":76761.798096,"mu":99996.040212,"pct":-23.2},{"dom":"METRIC","m":"Physical Reads Per Sec","z":-1.72,"sev":"INSUFFICIENT_HISTORY","cur":0.228850,"mu":0.293829,"pct":-22.1},{"dom":"METRIC","m":"User Calls Per Sec","z":-1.19,"sev":"INSUFFICIENT_HISTORY","cur":1.152217,"mu":1.191351,"pct":-3.3},{"dom":"METRIC","m":"Total Parse Count Per Sec","z":-1.18,"sev":"INSUFFICIENT_HISTORY","cur":1.998691,"mu":2.179693,"pct":-8.3},{"dom":"METRIC","m":"Executions Per Sec","z":-1.08,"sev":"INSUFFICIENT_HISTORY","cur":2.477534,"mu":2.725029,"pct":-9.1},{"dom":"METRIC","m":"SQL Service Response Time","z":-1.05,"sev":"INSUFFICIENT_HISTORY","cur":0.002310,"mu":0.003807,"pct":-39.3},{"dom":"METRIC","m":"Hard Parse Count Per Sec","z":-0.95,"sev":"INSUFFICIENT_HISTORY","cur":0.003333,"mu":0.011132,"pct":-70.1},{"dom":"METRIC","m":"Average Active Sessions","z":-0.94,"sev":"INSUFFICIENT_HISTORY","cur":0.000524,"mu":0.000897,"pct":-41.6},{"dom":"METRIC","m":"Physical Write Total Bytes Per Sec","z":-0.71,"sev":"INSUFFICIENT_HISTORY","cur":44778.609621,"mu":52272.091976,"pct":-14.3},{"dom":"METRIC","m":"Session Count","z":-0.68,"sev":"INSUFFICIENT_HISTORY","cur":95.533333,"mu":97.091667,"pct":-1.6},{"dom":"METRIC","m":"Redo Generated Per Sec","z":-0.67,"sev":"INSUFFICIENT_HISTORY","cur":5086.400273,"mu":5389.077639,"pct":-5.6},{"dom":"METRIC","m":"Database Wait Time Ratio","z":-0.25,"sev":"INSUFFICIENT_HISTORY","cur":7.384741,"mu":8.123932,"pct":-9.1},{"dom":"METRIC","m":"Database CPU Time Ratio","z":+0.06,"sev":"INSUFFICIENT_HISTORY","cur":107.132378,"mu":107.014379,"pct":+0.1},{"dom":"METRIC","m":"User Rollbacks Per Sec","z":null,"sev":"INSUFFICIENT_HISTORY","cur":0.000000,"mu":0.000000,"pct":null},{"dom":"WAIT","m":"Wait class: Concurrency","z":-4.32,"sev":"INSUFFICIENT_HISTORY","cur":0.000000,"mu":0.000001,"pct":-68.0},{"dom":"WAIT","m":"Wait class: Other","z":-3.27,"sev":"INSUFFICIENT_HISTORY","cur":0.007417,"mu":0.012485,"pct":-40.6},{"dom":"WAIT","m":"Wait class: System I/O","z":-3.19,"sev":"INSUFFICIENT_HISTORY","cur":0.013081,"mu":0.014682,"pct":-10.9},{"dom":"WAIT","m":"Wait class: Commit","z":-2.82,"sev":"INSUFFICIENT_HISTORY","cur":0.000131,"mu":0.000168,"pct":-22.0},{"dom":"WAIT","m":"Wait class: Network","z":-1.94,"sev":"INSUFFICIENT_HISTORY","cur":0.000008,"mu":0.000009,"pct":-17.4},{"dom":"WAIT","m":"Wait class: User I/O","z":-1.87,"sev":"INSUFFICIENT_HISTORY","cur":0.000356,"mu":0.000394,"pct":-9.6},{"dom":"WAIT","m":"Wait class: Application","z":-1.16,"sev":"INSUFFICIENT_HISTORY","cur":0.000003,"mu":0.000004,"pct":-10.0},{"dom":"WAIT","m":"Wait class: Configuration","z":null,"sev":"INSUFFICIENT_HISTORY","cur":null,"mu":0.000003,"pct":null}];
+if(!window.echarts) return;
+var el=document.getElementById("findings-heatmap"); if(!el) return;
+var raw=AWR_DATA.findings;
+var doms=[],mets=[],domIdx={},metIdx={};
+raw.forEach(function(f){if(!(f.dom in domIdx)){domIdx[f.dom]=doms.length;doms.push(f.dom);} if(!(f.m in metIdx)){metIdx[f.m]=mets.length;mets.push(f.m);}});
+var data=raw.map(function(f){var zval=f.z==null?null:Math.abs(f.z);return {value:[metIdx[f.m],domIdx[f.dom],zval],raw:f};});
+var maxAbs=3.5;
+var cs=getComputedStyle(document.body);
+var fg=cs.getPropertyValue("--fg").trim()||"#333";
+var mu=cs.getPropertyValue("--muted").trim()||"#888";
+var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";
+var chart=echarts.init(el);
+chart.setOption({
+  tooltip:{formatter:function(p){var f=p.data.raw;var fmt=function(v){return v==null?"\u2014":(+v).toLocaleString(undefined,{maximumFractionDigits:3});};return "<b>"+f.m+"</b><br/>domain: "+f.dom+"<br/>severity: <b>"+f.sev+"</b><br/>current: "+fmt(f.cur)+"<br/>prior \u03BC: "+fmt(f.mu)+"<br/>z-score: "+(f.z==null?"\u2014":(+f.z).toFixed(2))+"<br/>% \u0394: "+(f.pct==null?"\u2014":f.pct+"%");}},
+  grid:{left:10,right:10,top:30,bottom:70,containLabel:true},
+  xAxis:{type:"category",data:mets,axisLabel:{color:mu,rotate:55,fontSize:10,interval:0,formatter:function(v){return v.length>22?v.slice(0,22)+"\u2026":v;}},splitArea:{show:true}},
+  yAxis:{type:"category",data:doms,axisLabel:{color:fg,fontWeight:600},splitArea:{show:true}},
+  visualMap:{min:0,max:maxAbs,calculable:true,orient:"horizontal",left:"center",bottom:8,itemWidth:12,itemHeight:160,textStyle:{color:mu,fontSize:10},inRange:{color:["#eaf6ea","#eef2ff","#fff4d6","#ffe5e5","#8a1c1c"]},text:["|z|\u22653","0"]},
+  series:[{name:"|z|",type:"heatmap",data:data,label:{show:false},emphasis:{itemStyle:{borderColor:fg,borderWidth:1.5}}}]
+});
+chart.on("click",function(p){if(!p.data||!p.data.raw)return;var row=document.querySelector("tr[data-metric=\""+CSS.escape(p.data.raw.m)+"\"]");if(row){row.scrollIntoView({behavior:"smooth",block:"center"});row.style.transition="outline 1.5s";row.style.outline="2px solid "+cs.getPropertyValue("--accent");setTimeout(function(){row.style.outline="none";},1600);}});
+new ResizeObserver(function(){chart.resize();}).observe(el);
+})();
+</script>
+<table><thead><tr><th>Severity</th><th>Domain</th><th>Metric</th><th class="num">Current</th><th class="num">Prior mean</th><th class="num">Prior sd</th><th class="num">n</th><th class="num">z-score</th><th class="num">% &Delta;</th></tr></thead><tbody>
+<tr data-metric="table fetch by rowid" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>table fetch by rowid</td><td class="num">3.7261</td><td class="num">5.7347</td><td class="num">0.0251</td><td class="num">2</td><td class="num">-79.89</td><td class="num">-35.0%</td></tr>
+<tr data-metric="CPU used by this session" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>CPU used by this session</td><td class="num">0.2719</td><td class="num">0.3393</td><td class="num">0.0041</td><td class="num">2</td><td class="num">-16.33</td><td class="num">-19.9%</td></tr>
+<tr data-metric="User Commits Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>User Commits Per Sec</td><td class="num">0.0228</td><td class="num">0.0236</td><td class="num">0.0001</td><td class="num">2</td><td class="num">-9.03</td><td class="num">-3.3%</td></tr>
+<tr data-metric="Physical Read Total IO Requests Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Physical Read Total IO Requests Per Sec</td><td class="num">4.7163</td><td class="num">4.9438</td><td class="num">0.0286</td><td class="num">2</td><td class="num">-7.97</td><td class="num">-4.6%</td></tr>
+<tr data-metric="Average Synchronous Single-Block Read Latency" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Average Synchronous Single-Block Read Latency</td><td class="num">0.0007</td><td class="num">0.0005</td><td class="num">0.0000</td><td class="num">2</td><td class="num">+6.59</td><td class="num">+38.6%</td></tr>
+<tr data-metric="physical reads" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>physical reads</td><td class="num">0.2339</td><td class="num">0.2860</td><td class="num">0.0116</td><td class="num">2</td><td class="num">-4.49</td><td class="num">-18.2%</td></tr>
+<tr data-metric="Wait class: Concurrency" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>WAIT</td><td>Wait class: Concurrency</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">2</td><td class="num">-4.32</td><td class="num">-68.0%</td></tr>
+<tr data-metric="physical writes" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>physical writes</td><td class="num">1.4503</td><td class="num">1.5542</td><td class="num">0.0263</td><td class="num">2</td><td class="num">-3.95</td><td class="num">-6.7%</td></tr>
+<tr data-metric="Physical Writes Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Physical Writes Per Sec</td><td class="num">1.4501</td><td class="num">1.5532</td><td class="num">0.0272</td><td class="num">2</td><td class="num">-3.80</td><td class="num">-6.6%</td></tr>
+<tr data-metric="user commits" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>user commits</td><td class="num">0.0228</td><td class="num">0.0235</td><td class="num">0.0002</td><td class="num">2</td><td class="num">-3.54</td><td class="num">-3.0%</td></tr>
+<tr data-metric="Wait class: Other" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>WAIT</td><td>Wait class: Other</td><td class="num">0.0074</td><td class="num">0.0125</td><td class="num">0.0016</td><td class="num">2</td><td class="num">-3.27</td><td class="num">-40.6%</td></tr>
+<tr data-metric="Wait class: System I/O" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>WAIT</td><td>Wait class: System I/O</td><td class="num">0.0131</td><td class="num">0.0147</td><td class="num">0.0005</td><td class="num">2</td><td class="num">-3.19</td><td class="num">-10.9%</td></tr>
+<tr data-metric="Logons Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Logons Per Sec</td><td class="num">0.0461</td><td class="num">0.0472</td><td class="num">0.0004</td><td class="num">2</td><td class="num">-3.03</td><td class="num">-2.3%</td></tr>
+<tr data-metric="Wait class: Commit" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>WAIT</td><td>Wait class: Commit</td><td class="num">0.0001</td><td class="num">0.0002</td><td class="num">0.0000</td><td class="num">2</td><td class="num">-2.82</td><td class="num">-22.0%</td></tr>
+<tr data-metric="bytes sent via SQL*Net to client" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>bytes sent via SQL*Net to client</td><td class="num">114.9036</td><td class="num">130.1158</td><td class="num">5.5685</td><td class="num">2</td><td class="num">-2.73</td><td class="num">-11.7%</td></tr>
+<tr data-metric="Physical Write Total IO Requests Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Physical Write Total IO Requests Per Sec</td><td class="num">2.8990</td><td class="num">2.9353</td><td class="num">0.0144</td><td class="num">2</td><td class="num">-2.53</td><td class="num">-1.2%</td></tr>
+<tr data-metric="Host CPU Utilization (%)" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Host CPU Utilization (%)</td><td class="num">0.9520</td><td class="num">0.8329</td><td class="num">0.0478</td><td class="num">2</td><td class="num">+2.49</td><td class="num">+14.3%</td></tr>
+<tr data-metric="Network Traffic Volume Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Network Traffic Volume Per Sec</td><td class="num">330.4070</td><td class="num">349.9068</td><td class="num">8.2754</td><td class="num">2</td><td class="num">-2.36</td><td class="num">-5.6%</td></tr>
+<tr data-metric="Logical Reads Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Logical Reads Per Sec</td><td class="num">36.8406</td><td class="num">41.5983</td><td class="num">2.0765</td><td class="num">2</td><td class="num">-2.29</td><td class="num">-11.4%</td></tr>
+<tr data-metric="logons cumulative" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>logons cumulative</td><td class="num">0.0461</td><td class="num">0.0469</td><td class="num">0.0004</td><td class="num">2</td><td class="num">-2.12</td><td class="num">-1.8%</td></tr>
+<tr data-metric="Wait class: Network" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>WAIT</td><td>Wait class: Network</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">2</td><td class="num">-1.94</td><td class="num">-17.4%</td></tr>
+<tr data-metric="session logical reads" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>session logical reads</td><td class="num">36.9250</td><td class="num">41.5018</td><td class="num">2.3725</td><td class="num">2</td><td class="num">-1.93</td><td class="num">-11.0%</td></tr>
+<tr data-metric="Physical Read Total Bytes Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Physical Read Total Bytes Per Sec</td><td class="num">76,761.7981</td><td class="num">99,996.0402</td><td class="num">12,092.1790</td><td class="num">2</td><td class="num">-1.92</td><td class="num">-23.2%</td></tr>
+<tr data-metric="redo size for lost write detection" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>redo size for lost write detection</td><td class="num">6.8056</td><td class="num">8.9972</td><td class="num">1.1636</td><td class="num">2</td><td class="num">-1.88</td><td class="num">-24.4%</td></tr>
+<tr data-metric="physical read total bytes" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>physical read total bytes</td><td class="num">76,795.4489</td><td class="num">99,887.3600</td><td class="num">12,292.6208</td><td class="num">2</td><td class="num">-1.88</td><td class="num">-23.1%</td></tr>
+<tr data-metric="Wait class: User I/O" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>WAIT</td><td>Wait class: User I/O</td><td class="num">0.0004</td><td class="num">0.0004</td><td class="num">0.0000</td><td class="num">2</td><td class="num">-1.87</td><td class="num">-9.6%</td></tr>
+<tr data-metric="Physical Reads Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Physical Reads Per Sec</td><td class="num">0.2289</td><td class="num">0.2938</td><td class="num">0.0377</td><td class="num">2</td><td class="num">-1.72</td><td class="num">-22.1%</td></tr>
+<tr data-metric="sorts (rows)" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>sorts (rows)</td><td class="num">52.0981</td><td class="num">47.5026</td><td class="num">2.7591</td><td class="num">2</td><td class="num">+1.67</td><td class="num">+9.7%</td></tr>
+<tr data-metric="sorts (memory)" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>sorts (memory)</td><td class="num">0.8636</td><td class="num">0.9204</td><td class="num">0.0403</td><td class="num">2</td><td class="num">-1.41</td><td class="num">-6.2%</td></tr>
+<tr data-metric="bytes received via SQL*Net from client" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>bytes received via SQL*Net from client</td><td class="num">215.4986</td><td class="num">220.3511</td><td class="num">3.4876</td><td class="num">2</td><td class="num">-1.39</td><td class="num">-2.2%</td></tr>
+<tr data-metric="User Calls Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>User Calls Per Sec</td><td class="num">1.1522</td><td class="num">1.1914</td><td class="num">0.0329</td><td class="num">2</td><td class="num">-1.19</td><td class="num">-3.3%</td></tr>
+<tr data-metric="Total Parse Count Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Total Parse Count Per Sec</td><td class="num">1.9987</td><td class="num">2.1797</td><td class="num">0.1533</td><td class="num">2</td><td class="num">-1.18</td><td class="num">-8.3%</td></tr>
+<tr data-metric="Wait class: Application" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>WAIT</td><td>Wait class: Application</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">2</td><td class="num">-1.16</td><td class="num">-10.0%</td></tr>
+<tr data-metric="user calls" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>user calls</td><td class="num">1.1522</td><td class="num">1.1919</td><td class="num">0.0346</td><td class="num">2</td><td class="num">-1.15</td><td class="num">-3.3%</td></tr>
+<tr data-metric="parse count (total)" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>parse count (total)</td><td class="num">2.0000</td><td class="num">2.1742</td><td class="num">0.1579</td><td class="num">2</td><td class="num">-1.10</td><td class="num">-8.0%</td></tr>
+<tr data-metric="Executions Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Executions Per Sec</td><td class="num">2.4775</td><td class="num">2.7250</td><td class="num">0.2290</td><td class="num">2</td><td class="num">-1.08</td><td class="num">-9.1%</td></tr>
+<tr data-metric="redo writes" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>redo writes</td><td class="num">1.0958</td><td class="num">1.0925</td><td class="num">0.0031</td><td class="num">2</td><td class="num">+1.06</td><td class="num">+0.3%</td></tr>
+<tr data-metric="SQL Service Response Time" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>SQL Service Response Time</td><td class="num">0.0023</td><td class="num">0.0038</td><td class="num">0.0014</td><td class="num">2</td><td class="num">-1.05</td><td class="num">-39.3%</td></tr>
+<tr data-metric="opened cursors cumulative" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>opened cursors cumulative</td><td class="num">2.4489</td><td class="num">2.7046</td><td class="num">0.2465</td><td class="num">2</td><td class="num">-1.04</td><td class="num">-9.5%</td></tr>
+<tr data-metric="execute count" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>execute count</td><td class="num">2.4789</td><td class="num">2.7199</td><td class="num">0.2339</td><td class="num">2</td><td class="num">-1.03</td><td class="num">-8.9%</td></tr>
+<tr data-metric="Hard Parse Count Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Hard Parse Count Per Sec</td><td class="num">0.0033</td><td class="num">0.0111</td><td class="num">0.0082</td><td class="num">2</td><td class="num">-0.95</td><td class="num">-70.1%</td></tr>
+<tr data-metric="parse count (hard)" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>parse count (hard)</td><td class="num">0.0033</td><td class="num">0.0111</td><td class="num">0.0082</td><td class="num">2</td><td class="num">-0.94</td><td class="num">-70.0%</td></tr>
+<tr data-metric="Average Active Sessions" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Average Active Sessions</td><td class="num">0.0005</td><td class="num">0.0009</td><td class="num">0.0004</td><td class="num">2</td><td class="num">-0.94</td><td class="num">-41.6%</td></tr>
+<tr data-metric="Physical Write Total Bytes Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Physical Write Total Bytes Per Sec</td><td class="num">44,778.6096</td><td class="num">52,272.0920</td><td class="num">10,628.6504</td><td class="num">2</td><td class="num">-0.71</td><td class="num">-14.3%</td></tr>
+<tr data-metric="physical write total bytes" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>physical write total bytes</td><td class="num">44,565.3333</td><td class="num">51,829.4044</td><td class="num">10,638.0035</td><td class="num">2</td><td class="num">-0.68</td><td class="num">-14.0%</td></tr>
+<tr data-metric="Session Count" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Session Count</td><td class="num">95.5333</td><td class="num">97.0917</td><td class="num">2.2981</td><td class="num">2</td><td class="num">-0.68</td><td class="num">-1.6%</td></tr>
+<tr data-metric="Redo Generated Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Redo Generated Per Sec</td><td class="num">5,086.4003</td><td class="num">5,389.0776</td><td class="num">452.4499</td><td class="num">2</td><td class="num">-0.67</td><td class="num">-5.6%</td></tr>
+<tr data-metric="redo size" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>redo size</td><td class="num">5,111.0000</td><td class="num">5,388.0578</td><td class="num">490.0234</td><td class="num">2</td><td class="num">-0.57</td><td class="num">-5.1%</td></tr>
+<tr data-metric="Database Wait Time Ratio" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Database Wait Time Ratio</td><td class="num">7.3847</td><td class="num">8.1239</td><td class="num">2.9369</td><td class="num">2</td><td class="num">-0.25</td><td class="num">-9.1%</td></tr>
+<tr data-metric="DB time" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>DB time</td><td class="num">9.5258</td><td class="num">9.5422</td><td class="num">0.0955</td><td class="num">2</td><td class="num">-0.17</td><td class="num">-0.2%</td></tr>
+<tr data-metric="Database CPU Time Ratio" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>Database CPU Time Ratio</td><td class="num">107.1324</td><td class="num">107.0144</td><td class="num">2.0466</td><td class="num">2</td><td class="num">+0.06</td><td class="num">+0.1%</td></tr>
+<tr data-metric="User Rollbacks Per Sec" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>METRIC</td><td>User Rollbacks Per Sec</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">2</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+<tr data-metric="Wait class: Configuration" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>WAIT</td><td>Wait class: Configuration</td><td class="num">&mdash;</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">1</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+<tr data-metric="parse count (failures)" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>parse count (failures)</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">2</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+<tr data-metric="sorts (disk)" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>sorts (disk)</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">2</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+<tr data-metric="table scans (long tables)" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>table scans (long tables)</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">2</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+<tr data-metric="user rollbacks" class="skip"><td><span class="badge skip">INSUFFICIENT_HISTORY</span></td><td>LOAD</td><td>user rollbacks</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">0.0000</td><td class="num">2</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
+</tbody></table>
+<p style="font-size:12px;color:var(--muted)">All raw facts are persisted in the scratch schema (AWR_TREND_RUNS / _WINDOWS / _LOAD_PROFILE / _SYSMETRIC / _WAITS / _TOP_SQL / _FINDINGS) keyed by run_id = 14. Query them for deeper analysis.</p>
+</section>
+<section id="overview"><h2>Headline metrics</h2>
+<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">Six key signals across the last 2 aligned windows (oldest &rarr; current). Severity badge is taken from the <a href="#findings">Findings</a> table when a z-score baseline exists.</p>
+<div class="hero-grid">
+<div class="hero-card" data-hero-pos="1">
+  <div class="label">DB time</div>
+  <div class="mini" id="hero-mini-1" data-spark="9.474722,9.609722,9.525833" data-spark-title="DB time"></div>
+  <div class="value">9.53 <small>cs/s</small></div>
+  <div class="foot"><span class="delta down">&darr; -0.9% vs -1w</span><span class="badge skip">INSUFFICIENT_HISTORY z=-0.2</span></div>
+</div>
+<div class="hero-card" data-hero-pos="2">
+  <div class="label">Redo generated</div>
+  <div class="mini" id="hero-mini-2" data-spark="5734.556667,5041.558889,5111.000000" data-spark-title="Redo generated"></div>
+  <div class="value">5,111.00 <small>B/s</small></div>
+  <div class="foot"><span class="delta up">&uarr; +1.4% vs -1w</span><span class="badge skip">INSUFFICIENT_HISTORY z=-0.6</span></div>
+</div>
+<div class="hero-card" data-hero-pos="3">
+  <div class="label">Logical reads</div>
+  <div class="mini" id="hero-mini-3" data-spark="43.179444,39.824167,36.925000" data-spark-title="Logical reads"></div>
+  <div class="value">36.92 <small>/s</small></div>
+  <div class="foot"><span class="delta down">&darr; -7.3% vs -1w</span><span class="badge skip">INSUFFICIENT_HISTORY z=-1.9</span></div>
+</div>
+<div class="hero-card" data-hero-pos="4">
+  <div class="label">Average Active Sessions</div>
+  <div class="mini" id="hero-mini-4" data-spark="0.000617,0.001177,0.000524" data-spark-title="Average Active Sessions"></div>
+  <div class="value">0.00 <small>AAS</small></div>
+  <div class="foot"><span class="delta down">&darr; -55.5% vs -1w</span><span class="badge skip">INSUFFICIENT_HISTORY z=-0.9</span></div>
+</div>
+<div class="hero-card" data-hero-pos="5">
+  <div class="label">Wait Time Ratio</div>
+  <div class="mini" id="hero-mini-5" data-spark="6.047244,10.200621,7.384741" data-spark-title="Wait Time Ratio"></div>
+  <div class="value">7.38 <small>%</small></div>
+  <div class="foot"><span class="delta down">&darr; -27.6% vs -1w</span><span class="badge skip">INSUFFICIENT_HISTORY z=-0.3</span></div>
+</div>
+<div class="hero-card" data-hero-pos="6">
+  <div class="label">Hard parses</div>
+  <div class="mini" id="hero-mini-6" data-spark="0.016944,0.005278,0.003333" data-spark-title="Hard parses"></div>
+  <div class="value">0.00 <small>/s</small></div>
+  <div class="foot"><span class="delta down">&darr; -36.8% vs -1w</span><span class="badge skip">INSUFFICIENT_HISTORY z=-0.9</span></div>
+</div>
+</div>
+<script>
+(function(){
+AWR_DATA.overview = {weeks:["Mar 26","Apr 02","Apr 09"],cards:[{"pos":1,"label":"DB time","unit":"cs/s","cur":9.525833,"prev":9.609722,"sev":"INSUFFICIENT_HISTORY","z":-0.17,"pct":-0.2,"vals":[9.474722,9.609722,9.525833]},{"pos":2,"label":"Redo generated","unit":"B/s","cur":5111.000000,"prev":5041.558889,"sev":"INSUFFICIENT_HISTORY","z":-0.57,"pct":-5.1,"vals":[5734.556667,5041.558889,5111.000000]},{"pos":3,"label":"Logical reads","unit":"/s","cur":36.925000,"prev":39.824167,"sev":"INSUFFICIENT_HISTORY","z":-1.93,"pct":-11.0,"vals":[43.179444,39.824167,36.925000]},{"pos":4,"label":"Average Active Sessions","unit":"AAS","cur":0.000524,"prev":0.001177,"sev":"INSUFFICIENT_HISTORY","z":-0.94,"pct":-41.6,"vals":[0.000617,0.001177,0.000524]},{"pos":5,"label":"Wait Time Ratio","unit":"%","cur":7.384741,"prev":10.200621,"sev":"INSUFFICIENT_HISTORY","z":-0.25,"pct":-9.1,"vals":[6.047244,10.200621,7.384741]},{"pos":6,"label":"Hard parses","unit":"/s","cur":0.003333,"prev":0.005278,"sev":"INSUFFICIENT_HISTORY","z":-0.94,"pct":-70.0,"vals":[0.016944,0.005278,0.003333]}]};
+if(!window.echarts){
+  // Fallback: use the inline SVG sparkline renderer (window.__awrRenderSparks)
+  if(window.__awrRenderSparks) window.__awrRenderSparks();
+  return;
+}
+var cs=getComputedStyle(document.body);
+var ac=cs.getPropertyValue("--accent").trim()||"#2563eb";
+var ac2=cs.getPropertyValue("--accent-2").trim()||"#14b8a6";
+AWR_DATA.overview.cards.forEach(function(c){
+  var el=document.getElementById("hero-mini-"+c.pos);
+  if(!el || !c.vals || !c.vals.length) return;
+  el.__sparked=true;  // prevent sparkline renderer from overwriting
+  el.innerHTML="";  // clear any sparkline fallback already rendered
+  el.removeAttribute("data-spark");
+  var chart=echarts.init(el,null,{renderer:"svg"});
+  var color=c.sev==="CRITICAL"?cs.getPropertyValue("--crit-fg").trim():(c.sev==="WARN"?cs.getPropertyValue("--warn-fg").trim():ac);
+  chart.setOption({
+    animation:false,
+    grid:{left:2,right:2,top:2,bottom:2},
+    xAxis:{type:"category",show:false,data:AWR_DATA.overview.weeks,boundaryGap:false},
+    yAxis:{type:"value",show:false,scale:true},
+    tooltip:{trigger:"axis",formatter:function(p){return p[0].axisValue+"<br/><b>"+(p[0].data==null?"\u2014":(+p[0].data).toFixed(2))+"</b> "+c.unit;}},
+    series:[{type:"line",data:c.vals,smooth:true,showSymbol:false,connectNulls:true,lineStyle:{color:color,width:1.8},areaStyle:{color:{type:"linear",x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:color+"33"},{offset:1,color:color+"05"}]}},markPoint:{symbol:"circle",symbolSize:6,itemStyle:{color:color},data:[{coord:[c.vals.length-1,c.vals[c.vals.length-1]]}]}}]
+  });
+  new ResizeObserver(function(){chart.resize();}).observe(el);
+});
+})();
+</script>
+</section>
+<footer class="report">
+Generated by awr_trend.sql &mdash; run 14 &mdash; raw data preserved in the AWR_TREND_* scratch tables.
+</footer>
+</body></html>
