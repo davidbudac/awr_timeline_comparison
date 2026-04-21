@@ -51,8 +51,9 @@ sql/
 ├── 03_sysmetric.sql             -- SYSMETRIC_SUMMARY averages (23 curated metrics)
 ├── 04_waits_fg.sql              -- foreground waits + wait-class rollup
 ├── 05_waits_bg.sql              -- background waits (BG_EVENT_SUMMARY)
-├── 06_top_sql.sql               -- Top-N SQL ranked 4 ways
-└── 07_summary.sql               -- z-score findings; also flips run status to 'OK'
+├── 06_top_sql.sql               -- Top-N SQL ranked 4 ways + bump chart
+├── 07_summary.sql               -- z-score findings + heatmap; flips run status to 'OK'
+└── 08_overview.sql              -- hero strip: 6 headline-metric cards (runs last, reads 02/03/07)
 side/
 └── create_weekly_baselines.sql  -- optional weekly AWR baselines
 reports/                         -- generated HTML (gitignored? — not yet; see below)
@@ -98,6 +99,32 @@ relative to SYSDATE" (resolved in `00_params.sql`). `&run_id` is
 allocated by the driver from `AWR_TREND_RUN_SEQ` and threaded into every
 section — never re-allocate it inside a section.
 
+**Tilde gotcha**: every numbered section file issues `SET DEFINE '~'` so
+it can use `~run_id` for parameter substitution. That makes `~` the
+live substitution character for the rest of the file — any literal `~`
+followed by a character (even in comments or strings, e.g. `~0.003`,
+`~/path`) is parsed as a variable reference and triggers an `Enter
+value for 0:` prompt, which silently truncates the section in
+non-interactive runs. If you need a literal tilde, write it out
+("around 0.003", "home dir", etc.) or wrap the affected block in `SET
+DEFINE OFF` / `SET DEFINE '~'`.
+
+### Chart render layer (sections 02, 03, 04, 05, 06, 07, 08)
+The chart visualizations read only from the existing scratch tables —
+no new data compute or new tables. The pattern is: each numbered
+section builds its rendered slice via a `WITH all_weeks AS (CONNECT BY
+LEVEL …)` × entity CTE that guarantees null slots for missing weeks,
+then `LISTAGG(... WITHIN GROUP (ORDER BY week_offset DESC), ',')` into
+either a `data-spark="…"` attribute (read by the inline-SVG sparkline
+renderer in `awr_trend.sql`) or a JSON payload on `window.AWR_DATA` for
+an ECharts init block. Oldest→newest is the canonical spark order.
+Numeric CSV uses `NLS_NUMERIC_CHARACTERS='.,'` so `Number(x)` parses
+regardless of the session NLS. Table cells pick an adaptive decimal
+format from `row_max`: at least 2 decimals, more when all values are
+small enough that 2 decimals would show "0.00" for real movement.
+The sparkline JS has a flatness floor: `(max-min)/|mean| < 2 %` renders
+a midline instead of autoscaling imperceptible noise into a zigzag.
+
 ### Window validity
 `01_windows.sql` flags a window `valid_flag = 'N'` with a `skip_reason`
 when: bounds can't be resolved, begin=end (same snap), or
@@ -135,10 +162,13 @@ No automatic retention — add `side/purge_runs.sql` if needed.
 
 ## Verification state
 
-**Not yet executed against a real Oracle 19c instance.** All files are
-static-reviewed only. Before making substantive changes, ideally run
-once on a test DB to catch any syntax/semantics issues. Particular
-spots worth probing on first real run:
+Last verified against Oracle 19c on dbmint (CDB1, `connect / as sysdba`)
+in April 2026: all 8 sections render cleanly, 0 ORA errors, all
+visualizations populate when the underlying weeks have snapshots.
+Density matters — the test DB had at most 3 consecutive weeks at any
+given hour-of-week, so findings are forced to `INSUFFICIENT_HISTORY`
+(z-score needs ≥3 prior). Re-verify if you change any of sections
+02/03/04/05/06/07/08. Particular spots worth probing on a future real run:
 
 - HTML prologue: confirm the `SELECT awr_trend_run_seq.NEXTVAL` and the
   `report_path` SELECT don't leak into the spool (they shouldn't — both
