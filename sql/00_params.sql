@@ -84,13 +84,34 @@ BEGIN
             || '</nav>');
 
         DBMS_OUTPUT.PUT_LINE('<header class="report">');
-        DBMS_OUTPUT.PUT_LINE('  <h1>AWR Timeline Comparison &mdash; '
+        DBMS_OUTPUT.PUT_LINE('  <div class="eyebrow">Oracle 19c AWR week-over-week comparison</div>');
+        DBMS_OUTPUT.PUT_LINE('  <div class="hero-grid">');
+        DBMS_OUTPUT.PUT_LINE('    <div class="hero-copy">');
+        DBMS_OUTPUT.PUT_LINE('      <h1>AWR Timeline Comparison &mdash; '
             || DBMS_XMLGEN.CONVERT(TRIM(r.db_name))
             || ' <span class="badge info">run #' || r.run_id || '</span></h1>');
-        DBMS_OUTPUT.PUT_LINE('  <div>Comparing the current window against the '
+        DBMS_OUTPUT.PUT_LINE('      <p class="lede">Comparing the current window against the '
             || r.weeks_back || ' prior '
             || RTRIM(DBMS_XMLGEN.CONVERT(TRIM(r.dow)))
-            || ' window(s) at the same hour-of-day.</div>');
+            || ' window(s) at the same hour-of-day. The raw facts are still preserved in the scratch schema, but the presentation now leans harder on quick visual scanning.</p>');
+        DBMS_OUTPUT.PUT_LINE('      <div class="hero-badges">'
+            || '<span class="badge info">' || DBMS_XMLGEN.CONVERT(r.scope) || '</span> '
+            || '<span class="badge ok">' || r.weeks_back || ' prior week(s)</span> '
+            || '<span class="badge warn">Top ' || r.top_n || ' waits / SQL</span>'
+            || '</div>');
+        DBMS_OUTPUT.PUT_LINE('    </div>');
+        DBMS_OUTPUT.PUT_LINE('    <div class="hero-stats">');
+        DBMS_OUTPUT.PUT_LINE('      <div class="stat-line"><span>Window</span><strong>'
+            || DBMS_XMLGEN.CONVERT(r.win_start_s) || ' &rarr; '
+            || DBMS_XMLGEN.CONVERT(r.target_end_s) || '</strong></div>');
+        DBMS_OUTPUT.PUT_LINE('      <div class="stat-line"><span>Scope</span><strong>'
+            || DBMS_XMLGEN.CONVERT(r.inst_label) || '</strong></div>');
+        DBMS_OUTPUT.PUT_LINE('      <div class="stat-line"><span>Host</span><strong>'
+            || DBMS_XMLGEN.CONVERT(r.host_name) || '</strong></div>');
+        DBMS_OUTPUT.PUT_LINE('      <div class="stat-line"><span>Generated</span><strong>'
+            || DBMS_XMLGEN.CONVERT(r.gen_s) || '</strong></div>');
+        DBMS_OUTPUT.PUT_LINE('    </div>');
+        DBMS_OUTPUT.PUT_LINE('  </div>');
         DBMS_OUTPUT.PUT_LINE('  <div class="meta">');
         DBMS_OUTPUT.PUT_LINE('    <div><b>DBID:</b> ' || r.dbid || '</div>');
         DBMS_OUTPUT.PUT_LINE('    <div><b>Host:</b> ' || DBMS_XMLGEN.CONVERT(r.host_name) || '</div>');

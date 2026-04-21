@@ -99,6 +99,7 @@ COMMIT;
 --
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="windows"><h2>Aligned windows</h2>');
+    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">The current hour is matched to the same day-of-week and hour across prior weeks. Invalid windows remain visible here but are excluded from the baseline used for z-scores.</p>');
     DBMS_OUTPUT.PUT_LINE('<table>');
     DBMS_OUTPUT.PUT_LINE('<thead><tr>'
         || '<th>Week</th>'

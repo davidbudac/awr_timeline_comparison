@@ -77,13 +77,17 @@ DECLARE
     v_row         VARCHAR2(32767);
     v_val         NUMBER;
     v_fmt         VARCHAR2(40);
+    v_points      VARCHAR2(4000);
+    v_token       VARCHAR2(80);
+    TYPE t_num_tab IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
+    v_vals        t_num_tab;
 BEGIN
     SELECT weeks_back INTO v_weeks_back FROM awr_trend_runs WHERE run_id = ~run_id;
 
     DBMS_OUTPUT.PUT_LINE('<section id="metrics"><h2>System metrics (DBA_HIST_SYSMETRIC_SUMMARY)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">Averages over the snapshots inside each window. Values are already per-second where the metric name says so.</p>');
 
-    v_header := '<thead><tr><th>Metric</th><th>Unit</th><th class="num">Current</th>';
+    v_header := '<thead><tr><th>Metric</th><th>Unit</th><th>Trend</th><th class="num">Current</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num">&minus;' || k || 'w</th>';
     END LOOP;
@@ -123,20 +127,50 @@ BEGIN
             metric_name
     ) LOOP
         v_fmt := 'FM999G999G999G990D00';
+        v_vals.DELETE;
+        v_points := NULL;
+
+        FOR k IN 1 .. v_weeks_back LOOP
+            SELECT MAX(avg_value)
+            INTO   v_vals(k)
+            FROM   awr_trend_sysmetric
+            WHERE  run_id = ~run_id
+            AND    metric_name = m.metric_name
+            AND    week_offset = k;
+
+            v_token := CASE
+                WHEN v_vals(k) IS NULL THEN 'null'
+                ELSE TO_CHAR(v_vals(k), 'FM99999999999999999990D999999',
+                    'NLS_NUMERIC_CHARACTERS=''.,''')
+            END;
+
+            IF v_points IS NULL THEN
+                v_points := v_token;
+            ELSE
+                v_points := v_token || '|' || v_points;
+            END IF;
+        END LOOP;
+
+        v_token := CASE
+            WHEN m.cur_val IS NULL THEN 'null'
+            ELSE TO_CHAR(m.cur_val, 'FM99999999999999999990D999999',
+                'NLS_NUMERIC_CHARACTERS=''.,''')
+        END;
+        IF v_points IS NULL THEN
+            v_points := v_token;
+        ELSE
+            v_points := v_points || '|' || v_token;
+        END IF;
 
         v_row := '<tr><td>' || DBMS_XMLGEN.CONVERT(m.metric_name) || '</td>'
               || '<td>' || DBMS_XMLGEN.CONVERT(NVL(m.metric_unit, '')) || '</td>'
+              || '<td class="trend-cell"><span class="sparkline" data-points="' || v_points || '"></span></td>'
               || '<td class="num"><b>' ||
                  CASE WHEN m.cur_val IS NULL THEN '&mdash;'
                       ELSE TO_CHAR(m.cur_val, v_fmt) END || '</b></td>';
 
         FOR k IN 1 .. v_weeks_back LOOP
-            SELECT MAX(avg_value)
-            INTO   v_val
-            FROM   awr_trend_sysmetric
-            WHERE  run_id = ~run_id
-            AND    metric_name = m.metric_name
-            AND    week_offset = k;
+            v_val := v_vals(k);
 
             v_row := v_row || '<td class="num">' ||
                 CASE WHEN v_val IS NULL THEN '&mdash;' ELSE TO_CHAR(v_val, v_fmt) END

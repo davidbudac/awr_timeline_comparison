@@ -78,6 +78,10 @@ DECLARE
     v_cnt        NUMBER;
     v_us         NUMBER;
     v_rank       NUMBER;
+    v_points     VARCHAR2(4000);
+    v_token      VARCHAR2(80);
+    TYPE t_num_tab IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
+    v_vals       t_num_tab;
 BEGIN
     SELECT weeks_back INTO v_weeks_back FROM awr_trend_runs WHERE run_id = ~run_id;
     SELECT COUNT(*) INTO v_cnt FROM awr_trend_waits WHERE run_id = ~run_id AND scope = 'BG';
@@ -92,7 +96,7 @@ BEGIN
 
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">From DBA_HIST_BG_EVENT_SUMMARY. Idle waits filtered out. Time in seconds.</p>');
 
-    v_header := '<thead><tr><th>Event</th><th>Class</th><th class="num">Current (s)</th>';
+    v_header := '<thead><tr><th>Event</th><th>Class</th><th>Trend</th><th class="num">Current (s)</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num">&minus;' || k || 'w (s)</th>';
     END LOOP;
@@ -111,9 +115,45 @@ BEGIN
             MAX(CASE WHEN week_offset = 0 THEN rank_in_window END) NULLS LAST,
             MAX(time_waited_us) DESC
     ) LOOP
+        v_vals.DELETE;
+        v_points := NULL;
+
+        FOR k IN 1 .. v_weeks_back LOOP
+            SELECT MAX(time_waited_us)
+            INTO   v_us
+            FROM   awr_trend_waits
+            WHERE  run_id = ~run_id AND scope = 'BG'
+            AND    event_name = e.event_name AND week_offset = k;
+
+            v_vals(k) := CASE WHEN v_us IS NULL THEN NULL ELSE v_us / 1e6 END;
+            v_token := CASE
+                WHEN v_vals(k) IS NULL THEN 'null'
+                ELSE TO_CHAR(v_vals(k), 'FM99999999999999999990D999999',
+                    'NLS_NUMERIC_CHARACTERS=''.,''')
+            END;
+
+            IF v_points IS NULL THEN
+                v_points := v_token;
+            ELSE
+                v_points := v_token || '|' || v_points;
+            END IF;
+        END LOOP;
+
+        v_token := CASE
+            WHEN e.cur_us IS NULL THEN 'null'
+            ELSE TO_CHAR(e.cur_us / 1e6, 'FM99999999999999999990D999999',
+                'NLS_NUMERIC_CHARACTERS=''.,''')
+        END;
+        IF v_points IS NULL THEN
+            v_points := v_token;
+        ELSE
+            v_points := v_points || '|' || v_token;
+        END IF;
+
         v_row := '<tr>'
             || '<td>' || DBMS_XMLGEN.CONVERT(e.event_name) || '</td>'
             || '<td>' || DBMS_XMLGEN.CONVERT(NVL(e.wait_class, '')) || '</td>'
+            || '<td class="trend-cell"><span class="sparkline" data-points="' || v_points || '"></span></td>'
             || '<td class="num"><b>' ||
                 CASE WHEN e.cur_us IS NULL THEN '&mdash;'
                      ELSE TO_CHAR(e.cur_us/1e6, 'FM999G999G990D00') END
@@ -122,8 +162,9 @@ BEGIN
             || '</b></td>';
 
         FOR k IN 1 .. v_weeks_back LOOP
-            SELECT MAX(time_waited_us), MAX(rank_in_window)
-            INTO   v_us, v_rank
+            v_us := CASE WHEN v_vals(k) IS NULL THEN NULL ELSE v_vals(k) * 1e6 END;
+            SELECT MAX(rank_in_window)
+            INTO   v_rank
             FROM   awr_trend_waits
             WHERE  run_id = ~run_id AND scope = 'BG'
             AND    event_name = e.event_name AND week_offset = k;
