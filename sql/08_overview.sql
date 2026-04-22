@@ -5,11 +5,10 @@
 --   - metric label
 --   - mini ECharts line+area chart across windows (oldest -> newest)
 --   - current value (+ unit)
---   - severity badge (derived from awr_trend_findings if available)
+--   - severity badge derived from an inline z-score computation
 --
--- Runs AFTER 07_summary.sql so findings are available for severity/z-score.
--- Consumes data that is already persisted in awr_trend_load_profile,
--- awr_trend_sysmetric, awr_trend_waits, awr_trend_findings. No new facts.
+-- Read-only: recomputes everything in-flight from the AWR views; does NOT
+-- read or persist any scratch table.
 --
 
 SET DEFINE '~'
@@ -18,202 +17,266 @@ SET SERVEROUTPUT ON SIZE UNLIMITED
 DECLARE
     v_weeks_json  VARCHAR2(4000);
     v_cards_json  CLOB;
-
-    --
-    -- One card per headline metric. All pulled from already-persisted
-    -- scratch tables keyed by run_id.  Order matters (1..6 left-to-right).
-    --
-    TYPE t_card IS RECORD (
-        pos      NUMBER,
-        label    VARCHAR2(80),
-        unit     VARCHAR2(20),
-        src      VARCHAR2(20),     -- 'LOAD' | 'METRIC' | 'WAIT_RATIO'
-        key      VARCHAR2(200)     -- stat_name / metric_name
-    );
-    TYPE t_cards IS TABLE OF t_card;
-    v_cards t_cards;
-
-    v_vals_csv   VARCHAR2(4000);
-    v_cur        NUMBER;
-    v_prev       NUMBER;
-    v_sev        VARCHAR2(40);
-    v_z          NUMBER;
-    v_pct        NUMBER;
-    v_find_dom   VARCHAR2(20);
-    v_find_name  VARCHAR2(200);
-    v_weeks_back NUMBER;
-    v_src        VARCHAR2(20);
-    v_key        VARCHAR2(200);
-    v_label      VARCHAR2(80);
-    v_unit       VARCHAR2(20);
-    v_pos        NUMBER;
+    v_weeks_back  NUMBER := ~weeks_back;
 BEGIN
-    SELECT weeks_back INTO v_weeks_back FROM awr_trend_runs WHERE run_id = ~run_id;
-
-    v_cards := t_cards(
-        t_card(1, 'DB time',              'cs/s',   'LOAD',       'DB time'),
-        t_card(2, 'Redo generated',       'B/s',    'LOAD',       'redo size'),
-        t_card(3, 'Logical reads',        '/s',     'LOAD',       'session logical reads'),
-        t_card(4, 'Average Active Sessions','AAS',  'METRIC',     'Average Active Sessions'),
-        t_card(5, 'Wait Time Ratio',      '%',      'METRIC',     'Database Wait Time Ratio'),
-        t_card(6, 'Hard parses',          '/s',     'LOAD',       'parse count (hard)')
-    );
-
     DBMS_OUTPUT.PUT_LINE('<section id="overview"><h2>Headline metrics</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
         || 'Six key signals across the last ' || v_weeks_back
-        || ' aligned windows (oldest &rarr; current). Severity badge is taken from the '
-        || '<a href="#findings">Findings</a> table when a z-score baseline exists.</p>');
+        || ' aligned windows (oldest &rarr; current). Severity badge is the '
+        || 'z-score of the current window vs prior valid windows '
+        || '(|z|&gt;3 = CRITICAL, |z|&gt;2 = WARN).</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="hero-grid">');
 
-    -- Build per-card weeks array once (shared across cards, oldest->newest).
+    -- x-axis labels: one 'Mon DD' per compared window, oldest-first.
     SELECT '['
-        || LISTAGG('"' || TO_CHAR(win_end_ts, 'Mon DD') || '"', ',')
+        || LISTAGG('"' || TO_CHAR(
+               CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
+               - 7*week_offset, 'Mon DD') || '"', ',')
                WITHIN GROUP (ORDER BY week_offset DESC)
         || ']'
     INTO   v_weeks_json
-    FROM   awr_trend_windows
-    WHERE  run_id = ~run_id;
+    FROM   (SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1);
 
     v_cards_json := NULL;
 
-    FOR i IN 1 .. v_cards.COUNT LOOP
-        v_vals_csv := NULL;
-        v_cur := NULL;
-        v_prev := NULL;
-        v_pos   := v_cards(i).pos;
-        v_label := v_cards(i).label;
-        v_unit  := v_cards(i).unit;
-        v_src   := v_cards(i).src;
-        v_key   := v_cards(i).key;
-
-        IF v_src = 'LOAD' THEN
-            SELECT LISTAGG(CASE WHEN per_sec IS NULL THEN 'null'
-                                ELSE TO_CHAR(per_sec, 'FM99999999990D000000',
-                                             'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
-                       WITHIN GROUP (ORDER BY week_offset DESC)
-            INTO   v_vals_csv
-            FROM (
-                SELECT w.week_offset,
-                       MAX(lp.per_sec) AS per_sec
-                FROM   awr_trend_windows w
-                LEFT JOIN awr_trend_load_profile lp
-                       ON lp.run_id = w.run_id AND lp.week_offset = w.week_offset
-                      AND lp.stat_name = v_key
-                WHERE  w.run_id = ~run_id
-                GROUP BY w.week_offset
-            );
-            SELECT MAX(per_sec)
-            INTO   v_cur
-            FROM   awr_trend_load_profile
-            WHERE  run_id = ~run_id AND stat_name = v_key AND week_offset = 0;
-            SELECT MAX(per_sec)
-            INTO   v_prev
-            FROM   awr_trend_load_profile
-            WHERE  run_id = ~run_id AND stat_name = v_key AND week_offset = 1;
-            v_find_dom  := 'LOAD';
-            v_find_name := v_key;
-
-        ELSE  -- METRIC
-            SELECT LISTAGG(CASE WHEN avg_value IS NULL THEN 'null'
-                                ELSE TO_CHAR(avg_value, 'FM99999999990D000000',
-                                             'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
-                       WITHIN GROUP (ORDER BY week_offset DESC)
-            INTO   v_vals_csv
-            FROM (
-                SELECT w.week_offset, MAX(sm.avg_value) AS avg_value
-                FROM   awr_trend_windows w
-                LEFT JOIN awr_trend_sysmetric sm
-                       ON sm.run_id = w.run_id AND sm.week_offset = w.week_offset
-                      AND sm.metric_name = v_key
-                WHERE  w.run_id = ~run_id
-                GROUP BY w.week_offset
-            );
-            SELECT MAX(avg_value)
-            INTO   v_cur
-            FROM   awr_trend_sysmetric
-            WHERE  run_id = ~run_id AND metric_name = v_key AND week_offset = 0;
-            SELECT MAX(avg_value)
-            INTO   v_prev
-            FROM   awr_trend_sysmetric
-            WHERE  run_id = ~run_id AND metric_name = v_key AND week_offset = 1;
-            v_find_dom  := 'METRIC';
-            v_find_name := v_key;
-        END IF;
-
-        -- Severity from findings (may be NULL if the metric wasn't captured)
+    --
+    -- Single cursor that produces every card in one pass: shared windows CTE,
+    -- both LOAD and METRIC source rows, then a cards list LEFT-JOINed onto
+    -- the full week grid.  Ordered by pos 1..6 (left-to-right).
+    --
+    FOR c IN (
+        WITH run_params AS (
+            SELECT ~dbid AS dbid,
+                   CASE WHEN ~inst_num = 0 THEN NULL ELSE ~inst_num END AS instance_number,
+                   TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS target_end_ts,
+                   ~win_hours  AS win_hours,
+                   ~weeks_back AS weeks_back
+            FROM dual
+        ),
+        offsets AS (
+            SELECT LEVEL - 1 AS week_offset
+            FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
+        ),
+        raw_windows AS (
+            SELECT r.dbid, r.instance_number, o.week_offset,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+            FROM run_params r CROSS JOIN offsets o
+        ),
+        snaps AS (
+            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.instance_number, w.dbid,
+                   s.snap_id, s.end_interval_time, s.startup_time
+            FROM   raw_windows w
+            JOIN   dba_hist_snapshot s
+              ON   s.dbid = w.dbid
+             AND   (w.instance_number IS NULL OR s.instance_number = w.instance_number)
+             AND   s.end_interval_time BETWEEN
+                        CAST(w.win_start_dt - 1 AS TIMESTAMP)
+                    AND CAST(w.win_end_dt   + 1 AS TIMESTAMP)
+        ),
+        begin_snap AS (
+            SELECT week_offset,
+                   MAX(snap_id) KEEP (DENSE_RANK LAST ORDER BY end_interval_time)  AS snap_id,
+                   MAX(startup_time) KEEP (DENSE_RANK LAST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time <= CAST(win_start_dt + 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        ),
+        end_snap AS (
+            SELECT week_offset,
+                   MIN(snap_id) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS snap_id,
+                   MIN(startup_time) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time >= CAST(win_end_dt - 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        ),
+        windows AS (
+            SELECT w.week_offset, w.dbid, w.instance_number,
+                   bs.snap_id AS begin_snap_id,
+                   es.snap_id AS end_snap_id,
+                   CASE
+                       WHEN bs.snap_id IS NULL OR es.snap_id IS NULL THEN 'N'
+                       WHEN bs.snap_id = es.snap_id                  THEN 'N'
+                       WHEN bs.startup_time <> es.startup_time       THEN 'N'
+                       ELSE 'Y'
+                   END AS valid_flag
+            FROM   raw_windows w
+            LEFT JOIN begin_snap bs ON bs.week_offset = w.week_offset
+            LEFT JOIN end_snap   es ON es.week_offset = w.week_offset
+        ),
+        valid_windows AS (
+            SELECT w.week_offset, w.dbid, w.instance_number,
+                   w.begin_snap_id, w.end_snap_id,
+                   (CAST(rw.win_end_dt AS DATE) - CAST(rw.win_start_dt AS DATE)) * 86400 AS dur_sec
+            FROM   windows w
+            JOIN   raw_windows rw ON rw.week_offset = w.week_offset
+            WHERE  w.valid_flag = 'Y'
+        ),
+        cards AS (
+            SELECT 1 AS pos, 'DB time'                AS label, 'cs/s' AS unit,
+                   'LOAD'   AS src, 'DB time'                 AS key FROM dual UNION ALL
+            SELECT 2, 'Redo generated',        'B/s',
+                   'LOAD',   'redo size'                             FROM dual UNION ALL
+            SELECT 3, 'Logical reads',         '/s',
+                   'LOAD',   'session logical reads'                 FROM dual UNION ALL
+            SELECT 4, 'Average Active Sessions','AAS',
+                   'METRIC', 'Average Active Sessions'               FROM dual UNION ALL
+            SELECT 5, 'Wait Time Ratio',       '%',
+                   'METRIC', 'Database Wait Time Ratio'              FROM dual UNION ALL
+            SELECT 6, 'Hard parses',           '/s',
+                   'LOAD',   'parse count (hard)'                    FROM dual
+        ),
+        load_pairs AS (
+            SELECT w.week_offset, w.dur_sec, ss.stat_name, ss.instance_number,
+                   ss.snap_id, ss.value, w.begin_snap_id, w.end_snap_id
+            FROM   valid_windows w
+            JOIN   dba_hist_sysstat ss
+                ON ss.dbid = w.dbid
+               AND ss.snap_id IN (w.begin_snap_id, w.end_snap_id)
+               AND (w.instance_number IS NULL OR ss.instance_number = w.instance_number)
+               AND ss.stat_name IN (SELECT key FROM cards WHERE src = 'LOAD')
+        ),
+        load_bounds AS (
+            SELECT week_offset, dur_sec, stat_name, instance_number,
+                   SUM(CASE WHEN snap_id = begin_snap_id THEN value END) AS beg_val,
+                   SUM(CASE WHEN snap_id = end_snap_id   THEN value END) AS end_val
+            FROM   load_pairs
+            GROUP BY week_offset, dur_sec, stat_name, instance_number
+        ),
+        load_rows AS (
+            SELECT 'LOAD' AS src, stat_name AS key, week_offset,
+                   CASE WHEN dur_sec > 0
+                        THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / dur_sec
+                   END AS val
+            FROM   load_bounds
+            GROUP BY week_offset, dur_sec, stat_name
+        ),
+        metric_rows AS (
+            SELECT 'METRIC' AS src, sm.metric_name AS key, w.week_offset,
+                   AVG(sm.average) AS val
+            FROM   valid_windows w
+            JOIN   dba_hist_sysmetric_summary sm
+                ON sm.dbid = w.dbid
+               AND sm.snap_id BETWEEN w.begin_snap_id + 1 AND w.end_snap_id
+               AND (w.instance_number IS NULL OR sm.instance_number = w.instance_number)
+               AND sm.metric_name IN (SELECT key FROM cards WHERE src = 'METRIC')
+            GROUP BY w.week_offset, sm.metric_name
+        ),
+        all_rows AS (
+            SELECT * FROM load_rows   UNION ALL
+            SELECT * FROM metric_rows
+        ),
+        all_weeks AS (
+            SELECT LEVEL - 1 AS week_offset
+            FROM   dual CONNECT BY LEVEL <= ~weeks_back + 1
+        ),
+        grid AS (
+            SELECT c.pos, c.label, c.unit, c.src, c.key,
+                   w.week_offset, r.val
+            FROM   cards c
+            CROSS JOIN all_weeks w
+            LEFT JOIN all_rows r
+                   ON r.src = c.src AND r.key = c.key AND r.week_offset = w.week_offset
+        )
+        SELECT pos, label, unit,
+               MAX(CASE WHEN week_offset = 0 THEN val END) AS cur,
+               MAX(CASE WHEN week_offset = 1 THEN val END) AS prev,
+               AVG(CASE WHEN week_offset > 0 THEN val END) AS mu,
+               STDDEV(CASE WHEN week_offset > 0 THEN val END) AS sd,
+               COUNT(CASE WHEN week_offset > 0 THEN val END) AS n,
+               LISTAGG(CASE WHEN val IS NULL THEN 'null'
+                            ELSE TO_CHAR(val, 'FM99999999990D000000',
+                                         'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
+                   WITHIN GROUP (ORDER BY week_offset DESC) AS vals_csv
+        FROM   grid
+        GROUP BY pos, label, unit
+        ORDER BY pos
+    ) LOOP
+        DECLARE
+            v_z    NUMBER;
+            v_pct  NUMBER;
+            v_sev  VARCHAR2(40);
+            v_sev_cls VARCHAR2(10);
+            v_sev_badge VARCHAR2(80);
         BEGIN
-            SELECT severity, z_score, pct_delta
-            INTO   v_sev, v_z, v_pct
-            FROM   awr_trend_findings
-            WHERE  run_id = ~run_id
-              AND  metric_domain = v_find_dom
-              AND  metric_name   = v_find_name;
-        EXCEPTION WHEN NO_DATA_FOUND THEN
-            v_sev := NULL;
-            v_z   := NULL;
-            v_pct := NULL;
+            v_z := CASE
+                WHEN c.cur IS NULL OR c.mu IS NULL THEN NULL
+                WHEN c.sd IS NULL OR c.sd = 0       THEN NULL
+                ELSE (c.cur - c.mu) / c.sd
+            END;
+            v_pct := CASE
+                WHEN c.cur IS NULL OR c.mu IS NULL OR c.mu = 0 THEN NULL
+                ELSE (c.cur - c.mu) / ABS(c.mu) * 100
+            END;
+            v_sev := CASE
+                WHEN c.cur IS NULL THEN NULL
+                WHEN c.n < 3 THEN 'INSUFFICIENT_HISTORY'
+                WHEN c.sd IS NULL OR c.sd = 0 THEN 'FLAT_BASELINE'
+                WHEN ABS(v_z) > 3 THEN 'CRITICAL'
+                WHEN ABS(v_z) > 2 THEN 'WARN'
+                ELSE 'OK'
+            END;
+            v_sev_cls := CASE v_sev
+                WHEN 'CRITICAL' THEN 'crit'
+                WHEN 'WARN'     THEN 'warn'
+                WHEN 'OK'       THEN 'ok'
+                ELSE 'skip' END;
+
+            v_cards_json := CASE WHEN v_cards_json IS NULL THEN '' ELSE v_cards_json || ',' END
+                || '{"pos":' || c.pos
+                || ',"label":"' || c.label
+                || '","unit":"' || c.unit
+                || '","cur":' || CASE WHEN c.cur IS NULL THEN 'null'
+                                      ELSE TO_CHAR(c.cur, 'FM99999999990D000000',
+                                                   'NLS_NUMERIC_CHARACTERS=''.,''') END
+                || ',"prev":' || CASE WHEN c.prev IS NULL THEN 'null'
+                                       ELSE TO_CHAR(c.prev, 'FM99999999990D000000',
+                                                    'NLS_NUMERIC_CHARACTERS=''.,''') END
+                || ',"sev":' || CASE WHEN v_sev IS NULL THEN 'null'
+                                      ELSE '"' || v_sev || '"' END
+                || ',"z":' || CASE WHEN v_z IS NULL THEN 'null'
+                                    ELSE TO_CHAR(v_z, 'FMS990D00',
+                                                 'NLS_NUMERIC_CHARACTERS=''.,''') END
+                || ',"pct":' || CASE WHEN v_pct IS NULL THEN 'null'
+                                      ELSE TO_CHAR(v_pct, 'FMS990D0',
+                                                   'NLS_NUMERIC_CHARACTERS=''.,''') END
+                || ',"vals":[' || NVL(c.vals_csv, '') || ']}';
+
+            v_sev_badge := CASE
+                WHEN v_sev IS NULL THEN 'n/a'
+                WHEN v_z IS NOT NULL THEN v_sev || ' z=' || TO_CHAR(v_z, 'FMS990D0')
+                ELSE v_sev END;
+
+            DBMS_OUTPUT.PUT_LINE('<div class="hero-card" data-hero-pos="' || c.pos || '">');
+            DBMS_OUTPUT.PUT_LINE('  <div class="label">' || c.label || '</div>');
+            DBMS_OUTPUT.PUT_LINE('  <div class="mini" id="hero-mini-' || c.pos
+                || '" data-spark="' || NVL(c.vals_csv, '')
+                || '" data-spark-title="' || c.label || '"></div>');
+            DBMS_OUTPUT.PUT_LINE('  <div class="value">'
+                || CASE WHEN c.cur IS NULL THEN '&mdash;'
+                        ELSE TO_CHAR(c.cur, 'FM999G999G990D00') END
+                || ' <small>' || c.unit || '</small></div>');
+            DBMS_OUTPUT.PUT_LINE('  <div class="foot">'
+                || CASE
+                       WHEN c.cur IS NULL OR c.prev IS NULL OR c.prev = 0 THEN
+                           '<span class="delta">&mdash;</span>'
+                       WHEN c.cur > c.prev THEN
+                           '<span class="delta up">&uarr; '
+                               || TO_CHAR((c.cur - c.prev) / ABS(c.prev) * 100, 'FMS990D0')
+                               || '% vs -1w</span>'
+                       WHEN c.cur < c.prev THEN
+                           '<span class="delta down">&darr; '
+                               || TO_CHAR((c.cur - c.prev) / ABS(c.prev) * 100, 'FMS990D0')
+                               || '% vs -1w</span>'
+                       ELSE
+                           '<span class="delta">&mdash; vs -1w</span>'
+                   END
+                || '<span class="badge ' || v_sev_cls || '">'
+                || v_sev_badge
+                || '</span></div>');
+            DBMS_OUTPUT.PUT_LINE('</div>');
         END;
-
-        v_cards_json := CASE WHEN v_cards_json IS NULL THEN '' ELSE v_cards_json || ',' END
-            || '{"pos":' || v_cards(i).pos
-            || ',"label":"' || v_cards(i).label
-            || '","unit":"' || v_cards(i).unit
-            || '","cur":' || CASE WHEN v_cur IS NULL THEN 'null'
-                                  ELSE TO_CHAR(v_cur, 'FM99999999990D000000',
-                                               'NLS_NUMERIC_CHARACTERS=''.,''') END
-            || ',"prev":' || CASE WHEN v_prev IS NULL THEN 'null'
-                                   ELSE TO_CHAR(v_prev, 'FM99999999990D000000',
-                                                'NLS_NUMERIC_CHARACTERS=''.,''') END
-            || ',"sev":' || CASE WHEN v_sev IS NULL THEN 'null'
-                                  ELSE '"' || v_sev || '"' END
-            || ',"z":' || CASE WHEN v_z IS NULL THEN 'null'
-                                ELSE TO_CHAR(v_z, 'FMS990D00',
-                                             'NLS_NUMERIC_CHARACTERS=''.,''') END
-            || ',"pct":' || CASE WHEN v_pct IS NULL THEN 'null'
-                                  ELSE TO_CHAR(v_pct, 'FMS990D0',
-                                               'NLS_NUMERIC_CHARACTERS=''.,''') END
-            || ',"vals":[' || NVL(v_vals_csv, '') || ']}';
-
-        -- Emit the card HTML. JS init below fills in the mini chart.
-        DBMS_OUTPUT.PUT_LINE('<div class="hero-card" data-hero-pos="' || v_cards(i).pos || '">');
-        DBMS_OUTPUT.PUT_LINE('  <div class="label">' || v_cards(i).label || '</div>');
-        DBMS_OUTPUT.PUT_LINE('  <div class="mini" id="hero-mini-' || v_cards(i).pos
-            || '" data-spark="' || NVL(v_vals_csv, '')
-            || '" data-spark-title="' || v_cards(i).label || '"></div>');
-        DBMS_OUTPUT.PUT_LINE('  <div class="value">'
-            || CASE WHEN v_cur IS NULL THEN '&mdash;'
-                    ELSE TO_CHAR(v_cur, 'FM999G999G990D00') END
-            || ' <small>' || v_cards(i).unit || '</small></div>');
-        DBMS_OUTPUT.PUT_LINE('  <div class="foot">'
-            || CASE
-                   WHEN v_cur IS NULL OR v_prev IS NULL OR v_prev = 0 THEN
-                       '<span class="delta">&mdash;</span>'
-                   WHEN v_cur > v_prev THEN
-                       '<span class="delta up">&uarr; '
-                           || TO_CHAR((v_cur - v_prev) / ABS(v_prev) * 100, 'FMS990D0')
-                           || '% vs -1w</span>'
-                   WHEN v_cur < v_prev THEN
-                       '<span class="delta down">&darr; '
-                           || TO_CHAR((v_cur - v_prev) / ABS(v_prev) * 100, 'FMS990D0')
-                           || '% vs -1w</span>'
-                   ELSE
-                       '<span class="delta">&mdash; vs -1w</span>'
-               END
-            || '<span class="badge '
-            || CASE v_sev
-                   WHEN 'CRITICAL' THEN 'crit'
-                   WHEN 'WARN'     THEN 'warn'
-                   WHEN 'OK'       THEN 'ok'
-                   ELSE 'skip' END
-            || '">'
-            || CASE
-                   WHEN v_sev IS NULL THEN 'n/a'
-                   WHEN v_z IS NOT NULL THEN v_sev || ' z=' || TO_CHAR(v_z, 'FMS990D0')
-                   ELSE v_sev END
-            || '</span></div>');
-        DBMS_OUTPUT.PUT_LINE('</div>');
     END LOOP;
 
     DBMS_OUTPUT.PUT_LINE('</div>');  -- .hero-grid

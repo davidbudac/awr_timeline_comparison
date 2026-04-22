@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-Guidance for future Claude sessions working on this repo.
+Guidance for future Codex sessions working on this repo.
 
 ## What this is
 
@@ -15,23 +15,12 @@ self-contained HTML report.
 Everything is recomputed in-flight from the `DBA_HIST_*` views on each
 run. The only script that ever writes is
 `side/create_weekly_baselines.sql`, which is optional and orthogonal to
-the main report (it calls `DBMS_WORKLOAD_REPOSITORY.CREATE_BASELINE`).
+the main report.
 
 Requires Oracle 19c with Diagnostic + Tuning Pack. No Python, no shell
-beyond a thin `sqlplus` wrapper. Output is a single self-contained HTML file.
-
-**Note on offline rendering**: the HTML loads Apache ECharts from
-`cdn.jsdelivr.net` to render the larger visualizations (hero strip
-sparklines, wait-class stacked bars, findings heatmap, top-SQL bump
-chart, windows ribbon, ASH timeline). When the CDN is unreachable,
-`<script onerror>` sets `body.no-charts` which hides chart divs —
-tables still render every number, and an amber "Charts hidden" banner
-tells the reader why. Inline-SVG sparklines in the Load/Metrics/Waits
-tables are rendered by a ~30-line pure-DOM JS block shipped in the
-prologue and do **not** depend on the CDN, so they still draw when
-offline. For strict air-gapped environments, remove the ECharts
-`<script>` tag in `awr_trend.sql` — every other element degrades
-gracefully.
+beyond a thin `sqlplus` wrapper. Output is a single HTML file that
+works offline (charts hide, tables remain) when the ECharts CDN is
+blocked.
 
 ## Entry points
 
@@ -41,8 +30,8 @@ gracefully.
   — pure-SQL\*Plus equivalent. **The driver deliberately does not DEFINE defaults itself** so an explicit caller override is never clobbered. Always load `sql/defaults.sql` (or set DEFINEs manually) before `@awr_trend.sql`.
 - `sqlplus user/pw@svc @side/create_weekly_baselines.sql`
   — optional, independent of the main report. Creates `DBA_HIST_BASELINE`
-  rows named `WK_<IYYY>_<IW>`. **This is the only script that writes
-  to the database.** The main driver does not read these baselines.
+  rows named `WK_<IYYY>_<IW>`. **The only script that writes.** The main
+  driver does not read these baselines.
 
 ## File layout
 
@@ -61,7 +50,6 @@ sql/
 ├── 07_summary.sql               -- z-score findings + heatmap (recomputed inline)
 ├── 08_overview.sql              -- hero strip: 6 headline-metric cards (recomputed inline)
 └── 09_ash_timeline.sql          -- hourly ASH stacked-area timeline by wait_class
-                                    (reads dba_hist_active_sess_history directly)
 side/
 └── create_weekly_baselines.sql  -- optional weekly AWR baselines (writes; orthogonal)
 reports/                         -- generated HTML files
@@ -118,40 +106,15 @@ other value filters to that instance. `target_end = 'AUTO'` means
 timestamp from `SYSTIMESTAMP`), `dbid`, `db_name`, `host_name`,
 `db_version`, `caller_user`, `generated_at_s`, `dow_name`, and
 `report_path` up front; every section references them as `~name`.
-No section ever re-resolves these values.
+No section re-resolves these.
 
 **Tilde gotcha**: every numbered section file issues `SET DEFINE '~'` so
 it can use `~run_id` for parameter substitution. That makes `~` the
-live substitution character for the rest of the file — any literal `~`
-followed by a character (even in comments or strings, e.g. `~0.003`,
-`~/path`) is parsed as a variable reference and triggers an `Enter
-value for 0:` prompt, which silently truncates the section in
-non-interactive runs. If you need a literal tilde, write it out
-("around 0.003", "home dir", etc.) or wrap the affected block in `SET
-DEFINE OFF` / `SET DEFINE '~'`.
-
-### Chart render layer (sections 02, 03, 04, 05, 06, 07, 08, 09)
-Every chart is rendered from the same cursor that produces the numeric
-table — not from a separately persisted slice. The pattern is: the
-section's main cursor builds per-row CSVs via `LISTAGG(... WITHIN GROUP
-(ORDER BY week_offset DESC), ',')` (oldest→newest is the canonical
-spark order) and emits them either as a `data-spark="…"` attribute
-(read by the inline-SVG sparkline renderer in `awr_trend.sql`) or as a
-JSON payload on `window.AWR_DATA` for an ECharts init block. Numeric
-CSV uses `NLS_NUMERIC_CHARACTERS='.,'` so `Number(x)` parses regardless
-of the session NLS. Table cells pick an adaptive decimal format from
-`row_max`: at least 2 decimals, more when all values are small enough
-that 2 decimals would show "0.00" for real movement. The sparkline JS
-has a flatness floor: `(max-min)/|mean| < 2 %` renders a midline
-instead of autoscaling imperceptible noise into a zigzag.
-
-### Per-row CSV parsing in PL/SQL (`nth_csv`)
-Sections that need to render a grid with one column per week after
-`LISTAGG(... ORDER BY week_offset ASC)` parse the CSV inside the loop
-with a small `nth_csv(p_str, p_n)` PL/SQL function declared at the top
-of the anonymous block. Slot `k+1` corresponds to `week_offset = k`.
-The function is INSTR-based (not `REGEXP_SUBSTR`) so empty tokens are
-preserved. See `sql/02_load_profile.sql` for the canonical copy.
+live substitution character — any literal `~` followed by a character
+(even in comments, e.g. `~0.003`, `~/path`) is parsed as a variable
+reference and triggers an `Enter value for 0:` prompt that silently
+truncates the section in non-interactive runs. Write out literal
+tildes or temporarily `SET DEFINE OFF`.
 
 ### Window validity
 `01_windows.sql` flags a window `valid_flag = 'N'` with a `skip_reason`
@@ -165,40 +128,31 @@ table but excluded from the z-score baseline.
 `CRITICAL` → `crit`, `WARN` → `warn`, `OK` → `ok`,
 `INSUFFICIENT_HISTORY` / `FLAT_BASELINE` → `skip`, informational → `info`.
 If you add a new severity, update both `07_summary.sql`, `08_overview.sql`
-(it computes the same labels inline for the hero cards), and `_style.sql`.
+(it computes the same labels inline), and `_style.sql`.
 
 ### Findings are recomputed, not shared
 Section 07 (findings) and section 08 (overview hero) each recompute
 their own z-scores from the AWR views. They do not share data. If the
 metric list in section 02/03/04 changes, section 07's `load_targets` /
-`metric_targets` lists must be updated in lock-step (they are
-duplicated on purpose — see "The windows CTE is duplicated per section"
-above), and if section 08's 6 hero cards reference a LOAD stat or
-SYSMETRIC name that section 07 doesn't also track, the hero badge will
-fall back to `n/a`.
+`metric_targets` lists must be updated in lock-step.
 
 ## Verification state
 
-Last verified against Oracle 19c on dbmint (CDB1, `connect / as sysdba`)
-in April 2026 under the previous architecture (with scratch schema).
 The read-only rewrite on branch `no-db-writes` is **pending re-
-verification on a live instance**. Density matters — the test DB had
-at most 3 consecutive weeks at any given hour-of-week, so findings are
-forced to `INSUFFICIENT_HISTORY` (z-score needs ≥3 prior). Re-verify
-if you change any of sections 02/03/04/05/06/07/08/09. Particular spots
-worth probing on a future real run:
+verification on a live instance**. All files are static-reviewed only.
+Particular spots worth probing on first real run:
 
-- HTML prologue: confirm that the `SELECT` resolving `run_id / dbid /
-  host_name / …` and the `SPOOL ~report_path` don't leak into the
+- HTML prologue: confirm the driver's `SELECT` resolving `run_id / dbid
+  / host_name / …` and the `SPOOL ~report_path` don't leak into the
   spool (they shouldn't — every column is `NOPRINT` and `TERMOUT` is
   off, but verify the very top of the generated `.html`).
 - `06_top_sql.sql` uses nested `DECLARE … BEGIN … END;` blocks inside a
   `FOR` loop. Valid PL/SQL, but verbose — performance is fine at
   `top_n = 10`.
-- `09_ash_timeline.sql` pulls every qualifying ASH row aggregated to
+- `09_ash_timeline.sql` aggregates every qualifying ASH row to
   (hour_bucket, wait_class) over a (weeks_back+1)*win_hours×24-hour
   span. On a very busy DB this can be the single most expensive
-  section; consider narrowing the range if wall-clock matters.
+  section; narrow the range if wall-clock matters.
 - RAC aggregate vs per-instance: pick a known-quiet window on a RAC
   cluster, run with `inst_num = 0` and `inst_num = 1`, cross-check that
   aggregate ≈ sum of per-instance for cumulative stats.
@@ -210,16 +164,10 @@ worth probing on a future real run:
   path stay symmetric.
 - Don't assume `DBA_HIST_SYSTEM_EVENT` has `*_DELTA` columns. It doesn't.
 - Don't reintroduce a scratch schema to "share" data between sections.
-  The read-only invariant is the whole point of this branch. If a
-  computation needs to be reused, thread it via a substitution variable
-  resolved once in the driver, or accept the duplication (see the
-  windows CTE convention).
+  The read-only invariant is the whole point of this branch.
 - Don't concat user strings into HTML without `DBMS_XMLGEN.CONVERT`.
 - Don't introduce additional external JS/CSS beyond the single ECharts
-  CDN tag that's already in `awr_trend.sql`. The report is still one
-  HTML file and works offline (charts hide, tables remain) via the
-  `body.no-charts` fallback — any new dependency must degrade the
-  same way. Inline-SVG sparklines and the ribbon are CDN-free and must
-  stay that way.
+  CDN tag that's already in `awr_trend.sql`. The report must stay one
+  HTML file that degrades gracefully when offline.
 - Don't widen the grant list in `README.md` without a concrete reason —
   everything in there is actually needed by the current SQL.

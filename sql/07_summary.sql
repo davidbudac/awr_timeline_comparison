@@ -1,139 +1,293 @@
 --
 -- 07_summary.sql
--- For every scalar metric stored by sections 02-04, compute z-score of the
--- current window against the mean/stddev of the prior valid windows, flag
--- severity, and insert into awr_trend_findings.  Then render a sorted
--- "Findings" table at the top of the report body.  (Because SPOOL is append-
--- only, this block is still emitted last; the CSS already orders the
--- #findings section visually near the top when the page has a flex/grid
--- parent, but we also emit a jump link from the nav bar.)
+-- For every scalar metric rendered by sections 02-04, compute the z-score
+-- of the current window against the mean/stddev of the prior valid windows,
+-- flag severity and render the findings heatmap + detail table.
+-- Read-only: recomputes everything in-flight from the AWR views; does NOT
+-- persist anything.
 --
 
 SET DEFINE '~'
-
---
--- Build the union of metric rows across all three domains.
--- 'LOAD'   : per-sec rate from awr_trend_load_profile
--- 'METRIC' : avg value from awr_trend_sysmetric
--- 'WAIT'   : time waited per second for foreground wait CLASSES
---
-INSERT INTO awr_trend_findings (
-    run_id, metric_domain, metric_name,
-    current_value, prior_mean, prior_sd, n_prior, z_score, pct_delta, severity
-)
-WITH unified AS (
-    SELECT run_id, week_offset, 'LOAD'   AS metric_domain,
-           stat_name       AS metric_name,
-           per_sec         AS value
-    FROM   awr_trend_load_profile
-    WHERE  run_id = ~run_id
-    AND    per_sec IS NOT NULL
-    UNION ALL
-    SELECT run_id, week_offset, 'METRIC',
-           metric_name, avg_value
-    FROM   awr_trend_sysmetric
-    WHERE  run_id = ~run_id
-    AND    avg_value IS NOT NULL
-    UNION ALL
-    SELECT w.run_id, w.week_offset, 'WAIT',
-           'Wait class: ' || w.wait_class AS metric_name,
-           -- per-second time-waited for this class over the window
-           w.time_waited_us / NULLIF(
-               (CAST(win.win_end_ts AS DATE) - CAST(win.win_start_ts AS DATE)) * 86400 * 1e6, 0)
-           AS value
-    FROM   awr_trend_waits w
-    JOIN   awr_trend_windows win
-        ON win.run_id = w.run_id AND win.week_offset = w.week_offset
-    WHERE  w.run_id = ~run_id AND w.scope = 'CLASS'
-),
-pivoted AS (
-    SELECT
-        run_id, metric_domain, metric_name,
-        MAX(CASE WHEN week_offset = 0 THEN value END) AS cur_val,
-        AVG(CASE WHEN week_offset > 0 THEN value END) AS mu,
-        STDDEV(CASE WHEN week_offset > 0 THEN value END) AS sd,
-        COUNT(CASE WHEN week_offset > 0 THEN value END)  AS n
-    FROM   unified
-    GROUP BY run_id, metric_domain, metric_name
-)
-SELECT
-    run_id, metric_domain, metric_name,
-    cur_val,
-    mu,
-    sd,
-    n,
-    CASE
-        WHEN cur_val IS NULL OR mu IS NULL THEN NULL
-        WHEN sd IS NULL OR sd = 0 THEN NULL
-        ELSE (cur_val - mu) / sd
-    END AS z_score,
-    CASE
-        WHEN cur_val IS NULL OR mu IS NULL OR mu = 0 THEN NULL
-        ELSE (cur_val - mu) / ABS(mu) * 100
-    END AS pct_delta,
-    CASE
-        WHEN cur_val IS NULL THEN 'INSUFFICIENT_HISTORY'
-        WHEN n < 3           THEN 'INSUFFICIENT_HISTORY'
-        WHEN sd IS NULL OR sd = 0 THEN 'FLAT_BASELINE'
-        WHEN ABS((cur_val - mu) / sd) > 3 THEN 'CRITICAL'
-        WHEN ABS((cur_val - mu) / sd) > 2 THEN 'WARN'
-        ELSE 'OK'
-    END AS severity
-FROM   pivoted
-WHERE  cur_val IS NOT NULL OR mu IS NOT NULL;
-
-COMMIT;
-
---
--- Mark the run OK.
---
-UPDATE awr_trend_runs SET status = 'OK' WHERE run_id = ~run_id;
-COMMIT;
-
---
--- Render the findings section.  This is emitted AFTER the detail sections
--- in the spool stream, but structurally it's placed inside a <section>
--- element whose id the <nav> at the top links to, so readers see it
--- prominently on scroll-to.  The findings page also prints ranked findings
--- grouped by severity for quick skimming.
---
 SET SERVEROUTPUT ON SIZE UNLIMITED
 
 DECLARE
-    v_total      NUMBER;
-    v_crit       NUMBER;
-    v_warn       NUMBER;
+    v_total      NUMBER := 0;
+    v_crit       NUMBER := 0;
+    v_warn       NUMBER := 0;
     v_heat_json  CLOB;
-    v_domains    VARCHAR2(200);
+    v_row        VARCHAR2(32767);
+    v_sev        VARCHAR2(40);
+    v_cls        VARCHAR2(10);
+    v_weeks_back NUMBER := ~weeks_back;
 BEGIN
-    SELECT COUNT(*), SUM(CASE WHEN severity = 'CRITICAL' THEN 1 ELSE 0 END),
-                     SUM(CASE WHEN severity = 'WARN' THEN 1 ELSE 0 END)
-    INTO   v_total, v_crit, v_warn
-    FROM   awr_trend_findings WHERE run_id = ~run_id;
-
-    DBMS_OUTPUT.PUT_LINE('<section id="findings"><h2>Findings summary &mdash; ' ||
-        '<span class="badge crit">' || NVL(v_crit, 0) || ' critical</span> '  ||
-        '<span class="badge warn">' || NVL(v_warn, 0) || ' warn</span> '      ||
-        '<span class="badge ok">'   || v_total        || ' total</span></h2>');
-
+    DBMS_OUTPUT.PUT_LINE('<section id="findings"><h2 id="findings-heading">Findings summary</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'z-score of the current window vs prior valid windows. '
         || '|z|&gt;3 = CRITICAL, |z|&gt;2 = WARN. '
         || 'INSUFFICIENT_HISTORY (n&lt;3) shows only %-delta. '
         || 'Heatmap below: |z| magnitude per (domain &times; metric); gray = no baseline.</p>');
 
-    -- Findings heatmap container ------------------------------------------
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-medium" id="findings-heatmap"></div>');
 
-    -- Build heatmap data: each finding as {x:metric, y:domain, z, sev}
     v_heat_json := NULL;
+
+    --
+    -- One big cursor that recomputes LOAD / METRIC / WAIT values per
+    -- (week_offset, metric) from the AWR views, then pivots to cur vs
+    -- prior AVG/STDDEV and derives severity.  The unified CTE is a union
+    -- of three per-domain sub-CTEs that all sit on the same windows CTE.
+    --
     FOR f IN (
-        SELECT metric_domain, metric_name, z_score, severity,
-               current_value, prior_mean, pct_delta
-        FROM   awr_trend_findings
-        WHERE  run_id = ~run_id
-        ORDER BY metric_domain, ABS(NVL(z_score, 0)) DESC, metric_name
+        WITH run_params AS (
+            SELECT ~dbid AS dbid,
+                   CASE WHEN ~inst_num = 0 THEN NULL ELSE ~inst_num END AS instance_number,
+                   TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS target_end_ts,
+                   ~win_hours  AS win_hours,
+                   ~weeks_back AS weeks_back
+            FROM dual
+        ),
+        offsets AS (
+            SELECT LEVEL - 1 AS week_offset
+            FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
+        ),
+        raw_windows AS (
+            SELECT r.dbid, r.instance_number, o.week_offset,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+            FROM run_params r CROSS JOIN offsets o
+        ),
+        snaps AS (
+            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.instance_number, w.dbid,
+                   s.snap_id, s.end_interval_time, s.startup_time
+            FROM   raw_windows w
+            JOIN   dba_hist_snapshot s
+              ON   s.dbid = w.dbid
+             AND   (w.instance_number IS NULL OR s.instance_number = w.instance_number)
+             AND   s.end_interval_time BETWEEN
+                        CAST(w.win_start_dt - 1 AS TIMESTAMP)
+                    AND CAST(w.win_end_dt   + 1 AS TIMESTAMP)
+        ),
+        begin_snap AS (
+            SELECT week_offset,
+                   MAX(snap_id) KEEP (DENSE_RANK LAST ORDER BY end_interval_time)  AS snap_id,
+                   MAX(startup_time) KEEP (DENSE_RANK LAST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time <= CAST(win_start_dt + 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        ),
+        end_snap AS (
+            SELECT week_offset,
+                   MIN(snap_id) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS snap_id,
+                   MIN(startup_time) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time >= CAST(win_end_dt - 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        ),
+        windows AS (
+            SELECT w.week_offset, w.dbid, w.instance_number,
+                   bs.snap_id AS begin_snap_id,
+                   es.snap_id AS end_snap_id,
+                   CASE
+                       WHEN bs.snap_id IS NULL OR es.snap_id IS NULL THEN 'N'
+                       WHEN bs.snap_id = es.snap_id                  THEN 'N'
+                       WHEN bs.startup_time <> es.startup_time       THEN 'N'
+                       ELSE 'Y'
+                   END AS valid_flag
+            FROM   raw_windows w
+            LEFT JOIN begin_snap bs ON bs.week_offset = w.week_offset
+            LEFT JOIN end_snap   es ON es.week_offset = w.week_offset
+        ),
+        valid_windows AS (
+            SELECT w.week_offset, w.dbid, w.instance_number,
+                   w.begin_snap_id, w.end_snap_id,
+                   (CAST(rw.win_end_dt AS DATE) - CAST(rw.win_start_dt AS DATE)) * 86400 AS dur_sec
+            FROM   windows w
+            JOIN   raw_windows rw ON rw.week_offset = w.week_offset
+            WHERE  w.valid_flag = 'Y'
+        ),
+        -- LOAD domain: DBA_HIST_SYSSTAT cumulative counters, per-sec deltas.
+        load_targets AS (
+            SELECT 'redo size'                              stat_name FROM dual UNION ALL
+            SELECT 'redo size for lost write detection'               FROM dual UNION ALL
+            SELECT 'DB time'                                          FROM dual UNION ALL
+            SELECT 'DB CPU'                                           FROM dual UNION ALL
+            SELECT 'CPU used by this session'                         FROM dual UNION ALL
+            SELECT 'session logical reads'                            FROM dual UNION ALL
+            SELECT 'physical reads'                                   FROM dual UNION ALL
+            SELECT 'physical read total bytes'                        FROM dual UNION ALL
+            SELECT 'physical writes'                                  FROM dual UNION ALL
+            SELECT 'physical write total bytes'                       FROM dual UNION ALL
+            SELECT 'user calls'                                       FROM dual UNION ALL
+            SELECT 'user commits'                                     FROM dual UNION ALL
+            SELECT 'user rollbacks'                                   FROM dual UNION ALL
+            SELECT 'execute count'                                    FROM dual UNION ALL
+            SELECT 'parse count (total)'                              FROM dual UNION ALL
+            SELECT 'parse count (hard)'                               FROM dual UNION ALL
+            SELECT 'parse count (failures)'                           FROM dual UNION ALL
+            SELECT 'sorts (memory)'                                   FROM dual UNION ALL
+            SELECT 'sorts (disk)'                                     FROM dual UNION ALL
+            SELECT 'sorts (rows)'                                     FROM dual UNION ALL
+            SELECT 'logons cumulative'                                FROM dual UNION ALL
+            SELECT 'opened cursors cumulative'                        FROM dual UNION ALL
+            SELECT 'redo writes'                                      FROM dual UNION ALL
+            SELECT 'table scans (long tables)'                        FROM dual UNION ALL
+            SELECT 'table fetch by rowid'                             FROM dual UNION ALL
+            SELECT 'bytes sent via SQL*Net to client'                 FROM dual UNION ALL
+            SELECT 'bytes received via SQL*Net from client'           FROM dual
+        ),
+        load_pairs AS (
+            SELECT w.week_offset, w.dur_sec, ss.stat_name, ss.instance_number,
+                   ss.snap_id, ss.value,
+                   w.begin_snap_id, w.end_snap_id
+            FROM   valid_windows w
+            JOIN   dba_hist_sysstat ss
+                ON ss.dbid = w.dbid
+               AND ss.snap_id IN (w.begin_snap_id, w.end_snap_id)
+               AND (w.instance_number IS NULL OR ss.instance_number = w.instance_number)
+               AND ss.stat_name IN (SELECT stat_name FROM load_targets)
+        ),
+        load_bounds AS (
+            SELECT week_offset, dur_sec, stat_name, instance_number,
+                   SUM(CASE WHEN snap_id = begin_snap_id THEN value END) AS beg_val,
+                   SUM(CASE WHEN snap_id = end_snap_id   THEN value END) AS end_val
+            FROM   load_pairs
+            GROUP BY week_offset, dur_sec, stat_name, instance_number
+        ),
+        load_rows AS (
+            SELECT 'LOAD' AS metric_domain,
+                   stat_name AS metric_name,
+                   week_offset,
+                   CASE WHEN dur_sec > 0
+                        THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / dur_sec
+                   END AS metric_value
+            FROM   load_bounds
+            GROUP BY week_offset, dur_sec, stat_name
+        ),
+        -- METRIC domain: DBA_HIST_SYSMETRIC_SUMMARY averages over window.
+        metric_targets AS (
+            SELECT 'Host CPU Utilization (%)'                 metric_name FROM dual UNION ALL
+            SELECT 'Database CPU Time Ratio'                              FROM dual UNION ALL
+            SELECT 'Database Wait Time Ratio'                             FROM dual UNION ALL
+            SELECT 'Average Active Sessions'                              FROM dual UNION ALL
+            SELECT 'Average Synchronous Single-Block Read Latency'        FROM dual UNION ALL
+            SELECT 'Physical Reads Per Sec'                               FROM dual UNION ALL
+            SELECT 'Physical Writes Per Sec'                              FROM dual UNION ALL
+            SELECT 'Physical Read Total IO Requests Per Sec'              FROM dual UNION ALL
+            SELECT 'Physical Write Total IO Requests Per Sec'             FROM dual UNION ALL
+            SELECT 'Physical Read Total Bytes Per Sec'                    FROM dual UNION ALL
+            SELECT 'Physical Write Total Bytes Per Sec'                   FROM dual UNION ALL
+            SELECT 'Redo Generated Per Sec'                               FROM dual UNION ALL
+            SELECT 'Logons Per Sec'                                       FROM dual UNION ALL
+            SELECT 'Logical Reads Per Sec'                                FROM dual UNION ALL
+            SELECT 'User Calls Per Sec'                                   FROM dual UNION ALL
+            SELECT 'User Commits Per Sec'                                 FROM dual UNION ALL
+            SELECT 'User Rollbacks Per Sec'                               FROM dual UNION ALL
+            SELECT 'Executions Per Sec'                                   FROM dual UNION ALL
+            SELECT 'Hard Parse Count Per Sec'                             FROM dual UNION ALL
+            SELECT 'Total Parse Count Per Sec'                            FROM dual UNION ALL
+            SELECT 'Session Count'                                        FROM dual UNION ALL
+            SELECT 'Network Traffic Volume Per Sec'                       FROM dual UNION ALL
+            SELECT 'SQL Service Response Time'                            FROM dual
+        ),
+        metric_rows AS (
+            SELECT 'METRIC' AS metric_domain,
+                   sm.metric_name,
+                   w.week_offset,
+                   AVG(sm.average) AS metric_value
+            FROM   valid_windows w
+            JOIN   dba_hist_sysmetric_summary sm
+                ON sm.dbid = w.dbid
+               AND sm.snap_id BETWEEN w.begin_snap_id + 1 AND w.end_snap_id
+               AND (w.instance_number IS NULL OR sm.instance_number = w.instance_number)
+               AND sm.metric_name IN (SELECT metric_name FROM metric_targets)
+            GROUP BY w.week_offset, sm.metric_name
+        ),
+        -- WAIT domain: DBA_HIST_SYSTEM_EVENT time-waited per wait_class, as rate.
+        -- Delta is per (event_name, instance); then summed into wait_class.
+        wait_pairs AS (
+            SELECT w.week_offset, w.dur_sec,
+                   se.wait_class,
+                   se.event_name,
+                   se.snap_id,
+                   se.time_waited_micro,
+                   se.instance_number,
+                   w.begin_snap_id, w.end_snap_id
+            FROM   valid_windows w
+            JOIN   dba_hist_system_event se
+                ON se.dbid = w.dbid
+               AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
+               AND (w.instance_number IS NULL OR se.instance_number = w.instance_number)
+               AND se.wait_class <> 'Idle'
+        ),
+        wait_bounds AS (
+            SELECT week_offset, dur_sec, wait_class, event_name, instance_number,
+                   SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro END) AS beg_us,
+                   SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us
+            FROM   wait_pairs
+            GROUP BY week_offset, dur_sec, wait_class, event_name, instance_number
+        ),
+        wait_rows AS (
+            SELECT 'WAIT' AS metric_domain,
+                   'Wait class: ' || wait_class AS metric_name,
+                   week_offset,
+                   CASE WHEN dur_sec > 0
+                        THEN SUM(NVL(end_us, 0) - NVL(beg_us, 0)) / dur_sec / 1e6
+                   END AS metric_value
+            FROM   wait_bounds
+            GROUP BY week_offset, dur_sec, wait_class
+        ),
+        unified AS (
+            SELECT * FROM load_rows   WHERE metric_value IS NOT NULL
+            UNION ALL
+            SELECT * FROM metric_rows WHERE metric_value IS NOT NULL
+            UNION ALL
+            SELECT * FROM wait_rows   WHERE metric_value IS NOT NULL
+        ),
+        pivoted AS (
+            SELECT metric_domain, metric_name,
+                   MAX(CASE WHEN week_offset = 0 THEN metric_value END)  AS cur_val,
+                   AVG(CASE WHEN week_offset > 0 THEN metric_value END)  AS mu,
+                   STDDEV(CASE WHEN week_offset > 0 THEN metric_value END) AS sd,
+                   COUNT(CASE WHEN week_offset > 0 THEN metric_value END) AS n
+            FROM   unified
+            GROUP BY metric_domain, metric_name
+        )
+        SELECT metric_domain, metric_name,
+               cur_val,
+               mu       AS prior_mean,
+               sd       AS prior_sd,
+               n        AS n_prior,
+               CASE
+                   WHEN cur_val IS NULL OR mu IS NULL THEN NULL
+                   WHEN sd IS NULL OR sd = 0 THEN NULL
+                   ELSE (cur_val - mu) / sd
+               END AS z_score,
+               CASE
+                   WHEN cur_val IS NULL OR mu IS NULL OR mu = 0 THEN NULL
+                   ELSE (cur_val - mu) / ABS(mu) * 100
+               END AS pct_delta,
+               CASE
+                   WHEN cur_val IS NULL THEN 'INSUFFICIENT_HISTORY'
+                   WHEN n < 3           THEN 'INSUFFICIENT_HISTORY'
+                   WHEN sd IS NULL OR sd = 0 THEN 'FLAT_BASELINE'
+                   WHEN ABS((cur_val - mu) / sd) > 3 THEN 'CRITICAL'
+                   WHEN ABS((cur_val - mu) / sd) > 2 THEN 'WARN'
+                   ELSE 'OK'
+               END AS severity
+        FROM   pivoted
+        WHERE  cur_val IS NOT NULL OR mu IS NOT NULL
+        ORDER BY metric_domain, ABS(NVL(
+                   CASE
+                       WHEN cur_val IS NULL OR mu IS NULL THEN NULL
+                       WHEN sd IS NULL OR sd = 0 THEN NULL
+                       ELSE (cur_val - mu) / sd
+                   END, 0)) DESC, metric_name
     ) LOOP
+        v_total := v_total + 1;
+        IF f.severity = 'CRITICAL' THEN v_crit := v_crit + 1;
+        ELSIF f.severity = 'WARN'  THEN v_warn := v_warn + 1;
+        END IF;
+
         v_heat_json := CASE WHEN v_heat_json IS NULL THEN '' ELSE v_heat_json || ',' END
             || '{"dom":"' || f.metric_domain
             || '","m":"' || REPLACE(REPLACE(f.metric_name, '\', '\\'), '"', '\"')
@@ -141,17 +295,28 @@ BEGIN
                                 ELSE TO_CHAR(f.z_score, 'FMS99990D00',
                                              'NLS_NUMERIC_CHARACTERS=''.,''') END
             || ',"sev":"' || f.severity
-            || '","cur":' || CASE WHEN f.current_value IS NULL THEN 'null'
-                                  ELSE TO_CHAR(f.current_value, 'FM99999999990D000000',
+            || '","cur":' || CASE WHEN f.cur_val IS NULL THEN 'null'
+                                  ELSE TO_CHAR(f.cur_val, 'FM99999999990D000000',
                                                'NLS_NUMERIC_CHARACTERS=''.,''') END
             || ',"mu":' || CASE WHEN f.prior_mean IS NULL THEN 'null'
                                 ELSE TO_CHAR(f.prior_mean, 'FM99999999990D000000',
                                              'NLS_NUMERIC_CHARACTERS=''.,''') END
+            || ',"sd":' || CASE WHEN f.prior_sd IS NULL THEN 'null'
+                                ELSE TO_CHAR(f.prior_sd, 'FM99999999990D000000',
+                                             'NLS_NUMERIC_CHARACTERS=''.,''') END
+            || ',"n":' || NVL(TO_CHAR(f.n_prior), '0')
             || ',"pct":' || CASE WHEN f.pct_delta IS NULL THEN 'null'
                                  ELSE TO_CHAR(f.pct_delta, 'FMS99990D0',
                                               'NLS_NUMERIC_CHARACTERS=''.,''') END
             || '}';
     END LOOP;
+
+    -- Rewrite the heading now that we have the counters.
+    DBMS_OUTPUT.PUT_LINE('<script>(function(){var h=document.getElementById("findings-heading");'
+        || 'if(h)h.innerHTML=''Findings summary &mdash; '
+        || '<span class="badge crit">' || v_crit || ' critical</span> '
+        || '<span class="badge warn">' || v_warn || ' warn</span> '
+        || '<span class="badge ok">'   || v_total || ' total</span>'';})();</script>');
 
     IF v_heat_json IS NOT NULL THEN
         DBMS_OUTPUT.PUT_LINE('<script>');
@@ -196,8 +361,251 @@ BEGIN
         || '<th class="num">% &Delta;</th>'
         || '</tr></thead><tbody>');
 
+    --
+    -- Second pass: detail table ordered by severity bucket then |z|.
+    -- Repeating the recompute CTE is the least-bad way to walk the findings
+    -- twice without persisting them anywhere.
+    --
     FOR f IN (
-        SELECT f.*,
+        WITH run_params AS (
+            SELECT ~dbid AS dbid,
+                   CASE WHEN ~inst_num = 0 THEN NULL ELSE ~inst_num END AS instance_number,
+                   TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS target_end_ts,
+                   ~win_hours  AS win_hours,
+                   ~weeks_back AS weeks_back
+            FROM dual
+        ),
+        offsets AS (
+            SELECT LEVEL - 1 AS week_offset
+            FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
+        ),
+        raw_windows AS (
+            SELECT r.dbid, r.instance_number, o.week_offset,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+            FROM run_params r CROSS JOIN offsets o
+        ),
+        snaps AS (
+            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.instance_number, w.dbid,
+                   s.snap_id, s.end_interval_time, s.startup_time
+            FROM   raw_windows w
+            JOIN   dba_hist_snapshot s
+              ON   s.dbid = w.dbid
+             AND   (w.instance_number IS NULL OR s.instance_number = w.instance_number)
+             AND   s.end_interval_time BETWEEN
+                        CAST(w.win_start_dt - 1 AS TIMESTAMP)
+                    AND CAST(w.win_end_dt   + 1 AS TIMESTAMP)
+        ),
+        begin_snap AS (
+            SELECT week_offset,
+                   MAX(snap_id) KEEP (DENSE_RANK LAST ORDER BY end_interval_time)  AS snap_id,
+                   MAX(startup_time) KEEP (DENSE_RANK LAST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time <= CAST(win_start_dt + 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        ),
+        end_snap AS (
+            SELECT week_offset,
+                   MIN(snap_id) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS snap_id,
+                   MIN(startup_time) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time >= CAST(win_end_dt - 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        ),
+        windows AS (
+            SELECT w.week_offset, w.dbid, w.instance_number,
+                   bs.snap_id AS begin_snap_id,
+                   es.snap_id AS end_snap_id,
+                   CASE
+                       WHEN bs.snap_id IS NULL OR es.snap_id IS NULL THEN 'N'
+                       WHEN bs.snap_id = es.snap_id                  THEN 'N'
+                       WHEN bs.startup_time <> es.startup_time       THEN 'N'
+                       ELSE 'Y'
+                   END AS valid_flag
+            FROM   raw_windows w
+            LEFT JOIN begin_snap bs ON bs.week_offset = w.week_offset
+            LEFT JOIN end_snap   es ON es.week_offset = w.week_offset
+        ),
+        valid_windows AS (
+            SELECT w.week_offset, w.dbid, w.instance_number,
+                   w.begin_snap_id, w.end_snap_id,
+                   (CAST(rw.win_end_dt AS DATE) - CAST(rw.win_start_dt AS DATE)) * 86400 AS dur_sec
+            FROM   windows w
+            JOIN   raw_windows rw ON rw.week_offset = w.week_offset
+            WHERE  w.valid_flag = 'Y'
+        ),
+        load_targets AS (
+            SELECT 'redo size'                              stat_name FROM dual UNION ALL
+            SELECT 'redo size for lost write detection'               FROM dual UNION ALL
+            SELECT 'DB time'                                          FROM dual UNION ALL
+            SELECT 'DB CPU'                                           FROM dual UNION ALL
+            SELECT 'CPU used by this session'                         FROM dual UNION ALL
+            SELECT 'session logical reads'                            FROM dual UNION ALL
+            SELECT 'physical reads'                                   FROM dual UNION ALL
+            SELECT 'physical read total bytes'                        FROM dual UNION ALL
+            SELECT 'physical writes'                                  FROM dual UNION ALL
+            SELECT 'physical write total bytes'                       FROM dual UNION ALL
+            SELECT 'user calls'                                       FROM dual UNION ALL
+            SELECT 'user commits'                                     FROM dual UNION ALL
+            SELECT 'user rollbacks'                                   FROM dual UNION ALL
+            SELECT 'execute count'                                    FROM dual UNION ALL
+            SELECT 'parse count (total)'                              FROM dual UNION ALL
+            SELECT 'parse count (hard)'                               FROM dual UNION ALL
+            SELECT 'parse count (failures)'                           FROM dual UNION ALL
+            SELECT 'sorts (memory)'                                   FROM dual UNION ALL
+            SELECT 'sorts (disk)'                                     FROM dual UNION ALL
+            SELECT 'sorts (rows)'                                     FROM dual UNION ALL
+            SELECT 'logons cumulative'                                FROM dual UNION ALL
+            SELECT 'opened cursors cumulative'                        FROM dual UNION ALL
+            SELECT 'redo writes'                                      FROM dual UNION ALL
+            SELECT 'table scans (long tables)'                        FROM dual UNION ALL
+            SELECT 'table fetch by rowid'                             FROM dual UNION ALL
+            SELECT 'bytes sent via SQL*Net to client'                 FROM dual UNION ALL
+            SELECT 'bytes received via SQL*Net from client'           FROM dual
+        ),
+        load_pairs AS (
+            SELECT w.week_offset, w.dur_sec, ss.stat_name, ss.instance_number,
+                   ss.snap_id, ss.value,
+                   w.begin_snap_id, w.end_snap_id
+            FROM   valid_windows w
+            JOIN   dba_hist_sysstat ss
+                ON ss.dbid = w.dbid
+               AND ss.snap_id IN (w.begin_snap_id, w.end_snap_id)
+               AND (w.instance_number IS NULL OR ss.instance_number = w.instance_number)
+               AND ss.stat_name IN (SELECT stat_name FROM load_targets)
+        ),
+        load_bounds AS (
+            SELECT week_offset, dur_sec, stat_name, instance_number,
+                   SUM(CASE WHEN snap_id = begin_snap_id THEN value END) AS beg_val,
+                   SUM(CASE WHEN snap_id = end_snap_id   THEN value END) AS end_val
+            FROM   load_pairs
+            GROUP BY week_offset, dur_sec, stat_name, instance_number
+        ),
+        load_rows AS (
+            SELECT 'LOAD' AS metric_domain,
+                   stat_name AS metric_name,
+                   week_offset,
+                   CASE WHEN dur_sec > 0
+                        THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / dur_sec
+                   END AS metric_value
+            FROM   load_bounds
+            GROUP BY week_offset, dur_sec, stat_name
+        ),
+        metric_targets AS (
+            SELECT 'Host CPU Utilization (%)'                 metric_name FROM dual UNION ALL
+            SELECT 'Database CPU Time Ratio'                              FROM dual UNION ALL
+            SELECT 'Database Wait Time Ratio'                             FROM dual UNION ALL
+            SELECT 'Average Active Sessions'                              FROM dual UNION ALL
+            SELECT 'Average Synchronous Single-Block Read Latency'        FROM dual UNION ALL
+            SELECT 'Physical Reads Per Sec'                               FROM dual UNION ALL
+            SELECT 'Physical Writes Per Sec'                              FROM dual UNION ALL
+            SELECT 'Physical Read Total IO Requests Per Sec'              FROM dual UNION ALL
+            SELECT 'Physical Write Total IO Requests Per Sec'             FROM dual UNION ALL
+            SELECT 'Physical Read Total Bytes Per Sec'                    FROM dual UNION ALL
+            SELECT 'Physical Write Total Bytes Per Sec'                   FROM dual UNION ALL
+            SELECT 'Redo Generated Per Sec'                               FROM dual UNION ALL
+            SELECT 'Logons Per Sec'                                       FROM dual UNION ALL
+            SELECT 'Logical Reads Per Sec'                                FROM dual UNION ALL
+            SELECT 'User Calls Per Sec'                                   FROM dual UNION ALL
+            SELECT 'User Commits Per Sec'                                 FROM dual UNION ALL
+            SELECT 'User Rollbacks Per Sec'                               FROM dual UNION ALL
+            SELECT 'Executions Per Sec'                                   FROM dual UNION ALL
+            SELECT 'Hard Parse Count Per Sec'                             FROM dual UNION ALL
+            SELECT 'Total Parse Count Per Sec'                            FROM dual UNION ALL
+            SELECT 'Session Count'                                        FROM dual UNION ALL
+            SELECT 'Network Traffic Volume Per Sec'                       FROM dual UNION ALL
+            SELECT 'SQL Service Response Time'                            FROM dual
+        ),
+        metric_rows AS (
+            SELECT 'METRIC' AS metric_domain,
+                   sm.metric_name,
+                   w.week_offset,
+                   AVG(sm.average) AS metric_value
+            FROM   valid_windows w
+            JOIN   dba_hist_sysmetric_summary sm
+                ON sm.dbid = w.dbid
+               AND sm.snap_id BETWEEN w.begin_snap_id + 1 AND w.end_snap_id
+               AND (w.instance_number IS NULL OR sm.instance_number = w.instance_number)
+               AND sm.metric_name IN (SELECT metric_name FROM metric_targets)
+            GROUP BY w.week_offset, sm.metric_name
+        ),
+        wait_pairs AS (
+            SELECT w.week_offset, w.dur_sec,
+                   se.wait_class,
+                   se.event_name,
+                   se.snap_id,
+                   se.time_waited_micro,
+                   se.instance_number,
+                   w.begin_snap_id, w.end_snap_id
+            FROM   valid_windows w
+            JOIN   dba_hist_system_event se
+                ON se.dbid = w.dbid
+               AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
+               AND (w.instance_number IS NULL OR se.instance_number = w.instance_number)
+               AND se.wait_class <> 'Idle'
+        ),
+        wait_bounds AS (
+            SELECT week_offset, dur_sec, wait_class, event_name, instance_number,
+                   SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro END) AS beg_us,
+                   SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us
+            FROM   wait_pairs
+            GROUP BY week_offset, dur_sec, wait_class, event_name, instance_number
+        ),
+        wait_rows AS (
+            SELECT 'WAIT' AS metric_domain,
+                   'Wait class: ' || wait_class AS metric_name,
+                   week_offset,
+                   CASE WHEN dur_sec > 0
+                        THEN SUM(NVL(end_us, 0) - NVL(beg_us, 0)) / dur_sec / 1e6
+                   END AS metric_value
+            FROM   wait_bounds
+            GROUP BY week_offset, dur_sec, wait_class
+        ),
+        unified AS (
+            SELECT * FROM load_rows   WHERE metric_value IS NOT NULL
+            UNION ALL
+            SELECT * FROM metric_rows WHERE metric_value IS NOT NULL
+            UNION ALL
+            SELECT * FROM wait_rows   WHERE metric_value IS NOT NULL
+        ),
+        pivoted AS (
+            SELECT metric_domain, metric_name,
+                   MAX(CASE WHEN week_offset = 0 THEN metric_value END)  AS cur_val,
+                   AVG(CASE WHEN week_offset > 0 THEN metric_value END)  AS mu,
+                   STDDEV(CASE WHEN week_offset > 0 THEN metric_value END) AS sd,
+                   COUNT(CASE WHEN week_offset > 0 THEN metric_value END) AS n
+            FROM   unified
+            GROUP BY metric_domain, metric_name
+        ),
+        scored AS (
+            SELECT metric_domain, metric_name,
+                   cur_val,
+                   mu       AS prior_mean,
+                   sd       AS prior_sd,
+                   n        AS n_prior,
+                   CASE
+                       WHEN cur_val IS NULL OR mu IS NULL THEN NULL
+                       WHEN sd IS NULL OR sd = 0 THEN NULL
+                       ELSE (cur_val - mu) / sd
+                   END AS z_score,
+                   CASE
+                       WHEN cur_val IS NULL OR mu IS NULL OR mu = 0 THEN NULL
+                       ELSE (cur_val - mu) / ABS(mu) * 100
+                   END AS pct_delta,
+                   CASE
+                       WHEN cur_val IS NULL THEN 'INSUFFICIENT_HISTORY'
+                       WHEN n < 3           THEN 'INSUFFICIENT_HISTORY'
+                       WHEN sd IS NULL OR sd = 0 THEN 'FLAT_BASELINE'
+                       WHEN ABS((cur_val - mu) / sd) > 3 THEN 'CRITICAL'
+                       WHEN ABS((cur_val - mu) / sd) > 2 THEN 'WARN'
+                       ELSE 'OK'
+                   END AS severity
+            FROM   pivoted
+            WHERE  cur_val IS NOT NULL OR mu IS NOT NULL
+        )
+        SELECT metric_domain, metric_name,
+               cur_val, prior_mean, prior_sd, n_prior,
+               z_score, pct_delta, severity,
                CASE severity
                    WHEN 'CRITICAL'             THEN 1
                    WHEN 'WARN'                 THEN 2
@@ -205,30 +613,27 @@ BEGIN
                    WHEN 'FLAT_BASELINE'        THEN 4
                    ELSE 5
                END AS sev_order
-        FROM   awr_trend_findings f
-        WHERE  f.run_id = ~run_id
+        FROM   scored
         ORDER BY sev_order,
                  ABS(NVL(z_score, 0)) DESC,
                  ABS(NVL(pct_delta, 0)) DESC,
                  metric_name
     ) LOOP
-        DBMS_OUTPUT.PUT_LINE(
-            '<tr data-metric="' || REPLACE(DBMS_XMLGEN.CONVERT(f.metric_name), '"', '&quot;') || '"'
-            || ' class="' || CASE f.severity
-                    WHEN 'CRITICAL' THEN 'crit'
-                    WHEN 'WARN'     THEN 'warn'
-                    WHEN 'OK'       THEN 'ok'
-                    ELSE 'skip' END || '">'
-            || '<td><span class="badge ' || CASE f.severity
-                    WHEN 'CRITICAL' THEN 'crit'
-                    WHEN 'WARN'     THEN 'warn'
-                    WHEN 'OK'       THEN 'ok'
-                    ELSE 'skip' END || '">' || f.severity || '</span></td>'
+        v_sev := f.severity;
+        v_cls := CASE v_sev WHEN 'CRITICAL' THEN 'crit'
+                            WHEN 'WARN'     THEN 'warn'
+                            WHEN 'OK'       THEN 'ok'
+                            ELSE 'skip' END;
+
+        v_row := '<tr data-metric="'
+            || REPLACE(DBMS_XMLGEN.CONVERT(f.metric_name), '"', '&quot;')
+            || '" class="' || v_cls || '">'
+            || '<td><span class="badge ' || v_cls || '">' || v_sev || '</span></td>'
             || '<td>' || f.metric_domain || '</td>'
             || '<td>' || DBMS_XMLGEN.CONVERT(f.metric_name) || '</td>'
             || '<td class="num">' ||
-                CASE WHEN f.current_value IS NULL THEN '&mdash;'
-                     ELSE TO_CHAR(f.current_value, 'FM999G999G999G990D0000') END || '</td>'
+                CASE WHEN f.cur_val IS NULL THEN '&mdash;'
+                     ELSE TO_CHAR(f.cur_val, 'FM999G999G999G990D0000') END || '</td>'
             || '<td class="num">' ||
                 CASE WHEN f.prior_mean IS NULL THEN '&mdash;'
                      ELSE TO_CHAR(f.prior_mean, 'FM999G999G999G990D0000') END || '</td>'
@@ -242,14 +647,14 @@ BEGIN
             || '<td class="num">' ||
                 CASE WHEN f.pct_delta IS NULL THEN '&mdash;'
                      ELSE TO_CHAR(f.pct_delta, 'FMS990D0') || '%' END || '</td>'
-            || '</tr>');
+            || '</tr>';
+        DBMS_OUTPUT.PUT_LINE(v_row);
     END LOOP;
 
     DBMS_OUTPUT.PUT_LINE('</tbody></table>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'All raw facts are persisted in the scratch schema '
-        || '(AWR_TREND_RUNS / _WINDOWS / _LOAD_PROFILE / _SYSMETRIC / _WAITS / _TOP_SQL / _FINDINGS) '
-        || 'keyed by run_id = ' || ~run_id || '. Query them for deeper analysis.</p>');
+        || 'This run is read-only: nothing is persisted. '
+        || 'Re-run <code>awr_trend.sql</code> to refresh.</p>');
     DBMS_OUTPUT.PUT_LINE('</section>');
 END;
 /

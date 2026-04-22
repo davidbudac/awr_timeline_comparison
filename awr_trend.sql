@@ -2,29 +2,33 @@
 -- awr_trend.sql -- AWR Timeline Comparison (driver)
 -- =====================================================================
 --
--- Oracle 19c only (Diagnostic + Tuning Pack licensed).  Pure SQL*Plus.
+-- Oracle 19c only (Diagnostic + Tuning Pack licensed). Pure SQL*Plus.
+--
+-- READ-ONLY against the target database. The script does not create
+-- schemas, tables, sequences, packages or any other object, and never
+-- issues INSERT / UPDATE / DELETE / COMMIT.  Everything is computed
+-- in-flight from the DBA_HIST_* views and the result is emitted as a
+-- single self-contained HTML file.  It only needs SELECT access to the
+-- AWR views (see README).
 --
 -- Usage (two modes):
 --
 --   1. Defaults:
 --        sqlplus user/pw@svc @awr_trend.sql
 --
---   2. Override via DEFINE before calling (recommended for custom windows):
+--   2. Override via DEFINE before calling:
 --        sqlplus user/pw@svc
 --        SQL> DEFINE target_end = '2026-04-15 09:00'
 --        SQL> DEFINE win_hours  = 2
 --        SQL> DEFINE weeks_back = 6
 --        SQL> @awr_trend.sql
 --
--- Substitution variables (with defaults):
+-- Substitution variables (with defaults in sql/defaults.sql):
 --   target_end   'AUTO' (prior full hour) or 'YYYY-MM-DD HH24:MI'
 --   win_hours    1
 --   weeks_back   4
 --   top_n        10
 --   inst_num     0 = aggregate across RAC; otherwise the instance number
---
--- Prerequisite (run once per target database, as the owner user):
---   sqlplus user/pw@svc @sql/setup_schema.sql
 --
 -- Output: reports/awr_trend_<DBID>_<YYYYMMDDHH24MI>_run<run_id>.html
 --
@@ -55,17 +59,68 @@ WHENEVER OSERROR  EXIT FAILURE
 -- automatically, so a bare `./run_awr_trend.sh user/pw@svc` works too.
 -- We do NOT DEFINE them here to avoid clobbering an explicit caller override.
 
--- Allocate run_id and build report path --------------------------------
-COLUMN run_id       NEW_VALUE run_id       NOPRINT
-COLUMN report_path  NEW_VALUE report_path  NOPRINT
+-- --------------------------------------------------------------------
+-- Resolve run_id + database identity + target_end, once, up front.
+-- Downstream sections consume these as SQL*Plus substitution variables
+-- so we never have to round-trip through a scratch table.
+--
+--   run_id              17-digit timestamp, unique per invocation
+--   dbid                v$database.dbid (integer, used by every AWR query)
+--   db_name             v$database.name (trimmed)
+--   host_name           v$instance.host_name
+--   db_version          v$instance.version
+--   caller_user         USER
+--   generated_at_s      'YYYY-MM-DD HH24:MI:SS TZR'
+--   target_end_resolved 'YYYY-MM-DD HH24:MI:SS'   (AUTO -> prior full hour)
+--   dow_name            target_end day-of-week (trimmed)
+--   report_path         reports/awr_trend_<dbid>_<YYYYMMDDHH24MI>_run<run_id>.html
+-- --------------------------------------------------------------------
+COLUMN run_id              NEW_VALUE run_id              NOPRINT
+COLUMN dbid                NEW_VALUE dbid                NOPRINT
+COLUMN db_name             NEW_VALUE db_name             NOPRINT
+COLUMN host_name           NEW_VALUE host_name           NOPRINT
+COLUMN db_version          NEW_VALUE db_version          NOPRINT
+COLUMN caller_user         NEW_VALUE caller_user         NOPRINT
+COLUMN generated_at_s      NEW_VALUE generated_at_s      NOPRINT
+COLUMN target_end_resolved NEW_VALUE target_end_resolved NOPRINT
+COLUMN dow_name            NEW_VALUE dow_name            NOPRINT
+COLUMN report_path         NEW_VALUE report_path         NOPRINT
 
-SELECT awr_trend_run_seq.NEXTVAL AS run_id FROM dual;
-
-SELECT 'reports/awr_trend_'
-       || (SELECT dbid FROM v$database) || '_'
-       || TO_CHAR(SYSDATE, 'YYYYMMDDHH24MI') || '_run'
-       || ~run_id || '.html' AS report_path
-FROM dual;
+SELECT
+    t.run_id                                                       AS run_id,
+    d.dbid                                                         AS dbid,
+    TRIM(d.name)                                                   AS db_name,
+    i.host_name                                                    AS host_name,
+    i.version                                                      AS db_version,
+    USER                                                           AS caller_user,
+    t.generated_at_s                                               AS generated_at_s,
+    TO_CHAR(
+        CASE
+            WHEN UPPER('~target_end') IN ('AUTO','NOW','')
+                THEN TRUNC(SYSDATE, 'HH24')
+            ELSE TO_DATE('~target_end', 'YYYY-MM-DD HH24:MI')
+        END,
+        'YYYY-MM-DD HH24:MI:SS'
+    )                                                              AS target_end_resolved,
+    TRIM(TO_CHAR(
+        CASE
+            WHEN UPPER('~target_end') IN ('AUTO','NOW','')
+                THEN TRUNC(SYSDATE, 'HH24')
+            ELSE TO_DATE('~target_end', 'YYYY-MM-DD HH24:MI')
+        END,
+        'Day'))                                                    AS dow_name,
+    'reports/awr_trend_' || d.dbid || '_'
+        || TO_CHAR(SYSDATE, 'YYYYMMDDHH24MI')
+        || '_run' || t.run_id
+        || '.html'                                                 AS report_path
+FROM v$database d
+CROSS JOIN v$instance i
+CROSS JOIN (
+    SELECT
+        TO_CHAR(SYSTIMESTAMP, 'YYYYMMDDHH24MISSFF3')      AS run_id,
+        TO_CHAR(SYSTIMESTAMP, 'YYYY-MM-DD HH24:MI:SS TZR') AS generated_at_s
+    FROM dual
+) t;
 
 SPOOL ~report_path
 
@@ -77,7 +132,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<html lang="en"><head><meta charset="utf-8">');
     DBMS_OUTPUT.PUT_LINE('<meta name="viewport" content="width=device-width, initial-scale=1">');
     DBMS_OUTPUT.PUT_LINE('<title>AWR Timeline Comparison &mdash; run '
-        || ~run_id || '</title>');
+        || '~run_id' || '</title>');
 END;
 /
 
@@ -140,8 +195,11 @@ END;
 /
 
 -- -------------------------------------------------------------------
--- Sections (order matters: 07 must run last because it reads facts
--- inserted by 02-06).  Section 00 inserts the AWR_TREND_RUNS row.
+-- Sections.  Each section is compute+render in one anonymous block;
+-- none of them write to the database.  Run order matters: the findings
+-- (07) read z-score inputs derived from the same AWR views sections
+-- 02-04 already rendered, and overview (08) derives severity from 07's
+-- logic, so they are emitted in this order.
 -- -------------------------------------------------------------------
 @@sql/00_params.sql
 @@sql/01_windows.sql
@@ -159,8 +217,8 @@ END;
 -- -------------------------------------------------------------------
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<footer class="report">');
-    DBMS_OUTPUT.PUT_LINE('Generated by awr_trend.sql &mdash; run ' || ~run_id
-        || ' &mdash; raw data preserved in the AWR_TREND_* scratch tables.');
+    DBMS_OUTPUT.PUT_LINE('Generated by awr_trend.sql &mdash; run ' || '~run_id'
+        || ' &mdash; read-only against the source database, no scratch schema.');
     DBMS_OUTPUT.PUT_LINE('</footer>');
     DBMS_OUTPUT.PUT_LINE('</body></html>');
 END;
@@ -177,17 +235,7 @@ PROMPT
 PROMPT ============================================================
 PROMPT  Report written to: ~report_path
 PROMPT  Run id: ~run_id
-PROMPT
-PROMPT  Query scratch schema for this run:
-PROMPT    SELECT severity, metric_name, current_value, prior_mean, z_score
-PROMPT    FROM   awr_trend_findings
-PROMPT    WHERE  run_id = ~run_id
-PROMPT    ORDER BY
-PROMPT      CASE severity
-PROMPT        WHEN 'CRITICAL' THEN 1 WHEN 'WARN' THEN 2
-PROMPT        WHEN 'INSUFFICIENT_HISTORY' THEN 3
-PROMPT        WHEN 'FLAT_BASELINE' THEN 4 ELSE 5 END,
-PROMPT      ABS(NVL(z_score,0)) DESC;
+PROMPT  (read-only run -- no database objects created or modified)
 PROMPT ============================================================
 PROMPT
 

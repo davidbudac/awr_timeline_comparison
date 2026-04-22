@@ -9,56 +9,11 @@
 -- ASH persists 1 in 10 in-memory samples, i.e. one row per session per 10s,
 -- so an hour of one fully-busy session is 360 rows and AAS = samples / 360.
 --
--- Follows the compute -> insert -> render contract used by every other
--- numbered section. Reads only; no findings/z-score interaction.
+-- Read-only: pulls ASH rows into a PL/SQL collection in-memory, computes
+-- per-hour aggregates, and renders directly.  No scratch table.
 --
 
 SET DEFINE '~'
-
---
--- Compute + persist: one row per (hour_bucket, wait_class) with a non-zero
--- sample_count. Missing (hour, class) pairs are treated as 0 by the render
--- layer so the stacked area stays intact.
---
-INSERT INTO awr_trend_ash_timeline (run_id, hour_bucket, wait_class,
-                                    sample_count, active_sessions)
-WITH run AS (
-    SELECT run_id, dbid, instance_number, target_end_ts, win_hours, weeks_back
-    FROM   awr_trend_runs
-    WHERE  run_id = ~run_id
-),
-rng AS (
-    SELECT run_id, dbid, instance_number,
-           CAST(target_end_ts AS DATE) - weeks_back*7 - win_hours/24 AS range_start_dt,
-           CAST(target_end_ts AS DATE)                               AS range_end_dt
-    FROM   run
-),
-samples AS (
-    SELECT
-        CAST(TRUNC(CAST(ash.sample_time AS DATE), 'HH') AS TIMESTAMP) AS hour_bucket,
-        CASE WHEN ash.session_state = 'ON CPU' THEN 'CPU'
-             ELSE NVL(ash.wait_class, 'Other') END                    AS wait_class
-    FROM   rng r
-    JOIN   dba_hist_active_sess_history ash
-      ON   ash.dbid = r.dbid
-     AND   (r.instance_number IS NULL OR ash.instance_number = r.instance_number)
-     AND   ash.sample_time >= CAST(r.range_start_dt AS TIMESTAMP)
-     AND   ash.sample_time <  CAST(r.range_end_dt   AS TIMESTAMP)
-     AND   (ash.session_state = 'ON CPU' OR NVL(ash.wait_class, 'x') <> 'Idle')
-)
-SELECT ~run_id,
-       hour_bucket,
-       wait_class,
-       COUNT(*)         AS sample_count,
-       COUNT(*) / 360   AS active_sessions
-FROM   samples
-GROUP  BY hour_bucket, wait_class;
-
-COMMIT;
-
---
--- Render: stacked area chart.
---
 SET SERVEROUTPUT ON SIZE UNLIMITED
 
 DECLARE
@@ -74,12 +29,30 @@ DECLARE
         '["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1",' ||
         '"#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"]';
     v_first        BOOLEAN;
+
+    -- ASH aggregate: one entry per (hour_bucket, wait_class) with sample_count.
+    -- DATE arithmetic at hour granularity, so DATE keys (not TIMESTAMP) work.
+    TYPE t_cell_key  IS RECORD (
+        hour_key   NUMBER,           -- hours since v_range_start
+        wait_class VARCHAR2(64)
+    );
+    TYPE t_cell_tab IS TABLE OF NUMBER INDEX BY VARCHAR2(200);
+    v_cells        t_cell_tab;
+
+    TYPE t_class_tab IS TABLE OF NUMBER INDEX BY VARCHAR2(64);
+    v_class_totals t_class_tab;
+
+    v_ck           VARCHAR2(200);
+    v_hk           NUMBER;
+    v_wc           VARCHAR2(64);
+    v_n            NUMBER;
+    v_aas          NUMBER;
 BEGIN
-    SELECT CAST(target_end_ts AS DATE) - weeks_back*7 - win_hours/24,
-           CAST(target_end_ts AS DATE)
+    SELECT CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
+               - ~weeks_back*7 - ~win_hours/24,
+           CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
     INTO   v_range_start, v_range_end
-    FROM   awr_trend_runs
-    WHERE  run_id = ~run_id;
+    FROM   dual;
 
     v_total_hours := GREATEST((v_range_end - v_range_start) * 24, 1);
 
@@ -99,25 +72,48 @@ BEGIN
     -- bottom dataZoom slider), and the slider itself at the bottom.
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-ash" id="ash-timeline-stack"></div>');
 
-    -- Shared hour grid (ISO-ish strings, oldest -> newest). Built via a
-    -- PL/SQL accumulator rather than LISTAGG so we are not capped at the
-    -- 4000-byte VARCHAR2 limit.  Echarts categorical axis accepts these.
-    v_hours_json := '[';
-    v_first := TRUE;
-    FOR h IN (
-        SELECT v_range_start + (LEVEL - 1)/24 AS hr_dt
-        FROM   dual
-        CONNECT BY LEVEL <= v_total_hours
-        ORDER  BY 1
+    --
+    -- Pull aggregated ASH into a PL/SQL collection.  The view is large;
+    -- we GROUP BY the two keys we need so the round trip is small.
+    --
+    FOR r IN (
+        SELECT ROUND((CAST(TRUNC(CAST(ash.sample_time AS DATE), 'HH') AS DATE)
+                      - v_range_start) * 24) AS hour_key,
+               CASE WHEN ash.session_state = 'ON CPU' THEN 'CPU'
+                    ELSE NVL(ash.wait_class, 'Other') END AS wait_class,
+               COUNT(*) AS sample_count
+        FROM   dba_hist_active_sess_history ash
+        WHERE  ash.dbid = ~dbid
+          AND  (~inst_num = 0 OR ash.instance_number = ~inst_num)
+          AND  ash.sample_time >= CAST(v_range_start AS TIMESTAMP)
+          AND  ash.sample_time <  CAST(v_range_end   AS TIMESTAMP)
+          AND  (ash.session_state = 'ON CPU' OR NVL(ash.wait_class, 'x') <> 'Idle')
+        GROUP BY ROUND((CAST(TRUNC(CAST(ash.sample_time AS DATE), 'HH') AS DATE)
+                        - v_range_start) * 24),
+                 CASE WHEN ash.session_state = 'ON CPU' THEN 'CPU'
+                      ELSE NVL(ash.wait_class, 'Other') END
     ) LOOP
-        IF v_first THEN v_first := FALSE;
-        ELSE v_hours_json := v_hours_json || ','; END IF;
+        v_ck := TO_CHAR(r.hour_key) || '|' || r.wait_class;
+        v_cells(v_ck) := r.sample_count;
+        IF v_class_totals.EXISTS(r.wait_class) THEN
+            v_class_totals(r.wait_class) := v_class_totals(r.wait_class) + r.sample_count;
+        ELSE
+            v_class_totals(r.wait_class) := r.sample_count;
+        END IF;
+    END LOOP;
+
+    -- Shared hour grid (ISO-ish strings, oldest -> newest).
+    v_hours_json := '[';
+    FOR h IN 0 .. v_total_hours - 1 LOOP
+        IF h > 0 THEN v_hours_json := v_hours_json || ','; END IF;
         v_hours_json := v_hours_json
-            || '"' || TO_CHAR(h.hr_dt, 'YYYY-MM-DD HH24:MI') || '"';
+            || '"' || TO_CHAR(v_range_start + h/24, 'YYYY-MM-DD HH24:MI') || '"';
     END LOOP;
     v_hours_json := v_hours_json || ']';
 
     -- Window-band markers: small (one per compared window), LISTAGG is safe.
+    -- Compute windows inline from the same raw_windows CTE the other
+    -- sections use, plus validity check against dba_hist_snapshot.
     SELECT '['
            || LISTAGG(
                   '["'
@@ -131,11 +127,67 @@ BEGIN
                   WITHIN GROUP (ORDER BY week_offset DESC)
            || ']'
     INTO   v_windows_json
-    FROM   awr_trend_windows
-    WHERE  run_id = ~run_id;
+    FROM (
+        WITH run_params AS (
+            SELECT ~dbid AS dbid,
+                   CASE WHEN ~inst_num = 0 THEN NULL ELSE ~inst_num END AS instance_number,
+                   TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS target_end_ts,
+                   ~win_hours  AS win_hours,
+                   ~weeks_back AS weeks_back
+            FROM dual
+        ),
+        offsets AS (
+            SELECT LEVEL - 1 AS week_offset
+            FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
+        ),
+        raw_windows AS (
+            SELECT r.dbid, r.instance_number, o.week_offset,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+            FROM run_params r CROSS JOIN offsets o
+        ),
+        snaps AS (
+            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.instance_number, w.dbid,
+                   s.snap_id, s.end_interval_time, s.startup_time
+            FROM   raw_windows w
+            JOIN   dba_hist_snapshot s
+              ON   s.dbid = w.dbid
+             AND   (w.instance_number IS NULL OR s.instance_number = w.instance_number)
+             AND   s.end_interval_time BETWEEN
+                        CAST(w.win_start_dt - 1 AS TIMESTAMP)
+                    AND CAST(w.win_end_dt   + 1 AS TIMESTAMP)
+        ),
+        begin_snap AS (
+            SELECT week_offset,
+                   MAX(snap_id) KEEP (DENSE_RANK LAST ORDER BY end_interval_time)  AS snap_id,
+                   MAX(startup_time) KEEP (DENSE_RANK LAST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time <= CAST(win_start_dt + 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        ),
+        end_snap AS (
+            SELECT week_offset,
+                   MIN(snap_id) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS snap_id,
+                   MIN(startup_time) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time >= CAST(win_end_dt - 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        )
+        SELECT w.week_offset,
+               CAST(w.win_start_dt AS TIMESTAMP) AS win_start_ts,
+               CAST(w.win_end_dt   AS TIMESTAMP) AS win_end_ts,
+               CASE
+                   WHEN bs.snap_id IS NULL OR es.snap_id IS NULL THEN 'N'
+                   WHEN bs.snap_id = es.snap_id                  THEN 'N'
+                   WHEN bs.startup_time <> es.startup_time       THEN 'N'
+                   ELSE 'Y'
+               END AS valid_flag
+        FROM   raw_windows w
+        LEFT JOIN begin_snap bs ON bs.week_offset = w.week_offset
+        LEFT JOIN end_snap   es ON es.week_offset = w.week_offset
+    );
 
     -- Emit JS in chunks so no single PUT_LINE exceeds 32767 bytes.
-    -- JS doesn't care how the tokens are split across lines.
     DBMS_OUTPUT.PUT_LINE('<script>');
     DBMS_OUTPUT.PUT_LINE('(function(){');
     DBMS_OUTPUT.PUT_LINE('AWR_DATA.ashTimeline = {');
@@ -143,47 +195,62 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('windows:' || v_windows_json || ',');
     DBMS_OUTPUT.PUT_LINE('classes:[');
 
-    -- Per-class aligned values (NVL to 0 so the stack stays contiguous).
+    -- Emit per-class aligned values (NVL to 0 so the stack stays contiguous).
     -- Ordered biggest-first so palette[0] goes to the dominant class.
-    -- Each class emits a single JS object literal line (up to about 30KB).
-    v_first := TRUE;
-    FOR c IN (
-        SELECT wait_class,
-               SUM(active_sessions) AS total_aas
-        FROM   awr_trend_ash_timeline
-        WHERE  run_id = ~run_id
-        GROUP  BY wait_class
-        ORDER  BY SUM(active_sessions) DESC, wait_class
-    ) LOOP
-        v_class_vals := NULL;
-        FOR v IN (
-            SELECT NVL(t.active_sessions, 0) AS aas
-            FROM (
-                SELECT v_range_start + (LEVEL - 1)/24 AS hr_dt
-                FROM   dual
-                CONNECT BY LEVEL <= v_total_hours
-            ) g
-            LEFT JOIN awr_trend_ash_timeline t
-                   ON t.run_id      = ~run_id
-                  AND t.wait_class  = c.wait_class
-                  AND t.hour_bucket = CAST(g.hr_dt AS TIMESTAMP)
-            ORDER BY g.hr_dt
-        ) LOOP
-            IF v_class_vals IS NULL THEN
-                v_class_vals := TO_CHAR(v.aas, 'FM99999990D0000',
-                                        'NLS_NUMERIC_CHARACTERS=''.,''');
-            ELSE
-                v_class_vals := v_class_vals || ','
-                    || TO_CHAR(v.aas, 'FM99999990D0000',
-                               'NLS_NUMERIC_CHARACTERS=''.,''');
-            END IF;
+    -- Walk v_class_totals sorted by magnitude by copying keys into a sorted list.
+    DECLARE
+        TYPE t_kv IS RECORD (k VARCHAR2(64), v NUMBER);
+        TYPE t_klist IS TABLE OF t_kv;
+        v_list t_klist := t_klist();
+        v_tmp  t_kv;
+        v_ci   VARCHAR2(64);
+    BEGIN
+        v_ci := v_class_totals.FIRST;
+        WHILE v_ci IS NOT NULL LOOP
+            v_list.EXTEND;
+            v_list(v_list.LAST).k := v_ci;
+            v_list(v_list.LAST).v := v_class_totals(v_ci);
+            v_ci := v_class_totals.NEXT(v_ci);
         END LOOP;
 
-        IF v_first THEN v_first := FALSE;
-        ELSE DBMS_OUTPUT.PUT_LINE(','); END IF;
-        DBMS_OUTPUT.PUT_LINE('{"name":"' || REPLACE(c.wait_class, '"', '\"')
-            || '","vals":[' || v_class_vals || ']}');
-    END LOOP;
+        -- Simple selection sort: list is at most a few dozen classes.
+        FOR i IN 1 .. v_list.COUNT - 1 LOOP
+            FOR j IN i + 1 .. v_list.COUNT LOOP
+                IF v_list(j).v > v_list(i).v
+                   OR (v_list(j).v = v_list(i).v AND v_list(j).k < v_list(i).k) THEN
+                    v_tmp := v_list(i); v_list(i) := v_list(j); v_list(j) := v_tmp;
+                END IF;
+            END LOOP;
+        END LOOP;
+
+        v_first := TRUE;
+        FOR i IN 1 .. v_list.COUNT LOOP
+            v_wc := v_list(i).k;
+            v_class_vals := NULL;
+            FOR h IN 0 .. v_total_hours - 1 LOOP
+                v_ck := TO_CHAR(h) || '|' || v_wc;
+                IF v_cells.EXISTS(v_ck) THEN
+                    v_n := v_cells(v_ck);
+                ELSE
+                    v_n := 0;
+                END IF;
+                v_aas := v_n / 360;
+                IF v_class_vals IS NULL THEN
+                    v_class_vals := TO_CHAR(v_aas, 'FM99999990D0000',
+                                            'NLS_NUMERIC_CHARACTERS=''.,''');
+                ELSE
+                    v_class_vals := v_class_vals || ','
+                        || TO_CHAR(v_aas, 'FM99999990D0000',
+                                   'NLS_NUMERIC_CHARACTERS=''.,''');
+                END IF;
+            END LOOP;
+
+            IF v_first THEN v_first := FALSE;
+            ELSE DBMS_OUTPUT.PUT_LINE(','); END IF;
+            DBMS_OUTPUT.PUT_LINE('{"name":"' || REPLACE(v_wc, '"', '\"')
+                || '","vals":[' || v_class_vals || ']}');
+        END LOOP;
+    END;
 
     DBMS_OUTPUT.PUT_LINE(']};');
     DBMS_OUTPUT.PUT_LINE('if(!window.echarts) return;');
