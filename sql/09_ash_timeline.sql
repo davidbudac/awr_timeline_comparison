@@ -57,8 +57,7 @@ GROUP  BY hour_bucket, wait_class;
 COMMIT;
 
 --
--- Render: stacked area chart + compact wait-class summary table (fallback
--- for when the ECharts CDN is unreachable).
+-- Render: stacked area chart.
 --
 SET SERVEROUTPUT ON SIZE UNLIMITED
 
@@ -66,8 +65,6 @@ DECLARE
     v_range_start  DATE;
     v_range_end    DATE;
     v_total_hours  NUMBER;
-    v_weeks_back   NUMBER;
-    v_win_hours    NUMBER;
     -- PL/SQL VARCHAR2 goes up to 32767 bytes regardless of MAX_STRING_SIZE.
     -- Enough for about 2000 hours of CSV values; LISTAGG in SQL would cap at 4000.
     v_hours_json   VARCHAR2(32767);
@@ -76,15 +73,11 @@ DECLARE
     v_palette      VARCHAR2(400) :=
         '["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1",' ||
         '"#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"]';
-    v_row          VARCHAR2(4000);
-    v_grand_total  NUMBER;
     v_first        BOOLEAN;
 BEGIN
     SELECT CAST(target_end_ts AS DATE) - weeks_back*7 - win_hours/24,
-           CAST(target_end_ts AS DATE),
-           weeks_back,
-           win_hours
-    INTO   v_range_start, v_range_end, v_weeks_back, v_win_hours
+           CAST(target_end_ts AS DATE)
+    INTO   v_range_start, v_range_end
     FROM   awr_trend_runs
     WHERE  run_id = ~run_id;
 
@@ -221,57 +214,6 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('new ResizeObserver(function(){chart.resize();}).observe(el);');
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');
-
-    -- Compact wait-class summary (also a text fallback when charts are
-    -- hidden).  Every number here is persisted in awr_trend_ash_timeline.
-    SELECT NULLIF(SUM(active_sessions), 0)
-    INTO   v_grand_total
-    FROM   awr_trend_ash_timeline
-    WHERE  run_id = ~run_id;
-
-    DBMS_OUTPUT.PUT_LINE('<h3>Wait-class summary ('
-        || TO_CHAR(v_total_hours) || ' hours, '
-        || TO_CHAR((v_weeks_back + 1)) || ' compared windows)</h3>');
-
-    IF v_grand_total IS NULL THEN
-        DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-            || 'No ASH samples found in the requested range.</p>');
-    ELSE
-        DBMS_OUTPUT.PUT_LINE('<table><thead><tr>'
-            || '<th>Wait class</th>'
-            || '<th class="num">Hours with samples</th>'
-            || '<th class="num">Avg AAS</th>'
-            || '<th class="num">Peak AAS</th>'
-            || '<th class="num">Share</th>'
-            || '</tr></thead><tbody>');
-
-        FOR c IN (
-            SELECT wait_class,
-                   COUNT(DISTINCT hour_bucket)                       AS hours_covered,
-                   SUM(active_sessions) / v_total_hours              AS avg_aas,
-                   MAX(active_sessions)                              AS peak_aas,
-                   SUM(active_sessions) / v_grand_total * 100        AS share_pct,
-                   SUM(active_sessions)                              AS total_aas
-            FROM   awr_trend_ash_timeline
-            WHERE  run_id = ~run_id
-            GROUP  BY wait_class
-            ORDER  BY SUM(active_sessions) DESC, wait_class
-        ) LOOP
-            v_row := '<tr>'
-                || '<td>' || DBMS_XMLGEN.CONVERT(c.wait_class) || '</td>'
-                || '<td class="num">' || TO_CHAR(c.hours_covered) || '</td>'
-                || '<td class="num">'
-                    || TO_CHAR(c.avg_aas, 'FM99990D000') || '</td>'
-                || '<td class="num">'
-                    || TO_CHAR(c.peak_aas, 'FM99990D00') || '</td>'
-                || '<td class="num">'
-                    || TO_CHAR(c.share_pct, 'FM990D0') || '%</td>'
-                || '</tr>';
-            DBMS_OUTPUT.PUT_LINE(v_row);
-        END LOOP;
-
-        DBMS_OUTPUT.PUT_LINE('</tbody></table>');
-    END IF;
 
     DBMS_OUTPUT.PUT_LINE('</section>');
 END;
