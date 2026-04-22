@@ -2,50 +2,35 @@
 
 Pure-SQL Oracle 19c toolkit that compares AWR snapshots of **the same hour
 across weeks** (e.g. Mon 09:00–10:00 today vs the four prior Mondays
-09:00–10:00), flags drastic changes via z-score, renders a readable HTML
-report, and persists every fact into a scratch schema for ad-hoc analysis.
+09:00–10:00), flags drastic changes via z-score, and renders a readable
+single-file HTML report. **Read-only:** the script does not create,
+modify or delete any database objects — it only issues `SELECT` against
+`DBA_HIST_*`.
 
 Requirements: Oracle Database 19c with the **Diagnostic + Tuning Pack**
 licensed (needed for `DBA_HIST_*` and `DBA_HIST_SQLSTAT`).
 
 ## Install
 
-Run once per target database as the user that will own the scratch tables:
+Nothing to install in the database. Connect as a user (typically DBA)
+that can read the AWR views listed below, and run the driver directly.
 
-```bash
-sqlplus user/pw@svc @sql/setup_schema.sql
-```
-
-This creates (idempotently):
-
-| Object | Purpose |
-|---|---|
-| `AWR_TREND_RUN_SEQ` | Sequence for `run_id` |
-| `AWR_TREND_RUNS` | One row per report execution |
-| `AWR_TREND_WINDOWS` | Current + aligned prior windows with snap_id pairs |
-| `AWR_TREND_LOAD_PROFILE` | Per-window deltas from `DBA_HIST_SYSSTAT` |
-| `AWR_TREND_SYSMETRIC` | Per-window averages from `DBA_HIST_SYSMETRIC_SUMMARY` |
-| `AWR_TREND_WAITS` | Top FG + BG waits and wait-class rollup |
-| `AWR_TREND_TOP_SQL` | Top-N SQL per window by 4 dimensions |
-| `AWR_TREND_ASH_TIMELINE` | Hourly ASH sample counts by wait class across the full compare span |
-| `AWR_TREND_FINDINGS` | Ranked findings with z-score + severity |
-
-Required grants on the owning user (if not already granted by `DBA` role):
+Required grants (already covered by the `DBA` role, or for a dedicated
+analyst user):
 
 ```sql
-GRANT SELECT ON DBA_HIST_SNAPSHOT         TO <user>;
-GRANT SELECT ON DBA_HIST_SYSSTAT          TO <user>;
-GRANT SELECT ON DBA_HIST_SYSTEM_EVENT     TO <user>;
-GRANT SELECT ON DBA_HIST_BG_EVENT_SUMMARY TO <user>;
-GRANT SELECT ON DBA_HIST_SYSMETRIC_SUMMARY TO <user>;
-GRANT SELECT ON DBA_HIST_SQLSTAT          TO <user>;
-GRANT SELECT ON DBA_HIST_SQLTEXT          TO <user>;
-GRANT SELECT ON DBA_HIST_BASELINE         TO <user>;
+GRANT SELECT ON DBA_HIST_SNAPSHOT            TO <user>;
+GRANT SELECT ON DBA_HIST_SYSSTAT             TO <user>;
+GRANT SELECT ON DBA_HIST_SYSTEM_EVENT        TO <user>;
+GRANT SELECT ON DBA_HIST_BG_EVENT_SUMMARY    TO <user>;
+GRANT SELECT ON DBA_HIST_SYSMETRIC_SUMMARY   TO <user>;
+GRANT SELECT ON DBA_HIST_SQLSTAT             TO <user>;
+GRANT SELECT ON DBA_HIST_SQLTEXT             TO <user>;
 GRANT SELECT ON DBA_HIST_ACTIVE_SESS_HISTORY TO <user>;
-GRANT SELECT ON V_$DATABASE               TO <user>;
-GRANT SELECT ON V_$INSTANCE               TO <user>;
--- Only if you use side/create_weekly_baselines.sql:
-GRANT EXECUTE ON DBMS_WORKLOAD_REPOSITORY TO <user>;
+GRANT SELECT ON V_$DATABASE                  TO <user>;
+GRANT SELECT ON V_$INSTANCE                  TO <user>;
+-- Only if you use side/create_weekly_baselines.sql (optional, writes baselines):
+GRANT EXECUTE ON DBMS_WORKLOAD_REPOSITORY    TO <user>;
 ```
 
 ## Run
@@ -77,7 +62,9 @@ SQL> @awr_trend.sql
 ```
 
 Output: `reports/awr_trend_<DBID>_<YYYYMMDDHH24MI>_run<run_id>.html`. Open
-it in a browser. The report is self-contained (no external CSS/JS).
+it in a browser. The report is self-contained (one HTML file with inline
+CSS and inline SVG sparklines; the larger charts load ECharts from
+`cdn.jsdelivr.net` and degrade gracefully when the CDN is blocked).
 
 ## Read the report
 
@@ -90,9 +77,9 @@ so you always know exactly what baseline is driving the z-scores.
 2. **ASH timeline** — hourly stacked-area chart of Active Sessions by wait
    class from `DBA_HIST_ACTIVE_SESS_HISTORY`, covering the full compare
    span; compared windows are highlighted as background bands.
-3. **Findings** — top of the page. Each metric with `|z|>3` is CRITICAL,
-   `|z|>2` is WARN. Metrics with fewer than 3 valid prior windows fall back
-   to a `%`-delta only.
+3. **Findings** — each metric with `|z|>3` is CRITICAL, `|z|>2` is WARN.
+   Metrics with fewer than 3 valid prior windows fall back to a
+   `%`-delta only.
 4. **Windows** — the aligned windows used, with begin/end snap_ids. Weeks
    where the instance restarted mid-window are SKIPPED and excluded from
    the baseline.
@@ -106,62 +93,18 @@ so you always know exactly what baseline is driving the z-scores.
 
 ## Does it write to the database?
 
-Yes — by design. Each run inserts rows into the `AWR_TREND_*` scratch
-tables listed above (keyed by `run_id`), and every number in the HTML
-report is read back out of those tables on its way to the page. That
-is a hard architectural invariant: no section renders from transient
-CTEs only, so removing the writes would require a significant rewrite
-of sections 02–08. The `DBA_HIST_*` source views are read-only either
-way — the writes are confined to the connected user's own schema.
-
-If you want a "leave no trace" run:
-
-```sql
--- run the report, then drop that run's rows (ON DELETE CASCADE wipes
--- all 8 child tables for this run_id):
-DELETE FROM awr_trend_runs
- WHERE run_id = (SELECT MAX(run_id) FROM awr_trend_runs);
-COMMIT;
-```
-
-The scratch tables themselves stay in place. A TRUNCATE of each table,
-or dropping the schema entirely, is also safe — `setup_schema.sql` is
-idempotent and will recreate them.
-
-## Query the persisted data
-
-Every number in the HTML is also in the scratch tables, keyed by `run_id`:
-
-```sql
--- Latest run's findings, sorted most-critical-first
-SELECT severity, metric_domain, metric_name,
-       current_value, prior_mean, z_score, pct_delta
-FROM   awr_trend_findings
-WHERE  run_id = (SELECT MAX(run_id) FROM awr_trend_runs)
-ORDER BY CASE severity WHEN 'CRITICAL' THEN 1 WHEN 'WARN' THEN 2
-                       WHEN 'INSUFFICIENT_HISTORY' THEN 3
-                       WHEN 'FLAT_BASELINE' THEN 4 ELSE 5 END,
-         ABS(NVL(z_score,0)) DESC;
-
--- Trend a single metric across all runs for one DB
-SELECT r.target_end_ts, lp.per_sec AS redo_bytes_per_sec
-FROM   awr_trend_runs r
-JOIN   awr_trend_load_profile lp
-       ON lp.run_id = r.run_id AND lp.week_offset = 0
-WHERE  lp.stat_name = 'redo size'
-ORDER BY r.target_end_ts;
-
--- SQL that showed up in top-N more than once
-SELECT sql_id, COUNT(DISTINCT run_id) AS appearances
-FROM   awr_trend_top_sql
-GROUP BY sql_id HAVING COUNT(DISTINCT run_id) > 1
-ORDER BY appearances DESC;
-```
+No. Every fact in the report is computed in-flight from the `DBA_HIST_*`
+views; the driver and every numbered section only issue `SELECT`. The
+report is the only output — re-run `awr_trend.sql` whenever you want a
+fresh view. You can run it safely against production or read-only
+standbys (assuming the standby exposes AWR).
 
 ## Side script: weekly AWR baselines (optional)
 
-Creates one `DBA_HIST_BASELINE` entry per ISO week so you can later compare
-weeks with `awrddrpt.sql` / OEM directly. Independent from the main report.
+This is the **only** script that writes to the database, and it is
+entirely separate from the main report. It creates one
+`DBA_HIST_BASELINE` entry per ISO week so you can later compare weeks
+with `awrddrpt.sql` / OEM directly.
 
 ```bash
 sqlplus user/pw@svc @side/create_weekly_baselines.sql
@@ -179,27 +122,13 @@ SQL> DEFINE expire_days = 365
 SQL> @side/create_weekly_baselines.sql
 ```
 
-Schedule weekly:
-
-```sql
-BEGIN
-    DBMS_SCHEDULER.CREATE_JOB(
-        job_name        => 'AWR_WEEKLY_BASELINES',
-        job_type        => 'PLSQL_BLOCK',
-        job_action      => 'BEGIN NULL; END;',  -- replace with a CREATE_BASELINE call
-        repeat_interval => 'FREQ=WEEKLY;BYDAY=MON;BYHOUR=6;BYMINUTE=0',
-        enabled         => TRUE);
-END;
-/
-```
-
 ## File layout
 
 ```
 .
-├── awr_trend.sql                    -- driver
+├── awr_trend.sql                    -- driver (pure SELECT, one spooled HTML)
 ├── sql/
-│   ├── setup_schema.sql             -- one-time DDL
+│   ├── defaults.sql                 -- canonical default DEFINEs
 │   ├── _style.sql                   -- shared CSS (emitted once)
 │   ├── 00_params.sql                -- params + header card
 │   ├── 01_windows.sql               -- snapshot window matching
@@ -212,7 +141,7 @@ END;
 │   ├── 08_overview.sql              -- hero strip (headline metrics)
 │   └── 09_ash_timeline.sql          -- hourly ASH stacked-area timeline
 ├── side/
-│   └── create_weekly_baselines.sql  -- optional, AWR baselines
+│   └── create_weekly_baselines.sql  -- optional, AWR baselines (writes)
 └── reports/                         -- generated HTML files
 ```
 
@@ -226,3 +155,8 @@ END;
   filters by `instance_number`; aggregate mode sums across instances).
 - Pluggable databases: run as a user in the container you want to analyse.
   The `dbid` is resolved from `v$database` at run time.
+- Because every number is recomputed on each run, comparing the HTML of
+  two runs is the only way to look at historical output — there is no
+  scratch schema to query. If you need persisted facts, pipe the
+  generated HTML through a parser or spool the relevant
+  `DBA_HIST_*` queries yourself.

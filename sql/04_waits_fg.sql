@@ -4,204 +4,187 @@
 -- The view stores CUMULATIVE counters per snapshot, so delta per window =
 -- value_at_end_snap - value_at_begin_snap.  We filter out 'Idle' waits and
 -- keep the top-N per window, plus one row per wait_class for the rollup.
+-- Read-only: no scratch table.
 --
 
 SET DEFINE '~'
-
---
--- Per-event FG deltas (TOP-N per window).
---
-INSERT INTO awr_trend_waits (run_id, week_offset, scope, event_name, wait_class,
-                             total_waits, time_waited_us, avg_wait_ms, rank_in_window)
-WITH run AS (
-    SELECT run_id, dbid, instance_number, top_n
-    FROM   awr_trend_runs WHERE run_id = ~run_id
-),
-wins AS (
-    SELECT run_id, week_offset, begin_snap_id, end_snap_id
-    FROM   awr_trend_windows
-    WHERE  run_id = ~run_id AND valid_flag = 'Y'
-),
-pairs AS (
-    SELECT
-        w.run_id, w.week_offset,
-        se.event_name, se.wait_class,
-        se.snap_id, se.instance_number,
-        se.total_waits,
-        se.time_waited_micro,
-        w.begin_snap_id, w.end_snap_id
-    FROM   wins w
-    JOIN   run  r ON 1=1
-    JOIN   dba_hist_system_event se
-        ON se.dbid = r.dbid
-       AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
-       AND (r.instance_number IS NULL OR se.instance_number = r.instance_number)
-       AND se.wait_class <> 'Idle'
-),
-bounds AS (
-    SELECT run_id, week_offset, instance_number, event_name, wait_class,
-           SUM(CASE WHEN snap_id = begin_snap_id THEN total_waits END)       AS beg_waits,
-           SUM(CASE WHEN snap_id = end_snap_id   THEN total_waits END)       AS end_waits,
-           SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro END) AS beg_us,
-           SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us
-    FROM   pairs
-    GROUP BY run_id, week_offset, instance_number, event_name, wait_class
-),
-deltas AS (
-    -- Aggregate across instances for scope=ALL, or flat-through for scope=INSTANCE.
-    SELECT run_id, week_offset, event_name, wait_class,
-           SUM(NVL(end_waits, 0) - NVL(beg_waits, 0)) AS total_waits,
-           SUM(NVL(end_us,    0) - NVL(beg_us,    0)) AS time_waited_us
-    FROM   bounds
-    GROUP BY run_id, week_offset, event_name, wait_class
-),
-ranked AS (
-    SELECT d.*,
-           RANK() OVER (PARTITION BY run_id, week_offset ORDER BY time_waited_us DESC) AS rnk
-    FROM   deltas d
-    WHERE  time_waited_us > 0
-)
-SELECT run_id, week_offset, 'FG', event_name, wait_class,
-       total_waits, time_waited_us,
-       CASE WHEN total_waits > 0 THEN time_waited_us / total_waits / 1000 END AS avg_wait_ms,
-       rnk
-FROM   ranked
-WHERE  rnk <= (SELECT top_n FROM run);
-
---
--- Wait-class rollup (scope='CLASS'), ALL non-Idle classes.
---
-INSERT INTO awr_trend_waits (run_id, week_offset, scope, event_name, wait_class,
-                             total_waits, time_waited_us, avg_wait_ms, rank_in_window)
-WITH run AS (
-    SELECT run_id, dbid, instance_number FROM awr_trend_runs WHERE run_id = ~run_id
-),
-wins AS (
-    SELECT run_id, week_offset, begin_snap_id, end_snap_id
-    FROM   awr_trend_windows WHERE run_id = ~run_id AND valid_flag = 'Y'
-),
-pairs AS (
-    SELECT
-        w.run_id, w.week_offset,
-        se.wait_class, se.snap_id, se.instance_number,
-        se.total_waits, se.time_waited_micro,
-        w.begin_snap_id, w.end_snap_id
-    FROM   wins w
-    JOIN   run  r ON 1=1
-    JOIN   dba_hist_system_event se
-        ON se.dbid = r.dbid
-       AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
-       AND (r.instance_number IS NULL OR se.instance_number = r.instance_number)
-       AND se.wait_class <> 'Idle'
-),
-bounds AS (
-    SELECT run_id, week_offset, instance_number, wait_class,
-           SUM(CASE WHEN snap_id = begin_snap_id THEN total_waits END)       AS beg_waits,
-           SUM(CASE WHEN snap_id = end_snap_id   THEN total_waits END)       AS end_waits,
-           SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro END) AS beg_us,
-           SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us
-    FROM   pairs
-    GROUP BY run_id, week_offset, instance_number, wait_class
-),
-class_deltas AS (
-    SELECT run_id, week_offset, wait_class,
-           SUM(NVL(end_waits, 0) - NVL(beg_waits, 0)) AS total_waits,
-           SUM(NVL(end_us,    0) - NVL(beg_us,    0)) AS time_waited_us
-    FROM   bounds
-    GROUP BY run_id, week_offset, wait_class
-),
-ranked AS (
-    SELECT c.*,
-           RANK() OVER (PARTITION BY run_id, week_offset ORDER BY time_waited_us DESC) AS rnk
-    FROM   class_deltas c
-    WHERE  time_waited_us > 0
-)
-SELECT run_id, week_offset, 'CLASS',
-       wait_class AS event_name,
-       wait_class,
-       total_waits, time_waited_us,
-       CASE WHEN total_waits > 0 THEN time_waited_us / total_waits / 1000 END,
-       rnk
-FROM   ranked;
-
-COMMIT;
-
---
--- Render the FG waits table: columns = current + each prior week.  Rows =
--- distinct event names that appeared in at least one window's top-N.
--- Additionally a wait-class rollup table below.
---
 SET SERVEROUTPUT ON SIZE UNLIMITED
 
 DECLARE
-    v_weeks_back NUMBER;
-    v_top_n      NUMBER;
+    v_weeks_back NUMBER := ~weeks_back;
+    v_top_n      NUMBER := ~top_n;
     v_header     VARCHAR2(4000);
     v_row        VARCHAR2(32767);
     v_us         NUMBER;
+    v_us_s       VARCHAR2(64);
     v_rank       NUMBER;
+    v_rank_s     VARCHAR2(64);
     v_weeks_json VARCHAR2(4000);
     v_class_json CLOB;
     v_palette    VARCHAR2(400) :=
         '["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1",' ||
         '"#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"]';
-BEGIN
-    SELECT weeks_back, top_n INTO v_weeks_back, v_top_n
-    FROM   awr_trend_runs WHERE run_id = ~run_id;
 
+    FUNCTION nth_csv(p_str VARCHAR2, p_n POSITIVE) RETURN VARCHAR2 IS
+        v_start PLS_INTEGER := 1;
+        v_end   PLS_INTEGER;
+        v_cnt   PLS_INTEGER := 0;
+    BEGIN
+        IF p_str IS NULL OR p_n IS NULL OR p_n < 1 THEN
+            RETURN NULL;
+        END IF;
+        LOOP
+            v_end := INSTR(p_str, ',', v_start);
+            v_cnt := v_cnt + 1;
+            IF v_cnt = p_n THEN
+                IF v_end = 0 THEN
+                    RETURN SUBSTR(p_str, v_start);
+                ELSE
+                    RETURN SUBSTR(p_str, v_start, v_end - v_start);
+                END IF;
+            END IF;
+            EXIT WHEN v_end = 0;
+            v_start := v_end + 1;
+        END LOOP;
+        RETURN NULL;
+    END nth_csv;
+BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="waits-fg"><h2>Foreground wait events (top '
         || v_top_n || ' by time waited)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'Chart: wait-class time breakdown per week (stacked). Table below: '
         || 'top-' || v_top_n || ' individual events, with a sparkline over the series.</p>');
 
-    -- Wait-class stacked bar chart container -------------------------------
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-small" id="waits-fg-stack"></div>');
 
-    -- Build weeks[] (oldest -> newest, "Mon DD")
     SELECT '['
-        || LISTAGG('"' || TO_CHAR(win_end_ts, 'Mon DD') || '"', ',')
+        || LISTAGG('"' || TO_CHAR(
+               CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
+               - 7*week_offset, 'Mon DD') || '"', ',')
                WITHIN GROUP (ORDER BY week_offset DESC)
         || ']'
     INTO   v_weeks_json
-    FROM   awr_trend_windows
-    WHERE  run_id = ~run_id;
+    FROM   (SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1);
 
-    -- Build one JSON object per wait-class: { name, vals:[oldest..newest] }.
-    -- For windows where time_waited is NULL (invalid or missing) we emit null.
-    -- Ordered by current-week time_waited DESC so the biggest class is on top.
     v_class_json := NULL;
     FOR c IN (
-        SELECT w.wait_class,
-               MAX(CASE WHEN w.week_offset = 0 THEN w.time_waited_us END) AS cur_us,
+        WITH run_params AS (
+            SELECT ~dbid AS dbid,
+                   CASE WHEN ~inst_num = 0 THEN NULL ELSE ~inst_num END AS instance_number,
+                   TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS target_end_ts,
+                   ~win_hours  AS win_hours,
+                   ~weeks_back AS weeks_back
+            FROM dual
+        ),
+        offsets AS (
+            SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
+        ),
+        raw_windows AS (
+            SELECT r.dbid, r.instance_number, o.week_offset,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+            FROM run_params r CROSS JOIN offsets o
+        ),
+        snaps AS (
+            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.instance_number, w.dbid,
+                   s.snap_id, s.end_interval_time, s.startup_time
+            FROM   raw_windows w
+            JOIN   dba_hist_snapshot s
+              ON   s.dbid = w.dbid
+             AND   (w.instance_number IS NULL OR s.instance_number = w.instance_number)
+             AND   s.end_interval_time BETWEEN
+                        CAST(w.win_start_dt - 1 AS TIMESTAMP)
+                    AND CAST(w.win_end_dt   + 1 AS TIMESTAMP)
+        ),
+        begin_snap AS (
+            SELECT week_offset,
+                   MAX(snap_id) KEEP (DENSE_RANK LAST ORDER BY end_interval_time)  AS snap_id,
+                   MAX(startup_time) KEEP (DENSE_RANK LAST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time <= CAST(win_start_dt + 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        ),
+        end_snap AS (
+            SELECT week_offset,
+                   MIN(snap_id) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS snap_id,
+                   MIN(startup_time) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time >= CAST(win_end_dt - 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        ),
+        windows AS (
+            SELECT w.week_offset, w.dbid, w.instance_number,
+                   bs.snap_id AS begin_snap_id, es.snap_id AS end_snap_id,
+                   CASE
+                       WHEN bs.snap_id IS NULL OR es.snap_id IS NULL THEN 'N'
+                       WHEN bs.snap_id = es.snap_id                  THEN 'N'
+                       WHEN bs.startup_time <> es.startup_time       THEN 'N'
+                       ELSE 'Y'
+                   END AS valid_flag
+            FROM   raw_windows w
+            LEFT JOIN begin_snap bs ON bs.week_offset = w.week_offset
+            LEFT JOIN end_snap   es ON es.week_offset = w.week_offset
+        ),
+        valid_windows AS (
+            SELECT week_offset, dbid, instance_number, begin_snap_id, end_snap_id
+            FROM   windows WHERE valid_flag = 'Y'
+        ),
+        pairs AS (
+            SELECT w.week_offset, se.wait_class, se.snap_id, se.instance_number,
+                   se.total_waits, se.time_waited_micro,
+                   w.begin_snap_id, w.end_snap_id
+            FROM   valid_windows w
+            JOIN   dba_hist_system_event se
+                ON se.dbid = w.dbid
+               AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
+               AND (w.instance_number IS NULL OR se.instance_number = w.instance_number)
+               AND se.wait_class <> 'Idle'
+        ),
+        bounds AS (
+            SELECT week_offset, instance_number, wait_class,
+                   SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro END) AS beg_us,
+                   SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us
+            FROM   pairs
+            GROUP BY week_offset, instance_number, wait_class
+        ),
+        class_deltas AS (
+            SELECT week_offset, wait_class,
+                   SUM(NVL(end_us, 0) - NVL(beg_us, 0)) AS time_waited_us
+            FROM   bounds
+            GROUP BY week_offset, wait_class
+        ),
+        all_weeks AS (
+            SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
+        ),
+        classes AS (
+            SELECT DISTINCT wait_class FROM class_deltas WHERE time_waited_us > 0
+        ),
+        grid AS (
+            SELECT c.wait_class, w.week_offset, cd.time_waited_us
+            FROM   classes c
+            CROSS JOIN all_weeks w
+            LEFT JOIN class_deltas cd
+                   ON cd.wait_class = c.wait_class AND cd.week_offset = w.week_offset
+        )
+        SELECT wait_class,
+               MAX(CASE WHEN week_offset = 0 THEN time_waited_us END) AS cur_us,
                LISTAGG(
-                   CASE WHEN w.time_waited_us IS NULL THEN 'null'
-                        ELSE TO_CHAR(w.time_waited_us/1e6, 'FM99999999990D000000',
+                   CASE WHEN time_waited_us IS NULL THEN 'null'
+                        ELSE TO_CHAR(time_waited_us/1e6, 'FM99999999990D000000',
                                      'NLS_NUMERIC_CHARACTERS=''.,''')
                    END, ','
-               ) WITHIN GROUP (ORDER BY w.week_offset DESC) AS vals_csv
-        FROM (
-            -- Join waits to all windows so missing weeks show up as nulls.
-            SELECT win.run_id, win.week_offset, aw.wait_class, aw.time_waited_us
-            FROM   awr_trend_windows win
-            LEFT JOIN awr_trend_waits aw
-                   ON aw.run_id = win.run_id
-                  AND aw.week_offset = win.week_offset
-                  AND aw.scope = 'CLASS'
-            WHERE  win.run_id = ~run_id
-        ) w
-        WHERE  w.wait_class IS NOT NULL
-        GROUP BY w.wait_class
-        HAVING SUM(NVL(w.time_waited_us, 0)) > 0
-        ORDER BY MAX(CASE WHEN w.week_offset = 0 THEN w.time_waited_us END) DESC NULLS LAST,
-                 w.wait_class
+               ) WITHIN GROUP (ORDER BY week_offset DESC) AS vals_csv
+        FROM   grid
+        GROUP BY wait_class
+        HAVING SUM(NVL(time_waited_us, 0)) > 0
+        ORDER BY MAX(CASE WHEN week_offset = 0 THEN time_waited_us END) DESC NULLS LAST,
+                 wait_class
     ) LOOP
         v_class_json := CASE WHEN v_class_json IS NULL THEN '' ELSE v_class_json || ',' END
             || '{"name":"' || REPLACE(c.wait_class, '"', '\"')
             || '","vals":[' || c.vals_csv || ']}';
     END LOOP;
 
-    -- Emit the data + chart initializer ------------------------------------
     DBMS_OUTPUT.PUT_LINE('<script>');
     DBMS_OUTPUT.PUT_LINE('(function(){');
     DBMS_OUTPUT.PUT_LINE('AWR_DATA.waitsFg = {weeks:' || v_weeks_json
@@ -226,7 +209,6 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');
 
-    -- Per-event pivot table ------------------------------------------------
     DBMS_OUTPUT.PUT_LINE('<h3>Top ' || v_top_n || ' events by time waited</h3>');
     v_header := '<thead><tr><th>Event</th><th>Class</th><th class="trend">Trend</th><th class="num">Current (s)</th>';
     FOR k IN 1 .. v_weeks_back LOOP
@@ -236,34 +218,139 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
 
     FOR e IN (
-        WITH all_weeks AS (
-            SELECT week_offset FROM awr_trend_windows WHERE run_id = ~run_id
+        WITH run_params AS (
+            SELECT ~dbid AS dbid,
+                   CASE WHEN ~inst_num = 0 THEN NULL ELSE ~inst_num END AS instance_number,
+                   TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS target_end_ts,
+                   ~win_hours  AS win_hours,
+                   ~weeks_back AS weeks_back,
+                   ~top_n      AS top_n
+            FROM dual
+        ),
+        offsets AS (
+            SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
+        ),
+        raw_windows AS (
+            SELECT r.dbid, r.instance_number, o.week_offset,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+            FROM run_params r CROSS JOIN offsets o
+        ),
+        snaps AS (
+            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.instance_number, w.dbid,
+                   s.snap_id, s.end_interval_time, s.startup_time
+            FROM   raw_windows w
+            JOIN   dba_hist_snapshot s
+              ON   s.dbid = w.dbid
+             AND   (w.instance_number IS NULL OR s.instance_number = w.instance_number)
+             AND   s.end_interval_time BETWEEN
+                        CAST(w.win_start_dt - 1 AS TIMESTAMP)
+                    AND CAST(w.win_end_dt   + 1 AS TIMESTAMP)
+        ),
+        begin_snap AS (
+            SELECT week_offset,
+                   MAX(snap_id) KEEP (DENSE_RANK LAST ORDER BY end_interval_time)  AS snap_id,
+                   MAX(startup_time) KEEP (DENSE_RANK LAST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time <= CAST(win_start_dt + 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        ),
+        end_snap AS (
+            SELECT week_offset,
+                   MIN(snap_id) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS snap_id,
+                   MIN(startup_time) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time >= CAST(win_end_dt - 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        ),
+        windows AS (
+            SELECT w.week_offset, w.dbid, w.instance_number,
+                   bs.snap_id AS begin_snap_id, es.snap_id AS end_snap_id,
+                   CASE
+                       WHEN bs.snap_id IS NULL OR es.snap_id IS NULL THEN 'N'
+                       WHEN bs.snap_id = es.snap_id                  THEN 'N'
+                       WHEN bs.startup_time <> es.startup_time       THEN 'N'
+                       ELSE 'Y'
+                   END AS valid_flag
+            FROM   raw_windows w
+            LEFT JOIN begin_snap bs ON bs.week_offset = w.week_offset
+            LEFT JOIN end_snap   es ON es.week_offset = w.week_offset
+        ),
+        valid_windows AS (
+            SELECT week_offset, dbid, instance_number, begin_snap_id, end_snap_id
+            FROM   windows WHERE valid_flag = 'Y'
+        ),
+        pairs AS (
+            SELECT w.week_offset, se.event_name, se.wait_class,
+                   se.snap_id, se.instance_number,
+                   se.total_waits, se.time_waited_micro,
+                   w.begin_snap_id, w.end_snap_id
+            FROM   valid_windows w
+            JOIN   dba_hist_system_event se
+                ON se.dbid = w.dbid
+               AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
+               AND (w.instance_number IS NULL OR se.instance_number = w.instance_number)
+               AND se.wait_class <> 'Idle'
+        ),
+        bounds AS (
+            SELECT week_offset, instance_number, event_name, wait_class,
+                   SUM(CASE WHEN snap_id = begin_snap_id THEN total_waits END)       AS beg_waits,
+                   SUM(CASE WHEN snap_id = end_snap_id   THEN total_waits END)       AS end_waits,
+                   SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro END) AS beg_us,
+                   SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us
+            FROM   pairs
+            GROUP BY week_offset, instance_number, event_name, wait_class
+        ),
+        deltas AS (
+            SELECT week_offset, event_name, wait_class,
+                   SUM(NVL(end_waits, 0) - NVL(beg_waits, 0)) AS total_waits,
+                   SUM(NVL(end_us,    0) - NVL(beg_us,    0)) AS time_waited_us
+            FROM   bounds
+            GROUP BY week_offset, event_name, wait_class
+        ),
+        ranked AS (
+            SELECT d.*,
+                   RANK() OVER (PARTITION BY week_offset ORDER BY time_waited_us DESC) AS rnk
+            FROM   deltas d
+            WHERE  time_waited_us > 0
+        ),
+        top_n_events AS (
+            SELECT week_offset, event_name, wait_class, total_waits, time_waited_us, rnk
+            FROM   ranked
+            WHERE  rnk <= (SELECT top_n FROM run_params)
+        ),
+        all_weeks AS (
+            SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
         ),
         events AS (
-            SELECT DISTINCT event_name, wait_class
-            FROM   awr_trend_waits
-            WHERE  run_id = ~run_id AND scope = 'FG'
+            SELECT DISTINCT event_name, wait_class FROM top_n_events
         ),
         grid AS (
-            SELECT e.event_name, e.wait_class, w.week_offset, aw.time_waited_us, aw.rank_in_window
+            SELECT e.event_name, e.wait_class, w.week_offset,
+                   t.time_waited_us, t.rnk
             FROM   events e
             CROSS JOIN all_weeks w
-            LEFT JOIN awr_trend_waits aw
-                   ON aw.run_id = ~run_id AND aw.scope = 'FG'
-                  AND aw.event_name = e.event_name AND aw.week_offset = w.week_offset
+            LEFT JOIN top_n_events t
+                   ON t.event_name = e.event_name AND t.week_offset = w.week_offset
         )
         SELECT event_name, MAX(wait_class) AS wait_class,
                MAX(CASE WHEN week_offset = 0 THEN time_waited_us END) AS cur_us,
-               MAX(CASE WHEN week_offset = 0 THEN rank_in_window END) AS cur_rnk,
+               MAX(CASE WHEN week_offset = 0 THEN rnk END)            AS cur_rnk,
                LISTAGG(CASE WHEN time_waited_us IS NULL THEN ''
                             ELSE TO_CHAR(time_waited_us/1e6, 'FM99999999990D000000',
                                          'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
-                   WITHIN GROUP (ORDER BY week_offset DESC) AS spark_vals
+                   WITHIN GROUP (ORDER BY week_offset DESC) AS spark_vals,
+               LISTAGG(CASE WHEN time_waited_us IS NULL THEN ''
+                            ELSE TO_CHAR(time_waited_us/1e6, 'FM99999999990D000000',
+                                         'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
+                   WITHIN GROUP (ORDER BY week_offset ASC) AS week_us_vals,
+               LISTAGG(CASE WHEN rnk IS NULL THEN '' ELSE TO_CHAR(rnk) END, ',')
+                   WITHIN GROUP (ORDER BY week_offset ASC) AS week_rnk_vals
         FROM   grid
         GROUP BY event_name
         ORDER BY
-            CASE WHEN MAX(CASE WHEN week_offset = 0 THEN rank_in_window END) IS NULL THEN 1 ELSE 0 END,
-            MAX(CASE WHEN week_offset = 0 THEN rank_in_window END) NULLS LAST,
+            CASE WHEN MAX(CASE WHEN week_offset = 0 THEN rnk END) IS NULL THEN 1 ELSE 0 END,
+            MAX(CASE WHEN week_offset = 0 THEN rnk END) NULLS LAST,
             MAX(time_waited_us) DESC
     ) LOOP
         v_row := '<tr>'
@@ -279,25 +366,26 @@ BEGIN
             || '</b></td>';
 
         FOR k IN 1 .. v_weeks_back LOOP
-            SELECT MAX(time_waited_us), MAX(rank_in_window)
-            INTO   v_us, v_rank
-            FROM   awr_trend_waits
-            WHERE  run_id = ~run_id AND scope = 'FG'
-            AND    event_name = e.event_name AND week_offset = k;
-
-            v_row := v_row || '<td class="num">' ||
-                CASE WHEN v_us IS NULL THEN '&mdash;'
-                     ELSE TO_CHAR(v_us/1e6, 'FM999G999G990D00') END
-                || CASE WHEN v_rank IS NOT NULL
-                    THEN ' <span class="badge skip">#' || v_rank || '</span>' ELSE '' END
-                || '</td>';
+            v_us_s   := nth_csv(e.week_us_vals,  k + 1);
+            v_rank_s := nth_csv(e.week_rnk_vals, k + 1);
+            IF v_us_s IS NULL OR v_us_s = '' THEN
+                v_row := v_row || '<td class="num">&mdash;';
+            ELSE
+                v_us := TO_NUMBER(v_us_s, 'FM99999999990D000000',
+                                  'NLS_NUMERIC_CHARACTERS=''.,''');
+                v_row := v_row || '<td class="num">'
+                      || TO_CHAR(v_us, 'FM999G999G990D00');
+            END IF;
+            IF v_rank_s IS NOT NULL AND v_rank_s <> '' THEN
+                v_row := v_row || ' <span class="badge skip">#' || v_rank_s || '</span>';
+            END IF;
+            v_row := v_row || '</td>';
         END LOOP;
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
     END LOOP;
     DBMS_OUTPUT.PUT_LINE('</tbody></table>');
 
-    -- Wait-class rollup ----------------------------------------------------
     DBMS_OUTPUT.PUT_LINE('<h3>Wait-class rollup</h3>');
     v_header := '<thead><tr><th>Wait class</th><th class="num">Current (s)</th>';
     FOR k IN 1 .. v_weeks_back LOOP
@@ -307,10 +395,113 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
 
     FOR c IN (
+        WITH run_params AS (
+            SELECT ~dbid AS dbid,
+                   CASE WHEN ~inst_num = 0 THEN NULL ELSE ~inst_num END AS instance_number,
+                   TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS target_end_ts,
+                   ~win_hours  AS win_hours,
+                   ~weeks_back AS weeks_back
+            FROM dual
+        ),
+        offsets AS (
+            SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
+        ),
+        raw_windows AS (
+            SELECT r.dbid, r.instance_number, o.week_offset,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+            FROM run_params r CROSS JOIN offsets o
+        ),
+        snaps AS (
+            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.instance_number, w.dbid,
+                   s.snap_id, s.end_interval_time, s.startup_time
+            FROM   raw_windows w
+            JOIN   dba_hist_snapshot s
+              ON   s.dbid = w.dbid
+             AND   (w.instance_number IS NULL OR s.instance_number = w.instance_number)
+             AND   s.end_interval_time BETWEEN
+                        CAST(w.win_start_dt - 1 AS TIMESTAMP)
+                    AND CAST(w.win_end_dt   + 1 AS TIMESTAMP)
+        ),
+        begin_snap AS (
+            SELECT week_offset,
+                   MAX(snap_id) KEEP (DENSE_RANK LAST ORDER BY end_interval_time)  AS snap_id,
+                   MAX(startup_time) KEEP (DENSE_RANK LAST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time <= CAST(win_start_dt + 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        ),
+        end_snap AS (
+            SELECT week_offset,
+                   MIN(snap_id) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS snap_id,
+                   MIN(startup_time) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time >= CAST(win_end_dt - 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        ),
+        windows AS (
+            SELECT w.week_offset, w.dbid, w.instance_number,
+                   bs.snap_id AS begin_snap_id, es.snap_id AS end_snap_id,
+                   CASE
+                       WHEN bs.snap_id IS NULL OR es.snap_id IS NULL THEN 'N'
+                       WHEN bs.snap_id = es.snap_id                  THEN 'N'
+                       WHEN bs.startup_time <> es.startup_time       THEN 'N'
+                       ELSE 'Y'
+                   END AS valid_flag
+            FROM   raw_windows w
+            LEFT JOIN begin_snap bs ON bs.week_offset = w.week_offset
+            LEFT JOIN end_snap   es ON es.week_offset = w.week_offset
+        ),
+        valid_windows AS (
+            SELECT week_offset, dbid, instance_number, begin_snap_id, end_snap_id
+            FROM   windows WHERE valid_flag = 'Y'
+        ),
+        pairs AS (
+            SELECT w.week_offset, se.wait_class,
+                   se.snap_id, se.instance_number,
+                   se.time_waited_micro,
+                   w.begin_snap_id, w.end_snap_id
+            FROM   valid_windows w
+            JOIN   dba_hist_system_event se
+                ON se.dbid = w.dbid
+               AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
+               AND (w.instance_number IS NULL OR se.instance_number = w.instance_number)
+               AND se.wait_class <> 'Idle'
+        ),
+        bounds AS (
+            SELECT week_offset, instance_number, wait_class,
+                   SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro END) AS beg_us,
+                   SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us
+            FROM   pairs
+            GROUP BY week_offset, instance_number, wait_class
+        ),
+        class_deltas AS (
+            SELECT week_offset, wait_class,
+                   SUM(NVL(end_us, 0) - NVL(beg_us, 0)) AS time_waited_us
+            FROM   bounds
+            GROUP BY week_offset, wait_class
+            HAVING SUM(NVL(end_us, 0) - NVL(beg_us, 0)) > 0
+        ),
+        all_weeks AS (
+            SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
+        ),
+        classes AS (
+            SELECT DISTINCT wait_class FROM class_deltas
+        ),
+        grid AS (
+            SELECT c.wait_class, w.week_offset, cd.time_waited_us
+            FROM   classes c
+            CROSS JOIN all_weeks w
+            LEFT JOIN class_deltas cd
+                   ON cd.wait_class = c.wait_class AND cd.week_offset = w.week_offset
+        )
         SELECT wait_class,
-               MAX(CASE WHEN week_offset = 0 THEN time_waited_us END) AS cur_us
-        FROM   awr_trend_waits
-        WHERE  run_id = ~run_id AND scope = 'CLASS'
+               MAX(CASE WHEN week_offset = 0 THEN time_waited_us END) AS cur_us,
+               LISTAGG(CASE WHEN time_waited_us IS NULL THEN ''
+                            ELSE TO_CHAR(time_waited_us/1e6, 'FM99999999990D000000',
+                                         'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
+                   WITHIN GROUP (ORDER BY week_offset ASC) AS week_vals
+        FROM   grid
         GROUP BY wait_class
         ORDER BY MAX(CASE WHEN week_offset = 0 THEN time_waited_us END) DESC NULLS LAST
     ) LOOP
@@ -321,14 +512,15 @@ BEGIN
                      ELSE TO_CHAR(c.cur_us/1e6, 'FM999G999G990D00') END
             || '</b></td>';
         FOR k IN 1 .. v_weeks_back LOOP
-            SELECT MAX(time_waited_us)
-            INTO   v_us
-            FROM   awr_trend_waits
-            WHERE  run_id = ~run_id AND scope = 'CLASS'
-            AND    wait_class = c.wait_class AND week_offset = k;
-            v_row := v_row || '<td class="num">' ||
-                CASE WHEN v_us IS NULL THEN '&mdash;'
-                     ELSE TO_CHAR(v_us/1e6, 'FM999G999G990D00') END || '</td>';
+            v_us_s := nth_csv(c.week_vals, k + 1);
+            IF v_us_s IS NULL OR v_us_s = '' THEN
+                v_row := v_row || '<td class="num">&mdash;</td>';
+            ELSE
+                v_us := TO_NUMBER(v_us_s, 'FM99999999990D000000',
+                                  'NLS_NUMERIC_CHARACTERS=''.,''');
+                v_row := v_row || '<td class="num">'
+                      || TO_CHAR(v_us, 'FM999G999G990D00') || '</td>';
+            END IF;
         END LOOP;
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
