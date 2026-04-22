@@ -27,6 +27,7 @@ This creates (idempotently):
 | `AWR_TREND_SYSMETRIC` | Per-window averages from `DBA_HIST_SYSMETRIC_SUMMARY` |
 | `AWR_TREND_WAITS` | Top FG + BG waits and wait-class rollup |
 | `AWR_TREND_TOP_SQL` | Top-N SQL per window by 4 dimensions |
+| `AWR_TREND_ASH_TIMELINE` | Hourly ASH sample counts by wait class across the full compare span |
 | `AWR_TREND_FINDINGS` | Ranked findings with z-score + severity |
 
 Required grants on the owning user (if not already granted by `DBA` role):
@@ -40,6 +41,7 @@ GRANT SELECT ON DBA_HIST_SYSMETRIC_SUMMARY TO <user>;
 GRANT SELECT ON DBA_HIST_SQLSTAT          TO <user>;
 GRANT SELECT ON DBA_HIST_SQLTEXT          TO <user>;
 GRANT SELECT ON DBA_HIST_BASELINE         TO <user>;
+GRANT SELECT ON DBA_HIST_ACTIVE_SESS_HISTORY TO <user>;
 GRANT SELECT ON V_$DATABASE               TO <user>;
 GRANT SELECT ON V_$INSTANCE               TO <user>;
 -- Only if you use side/create_weekly_baselines.sql:
@@ -79,18 +81,22 @@ it in a browser. The report is self-contained (no external CSS/JS).
 
 ## Read the report
 
-1. **Findings** — top of the page. Each metric with `|z|>3` is CRITICAL,
+1. **Overview** — hero strip with the six headline load/metric numbers.
+2. **ASH timeline** — hourly stacked-area chart of Active Sessions by wait
+   class from `DBA_HIST_ACTIVE_SESS_HISTORY`, covering the full compare
+   span; compared windows are highlighted as background bands.
+3. **Findings** — top of the page. Each metric with `|z|>3` is CRITICAL,
    `|z|>2` is WARN. Metrics with fewer than 3 valid prior windows fall back
    to a `%`-delta only.
-2. **Windows** — the aligned windows used, with begin/end snap_ids. Weeks
+4. **Windows** — the aligned windows used, with begin/end snap_ids. Weeks
    where the instance restarted mid-window are SKIPPED and excluded from
    the baseline.
-3. **Load profile** — per-second rates for the classic AWR "Load Profile"
+5. **Load profile** — per-second rates for the classic AWR "Load Profile"
    stats incl. redo size.
-4. **System metrics** — averages from `DBA_HIST_SYSMETRIC_SUMMARY`.
-5. **Foreground waits** — top-N events + wait-class rollup.
-6. **Background waits** — from `DBA_HIST_BG_EVENT_SUMMARY`.
-7. **Top SQL** — ranked 4 ways (elapsed, CPU, buffer gets, executions)
+6. **System metrics** — averages from `DBA_HIST_SYSMETRIC_SUMMARY`.
+7. **Foreground waits** — top-N events + wait-class rollup.
+8. **Background waits** — from `DBA_HIST_BG_EVENT_SUMMARY`.
+9. **Top SQL** — ranked 4 ways (elapsed, CPU, buffer gets, executions)
    with plan-change badges and full SQL text.
 
 ## Query the persisted data
@@ -173,7 +179,9 @@ END;
 │   ├── 04_waits_fg.sql              -- foreground waits
 │   ├── 05_waits_bg.sql              -- background waits
 │   ├── 06_top_sql.sql               -- Top-N SQL
-│   └── 07_summary.sql               -- z-score findings
+│   ├── 07_summary.sql               -- z-score findings
+│   ├── 08_overview.sql              -- hero strip (headline metrics)
+│   └── 09_ash_timeline.sql          -- hourly ASH stacked-area timeline
 ├── side/
 │   └── create_weekly_baselines.sql  -- optional, AWR baselines
 └── reports/                         -- generated HTML files

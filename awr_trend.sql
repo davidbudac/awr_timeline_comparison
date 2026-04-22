@@ -152,6 +152,7 @@ END;
 @@sql/06_top_sql.sql
 @@sql/07_summary.sql
 @@sql/08_overview.sql
+@@sql/09_ash_timeline.sql
 
 -- -------------------------------------------------------------------
 -- HTML epilogue

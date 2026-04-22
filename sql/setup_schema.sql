@@ -7,8 +7,8 @@
 -- Required privileges (grant to the owning user):
 --   SELECT ON DBA_HIST_SNAPSHOT, DBA_HIST_SYSSTAT, DBA_HIST_SYSTEM_EVENT,
 --          DBA_HIST_BG_EVENT_SUMMARY, DBA_HIST_SYSMETRIC_SUMMARY,
---          DBA_HIST_SQLSTAT, DBA_HIST_SQLTEXT, DBA_HIST_BASELINE, V_$DATABASE,
---          V_$INSTANCE, V_$EVENT_NAME
+--          DBA_HIST_SQLSTAT, DBA_HIST_SQLTEXT, DBA_HIST_BASELINE,
+--          DBA_HIST_ACTIVE_SESS_HISTORY, V_$DATABASE, V_$INSTANCE, V_$EVENT_NAME
 --   EXECUTE ON DBMS_WORKLOAD_REPOSITORY (only for side/create_weekly_baselines.sql)
 --
 -- Run as the user that will own the AWR_TREND_* objects:
@@ -152,6 +152,20 @@ BEGIN
         )
     ]');
     exec_ignore('CREATE INDEX awr_trend_top_sql_sqlid_ix ON awr_trend_top_sql (sql_id, run_id)');
+
+    -- ASH timeline (hourly active-session counts per wait_class) ---------
+    exec_ignore(q'[
+        CREATE TABLE awr_trend_ash_timeline (
+            run_id           NUMBER         NOT NULL,
+            hour_bucket      TIMESTAMP      NOT NULL,
+            wait_class       VARCHAR2(64)   NOT NULL,
+            sample_count     NUMBER         NOT NULL,
+            active_sessions  NUMBER,
+            CONSTRAINT awr_trend_ash_pk PRIMARY KEY (run_id, hour_bucket, wait_class),
+            CONSTRAINT awr_trend_ash_fk FOREIGN KEY (run_id)
+                REFERENCES awr_trend_runs (run_id) ON DELETE CASCADE
+        )
+    ]');
 
     -- Findings ------------------------------------------------------------
     exec_ignore(q'[

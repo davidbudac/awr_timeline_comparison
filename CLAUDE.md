@@ -42,7 +42,7 @@ strict air-gapped environments, remove the ECharts `<script>` tag in
 ```
 awr_trend.sql                    -- driver: prologue, SPOOL, calls sections, epilogue
 sql/
-├── setup_schema.sql             -- one-time DDL (sequence + 7 tables, idempotent)
+├── setup_schema.sql             -- one-time DDL (sequence + 8 tables, idempotent)
 ├── defaults.sql                 -- canonical DEFINEs for the 5 substitution vars
 ├── _style.sql                   -- embedded CSS (emitted once from the driver)
 ├── 00_params.sql                -- inserts AWR_TREND_RUNS row, emits <nav>+<header>
@@ -53,7 +53,9 @@ sql/
 ├── 05_waits_bg.sql              -- background waits (BG_EVENT_SUMMARY)
 ├── 06_top_sql.sql               -- Top-N SQL ranked 4 ways + bump chart
 ├── 07_summary.sql               -- z-score findings + heatmap; flips run status to 'OK'
-└── 08_overview.sql              -- hero strip: 6 headline-metric cards (runs last, reads 02/03/07)
+├── 08_overview.sql              -- hero strip: 6 headline-metric cards (reads 02/03/07)
+└── 09_ash_timeline.sql          -- hourly ASH stacked-area timeline by wait_class
+                                    (reads dba_hist_active_sess_history directly)
 side/
 └── create_weekly_baselines.sql  -- optional weekly AWR baselines
 reports/                         -- generated HTML (gitignored? — not yet; see below)
@@ -109,7 +111,7 @@ non-interactive runs. If you need a literal tilde, write it out
 ("around 0.003", "home dir", etc.) or wrap the affected block in `SET
 DEFINE OFF` / `SET DEFINE '~'`.
 
-### Chart render layer (sections 02, 03, 04, 05, 06, 07, 08)
+### Chart render layer (sections 02, 03, 04, 05, 06, 07, 08, 09)
 The chart visualizations read only from the existing scratch tables —
 no new data compute or new tables. The pattern is: each numbered
 section builds its rendered slice via a `WITH all_weeks AS (CONNECT BY
@@ -154,6 +156,7 @@ we can write `'FAILED'`). Acceptable for now; noted as future work.
 - `AWR_TREND_SYSMETRIC` — SYSMETRIC averages.
 - `AWR_TREND_WAITS` — top FG/BG events + wait-class rollup.
 - `AWR_TREND_TOP_SQL` — Top-N SQL ranked 4 ways.
+- `AWR_TREND_ASH_TIMELINE` — hourly ASH sample counts per wait_class across the full compare span. One row per `(run_id, hour_bucket, wait_class)` where `sample_count > 0`; render layer NVL-zeros the gaps.
 - `AWR_TREND_FINDINGS` — z-score findings (populated last).
 
 All child tables FK to `AWR_TREND_RUNS` with `ON DELETE CASCADE`.
