@@ -102,6 +102,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.chart-big    { height:360px; }');
     DBMS_OUTPUT.PUT_LINE('.chart-medium { height:260px; }');
     DBMS_OUTPUT.PUT_LINE('.chart-small  { height:180px; }');
+    -- ASH timeline: plot + top legend + bottom dataZoom slider need more room
+    DBMS_OUTPUT.PUT_LINE('.chart-ash    { height:440px; }');
     DBMS_OUTPUT.PUT_LINE('body.no-charts .chart-wrap, body.no-charts .hero-card .mini { display:none; }');
     DBMS_OUTPUT.PUT_LINE('body.no-charts .cdn-warn { display:block !important; }');
     DBMS_OUTPUT.PUT_LINE('.cdn-warn { display:none; background:var(--warn); color:var(--warn-fg); '

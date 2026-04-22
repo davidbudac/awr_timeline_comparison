@@ -94,7 +94,10 @@ BEGIN
         || '). ON-CPU rows are bucketed as <b>CPU</b>; Idle waits are excluded. '
         || 'Compared windows are highlighted in the chart background.</p>');
 
-    DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-big" id="ash-timeline-stack"></div>');
+    -- Taller container than .chart-big: the stacked area needs room for the
+    -- plot, a top-anchored scrolling legend (so it does not collide with the
+    -- bottom dataZoom slider), and the slider itself at the bottom.
+    DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-ash" id="ash-timeline-stack"></div>');
 
     -- Shared hour grid (ISO-ish strings, oldest -> newest). Built via a
     -- PL/SQL accumulator rather than LISTAGG so we are not capped at the
@@ -196,11 +199,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('chart.setOption({');
     DBMS_OUTPUT.PUT_LINE('  tooltip:{trigger:"axis",axisPointer:{type:"line"},');
     DBMS_OUTPUT.PUT_LINE('    valueFormatter:function(v){return v==null?"\u2014":(+v).toFixed(2);}},');
-    DBMS_OUTPUT.PUT_LINE('  legend:{bottom:30,textStyle:{color:fg,fontSize:11},itemWidth:12,itemHeight:8,type:"scroll"},');
-    DBMS_OUTPUT.PUT_LINE('  grid:{left:50,right:16,top:20,bottom:80,containLabel:true},');
+    DBMS_OUTPUT.PUT_LINE('  legend:{top:0,left:"center",textStyle:{color:fg,fontSize:11},itemWidth:12,itemHeight:8,type:"scroll"},');
+    DBMS_OUTPUT.PUT_LINE('  grid:{left:50,right:16,top:40,bottom:60,containLabel:true},');
     DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"category",data:d.hours,boundaryGap:false,axisLabel:{color:mu,fontSize:10,hideOverlap:true}},');
     DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"value",name:"Active sessions",nameTextStyle:{color:mu,fontSize:11},axisLabel:{color:mu},splitLine:{lineStyle:{color:gr}}},');
-    DBMS_OUTPUT.PUT_LINE('  dataZoom:[{type:"inside"},{type:"slider",bottom:0,height:18,textStyle:{color:mu,fontSize:10}}],');
+    DBMS_OUTPUT.PUT_LINE('  dataZoom:[{type:"inside"},{type:"slider",bottom:8,height:18,textStyle:{color:mu,fontSize:10}}],');
     DBMS_OUTPUT.PUT_LINE('  series:d.classes.map(function(c,i){');
     DBMS_OUTPUT.PUT_LINE('    var s={name:c.name,type:"line",stack:"total",smooth:false,symbol:"none",');
     DBMS_OUTPUT.PUT_LINE('      areaStyle:{opacity:0.85},emphasis:{focus:"series"},');
