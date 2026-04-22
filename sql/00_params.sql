@@ -56,6 +56,7 @@ BEGIN
             r.dbid,
             r.db_name,
             NVL(TO_CHAR(r.instance_number), 'ALL (aggregated)') AS inst_label,
+            r.target_end_ts,
             TO_CHAR(r.target_end_ts, 'YYYY-MM-DD HH24:MI') AS target_end_s,
             TO_CHAR(CAST(r.target_end_ts AS DATE) - r.win_hours/24,
                     'YYYY-MM-DD HH24:MI') AS win_start_s,
@@ -89,22 +90,44 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('  <h1>AWR Timeline Comparison &mdash; '
             || DBMS_XMLGEN.CONVERT(TRIM(r.db_name))
             || ' <span class="badge info">run #' || r.run_id || '</span></h1>');
-        DBMS_OUTPUT.PUT_LINE('  <div>Comparing the current window against the '
-            || r.weeks_back || ' prior '
-            || RTRIM(DBMS_XMLGEN.CONVERT(TRIM(r.dow)))
-            || ' window(s) at the same hour-of-day.</div>');
         DBMS_OUTPUT.PUT_LINE('  <div class="meta">');
-        DBMS_OUTPUT.PUT_LINE('    <div><b>DBID:</b> ' || r.dbid || '</div>');
         DBMS_OUTPUT.PUT_LINE('    <div><b>Host:</b> ' || DBMS_XMLGEN.CONVERT(r.host_name) || '</div>');
-        DBMS_OUTPUT.PUT_LINE('    <div><b>Version:</b> ' || DBMS_XMLGEN.CONVERT(r.db_version) || '</div>');
-        DBMS_OUTPUT.PUT_LINE('    <div><b>Instance scope:</b> ' || r.inst_label || '</div>');
-        DBMS_OUTPUT.PUT_LINE('    <div><b>Current window:</b> '
-            || r.win_start_s || ' &rarr; ' || r.target_end_s
-            || ' (' || r.win_hours || 'h)</div>');
-        DBMS_OUTPUT.PUT_LINE('    <div><b>Weeks back:</b> ' || r.weeks_back || '</div>');
-        DBMS_OUTPUT.PUT_LINE('    <div><b>Top-N:</b> ' || r.top_n || '</div>');
         DBMS_OUTPUT.PUT_LINE('    <div><b>Generated:</b> ' || r.gen_s || '</div>');
-        DBMS_OUTPUT.PUT_LINE('    <div><b>By:</b> ' || DBMS_XMLGEN.CONVERT(r.caller_user) || '</div>');
+        DBMS_OUTPUT.PUT_LINE('  </div>');
+
+        --
+        -- Compared windows: enumerate the (weeks_back + 1) aligned windows
+        -- by shifting target_end backwards in 7-day steps.  Derived purely
+        -- from r.target_end_ts / r.win_hours / r.weeks_back so we do not
+        -- depend on awr_trend_windows (which is populated by 01_windows.sql
+        -- *after* this section runs).
+        --
+        DBMS_OUTPUT.PUT_LINE('  <div class="windows-list" style="margin-top:10px;">');
+        DBMS_OUTPUT.PUT_LINE('    <b>Compared windows ('
+            || RTRIM(DBMS_XMLGEN.CONVERT(TRIM(r.dow))) || ', '
+            || r.win_hours || 'h each):</b>');
+        DBMS_OUTPUT.PUT_LINE('    <ul style="margin:4px 0 0 0;padding-left:22px;'
+            || 'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;'
+            || 'font-size:12px;line-height:1.6;">');
+        FOR w IN (
+            SELECT LEVEL - 1 AS wk,
+                   TO_CHAR(CAST(r.target_end_ts AS DATE) - (LEVEL-1)*7 - r.win_hours/24,
+                           'YYYY-MM-DD HH24:MI') AS w_start,
+                   TO_CHAR(CAST(r.target_end_ts AS DATE) - (LEVEL-1)*7,
+                           'YYYY-MM-DD HH24:MI') AS w_end
+            FROM   dual
+            CONNECT BY LEVEL <= r.weeks_back + 1
+            ORDER  BY LEVEL - 1
+        ) LOOP
+            DBMS_OUTPUT.PUT_LINE('      <li>'
+                || CASE WHEN w.wk = 0 THEN '<b>Current:</b>   '
+                        WHEN w.wk = 1 THEN '<b>&minus;1 week:</b>  '
+                        ELSE '<b>&minus;' || w.wk || ' weeks:</b> '
+                   END
+                || w.w_start || ' &rarr; ' || w.w_end
+                || '</li>');
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('    </ul>');
         DBMS_OUTPUT.PUT_LINE('  </div>');
         DBMS_OUTPUT.PUT_LINE('</header>');
     END LOOP;

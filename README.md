@@ -81,6 +81,11 @@ it in a browser. The report is self-contained (no external CSS/JS).
 
 ## Read the report
 
+The header card at the top lists **which windows were compared** —
+the current window plus the aligned prior windows (same hour-of-week,
+stepping back 7 days at a time) with explicit start → end timestamps,
+so you always know exactly what baseline is driving the z-scores.
+
 1. **Overview** — hero strip with the six headline load/metric numbers.
 2. **ASH timeline** — hourly stacked-area chart of Active Sessions by wait
    class from `DBA_HIST_ACTIVE_SESS_HISTORY`, covering the full compare
@@ -98,6 +103,30 @@ it in a browser. The report is self-contained (no external CSS/JS).
 8. **Background waits** — from `DBA_HIST_BG_EVENT_SUMMARY`.
 9. **Top SQL** — ranked 4 ways (elapsed, CPU, buffer gets, executions)
    with plan-change badges and full SQL text.
+
+## Does it write to the database?
+
+Yes — by design. Each run inserts rows into the `AWR_TREND_*` scratch
+tables listed above (keyed by `run_id`), and every number in the HTML
+report is read back out of those tables on its way to the page. That
+is a hard architectural invariant: no section renders from transient
+CTEs only, so removing the writes would require a significant rewrite
+of sections 02–08. The `DBA_HIST_*` source views are read-only either
+way — the writes are confined to the connected user's own schema.
+
+If you want a "leave no trace" run:
+
+```sql
+-- run the report, then drop that run's rows (ON DELETE CASCADE wipes
+-- all 8 child tables for this run_id):
+DELETE FROM awr_trend_runs
+ WHERE run_id = (SELECT MAX(run_id) FROM awr_trend_runs);
+COMMIT;
+```
+
+The scratch tables themselves stay in place. A TRUNCATE of each table,
+or dropping the schema entirely, is also safe — `setup_schema.sql` is
+idempotent and will recreate them.
 
 ## Query the persisted data
 
