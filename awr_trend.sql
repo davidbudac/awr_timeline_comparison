@@ -198,8 +198,8 @@ END;
 -- Sections.  Each section is compute+render in one anonymous block;
 -- none of them write to the database.  Run order matters: the findings
 -- (07) read z-score inputs derived from the same AWR views sections
--- 02-04 already rendered, and overview (08) derives severity from 07's
--- logic, so they are emitted in this order.
+-- 02-04 already rendered, and overview (08) reuses the same change-bucket
+-- logic from 07, so they are emitted in this order.
 -- -------------------------------------------------------------------
 @@sql/00_params.sql
 @@sql/01_windows.sql

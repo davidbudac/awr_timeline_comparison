@@ -5,7 +5,7 @@
 --   - metric label
 --   - mini ECharts line+area chart across windows (oldest -> newest)
 --   - current value (+ unit)
---   - severity badge derived from an inline z-score computation
+--   - change-bucket badge (large/moderate/typical) from an inline z-score
 --
 -- Read-only: recomputes everything in-flight from the AWR views; does NOT
 -- read or persist any scratch table.
@@ -22,9 +22,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="overview"><h2>Headline metrics</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
         || 'Six key signals across the last ' || v_weeks_back
-        || ' aligned windows (oldest &rarr; current). Severity badge is the '
+        || ' aligned windows (oldest &rarr; current). Change badge buckets the '
         || 'z-score of the current window vs prior valid windows '
-        || '(|z|&gt;3 = CRITICAL, |z|&gt;2 = WARN).</p>');
+        || '(|z|&gt;3 = large, |z|&gt;2 = moderate, otherwise typical).</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="hero-grid">');
 
@@ -211,16 +211,16 @@ BEGIN
             END;
             v_sev := CASE
                 WHEN c.cur IS NULL THEN NULL
-                WHEN c.n < 3 THEN 'INSUFFICIENT_HISTORY'
-                WHEN c.sd IS NULL OR c.sd = 0 THEN 'FLAT_BASELINE'
-                WHEN ABS(v_z) > 3 THEN 'CRITICAL'
-                WHEN ABS(v_z) > 2 THEN 'WARN'
-                ELSE 'OK'
+                WHEN c.n < 3 THEN 'insufficient history'
+                WHEN c.sd IS NULL OR c.sd = 0 THEN 'flat baseline'
+                WHEN ABS(v_z) > 3 THEN 'large'
+                WHEN ABS(v_z) > 2 THEN 'moderate'
+                ELSE 'typical'
             END;
             v_sev_cls := CASE v_sev
-                WHEN 'CRITICAL' THEN 'crit'
-                WHEN 'WARN'     THEN 'warn'
-                WHEN 'OK'       THEN 'ok'
+                WHEN 'large'    THEN 'crit'
+                WHEN 'moderate' THEN 'warn'
+                WHEN 'typical'  THEN 'ok'
                 ELSE 'skip' END;
 
             v_cards_json := CASE WHEN v_cards_json IS NULL THEN '' ELSE v_cards_json || ',' END
@@ -302,7 +302,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  el.innerHTML="";  // clear any sparkline fallback already rendered');
     DBMS_OUTPUT.PUT_LINE('  el.removeAttribute("data-spark");');
     DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el,null,{renderer:"svg"});');
-    DBMS_OUTPUT.PUT_LINE('  var color=c.sev==="CRITICAL"?cs.getPropertyValue("--crit-fg").trim():(c.sev==="WARN"?cs.getPropertyValue("--warn-fg").trim():ac);');
+    DBMS_OUTPUT.PUT_LINE('  var color=c.sev==="large"?cs.getPropertyValue("--crit-fg").trim():(c.sev==="moderate"?cs.getPropertyValue("--warn-fg").trim():ac);');
     DBMS_OUTPUT.PUT_LINE('  chart.setOption({');
     DBMS_OUTPUT.PUT_LINE('    animation:false,');
     DBMS_OUTPUT.PUT_LINE('    grid:{left:2,right:2,top:2,bottom:2},');

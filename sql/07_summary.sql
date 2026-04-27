@@ -2,7 +2,10 @@
 -- 07_summary.sql
 -- For every scalar metric rendered by sections 02-04, compute the z-score
 -- of the current window against the mean/stddev of the prior valid windows,
--- flag severity and render the findings heatmap + detail table.
+-- bucket the change magnitude (large / moderate / typical) and render the
+-- findings heatmap + detail table.  Buckets describe how far the current
+-- value sits from its same-hour-of-week baseline; "large" is not a value
+-- judgement, just a |z| > 3 outlier.
 -- Read-only: recomputes everything in-flight from the AWR views; does NOT
 -- persist anything.
 --
@@ -23,8 +26,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="findings"><h2 id="findings-heading">Findings summary</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'z-score of the current window vs prior valid windows. '
-        || '|z|&gt;3 = CRITICAL, |z|&gt;2 = WARN. '
-        || 'INSUFFICIENT_HISTORY (n&lt;3) shows only %-delta. '
+        || '|z|&gt;3 = large change, |z|&gt;2 = moderate change, otherwise typical. '
+        || 'Insufficient history (n&lt;3) shows only %-delta. '
         || 'Heatmap below: |z| magnitude per (domain &times; metric); gray = no baseline.</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-medium" id="findings-heatmap"></div>');
@@ -34,7 +37,7 @@ BEGIN
     --
     -- One big cursor that recomputes LOAD / METRIC / WAIT values per
     -- (week_offset, metric) from the AWR views, then pivots to cur vs
-    -- prior AVG/STDDEV and derives severity.  The unified CTE is a union
+    -- prior AVG/STDDEV and derives the change bucket.  The unified CTE is a union
     -- of three per-domain sub-CTEs that all sit on the same windows CTE.
     --
     FOR f IN (
@@ -267,13 +270,13 @@ BEGIN
                    ELSE (cur_val - mu) / ABS(mu) * 100
                END AS pct_delta,
                CASE
-                   WHEN cur_val IS NULL THEN 'INSUFFICIENT_HISTORY'
-                   WHEN n < 3           THEN 'INSUFFICIENT_HISTORY'
-                   WHEN sd IS NULL OR sd = 0 THEN 'FLAT_BASELINE'
-                   WHEN ABS((cur_val - mu) / sd) > 3 THEN 'CRITICAL'
-                   WHEN ABS((cur_val - mu) / sd) > 2 THEN 'WARN'
-                   ELSE 'OK'
-               END AS severity
+                   WHEN cur_val IS NULL THEN 'insufficient history'
+                   WHEN n < 3           THEN 'insufficient history'
+                   WHEN sd IS NULL OR sd = 0 THEN 'flat baseline'
+                   WHEN ABS((cur_val - mu) / sd) > 3 THEN 'large'
+                   WHEN ABS((cur_val - mu) / sd) > 2 THEN 'moderate'
+                   ELSE 'typical'
+               END AS change_bucket
         FROM   pivoted
         WHERE  cur_val IS NOT NULL OR mu IS NOT NULL
         ORDER BY metric_domain, ABS(NVL(
@@ -284,8 +287,8 @@ BEGIN
                    END, 0)) DESC, metric_name
     ) LOOP
         v_total := v_total + 1;
-        IF f.severity = 'CRITICAL' THEN v_crit := v_crit + 1;
-        ELSIF f.severity = 'WARN'  THEN v_warn := v_warn + 1;
+        IF f.change_bucket = 'large'    THEN v_crit := v_crit + 1;
+        ELSIF f.change_bucket = 'moderate' THEN v_warn := v_warn + 1;
         END IF;
 
         v_heat_json := CASE WHEN v_heat_json IS NULL THEN '' ELSE v_heat_json || ',' END
@@ -294,7 +297,7 @@ BEGIN
             || '","z":' || CASE WHEN f.z_score IS NULL THEN 'null'
                                 ELSE TO_CHAR(f.z_score, 'FMS99990D00',
                                              'NLS_NUMERIC_CHARACTERS=''.,''') END
-            || ',"sev":"' || f.severity
+            || ',"sev":"' || f.change_bucket
             || '","cur":' || CASE WHEN f.cur_val IS NULL THEN 'null'
                                   ELSE TO_CHAR(f.cur_val, 'FM99999999990D000000',
                                                'NLS_NUMERIC_CHARACTERS=''.,''') END
@@ -314,8 +317,8 @@ BEGIN
     -- Rewrite the heading now that we have the counters.
     DBMS_OUTPUT.PUT_LINE('<script>(function(){var h=document.getElementById("findings-heading");'
         || 'if(h)h.innerHTML=''Findings summary &mdash; '
-        || '<span class="badge crit">' || v_crit || ' critical</span> '
-        || '<span class="badge warn">' || v_warn || ' warn</span> '
+        || '<span class="badge crit">' || v_crit || ' large</span> '
+        || '<span class="badge warn">' || v_warn || ' moderate</span> '
         || '<span class="badge ok">'   || v_total || ' total</span>'';})();</script>');
 
     IF v_heat_json IS NOT NULL THEN
@@ -335,7 +338,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
         DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
         DBMS_OUTPUT.PUT_LINE('chart.setOption({');
-        DBMS_OUTPUT.PUT_LINE('  tooltip:{formatter:function(p){var f=p.data.raw;var fmt=function(v){return v==null?"\u2014":(+v).toLocaleString(undefined,{maximumFractionDigits:3});};return "<b>"+f.m+"</b><br/>domain: "+f.dom+"<br/>severity: <b>"+f.sev+"</b><br/>current: "+fmt(f.cur)+"<br/>prior \u03BC: "+fmt(f.mu)+"<br/>z-score: "+(f.z==null?"\u2014":(+f.z).toFixed(2))+"<br/>% \u0394: "+(f.pct==null?"\u2014":f.pct+"%");}},');
+        DBMS_OUTPUT.PUT_LINE('  tooltip:{formatter:function(p){var f=p.data.raw;var fmt=function(v){return v==null?"\u2014":(+v).toLocaleString(undefined,{maximumFractionDigits:3});};return "<b>"+f.m+"</b><br/>domain: "+f.dom+"<br/>change: <b>"+f.sev+"</b><br/>current: "+fmt(f.cur)+"<br/>prior \u03BC: "+fmt(f.mu)+"<br/>z-score: "+(f.z==null?"\u2014":(+f.z).toFixed(2))+"<br/>% \u0394: "+(f.pct==null?"\u2014":f.pct+"%");}},');
         DBMS_OUTPUT.PUT_LINE('  grid:{left:10,right:10,top:30,bottom:70,containLabel:true},');
         DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"category",data:mets,axisLabel:{color:mu,rotate:55,fontSize:10,interval:0,formatter:function(v){return v.length>22?v.slice(0,22)+"\u2026":v;}},splitArea:{show:true}},');
         DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"category",data:doms,axisLabel:{color:fg,fontWeight:600},splitArea:{show:true}},');
@@ -350,7 +353,7 @@ BEGIN
 
     DBMS_OUTPUT.PUT_LINE('<table>'
         || '<thead><tr>'
-        || '<th>Severity</th>'
+        || '<th>Change</th>'
         || '<th>Domain</th>'
         || '<th>Metric</th>'
         || '<th class="num">Current</th>'
@@ -362,7 +365,7 @@ BEGIN
         || '</tr></thead><tbody>');
 
     --
-    -- Second pass: detail table ordered by severity bucket then |z|.
+    -- Second pass: detail table ordered by change-bucket then |z|.
     -- Repeating the recompute CTE is the least-bad way to walk the findings
     -- twice without persisting them anywhere.
     --
@@ -593,24 +596,24 @@ BEGIN
                        ELSE (cur_val - mu) / ABS(mu) * 100
                    END AS pct_delta,
                    CASE
-                       WHEN cur_val IS NULL THEN 'INSUFFICIENT_HISTORY'
-                       WHEN n < 3           THEN 'INSUFFICIENT_HISTORY'
-                       WHEN sd IS NULL OR sd = 0 THEN 'FLAT_BASELINE'
-                       WHEN ABS((cur_val - mu) / sd) > 3 THEN 'CRITICAL'
-                       WHEN ABS((cur_val - mu) / sd) > 2 THEN 'WARN'
-                       ELSE 'OK'
-                   END AS severity
+                       WHEN cur_val IS NULL THEN 'insufficient history'
+                       WHEN n < 3           THEN 'insufficient history'
+                       WHEN sd IS NULL OR sd = 0 THEN 'flat baseline'
+                       WHEN ABS((cur_val - mu) / sd) > 3 THEN 'large'
+                       WHEN ABS((cur_val - mu) / sd) > 2 THEN 'moderate'
+                       ELSE 'typical'
+                   END AS change_bucket
             FROM   pivoted
             WHERE  cur_val IS NOT NULL OR mu IS NOT NULL
         )
         SELECT metric_domain, metric_name,
                cur_val, prior_mean, prior_sd, n_prior,
-               z_score, pct_delta, severity,
-               CASE severity
-                   WHEN 'CRITICAL'             THEN 1
-                   WHEN 'WARN'                 THEN 2
-                   WHEN 'INSUFFICIENT_HISTORY' THEN 3
-                   WHEN 'FLAT_BASELINE'        THEN 4
+               z_score, pct_delta, change_bucket,
+               CASE change_bucket
+                   WHEN 'large'                THEN 1
+                   WHEN 'moderate'             THEN 2
+                   WHEN 'insufficient history' THEN 3
+                   WHEN 'flat baseline'        THEN 4
                    ELSE 5
                END AS sev_order
         FROM   scored
@@ -619,10 +622,10 @@ BEGIN
                  ABS(NVL(pct_delta, 0)) DESC,
                  metric_name
     ) LOOP
-        v_sev := f.severity;
-        v_cls := CASE v_sev WHEN 'CRITICAL' THEN 'crit'
-                            WHEN 'WARN'     THEN 'warn'
-                            WHEN 'OK'       THEN 'ok'
+        v_sev := f.change_bucket;
+        v_cls := CASE v_sev WHEN 'large'    THEN 'crit'
+                            WHEN 'moderate' THEN 'warn'
+                            WHEN 'typical'  THEN 'ok'
                             ELSE 'skip' END;
 
         v_row := '<tr data-metric="'
