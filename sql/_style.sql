@@ -65,6 +65,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('tbody tr:hover { background:rgba(127,127,127,0.08); }');
     DBMS_OUTPUT.PUT_LINE('td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }');
     DBMS_OUTPUT.PUT_LINE('td.mono, code, .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; }');
+    DBMS_OUTPUT.PUT_LINE('td a { color:var(--accent); text-decoration:none; }');
+    DBMS_OUTPUT.PUT_LINE('td a:hover { text-decoration:underline; }');
     DBMS_OUTPUT.PUT_LINE('tr.crit   { background:var(--crit); }  tr.crit td:first-child { border-left:4px solid var(--crit-fg); }');
     DBMS_OUTPUT.PUT_LINE('tr.warn   { background:var(--warn); }  tr.warn td:first-child { border-left:4px solid var(--warn-fg); }');
     DBMS_OUTPUT.PUT_LINE('tr.ok     { background:transparent; }');

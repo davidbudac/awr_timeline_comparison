@@ -301,8 +301,12 @@ BEGIN
             || '","cur":' || NVL(TO_CHAR(s.cur_rnk), 'null')
             || ',"vals":[' || v_chart_vals || ']}';
 
+        -- SQL_ID links to its detail block in the Per-SQL detail section
+        -- below. The hashchange listener emitted at the end of this section
+        -- auto-opens the target <details> on click.
         v_row := '<tr>'
-            || '<td class="mono">' || s.sql_id || '</td>'
+            || '<td class="mono"><a href="#sql-' || s.sql_id || '">'
+            || s.sql_id || '</a></td>'
             || '<td class="num mono">' ||
                 CASE WHEN s.cur_phv IS NULL THEN '&mdash;'
                      ELSE TO_CHAR(s.cur_phv) END
@@ -394,16 +398,61 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('})();</script>');
     END IF;
 
-    -- Full SQL text dump for all SQL_IDs that appeared in any dimension --
-    DBMS_OUTPUT.PUT_LINE('<details><summary>Full SQL text for all listed SQL_IDs</summary>');
+    -- Per-SQL detail: full text + AWR retention range + plan timeline ----
+    -- For each SQL listed in any dimension above, emit a collapsible block
+    -- with: a metadata header, a per-PHV summary table, a timeline chart
+    -- (x=snap end time, y=avg s/exec, color=plan_hash_value), and the
+    -- full SQL text. The aim is to let a reader visually correlate
+    -- performance changes in the dimension tables with plan switches.
+    DBMS_OUTPUT.PUT_LINE('<h3 style="margin-top:18px">Per-SQL detail</h3>');
+    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
+        || 'For each SQL_ID listed in any dimension above: full SQL text, '
+        || 'AWR retention range, plan_hash_value summary, and a timeline '
+        || 'chart showing avg seconds-per-execution colored by PHV across '
+        || 'all snapshots where the SQL appeared. Use this to spot plan '
+        || 'changes that coincide with performance shifts.</p>');
+
+    -- One JS namespace bucket per SQL; populated below, consumed by the
+    -- single ECharts init pass at the end of the section.
+    DBMS_OUTPUT.PUT_LINE('<script>AWR_DATA.sqlDetails = AWR_DATA.sqlDetails || {};</script>');
+
     DECLARE
-        v_sql_id VARCHAR2(30);
-        v_text   CLOB;
-        v_len    NUMBER;
-        v_snip   VARCHAR2(8000);
+        v_sql_id     VARCHAR2(30);
+        v_text       CLOB;
+        v_len        NUMBER;
+        v_snip       VARCHAR2(8000);
+        v_first_seen VARCHAR2(30);
+        v_last_seen  VARCHAR2(30);
+        v_phv_count  NUMBER;
+        v_total_exec NUMBER;
+        v_total_snap NUMBER;
+        v_first_pt   BOOLEAN;
     BEGIN
         v_sql_id := v_seen_sqls.FIRST;
         WHILE v_sql_id IS NOT NULL LOOP
+            -- Aggregate metadata across full AWR retention for this SQL.
+            BEGIN
+                SELECT TO_CHAR(MIN(s.begin_interval_time), 'YYYY-MM-DD HH24:MI'),
+                       TO_CHAR(MAX(s.end_interval_time),   'YYYY-MM-DD HH24:MI'),
+                       COUNT(DISTINCT NULLIF(st.plan_hash_value, 0)),
+                       SUM(NVL(st.executions_delta, 0)),
+                       COUNT(*)
+                INTO   v_first_seen, v_last_seen,
+                       v_phv_count, v_total_exec, v_total_snap
+                FROM   dba_hist_sqlstat st
+                JOIN   dba_hist_snapshot s
+                  ON   s.dbid = st.dbid
+                 AND   s.snap_id = st.snap_id
+                 AND   s.instance_number = st.instance_number
+                WHERE  st.dbid   = ~dbid
+                  AND  st.sql_id = v_sql_id
+                  AND  (~inst_num = 0 OR st.instance_number = ~inst_num);
+            EXCEPTION WHEN NO_DATA_FOUND THEN
+                v_first_seen := NULL; v_last_seen  := NULL;
+                v_phv_count  := 0;    v_total_exec := 0; v_total_snap := 0;
+            END;
+
+            -- Full SQL text (single source of truth, same lookup as before).
             BEGIN
                 SELECT sql_text
                 INTO   v_text
@@ -425,7 +474,112 @@ BEGIN
                 v_snip := DBMS_LOB.SUBSTR(v_text, 8000, 1);
             END IF;
 
-            DBMS_OUTPUT.PUT_LINE('<h3>' || v_sql_id || '</h3>');
+            -- Per-SQL collapsible container. The id is the link target for
+            -- SQL_ID anchors in the top-N tables above.
+            DBMS_OUTPUT.PUT_LINE('<details id="sql-' || v_sql_id || '"><summary>'
+                || '<span class="mono">' || v_sql_id || '</span> &mdash; '
+                || NVL(v_first_seen, '?') || ' &rarr; ' || NVL(v_last_seen, '?')
+                || ' &middot; <b>' || v_phv_count || '</b> distinct plan'
+                || CASE WHEN v_phv_count = 1 THEN '' ELSE 's' END
+                || ' &middot; ' || TO_CHAR(NVL(v_total_exec, 0), 'FM999G999G999G990')
+                || ' executions across ' || NVL(v_total_snap, 0) || ' snapshots'
+                || '</summary>');
+
+            -- Per-PHV summary table.
+            IF NVL(v_total_snap, 0) > 0 THEN
+                DBMS_OUTPUT.PUT_LINE('<table><thead><tr>'
+                    || '<th class="num">PHV</th>'
+                    || '<th>First seen</th><th>Last seen</th>'
+                    || '<th class="num">Snaps</th>'
+                    || '<th class="num">Executions</th>'
+                    || '<th class="num">Avg s/exec</th>'
+                    || '<th class="num">Avg gets/exec</th>'
+                    || '</tr></thead><tbody>');
+                FOR p IN (
+                    SELECT st.plan_hash_value AS phv,
+                           TO_CHAR(MIN(s.begin_interval_time), 'YYYY-MM-DD HH24:MI') AS first_seen,
+                           TO_CHAR(MAX(s.end_interval_time),   'YYYY-MM-DD HH24:MI') AS last_seen,
+                           COUNT(*)                           AS snaps,
+                           SUM(NVL(st.executions_delta, 0))   AS execs,
+                           SUM(NVL(st.elapsed_time_delta, 0)) AS ela_us,
+                           SUM(NVL(st.buffer_gets_delta, 0))  AS gets
+                    FROM   dba_hist_sqlstat st
+                    JOIN   dba_hist_snapshot s
+                      ON   s.dbid = st.dbid
+                     AND   s.snap_id = st.snap_id
+                     AND   s.instance_number = st.instance_number
+                    WHERE  st.dbid   = ~dbid
+                      AND  st.sql_id = v_sql_id
+                      AND  (~inst_num = 0 OR st.instance_number = ~inst_num)
+                      AND  st.plan_hash_value > 0
+                    GROUP BY st.plan_hash_value
+                    ORDER BY MIN(s.begin_interval_time)
+                ) LOOP
+                    DBMS_OUTPUT.PUT_LINE('<tr>'
+                        || '<td class="num mono">' || p.phv || '</td>'
+                        || '<td>' || p.first_seen || '</td>'
+                        || '<td>' || p.last_seen  || '</td>'
+                        || '<td class="num">' || p.snaps || '</td>'
+                        || '<td class="num">' || TO_CHAR(p.execs, 'FM999G999G999G990') || '</td>'
+                        || '<td class="num">'
+                        || CASE WHEN p.execs > 0
+                                THEN TO_CHAR(p.ela_us / p.execs / 1e6, 'FM9G990D000')
+                                ELSE '&mdash;' END
+                        || '</td>'
+                        || '<td class="num">'
+                        || CASE WHEN p.execs > 0
+                                THEN TO_CHAR(p.gets / p.execs, 'FM999G999G990')
+                                ELSE '&mdash;' END
+                        || '</td>'
+                        || '</tr>');
+                END LOOP;
+                DBMS_OUTPUT.PUT_LINE('</tbody></table>');
+
+                -- Timeline chart container; rendered by the ECharts init pass.
+                DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-medium" '
+                    || 'id="sqltl-' || v_sql_id || '"></div>');
+
+                -- Snap-level points feeding the timeline chart. One JSON
+                -- object per (snap, phv) where the SQL had a captured plan,
+                -- oldest -> newest. Numeric format uses '.,' so JS Number()
+                -- parses regardless of session NLS.
+                DBMS_OUTPUT.PUT_LINE('<script>AWR_DATA.sqlDetails['
+                    || '"' || v_sql_id || '"]={snaps:[');
+                v_first_pt := TRUE;
+                FOR r IN (
+                    SELECT TO_CHAR(s.end_interval_time, 'YYYY-MM-DD HH24:MI') AS t,
+                           st.plan_hash_value AS phv,
+                           SUM(NVL(st.executions_delta, 0))   AS execs,
+                           SUM(NVL(st.elapsed_time_delta, 0)) AS ela_us
+                    FROM   dba_hist_sqlstat st
+                    JOIN   dba_hist_snapshot s
+                      ON   s.dbid = st.dbid
+                     AND   s.snap_id = st.snap_id
+                     AND   s.instance_number = st.instance_number
+                    WHERE  st.dbid   = ~dbid
+                      AND  st.sql_id = v_sql_id
+                      AND  (~inst_num = 0 OR st.instance_number = ~inst_num)
+                      AND  st.plan_hash_value > 0
+                    GROUP BY s.end_interval_time, st.plan_hash_value
+                    ORDER BY s.end_interval_time
+                ) LOOP
+                    DBMS_OUTPUT.PUT_LINE(
+                        CASE WHEN v_first_pt THEN '' ELSE ',' END
+                        || '{"t":"' || r.t || '"'
+                        || ',"phv":"' || r.phv || '"'
+                        || ',"exec":' || NVL(TO_CHAR(r.execs), '0')
+                        || ',"ela":'
+                        || CASE WHEN r.execs > 0
+                                THEN TO_CHAR(r.ela_us / r.execs / 1e6,
+                                             'FM9999990D000000',
+                                             'NLS_NUMERIC_CHARACTERS=''.,''')
+                                ELSE 'null' END
+                        || '}');
+                    v_first_pt := FALSE;
+                END LOOP;
+                DBMS_OUTPUT.PUT_LINE(']};</script>');
+            END IF;
+
             DBMS_OUTPUT.PUT_LINE('<pre class="sql">'
                 || DBMS_XMLGEN.CONVERT(v_snip)
                 || CASE WHEN v_len > 8000
@@ -433,10 +587,73 @@ BEGIN
                         ELSE '' END
                 || '</pre>');
 
+            DBMS_OUTPUT.PUT_LINE('</details>');
+
             v_sql_id := v_seen_sqls.NEXT(v_sql_id);
         END LOOP;
     END;
-    DBMS_OUTPUT.PUT_LINE('</details>');
+
+    -- Single ECharts init pass: render a per-SQL timeline (scatter, x=snap
+    -- end time, y=s/exec, one series per PHV). Skipped silently when the
+    -- ECharts CDN is unreachable; the per-PHV table still carries every
+    -- number. Charts inside collapsed <details> are (re)sized when the
+    -- user opens them so they don't render at 0x0.
+    DBMS_OUTPUT.PUT_LINE('<script>(function(){');
+    DBMS_OUTPUT.PUT_LINE('if(!window.echarts || !AWR_DATA.sqlDetails) return;');
+    DBMS_OUTPUT.PUT_LINE('var cs=getComputedStyle(document.body);');
+    DBMS_OUTPUT.PUT_LINE('var fg=cs.getPropertyValue("--fg").trim()||"#333";');
+    DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
+    DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
+    DBMS_OUTPUT.PUT_LINE('var palette=["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1","#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"];');
+    DBMS_OUTPUT.PUT_LINE('function build(el,sqlId){');
+    DBMS_OUTPUT.PUT_LINE('  var snaps=(AWR_DATA.sqlDetails[sqlId]||{}).snaps||[];');
+    DBMS_OUTPUT.PUT_LINE('  if(!snaps.length) return null;');
+    DBMS_OUTPUT.PUT_LINE('  var phvOrder=[],phvIdx={};');
+    DBMS_OUTPUT.PUT_LINE('  snaps.forEach(function(p){if(!(p.phv in phvIdx)){phvIdx[p.phv]=phvOrder.length;phvOrder.push(p.phv);}});');
+    DBMS_OUTPUT.PUT_LINE('  var xs=snaps.map(function(p){return p.t;});');
+    DBMS_OUTPUT.PUT_LINE('  var series=phvOrder.map(function(phv,i){return {name:"PHV "+phv,type:"scatter",symbolSize:7,itemStyle:{color:palette[i%palette.length]},data:snaps.filter(function(p){return p.phv===phv;}).map(function(p){return [p.t,p.ela,p.exec,p.phv];})};});');
+    DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el);');
+    DBMS_OUTPUT.PUT_LINE('  chart.setOption({');
+    DBMS_OUTPUT.PUT_LINE('    tooltip:{trigger:"item",formatter:function(p){var v=p.value;return "<b>"+v[0]+"</b><br/>PHV: <b>"+v[3]+"</b><br/>s/exec: <b>"+(v[1]==null?"&mdash;":(+v[1]).toLocaleString(undefined,{maximumFractionDigits:3}))+"</b><br/>execs: <b>"+(+v[2]).toLocaleString()+"</b>";}},');
+    DBMS_OUTPUT.PUT_LINE('    legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},');
+    DBMS_OUTPUT.PUT_LINE('    grid:{left:50,right:30,top:14,bottom:48,containLabel:true},');
+    DBMS_OUTPUT.PUT_LINE('    xAxis:{type:"category",data:xs,axisLabel:{color:mu,rotate:-30,fontSize:10},splitLine:{show:false}},');
+    DBMS_OUTPUT.PUT_LINE('    yAxis:{type:"value",name:"s/exec",nameTextStyle:{color:mu,fontSize:10},axisLabel:{color:mu,formatter:function(v){return (+v).toLocaleString(undefined,{maximumFractionDigits:3});}},splitLine:{lineStyle:{color:gr}}},');
+    DBMS_OUTPUT.PUT_LINE('    series:series');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return chart;');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('Object.keys(AWR_DATA.sqlDetails).forEach(function(sqlId){');
+    DBMS_OUTPUT.PUT_LINE('  var el=document.getElementById("sqltl-"+sqlId); if(!el) return;');
+    DBMS_OUTPUT.PUT_LINE('  var chart=null;');
+    DBMS_OUTPUT.PUT_LINE('  var details=el.closest("details");');
+    DBMS_OUTPUT.PUT_LINE('  function ensure(){ if(!chart){chart=build(el,sqlId);} if(chart){chart.resize();} }');
+    DBMS_OUTPUT.PUT_LINE('  if(details){');
+    DBMS_OUTPUT.PUT_LINE('    details.addEventListener("toggle",function(){ if(details.open) setTimeout(ensure,0); });');
+    DBMS_OUTPUT.PUT_LINE('    if(details.open) ensure();');
+    DBMS_OUTPUT.PUT_LINE('  } else { ensure(); }');
+    DBMS_OUTPUT.PUT_LINE('  new ResizeObserver(function(){ if(chart) chart.resize(); }).observe(el);');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('})();</script>');
+
+    -- Hash navigation: SQL_IDs in the top-N tables are anchors of the form
+    -- #sql-XXXXXXXXXXXXX pointing at the per-SQL <details>. Browsers do not
+    -- auto-open <details> on fragment navigation, so this listener opens
+    -- the matching block on initial load and on every hashchange (i.e.
+    -- every click of an in-page SQL_ID link).
+    DBMS_OUTPUT.PUT_LINE('<script>(function(){');
+    DBMS_OUTPUT.PUT_LINE('function openHash(){');
+    DBMS_OUTPUT.PUT_LINE('  var h=window.location.hash;');
+    DBMS_OUTPUT.PUT_LINE('  if(!h || h.length<2) return;');
+    DBMS_OUTPUT.PUT_LINE('  var el; try{ el=document.querySelector(h); } catch(e){ return; }');
+    DBMS_OUTPUT.PUT_LINE('  if(!el) return;');
+    DBMS_OUTPUT.PUT_LINE('  var det=(el.tagName==="DETAILS")?el:(el.closest&&el.closest("details"));');
+    DBMS_OUTPUT.PUT_LINE('  if(det && !det.open){ det.open=true; }');
+    DBMS_OUTPUT.PUT_LINE('  setTimeout(function(){ el.scrollIntoView({behavior:"smooth",block:"start"}); }, 50);');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('window.addEventListener("hashchange", openHash);');
+    DBMS_OUTPUT.PUT_LINE('if(window.location.hash) setTimeout(openHash, 0);');
+    DBMS_OUTPUT.PUT_LINE('})();</script>');
 
     DBMS_OUTPUT.PUT_LINE('</section>');
 END;
