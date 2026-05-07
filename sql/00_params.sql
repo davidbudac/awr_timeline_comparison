@@ -25,6 +25,7 @@ SET SERVEROUTPUT ON SIZE UNLIMITED
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<nav class="toc">'
         || '<b>Jump to:</b> '
+        || '<a href="#db-time-summary">DB time</a>'
         || '<a href="#overview">Overview</a>'
         || '<a href="#ash-timeline">ASH timeline</a>'
         || '<a href="#findings">Findings</a>'

@@ -211,6 +211,7 @@ END;
 @@sql/07_summary.sql
 @@sql/08_overview.sql
 @@sql/09_ash_timeline.sql
+@@sql/10_db_time_summary.sql
 
 -- -------------------------------------------------------------------
 -- HTML epilogue
