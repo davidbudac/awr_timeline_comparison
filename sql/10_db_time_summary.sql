@@ -21,8 +21,9 @@ DECLARE
     v_min_snap   NUMBER;
     v_max_snap   NUMBER;
     v_buckets    PLS_INTEGER := 0;
-    v_times_json VARCHAR2(32767);
-    v_class_vals VARCHAR2(32767);
+    v_times_json   VARCHAR2(32767);
+    v_class_vals   VARCHAR2(32767);
+    v_windows_json VARCHAR2(4000);
     v_palette    VARCHAR2(400) :=
         '["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1",' ||
         '"#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"]';
@@ -125,6 +126,80 @@ BEGIN
         || 'dropped (rendered as gaps).</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-big" id="db-time-summary-chart"></div>');
+
+    --
+    -- Compared windows for the markArea bands (one per valid window). The
+    -- xAxis values are the same YYYY-MM-DD HH24:MI format the chart uses
+    -- for its category labels, so ECharts matches them by string.
+    --
+    SELECT '['
+           || LISTAGG(
+                  '["'
+                  || TO_CHAR(win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
+                  || TO_CHAR(win_end_ts,   'YYYY-MM-DD HH24:MI') || '","'
+                  || CASE WHEN week_offset = 0 THEN 'current'
+                          ELSE 'w-' || week_offset END || '"]',
+                  ',')
+                  WITHIN GROUP (ORDER BY week_offset DESC)
+           || ']'
+    INTO   v_windows_json
+    FROM (
+        WITH run_params AS (
+            SELECT ~dbid AS dbid,
+                   CASE WHEN ~inst_num = 0 THEN NULL ELSE ~inst_num END AS instance_number,
+                   TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS target_end_ts,
+                   ~win_hours  AS win_hours,
+                   ~weeks_back AS weeks_back
+            FROM dual
+        ),
+        offsets AS (
+            SELECT LEVEL - 1 AS week_offset
+            FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
+        ),
+        raw_windows AS (
+            SELECT r.dbid, r.instance_number, o.week_offset,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+            FROM run_params r CROSS JOIN offsets o
+        ),
+        snaps AS (
+            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.instance_number, w.dbid,
+                   s.snap_id, s.end_interval_time, s.startup_time
+            FROM   raw_windows w
+            JOIN   dba_hist_snapshot s
+              ON   s.dbid = w.dbid
+             AND   (w.instance_number IS NULL OR s.instance_number = w.instance_number)
+             AND   s.end_interval_time BETWEEN
+                        CAST(w.win_start_dt - 1 AS TIMESTAMP)
+                    AND CAST(w.win_end_dt   + 1 AS TIMESTAMP)
+        ),
+        begin_snap AS (
+            SELECT week_offset,
+                   MAX(snap_id) KEEP (DENSE_RANK LAST ORDER BY end_interval_time)  AS snap_id,
+                   MAX(startup_time) KEEP (DENSE_RANK LAST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time <= CAST(win_start_dt + 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        ),
+        end_snap AS (
+            SELECT week_offset,
+                   MIN(snap_id) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS snap_id,
+                   MIN(startup_time) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS startup_time
+            FROM   snaps
+            WHERE  end_interval_time >= CAST(win_end_dt - 5/1440 AS TIMESTAMP)
+            GROUP BY week_offset
+        )
+        SELECT w.week_offset,
+               CAST(w.win_start_dt AS TIMESTAMP) AS win_start_ts,
+               CAST(w.win_end_dt   AS TIMESTAMP) AS win_end_ts
+        FROM   raw_windows w
+        JOIN   begin_snap bs ON bs.week_offset = w.week_offset
+        JOIN   end_snap   es ON es.week_offset = w.week_offset
+        WHERE  bs.snap_id IS NOT NULL
+          AND  es.snap_id IS NOT NULL
+          AND  bs.snap_id <> es.snap_id
+          AND  bs.startup_time = es.startup_time
+    );
 
     --
     -- Build the x-axis: distinct snap_id (with a same-startup prior snap)
@@ -245,6 +320,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('(function(){');
     DBMS_OUTPUT.PUT_LINE('AWR_DATA.dbTimeSummary = {');
     DBMS_OUTPUT.PUT_LINE('times:' || v_times_json || ',');
+    DBMS_OUTPUT.PUT_LINE('windows:' || NVL(v_windows_json, '[]') || ',');
     DBMS_OUTPUT.PUT_LINE('classes:[');
 
     -- Walk v_class_totals biggest-first so the dominant series gets palette[0].
@@ -311,6 +387,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
     DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
     DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
+    DBMS_OUTPUT.PUT_LINE('var bandColor="rgba(37,99,235,0.10)", bandCurrent="rgba(37,99,235,0.22)";');
+    DBMS_OUTPUT.PUT_LINE('var markAreaData=(d.windows||[]).map(function(w){return [');
+    DBMS_OUTPUT.PUT_LINE('  {xAxis:w[0],itemStyle:{color:w[2]==="current"?bandCurrent:bandColor},');
+    DBMS_OUTPUT.PUT_LINE('   label:{show:true,position:"insideTop",color:mu,fontSize:10,formatter:w[2]}},');
+    DBMS_OUTPUT.PUT_LINE('  {xAxis:w[1]}];});');
     DBMS_OUTPUT.PUT_LINE('chart.setOption({');
     DBMS_OUTPUT.PUT_LINE('  tooltip:{trigger:"axis",axisPointer:{type:"line"},');
     DBMS_OUTPUT.PUT_LINE('    valueFormatter:function(v){return v==null?"\u2014":(+v).toFixed(1)+" s";}},');
@@ -320,11 +401,14 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"value",name:"DB time (s)",nameTextStyle:{color:mu,fontSize:11},axisLabel:{color:mu},splitLine:{lineStyle:{color:gr}}},');
     DBMS_OUTPUT.PUT_LINE('  dataZoom:[{type:"inside"},{type:"slider",bottom:8,height:18,textStyle:{color:mu,fontSize:10}}],');
     DBMS_OUTPUT.PUT_LINE('  series:d.classes.map(function(c,i){');
-    DBMS_OUTPUT.PUT_LINE('    return {name:c.name,type:"line",stack:"total",smooth:false,symbol:"none",');
+    DBMS_OUTPUT.PUT_LINE('    var s={name:c.name,type:"line",stack:"total",smooth:false,symbol:"none",');
     DBMS_OUTPUT.PUT_LINE('      areaStyle:{opacity:0.85},emphasis:{focus:"series"},');
     DBMS_OUTPUT.PUT_LINE('      lineStyle:{width:0.5,color:palette[i%palette.length]},');
     DBMS_OUTPUT.PUT_LINE('      itemStyle:{color:palette[i%palette.length]},');
-    DBMS_OUTPUT.PUT_LINE('      data:c.vals};})');
+    DBMS_OUTPUT.PUT_LINE('      data:c.vals};');
+    DBMS_OUTPUT.PUT_LINE('    if(i===0 && markAreaData.length){');
+    DBMS_OUTPUT.PUT_LINE('      s.markArea={silent:true,data:markAreaData,itemStyle:{opacity:1},z:0};}');
+    DBMS_OUTPUT.PUT_LINE('    return s;})');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('new ResizeObserver(function(){chart.resize();}).observe(el);');
     DBMS_OUTPUT.PUT_LINE('})();');
