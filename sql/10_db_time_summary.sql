@@ -401,10 +401,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"value",name:"DB time (s)",nameTextStyle:{color:mu,fontSize:11},axisLabel:{color:mu},splitLine:{lineStyle:{color:gr}}},');
     DBMS_OUTPUT.PUT_LINE('  dataZoom:[{type:"inside"},{type:"slider",bottom:8,height:18,textStyle:{color:mu,fontSize:10}}],');
     DBMS_OUTPUT.PUT_LINE('  series:d.classes.map(function(c,i){');
+    DBMS_OUTPUT.PUT_LINE('    var color=(window.AWR_WAIT_COLORS||{})[c.name]||palette[i%palette.length];');
     DBMS_OUTPUT.PUT_LINE('    var s={name:c.name,type:"line",stack:"total",smooth:false,symbol:"none",');
     DBMS_OUTPUT.PUT_LINE('      areaStyle:{opacity:0.85},emphasis:{focus:"series"},');
-    DBMS_OUTPUT.PUT_LINE('      lineStyle:{width:0.5,color:palette[i%palette.length]},');
-    DBMS_OUTPUT.PUT_LINE('      itemStyle:{color:palette[i%palette.length]},');
+    DBMS_OUTPUT.PUT_LINE('      lineStyle:{width:0.5,color:color},');
+    DBMS_OUTPUT.PUT_LINE('      itemStyle:{color:color},');
     DBMS_OUTPUT.PUT_LINE('      data:c.vals};');
     DBMS_OUTPUT.PUT_LINE('    if(i===0 && markAreaData.length){');
     DBMS_OUTPUT.PUT_LINE('      s.markArea={silent:true,data:markAreaData,itemStyle:{opacity:1},z:0};}');
