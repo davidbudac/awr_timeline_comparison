@@ -4,8 +4,8 @@
 -- of the current window against the mean/stddev of the prior valid windows,
 -- bucket the change magnitude (large / moderate / typical) and render the
 -- findings heatmap + detail table.  Buckets describe how far the current
--- value sits from its same-hour-of-week baseline; "large" is not a value
--- judgement, just a |z| > 3 outlier.
+-- value sits from its baseline of prior comparison windows; "large" is not
+-- a value judgement, just a |z| > 3 outlier.
 -- Read-only: recomputes everything in-flight from the AWR views; does NOT
 -- persist anything.
 --
@@ -55,8 +55,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (
@@ -384,8 +384,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (

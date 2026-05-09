@@ -2,9 +2,9 @@
 -- 09_ash_timeline.sql
 -- Hourly Active-Session timeline from DBA_HIST_ACTIVE_SESS_HISTORY, stacked
 -- by wait_class (ON-CPU rows bucketed as 'CPU', Idle waits excluded).
--- Spans from (target_end - weeks_back*7 days - win_hours) up to target_end,
--- so every compared window is covered in context. Renders below the
--- Headline metrics (hero strip) via flexbox order.
+-- Spans from (target_end - weeks_back*step_hours/24 days - win_hours) up to
+-- target_end, so every compared window is covered in context. Renders below
+-- the Headline metrics (hero strip) via flexbox order.
 --
 -- ASH persists 1 in 10 in-memory samples, i.e. one row per session per 10s,
 -- so an hour of one fully-busy session is 360 rows and AAS = samples / 360.
@@ -49,7 +49,7 @@ DECLARE
     v_aas          NUMBER;
 BEGIN
     SELECT CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
-               - ~weeks_back*7 - ~win_hours/24,
+               - ~weeks_back*(~step_hours/24) - ~win_hours/24,
            CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
     INTO   v_range_start, v_range_end
     FROM   dual;
@@ -142,8 +142,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (

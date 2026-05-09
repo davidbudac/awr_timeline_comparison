@@ -52,7 +52,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="waits-fg"><h2>Foreground wait events (top '
         || v_top_n || ' by time waited)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'Chart: wait-class time breakdown per week (stacked). Table below: '
+        || 'Chart: wait-class time breakdown per ~period_unit_long (stacked). Table below: '
         || 'top-' || v_top_n || ' individual events, with a sparkline over the series.</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-small" id="waits-fg-stack"></div>');
@@ -60,7 +60,7 @@ BEGIN
     SELECT '['
         || LISTAGG('"' || TO_CHAR(
                CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
-               - 7*week_offset, 'Mon DD') || '"', ',')
+               - (~step_hours/24)*week_offset, '~period_axis_fmt') || '"', ',')
                WITHIN GROUP (ORDER BY week_offset DESC)
         || ']'
     INTO   v_weeks_json
@@ -81,8 +81,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (
@@ -212,7 +212,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<h3>Top ' || v_top_n || ' events by time waited</h3>');
     v_header := '<thead><tr><th>Event</th><th>Class</th><th class="trend">Trend</th><th class="num">Current (s)</th>';
     FOR k IN 1 .. v_weeks_back LOOP
-        v_header := v_header || '<th class="num">&minus;' || k || 'w (s)</th>';
+        v_header := v_header || '<th class="num">&minus;' || k || '~period_unit_short (s)</th>';
     END LOOP;
     v_header := v_header || '</tr></thead>';
     DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
@@ -232,8 +232,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (
@@ -389,7 +389,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<h3>Wait-class rollup</h3>');
     v_header := '<thead><tr><th>Wait class</th><th class="num">Current (s)</th>';
     FOR k IN 1 .. v_weeks_back LOOP
-        v_header := v_header || '<th class="num">&minus;' || k || 'w (s)</th>';
+        v_header := v_header || '<th class="num">&minus;' || k || '~period_unit_short (s)</th>';
     END LOOP;
     v_header := v_header || '</tr></thead>';
     DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
@@ -408,8 +408,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (

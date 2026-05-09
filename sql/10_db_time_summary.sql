@@ -1,7 +1,7 @@
 --
 -- 10_db_time_summary.sql
 -- Stacked-area summary of database time at the very top of the report.
--- Covers every AWR snapshot pair from the earliest valid comparison-week
+-- Covers every AWR snapshot pair from the earliest valid comparison-window
 -- begin snap through the current window end snap (one bucket per native
 -- snap interval, no aggregation). Stacked by:
 --   * CPU         -- from DBA_HIST_SYS_TIME_MODEL stat_name = 'DB CPU'
@@ -65,8 +65,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (
@@ -158,8 +158,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (

@@ -1,8 +1,9 @@
 --
 -- 01_windows.sql
--- Resolve the current window and ~weeks_back prior aligned windows (same
--- day-of-week, same hour-of-day) from dba_hist_snapshot and render them
--- as a timeline ribbon + detail table.  Read-only: no scratch table.
+-- Resolve the current window and ~weeks_back prior windows (each one is
+-- step*step_unit earlier than the next; defaults to one week earlier)
+-- from dba_hist_snapshot and render them as a timeline ribbon + detail
+-- table.  Read-only: no scratch table.
 --
 -- The windows CTE used here is also duplicated by every downstream
 -- numbered section that needs per-window snap_id pairs.  Section-local
@@ -56,8 +57,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (
@@ -149,7 +150,7 @@ BEGIN
 
         DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
             || '" y="10" text-anchor="middle" font-size="10" fill="#666">'
-            || TO_CHAR(w.win_end_ts, 'Mon DD') || '</text>');
+            || TO_CHAR(w.win_end_ts, '~period_axis_fmt') || '</text>');
 
         IF v_is_current THEN
             DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
@@ -166,7 +167,7 @@ BEGIN
 
     DBMS_OUTPUT.PUT_LINE('<table>');
     DBMS_OUTPUT.PUT_LINE('<thead><tr>'
-        || '<th>Week</th>'
+        || '<th>~period_unit_title</th>'
         || '<th>Window start</th>'
         || '<th>Window end</th>'
         || '<th class="num">Begin snap</th>'
@@ -190,8 +191,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (
@@ -253,7 +254,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE(
             '<tr class="' || CASE WHEN w.valid_flag = 'N' THEN 'skip' ELSE 'ok' END || '">'
             || '<td>' || CASE WHEN w.week_offset = 0 THEN '<b>Current</b>'
-                              ELSE '&minus;' || w.week_offset || 'w' END || '</td>'
+                              ELSE '&minus;' || w.week_offset || '~period_unit_short' END || '</td>'
             || '<td>' || TO_CHAR(w.win_start_ts, 'YYYY-MM-DD Dy HH24:MI') || '</td>'
             || '<td>' || TO_CHAR(w.win_end_ts,   'YYYY-MM-DD Dy HH24:MI') || '</td>'
             || '<td class="num">' || NVL(TO_CHAR(w.begin_snap_id), '&mdash;') || '</td>'

@@ -13,10 +13,14 @@
 --   ~generated_at_s       'YYYY-MM-DD HH24:MI:SS TZR'
 --   ~target_end_resolved  'YYYY-MM-DD HH24:MI:SS'
 --   ~dow_name             trimmed day-of-week name of target_end
+--   ~step_hours           cadence between adjacent windows, in hours
+--   ~period_unit_long     'hour' | 'day' | 'week'
+--   ~period_step_label    e.g. 'w', '2d', '6h'
 --   ~report_path          output filename (relative)
 --
 -- Run parameters (from defaults.sql or caller):
---   ~target_end, ~win_hours, ~weeks_back, ~top_n, ~inst_num
+--   ~target_end, ~win_hours, ~weeks_back, ~top_n, ~inst_num,
+--   ~step, ~step_unit
 --
 
 SET DEFINE '~'
@@ -50,13 +54,13 @@ BEGIN
 
     --
     -- Compared windows: enumerate (weeks_back + 1) aligned windows by
-    -- stepping target_end back in 7-day chunks.  Purely derived from the
-    -- resolved timestamps; no dependency on any scratch table.
+    -- stepping target_end back in ~period_step_label chunks.  Purely derived
+    -- from the resolved timestamps; no dependency on any scratch table.
     --
     DBMS_OUTPUT.PUT_LINE('  <div class="windows-list" style="margin-top:10px;">');
     DBMS_OUTPUT.PUT_LINE('    <b>Compared windows ('
         || DBMS_XMLGEN.CONVERT('~dow_name') || ', '
-        || '~win_hours' || 'h each):</b>');
+        || '~win_hours' || 'h each, every ~period_step_label):</b>');
     DBMS_OUTPUT.PUT_LINE('    <ul style="margin:4px 0 0 0;padding-left:22px;'
         || 'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;'
         || 'font-size:12px;line-height:1.6;">');
@@ -65,11 +69,11 @@ BEGIN
         SELECT LEVEL - 1 AS wk,
                TO_CHAR(
                    TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
-                       - (LEVEL-1)*7 - ~win_hours/24,
+                       - (LEVEL-1)*(~step_hours/24) - ~win_hours/24,
                    'YYYY-MM-DD HH24:MI') AS w_start,
                TO_CHAR(
                    TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
-                       - (LEVEL-1)*7,
+                       - (LEVEL-1)*(~step_hours/24),
                    'YYYY-MM-DD HH24:MI') AS w_end
         FROM   dual
         CONNECT BY LEVEL <= ~weeks_back + 1
@@ -77,8 +81,8 @@ BEGIN
     ) LOOP
         DBMS_OUTPUT.PUT_LINE('      <li>'
             || CASE WHEN w.wk = 0 THEN '<b>Current:</b>   '
-                    WHEN w.wk = 1 THEN '<b>&minus;1 week:</b>  '
-                    ELSE '<b>&minus;' || w.wk || ' weeks:</b> '
+                    WHEN w.wk = 1 THEN '<b>&minus;1 ~period_unit_long:</b>  '
+                    ELSE '<b>&minus;' || w.wk || ' ~period_unit_long.s:</b> '
                END
             || w.w_start || ' &rarr; ' || w.w_end
             || '</li>');
