@@ -121,7 +121,6 @@
                 ip.begin_snap_id,
                 ip.end_snap_id,
                 CASE
-                    WHEN ip.instance_number IS NULL                    THEN 'N'
                     WHEN ip.begin_snap_id IS NULL                      THEN 'N'
                     WHEN ip.end_snap_id   IS NULL                      THEN 'N'
                     WHEN ip.begin_snap_id = ip.end_snap_id             THEN 'N'
@@ -129,7 +128,6 @@
                     ELSE 'Y'
                 END AS valid_flag,
                 CASE
-                    WHEN ip.instance_number IS NULL THEN 'no snapshots in window for any instance'
                     WHEN ip.begin_snap_id IS NULL THEN 'no snapshot at/before window start'
                     WHEN ip.end_snap_id   IS NULL THEN 'no snapshot at/after window end'
                     WHEN ip.begin_snap_id = ip.end_snap_id THEN 'begin and end snapshot identical (window shorter than AWR interval)'

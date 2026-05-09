@@ -259,9 +259,14 @@ to get a different ORDER BY.
 ## Verification state
 
 Last verified against Oracle 19c on dbmint (CDB1, `connect / as sysdba`)
-in May 2026 after the `refactor/data-render-split` lib extraction.
-Density matters — the test DB had at most 3 consecutive weeks at any
-given hour-of-week, so findings are forced to `INSUFFICIENT_HISTORY`
+in May 2026 after the `fix/codex-review-priorities` round (per-instance
+window validity in `windows_cte.sql`, SYSMETRIC additive-vs-ratio
+classification, baselines override regression, generated-report
+gitignore). Single-instance byte-identity confirmed: the normalized
+md5 of a fresh `main`-branch report and a fresh `fix` -branch report
+generated minutes apart on dbmint matched (`fac510ce…`). Density
+matters — the test DB had at most 3 consecutive weeks at any given
+hour-of-week, so findings are forced to `INSUFFICIENT_HISTORY`
 (z-score needs ≥3 prior). Re-verify if you change any of sections
 02/03/04/05/06/07/08/09. Particular spots worth probing on a future
 real run:
