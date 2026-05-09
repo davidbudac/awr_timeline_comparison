@@ -43,7 +43,7 @@ BEGIN
             JOIN   dba_hist_bg_event_summary bg
                 ON bg.dbid = w.dbid
                AND bg.snap_id IN (w.begin_snap_id, w.end_snap_id)
-               AND (w.instance_number IS NULL OR bg.instance_number = w.instance_number)
+               AND bg.instance_number = w.instance_number
                AND NVL(bg.wait_class, 'Other') <> 'Idle'
         ),
         bounds AS (
@@ -92,7 +92,7 @@ BEGIN
             JOIN   dba_hist_bg_event_summary bg
                 ON bg.dbid = w.dbid
                AND bg.snap_id IN (w.begin_snap_id, w.end_snap_id)
-               AND (w.instance_number IS NULL OR bg.instance_number = w.instance_number)
+               AND bg.instance_number = w.instance_number
                AND NVL(bg.wait_class, 'Other') <> 'Idle'
         ),
         bounds AS (
@@ -188,7 +188,7 @@ BEGIN
             JOIN   dba_hist_bg_event_summary bg
                 ON bg.dbid = w.dbid
                AND bg.snap_id IN (w.begin_snap_id, w.end_snap_id)
-               AND (w.instance_number IS NULL OR bg.instance_number = w.instance_number)
+               AND bg.instance_number = w.instance_number
                AND NVL(bg.wait_class, 'Other') <> 'Idle'
         ),
         bounds AS (

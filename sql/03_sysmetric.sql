@@ -39,18 +39,30 @@ BEGIN
         targets AS (
             @@sql/lib/sysmetric_targets.sql
         ),
-        facts AS (
-            SELECT w.week_offset, sm.metric_name,
+        -- Per-snap cluster value: SUM across instances for additive
+        -- metrics (rates/counters), AVG across instances for ratios
+        -- and latencies. On single-instance these are identical.
+        per_snap AS (
+            SELECT w.week_offset, t.metric_name, sm.snap_id,
+                   t.is_additive,
                    MAX(sm.metric_unit) AS metric_unit,
-                   AVG(sm.average)     AS avg_value
+                   CASE WHEN t.is_additive = 'Y' THEN SUM(sm.average)
+                                                 ELSE AVG(sm.average) END AS snap_value
             FROM   valid_windows w
             CROSS JOIN targets t
             JOIN   dba_hist_sysmetric_summary sm
                 ON sm.dbid = w.dbid
                AND sm.snap_id BETWEEN w.begin_snap_id + 1 AND w.end_snap_id
-               AND (w.instance_number IS NULL OR sm.instance_number = w.instance_number)
+               AND sm.instance_number = w.instance_number
                AND sm.metric_name = t.metric_name
-            GROUP BY w.week_offset, sm.metric_name
+            GROUP BY w.week_offset, t.metric_name, t.is_additive, sm.snap_id
+        ),
+        facts AS (
+            SELECT week_offset, metric_name,
+                   MAX(metric_unit) AS metric_unit,
+                   AVG(snap_value)  AS avg_value
+            FROM   per_snap
+            GROUP BY week_offset, metric_name
         ),
         all_weeks AS (
             SELECT LEVEL - 1 AS week_offset

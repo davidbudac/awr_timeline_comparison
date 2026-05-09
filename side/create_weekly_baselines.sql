@@ -8,8 +8,19 @@
 -- Requires: EXECUTE on DBMS_WORKLOAD_REPOSITORY; Diagnostic Pack license.
 --
 -- Usage:
---   sqlplus user/pw@svc @side/create_weekly_baselines.sql
---   (or DEFINE weeks_back = 4 / prefix = 'WK_' / expire_days = 365 first.)
+--   sqlplus user/pw@svc @side/baselines_defaults.sql @side/create_weekly_baselines.sql
+--   sqlplus user/pw@svc /nolog
+--     SQL> connect ...
+--     SQL> DEFINE weeks_back = 4
+--     SQL> @side/create_weekly_baselines.sql
+--
+-- This script intentionally does NOT DEFINE defaults itself, so an
+-- explicit caller override (DEFINE before @-loading the script) is
+-- never clobbered. Mirrors the awr_trend.sql / sql/defaults.sql
+-- pattern. Either load side/baselines_defaults.sql first or set the
+-- DEFINEs yourself.
+--
+-- Required substitution vars: weeks_back, prefix, expire_days.
 --
 -- Idempotent: baselines that already exist (matched by name) are skipped.
 --
@@ -18,10 +29,6 @@ SET SERVEROUTPUT ON SIZE UNLIMITED
 SET FEEDBACK OFF
 SET VERIFY OFF
 SET DEFINE '~'
-
-DEFINE weeks_back  = 1
-DEFINE prefix      = 'WK_'
-DEFINE expire_days = 365
 
 DECLARE
     v_weeks_back   NUMBER := ~weeks_back;

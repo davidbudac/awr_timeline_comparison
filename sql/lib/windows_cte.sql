@@ -28,21 +28,26 @@
 --                   target_end_ts, win_hours, weeks_back, top_n)
 --   offsets         rows for each week_offset 0..weeks_back
 --   raw_windows     unsnapped time bounds per offset
---   snaps           candidate snaps within each window's bracket
---   begin_snap      resolved begin snap per offset
---   end_snap        resolved end snap per offset
---   windows         per-offset metadata + valid_flag + skip_reason
---                   (week_offset, dbid, instance_number,
---                    win_start_ts, win_end_ts,
---                    begin_snap_id, end_snap_id,
---                    valid_flag, skip_reason)
---   valid_windows   only valid_flag='Y' rows + dur_sec
---                   (week_offset, dbid, instance_number,
---                    win_start_ts, win_end_ts,
---                    begin_snap_id, end_snap_id, dur_sec)
---
--- Intentionally projects every column any consumer needs; unreferenced
--- CTEs (e.g. valid_windows in section 01) are ignored by the optimizer.
+--   snaps           candidate snaps within each window's bracket,
+--                   carrying instance_number
+--   begin_snap      resolved begin snap per (offset, instance_number)
+--   end_snap        resolved end snap per (offset, instance_number)
+--   instance_pairs  FULL OUTER JOIN of begin/end on
+--                   (offset, instance_number), so an instance with
+--                   only one of the two snaps still surfaces (and
+--                   gets flagged invalid below)
+--   windows         per (offset, instance_number) metadata + valid_flag
+--                   + skip_reason. RAC: one row per instance per offset.
+--                   Single-instance: one row per offset.
+--   valid_windows   only valid_flag='Y' rows + dur_sec, per
+--                   (offset, instance_number). Downstream cumulative
+--                   sections SUM(end - begin) GROUP BY offset, which
+--                   correctly aggregates only valid instance pairs.
+--   windows_rollup  per (offset) summary used by display sections
+--                   (01, 09): valid_flag = 'Y' iff at least one
+--                   instance is valid; begin/end snap range; first
+--                   non-null skip_reason. Preserves single-instance
+--                   byte-identity.
 --
 -- Substitution variables consumed (resolved once by awr_trend.sql):
 --   ~dbid ~inst_num ~target_end_resolved
@@ -68,7 +73,8 @@
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (
-            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.instance_number, w.dbid,
+            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.dbid,
+                   s.instance_number,
                    s.snap_id, s.end_interval_time, s.startup_time
             FROM   raw_windows w
             JOIN   dba_hist_snapshot s
@@ -79,44 +85,57 @@
                     AND CAST(w.win_end_dt   + 1 AS TIMESTAMP)
         ),
         begin_snap AS (
-            SELECT week_offset,
+            SELECT week_offset, instance_number,
                    MAX(snap_id) KEEP (DENSE_RANK LAST ORDER BY end_interval_time)  AS snap_id,
                    MAX(startup_time) KEEP (DENSE_RANK LAST ORDER BY end_interval_time) AS startup_time
             FROM   snaps
             WHERE  end_interval_time <= CAST(win_start_dt + 5/1440 AS TIMESTAMP)
-            GROUP BY week_offset
+            GROUP BY week_offset, instance_number
         ),
         end_snap AS (
-            SELECT week_offset,
+            SELECT week_offset, instance_number,
                    MIN(snap_id) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS snap_id,
                    MIN(startup_time) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS startup_time
             FROM   snaps
             WHERE  end_interval_time >= CAST(win_end_dt - 5/1440 AS TIMESTAMP)
-            GROUP BY week_offset
+            GROUP BY week_offset, instance_number
+        ),
+        instance_pairs AS (
+            SELECT NVL(bs.week_offset,     es.week_offset)     AS week_offset,
+                   NVL(bs.instance_number, es.instance_number) AS instance_number,
+                   bs.snap_id      AS begin_snap_id,
+                   bs.startup_time AS begin_startup_time,
+                   es.snap_id      AS end_snap_id,
+                   es.startup_time AS end_startup_time
+            FROM   begin_snap bs
+            FULL OUTER JOIN end_snap es
+              ON  es.week_offset     = bs.week_offset
+             AND  es.instance_number = bs.instance_number
         ),
         windows AS (
             SELECT
-                w.week_offset, w.dbid, w.instance_number,
+                w.week_offset, w.dbid,
+                ip.instance_number,
                 CAST(w.win_start_dt AS TIMESTAMP) AS win_start_ts,
                 CAST(w.win_end_dt   AS TIMESTAMP) AS win_end_ts,
-                bs.snap_id AS begin_snap_id,
-                es.snap_id AS end_snap_id,
+                ip.begin_snap_id,
+                ip.end_snap_id,
                 CASE
-                    WHEN bs.snap_id IS NULL OR es.snap_id IS NULL THEN 'N'
-                    WHEN bs.snap_id = es.snap_id                  THEN 'N'
-                    WHEN bs.startup_time <> es.startup_time       THEN 'N'
+                    WHEN ip.begin_snap_id IS NULL                      THEN 'N'
+                    WHEN ip.end_snap_id   IS NULL                      THEN 'N'
+                    WHEN ip.begin_snap_id = ip.end_snap_id             THEN 'N'
+                    WHEN ip.begin_startup_time <> ip.end_startup_time  THEN 'N'
                     ELSE 'Y'
                 END AS valid_flag,
                 CASE
-                    WHEN bs.snap_id IS NULL THEN 'no snapshot at/before window start'
-                    WHEN es.snap_id IS NULL THEN 'no snapshot at/after window end'
-                    WHEN bs.snap_id = es.snap_id THEN 'begin and end snapshot identical (window shorter than AWR interval)'
-                    WHEN bs.startup_time <> es.startup_time THEN 'instance restarted inside window'
+                    WHEN ip.begin_snap_id IS NULL THEN 'no snapshot at/before window start'
+                    WHEN ip.end_snap_id   IS NULL THEN 'no snapshot at/after window end'
+                    WHEN ip.begin_snap_id = ip.end_snap_id THEN 'begin and end snapshot identical (window shorter than AWR interval)'
+                    WHEN ip.begin_startup_time <> ip.end_startup_time THEN 'instance restarted inside window'
                     ELSE NULL
                 END AS skip_reason
             FROM   raw_windows w
-            LEFT JOIN begin_snap bs ON bs.week_offset = w.week_offset
-            LEFT JOIN end_snap   es ON es.week_offset = w.week_offset
+            LEFT JOIN instance_pairs ip ON ip.week_offset = w.week_offset
         ),
         valid_windows AS (
             SELECT week_offset, dbid, instance_number,
@@ -125,4 +144,18 @@
                    (CAST(win_end_ts AS DATE) - CAST(win_start_ts AS DATE)) * 86400 AS dur_sec
             FROM   windows
             WHERE  valid_flag = 'Y'
+        ),
+        windows_rollup AS (
+            SELECT week_offset,
+                   MAX(win_start_ts) AS win_start_ts,
+                   MAX(win_end_ts)   AS win_end_ts,
+                   MIN(begin_snap_id) AS begin_snap_id,
+                   MAX(end_snap_id)   AS end_snap_id,
+                   CASE WHEN SUM(CASE WHEN valid_flag = 'Y' THEN 1 ELSE 0 END) > 0
+                        THEN 'Y' ELSE 'N' END AS valid_flag,
+                   MIN(skip_reason) KEEP (DENSE_RANK FIRST
+                       ORDER BY CASE WHEN skip_reason IS NULL THEN 1 ELSE 0 END,
+                                skip_reason) AS skip_reason
+            FROM   windows
+            GROUP BY week_offset
         )

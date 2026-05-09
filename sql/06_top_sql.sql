@@ -73,7 +73,7 @@ BEGIN
             JOIN   dba_hist_sqlstat s
                 ON s.dbid = w.dbid
                AND s.snap_id BETWEEN w.begin_snap_id + 1 AND w.end_snap_id
-               AND (w.instance_number IS NULL OR s.instance_number = w.instance_number)
+               AND s.instance_number = w.instance_number
             GROUP BY w.week_offset, s.sql_id
         ),
         ranked AS (

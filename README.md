@@ -130,13 +130,15 @@ entirely separate from the main report. It creates one
 with `awrddrpt.sql` / OEM directly.
 
 ```bash
-sqlplus user/pw@svc @side/create_weekly_baselines.sql
+sqlplus user/pw@svc @side/baselines_defaults.sql @side/create_weekly_baselines.sql
 ```
 
-Defaults: creates a baseline for the last completed ISO week, name
-`WK_<IYYY>_<IW>` (e.g. `WK_2026_16`). Idempotent.
+Defaults (from `side/baselines_defaults.sql`): creates a baseline for the
+last completed ISO week, name `WK_<IYYY>_<IW>` (e.g. `WK_2026_16`).
+Idempotent.
 
-Override:
+Override (set DEFINEs before `@`-loading the script — they are NOT
+clobbered by defaults, so don't `@` `baselines_defaults.sql` here):
 
 ```sql
 SQL> DEFINE weeks_back  = 4
@@ -165,7 +167,8 @@ SQL> @side/create_weekly_baselines.sql
 │   ├── 09_ash_timeline.sql          -- hourly ASH stacked-area timeline
 │   └── 10_db_time_summary.sql       -- full-span DB time stacked area
 ├── side/
-│   └── create_weekly_baselines.sql  -- optional, AWR baselines (writes)
+│   ├── baselines_defaults.sql      -- canonical defaults for the baselines script
+│   └── create_weekly_baselines.sql -- optional, AWR baselines (writes)
 └── reports/                         -- generated HTML files
 ```
 

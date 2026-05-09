@@ -187,13 +187,51 @@ anonymous block (just before `BEGIN`). Slot `k+1` corresponds to
 `week_offset = k`. The function is INSTR-based (not `REGEXP_SUBSTR`)
 so empty tokens between commas are preserved.
 
-### Window validity
-`01_windows.sql` flags a window `valid_flag = 'N'` with a `skip_reason`
-when: bounds can't be resolved, begin=end (same snap), or
-`startup_time` differs between the two snaps (instance restart). Every
-downstream section carries its own copy of the windows CTE and filters
-on `valid_flag = 'Y'`; invalid weeks are still shown in the Windows
-table but excluded from the z-score baseline.
+### Window validity (per-instance in RAC aggregate mode)
+`windows_cte.sql` resolves `begin_snap` and `end_snap` per
+`(week_offset, instance_number)`, FULL OUTER JOINs them into
+`instance_pairs`, and produces `windows` with one row per
+`(week_offset, instance_number)`. `valid_flag = 'N'` (with a
+`skip_reason`) is set per-instance when: an instance has no candidate
+begin or end snap; begin=end (same snap, window shorter than the AWR
+interval); or `startup_time` differs between the two snaps (the
+instance restarted inside the window).
+
+`valid_windows` is the per-instance, valid-only projection consumed by
+every numbered data section (02–08); their joins use
+`v.instance_number = w.instance_number` directly (no NULL fallback —
+`valid_windows.instance_number` is never NULL by construction). The
+final per-week aggregate happens at the section's own `GROUP BY
+week_offset` and naturally sums only over instance pairs that survived
+validation. On a RAC cluster where one instance restarts mid-window,
+its delta is dropped and the others' kept; on single-instance, this is
+a no-op.
+
+For display, `windows_rollup` aggregates `windows` back to one row per
+`week_offset`: `valid_flag = 'Y'` if at least one instance was valid;
+`begin_snap_id`/`end_snap_id` show the MIN/MAX across instances; the
+first non-null `skip_reason` wins. Sections 01 (windows ribbon + table)
+and 09 (ASH band markers) read `windows_rollup`. Single-instance output
+is byte-identical to the per-week-only design that preceded this CTE.
+
+### SYSMETRIC cross-instance aggregation (additive vs ratio)
+`DBA_HIST_SYSMETRIC_SUMMARY` reports per-(snap, instance) averages over
+the snapshot interval. Cross-instance roll-up is metric-dependent:
+**rates and counters** (Average Active Sessions, *_Per_Sec, Session
+Count) are **additive** — the cluster value is `SUM(average)` across
+instances; **ratios, percentages, latencies, response times** (CPU
+Ratios, Wait Time Ratio, Sync SBR Latency, SQL Service Response Time)
+are **averages** — `AVG(average)`. Doing a flat `AVG` across instances
+for additive metrics silently undercounts cluster load.
+
+`sql/lib/sysmetric_targets.sql` tags each metric with an `is_additive`
+flag ('Y'/'N'). Sections 03 and 07 read the flag from the targets file;
+section 08's hand-maintained `cards` CTE carries an inline `is_add`
+column for the same purpose. The aggregation pattern is two-step in
+every consumer: `snap_value = (SUM|AVG)(sm.average) GROUP BY week,
+metric, snap_id`, then `metric_value = AVG(snap_value) GROUP BY week,
+metric`. On single-instance, SUM and AVG over one row are identical, so
+this is a no-op.
 
 ### Severity classes (must stay aligned with CSS in `_style.sql`)
 `CRITICAL` → `crit`, `WARN` → `warn`, `OK` → `ok`,
@@ -221,9 +259,14 @@ to get a different ORDER BY.
 ## Verification state
 
 Last verified against Oracle 19c on dbmint (CDB1, `connect / as sysdba`)
-in May 2026 after the `refactor/data-render-split` lib extraction.
-Density matters — the test DB had at most 3 consecutive weeks at any
-given hour-of-week, so findings are forced to `INSUFFICIENT_HISTORY`
+in May 2026 after the `fix/codex-review-priorities` round (per-instance
+window validity in `windows_cte.sql`, SYSMETRIC additive-vs-ratio
+classification, baselines override regression, generated-report
+gitignore). Single-instance byte-identity confirmed: the normalized
+md5 of a fresh `main`-branch report and a fresh `fix` -branch report
+generated minutes apart on dbmint matched (`fac510ce…`). Density
+matters — the test DB had at most 3 consecutive weeks at any given
+hour-of-week, so findings are forced to `INSUFFICIENT_HISTORY`
 (z-score needs ≥3 prior). Re-verify if you change any of sections
 02/03/04/05/06/07/08/09. Particular spots worth probing on a future
 real run:

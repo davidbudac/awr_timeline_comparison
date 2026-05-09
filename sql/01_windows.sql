@@ -41,13 +41,16 @@ BEGIN
         || '<svg viewBox="0 0 1000 72" preserveAspectRatio="none" role="img" aria-label="Baseline windows timeline">');
     DBMS_OUTPUT.PUT_LINE('<line x1="0" y1="56" x2="1000" y2="56" stroke="#c8d0dc" stroke-width="1"/>');
 
-    -- Emit one <g> per window, oldest on the left.
+    -- Emit one <g> per window, oldest on the left. Display uses
+    -- windows_rollup so each week_offset gets a single ribbon block
+    -- regardless of instance count (RAC: rollup is 'Y' if any
+    -- instance is valid; per-instance detail goes to the data sections).
     FOR w IN (
         WITH
         @@sql/lib/windows_cte.sql
         SELECT week_offset, win_end_ts, begin_snap_id, end_snap_id,
                valid_flag, skip_reason
-        FROM   windows
+        FROM   windows_rollup
         ORDER BY week_offset DESC
     ) LOOP
         v_slot_idx   := v_weeks_back - w.week_offset;       -- 0 = leftmost (oldest)
@@ -114,7 +117,7 @@ BEGIN
         @@sql/lib/windows_cte.sql
         SELECT week_offset, win_start_ts, win_end_ts,
                begin_snap_id, end_snap_id, valid_flag, skip_reason
-        FROM   windows
+        FROM   windows_rollup
         ORDER BY week_offset
     ) LOOP
         DBMS_OUTPUT.PUT_LINE(

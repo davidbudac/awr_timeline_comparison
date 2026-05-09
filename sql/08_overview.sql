@@ -51,19 +51,24 @@ BEGIN
         WITH
         @@sql/lib/windows_cte.sql
         ,
+        -- is_add tags METRIC rows for cross-instance aggregation: 'Y' =
+        -- additive (SUM across instances per snap), 'N' = ratio/avg.
+        -- LOAD rows are SYSSTAT counter deltas which are already
+        -- per-instance in the GROUP BY and SUMmed at the rows level, so
+        -- the flag is irrelevant for them (set to 'Y' for tidiness).
         cards AS (
             SELECT 1 AS pos, 'DB time'                AS label, 'cs/s' AS unit,
-                   'LOAD'   AS src, 'DB time'                 AS key FROM dual UNION ALL
+                   'LOAD'   AS src, 'DB time'                 AS key, 'Y' AS is_add FROM dual UNION ALL
             SELECT 2, 'Redo generated',        'B/s',
-                   'LOAD',   'redo size'                             FROM dual UNION ALL
+                   'LOAD',   'redo size'                             , 'Y'           FROM dual UNION ALL
             SELECT 3, 'Logical reads',         '/s',
-                   'LOAD',   'session logical reads'                 FROM dual UNION ALL
+                   'LOAD',   'session logical reads'                 , 'Y'           FROM dual UNION ALL
             SELECT 4, 'Average Active Sessions','AAS',
-                   'METRIC', 'Average Active Sessions'               FROM dual UNION ALL
+                   'METRIC', 'Average Active Sessions'               , 'Y'           FROM dual UNION ALL
             SELECT 5, 'Wait Time Ratio',       '%',
-                   'METRIC', 'Database Wait Time Ratio'              FROM dual UNION ALL
+                   'METRIC', 'Database Wait Time Ratio'              , 'N'           FROM dual UNION ALL
             SELECT 6, 'Hard parses',           '/s',
-                   'LOAD',   'parse count (hard)'                    FROM dual
+                   'LOAD',   'parse count (hard)'                    , 'Y'           FROM dual
         ),
         load_pairs AS (
             SELECT w.week_offset, w.dur_sec, ss.stat_name, ss.instance_number,
@@ -72,7 +77,7 @@ BEGIN
             JOIN   dba_hist_sysstat ss
                 ON ss.dbid = w.dbid
                AND ss.snap_id IN (w.begin_snap_id, w.end_snap_id)
-               AND (w.instance_number IS NULL OR ss.instance_number = w.instance_number)
+               AND ss.instance_number = w.instance_number
                AND ss.stat_name IN (SELECT key FROM cards WHERE src = 'LOAD')
         ),
         load_bounds AS (
@@ -90,16 +95,29 @@ BEGIN
             FROM   load_bounds
             GROUP BY week_offset, dur_sec, stat_name
         ),
-        metric_rows AS (
-            SELECT 'METRIC' AS src, sm.metric_name AS key, w.week_offset,
-                   AVG(sm.average) AS val
+        -- Per-snap cluster value: SUM across instances for additive
+        -- metrics (rates/counters), AVG for ratios. See is_add tagging
+        -- on cards above. On single-instance, SUM and AVG over one row
+        -- are identical, so no behavior change for non-RAC.
+        metric_per_snap AS (
+            SELECT w.week_offset, c.key AS metric_name, sm.snap_id,
+                   c.is_add,
+                   CASE WHEN c.is_add = 'Y' THEN SUM(sm.average)
+                                            ELSE AVG(sm.average) END AS snap_value
             FROM   valid_windows w
+            JOIN   cards c ON c.src = 'METRIC'
             JOIN   dba_hist_sysmetric_summary sm
                 ON sm.dbid = w.dbid
                AND sm.snap_id BETWEEN w.begin_snap_id + 1 AND w.end_snap_id
-               AND (w.instance_number IS NULL OR sm.instance_number = w.instance_number)
-               AND sm.metric_name IN (SELECT key FROM cards WHERE src = 'METRIC')
-            GROUP BY w.week_offset, sm.metric_name
+               AND sm.instance_number = w.instance_number
+               AND sm.metric_name = c.key
+            GROUP BY w.week_offset, c.key, c.is_add, sm.snap_id
+        ),
+        metric_rows AS (
+            SELECT 'METRIC' AS src, metric_name AS key, week_offset,
+                   AVG(snap_value) AS val
+            FROM   metric_per_snap
+            GROUP BY week_offset, metric_name
         ),
         all_rows AS (
             SELECT * FROM load_rows   UNION ALL

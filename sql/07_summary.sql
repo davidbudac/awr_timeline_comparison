@@ -82,7 +82,7 @@ BEGIN
         JOIN   dba_hist_sysstat ss
             ON ss.dbid = w.dbid
            AND ss.snap_id IN (w.begin_snap_id, w.end_snap_id)
-           AND (w.instance_number IS NULL OR ss.instance_number = w.instance_number)
+           AND ss.instance_number = w.instance_number
            AND ss.stat_name IN (SELECT stat_name FROM load_targets)
     ),
     load_bounds AS (
@@ -103,21 +103,32 @@ BEGIN
         GROUP BY week_offset, dur_sec, stat_name
     ),
     -- METRIC domain: DBA_HIST_SYSMETRIC_SUMMARY averages over window.
+    -- Per-snap cluster value: SUM across instances for additive metrics,
+    -- AVG for ratios. See sql/lib/sysmetric_targets.sql for the rationale.
     metric_targets AS (
         @@sql/lib/sysmetric_targets.sql
     ),
-    metric_rows AS (
-        SELECT 'METRIC' AS metric_domain,
-               sm.metric_name,
-               w.week_offset,
-               AVG(sm.average) AS metric_value
+    metric_per_snap AS (
+        SELECT w.week_offset, t.metric_name, sm.snap_id,
+               t.is_additive,
+               CASE WHEN t.is_additive = 'Y' THEN SUM(sm.average)
+                                             ELSE AVG(sm.average) END AS snap_value
         FROM   valid_windows w
+        JOIN   metric_targets t ON 1 = 1
         JOIN   dba_hist_sysmetric_summary sm
             ON sm.dbid = w.dbid
            AND sm.snap_id BETWEEN w.begin_snap_id + 1 AND w.end_snap_id
-           AND (w.instance_number IS NULL OR sm.instance_number = w.instance_number)
-           AND sm.metric_name IN (SELECT metric_name FROM metric_targets)
-        GROUP BY w.week_offset, sm.metric_name
+           AND sm.instance_number = w.instance_number
+           AND sm.metric_name = t.metric_name
+        GROUP BY w.week_offset, t.metric_name, t.is_additive, sm.snap_id
+    ),
+    metric_rows AS (
+        SELECT 'METRIC' AS metric_domain,
+               metric_name,
+               week_offset,
+               AVG(snap_value) AS metric_value
+        FROM   metric_per_snap
+        GROUP BY week_offset, metric_name
     ),
     -- WAIT domain: DBA_HIST_SYSTEM_EVENT time-waited per wait_class, as rate.
     wait_pairs AS (
@@ -132,7 +143,7 @@ BEGIN
         JOIN   dba_hist_system_event se
             ON se.dbid = w.dbid
            AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
-           AND (w.instance_number IS NULL OR se.instance_number = w.instance_number)
+           AND se.instance_number = w.instance_number
            AND se.wait_class <> 'Idle'
     ),
     wait_bounds AS (
