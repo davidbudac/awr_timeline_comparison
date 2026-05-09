@@ -22,29 +22,7 @@ DECLARE
     v_pct        NUMBER;
     v_fmt        VARCHAR2(40);
 
-    FUNCTION nth_csv(p_str VARCHAR2, p_n POSITIVE) RETURN VARCHAR2 IS
-        v_start PLS_INTEGER := 1;
-        v_end   PLS_INTEGER;
-        v_cnt   PLS_INTEGER := 0;
-    BEGIN
-        IF p_str IS NULL OR p_n IS NULL OR p_n < 1 THEN
-            RETURN NULL;
-        END IF;
-        LOOP
-            v_end := INSTR(p_str, ',', v_start);
-            v_cnt := v_cnt + 1;
-            IF v_cnt = p_n THEN
-                IF v_end = 0 THEN
-                    RETURN SUBSTR(p_str, v_start);
-                ELSE
-                    RETURN SUBSTR(p_str, v_start, v_end - v_start);
-                END IF;
-            END IF;
-            EXIT WHEN v_end = 0;
-            v_start := v_end + 1;
-        END LOOP;
-        RETURN NULL;
-    END nth_csv;
+    @@sql/lib/nth_csv.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="load"><h2>Load profile &mdash; per-second rates</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
@@ -65,33 +43,7 @@ BEGIN
         @@sql/lib/windows_cte.sql
         ,
         targets AS (
-            SELECT 'redo size'                              stat_name FROM dual UNION ALL
-            SELECT 'redo size for lost write detection'               FROM dual UNION ALL
-            SELECT 'DB time'                                          FROM dual UNION ALL
-            SELECT 'DB CPU'                                           FROM dual UNION ALL
-            SELECT 'CPU used by this session'                         FROM dual UNION ALL
-            SELECT 'session logical reads'                            FROM dual UNION ALL
-            SELECT 'physical reads'                                   FROM dual UNION ALL
-            SELECT 'physical read total bytes'                        FROM dual UNION ALL
-            SELECT 'physical writes'                                  FROM dual UNION ALL
-            SELECT 'physical write total bytes'                       FROM dual UNION ALL
-            SELECT 'user calls'                                       FROM dual UNION ALL
-            SELECT 'user commits'                                     FROM dual UNION ALL
-            SELECT 'user rollbacks'                                   FROM dual UNION ALL
-            SELECT 'execute count'                                    FROM dual UNION ALL
-            SELECT 'parse count (total)'                              FROM dual UNION ALL
-            SELECT 'parse count (hard)'                               FROM dual UNION ALL
-            SELECT 'parse count (failures)'                           FROM dual UNION ALL
-            SELECT 'sorts (memory)'                                   FROM dual UNION ALL
-            SELECT 'sorts (disk)'                                     FROM dual UNION ALL
-            SELECT 'sorts (rows)'                                     FROM dual UNION ALL
-            SELECT 'logons cumulative'                                FROM dual UNION ALL
-            SELECT 'opened cursors cumulative'                        FROM dual UNION ALL
-            SELECT 'redo writes'                                      FROM dual UNION ALL
-            SELECT 'table scans (long tables)'                        FROM dual UNION ALL
-            SELECT 'table fetch by rowid'                             FROM dual UNION ALL
-            SELECT 'bytes sent via SQL*Net to client'                 FROM dual UNION ALL
-            SELECT 'bytes received via SQL*Net from client'           FROM dual
+            @@sql/lib/sysstat_load_targets.sql
         ),
         pairs AS (
             SELECT

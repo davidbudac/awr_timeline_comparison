@@ -25,29 +25,7 @@ DECLARE
         '["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1",' ||
         '"#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"]';
 
-    FUNCTION nth_csv(p_str VARCHAR2, p_n POSITIVE) RETURN VARCHAR2 IS
-        v_start PLS_INTEGER := 1;
-        v_end   PLS_INTEGER;
-        v_cnt   PLS_INTEGER := 0;
-    BEGIN
-        IF p_str IS NULL OR p_n IS NULL OR p_n < 1 THEN
-            RETURN NULL;
-        END IF;
-        LOOP
-            v_end := INSTR(p_str, ',', v_start);
-            v_cnt := v_cnt + 1;
-            IF v_cnt = p_n THEN
-                IF v_end = 0 THEN
-                    RETURN SUBSTR(p_str, v_start);
-                ELSE
-                    RETURN SUBSTR(p_str, v_start, v_end - v_start);
-                END IF;
-            END IF;
-            EXIT WHEN v_end = 0;
-            v_start := v_end + 1;
-        END LOOP;
-        RETURN NULL;
-    END nth_csv;
+    @@sql/lib/nth_csv.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="waits-bg"><h2>Background wait events</h2>');
 

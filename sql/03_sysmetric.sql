@@ -19,29 +19,7 @@ DECLARE
     v_row_max     NUMBER;
     v_pct         NUMBER;
 
-    FUNCTION nth_csv(p_str VARCHAR2, p_n POSITIVE) RETURN VARCHAR2 IS
-        v_start PLS_INTEGER := 1;
-        v_end   PLS_INTEGER;
-        v_cnt   PLS_INTEGER := 0;
-    BEGIN
-        IF p_str IS NULL OR p_n IS NULL OR p_n < 1 THEN
-            RETURN NULL;
-        END IF;
-        LOOP
-            v_end := INSTR(p_str, ',', v_start);
-            v_cnt := v_cnt + 1;
-            IF v_cnt = p_n THEN
-                IF v_end = 0 THEN
-                    RETURN SUBSTR(p_str, v_start);
-                ELSE
-                    RETURN SUBSTR(p_str, v_start, v_end - v_start);
-                END IF;
-            END IF;
-            EXIT WHEN v_end = 0;
-            v_start := v_end + 1;
-        END LOOP;
-        RETURN NULL;
-    END nth_csv;
+    @@sql/lib/nth_csv.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="metrics"><h2>System metrics (DBA_HIST_SYSMETRIC_SUMMARY)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">Averages over the snapshots inside each window. The <b>Trend</b> column plots the per-~period_unit_long series (oldest &rarr; current). Values are already per-second where the metric name says so.</p>');
@@ -59,31 +37,7 @@ BEGIN
         @@sql/lib/windows_cte.sql
         ,
         targets AS (
-            SELECT metric_name FROM (
-                SELECT 'Host CPU Utilization (%)'                 metric_name FROM dual UNION ALL
-                SELECT 'Database CPU Time Ratio'                              FROM dual UNION ALL
-                SELECT 'Database Wait Time Ratio'                             FROM dual UNION ALL
-                SELECT 'Average Active Sessions'                              FROM dual UNION ALL
-                SELECT 'Average Synchronous Single-Block Read Latency'        FROM dual UNION ALL
-                SELECT 'Physical Reads Per Sec'                               FROM dual UNION ALL
-                SELECT 'Physical Writes Per Sec'                              FROM dual UNION ALL
-                SELECT 'Physical Read Total IO Requests Per Sec'              FROM dual UNION ALL
-                SELECT 'Physical Write Total IO Requests Per Sec'             FROM dual UNION ALL
-                SELECT 'Physical Read Total Bytes Per Sec'                    FROM dual UNION ALL
-                SELECT 'Physical Write Total Bytes Per Sec'                   FROM dual UNION ALL
-                SELECT 'Redo Generated Per Sec'                               FROM dual UNION ALL
-                SELECT 'Logons Per Sec'                                       FROM dual UNION ALL
-                SELECT 'Logical Reads Per Sec'                                FROM dual UNION ALL
-                SELECT 'User Calls Per Sec'                                   FROM dual UNION ALL
-                SELECT 'User Commits Per Sec'                                 FROM dual UNION ALL
-                SELECT 'User Rollbacks Per Sec'                               FROM dual UNION ALL
-                SELECT 'Executions Per Sec'                                   FROM dual UNION ALL
-                SELECT 'Hard Parse Count Per Sec'                             FROM dual UNION ALL
-                SELECT 'Total Parse Count Per Sec'                            FROM dual UNION ALL
-                SELECT 'Session Count'                                        FROM dual UNION ALL
-                SELECT 'Network Traffic Volume Per Sec'                       FROM dual UNION ALL
-                SELECT 'SQL Service Response Time'                            FROM dual
-            )
+            @@sql/lib/sysmetric_targets.sql
         ),
         facts AS (
             SELECT w.week_offset, sm.metric_name,

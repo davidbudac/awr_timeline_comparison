@@ -46,33 +46,7 @@ BEGIN
         ,
         -- LOAD domain: DBA_HIST_SYSSTAT cumulative counters, per-sec deltas.
         load_targets AS (
-            SELECT 'redo size'                              stat_name FROM dual UNION ALL
-            SELECT 'redo size for lost write detection'               FROM dual UNION ALL
-            SELECT 'DB time'                                          FROM dual UNION ALL
-            SELECT 'DB CPU'                                           FROM dual UNION ALL
-            SELECT 'CPU used by this session'                         FROM dual UNION ALL
-            SELECT 'session logical reads'                            FROM dual UNION ALL
-            SELECT 'physical reads'                                   FROM dual UNION ALL
-            SELECT 'physical read total bytes'                        FROM dual UNION ALL
-            SELECT 'physical writes'                                  FROM dual UNION ALL
-            SELECT 'physical write total bytes'                       FROM dual UNION ALL
-            SELECT 'user calls'                                       FROM dual UNION ALL
-            SELECT 'user commits'                                     FROM dual UNION ALL
-            SELECT 'user rollbacks'                                   FROM dual UNION ALL
-            SELECT 'execute count'                                    FROM dual UNION ALL
-            SELECT 'parse count (total)'                              FROM dual UNION ALL
-            SELECT 'parse count (hard)'                               FROM dual UNION ALL
-            SELECT 'parse count (failures)'                           FROM dual UNION ALL
-            SELECT 'sorts (memory)'                                   FROM dual UNION ALL
-            SELECT 'sorts (disk)'                                     FROM dual UNION ALL
-            SELECT 'sorts (rows)'                                     FROM dual UNION ALL
-            SELECT 'logons cumulative'                                FROM dual UNION ALL
-            SELECT 'opened cursors cumulative'                        FROM dual UNION ALL
-            SELECT 'redo writes'                                      FROM dual UNION ALL
-            SELECT 'table scans (long tables)'                        FROM dual UNION ALL
-            SELECT 'table fetch by rowid'                             FROM dual UNION ALL
-            SELECT 'bytes sent via SQL*Net to client'                 FROM dual UNION ALL
-            SELECT 'bytes received via SQL*Net from client'           FROM dual
+            @@sql/lib/sysstat_load_targets.sql
         ),
         load_pairs AS (
             SELECT w.week_offset, w.dur_sec, ss.stat_name, ss.instance_number,
@@ -104,29 +78,7 @@ BEGIN
         ),
         -- METRIC domain: DBA_HIST_SYSMETRIC_SUMMARY averages over window.
         metric_targets AS (
-            SELECT 'Host CPU Utilization (%)'                 metric_name FROM dual UNION ALL
-            SELECT 'Database CPU Time Ratio'                              FROM dual UNION ALL
-            SELECT 'Database Wait Time Ratio'                             FROM dual UNION ALL
-            SELECT 'Average Active Sessions'                              FROM dual UNION ALL
-            SELECT 'Average Synchronous Single-Block Read Latency'        FROM dual UNION ALL
-            SELECT 'Physical Reads Per Sec'                               FROM dual UNION ALL
-            SELECT 'Physical Writes Per Sec'                              FROM dual UNION ALL
-            SELECT 'Physical Read Total IO Requests Per Sec'              FROM dual UNION ALL
-            SELECT 'Physical Write Total IO Requests Per Sec'             FROM dual UNION ALL
-            SELECT 'Physical Read Total Bytes Per Sec'                    FROM dual UNION ALL
-            SELECT 'Physical Write Total Bytes Per Sec'                   FROM dual UNION ALL
-            SELECT 'Redo Generated Per Sec'                               FROM dual UNION ALL
-            SELECT 'Logons Per Sec'                                       FROM dual UNION ALL
-            SELECT 'Logical Reads Per Sec'                                FROM dual UNION ALL
-            SELECT 'User Calls Per Sec'                                   FROM dual UNION ALL
-            SELECT 'User Commits Per Sec'                                 FROM dual UNION ALL
-            SELECT 'User Rollbacks Per Sec'                               FROM dual UNION ALL
-            SELECT 'Executions Per Sec'                                   FROM dual UNION ALL
-            SELECT 'Hard Parse Count Per Sec'                             FROM dual UNION ALL
-            SELECT 'Total Parse Count Per Sec'                            FROM dual UNION ALL
-            SELECT 'Session Count'                                        FROM dual UNION ALL
-            SELECT 'Network Traffic Volume Per Sec'                       FROM dual UNION ALL
-            SELECT 'SQL Service Response Time'                            FROM dual
+            @@sql/lib/sysmetric_targets.sql
         ),
         metric_rows AS (
             SELECT 'METRIC' AS metric_domain,
@@ -310,33 +262,7 @@ BEGIN
         @@sql/lib/windows_cte.sql
         ,
         load_targets AS (
-            SELECT 'redo size'                              stat_name FROM dual UNION ALL
-            SELECT 'redo size for lost write detection'               FROM dual UNION ALL
-            SELECT 'DB time'                                          FROM dual UNION ALL
-            SELECT 'DB CPU'                                           FROM dual UNION ALL
-            SELECT 'CPU used by this session'                         FROM dual UNION ALL
-            SELECT 'session logical reads'                            FROM dual UNION ALL
-            SELECT 'physical reads'                                   FROM dual UNION ALL
-            SELECT 'physical read total bytes'                        FROM dual UNION ALL
-            SELECT 'physical writes'                                  FROM dual UNION ALL
-            SELECT 'physical write total bytes'                       FROM dual UNION ALL
-            SELECT 'user calls'                                       FROM dual UNION ALL
-            SELECT 'user commits'                                     FROM dual UNION ALL
-            SELECT 'user rollbacks'                                   FROM dual UNION ALL
-            SELECT 'execute count'                                    FROM dual UNION ALL
-            SELECT 'parse count (total)'                              FROM dual UNION ALL
-            SELECT 'parse count (hard)'                               FROM dual UNION ALL
-            SELECT 'parse count (failures)'                           FROM dual UNION ALL
-            SELECT 'sorts (memory)'                                   FROM dual UNION ALL
-            SELECT 'sorts (disk)'                                     FROM dual UNION ALL
-            SELECT 'sorts (rows)'                                     FROM dual UNION ALL
-            SELECT 'logons cumulative'                                FROM dual UNION ALL
-            SELECT 'opened cursors cumulative'                        FROM dual UNION ALL
-            SELECT 'redo writes'                                      FROM dual UNION ALL
-            SELECT 'table scans (long tables)'                        FROM dual UNION ALL
-            SELECT 'table fetch by rowid'                             FROM dual UNION ALL
-            SELECT 'bytes sent via SQL*Net to client'                 FROM dual UNION ALL
-            SELECT 'bytes received via SQL*Net from client'           FROM dual
+            @@sql/lib/sysstat_load_targets.sql
         ),
         load_pairs AS (
             SELECT w.week_offset, w.dur_sec, ss.stat_name, ss.instance_number,
@@ -367,29 +293,7 @@ BEGIN
             GROUP BY week_offset, dur_sec, stat_name
         ),
         metric_targets AS (
-            SELECT 'Host CPU Utilization (%)'                 metric_name FROM dual UNION ALL
-            SELECT 'Database CPU Time Ratio'                              FROM dual UNION ALL
-            SELECT 'Database Wait Time Ratio'                             FROM dual UNION ALL
-            SELECT 'Average Active Sessions'                              FROM dual UNION ALL
-            SELECT 'Average Synchronous Single-Block Read Latency'        FROM dual UNION ALL
-            SELECT 'Physical Reads Per Sec'                               FROM dual UNION ALL
-            SELECT 'Physical Writes Per Sec'                              FROM dual UNION ALL
-            SELECT 'Physical Read Total IO Requests Per Sec'              FROM dual UNION ALL
-            SELECT 'Physical Write Total IO Requests Per Sec'             FROM dual UNION ALL
-            SELECT 'Physical Read Total Bytes Per Sec'                    FROM dual UNION ALL
-            SELECT 'Physical Write Total Bytes Per Sec'                   FROM dual UNION ALL
-            SELECT 'Redo Generated Per Sec'                               FROM dual UNION ALL
-            SELECT 'Logons Per Sec'                                       FROM dual UNION ALL
-            SELECT 'Logical Reads Per Sec'                                FROM dual UNION ALL
-            SELECT 'User Calls Per Sec'                                   FROM dual UNION ALL
-            SELECT 'User Commits Per Sec'                                 FROM dual UNION ALL
-            SELECT 'User Rollbacks Per Sec'                               FROM dual UNION ALL
-            SELECT 'Executions Per Sec'                                   FROM dual UNION ALL
-            SELECT 'Hard Parse Count Per Sec'                             FROM dual UNION ALL
-            SELECT 'Total Parse Count Per Sec'                            FROM dual UNION ALL
-            SELECT 'Session Count'                                        FROM dual UNION ALL
-            SELECT 'Network Traffic Volume Per Sec'                       FROM dual UNION ALL
-            SELECT 'SQL Service Response Time'                            FROM dual
+            @@sql/lib/sysmetric_targets.sql
         ),
         metric_rows AS (
             SELECT 'METRIC' AS metric_domain,
