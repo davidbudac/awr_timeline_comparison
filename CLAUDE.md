@@ -49,7 +49,7 @@ gracefully.
 ```
 awr_trend.sql                    -- driver: prologue, SPOOL, calls sections, epilogue
 sql/
-├── defaults.sql                 -- canonical DEFINEs for the 5 substitution vars
+├── defaults.sql                 -- canonical DEFINEs for the 7 substitution vars
 ├── _style.sql                   -- embedded CSS (emitted once from the driver)
 ├── 00_params.sql                -- <nav> + <header> card (no DML)
 ├── 01_windows.sql               -- aligned windows, snap_id pairs, instance-restart guard
@@ -60,8 +60,15 @@ sql/
 ├── 06_top_sql.sql               -- Top-N SQL ranked 4 ways + bump chart
 ├── 07_summary.sql               -- z-score findings + heatmap (recomputed inline)
 ├── 08_overview.sql              -- hero strip: 6 headline-metric cards (recomputed inline)
-└── 09_ash_timeline.sql          -- hourly ASH stacked-area timeline by wait_class
-                                    (reads dba_hist_active_sess_history directly)
+├── 09_ash_timeline.sql          -- hourly ASH stacked-area timeline by wait_class
+│                                   (reads dba_hist_active_sess_history directly)
+└── lib/                         -- SQL/PL/SQL fragments shared across sections via @@
+    ├── windows_cte.sql          -- run_params → … → valid_windows CTE chain
+    ├── sysstat_load_targets.sql -- 27 SYSSTAT counter names (used by 02 + 07)
+    ├── sysmetric_targets.sql    -- 23 SYSMETRIC_SUMMARY metric names (used by 03 + 07)
+    ├── nth_csv.plsql            -- INSTR-based PL/SQL CSV parser (preserves empty tokens)
+    ├── js_sparkline.plsql       -- ~30-line inline-SVG sparkline renderer (CDN-free)
+    └── js_wait_colors.plsql     -- shared OEM-13c-aligned wait_class color palette
 side/
 └── create_weekly_baselines.sql  -- optional weekly AWR baselines (writes; orthogonal)
 reports/                         -- generated HTML files
@@ -81,14 +88,29 @@ substitution variable (see `awr_trend.sql` — `run_id`, `dbid`,
 section), or shape it as a PL/SQL collection inside the section's
 anonymous block.
 
-### The `windows` CTE is duplicated per section
-Every numbered section (01–09) carries its own inline copy of the
-windows CTE chain (`run_params → offsets → raw_windows → snaps →
-begin_snap → end_snap → windows → valid_windows`). This is deliberate:
-SQL\*Plus can't share a CTE across `@@` includes, and factoring into a
-view or a helper package would violate the no-DDL rule. Accept the
-duplication; if you change the windows logic, grep for `raw_windows AS`
-and update every site.
+### Shared CTE bodies and helpers live under `sql/lib/`
+What used to be six near-identical inline copies of the same SQL/PL/SQL
+fragments now lives under `sql/lib/` and is `@@`-included from each
+section. The `windows` CTE chain (`run_params → offsets → raw_windows →
+snaps → begin_snap → end_snap → windows → valid_windows`) is in
+`sql/lib/windows_cte.sql`; the curated stat/metric lists are in
+`sql/lib/sysstat_load_targets.sql` and `sql/lib/sysmetric_targets.sql`;
+the `nth_csv` PL/SQL helper is in `sql/lib/nth_csv.plsql`; the inline
+SVG sparkline JS and the wait-class color palette are in `js_*.plsql`.
+A view or helper package would violate the no-DDL rule, so include-files
+are the chosen mechanism. To change the windows logic or the curated
+metric lists, edit one file under `sql/lib/` and every consumer picks
+the change up.
+
+**Nested `@@` path gotcha**: SQL\*Plus resolves `@@` paths in nested
+include files relative to the **outermost caller's** directory, not the
+immediate parent. The driver `awr_trend.sql` runs from the project root
+and `@@`-calls section files which in turn `@@`-include files under
+`sql/lib/`. The path written in the section file must therefore be
+`@@sql/lib/windows_cte.sql` — the full path *from the project root* —
+not `@@lib/windows_cte.sql` (which fails with "No such file or
+directory") nor `@@../lib/windows_cte.sql`. This was verified on Oracle
+19c sqlplus; treat it as the canonical path form.
 
 ### The `pairs → bounds → deltas` pattern
 For cumulative AWR counters (`DBA_HIST_SYSSTAT`, `DBA_HIST_SYSTEM_EVENT`,
@@ -159,10 +181,11 @@ instead of autoscaling imperceptible noise into a zigzag.
 ### Per-row CSV parsing in PL/SQL (`nth_csv`)
 Sections that need to render a grid with one column per week after
 `LISTAGG(... ORDER BY week_offset ASC)` parse the CSV inside the loop
-with a small `nth_csv(p_str, p_n)` PL/SQL function declared at the top
-of the anonymous block. Slot `k+1` corresponds to `week_offset = k`.
-The function is INSTR-based (not `REGEXP_SUBSTR`) so empty tokens are
-preserved. See `sql/02_load_profile.sql` for the canonical copy.
+with a small `nth_csv(p_str, p_n)` PL/SQL function. The function lives
+in `sql/lib/nth_csv.plsql` and is `@@`-included at the top of the
+anonymous block (just before `BEGIN`). Slot `k+1` corresponds to
+`week_offset = k`. The function is INSTR-based (not `REGEXP_SUBSTR`)
+so empty tokens between commas are preserved.
 
 ### Window validity
 `01_windows.sql` flags a window `valid_flag = 'N'` with a `skip_reason`
@@ -180,24 +203,30 @@ If you add a new severity, update both `07_summary.sql`, `08_overview.sql`
 
 ### Findings are recomputed, not shared
 Section 07 (findings) and section 08 (overview hero) each recompute
-their own z-scores from the AWR views. They do not share data. If the
-metric list in section 02/03/04 changes, section 07's `load_targets` /
-`metric_targets` lists must be updated in lock-step (they are
-duplicated on purpose — see "The windows CTE is duplicated per section"
-above), and if section 08's 6 hero cards reference a LOAD stat or
-SYSMETRIC name that section 07 doesn't also track, the hero badge will
-fall back to `n/a`.
+their own z-scores from the AWR views. They do not share data. The
+LOAD/METRIC target lists are now single-sourced from
+`sql/lib/sysstat_load_targets.sql` and `sql/lib/sysmetric_targets.sql`
+and `@@`-included by sections 02/03/07, so adding or removing a stat
+updates every consumer in lock-step. Section 08's 6 hero cards
+reference specific LOAD/SYSMETRIC names by hand; if you remove one of
+those from a target list the hero badge will fall back to `n/a`.
+
+Inside section 07 itself, the unified LOAD/METRIC/WAIT recompute is
+`BULK COLLECT`-ed once into a PL/SQL record collection tagged with both
+view positions via `ROW_NUMBER()`, and the heatmap and detail-table
+loops both walk that single collection in their respective orders. Do
+not reintroduce a second cursor that re-runs the whole recompute just
+to get a different ORDER BY.
 
 ## Verification state
 
 Last verified against Oracle 19c on dbmint (CDB1, `connect / as sysdba`)
-in April 2026 under the previous architecture (with scratch schema).
-The read-only rewrite on branch `no-db-writes` is **pending re-
-verification on a live instance**. Density matters — the test DB had
-at most 3 consecutive weeks at any given hour-of-week, so findings are
-forced to `INSUFFICIENT_HISTORY` (z-score needs ≥3 prior). Re-verify
-if you change any of sections 02/03/04/05/06/07/08/09. Particular spots
-worth probing on a future real run:
+in May 2026 after the `refactor/data-render-split` lib extraction.
+Density matters — the test DB had at most 3 consecutive weeks at any
+given hour-of-week, so findings are forced to `INSUFFICIENT_HISTORY`
+(z-score needs ≥3 prior). Re-verify if you change any of sections
+02/03/04/05/06/07/08/09. Particular spots worth probing on a future
+real run:
 
 - HTML prologue: confirm that the `SELECT` resolving `run_id / dbid /
   host_name / …` and the `SPOOL ~report_path` don't leak into the
@@ -215,6 +244,27 @@ worth probing on a future real run:
   cluster, run with `inst_num = 0` and `inst_num = 1`, cross-check that
   aggregate ≈ sum of per-instance for cumulative stats.
 
+### Byte-identity convention for behavior-preserving refactors
+When refactoring code that should not change report output, sync the
+project to dbmint (`rsync -az --exclude=.git --exclude=reports
+--exclude=.claude ./ oracle@dbmint:~/awr_timeline_comparison/ -e 'ssh
+-p 2201'`), generate one HTML report against the pre-change code and
+one against the post-change code at roughly the same wall-clock time
+(AWR data is live — the same hour-of-week run an hour later may pick
+up fresh snapshots), normalize the volatile bits (`run_id`,
+`generated_at`), and compare md5:
+
+```sh
+sed -E '
+  s/run [0-9]{17}/run RUNID/g
+  s/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} \+[0-9]{2}:[0-9]{2}/TIMESTAMP/g
+' "$1" | md5
+```
+
+The report is otherwise deterministic given the AWR state, so a
+byte-identical match is the strongest possible "no behavior change"
+signal.
+
 ## Things NOT to do
 
 - Don't add positional args to `awr_trend.sql` itself — keep it driven
@@ -222,10 +272,17 @@ worth probing on a future real run:
   path stay symmetric.
 - Don't assume `DBA_HIST_SYSTEM_EVENT` has `*_DELTA` columns. It doesn't.
 - Don't reintroduce a scratch schema to "share" data between sections.
-  The read-only invariant is the whole point of this branch. If a
-  computation needs to be reused, thread it via a substitution variable
-  resolved once in the driver, or accept the duplication (see the
-  windows CTE convention).
+  The read-only invariant is the whole point of this design. If a
+  computation needs to be reused across sections, extract it as an
+  `@@`-included file under `sql/lib/`. If it needs to be reused inside
+  one section (e.g. driving two views from the same recompute), use
+  `BULK COLLECT` into a PL/SQL collection — section 07 is the canonical
+  example.
+- Don't write `@@lib/...` or `@@../lib/...` from a section file. SQL\*Plus
+  resolves nested `@@` paths against the **outermost caller's**
+  directory, so the only correct form is `@@sql/lib/<file>` from any
+  section. The "Shared CTE bodies and helpers live under `sql/lib/`"
+  section above explains why.
 - Don't concat user strings into HTML without `DBMS_XMLGEN.CONVERT`.
 - Don't introduce additional external JS/CSS beyond the single ECharts
   CDN tag that's already in `awr_trend.sql`. The report is still one
