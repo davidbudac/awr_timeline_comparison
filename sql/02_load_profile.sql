@@ -22,29 +22,7 @@ DECLARE
     v_pct        NUMBER;
     v_fmt        VARCHAR2(40);
 
-    FUNCTION nth_csv(p_str VARCHAR2, p_n POSITIVE) RETURN VARCHAR2 IS
-        v_start PLS_INTEGER := 1;
-        v_end   PLS_INTEGER;
-        v_cnt   PLS_INTEGER := 0;
-    BEGIN
-        IF p_str IS NULL OR p_n IS NULL OR p_n < 1 THEN
-            RETURN NULL;
-        END IF;
-        LOOP
-            v_end := INSTR(p_str, ',', v_start);
-            v_cnt := v_cnt + 1;
-            IF v_cnt = p_n THEN
-                IF v_end = 0 THEN
-                    RETURN SUBSTR(p_str, v_start);
-                ELSE
-                    RETURN SUBSTR(p_str, v_start, v_end - v_start);
-                END IF;
-            END IF;
-            EXIT WHEN v_end = 0;
-            v_start := v_end + 1;
-        END LOOP;
-        RETURN NULL;
-    END nth_csv;
+    @@sql/lib/nth_csv.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="load"><h2>Load profile &mdash; per-second rates</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
@@ -61,104 +39,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
 
     FOR m IN (
-        WITH run_params AS (
-            SELECT ~dbid AS dbid,
-                   CASE WHEN ~inst_num = 0 THEN NULL ELSE ~inst_num END AS instance_number,
-                   TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS target_end_ts,
-                   ~win_hours  AS win_hours,
-                   ~weeks_back AS weeks_back
-            FROM dual
-        ),
-        offsets AS (
-            SELECT LEVEL - 1 AS week_offset
-            FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
-        ),
-        raw_windows AS (
-            SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
-            FROM run_params r CROSS JOIN offsets o
-        ),
-        snaps AS (
-            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.instance_number, w.dbid,
-                   s.snap_id, s.end_interval_time, s.startup_time
-            FROM   raw_windows w
-            JOIN   dba_hist_snapshot s
-              ON   s.dbid = w.dbid
-             AND   (w.instance_number IS NULL OR s.instance_number = w.instance_number)
-             AND   s.end_interval_time BETWEEN
-                        CAST(w.win_start_dt - 1 AS TIMESTAMP)
-                    AND CAST(w.win_end_dt   + 1 AS TIMESTAMP)
-        ),
-        begin_snap AS (
-            SELECT week_offset,
-                   MAX(snap_id) KEEP (DENSE_RANK LAST ORDER BY end_interval_time)  AS snap_id,
-                   MAX(startup_time) KEEP (DENSE_RANK LAST ORDER BY end_interval_time) AS startup_time
-            FROM   snaps
-            WHERE  end_interval_time <= CAST(win_start_dt + 5/1440 AS TIMESTAMP)
-            GROUP BY week_offset
-        ),
-        end_snap AS (
-            SELECT week_offset,
-                   MIN(snap_id) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS snap_id,
-                   MIN(startup_time) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS startup_time
-            FROM   snaps
-            WHERE  end_interval_time >= CAST(win_end_dt - 5/1440 AS TIMESTAMP)
-            GROUP BY week_offset
-        ),
-        windows AS (
-            SELECT
-                w.week_offset,
-                w.dbid, w.instance_number,
-                CAST(w.win_start_dt AS TIMESTAMP) AS win_start_ts,
-                CAST(w.win_end_dt   AS TIMESTAMP) AS win_end_ts,
-                bs.snap_id AS begin_snap_id,
-                es.snap_id AS end_snap_id,
-                CASE
-                    WHEN bs.snap_id IS NULL OR es.snap_id IS NULL THEN 'N'
-                    WHEN bs.snap_id = es.snap_id                  THEN 'N'
-                    WHEN bs.startup_time <> es.startup_time       THEN 'N'
-                    ELSE 'Y'
-                END AS valid_flag
-            FROM   raw_windows w
-            LEFT JOIN begin_snap bs ON bs.week_offset = w.week_offset
-            LEFT JOIN end_snap   es ON es.week_offset = w.week_offset
-        ),
-        valid_windows AS (
-            SELECT week_offset, dbid, instance_number,
-                   begin_snap_id, end_snap_id,
-                   (CAST(win_end_ts AS DATE) - CAST(win_start_ts AS DATE)) * 86400 AS dur_sec
-            FROM windows
-            WHERE valid_flag = 'Y'
-        ),
+        WITH
+        @@sql/lib/windows_cte.sql
+        ,
         targets AS (
-            SELECT 'redo size'                              stat_name FROM dual UNION ALL
-            SELECT 'redo size for lost write detection'               FROM dual UNION ALL
-            SELECT 'DB time'                                          FROM dual UNION ALL
-            SELECT 'DB CPU'                                           FROM dual UNION ALL
-            SELECT 'CPU used by this session'                         FROM dual UNION ALL
-            SELECT 'session logical reads'                            FROM dual UNION ALL
-            SELECT 'physical reads'                                   FROM dual UNION ALL
-            SELECT 'physical read total bytes'                        FROM dual UNION ALL
-            SELECT 'physical writes'                                  FROM dual UNION ALL
-            SELECT 'physical write total bytes'                       FROM dual UNION ALL
-            SELECT 'user calls'                                       FROM dual UNION ALL
-            SELECT 'user commits'                                     FROM dual UNION ALL
-            SELECT 'user rollbacks'                                   FROM dual UNION ALL
-            SELECT 'execute count'                                    FROM dual UNION ALL
-            SELECT 'parse count (total)'                              FROM dual UNION ALL
-            SELECT 'parse count (hard)'                               FROM dual UNION ALL
-            SELECT 'parse count (failures)'                           FROM dual UNION ALL
-            SELECT 'sorts (memory)'                                   FROM dual UNION ALL
-            SELECT 'sorts (disk)'                                     FROM dual UNION ALL
-            SELECT 'sorts (rows)'                                     FROM dual UNION ALL
-            SELECT 'logons cumulative'                                FROM dual UNION ALL
-            SELECT 'opened cursors cumulative'                        FROM dual UNION ALL
-            SELECT 'redo writes'                                      FROM dual UNION ALL
-            SELECT 'table scans (long tables)'                        FROM dual UNION ALL
-            SELECT 'table fetch by rowid'                             FROM dual UNION ALL
-            SELECT 'bytes sent via SQL*Net to client'                 FROM dual UNION ALL
-            SELECT 'bytes received via SQL*Net from client'           FROM dual
+            @@sql/lib/sysstat_load_targets.sql
         ),
         pairs AS (
             SELECT

@@ -275,74 +275,14 @@ BEGIN
         || '(cdn.jsdelivr.net) could not be reached. Tables still show every number.</div>');
     -- Namespace for per-section data handoff from PL/SQL to ECharts init blocks.
     DBMS_OUTPUT.PUT_LINE('<script>window.AWR_DATA = window.AWR_DATA || {};</script>');
-    --
-    -- Wait-class colour map shared by every chart that stacks by wait_class
-    -- (sections 09 ASH timeline + 10 DB time summary). Approximation of the
-    -- Oracle Enterprise Manager 13c "Top Activity" / ASH analytics palette;
-    -- exact OEM hex codes drift across releases so these are eyeballed
-    -- conventions, not lifted from a docs page. Charts fall back to their
-    -- positional palette for any wait_class that is not in this map.
-    --
-    DBMS_OUTPUT.PUT_LINE('<script>window.AWR_WAIT_COLORS = {');
-    DBMS_OUTPUT.PUT_LINE('  "CPU":            "#3FB344",');
-    DBMS_OUTPUT.PUT_LINE('  "Scheduler":      "#88C070",');
-    DBMS_OUTPUT.PUT_LINE('  "User I/O":       "#4A90D9",');
-    DBMS_OUTPUT.PUT_LINE('  "System I/O":     "#1F4E89",');
-    DBMS_OUTPUT.PUT_LINE('  "Concurrency":    "#8B0000",');
-    DBMS_OUTPUT.PUT_LINE('  "Application":    "#D62728",');
-    DBMS_OUTPUT.PUT_LINE('  "Commit":         "#E89B40",');
-    DBMS_OUTPUT.PUT_LINE('  "Configuration":  "#793C32",');
-    DBMS_OUTPUT.PUT_LINE('  "Administrative": "#7B6FA8",');
-    DBMS_OUTPUT.PUT_LINE('  "Network":        "#967259",');
-    DBMS_OUTPUT.PUT_LINE('  "Queueing":       "#E89BB7",');
-    DBMS_OUTPUT.PUT_LINE('  "Cluster":        "#E5C228",');
-    DBMS_OUTPUT.PUT_LINE('  "Other":          "#C77CB0"');
-    DBMS_OUTPUT.PUT_LINE('};</script>');
-    --
-    -- Tiny dependency-free sparkline renderer.  Each numeric table that needs
-    -- an inline trend column emits <td class="trend" data-spark="v,v,v"></td>;
-    -- this script swaps the attribute for a viewBox-scaled SVG path.  No
-    -- charting library needed, so trends render even if the ECharts CDN is
-    -- blocked.  Cell stays empty (but the numbers are right next to it) if
-    -- JS itself is disabled.
-    --
-    DBMS_OUTPUT.PUT_LINE('<script>(function(){');
-    DBMS_OUTPUT.PUT_LINE('function esc(s){return String(s).replace(/[&<>]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;"})[c];});}');
-    DBMS_OUTPUT.PUT_LINE('function spark(raw, klass, title){');
-    DBMS_OUTPUT.PUT_LINE('  var W=110,H=24,PAD=2;');
-    DBMS_OUTPUT.PUT_LINE('  var arr=String(raw||"").split(",").map(function(s){s=s.trim();return s===""?null:+s;});');
-    DBMS_OUTPUT.PUT_LINE('  var vs=arr.filter(function(v){return v!=null&&!isNaN(v);});');
-    DBMS_OUTPUT.PUT_LINE('  if(vs.length===0)return "<svg class=\""+klass+"\" viewBox=\"0 0 "+W+" "+H+"\"></svg>";');
-    DBMS_OUTPUT.PUT_LINE('  var mn=Math.min.apply(null,vs), mx=Math.max.apply(null,vs);');
-    -- Flatness guard: if the relative swing vs. the mean magnitude is below
-    -- 2%, autoscaling would turn imperceptible noise into a dramatic zigzag.
-    -- Collapse to a flat midline in that case so the eye reads "steady".
-    DBMS_OUTPUT.PUT_LINE('  var sum=0; vs.forEach(function(v){sum+=v;}); var mean=sum/vs.length;');
-    DBMS_OUTPUT.PUT_LINE('  var flat=(mx===mn)||(Math.abs(mean)>0 && (mx-mn)/Math.abs(mean)<0.02)||(mean===0 && mx-mn<1e-9);');
-    DBMS_OUTPUT.PUT_LINE('  var rng=flat?1:(mx-mn);');
-    DBMS_OUTPUT.PUT_LINE('  var step=(W-2*PAD)/Math.max(arr.length-1,1);');
-    DBMS_OUTPUT.PUT_LINE('  var pts=[];');
-    DBMS_OUTPUT.PUT_LINE('  arr.forEach(function(v,i){if(v==null||isNaN(v))return;var y=flat?(H/2):(H-PAD-(v-mn)/rng*(H-2*PAD));pts.push({x:PAD+i*step,y:y});});');
-    DBMS_OUTPUT.PUT_LINE('  if(pts.length===0)return "<svg class=\""+klass+"\" viewBox=\"0 0 "+W+" "+H+"\"></svg>";');
-    DBMS_OUTPUT.PUT_LINE('  var line=pts.map(function(p){return p.x.toFixed(1)+","+p.y.toFixed(1);}).join(" L ");');
-    DBMS_OUTPUT.PUT_LINE('  var fx=pts[0].x.toFixed(1), last=pts[pts.length-1];');
-    DBMS_OUTPUT.PUT_LINE('  var out="<svg class=\""+klass+"\" viewBox=\"0 0 "+W+" "+H+"\""+(title?" aria-label=\""+esc(title)+"\"":"")+">";');
-    DBMS_OUTPUT.PUT_LINE('  if(title) out+="<title>"+esc(title)+"</title>";');
-    DBMS_OUTPUT.PUT_LINE('  if(pts.length>=2){out+="<path class=\"fill\" d=\"M "+fx+","+(H-PAD)+" L "+line+" L "+last.x.toFixed(1)+","+(H-PAD)+" Z\"/>";}');
-    DBMS_OUTPUT.PUT_LINE('  out+="<path class=\"line\" d=\"M "+line+"\"/>";');
-    DBMS_OUTPUT.PUT_LINE('  out+="<circle class=\"dot\" cx=\""+last.x.toFixed(1)+"\" cy=\""+last.y.toFixed(1)+"\" r=\"2.5\"/>";');
-    DBMS_OUTPUT.PUT_LINE('  return out+"</svg>";');
-    DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('window.__awrSpark=spark;');
-    DBMS_OUTPUT.PUT_LINE('function render(){document.querySelectorAll("[data-spark]").forEach(function(el){');
-    DBMS_OUTPUT.PUT_LINE('  if(el.__sparked) return;');
-    DBMS_OUTPUT.PUT_LINE('  el.innerHTML=spark(el.getAttribute("data-spark"), el.getAttribute("data-spark-cls")||"spark", el.getAttribute("data-spark-title")||"");');
-    DBMS_OUTPUT.PUT_LINE('  el.__sparked=true;});}');
-    DBMS_OUTPUT.PUT_LINE('if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",render); else render();');
-    DBMS_OUTPUT.PUT_LINE('window.__awrRenderSparks=render;');
-    DBMS_OUTPUT.PUT_LINE('})();</script>');
 END;
 /
+
+-- Render-runtime JS shared across sections.  Each file is a standalone
+-- BEGIN/END/ block that emits one <script>; loaded in order so later
+-- sections can rely on globals defined here.
+@@sql/lib/js_wait_colors.plsql
+@@sql/lib/js_sparkline.plsql
 
 -- -------------------------------------------------------------------
 -- Sections.  Each section is compute+render in one anonymous block;

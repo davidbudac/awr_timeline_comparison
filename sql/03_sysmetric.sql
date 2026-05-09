@@ -19,29 +19,7 @@ DECLARE
     v_row_max     NUMBER;
     v_pct         NUMBER;
 
-    FUNCTION nth_csv(p_str VARCHAR2, p_n POSITIVE) RETURN VARCHAR2 IS
-        v_start PLS_INTEGER := 1;
-        v_end   PLS_INTEGER;
-        v_cnt   PLS_INTEGER := 0;
-    BEGIN
-        IF p_str IS NULL OR p_n IS NULL OR p_n < 1 THEN
-            RETURN NULL;
-        END IF;
-        LOOP
-            v_end := INSTR(p_str, ',', v_start);
-            v_cnt := v_cnt + 1;
-            IF v_cnt = p_n THEN
-                IF v_end = 0 THEN
-                    RETURN SUBSTR(p_str, v_start);
-                ELSE
-                    RETURN SUBSTR(p_str, v_start, v_end - v_start);
-                END IF;
-            END IF;
-            EXIT WHEN v_end = 0;
-            v_start := v_end + 1;
-        END LOOP;
-        RETURN NULL;
-    END nth_csv;
+    @@sql/lib/nth_csv.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="metrics"><h2>System metrics (DBA_HIST_SYSMETRIC_SUMMARY)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">Averages over the snapshots inside each window. The <b>Trend</b> column plots the per-~period_unit_long series (oldest &rarr; current). Values are already per-second where the metric name says so.</p>');
@@ -55,96 +33,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
 
     FOR m IN (
-        WITH run_params AS (
-            SELECT ~dbid AS dbid,
-                   CASE WHEN ~inst_num = 0 THEN NULL ELSE ~inst_num END AS instance_number,
-                   TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS target_end_ts,
-                   ~win_hours  AS win_hours,
-                   ~weeks_back AS weeks_back
-            FROM dual
-        ),
-        offsets AS (
-            SELECT LEVEL - 1 AS week_offset
-            FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
-        ),
-        raw_windows AS (
-            SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
-            FROM run_params r CROSS JOIN offsets o
-        ),
-        snaps AS (
-            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.instance_number, w.dbid,
-                   s.snap_id, s.end_interval_time, s.startup_time
-            FROM   raw_windows w
-            JOIN   dba_hist_snapshot s
-              ON   s.dbid = w.dbid
-             AND   (w.instance_number IS NULL OR s.instance_number = w.instance_number)
-             AND   s.end_interval_time BETWEEN
-                        CAST(w.win_start_dt - 1 AS TIMESTAMP)
-                    AND CAST(w.win_end_dt   + 1 AS TIMESTAMP)
-        ),
-        begin_snap AS (
-            SELECT week_offset,
-                   MAX(snap_id) KEEP (DENSE_RANK LAST ORDER BY end_interval_time)  AS snap_id,
-                   MAX(startup_time) KEEP (DENSE_RANK LAST ORDER BY end_interval_time) AS startup_time
-            FROM   snaps
-            WHERE  end_interval_time <= CAST(win_start_dt + 5/1440 AS TIMESTAMP)
-            GROUP BY week_offset
-        ),
-        end_snap AS (
-            SELECT week_offset,
-                   MIN(snap_id) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS snap_id,
-                   MIN(startup_time) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS startup_time
-            FROM   snaps
-            WHERE  end_interval_time >= CAST(win_end_dt - 5/1440 AS TIMESTAMP)
-            GROUP BY week_offset
-        ),
-        windows AS (
-            SELECT
-                w.week_offset, w.dbid, w.instance_number,
-                bs.snap_id AS begin_snap_id,
-                es.snap_id AS end_snap_id,
-                CASE
-                    WHEN bs.snap_id IS NULL OR es.snap_id IS NULL THEN 'N'
-                    WHEN bs.snap_id = es.snap_id                  THEN 'N'
-                    WHEN bs.startup_time <> es.startup_time       THEN 'N'
-                    ELSE 'Y'
-                END AS valid_flag
-            FROM   raw_windows w
-            LEFT JOIN begin_snap bs ON bs.week_offset = w.week_offset
-            LEFT JOIN end_snap   es ON es.week_offset = w.week_offset
-        ),
-        valid_windows AS (
-            SELECT week_offset, dbid, instance_number, begin_snap_id, end_snap_id
-            FROM   windows WHERE valid_flag = 'Y'
-        ),
+        WITH
+        @@sql/lib/windows_cte.sql
+        ,
         targets AS (
-            SELECT metric_name FROM (
-                SELECT 'Host CPU Utilization (%)'                 metric_name FROM dual UNION ALL
-                SELECT 'Database CPU Time Ratio'                              FROM dual UNION ALL
-                SELECT 'Database Wait Time Ratio'                             FROM dual UNION ALL
-                SELECT 'Average Active Sessions'                              FROM dual UNION ALL
-                SELECT 'Average Synchronous Single-Block Read Latency'        FROM dual UNION ALL
-                SELECT 'Physical Reads Per Sec'                               FROM dual UNION ALL
-                SELECT 'Physical Writes Per Sec'                              FROM dual UNION ALL
-                SELECT 'Physical Read Total IO Requests Per Sec'              FROM dual UNION ALL
-                SELECT 'Physical Write Total IO Requests Per Sec'             FROM dual UNION ALL
-                SELECT 'Physical Read Total Bytes Per Sec'                    FROM dual UNION ALL
-                SELECT 'Physical Write Total Bytes Per Sec'                   FROM dual UNION ALL
-                SELECT 'Redo Generated Per Sec'                               FROM dual UNION ALL
-                SELECT 'Logons Per Sec'                                       FROM dual UNION ALL
-                SELECT 'Logical Reads Per Sec'                                FROM dual UNION ALL
-                SELECT 'User Calls Per Sec'                                   FROM dual UNION ALL
-                SELECT 'User Commits Per Sec'                                 FROM dual UNION ALL
-                SELECT 'User Rollbacks Per Sec'                               FROM dual UNION ALL
-                SELECT 'Executions Per Sec'                                   FROM dual UNION ALL
-                SELECT 'Hard Parse Count Per Sec'                             FROM dual UNION ALL
-                SELECT 'Total Parse Count Per Sec'                            FROM dual UNION ALL
-                SELECT 'Session Count'                                        FROM dual UNION ALL
-                SELECT 'Network Traffic Volume Per Sec'                       FROM dual UNION ALL
-                SELECT 'SQL Service Response Time'                            FROM dual
-            )
+            @@sql/lib/sysmetric_targets.sql
         ),
         facts AS (
             SELECT w.week_offset, sm.metric_name,
