@@ -77,7 +77,7 @@ BEGIN
             JOIN   dba_hist_sysstat ss
                 ON ss.dbid = w.dbid
                AND ss.snap_id IN (w.begin_snap_id, w.end_snap_id)
-               AND (w.instance_number IS NULL OR ss.instance_number = w.instance_number)
+               AND ss.instance_number = w.instance_number
                AND ss.stat_name IN (SELECT key FROM cards WHERE src = 'LOAD')
         ),
         load_bounds AS (
@@ -109,7 +109,7 @@ BEGIN
             JOIN   dba_hist_sysmetric_summary sm
                 ON sm.dbid = w.dbid
                AND sm.snap_id BETWEEN w.begin_snap_id + 1 AND w.end_snap_id
-               AND (w.instance_number IS NULL OR sm.instance_number = w.instance_number)
+               AND sm.instance_number = w.instance_number
                AND sm.metric_name = c.key
             GROUP BY w.week_offset, c.key, c.is_add, sm.snap_id
         ),

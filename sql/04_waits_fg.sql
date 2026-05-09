@@ -57,7 +57,7 @@ BEGIN
             JOIN   dba_hist_system_event se
                 ON se.dbid = w.dbid
                AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
-               AND (w.instance_number IS NULL OR se.instance_number = w.instance_number)
+               AND se.instance_number = w.instance_number
                AND se.wait_class <> 'Idle'
         ),
         bounds AS (
@@ -151,7 +151,7 @@ BEGIN
             JOIN   dba_hist_system_event se
                 ON se.dbid = w.dbid
                AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
-               AND (w.instance_number IS NULL OR se.instance_number = w.instance_number)
+               AND se.instance_number = w.instance_number
                AND se.wait_class <> 'Idle'
         ),
         bounds AS (
@@ -270,7 +270,7 @@ BEGIN
             JOIN   dba_hist_system_event se
                 ON se.dbid = w.dbid
                AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
-               AND (w.instance_number IS NULL OR se.instance_number = w.instance_number)
+               AND se.instance_number = w.instance_number
                AND se.wait_class <> 'Idle'
         ),
         bounds AS (

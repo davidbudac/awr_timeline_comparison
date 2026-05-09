@@ -141,8 +141,9 @@ BEGIN
     v_hours_json := v_hours_json || ']';
 
     -- Window-band markers: small (one per compared window), LISTAGG is safe.
-    -- Compute windows inline from the same raw_windows CTE the other
-    -- sections use, plus validity check against dba_hist_snapshot.
+    -- Read from the shared windows_rollup CTE (per-week_offset roll-up
+    -- of per-instance windows) so the band gets a single Y/N flag per
+    -- offset regardless of RAC instance count.
     SELECT '['
            || LISTAGG(
                   '["'
@@ -159,18 +160,8 @@ BEGIN
     FROM (
         WITH
         @@sql/lib/windows_cte.sql
-        SELECT w.week_offset,
-               CAST(w.win_start_dt AS TIMESTAMP) AS win_start_ts,
-               CAST(w.win_end_dt   AS TIMESTAMP) AS win_end_ts,
-               CASE
-                   WHEN bs.snap_id IS NULL OR es.snap_id IS NULL THEN 'N'
-                   WHEN bs.snap_id = es.snap_id                  THEN 'N'
-                   WHEN bs.startup_time <> es.startup_time       THEN 'N'
-                   ELSE 'Y'
-               END AS valid_flag
-        FROM   raw_windows w
-        LEFT JOIN begin_snap bs ON bs.week_offset = w.week_offset
-        LEFT JOIN end_snap   es ON es.week_offset = w.week_offset
+        SELECT week_offset, win_start_ts, win_end_ts, valid_flag
+        FROM   windows_rollup
     );
 
     -- Emit JS in chunks so no single PUT_LINE exceeds 32767 bytes.

@@ -187,13 +187,32 @@ anonymous block (just before `BEGIN`). Slot `k+1` corresponds to
 `week_offset = k`. The function is INSTR-based (not `REGEXP_SUBSTR`)
 so empty tokens between commas are preserved.
 
-### Window validity
-`01_windows.sql` flags a window `valid_flag = 'N'` with a `skip_reason`
-when: bounds can't be resolved, begin=end (same snap), or
-`startup_time` differs between the two snaps (instance restart). Every
-downstream section carries its own copy of the windows CTE and filters
-on `valid_flag = 'Y'`; invalid weeks are still shown in the Windows
-table but excluded from the z-score baseline.
+### Window validity (per-instance in RAC aggregate mode)
+`windows_cte.sql` resolves `begin_snap` and `end_snap` per
+`(week_offset, instance_number)`, FULL OUTER JOINs them into
+`instance_pairs`, and produces `windows` with one row per
+`(week_offset, instance_number)`. `valid_flag = 'N'` (with a
+`skip_reason`) is set per-instance when: an instance has no candidate
+begin or end snap; begin=end (same snap, window shorter than the AWR
+interval); or `startup_time` differs between the two snaps (the
+instance restarted inside the window).
+
+`valid_windows` is the per-instance, valid-only projection consumed by
+every numbered data section (02–08); their joins use
+`v.instance_number = w.instance_number` directly (no NULL fallback —
+`valid_windows.instance_number` is never NULL by construction). The
+final per-week aggregate happens at the section's own `GROUP BY
+week_offset` and naturally sums only over instance pairs that survived
+validation. On a RAC cluster where one instance restarts mid-window,
+its delta is dropped and the others' kept; on single-instance, this is
+a no-op.
+
+For display, `windows_rollup` aggregates `windows` back to one row per
+`week_offset`: `valid_flag = 'Y'` if at least one instance was valid;
+`begin_snap_id`/`end_snap_id` show the MIN/MAX across instances; the
+first non-null `skip_reason` wins. Sections 01 (windows ribbon + table)
+and 09 (ASH band markers) read `windows_rollup`. Single-instance output
+is byte-identical to the per-week-only design that preceded this CTE.
 
 ### SYSMETRIC cross-instance aggregation (additive vs ratio)
 `DBA_HIST_SYSMETRIC_SUMMARY` reports per-(snap, instance) averages over

@@ -55,7 +55,7 @@ BEGIN
             JOIN   dba_hist_sysstat ss
                 ON ss.dbid = w.dbid
                AND ss.snap_id IN (w.begin_snap_id, w.end_snap_id)
-               AND (w.instance_number IS NULL OR ss.instance_number = w.instance_number)
+               AND ss.instance_number = w.instance_number
                AND ss.stat_name IN (SELECT stat_name FROM targets)
         ),
         bounds AS (
