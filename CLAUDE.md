@@ -195,6 +195,25 @@ downstream section carries its own copy of the windows CTE and filters
 on `valid_flag = 'Y'`; invalid weeks are still shown in the Windows
 table but excluded from the z-score baseline.
 
+### SYSMETRIC cross-instance aggregation (additive vs ratio)
+`DBA_HIST_SYSMETRIC_SUMMARY` reports per-(snap, instance) averages over
+the snapshot interval. Cross-instance roll-up is metric-dependent:
+**rates and counters** (Average Active Sessions, *_Per_Sec, Session
+Count) are **additive** — the cluster value is `SUM(average)` across
+instances; **ratios, percentages, latencies, response times** (CPU
+Ratios, Wait Time Ratio, Sync SBR Latency, SQL Service Response Time)
+are **averages** — `AVG(average)`. Doing a flat `AVG` across instances
+for additive metrics silently undercounts cluster load.
+
+`sql/lib/sysmetric_targets.sql` tags each metric with an `is_additive`
+flag ('Y'/'N'). Sections 03 and 07 read the flag from the targets file;
+section 08's hand-maintained `cards` CTE carries an inline `is_add`
+column for the same purpose. The aggregation pattern is two-step in
+every consumer: `snap_value = (SUM|AVG)(sm.average) GROUP BY week,
+metric, snap_id`, then `metric_value = AVG(snap_value) GROUP BY week,
+metric`. On single-instance, SUM and AVG over one row are identical, so
+this is a no-op.
+
 ### Severity classes (must stay aligned with CSS in `_style.sql`)
 `CRITICAL` → `crit`, `WARN` → `warn`, `OK` → `ok`,
 `INSUFFICIENT_HISTORY` / `FLAT_BASELINE` → `skip`, informational → `info`.
