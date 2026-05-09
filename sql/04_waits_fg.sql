@@ -68,67 +68,9 @@ BEGIN
 
     v_class_json := NULL;
     FOR c IN (
-        WITH run_params AS (
-            SELECT ~dbid AS dbid,
-                   CASE WHEN ~inst_num = 0 THEN NULL ELSE ~inst_num END AS instance_number,
-                   TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS target_end_ts,
-                   ~win_hours  AS win_hours,
-                   ~weeks_back AS weeks_back
-            FROM dual
-        ),
-        offsets AS (
-            SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
-        ),
-        raw_windows AS (
-            SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
-            FROM run_params r CROSS JOIN offsets o
-        ),
-        snaps AS (
-            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.instance_number, w.dbid,
-                   s.snap_id, s.end_interval_time, s.startup_time
-            FROM   raw_windows w
-            JOIN   dba_hist_snapshot s
-              ON   s.dbid = w.dbid
-             AND   (w.instance_number IS NULL OR s.instance_number = w.instance_number)
-             AND   s.end_interval_time BETWEEN
-                        CAST(w.win_start_dt - 1 AS TIMESTAMP)
-                    AND CAST(w.win_end_dt   + 1 AS TIMESTAMP)
-        ),
-        begin_snap AS (
-            SELECT week_offset,
-                   MAX(snap_id) KEEP (DENSE_RANK LAST ORDER BY end_interval_time)  AS snap_id,
-                   MAX(startup_time) KEEP (DENSE_RANK LAST ORDER BY end_interval_time) AS startup_time
-            FROM   snaps
-            WHERE  end_interval_time <= CAST(win_start_dt + 5/1440 AS TIMESTAMP)
-            GROUP BY week_offset
-        ),
-        end_snap AS (
-            SELECT week_offset,
-                   MIN(snap_id) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS snap_id,
-                   MIN(startup_time) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS startup_time
-            FROM   snaps
-            WHERE  end_interval_time >= CAST(win_end_dt - 5/1440 AS TIMESTAMP)
-            GROUP BY week_offset
-        ),
-        windows AS (
-            SELECT w.week_offset, w.dbid, w.instance_number,
-                   bs.snap_id AS begin_snap_id, es.snap_id AS end_snap_id,
-                   CASE
-                       WHEN bs.snap_id IS NULL OR es.snap_id IS NULL THEN 'N'
-                       WHEN bs.snap_id = es.snap_id                  THEN 'N'
-                       WHEN bs.startup_time <> es.startup_time       THEN 'N'
-                       ELSE 'Y'
-                   END AS valid_flag
-            FROM   raw_windows w
-            LEFT JOIN begin_snap bs ON bs.week_offset = w.week_offset
-            LEFT JOIN end_snap   es ON es.week_offset = w.week_offset
-        ),
-        valid_windows AS (
-            SELECT week_offset, dbid, instance_number, begin_snap_id, end_snap_id
-            FROM   windows WHERE valid_flag = 'Y'
-        ),
+        WITH
+        @@sql/lib/windows_cte.sql
+        ,
         pairs AS (
             SELECT w.week_offset, se.wait_class, se.snap_id, se.instance_number,
                    se.total_waits, se.time_waited_micro,
@@ -219,68 +161,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
 
     FOR e IN (
-        WITH run_params AS (
-            SELECT ~dbid AS dbid,
-                   CASE WHEN ~inst_num = 0 THEN NULL ELSE ~inst_num END AS instance_number,
-                   TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS target_end_ts,
-                   ~win_hours  AS win_hours,
-                   ~weeks_back AS weeks_back,
-                   ~top_n      AS top_n
-            FROM dual
-        ),
-        offsets AS (
-            SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
-        ),
-        raw_windows AS (
-            SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
-            FROM run_params r CROSS JOIN offsets o
-        ),
-        snaps AS (
-            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.instance_number, w.dbid,
-                   s.snap_id, s.end_interval_time, s.startup_time
-            FROM   raw_windows w
-            JOIN   dba_hist_snapshot s
-              ON   s.dbid = w.dbid
-             AND   (w.instance_number IS NULL OR s.instance_number = w.instance_number)
-             AND   s.end_interval_time BETWEEN
-                        CAST(w.win_start_dt - 1 AS TIMESTAMP)
-                    AND CAST(w.win_end_dt   + 1 AS TIMESTAMP)
-        ),
-        begin_snap AS (
-            SELECT week_offset,
-                   MAX(snap_id) KEEP (DENSE_RANK LAST ORDER BY end_interval_time)  AS snap_id,
-                   MAX(startup_time) KEEP (DENSE_RANK LAST ORDER BY end_interval_time) AS startup_time
-            FROM   snaps
-            WHERE  end_interval_time <= CAST(win_start_dt + 5/1440 AS TIMESTAMP)
-            GROUP BY week_offset
-        ),
-        end_snap AS (
-            SELECT week_offset,
-                   MIN(snap_id) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS snap_id,
-                   MIN(startup_time) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS startup_time
-            FROM   snaps
-            WHERE  end_interval_time >= CAST(win_end_dt - 5/1440 AS TIMESTAMP)
-            GROUP BY week_offset
-        ),
-        windows AS (
-            SELECT w.week_offset, w.dbid, w.instance_number,
-                   bs.snap_id AS begin_snap_id, es.snap_id AS end_snap_id,
-                   CASE
-                       WHEN bs.snap_id IS NULL OR es.snap_id IS NULL THEN 'N'
-                       WHEN bs.snap_id = es.snap_id                  THEN 'N'
-                       WHEN bs.startup_time <> es.startup_time       THEN 'N'
-                       ELSE 'Y'
-                   END AS valid_flag
-            FROM   raw_windows w
-            LEFT JOIN begin_snap bs ON bs.week_offset = w.week_offset
-            LEFT JOIN end_snap   es ON es.week_offset = w.week_offset
-        ),
-        valid_windows AS (
-            SELECT week_offset, dbid, instance_number, begin_snap_id, end_snap_id
-            FROM   windows WHERE valid_flag = 'Y'
-        ),
+        WITH
+        @@sql/lib/windows_cte.sql
+        ,
         pairs AS (
             SELECT w.week_offset, se.event_name, se.wait_class,
                    se.snap_id, se.instance_number,
@@ -397,67 +280,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
 
     FOR c IN (
-        WITH run_params AS (
-            SELECT ~dbid AS dbid,
-                   CASE WHEN ~inst_num = 0 THEN NULL ELSE ~inst_num END AS instance_number,
-                   TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS target_end_ts,
-                   ~win_hours  AS win_hours,
-                   ~weeks_back AS weeks_back
-            FROM dual
-        ),
-        offsets AS (
-            SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
-        ),
-        raw_windows AS (
-            SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
-            FROM run_params r CROSS JOIN offsets o
-        ),
-        snaps AS (
-            SELECT w.week_offset, w.win_start_dt, w.win_end_dt, w.instance_number, w.dbid,
-                   s.snap_id, s.end_interval_time, s.startup_time
-            FROM   raw_windows w
-            JOIN   dba_hist_snapshot s
-              ON   s.dbid = w.dbid
-             AND   (w.instance_number IS NULL OR s.instance_number = w.instance_number)
-             AND   s.end_interval_time BETWEEN
-                        CAST(w.win_start_dt - 1 AS TIMESTAMP)
-                    AND CAST(w.win_end_dt   + 1 AS TIMESTAMP)
-        ),
-        begin_snap AS (
-            SELECT week_offset,
-                   MAX(snap_id) KEEP (DENSE_RANK LAST ORDER BY end_interval_time)  AS snap_id,
-                   MAX(startup_time) KEEP (DENSE_RANK LAST ORDER BY end_interval_time) AS startup_time
-            FROM   snaps
-            WHERE  end_interval_time <= CAST(win_start_dt + 5/1440 AS TIMESTAMP)
-            GROUP BY week_offset
-        ),
-        end_snap AS (
-            SELECT week_offset,
-                   MIN(snap_id) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS snap_id,
-                   MIN(startup_time) KEEP (DENSE_RANK FIRST ORDER BY end_interval_time) AS startup_time
-            FROM   snaps
-            WHERE  end_interval_time >= CAST(win_end_dt - 5/1440 AS TIMESTAMP)
-            GROUP BY week_offset
-        ),
-        windows AS (
-            SELECT w.week_offset, w.dbid, w.instance_number,
-                   bs.snap_id AS begin_snap_id, es.snap_id AS end_snap_id,
-                   CASE
-                       WHEN bs.snap_id IS NULL OR es.snap_id IS NULL THEN 'N'
-                       WHEN bs.snap_id = es.snap_id                  THEN 'N'
-                       WHEN bs.startup_time <> es.startup_time       THEN 'N'
-                       ELSE 'Y'
-                   END AS valid_flag
-            FROM   raw_windows w
-            LEFT JOIN begin_snap bs ON bs.week_offset = w.week_offset
-            LEFT JOIN end_snap   es ON es.week_offset = w.week_offset
-        ),
-        valid_windows AS (
-            SELECT week_offset, dbid, instance_number, begin_snap_id, end_snap_id
-            FROM   windows WHERE valid_flag = 'Y'
-        ),
+        WITH
+        @@sql/lib/windows_cte.sql
+        ,
         pairs AS (
             SELECT w.week_offset, se.wait_class,
                    se.snap_id, se.instance_number,
