@@ -49,12 +49,13 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="load"><h2>Load profile &mdash; per-second rates</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'Cumulative DBA_HIST_SYSSTAT deltas divided by window duration. '
-        || 'The <b>Trend</b> column shows the per-week series (oldest &rarr; current); '
+        || 'The <b>Trend</b> column shows the per-~period_unit_long series (oldest &rarr; current); '
         || 'the bar behind <b>Current</b> shows each value relative to its row max.</p>');
 
     v_header := '<thead><tr><th>Metric</th><th class="trend">Trend</th><th class="num">Current</th>';
     FOR k IN 1 .. v_weeks_back LOOP
-        v_header := v_header || '<th class="num">&minus;' || k || 'w</th>';
+        v_header := v_header || '<th class="num">&minus;'
+            || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
     END LOOP;
     v_header := v_header || '</tr></thead>';
     DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
@@ -74,8 +75,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (

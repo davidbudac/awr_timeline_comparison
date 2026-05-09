@@ -1,7 +1,7 @@
 --
 -- 10_db_time_summary.sql
 -- Stacked-area summary of database time at the very top of the report.
--- Covers every AWR snapshot pair from the earliest valid comparison-week
+-- Covers every AWR snapshot pair from the earliest valid comparison-window
 -- begin snap through the current window end snap (one bucket per native
 -- snap interval, no aggregation). Stacked by:
 --   * CPU         -- from DBA_HIST_SYS_TIME_MODEL stat_name = 'DB CPU'
@@ -65,8 +65,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (
@@ -158,8 +158,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (
@@ -265,7 +265,11 @@ BEGIN
               AND  startup_time = prev_startup
         ),
         cpu_d AS (
-            SELECT stm.snap_id, stm.instance_number, 'CPU' AS cat,
+            -- CAST the literal to match wait_d.cat width; otherwise UNION ALL
+            -- inherits VARCHAR2(3) from this arm and longer wait_class names
+            -- (e.g. 'Configuration') overflow on cursor fetch (ORA-06502).
+            SELECT stm.snap_id, stm.instance_number,
+                   CAST('CPU' AS VARCHAR2(64)) AS cat,
                    GREATEST(stm.value
                        - LAG(stm.value) OVER (PARTITION BY stm.instance_number
                                               ORDER BY stm.snap_id), 0) AS micro

@@ -22,17 +22,17 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="overview"><h2>Headline metrics</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
         || 'Six key signals across the last ' || v_weeks_back
-        || ' aligned windows (oldest &rarr; current). Change badge buckets the '
+        || ' compared windows (oldest &rarr; current). Change badge buckets the '
         || 'z-score of the current window vs prior valid windows '
         || '(|z|&gt;3 = large, |z|&gt;2 = moderate, otherwise typical).</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="hero-grid">');
 
-    -- x-axis labels: one 'Mon DD' per compared window, oldest-first.
+    -- x-axis labels: one timestamp per compared window, oldest-first.
     SELECT '['
         || LISTAGG('"' || TO_CHAR(
                CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
-               - 7*week_offset, 'Mon DD') || '"', ',')
+               - (~step_hours/24)*week_offset, '~period_axis_fmt') || '"', ',')
                WITHIN GROUP (ORDER BY week_offset DESC)
         || ']'
     INTO   v_weeks_json
@@ -60,8 +60,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (

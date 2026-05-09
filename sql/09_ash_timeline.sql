@@ -1,16 +1,21 @@
 --
 -- 09_ash_timeline.sql
--- Hourly Active-Session timeline from DBA_HIST_ACTIVE_SESS_HISTORY, stacked
--- by wait_class (ON-CPU rows bucketed as 'CPU', Idle waits excluded).
--- Spans from (target_end - weeks_back*7 days - win_hours) up to target_end,
--- so every compared window is covered in context. Renders below the
--- Headline metrics (hero strip) via flexbox order.
+-- Active-Session timeline from DBA_HIST_ACTIVE_SESS_HISTORY, stacked by
+-- wait_class (ON-CPU rows bucketed as 'CPU', Idle waits excluded).
+-- Spans from (target_end - weeks_back*step_hours/24 days - win_hours) up to
+-- target_end, so every compared window is covered in context. Renders below
+-- the Headline metrics (hero strip) via flexbox order.
+--
+-- Bucket width = ~bucket_hours = LEAST(step_hours, 1). For sub-hour cadences
+-- (e.g. 15-min comparisons), buckets shrink to step_hours so each window is
+-- still a single bar; for hourly+ cadences, buckets stay 1h.
 --
 -- ASH persists 1 in 10 in-memory samples, i.e. one row per session per 10s,
--- so an hour of one fully-busy session is 360 rows and AAS = samples / 360.
+-- so a fully-busy session contributes 360 rows/hour. AAS for a bucket is
+-- sample_count / (bucket_hours * 360).
 --
 -- Read-only: pulls ASH rows into a PL/SQL collection in-memory, computes
--- per-hour aggregates, and renders directly.  No scratch table.
+-- per-bucket aggregates, and renders directly.  No scratch table.
 --
 
 SET DEFINE '~'
@@ -19,7 +24,12 @@ SET SERVEROUTPUT ON SIZE UNLIMITED
 DECLARE
     v_range_start  DATE;
     v_range_end    DATE;
-    v_total_hours  NUMBER;
+    v_bucket_hours  NUMBER := ~bucket_hours;          -- 0.25 .. 1
+    v_total_buckets NUMBER;
+    v_total_hours   NUMBER;
+    -- Compact, human-readable label for v_bucket_hours, used in the section
+    -- title and prose. "15-min", "1-hour", or "X.YY-hour" for odd fractions.
+    v_bucket_label  VARCHAR2(32);
     -- PL/SQL VARCHAR2 goes up to 32767 bytes regardless of MAX_STRING_SIZE.
     -- Enough for about 2000 hours of CSV values; LISTAGG in SQL would cap at 4000.
     v_hours_json   VARCHAR2(32767);
@@ -30,10 +40,10 @@ DECLARE
         '"#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"]';
     v_first        BOOLEAN;
 
-    -- ASH aggregate: one entry per (hour_bucket, wait_class) with sample_count.
-    -- DATE arithmetic at hour granularity, so DATE keys (not TIMESTAMP) work.
+    -- ASH aggregate: one entry per (bucket, wait_class) with sample_count.
+    -- DATE arithmetic at bucket_hours granularity, so DATE keys are fine.
     TYPE t_cell_key  IS RECORD (
-        hour_key   NUMBER,           -- hours since v_range_start
+        bucket_key NUMBER,           -- buckets since v_range_start
         wait_class VARCHAR2(64)
     );
     TYPE t_cell_tab IS TABLE OF NUMBER INDEX BY VARCHAR2(200);
@@ -43,23 +53,36 @@ DECLARE
     v_class_totals t_class_tab;
 
     v_ck           VARCHAR2(200);
-    v_hk           NUMBER;
+    v_bk           NUMBER;
     v_wc           VARCHAR2(64);
     v_n            NUMBER;
     v_aas          NUMBER;
 BEGIN
     SELECT CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
-               - ~weeks_back*7 - ~win_hours/24,
+               - ~weeks_back*(~step_hours/24) - ~win_hours/24,
            CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
     INTO   v_range_start, v_range_end
     FROM   dual;
 
-    v_total_hours := GREATEST((v_range_end - v_range_start) * 24, 1);
+    v_total_hours   := GREATEST((v_range_end - v_range_start) * 24, 1);
+    v_total_buckets := GREATEST(ROUND(v_total_hours / v_bucket_hours), 1);
+    v_bucket_label  :=
+        CASE WHEN v_bucket_hours = 1 THEN '1-hour'
+             WHEN v_bucket_hours < 1 AND MOD(v_bucket_hours*60, 1) = 0
+                  THEN TO_CHAR(ROUND(v_bucket_hours*60)) || '-min'
+             ELSE TO_CHAR(v_bucket_hours,
+                          'FM999990.99',
+                          'NLS_NUMERIC_CHARACTERS=''.,''') || '-hour'
+        END;
 
     DBMS_OUTPUT.PUT_LINE('<section id="ash-timeline"><h2>ASH timeline '
-        || '(hourly, stacked by wait class)</h2>');
+        || '(' || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
+        || ', stacked by wait class)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || 'Active sessions per hour from <code>dba_hist_active_sess_history</code>, '
+        || 'Active sessions per '
+        || CASE WHEN v_bucket_hours = 1 THEN 'hour'
+                ELSE v_bucket_label || ' bucket' END
+        || ' from <code>dba_hist_active_sess_history</code>, '
         || 'covering the full comparison span ('
         || TO_CHAR(CAST(v_range_start AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
         || ' &rarr; '
@@ -77,8 +100,11 @@ BEGIN
     -- we GROUP BY the two keys we need so the round trip is small.
     --
     FOR r IN (
-        SELECT ROUND((CAST(TRUNC(CAST(ash.sample_time AS DATE), 'HH') AS DATE)
-                      - v_range_start) * 24) AS hour_key,
+        -- bucket_key = floor((sample - range_start) hours / bucket_hours).
+        -- Direct floor on a fractional bucket avoids the TRUNC('HH') trap
+        -- that collapsed every sub-hour cadence into one bar.
+        SELECT FLOOR(((CAST(ash.sample_time AS DATE) - v_range_start) * 24)
+                     / v_bucket_hours) AS bucket_key,
                CASE WHEN ash.session_state = 'ON CPU' THEN 'CPU'
                     ELSE NVL(ash.wait_class, 'Other') END AS wait_class,
                COUNT(*) AS sample_count
@@ -88,12 +114,12 @@ BEGIN
           AND  ash.sample_time >= CAST(v_range_start AS TIMESTAMP)
           AND  ash.sample_time <  CAST(v_range_end   AS TIMESTAMP)
           AND  (ash.session_state = 'ON CPU' OR NVL(ash.wait_class, 'x') <> 'Idle')
-        GROUP BY ROUND((CAST(TRUNC(CAST(ash.sample_time AS DATE), 'HH') AS DATE)
-                        - v_range_start) * 24),
+        GROUP BY FLOOR(((CAST(ash.sample_time AS DATE) - v_range_start) * 24)
+                       / v_bucket_hours),
                  CASE WHEN ash.session_state = 'ON CPU' THEN 'CPU'
                       ELSE NVL(ash.wait_class, 'Other') END
     ) LOOP
-        v_ck := TO_CHAR(r.hour_key) || '|' || r.wait_class;
+        v_ck := TO_CHAR(r.bucket_key) || '|' || r.wait_class;
         v_cells(v_ck) := r.sample_count;
         IF v_class_totals.EXISTS(r.wait_class) THEN
             v_class_totals(r.wait_class) := v_class_totals(r.wait_class) + r.sample_count;
@@ -102,12 +128,15 @@ BEGIN
         END IF;
     END LOOP;
 
-    -- Shared hour grid (ISO-ish strings, oldest -> newest).
+    -- Shared bucket grid (ISO-ish strings, oldest -> newest). Each label is
+    -- the bucket's start instant; with sub-hour bucket_hours, HH24:MI shows
+    -- the minute boundary too.
     v_hours_json := '[';
-    FOR h IN 0 .. v_total_hours - 1 LOOP
-        IF h > 0 THEN v_hours_json := v_hours_json || ','; END IF;
+    FOR b IN 0 .. v_total_buckets - 1 LOOP
+        IF b > 0 THEN v_hours_json := v_hours_json || ','; END IF;
         v_hours_json := v_hours_json
-            || '"' || TO_CHAR(v_range_start + h/24, 'YYYY-MM-DD HH24:MI') || '"';
+            || '"' || TO_CHAR(v_range_start + (b * v_bucket_hours) / 24,
+                              'YYYY-MM-DD HH24:MI') || '"';
     END LOOP;
     v_hours_json := v_hours_json || ']';
 
@@ -142,8 +171,8 @@ BEGIN
         ),
         raw_windows AS (
             SELECT r.dbid, r.instance_number, o.week_offset,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset - r.win_hours/24 AS win_start_dt,
-                   CAST(r.target_end_ts AS DATE) - 7*o.week_offset                   AS win_end_dt
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset - r.win_hours/24 AS win_start_dt,
+                   CAST(r.target_end_ts AS DATE) - (~step_hours/24)*o.week_offset                   AS win_end_dt
             FROM run_params r CROSS JOIN offsets o
         ),
         snaps AS (
@@ -227,14 +256,16 @@ BEGIN
         FOR i IN 1 .. v_list.COUNT LOOP
             v_wc := v_list(i).k;
             v_class_vals := NULL;
-            FOR h IN 0 .. v_total_hours - 1 LOOP
-                v_ck := TO_CHAR(h) || '|' || v_wc;
+            FOR b IN 0 .. v_total_buckets - 1 LOOP
+                v_ck := TO_CHAR(b) || '|' || v_wc;
                 IF v_cells.EXISTS(v_ck) THEN
                     v_n := v_cells(v_ck);
                 ELSE
                     v_n := 0;
                 END IF;
-                v_aas := v_n / 360;
+                -- 360 ASH samples == one busy session-hour;
+                -- divide by the bucket width (in hours) to get AAS.
+                v_aas := v_n / (v_bucket_hours * 360);
                 IF v_class_vals IS NULL THEN
                     v_class_vals := TO_CHAR(v_aas, 'FM99999990D0000',
                                             'NLS_NUMERIC_CHARACTERS=''.,''');

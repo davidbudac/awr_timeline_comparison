@@ -110,15 +110,26 @@ will leak into the HTML.** All user-visible strings (SQL text, event
 names, metric names) must be wrapped in `DBMS_XMLGEN.CONVERT(...)`.
 
 ### Substitution variables
-Five user-facing vars: `target_end`, `win_hours`, `weeks_back`, `top_n`,
-`inst_num`. `inst_num = 0` means aggregate across RAC instances; any
-other value filters to that instance. `target_end = 'AUTO'` means
-"prior full hour relative to SYSDATE" (resolved in the driver into
-`target_end_resolved`). The driver also resolves `run_id` (17-digit
-timestamp from `SYSTIMESTAMP`), `dbid`, `db_name`, `host_name`,
-`db_version`, `caller_user`, `generated_at_s`, `dow_name`, and
-`report_path` up front; every section references them as `~name`.
-No section ever re-resolves these values.
+Seven user-facing vars: `target_end`, `win_hours`, `weeks_back`, `top_n`,
+`inst_num`, `step`, `step_unit`. `inst_num = 0` means aggregate across
+RAC instances; any other value filters to that instance.
+`target_end = 'AUTO'` means "prior full hour relative to SYSDATE"
+(resolved in the driver into `target_end_resolved`). `step` + `step_unit`
+(default `1` + `'w'`) control the cadence between adjacent comparison
+windows; `step_unit` is one of `'h'` (hours), `'d'` (days), `'w'`
+(weeks). The original "same hour-of-week, N prior weeks" behaviour is
+the default (`step=1, step_unit='w'`). Setting `step=1, step_unit='h'`
+compares the last `weeks_back+1` consecutive 1-hour windows in a
+straight line back from `target_end`. The driver resolves
+`step_hours = step * (1|24|168)` plus `period_unit_short` /
+`period_unit_long` / `period_unit_title` / `period_step_label` /
+`period_axis_fmt` once up front; every section uses
+`~step_hours/24` (NOT the literal `7`) as the cadence multiplier.
+The driver also resolves `run_id` (17-digit timestamp from
+`SYSTIMESTAMP`), `dbid`, `db_name`, `host_name`, `db_version`,
+`caller_user`, `generated_at_s`, `dow_name`, and `report_path` up
+front; every section references them as `~name`. No section ever
+re-resolves these values.
 
 **Tilde gotcha**: every numbered section file issues `SET DEFINE '~'` so
 it can use `~run_id` for parameter substitution. That makes `~` the
@@ -196,9 +207,10 @@ worth probing on a future real run:
   `FOR` loop. Valid PL/SQL, but verbose — performance is fine at
   `top_n = 10`.
 - `09_ash_timeline.sql` pulls every qualifying ASH row aggregated to
-  (hour_bucket, wait_class) over a (weeks_back+1)*win_hours×24-hour
-  span. On a very busy DB this can be the single most expensive
-  section; consider narrowing the range if wall-clock matters.
+  (hour_bucket, wait_class) over a `weeks_back*step_hours + win_hours`-
+  hour span. On a very busy DB this can be the single most expensive
+  section; consider narrowing the range (smaller `weeks_back`, or a
+  shorter `step_hours`) if wall-clock matters.
 - RAC aggregate vs per-instance: pick a known-quiet window on a RAC
   cluster, run with `inst_num = 0` and `inst_num = 1`, cross-check that
   aggregate ≈ sum of per-instance for cumulative stats.
@@ -223,3 +235,7 @@ worth probing on a future real run:
   stay that way.
 - Don't widen the grant list in `README.md` without a concrete reason —
   everything in there is actually needed by the current SQL.
+- Don't reintroduce the literal `7` as the cadence multiplier inside any
+  `raw_windows` CTE. The cadence is `~step_hours/24` (resolved by the
+  driver from `step` + `step_unit`); typing `7*o.week_offset` re-hardcodes
+  the weekly default and breaks every non-weekly comparison.
