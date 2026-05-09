@@ -1,0 +1,7 @@
+# Generated AWR reports — keep the directory but not its contents.
+reports/*.html
+!reports/.gitkeep
+
+# OS / editor / tool noise
+.DS_Store
+.claude/
