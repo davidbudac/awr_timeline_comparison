@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mockup A · Editorial — AWR Timeline Comparison</title>
+<style>
+  :root {
+    --bg: #fafaf7;
+    --panel: #ffffff;
+    --fg: #1a1d29;
+    --fg-soft: #4b5263;
+    --muted: #8a91a3;
+    --line: #ebe8e0;
+    --line-soft: #f1eee7;
+    --accent: #5b51d8;
+    --accent-soft: #ece9ff;
+    --crit: #c0392b;
+    --crit-bg: #fdecea;
+    --warn: #b07700;
+    --warn-bg: #fdf3dd;
+    --ok: #2f7a48;
+    --ok-bg: #e8f3eb;
+    --info: #2a5dd5;
+    --info-bg: #e7eefb;
+    --serif: ui-serif, "Iowan Old Style", "Charter", "Georgia", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14141a;
+      --panel: #1c1d25;
+      --fg: #e8e6df;
+      --fg-soft: #b9b6ad;
+      --muted: #7a7c87;
+      --line: #2a2c36;
+      --line-soft: #23252e;
+      --accent: #9c93ff;
+      --accent-soft: #2a2546;
+      --crit: #ff8a7d;
+      --crit-bg: #3a1d1a;
+      --warn: #f3c873;
+      --warn-bg: #3a2e16;
+      --ok: #8fd9a3;
+      --ok-bg: #19301f;
+      --info: #92b3ff;
+      --info-bg: #1c2440;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 56px 48px 96px; }
+
+  /* Masthead */
+  .mast { border-bottom: 1px solid var(--line); padding-bottom: 28px; margin-bottom: 36px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  h1.title { font-family: var(--serif); font-weight: 600; font-size: 40px; line-height: 1.1; letter-spacing: -0.02em; margin: 8px 0 20px; }
+  h1.title em { font-style: italic; font-weight: 400; color: var(--fg-soft); }
+  .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 4px 32px; font-size: 13px; color: var(--fg-soft); }
+  .meta dt { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  .meta dd { margin: 0 0 8px 0; font-variant-numeric: tabular-nums; }
+  .meta dd b { color: var(--fg); font-weight: 600; }
+
+  /* Section */
+  section { margin: 56px 0 0; }
+  section:first-of-type { margin-top: 40px; }
+  h2 { font-family: var(--serif); font-weight: 500; font-size: 24px; letter-spacing: -0.01em; margin: 0 0 6px; }
+  h2 .num { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; margin-right: 12px; }
+  .lede { color: var(--fg-soft); margin: 0 0 24px; max-width: 640px; }
+
+  /* Hero strip */
+  .hero { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .hero-card { padding: 20px 24px; border-right: 1px solid var(--line-soft); }
+  .hero-card:nth-child(3n) { border-right: 0; }
+  .hero-card:nth-child(n+4) { border-top: 1px solid var(--line-soft); }
+  .hero-card .lab { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+  .hero-card .v { font-family: var(--serif); font-size: 32px; font-weight: 500; letter-spacing: -0.02em; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+  .hero-card .v small { font-size: 14px; color: var(--muted); margin-left: 4px; font-family: var(--sans); font-weight: 400; letter-spacing: 0; }
+  .hero-card .delta { font-size: 13px; font-variant-numeric: tabular-nums; }
+  .hero-card .delta .up { color: var(--warn); }
+  .hero-card .delta .dn { color: var(--ok); }
+  .hero-card .delta .nc { color: var(--muted); }
+  .hero-card svg.spark { width: 100%; height: 36px; margin-top: 10px; display: block; color: var(--accent); }
+
+  /* Findings */
+  .findings { display: flex; flex-direction: column; gap: 1px; background: var(--line-soft); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .finding { display: grid; grid-template-columns: 28px 1fr 120px 80px; align-items: center; gap: 16px; background: var(--bg); padding: 12px 4px; }
+  .finding .sev { width: 8px; height: 36px; border-radius: 4px; margin-left: 12px; }
+  .finding.crit .sev { background: var(--crit); }
+  .finding.warn .sev { background: var(--warn); }
+  .finding.ok .sev { background: var(--ok); }
+  .finding.info .sev { background: var(--info); }
+  .finding .name { font-weight: 500; }
+  .finding .name .sub { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 8px; }
+  .finding .z { font-family: var(--mono); font-size: 13px; color: var(--fg-soft); text-align: right; padding-right: 12px; }
+  .finding .tag { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+  .finding.crit .tag { color: var(--crit); }
+  .finding.warn .tag { color: var(--warn); }
+  .finding.ok .tag { color: var(--ok); }
+  .finding.info .tag { color: var(--info); }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  thead th { text-align: left; padding: 10px 12px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: var(--line-soft); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.mono { font-family: var(--mono); font-size: 12px; color: var(--fg-soft); }
+  td.name { font-weight: 500; }
+  td .pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; font-weight: 600; letter-spacing: 0.02em; }
+  td .pill.io  { background: var(--info-bg); color: var(--info); }
+  td .pill.cmt { background: var(--warn-bg); color: var(--warn); }
+  td .pill.cfg { background: var(--crit-bg); color: var(--crit); }
+  td .pill.usr { background: var(--ok-bg); color: var(--ok); }
+  td .pill.oth { background: var(--accent-soft); color: var(--accent); }
+  svg.spark { width: 110px; height: 22px; vertical-align: middle; color: var(--accent); }
+  svg.spark .line { fill: none; stroke: currentColor; stroke-width: 1.5; }
+  svg.spark .fill { fill: currentColor; opacity: 0.10; }
+  svg.spark .dot  { fill: currentColor; }
+
+  /* Top SQL */
+  .topsql { display: flex; flex-direction: column; gap: 0; }
+  .sqlrow { display: grid; grid-template-columns: 36px 96px 1fr 100px 130px; gap: 16px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--line-soft); }
+  .sqlrow:last-child { border-bottom: 0; }
+  .sqlrow .rk { font-family: var(--serif); font-size: 22px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .sqlrow .id { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .sqlrow .sql { font-family: var(--mono); font-size: 12.5px; color: var(--fg-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sqlrow .ela { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .sqlrow .ela small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+
+  footer { margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">AWR Timeline Comparison</div>
+  <h1 class="title">PROD-DW &middot; <em>Friday 14:00 — 15:00</em></h1>
+  <dl class="meta">
+    <div><dt>Database</dt><dd><b>CDB1</b> &middot; 19.22.0.0</dd></div>
+    <div><dt>Window</dt><dd>1h <b>&times; 5</b> weekly</dd></div>
+    <div><dt>Generated</dt><dd>2026&#8209;05&#8209;09 13:48 UTC</dd></div>
+    <div><dt>Snapshots</dt><dd><b>10</b> &middot; 1774–1779</dd></div>
+    <div><dt>Run</dt><dd>20260509134839515</dd></div>
+  </dl>
+</header>
+
+<section>
+  <h2><span class="num">01</span>Overview</h2>
+  <p class="lede">Headline metrics for the current window with deltas against the prior 4 weeks. Sparklines run oldest&nbsp;→&nbsp;newest.</p>
+  <div class="hero">
+    <div class="hero-card">
+      <div class="lab">DB time</div>
+      <div class="v">202<small>s/s</small></div>
+      <div class="delta"><span class="dn">&minus;15.1%</span> <span style="color:var(--muted)">vs &minus;1w</span></div>
+      <svg class="spark" viewBox="0 0 100 36" preserveAspectRatio="none">
+        <path class="fill" d="M0,18 L25,14 50,22 75,12 100,26 L100,36 0,36 Z"/>
+        <path class="line" d="M0,18 L25,14 50,22 75,12 100,26"/>
+        <circle class="dot" cx="100" cy="26" r="2"/>
+      </svg>
+    </div>
+    <div class="hero-card">
+      <div class="lab">Redo generated</div>
+      <div class="v">490<small>K/s</small></div>
+      <div class="delta"><span class="up">+2.4%</span> <span style="color:var(--muted)">vs &minus;1w</span></div>
+      <svg class="spark" viewBox="0 0 100 36" preserveAspectRatio="none">
+        <path class="fill" d="M0,28 L25,4 50,20 75,17 100,15 L100,36 0,36 Z"/>
+        <path class="line" d="M0,28 L25,4 50,20 75,17 100,15"/>
+        <circle class="dot" cx="100" cy="15" r="2"/>
+      </svg>
+    </div>
+    <div class="hero-card">
+      <div class="lab">Logical reads</div>
+      <div class="v">31.5<small>K/s</small></div>
+      <div class="delta"><span class="dn">&minus;6.3%</span> <span style="color:var(--muted)">vs &minus;1w</span></div>
+      <svg class="spark" viewBox="0 0 100 36" preserveAspectRatio="none">
+        <path class="fill" d="M0,16 L25,18 50,20 75,12 100,22 L100,36 0,36 Z"/>
+        <path class="line" d="M0,16 L25,18 50,20 75,12 100,22"/>
+        <circle class="dot" cx="100" cy="22" r="2"/>
+      </svg>
+    </div>
+    <div class="hero-card">
+      <div class="lab">Executions</div>
+      <div class="v">2.84<small>K/s</small></div>
+      <div class="delta"><span class="nc">+0.2%</span> <span style="color:var(--muted)">vs &minus;1w</span></div>
+      <svg class="spark" viewBox="0 0 100 36" preserveAspectRatio="none">
+        <path class="fill" d="M0,20 L25,22 50,18 75,21 100,19 L100,36 0,36 Z"/>
+        <path class="line" d="M0,20 L25,22 50,18 75,21 100,19"/>
+        <circle class="dot" cx="100" cy="19" r="2"/>
+      </svg>
+    </div>
+    <div class="hero-card">
+      <div class="lab">Hard parses</div>
+      <div class="v">12.4<small>/s</small></div>
+      <div class="delta"><span class="up">+47.8%</span> <span style="color:var(--muted)">vs &minus;1w</span></div>
+      <svg class="spark" viewBox="0 0 100 36" preserveAspectRatio="none">
+        <path class="fill" d="M0,28 L25,26 50,24 75,18 100,4 L100,36 0,36 Z"/>
+        <path class="line" d="M0,28 L25,26 50,24 75,18 100,4"/>
+        <circle class="dot" cx="100" cy="4" r="2"/>
+      </svg>
+    </div>
+    <div class="hero-card">
+      <div class="lab">User commits</div>
+      <div class="v">385<small>/s</small></div>
+      <div class="delta"><span class="dn">&minus;1.1%</span> <span style="color:var(--muted)">vs &minus;1w</span></div>
+      <svg class="spark" viewBox="0 0 100 36" preserveAspectRatio="none">
+        <path class="fill" d="M0,16 L25,18 50,15 75,17 100,18 L100,36 0,36 Z"/>
+        <path class="line" d="M0,16 L25,18 50,15 75,17 100,18"/>
+        <circle class="dot" cx="100" cy="18" r="2"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">02</span>Findings</h2>
+  <p class="lede">Metrics whose current value moved more than 2&sigma; from the 4-week baseline.</p>
+  <div class="findings">
+    <div class="finding crit">
+      <div class="sev"></div>
+      <div class="name">Hard parses (CPU)<span class="sub">load profile</span></div>
+      <div class="z">z = +3.84</div>
+      <div class="tag">Critical</div>
+    </div>
+    <div class="finding crit">
+      <div class="sev"></div>
+      <div class="name">free buffer waits<span class="sub">foreground wait</span></div>
+      <div class="z">z = +3.12</div>
+      <div class="tag">Critical</div>
+    </div>
+    <div class="finding warn">
+      <div class="sev"></div>
+      <div class="name">log file sync<span class="sub">commit wait</span></div>
+      <div class="z">z = +2.41</div>
+      <div class="tag">Warn</div>
+    </div>
+    <div class="finding warn">
+      <div class="sev"></div>
+      <div class="name">Avg active sessions<span class="sub">sysmetric</span></div>
+      <div class="z">z = +2.08</div>
+      <div class="tag">Warn</div>
+    </div>
+    <div class="finding ok">
+      <div class="sev"></div>
+      <div class="name">DB time<span class="sub">load profile</span></div>
+      <div class="z">z = &minus;1.21</div>
+      <div class="tag">OK</div>
+    </div>
+    <div class="finding info">
+      <div class="sev"></div>
+      <div class="name">Buffer cache hit ratio<span class="sub">sysmetric · stable</span></div>
+      <div class="z">z = +0.04</div>
+      <div class="tag">Info</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">03</span>Foreground waits</h2>
+  <p class="lede">Top 10 by time waited (current window). Sparkline shows the 5-week trajectory.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Event</th>
+        <th>Class</th>
+        <th>Trend</th>
+        <th class="num">Now</th>
+        <th class="num">&minus;1w</th>
+        <th class="num">&minus;2w</th>
+        <th class="num">&minus;3w</th>
+        <th class="num">&minus;4w</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="name">db file async I/O submit</td><td><span class="pill io">System I/O</span></td><td><svg class="spark" viewBox="0 0 100 22" preserveAspectRatio="none"><path class="line" d="M0,11 L25,12 50,10 75,11 100,11"/></svg></td><td class="num"><b>896.71</b></td><td class="num">901.14</td><td class="num">903.17</td><td class="num">893.44</td><td class="num">897.81</td></tr>
+      <tr><td class="name">db file sequential read</td><td><span class="pill usr">User I/O</span></td><td><svg class="spark" viewBox="0 0 100 22" preserveAspectRatio="none"><path class="line" d="M0,4 L25,12 50,11 75,15 100,12"/></svg></td><td class="num"><b>824.17</b></td><td class="num">775.18</td><td class="num">845.39</td><td class="num">833.41</td><td class="num">951.24</td></tr>
+      <tr><td class="name">log file sync</td><td><span class="pill cmt">Commit</span></td><td><svg class="spark" viewBox="0 0 100 22" preserveAspectRatio="none"><path class="line" d="M0,8 L25,16 50,9 75,11 100,10"/></svg></td><td class="num"><b>371.96</b></td><td class="num">368.61</td><td class="num">374.19</td><td class="num">326.65</td><td class="num">379.72</td></tr>
+      <tr><td class="name">log file parallel write</td><td><span class="pill io">System I/O</span></td><td><svg class="spark" viewBox="0 0 100 22" preserveAspectRatio="none"><path class="line" d="M0,8 L25,16 50,9 75,11 100,10"/></svg></td><td class="num"><b>362.22</b></td><td class="num">358.88</td><td class="num">365.07</td><td class="num">321.47</td><td class="num">369.54</td></tr>
+      <tr><td class="name">free buffer waits</td><td><span class="pill cfg">Configuration</span></td><td><svg class="spark" viewBox="0 0 100 22" preserveAspectRatio="none" style="color:var(--crit)"><path class="line" d="M0,4 L25,18 50,14 75,11 100,16"/></svg></td><td class="num"><b>193.27</b></td><td class="num">268.48</td><td class="num">213.22</td><td class="num">176.18</td><td class="num">392.08</td></tr>
+      <tr><td class="name">write complete waits</td><td><span class="pill cfg">Configuration</span></td><td><svg class="spark" viewBox="0 0 100 22" preserveAspectRatio="none"><path class="line" d="M0,6 L25,12 50,12 75,11 100,10"/></svg></td><td class="num"><b>161.89</b></td><td class="num">160.63</td><td class="num">140.94</td><td class="num">141.01</td><td class="num">189.50</td></tr>
+      <tr><td class="name">flashback log file write</td><td><span class="pill io">System I/O</span></td><td><svg class="spark" viewBox="0 0 100 22" preserveAspectRatio="none"><path class="line" d="M0,12 L25,11 50,18 75,11 100,11"/></svg></td><td class="num"><b>55.67</b></td><td class="num">27.27</td><td class="num">53.74</td><td class="num">52.44</td><td class="num">&mdash;</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2><span class="num">04</span>Top SQL</h2>
+  <p class="lede">Ranked by elapsed time (current window).</p>
+  <div class="topsql">
+    <div class="sqlrow">
+      <div class="rk">1</div>
+      <div class="id">3n4tadqgd9b9r</div>
+      <div class="sql">BEGIN :1 := orderentry.neworder(:2,:3,:4); END;</div>
+      <div class="ela">1,053.97<small>elapsed (s)</small></div>
+      <div class="ela" style="color:var(--warn)">+11.0%<small>vs &minus;1w</small></div>
+    </div>
+    <div class="sqlrow">
+      <div class="rk">2</div>
+      <div class="id">f7rxuxzt64k87</div>
+      <div class="sql">INSERT INTO ORDER_ITEMS (ORDER_ID, LINE_ITEM_ID, PRODUCT_ID, UNIT_PRICE, QUANTITY, GIFT_WRAP, …</div>
+      <div class="ela">238.73<small>elapsed (s)</small></div>
+      <div class="ela" style="color:var(--warn)">+20.5%<small>vs &minus;1w</small></div>
+    </div>
+    <div class="sqlrow">
+      <div class="rk">3</div>
+      <div class="id">g81cbrq5yamf5</div>
+      <div class="sql">SELECT ADDRESS_ID, CUSTOMER_ID, DATE_CREATED, … FROM ADDRESSES WHERE CUSTOMER_ID = :B2 …</div>
+      <div class="ela">207.99<small>elapsed (s)</small></div>
+      <div class="ela" style="color:var(--ok)">+5.0%<small>vs &minus;1w</small></div>
+    </div>
+    <div class="sqlrow">
+      <div class="rk">4</div>
+      <div class="id">21ss57x3bykp3</div>
+      <div class="sql">BEGIN :1 := orderentry.newcustomer(:2,:3,:4,:5,:6,:7,:8,:9,:10); END;</div>
+      <div class="ela">194.54<small>elapsed (s)</small></div>
+      <div class="ela" style="color:var(--ok)">+4.8%<small>vs &minus;1w</small></div>
+    </div>
+    <div class="sqlrow">
+      <div class="rk">5</div>
+      <div class="id">7ws837zynp1zv</div>
+      <div class="sql">SELECT CARD_ID, CUSTOMER_ID, CARD_TYPE, CARD_NUMBER, EXPIRY_DATE, IS_VALID, SECURITY_CODE FROM CARD_DETAILS …</div>
+      <div class="ela">189.10<small>elapsed (s)</small></div>
+      <div class="ela" style="color:var(--warn)">+5.7%<small>vs &minus;1w</small></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div>AWR Timeline Comparison · Mockup A — Editorial</div>
+  <div>generated 2026-05-09 13:48 UTC</div>
+</footer>
+
+</div>
+</body>
+</html>

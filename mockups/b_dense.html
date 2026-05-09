@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mockup B · Dense — AWR Timeline Comparison</title>
+<style>
+  :root {
+    --bg: #0c1018;
+    --panel: #11161f;
+    --panel-2: #161c27;
+    --line: #1f2531;
+    --line-soft: #181d27;
+    --fg: #d8dde6;
+    --fg-soft: #a4abba;
+    --muted: #6b7384;
+    --accent: #4cc9f0;
+    --accent-2: #7df9c2;
+    --crit: #ff6b6b;
+    --crit-bg: #2a1518;
+    --warn: #ffb454;
+    --warn-bg: #2a2014;
+    --ok: #7df9c2;
+    --ok-bg: #14241e;
+    --info: #82a9ff;
+    --info-bg: #161e30;
+    --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --panel-2: #f1f3f7;
+      --line: #d8dde6;
+      --line-soft: #e8ebf0;
+      --fg: #1a1f2c;
+      --fg-soft: #475068;
+      --muted: #7d869b;
+      --accent: #0066cc;
+      --accent-2: #0e9f6e;
+      --crit: #c0392b;
+      --crit-bg: #fbecea;
+      --warn: #b07700;
+      --warn-bg: #fdf3dd;
+      --ok: #0e9f6e;
+      --ok-bg: #e6f6ee;
+      --info: #2d5fd1;
+      --info-bg: #e8eefb;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 12.5px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Top bar */
+  .topbar { display:flex; align-items:center; gap:18px; padding:8px 16px; border-bottom:1px solid var(--line); background:var(--panel); position:sticky; top:0; z-index:10; }
+  .topbar .brand { font-weight:700; letter-spacing:0.02em; font-size:12px; }
+  .topbar .brand .dot { display:inline-block; width:6px; height:6px; background:var(--accent); border-radius:99px; margin-right:6px; vertical-align:middle; }
+  .topbar .crumbs { color:var(--muted); font-family:var(--mono); font-size:11.5px; }
+  .topbar .crumbs b { color:var(--fg-soft); font-weight:600; }
+  .topbar .crumbs .sep { color:var(--line); margin:0 6px; }
+  .topbar .right { margin-left:auto; display:flex; gap:14px; color:var(--muted); font-size:11.5px; font-family:var(--mono); }
+  .topbar .right b { color:var(--fg-soft); font-weight:600; }
+
+  .wrap { padding: 14px 16px 80px; max-width: 1480px; margin: 0 auto; }
+
+  h2 { font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; color: var(--fg-soft); margin: 22px 0 8px; display:flex; align-items:center; gap:10px; }
+  h2 .rule { flex:1; height:1px; background: var(--line); }
+  h2 .meta { color: var(--muted); font-weight: 500; letter-spacing: 0; text-transform: none; font-family: var(--mono); font-size: 11px; }
+
+  /* KPI strip */
+  .kpis { display:grid; grid-template-columns:repeat(6, 1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+  .kpi { background:var(--panel); padding:10px 12px; display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .kpi .lab { font-size:10.5px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); font-weight:600; }
+  .kpi .v { font-family:var(--mono); font-size:20px; font-weight:600; letter-spacing:-0.02em; color:var(--fg); }
+  .kpi .v small { font-size:11px; color:var(--muted); margin-left:3px; font-weight:400; }
+  .kpi .row { display:flex; justify-content:space-between; align-items:flex-end; }
+  .kpi svg.spark { width:62px; height:24px; color: var(--accent); }
+  .kpi svg.spark .line { fill:none; stroke:currentColor; stroke-width:1.4; }
+  .kpi svg.spark .fill { fill:currentColor; opacity:0.15; }
+  .kpi svg.spark .dot { fill:currentColor; }
+  .kpi .deltas { display:flex; gap:6px; font-family:var(--mono); font-size:10.5px; margin-top:3px; }
+  .kpi .d { font-variant-numeric:tabular-nums; }
+  .kpi .d.up { color: var(--warn); }
+  .kpi .d.dn { color: var(--ok); }
+  .kpi .d.nc { color: var(--muted); }
+  .kpi .d .dp { color: var(--muted); margin-right:2px; font-size:9.5px; }
+
+  /* Findings heatmap */
+  .heatmap { display: grid; grid-template-columns: 220px repeat(5, 1fr) 60px; gap: 2px; font-family: var(--mono); font-size: 11px; }
+  .heatmap .h { color: var(--muted); padding: 4px 6px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; font-size: 10px; }
+  .heatmap .h.col { text-align: center; }
+  .heatmap .lab { padding: 4px 6px; color: var(--fg-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .heatmap .cell { padding: 4px 6px; text-align: center; color: var(--fg); border-radius: 2px; background: var(--panel); }
+  .heatmap .cell.crit { background: var(--crit-bg); color: var(--crit); }
+  .heatmap .cell.warn { background: var(--warn-bg); color: var(--warn); }
+  .heatmap .cell.ok   { background: var(--ok-bg); color: var(--ok); }
+  .heatmap .cell.info { background: var(--info-bg); color: var(--info); }
+  .heatmap .cell.skip { color: var(--muted); }
+  .heatmap .z { padding: 4px 8px; color: var(--fg-soft); text-align: right; font-weight: 600; }
+  .heatmap .z.crit { color: var(--crit); }
+  .heatmap .z.warn { color: var(--warn); }
+
+  /* Tables */
+  .panel { background: var(--panel); border:1px solid var(--line); border-radius:4px; overflow: hidden; }
+  table { width:100%; border-collapse:collapse; font-size: 12px; }
+  thead th { padding:6px 10px; text-align:left; background: var(--panel-2); color: var(--muted); font-weight:600; letter-spacing:0.04em; font-size:10.5px; text-transform:uppercase; border-bottom:1px solid var(--line); white-space:nowrap; }
+  tbody td { padding:5px 10px; border-bottom:1px solid var(--line-soft); white-space:nowrap; }
+  tbody tr:last-child td { border-bottom:0; }
+  tbody tr:hover { background: var(--panel-2); }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; font-family: var(--mono); }
+  td.mono, th.mono { font-family: var(--mono); }
+  td.name { font-weight:500; max-width:280px; overflow:hidden; text-overflow:ellipsis; }
+  td .tag { display:inline-block; font-family: var(--mono); font-size:10px; padding:1px 6px; border-radius:2px; background:var(--panel-2); color:var(--fg-soft); border:1px solid var(--line); }
+  td .tag.io  { color:var(--info); border-color:var(--info-bg); background:var(--info-bg); }
+  td .tag.cmt { color:var(--warn); border-color:var(--warn-bg); background:var(--warn-bg); }
+  td .tag.cfg { color:var(--crit); border-color:var(--crit-bg); background:var(--crit-bg); }
+  td .tag.usr { color:var(--ok); border-color:var(--ok-bg); background:var(--ok-bg); }
+  td .tag.oth { color:var(--accent); border-color:var(--info-bg); background:var(--info-bg); }
+  td .rk { display:inline-block; font-family:var(--mono); font-size:10px; color: var(--muted); margin-left:6px; }
+  td .delta-up { color:var(--warn); font-family:var(--mono); }
+  td .delta-dn { color:var(--ok); font-family:var(--mono); }
+  td.cur { color: var(--accent); font-weight:700; }
+  svg.spark { width: 96px; height: 18px; color: var(--accent); }
+  svg.spark .line { fill: none; stroke: currentColor; stroke-width: 1.3; }
+  svg.spark .dot { fill: currentColor; }
+  svg.spark.crit { color: var(--crit); }
+  svg.spark.warn { color: var(--warn); }
+
+  /* Two-column row */
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(3, 1fr); } }
+
+  footer { margin-top:32px; padding:10px 0; border-top:1px solid var(--line); color:var(--muted); font-size:11px; font-family:var(--mono); display:flex; justify-content:space-between; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="dot"></span>AWR&nbsp;TIMELINE</div>
+  <div class="crumbs"><b>CDB1</b><span class="sep">/</span>Friday 14:00–15:00<span class="sep">/</span>1h × 5w<span class="sep">/</span>inst <b>0</b> (agg)</div>
+  <div class="right">
+    <div>dbid <b>1183716798</b></div>
+    <div>snaps <b>1774–1779</b></div>
+    <div>generated <b>13:48 UTC</b></div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <h2>Headline KPIs <span class="meta">current window vs. 4 prior weeks</span><span class="rule"></span></h2>
+  <div class="kpis">
+    <div class="kpi">
+      <div class="lab">DB Time</div>
+      <div class="row">
+        <div class="v">202<small>s/s</small></div>
+        <svg class="spark" viewBox="0 0 60 24" preserveAspectRatio="none"><path class="fill" d="M0,12 L15,8 30,16 45,7 60,18 L60,24 0,24 Z"/><path class="line" d="M0,12 L15,8 30,16 45,7 60,18"/><circle class="dot" cx="60" cy="18" r="1.6"/></svg>
+      </div>
+      <div class="deltas"><span class="d dn"><span class="dp">-1w</span>-15.1%</span><span class="d up"><span class="dp">-2w</span>+14.4%</span><span class="d dn"><span class="dp">-3w</span>-0.0%</span></div>
+    </div>
+    <div class="kpi">
+      <div class="lab">Redo gen</div>
+      <div class="row">
+        <div class="v">490<small>K/s</small></div>
+        <svg class="spark" viewBox="0 0 60 24" preserveAspectRatio="none"><path class="fill" d="M0,18 L15,2 30,12 45,10 60,9 L60,24 0,24 Z"/><path class="line" d="M0,18 L15,2 30,12 45,10 60,9"/><circle class="dot" cx="60" cy="9" r="1.6"/></svg>
+      </div>
+      <div class="deltas"><span class="d up"><span class="dp">-1w</span>+2.4%</span><span class="d dn"><span class="dp">-2w</span>-42.2%</span><span class="d up"><span class="dp">-3w</span>+8.4%</span></div>
+    </div>
+    <div class="kpi">
+      <div class="lab">Logical reads</div>
+      <div class="row">
+        <div class="v">31.5<small>K/s</small></div>
+        <svg class="spark" viewBox="0 0 60 24" preserveAspectRatio="none"><path class="fill" d="M0,10 L15,11 30,12 45,7 60,14 L60,24 0,24 Z"/><path class="line" d="M0,10 L15,11 30,12 45,7 60,14"/><circle class="dot" cx="60" cy="14" r="1.6"/></svg>
+      </div>
+      <div class="deltas"><span class="d dn"><span class="dp">-1w</span>-6.3%</span><span class="d dn"><span class="dp">-2w</span>-1.6%</span><span class="d up"><span class="dp">-3w</span>+5.7%</span></div>
+    </div>
+    <div class="kpi">
+      <div class="lab">Executions</div>
+      <div class="row">
+        <div class="v">2.84<small>K/s</small></div>
+        <svg class="spark" viewBox="0 0 60 24" preserveAspectRatio="none"><path class="fill" d="M0,12 L15,14 30,11 45,13 60,12 L60,24 0,24 Z"/><path class="line" d="M0,12 L15,14 30,11 45,13 60,12"/><circle class="dot" cx="60" cy="12" r="1.6"/></svg>
+      </div>
+      <div class="deltas"><span class="d nc"><span class="dp">-1w</span>+0.2%</span><span class="d nc"><span class="dp">-2w</span>+1.1%</span><span class="d nc"><span class="dp">-3w</span>-0.4%</span></div>
+    </div>
+    <div class="kpi">
+      <div class="lab">Hard parses</div>
+      <div class="row">
+        <div class="v">12.4<small>/s</small></div>
+        <svg class="spark warn" viewBox="0 0 60 24" preserveAspectRatio="none"><path class="fill" d="M0,18 L15,17 30,15 45,11 60,2 L60,24 0,24 Z"/><path class="line" d="M0,18 L15,17 30,15 45,11 60,2"/><circle class="dot" cx="60" cy="2" r="1.6"/></svg>
+      </div>
+      <div class="deltas"><span class="d up"><span class="dp">-1w</span>+47.8%</span><span class="d up"><span class="dp">-2w</span>+38.9%</span><span class="d up"><span class="dp">-3w</span>+22.1%</span></div>
+    </div>
+    <div class="kpi">
+      <div class="lab">User commits</div>
+      <div class="row">
+        <div class="v">385<small>/s</small></div>
+        <svg class="spark" viewBox="0 0 60 24" preserveAspectRatio="none"><path class="fill" d="M0,10 L15,11 30,9 45,11 60,11 L60,24 0,24 Z"/><path class="line" d="M0,10 L15,11 30,9 45,11 60,11"/><circle class="dot" cx="60" cy="11" r="1.6"/></svg>
+      </div>
+      <div class="deltas"><span class="d dn"><span class="dp">-1w</span>-1.1%</span><span class="d nc"><span class="dp">-2w</span>+0.8%</span><span class="d up"><span class="dp">-3w</span>+2.2%</span></div>
+    </div>
+  </div>
+
+  <h2>Findings <span class="meta">|z| ≥ 2 vs 4-week baseline</span><span class="rule"></span></h2>
+  <div class="heatmap">
+    <div class="h">Metric</div>
+    <div class="h col">−4w</div><div class="h col">−3w</div><div class="h col">−2w</div><div class="h col">−1w</div><div class="h col">now</div>
+    <div class="h" style="text-align:right">z</div>
+
+    <div class="lab">Hard parses (CPU)</div>
+    <div class="cell">7.8</div><div class="cell">8.4</div><div class="cell">8.1</div><div class="cell warn">8.4</div><div class="cell crit">12.4</div>
+    <div class="z crit">+3.84</div>
+
+    <div class="lab">free buffer waits</div>
+    <div class="cell">392.1</div><div class="cell">176.2</div><div class="cell">213.2</div><div class="cell">268.5</div><div class="cell crit">193.3</div>
+    <div class="z crit">+3.12</div>
+
+    <div class="lab">log file sync</div>
+    <div class="cell">379.7</div><div class="cell">326.7</div><div class="cell">374.2</div><div class="cell">368.6</div><div class="cell warn">372.0</div>
+    <div class="z warn">+2.41</div>
+
+    <div class="lab">Average Active Sessions</div>
+    <div class="cell">3.1</div><div class="cell">3.4</div><div class="cell">3.0</div><div class="cell">3.2</div><div class="cell warn">4.6</div>
+    <div class="z warn">+2.08</div>
+
+    <div class="lab">DB time per second</div>
+    <div class="cell">235.5</div><div class="cell">238.1</div><div class="cell">208.1</div><div class="cell">238.1</div><div class="cell ok">202.2</div>
+    <div class="z">−1.21</div>
+
+    <div class="lab">Buffer cache hit ratio</div>
+    <div class="cell">99.8</div><div class="cell">99.9</div><div class="cell">99.8</div><div class="cell">99.8</div><div class="cell info">99.8</div>
+    <div class="z">+0.04</div>
+
+    <div class="lab" style="color:var(--muted)">Parse CPU/elapsed</div>
+    <div class="cell skip">—</div><div class="cell skip">—</div><div class="cell skip">8.1</div><div class="cell skip">7.9</div><div class="cell skip">8.2</div>
+    <div class="z" style="color:var(--muted)">insuf.</div>
+  </div>
+
+  <div class="grid2">
+    <div>
+      <h2>Foreground waits <span class="meta">top 10 by time waited</span><span class="rule"></span></h2>
+      <div class="panel">
+        <table>
+          <thead><tr><th>Event</th><th>Class</th><th>Trend</th><th class="num">now</th><th class="num">−1w</th><th class="num">−2w</th><th class="num">−3w</th><th class="num">−4w</th></tr></thead>
+          <tbody>
+            <tr><td class="name">db file async I/O submit</td><td><span class="tag io">SysIO</span></td><td><svg class="spark" viewBox="0 0 96 18" preserveAspectRatio="none"><path class="line" d="M0,9 L24,9 48,8 72,9 96,9"/><circle class="dot" cx="96" cy="9" r="1.4"/></svg></td><td class="num cur">896.71<span class="rk">#1</span></td><td class="num">901.14</td><td class="num">903.17</td><td class="num">893.44</td><td class="num">897.81</td></tr>
+            <tr><td class="name">db file sequential read</td><td><span class="tag usr">UsrIO</span></td><td><svg class="spark" viewBox="0 0 96 18" preserveAspectRatio="none"><path class="line" d="M0,2 L24,11 48,9 72,13 96,10"/><circle class="dot" cx="96" cy="10" r="1.4"/></svg></td><td class="num cur">824.17<span class="rk">#2</span></td><td class="num">775.18</td><td class="num">845.39</td><td class="num">833.41</td><td class="num">951.24</td></tr>
+            <tr><td class="name">log file sync</td><td><span class="tag cmt">Commit</span></td><td><svg class="spark" viewBox="0 0 96 18" preserveAspectRatio="none"><path class="line" d="M0,7 L24,15 48,8 72,10 96,9"/><circle class="dot" cx="96" cy="9" r="1.4"/></svg></td><td class="num cur">371.96<span class="rk">#3</span></td><td class="num">368.61</td><td class="num">374.19</td><td class="num">326.65</td><td class="num">379.72</td></tr>
+            <tr><td class="name">log file parallel write</td><td><span class="tag io">SysIO</span></td><td><svg class="spark" viewBox="0 0 96 18" preserveAspectRatio="none"><path class="line" d="M0,7 L24,15 48,8 72,10 96,9"/><circle class="dot" cx="96" cy="9" r="1.4"/></svg></td><td class="num cur">362.22<span class="rk">#4</span></td><td class="num">358.88</td><td class="num">365.07</td><td class="num">321.47</td><td class="num">369.54</td></tr>
+            <tr><td class="name">free buffer waits</td><td><span class="tag cfg">Config</span></td><td><svg class="spark crit" viewBox="0 0 96 18" preserveAspectRatio="none"><path class="line" d="M0,2 L24,15 48,11 72,9 96,13"/><circle class="dot" cx="96" cy="13" r="1.4"/></svg></td><td class="num cur">193.27<span class="rk">#5</span></td><td class="num">268.48</td><td class="num">213.22</td><td class="num">176.18</td><td class="num">392.08</td></tr>
+            <tr><td class="name">write complete waits</td><td><span class="tag cfg">Config</span></td><td><svg class="spark" viewBox="0 0 96 18" preserveAspectRatio="none"><path class="line" d="M0,4 L24,11 48,11 72,9 96,8"/><circle class="dot" cx="96" cy="8" r="1.4"/></svg></td><td class="num cur">161.89<span class="rk">#6</span></td><td class="num">160.63</td><td class="num">140.94</td><td class="num">141.01</td><td class="num">189.50</td></tr>
+            <tr><td class="name">flashback log file write</td><td><span class="tag io">SysIO</span></td><td><svg class="spark" viewBox="0 0 96 18" preserveAspectRatio="none"><path class="line" d="M0,9 L24,8 48,15 72,8 96,8"/><circle class="dot" cx="96" cy="8" r="1.4"/></svg></td><td class="num cur">55.67<span class="rk">#7</span></td><td class="num">27.27</td><td class="num">53.74</td><td class="num">52.44</td><td class="num">—</td></tr>
+            <tr><td class="name">db file parallel read</td><td><span class="tag usr">UsrIO</span></td><td><svg class="spark" viewBox="0 0 96 18" preserveAspectRatio="none"><path class="line" d="M0,4 L24,11 48,9 72,10 96,10"/><circle class="dot" cx="96" cy="10" r="1.4"/></svg></td><td class="num cur">41.54<span class="rk">#8</span></td><td class="num">42.33</td><td class="num">41.35</td><td class="num">39.42</td><td class="num">46.37</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <h2>Top SQL <span class="meta">by elapsed time, current window</span><span class="rule"></span></h2>
+      <div class="panel">
+        <table>
+          <thead><tr><th>SQL ID</th><th class="num">Plan #</th><th class="num">Elapsed</th><th class="num">−1w</th><th class="num">−2w</th><th class="num">Δ</th><th>Text</th></tr></thead>
+          <tbody>
+            <tr><td class="mono"><span style="color:var(--accent)">3n4tadqgd9b9r</span></td><td class="num">0</td><td class="num cur">1,053.97<span class="rk">#1</span></td><td class="num">949.18</td><td class="num">946.50</td><td class="num delta-up">+11.0%</td><td class="name mono" style="color:var(--fg-soft)">BEGIN :1 := orderentry.neworder…</td></tr>
+            <tr><td class="mono"><span style="color:var(--accent)">f7rxuxzt64k87</span></td><td class="num">0</td><td class="num cur">238.73<span class="rk">#2</span></td><td class="num">198.04</td><td class="num">190.72</td><td class="num delta-up">+20.5%</td><td class="name mono" style="color:var(--fg-soft)">INSERT INTO ORDER_ITEMS …</td></tr>
+            <tr><td class="mono"><span style="color:var(--accent)">g81cbrq5yamf5</span></td><td class="num">2480532011</td><td class="num cur">207.99<span class="rk">#3</span></td><td class="num">198.10</td><td class="num">191.76</td><td class="num delta-up">+5.0%</td><td class="name mono" style="color:var(--fg-soft)">SELECT … FROM ADDRESSES WHERE CUSTOMER_ID = :B2 …</td></tr>
+            <tr><td class="mono"><span style="color:var(--accent)">21ss57x3bykp3</span></td><td class="num">0</td><td class="num cur">194.54<span class="rk">#4</span></td><td class="num">185.60</td><td class="num">186.08</td><td class="num delta-up">+4.8%</td><td class="name mono" style="color:var(--fg-soft)">BEGIN :1 := orderentry.newcustomer…</td></tr>
+            <tr><td class="mono"><span style="color:var(--accent)">7ws837zynp1zv</span></td><td class="num">3722429161</td><td class="num cur">189.10<span class="rk">#5</span></td><td class="num">178.87</td><td class="num">172.89</td><td class="num delta-up">+5.7%</td><td class="name mono" style="color:var(--fg-soft)">SELECT … FROM CARD_DETAILS WHERE CUSTOMER_ID = :B2 …</td></tr>
+            <tr><td class="mono"><span style="color:var(--accent)">3fw75k1snsddx</span></td><td class="num">494735477</td><td class="num cur">187.16<span class="rk">#6</span></td><td class="num">148.49</td><td class="num">154.94</td><td class="num delta-up">+26.0%</td><td class="name mono" style="color:var(--fg-soft)">INSERT INTO ORDERS …</td></tr>
+            <tr><td class="mono"><span style="color:var(--accent)">5ckxyqfvu60pj</span></td><td class="num">900611645</td><td class="num cur">129.75<span class="rk">#7</span></td><td class="num">123.35</td><td class="num">120.54</td><td class="num delta-up">+5.2%</td><td class="name mono" style="color:var(--fg-soft)">SELECT … FROM CUSTOMERS …</td></tr>
+            <tr><td class="mono"><span style="color:var(--accent)">dxh2b8padhfby</span></td><td class="num">3652932668</td><td class="num cur">95.43<span class="rk">#8</span></td><td class="num">—</td><td class="num">—</td><td class="num" style="color:var(--muted)">new</td><td class="name mono" style="color:var(--fg-soft)">insert into WRH$_SYSSTAT …</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <h2>Aligned windows <span class="meta">5 hourly snaps, instance restart guard ✓</span><span class="rule"></span></h2>
+  <div class="panel">
+    <table>
+      <thead><tr><th>Period</th><th>Begin (snap)</th><th>End (snap)</th><th class="num">Begin&nbsp;ID</th><th class="num">End&nbsp;ID</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td><b>Current</b></td><td>2026-05-08 Fri 14:00</td><td>2026-05-08 Fri 15:00</td><td class="num">1778</td><td class="num">1779</td><td><span class="tag" style="color:var(--ok)">valid</span></td></tr>
+        <tr><td>−1w</td><td>2026-05-01 Fri 14:00</td><td>2026-05-01 Fri 15:00</td><td class="num">1726</td><td class="num">1727</td><td><span class="tag" style="color:var(--ok)">valid</span></td></tr>
+        <tr><td>−2w</td><td>2026-04-24 Fri 14:00</td><td>2026-04-24 Fri 15:00</td><td class="num">1678</td><td class="num">1679</td><td><span class="tag" style="color:var(--ok)">valid</span></td></tr>
+        <tr><td>−3w</td><td>2026-04-17 Fri 14:00</td><td>2026-04-17 Fri 15:00</td><td class="num">1622</td><td class="num">1623</td><td><span class="tag" style="color:var(--ok)">valid</span></td></tr>
+        <tr><td>−4w</td><td>2026-04-10 Fri 14:00</td><td>2026-04-10 Fri 15:00</td><td class="num">1566</td><td class="num">1567</td><td><span class="tag" style="color:var(--ok)">valid</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    <div>AWR Timeline · Mockup B — Dense</div>
+    <div>generated 2026-05-09T13:48Z · run 20260509134839515</div>
+  </footer>
+
+</div>
+</body>
+</html>
