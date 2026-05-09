@@ -18,6 +18,8 @@ DECLARE
     v_weeks_json  VARCHAR2(4000);
     v_cards_json  CLOB;
     v_weeks_back  NUMBER := ~weeks_back;
+
+    @@sql/lib/nth_csv.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="overview"><h2>Headline metrics</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
@@ -114,17 +116,38 @@ BEGIN
             CROSS JOIN all_weeks w
             LEFT JOIN all_rows r
                    ON r.src = c.src AND r.key = c.key AND r.week_offset = w.week_offset
+        ),
+        with_lag AS (
+            SELECT pos, label, unit, week_offset, val,
+                   LEAD(val) OVER (PARTITION BY pos ORDER BY week_offset) AS older_val
+            FROM   grid
+        ),
+        deltas AS (
+            SELECT pos, week_offset,
+                   CASE WHEN week_offset < ~weeks_back
+                         AND val IS NOT NULL
+                         AND older_val IS NOT NULL
+                         AND older_val <> 0
+                        THEN (val - older_val) / ABS(older_val) * 100
+                   END AS delta_pct
+            FROM   with_lag
         )
         SELECT pos, label, unit,
                MAX(CASE WHEN week_offset = 0 THEN val END) AS cur,
-               MAX(CASE WHEN week_offset = 1 THEN val END) AS prev,
                AVG(CASE WHEN week_offset > 0 THEN val END) AS mu,
                STDDEV(CASE WHEN week_offset > 0 THEN val END) AS sd,
                COUNT(CASE WHEN week_offset > 0 THEN val END) AS n,
                LISTAGG(CASE WHEN val IS NULL THEN 'null'
                             ELSE TO_CHAR(val, 'FM99999999990D000000',
                                          'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
-                   WITHIN GROUP (ORDER BY week_offset DESC) AS vals_csv
+                   WITHIN GROUP (ORDER BY week_offset DESC) AS vals_csv,
+               (SELECT LISTAGG(CASE WHEN d.delta_pct IS NULL THEN ''
+                                    ELSE TO_CHAR(d.delta_pct, 'FM99999999990D000000',
+                                                 'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
+                       WITHIN GROUP (ORDER BY d.week_offset DESC)
+                FROM   deltas d
+                WHERE  d.pos = grid.pos
+                  AND  d.week_offset < ~weeks_back) AS deltas_csv
         FROM   grid
         GROUP BY pos, label, unit
         ORDER BY pos
@@ -135,6 +158,11 @@ BEGIN
             v_sev  VARCHAR2(40);
             v_sev_cls VARCHAR2(10);
             v_sev_badge VARCHAR2(80);
+            v_chips    VARCHAR2(32767);
+            v_d_s      VARCHAR2(64);
+            v_d        NUMBER;
+            v_off      PLS_INTEGER;
+            v_off_lbl  VARCHAR2(80);
         BEGIN
             v_z := CASE
                 WHEN c.cur IS NULL OR c.mu IS NULL THEN NULL
@@ -166,9 +194,6 @@ BEGIN
                 || '","cur":' || CASE WHEN c.cur IS NULL THEN 'null'
                                       ELSE TO_CHAR(c.cur, 'FM99999999990D000000',
                                                    'NLS_NUMERIC_CHARACTERS=''.,''') END
-                || ',"prev":' || CASE WHEN c.prev IS NULL THEN 'null'
-                                       ELSE TO_CHAR(c.prev, 'FM99999999990D000000',
-                                                    'NLS_NUMERIC_CHARACTERS=''.,''') END
                 || ',"sev":' || CASE WHEN v_sev IS NULL THEN 'null'
                                       ELSE '"' || v_sev || '"' END
                 || ',"z":' || CASE WHEN v_z IS NULL THEN 'null'
@@ -193,21 +218,37 @@ BEGIN
                 || CASE WHEN c.cur IS NULL THEN '&mdash;'
                         ELSE TO_CHAR(c.cur, 'FM999G999G990D00') END
                 || ' <small>' || c.unit || '</small></div>');
+            v_chips := NULL;
+            FOR k IN 1 .. v_weeks_back LOOP
+                v_off     := v_weeks_back - k + 1;
+                v_off_lbl := '<span class="dp">-' || v_off || 'p</span>';
+                v_d_s := nth_csv(c.deltas_csv, k);
+                IF v_d_s IS NULL OR v_d_s = '' THEN
+                    v_chips := v_chips || '<span class="delta" title="vs -'
+                        || v_off || 'p">' || v_off_lbl || '&mdash;</span>';
+                ELSE
+                    v_d := TO_NUMBER(v_d_s, 'FM99999999990D000000',
+                                     'NLS_NUMERIC_CHARACTERS=''.,''');
+                    IF v_d > 0 THEN
+                        v_chips := v_chips || '<span class="delta up" title="vs -'
+                            || v_off || 'p">' || v_off_lbl
+                            || TO_CHAR(v_d, 'FMS990D0') || '%</span>';
+                    ELSIF v_d < 0 THEN
+                        v_chips := v_chips || '<span class="delta down" title="vs -'
+                            || v_off || 'p">' || v_off_lbl
+                            || TO_CHAR(v_d, 'FMS990D0') || '%</span>';
+                    ELSE
+                        v_chips := v_chips || '<span class="delta" title="vs -'
+                            || v_off || 'p">' || v_off_lbl || '0%</span>';
+                    END IF;
+                END IF;
+            END LOOP;
+
             DBMS_OUTPUT.PUT_LINE('  <div class="foot">'
-                || CASE
-                       WHEN c.cur IS NULL OR c.prev IS NULL OR c.prev = 0 THEN
-                           '<span class="delta">&mdash;</span>'
-                       WHEN c.cur > c.prev THEN
-                           '<span class="delta up">&uarr; '
-                               || TO_CHAR((c.cur - c.prev) / ABS(c.prev) * 100, 'FMS990D0')
-                               || '% vs -1w</span>'
-                       WHEN c.cur < c.prev THEN
-                           '<span class="delta down">&darr; '
-                               || TO_CHAR((c.cur - c.prev) / ABS(c.prev) * 100, 'FMS990D0')
-                               || '% vs -1w</span>'
-                       ELSE
-                           '<span class="delta">&mdash; vs -1w</span>'
-                   END
+                || '<span class="deltas" title="Period-over-period change'
+                || ' (oldest &rarr; current, every ~step_label)">'
+                || NVL(v_chips, '<span class="delta">&mdash;</span>')
+                || '</span>'
                 || '<span class="badge ' || v_sev_cls || '">'
                 || v_sev_badge
                 || '</span></div>');

@@ -121,7 +121,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.hero-card .value { font-size:22px; font-weight:700; letter-spacing:-0.02em; font-variant-numeric:tabular-nums; }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .value small { font-size:12px; font-weight:500; color:var(--muted); margin-left:4px; }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .mini { width:100%; height:38px; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .foot { display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .foot { display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:11px; color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .deltas { display:flex; gap:3px; flex-wrap:wrap; min-width:0; }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .delta { font-variant-numeric:tabular-nums; white-space:nowrap; }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .delta .dp { color:var(--muted); margin-right:3px; font-size:10px; font-weight:400; }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .delta.up   { color:var(--warn-fg); }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .delta.down { color:var(--ok-fg); }');
     --
