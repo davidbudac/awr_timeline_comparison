@@ -60,7 +60,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  <div class="windows-list" style="margin-top:10px;">');
     DBMS_OUTPUT.PUT_LINE('    <b>Compared windows ('
         || DBMS_XMLGEN.CONVERT('~dow_name') || ', '
-        || '~win_hours' || 'h each, every ~period_step_label):</b>');
+        || '~win_label each, every ~step_label):</b>');
     DBMS_OUTPUT.PUT_LINE('    <ul style="margin:4px 0 0 0;padding-left:22px;'
         || 'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;'
         || 'font-size:12px;line-height:1.6;">');
@@ -80,9 +80,11 @@ BEGIN
         ORDER  BY LEVEL - 1
     ) LOOP
         DBMS_OUTPUT.PUT_LINE('      <li>'
-            || CASE WHEN w.wk = 0 THEN '<b>Current:</b>   '
-                    WHEN w.wk = 1 THEN '<b>&minus;1 ~period_unit_long:</b>  '
-                    ELSE '<b>&minus;' || w.wk || ' ~period_unit_long.s:</b> '
+            || CASE WHEN w.wk = 0
+                    THEN '<b>Current:</b>     '
+                    ELSE '<b>&minus;'
+                         || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, w.wk)
+                         || ':</b>  '
                END
             || w.w_start || ' &rarr; ' || w.w_end
             || '</li>');

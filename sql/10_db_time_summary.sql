@@ -265,7 +265,11 @@ BEGIN
               AND  startup_time = prev_startup
         ),
         cpu_d AS (
-            SELECT stm.snap_id, stm.instance_number, 'CPU' AS cat,
+            -- CAST the literal to match wait_d.cat width; otherwise UNION ALL
+            -- inherits VARCHAR2(3) from this arm and longer wait_class names
+            -- (e.g. 'Configuration') overflow on cursor fetch (ORA-06502).
+            SELECT stm.snap_id, stm.instance_number,
+                   CAST('CPU' AS VARCHAR2(64)) AS cat,
                    GREATEST(stm.value
                        - LAG(stm.value) OVER (PARTITION BY stm.instance_number
                                               ORDER BY stm.snap_id), 0) AS micro

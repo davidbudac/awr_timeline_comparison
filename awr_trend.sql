@@ -108,6 +108,19 @@ COLUMN period_unit_title   NEW_VALUE period_unit_title   NOPRINT
 COLUMN period_step_label   NEW_VALUE period_step_label   NOPRINT
 COLUMN period_axis_fmt     NEW_VALUE period_axis_fmt     NOPRINT
 COLUMN report_path         NEW_VALUE report_path         NOPRINT
+-- Derived labels for compact, unit-aware UI strings. Computed once after
+-- step_hours is resolved so every section can reference identical text:
+--   win_label       compact width of one comparison window     ("15m" / "1h")
+--   step_label      compact cadence between adjacent windows   ("15m" / "1w")
+--   offset_labels   CSV of compact offsets k*step_hours, k=1..weeks_back
+--                   (e.g. "15m,30m,45m" or "1w,2w,3w") - parsed via REGEXP_SUBSTR
+--   bucket_hours    LEAST(step_hours, 1) - bucket width (in hours) for the
+--                   ASH stacked-area timeline; 0.25 for 15-min cadences,
+--                   1 for hourly+; allows fractional buckets when step<1h.
+COLUMN win_label           NEW_VALUE win_label           NOPRINT
+COLUMN step_label          NEW_VALUE step_label          NOPRINT
+COLUMN offset_labels       NEW_VALUE offset_labels       NOPRINT
+COLUMN bucket_hours        NEW_VALUE bucket_hours        NOPRINT
 
 SELECT
     t.run_id                                                       AS run_id,
@@ -136,7 +149,10 @@ SELECT
     -- 'h','d','w' (case-insensitive); anything else triggers ORA-01722
     -- ("invalid number") on purpose so the run aborts before producing a
     -- nonsense report.
-    TO_CHAR(p.step_hours, 'FM99999999990')                         AS step_hours,
+    -- Allow fractional step_hours so step values like 0.25 (15 min) survive
+    -- the COLUMN ... NEW_VALUE round-trip; the integer-only mask used to
+    -- silently round 0.25 to 0 and collapse all windows onto target_end.
+    TO_CHAR(p.step_hours, 'FM99999999990.999999')                  AS step_hours,
     p.period_unit_short                                            AS period_unit_short,
     p.period_unit_long                                             AS period_unit_long,
     INITCAP(p.period_unit_long)                                    AS period_unit_title,
@@ -176,6 +192,62 @@ CROSS JOIN (
         END AS step_hours
     FROM dual
 ) p;
+
+-- -------------------------------------------------------------------
+-- Derived labels (win_label, step_label, offset_labels, bucket_hours)
+--
+-- A compact, unit-aware label for any value of "hours":
+--   < 1h with whole-minute value  -> "Nm"   (e.g. 15m, 30m)
+--   multiple of 168               -> "Nw"   (e.g. 1w, 2w)
+--   multiple of 24                -> "Nd"   (e.g. 1d, 3d)
+--   multiple of 1                 -> "Nh"   (e.g. 1h, 4h)
+--   anything else                 -> "X.YYh"  (decimal hours, dot decimal)
+--
+-- offset_labels is a CSV of 16 entries (1..16 * step_hours). Sections only
+-- consume the first weeks_back of them via REGEXP_SUBSTR(... ,k).
+-- 16 is well above any realistic weeks_back; if a caller exceeds it, the
+-- per-section header REGEXP_SUBSTR returns NULL and the column header
+-- renders as just "&minus;" (silent visual bug, not an ORA).
+-- -------------------------------------------------------------------
+WITH FUNCTION fmt_one(h IN NUMBER) RETURN VARCHAR2 IS
+BEGIN
+    IF h IS NULL THEN
+        RETURN '';
+    ELSIF h < 1 AND MOD(h * 60, 1) = 0 THEN
+        RETURN TO_CHAR(ROUND(h * 60)) || 'm';
+    ELSIF MOD(h, 168) = 0 THEN
+        RETURN TO_CHAR(ROUND(h / 168)) || 'w';
+    ELSIF MOD(h, 24) = 0 THEN
+        RETURN TO_CHAR(ROUND(h / 24)) || 'd';
+    ELSIF MOD(h, 1) = 0 THEN
+        RETURN TO_CHAR(ROUND(h)) || 'h';
+    ELSE
+        RETURN TO_CHAR(h, 'FM999990.99', 'NLS_NUMERIC_CHARACTERS=''.,''') || 'h';
+    END IF;
+END;
+SELECT
+    fmt_one(TO_NUMBER('~win_hours'))                                  AS win_label,
+    fmt_one(TO_NUMBER('~step_hours'))                                 AS step_label,
+       fmt_one(1  * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(2  * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(3  * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(4  * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(5  * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(6  * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(7  * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(8  * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(9  * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(10 * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(11 * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(12 * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(13 * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(14 * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(15 * TO_NUMBER('~step_hours'))
+    || ',' || fmt_one(16 * TO_NUMBER('~step_hours'))                  AS offset_labels,
+    TO_CHAR(LEAST(TO_NUMBER('~step_hours'), 1),
+            'FM99999999990.999999')                                   AS bucket_hours
+FROM dual
+/
 
 SPOOL ~report_path
 

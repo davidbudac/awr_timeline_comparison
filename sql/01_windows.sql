@@ -254,7 +254,9 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE(
             '<tr class="' || CASE WHEN w.valid_flag = 'N' THEN 'skip' ELSE 'ok' END || '">'
             || '<td>' || CASE WHEN w.week_offset = 0 THEN '<b>Current</b>'
-                              ELSE '&minus;' || w.week_offset || '~period_unit_short' END || '</td>'
+                              ELSE '&minus;'
+                                   || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, w.week_offset)
+                              END || '</td>'
             || '<td>' || TO_CHAR(w.win_start_ts, 'YYYY-MM-DD Dy HH24:MI') || '</td>'
             || '<td>' || TO_CHAR(w.win_end_ts,   'YYYY-MM-DD Dy HH24:MI') || '</td>'
             || '<td class="num">' || NVL(TO_CHAR(w.begin_snap_id), '&mdash;') || '</td>'

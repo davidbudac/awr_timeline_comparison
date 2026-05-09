@@ -266,7 +266,8 @@ BEGIN
             v_header := '<thead><tr><th>SQL_ID</th><th class="num">PHV (cur)</th>'
                 || '<th class="num">Current (' || s.dim_unit || ')</th>';
             FOR k IN 1 .. v_weeks_back LOOP
-                v_header := v_header || '<th class="num">&minus;' || k || '~period_unit_short</th>';
+                v_header := v_header || '<th class="num">&minus;'
+                    || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
             END LOOP;
             v_header := v_header || '<th>SQL</th></tr></thead>';
             DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
