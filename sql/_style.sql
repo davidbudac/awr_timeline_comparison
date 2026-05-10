@@ -67,59 +67,77 @@ BEGIN
         || ' max-width:1480px; margin:0 auto; padding:0 16px 80px;'
         || ' display:flex; flex-direction:column; gap:0; }');
 
-    -- Section ordering (kept identical to the previous design)
-    DBMS_OUTPUT.PUT_LINE('nav.toc { order:1; }');
-    DBMS_OUTPUT.PUT_LINE('header.report { order:2; }');
+    -- Section ordering: topbar / sub-nav at top, then DB time, overview hero,
+    -- findings, then the side-by-side FG-waits + Top-SQL row, then the deeper
+    -- detail sections (load / metrics / BG waits / ASH / windows).
+    DBMS_OUTPUT.PUT_LINE('.topbar { order:1; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc { order:2; }');
     DBMS_OUTPUT.PUT_LINE('#db-time-summary { order:3; }');
     DBMS_OUTPUT.PUT_LINE('#overview { order:4; }');
-    DBMS_OUTPUT.PUT_LINE('#ash-timeline { order:5; }');
-    DBMS_OUTPUT.PUT_LINE('#findings { order:6; }');
-    DBMS_OUTPUT.PUT_LINE('#windows { order:7; }');
+    DBMS_OUTPUT.PUT_LINE('#findings { order:5; }');
+    DBMS_OUTPUT.PUT_LINE('.fg-topsql-row { order:6; display:grid;'
+        || ' grid-template-columns:1fr 1fr; gap:14px; margin-top:18px; }');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width:1100px) {'
+        || ' .fg-topsql-row { grid-template-columns:1fr; gap:0; } }');
+    DBMS_OUTPUT.PUT_LINE('.fg-topsql-row > section { margin-top:0; min-width:0; }');
+    -- #waits-fg and #topsql live inside .fg-topsql-row, so they don't need
+    -- their own body-level order; the wrapper carries it.
+    DBMS_OUTPUT.PUT_LINE('#ash-timeline { order:7; }');
     DBMS_OUTPUT.PUT_LINE('#load { order:8; }');
     DBMS_OUTPUT.PUT_LINE('#metrics { order:9; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-fg { order:10; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-bg { order:11; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql { order:12; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-bg { order:10; }');
+    DBMS_OUTPUT.PUT_LINE('#windows { order:11; }');
     DBMS_OUTPUT.PUT_LINE('footer.report { order:13; }');
 
-    -- Sticky brand+nav top bar (re-uses nav.toc markup)
-    DBMS_OUTPUT.PUT_LINE('nav.toc {'
-        || ' position:sticky; top:0; z-index:10;'
+    -- Sticky top bar (brand + crumbs + right meta) per the dense mockup.
+    DBMS_OUTPUT.PUT_LINE('.topbar {'
+        || ' position:sticky; top:0; z-index:11;'
+        || ' display:flex; align-items:center; gap:18px;'
+        || ' padding:8px 16px;'
         || ' background:var(--panel); border-bottom:1px solid var(--border);'
-        || ' margin:0 -16px 0 -16px; padding:8px 16px;'
-        || ' font-size:11.5px; display:flex; flex-wrap:wrap;'
-        || ' align-items:center; gap:6px 14px;'
-        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc b { color:var(--fg-soft); font-weight:600;'
-        || ' letter-spacing:0.04em; text-transform:uppercase; font-size:10.5px;'
-        || ' margin-right:6px; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc b::before { content:"\25CF"; color:var(--accent);'
-        || ' margin-right:6px; font-size:10px; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc a { color:var(--fg-soft); text-decoration:none;'
-        || ' padding:2px 8px; border-radius:3px; transition:background .12s; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc a:hover { background:var(--panel-2); color:var(--accent); }');
-
-    -- Compact metadata header (was a big info card)
-    DBMS_OUTPUT.PUT_LINE('header.report {'
-        || ' background:transparent; color:var(--fg);'
-        || ' padding:18px 0 14px; margin:0;'
-        || ' border-bottom:1px solid var(--border); }');
-    DBMS_OUTPUT.PUT_LINE('header.report h1 {'
-        || ' font-size:20px; font-weight:600; letter-spacing:-0.015em; margin:0 0 6px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report h1 .badge { vertical-align:middle; margin-left:8px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .meta {'
-        || ' display:flex; flex-wrap:wrap; gap:4px 18px; margin-top:6px;'
-        || ' font-size:11.5px;'
+        || ' margin:0 -16px;'
+        || ' font-size:11.5px; }');
+    DBMS_OUTPUT.PUT_LINE('.topbar .brand {'
+        || ' font-weight:700; letter-spacing:0.02em; font-size:12px;'
+        || ' color:var(--fg); white-space:nowrap; }');
+    DBMS_OUTPUT.PUT_LINE('.topbar .brand .dot {'
+        || ' display:inline-block; width:6px; height:6px;'
+        || ' background:var(--accent); border-radius:99px;'
+        || ' margin-right:6px; vertical-align:middle; }');
+    DBMS_OUTPUT.PUT_LINE('.topbar .crumbs {'
+        || ' color:var(--muted); font-size:11.5px;'
         || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
-        || ' color:var(--muted); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .meta div { color:var(--muted); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .meta b { color:var(--fg-soft); font-weight:600;'
+        || ' min-width:0; flex:0 1 auto;'
+        || ' white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }');
+    DBMS_OUTPUT.PUT_LINE('.topbar .crumbs b {'
+        || ' color:var(--fg-soft); font-weight:600; }');
+    DBMS_OUTPUT.PUT_LINE('.topbar .crumbs .sep {'
+        || ' color:var(--border-strong); margin:0 6px; }');
+    DBMS_OUTPUT.PUT_LINE('.topbar .right {'
+        || ' margin-left:auto; display:flex; gap:14px;'
+        || ' color:var(--muted); font-size:11.5px;'
+        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
+        || ' white-space:nowrap; }');
+    DBMS_OUTPUT.PUT_LINE('.topbar .right b {'
+        || ' color:var(--fg-soft); font-weight:600; }');
+
+    -- Compact section nav under the topbar.
+    DBMS_OUTPUT.PUT_LINE('nav.toc {'
+        || ' background:transparent; border-bottom:1px solid var(--border);'
+        || ' margin:0 -16px; padding:6px 16px;'
+        || ' font-size:11px; display:flex; flex-wrap:wrap;'
+        || ' align-items:center; gap:4px 12px;'
+        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc b {'
+        || ' color:var(--muted); font-weight:600;'
+        || ' letter-spacing:0.04em; text-transform:uppercase; font-size:10px;'
         || ' margin-right:4px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-list { margin-top:10px; font-size:11.5px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-list b { color:var(--fg-soft); font-weight:600;'
-        || ' letter-spacing:0.04em; font-size:10.5px; text-transform:uppercase; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-list ul {'
-        || ' color:var(--fg-soft); margin:4px 0 0 !important; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a {'
+        || ' color:var(--fg-soft); text-decoration:none;'
+        || ' padding:2px 7px; border-radius:3px;'
+        || ' transition:background .12s; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a:hover {'
+        || ' background:var(--panel-2); color:var(--accent); }');
 
     -- Sections (no card chrome - just spacing + a thin top rule via h2)
     DBMS_OUTPUT.PUT_LINE('section { background:transparent; border:0; padding:0; margin:18px 0 0; }');
@@ -222,6 +240,45 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('td.cell-bar .v { position:relative; z-index:1; }');
 
     --
+    -- Findings heatmap (section 07).  CSS-grid table with one row per
+    -- finding and one column per (metric label, per-week value..., z).
+    -- The grid-template-columns rule is set inline by the section so a
+    -- single CSS block covers any weeks_back the caller chose.
+    --
+    DBMS_OUTPUT.PUT_LINE('.heatmap {'
+        || ' display:grid; gap:2px;'
+        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
+        || ' font-size:11px; margin:6px 0 12px; }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .h {'
+        || ' color:var(--muted); padding:4px 6px;'
+        || ' font-weight:600; letter-spacing:0.06em;'
+        || ' text-transform:uppercase; font-size:10px; }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .h.col { text-align:center; }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .h.z-h { text-align:right; }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .lab {'
+        || ' padding:4px 6px; color:var(--fg-soft);'
+        || ' white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .lab.skip { color:var(--muted); font-style:italic; }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .cell {'
+        || ' padding:4px 6px; text-align:center;'
+        || ' color:var(--fg); background:var(--panel);'
+        || ' border-radius:2px;'
+        || ' font-variant-numeric:tabular-nums;'
+        || ' overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .cell.crit { background:var(--crit-bg); color:var(--crit-fg); }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .cell.warn { background:var(--warn-bg); color:var(--warn-fg); }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .cell.ok   { background:var(--ok-bg);   color:var(--ok-fg); }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .cell.info { background:var(--info-bg); color:var(--info-fg); }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .cell.skip { background:var(--panel); color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .z {'
+        || ' padding:4px 8px; text-align:right;'
+        || ' font-weight:600; color:var(--fg-soft);'
+        || ' font-variant-numeric:tabular-nums; }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .z.crit { color:var(--crit-fg); }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .z.warn { color:var(--warn-fg); }');
+    DBMS_OUTPUT.PUT_LINE('.heatmap .z.skip { color:var(--muted); font-style:italic; font-weight:400; }');
+
+    --
     -- ECharts chart containers
     --
     DBMS_OUTPUT.PUT_LINE('.chart-wrap {'
@@ -232,7 +289,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.chart-medium { height:240px; }');
     DBMS_OUTPUT.PUT_LINE('.chart-small  { height:160px; }');
     DBMS_OUTPUT.PUT_LINE('.chart-ash    { height:420px; }');
-    DBMS_OUTPUT.PUT_LINE('body.no-charts .chart-wrap, body.no-charts .hero-card .mini { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('body.no-charts .chart-wrap { display:none; }');
     DBMS_OUTPUT.PUT_LINE('body.no-charts .cdn-warn { display:block !important; }');
     DBMS_OUTPUT.PUT_LINE('.cdn-warn {'
         || ' display:none; background:var(--warn-bg); color:var(--warn-fg);'
@@ -252,30 +309,38 @@ BEGIN
         || ' #overview .hero-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }');
     DBMS_OUTPUT.PUT_LINE('.hero-card {'
         || ' background:var(--panel); padding:10px 12px;'
-        || ' display:flex; flex-direction:column; gap:3px;'
+        || ' display:flex; flex-direction:column; gap:2px;'
         || ' position:relative; min-width:0;'
         || ' border:0; border-radius:0; box-shadow:none; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .label {'
+    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-lab {'
         || ' font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em;'
         || ' color:var(--muted); font-weight:600; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .value {'
+    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-row {'
+        || ' display:flex; justify-content:space-between; align-items:flex-end;'
+        || ' gap:8px; min-width:0; }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-val {'
         || ' font-size:20px; font-weight:600; letter-spacing:-0.02em;'
         || ' font-variant-numeric:tabular-nums; color:var(--fg);'
-        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .value small {'
+        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
+        || ' overflow:hidden; text-overflow:ellipsis; white-space:nowrap;'
+        || ' min-width:0; flex:1 1 auto; }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-val small {'
         || ' font-size:11px; font-weight:400; color:var(--muted);'
         || ' margin-left:3px; font-family:inherit; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .mini { width:100%; height:34px; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .foot {'
-        || ' display:flex; justify-content:space-between; align-items:center;'
-        || ' gap:6px; font-size:10.5px; color:var(--muted); }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .deltas {'
-        || ' display:flex; gap:5px; flex-wrap:wrap; min-width:0;'
-        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta { font-variant-numeric:tabular-nums; white-space:nowrap; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta .dp { color:var(--muted); margin-right:2px; font-size:9.5px; font-weight:400; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta.up   { color:var(--warn-fg); }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta.down { color:var(--ok-fg); }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-spark {'
+        || ' width:78px; height:24px; flex:0 0 auto; line-height:0; }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-spark svg { width:100%; height:100%; display:block; }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-deltas {'
+        || ' display:flex; gap:6px; flex-wrap:wrap; margin-top:3px;'
+        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
+        || ' font-size:10.5px; }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-d {'
+        || ' font-variant-numeric:tabular-nums; white-space:nowrap; }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-d .dp {'
+        || ' color:var(--muted); margin-right:2px; font-size:9.5px; font-weight:400; }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-d.up { color:var(--warn-fg); }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-d.dn { color:var(--ok-fg); }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-d.nc { color:var(--muted); }');
 
     --
     -- Windows timeline ribbon (kept compact to match the dense aesthetic)

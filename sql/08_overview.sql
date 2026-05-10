@@ -175,12 +175,12 @@ BEGIN
             v_pct  NUMBER;
             v_sev  VARCHAR2(40);
             v_sev_cls VARCHAR2(10);
-            v_sev_badge VARCHAR2(80);
             v_chips    VARCHAR2(32767);
             v_d_s      VARCHAR2(64);
             v_d        NUMBER;
             v_off      PLS_INTEGER;
-            v_off_lbl  VARCHAR2(80);
+            v_off_lbl_text  VARCHAR2(80);
+            v_spark_cls     VARCHAR2(40);
         BEGIN
             v_z := CASE
                 WHEN c.cur IS NULL OR c.mu IS NULL THEN NULL
@@ -205,6 +205,15 @@ BEGIN
                 WHEN 'typical'  THEN 'ok'
                 ELSE 'skip' END;
 
+            -- spark-warn / spark-crit only when the current window is far
+            -- enough from baseline to deserve attention; typical/insuf draws
+            -- in the default accent color.
+            v_spark_cls := CASE v_sev_cls
+                WHEN 'crit' THEN 'spark crit'
+                WHEN 'warn' THEN 'spark warn'
+                ELSE             'spark'
+            END;
+
             v_cards_json := CASE WHEN v_cards_json IS NULL THEN '' ELSE v_cards_json || ',' END
                 || '{"pos":' || c.pos
                 || ',"label":"' || c.label
@@ -222,94 +231,79 @@ BEGIN
                                                    'NLS_NUMERIC_CHARACTERS=''.,''') END
                 || ',"vals":[' || NVL(c.vals_csv, '') || ']}';
 
-            v_sev_badge := CASE
-                WHEN v_sev IS NULL THEN 'n/a'
-                WHEN v_z IS NOT NULL THEN v_sev || ' z=' || TO_CHAR(v_z, 'FMS990D0')
-                ELSE v_sev END;
-
-            DBMS_OUTPUT.PUT_LINE('<div class="hero-card" data-hero-pos="' || c.pos || '">');
-            DBMS_OUTPUT.PUT_LINE('  <div class="label">' || c.label || '</div>');
-            DBMS_OUTPUT.PUT_LINE('  <div class="mini" id="hero-mini-' || c.pos
-                || '" data-spark="' || NVL(c.vals_csv, '')
-                || '" data-spark-title="' || c.label || '"></div>');
-            DBMS_OUTPUT.PUT_LINE('  <div class="value">'
+            -- Card layout: label on top, then a flex row with the current
+            -- value left and a small inline-SVG sparkline on the right.
+            -- Severity is conveyed by the sparkline color (no badge), so the
+            -- card stays as compact as the mockup's KPI strip.
+            DBMS_OUTPUT.PUT_LINE('<div class="hero-card" data-hero-pos="' || c.pos
+                || '" title="' || NVL(v_sev, 'n/a')
+                || CASE WHEN v_z IS NULL THEN ''
+                        ELSE ' (z=' || TO_CHAR(v_z, 'FMS990D0') || ')' END
+                || '">');
+            DBMS_OUTPUT.PUT_LINE('  <div class="hc-lab">' || c.label || '</div>');
+            DBMS_OUTPUT.PUT_LINE('  <div class="hc-row">');
+            DBMS_OUTPUT.PUT_LINE('    <div class="hc-val">'
                 || CASE WHEN c.cur IS NULL THEN '&mdash;'
                         ELSE TO_CHAR(c.cur, 'FM999G999G990D00') END
-                || ' <small>' || c.unit || '</small></div>');
+                || '<small>' || c.unit || '</small></div>');
+            DBMS_OUTPUT.PUT_LINE('    <div class="hc-spark" data-spark="'
+                || NVL(c.vals_csv, '')
+                || '" data-spark-cls="' || v_spark_cls
+                || '" data-spark-title="' || c.label || '"></div>');
+            DBMS_OUTPUT.PUT_LINE('  </div>');
+
             v_chips := NULL;
             FOR k IN 1 .. v_weeks_back LOOP
-                v_off     := v_weeks_back - k + 1;
-                v_off_lbl := '<span class="dp">-' || v_off || 'p</span>';
+                v_off          := v_weeks_back - k + 1;
+                -- Unit-aware offset label parsed from offset_labels CSV
+                -- ('1w,2w,3w' or '15m,30m,45m'). Falls back to "<n>p" if the
+                -- caller exceeded 16 offsets.
+                v_off_lbl_text := REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, v_off);
+                IF v_off_lbl_text IS NULL THEN
+                    v_off_lbl_text := v_off || 'p';
+                END IF;
+
                 v_d_s := nth_csv(c.deltas_csv, k);
                 IF v_d_s IS NULL OR v_d_s = '' THEN
-                    v_chips := v_chips || '<span class="delta" title="vs -'
-                        || v_off || 'p">' || v_off_lbl || '&mdash;</span>';
+                    v_chips := v_chips || '<span class="hc-d nc" title="vs -'
+                        || v_off_lbl_text || '"><span class="dp">-'
+                        || v_off_lbl_text || '</span>&mdash;</span>';
                 ELSE
                     v_d := TO_NUMBER(v_d_s, 'FM99999999990D000000',
                                      'NLS_NUMERIC_CHARACTERS=''.,''');
                     IF v_d > 0 THEN
-                        v_chips := v_chips || '<span class="delta up" title="vs -'
-                            || v_off || 'p">' || v_off_lbl
+                        v_chips := v_chips || '<span class="hc-d up" title="vs -'
+                            || v_off_lbl_text || '"><span class="dp">-'
+                            || v_off_lbl_text || '</span>'
                             || TO_CHAR(v_d, 'FMS990D0') || '%</span>';
                     ELSIF v_d < 0 THEN
-                        v_chips := v_chips || '<span class="delta down" title="vs -'
-                            || v_off || 'p">' || v_off_lbl
+                        v_chips := v_chips || '<span class="hc-d dn" title="vs -'
+                            || v_off_lbl_text || '"><span class="dp">-'
+                            || v_off_lbl_text || '</span>'
                             || TO_CHAR(v_d, 'FMS990D0') || '%</span>';
                     ELSE
-                        v_chips := v_chips || '<span class="delta" title="vs -'
-                            || v_off || 'p">' || v_off_lbl || '0%</span>';
+                        v_chips := v_chips || '<span class="hc-d nc" title="vs -'
+                            || v_off_lbl_text || '"><span class="dp">-'
+                            || v_off_lbl_text || '</span>0%</span>';
                     END IF;
                 END IF;
             END LOOP;
 
-            DBMS_OUTPUT.PUT_LINE('  <div class="foot">'
-                || '<span class="deltas" title="Period-over-period change'
-                || ' (oldest &rarr; current, every ~step_label)">'
-                || NVL(v_chips, '<span class="delta">&mdash;</span>')
-                || '</span>'
-                || '<span class="badge ' || v_sev_cls || '">'
-                || v_sev_badge
-                || '</span></div>');
+            DBMS_OUTPUT.PUT_LINE('  <div class="hc-deltas">'
+                || NVL(v_chips, '<span class="hc-d nc">&mdash;</span>')
+                || '</div>');
             DBMS_OUTPUT.PUT_LINE('</div>');
         END;
     END LOOP;
 
     DBMS_OUTPUT.PUT_LINE('</div>');  -- .hero-grid
 
-    -- Emit mini-chart init (uses sparkline renderer for CDN-free fallback, upgrades
-    -- to ECharts mini line+area when ECharts is available).
-    DBMS_OUTPUT.PUT_LINE('<script>');
-    DBMS_OUTPUT.PUT_LINE('(function(){');
-    DBMS_OUTPUT.PUT_LINE('AWR_DATA.overview = {weeks:' || v_weeks_json
-        || ',cards:[' || NVL(v_cards_json, '') || ']};');
-    DBMS_OUTPUT.PUT_LINE('if(!window.echarts){');
-    DBMS_OUTPUT.PUT_LINE('  // Fallback: use the inline SVG sparkline renderer (window.__awrRenderSparks)');
-    DBMS_OUTPUT.PUT_LINE('  if(window.__awrRenderSparks) window.__awrRenderSparks();');
-    DBMS_OUTPUT.PUT_LINE('  return;');
-    DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('var cs=getComputedStyle(document.body);');
-    DBMS_OUTPUT.PUT_LINE('var ac=cs.getPropertyValue("--accent").trim()||"#2563eb";');
-    DBMS_OUTPUT.PUT_LINE('var ac2=cs.getPropertyValue("--accent-2").trim()||"#14b8a6";');
-    DBMS_OUTPUT.PUT_LINE('AWR_DATA.overview.cards.forEach(function(c){');
-    DBMS_OUTPUT.PUT_LINE('  var el=document.getElementById("hero-mini-"+c.pos);');
-    DBMS_OUTPUT.PUT_LINE('  if(!el || !c.vals || !c.vals.length) return;');
-    DBMS_OUTPUT.PUT_LINE('  el.__sparked=true;  // prevent sparkline renderer from overwriting');
-    DBMS_OUTPUT.PUT_LINE('  el.innerHTML="";  // clear any sparkline fallback already rendered');
-    DBMS_OUTPUT.PUT_LINE('  el.removeAttribute("data-spark");');
-    DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el,null,{renderer:"svg"});');
-    DBMS_OUTPUT.PUT_LINE('  var color=c.sev==="large"?cs.getPropertyValue("--crit-fg").trim():(c.sev==="moderate"?cs.getPropertyValue("--warn-fg").trim():ac);');
-    DBMS_OUTPUT.PUT_LINE('  chart.setOption({');
-    DBMS_OUTPUT.PUT_LINE('    animation:false,');
-    DBMS_OUTPUT.PUT_LINE('    grid:{left:2,right:2,top:2,bottom:2},');
-    DBMS_OUTPUT.PUT_LINE('    xAxis:{type:"category",show:false,data:AWR_DATA.overview.weeks,boundaryGap:false},');
-    DBMS_OUTPUT.PUT_LINE('    yAxis:{type:"value",show:false,scale:true},');
-    DBMS_OUTPUT.PUT_LINE('    tooltip:{trigger:"axis",formatter:function(p){return p[0].axisValue+"<br/><b>"+(p[0].data==null?"\u2014":(+p[0].data).toFixed(2))+"</b> "+c.unit;}},');
-    DBMS_OUTPUT.PUT_LINE('    series:[{type:"line",data:c.vals,smooth:true,showSymbol:false,connectNulls:true,lineStyle:{color:color,width:1.8},areaStyle:{color:{type:"linear",x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:color+"33"},{offset:1,color:color+"05"}]}},markPoint:{symbol:"circle",symbolSize:6,itemStyle:{color:color},data:[{coord:[c.vals.length-1,c.vals[c.vals.length-1]]}]}}]');
-    DBMS_OUTPUT.PUT_LINE('  });');
-    DBMS_OUTPUT.PUT_LINE('  new ResizeObserver(function(){chart.resize();}).observe(el);');
-    DBMS_OUTPUT.PUT_LINE('});');
-    DBMS_OUTPUT.PUT_LINE('})();');
-    DBMS_OUTPUT.PUT_LINE('</script>');
+    -- Stash the structured card data on window.AWR_DATA so a future debug
+    -- console / drill-down can walk it; the inline-SVG sparkline renderer
+    -- (js_sparkline.plsql) already picks up data-spark attributes on its
+    -- own DOMReady pass, so no chart init is needed here.
+    DBMS_OUTPUT.PUT_LINE('<script>AWR_DATA.overview = {weeks:' || v_weeks_json
+        || ',cards:[' || NVL(v_cards_json, '') || ']};</script>');
 
     DBMS_OUTPUT.PUT_LINE('</section>');
 END;

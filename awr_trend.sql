@@ -295,9 +295,18 @@ END;
 @@sql/01_windows.sql
 @@sql/02_load_profile.sql
 @@sql/03_sysmetric.sql
+
+-- Foreground waits + Top SQL ride together in a 2-column row at >=1100px.
+-- The wrapper div is what CSS positions via .fg-topsql-row { order:6 };
+-- emit them DOM-adjacent so the grid can lay them out side by side.
+BEGIN DBMS_OUTPUT.PUT_LINE('<div class="fg-topsql-row">'); END;
+/
 @@sql/04_waits_fg.sql
-@@sql/05_waits_bg.sql
 @@sql/06_top_sql.sql
+BEGIN DBMS_OUTPUT.PUT_LINE('</div>'); END;
+/
+
+@@sql/05_waits_bg.sql
 @@sql/07_summary.sql
 @@sql/08_overview.sql
 @@sql/09_ash_timeline.sql
