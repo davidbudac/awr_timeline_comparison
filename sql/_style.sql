@@ -1,11 +1,17 @@
 --
 -- _style.sql
--- Emits the <style> and tiny JS fragment shared by every section of the
--- HTML report.  Called once from awr_trend.sql after the <head> opens.
+-- Emits the <style> shared by every section of the HTML report.  Called
+-- once from awr_trend.sql after the <head> opens.
 --
--- Visual style: "Dense" — power-user observability dashboard.
--- Dark-first with a prefers-color-scheme: light override, monospace
--- numerals, tight padding, KPI strip, heatmap-style findings.
+-- Visual style: "Editorial" -- magazine-style report.
+-- Light, warm off-white canvas; large red section numerals; bold
+-- masthead; pill-shaped param chips; red-sidebar editorial cards.
+-- Class names match those emitted by sections 01-10 verbatim, so the
+-- restyle is purely a CSS swap (no section-file changes required).
+--
+-- Design tokens, section-level layout, table conventions, severity
+-- semantics, and the per-section header numbering scheme are documented
+-- in design.md at the project root -- read that before iterating.
 --
 
 SET DEFINE OFF
@@ -13,221 +19,282 @@ SET DEFINE OFF
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<style>');
 
-    -- Dark-first palette (default)
+    -- =========================================================
+    -- Design tokens
+    -- =========================================================
     DBMS_OUTPUT.PUT_LINE(':root {'
-        || ' --bg:#0c1018; --panel:#11161f; --panel-2:#161c27;'
-        || ' --fg:#d8dde6; --fg-soft:#a4abba; --muted:#6b7384;'
-        || ' --border:#1f2531; --border-strong:#2a3142; --line-soft:#181d27;'
-        || ' --accent:#4cc9f0; --accent-2:#7df9c2;'
-        || ' --crit:#ff6b6b;  --crit-fg:#ff6b6b;  --crit-bg:#2a1518;'
-        || ' --warn:#ffb454;  --warn-fg:#ffb454;  --warn-bg:#2a2014;'
-        || ' --ok:#7df9c2;    --ok-fg:#7df9c2;    --ok-bg:#14241e;'
-        || ' --info:#82a9ff;  --info-fg:#82a9ff;  --info-bg:#161e30;'
-        || ' --skip:#6b7384;'
-        || ' --spark:#4cc9f0; --spark-fill:rgba(76,201,240,.15);'
-        || ' --shadow:none;'
-        -- OEM-13c-aligned wait_class palette (re-tuned for the dark canvas)
-        || ' --wc-sysio:#4cc9f0;       --wc-other:#a78bfa;'
-        || ' --wc-userio:#7df9c2;      --wc-commit:#ffb454;'
-        || ' --wc-config:#ff6b6b;      --wc-concurrency:#f472b6;'
-        || ' --wc-network:#82a9ff;     --wc-application:#bef264;'
-        || ' --wc-cluster:#fb923c;     --wc-admin:#94a3b8;'
-        || ' --wc-sched:#22d3ee;       --wc-queue:#e879f9;'
+        || ' --paper:#f6f4ef;       --panel:#ffffff;        --panel-2:#fbfaf6;'
+        || ' --ink:#111111;         --ink-soft:#2b2b2b;     --muted:#6b6b6b;'
+        || ' --rule:#1f1f1f;        --hairline:#e2dfd7;     --line-soft:#ece9e1;'
+        || ' --red:#e2231a;         --red-deep:#b51a13;     --chip-bg:#ebe8e0;'
+        || ' --track:#e6e2d8;'
+        || ' --crit:#c0231b;        --warn:#d28a00;         --ok:#2f7d3a;'
+        || ' --info:#4a6f8a;        --skip:#8a8a8a;'
+        || ' --crit-bg:#fbeae8;     --warn-bg:#fdf2dd;      --ok-bg:#e6f3e9;'
+        || ' --info-bg:#e8eef4;     --skip-bg:#ececec;'
+        || ' --spark:#111111;       --spark-fill:rgba(17,17,17,.06);'
+        -- Wait-class palette: kept in approximate parity with
+        -- js_wait_colors.plsql so on-page swatches read the same as the
+        -- ECharts series. Tints are slightly muted for the warm canvas.
+        || ' --wc-sysio:#1F4E89;       --wc-other:#C77CB0;'
+        || ' --wc-userio:#4A90D9;      --wc-commit:#E89B40;'
+        || ' --wc-config:#793C32;      --wc-concurrency:#8B0000;'
+        || ' --wc-network:#967259;     --wc-application:#D62728;'
+        || ' --wc-cluster:#E5C228;     --wc-admin:#7B6FA8;'
+        || ' --wc-sched:#88C070;       --wc-queue:#E89BB7;'
+        || ' --wc-cpu:#3FB344;'
         || ' }');
 
-    -- Light-mode override (when the user OS is in light mode)
-    DBMS_OUTPUT.PUT_LINE('@media (prefers-color-scheme: light) {');
-    DBMS_OUTPUT.PUT_LINE(':root {'
-        || ' --bg:#f6f7f9; --panel:#ffffff; --panel-2:#f1f3f7;'
-        || ' --fg:#1a1f2c; --fg-soft:#475068; --muted:#7d869b;'
-        || ' --border:#d8dde6; --border-strong:#b9c1cf; --line-soft:#e8ebf0;'
-        || ' --accent:#0066cc; --accent-2:#0e9f6e;'
-        || ' --crit:#c0392b;  --crit-fg:#c0392b;  --crit-bg:#fbecea;'
-        || ' --warn:#b07700;  --warn-fg:#b07700;  --warn-bg:#fdf3dd;'
-        || ' --ok:#0e9f6e;    --ok-fg:#0e9f6e;    --ok-bg:#e6f6ee;'
-        || ' --info:#2d5fd1;  --info-fg:#2d5fd1;  --info-bg:#e8eefb;'
-        || ' --skip:#7d869b;'
-        || ' --spark:#0066cc; --spark-fill:rgba(0,102,204,.10);'
-        || ' --shadow:0 1px 2px rgba(15,23,42,.05);'
-        || ' --wc-sysio:#0066cc;       --wc-other:#7c3aed;'
-        || ' --wc-userio:#0e9f6e;      --wc-commit:#b07700;'
-        || ' --wc-config:#c0392b;      --wc-concurrency:#db2777;'
-        || ' --wc-network:#2d5fd1;     --wc-application:#65a30d;'
-        || ' --wc-cluster:#ea580c;     --wc-admin:#64748b;'
-        || ' --wc-sched:#0891b2;       --wc-queue:#c026d3;'
-        || ' } }');
-
+    -- =========================================================
     -- Reset + body
+    -- =========================================================
     DBMS_OUTPUT.PUT_LINE('* { box-sizing:border-box; }');
-    DBMS_OUTPUT.PUT_LINE('html,body { margin:0; padding:0; background:var(--bg); color:var(--fg); }');
+    DBMS_OUTPUT.PUT_LINE('html,body { margin:0; padding:0; background:var(--paper); color:var(--ink); }');
     DBMS_OUTPUT.PUT_LINE('body {'
-        || ' font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,system-ui,sans-serif;'
-        || ' font-size:12.5px; line-height:1.45;'
+        || ' font-family:"Inter","Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;'
+        || ' font-size:15px; line-height:1.55;'
         || ' -webkit-font-smoothing:antialiased;'
-        || ' max-width:1480px; margin:0 auto; padding:0 16px 80px;'
+        || ' max-width:1180px; margin:0 auto; padding:0 56px 96px;'
         || ' display:flex; flex-direction:column; gap:0; }');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
+        || ' body { padding:0 22px 64px; font-size:14px; } }');
 
-    -- Section ordering (kept identical to the previous design)
-    DBMS_OUTPUT.PUT_LINE('nav.toc { order:1; }');
-    DBMS_OUTPUT.PUT_LINE('header.report { order:2; }');
-    DBMS_OUTPUT.PUT_LINE('#db-time-summary { order:3; }');
-    DBMS_OUTPUT.PUT_LINE('#overview { order:4; }');
-    DBMS_OUTPUT.PUT_LINE('#ash-timeline { order:5; }');
-    DBMS_OUTPUT.PUT_LINE('#findings { order:6; }');
-    DBMS_OUTPUT.PUT_LINE('#windows { order:7; }');
-    DBMS_OUTPUT.PUT_LINE('#load { order:8; }');
-    DBMS_OUTPUT.PUT_LINE('#metrics { order:9; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-fg { order:10; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-bg { order:11; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql { order:12; }');
-    DBMS_OUTPUT.PUT_LINE('footer.report { order:13; }');
+    -- =========================================================
+    -- Visual section ordering (kept identical to the dense design,
+    -- so the editorial numerals 01..10 below match the rendered order).
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('header.report      { order:1; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc            { order:2; }');
+    DBMS_OUTPUT.PUT_LINE('#db-time-summary   { order:3; }');
+    DBMS_OUTPUT.PUT_LINE('#overview          { order:4; }');
+    DBMS_OUTPUT.PUT_LINE('#ash-timeline      { order:5; }');
+    DBMS_OUTPUT.PUT_LINE('#findings          { order:6; }');
+    DBMS_OUTPUT.PUT_LINE('#windows           { order:7; }');
+    DBMS_OUTPUT.PUT_LINE('#load              { order:8; }');
+    DBMS_OUTPUT.PUT_LINE('#metrics           { order:9; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-fg          { order:10; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-bg          { order:11; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql            { order:12; }');
+    DBMS_OUTPUT.PUT_LINE('footer.report      { order:13; }');
 
-    -- Sticky brand+nav top bar (re-uses nav.toc markup)
+    -- =========================================================
+    -- Masthead (header.report)
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('header.report {'
+        || ' background:transparent; color:var(--ink);'
+        || ' padding:56px 0 22px; margin:0;'
+        || ' border-bottom:2px solid var(--rule); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .brandline {'
+        || ' font-weight:800; letter-spacing:0.02em; font-size:13px;'
+        || ' text-transform:uppercase; color:var(--ink); margin:0 0 12px; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .brandline .dot { color:var(--red); margin-right:6px; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .brandline .slash { color:var(--red); font-weight:800; }');
+    DBMS_OUTPUT.PUT_LINE('header.report h1 {'
+        || ' font-family:"Soehne","Inter","Helvetica Neue",Helvetica,Arial,sans-serif;'
+        || ' font-weight:800; font-size:48px; line-height:1.04;'
+        || ' letter-spacing:-0.02em; margin:0; color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('header.report h1 em {'
+        || ' font-style:normal; color:var(--red); }');
+    DBMS_OUTPUT.PUT_LINE('header.report h1 .badge { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
+        || ' header.report { padding:32px 0 18px; }'
+        || ' header.report h1 { font-size:32px; } }');
+
+    -- Masthead .topgrid: headline left, run metadata right
+    DBMS_OUTPUT.PUT_LINE('header.report .topgrid {'
+        || ' display:flex; justify-content:space-between; align-items:flex-end;'
+        || ' gap:24px; flex-wrap:wrap; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .meta {'
+        || ' text-align:right; font-size:13px; color:var(--muted);'
+        || ' line-height:1.7; min-width:240px;'
+        || ' display:block; margin-top:0; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .meta div {'
+        || ' color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .meta b {'
+        || ' color:var(--ink); font-weight:600; margin-right:4px; }');
+
+    -- Param chips
+    DBMS_OUTPUT.PUT_LINE('header.report .params {'
+        || ' display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 0; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .params .chip {'
+        || ' background:var(--chip-bg); color:var(--ink);'
+        || ' border-radius:999px; padding:4px 12px;'
+        || ' font-size:12px; font-weight:500; letter-spacing:0.01em; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .params .chip b {'
+        || ' font-weight:700; margin-left:2px; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .params .chip.dot::before {'
+        || ' content:""; display:inline-block; width:6px; height:6px;'
+        || ' border-radius:50%; background:var(--red);'
+        || ' margin-right:6px; vertical-align:1px; }');
+
+    -- Header windows-list (compared windows enumeration)
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-list {'
+        || ' margin-top:18px; font-size:13px; color:var(--ink-soft); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-list b {'
+        || ' color:var(--muted); font-weight:700;'
+        || ' letter-spacing:0.08em; font-size:11px;'
+        || ' text-transform:uppercase; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-list ul {'
+        || ' margin:6px 0 0 !important; padding-left:18px;'
+        || ' list-style:square; color:var(--ink-soft); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-list ul li::marker { color:var(--red); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-list ul b { color:var(--ink); font-weight:600;'
+        || ' letter-spacing:0; text-transform:none; font-size:13px; }');
+
+    -- =========================================================
+    -- Table-of-contents nav
+    -- =========================================================
     DBMS_OUTPUT.PUT_LINE('nav.toc {'
         || ' position:sticky; top:0; z-index:10;'
-        || ' background:var(--panel); border-bottom:1px solid var(--border);'
-        || ' margin:0 -16px 0 -16px; padding:8px 16px;'
-        || ' font-size:11.5px; display:flex; flex-wrap:wrap;'
-        || ' align-items:center; gap:6px 14px;'
-        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc b { color:var(--fg-soft); font-weight:600;'
-        || ' letter-spacing:0.04em; text-transform:uppercase; font-size:10.5px;'
-        || ' margin-right:6px; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc b::before { content:"\25CF"; color:var(--accent);'
-        || ' margin-right:6px; font-size:10px; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc a { color:var(--fg-soft); text-decoration:none;'
-        || ' padding:2px 8px; border-radius:3px; transition:background .12s; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc a:hover { background:var(--panel-2); color:var(--accent); }');
-
-    -- Compact metadata header (was a big info card)
-    DBMS_OUTPUT.PUT_LINE('header.report {'
-        || ' background:transparent; color:var(--fg);'
-        || ' padding:18px 0 14px; margin:0;'
-        || ' border-bottom:1px solid var(--border); }');
-    DBMS_OUTPUT.PUT_LINE('header.report h1 {'
-        || ' font-size:20px; font-weight:600; letter-spacing:-0.015em; margin:0 0 6px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report h1 .badge { vertical-align:middle; margin-left:8px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .meta {'
-        || ' display:flex; flex-wrap:wrap; gap:4px 18px; margin-top:6px;'
-        || ' font-size:11.5px;'
-        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
-        || ' color:var(--muted); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .meta div { color:var(--muted); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .meta b { color:var(--fg-soft); font-weight:600;'
+        || ' background:var(--paper);'
+        || ' border-top:1px solid var(--hairline);'
+        || ' border-bottom:1px solid var(--hairline);'
+        || ' margin:18px 0 28px; padding:12px 0;'
+        || ' font-size:12px; letter-spacing:0.04em; text-transform:uppercase;'
+        || ' color:var(--muted);'
+        || ' display:flex; flex-wrap:wrap; gap:14px 22px; align-items:center; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc b {'
+        || ' color:var(--muted); font-weight:700;'
+        || ' letter-spacing:0.10em; font-size:11px;'
         || ' margin-right:4px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-list { margin-top:10px; font-size:11.5px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-list b { color:var(--fg-soft); font-weight:600;'
-        || ' letter-spacing:0.04em; font-size:10.5px; text-transform:uppercase; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-list ul {'
-        || ' color:var(--fg-soft); margin:4px 0 0 !important; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc b::before { content:none; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a {'
+        || ' color:var(--ink); text-decoration:none; font-weight:600;'
+        || ' transition:color .12s; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a:hover { color:var(--red); }');
 
-    -- Sections (no card chrome - just spacing + a thin top rule via h2)
-    DBMS_OUTPUT.PUT_LINE('section { background:transparent; border:0; padding:0; margin:18px 0 0; }');
-    DBMS_OUTPUT.PUT_LINE('h1 { font-size:20px; margin:0 0 4px; }');
+    -- =========================================================
+    -- Sections + numbered headings (editorial)
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('section {'
+        || ' background:transparent; border:0; padding:0;'
+        || ' margin:48px 0 0; scroll-margin-top:80px; }');
+    DBMS_OUTPUT.PUT_LINE('h1 { font-size:48px; margin:0; }');
+
+    -- The section <h2> rendered as a numbered editorial heading.
+    -- The big red numeral is injected as a ::before pseudo-element;
+    -- per-section content is set further down via #id h2::before.
     DBMS_OUTPUT.PUT_LINE('h2 {'
-        || ' font-size:11.5px; letter-spacing:0.12em; text-transform:uppercase;'
-        || ' font-weight:700; color:var(--fg-soft);'
-        || ' margin:24px 0 8px; padding:0; border:0;'
-        || ' display:flex; align-items:center; gap:10px; }');
-    DBMS_OUTPUT.PUT_LINE('h2::after {'
-        || ' content:""; flex:1; height:1px; background:var(--border); }');
-    DBMS_OUTPUT.PUT_LINE('h3 {'
-        || ' font-size:11px; letter-spacing:0.08em; text-transform:uppercase;'
-        || ' color:var(--muted); font-weight:600; margin:14px 0 6px; }');
+        || ' font-family:"Soehne","Inter","Helvetica Neue",Helvetica,Arial,sans-serif;'
+        || ' font-weight:800; font-size:26px; line-height:1.15;'
+        || ' letter-spacing:-0.01em; color:var(--ink);'
+        || ' text-transform:none;'
+        || ' margin:0 0 14px; padding:0; border:0;'
+        || ' display:flex; align-items:baseline; gap:18px; }');
+    DBMS_OUTPUT.PUT_LINE('h2::before {'
+        || ' content:""; color:var(--red); font-weight:800; font-size:38px;'
+        || ' line-height:1; letter-spacing:-0.02em; min-width:56px;'
+        || ' display:inline-block; }');
+    DBMS_OUTPUT.PUT_LINE('h2::after { content:none; }');
 
-    -- Tables (compact, monospace numerics)
+    -- Per-section numerals (visual order matches the `order:` set above).
+    DBMS_OUTPUT.PUT_LINE('#db-time-summary h2::before { content:"01"; }');
+    DBMS_OUTPUT.PUT_LINE('#overview        h2::before { content:"02"; }');
+    DBMS_OUTPUT.PUT_LINE('#ash-timeline    h2::before { content:"03"; }');
+    DBMS_OUTPUT.PUT_LINE('#findings        h2::before { content:"04"; }');
+    DBMS_OUTPUT.PUT_LINE('#windows         h2::before { content:"05"; }');
+    DBMS_OUTPUT.PUT_LINE('#load            h2::before { content:"06"; }');
+    DBMS_OUTPUT.PUT_LINE('#metrics         h2::before { content:"07"; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-fg        h2::before { content:"08"; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-bg        h2::before { content:"09"; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql          h2::before { content:"10"; }');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
+        || ' h2 { font-size:22px; gap:12px; }'
+        || ' h2::before { font-size:30px; min-width:42px; } }');
+
+    -- h3: subsection (used inside Top SQL etc.)
+    DBMS_OUTPUT.PUT_LINE('h3 {'
+        || ' font-size:11px; letter-spacing:0.10em; text-transform:uppercase;'
+        || ' color:var(--muted); font-weight:700; margin:22px 0 8px; }');
+
+    -- =========================================================
+    -- Tables (clean magazine-style, hairline rules)
+    -- =========================================================
     DBMS_OUTPUT.PUT_LINE('table {'
-        || ' width:100%; border-collapse:collapse; font-size:12px;'
-        || ' background:var(--panel); border:1px solid var(--border); border-radius:4px;'
-        || ' overflow:hidden; margin:6px 0 14px; }');
+        || ' width:100%; border-collapse:collapse;'
+        || ' font-size:13px; background:transparent;'
+        || ' border:0; border-radius:0;'
+        || ' margin:14px 0 18px; }');
     DBMS_OUTPUT.PUT_LINE('thead th {'
-        || ' background:var(--panel-2); color:var(--muted);'
-        || ' text-align:left; padding:6px 10px;'
-        || ' font-size:10.5px; font-weight:600; letter-spacing:0.06em;'
+        || ' background:transparent; color:var(--muted);'
+        || ' text-align:left; padding:10px 10px 8px;'
+        || ' font-size:11px; font-weight:700; letter-spacing:0.10em;'
         || ' text-transform:uppercase; white-space:nowrap;'
-        || ' border-bottom:1px solid var(--border); }');
-    DBMS_OUTPUT.PUT_LINE('tbody td { padding:5px 10px; border-bottom:1px solid var(--line-soft);'
+        || ' border-bottom:1.5px solid var(--rule); }');
+    DBMS_OUTPUT.PUT_LINE('tbody td {'
+        || ' padding:9px 10px; border-bottom:1px solid var(--hairline);'
         || ' vertical-align:middle; }');
     DBMS_OUTPUT.PUT_LINE('tbody tr:last-child td { border-bottom:0; }');
-    DBMS_OUTPUT.PUT_LINE('tbody tr:hover { background:var(--panel-2); }');
+    DBMS_OUTPUT.PUT_LINE('tbody tr:hover { background:rgba(0,0,0,0.02); }');
     DBMS_OUTPUT.PUT_LINE('td.num, th.num {'
-        || ' text-align:right; font-variant-numeric:tabular-nums;'
-        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
-        || ' white-space:nowrap; }');
+        || ' text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }');
     DBMS_OUTPUT.PUT_LINE('td.mono, code, .mono {'
         || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
-        || ' font-size:11.5px; }');
-    DBMS_OUTPUT.PUT_LINE('td a { color:var(--accent); text-decoration:none; }');
+        || ' font-size:12px; }');
+    DBMS_OUTPUT.PUT_LINE('td a { color:var(--red); text-decoration:none; font-weight:600; }');
     DBMS_OUTPUT.PUT_LINE('td a:hover { text-decoration:underline; }');
 
     -- Severity rows: subtle tinted background + colored left rule
     DBMS_OUTPUT.PUT_LINE('tr.crit { background:var(--crit-bg); }'
-        || ' tr.crit td:first-child { box-shadow:inset 3px 0 0 var(--crit-fg); }');
+        || ' tr.crit td:first-child { box-shadow:inset 3px 0 0 var(--crit); }');
     DBMS_OUTPUT.PUT_LINE('tr.warn { background:var(--warn-bg); }'
-        || ' tr.warn td:first-child { box-shadow:inset 3px 0 0 var(--warn-fg); }');
+        || ' tr.warn td:first-child { box-shadow:inset 3px 0 0 var(--warn); }');
     DBMS_OUTPUT.PUT_LINE('tr.ok   { background:transparent; }');
-    DBMS_OUTPUT.PUT_LINE('tr.info { background:var(--info-bg); color:var(--info-fg); }');
+    DBMS_OUTPUT.PUT_LINE('tr.info { background:var(--info-bg); }');
     DBMS_OUTPUT.PUT_LINE('tr.skip { color:var(--muted); font-style:italic; }');
 
-    -- Badges (used inline by sections)
+    -- =========================================================
+    -- Badges
+    -- =========================================================
     DBMS_OUTPUT.PUT_LINE('.badge {'
-        || ' display:inline-block; padding:1px 7px; border-radius:3px;'
-        || ' font-size:10px; font-weight:600; letter-spacing:0.04em;'
-        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
-        || ' text-transform:uppercase; vertical-align:middle; }');
-    DBMS_OUTPUT.PUT_LINE('.badge.crit {'
-        || ' background:var(--crit-bg); color:var(--crit-fg); border:1px solid var(--crit-fg); }');
-    DBMS_OUTPUT.PUT_LINE('.badge.warn {'
-        || ' background:var(--warn-bg); color:var(--warn-fg); border:1px solid var(--warn-fg); }');
-    DBMS_OUTPUT.PUT_LINE('.badge.ok {'
-        || ' background:var(--ok-bg);   color:var(--ok-fg);   border:1px solid var(--ok-fg); }');
-    DBMS_OUTPUT.PUT_LINE('.badge.info {'
-        || ' background:var(--info-bg); color:var(--info-fg); border:1px solid var(--info-fg); }');
-    DBMS_OUTPUT.PUT_LINE('.badge.skip {'
-        || ' background:var(--panel-2); color:var(--muted);   border:1px solid var(--border); }');
+        || ' display:inline-block; padding:2px 8px; border-radius:999px;'
+        || ' font-size:10.5px; font-weight:700; letter-spacing:0.04em;'
+        || ' text-transform:uppercase; vertical-align:middle;'
+        || ' border:0; }');
+    DBMS_OUTPUT.PUT_LINE('.badge.crit { background:var(--crit); color:#fff; }');
+    DBMS_OUTPUT.PUT_LINE('.badge.warn { background:var(--warn); color:#fff; }');
+    DBMS_OUTPUT.PUT_LINE('.badge.ok   { background:var(--ok);   color:#fff; }');
+    DBMS_OUTPUT.PUT_LINE('.badge.info { background:var(--info); color:#fff; }');
+    DBMS_OUTPUT.PUT_LINE('.badge.skip { background:var(--skip); color:#fff; }');
 
-    -- Soft accent bar (used by hero card foot deltas in some places)
+    -- Soft accent bar (legacy hook used by hero card foot deltas)
     DBMS_OUTPUT.PUT_LINE('.bar {'
-        || ' display:block; height:2px;'
-        || ' background:linear-gradient(90deg,var(--accent),var(--accent-2));'
-        || ' opacity:.65; border-radius:1px; margin-top:3px; }');
+        || ' display:block; height:2px; background:var(--red);'
+        || ' opacity:.55; border-radius:1px; margin-top:3px; }');
 
-    --
-    -- Sparkline SVGs (emitted per-row by the inline JS in awr_trend.sql)
-    --
+    -- =========================================================
+    -- Sparkline SVGs (per-row, emitted by js_sparkline.plsql)
+    -- =========================================================
     DBMS_OUTPUT.PUT_LINE('svg.spark {'
         || ' display:inline-block; vertical-align:middle;'
         || ' width:96px; height:18px; color:var(--spark); }');
-    DBMS_OUTPUT.PUT_LINE('svg.spark.warn { color:var(--warn-fg); }');
-    DBMS_OUTPUT.PUT_LINE('svg.spark.crit { color:var(--crit-fg); }');
+    DBMS_OUTPUT.PUT_LINE('svg.spark.warn { color:var(--warn); }');
+    DBMS_OUTPUT.PUT_LINE('svg.spark.crit { color:var(--crit); }');
     DBMS_OUTPUT.PUT_LINE('svg.spark .fill { fill:var(--spark-fill); }');
     DBMS_OUTPUT.PUT_LINE('svg.spark .line {'
-        || ' fill:none; stroke:currentColor; stroke-width:1.3;'
+        || ' fill:none; stroke:currentColor; stroke-width:1.4;'
         || ' stroke-linecap:round; stroke-linejoin:round; }');
-    DBMS_OUTPUT.PUT_LINE('svg.spark .dot { fill:currentColor; }');
-    DBMS_OUTPUT.PUT_LINE('th.trend, td.trend { width:110px; padding:4px 8px; text-align:center; }');
+    DBMS_OUTPUT.PUT_LINE('svg.spark .dot { fill:var(--red); }');
+    DBMS_OUTPUT.PUT_LINE('th.trend, td.trend { width:110px; padding:6px 8px; text-align:center; }');
 
-    --
+    -- =========================================================
     -- Cell-bar behind the current-value column in load/sysmetric tables
-    --
+    -- =========================================================
     DBMS_OUTPUT.PUT_LINE('td.cell-bar { position:relative; }');
     DBMS_OUTPUT.PUT_LINE('td.cell-bar .bg {'
         || ' position:absolute; left:0; top:0; bottom:0;'
-        || ' background:linear-gradient(90deg, rgba(76,201,240,.12), rgba(125,249,194,.06));'
-        || ' border-right:1px solid var(--accent); pointer-events:none; }');
-    DBMS_OUTPUT.PUT_LINE('@media (prefers-color-scheme: light) {'
-        || ' td.cell-bar .bg {'
-        || ' background:linear-gradient(90deg, rgba(0,102,204,.10), rgba(14,159,110,.05));'
-        || ' border-right:1px solid var(--accent); } }');
-    DBMS_OUTPUT.PUT_LINE('td.cell-bar .v { position:relative; z-index:1; }');
+        || ' background:rgba(226,35,26,0.10);'
+        || ' border-right:2px solid var(--red); pointer-events:none; }');
+    DBMS_OUTPUT.PUT_LINE('td.cell-bar .v {'
+        || ' position:relative; z-index:1; font-weight:600; }');
 
-    --
-    -- ECharts chart containers
-    --
+    -- =========================================================
+    -- ECharts containers
+    -- =========================================================
     DBMS_OUTPUT.PUT_LINE('.chart-wrap {'
         || ' width:100%; background:var(--panel);'
-        || ' border:1px solid var(--border); border-radius:4px;'
-        || ' padding:6px; margin:4px 0 12px; }');
+        || ' border:1px solid var(--hairline); border-radius:0;'
+        || ' padding:8px; margin:14px 0 6px; }');
     DBMS_OUTPUT.PUT_LINE('.chart-big    { height:340px; }');
     DBMS_OUTPUT.PUT_LINE('.chart-medium { height:240px; }');
     DBMS_OUTPUT.PUT_LINE('.chart-small  { height:160px; }');
@@ -235,79 +302,102 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('body.no-charts .chart-wrap, body.no-charts .hero-card .mini { display:none; }');
     DBMS_OUTPUT.PUT_LINE('body.no-charts .cdn-warn { display:block !important; }');
     DBMS_OUTPUT.PUT_LINE('.cdn-warn {'
-        || ' display:none; background:var(--warn-bg); color:var(--warn-fg);'
-        || ' padding:8px 12px; border-radius:3px;'
-        || ' border:1px solid var(--warn-fg); font-size:12px; margin:6px 0; }');
+        || ' display:none;'
+        || ' background:var(--warn-bg); color:#7c5b00;'
+        || ' padding:8px 12px; border:1px solid #f0d77a; border-radius:0;'
+        || ' font-size:13px; margin:6px 0; }');
 
-    --
-    -- Overview KPI strip — value on top, mini-chart below, deltas at the foot
-    --
+    -- =========================================================
+    -- Overview KPI strip (#overview .hero-grid)
+    -- Editorial card grid: white panels with red sidebar stripes,
+    -- value on top, mini chart, then deltas at the foot.
+    -- =========================================================
     DBMS_OUTPUT.PUT_LINE('#overview .hero-grid {'
-        || ' display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:1px;'
-        || ' background:var(--border); border:1px solid var(--border);'
-        || ' border-radius:4px; overflow:hidden; margin-top:6px; }');
+        || ' display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:14px;'
+        || ' background:transparent; border:0; border-radius:0;'
+        || ' margin-top:14px; padding:0; }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 1100px) {'
         || ' #overview .hero-grid { grid-template-columns:repeat(3, minmax(0,1fr)); } }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 640px) {'
         || ' #overview .hero-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }');
     DBMS_OUTPUT.PUT_LINE('.hero-card {'
-        || ' background:var(--panel); padding:10px 12px;'
-        || ' display:flex; flex-direction:column; gap:3px;'
+        || ' background:var(--panel);'
+        || ' border:1px solid var(--hairline);'
+        || ' border-left:6px solid var(--red);'
+        || ' padding:14px 16px;'
+        || ' display:flex; flex-direction:column; gap:6px;'
         || ' position:relative; min-width:0;'
-        || ' border:0; border-radius:0; box-shadow:none; }');
+        || ' border-radius:0; box-shadow:none; }');
+    -- Severity tinting (sec 08 sets card class via the severity value)
+    DBMS_OUTPUT.PUT_LINE('.hero-card.crit { border-left-color:var(--crit); }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card.warn { border-left-color:var(--warn); }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card.ok   { border-left-color:var(--ok); }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card.skip { border-left-color:var(--skip); }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card.info { border-left-color:var(--info); }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .label {'
-        || ' font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em;'
-        || ' color:var(--muted); font-weight:600; }');
+        || ' font-size:11px; text-transform:uppercase; letter-spacing:0.10em;'
+        || ' color:var(--muted); font-weight:700; }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .value {'
-        || ' font-size:20px; font-weight:600; letter-spacing:-0.02em;'
-        || ' font-variant-numeric:tabular-nums; color:var(--fg);'
-        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; }');
+        || ' font-size:26px; font-weight:800; letter-spacing:-0.02em;'
+        || ' line-height:1.05; color:var(--ink);'
+        || ' font-variant-numeric:tabular-nums; }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .value small {'
-        || ' font-size:11px; font-weight:400; color:var(--muted);'
-        || ' margin-left:3px; font-family:inherit; }');
+        || ' font-size:12px; font-weight:500; color:var(--muted);'
+        || ' margin-left:4px; letter-spacing:0; }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .mini { width:100%; height:34px; }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .foot {'
         || ' display:flex; justify-content:space-between; align-items:center;'
-        || ' gap:6px; font-size:10.5px; color:var(--muted); }');
+        || ' gap:6px; font-size:11px; color:var(--muted); }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .deltas {'
-        || ' display:flex; gap:5px; flex-wrap:wrap; min-width:0;'
-        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta { font-variant-numeric:tabular-nums; white-space:nowrap; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta .dp { color:var(--muted); margin-right:2px; font-size:9.5px; font-weight:400; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta.up   { color:var(--warn-fg); }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta.down { color:var(--ok-fg); }');
+        || ' display:flex; gap:8px; flex-wrap:wrap; min-width:0; }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .delta {'
+        || ' font-variant-numeric:tabular-nums; white-space:nowrap; font-weight:600; }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .delta .dp {'
+        || ' color:var(--muted); margin-right:2px; font-size:10.5px; font-weight:500; }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .delta.up   { color:var(--red); }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .delta.down { color:var(--ok); }');
 
-    --
-    -- Windows timeline ribbon (kept compact to match the dense aesthetic)
-    --
-    DBMS_OUTPUT.PUT_LINE('.ribbon { width:100%; height:64px; margin:4px 0 12px; position:relative; }');
+    -- =========================================================
+    -- Windows ribbon
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('.ribbon {'
+        || ' width:100%; height:64px; margin:14px 0 8px; position:relative;'
+        || ' background:var(--panel); border:1px solid var(--hairline); }');
     DBMS_OUTPUT.PUT_LINE('.ribbon svg { width:100%; height:100%; display:block; }');
 
-    --
+    -- =========================================================
     -- Disclosures + SQL listings
-    --
-    DBMS_OUTPUT.PUT_LINE('details { margin:4px 0; }');
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('details { margin:6px 0; }');
     DBMS_OUTPUT.PUT_LINE('details summary {'
-        || ' cursor:pointer; padding:3px 0; font-weight:600; color:var(--accent);'
-        || ' font-size:11.5px;'
-        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; }');
+        || ' cursor:pointer; padding:4px 0; font-weight:600; color:var(--red);'
+        || ' font-size:12px; letter-spacing:0.04em; text-transform:uppercase; }');
     DBMS_OUTPUT.PUT_LINE('pre.sql {'
-        || ' background:var(--panel-2); padding:10px; border-radius:3px;'
-        || ' border:1px solid var(--border); overflow-x:auto; white-space:pre-wrap;'
-        || ' font-size:11.5px;'
+        || ' background:var(--panel-2); padding:12px; border-radius:0;'
+        || ' border:1px solid var(--hairline);'
+        || ' overflow-x:auto; white-space:pre-wrap;'
+        || ' font-size:12px;'
         || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
-        || ' color:var(--fg-soft); }');
+        || ' color:var(--ink-soft); }');
 
+    -- =========================================================
+    -- Footer
+    -- =========================================================
     DBMS_OUTPUT.PUT_LINE('footer.report {'
-        || ' color:var(--muted); font-size:11px;'
-        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
-        || ' margin-top:32px; padding:10px 0; border-top:1px solid var(--border); }');
+        || ' color:var(--muted); font-size:12px;'
+        || ' margin-top:80px; padding:22px 0 0;'
+        || ' border-top:1px solid var(--hairline); }');
 
+    -- =========================================================
+    -- Print
+    -- =========================================================
     DBMS_OUTPUT.PUT_LINE('@media print {'
-        || ' nav.toc { display:none; }'
-        || ' thead th { position:static; }'
-        || ' body { max-width:none; }'
-        || ' h2::after { display:none; } }');
+        || ' nav.toc { display:none; position:static; }'
+        || ' body { max-width:none; padding:0 0 24px; background:#fff; }'
+        || ' header.report { padding-top:0; }'
+        || ' .chart-wrap { break-inside:avoid; }'
+        || ' h2 { break-after:avoid; }'
+        || ' }');
 
     DBMS_OUTPUT.PUT_LINE('</style>');
 END;
