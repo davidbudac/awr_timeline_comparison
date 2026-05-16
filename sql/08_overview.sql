@@ -23,10 +23,8 @@ DECLARE
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="overview"><h2>Headline metrics</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || 'Six key signals across the last ' || v_weeks_back
-        || ' compared windows (oldest &rarr; current). Change badge buckets the '
-        || 'z-score of the current window vs prior valid windows '
-        || '(|z|&gt;3 = large, |z|&gt;2 = moderate, otherwise typical).</p>');
+        || 'Six headline metrics across the compared windows, oldest &rarr; current. '
+        || 'Badge = z bucket: |z|&gt;3 large, |z|&gt;2 moderate, else typical.</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="hero-grid">');
 

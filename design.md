@@ -45,7 +45,7 @@ All tokens live in `sql/_style.sql` as CSS custom properties on
 | `--rule` | `#1f1f1f` | Heavy rule under masthead and `<thead>` |
 | `--hairline` | `#e2dfd7` | Light table rules, panel borders |
 | `--line-soft` | `#ece9e1` | Reserved soft divider |
-| `--red` | `#e2231a` | Brand red — section numerals, chip dot, hover, links inside tables, hero stripe |
+| `--red` | `#e2231a` | Brand red — section numerals, chip dot, hover, links inside tables |
 | `--red-deep` | `#b51a13` | Reserved (hover state) |
 | `--chip-bg` | `#ebe8e0` | Param chip background |
 | `--track` | `#e6e2d8` | Bar-comparison track |
@@ -129,7 +129,7 @@ fallback that gracefully degrades to Inter.
 |   ...                                       |
 | section#overview                            |
 |   h2  → "02 Headline metrics"               |
-|   .hero-grid (6 cards)                      |
+|   .hero-grid (6 cards, 2 rows × 3)          |
 | ... 8 more sections ...                     |
 +---------------------------------------------+
 | footer.report                               |
@@ -243,19 +243,19 @@ numeral and the title share a baseline. The numeral has
 ### 6.4 Editorial card — `.hero-card`
 
 Used by section 02 (overview hero strip) and reusable for any future
-"feature card". Visual: white panel, hairline border, **6 px coloured
-left rule** in the card's severity colour (red by default; tinted
-`crit` / `warn` / `ok` / `skip` / `info`).
+"feature card". Visual: white panel, hairline border on all sides — no
+coloured left rule. Severity is communicated by the badge/delta chips
+inside the card, not by the frame.
 
 Children (already emitted by `08_overview.sql`):
 - `.label` — eyebrow, uppercase
 - `.value` — big tabular-num figure with optional `<small>` unit
-- `.mini` — 34 px sparkline canvas
+- `.mini` — 48 px sparkline canvas
 - `.foot` — row containing `.deltas` (a list of `.delta.up/.down`
   chips, each with a `.dp` decimal-pixel hint)
 
-Grid wrapper: `#overview .hero-grid` is 6 columns at desktop, 3 at
-≤1100 px, 2 at ≤640 px.
+Grid wrapper: `#overview .hero-grid` is 3 columns at desktop (so the
+6 cards lay out as 2 rows × 3), 2 at ≤900 px, 1 at ≤520 px.
 
 ### 6.5 Tables
 

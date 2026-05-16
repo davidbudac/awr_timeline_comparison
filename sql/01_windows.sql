@@ -34,8 +34,8 @@ BEGIN
 
     DBMS_OUTPUT.PUT_LINE('<section id="windows"><h2>Aligned windows</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || 'Ribbon shows valid vs skipped baseline windows at a glance. '
-        || 'Skipped windows are excluded from the z-score baseline.</p>');
+        || 'One bar per window. Dimmed = skipped (missing snap, zero-length, '
+        || 'or instance restart) and dropped from the z-score baseline.</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="ribbon">'
         || '<svg viewBox="0 0 1000 72" preserveAspectRatio="none" role="img" aria-label="Baseline windows timeline">');
@@ -138,7 +138,6 @@ BEGIN
     END LOOP;
 
     DBMS_OUTPUT.PUT_LINE('</tbody></table>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">Skipped windows are excluded from the baseline used to compute z-scores.</p>');
     DBMS_OUTPUT.PUT_LINE('</section>');
 END;
 /

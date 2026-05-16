@@ -74,13 +74,11 @@ BEGIN
     END IF;
 
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || 'DB time per AWR snapshot interval, stacked by wait class, covering '
-        || 'every snap from the earliest compared window through the current one. '
-        || '<b>CPU</b> comes from <code>dba_hist_sys_time_model</code> '
-        || '(stat_name=DB CPU); the rest are summed from '
-        || '<code>dba_hist_system_event</code> by <code>wait_class</code> '
-        || '(Idle excluded). Snap-pairs that span an instance restart are '
-        || 'dropped (rendered as gaps).</p>');
+        || 'DB time per snap interval, stacked by wait_class, '
+        || 'earliest compared window &rarr; current. '
+        || '<b>CPU</b>: <code>dba_hist_sys_time_model</code> (stat_name=DB CPU). '
+        || 'Waits: <code>dba_hist_system_event</code> grouped by <code>wait_class</code> '
+        || '(Idle excluded). Snap-pairs across an instance restart &rarr; gap.</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-big" id="db-time-summary-chart"></div>');
 

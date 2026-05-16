@@ -79,16 +79,15 @@ BEGIN
         || '(' || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
         || ', stacked by wait class)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || 'Active sessions per '
-        || CASE WHEN v_bucket_hours = 1 THEN 'hour'
-                ELSE v_bucket_label || ' bucket' END
-        || ' from <code>dba_hist_active_sess_history</code>, '
-        || 'covering the full comparison span ('
+        || '<code>dba_hist_active_sess_history</code>, '
         || TO_CHAR(CAST(v_range_start AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
         || ' &rarr; '
         || TO_CHAR(CAST(v_range_end   AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
-        || '). ON-CPU rows are bucketed as <b>CPU</b>; Idle waits are excluded. '
-        || 'Compared windows are highlighted in the chart background.</p>');
+        || ', '
+        || CASE WHEN v_bucket_hours = 1 THEN 'hourly'
+                ELSE v_bucket_label END
+        || ' buckets. ON-CPU &rarr; <b>CPU</b>; Idle excluded. '
+        || 'Compared windows shaded.</p>');
 
     -- Taller container than .chart-big: the stacked area needs room for the
     -- plot, a top-anchored scrolling legend (so it does not collide with the

@@ -26,9 +26,9 @@ DECLARE
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="load"><h2>Load profile &mdash; per-second rates</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'Cumulative DBA_HIST_SYSSTAT deltas divided by window duration. '
-        || 'The <b>Trend</b> column shows the per-~period_unit_long series (oldest &rarr; current); '
-        || 'the bar behind <b>Current</b> shows each value relative to its row max.</p>');
+        || 'DBA_HIST_SYSSTAT (end &minus; begin) &divide; window seconds. '
+        || '<b>Trend</b>: per-window values, oldest &rarr; current. '
+        || '<b>Current</b> cell bar = value &divide; row max.</p>');
 
     v_header := '<thead><tr><th>Metric</th><th class="trend">Trend</th><th class="num">Current</th>';
     FOR k IN 1 .. v_weeks_back LOOP

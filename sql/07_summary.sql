@@ -47,17 +47,77 @@ DECLARE
     v_crit       NUMBER := 0;
     v_warn       NUMBER := 0;
     v_heat_json  CLOB;
-    v_row        VARCHAR2(32767);
-    v_sev        VARCHAR2(40);
-    v_cls        VARCHAR2(10);
     v_weeks_back NUMBER := ~weeks_back;
+
+    PROCEDURE emit_domain_table(p_dom VARCHAR2, p_title VARCHAR2) IS
+        v_row   VARCHAR2(32767);
+        v_sev   VARCHAR2(40);
+        v_cls   VARCHAR2(10);
+        v_count PLS_INTEGER := 0;
+        rec     finding_rec;
+    BEGIN
+        FOR p IN 1 .. v_table_idx.COUNT LOOP
+            IF v_findings(v_table_idx(p)).metric_domain = p_dom THEN
+                v_count := v_count + 1;
+            END IF;
+        END LOOP;
+        IF v_count = 0 THEN RETURN; END IF;
+
+        DBMS_OUTPUT.PUT_LINE('<h3>' || p_title || '</h3>');
+        DBMS_OUTPUT.PUT_LINE('<table>'
+            || '<thead><tr>'
+            || '<th>Change</th>'
+            || '<th>Metric</th>'
+            || '<th class="num">Current</th>'
+            || '<th class="num">Prior mean</th>'
+            || '<th class="num">Prior sd</th>'
+            || '<th class="num">n</th>'
+            || '<th class="num">z-score</th>'
+            || '<th class="num">% &Delta;</th>'
+            || '</tr></thead><tbody>');
+
+        FOR p IN 1 .. v_table_idx.COUNT LOOP
+            rec := v_findings(v_table_idx(p));
+            IF rec.metric_domain = p_dom THEN
+                v_sev := rec.change_bucket;
+                v_cls := CASE v_sev WHEN 'large'    THEN 'crit'
+                                    WHEN 'moderate' THEN 'warn'
+                                    WHEN 'typical'  THEN 'ok'
+                                    ELSE 'skip' END;
+                v_row := '<tr data-metric="'
+                    || REPLACE(DBMS_XMLGEN.CONVERT(rec.metric_name), '"', '&quot;')
+                    || '" class="' || v_cls || '">'
+                    || '<td><span class="badge ' || v_cls || '">' || v_sev || '</span></td>'
+                    || '<td>' || DBMS_XMLGEN.CONVERT(rec.metric_name) || '</td>'
+                    || '<td class="num">' ||
+                        CASE WHEN rec.cur_val IS NULL THEN '&mdash;'
+                             ELSE TO_CHAR(rec.cur_val, 'FM999G999G999G990D0000') END || '</td>'
+                    || '<td class="num">' ||
+                        CASE WHEN rec.prior_mean IS NULL THEN '&mdash;'
+                             ELSE TO_CHAR(rec.prior_mean, 'FM999G999G999G990D0000') END || '</td>'
+                    || '<td class="num">' ||
+                        CASE WHEN rec.prior_sd IS NULL THEN '&mdash;'
+                             ELSE TO_CHAR(rec.prior_sd, 'FM999G999G999G990D0000') END || '</td>'
+                    || '<td class="num">' || NVL(TO_CHAR(rec.n_prior), '0') || '</td>'
+                    || '<td class="num">' ||
+                        CASE WHEN rec.z_score IS NULL THEN '&mdash;'
+                             ELSE TO_CHAR(rec.z_score, 'FMS990D00') END || '</td>'
+                    || '<td class="num">' ||
+                        CASE WHEN rec.pct_delta IS NULL THEN '&mdash;'
+                             ELSE TO_CHAR(rec.pct_delta, 'FMS990D0') || '%' END || '</td>'
+                    || '</tr>';
+                DBMS_OUTPUT.PUT_LINE(v_row);
+            END IF;
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('</tbody></table>');
+    END emit_domain_table;
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="findings"><h2 id="findings-heading">Findings summary</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'z-score of the current window vs prior valid windows. '
-        || '|z|&gt;3 = large change, |z|&gt;2 = moderate change, otherwise typical. '
-        || 'Insufficient history (n&lt;3) shows only %-delta. '
-        || 'Heatmap below: |z| magnitude per (domain &times; metric); gray = no baseline.</p>');
+        || 'z = (current &minus; &mu;) &divide; &sigma; over prior valid windows. '
+        || '|z|&gt;3 large, |z|&gt;2 moderate, else typical. '
+        || 'n&lt;3 &rarr; %-delta only. '
+        || 'Heatmap: |z| per (domain &times; metric); gray = no baseline.</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-medium" id="findings-heatmap"></div>');
 
@@ -309,61 +369,14 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('</script>');
     END IF;
 
-    DBMS_OUTPUT.PUT_LINE('<table>'
-        || '<thead><tr>'
-        || '<th>Change</th>'
-        || '<th>Domain</th>'
-        || '<th>Metric</th>'
-        || '<th class="num">Current</th>'
-        || '<th class="num">Prior mean</th>'
-        || '<th class="num">Prior sd</th>'
-        || '<th class="num">n</th>'
-        || '<th class="num">z-score</th>'
-        || '<th class="num">% &Delta;</th>'
-        || '</tr></thead><tbody>');
-
     --
-    -- Second pass: detail table ordered by sev / |z| / |pct| / name.
+    -- Detail tables: one per domain, ordered by sev / |z| / |pct| / name.
     -- v_table_idx[p] -> index in v_findings, populated above.
     --
-    FOR p IN 1 .. v_table_idx.COUNT LOOP
-        f := v_findings(v_table_idx(p));
-        v_sev := f.change_bucket;
-        v_cls := CASE v_sev WHEN 'large'    THEN 'crit'
-                            WHEN 'moderate' THEN 'warn'
-                            WHEN 'typical'  THEN 'ok'
-                            ELSE 'skip' END;
+    emit_domain_table('LOAD',   'Load profile');
+    emit_domain_table('METRIC', 'System metrics');
+    emit_domain_table('WAIT',   'Wait classes');
 
-        v_row := '<tr data-metric="'
-            || REPLACE(DBMS_XMLGEN.CONVERT(f.metric_name), '"', '&quot;')
-            || '" class="' || v_cls || '">'
-            || '<td><span class="badge ' || v_cls || '">' || v_sev || '</span></td>'
-            || '<td>' || f.metric_domain || '</td>'
-            || '<td>' || DBMS_XMLGEN.CONVERT(f.metric_name) || '</td>'
-            || '<td class="num">' ||
-                CASE WHEN f.cur_val IS NULL THEN '&mdash;'
-                     ELSE TO_CHAR(f.cur_val, 'FM999G999G999G990D0000') END || '</td>'
-            || '<td class="num">' ||
-                CASE WHEN f.prior_mean IS NULL THEN '&mdash;'
-                     ELSE TO_CHAR(f.prior_mean, 'FM999G999G999G990D0000') END || '</td>'
-            || '<td class="num">' ||
-                CASE WHEN f.prior_sd IS NULL THEN '&mdash;'
-                     ELSE TO_CHAR(f.prior_sd, 'FM999G999G999G990D0000') END || '</td>'
-            || '<td class="num">' || NVL(TO_CHAR(f.n_prior), '0') || '</td>'
-            || '<td class="num">' ||
-                CASE WHEN f.z_score IS NULL THEN '&mdash;'
-                     ELSE TO_CHAR(f.z_score, 'FMS990D00') END || '</td>'
-            || '<td class="num">' ||
-                CASE WHEN f.pct_delta IS NULL THEN '&mdash;'
-                     ELSE TO_CHAR(f.pct_delta, 'FMS990D0') || '%' END || '</td>'
-            || '</tr>';
-        DBMS_OUTPUT.PUT_LINE(v_row);
-    END LOOP;
-
-    DBMS_OUTPUT.PUT_LINE('</tbody></table>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'This run is read-only: nothing is persisted. '
-        || 'Re-run <code>awr_trend.sql</code> to refresh.</p>');
     DBMS_OUTPUT.PUT_LINE('</section>');
 END;
 /

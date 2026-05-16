@@ -68,13 +68,13 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('#db-time-summary   { order:3; }');
     DBMS_OUTPUT.PUT_LINE('#overview          { order:4; }');
     DBMS_OUTPUT.PUT_LINE('#ash-timeline      { order:5; }');
-    DBMS_OUTPUT.PUT_LINE('#findings          { order:6; }');
-    DBMS_OUTPUT.PUT_LINE('#windows           { order:7; }');
-    DBMS_OUTPUT.PUT_LINE('#load              { order:8; }');
-    DBMS_OUTPUT.PUT_LINE('#metrics           { order:9; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-fg          { order:10; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-bg          { order:11; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql            { order:12; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-fg          { order:6; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-bg          { order:7; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql            { order:8; }');
+    DBMS_OUTPUT.PUT_LINE('#findings          { order:9; }');
+    DBMS_OUTPUT.PUT_LINE('#windows           { order:10; }');
+    DBMS_OUTPUT.PUT_LINE('#load              { order:11; }');
+    DBMS_OUTPUT.PUT_LINE('#metrics           { order:12; }');
     DBMS_OUTPUT.PUT_LINE('footer.report      { order:13; }');
 
     -- =========================================================
@@ -113,33 +113,76 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('header.report .meta b {'
         || ' color:var(--ink); font-weight:600; margin-right:4px; }');
 
-    -- Param chips
-    DBMS_OUTPUT.PUT_LINE('header.report .params {'
-        || ' display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 0; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .params .chip {'
-        || ' background:var(--chip-bg); color:var(--ink);'
-        || ' border-radius:999px; padding:4px 12px;'
-        || ' font-size:12px; font-weight:500; letter-spacing:0.01em; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .params .chip b {'
-        || ' font-weight:700; margin-left:2px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .params .chip.dot::before {'
-        || ' content:""; display:inline-block; width:6px; height:6px;'
-        || ' border-radius:50%; background:var(--red);'
-        || ' margin-right:6px; vertical-align:1px; }');
-
-    -- Header windows-list (compared windows enumeration)
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-list {'
+    -- Header windows-strip: narrow full-width DB-time timeline that
+    -- replaces the old <ul> windows-list. .strip-head holds a single
+    -- caption line; .windows-chart is the ECharts target (very short);
+    -- .windows-fallback is shown only when body.no-charts hides the
+    -- chart (offline / CDN-less) and lists windows as plain text.
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip {'
         || ' margin-top:18px; font-size:13px; color:var(--ink-soft); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-list b {'
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .strip-head {'
+        || ' display:flex; align-items:baseline; gap:10px;'
+        || ' flex-wrap:wrap; margin-bottom:4px; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .strip-head b {'
         || ' color:var(--muted); font-weight:700;'
         || ' letter-spacing:0.08em; font-size:11px;'
         || ' text-transform:uppercase; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-list ul {'
-        || ' margin:6px 0 0 !important; padding-left:18px;'
-        || ' list-style:square; color:var(--ink-soft); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-list ul li::marker { color:var(--red); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-list ul b { color:var(--ink); font-weight:600;'
-        || ' letter-spacing:0; text-transform:none; font-size:13px; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .strip-meta {'
+        || ' color:var(--muted); font-size:11px;'
+        || ' letter-spacing:0.02em; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .windows-chart {'
+        || ' width:100%; height:64px; }');
+    DBMS_OUTPUT.PUT_LINE('body.no-charts header.report .windows-strip .windows-chart {'
+        || ' display:none; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .windows-fallback {'
+        || ' display:none; font-size:12px; color:var(--ink-soft);'
+        || ' flex-wrap:wrap; gap:4px 14px; margin-top:2px; }');
+    DBMS_OUTPUT.PUT_LINE('body.no-charts header.report .windows-strip .windows-fallback {'
+        || ' display:flex; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .windows-fallback .win b {'
+        || ' color:var(--ink); font-weight:700; margin-right:4px; }');
+
+    -- =========================================================
+    -- Masthead verdict: single-line punchline emitted by
+    -- 00_params.sql from a recomputed z-score. Sits between
+    -- .topgrid and .windows-strip, separated from the headline
+    -- by a hairline rule.
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict {'
+        || ' margin-top:18px; padding-top:14px;'
+        || ' border-top:1px solid var(--hairline);'
+        || ' font-size:14px; color:var(--ink-soft); line-height:1.55;'
+        || ' display:flex; flex-wrap:wrap; align-items:baseline;'
+        || ' column-gap:12px; row-gap:6px; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .label {'
+        || ' font-size:11px; letter-spacing:0.10em; text-transform:uppercase;'
+        || ' color:var(--muted); font-weight:700; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede {'
+        || ' color:var(--ink); font-weight:700;'
+        || ' font-size:15px; letter-spacing:-0.005em;'
+        || ' text-decoration:none; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict a.lede:hover { text-decoration:underline; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede.crit { color:var(--crit); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede.ok   { color:var(--ok); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede.skip { color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .sep {'
+        || ' color:var(--red); font-weight:700; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .body { color:var(--ink-soft); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .body a {'
+        || ' color:var(--red); text-decoration:none; font-weight:600; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .body a:hover { text-decoration:underline; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover {'
+        || ' display:inline-flex; align-items:baseline; gap:6px;'
+        || ' white-space:nowrap; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover::before {'
+        || ' content:"\2022"; color:var(--red); font-weight:700;'
+        || ' margin-right:2px; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .name {'
+        || ' color:var(--ink); font-weight:600; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct {'
+        || ' font-variant-numeric:tabular-nums; font-weight:700; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct.up   { color:var(--red); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct.down { color:var(--ok); }');
 
     -- =========================================================
     -- Table-of-contents nav
@@ -191,13 +234,13 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('#db-time-summary h2::before { content:"01"; }');
     DBMS_OUTPUT.PUT_LINE('#overview        h2::before { content:"02"; }');
     DBMS_OUTPUT.PUT_LINE('#ash-timeline    h2::before { content:"03"; }');
-    DBMS_OUTPUT.PUT_LINE('#findings        h2::before { content:"04"; }');
-    DBMS_OUTPUT.PUT_LINE('#windows         h2::before { content:"05"; }');
-    DBMS_OUTPUT.PUT_LINE('#load            h2::before { content:"06"; }');
-    DBMS_OUTPUT.PUT_LINE('#metrics         h2::before { content:"07"; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-fg        h2::before { content:"08"; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-bg        h2::before { content:"09"; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql          h2::before { content:"10"; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-fg        h2::before { content:"04"; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-bg        h2::before { content:"05"; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql          h2::before { content:"06"; }');
+    DBMS_OUTPUT.PUT_LINE('#findings        h2::before { content:"07"; }');
+    DBMS_OUTPUT.PUT_LINE('#windows         h2::before { content:"08"; }');
+    DBMS_OUTPUT.PUT_LINE('#load            h2::before { content:"09"; }');
+    DBMS_OUTPUT.PUT_LINE('#metrics         h2::before { content:"10"; }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
         || ' h2 { font-size:22px; gap:12px; }'
         || ' h2::before { font-size:30px; min-width:42px; } }');
@@ -263,6 +306,38 @@ BEGIN
         || ' opacity:.55; border-radius:1px; margin-top:3px; }');
 
     -- =========================================================
+    -- Per-SQL metadata strip (key/value grid under each <summary>)
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('dl.sql-meta {'
+        || ' display:grid; grid-template-columns:max-content 1fr;'
+        || ' gap:2px 14px; font-size:12px; margin:8px 0 14px; }');
+    DBMS_OUTPUT.PUT_LINE('dl.sql-meta dt {'
+        || ' color:var(--muted); font-weight:600;'
+        || ' text-transform:uppercase; letter-spacing:0.03em;'
+        || ' font-size:11px; }');
+    DBMS_OUTPUT.PUT_LINE('dl.sql-meta dd { margin:0; color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('dl.sql-meta dd.mono {'
+        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
+        || ' font-size:11.5px; }');
+    DBMS_OUTPUT.PUT_LINE('dl.sql-meta dd .muted { color:var(--muted); }');
+
+    -- =========================================================
+    -- Top-SQL chart breakdown toggle (SQL_ID / Schema)
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('.topsql-toggle {'
+        || ' display:flex; align-items:center; gap:6px;'
+        || ' margin:4px 0 6px; font-size:11px; color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('.topsql-toggle button {'
+        || ' font:inherit; font-size:11px; font-weight:600;'
+        || ' padding:2px 10px; border-radius:999px; cursor:pointer;'
+        || ' border:1px solid var(--border); background:transparent;'
+        || ' color:var(--muted); letter-spacing:0.02em; }');
+    DBMS_OUTPUT.PUT_LINE('.topsql-toggle button:hover { color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('.topsql-toggle button.active {'
+        || ' background:var(--ink); color:#fff;'
+        || ' border-color:var(--ink); }');
+
+    -- =========================================================
     -- Sparkline SVGs (per-row, emitted by js_sparkline.plsql)
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('svg.spark {'
@@ -313,27 +388,20 @@ BEGIN
     -- value on top, mini chart, then deltas at the foot.
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('#overview .hero-grid {'
-        || ' display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:14px;'
+        || ' display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:14px;'
         || ' background:transparent; border:0; border-radius:0;'
         || ' margin-top:14px; padding:0; }');
-    DBMS_OUTPUT.PUT_LINE('@media (max-width: 1100px) {'
-        || ' #overview .hero-grid { grid-template-columns:repeat(3, minmax(0,1fr)); } }');
-    DBMS_OUTPUT.PUT_LINE('@media (max-width: 640px) {'
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 900px) {'
         || ' #overview .hero-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 520px) {'
+        || ' #overview .hero-grid { grid-template-columns:1fr; } }');
     DBMS_OUTPUT.PUT_LINE('.hero-card {'
         || ' background:var(--panel);'
         || ' border:1px solid var(--hairline);'
-        || ' border-left:6px solid var(--red);'
         || ' padding:14px 16px;'
         || ' display:flex; flex-direction:column; gap:6px;'
         || ' position:relative; min-width:0;'
         || ' border-radius:0; box-shadow:none; }');
-    -- Severity tinting (sec 08 sets card class via the severity value)
-    DBMS_OUTPUT.PUT_LINE('.hero-card.crit { border-left-color:var(--crit); }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card.warn { border-left-color:var(--warn); }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card.ok   { border-left-color:var(--ok); }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card.skip { border-left-color:var(--skip); }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card.info { border-left-color:var(--info); }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .label {'
         || ' font-size:11px; text-transform:uppercase; letter-spacing:0.10em;'
         || ' color:var(--muted); font-weight:700; }');
@@ -344,7 +412,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.hero-card .value small {'
         || ' font-size:12px; font-weight:500; color:var(--muted);'
         || ' margin-left:4px; letter-spacing:0; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .mini { width:100%; height:34px; }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .mini { width:100%; height:48px; }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .foot {'
         || ' display:flex; justify-content:space-between; align-items:center;'
         || ' gap:6px; font-size:11px; color:var(--muted); }');
