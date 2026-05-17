@@ -7,22 +7,23 @@ working directory is the repo root and the wrapper is executable.
 
 ```
 ./run_awr_trend.sh <connect> [target_end] [win_hours] [weeks_back] \
-                              [top_n] [inst_num] [step] [step_unit]
+                              [top_n] [inst_num] [step] [step_unit] [template]
 ```
 
-| Pos | Name         | Default | Notes                                            |
-|-----|--------------|---------|--------------------------------------------------|
-| 1   | connect      | —       | `user/pw@svc`, `/`, or any sqlplus connect string |
-| 2   | target_end   | `AUTO`  | `AUTO` = prior full hour, or `'YYYY-MM-DD HH24:MI'` |
-| 3   | win_hours    | `1`     | Width of every compared window                    |
-| 4   | weeks_back   | `4`     | How many prior windows to include (count, not weeks) |
-| 5   | top_n        | `10`    | Top-N rows in Top-SQL / wait tables               |
-| 6   | inst_num     | `0`     | RAC: `0` = aggregate, `>0` = filter to one instance |
-| 7   | step         | `1`     | Cadence count between adjacent windows            |
-| 8   | step_unit    | `w`     | `h` hours, `d` days, `w` weeks                    |
+| Pos | Name         | Default          | Notes                                            |
+|-----|--------------|------------------|--------------------------------------------------|
+| 1   | connect      | —                | `user/pw@svc`, `/`, or any sqlplus connect string |
+| 2   | target_end   | `AUTO`           | `AUTO` = prior full hour, or `'YYYY-MM-DD HH24:MI'` |
+| 3   | win_hours    | `1`              | Width of every compared window                    |
+| 4   | weeks_back   | `4`              | How many prior windows to include (count, not weeks) |
+| 5   | top_n        | `10`             | Top-N rows in Top-SQL / wait tables               |
+| 6   | inst_num     | `0`              | RAC: `0` = aggregate, `>0` = filter to one instance |
+| 7   | step         | `1`              | Cadence count between adjacent windows            |
+| 8   | step_unit    | `w`              | `h` hours, `d` days, `w` weeks                    |
+| 9   | template     | `comprehensive`  | `comprehensive` (full lists) or `simple` (triage subset) |
 
-Trailing args you don't care about can be omitted. To pin step / step_unit
-you must also supply every preceding arg — use `AUTO`/`0` etc. as
+Trailing args you don't care about can be omitted. To pin step / step_unit /
+template you must also supply every preceding arg — use `AUTO`/`0` etc. as
 placeholders (see examples).
 
 The total compared span is `weeks_back × step + win_hours` of `step_unit`.
@@ -146,6 +147,42 @@ SYSMETRIC.
 
 ---
 
+## Templates (which metrics & waits to render)
+
+Templates pick the curated set of stats, metrics, and wait events the
+report renders. They do not change cadence or compared windows — they
+just trim or expand the rows.
+
+### `comprehensive` (default) — every curated metric and the full firehose of waits
+```bash
+./run_awr_trend.sh user/pw@svc
+```
+27 load stats, 23 SYSMETRIC metrics, all wait events ranked by time.
+Byte-identical to the pre-template report.
+
+### `simple` — triage-friendly subset for a quick glance
+```bash
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple
+```
+9 load stats, 8 SYSMETRIC metrics, ~10 commonly-watched wait events.
+Section 00 also renders a small `template: simple` pill so you can tell
+templates apart at a glance.
+
+### Simple template + hourly cadence — fast walkthrough of the last few hours
+```bash
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h simple
+```
+
+### Roll your own
+Drop a directory under `sql/lib/templates/<name>/` with three files —
+`sysstat_load_targets.sql`, `sysmetric_targets.sql`,
+`wait_event_targets.sql` — and add the name to the whitelist `CASE`
+in `awr_trend.sql`. A single `'*'` row in `wait_event_targets.sql` is a
+sentinel meaning "no filter, top-N firehose"; any other rows form an
+allowlist.
+
+---
+
 ## Larger Top-N
 
 ### Top-25 SQL with default weekly comparison
@@ -171,6 +208,7 @@ SQL> @sql/defaults.sql
 SQL> DEFINE step      = 1
 SQL> DEFINE step_unit = 'h'
 SQL> DEFINE weeks_back = 6
+SQL> DEFINE template  = 'simple'
 SQL> @awr_trend.sql
 ```
 
@@ -185,6 +223,7 @@ DEFINE top_n      = 10
 DEFINE inst_num   = 0
 DEFINE step       = 1
 DEFINE step_unit  = 'h'
+DEFINE template   = 'comprehensive'
 @@awr_trend.sql
 EXIT
 SQL
@@ -243,6 +282,7 @@ DEFINE top_n      = 10
 DEFINE inst_num   = 0
 DEFINE step       = 1
 DEFINE step_unit  = 'w'
+DEFINE template   = 'comprehensive'
 ```
 
 ---

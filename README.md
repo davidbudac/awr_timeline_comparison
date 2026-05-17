@@ -45,26 +45,37 @@ Easiest — the shell wrapper (sets all substitution vars for you):
 ./run_awr_trend.sh user/pw@svc                                  # defaults
 ./run_awr_trend.sh user/pw@svc '2026-04-15 09:00' 1 4 10 0      # explicit weekly
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h                # last 4 hours straight back
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple         # lean triage report
 ```
 
-Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit]]]]]]]`
+Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template]]]]]]]]`
 
-| Arg          | Default | Meaning                                             |
-|--------------|---------|-----------------------------------------------------|
-| `target_end` | `AUTO`  | Window end — `AUTO` = prior full hour, or `'YYYY-MM-DD HH24:MI'` |
-| `win_hours`  | `1`     | Length of each compared window, in hours            |
-| `weeks_back` | `4`     | Number of prior windows to compare against (the name is historical; it's just the count) |
-| `top_n`      | `10`    | Top-N rows per ranking in Top SQL / waits           |
-| `inst_num`   | `0`     | RAC: `0` = aggregate across all instances; `>0` = filter to that instance |
-| `step`       | `1`     | Cadence count between adjacent windows              |
-| `step_unit`  | `w`     | Cadence unit: `h` (hours), `d` (days), `w` (weeks)  |
+| Arg          | Default          | Meaning                                             |
+|--------------|------------------|-----------------------------------------------------|
+| `target_end` | `AUTO`           | Window end — `AUTO` = prior full hour, or `'YYYY-MM-DD HH24:MI'` |
+| `win_hours`  | `1`              | Length of each compared window, in hours            |
+| `weeks_back` | `4`              | Number of prior windows to compare against (the name is historical; it's just the count) |
+| `top_n`      | `10`             | Top-N rows per ranking in Top SQL / waits           |
+| `inst_num`   | `0`              | RAC: `0` = aggregate across all instances; `>0` = filter to that instance |
+| `step`       | `1`              | Cadence count between adjacent windows              |
+| `step_unit`  | `w`              | Cadence unit: `h` (hours), `d` (days), `w` (weeks)  |
+| `template`   | `comprehensive`  | Metric + wait-event set: `comprehensive` (full curated lists) or `simple` (triage-friendly subset) |
 
 `step` × `step_unit` defines the gap between adjacent comparison
 windows. `step=1, step_unit=w` (the default) reproduces the original
 "same hour-of-week, N prior weeks" behaviour. `step=1, step_unit=h`
 gives the last `weeks_back+1` consecutive 1-hour windows. `step=2,
-step_unit=d` runs every-other-day. See [CHEATSHEET.md](CHEATSHEET.md)
-for ready-to-paste recipes.
+step_unit=d` runs every-other-day.
+
+`template` picks which set of metrics and wait events the report renders.
+`comprehensive` is the full pre-template content (27 SYSSTAT load stats,
+23 SYSMETRIC metrics, all wait events ranked by time). `simple` is a
+triage-friendly subset (9 load stats, 8 metrics, ~10 wait events) for a
+quick glance. To add your own template, drop a directory under
+`sql/lib/templates/<name>/` with three files
+(`sysstat_load_targets.sql`, `sysmetric_targets.sql`,
+`wait_event_targets.sql`) and extend the whitelist in `awr_trend.sql`.
+See [CHEATSHEET.md](CHEATSHEET.md) for ready-to-paste recipes.
 
 Pure SQL\*Plus (no bash) — you must pre-DEFINE the variables or load the
 canonical defaults first:
@@ -80,6 +91,7 @@ SQL> DEFINE top_n      = 20
 SQL> DEFINE inst_num   = 1
 SQL> DEFINE step       = 1
 SQL> DEFINE step_unit  = 'w'
+SQL> DEFINE template   = 'comprehensive'
 SQL> @awr_trend.sql
 ```
 
@@ -157,15 +169,24 @@ SQL> @side/create_weekly_baselines.sql
 │   ├── _style.sql                   -- shared CSS (emitted once)
 │   ├── 00_params.sql                -- params + header card
 │   ├── 01_windows.sql               -- snapshot window matching
-│   ├── 02_load_profile.sql          -- SYSSTAT deltas
-│   ├── 03_sysmetric.sql             -- SYSMETRIC averages
-│   ├── 04_waits_fg.sql              -- foreground waits
-│   ├── 05_waits_bg.sql              -- background waits
+│   ├── 02_load_profile.sql          -- SYSSTAT deltas (per template)
+│   ├── 03_sysmetric.sql             -- SYSMETRIC averages (per template)
+│   ├── 04_waits_fg.sql              -- foreground waits (per template)
+│   ├── 05_waits_bg.sql              -- background waits (per template)
 │   ├── 06_top_sql.sql               -- Top-N SQL
 │   ├── 07_summary.sql               -- z-score findings
 │   ├── 08_overview.sql              -- hero strip (headline metrics)
 │   ├── 09_ash_timeline.sql          -- hourly ASH stacked-area timeline
-│   └── 10_db_time_summary.sql       -- full-span DB time stacked area
+│   ├── 10_db_time_summary.sql       -- full-span DB time stacked area
+│   └── lib/templates/               -- per-template metric + wait-event lists
+│       ├── comprehensive/           -- default; full curated lists
+│       │   ├── sysstat_load_targets.sql
+│       │   ├── sysmetric_targets.sql
+│       │   └── wait_event_targets.sql   -- '*' sentinel = no filter
+│       └── simple/                  -- triage-friendly subset
+│           ├── sysstat_load_targets.sql
+│           ├── sysmetric_targets.sql
+│           └── wait_event_targets.sql
 ├── side/
 │   ├── baselines_defaults.sql      -- canonical defaults for the baselines script
 │   └── create_weekly_baselines.sql -- optional, AWR baselines (writes)
