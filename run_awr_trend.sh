@@ -3,11 +3,16 @@
 # Convenience wrapper around awr_trend.sql.
 # Usage:
 #   ./run_awr_trend.sh <connect_string> [target_end] [win_hours] [weeks_back] \
-#                      [top_n] [inst_num] [step] [step_unit]
+#                      [top_n] [inst_num] [step] [step_unit] [template]
 #
 # step / step_unit set the cadence between comparison windows.  Defaults
 # step=1, step_unit=w reproduce the original "same hour-of-week, N prior
 # weeks" behaviour.  step_unit is one of: h (hours), d (days), w (weeks).
+#
+# template selects which set of metrics + wait events to display.
+# Defaults to 'comprehensive' (the full curated lists, identical to the
+# pre-template behaviour).  'simple' shows a small triage-friendly
+# subset.  See sql/lib/templates/<name>/ for the metric/wait lists.
 #
 # Examples:
 #   ./run_awr_trend.sh user/pw@svc
@@ -17,11 +22,13 @@
 #   ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h
 #   # Every other day for the past 7 days:
 #   ./run_awr_trend.sh user/pw@svc AUTO 1 7 10 0 2 d
+#   # Lean triage report for the prior hour:
+#   ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple
 #
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
-    sed -n '1,20p' "$0"
+    sed -n '1,26p' "$0"
     exit 1
 fi
 
@@ -33,6 +40,7 @@ TOP_N="${5:-10}"
 INST_NUM="${6:-0}"
 STEP="${7:-1}"
 STEP_UNIT="${8:-w}"
+TEMPLATE="${9:-comprehensive}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -48,6 +56,7 @@ DEFINE top_n      = ${TOP_N}
 DEFINE inst_num   = ${INST_NUM}
 DEFINE step       = ${STEP}
 DEFINE step_unit  = '${STEP_UNIT}'
+DEFINE template   = '${TEMPLATE}'
 @@awr_trend.sql
 EXIT
 EOF

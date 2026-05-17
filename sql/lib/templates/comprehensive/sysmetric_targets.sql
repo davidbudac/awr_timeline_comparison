@@ -1,13 +1,15 @@
 --
--- sql/lib/sysmetric_targets.sql
+-- sql/lib/templates/comprehensive/sysmetric_targets.sql
 --
 -- Body of a "metric_targets AS (...)" CTE: the curated list of
--- DBA_HIST_SYSMETRIC_SUMMARY metric_names tracked by the report,
--- each tagged with an is_additive flag.
+-- DBA_HIST_SYSMETRIC_SUMMARY metric_names tracked by the report
+-- under the COMPREHENSIVE template (full set, 23 metrics), each
+-- tagged with an is_additive flag.
 --
--- Used by section 03 (system-metrics pivot), section 07 (findings
--- z-score, METRIC domain), and section 08 (hero strip). Single source
--- of truth so all three consumers stay aligned.
+-- Used by section 03 (system-metrics pivot) and section 07
+-- (findings z-score, METRIC domain).  Section 08 (hero strip)
+-- references specific metric names by hand; if a template excludes
+-- one of those names the hero card falls back to "n/a".
 --
 -- is_additive semantics for cross-instance (RAC) aggregation:
 --   'Y' = cluster-wide value is the SUM across instances within a
@@ -23,13 +25,9 @@
 -- On single-instance, SUM and AVG over one row are identical, so this
 -- is a no-op for non-RAC databases.
 --
--- Usage (note path is from awr_trend.sql's directory):
---
---   WITH @@sql/lib/windows_cte.sql,
---        metric_targets AS (
---            @@sql/lib/sysmetric_targets.sql
---        ),
---        ...
+-- The driver resolves ~template_dir = sql/lib/templates/<template>
+-- once up front; consumers write the include as
+--   @@~template_dir/sysmetric_targets.sql
 --
             SELECT 'Host CPU Utilization (%)'                  AS metric_name, 'N' AS is_additive FROM dual UNION ALL
             SELECT 'Database CPU Time Ratio'                                 , 'N'                FROM dual UNION ALL

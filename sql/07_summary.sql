@@ -132,7 +132,7 @@ BEGIN
     ,
     -- LOAD domain: DBA_HIST_SYSSTAT cumulative counters, per-sec deltas.
     load_targets AS (
-        @@sql/lib/sysstat_load_targets.sql
+        @@~template_dir/sysstat_load_targets.sql
     ),
     load_pairs AS (
         SELECT w.week_offset, w.dur_sec, ss.stat_name, ss.instance_number,
@@ -166,7 +166,7 @@ BEGIN
     -- Per-snap cluster value: SUM across instances for additive metrics,
     -- AVG for ratios. See sql/lib/sysmetric_targets.sql for the rationale.
     metric_targets AS (
-        @@sql/lib/sysmetric_targets.sql
+        @@~template_dir/sysmetric_targets.sql
     ),
     metric_per_snap AS (
         SELECT w.week_offset, t.metric_name, sm.snap_id,
@@ -191,6 +191,11 @@ BEGIN
         GROUP BY week_offset, metric_name
     ),
     -- WAIT domain: DBA_HIST_SYSTEM_EVENT time-waited per wait_class, as rate.
+    -- wait_targets honors the template's wait_event_targets.sql; '*' sentinel
+    -- preserves the comprehensive-template firehose behavior byte-for-byte.
+    wait_targets AS (
+        @@~template_dir/wait_event_targets.sql
+    ),
     wait_pairs AS (
         SELECT w.week_offset, w.dur_sec,
                se.wait_class,
@@ -205,6 +210,8 @@ BEGIN
            AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
            AND se.instance_number = w.instance_number
            AND se.wait_class <> 'Idle'
+           AND ( EXISTS (SELECT 1 FROM wait_targets WHERE event_name = '*')
+                 OR se.event_name IN (SELECT event_name FROM wait_targets) )
     ),
     wait_bounds AS (
         SELECT week_offset, dur_sec, wait_class, event_name, instance_number,

@@ -18,3 +18,4 @@ DEFINE top_n      = 10
 DEFINE inst_num   = 0
 DEFINE step       = 1
 DEFINE step_unit  = 'w'
+DEFINE template   = 'comprehensive'

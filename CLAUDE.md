@@ -49,14 +49,14 @@ gracefully.
 ```
 awr_trend.sql                    -- driver: prologue, SPOOL, calls sections, epilogue
 sql/
-├── defaults.sql                 -- canonical DEFINEs for the 7 substitution vars
+├── defaults.sql                 -- canonical DEFINEs for the 8 substitution vars
 ├── _style.sql                   -- embedded CSS (emitted once from the driver)
 ├── 00_params.sql                -- <nav> + <header> card (no DML)
 ├── 01_windows.sql               -- aligned windows, snap_id pairs, instance-restart guard
-├── 02_load_profile.sql          -- SYSSTAT deltas (27 curated stats)
-├── 03_sysmetric.sql             -- SYSMETRIC_SUMMARY averages (23 curated metrics)
-├── 04_waits_fg.sql              -- foreground waits + wait-class rollup
-├── 05_waits_bg.sql              -- background waits (BG_EVENT_SUMMARY)
+├── 02_load_profile.sql          -- SYSSTAT deltas (curated stats, per template)
+├── 03_sysmetric.sql             -- SYSMETRIC_SUMMARY averages (curated metrics, per template)
+├── 04_waits_fg.sql              -- foreground waits + wait-class rollup (filtered per template)
+├── 05_waits_bg.sql              -- background waits (BG_EVENT_SUMMARY; filtered per template)
 ├── 06_top_sql.sql               -- Top-N SQL ranked 4 ways + bump chart
 ├── 07_summary.sql               -- z-score findings + heatmap (recomputed inline)
 ├── 08_overview.sql              -- hero strip: 6 headline-metric cards (recomputed inline)
@@ -64,11 +64,19 @@ sql/
 │                                   (reads dba_hist_active_sess_history directly)
 └── lib/                         -- SQL/PL/SQL fragments shared across sections via @@
     ├── windows_cte.sql          -- run_params → … → valid_windows CTE chain
-    ├── sysstat_load_targets.sql -- 27 SYSSTAT counter names (used by 02 + 07)
-    ├── sysmetric_targets.sql    -- 23 SYSMETRIC_SUMMARY metric names (used by 03 + 07)
     ├── nth_csv.plsql            -- INSTR-based PL/SQL CSV parser (preserves empty tokens)
     ├── js_sparkline.plsql       -- ~30-line inline-SVG sparkline renderer (CDN-free)
-    └── js_wait_colors.plsql     -- shared OEM-13c-aligned wait_class color palette
+    ├── js_wait_colors.plsql     -- shared OEM-13c-aligned wait_class color palette
+    └── templates/               -- per-template metric + wait-event target lists
+        ├── comprehensive/       -- default; full curated lists (27 SYSSTAT + 23 SYSMETRIC,
+        │   │                       and a '*' sentinel for waits = no event filter)
+        │   ├── sysstat_load_targets.sql
+        │   ├── sysmetric_targets.sql
+        │   └── wait_event_targets.sql
+        └── simple/              -- triage-friendly subset (9 SYSSTAT + 8 SYSMETRIC + ~10 waits)
+            ├── sysstat_load_targets.sql
+            ├── sysmetric_targets.sql
+            └── wait_event_targets.sql
 side/
 └── create_weekly_baselines.sql  -- optional weekly AWR baselines (writes; orthogonal)
 reports/                         -- generated HTML files
@@ -93,14 +101,49 @@ What used to be six near-identical inline copies of the same SQL/PL/SQL
 fragments now lives under `sql/lib/` and is `@@`-included from each
 section. The `windows` CTE chain (`run_params → offsets → raw_windows →
 snaps → begin_snap → end_snap → windows → valid_windows`) is in
-`sql/lib/windows_cte.sql`; the curated stat/metric lists are in
-`sql/lib/sysstat_load_targets.sql` and `sql/lib/sysmetric_targets.sql`;
-the `nth_csv` PL/SQL helper is in `sql/lib/nth_csv.plsql`; the inline
-SVG sparkline JS and the wait-class color palette are in `js_*.plsql`.
-A view or helper package would violate the no-DDL rule, so include-files
-are the chosen mechanism. To change the windows logic or the curated
-metric lists, edit one file under `sql/lib/` and every consumer picks
-the change up.
+`sql/lib/windows_cte.sql`; the curated stat/metric/wait lists are
+per-template under `sql/lib/templates/<template>/` (see "Templates"
+below); the `nth_csv` PL/SQL helper is in `sql/lib/nth_csv.plsql`;
+the inline SVG sparkline JS and the wait-class color palette are in
+`js_*.plsql`. A view or helper package would violate the no-DDL rule,
+so include-files are the chosen mechanism. To change the windows
+logic, edit one file under `sql/lib/` and every consumer picks the
+change up.
+
+### Templates: per-run metric + wait-event subsetting
+Sections 02/03/07 (metrics) and 04/05/07 (waits) read their target
+lists from `sql/lib/templates/<template>/`:
+- `sysstat_load_targets.sql`  — SYSSTAT names for the Load Profile
+- `sysmetric_targets.sql`     — SYSMETRIC_SUMMARY names + is_additive flag
+- `wait_event_targets.sql`    — DBA_HIST_(SYSTEM_EVENT|BG_EVENT_SUMMARY)
+                                event_names; a single `'*'` row is a
+                                sentinel meaning "no filter".
+
+The driver resolves `~template` (8th DEFINE, default `'comprehensive'`)
+into `~template_dir = sql/lib/templates/<template>` once up front, so
+every consumer writes the include as
+`@@~template_dir/<file>.sql`. Unknown template names abort the run via
+the `TO_NUMBER('x')` ORA-01722 trick (same pattern as `step_unit`
+validation). To add a new template, drop a directory with all three
+files into `sql/lib/templates/` and extend the whitelist `CASE` in the
+driver. Two templates ship today:
+- `comprehensive` (default) — the full curated lists used pre-templates.
+  The wait-event file is the `'*'` sentinel so the firehose-then-top-N
+  behavior is byte-identical to the pre-template report.
+- `simple` — a triage-friendly subset (~9 SYSSTAT, ~8 SYSMETRIC, ~10
+  wait events). Deliberately includes the SYSSTAT/SYSMETRIC names that
+  section 08's hero strip hard-references, so the hero cards keep
+  rendering instead of falling to `n/a`.
+
+Wait-event filter idiom (in every consumer that joins
+`dba_hist_system_event` or `dba_hist_bg_event_summary`):
+```sql
+AND ( EXISTS (SELECT 1 FROM wait_targets WHERE event_name = '*')
+      OR se.event_name IN (SELECT event_name FROM wait_targets) )
+```
+This keeps the `comprehensive`-template plan byte-identical (the
+`EXISTS` short-circuits the per-row IN-list) while still applying a
+proper allowlist for curated templates.
 
 **Nested `@@` path gotcha**: SQL\*Plus resolves `@@` paths in nested
 include files relative to the **outermost caller's** directory, not the
@@ -132,26 +175,27 @@ will leak into the HTML.** All user-visible strings (SQL text, event
 names, metric names) must be wrapped in `DBMS_XMLGEN.CONVERT(...)`.
 
 ### Substitution variables
-Seven user-facing vars: `target_end`, `win_hours`, `weeks_back`, `top_n`,
-`inst_num`, `step`, `step_unit`. `inst_num = 0` means aggregate across
-RAC instances; any other value filters to that instance.
-`target_end = 'AUTO'` means "prior full hour relative to SYSDATE"
-(resolved in the driver into `target_end_resolved`). `step` + `step_unit`
-(default `1` + `'w'`) control the cadence between adjacent comparison
-windows; `step_unit` is one of `'h'` (hours), `'d'` (days), `'w'`
-(weeks). The original "same hour-of-week, N prior weeks" behaviour is
-the default (`step=1, step_unit='w'`). Setting `step=1, step_unit='h'`
-compares the last `weeks_back+1` consecutive 1-hour windows in a
-straight line back from `target_end`. The driver resolves
-`step_hours = step * (1|24|168)` plus `period_unit_short` /
-`period_unit_long` / `period_unit_title` / `period_step_label` /
-`period_axis_fmt` once up front; every section uses
-`~step_hours/24` (NOT the literal `7`) as the cadence multiplier.
+Eight user-facing vars: `target_end`, `win_hours`, `weeks_back`, `top_n`,
+`inst_num`, `step`, `step_unit`, `template`. `inst_num = 0` means
+aggregate across RAC instances; any other value filters to that
+instance. `target_end = 'AUTO'` means "prior full hour relative to
+SYSDATE" (resolved in the driver into `target_end_resolved`).
+`step` + `step_unit` (default `1` + `'w'`) control the cadence between
+adjacent comparison windows; `step_unit` is one of `'h'` (hours), `'d'`
+(days), `'w'` (weeks). The original "same hour-of-week, N prior weeks"
+behaviour is the default (`step=1, step_unit='w'`). Setting `step=1,
+step_unit='h'` compares the last `weeks_back+1` consecutive 1-hour
+windows in a straight line back from `target_end`. `template` selects
+which subset of metrics + wait events to display; see "Templates"
+above. The driver resolves `step_hours = step * (1|24|168)` plus
+`period_unit_short` / `period_unit_long` / `period_unit_title` /
+`period_step_label` / `period_axis_fmt` once up front; every section
+uses `~step_hours/24` (NOT the literal `7`) as the cadence multiplier.
 The driver also resolves `run_id` (17-digit timestamp from
 `SYSTIMESTAMP`), `dbid`, `db_name`, `host_name`, `db_version`,
-`caller_user`, `generated_at_s`, `dow_name`, and `report_path` up
-front; every section references them as `~name`. No section ever
-re-resolves these values.
+`caller_user`, `generated_at_s`, `dow_name`, `report_path`,
+`template_name`, and `template_dir` up front; every section references
+them as `~name`. No section ever re-resolves these values.
 
 **Tilde gotcha**: every numbered section file issues `SET DEFINE '~'` so
 it can use `~run_id` for parameter substitution. That makes `~` the
@@ -224,14 +268,14 @@ Ratios, Wait Time Ratio, Sync SBR Latency, SQL Service Response Time)
 are **averages** — `AVG(average)`. Doing a flat `AVG` across instances
 for additive metrics silently undercounts cluster load.
 
-`sql/lib/sysmetric_targets.sql` tags each metric with an `is_additive`
-flag ('Y'/'N'). Sections 03 and 07 read the flag from the targets file;
-section 08's hand-maintained `cards` CTE carries an inline `is_add`
-column for the same purpose. The aggregation pattern is two-step in
-every consumer: `snap_value = (SUM|AVG)(sm.average) GROUP BY week,
-metric, snap_id`, then `metric_value = AVG(snap_value) GROUP BY week,
-metric`. On single-instance, SUM and AVG over one row are identical, so
-this is a no-op.
+Each template's `sysmetric_targets.sql` tags every metric with an
+`is_additive` flag ('Y'/'N'). Sections 03 and 07 read the flag from
+the targets file; section 08's hand-maintained `cards` CTE carries an
+inline `is_add` column for the same purpose. The aggregation pattern
+is two-step in every consumer: `snap_value = (SUM|AVG)(sm.average)
+GROUP BY week, metric, snap_id`, then `metric_value = AVG(snap_value)
+GROUP BY week, metric`. On single-instance, SUM and AVG over one row
+are identical, so this is a no-op.
 
 ### Severity classes (must stay aligned with CSS in `_style.sql`)
 `CRITICAL` → `crit`, `WARN` → `warn`, `OK` → `ok`,
@@ -242,12 +286,15 @@ If you add a new severity, update both `07_summary.sql`, `08_overview.sql`
 ### Findings are recomputed, not shared
 Section 07 (findings) and section 08 (overview hero) each recompute
 their own z-scores from the AWR views. They do not share data. The
-LOAD/METRIC target lists are now single-sourced from
-`sql/lib/sysstat_load_targets.sql` and `sql/lib/sysmetric_targets.sql`
-and `@@`-included by sections 02/03/07, so adding or removing a stat
-updates every consumer in lock-step. Section 08's 6 hero cards
-reference specific LOAD/SYSMETRIC names by hand; if you remove one of
-those from a target list the hero badge will fall back to `n/a`.
+LOAD/METRIC/WAIT target lists are now single-sourced per template
+from `sql/lib/templates/<template>/{sysstat_load,sysmetric,wait_event}_targets.sql`
+and `@@`-included by sections 02/03 (LOAD/METRIC), 04/05 (waits) and
+07 (all three), so adding or removing a stat from a template updates
+every consumer for that template in lock-step. Section 08's 6 hero
+cards reference specific LOAD/SYSMETRIC names by hand; if a template's
+target list omits one of those, the hero badge falls back to `n/a` —
+the `simple` template deliberately keeps the 6 names included so this
+doesn't trigger.
 
 Inside section 07 itself, the unified LOAD/METRIC/WAIT recompute is
 `BULK COLLECT`-ed once into a PL/SQL record collection tagged with both
@@ -326,6 +373,17 @@ signal.
   directory, so the only correct form is `@@sql/lib/<file>` from any
   section. The "Shared CTE bodies and helpers live under `sql/lib/`"
   section above explains why.
+- Don't hardcode `@@sql/lib/sysstat_load_targets.sql`,
+  `@@sql/lib/sysmetric_targets.sql`, or any flat path under `sql/lib/`
+  for the curated metric / wait-event lists. Those files moved under
+  `sql/lib/templates/<template>/` and every consumer must use
+  `@@~template_dir/<file>.sql` so the active template's lists are
+  picked up. See "Templates" in Core conventions.
+- Don't change the `'*'` sentinel idiom for wait_event_targets without
+  updating every consumer (sections 04/05/07) and the comprehensive
+  template's file in lockstep. The sentinel is what keeps
+  comprehensive-template output byte-identical to the pre-template
+  report.
 - Don't concat user strings into HTML without `DBMS_XMLGEN.CONVERT`.
 - Don't introduce additional external JS/CSS beyond the single ECharts
   CDN tag that's already in `awr_trend.sql`. The report is still one
