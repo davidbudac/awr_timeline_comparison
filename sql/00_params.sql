@@ -29,10 +29,12 @@
 --   ~win_label            compact width of one window (e.g. '15m', '1h')
 --   ~step_label           compact cadence between windows (e.g. '15m', '1w')
 --   ~report_path          output filename (relative)
+--   ~template_name        active template name ('comprehensive', 'simple')
+--   ~template_dir         path under sql/lib/templates/ for the active template
 --
 -- Run parameters (from defaults.sql or caller):
 --   ~target_end, ~win_hours, ~weeks_back, ~top_n, ~inst_num,
---   ~step, ~step_unit
+--   ~step, ~step_unit, ~template
 --
 
 SET DEFINE '~'
@@ -85,7 +87,7 @@ BEGIN
     @@sql/lib/windows_cte.sql
     ,
     load_targets AS (
-        @@sql/lib/sysstat_load_targets.sql
+        @@~template_dir/sysstat_load_targets.sql
     ),
     load_pairs AS (
         SELECT w.week_offset, w.dur_sec, ss.stat_name, ss.instance_number,
@@ -116,7 +118,7 @@ BEGIN
         GROUP BY week_offset, dur_sec, stat_name
     ),
     metric_targets AS (
-        @@sql/lib/sysmetric_targets.sql
+        @@~template_dir/sysmetric_targets.sql
     ),
     metric_per_snap AS (
         SELECT w.week_offset, t.metric_name, sm.snap_id,
@@ -500,7 +502,11 @@ BEGIN
         || ' <span class="strip-meta">'
         || DBMS_XMLGEN.CONVERT('~dow_name')
         || ' &middot; ~win_label each &middot; every ~step_label'
-        || ' &middot; DB time (s) over full span</span>'
+        || ' &middot; DB time (s) over full span'
+        || CASE WHEN '~template_name' = 'comprehensive' THEN ''
+                ELSE ' &middot; template: <code>~template_name</code>'
+           END
+        || '</span>'
         || '</div>');
     DBMS_OUTPUT.PUT_LINE('    <div class="windows-chart" id="masthead-timeline"></div>');
 

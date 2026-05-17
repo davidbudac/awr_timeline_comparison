@@ -60,6 +60,9 @@ BEGIN
         WITH
         @@sql/lib/windows_cte.sql
         ,
+        wait_targets AS (
+            @@~template_dir/wait_event_targets.sql
+        ),
         pairs AS (
             SELECT w.week_offset, bg.event_name, bg.wait_class,
                    bg.snap_id, bg.time_waited_micro,
@@ -70,6 +73,8 @@ BEGIN
                AND bg.snap_id IN (w.begin_snap_id, w.end_snap_id)
                AND bg.instance_number = w.instance_number
                AND NVL(bg.wait_class, 'Other') <> 'Idle'
+               AND ( EXISTS (SELECT 1 FROM wait_targets WHERE event_name = '*')
+                     OR bg.event_name IN (SELECT event_name FROM wait_targets) )
         ),
         bounds AS (
             SELECT week_offset, event_name,
@@ -110,6 +115,9 @@ BEGIN
         WITH
         @@sql/lib/windows_cte.sql
         ,
+        wait_targets AS (
+            @@~template_dir/wait_event_targets.sql
+        ),
         pairs AS (
             SELECT w.week_offset, bg.event_name, NVL(bg.wait_class, 'Other') AS wait_class,
                    bg.snap_id, bg.time_waited_micro,
@@ -120,6 +128,8 @@ BEGIN
                AND bg.snap_id IN (w.begin_snap_id, w.end_snap_id)
                AND bg.instance_number = w.instance_number
                AND NVL(bg.wait_class, 'Other') <> 'Idle'
+               AND ( EXISTS (SELECT 1 FROM wait_targets WHERE event_name = '*')
+                     OR bg.event_name IN (SELECT event_name FROM wait_targets) )
         ),
         bounds AS (
             SELECT week_offset, event_name, wait_class,
@@ -200,6 +210,9 @@ BEGIN
     WITH
     @@sql/lib/windows_cte.sql
     ,
+    wait_targets AS (
+        @@~template_dir/wait_event_targets.sql
+    ),
     pairs AS (
         SELECT w.week_offset, bg.event_name, NVL(bg.wait_class, 'Other') AS wait_class,
                bg.snap_id, bg.total_waits, bg.time_waited_micro,
@@ -210,6 +223,8 @@ BEGIN
            AND bg.snap_id IN (w.begin_snap_id, w.end_snap_id)
            AND bg.instance_number = w.instance_number
            AND NVL(bg.wait_class, 'Other') <> 'Idle'
+           AND ( EXISTS (SELECT 1 FROM wait_targets WHERE event_name = '*')
+                 OR bg.event_name IN (SELECT event_name FROM wait_targets) )
     ),
     bounds AS (
         SELECT week_offset, event_name, wait_class,

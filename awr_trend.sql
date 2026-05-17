@@ -31,6 +31,10 @@
 --   inst_num     0 = aggregate across RAC; otherwise the instance number
 --   step         1     -- cadence count between comparison windows
 --   step_unit    'w'   -- 'h' | 'd' | 'w'  (hours, days, weeks)
+--   template     'comprehensive' (default, full lists) or 'simple'
+--                  (small triage-friendly subset).  Selects which
+--                  directory under sql/lib/templates/<name>/ supplies
+--                  the sysstat / sysmetric / wait-event target lists.
 --
 -- The cadence between adjacent comparison windows is step*step_unit.
 -- Default step=1, step_unit='w' reproduces the original "same hour-of-week,
@@ -91,6 +95,9 @@ WHENEVER OSERROR  EXIT FAILURE
 --   period_axis_fmt     TO_CHAR fmt mask for chart x-axis labels
 --                       ('Mon DD' for d/w, 'Mon DD HH24:MI' for h)
 --   report_path         reports/awr_trend_<dbid>_<YYYYMMDDHH24MI>_run<run_id>.html
+--   template_name       lower-cased + trimmed ~template (used in headers)
+--   template_dir        sql/lib/templates/<template_name> (path used by
+--                       every section's @@~template_dir/<file>.sql include)
 -- --------------------------------------------------------------------
 COLUMN run_id              NEW_VALUE run_id              NOPRINT
 COLUMN dbid                NEW_VALUE dbid                NOPRINT
@@ -108,6 +115,8 @@ COLUMN period_unit_title   NEW_VALUE period_unit_title   NOPRINT
 COLUMN period_step_label   NEW_VALUE period_step_label   NOPRINT
 COLUMN period_axis_fmt     NEW_VALUE period_axis_fmt     NOPRINT
 COLUMN report_path         NEW_VALUE report_path         NOPRINT
+COLUMN template_name       NEW_VALUE template_name       NOPRINT
+COLUMN template_dir        NEW_VALUE template_dir        NOPRINT
 -- Derived labels for compact, unit-aware UI strings. Computed once after
 -- step_hours is resolved so every section can reference identical text:
 --   win_label       compact width of one comparison window     ("15m" / "1h")
@@ -165,7 +174,9 @@ SELECT
     'reports/awr_trend_' || d.dbid || '_'
         || TO_CHAR(SYSDATE, 'YYYYMMDDHH24MI')
         || '_run' || t.run_id
-        || '.html'                                                 AS report_path
+        || '.html'                                                 AS report_path,
+    tpl.template_name                                              AS template_name,
+    tpl.template_dir                                               AS template_dir
 FROM v$database d
 CROSS JOIN v$instance i
 CROSS JOIN (
@@ -191,7 +202,24 @@ CROSS JOIN (
             ELSE TO_NUMBER('x')   -- force ORA-01722 on invalid step_unit
         END AS step_hours
     FROM dual
-) p;
+) p
+CROSS JOIN (
+    -- Validate ~template against the supported whitelist; an unknown
+    -- name forces ORA-01722 via TO_NUMBER('x'), aborting the run before
+    -- any HTML is spooled.  Same trick used for step_unit above.  To
+    -- add a new template, drop a directory under sql/lib/templates/ and
+    -- extend the CASE.
+    SELECT
+        LOWER(TRIM('~template')) AS template_name,
+        'sql/lib/templates/' ||
+            CASE LOWER(TRIM('~template'))
+                WHEN 'comprehensive' THEN 'comprehensive'
+                WHEN 'simple'        THEN 'simple'
+                ELSE TO_CHAR(TO_NUMBER('x'))   -- force ORA-01722 on unknown template
+            END
+            AS template_dir
+    FROM dual
+) tpl;
 
 -- -------------------------------------------------------------------
 -- Derived labels (win_label, step_label, offset_labels, bucket_hours)

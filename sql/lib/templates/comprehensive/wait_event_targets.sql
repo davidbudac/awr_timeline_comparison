@@ -1,0 +1,23 @@
+--
+-- sql/lib/templates/comprehensive/wait_event_targets.sql
+--
+-- Body of a "wait_targets AS (...)" CTE: the curated list of
+-- DBA_HIST_SYSTEM_EVENT / DBA_HIST_BG_EVENT_SUMMARY event_names
+-- that the report should consider before applying top-N ranking.
+--
+-- COMPREHENSIVE template = no event_name filter.  We emit a single
+-- sentinel row ('*'); consumers honor it with
+--
+--     ( EXISTS (SELECT 1 FROM wait_targets WHERE event_name = '*')
+--       OR se.event_name IN (SELECT event_name FROM wait_targets) )
+--
+-- so the resulting query plan is byte-identical to the pre-template
+-- "firehose, top-N by time_waited" behavior.  Used by sections 04
+-- (foreground waits), 05 (background waits), and the WAIT domain of
+-- section 07 (findings).
+--
+-- The driver resolves ~template_dir = sql/lib/templates/<template>
+-- once up front; consumers write the include as
+--   @@~template_dir/wait_event_targets.sql
+--
+            SELECT '*' AS event_name FROM dual

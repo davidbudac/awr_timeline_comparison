@@ -1,20 +1,18 @@
 --
--- sql/lib/sysstat_load_targets.sql
+-- sql/lib/templates/comprehensive/sysstat_load_targets.sql
 --
 -- Body of a "load_targets AS (...)" CTE: the curated list of
 -- DBA_HIST_SYSSTAT cumulative-counter stat_names that make up the
--- AWR Load Profile.  Used by section 02 (load profile pivot) and
--- section 07 (findings z-score, LOAD domain).  Keeping a single
--- source of truth here means adding/removing a stat updates both
--- consumers in lock-step.
+-- AWR Load Profile under the COMPREHENSIVE template (full set,
+-- 27 stats).  Used by section 02 (load profile pivot) and section
+-- 07 (findings z-score, LOAD domain).
 --
--- Usage (note path is from awr_trend.sql's directory):
---
---   WITH @@sql/lib/windows_cte.sql,
---        load_targets AS (
---            @@sql/lib/sysstat_load_targets.sql
---        ),
---        ...
+-- This is one of three target files per template (sysstat /
+-- sysmetric / wait_event).  The driver resolves
+--   ~template_dir = sql/lib/templates/<template>
+-- once up front, so every consumer writes the include as
+--   @@~template_dir/sysstat_load_targets.sql
+-- and a different template's directory swaps in transparently.
 --
             SELECT 'redo size'                              stat_name FROM dual UNION ALL
             SELECT 'redo size for lost write detection'               FROM dual UNION ALL

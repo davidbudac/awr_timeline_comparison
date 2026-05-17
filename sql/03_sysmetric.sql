@@ -42,7 +42,7 @@ BEGIN
         @@sql/lib/windows_cte.sql
         ,
         targets AS (
-            @@sql/lib/sysmetric_targets.sql
+            @@~template_dir/sysmetric_targets.sql
         ),
         -- Per-snap cluster value: SUM across instances for additive
         -- metrics (rates/counters), AVG across instances for ratios

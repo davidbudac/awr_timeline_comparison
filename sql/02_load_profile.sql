@@ -43,7 +43,7 @@ BEGIN
         @@sql/lib/windows_cte.sql
         ,
         targets AS (
-            @@sql/lib/sysstat_load_targets.sql
+            @@~template_dir/sysstat_load_targets.sql
         ),
         pairs AS (
             SELECT

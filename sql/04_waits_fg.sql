@@ -87,6 +87,9 @@ BEGIN
         WITH
         @@sql/lib/windows_cte.sql
         ,
+        wait_targets AS (
+            @@~template_dir/wait_event_targets.sql
+        ),
         pairs AS (
             SELECT w.week_offset, se.wait_class, se.snap_id, se.instance_number,
                    se.total_waits, se.time_waited_micro,
@@ -97,6 +100,8 @@ BEGIN
                AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
                AND se.instance_number = w.instance_number
                AND se.wait_class <> 'Idle'
+               AND ( EXISTS (SELECT 1 FROM wait_targets WHERE event_name = '*')
+                     OR se.event_name IN (SELECT event_name FROM wait_targets) )
         ),
         bounds AS (
             SELECT week_offset, instance_number, wait_class,
@@ -173,6 +178,9 @@ BEGIN
     WITH
     @@sql/lib/windows_cte.sql
     ,
+    wait_targets AS (
+        @@~template_dir/wait_event_targets.sql
+    ),
     pairs AS (
         SELECT w.week_offset, se.event_name, se.wait_class,
                se.snap_id, se.instance_number,
@@ -184,6 +192,8 @@ BEGIN
            AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
            AND se.instance_number = w.instance_number
            AND se.wait_class <> 'Idle'
+           AND ( EXISTS (SELECT 1 FROM wait_targets WHERE event_name = '*')
+                 OR se.event_name IN (SELECT event_name FROM wait_targets) )
     ),
     bounds AS (
         SELECT week_offset, instance_number, event_name, wait_class,
