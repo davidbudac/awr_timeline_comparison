@@ -67,10 +67,18 @@ DECLARE
     -- overview right under the headline.
     v_min_snap     NUMBER;
     v_max_snap     NUMBER;
-    v_buckets      PLS_INTEGER := 0;
+    v_buckets       PLS_INTEGER := 0;
+    v_total_buckets PLS_INTEGER := 0;
+    -- VARCHAR2 in PL/SQL hard-caps at 32767. On a busy DB with many AWR
+    -- snapshots in the compared span (e.g. weeks_back=4, 15-min snaps),
+    -- naive concat into v_times_json/v_vals_json overflows with ORA-06502.
+    -- Cap defensively below 32767 so the closing ']' and the outer
+    -- DBMS_OUTPUT concat in 'times:'||v_times_json||',' can never trip.
+    c_json_cap     CONSTANT PLS_INTEGER := 32500;
     v_times_json   VARCHAR2(32767);
     v_vals_json    VARCHAR2(32767);
     v_windows_json VARCHAR2(4000);
+    v_new_entry    VARCHAR2(64);
     TYPE t_idx_tab IS TABLE OF PLS_INTEGER INDEX BY VARCHAR2(40);
     v_snap_idx     t_idx_tab;
     TYPE t_num_arr IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
@@ -315,15 +323,25 @@ BEGIN
             GROUP BY snap_id
             ORDER BY MIN(end_interval_time)
         ) LOOP
-            v_buckets := v_buckets + 1;
-            v_snap_idx(TO_CHAR(s.snap_id)) := v_buckets;
-            v_vals(v_buckets) := 0;
+            v_total_buckets := v_total_buckets + 1;
             IF v_times_json IS NULL THEN
-                v_times_json := '["'
+                v_new_entry := '["'
                     || TO_CHAR(s.end_ts, 'YYYY-MM-DD HH24:MI') || '"';
             ELSE
-                v_times_json := v_times_json || ',"'
+                v_new_entry := ',"'
                     || TO_CHAR(s.end_ts, 'YYYY-MM-DD HH24:MI') || '"';
+            END IF;
+            -- Cap append to avoid VARCHAR2(32767) overflow on long /
+            -- dense spans. Once we stop adding to v_times_json, we
+            -- also stop growing v_buckets so v_vals_json (built from
+            -- 1..v_buckets in pass 2) stays length-aligned with the
+            -- xAxis. pass 2's snap_idx lookup naturally drops the
+            -- truncated tail.
+            IF NVL(LENGTHB(v_times_json), 0) + LENGTHB(v_new_entry) <= c_json_cap THEN
+                v_times_json := v_times_json || v_new_entry;
+                v_buckets := v_buckets + 1;
+                v_snap_idx(TO_CHAR(s.snap_id)) := v_buckets;
+                v_vals(v_buckets) := 0;
             END IF;
         END LOOP;
 
@@ -387,17 +405,22 @@ BEGIN
         END LOOP;
 
         -- Materialize v_vals_json walking buckets 1..N (zero-fills the
-        -- snaps that had no DB time so the line is continuous).
+        -- snaps that had no DB time so the line is continuous). Same
+        -- length-cap as v_times_json above; bounded by construction
+        -- (v_buckets is already capped) but guard defensively so a
+        -- future tweak to c_json_cap can't reintroduce ORA-06502.
         FOR b IN 1 .. v_buckets LOOP
             IF v_vals_json IS NULL THEN
-                v_vals_json := '['
+                v_new_entry := '['
                     || TO_CHAR(v_vals(b), 'FM99999990D000',
                                'NLS_NUMERIC_CHARACTERS=''.,''');
             ELSE
-                v_vals_json := v_vals_json || ','
+                v_new_entry := ','
                     || TO_CHAR(v_vals(b), 'FM99999990D000',
                                'NLS_NUMERIC_CHARACTERS=''.,''');
             END IF;
+            EXIT WHEN NVL(LENGTHB(v_vals_json), 0) + LENGTHB(v_new_entry) > c_json_cap;
+            v_vals_json := v_vals_json || v_new_entry;
         END LOOP;
     END IF;
 
@@ -506,6 +529,11 @@ BEGIN
         || CASE WHEN '~template_name' = 'comprehensive' THEN ''
                 ELSE ' &middot; template: <code>~template_name</code>'
            END
+        || CASE WHEN v_total_buckets > v_buckets
+                THEN ' &middot; <span class="badge warn">showing first '
+                     || v_buckets || ' of ' || v_total_buckets
+                     || ' snapshots</span>'
+                ELSE '' END
         || '</span>'
         || '</div>');
     DBMS_OUTPUT.PUT_LINE('    <div class="windows-chart" id="masthead-timeline"></div>');
