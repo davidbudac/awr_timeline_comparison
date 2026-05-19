@@ -14,6 +14,9 @@
 SET DEFINE '~'
 SET SERVEROUTPUT ON SIZE UNLIMITED
 
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 01_windows BEGIN -->'); END;
+/
+
 DECLARE
     v_weeks_back NUMBER := ~weeks_back;
     v_slots      NUMBER;
@@ -140,4 +143,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('</tbody></table>');
     DBMS_OUTPUT.PUT_LINE('</section>');
 END;
+/
+
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 01_windows END -->'); END;
 /

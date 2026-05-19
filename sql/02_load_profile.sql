@@ -11,6 +11,9 @@
 SET DEFINE '~'
 SET SERVEROUTPUT ON SIZE UNLIMITED
 
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 02_load_profile BEGIN -->'); END;
+/
+
 DECLARE
     v_weeks_back NUMBER := ~weeks_back;
     v_header     VARCHAR2(4000);
@@ -182,4 +185,7 @@ BEGIN
 
     DBMS_OUTPUT.PUT_LINE('</tbody></table></section>');
 END;
+/
+
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 02_load_profile END -->'); END;
 /

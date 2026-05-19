@@ -17,13 +17,21 @@
 SET DEFINE '~'
 SET SERVEROUTPUT ON SIZE UNLIMITED
 
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 10_db_time_summary BEGIN -->'); END;
+/
+
 DECLARE
     v_min_snap   NUMBER;
     v_max_snap   NUMBER;
     v_buckets    PLS_INTEGER := 0;
-    v_times_json   VARCHAR2(32767);
-    v_class_vals   VARCHAR2(32767);
+    -- v_times_json + v_class_vals are CLOBs so a dense AWR span with
+    -- thousands of snap pairs (e.g. weeks_back=4 at 15-min cadence)
+    -- cannot overflow PL/SQL's 32767-byte VARCHAR2 limit.  v_windows_json
+    -- stays VARCHAR2 (bounded by weeks_back+1).
+    v_times_json   CLOB;
+    v_class_vals   CLOB;
     v_windows_json VARCHAR2(4000);
+    v_buf          VARCHAR2(64);
     v_palette    VARCHAR2(400) :=
         '["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1",' ||
         '"#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"]';
@@ -42,7 +50,10 @@ DECLARE
 
     v_ck VARCHAR2(80);
     v_wc VARCHAR2(64);
+    @@sql/lib/put_clob_chunked.plsql
 BEGIN
+    DBMS_LOB.CREATETEMPORARY(v_times_json, TRUE);
+    DBMS_LOB.CREATETEMPORARY(v_class_vals, TRUE);
     --
     -- Resolve the snap range from the inline windows CTE: earliest valid
     -- begin_snap through latest valid end_snap. Identical CTE shape to
@@ -70,6 +81,8 @@ BEGIN
     IF v_min_snap IS NULL OR v_max_snap IS NULL THEN
         DBMS_OUTPUT.PUT_LINE('<p style="color:var(--muted)">No valid comparison '
             || 'windows resolved &mdash; cannot render the timeline.</p></section>');
+        DBMS_LOB.FREETEMPORARY(v_times_json);
+        DBMS_LOB.FREETEMPORARY(v_class_vals);
         RETURN;
     END IF;
 
@@ -138,19 +151,24 @@ BEGIN
     ) LOOP
         v_buckets := v_buckets + 1;
         v_snap_idx(TO_CHAR(s.snap_id)) := v_buckets;
-
-        IF v_times_json IS NULL THEN
-            v_times_json := '["' || TO_CHAR(s.end_ts, 'YYYY-MM-DD HH24:MI') || '"';
+        IF v_buckets = 1 THEN
+            v_buf := '["' || TO_CHAR(s.end_ts, 'YYYY-MM-DD HH24:MI') || '"';
         ELSE
-            v_times_json := v_times_json || ',"'
-                || TO_CHAR(s.end_ts, 'YYYY-MM-DD HH24:MI') || '"';
+            v_buf := ',"' || TO_CHAR(s.end_ts, 'YYYY-MM-DD HH24:MI') || '"';
         END IF;
+        DBMS_LOB.WRITEAPPEND(v_times_json, LENGTH(v_buf), v_buf);
     END LOOP;
-    v_times_json := NVL(v_times_json, '[') || ']';
+    IF v_buckets = 0 THEN
+        DBMS_LOB.WRITEAPPEND(v_times_json, 2, '[]');
+    ELSE
+        DBMS_LOB.WRITEAPPEND(v_times_json, 1, ']');
+    END IF;
 
     IF v_buckets = 0 THEN
         DBMS_OUTPUT.PUT_LINE('<p style="color:var(--muted)">'
             || 'No snap pairs available in the resolved span.</p></section>');
+        DBMS_LOB.FREETEMPORARY(v_times_json);
+        DBMS_LOB.FREETEMPORARY(v_class_vals);
         RETURN;
     END IF;
 
@@ -235,7 +253,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<script>');
     DBMS_OUTPUT.PUT_LINE('(function(){');
     DBMS_OUTPUT.PUT_LINE('AWR_DATA.dbTimeSummary = {');
-    DBMS_OUTPUT.PUT_LINE('times:' || v_times_json || ',');
+    -- v_times_json is a CLOB that may exceed 32767 bytes; emit chunked.
+    DBMS_OUTPUT.PUT_LINE('times:');
+    put_clob_chunked(v_times_json);
+    DBMS_OUTPUT.PUT_LINE(',');
     DBMS_OUTPUT.PUT_LINE('windows:' || NVL(v_windows_json, '[]') || ',');
     DBMS_OUTPUT.PUT_LINE('classes:[');
 
@@ -269,7 +290,9 @@ BEGIN
         v_first := TRUE;
         FOR i IN 1 .. v_list.COUNT LOOP
             v_wc := v_list(i).k;
-            v_class_vals := NULL;
+            -- Reuse the same CLOB across iterations: truncate to 0 then
+            -- WRITEAPPEND. Avoids reallocating a temp LOB per class.
+            DBMS_LOB.TRIM(v_class_vals, 0);
             FOR b IN 1 .. v_buckets LOOP
                 v_ck := TO_CHAR(b) || '|' || v_wc;
                 IF v_cells.EXISTS(v_ck) THEN
@@ -277,20 +300,25 @@ BEGIN
                 ELSE
                     v_n := 0;
                 END IF;
-                IF v_class_vals IS NULL THEN
-                    v_class_vals := TO_CHAR(v_n, 'FM99999990D000',
-                                            'NLS_NUMERIC_CHARACTERS=''.,''');
+                IF b = 1 THEN
+                    v_buf := TO_CHAR(v_n, 'FM99999990D000',
+                                     'NLS_NUMERIC_CHARACTERS=''.,''');
                 ELSE
-                    v_class_vals := v_class_vals || ','
-                        || TO_CHAR(v_n, 'FM99999990D000',
-                                   'NLS_NUMERIC_CHARACTERS=''.,''');
+                    v_buf := ',' || TO_CHAR(v_n, 'FM99999990D000',
+                                            'NLS_NUMERIC_CHARACTERS=''.,''');
                 END IF;
+                DBMS_LOB.WRITEAPPEND(v_class_vals, LENGTH(v_buf), v_buf);
             END LOOP;
 
             IF v_first THEN v_first := FALSE;
             ELSE DBMS_OUTPUT.PUT_LINE(','); END IF;
+            -- Emit '{"name":"...","vals":[' prefix, then the CLOB body
+            -- chunked, then ']}'.  Newlines between chunks are valid JS
+            -- whitespace inside the array literal.
             DBMS_OUTPUT.PUT_LINE('{"name":"' || REPLACE(v_wc, '"', '\"')
-                || '","vals":[' || v_class_vals || ']}');
+                || '","vals":[');
+            put_clob_chunked(v_class_vals);
+            DBMS_OUTPUT.PUT_LINE(']}');
         END LOOP;
     END;
 
@@ -332,5 +360,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('</script>');
 
     DBMS_OUTPUT.PUT_LINE('</section>');
+
+    DBMS_LOB.FREETEMPORARY(v_times_json);
+    DBMS_LOB.FREETEMPORARY(v_class_vals);
 END;
+/
+
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 10_db_time_summary END -->'); END;
 /

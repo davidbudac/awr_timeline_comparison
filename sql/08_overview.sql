@@ -14,6 +14,9 @@
 SET DEFINE '~'
 SET SERVEROUTPUT ON SIZE UNLIMITED
 
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 08_overview BEGIN -->'); END;
+/
+
 DECLARE
     v_weeks_json  VARCHAR2(4000);
     v_cards_json  CLOB;
@@ -311,4 +314,7 @@ BEGIN
 
     DBMS_OUTPUT.PUT_LINE('</section>');
 END;
+/
+
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 08_overview END -->'); END;
 /

@@ -40,6 +40,12 @@
 SET DEFINE '~'
 SET SERVEROUTPUT ON SIZE UNLIMITED
 
+-- Section boundary marker (HTML comment, invisible in browser).  Lets a
+-- failed run be localized: grep the spool for the last "BEGIN" marker
+-- without a matching "END" -- that section is the one that aborted.
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 00_params BEGIN -->'); END;
+/
+
 DECLARE
     TYPE mover_rec IS RECORD (
         metric_domain VARCHAR2(16),
@@ -67,23 +73,26 @@ DECLARE
     -- overview right under the headline.
     v_min_snap     NUMBER;
     v_max_snap     NUMBER;
-    v_buckets       PLS_INTEGER := 0;
-    v_total_buckets PLS_INTEGER := 0;
-    -- VARCHAR2 in PL/SQL hard-caps at 32767. On a busy DB with many AWR
-    -- snapshots in the compared span (e.g. weeks_back=4, 15-min snaps),
-    -- naive concat into v_times_json/v_vals_json overflows with ORA-06502.
-    -- Cap defensively below 32767 so the closing ']' and the outer
-    -- DBMS_OUTPUT concat in 'times:'||v_times_json||',' can never trip.
-    c_json_cap     CONSTANT PLS_INTEGER := 32500;
-    v_times_json   VARCHAR2(32767);
-    v_vals_json    VARCHAR2(32767);
+    v_buckets      PLS_INTEGER := 0;
+    -- v_times_json / v_vals_json are CLOBs so a long, dense compared
+    -- span (e.g. weeks_back=4 with 15-min AWR snaps -> 2700+ buckets)
+    -- cannot overflow the 32767-byte PL/SQL VARCHAR2 limit and abort
+    -- the masthead with ORA-06502.  v_windows_json stays VARCHAR2 --
+    -- it has one entry per compared window (bounded by weeks_back+1).
+    v_times_json   CLOB;
+    v_vals_json    CLOB;
     v_windows_json VARCHAR2(4000);
-    v_new_entry    VARCHAR2(64);
+    v_buf          VARCHAR2(64);
     TYPE t_idx_tab IS TABLE OF PLS_INTEGER INDEX BY VARCHAR2(40);
     v_snap_idx     t_idx_tab;
     TYPE t_num_arr IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
     v_vals         t_num_arr;
+    @@sql/lib/put_clob_chunked.plsql
 BEGIN
+    DBMS_LOB.CREATETEMPORARY(v_times_json, TRUE);
+    DBMS_LOB.CREATETEMPORARY(v_vals_json,  TRUE);
+    DBMS_LOB.WRITEAPPEND(v_times_json, 1, '[');
+    DBMS_LOB.WRITEAPPEND(v_vals_json,  1, '[');
     --
     -- Recompute LOAD / METRIC / WAIT z-scores. Same query shape as
     -- sql/07_summary.sql, just a narrower projection (we only need
@@ -323,26 +332,19 @@ BEGIN
             GROUP BY snap_id
             ORDER BY MIN(end_interval_time)
         ) LOOP
-            v_total_buckets := v_total_buckets + 1;
-            IF v_times_json IS NULL THEN
-                v_new_entry := '["'
-                    || TO_CHAR(s.end_ts, 'YYYY-MM-DD HH24:MI') || '"';
+            v_buckets := v_buckets + 1;
+            v_snap_idx(TO_CHAR(s.snap_id)) := v_buckets;
+            v_vals(v_buckets) := 0;
+            -- CLOB v_times_json was pre-seeded with '[' so every entry
+            -- after the first is comma-separated.  WRITEAPPEND amount
+            -- arg is in chars; LENGTH() of the buffer is correct
+            -- regardless of NLS_CHARACTERSET (the strings are ASCII).
+            IF v_buckets = 1 THEN
+                v_buf := '"' || TO_CHAR(s.end_ts, 'YYYY-MM-DD HH24:MI') || '"';
             ELSE
-                v_new_entry := ',"'
-                    || TO_CHAR(s.end_ts, 'YYYY-MM-DD HH24:MI') || '"';
+                v_buf := ',"' || TO_CHAR(s.end_ts, 'YYYY-MM-DD HH24:MI') || '"';
             END IF;
-            -- Cap append to avoid VARCHAR2(32767) overflow on long /
-            -- dense spans. Once we stop adding to v_times_json, we
-            -- also stop growing v_buckets so v_vals_json (built from
-            -- 1..v_buckets in pass 2) stays length-aligned with the
-            -- xAxis. pass 2's snap_idx lookup naturally drops the
-            -- truncated tail.
-            IF NVL(LENGTHB(v_times_json), 0) + LENGTHB(v_new_entry) <= c_json_cap THEN
-                v_times_json := v_times_json || v_new_entry;
-                v_buckets := v_buckets + 1;
-                v_snap_idx(TO_CHAR(s.snap_id)) := v_buckets;
-                v_vals(v_buckets) := 0;
-            END IF;
+            DBMS_LOB.WRITEAPPEND(v_times_json, LENGTH(v_buf), v_buf);
         END LOOP;
 
         -- Pass 2: per-snap total DB time = CPU + non-Idle wait LAG deltas
@@ -405,27 +407,23 @@ BEGIN
         END LOOP;
 
         -- Materialize v_vals_json walking buckets 1..N (zero-fills the
-        -- snaps that had no DB time so the line is continuous). Same
-        -- length-cap as v_times_json above; bounded by construction
-        -- (v_buckets is already capped) but guard defensively so a
-        -- future tweak to c_json_cap can't reintroduce ORA-06502.
+        -- snaps that had no DB time so the line is continuous).  CLOB
+        -- v_vals_json was pre-seeded with '['.
         FOR b IN 1 .. v_buckets LOOP
-            IF v_vals_json IS NULL THEN
-                v_new_entry := '['
-                    || TO_CHAR(v_vals(b), 'FM99999990D000',
-                               'NLS_NUMERIC_CHARACTERS=''.,''');
+            IF b = 1 THEN
+                v_buf := TO_CHAR(v_vals(b), 'FM99999990D000',
+                                 'NLS_NUMERIC_CHARACTERS=''.,''');
             ELSE
-                v_new_entry := ','
-                    || TO_CHAR(v_vals(b), 'FM99999990D000',
-                               'NLS_NUMERIC_CHARACTERS=''.,''');
+                v_buf := ',' || TO_CHAR(v_vals(b), 'FM99999990D000',
+                                        'NLS_NUMERIC_CHARACTERS=''.,''');
             END IF;
-            EXIT WHEN NVL(LENGTHB(v_vals_json), 0) + LENGTHB(v_new_entry) > c_json_cap;
-            v_vals_json := v_vals_json || v_new_entry;
+            DBMS_LOB.WRITEAPPEND(v_vals_json, LENGTH(v_buf), v_buf);
         END LOOP;
     END IF;
 
-    v_times_json   := NVL(v_times_json,   '[') || ']';
-    v_vals_json    := NVL(v_vals_json,    '[') || ']';
+    -- Close the CLOB arrays now that all appends are done.
+    DBMS_LOB.WRITEAPPEND(v_times_json, 1, ']');
+    DBMS_LOB.WRITEAPPEND(v_vals_json,  1, ']');
     v_windows_json := NVL(v_windows_json, '[]');
 
     -- =========================================================
@@ -529,11 +527,6 @@ BEGIN
         || CASE WHEN '~template_name' = 'comprehensive' THEN ''
                 ELSE ' &middot; template: <code>~template_name</code>'
            END
-        || CASE WHEN v_total_buckets > v_buckets
-                THEN ' &middot; <span class="badge warn">showing first '
-                     || v_buckets || ' of ' || v_total_buckets
-                     || ' snapshots</span>'
-                ELSE '' END
         || '</span>'
         || '</div>');
     DBMS_OUTPUT.PUT_LINE('    <div class="windows-chart" id="masthead-timeline"></div>');
@@ -575,8 +568,15 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<script>');
     DBMS_OUTPUT.PUT_LINE('(function(){');
     DBMS_OUTPUT.PUT_LINE('AWR_DATA.mastheadTimeline={');
-    DBMS_OUTPUT.PUT_LINE('times:'   || v_times_json   || ',');
-    DBMS_OUTPUT.PUT_LINE('vals:'    || v_vals_json    || ',');
+    -- v_times_json / v_vals_json are CLOBs that can exceed the 32767-byte
+    -- per-PUT_LINE limit; emit each in 32500-char chunks (newlines between
+    -- chunks are valid whitespace inside JS array literals).
+    DBMS_OUTPUT.PUT_LINE('times:');
+    put_clob_chunked(v_times_json);
+    DBMS_OUTPUT.PUT_LINE(',');
+    DBMS_OUTPUT.PUT_LINE('vals:');
+    put_clob_chunked(v_vals_json);
+    DBMS_OUTPUT.PUT_LINE(',');
     DBMS_OUTPUT.PUT_LINE('windows:' || v_windows_json);
     DBMS_OUTPUT.PUT_LINE('};');
     DBMS_OUTPUT.PUT_LINE('if(!window.echarts) return;');
@@ -633,5 +633,14 @@ BEGIN
         || '<a href="#load">09 Load profile</a>'
         || '<a href="#metrics">10 Metrics</a>'
         || '</nav>');
+
+    -- Temporary CLOBs are session-lived and will free at end-of-session,
+    -- but free explicitly so the report can be regenerated in a loop
+    -- without leaking locators.
+    DBMS_LOB.FREETEMPORARY(v_times_json);
+    DBMS_LOB.FREETEMPORARY(v_vals_json);
 END;
+/
+
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 00_params END -->'); END;
 /

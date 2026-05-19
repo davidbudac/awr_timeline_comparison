@@ -22,6 +22,9 @@
 SET DEFINE '~'
 SET SERVEROUTPUT ON SIZE UNLIMITED
 
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 07_summary BEGIN -->'); END;
+/
+
 DECLARE
     TYPE finding_rec IS RECORD (
         metric_domain  VARCHAR2(16),
@@ -386,4 +389,7 @@ BEGIN
 
     DBMS_OUTPUT.PUT_LINE('</section>');
 END;
+/
+
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 07_summary END -->'); END;
 /

@@ -21,6 +21,9 @@
 SET DEFINE '~'
 SET SERVEROUTPUT ON SIZE UNLIMITED
 
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 09_ash_timeline BEGIN -->'); END;
+/
+
 DECLARE
     v_range_start  DATE;
     v_range_end    DATE;
@@ -30,11 +33,15 @@ DECLARE
     -- Compact, human-readable label for v_bucket_hours, used in the section
     -- title and prose. "15-min", "1-hour", or "X.YY-hour" for odd fractions.
     v_bucket_label  VARCHAR2(32);
-    -- PL/SQL VARCHAR2 goes up to 32767 bytes regardless of MAX_STRING_SIZE.
-    -- Enough for about 2000 hours of CSV values; LISTAGG in SQL would cap at 4000.
-    v_hours_json   VARCHAR2(32767);
-    v_class_vals   VARCHAR2(32767);
+    -- v_hours_json + v_class_vals are CLOBs so a long span with many
+    -- buckets (e.g. weeks_back=4 at 15-min cadence -> 2700+ buckets)
+    -- can't overflow PL/SQL's 32767-byte VARCHAR2 limit and abort the
+    -- chart with ORA-06502.  v_windows_json stays VARCHAR2 (one entry
+    -- per compared window, bounded by weeks_back+1).
+    v_hours_json   CLOB;
+    v_class_vals   CLOB;
     v_windows_json VARCHAR2(4000);
+    v_buf          VARCHAR2(64);
     v_palette      VARCHAR2(400) :=
         '["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1",' ||
         '"#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"]';
@@ -57,7 +64,10 @@ DECLARE
     v_wc           VARCHAR2(64);
     v_n            NUMBER;
     v_aas          NUMBER;
+    @@sql/lib/put_clob_chunked.plsql
 BEGIN
+    DBMS_LOB.CREATETEMPORARY(v_hours_json, TRUE);
+    DBMS_LOB.CREATETEMPORARY(v_class_vals, TRUE);
     SELECT CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
                - ~weeks_back*(~step_hours/24) - ~win_hours/24,
            CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
@@ -129,15 +139,20 @@ BEGIN
 
     -- Shared bucket grid (ISO-ish strings, oldest -> newest). Each label is
     -- the bucket's start instant; with sub-hour bucket_hours, HH24:MI shows
-    -- the minute boundary too.
-    v_hours_json := '[';
+    -- the minute boundary too.  Built into a CLOB via WRITEAPPEND so a
+    -- long compared span can hold thousands of buckets without overflow.
+    DBMS_LOB.WRITEAPPEND(v_hours_json, 1, '[');
     FOR b IN 0 .. v_total_buckets - 1 LOOP
-        IF b > 0 THEN v_hours_json := v_hours_json || ','; END IF;
-        v_hours_json := v_hours_json
-            || '"' || TO_CHAR(v_range_start + (b * v_bucket_hours) / 24,
-                              'YYYY-MM-DD HH24:MI') || '"';
+        IF b = 0 THEN
+            v_buf := '"' || TO_CHAR(v_range_start + (b * v_bucket_hours) / 24,
+                                    'YYYY-MM-DD HH24:MI') || '"';
+        ELSE
+            v_buf := ',"' || TO_CHAR(v_range_start + (b * v_bucket_hours) / 24,
+                                     'YYYY-MM-DD HH24:MI') || '"';
+        END IF;
+        DBMS_LOB.WRITEAPPEND(v_hours_json, LENGTH(v_buf), v_buf);
     END LOOP;
-    v_hours_json := v_hours_json || ']';
+    DBMS_LOB.WRITEAPPEND(v_hours_json, 1, ']');
 
     -- Window-band markers: small (one per compared window), LISTAGG is safe.
     -- Read from the shared windows_rollup CTE (per-week_offset roll-up
@@ -167,7 +182,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<script>');
     DBMS_OUTPUT.PUT_LINE('(function(){');
     DBMS_OUTPUT.PUT_LINE('AWR_DATA.ashTimeline = {');
-    DBMS_OUTPUT.PUT_LINE('hours:' || v_hours_json || ',');
+    -- v_hours_json is a CLOB that may exceed 32767 bytes; emit chunked.
+    DBMS_OUTPUT.PUT_LINE('hours:');
+    put_clob_chunked(v_hours_json);
+    DBMS_OUTPUT.PUT_LINE(',');
     DBMS_OUTPUT.PUT_LINE('windows:' || v_windows_json || ',');
     DBMS_OUTPUT.PUT_LINE('classes:[');
 
@@ -202,7 +220,9 @@ BEGIN
         v_first := TRUE;
         FOR i IN 1 .. v_list.COUNT LOOP
             v_wc := v_list(i).k;
-            v_class_vals := NULL;
+            -- Reuse the same CLOB across iterations: truncate to 0 then
+            -- WRITEAPPEND. Avoids reallocating a temp LOB per class.
+            DBMS_LOB.TRIM(v_class_vals, 0);
             FOR b IN 0 .. v_total_buckets - 1 LOOP
                 v_ck := TO_CHAR(b) || '|' || v_wc;
                 IF v_cells.EXISTS(v_ck) THEN
@@ -213,20 +233,25 @@ BEGIN
                 -- 360 ASH samples == one busy session-hour;
                 -- divide by the bucket width (in hours) to get AAS.
                 v_aas := v_n / (v_bucket_hours * 360);
-                IF v_class_vals IS NULL THEN
-                    v_class_vals := TO_CHAR(v_aas, 'FM99999990D0000',
-                                            'NLS_NUMERIC_CHARACTERS=''.,''');
+                IF b = 0 THEN
+                    v_buf := TO_CHAR(v_aas, 'FM99999990D0000',
+                                     'NLS_NUMERIC_CHARACTERS=''.,''');
                 ELSE
-                    v_class_vals := v_class_vals || ','
-                        || TO_CHAR(v_aas, 'FM99999990D0000',
-                                   'NLS_NUMERIC_CHARACTERS=''.,''');
+                    v_buf := ',' || TO_CHAR(v_aas, 'FM99999990D0000',
+                                            'NLS_NUMERIC_CHARACTERS=''.,''');
                 END IF;
+                DBMS_LOB.WRITEAPPEND(v_class_vals, LENGTH(v_buf), v_buf);
             END LOOP;
 
             IF v_first THEN v_first := FALSE;
             ELSE DBMS_OUTPUT.PUT_LINE(','); END IF;
+            -- Emit '{"name":"...","vals":[' prefix, then the CLOB body
+            -- chunked, then ']}'. Newlines between chunks are valid JS
+            -- whitespace inside the array literal.
             DBMS_OUTPUT.PUT_LINE('{"name":"' || REPLACE(v_wc, '"', '\"')
-                || '","vals":[' || v_class_vals || ']}');
+                || '","vals":[');
+            put_clob_chunked(v_class_vals);
+            DBMS_OUTPUT.PUT_LINE(']}');
         END LOOP;
     END;
 
@@ -265,5 +290,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('</script>');
 
     DBMS_OUTPUT.PUT_LINE('</section>');
+
+    DBMS_LOB.FREETEMPORARY(v_hours_json);
+    DBMS_LOB.FREETEMPORARY(v_class_vals);
 END;
+/
+
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 09_ash_timeline END -->'); END;
 /

@@ -12,6 +12,9 @@
 SET DEFINE '~'
 SET SERVEROUTPUT ON SIZE UNLIMITED
 
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 04_waits_fg BEGIN -->'); END;
+/
+
 DECLARE
     v_weeks_back NUMBER := ~weeks_back;
     v_top_n      NUMBER := ~top_n;
@@ -475,4 +478,7 @@ BEGIN
     END LOOP;
     DBMS_OUTPUT.PUT_LINE('</tbody></table></section>');
 END;
+/
+
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 04_waits_fg END -->'); END;
 /
