@@ -21,6 +21,15 @@ DECLARE
     v_rnk_s      VARCHAR2(64);
     v_phv_s      VARCHAR2(64);
     v_chart_vals VARCHAR2(8000);
+    v_new_entry  VARCHAR2(8000);
+
+    -- Hard cap for the per-dimension JSON accumulators below. PL/SQL
+    -- VARCHAR2 maxes out at 32767 bytes; the per-dim emit at the end of
+    -- this section concatenates the accumulator with a short prefix/suffix
+    -- ("sqls":[ ... ], / "schemas":[ ... ]}) so we leave headroom for that.
+    -- Busy DBs with many parsing schemas in top-N can otherwise overflow
+    -- the slot or the emit, raising ORA-06502 at the PUT_LINE call.
+    c_json_cap   CONSTANT PLS_INTEGER := 32500;
 
     TYPE t_sqlid_tab IS TABLE OF BOOLEAN INDEX BY VARCHAR2(30);
     v_seen_sqls t_sqlid_tab;
@@ -34,10 +43,19 @@ DECLARE
     -- top-N parsing_schema_name. The browser toggles between them.
     TYPE t_dim_str  IS TABLE OF VARCHAR2(32767) INDEX BY VARCHAR2(10);
     TYPE t_dim_meta IS TABLE OF VARCHAR2(80)    INDEX BY VARCHAR2(10);
+    TYPE t_dim_num  IS TABLE OF NUMBER          INDEX BY VARCHAR2(10);
     v_dim_sqls_json    t_dim_str;
     v_dim_schemas_json t_dim_str;
     v_dim_label        t_dim_meta;
     v_dim_unit         t_dim_meta;
+    -- Per-dim "kept vs total" counters that drive the truncation footnote
+    -- shown above each dim's chart. kept is bumped only when an entry was
+    -- actually appended to the accumulator; total is bumped on every row
+    -- the cursor returns, so kept < total <=> the c_json_cap kicked in.
+    v_dim_sqls_kept     t_dim_num;
+    v_dim_sqls_total    t_dim_num;
+    v_dim_schemas_kept  t_dim_num;
+    v_dim_schemas_total t_dim_num;
     v_dim              VARCHAR2(10);
     v_first_dim        BOOLEAN;
 
@@ -235,9 +253,13 @@ BEGIN
                 DBMS_OUTPUT.PUT_LINE('</tbody></table></details>');
             END IF;
             v_cur_dim := s.dim;
-            v_dim_label(s.dim)     := s.dim_label;
-            v_dim_unit(s.dim)      := s.dim_unit;
-            v_dim_sqls_json(s.dim) := NULL;
+            v_dim_label(s.dim)         := s.dim_label;
+            v_dim_unit(s.dim)          := s.dim_unit;
+            v_dim_sqls_json(s.dim)     := NULL;
+            v_dim_sqls_kept(s.dim)     := 0;
+            v_dim_sqls_total(s.dim)    := 0;
+            v_dim_schemas_kept(s.dim)  := 0;
+            v_dim_schemas_total(s.dim) := 0;
 
             DBMS_OUTPUT.PUT_LINE('<h3 style="margin-top:18px">' || s.dim_label || '</h3>');
             DBMS_OUTPUT.PUT_LINE('<div class="topsql-toggle" data-topsql-target="' || s.dim || '">'
@@ -304,12 +326,19 @@ BEGIN
                                'NLS_NUMERIC_CHARACTERS=''.,''');
             END IF;
         END LOOP;
-        v_dim_sqls_json(s.dim) :=
-            CASE WHEN v_dim_sqls_json(s.dim) IS NULL THEN ''
-                 ELSE v_dim_sqls_json(s.dim) || ',' END
-            || '{"sql_id":"' || s.sql_id
+        v_new_entry := '{"sql_id":"' || s.sql_id
             || '","cur":' || NVL(TO_CHAR(s.cur_rnk), 'null')
             || ',"vals":[' || v_chart_vals || ']}';
+        v_dim_sqls_total(s.dim) := v_dim_sqls_total(s.dim) + 1;
+        IF v_dim_sqls_json(s.dim) IS NULL THEN
+            v_dim_sqls_json(s.dim) := v_new_entry;
+            v_dim_sqls_kept(s.dim) := v_dim_sqls_kept(s.dim) + 1;
+        ELSIF LENGTH(v_dim_sqls_json(s.dim)) + LENGTH(v_new_entry) + 1
+              <= c_json_cap THEN
+            v_dim_sqls_json(s.dim) :=
+                v_dim_sqls_json(s.dim) || ',' || v_new_entry;
+            v_dim_sqls_kept(s.dim) := v_dim_sqls_kept(s.dim) + 1;
+        END IF;
 
         -- SQL_ID links to its detail block in the Per-SQL detail section
         -- below. The hashchange listener emitted at the end of this section
@@ -472,13 +501,27 @@ BEGIN
                                'NLS_NUMERIC_CHARACTERS=''.,''');
             END IF;
         END LOOP;
-        v_dim_schemas_json(sc.dim) :=
-            CASE WHEN v_dim_schemas_json.EXISTS(sc.dim)
-                  AND v_dim_schemas_json(sc.dim) IS NOT NULL
-                 THEN v_dim_schemas_json(sc.dim) || ',' ELSE '' END
-            || '{"name":"' || REPLACE(sc.schema_name, '"', '\"')
+        v_new_entry := '{"name":"' || REPLACE(sc.schema_name, '"', '\"')
             || '","cur":' || NVL(TO_CHAR(sc.cur_rnk), 'null')
             || ',"vals":[' || v_chart_vals || ']}';
+        -- Defensive init: schemas-loop dims should already be initialized
+        -- by the SQL loop's per-dim block, but a dim with schemas but no
+        -- top-N SQLs would skip that init. Treat as zeroed.
+        IF NOT v_dim_schemas_total.EXISTS(sc.dim) THEN
+            v_dim_schemas_total(sc.dim) := 0;
+            v_dim_schemas_kept(sc.dim)  := 0;
+        END IF;
+        v_dim_schemas_total(sc.dim) := v_dim_schemas_total(sc.dim) + 1;
+        IF NOT v_dim_schemas_json.EXISTS(sc.dim)
+           OR v_dim_schemas_json(sc.dim) IS NULL THEN
+            v_dim_schemas_json(sc.dim) := v_new_entry;
+            v_dim_schemas_kept(sc.dim) := v_dim_schemas_kept(sc.dim) + 1;
+        ELSIF LENGTH(v_dim_schemas_json(sc.dim)) + LENGTH(v_new_entry) + 1
+              <= c_json_cap THEN
+            v_dim_schemas_json(sc.dim) :=
+                v_dim_schemas_json(sc.dim) || ',' || v_new_entry;
+            v_dim_schemas_kept(sc.dim) := v_dim_schemas_kept(sc.dim) + 1;
+        END IF;
     END LOOP;
 
     -- One ECharts line chart per dimension, plotting metric value (in the
@@ -491,12 +534,33 @@ BEGIN
         v_first_dim := TRUE;
         v_dim := v_dim_label.FIRST;
         WHILE v_dim IS NOT NULL LOOP
+            -- Emit each dim in three PUT_LINE calls so no single concat
+            -- ever holds both the sqls and the schemas accumulator at once;
+            -- their VARCHAR2(32767) slots can otherwise sum past PL/SQL's
+            -- 32767-byte expression limit and raise ORA-06502. The newlines
+            -- the splits inject sit inside a JS object literal and are
+            -- ignored by the parser.
+            IF NOT v_first_dim THEN
+                DBMS_OUTPUT.PUT_LINE(',');
+            END IF;
             DBMS_OUTPUT.PUT_LINE(
-                CASE WHEN v_first_dim THEN '' ELSE ',' END
-                || '"' || v_dim || '":{"label":"' || v_dim_label(v_dim)
+                '"' || v_dim || '":{"label":"' || v_dim_label(v_dim)
                 || '","unit":"' || v_dim_unit(v_dim)
-                || '","sqls":[' || NVL(v_dim_sqls_json(v_dim), '') || ']'
-                || ',"schemas":[' ||
+                || '","sqlsKept":' || NVL(TO_CHAR(v_dim_sqls_kept(v_dim)), '0')
+                || ',"sqlsTotal":' || NVL(TO_CHAR(v_dim_sqls_total(v_dim)), '0')
+                || ',"schemasKept":'
+                    || CASE WHEN v_dim_schemas_kept.EXISTS(v_dim)
+                            THEN TO_CHAR(v_dim_schemas_kept(v_dim))
+                            ELSE '0' END
+                || ',"schemasTotal":'
+                    || CASE WHEN v_dim_schemas_total.EXISTS(v_dim)
+                            THEN TO_CHAR(v_dim_schemas_total(v_dim))
+                            ELSE '0' END
+                || ',');
+            DBMS_OUTPUT.PUT_LINE(
+                '"sqls":[' || NVL(v_dim_sqls_json(v_dim), '') || '],');
+            DBMS_OUTPUT.PUT_LINE(
+                '"schemas":[' ||
                     CASE WHEN v_dim_schemas_json.EXISTS(v_dim)
                          THEN NVL(v_dim_schemas_json(v_dim), '') ELSE '' END
                 || ']}');
@@ -504,6 +568,24 @@ BEGIN
             v_dim := v_dim_label.NEXT(v_dim);
         END LOOP;
         DBMS_OUTPUT.PUT_LINE('}};');
+        -- Truncation footnote: when c_json_cap clamped either accumulator,
+        -- inject a small <p> above the matching chart-wrap so the user
+        -- knows the chart doesn't reflect every top SQL / schema. Runs
+        -- before the echarts guard so the note still shows in offline mode
+        -- (chart-wrap is empty there, but the detail table below carries
+        -- every value).
+        DBMS_OUTPUT.PUT_LINE('Object.keys(AWR_DATA.topSql.dims).forEach(function(dim){');
+        DBMS_OUTPUT.PUT_LINE('  var el=document.getElementById("topsql-chart-"+dim); if(!el) return;');
+        DBMS_OUTPUT.PUT_LINE('  var d=AWR_DATA.topSql.dims[dim]; var bits=[];');
+        DBMS_OUTPUT.PUT_LINE('  if(d.sqlsKept<d.sqlsTotal){ bits.push("first "+d.sqlsKept+" of "+d.sqlsTotal+" SQL"); }');
+        DBMS_OUTPUT.PUT_LINE('  if(d.schemasKept<d.schemasTotal){ bits.push("first "+d.schemasKept+" of "+d.schemasTotal+" parsing schemas"); }');
+        DBMS_OUTPUT.PUT_LINE('  if(!bits.length) return;');
+        DBMS_OUTPUT.PUT_LINE('  var note=document.createElement("p");');
+        DBMS_OUTPUT.PUT_LINE('  note.className="trunc-note";');
+        DBMS_OUTPUT.PUT_LINE('  note.style.cssText="font-size:11px;color:var(--muted);margin:-2px 0 6px;font-style:italic";');
+        DBMS_OUTPUT.PUT_LINE('  note.textContent="Chart truncated to fit the 32 KB per-dimension JSON budget: showing "+bits.join(", ")+". The detail table below carries every value.";');
+        DBMS_OUTPUT.PUT_LINE('  el.parentNode.insertBefore(note, el);');
+        DBMS_OUTPUT.PUT_LINE('});');
         DBMS_OUTPUT.PUT_LINE('if(!window.echarts) return;');
         DBMS_OUTPUT.PUT_LINE('var cs=getComputedStyle(document.body);');
         DBMS_OUTPUT.PUT_LINE('var fg=cs.getPropertyValue("--fg").trim()||"#333";');
