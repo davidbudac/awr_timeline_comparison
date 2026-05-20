@@ -330,6 +330,7 @@ END;
 @@sql/08_overview.sql
 @@sql/09_ash_timeline.sql
 @@sql/10_db_time_summary.sql
+@@sql/11_top_sql_ash_breakdown.sql
 
 -- -------------------------------------------------------------------
 -- HTML epilogue

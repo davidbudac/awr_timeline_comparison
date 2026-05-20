@@ -75,7 +75,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('#windows           { order:10; }');
     DBMS_OUTPUT.PUT_LINE('#load              { order:11; }');
     DBMS_OUTPUT.PUT_LINE('#metrics           { order:12; }');
-    DBMS_OUTPUT.PUT_LINE('footer.report      { order:13; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql-ash        { order:13; }');
+    DBMS_OUTPUT.PUT_LINE('footer.report      { order:14; }');
 
     -- =========================================================
     -- Masthead (header.report)
@@ -241,6 +242,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('#windows         h2::before { content:"08"; }');
     DBMS_OUTPUT.PUT_LINE('#load            h2::before { content:"09"; }');
     DBMS_OUTPUT.PUT_LINE('#metrics         h2::before { content:"10"; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql-ash      h2::before { content:"11"; }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
         || ' h2 { font-size:22px; gap:12px; }'
         || ' h2::before { font-size:30px; min-width:42px; } }');
@@ -374,6 +376,31 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.chart-medium { height:240px; }');
     DBMS_OUTPUT.PUT_LINE('.chart-small  { height:160px; }');
     DBMS_OUTPUT.PUT_LINE('.chart-ash    { height:420px; }');
+    -- Per-SQL ASH cards (#topsql-ash): a compact card per Top-N SQL with
+    -- header (sql_id, sample count, dominant event), text snippet, and a
+    -- smaller stacked-area chart. Many cards stack vertically.
+    DBMS_OUTPUT.PUT_LINE('.chart-ash-sql { height:220px; }');
+    DBMS_OUTPUT.PUT_LINE('.ash-sql-card {'
+        || ' border:1px solid var(--hairline); border-radius:0;'
+        || ' padding:12px 14px; margin:14px 0; background:var(--panel); }');
+    DBMS_OUTPUT.PUT_LINE('.ash-sql-card.insufficient {'
+        || ' opacity:0.65; background:transparent;'
+        || ' padding:8px 12px; }');
+    DBMS_OUTPUT.PUT_LINE('.ash-sql-head {'
+        || ' display:flex; flex-wrap:wrap; gap:10px; align-items:baseline;'
+        || ' font-size:13px; color:var(--ink); margin-bottom:6px; }');
+    DBMS_OUTPUT.PUT_LINE('.ash-sql-head code {'
+        || ' font-family:"SFMono-Regular",Menlo,Consolas,monospace;'
+        || ' font-size:13px; color:var(--ink); font-weight:600; }');
+    DBMS_OUTPUT.PUT_LINE('.ash-sql-meta {'
+        || ' color:var(--muted); font-size:12px; font-weight:400; }');
+    DBMS_OUTPUT.PUT_LINE('.ash-sql-snippet {'
+        || ' font-family:"SFMono-Regular",Menlo,Consolas,monospace;'
+        || ' font-size:11px; color:var(--muted);'
+        || ' white-space:pre-wrap; word-break:break-word;'
+        || ' margin:4px 0 8px; padding:0; background:transparent;'
+        || ' max-height:48px; overflow:hidden;'
+        || ' text-overflow:ellipsis; }');
     DBMS_OUTPUT.PUT_LINE('body.no-charts .chart-wrap, body.no-charts .hero-card .mini { display:none; }');
     DBMS_OUTPUT.PUT_LINE('body.no-charts .cdn-warn { display:block !important; }');
     DBMS_OUTPUT.PUT_LINE('.cdn-warn {'
