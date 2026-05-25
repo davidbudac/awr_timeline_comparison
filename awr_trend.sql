@@ -98,6 +98,9 @@ WHENEVER OSERROR  EXIT FAILURE
 --   template_name       lower-cased + trimmed ~template (used in headers)
 --   template_dir        sql/lib/templates/<template_name> (path used by
 --                       every section's @@~template_dir/<file>.sql include)
+--   debug_termout       'ON' if ~debug='Y' (any case), else 'OFF'.  Used
+--                       by sql/lib/debug_log.sql to gate per-section
+--                       progress markers; see that file for details.
 -- --------------------------------------------------------------------
 COLUMN run_id              NEW_VALUE run_id              NOPRINT
 COLUMN dbid                NEW_VALUE dbid                NOPRINT
@@ -117,6 +120,13 @@ COLUMN period_axis_fmt     NEW_VALUE period_axis_fmt     NOPRINT
 COLUMN report_path         NEW_VALUE report_path         NOPRINT
 COLUMN template_name       NEW_VALUE template_name       NOPRINT
 COLUMN template_dir        NEW_VALUE template_dir        NOPRINT
+COLUMN debug_termout       NEW_VALUE debug_termout       NOPRINT
+-- dbg_ts is refreshed inside sql/lib/debug_log.sql before each marker.
+-- Declaring the COLUMN once here keeps the helper from re-declaring it
+-- on every call.  NOPRINT suppresses the value from any visible output
+-- (the helper depends on that to stay silent when debug is off).
+-- Identifier must NOT start with an underscore (ORA-00911).
+COLUMN dbg_ts              NEW_VALUE dbg_ts              NOPRINT
 -- Derived labels for compact, unit-aware UI strings. Computed once after
 -- step_hours is resolved so every section can reference identical text:
 --   win_label       compact width of one comparison window     ("15m" / "1h")
@@ -176,7 +186,8 @@ SELECT
         || '_run' || t.run_id
         || '.html'                                                 AS report_path,
     tpl.template_name                                              AS template_name,
-    tpl.template_dir                                               AS template_dir
+    tpl.template_dir                                               AS template_dir,
+    dbg.debug_termout                                              AS debug_termout
 FROM v$database d
 CROSS JOIN v$instance i
 CROSS JOIN (
@@ -219,7 +230,16 @@ CROSS JOIN (
             END
             AS template_dir
     FROM dual
-) tpl;
+) tpl
+CROSS JOIN (
+    -- Any case-insensitive truthy form enables debug progress markers.
+    -- Falsy / unrecognised values silently disable (no error) so an old
+    -- caller that omits the var still works against the new driver.
+    SELECT
+        CASE WHEN UPPER(TRIM('~debug')) IN ('Y','YES','1','ON','TRUE','T')
+             THEN 'ON' ELSE 'OFF' END AS debug_termout
+    FROM dual
+) dbg;
 
 -- -------------------------------------------------------------------
 -- Derived labels (win_label, step_label, offset_labels, bucket_hours)
@@ -318,19 +338,50 @@ END;
 -- (07) read z-score inputs derived from the same AWR views sections
 -- 02-04 already rendered, and overview (08) reuses the same change-bucket
 -- logic from 07, so they are emitted in this order.
+--
+-- Each section is preceded by a DEFINE _dbg_msg + @@sql/lib/debug_log.sql
+-- pair that prints a one-line progress marker to standard output when
+-- ~debug='Y'.  Disabled by default; see sql/defaults.sql / the wrapper
+-- usage banner.  The helper file documents the mechanism in detail.
 -- -------------------------------------------------------------------
+DEFINE _dbg_msg = 'section 00 params (header + nav)'
+@@sql/lib/debug_log.sql
 @@sql/00_params.sql
+DEFINE _dbg_msg = 'section 01 windows (aligned begin/end snap pairs)'
+@@sql/lib/debug_log.sql
 @@sql/01_windows.sql
+DEFINE _dbg_msg = 'section 02 load_profile (SYSSTAT deltas)'
+@@sql/lib/debug_log.sql
 @@sql/02_load_profile.sql
+DEFINE _dbg_msg = 'section 03 sysmetric (SYSMETRIC_SUMMARY averages)'
+@@sql/lib/debug_log.sql
 @@sql/03_sysmetric.sql
+DEFINE _dbg_msg = 'section 04 waits_fg (foreground waits)'
+@@sql/lib/debug_log.sql
 @@sql/04_waits_fg.sql
+DEFINE _dbg_msg = 'section 05 waits_bg (background waits)'
+@@sql/lib/debug_log.sql
 @@sql/05_waits_bg.sql
+DEFINE _dbg_msg = 'section 06 top_sql (Top-N SQL ranked 4 ways + regression)'
+@@sql/lib/debug_log.sql
 @@sql/06_top_sql.sql
+DEFINE _dbg_msg = 'section 07 summary (z-score findings + heatmap)'
+@@sql/lib/debug_log.sql
 @@sql/07_summary.sql
+DEFINE _dbg_msg = 'section 08 overview (hero strip; recomputes z-scores)'
+@@sql/lib/debug_log.sql
 @@sql/08_overview.sql
+DEFINE _dbg_msg = 'section 09 ash_timeline (ASH stacked-area; often the slowest)'
+@@sql/lib/debug_log.sql
 @@sql/09_ash_timeline.sql
+DEFINE _dbg_msg = 'section 10 db_time_summary (DB time over the full span)'
+@@sql/lib/debug_log.sql
 @@sql/10_db_time_summary.sql
+DEFINE _dbg_msg = 'section 11 top_sql_ash_breakdown (per-SQL ASH; one cursor per pool)'
+@@sql/lib/debug_log.sql
 @@sql/11_top_sql_ash_breakdown.sql
+DEFINE _dbg_msg = 'all sections rendered; writing HTML epilogue'
+@@sql/lib/debug_log.sql
 
 -- -------------------------------------------------------------------
 -- HTML epilogue

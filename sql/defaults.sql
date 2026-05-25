@@ -19,3 +19,9 @@ DEFINE inst_num   = 0
 DEFINE step       = 1
 DEFINE step_unit  = 'w'
 DEFINE template   = 'comprehensive'
+-- debug = 'Y' prints one-line, timestamped progress markers to standard
+-- output as each section begins (e.g. "[awr_trend 09:42:18.123] section
+-- 06 top_sql ...").  Useful for spotting slow sections on large DBs.
+-- Markers are written to stdout only; the HTML report is unaffected.
+-- Any value other than 'Y' (case-insensitive) disables the markers.
+DEFINE debug      = 'N'

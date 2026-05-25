@@ -3,7 +3,7 @@
 # Convenience wrapper around awr_trend.sql.
 # Usage:
 #   ./run_awr_trend.sh <connect_string> [target_end] [win_hours] [weeks_back] \
-#                      [top_n] [inst_num] [step] [step_unit] [template]
+#                      [top_n] [inst_num] [step] [step_unit] [template] [debug]
 #
 # step / step_unit set the cadence between comparison windows.  Defaults
 # step=1, step_unit=w reproduce the original "same hour-of-week, N prior
@@ -13,6 +13,10 @@
 # Defaults to 'comprehensive' (the full curated lists, identical to the
 # pre-template behaviour).  'simple' shows a small triage-friendly
 # subset.  See sql/lib/templates/<name>/ for the metric/wait lists.
+#
+# debug = Y prints one-line timestamped progress markers to standard
+# output as each section begins (helpful on large DBs where some sections
+# take minutes).  The HTML report is unaffected.  Default: N.
 #
 # Examples:
 #   ./run_awr_trend.sh user/pw@svc
@@ -24,11 +28,13 @@
 #   ./run_awr_trend.sh user/pw@svc AUTO 1 7 10 0 2 d
 #   # Lean triage report for the prior hour:
 #   ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple
+#   # Same as defaults but with progress markers on stdout:
+#   ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y
 #
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
-    sed -n '1,26p' "$0"
+    sed -n '1,30p' "$0"
     exit 1
 fi
 
@@ -41,6 +47,7 @@ INST_NUM="${6:-0}"
 STEP="${7:-1}"
 STEP_UNIT="${8:-w}"
 TEMPLATE="${9:-comprehensive}"
+DEBUG="${10:-N}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -57,6 +64,7 @@ DEFINE inst_num   = ${INST_NUM}
 DEFINE step       = ${STEP}
 DEFINE step_unit  = '${STEP_UNIT}'
 DEFINE template   = '${TEMPLATE}'
+DEFINE debug      = '${DEBUG}'
 @@awr_trend.sql
 EXIT
 EOF
