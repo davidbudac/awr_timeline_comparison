@@ -35,8 +35,8 @@ gracefully.
 
 ## Entry points
 
-- `run_awr_trend.sh user/pw@svc [target_end] [win_hours] [weeks_back] [top_n] [inst_num]`
-  — convenience wrapper. Sets all substitution vars via heredoc, then `@@awr_trend.sql`.
+- `run_awr_trend.sh user/pw@svc [target_end] [win_hours] [weeks_back] [top_n] [inst_num] [step] [step_unit] [template] [debug]`
+  — convenience wrapper. Sets all substitution vars via heredoc, then `@@awr_trend.sql`. `debug='Y'` (case-insensitive) emits one timestamped progress marker per section to **stdout** (the HTML is byte-identical). See "Debug logging" below.
 - `sqlplus user/pw@svc @sql/defaults.sql @awr_trend.sql`
   — pure-SQL\*Plus equivalent. **The driver deliberately does not DEFINE defaults itself** so an explicit caller override is never clobbered. Always load `sql/defaults.sql` (or set DEFINEs manually) before `@awr_trend.sql`.
 - `sqlplus user/pw@svc @side/create_weekly_baselines.sql`
@@ -49,7 +49,7 @@ gracefully.
 ```
 awr_trend.sql                    -- driver: prologue, SPOOL, calls sections, epilogue
 sql/
-├── defaults.sql                 -- canonical DEFINEs for the 8 substitution vars
+├── defaults.sql                 -- canonical DEFINEs for the 9 substitution vars
 ├── _style.sql                   -- embedded CSS (emitted once from the driver)
 ├── 00_params.sql                -- <nav> + <header> card (no DML)
 ├── 01_windows.sql               -- aligned windows, snap_id pairs, instance-restart guard
@@ -175,8 +175,8 @@ will leak into the HTML.** All user-visible strings (SQL text, event
 names, metric names) must be wrapped in `DBMS_XMLGEN.CONVERT(...)`.
 
 ### Substitution variables
-Eight user-facing vars: `target_end`, `win_hours`, `weeks_back`, `top_n`,
-`inst_num`, `step`, `step_unit`, `template`. `inst_num = 0` means
+Nine user-facing vars: `target_end`, `win_hours`, `weeks_back`, `top_n`,
+`inst_num`, `step`, `step_unit`, `template`, `debug`. `inst_num = 0` means
 aggregate across RAC instances; any other value filters to that
 instance. `target_end = 'AUTO'` means "prior full hour relative to
 SYSDATE" (resolved in the driver into `target_end_resolved`).
@@ -187,15 +187,43 @@ behaviour is the default (`step=1, step_unit='w'`). Setting `step=1,
 step_unit='h'` compares the last `weeks_back+1` consecutive 1-hour
 windows in a straight line back from `target_end`. `template` selects
 which subset of metrics + wait events to display; see "Templates"
-above. The driver resolves `step_hours = step * (1|24|168)` plus
+above. `debug` is a UI-only toggle: any case-insensitive truthy form
+(`Y`, `YES`, `1`, `ON`, `TRUE`, `T`) resolves into `debug_termout='ON'`
+and unmutes the per-section progress markers; everything else
+(including the default `N`) resolves into `'OFF'`. See "Debug logging"
+below. The driver resolves `step_hours = step * (1|24|168)` plus
 `period_unit_short` / `period_unit_long` / `period_unit_title` /
 `period_step_label` / `period_axis_fmt` once up front; every section
 uses `~step_hours/24` (NOT the literal `7`) as the cadence multiplier.
 The driver also resolves `run_id` (17-digit timestamp from
 `SYSTIMESTAMP`), `dbid`, `db_name`, `host_name`, `db_version`,
 `caller_user`, `generated_at_s`, `dow_name`, `report_path`,
-`template_name`, and `template_dir` up front; every section references
-them as `~name`. No section ever re-resolves these values.
+`template_name`, `template_dir`, and `debug_termout` up front; every
+section references them as `~name`. No section ever re-resolves these
+values.
+
+### Debug logging
+`sql/lib/debug_log.sql` is the single helper that emits per-section
+progress markers without polluting the HTML spool. The driver
+`@@`-includes it before every section's main include with a
+`DEFINE _dbg_msg = '...'` line setting the label. Mechanism per call:
+`SPOOL OFF` → silent `SELECT TO_CHAR(SYSTIMESTAMP, ...)` (captured via
+`COLUMN dbg_ts NEW_VALUE dbg_ts NOPRINT` declared once in the driver)
+→ `SET TERMOUT ~debug_termout` → `PROMPT [awr_trend ~dbg_ts] ~_dbg_msg`
+→ `SET TERMOUT OFF` → `SPOOL ~report_path APPEND`. Cost when disabled
+is one round-trip per section (≤ 12) — negligible. Verified
+byte-identical HTML output between `debug=N` and `debug=Y` runs.
+
+**Gotcha — Oracle identifiers cannot start with an underscore.** The
+column alias for the timestamp slot is `dbg_ts`, **not** `_dbg_ts`.
+The latter raises `ORA-00911: invalid character`, and because the
+driver runs under `WHENEVER SQLERROR EXIT SQL.SQLCODE` that error
+aborts the entire run right after the prologue — producing a
+213-line truncated HTML stub with zero sections. (The `_dbg_msg`
+substitution variable name is fine because that's a SQL\*Plus DEFINE
+name, not a column identifier.) If you ever rename either slot, keep
+the leading character a letter and re-run the byte-identity smoke
+test on dbmint.
 
 **Tilde gotcha**: every numbered section file issues `SET DEFINE '~'` so
 it can use `~run_id` for parameter substitution. That makes `~` the

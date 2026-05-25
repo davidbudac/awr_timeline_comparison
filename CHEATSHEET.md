@@ -7,7 +7,8 @@ working directory is the repo root and the wrapper is executable.
 
 ```
 ./run_awr_trend.sh <connect> [target_end] [win_hours] [weeks_back] \
-                              [top_n] [inst_num] [step] [step_unit] [template]
+                              [top_n] [inst_num] [step] [step_unit] \
+                              [template] [debug]
 ```
 
 | Pos | Name         | Default          | Notes                                            |
@@ -21,6 +22,7 @@ working directory is the repo root and the wrapper is executable.
 | 7   | step         | `1`              | Cadence count between adjacent windows            |
 | 8   | step_unit    | `w`              | `h` hours, `d` days, `w` weeks                    |
 | 9   | template     | `comprehensive`  | `comprehensive` (full lists) or `simple` (triage subset) |
+| 10  | debug        | `N`              | `Y` prints one-line timestamped progress markers to stdout (one per section). HTML report is unaffected |
 
 Trailing args you don't care about can be omitted. To pin step / step_unit /
 template you must also supply every preceding arg — use `AUTO`/`0` etc. as
@@ -183,6 +185,62 @@ allowlist.
 
 ---
 
+## Progress markers (`debug=Y`)
+
+On a busy DB some sections take minutes; with no terminal output it
+looks hung. `debug=Y` prints one timestamped line per section to
+**stdout** (the HTML report is byte-identical with debug on or off).
+
+### Defaults + debug
+```bash
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y
+```
+
+### Simple template + debug (the lightest combo)
+```bash
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple Y
+```
+
+You'll see output like:
+```
+[awr_trend 08:38:42.369] section 00 params (header + nav)
+[awr_trend 08:38:42.594] section 01 windows (aligned begin/end snap pairs)
+[awr_trend 08:38:42.600] section 02 load_profile (SYSSTAT deltas)
+[awr_trend 08:38:44.188] section 03 sysmetric (SYSMETRIC_SUMMARY averages)
+…
+[awr_trend 08:38:45.142] all sections rendered; writing HTML epilogue
+```
+
+Diff two consecutive timestamps to see which section is your slowest.
+Any case-insensitive truthy value enables debug (`Y`, `YES`, `1`, `ON`,
+`TRUE`, `T`); everything else (including the default `N`) disables it.
+
+### Tee into a log so you keep the timings
+```bash
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y \
+  | tee reports/last_run_markers.log
+```
+
+### Pure-sqlplus alternative
+If you don't want to type all the positional slots, drive the
+substitution variable directly:
+```bash
+sqlplus -S -L user/pw@svc <<'SQL'
+@sql/defaults.sql
+DEFINE template = 'simple'
+DEFINE debug    = 'Y'
+@awr_trend.sql
+SQL
+```
+
+---
+
+## Legacy — wrapper without the debug slot
+The 10th positional arg was added later; older invocations that stop
+at slot 9 (template) still work and run with `debug=N`.
+
+---
+
 ## Larger Top-N
 
 ### Top-25 SQL with default weekly comparison
@@ -224,6 +282,7 @@ DEFINE inst_num   = 0
 DEFINE step       = 1
 DEFINE step_unit  = 'h'
 DEFINE template   = 'comprehensive'
+DEFINE debug      = 'N'
 @@awr_trend.sql
 EXIT
 SQL
@@ -283,6 +342,7 @@ DEFINE inst_num   = 0
 DEFINE step       = 1
 DEFINE step_unit  = 'w'
 DEFINE template   = 'comprehensive'
+DEFINE debug      = 'N'
 ```
 
 ---

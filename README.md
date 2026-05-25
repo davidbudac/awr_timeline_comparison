@@ -46,9 +46,10 @@ Easiest — the shell wrapper (sets all substitution vars for you):
 ./run_awr_trend.sh user/pw@svc '2026-04-15 09:00' 1 4 10 0      # explicit weekly
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h                # last 4 hours straight back
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple         # lean triage report
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple Y       # simple + progress markers on stdout
 ```
 
-Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template]]]]]]]]`
+Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template [debug]]]]]]]]]`
 
 | Arg          | Default          | Meaning                                             |
 |--------------|------------------|-----------------------------------------------------|
@@ -60,6 +61,7 @@ Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [
 | `step`       | `1`              | Cadence count between adjacent windows              |
 | `step_unit`  | `w`              | Cadence unit: `h` (hours), `d` (days), `w` (weeks)  |
 | `template`   | `comprehensive`  | Metric + wait-event set: `comprehensive` (full curated lists) or `simple` (triage-friendly subset) |
+| `debug`      | `N`              | `Y` (or `YES/1/ON/TRUE/T`, case-insensitive) prints one-line, millisecond-timestamped progress markers to stdout as each section begins — useful when a slow section makes the run look hung. Markers go to stdout only; the HTML report is byte-identical to a `debug=N` run |
 
 `step` × `step_unit` defines the gap between adjacent comparison
 windows. `step=1, step_unit=w` (the default) reproduces the original
@@ -92,6 +94,7 @@ SQL> DEFINE inst_num   = 1
 SQL> DEFINE step       = 1
 SQL> DEFINE step_unit  = 'w'
 SQL> DEFINE template   = 'comprehensive'
+SQL> DEFINE debug      = 'N'
 SQL> @awr_trend.sql
 ```
 
