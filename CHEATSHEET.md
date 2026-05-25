@@ -45,6 +45,22 @@ Compares `now-1h → now`, `7d ago`, `14d ago`, `21d ago`, `28d ago`.
 ./run_awr_trend.sh user/pw@svc '2026-04-13 09:00'
 ```
 
+### Monday 09:00–13:00 across the last 4 Mondays
+```bash
+./run_awr_trend.sh user/pw@svc '2026-05-25 13:00' 4 3 10 0 1 w
+```
+Four 4-hour windows ending Mon 13:00 each, stepping back weekly:
+2026-05-25, 05-18, 05-11, 05-04 (current + 3 prior). Use
+`weeks_back=4` instead of `3` if you'd rather frame it as "current
+Monday vs 4 prior Mondays" (5 windows total). If you're running before
+13:00 on a Monday, push `target_end` back one week so the current
+window is fully populated:
+```bash
+./run_awr_trend.sh user/pw@svc '2026-05-18 13:00' 4 3 10 0 1 w
+```
+AWR retention must cover ~29 days for this — see the retention check
+at the bottom.
+
 ### Two-hour window over twelve weeks of history
 ```bash
 ./run_awr_trend.sh user/pw@svc AUTO 2 12
