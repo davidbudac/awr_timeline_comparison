@@ -273,9 +273,15 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('tbody tr:hover { background:rgba(0,0,0,0.02); }');
     DBMS_OUTPUT.PUT_LINE('td.num, th.num {'
         || ' text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }');
+    -- text-transform:none is critical: sql_ids are case-sensitive base32
+    -- hashes ("gnj0gxw60apzr" != "GNJ0GXW60APZR"), and at least one parent
+    -- selector (details summary) applies text-transform:uppercase which
+    -- would otherwise cascade in and break copy-paste back into AWR
+    -- queries.  Pinning it here protects every <code>/.mono usage
+    -- regardless of which container it ends up in.
     DBMS_OUTPUT.PUT_LINE('td.mono, code, .mono {'
         || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
-        || ' font-size:12px; }');
+        || ' font-size:12px; text-transform:none; }');
     DBMS_OUTPUT.PUT_LINE('td a { color:var(--red); text-decoration:none; font-weight:600; }');
     DBMS_OUTPUT.PUT_LINE('td a:hover { text-decoration:underline; }');
 
