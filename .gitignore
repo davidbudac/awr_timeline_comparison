@@ -1,6 +1,7 @@
-# Generated AWR reports — keep the directory but not its contents.
-reports/*.html
-!reports/.gitkeep
+# Generated AWR reports — keep the directory itself but ignore everything
+# inside it (HTML reports, scratch subdirs from experiments, etc.).
+/reports/*
+!/reports/.gitkeep
 
 # OS / editor / tool noise
 .DS_Store
