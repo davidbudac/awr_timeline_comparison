@@ -462,15 +462,16 @@ BEGIN
     -- short-baseline fallback. Recomputed above. Anchors to #findings
     -- so the reader can jump to the full detail in one click.
     -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('  <div class="verdict">');
-    DBMS_OUTPUT.PUT_LINE('    <span class="label">Verdict</span>');
-
     IF v_n_usable = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('  <div class="verdict v-skip">');
+        DBMS_OUTPUT.PUT_LINE('    <span class="label">Verdict</span>');
         DBMS_OUTPUT.PUT_LINE('    <span class="lede skip">Baseline too short</span>'
             || ' <span class="sep">/</span> '
             || '<span class="body">need at least 3 prior valid windows to score; '
             || 'only %-delta available in <a href="#findings">findings</a>.</span>');
     ELSIF v_n_movers = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('  <div class="verdict v-ok">');
+        DBMS_OUTPUT.PUT_LINE('    <span class="label">Verdict</span>');
         DBMS_OUTPUT.PUT_LINE('    <span class="lede ok">Quiet</span>'
             || ' <span class="sep">/</span> '
             || '<span class="body">no metric moved beyond |z| &gt; 2 vs the prior '
@@ -478,6 +479,8 @@ BEGIN
             || CASE WHEN v_max_n = 1 THEN '' ELSE 's' END
             || '.</span>');
     ELSE
+        DBMS_OUTPUT.PUT_LINE('  <div class="verdict v-crit">');
+        DBMS_OUTPUT.PUT_LINE('    <span class="label">Verdict</span>');
         DBMS_OUTPUT.PUT_LINE('    <a href="#findings" class="lede crit">'
             || v_n_movers || ' mover'
             || CASE WHEN v_n_movers = 1 THEN '' ELSE 's' END

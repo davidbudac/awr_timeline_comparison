@@ -144,23 +144,35 @@ BEGIN
         || ' color:var(--ink); font-weight:700; margin-right:4px; }');
 
     -- =========================================================
-    -- Masthead verdict: single-line punchline emitted by
-    -- 00_params.sql from a recomputed z-score. Sits between
-    -- .topgrid and .windows-strip, separated from the headline
-    -- by a hairline rule.
+    -- Masthead verdict: prominent severity-tinted banner emitted by
+    -- 00_params.sql from a recomputed z-score. The container carries a
+    -- v-ok / v-crit / v-skip class so the whole callout is tinted by
+    -- severity (not just the lede text), making the headline judgement
+    -- impossible to miss above the windows strip.
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('header.report .verdict {'
-        || ' margin-top:18px; padding-top:14px;'
-        || ' border-top:1px solid var(--hairline);'
-        || ' font-size:14px; color:var(--ink-soft); line-height:1.55;'
-        || ' display:flex; flex-wrap:wrap; align-items:baseline;'
-        || ' column-gap:12px; row-gap:6px; }');
+        || ' margin-top:18px; padding:14px 18px;'
+        || ' border:1px solid var(--hairline); border-left:5px solid var(--muted);'
+        || ' border-radius:10px;'
+        || ' background:var(--panel-2);'
+        || ' font-size:14px; color:var(--ink-soft); line-height:1.5;'
+        || ' display:flex; flex-wrap:wrap; align-items:center;'
+        || ' column-gap:12px; row-gap:8px; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict.v-crit {'
+        || ' border-left-color:var(--crit);'
+        || ' background:var(--crit-bg); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict.v-ok {'
+        || ' border-left-color:var(--ok);'
+        || ' background:var(--ok-bg); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict.v-skip {'
+        || ' border-left-color:var(--muted);'
+        || ' background:var(--skip-bg); }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .label {'
-        || ' font-size:11px; letter-spacing:0.10em; text-transform:uppercase;'
-        || ' color:var(--muted); font-weight:700; }');
+        || ' font-size:11px; letter-spacing:0.12em; text-transform:uppercase;'
+        || ' color:var(--muted); font-weight:700; align-self:center; }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede {'
-        || ' color:var(--ink); font-weight:700;'
-        || ' font-size:15px; letter-spacing:-0.005em;'
+        || ' color:var(--ink); font-weight:800;'
+        || ' font-size:22px; letter-spacing:-0.01em; line-height:1.15;'
         || ' text-decoration:none; }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict a.lede:hover { text-decoration:underline; }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede.crit { color:var(--crit); }');
