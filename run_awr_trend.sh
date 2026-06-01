@@ -3,7 +3,8 @@
 # Convenience wrapper around awr_trend.sql.
 # Usage:
 #   ./run_awr_trend.sh <connect_string> [target_end] [win_hours] [weeks_back] \
-#                      [top_n] [inst_num] [step] [step_unit] [template] [debug]
+#                      [top_n] [inst_num] [step] [step_unit] [template] [debug] \
+#                      [marker_file]
 #
 # step / step_unit set the cadence between comparison windows.  Defaults
 # step=1, step_unit=w reproduce the original "same hour-of-week, N prior
@@ -18,6 +19,10 @@
 # output as each section begins (helpful on large DBs where some sections
 # take minutes).  The HTML report is unaffected.  Default: N.
 #
+# marker_file is an optional path to a timeline-marker config file
+# (datetime + label milestones drawn as vertical lines on the dated
+# charts).  Default: empty (no markers).  See markers.example.sql.
+#
 # Examples:
 #   ./run_awr_trend.sh user/pw@svc
 #   ./run_awr_trend.sh user/pw@svc '2026-04-15 09:00' 1 4 10 0
@@ -30,6 +35,8 @@
 #   ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple
 #   # Same as defaults but with progress markers on stdout:
 #   ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y
+#   # With user-defined milestone markers on the timeline charts:
+#   ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive N my_markers.sql
 #
 set -euo pipefail
 
@@ -48,6 +55,7 @@ STEP="${7:-1}"
 STEP_UNIT="${8:-w}"
 TEMPLATE="${9:-comprehensive}"
 DEBUG="${10:-N}"
+MARKER_FILE="${11:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -65,6 +73,7 @@ DEFINE step       = ${STEP}
 DEFINE step_unit  = '${STEP_UNIT}'
 DEFINE template   = '${TEMPLATE}'
 DEFINE debug      = '${DEBUG}'
+DEFINE marker_file = '${MARKER_FILE}'
 @@awr_trend.sql
 EXIT
 EOF

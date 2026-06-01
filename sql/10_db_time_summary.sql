@@ -353,6 +353,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('      data:c.vals};');
     DBMS_OUTPUT.PUT_LINE('    if(i===0 && markAreaData.length){');
     DBMS_OUTPUT.PUT_LINE('      s.markArea={silent:true,data:markAreaData,itemStyle:{opacity:1},z:0};}');
+    DBMS_OUTPUT.PUT_LINE('    if(i===0){var __ml=window.AWR_markLine&&window.AWR_markLine(d.times); if(__ml) s.markLine=__ml;}');
     DBMS_OUTPUT.PUT_LINE('    return s;})');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('new ResizeObserver(function(){chart.resize();}).observe(el);');

@@ -25,3 +25,7 @@ DEFINE template   = 'comprehensive'
 -- Markers are written to stdout only; the HTML report is unaffected.
 -- Any value other than 'Y' (case-insensitive) disables the markers.
 DEFINE debug      = 'N'
+-- marker_file optional path to a timeline-marker config file (datetime +
+-- label milestones drawn as vertical lines on the dated charts).  Empty =
+-- no markers.  See markers.example.sql for the format.
+DEFINE marker_file = ''

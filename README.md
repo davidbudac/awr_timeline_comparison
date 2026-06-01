@@ -48,9 +48,10 @@ Easiest — the shell wrapper (sets all substitution vars for you):
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h                # last 4 hours straight back
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple         # lean triage report
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple Y       # simple + progress markers on stdout
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive N my_markers.sql  # annotate timelines with milestones
 ```
 
-Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template [debug]]]]]]]]]`
+Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template [debug [marker_file]]]]]]]]]]`
 
 | Arg          | Default          | Meaning                                             |
 |--------------|------------------|-----------------------------------------------------|
@@ -63,6 +64,7 @@ Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [
 | `step_unit`  | `w`              | Cadence unit: `h` (hours), `d` (days), `w` (weeks)  |
 | `template`   | `comprehensive`  | Metric + wait-event set: `comprehensive` (full curated lists) or `simple` (triage-friendly subset) |
 | `debug`      | `N`              | `Y` (or `YES/1/ON/TRUE/T`, case-insensitive) prints one-line, millisecond-timestamped progress markers to stdout as each section begins — useful when a slow section makes the run look hung. Markers go to stdout only; the HTML report is byte-identical to a `debug=N` run |
+| `marker_file`| *(empty)*        | Optional path to a timeline-marker config file (milestones drawn as vertical dashed lines on the dated charts). Empty = no markers. See "Timeline markers" below |
 
 `step` × `step_unit` defines the gap between adjacent comparison
 windows. `step=1, step_unit=w` (the default) reproduces the original
@@ -80,6 +82,40 @@ quick glance. To add your own template, drop a directory under
 `wait_event_targets.sql`) and extend the whitelist in `awr_trend.sql`.
 See [CHEATSHEET.md](CHEATSHEET.md) for ready-to-paste recipes.
 
+### Timeline markers (milestones)
+
+`marker_file` lets you annotate the dated charts with your own milestones
+— a patch, an index rebuild, a stats gather, an incident, a release — so a
+spike or dip lines up visually with a known change. It's **optional**: no
+`marker_file` means no markers and no change to the report.
+
+The config file lists one milestone per line — a datetime (`YYYY-MM-DD
+HH24:MI`, 24-hour clock) and a label. Copy
+[`markers.example.sql`](markers.example.sql) and edit:
+
+```sql
+-- my_markers.sql
+@@sql/lib/marker '2026-04-20 14:00' 'Applied patch 19.22'
+@@sql/lib/marker '2026-05-01 02:00' 'Index rebuild on SALES'
+@@sql/lib/marker '2026-05-10 09:30' 'Optimizer stats gather'
+```
+
+Then pass its path as the `marker_file` argument (wrapper) or
+`DEFINE marker_file = 'my_markers.sql'` (pure SQL\*Plus). Markers appear on
+every calendar-axis chart: the masthead strip, the ASH timeline, the
+DB-time summary, and the per-SQL ASH cards. Notes:
+
+- Keep the path exactly `@@sql/lib/marker` even if your config lives
+  elsewhere — SQL\*Plus resolves nested `@@` paths from the project root.
+- A marker outside a given chart's time span is silently dropped for that
+  chart; markers snap to the nearest data point on the chart's axis.
+- A malformed datetime is skipped (it becomes an HTML comment) rather than
+  failing the run. Labels containing a single quote must double it
+  (`'Bob''s change'`).
+- Markers are chart-only: with the ECharts CDN blocked they don't draw,
+  and the per-window sparkline tables (Load / Metrics / Waits) never carry
+  them since those aren't calendar timelines.
+
 Pure SQL\*Plus (no bash) — you must pre-DEFINE the variables or load the
 canonical defaults first:
 
@@ -96,6 +132,7 @@ SQL> DEFINE step       = 1
 SQL> DEFINE step_unit  = 'w'
 SQL> DEFINE template   = 'comprehensive'
 SQL> DEFINE debug      = 'N'
+SQL> DEFINE marker_file = 'my_markers.sql'   -- optional; '' for none
 SQL> @awr_trend.sql
 ```
 
@@ -115,7 +152,9 @@ z-scores.
 1. **Overview** — hero strip with the six headline load/metric numbers.
 2. **ASH timeline** — hourly stacked-area chart of Active Sessions by wait
    class from `DBA_HIST_ACTIVE_SESS_HISTORY`, covering the full compare
-   span; compared windows are highlighted as background bands.
+   span; compared windows are highlighted as background bands. If you pass
+   a `marker_file`, your milestones appear here (and on the other dated
+   charts) as vertical dashed lines — see "Timeline markers" above.
 3. **Findings** — each metric with `|z|>3` is CRITICAL, `|z|>2` is WARN.
    Metrics with fewer than 3 valid prior windows fall back to a
    `%`-delta only.
@@ -171,6 +210,7 @@ SQL> @side/create_weekly_baselines.sql
 ```
 .
 ├── awr_trend.sql                    -- driver (pure SELECT, one spooled HTML)
+├── markers.example.sql              -- example timeline-marker config (optional)
 ├── sql/
 │   ├── defaults.sql                 -- canonical default DEFINEs
 │   ├── _style.sql                   -- shared CSS (emitted once)
@@ -187,15 +227,19 @@ SQL> @side/create_weekly_baselines.sql
 │   ├── 10_db_time_summary.sql       -- full-span DB time stacked area
 │   ├── 11_top_sql_ash_breakdown.sql -- per-Top-N-SQL ASH cards
 │   ├── 12_param_changes.sql         -- parameters that differ across windows
-│   └── lib/templates/               -- per-template metric + wait-event lists
-│       ├── comprehensive/           -- default; full curated lists
-│       │   ├── sysstat_load_targets.sql
-│       │   ├── sysmetric_targets.sql
-│       │   └── wait_event_targets.sql   -- '*' sentinel = no filter
-│       └── simple/                  -- triage-friendly subset
-│           ├── sysstat_load_targets.sql
-│           ├── sysmetric_targets.sql
-│           └── wait_event_targets.sql
+│   └── lib/                         -- shared @@-included fragments (CTEs, JS, helpers)
+│       ├── js_markers.plsql         -- inits window.AWR_MARKERS + AWR_markLine()
+│       ├── marker.sql               -- emit one timeline marker (used by marker_file)
+│       ├── no_markers.sql           -- no-op stub when marker_file is empty
+│       └── templates/               -- per-template metric + wait-event lists
+│           ├── comprehensive/       -- default; full curated lists
+│           │   ├── sysstat_load_targets.sql
+│           │   ├── sysmetric_targets.sql
+│           │   └── wait_event_targets.sql   -- '*' sentinel = no filter
+│           └── simple/              -- triage-friendly subset
+│               ├── sysstat_load_targets.sql
+│               ├── sysmetric_targets.sql
+│               └── wait_event_targets.sql
 ├── side/
 │   ├── baselines_defaults.sql      -- canonical defaults for the baselines script
 │   └── create_weekly_baselines.sql -- optional, AWR baselines (writes)

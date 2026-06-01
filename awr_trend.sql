@@ -35,6 +35,10 @@
 --                  (small triage-friendly subset).  Selects which
 --                  directory under sql/lib/templates/<name>/ supplies
 --                  the sysstat / sysmetric / wait-event target lists.
+--   debug        'N' (default) or 'Y' -- per-section stdout progress markers.
+--   marker_file  '' (default) or path to an optional timeline-marker config
+--                  file (datetime + label milestones) drawn as vertical
+--                  marker lines on the dated charts.  See markers.example.sql.
 --
 -- The cadence between adjacent comparison windows is step*step_unit.
 -- Default step=1, step_unit='w' reproduces the original "same hour-of-week,
@@ -121,6 +125,10 @@ COLUMN report_path         NEW_VALUE report_path         NOPRINT
 COLUMN template_name       NEW_VALUE template_name       NOPRINT
 COLUMN template_dir        NEW_VALUE template_dir        NOPRINT
 COLUMN debug_termout       NEW_VALUE debug_termout       NOPRINT
+-- marker_include is the file @@-included in the prologue to load optional
+-- user-defined timeline markers: either the caller's ~marker_file or the
+-- no-op stub sql/lib/no_markers.sql when ~marker_file is empty/unset.
+COLUMN marker_include      NEW_VALUE marker_include      NOPRINT
 -- dbg_ts is refreshed inside sql/lib/debug_log.sql before each marker.
 -- Declaring the COLUMN once here keeps the helper from re-declaring it
 -- on every call.  NOPRINT suppresses the value from any visible output
@@ -187,7 +195,8 @@ SELECT
         || '.html'                                                 AS report_path,
     tpl.template_name                                              AS template_name,
     tpl.template_dir                                               AS template_dir,
-    dbg.debug_termout                                              AS debug_termout
+    dbg.debug_termout                                              AS debug_termout,
+    mk.marker_include                                              AS marker_include
 FROM v$database d
 CROSS JOIN v$instance i
 CROSS JOIN (
@@ -239,7 +248,20 @@ CROSS JOIN (
         CASE WHEN UPPER(TRIM('~debug')) IN ('Y','YES','1','ON','TRUE','T')
              THEN 'ON' ELSE 'OFF' END AS debug_termout
     FROM dual
-) dbg;
+) dbg
+CROSS JOIN (
+    -- Optional path to a timeline-marker config file (datetime + label
+    -- milestones).  Empty / unset (TRIM of '' is NULL in Oracle) resolves
+    -- to the no-op stub so the prologue can always @@-include exactly one
+    -- marker file.  See sql/lib/marker.sql and sql/lib/js_markers.plsql.
+    SELECT
+        CASE
+            WHEN TRIM('~marker_file') IS NULL
+                THEN 'sql/lib/no_markers.sql'
+            ELSE TRIM('~marker_file')
+        END AS marker_include
+    FROM dual
+) mk;
 
 -- -------------------------------------------------------------------
 -- Derived labels (win_label, step_label, offset_labels, bucket_hours)
@@ -331,6 +353,14 @@ END;
 -- sections can rely on globals defined here.
 @@sql/lib/js_wait_colors.plsql
 @@sql/lib/js_sparkline.plsql
+
+-- Optional user-defined timeline markers (milestones).  js_markers.plsql
+-- inits window.AWR_MARKERS=[] and defines window.AWR_markLine(); the
+-- resolved marker_include file then pushes one marker per config line
+-- (or is the no-op stub when no marker_file was supplied).  The dated
+-- charts (sections 00/09/10/11) read these at render time.
+@@sql/lib/js_markers.plsql
+@@~marker_include
 
 -- -------------------------------------------------------------------
 -- Sections.  Each section is compute+render in one anonymous block;

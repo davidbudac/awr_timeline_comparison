@@ -8,7 +8,7 @@ working directory is the repo root and the wrapper is executable.
 ```
 ./run_awr_trend.sh <connect> [target_end] [win_hours] [weeks_back] \
                               [top_n] [inst_num] [step] [step_unit] \
-                              [template] [debug]
+                              [template] [debug] [marker_file]
 ```
 
 | Pos | Name         | Default          | Notes                                            |
@@ -23,6 +23,7 @@ working directory is the repo root and the wrapper is executable.
 | 8   | step_unit    | `w`              | `h` hours, `d` days, `w` weeks                    |
 | 9   | template     | `comprehensive`  | `comprehensive` (full lists) or `simple` (triage subset) |
 | 10  | debug        | `N`              | `Y` prints one-line timestamped progress markers to stdout (one per section). HTML report is unaffected |
+| 11  | marker_file  | *(empty)*        | Optional path to a timeline-marker config file (milestones drawn as vertical lines on the dated charts). Empty = none. See "Timeline markers" below |
 
 Trailing args you don't care about can be omitted. To pin step / step_unit /
 template you must also supply every preceding arg — use `AUTO`/`0` etc. as
@@ -251,9 +252,55 @@ SQL
 
 ---
 
-## Legacy — wrapper without the debug slot
-The 10th positional arg was added later; older invocations that stop
-at slot 9 (template) still work and run with `debug=N`.
+## Timeline markers (`marker_file`)
+
+Annotate the dated charts (masthead strip, ASH timeline, DB-time summary,
+per-SQL ASH cards) with your own milestones — a patch, an index rebuild, a
+stats gather, an incident — so a spike lines up with a known change.
+Optional: no `marker_file` means no markers and no change to the report.
+
+Write a config file, one milestone per line (`YYYY-MM-DD HH24:MI` +
+label). Copy `markers.example.sql` and edit:
+```sql
+-- my_markers.sql
+@@sql/lib/marker '2026-04-20 14:00' 'Applied patch 19.22'
+@@sql/lib/marker '2026-05-01 02:00' 'Index rebuild on SALES'
+@@sql/lib/marker '2026-05-10 09:30' 'Optimizer stats gather'
+```
+
+### Defaults + markers
+```bash
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive N my_markers.sql
+```
+
+### Hourly walkthrough with markers
+```bash
+./run_awr_trend.sh user/pw@svc AUTO 1 12 10 0 1 h comprehensive N my_markers.sql
+```
+
+Notes:
+- Keep the path exactly `@@sql/lib/marker` even if your config lives
+  elsewhere — SQL\*Plus resolves nested `@@` paths from the project root.
+- A marker outside a chart's span is dropped for that chart; markers snap
+  to the nearest point on the axis.
+- A malformed datetime is skipped (becomes an HTML comment), not fatal.
+  Labels with a single quote must double it (`'Bob''s change'`).
+
+### Pure-sqlplus alternative
+```bash
+sqlplus -S -L user/pw@svc <<'SQL'
+@sql/defaults.sql
+DEFINE marker_file = 'my_markers.sql'
+@awr_trend.sql
+SQL
+```
+
+---
+
+## Legacy — wrapper without the debug / marker_file slots
+Positional args 10 (`debug`) and 11 (`marker_file`) were added later;
+older invocations that stop at slot 9 (template) still work and run with
+`debug=N` and no markers.
 
 ---
 
@@ -299,10 +346,15 @@ DEFINE step       = 1
 DEFINE step_unit  = 'h'
 DEFINE template   = 'comprehensive'
 DEFINE debug      = 'N'
+DEFINE marker_file = ''
 @@awr_trend.sql
 EXIT
 SQL
 ```
+
+(When you set the DEFINEs by hand instead of loading `@sql/defaults.sql`,
+include `DEFINE marker_file = ''` — the driver references it, so an unset
+value would stop for an "Enter value" prompt.)
 
 ---
 
@@ -359,6 +411,7 @@ DEFINE step       = 1
 DEFINE step_unit  = 'w'
 DEFINE template   = 'comprehensive'
 DEFINE debug      = 'N'
+DEFINE marker_file = ''
 ```
 
 ---

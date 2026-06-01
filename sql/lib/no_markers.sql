@@ -1,0 +1,10 @@
+--
+-- sql/lib/no_markers.sql -- no-op stub included when no marker_file is set.
+--
+-- The driver resolves marker_include to this file when the marker_file
+-- substitution variable is empty/unset, so the prologue can always
+-- @@-include exactly one marker file (no conditional-include needed).
+-- It emits nothing: window.AWR_MARKERS stays the empty array that
+-- sql/lib/js_markers.plsql initialised, so the calendar-timeline charts
+-- draw no marker lines.  See awr_trend.sql (marker_include resolution).
+--

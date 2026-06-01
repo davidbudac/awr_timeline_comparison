@@ -611,6 +611,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    lineStyle:{width:1.2,color:red},');
     DBMS_OUTPUT.PUT_LINE('    areaStyle:{color:"rgba(226,35,26,0.06)"},');
     DBMS_OUTPUT.PUT_LINE('    markArea:{silent:true,data:markAreaData,itemStyle:{opacity:1},z:0},');
+    DBMS_OUTPUT.PUT_LINE('    markLine:(window.AWR_markLine&&window.AWR_markLine(d.times))||{data:[]},');
     DBMS_OUTPUT.PUT_LINE('    z:5');
     DBMS_OUTPUT.PUT_LINE('  }]');
     DBMS_OUTPUT.PUT_LINE('});');

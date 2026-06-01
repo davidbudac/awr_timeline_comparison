@@ -1,0 +1,37 @@
+--
+-- markers.example.sql -- example timeline-marker configuration.
+--
+-- Optional milestones (datetime + label) drawn as vertical dashed marker
+-- lines on every dated timeline chart in the report (sections 00 masthead,
+-- 09 ASH timeline, 10 DB-time summary, 11 per-SQL ASH breakdown).  Use it
+-- to correlate load changes with known events: patches, index rebuilds,
+-- stats gathers, incidents, releases.
+--
+-- Copy this file, edit the marker lines below, and pass its path as the
+-- marker_file argument:
+--
+--   ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive N my_markers.sql
+--
+-- or on the pure-SQL*Plus path:
+--
+--   SQL> @sql/defaults.sql
+--   SQL> DEFINE marker_file = 'my_markers.sql'
+--   SQL> @awr_trend.sql
+--
+-- Each marker is one line:
+--
+--   @@sql/lib/marker '<YYYY-MM-DD HH24:MI>' '<label>'
+--
+-- Notes:
+--   * The instant must be 'YYYY-MM-DD HH24:MI' (24-hour clock).  A
+--     malformed instant is skipped (an HTML comment), not fatal.
+--   * Markers whose instant falls outside a given chart's time span are
+--     silently dropped for that chart.
+--   * Labels containing a single quote must double it ('Bob''s change').
+--   * Keep the path exactly '@@sql/lib/marker' even if this file lives
+--     elsewhere: SQL*Plus resolves nested @@ paths against the outermost
+--     caller (awr_trend.sql, run from the project root).
+--
+@@sql/lib/marker '2026-04-20 14:00' 'Applied patch 19.22'
+@@sql/lib/marker '2026-05-01 02:00' 'Index rebuild on SALES'
+@@sql/lib/marker '2026-05-10 09:30' 'Optimizer stats gather'

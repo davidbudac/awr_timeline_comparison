@@ -35,7 +35,7 @@ gracefully.
 
 ## Entry points
 
-- `run_awr_trend.sh user/pw@svc [target_end] [win_hours] [weeks_back] [top_n] [inst_num] [step] [step_unit] [template] [debug]`
+- `run_awr_trend.sh user/pw@svc [target_end] [win_hours] [weeks_back] [top_n] [inst_num] [step] [step_unit] [template] [debug] [marker_file]`
   — convenience wrapper. Sets all substitution vars via heredoc, then `@@awr_trend.sql`. `debug='Y'` (case-insensitive) emits one timestamped progress marker per section to **stdout** (the HTML is byte-identical). See "Debug logging" below.
 - `sqlplus user/pw@svc @sql/defaults.sql @awr_trend.sql`
   — pure-SQL\*Plus equivalent. **The driver deliberately does not DEFINE defaults itself** so an explicit caller override is never clobbered. Always load `sql/defaults.sql` (or set DEFINEs manually) before `@awr_trend.sql`.
@@ -48,8 +48,9 @@ gracefully.
 
 ```
 awr_trend.sql                    -- driver: prologue, SPOOL, calls sections, epilogue
+markers.example.sql              -- example timeline-marker config (optional marker_file)
 sql/
-├── defaults.sql                 -- canonical DEFINEs for the 9 substitution vars
+├── defaults.sql                 -- canonical DEFINEs for the 10 substitution vars
 ├── _style.sql                   -- embedded CSS (emitted once from the driver)
 ├── 00_params.sql                -- <nav> + <header> card (no DML)
 ├── 01_windows.sql               -- aligned windows, snap_id pairs, instance-restart guard
@@ -71,6 +72,9 @@ sql/
     ├── nth_csv.plsql            -- INSTR-based PL/SQL CSV parser (preserves empty tokens)
     ├── js_sparkline.plsql       -- ~30-line inline-SVG sparkline renderer (CDN-free)
     ├── js_wait_colors.plsql     -- shared OEM-13c-aligned wait_class color palette
+    ├── js_markers.plsql         -- inits window.AWR_MARKERS + AWR_markLine() (timeline markers)
+    ├── marker.sql               -- emit one user-defined timeline marker (~1=instant, ~2=label)
+    ├── no_markers.sql           -- no-op stub used when marker_file is empty
     └── templates/               -- per-template metric + wait-event target lists
         ├── comprehensive/       -- default; full curated lists (27 SYSSTAT + 23 SYSMETRIC,
         │   │                       and a '*' sentinel for waits = no event filter)
@@ -179,8 +183,9 @@ will leak into the HTML.** All user-visible strings (SQL text, event
 names, metric names) must be wrapped in `DBMS_XMLGEN.CONVERT(...)`.
 
 ### Substitution variables
-Nine user-facing vars: `target_end`, `win_hours`, `weeks_back`, `top_n`,
-`inst_num`, `step`, `step_unit`, `template`, `debug`. `inst_num = 0` means
+Ten user-facing vars: `target_end`, `win_hours`, `weeks_back`, `top_n`,
+`inst_num`, `step`, `step_unit`, `template`, `debug`, `marker_file`.
+`inst_num = 0` means
 aggregate across RAC instances; any other value filters to that
 instance. `target_end = 'AUTO'` means "prior full hour relative to
 SYSDATE" (resolved in the driver into `target_end_resolved`).
@@ -195,6 +200,8 @@ above. `debug` is a UI-only toggle: any case-insensitive truthy form
 (`Y`, `YES`, `1`, `ON`, `TRUE`, `T`) resolves into `debug_termout='ON'`
 and unmutes the per-section progress markers; everything else
 (including the default `N`) resolves into `'OFF'`. See "Debug logging"
+below. `marker_file` is an optional path to a timeline-marker config
+file; empty/unset (the default) means no markers. See "Timeline markers"
 below. The driver resolves `step_hours = step * (1|24|168)` plus
 `period_unit_short` / `period_unit_long` / `period_unit_title` /
 `period_step_label` / `period_axis_fmt` once up front; every section
@@ -202,9 +209,46 @@ uses `~step_hours/24` (NOT the literal `7`) as the cadence multiplier.
 The driver also resolves `run_id` (17-digit timestamp from
 `SYSTIMESTAMP`), `dbid`, `db_name`, `host_name`, `db_version`,
 `caller_user`, `generated_at_s`, `dow_name`, `report_path`,
-`template_name`, `template_dir`, and `debug_termout` up front; every
-section references them as `~name`. No section ever re-resolves these
-values.
+`template_name`, `template_dir`, `debug_termout`, and `marker_include`
+up front; every section references them as `~name`. No section ever
+re-resolves these values.
+
+### Timeline markers
+`marker_file` lets a user annotate the dated charts with milestones
+(patch applied, index rebuild, incident, release). It is an **optional**
+path to a config file; the driver resolves `marker_include` via the same
+CASE-to-path trick as `template_dir` — empty `marker_file` (TRIM of `''`
+is NULL in Oracle) → `sql/lib/no_markers.sql` (no-op stub), otherwise the
+caller's path. The prologue always `@@`-includes exactly one marker file,
+so there is no conditional-include problem.
+
+Flow: `sql/lib/js_markers.plsql` (included right after `js_sparkline.plsql`)
+emits one `<script>` that inits `window.AWR_MARKERS=[]` and defines
+`window.AWR_markLine(catLabels)`. Then `@@~marker_include` runs; each line
+of the user's config is `@@sql/lib/marker '<YYYY-MM-DD HH24:MI>' '<label>'`,
+and `sql/lib/marker.sql` emits `window.AWR_MARKERS.push({t,label})`. The
+four **calendar-axis** charts — sections **00** (masthead), **09** (ASH
+timeline), **10** (DB-time summary), **11** (per-SQL ASH breakdown) — call
+`AWR_markLine(<their category array>)` in their ECharts init block and
+attach the result as `series[0].markLine`, alongside the existing
+`markArea` window bands. The per-window sparklines (sections 02–08) are
+NOT calendar timelines (x-axis is week offsets), so they get no markers.
+
+Gotchas:
+- `sql/lib/marker.sql` runs under the driver's `SET DEFINE '~'`, so its
+  positional parameters are `~1` / `~2`, **not** `&1` / `&2`.
+- The config file uses `@@sql/lib/marker` (full path from the project
+  root) because SQL\*Plus resolves nested `@@` paths against the outermost
+  caller — same rule as every other `@@sql/lib/` include.
+- The x-axis is `type:"category"` of `'YYYY-MM-DD HH24:MI'` strings, not a
+  time axis, so `AWR_markLine` snaps each marker to the nearest category
+  tick (client-side) and drops markers outside a chart's span per chart.
+- Markers are chart-only: offline (no ECharts) they don't draw, which is
+  inherent — the init blocks `return` before touching `markLine`.
+- A malformed instant is skipped with an HTML comment, not a fatal error
+  (the marker file is included after SPOOL starts, so aborting there would
+  truncate the report). Labels with a single quote must double it.
+- See `markers.example.sql` for the user-facing format.
 
 ### Debug logging
 `sql/lib/debug_log.sql` is the single helper that emits per-section
