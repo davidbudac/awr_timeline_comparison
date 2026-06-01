@@ -31,6 +31,7 @@ GRANT SELECT ON DBA_HIST_SYSMETRIC_SUMMARY   TO <user>;
 GRANT SELECT ON DBA_HIST_SQLSTAT             TO <user>;
 GRANT SELECT ON DBA_HIST_SQLTEXT             TO <user>;
 GRANT SELECT ON DBA_HIST_ACTIVE_SESS_HISTORY TO <user>;
+GRANT SELECT ON DBA_HIST_PARAMETER           TO <user>;
 GRANT SELECT ON V_$DATABASE                  TO <user>;
 GRANT SELECT ON V_$INSTANCE                  TO <user>;
 -- Only if you use side/create_weekly_baselines.sql (optional, writes baselines):
@@ -128,6 +129,9 @@ z-scores.
 8. **Background waits** — from `DBA_HIST_BG_EVENT_SUMMARY`.
 9. **Top SQL** — ranked 4 ways (elapsed, CPU, buffer gets, executions)
    with plan-change badges and full SQL text.
+10. **Parameter changes** — initialization parameters from
+    `DBA_HIST_PARAMETER` whose value differs across the compared windows,
+    pivoted parameter × window (value as of each window's end snapshot).
 
 ## Does it write to the database?
 
@@ -181,6 +185,8 @@ SQL> @side/create_weekly_baselines.sql
 │   ├── 08_overview.sql              -- hero strip (headline metrics)
 │   ├── 09_ash_timeline.sql          -- hourly ASH stacked-area timeline
 │   ├── 10_db_time_summary.sql       -- full-span DB time stacked area
+│   ├── 11_top_sql_ash_breakdown.sql -- per-Top-N-SQL ASH cards
+│   ├── 12_param_changes.sql         -- parameters that differ across windows
 │   └── lib/templates/               -- per-template metric + wait-event lists
 │       ├── comprehensive/           -- default; full curated lists
 │       │   ├── sysstat_load_targets.sql

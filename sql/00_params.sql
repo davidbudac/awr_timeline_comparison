@@ -636,6 +636,7 @@ BEGIN
         || '<a href="#load">09 Load profile</a>'
         || '<a href="#metrics">10 Metrics</a>'
         || '<a href="#topsql-ash">11 Top SQL ASH</a>'
+        || '<a href="#param-changes">12 Parameters</a>'
         || '</nav>');
 
     -- Temporary CLOBs are session-lived and will free at end-of-session,

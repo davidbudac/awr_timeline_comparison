@@ -62,6 +62,10 @@ sql/
 ├── 08_overview.sql              -- hero strip: 6 headline-metric cards (recomputed inline)
 ├── 09_ash_timeline.sql          -- hourly ASH stacked-area timeline by wait_class
 │                                   (reads dba_hist_active_sess_history directly)
+├── 10_db_time_summary.sql       -- stacked DB time across the full compared span
+├── 11_top_sql_ash_breakdown.sql -- per-Top-N-SQL ASH stacked-area cards
+├── 12_param_changes.sql         -- init parameters that differ across windows
+│                                   (reads dba_hist_parameter; per-window end snap)
 └── lib/                         -- SQL/PL/SQL fragments shared across sections via @@
     ├── windows_cte.sql          -- run_params → … → valid_windows CTE chain
     ├── nth_csv.plsql            -- INSTR-based PL/SQL CSV parser (preserves empty tokens)

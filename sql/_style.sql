@@ -76,7 +76,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('#load              { order:11; }');
     DBMS_OUTPUT.PUT_LINE('#metrics           { order:12; }');
     DBMS_OUTPUT.PUT_LINE('#topsql-ash        { order:13; }');
-    DBMS_OUTPUT.PUT_LINE('footer.report      { order:14; }');
+    DBMS_OUTPUT.PUT_LINE('#param-changes     { order:14; }');
+    DBMS_OUTPUT.PUT_LINE('footer.report      { order:15; }');
 
     -- =========================================================
     -- Masthead (header.report)
@@ -255,6 +256,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('#load            h2::before { content:"09"; }');
     DBMS_OUTPUT.PUT_LINE('#metrics         h2::before { content:"10"; }');
     DBMS_OUTPUT.PUT_LINE('#topsql-ash      h2::before { content:"11"; }');
+    DBMS_OUTPUT.PUT_LINE('#param-changes   h2::before { content:"12"; }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
         || ' h2 { font-size:22px; gap:12px; }'
         || ' h2::before { font-size:30px; min-width:42px; } }');
@@ -382,6 +384,23 @@ BEGIN
         || ' border-right:2px solid var(--red); pointer-events:none; }');
     DBMS_OUTPUT.PUT_LINE('td.cell-bar .v {'
         || ' position:relative; z-index:1; font-weight:600; }');
+
+    -- =========================================================
+    -- Parameter-changes table (#param-changes): monospace name/value
+    -- cells, value cells allowed to wrap, changed cells tinted amber
+    -- with a left rule (same warn tokens as the severity rows).
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('#param-changes td.pname code { font-weight:600; color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('#param-changes td.pval {'
+        || ' white-space:normal; word-break:break-word;'
+        || ' max-width:320px; vertical-align:top; }');
+    DBMS_OUTPUT.PUT_LINE('#param-changes td.pval code {'
+        || ' font-size:11.5px; color:var(--ink-soft); }');
+    DBMS_OUTPUT.PUT_LINE('#param-changes td.cur code { font-weight:700; color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('#param-changes td.chg {'
+        || ' background:var(--warn-bg);'
+        || ' box-shadow:inset 3px 0 0 var(--warn); }');
+    DBMS_OUTPUT.PUT_LINE('#param-changes td .muted { color:var(--muted); }');
 
     -- =========================================================
     -- ECharts containers

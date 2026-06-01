@@ -380,6 +380,9 @@ DEFINE _dbg_msg = 'section 10 db_time_summary (DB time over the full span)'
 DEFINE _dbg_msg = 'section 11 top_sql_ash_breakdown (per-SQL ASH; one cursor per pool)'
 @@sql/lib/debug_log.sql
 @@sql/11_top_sql_ash_breakdown.sql
+DEFINE _dbg_msg = 'section 12 param_changes (parameters that differ across windows)'
+@@sql/lib/debug_log.sql
+@@sql/12_param_changes.sql
 DEFINE _dbg_msg = 'all sections rendered; writing HTML epilogue'
 @@sql/lib/debug_log.sql
 
