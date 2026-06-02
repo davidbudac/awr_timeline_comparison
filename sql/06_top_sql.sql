@@ -231,7 +231,10 @@ BEGIN
             SELECT sql_id, sql_text_short FROM (
                 SELECT sql_id,
                        DBMS_LOB.SUBSTR(sql_text, 400, 1) AS sql_text_short,
-                       ROW_NUMBER() OVER (PARTITION BY dbid, sql_id ORDER BY ROWID) AS rn
+                       -- ORDER BY NULL, not ROWID: DBA_HIST_SQLTEXT is a join
+                       -- view in a PDB and selecting ROWID raises ORA-01445.
+                       -- At most one row per (dbid, sql_id), so order is moot.
+                       ROW_NUMBER() OVER (PARTITION BY dbid, sql_id ORDER BY NULL) AS rn
                 FROM   dba_hist_sqltext
                 WHERE  dbid = ~dbid
             ) WHERE rn = 1
@@ -749,7 +752,10 @@ BEGIN
                 INTO   v_text
                 FROM (
                     SELECT sql_text,
-                           ROW_NUMBER() OVER (PARTITION BY dbid, sql_id ORDER BY ROWID) AS rn
+                           -- ORDER BY NULL, not ROWID: avoids ORA-01445 on the
+                           -- DBA_HIST_SQLTEXT join view under a PDB. One row max
+                           -- per (dbid, sql_id), so order is moot.
+                           ROW_NUMBER() OVER (PARTITION BY dbid, sql_id ORDER BY NULL) AS rn
                     FROM   dba_hist_sqltext
                     WHERE  dbid = ~dbid AND sql_id = v_sql_id
                 ) WHERE rn = 1;
