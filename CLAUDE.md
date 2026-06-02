@@ -213,6 +213,28 @@ The driver also resolves `run_id` (17-digit timestamp from
 up front; every section references them as `~name`. No section ever
 re-resolves these values.
 
+**Multitenant `dbid` gotcha (data-driven resolution).** `~dbid` is **not**
+`v$database.dbid` — it is resolved data-drivenly by the `dbo` inline view in
+the driver as *the DBID owning the freshest snapshot visible in the current
+container*. This is required because in multitenant there is no single static
+source that is correct everywhere:
+- In a PDB, `v$database.dbid` returns the **CDB root's** DBID, not the PDB's.
+- Whether the `DBA_HIST_*` rows a PDB can see are stored under the **CDB DBID**
+  or under the **PDB's `CON_DBID`** depends on PDB-level AWR (autoflush):
+  with local AWR on, rows live under the PDB's `CON_DBID` and the root's
+  repository is invisible inside the PDB; with it off, the only visible rows
+  are the root's, under the CDB DBID. So `CON_DBID`-only would return an empty
+  report against a PDB that has *no* local AWR, and `v$database.dbid`-only
+  misses a PDB that *has* local AWR — the original bug.
+The `dbo` view picks `MAX(end_interval_time)`'s DBID from `dba_hist_snapshot`,
+falling back to `CON_DBID` only when AWR is empty (so `~dbid` is never NULL).
+In a non-CDB and in the CDB root this resolves to the same DBID as
+`v$database.dbid`, so existing output (and the dbmint byte-identity test) is
+unchanged. Every AWR query filters `dbid = ~dbid`, so this single resolution
+point governs which container's data the whole report reflects. The header
+`db_name` is likewise suffixed with `/ <CON_NAME>` in a PDB so the report is
+unambiguous about which container it covers.
+
 ### Timeline markers
 `marker_file` lets a user annotate the dated charts with milestones
 (patch applied, index rebuild, incident, release). It is an **optional**

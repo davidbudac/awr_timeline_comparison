@@ -82,8 +82,19 @@ WHENEVER OSERROR  EXIT FAILURE
 -- so we never have to round-trip through a scratch table.
 --
 --   run_id              17-digit timestamp, unique per invocation
---   dbid                v$database.dbid (integer, used by every AWR query)
---   db_name             v$database.name (trimmed)
+--   dbid                DBID owning the freshest snapshot VISIBLE in the
+--                       current container (data-driven; see the `dbo` inline
+--                       view below).  Deliberately NOT v$database.dbid: in a
+--                       PDB that returns the CDB root's DBID, but the AWR rows
+--                       a PDB can see live under the PDB's CON_DBID when
+--                       PDB-level AWR is enabled and under the CDB DBID when it
+--                       is not -- so the correct DBID can only be discovered
+--                       from the data.  Matches v$database.dbid in a non-CDB
+--                       and in the CDB root, so existing output is unchanged
+--                       there.  Used by every AWR query as ~dbid.
+--   db_name             v$database.name (trimmed); when connected to a PDB,
+--                       suffixed with " / <CON_NAME>" so the report header
+--                       identifies the container whose AWR is shown
 --   host_name           v$instance.host_name
 --   db_version          v$instance.version
 --   caller_user         USER
@@ -151,8 +162,14 @@ COLUMN bucket_hours        NEW_VALUE bucket_hours        NOPRINT
 
 SELECT
     t.run_id                                                       AS run_id,
-    d.dbid                                                         AS dbid,
-    TRIM(d.name)                                                   AS db_name,
+    dbo.dbid                                                       AS dbid,
+    -- Show the CDB/database name, and append the container name when we are
+    -- connected to a PDB (CON_ID not in 0=non-CDB, 1=root) so the header makes
+    -- it unambiguous that the report reflects the PDB's own AWR, not the root's.
+    TRIM(d.name)
+        || CASE WHEN TO_NUMBER(SYS_CONTEXT('USERENV','CON_ID')) NOT IN (0,1)
+                THEN ' / ' || SYS_CONTEXT('USERENV','CON_NAME')
+                ELSE '' END                                        AS db_name,
     i.host_name                                                    AS host_name,
     i.version                                                      AS db_version,
     USER                                                           AS caller_user,
@@ -189,7 +206,7 @@ SELECT
     CASE WHEN p.period_unit_short = 'h' THEN 'Mon DD HH24:MI'
          ELSE 'Mon DD'
     END                                                            AS period_axis_fmt,
-    'reports/awr_trend_' || d.dbid || '_'
+    'reports/awr_trend_' || dbo.dbid || '_'
         || TO_CHAR(SYSDATE, 'YYYYMMDDHH24MI')
         || '_run' || t.run_id
         || '.html'                                                 AS report_path,
@@ -199,6 +216,33 @@ SELECT
     mk.marker_include                                              AS marker_include
 FROM v$database d
 CROSS JOIN v$instance i
+CROSS JOIN (
+    -- DBID resolution must be data-driven, NOT v$database.dbid.  In a PDB,
+    -- v$database.dbid returns the CDB root's DBID; whether the AWR rows the
+    -- current container can see are stored under that DBID or under the PDB's
+    -- own CON_DBID depends on whether PDB-level AWR (autoflush) is enabled:
+    --   * PDB with local AWR  -> rows live under the PDB's CON_DBID, and the
+    --     root's repository is NOT visible inside the PDB.
+    --   * PDB without local AWR -> the only DBA_HIST_* rows visible inside the
+    --     PDB are the root's, stored under the CDB DBID (== v$database.dbid).
+    -- So neither v$database.dbid nor CON_DBID alone is correct in every case.
+    -- Resolve to whichever DBID actually has the freshest snapshot visible in
+    -- the current container -- that is, by construction, the dataset every
+    -- DBA_HIST_* query in this report should trend.  Falls back to CON_DBID
+    -- only when AWR is completely empty (brand-new DB) so dbid is never NULL.
+    -- In a non-CDB and in the CDB root this picks the same DBID as
+    -- v$database.dbid, so existing output is unchanged there.
+    SELECT NVL(
+             (SELECT dbid FROM (
+                  SELECT dbid
+                  FROM   dba_hist_snapshot
+                  GROUP BY dbid
+                  ORDER BY MAX(end_interval_time) DESC
+              ) WHERE ROWNUM = 1),
+             TO_NUMBER(SYS_CONTEXT('USERENV','CON_DBID'))
+           ) AS dbid
+    FROM dual
+) dbo
 CROSS JOIN (
     SELECT
         TO_CHAR(SYSTIMESTAMP, 'YYYYMMDDHH24MISSFF3')      AS run_id,

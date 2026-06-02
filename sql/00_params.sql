@@ -15,8 +15,8 @@
 --
 -- Expects these substitution variables from awr_trend.sql:
 --   ~run_id               17-digit timestamp run identifier
---   ~dbid                 v$database.dbid (integer)
---   ~db_name              v$database.name (trimmed)
+--   ~dbid                 current container DBID via SYS_CONTEXT CON_DBID (int)
+--   ~db_name              v$database.name (trimmed; + " / <CON_NAME>" in a PDB)
 --   ~host_name            v$instance.host_name
 --   ~db_version           v$instance.version
 --   ~caller_user          USER
