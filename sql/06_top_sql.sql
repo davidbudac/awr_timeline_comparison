@@ -233,10 +233,13 @@ BEGIN
                        DBMS_LOB.SUBSTR(sql_text, 400, 1) AS sql_text_short,
                        -- ORDER BY NULL, not ROWID: DBA_HIST_SQLTEXT is a join
                        -- view in a PDB and selecting ROWID raises ORA-01445.
-                       -- At most one row per (dbid, sql_id), so order is moot.
-                       ROW_NUMBER() OVER (PARTITION BY dbid, sql_id ORDER BY NULL) AS rn
+                       -- PARTITION BY sql_id only (NOT dbid): when ~dbid_list
+                       -- spans a migration the same sql_id can exist under both
+                       -- DBIDs with identical text; collapsing on sql_id keeps
+                       -- one row so the join to the per-SQL rows stays 1:1.
+                       ROW_NUMBER() OVER (PARTITION BY sql_id ORDER BY NULL) AS rn
                 FROM   dba_hist_sqltext
-                WHERE  dbid = ~dbid
+                WHERE  dbid IN (~dbid_list)
             ) WHERE rn = 1
         )
         SELECT d.code AS dim, d.ord AS dim_ord, d.label AS dim_label,
@@ -734,7 +737,7 @@ BEGIN
                   ON   s.dbid = st.dbid
                  AND   s.snap_id = st.snap_id
                  AND   s.instance_number = st.instance_number
-                WHERE  st.dbid   = ~dbid
+                WHERE  st.dbid   IN (~dbid_list)
                   AND  st.sql_id = v_sql_id
                   AND  (~inst_num = 0 OR st.instance_number = ~inst_num);
             EXCEPTION WHEN NO_DATA_FOUND THEN
@@ -753,11 +756,12 @@ BEGIN
                 FROM (
                     SELECT sql_text,
                            -- ORDER BY NULL, not ROWID: avoids ORA-01445 on the
-                           -- DBA_HIST_SQLTEXT join view under a PDB. One row max
-                           -- per (dbid, sql_id), so order is moot.
-                           ROW_NUMBER() OVER (PARTITION BY dbid, sql_id ORDER BY NULL) AS rn
+                           -- DBA_HIST_SQLTEXT join view under a PDB. PARTITION
+                           -- BY sql_id only so a sql_id present under both a
+                           -- pre- and post-migration DBID collapses to one row.
+                           ROW_NUMBER() OVER (PARTITION BY sql_id ORDER BY NULL) AS rn
                     FROM   dba_hist_sqltext
-                    WHERE  dbid = ~dbid AND sql_id = v_sql_id
+                    WHERE  dbid IN (~dbid_list) AND sql_id = v_sql_id
                 ) WHERE rn = 1;
             EXCEPTION WHEN NO_DATA_FOUND THEN
                 v_text := NULL;
@@ -853,7 +857,7 @@ BEGIN
                       ON   s.dbid = st.dbid
                      AND   s.snap_id = st.snap_id
                      AND   s.instance_number = st.instance_number
-                    WHERE  st.dbid   = ~dbid
+                    WHERE  st.dbid   IN (~dbid_list)
                       AND  st.sql_id = v_sql_id
                       AND  (~inst_num = 0 OR st.instance_number = ~inst_num)
                       AND  st.plan_hash_value > 0
@@ -901,7 +905,7 @@ BEGIN
                       ON   s.dbid = st.dbid
                      AND   s.snap_id = st.snap_id
                      AND   s.instance_number = st.instance_number
-                    WHERE  st.dbid   = ~dbid
+                    WHERE  st.dbid   IN (~dbid_list)
                       AND  st.sql_id = v_sql_id
                       AND  (~inst_num = 0 OR st.instance_number = ~inst_num)
                       AND  st.plan_hash_value > 0

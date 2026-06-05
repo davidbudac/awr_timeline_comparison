@@ -207,7 +207,8 @@ below. The driver resolves `step_hours = step * (1|24|168)` plus
 `period_step_label` / `period_axis_fmt` once up front; every section
 uses `~step_hours/24` (NOT the literal `7`) as the cadence multiplier.
 The driver also resolves `run_id` (17-digit timestamp from
-`SYSTIMESTAMP`), `dbid`, `db_name`, `host_name`, `db_version`,
+`SYSTIMESTAMP`), `dbid`, `dbid_list` (comma set of all visible DBIDs;
+see "Cross-DBID continuity" below), `db_name`, `host_name`, `db_version`,
 `caller_user`, `generated_at_s`, `dow_name`, `report_path`,
 `template_name`, `template_dir`, `debug_termout`, and `marker_include`
 up front; every section references them as `~name`. No section ever
@@ -230,10 +231,58 @@ The `dbo` view picks `MAX(end_interval_time)`'s DBID from `dba_hist_snapshot`,
 falling back to `CON_DBID` only when AWR is empty (so `~dbid` is never NULL).
 In a non-CDB and in the CDB root this resolves to the same DBID as
 `v$database.dbid`, so existing output (and the dbmint byte-identity test) is
-unchanged. Every AWR query filters `dbid = ~dbid`, so this single resolution
-point governs which container's data the whole report reflects. The header
-`db_name` is likewise suffixed with `/ <CON_NAME>` in a PDB so the report is
-unambiguous about which container it covers.
+unchanged. `~dbid` is used for the **report path filename** and the **masthead
+label** only. The header `db_name` is likewise suffixed with `/ <CON_NAME>` in
+a PDB so the report is unambiguous about which container it covers.
+
+**Cross-DBID continuity (`~dbid_list`) — non-CDB → PDB migrations.** AWR is
+keyed by `(dbid, snap_id)`, and a non-CDB migrated into a PDB keeps its
+pre-migration history under the **old non-CDB DBID** while post-migration
+snapshots land under the **new `CON_DBID`**. A report pinned to a single
+`~dbid` therefore goes blank for every window on the far side of the migration
+(the original "AWR not continuous" symptom). The fix: the driver also resolves
+`~dbid_list`, the comma set of **all** DBIDs owning snapshots visible in the
+container (the `dbl` inline view: `LISTAGG(DISTINCT dbid)` over
+`dba_hist_snapshot`, `NVL` to `CON_DBID` so the list is never empty). Because
+`DBA_HIST_*` is container-scoped, in a migrated PDB this set is exactly
+`{old non-CDB DBID, new CON_DBID}`. Every AWR filter uses
+`dbid IN (~dbid_list)` instead of `dbid = ~dbid`:
+- **Window-joined sections (02–08, 11 main, 12)** need *no per-section change*:
+  `sql/lib/windows_cte.sql` now resolves candidate snaps **by time** across
+  `dbid IN (~dbid_list)` and carries each snap's own `s.dbid` forward, so
+  `begin_snap`/`end_snap`/`instance_pairs`/`windows`/`valid_windows`/
+  `windows_rollup` all gain a **per-window dbid**. Those sections already join
+  `ON x.dbid = w.dbid`, so a pre-migration window now resolves against the old
+  DBID and a post-migration window against the new one, automatically. A window
+  that **straddles** the migration (begin and end snaps under different DBIDs)
+  is invalidated with `skip_reason = 'DBID changed inside window …'` — a delta
+  across a DBID change is meaningless. `begin_snap`/`end_snap` also expose
+  `end_ts` (the snap's `end_interval_time`) for the time-axis sections below.
+- **Time-range chart sections (00 masthead strip, 10 DB-time summary)** can no
+  longer scan a single contiguous `snap_id BETWEEN v_min AND v_max` range
+  (snap_ids reset per DBID). They now resolve a **TIMESTAMP** span
+  (`v_range_start`/`v_range_end` = the `end_ts` of the earliest begin / latest
+  end snap across valid windows) and scan `end_interval_time BETWEEN` it with
+  `dbid IN (~dbid_list)`; their `v_snap_idx` bucket map is keyed by
+  `dbid||'|'||snap_id` and every `LAG` partitions by `(dbid, instance_number …)`
+  so deltas never cross the boundary. `dba_hist_sys_time_model` /
+  `dba_hist_system_event` (no `end_interval_time` column) are joined to
+  `dba_hist_snapshot` to get the time bound.
+- **Point-lookup filters (09 ASH pull, 11 ASH + sqltext, 06 sqltext + per-SQL
+  sqlstat)** just switch `= ~dbid` → `IN (~dbid_list)`. The two `dba_hist_sqltext`
+  lookups in 06 drop `dbid` from their `ROW_NUMBER() PARTITION BY` (text is
+  identical across DBIDs for a sql_id) so the result stays one row per `sql_id`.
+- Section 00's masthead shows **`DBID 12345, 67890`** (label auto-pluralized)
+  when the span crosses a DBID change.
+
+**Single-DBID invariant.** When only one DBID is present, `~dbid_list` is a
+one-element list equal to `~dbid`, so `dbid IN (~dbid_list)` ≡ the old
+`dbid = ~dbid`, the per-window dbid is constant, the straddle check never
+fires, and the time-range scans select exactly the old snap_id range. Output
+is byte-identical — the dbmint byte-identity test still applies and must be
+re-run after touching any of sections 00/06/09/10/11/12 or `windows_cte.sql`.
+The multi-DBID path can only be validated on a real migrated PDB (dbmint is a
+single-DBID CDB).
 
 ### Timeline markers
 `marker_file` lets a user annotate the dated charts with milestones
