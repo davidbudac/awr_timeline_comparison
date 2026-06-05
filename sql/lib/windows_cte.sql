@@ -50,13 +50,13 @@
 --                   byte-identity.
 --
 -- Substitution variables consumed (resolved once by awr_trend.sql):
---   ~dbid_list ~inst_num ~target_end_resolved
+--   dbid_list ~inst_num ~target_end_resolved
 --   ~win_hours ~weeks_back ~top_n ~step_hours
--- (~dbid_list is the comma set of all visible DBIDs; snaps are resolved by
+-- (dbid_list is the comma set of all visible DBIDs; snaps are resolved by
 --  time across it so a window straddling a DBID change is detected.  Each
 --  resolved snap/window carries its own dbid -- begin_snap/end_snap expose
 --  dbid + end_ts, and windows / valid_windows / windows_rollup expose a
---  per-window dbid.  With one DBID this is byte-identical to pinning ~dbid.)
+--  per-window dbid.  With one DBID this is byte-identical to pinning dbid.)
 --
         run_params AS (
             SELECT ~dbid AS dbid,
@@ -78,13 +78,13 @@
             FROM run_params r CROSS JOIN offsets o
         ),
         -- Candidate snaps are resolved BY TIME across every visible DBID
-        -- (dbid IN (~dbid_list)), NOT pinned to a single ~dbid.  We carry the
+        -- (dbid IN (dbid_list)), NOT pinned to a single dbid.  We carry the
         -- snapshot's own s.dbid forward so each window's begin/end snap -- and
         -- thus the window itself -- is tagged with the DBID that actually owns
         -- it.  A window fully before a non-CDB->PDB migration resolves to the
         -- old DBID, one fully after to the new DBID, and a window straddling
         -- the boundary is caught and invalidated below (begin_dbid<>end_dbid).
-        -- With a single DBID, dbid IN (~dbid_list) == dbid = ~dbid and s.dbid
+        -- With a single DBID, dbid IN (dbid_list) == dbid = dbid and s.dbid
         -- is constant, so this is byte-identical to the pinned-DBID resolution.
         snaps AS (
             SELECT w.week_offset, w.win_start_dt, w.win_end_dt,
@@ -142,7 +142,7 @@
             SELECT
                 w.week_offset,
                 -- DBID is now per-window, taken from the window's own resolved
-                -- snaps (begin preferred, else end), NOT a single global ~dbid.
+                -- snaps (begin preferred, else end), NOT a single global dbid.
                 NVL(ip.begin_dbid, ip.end_dbid) AS dbid,
                 ip.instance_number,
                 CAST(w.win_start_dt AS TIMESTAMP) AS win_start_ts,

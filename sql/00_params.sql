@@ -15,7 +15,7 @@
 --
 -- Expects these substitution variables from awr_trend.sql:
 --   ~run_id               17-digit timestamp run identifier
---   ~dbid                 current container DBID via SYS_CONTEXT CON_DBID (int)
+--   dbid                 current container DBID via SYS_CONTEXT CON_DBID (int)
 --   ~db_name              v$database.name (trimmed; + " / <CON_NAME>" in a PDB)
 --   ~host_name            v$instance.host_name
 --   ~db_version           v$instance.version
@@ -75,7 +75,7 @@ DECLARE
     -- DBID, so after a non-CDB->PDB migration one snap_id range can't cover
     -- both eras.  v_range_start/v_range_end are the actual snap times of the
     -- earliest begin and latest end across valid windows; scans filter
-    -- end_interval_time BETWEEN them with dbid IN (~dbid_list).  Single-DBID:
+    -- end_interval_time BETWEEN them with dbid IN (dbid_list).  Single-DBID:
     -- selects exactly the old snap_id range, so output is unchanged.
     v_range_start  TIMESTAMP;
     v_range_end    TIMESTAMP;
@@ -467,15 +467,18 @@ BEGIN
         || ' <span class="badge info">run ' || '~run_id' || '</span>'
         || '</h1>');
     DBMS_OUTPUT.PUT_LINE('    <div class="meta">');
-    -- ~dbid_list is the full set of DBIDs the report spans; with a single
-    -- DBID it equals ~dbid, so this is byte-identical to the old "DBID <n>"
-    -- masthead.  When AWR crosses a DBID change (non-CDB->PDB migration) it
-    -- becomes "DBID 12345, 67890", making the spanned eras explicit.  The
-    -- INSTR test only pluralizes the label when more than one DBID is present.
+    -- Primary DBID label is emitted EXACTLY as before (the dbid NEW_VALUE,
+    -- including its NUMBER-column padding) so single-DBID output stays
+    -- byte-identical.  Only when the report actually spans more than one DBID
+    -- (non-CDB->PDB migration: INSTR finds a comma in dbid_list) do we append
+    -- the full set, making the crossed eras explicit without disturbing the
+    -- common case.
     DBMS_OUTPUT.PUT_LINE('      <div><b>' || DBMS_XMLGEN.CONVERT('~db_name')
-        || '</b> &middot; DBID'
-        || CASE WHEN INSTR('~dbid_list', ',') > 0 THEN 's ' ELSE ' ' END
-        || REPLACE('~dbid_list', ',', ', ') || '</div>');
+        || '</b> &middot; DBID ' || '~dbid'
+        || CASE WHEN INSTR('~dbid_list', ',') > 0
+                THEN ' &middot; all DBIDs ' || REPLACE('~dbid_list', ',', ', ')
+                ELSE '' END
+        || '</div>');
     DBMS_OUTPUT.PUT_LINE('      <div>Host <b>' || DBMS_XMLGEN.CONVERT('~host_name')
         || '</b> &middot; ' || DBMS_XMLGEN.CONVERT('~db_version') || '</div>');
     DBMS_OUTPUT.PUT_LINE('      <div>Generated <b>' || '~generated_at_s' || '</b></div>');

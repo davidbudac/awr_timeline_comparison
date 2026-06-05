@@ -27,7 +27,7 @@ DECLARE
     -- eras.  v_range_start/v_range_end are the actual end_interval_time of the
     -- earliest begin snap and latest end snap across all valid windows, and
     -- every scan filters end_interval_time BETWEEN them with dbid IN
-    -- (~dbid_list).  With one DBID this selects exactly the old snap_id range.
+    -- (dbid_list).  With one DBID this selects exactly the old snap_id range.
     v_range_start  TIMESTAMP;
     v_range_end    TIMESTAMP;
     v_buckets    PLS_INTEGER := 0;

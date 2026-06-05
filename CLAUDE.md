@@ -272,16 +272,32 @@ container (the `dbl` inline view: `LISTAGG(DISTINCT dbid)` over
   sqlstat)** just switch `= ~dbid` → `IN (~dbid_list)`. The two `dba_hist_sqltext`
   lookups in 06 drop `dbid` from their `ROW_NUMBER() PARTITION BY` (text is
   identical across DBIDs for a sql_id) so the result stays one row per `sql_id`.
-- Section 00's masthead shows **`DBID 12345, 67890`** (label auto-pluralized)
-  when the span crosses a DBID change.
+- Section 00's masthead emits the **primary DBID label exactly as before**
+  (the `~dbid` NEW_VALUE, padding and all) and only **appends**
+  `&middot; all DBIDs <a>, <b>` when `~dbid_list` actually contains a comma
+  (i.e. the span crosses a DBID change). This is deliberate so the
+  single-DBID masthead stays byte-identical — do NOT "simplify" it to emit
+  `~dbid_list` directly (that drops the NUMBER-column padding and fails the
+  byte-identity test by one line).
 
-**Single-DBID invariant.** When only one DBID is present, `~dbid_list` is a
-one-element list equal to `~dbid`, so `dbid IN (~dbid_list)` ≡ the old
-`dbid = ~dbid`, the per-window dbid is constant, the straddle check never
-fires, and the time-range scans select exactly the old snap_id range. Output
-is byte-identical — the dbmint byte-identity test still applies and must be
-re-run after touching any of sections 00/06/09/10/11/12 or `windows_cte.sql`.
-The multi-DBID path can only be validated on a real migrated PDB (dbmint is a
+**Tilde-in-comments caveat (bit me once).** Because `~dbid_list` / `~dbid`
+are now woven through the code, remember the `SET DEFINE '~'` gotcha (see
+"Tilde gotcha"): a literal `~dbid_list` in a comment **embedded inside a SQL
+statement** (e.g. mid-`SELECT` in the driver prologue, before the SELECT that
+defines it) is parsed as an undefined substitution variable and triggers an
+interactive `Enter value for dbid_list:` prompt — which, against a heredoc,
+reads EOF garbage and aborts with `SP2-0310 … O/S Message: No such file or
+directory`. Keep `~name` out of comments; write the bare name (`dbid_list`).
+
+**Single-DBID invariant (verified).** When only one DBID is present,
+`~dbid_list` is a one-element list equal to `~dbid`, so `dbid IN (~dbid_list)`
+≡ the old `dbid = ~dbid`, the per-window dbid is constant, the straddle check
+never fires, and the time-range scans select exactly the old snap_id range.
+Output is byte-identical — **confirmed on dbmint in Jun 2026**: a fresh
+pre-change (`d2f185f`) report and a post-change report generated back-to-back
+normalized to the same md5 (`ea447dac…`). Re-run the byte-identity test after
+touching any of sections 00/06/09/10/11/12 or `windows_cte.sql`. The
+multi-DBID path can only be validated on a real migrated PDB (dbmint is a
 single-DBID CDB).
 
 ### Timeline markers
