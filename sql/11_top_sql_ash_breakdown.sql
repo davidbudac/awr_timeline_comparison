@@ -265,7 +265,7 @@ BEGIN
             FROM   picked p
             LEFT JOIN dba_hist_active_sess_history a
                   ON a.sql_id = p.sql_id
-                 AND a.dbid = ~dbid
+                 AND a.dbid IN (~dbid_list)
                  AND (~inst_num = 0 OR a.instance_number = ~inst_num)
                  AND a.sample_time >= CAST(v_range_start AS TIMESTAMP)
                  AND a.sample_time <  CAST(v_range_end   AS TIMESTAMP)
@@ -284,7 +284,7 @@ BEGIN
                    COUNT(*) AS samples
             FROM   dba_hist_active_sess_history a
             JOIN   pool p ON p.sql_id = a.sql_id
-            WHERE  a.dbid = ~dbid
+            WHERE  a.dbid IN (~dbid_list)
               AND  (~inst_num = 0 OR a.instance_number = ~inst_num)
               AND  a.sample_time >= CAST(v_range_start AS TIMESTAMP)
               AND  a.sample_time <  CAST(v_range_end   AS TIMESTAMP)
@@ -394,7 +394,7 @@ BEGIN
                                           CHR(10), ' '), CHR(13), ' '), 1, 200)
             INTO   v_sql_text(v_sid)
             FROM   dba_hist_sqltext
-            WHERE  dbid = ~dbid
+            WHERE  dbid IN (~dbid_list)
               AND  sql_id = v_sid
               AND  ROWNUM = 1;
         EXCEPTION

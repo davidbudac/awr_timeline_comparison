@@ -91,7 +91,14 @@ WHENEVER OSERROR  EXIT FAILURE
 --                       is not -- so the correct DBID can only be discovered
 --                       from the data.  Matches v$database.dbid in a non-CDB
 --                       and in the CDB root, so existing output is unchanged
---                       there.  Used by every AWR query as ~dbid.
+--                       there.  Used as ~dbid for the report path + masthead
+--                       label and as the fallback element of ~dbid_list.
+--   dbid_list           comma-separated set of ALL DBIDs owning snapshots
+--                       visible in the container (data-driven; see the `dbl`
+--                       inline view below).  Every DBA_HIST_* filter uses
+--                       `dbid IN (~dbid_list)` so AWR that spans a DBID change
+--                       (non-CDB -> PDB migration) is continuous.  Equals
+--                       {~dbid} in a single-DBID database (output unchanged).
 --   db_name             v$database.name (trimmed); when connected to a PDB,
 --                       suffixed with " / <CON_NAME>" so the report header
 --                       identifies the container whose AWR is shown
@@ -119,6 +126,18 @@ WHENEVER OSERROR  EXIT FAILURE
 -- --------------------------------------------------------------------
 COLUMN run_id              NEW_VALUE run_id              NOPRINT
 COLUMN dbid                NEW_VALUE dbid                NOPRINT
+-- dbid_list is the comma-separated set of EVERY DBID that owns snapshots
+-- visible in the current container (data-driven; see the `dbl` inline view
+-- below).  ~dbid stays the single freshest DBID (used for the report path,
+-- the masthead label, and as the always-present fallback element here); but
+-- every DBA_HIST_* time-range / point-lookup filter uses `dbid IN (~dbid_list)`
+-- so AWR history that spans a DBID change -- e.g. a non-CDB migrated into a
+-- PDB, where pre-migration snaps live under the old non-CDB DBID and
+-- post-migration snaps under the new CON_DBID -- is reported continuously
+-- instead of silently truncated at the boundary.  In a DB with a single DBID
+-- this resolves to exactly `~dbid`, so `dbid IN (~dbid_list)` is equivalent
+-- to the old `dbid = ~dbid` and output is unchanged.
+COLUMN dbid_list           NEW_VALUE dbid_list           NOPRINT
 COLUMN db_name             NEW_VALUE db_name             NOPRINT
 COLUMN host_name           NEW_VALUE host_name           NOPRINT
 COLUMN db_version          NEW_VALUE db_version          NOPRINT
@@ -163,6 +182,7 @@ COLUMN bucket_hours        NEW_VALUE bucket_hours        NOPRINT
 SELECT
     t.run_id                                                       AS run_id,
     dbo.dbid                                                       AS dbid,
+    dbl.dbid_list                                                  AS dbid_list,
     -- Show the CDB/database name, and append the container name when we are
     -- connected to a PDB (CON_ID not in 0=non-CDB, 1=root) so the header makes
     -- it unambiguous that the report reflects the PDB's own AWR, not the root's.
@@ -243,6 +263,21 @@ CROSS JOIN (
            ) AS dbid
     FROM dual
 ) dbo
+CROSS JOIN (
+    -- Every DBID that owns snapshots visible in this container, as a comma
+    -- list for `dbid IN (~dbid_list)`.  DBA_HIST_SNAPSHOT is already
+    -- container-scoped (it shows only the current container's AWR rows), so
+    -- in a migrated PDB this set is exactly {old non-CDB DBID, new CON_DBID}
+    -- and in an ordinary single-DBID database it is a one-element list equal
+    -- to ~dbid.  NVL to CON_DBID keeps the list non-empty (so the generated
+    -- `IN (...)` never degenerates to invalid `IN ()`) when AWR is empty.
+    SELECT NVL(
+             (SELECT LISTAGG(dbid, ',') WITHIN GROUP (ORDER BY dbid)
+              FROM   (SELECT DISTINCT dbid FROM dba_hist_snapshot)),
+             TO_CHAR(SYS_CONTEXT('USERENV','CON_DBID'))
+           ) AS dbid_list
+    FROM dual
+) dbl
 CROSS JOIN (
     SELECT
         TO_CHAR(SYSTIMESTAMP, 'YYYYMMDDHH24MISSFF3')      AS run_id,

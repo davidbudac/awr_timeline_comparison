@@ -71,8 +71,14 @@ DECLARE
     -- LAG-delta pattern as sql/10_db_time_summary.sql, flattened to a
     -- single total line (no wait_class stacking) for an at-a-glance
     -- overview right under the headline.
-    v_min_snap     NUMBER;
-    v_max_snap     NUMBER;
+    -- TIME-bounded span (not a single snap_id range): snap_ids reset per
+    -- DBID, so after a non-CDB->PDB migration one snap_id range can't cover
+    -- both eras.  v_range_start/v_range_end are the actual snap times of the
+    -- earliest begin and latest end across valid windows; scans filter
+    -- end_interval_time BETWEEN them with dbid IN (~dbid_list).  Single-DBID:
+    -- selects exactly the old snap_id range, so output is unchanged.
+    v_range_start  TIMESTAMP;
+    v_range_end    TIMESTAMP;
     v_buckets      PLS_INTEGER := 0;
     -- v_times_json / v_vals_json are CLOBs so a long, dense compared
     -- span (e.g. weeks_back=4 with 15-min AWR snaps -> 2700+ buckets)
@@ -264,19 +270,20 @@ BEGIN
     -- convention in CLAUDE.md. The shape mirrors sql/10_db_time_summary
     -- .sql; just the cat dimension is collapsed.
     -- =========================================================
-    SELECT MIN(begin_snap_id), MAX(end_snap_id)
-    INTO   v_min_snap, v_max_snap
+    SELECT MIN(begin_ts), MAX(end_ts)
+    INTO   v_range_start, v_range_end
     FROM (
         WITH
         @@sql/lib/windows_cte.sql
-        SELECT bs.snap_id AS begin_snap_id,
-               es.snap_id AS end_snap_id
+        SELECT bs.end_ts AS begin_ts,
+               es.end_ts AS end_ts
         FROM   raw_windows w
         JOIN   begin_snap bs ON bs.week_offset = w.week_offset
         JOIN   end_snap   es ON es.week_offset = w.week_offset
         WHERE  bs.snap_id IS NOT NULL
           AND  es.snap_id IS NOT NULL
           AND  bs.snap_id <> es.snap_id
+          AND  bs.dbid = es.dbid
           AND  bs.startup_time = es.startup_time
     );
 
@@ -309,31 +316,32 @@ BEGIN
           AND  bs.startup_time = es.startup_time
     );
 
-    IF v_min_snap IS NOT NULL AND v_max_snap IS NOT NULL THEN
-        -- Pass 1: chronological x-axis. snap_id is identical across
-        -- instances at the same point in time, so DISTINCT collapses
-        -- RAC duplicates.
+    IF v_range_start IS NOT NULL AND v_range_end IS NOT NULL THEN
+        -- Pass 1: chronological x-axis across all visible DBIDs. snap_id is
+        -- identical across instances at the same point in time, so grouping
+        -- collapses RAC duplicates; (dbid, snap_id) keeps the two eras of a
+        -- migrated DB distinct.
         FOR s IN (
             WITH ordered AS (
-                SELECT s.snap_id, s.instance_number, s.end_interval_time,
+                SELECT s.dbid, s.snap_id, s.instance_number, s.end_interval_time,
                        s.startup_time,
-                       LAG(s.startup_time) OVER (PARTITION BY s.instance_number
+                       LAG(s.startup_time) OVER (PARTITION BY s.dbid, s.instance_number
                                                  ORDER BY s.snap_id) AS prev_startup
                 FROM   dba_hist_snapshot s
-                WHERE  s.dbid = ~dbid
-                  AND  s.snap_id BETWEEN v_min_snap AND v_max_snap
+                WHERE  s.dbid IN (~dbid_list)
+                  AND  s.end_interval_time BETWEEN v_range_start AND v_range_end
                   AND  (~inst_num = 0 OR s.instance_number = ~inst_num)
             )
-            SELECT snap_id,
+            SELECT dbid, snap_id,
                    MIN(end_interval_time) AS end_ts
             FROM   ordered
             WHERE  prev_startup IS NOT NULL
               AND  startup_time = prev_startup
-            GROUP BY snap_id
+            GROUP BY dbid, snap_id
             ORDER BY MIN(end_interval_time)
         ) LOOP
             v_buckets := v_buckets + 1;
-            v_snap_idx(TO_CHAR(s.snap_id)) := v_buckets;
+            v_snap_idx(s.dbid || '|' || s.snap_id) := v_buckets;
             v_vals(v_buckets) := 0;
             -- CLOB v_times_json was pre-seeded with '[' so every entry
             -- after the first is comma-separated.  WRITEAPPEND amount
@@ -351,58 +359,70 @@ BEGIN
         -- across all valid (snap_id, instance_number) pair_keys.
         FOR r IN (
             WITH ordered_snaps AS (
-                SELECT s.snap_id, s.instance_number, s.startup_time,
-                       LAG(s.startup_time) OVER (PARTITION BY s.instance_number
+                SELECT s.dbid, s.snap_id, s.instance_number, s.startup_time,
+                       LAG(s.startup_time) OVER (PARTITION BY s.dbid, s.instance_number
                                                  ORDER BY s.snap_id) AS prev_startup
                 FROM   dba_hist_snapshot s
-                WHERE  s.dbid = ~dbid
-                  AND  s.snap_id BETWEEN v_min_snap AND v_max_snap
+                WHERE  s.dbid IN (~dbid_list)
+                  AND  s.end_interval_time BETWEEN v_range_start AND v_range_end
                   AND  (~inst_num = 0 OR s.instance_number = ~inst_num)
             ),
             pair_keys AS (
-                SELECT snap_id, instance_number
+                SELECT dbid, snap_id, instance_number
                 FROM   ordered_snaps
                 WHERE  prev_startup IS NOT NULL
                   AND  startup_time = prev_startup
             ),
             cpu_d AS (
-                SELECT stm.snap_id, stm.instance_number,
+                -- joined to dba_hist_snapshot so the span is bounded by TIME
+                -- (sys_time_model has no end_interval_time) and the LAG delta
+                -- is partitioned per DBID so it never crosses a migration.
+                SELECT stm.dbid, stm.snap_id, stm.instance_number,
                        GREATEST(stm.value
-                           - LAG(stm.value) OVER (PARTITION BY stm.instance_number
+                           - LAG(stm.value) OVER (PARTITION BY stm.dbid, stm.instance_number
                                                   ORDER BY stm.snap_id), 0) AS micro
                 FROM   dba_hist_sys_time_model stm
-                WHERE  stm.dbid = ~dbid
+                JOIN   dba_hist_snapshot s2
+                  ON   s2.dbid = stm.dbid
+                 AND   s2.snap_id = stm.snap_id
+                 AND   s2.instance_number = stm.instance_number
+                WHERE  stm.dbid IN (~dbid_list)
                   AND  stm.stat_name = 'DB CPU'
-                  AND  stm.snap_id BETWEEN v_min_snap AND v_max_snap
+                  AND  s2.end_interval_time BETWEEN v_range_start AND v_range_end
                   AND  (~inst_num = 0 OR stm.instance_number = ~inst_num)
             ),
             wait_d AS (
-                SELECT se.snap_id, se.instance_number,
+                SELECT se.dbid, se.snap_id, se.instance_number,
                        GREATEST(se.time_waited_micro
                            - LAG(se.time_waited_micro) OVER (
-                               PARTITION BY se.instance_number, se.event_id
+                               PARTITION BY se.dbid, se.instance_number, se.event_id
                                ORDER BY se.snap_id), 0) AS micro
                 FROM   dba_hist_system_event se
-                WHERE  se.dbid = ~dbid
+                JOIN   dba_hist_snapshot s3
+                  ON   s3.dbid = se.dbid
+                 AND   s3.snap_id = se.snap_id
+                 AND   s3.instance_number = se.instance_number
+                WHERE  se.dbid IN (~dbid_list)
                   AND  NVL(se.wait_class, 'x') <> 'Idle'
-                  AND  se.snap_id BETWEEN v_min_snap AND v_max_snap
+                  AND  s3.end_interval_time BETWEEN v_range_start AND v_range_end
                   AND  (~inst_num = 0 OR se.instance_number = ~inst_num)
             ),
             all_d AS (
-                SELECT snap_id, instance_number, micro FROM cpu_d
+                SELECT dbid, snap_id, instance_number, micro FROM cpu_d
                 UNION ALL
-                SELECT snap_id, instance_number, micro FROM wait_d
+                SELECT dbid, snap_id, instance_number, micro FROM wait_d
             )
-            SELECT a.snap_id, SUM(a.micro)/1e6 AS sec
+            SELECT a.dbid, a.snap_id, SUM(a.micro)/1e6 AS sec
             FROM   all_d a
             JOIN   pair_keys pk
-              ON   pk.snap_id = a.snap_id
+              ON   pk.dbid = a.dbid
+             AND   pk.snap_id = a.snap_id
              AND   pk.instance_number = a.instance_number
-            GROUP BY a.snap_id
+            GROUP BY a.dbid, a.snap_id
             HAVING SUM(a.micro) > 0
         ) LOOP
-            IF v_snap_idx.EXISTS(TO_CHAR(r.snap_id)) THEN
-                v_vals(v_snap_idx(TO_CHAR(r.snap_id))) := r.sec;
+            IF v_snap_idx.EXISTS(r.dbid || '|' || r.snap_id) THEN
+                v_vals(v_snap_idx(r.dbid || '|' || r.snap_id)) := r.sec;
             END IF;
         END LOOP;
 
@@ -447,8 +467,15 @@ BEGIN
         || ' <span class="badge info">run ' || '~run_id' || '</span>'
         || '</h1>');
     DBMS_OUTPUT.PUT_LINE('    <div class="meta">');
+    -- ~dbid_list is the full set of DBIDs the report spans; with a single
+    -- DBID it equals ~dbid, so this is byte-identical to the old "DBID <n>"
+    -- masthead.  When AWR crosses a DBID change (non-CDB->PDB migration) it
+    -- becomes "DBID 12345, 67890", making the spanned eras explicit.  The
+    -- INSTR test only pluralizes the label when more than one DBID is present.
     DBMS_OUTPUT.PUT_LINE('      <div><b>' || DBMS_XMLGEN.CONVERT('~db_name')
-        || '</b> &middot; DBID ' || '~dbid' || '</div>');
+        || '</b> &middot; DBID'
+        || CASE WHEN INSTR('~dbid_list', ',') > 0 THEN 's ' ELSE ' ' END
+        || REPLACE('~dbid_list', ',', ', ') || '</div>');
     DBMS_OUTPUT.PUT_LINE('      <div>Host <b>' || DBMS_XMLGEN.CONVERT('~host_name')
         || '</b> &middot; ' || DBMS_XMLGEN.CONVERT('~db_version') || '</div>');
     DBMS_OUTPUT.PUT_LINE('      <div>Generated <b>' || '~generated_at_s' || '</b></div>');

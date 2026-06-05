@@ -118,7 +118,7 @@ BEGIN
                     ELSE NVL(ash.wait_class, 'Other') END AS wait_class,
                COUNT(*) AS sample_count
         FROM   dba_hist_active_sess_history ash
-        WHERE  ash.dbid = ~dbid
+        WHERE  ash.dbid IN (~dbid_list)
           AND  (~inst_num = 0 OR ash.instance_number = ~inst_num)
           AND  ash.sample_time >= CAST(v_range_start AS TIMESTAMP)
           AND  ash.sample_time <  CAST(v_range_end   AS TIMESTAMP)

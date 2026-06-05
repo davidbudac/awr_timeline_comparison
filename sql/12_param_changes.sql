@@ -100,7 +100,11 @@ BEGIN
         @@sql/lib/windows_cte.sql
         ,
         win AS (
-            SELECT week_offset, end_snap_id
+            -- carry the per-window DBID so the dba_hist_parameter join is
+            -- qualified by (dbid, snap_id): across a non-CDB->PDB migration the
+            -- same snap_id exists under both DBIDs, so snap_id alone would
+            -- match the wrong window's parameters.
+            SELECT week_offset, dbid, end_snap_id
             FROM   windows_rollup
             WHERE  end_snap_id IS NOT NULL
         ),
@@ -112,13 +116,13 @@ BEGIN
                         ELSE ~inst_num END AS inst
             FROM   dba_hist_parameter p
             JOIN   win w ON w.end_snap_id = p.snap_id
-            WHERE  p.dbid = ~dbid
+                       AND w.dbid        = p.dbid
         ),
         pv AS (
             SELECT w.week_offset, p.parameter_name, p.value
             FROM   win w
             JOIN   dba_hist_parameter p
-              ON   p.dbid = ~dbid
+              ON   p.dbid = w.dbid
              AND   p.snap_id = w.end_snap_id
              AND   p.instance_number = (SELECT inst FROM param_inst)
         ),
