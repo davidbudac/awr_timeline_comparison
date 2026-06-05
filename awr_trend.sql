@@ -91,14 +91,14 @@ WHENEVER OSERROR  EXIT FAILURE
 --                       is not -- so the correct DBID can only be discovered
 --                       from the data.  Matches v$database.dbid in a non-CDB
 --                       and in the CDB root, so existing output is unchanged
---                       there.  Used as ~dbid for the report path + masthead
---                       label and as the fallback element of ~dbid_list.
+--                       there.  Used as dbid for the report path + masthead
+--                       label and as the fallback element of dbid_list.
 --   dbid_list           comma-separated set of ALL DBIDs owning snapshots
 --                       visible in the container (data-driven; see the `dbl`
 --                       inline view below).  Every DBA_HIST_* filter uses
---                       `dbid IN (~dbid_list)` so AWR that spans a DBID change
+--                       `dbid IN (dbid_list)` so AWR that spans a DBID change
 --                       (non-CDB -> PDB migration) is continuous.  Equals
---                       {~dbid} in a single-DBID database (output unchanged).
+--                       {dbid} in a single-DBID database (output unchanged).
 --   db_name             v$database.name (trimmed); when connected to a PDB,
 --                       suffixed with " / <CON_NAME>" so the report header
 --                       identifies the container whose AWR is shown
@@ -128,15 +128,15 @@ COLUMN run_id              NEW_VALUE run_id              NOPRINT
 COLUMN dbid                NEW_VALUE dbid                NOPRINT
 -- dbid_list is the comma-separated set of EVERY DBID that owns snapshots
 -- visible in the current container (data-driven; see the `dbl` inline view
--- below).  ~dbid stays the single freshest DBID (used for the report path,
+-- below).  dbid stays the single freshest DBID (used for the report path,
 -- the masthead label, and as the always-present fallback element here); but
--- every DBA_HIST_* time-range / point-lookup filter uses `dbid IN (~dbid_list)`
+-- every DBA_HIST_* time-range / point-lookup filter uses `dbid IN (dbid_list)`
 -- so AWR history that spans a DBID change -- e.g. a non-CDB migrated into a
 -- PDB, where pre-migration snaps live under the old non-CDB DBID and
 -- post-migration snaps under the new CON_DBID -- is reported continuously
 -- instead of silently truncated at the boundary.  In a DB with a single DBID
--- this resolves to exactly `~dbid`, so `dbid IN (~dbid_list)` is equivalent
--- to the old `dbid = ~dbid` and output is unchanged.
+-- this resolves to exactly `dbid`, so `dbid IN (dbid_list)` is equivalent
+-- to the old `dbid = dbid` and output is unchanged.
 COLUMN dbid_list           NEW_VALUE dbid_list           NOPRINT
 COLUMN db_name             NEW_VALUE db_name             NOPRINT
 COLUMN host_name           NEW_VALUE host_name           NOPRINT
@@ -265,11 +265,11 @@ CROSS JOIN (
 ) dbo
 CROSS JOIN (
     -- Every DBID that owns snapshots visible in this container, as a comma
-    -- list for `dbid IN (~dbid_list)`.  DBA_HIST_SNAPSHOT is already
+    -- list for `dbid IN (dbid_list)`.  DBA_HIST_SNAPSHOT is already
     -- container-scoped (it shows only the current container's AWR rows), so
     -- in a migrated PDB this set is exactly {old non-CDB DBID, new CON_DBID}
     -- and in an ordinary single-DBID database it is a one-element list equal
-    -- to ~dbid.  NVL to CON_DBID keeps the list non-empty (so the generated
+    -- to dbid.  NVL to CON_DBID keeps the list non-empty (so the generated
     -- `IN (...)` never degenerates to invalid `IN ()`) when AWR is empty.
     SELECT NVL(
              (SELECT LISTAGG(dbid, ',') WITHIN GROUP (ORDER BY dbid)

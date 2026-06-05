@@ -233,7 +233,7 @@ BEGIN
                        DBMS_LOB.SUBSTR(sql_text, 400, 1) AS sql_text_short,
                        -- ORDER BY NULL, not ROWID: DBA_HIST_SQLTEXT is a join
                        -- view in a PDB and selecting ROWID raises ORA-01445.
-                       -- PARTITION BY sql_id only (NOT dbid): when ~dbid_list
+                       -- PARTITION BY sql_id only (NOT dbid): when dbid_list
                        -- spans a migration the same sql_id can exist under both
                        -- DBIDs with identical text; collapsing on sql_id keeps
                        -- one row so the join to the per-SQL rows stays 1:1.
