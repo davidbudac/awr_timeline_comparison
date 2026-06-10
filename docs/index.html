@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWR Timeline Comparison — pure-SQL Oracle AWR trend reports</title>
+<meta name="description" content="Pure-SQL Oracle 19c toolkit that compares AWR snapshots of the same hour across weeks, flags drastic changes via z-score, and renders a single self-contained HTML report. 100% read-only.">
+<meta property="og:title" content="AWR Timeline Comparison">
+<meta property="og:description" content="Compare the same hour across weeks of Oracle AWR history, flag what genuinely moved, get one self-contained HTML report. Pure SQL*Plus, 100% read-only.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://davidbudac.github.io/awr_timeline_comparison/assets/shot_hero_cards.jpg">
+<style>
+  :root{
+    --ink:#1c2433;
+    --ink-soft:#46546b;
+    --ink-faint:#7c8aa0;
+    --paper:#f6f7f9;
+    --card:#ffffff;
+    --line:#e3e8ef;
+    --accent:#c74634;          /* Oracle red */
+    --accent-dark:#9e3424;
+    --teal:#0f766e;
+    --teal-soft:#e6f4f2;
+    --amber:#b45309;
+    --amber-soft:#fdf3e3;
+    --hero-1:#16202f;
+    --hero-2:#243650;
+    --code-bg:#16202f;
+    --code-ink:#dbe4f0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.7;
+    font-size:16.5px;
+  }
+  .wrap{max-width:900px;margin:0 auto;padding:0 28px}
+
+  /* ---------- top nav ---------- */
+  nav.top{
+    position:sticky;top:0;z-index:50;
+    background:rgba(22,32,47,.96);
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid rgba(255,255,255,.08);
+  }
+  nav.top .wrap{
+    display:flex;align-items:center;gap:18px;
+    padding-top:10px;padding-bottom:10px;
+    flex-wrap:wrap;
+  }
+  nav.top .brand{
+    font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+    color:#fff;text-decoration:none;white-space:nowrap;
+  }
+  nav.top .brand .dot{color:var(--accent)}
+  nav.top .links{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
+  nav.top a.nl{
+    font-size:13px;font-weight:600;color:#c4d0e2;text-decoration:none;
+    padding:4px 10px;border-radius:7px;
+  }
+  nav.top a.nl:hover{color:#fff;background:rgba(255,255,255,.08)}
+  nav.top a.gh{
+    font-size:13px;font-weight:700;color:#fff;text-decoration:none;
+    border:1px solid rgba(255,255,255,.25);border-radius:999px;
+    padding:4px 14px;white-space:nowrap;
+  }
+  nav.top a.gh:hover{background:rgba(255,255,255,.1)}
+
+  /* ---------- hero ---------- */
+  header.hero{
+    background:linear-gradient(135deg,var(--hero-1) 0%,var(--hero-2) 100%);
+    color:#fff;
+    padding:60px 0 52px;
+    position:relative;
+    overflow:hidden;
+  }
+  header.hero .wrap{position:relative;z-index:1}
+  .kicker{
+    display:inline-block;
+    font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:#f0b9ae;
+    border:1px solid rgba(240,185,174,.35);
+    border-radius:999px;
+    padding:4px 14px;
+    margin-bottom:18px;
+  }
+  h1{font-size:42px;line-height:1.12;font-weight:800;letter-spacing:-.02em;margin-bottom:14px}
+  .tagline{font-size:19px;color:#c4d0e2;max-width:680px;margin-bottom:26px}
+  .tagline strong{color:#fff}
+  .badges{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:30px}
+  .badge{
+    font-size:13px;font-weight:600;
+    background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.16);
+    color:#e8edf5;
+    border-radius:999px;
+    padding:6px 14px;
+  }
+  .badge .dot{color:#6ee7b7;margin-right:6px}
+  .cta-row{display:flex;flex-wrap:wrap;gap:12px}
+  a.btn{
+    display:inline-block;text-decoration:none;font-weight:700;font-size:15px;
+    border-radius:10px;padding:11px 22px;
+  }
+  a.btn-primary{background:var(--accent);color:#fff}
+  a.btn-primary:hover{background:var(--accent-dark)}
+  a.btn-ghost{border:1.5px solid rgba(255,255,255,.35);color:#fff}
+  a.btn-ghost:hover{background:rgba(255,255,255,.1)}
+  .hero-spark{
+    position:absolute;right:-40px;bottom:-12px;width:520px;opacity:.35;z-index:0;
+    pointer-events:none;
+  }
+
+  /* ---------- body ---------- */
+  main{padding:48px 0 8px}
+  section{margin-bottom:60px;scroll-margin-top:64px}
+  h2{
+    font-size:25px;font-weight:800;letter-spacing:-.01em;margin-bottom:16px;
+    display:flex;align-items:center;gap:10px;
+  }
+  h2 .num{
+    font-size:13px;font-weight:700;color:var(--accent);
+    border:1.5px solid var(--accent);border-radius:8px;
+    padding:1px 8px;letter-spacing:.05em;
+  }
+  h3{font-size:18px;font-weight:750;margin:26px 0 10px}
+  p{margin-bottom:16px;color:var(--ink);max-width:800px}
+  p em{color:var(--ink-soft)}
+  ul.plain{margin:0 0 16px 22px;max-width:800px}
+  ul.plain li{margin-bottom:8px}
+  a{color:var(--accent-dark)}
+  code{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:.88em;
+    background:#edf0f4;border:1px solid var(--line);border-radius:5px;
+    padding:1px 5px;
+  }
+
+  /* ---------- intro card ---------- */
+  .exec{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-left:5px solid var(--accent);
+    border-radius:14px;
+    padding:30px 34px;
+    box-shadow:0 10px 30px -18px rgba(28,36,51,.25);
+    margin-top:-32px;
+    position:relative;z-index:2;
+  }
+  .exec h2{margin-bottom:10px}
+  .exec p{font-size:17px;margin-bottom:0;max-width:none}
+
+  /* ---------- diagrams & screenshots ---------- */
+  figure.diagram{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:22px 22px 14px;
+    margin:26px 0;
+    box-shadow:0 6px 18px -14px rgba(28,36,51,.2);
+  }
+  figure.diagram svg{display:block;width:100%;height:auto}
+  figure.diagram figcaption,
+  figure.shot figcaption{
+    font-size:13.5px;color:var(--ink-faint);
+    text-align:center;
+    padding:10px 30px 6px;
+    line-height:1.55;
+  }
+  figure.shot{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:14px 14px 6px;
+    margin:26px 0;
+    box-shadow:0 6px 18px -14px rgba(28,36,51,.2);
+  }
+  figure.shot .shot-tag{
+    display:inline-block;
+    font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--teal);background:var(--teal-soft);
+    border-radius:6px;padding:2px 9px;margin:0 0 10px 2px;
+  }
+  figure.shot img{
+    display:block;width:100%;height:auto;
+    border:1px solid var(--line);border-radius:8px;
+  }
+
+  /* ---------- feature cards ---------- */
+  .cards{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+    gap:16px;margin:24px 0;
+  }
+  .fcard{
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:18px 20px;
+    box-shadow:0 6px 18px -14px rgba(28,36,51,.2);
+  }
+  .fcard h4{font-size:15.5px;font-weight:750;margin-bottom:6px}
+  .fcard h4 .ico{color:var(--teal);margin-right:7px}
+  .fcard p{font-size:14px;color:var(--ink-soft);margin:0;max-width:none}
+  .fcard code{font-size:.85em}
+
+  /* ---------- code blocks ---------- */
+  pre{
+    background:var(--code-bg);color:var(--code-ink);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:13.5px;line-height:1.6;
+    border-radius:12px;
+    padding:18px 22px;
+    overflow-x:auto;
+    margin:18px 0;
+    box-shadow:0 6px 18px -14px rgba(28,36,51,.35);
+  }
+  pre .c{color:#7c8aa0}        /* comment */
+  pre .k{color:#f0b9ae}        /* keyword-ish */
+  pre .s{color:#9ad7c9}        /* string */
+
+  /* ---------- tables ---------- */
+  .tbl-scroll{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:12px;background:var(--card);
+    box-shadow:0 6px 18px -14px rgba(28,36,51,.2)}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{padding:9px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+  th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:#fafbfc}
+  tr:last-child td{border-bottom:none}
+  td code{white-space:nowrap}
+
+  /* ---------- report tour list ---------- */
+  ol.tour{margin:0 0 16px 0;max-width:800px;list-style:none;counter-reset:tour}
+  ol.tour li{
+    counter-increment:tour;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:12px 16px 12px 52px;margin-bottom:8px;position:relative;
+    font-size:14.5px;color:var(--ink-soft);
+  }
+  ol.tour li::before{
+    content:counter(tour,decimal-leading-zero);
+    position:absolute;left:14px;top:12px;
+    font-size:12px;font-weight:800;color:var(--accent);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  ol.tour li strong{color:var(--ink)}
+
+  /* ---------- example report cards ---------- */
+  .examples{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin:24px 0}
+  a.excard{
+    display:block;text-decoration:none;color:inherit;
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:20px 22px;
+    box-shadow:0 6px 18px -14px rgba(28,36,51,.2);
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  a.excard:hover{transform:translateY(-2px);box-shadow:0 12px 26px -14px rgba(28,36,51,.35);border-color:#cdd6e1}
+  a.excard .ex-tag{
+    display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    border-radius:6px;padding:2px 9px;margin-bottom:10px;
+  }
+  a.excard .ex-tag.t1{color:var(--accent);background:#fdeae6}
+  a.excard .ex-tag.t2{color:var(--teal);background:var(--teal-soft)}
+  a.excard .ex-tag.t3{color:var(--amber);background:var(--amber-soft)}
+  a.excard h4{font-size:16px;font-weight:750;margin-bottom:6px}
+  a.excard p{font-size:13.5px;color:var(--ink-soft);margin:0;max-width:none}
+  a.excard .open{display:inline-block;margin-top:12px;font-size:13px;font-weight:700;color:var(--accent-dark)}
+
+  .note{
+    background:var(--amber-soft);border:1px solid #f3dfc0;border-radius:10px;
+    padding:12px 16px;font-size:14px;color:#7a4a10;max-width:800px;margin:16px 0;
+  }
+  .note strong{color:#5e3a0c}
+
+  /* ---------- cheatsheet teaser ---------- */
+  .recipes{display:grid;grid-template-columns:1fr;gap:10px;margin:20px 0}
+  .recipe{
+    background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:12px 16px;
+  }
+  .recipe .q{font-size:14px;font-weight:700;margin-bottom:6px}
+  .recipe pre{margin:0;padding:10px 14px;font-size:12.5px;border-radius:8px}
+
+  /* ---------- footer ---------- */
+  footer{
+    border-top:1px solid var(--line);
+    margin-top:24px;padding:26px 0 40px;
+    color:var(--ink-faint);font-size:13.5px;
+  }
+  footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  footer strong{color:var(--ink-soft)}
+  footer a{color:var(--ink-soft)}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:720px){
+    h1{font-size:31px}
+    .hero-spark{display:none}
+    .exec{padding:24px}
+    nav.top .links{display:none}
+  }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="wrap">
+    <a class="brand" href="#"><span class="dot">●</span> AWR / Timeline Comparison</a>
+    <div class="links">
+      <a class="nl" href="#why">Why</a>
+      <a class="nl" href="#how">How it works</a>
+      <a class="nl" href="#report">Inside the report</a>
+      <a class="nl" href="#start">Get started</a>
+      <a class="nl" href="#templates">Templates</a>
+      <a class="nl" href="#markers">Markers</a>
+      <a class="nl" href="#examples">Examples</a>
+      <a class="nl" href="cheatsheet.html">Cheat sheet</a>
+    </div>
+    <a class="gh" href="https://github.com/davidbudac/awr_timeline_comparison">GitHub ↗</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <svg class="hero-spark" viewBox="0 0 520 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <polyline points="0,120 40,118 80,122 120,117 160,121 200,119 240,123 280,118 320,60 360,55 400,62 440,52 480,58 520,50"
+              fill="none" stroke="#f0b9ae" stroke-width="3" stroke-linejoin="round"/>
+    <line x1="300" y1="20" x2="300" y2="170" stroke="#f0b9ae" stroke-width="2" stroke-dasharray="5 5"/>
+    <circle cx="320" cy="60" r="5" fill="#f0b9ae"/>
+    <text x="308" y="34" fill="#f0b9ae" font-size="12" font-weight="600">release</text>
+  </svg>
+  <div class="wrap">
+    <span class="kicker">Oracle 19c · Pure SQL*Plus · Diagnostic + Tuning Pack</span>
+    <h1>AWR Timeline Comparison</h1>
+    <p class="tagline">
+      One command. One self-contained HTML report. A clear, statistical answer to
+      <strong>“is the database behaving the way it did before?”</strong> —
+      the same hour compared like-for-like across weeks, with anything unusual
+      named, dated and graded.
+    </p>
+    <div class="badges">
+      <span class="badge"><span class="dot">●</span>100% read-only</span>
+      <span class="badge"><span class="dot">●</span>Zero install</span>
+      <span class="badge"><span class="dot">●</span>Single-file HTML output</span>
+      <span class="badge"><span class="dot">●</span>No Python, no agents</span>
+    </div>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="examples/weekly_comprehensive.html">See a live example report</a>
+      <a class="btn btn-ghost" href="#start">Get started</a>
+      <a class="btn btn-ghost" href="cheatsheet.html">Cheat sheet</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <section class="exec">
+      <h2>What it is</h2>
+      <p>
+        A pure-SQL toolkit for Oracle 19c that compares AWR snapshots of
+        <em>the same hour across weeks</em> — by default this Monday 09:00–10:00
+        against the four prior Mondays at 09:00–10:00 — flags drastic changes via
+        z-score, and renders everything as a single self-contained HTML file.
+        It runs from SQL*Plus with nothing to deploy: no scratch schema, no Python,
+        no agents, and not a single write to the database. Point it at production,
+        get a report, attach it to a ticket.
+      </p>
+    </section>
+
+    <section id="why">
+      <h2><span class="num">01</span>Why aligned windows</h2>
+      <p>
+        Oracle databases continuously record detailed performance history through a
+        built-in facility called <strong>AWR</strong> — the Automatic Workload
+        Repository. Everything needed to judge whether the system still behaves
+        normally is already being collected, every hour, automatically. What Oracle
+        does <em>not</em> provide is the comparison: putting this Monday morning next
+        to the last four Monday mornings and saying, with confidence, whether anything
+        genuinely changed. Done by hand, that means generating several separate AWR
+        reports and eyeballing them page by page — slow, error-prone, and exactly the
+        kind of task that gets skipped under pressure.
+      </p>
+      <p>
+        The comparison also has to be fair. Workload follows a weekly rhythm — batch
+        jobs, business hours, quiet weekends — so Monday at 09:00 only means something
+        next to <em>other Mondays at 09:00</em>. This toolkit automates precisely that:
+        it lines up the same hour of the same weekday across the past weeks and compares
+        them like-for-like, so the normal weekly heartbeat is never mistaken for a
+        problem, and a real change has nowhere to hide.
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 840 215" xmlns="http://www.w3.org/2000/svg" role="img"
+             aria-label="Five aligned weekly windows compared like-for-like"
+             font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+          <text x="20" y="26" font-size="12.5" font-weight="700" fill="#0f766e">Mon 09:00–10:00</text>
+          <line x1="33" y1="32" x2="33" y2="66" stroke="#0f766e" stroke-width="1.2"/>
+          <text x="420" y="26" font-size="12" font-style="italic" fill="#7c8aa0" text-anchor="middle">compared like-for-like</text>
+          <line x1="33" y1="81" x2="673" y2="81" stroke="#9aa7b8" stroke-width="1.5" stroke-dasharray="5 5"/>
+          <g>
+            <rect x="20" y="40" width="140" height="110" rx="8" fill="#f7f9fb" stroke="#dfe5ec"/>
+            <g fill="#e9edf3">
+              <rect x="26" y="46" width="15" height="98" fill="#dde6ef"/>
+              <rect x="45" y="46" width="15" height="98"/><rect x="64" y="46" width="15" height="98"/>
+              <rect x="83" y="46" width="15" height="98"/><rect x="102" y="46" width="15" height="98"/>
+              <rect x="121" y="46" width="15" height="98"/><rect x="140" y="46" width="15" height="98"/>
+            </g>
+            <rect x="26" y="70" width="15" height="22" rx="2" fill="#0f766e"/>
+            <rect x="180" y="40" width="140" height="110" rx="8" fill="#f7f9fb" stroke="#dfe5ec"/>
+            <g fill="#e9edf3">
+              <rect x="186" y="46" width="15" height="98" fill="#dde6ef"/>
+              <rect x="205" y="46" width="15" height="98"/><rect x="224" y="46" width="15" height="98"/>
+              <rect x="243" y="46" width="15" height="98"/><rect x="262" y="46" width="15" height="98"/>
+              <rect x="281" y="46" width="15" height="98"/><rect x="300" y="46" width="15" height="98"/>
+            </g>
+            <rect x="186" y="70" width="15" height="22" rx="2" fill="#0f766e"/>
+            <rect x="340" y="40" width="140" height="110" rx="8" fill="#f7f9fb" stroke="#dfe5ec"/>
+            <g fill="#e9edf3">
+              <rect x="346" y="46" width="15" height="98" fill="#dde6ef"/>
+              <rect x="365" y="46" width="15" height="98"/><rect x="384" y="46" width="15" height="98"/>
+              <rect x="403" y="46" width="15" height="98"/><rect x="422" y="46" width="15" height="98"/>
+              <rect x="441" y="46" width="15" height="98"/><rect x="460" y="46" width="15" height="98"/>
+            </g>
+            <rect x="346" y="70" width="15" height="22" rx="2" fill="#0f766e"/>
+            <rect x="500" y="40" width="140" height="110" rx="8" fill="#f7f9fb" stroke="#dfe5ec"/>
+            <g fill="#e9edf3">
+              <rect x="506" y="46" width="15" height="98" fill="#dde6ef"/>
+              <rect x="525" y="46" width="15" height="98"/><rect x="544" y="46" width="15" height="98"/>
+              <rect x="563" y="46" width="15" height="98"/><rect x="582" y="46" width="15" height="98"/>
+              <rect x="601" y="46" width="15" height="98"/><rect x="620" y="46" width="15" height="98"/>
+            </g>
+            <rect x="506" y="70" width="15" height="22" rx="2" fill="#0f766e"/>
+            <rect x="660" y="40" width="140" height="110" rx="8" fill="#fff" stroke="#c74634" stroke-width="2"/>
+            <g fill="#e9edf3">
+              <rect x="666" y="46" width="15" height="98" fill="#dde6ef"/>
+              <rect x="685" y="46" width="15" height="98"/><rect x="704" y="46" width="15" height="98"/>
+              <rect x="723" y="46" width="15" height="98"/><rect x="742" y="46" width="15" height="98"/>
+              <rect x="761" y="46" width="15" height="98"/><rect x="780" y="46" width="15" height="98"/>
+            </g>
+            <rect x="666" y="70" width="15" height="22" rx="2" fill="#c74634"/>
+          </g>
+          <g font-size="9" fill="#9aa7b8" text-anchor="middle">
+            <text x="33" y="163">M</text><text x="52" y="163">T</text><text x="71" y="163">W</text><text x="90" y="163">T</text><text x="109" y="163">F</text><text x="128" y="163">S</text><text x="147" y="163">S</text>
+            <text x="193" y="163">M</text><text x="212" y="163">T</text><text x="231" y="163">W</text><text x="250" y="163">T</text><text x="269" y="163">F</text><text x="288" y="163">S</text><text x="307" y="163">S</text>
+            <text x="353" y="163">M</text><text x="372" y="163">T</text><text x="391" y="163">W</text><text x="410" y="163">T</text><text x="429" y="163">F</text><text x="448" y="163">S</text><text x="467" y="163">S</text>
+            <text x="513" y="163">M</text><text x="532" y="163">T</text><text x="551" y="163">W</text><text x="570" y="163">T</text><text x="589" y="163">F</text><text x="608" y="163">S</text><text x="627" y="163">S</text>
+            <text x="673" y="163">M</text><text x="692" y="163">T</text><text x="711" y="163">W</text><text x="730" y="163">T</text><text x="749" y="163">F</text><text x="768" y="163">S</text><text x="787" y="163">S</text>
+          </g>
+          <g font-size="13" fill="#7c8aa0" text-anchor="middle">
+            <text x="90" y="190">4 weeks ago</text>
+            <text x="250" y="190">3 weeks ago</text>
+            <text x="410" y="190">2 weeks ago</text>
+            <text x="570" y="190">last week</text>
+            <text x="730" y="190" font-weight="700" fill="#c74634">this week</text>
+          </g>
+        </svg>
+        <figcaption>
+          The report lines up the same hour of the same weekday across the past weeks —
+          four reference windows (green) and the current one (red) — so the normal weekly
+          rhythm never gets mistaken for a change. The cadence is configurable: hour by
+          hour, day by day, weekly, or any multiple.
+        </figcaption>
+      </figure>
+
+      <figure class="shot">
+        <span class="shot-tag">From a live test run</span>
+        <img src="assets/shot_aligned_windows.jpg" loading="lazy"
+             alt="Report screenshot: the Aligned windows section, five Wednesday-morning windows across five weeks, two valid and three skipped">
+        <figcaption>
+          The same idea in the real report: five Wednesday 08:00–09:00 windows, one per
+          week, lined up side by side. Where the database has no history for a week,
+          the window is dimmed, marked “skipped”, and excluded from the comparison —
+          never silently guessed.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section id="how">
+      <h2><span class="num">02</span>How it works</h2>
+      <p>
+        A single command connects to the database and asks Oracle's own performance
+        history a series of questions. Every one of them is a read-only query against
+        the <code>DBA_HIST_*</code> views: nothing is installed, created, or modified
+        anywhere — which is why the report is safe to run against production at any
+        time of day, or against a read-only standby that exposes AWR.
+      </p>
+      <p>
+        The toolkit then does what a careful analyst would do, but in seconds and
+        without fatigue. Each metric — how much work the database did, how fast it
+        responded, what it spent its time waiting on, which SQL statements were the
+        most expensive — is scored against its own recent history, so the report
+        highlights only movement that is genuinely unusual, graded
+        <em>OK</em>, <em>Warning</em> or <em>Critical</em>.
+      </p>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 840 195" xmlns="http://www.w3.org/2000/svg" role="img"
+             aria-label="Pipeline: AWR history, like-for-like comparison, statistical scoring, one HTML report"
+             font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#7c8aa0"/>
+            </marker>
+          </defs>
+          <g>
+            <path d="M37,48 v84 a58,12 0 0 0 116,0 v-84" fill="#243650"/>
+            <ellipse cx="95" cy="48" rx="58" ry="12" fill="#3a4f70"/>
+            <text x="95" y="100" text-anchor="middle" font-size="16" font-weight="800" fill="#ffffff">AWR</text>
+            <text x="95" y="167" text-anchor="middle" font-size="12" fill="#7c8aa0">performance history,</text>
+            <text x="95" y="182" text-anchor="middle" font-size="12" fill="#7c8aa0">already in the database</text>
+          </g>
+          <line x1="162" y1="90" x2="200" y2="90" stroke="#7c8aa0" stroke-width="2" marker-end="url(#arr)"/>
+          <g>
+            <rect x="205" y="48" width="185" height="84" rx="10" fill="#ffffff" stroke="#e3e8ef"/>
+            <text x="297" y="76" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1c2433">Like-for-like windows</text>
+            <text x="297" y="96" text-anchor="middle" font-size="12" fill="#46546b">the same hour of the week,</text>
+            <text x="297" y="112" text-anchor="middle" font-size="12" fill="#46546b">this week vs the weeks before</text>
+            <text x="297" y="152" text-anchor="middle" font-size="11.5" font-style="italic" fill="#0f766e">read-only — nothing installed</text>
+          </g>
+          <line x1="392" y1="90" x2="430" y2="90" stroke="#7c8aa0" stroke-width="2" marker-end="url(#arr)"/>
+          <g>
+            <rect x="435" y="48" width="185" height="84" rx="10" fill="#ffffff" stroke="#e3e8ef"/>
+            <text x="527" y="74" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1c2433">Statistical scoring</text>
+            <text x="527" y="93" text-anchor="middle" font-size="12" fill="#46546b">each metric judged against</text>
+            <text x="527" y="108" text-anchor="middle" font-size="12" fill="#46546b">its own history; only real</text>
+            <text x="527" y="123" text-anchor="middle" font-size="12" fill="#46546b">movement is flagged</text>
+            <text x="527" y="152" text-anchor="middle" font-size="11.5" font-style="italic" fill="#b45309">OK · Warning · Critical</text>
+          </g>
+          <line x1="622" y1="90" x2="660" y2="90" stroke="#7c8aa0" stroke-width="2" marker-end="url(#arr)"/>
+          <g>
+            <path d="M665,42 h100 l45,45 v61 h-145 z" fill="#ffffff" stroke="#c74634" stroke-width="1.8"/>
+            <path d="M765,42 v45 h45 z" fill="#fdeae6" stroke="#c74634" stroke-width="1.8"/>
+            <text x="730" y="105" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1c2433">One HTML file</text>
+            <text x="737" y="124" text-anchor="middle" font-size="12" fill="#46546b">charts, tables, findings —</text>
+            <text x="737" y="139" text-anchor="middle" font-size="12" fill="#46546b">open it anywhere</text>
+          </g>
+        </svg>
+        <figcaption>
+          From raw history to verdict in one pass: read-only queries pull the aligned
+          windows, statistics decide what is genuinely unusual, and the result is a single
+          page anyone can open — no tooling, no database access required to read it.
+        </figcaption>
+      </figure>
+
+      <div class="cards">
+        <div class="fcard">
+          <h4><span class="ico">●</span>Strictly read-only</h4>
+          <p>The driver and every section issue <code>SELECT</code> only. No scratch
+          schema, no DDL, no DML — everything is recomputed in-flight from
+          <code>DBA_HIST_*</code> on each run.</p>
+        </div>
+        <div class="fcard">
+          <h4><span class="ico">●</span>z-score findings</h4>
+          <p>Each metric is scored against its own prior windows: <code>|z| &gt; 3</code>
+          is Critical, <code>|z| &gt; 2</code> is Warning. Too little history? The report
+          says so instead of guessing.</p>
+        </div>
+        <div class="fcard">
+          <h4><span class="ico">●</span>Configurable cadence</h4>
+          <p>Weekly is the default, but <code>step × step_unit</code> gives you
+          hour-by-hour walk-throughs, every-other-day, fortnightly, even
+          quarter-over-quarter.</p>
+        </div>
+        <div class="fcard">
+          <h4><span class="ico">●</span>Works offline too</h4>
+          <p>The big charts load ECharts from a CDN; when it's unreachable the charts
+          hide, a banner explains why, and every number is still in the tables.
+          Inline-SVG sparklines never need the network.</p>
+        </div>
+        <div class="fcard">
+          <h4><span class="ico">●</span>RAC-aware</h4>
+          <p>Aggregate across all instances or filter to one. Per-instance window
+          validation drops only the instance that restarted mid-window, keeping the
+          rest of the baseline.</p>
+        </div>
+        <div class="fcard">
+          <h4><span class="ico">●</span>Multitenant-aware</h4>
+          <p>Resolves the right DBID inside PDBs (local AWR or not) and survives
+          non-CDB → PDB migrations by following the snapshot history across DBIDs.</p>
+        </div>
+      </div>
+
+      <figure class="shot">
+        <span class="shot-tag">From a live test run</span>
+        <img src="assets/shot_verdict_quiet.jpg" loading="lazy"
+             alt="Report screenshot: the masthead with the verdict 'Quiet — no metric moved beyond |z| greater than 2 vs the prior 4 windows'">
+        <figcaption>
+          Every report opens with a one-line verdict in plain language. Here, an
+          hour-over-hour run of a quiet Monday morning: nothing moved beyond two standard
+          deviations of its own recent history — read the first line and move on.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section id="report">
+      <h2><span class="num">03</span>Inside the report</h2>
+      <p>
+        The report opens with the masthead verdict and a card listing exactly which
+        windows were compared — explicit start → end timestamps, so you always know
+        what baseline is driving the z-scores. Then, top to bottom:
+      </p>
+
+      <ol class="tour">
+        <li><strong>Overview</strong> — hero strip with the six headline load/metric numbers, each with a trend sparkline and a z-badge.</li>
+        <li><strong>ASH timeline</strong> — hourly stacked-area chart of active sessions by wait class over the full compared span; compared windows shown as background bands.</li>
+        <li><strong>Findings</strong> — every metric with <code>|z| &gt; 3</code> flagged CRITICAL, <code>|z| &gt; 2</code> WARN, plus a heatmap; falls back to %-delta when history is short.</li>
+        <li><strong>Windows</strong> — the compared windows with begin/end snapshot ids; restart-invalidated windows are flagged and excluded.</li>
+        <li><strong>Load profile</strong> — per-second rates for the classic AWR load-profile stats, one column per window, sparkline per stat.</li>
+        <li><strong>System metrics</strong> — averages from <code>DBA_HIST_SYSMETRIC_SUMMARY</code>, additive vs ratio metrics aggregated correctly across RAC.</li>
+        <li><strong>Foreground &amp; background waits</strong> — top-N events plus a wait-class rollup.</li>
+        <li><strong>Top SQL</strong> — ranked four ways (elapsed, CPU, buffer gets, executions) with plan-change badges, full SQL text, and per-statement ASH breakdowns.</li>
+        <li><strong>DB time summary</strong> — stacked DB time across the whole span.</li>
+        <li><strong>Parameter changes</strong> — init parameters whose values differ across the compared windows.</li>
+      </ol>
+
+      <figure class="shot">
+        <span class="shot-tag">From a live test run</span>
+        <img src="assets/shot_hero_cards.jpg" loading="lazy"
+             alt="Report screenshot: six headline metric cards with trend sparklines, current values and statistical badges">
+        <figcaption>
+          Six headline health cards: the trend across the compared windows, the current
+          value, and a statistical badge — “typical” here — instead of a wall of raw
+          numbers to squint at.
+        </figcaption>
+      </figure>
+
+      <figure class="shot">
+        <span class="shot-tag">From a live test run</span>
+        <img src="assets/shot_load_profile.jpg" loading="lazy"
+             alt="Report screenshot: the load profile table with one column per compared window and a trend sparkline per measure">
+        <figcaption>
+          For those who want the detail, every measure is laid out with one column per
+          compared window, a small trend line, and the current window highlighted — the
+          side-by-side an analyst would have assembled by hand, already done.
+        </figcaption>
+      </figure>
+
+      <figure class="shot">
+        <span class="shot-tag">From a live test run</span>
+        <img src="assets/shot_ash_timeline.jpg" loading="lazy"
+             alt="Report screenshot: a stacked area timeline of database activity by wait category, hour by hour">
+        <figcaption>
+          The ASH timeline: where the database spent its time, hour by hour, split by
+          wait class. This is also the canvas your milestone markers are drawn on — a
+          before/after difference in the shape of this chart is visible at a glance.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section id="start">
+      <h2><span class="num">04</span>Get started</h2>
+
+      <h3>Requirements</h3>
+      <ul class="plain">
+        <li>Oracle Database 19c with the <strong>Diagnostic + Tuning Pack</strong> licensed
+            (needed for <code>DBA_HIST_*</code> and <code>DBA_HIST_SQLSTAT</code>).</li>
+        <li>SQL*Plus and a user that can read the AWR views — the <code>DBA</code> role covers it,
+            or grant a dedicated analyst user <code>SELECT</code> on the handful of
+            <code>DBA_HIST_*</code> views listed in the
+            <a href="https://github.com/davidbudac/awr_timeline_comparison#install">README</a>.</li>
+        <li>Nothing to install in the database. Clone the repo, connect, run.</li>
+      </ul>
+
+      <h3>Run it</h3>
+      <p>Easiest — the shell wrapper, which sets all substitution variables for you:</p>
+<pre><span class="c"># defaults: current hour vs the same hour on the 4 prior weeks</span>
+./run_awr_trend.sh user/pw@svc
+
+<span class="c"># explicit weekly: a specific Monday morning vs the 4 prior Mondays</span>
+./run_awr_trend.sh user/pw@svc <span class="s">'2026-04-13 09:00'</span>
+
+<span class="c"># last 4 hours, hour by hour</span>
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h
+
+<span class="c"># lean triage report</span>
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple
+
+<span class="c"># annotate the timelines with your own milestones</span>
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive N my_markers.sql</pre>
+
+      <p>Or pure SQL*Plus, no shell required (Windows-friendly):</p>
+<pre>SQL&gt; <span class="k">@sql/defaults.sql</span>
+SQL&gt; <span class="k">@awr_trend.sql</span>
+
+<span class="c">-- or customize one-off:</span>
+SQL&gt; DEFINE target_end = <span class="s">'2026-04-15 09:00'</span>
+SQL&gt; DEFINE win_hours  = 2
+SQL&gt; DEFINE weeks_back = 6
+SQL&gt; <span class="k">@awr_trend.sql</span></pre>
+
+      <p>
+        The report lands in
+        <code>reports/awr_trend_&lt;DBID&gt;_&lt;timestamp&gt;_run&lt;run_id&gt;.html</code>.
+        Open it in any browser.
+      </p>
+
+      <h3>Arguments</h3>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>Arg</th><th>Default</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>target_end</code></td><td><code>AUTO</code></td>
+                <td>Window end — <code>AUTO</code> = prior full hour, or <code>'YYYY-MM-DD HH24:MI'</code></td></tr>
+            <tr><td><code>win_hours</code></td><td><code>1</code></td>
+                <td>Length of each compared window, in hours</td></tr>
+            <tr><td><code>weeks_back</code></td><td><code>4</code></td>
+                <td>Number of prior windows to compare against (a count — the name is historical)</td></tr>
+            <tr><td><code>top_n</code></td><td><code>10</code></td>
+                <td>Top-N rows per ranking in Top SQL / waits</td></tr>
+            <tr><td><code>inst_num</code></td><td><code>0</code></td>
+                <td>RAC: <code>0</code> = aggregate across all instances; <code>&gt;0</code> = that instance only</td></tr>
+            <tr><td><code>step</code></td><td><code>1</code></td>
+                <td>Cadence count between adjacent windows</td></tr>
+            <tr><td><code>step_unit</code></td><td><code>w</code></td>
+                <td>Cadence unit: <code>h</code> hours, <code>d</code> days, <code>w</code> weeks</td></tr>
+            <tr><td><code>template</code></td><td><code>comprehensive</code></td>
+                <td>Metric + wait-event set: <code>comprehensive</code>, <code>simple</code>, or <code>dev</code></td></tr>
+            <tr><td><code>debug</code></td><td><code>N</code></td>
+                <td><code>Y</code> prints timestamped per-section progress markers to stdout; the HTML is unaffected</td></tr>
+            <tr><td><code>marker_file</code></td><td><em>(empty)</em></td>
+                <td>Optional timeline-marker config — milestones drawn on the dated charts</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <code>step × step_unit</code> defines the gap between adjacent comparison
+        windows: <code>1 w</code> (default) is the classic same-hour-of-week trend,
+        <code>1 h</code> walks straight back hour by hour, <code>2 d</code> runs
+        every other day. Many more combinations are in the
+        <a href="cheatsheet.html">cheat sheet</a>.
+      </p>
+    </section>
+
+    <section id="templates">
+      <h2><span class="num">05</span>Three views, three audiences</h2>
+      <p>
+        The <code>template</code> argument picks which curated set of metrics and wait
+        events the report renders — same comparison engine, different altitude:
+      </p>
+      <div class="cards">
+        <div class="fcard">
+          <h4><span class="ico">●</span><code>comprehensive</code> — for DBAs</h4>
+          <p>The default. The full curated lists: 27 load stats, 23 system metrics,
+          and the complete firehose of wait events ranked by time.</p>
+        </div>
+        <div class="fcard">
+          <h4><span class="ico">●</span><code>simple</code> — for triage</h4>
+          <p>A quick-glance subset: 9 load stats, 8 metrics, ~10 commonly-watched wait
+          events. The report you skim in thirty seconds before deciding whether to dig.</p>
+        </div>
+        <div class="fcard">
+          <h4><span class="ico">●</span><code>dev</code> — for application teams</h4>
+          <p>What the application itself drives: transaction throughput, query work,
+          parsing, sorts, SQL*Net chattiness and app-caused contention — with host/OS
+          and storage internals left out.</p>
+        </div>
+      </div>
+      <p>
+        Rolling your own is a directory with three files under
+        <code>sql/lib/templates/&lt;name&gt;/</code> plus one whitelist entry in the
+        driver — the lists feed every section, the findings and the hero cards in
+        lock-step.
+      </p>
+    </section>
+
+    <section id="markers">
+      <h2><span class="num">06</span>Timeline markers</h2>
+      <p>
+        A spike means more when it lines up with something you did. The optional
+        <code>marker_file</code> lets you annotate the dated charts with your own
+        milestones — a release, a patch, an index rebuild, a stats gather, an incident —
+        drawn as vertical dashed lines on the masthead strip, the ASH timeline, the
+        DB-time summary and the per-SQL ASH cards.
+      </p>
+<pre><span class="c">-- my_markers.sql — one milestone per line</span>
+@@sql/lib/marker <span class="s">'2026-04-20 14:00'</span> <span class="s">'Applied patch 19.22'</span>
+@@sql/lib/marker <span class="s">'2026-05-01 02:00'</span> <span class="s">'Index rebuild on SALES'</span>
+@@sql/lib/marker <span class="s">'2026-05-10 09:30'</span> <span class="s">'Optimizer stats gather'</span></pre>
+
+      <figure class="diagram">
+        <svg viewBox="0 0 840 235" xmlns="http://www.w3.org/2000/svg" role="img"
+             aria-label="Timeline with a release marked: baseline windows before, checked windows after"
+             font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+          <rect x="30" y="50" width="440" height="130" fill="#e6f4f2"/>
+          <rect x="470" y="50" width="340" height="130" fill="#fdf3e3"/>
+          <text x="250" y="72" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0f766e">before — capture what “normal” looks like</text>
+          <text x="640" y="72" text-anchor="middle" font-size="12.5" font-weight="700" fill="#b45309">after — first hours, then weekly checks</text>
+          <polyline points="30,132 70,128 110,131 150,127 190,130 230,126 270,129 310,125 350,128 390,124 430,127 470,125 490,108 510,100 540,104 580,99 620,103 660,98 700,102 740,97 780,100 810,98"
+                    fill="none" stroke="#46546b" stroke-width="2.5" stroke-linejoin="round"/>
+          <line x1="470" y1="38" x2="470" y2="190" stroke="#c74634" stroke-width="2" stroke-dasharray="6 5"/>
+          <text x="470" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="#c74634">application release</text>
+          <g>
+            <rect x="86" y="156" width="18" height="14" rx="3" fill="#0f766e"/>
+            <rect x="181" y="156" width="18" height="14" rx="3" fill="#0f766e"/>
+            <rect x="276" y="156" width="18" height="14" rx="3" fill="#0f766e"/>
+            <rect x="371" y="156" width="18" height="14" rx="3" fill="#0f766e"/>
+            <rect x="521" y="156" width="18" height="14" rx="3" fill="#c74634"/>
+            <rect x="616" y="156" width="18" height="14" rx="3" fill="#c74634"/>
+            <rect x="711" y="156" width="18" height="14" rx="3" fill="#c74634"/>
+          </g>
+          <line x1="30" y1="190" x2="810" y2="190" stroke="#e3e8ef" stroke-width="2"/>
+          <text x="250" y="212" text-anchor="middle" font-size="12" fill="#7c8aa0">reference windows — the baseline</text>
+          <text x="640" y="212" text-anchor="middle" font-size="12" fill="#7c8aa0">new windows, checked against the baseline</text>
+        </svg>
+        <figcaption>
+          The change you ship is drawn directly on the report's charts. Every run after
+          go-live compares the fresh windows (red) against the baseline (green) — a
+          before/after difference cannot hide; it is named, dated, and graded.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section id="honest">
+      <h2><span class="num">07</span>Honest by design</h2>
+      <p>
+        The toolkit is deliberately conservative. It never writes to the database, so it
+        can be handed to a restricted analyst account without a second thought. The
+        report is honest about its own limits: when there is too little history to judge
+        a metric fairly, it says so rather than guessing — and a window invalidated by an
+        instance restart is shown, flagged, and excluded rather than silently blended in.
+        Changes to the toolkit itself are verified by regenerating reports before and
+        after a change against a live test database and proving the output
+        byte-for-byte identical.
+      </p>
+
+      <figure class="shot">
+        <span class="shot-tag">From a live test run</span>
+        <img src="assets/shot_verdict_baseline_short.jpg" loading="lazy"
+             alt="Report screenshot: the masthead with the verdict 'Baseline too short — need at least 3 prior valid windows to score'">
+        <figcaption>
+          Honesty in practice: run against a database with too little history, the report
+          says so outright — “Baseline too short” — and limits itself to simple
+          comparisons rather than inventing a score.
+        </figcaption>
+      </figure>
+    </section>
+
+    <section id="examples">
+      <h2><span class="num">08</span>Example reports</h2>
+      <p>
+        These are real, unedited reports generated against a small Oracle 19c lab
+        database — open them, scroll around, hover the charts. Each is a single HTML
+        file exactly as the toolkit spooled it.
+      </p>
+
+      <div class="examples">
+        <a class="excard" href="examples/weekly_comprehensive.html">
+          <span class="ex-tag t1">comprehensive · weekly</span>
+          <h4>The full report</h4>
+          <p>Default template, week-over-week cadence: hero cards, ASH timeline,
+          findings heatmap, load profile, waits, Top SQL ranked four ways,
+          per-SQL ASH breakdowns, parameter changes.</p>
+          <span class="open">Open report →</span>
+        </a>
+        <a class="excard" href="examples/weekly_simple_template.html">
+          <span class="ex-tag t2">simple · weekly</span>
+          <h4>The triage view</h4>
+          <p>Same engine, <code>template=simple</code>: a lean subset of stats, metrics
+          and waits for a thirty-second skim. Note the <code>template: simple</code>
+          pill in the masthead.</p>
+          <span class="open">Open report →</span>
+        </a>
+        <a class="excard" href="examples/weekly_with_markers.html">
+          <span class="ex-tag t3">markers · weekly</span>
+          <h4>With timeline markers</h4>
+          <p>Run with a <code>marker_file</code>: “Patch 19.22 applied” and “Index
+          rebuild on SALES” drawn as vertical dashed lines on every dated chart.</p>
+          <span class="open">Open report →</span>
+        </a>
+      </div>
+
+      <div class="note">
+        <strong>About the data:</strong> the lab database is mostly idle and only weeks
+        old, so the examples show tiny load numbers and “Baseline too short” verdicts —
+        which is itself a feature on display: the report refuses to score what it cannot
+        score fairly. On a production system with months of AWR history, the findings
+        section grades every metric OK / WARN / CRITICAL.
+      </div>
+    </section>
+
+    <section id="cheatsheet">
+      <h2><span class="num">09</span>The cheat sheet</h2>
+      <p>
+        Eleven positional arguments sounds like a lot, so the
+        <a href="cheatsheet.html">cheat sheet</a> keeps ready-to-paste recipes for the
+        questions you actually ask. A taste:
+      </p>
+
+      <div class="recipes">
+        <div class="recipe">
+          <div class="q">“What's different this morning vs my normal Monday?”</div>
+          <pre>./run_awr_trend.sh user/pw@svc</pre>
+        </div>
+        <div class="recipe">
+          <div class="q">“Walk me through the last 12 hours, hour by hour.”</div>
+          <pre>./run_awr_trend.sh user/pw@svc AUTO 1 12 10 0 1 h</pre>
+        </div>
+        <div class="recipe">
+          <div class="q">“Did yesterday's batch differ from the previous five Tuesdays?”</div>
+          <pre>./run_awr_trend.sh user/pw@svc '2026-05-12 06:00' 4 5 25 0 1 w</pre>
+        </div>
+        <div class="recipe">
+          <div class="q">“Quarter-end vs the last three quarter-ends.”</div>
+          <pre>./run_awr_trend.sh user/pw@svc '2026-03-31 23:00' 1 3 25 0 13 w</pre>
+        </div>
+      </div>
+
+      <p>
+        <a class="btn btn-primary" href="cheatsheet.html" style="color:#fff">Browse the full cheat sheet →</a>
+      </p>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <strong>Requirements:</strong> Oracle Database 19c with Diagnostic + Tuning Pack;
+      a user that can read the AWR history views (any DBA account qualifies).
+    </div>
+    <div>
+      <a href="https://github.com/davidbudac/awr_timeline_comparison">github.com/davidbudac/awr_timeline_comparison</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cheat sheet — AWR Timeline Comparison</title>
+<meta name="description" content="Ready-to-paste recipes for run_awr_trend.sh: weekly, daily and hourly cadences, RAC, templates, debug markers, timeline markers, and comparison playbooks.">
+<style>
+  :root{
+    --ink:#1c2433;
+    --ink-soft:#46546b;
+    --ink-faint:#7c8aa0;
+    --paper:#f6f7f9;
+    --card:#ffffff;
+    --line:#e3e8ef;
+    --accent:#c74634;
+    --accent-dark:#9e3424;
+    --teal:#0f766e;
+    --teal-soft:#e6f4f2;
+    --amber:#b45309;
+    --amber-soft:#fdf3e3;
+    --hero-1:#16202f;
+    --hero-2:#243650;
+    --code-bg:#16202f;
+    --code-ink:#dbe4f0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.7;
+    font-size:16.5px;
+  }
+  .wrap{max-width:900px;margin:0 auto;padding:0 28px}
+
+  nav.top{
+    position:sticky;top:0;z-index:50;
+    background:rgba(22,32,47,.96);
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid rgba(255,255,255,.08);
+  }
+  nav.top .wrap{
+    display:flex;align-items:center;gap:18px;
+    padding-top:10px;padding-bottom:10px;flex-wrap:wrap;
+  }
+  nav.top .brand{
+    font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+    color:#fff;text-decoration:none;white-space:nowrap;
+  }
+  nav.top .brand .dot{color:var(--accent)}
+  nav.top .links{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
+  nav.top a.nl{
+    font-size:13px;font-weight:600;color:#c4d0e2;text-decoration:none;
+    padding:4px 10px;border-radius:7px;
+  }
+  nav.top a.nl:hover{color:#fff;background:rgba(255,255,255,.08)}
+  nav.top a.gh{
+    font-size:13px;font-weight:700;color:#fff;text-decoration:none;
+    border:1px solid rgba(255,255,255,.25);border-radius:999px;
+    padding:4px 14px;white-space:nowrap;
+  }
+  nav.top a.gh:hover{background:rgba(255,255,255,.1)}
+
+  header.hero{
+    background:linear-gradient(135deg,var(--hero-1) 0%,var(--hero-2) 100%);
+    color:#fff;
+    padding:44px 0 38px;
+  }
+  .kicker{
+    display:inline-block;
+    font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:#f0b9ae;
+    border:1px solid rgba(240,185,174,.35);
+    border-radius:999px;
+    padding:4px 14px;
+    margin-bottom:14px;
+  }
+  h1{font-size:34px;line-height:1.15;font-weight:800;letter-spacing:-.02em;margin-bottom:10px}
+  .tagline{font-size:17px;color:#c4d0e2;max-width:680px}
+  .tagline code{background:rgba(255,255,255,.1);border:none;color:#fff;border-radius:5px;padding:1px 6px;font-size:.88em}
+
+  main{padding:42px 0 8px}
+  section{margin-bottom:50px;scroll-margin-top:64px}
+  h2{
+    font-size:23px;font-weight:800;letter-spacing:-.01em;margin-bottom:14px;
+    display:flex;align-items:center;gap:10px;
+  }
+  h2 .num{
+    font-size:13px;font-weight:700;color:var(--accent);
+    border:1.5px solid var(--accent);border-radius:8px;
+    padding:1px 8px;letter-spacing:.05em;
+  }
+  h3{font-size:16.5px;font-weight:750;margin:24px 0 6px}
+  p{margin-bottom:14px;color:var(--ink);max-width:800px}
+  p em{color:var(--ink-soft)}
+  a{color:var(--accent-dark)}
+  code{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:.88em;
+    background:#edf0f4;border:1px solid var(--line);border-radius:5px;
+    padding:1px 5px;
+  }
+  pre{
+    background:var(--code-bg);color:var(--code-ink);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:13.5px;line-height:1.6;
+    border-radius:12px;
+    padding:16px 20px;
+    overflow-x:auto;
+    margin:10px 0 20px;
+    box-shadow:0 6px 18px -14px rgba(28,36,51,.35);
+  }
+  pre .c{color:#7c8aa0}
+  pre .s{color:#9ad7c9}
+  ul.plain{margin:0 0 16px 22px;max-width:800px}
+  ul.plain li{margin-bottom:8px}
+
+  .tbl-scroll{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:12px;background:var(--card);
+    box-shadow:0 6px 18px -14px rgba(28,36,51,.2)}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{padding:9px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+  th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:#fafbfc}
+  tr:last-child td{border-bottom:none}
+  td code{white-space:nowrap}
+
+  /* mini table of contents */
+  .toc{
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:16px 20px;margin:0 0 36px;
+    box-shadow:0 6px 18px -14px rgba(28,36,51,.2);
+  }
+  .toc strong{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+  .toc ul{list-style:none;margin-top:8px;display:flex;flex-wrap:wrap;gap:6px 8px}
+  .toc a{
+    display:inline-block;font-size:13.5px;font-weight:600;text-decoration:none;
+    color:var(--ink-soft);background:#eef1f5;border-radius:999px;padding:3px 13px;
+  }
+  .toc a:hover{background:var(--teal-soft);color:var(--teal)}
+
+  .note{
+    background:var(--amber-soft);border:1px solid #f3dfc0;border-radius:10px;
+    padding:12px 16px;font-size:14px;color:#7a4a10;max-width:800px;margin:16px 0;
+  }
+
+  footer{
+    border-top:1px solid var(--line);
+    margin-top:24px;padding:26px 0 40px;
+    color:var(--ink-faint);font-size:13.5px;
+  }
+  footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  footer a{color:var(--ink-soft)}
+
+  @media (max-width:720px){
+    h1{font-size:27px}
+    nav.top .links{display:none}
+  }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><span class="dot">●</span> AWR / Timeline Comparison</a>
+    <div class="links">
+      <a class="nl" href="index.html">Home</a>
+      <a class="nl" href="index.html#start">Get started</a>
+      <a class="nl" href="index.html#examples">Examples</a>
+    </div>
+    <a class="gh" href="https://github.com/davidbudac/awr_timeline_comparison">GitHub ↗</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="kicker">Cheat sheet</span>
+    <h1>Ready-to-paste recipes</h1>
+    <p class="tagline">
+      Every recipe below is a complete <code>run_awr_trend.sh</code> invocation —
+      copy, swap in your connect string, run. All commands assume your working
+      directory is the repo root.
+    </p>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <div class="toc">
+      <strong>Jump to</strong>
+      <ul>
+        <li><a href="#args">Argument order</a></li>
+        <li><a href="#weekly">Weekly cadence</a></li>
+        <li><a href="#daily">Daily cadence</a></li>
+        <li><a href="#hourly">Hourly cadence</a></li>
+        <li><a href="#rac">RAC</a></li>
+        <li><a href="#templates">Templates</a></li>
+        <li><a href="#debug">Progress markers</a></li>
+        <li><a href="#markers">Timeline markers</a></li>
+        <li><a href="#topn">Larger Top-N</a></li>
+        <li><a href="#nowrapper">Without the wrapper</a></li>
+        <li><a href="#playbooks">Playbooks</a></li>
+        <li><a href="#retention">AWR retention</a></li>
+      </ul>
+    </div>
+
+    <section id="args">
+      <h2><span class="num">§1</span>Argument order (positional)</h2>
+<pre>./run_awr_trend.sh &lt;connect&gt; [target_end] [win_hours] [weeks_back] \
+                              [top_n] [inst_num] [step] [step_unit] \
+                              [template] [debug] [marker_file]</pre>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>Pos</th><th>Name</th><th>Default</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><code>connect</code></td><td>—</td><td><code>user/pw@svc</code>, <code>/</code>, or any sqlplus connect string</td></tr>
+            <tr><td>2</td><td><code>target_end</code></td><td><code>AUTO</code></td><td><code>AUTO</code> = prior full hour, or <code>'YYYY-MM-DD HH24:MI'</code></td></tr>
+            <tr><td>3</td><td><code>win_hours</code></td><td><code>1</code></td><td>Width of every compared window</td></tr>
+            <tr><td>4</td><td><code>weeks_back</code></td><td><code>4</code></td><td>How many prior windows to include (a count, not necessarily weeks)</td></tr>
+            <tr><td>5</td><td><code>top_n</code></td><td><code>10</code></td><td>Top-N rows in Top-SQL / wait tables</td></tr>
+            <tr><td>6</td><td><code>inst_num</code></td><td><code>0</code></td><td>RAC: <code>0</code> = aggregate, <code>&gt;0</code> = one instance</td></tr>
+            <tr><td>7</td><td><code>step</code></td><td><code>1</code></td><td>Cadence count between adjacent windows</td></tr>
+            <tr><td>8</td><td><code>step_unit</code></td><td><code>w</code></td><td><code>h</code> hours, <code>d</code> days, <code>w</code> weeks</td></tr>
+            <tr><td>9</td><td><code>template</code></td><td><code>comprehensive</code></td><td><code>comprehensive</code>, <code>simple</code>, or <code>dev</code></td></tr>
+            <tr><td>10</td><td><code>debug</code></td><td><code>N</code></td><td><code>Y</code> prints per-section progress markers to stdout; HTML unaffected</td></tr>
+            <tr><td>11</td><td><code>marker_file</code></td><td><em>(empty)</em></td><td>Optional timeline-marker config; empty = none</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Trailing args you don't care about can be omitted. To pin
+        <code>step</code> / <code>step_unit</code> / <code>template</code> you must also
+        supply every preceding arg — use <code>AUTO</code> / <code>0</code> as
+        placeholders (see the examples). The total compared span is
+        <code>weeks_back × step + win_hours</code> of <code>step_unit</code>.
+      </p>
+    </section>
+
+    <section id="weekly">
+      <h2><span class="num">§2</span>Weekly cadence (the original behaviour)</h2>
+
+      <h3>Default — last 4 same-hour-of-week windows</h3>
+<pre>./run_awr_trend.sh user/pw@svc</pre>
+      <p><em>Compares <code>now−1h → now</code> against the same hour 7, 14, 21 and 28 days ago.</em></p>
+
+      <h3>Specific Monday morning vs the four prior Mondays</h3>
+<pre>./run_awr_trend.sh user/pw@svc <span class="s">'2026-04-13 09:00'</span></pre>
+
+      <h3>Monday 09:00–13:00 across the last 4 Mondays</h3>
+<pre>./run_awr_trend.sh user/pw@svc <span class="s">'2026-05-25 13:00'</span> 4 3 10 0 1 w</pre>
+      <p><em>Four 4-hour windows ending Mon 13:00 each, stepping back weekly. Use
+      <code>weeks_back=4</code> instead of <code>3</code> for "current Monday vs 4 prior
+      Mondays" (5 windows total). If you're running before 13:00 on a Monday, push
+      <code>target_end</code> back one week so the current window is fully populated.
+      AWR retention must cover ~29 days — see <a href="#retention">the retention check</a>.</em></p>
+
+      <h3>Two-hour window over twelve weeks of history</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 2 12</pre>
+
+      <h3>Every other week (fortnightly), 6 windows back</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 6 10 0 2 w</pre>
+      <p><em>Spans 12 weeks; useful when alternating weeks have different workloads
+      (payroll Tue, batch Wed, …).</em></p>
+
+      <h3>Approximate monthly comparison — every 4th week, 6 windows</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 6 10 0 4 w</pre>
+      <p><em>Spans ~24 weeks. AWR retention must cover that range.</em></p>
+    </section>
+
+    <section id="daily">
+      <h2><span class="num">§3</span>Daily cadence</h2>
+
+      <h3>Each of the last 7 days at this hour</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 7 10 0 1 d</pre>
+      <p><em>Detects “today is unusual vs the rest of the week”.</em></p>
+
+      <h3>Same hour, every other day for 14 days</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 7 10 0 2 d</pre>
+
+      <h3>Daily 09:00 → 10:00 windows for the past 5 business days</h3>
+<pre>./run_awr_trend.sh user/pw@svc <span class="s">'2026-05-08 10:00'</span> 1 4 10 0 1 d</pre>
+      <p><em>Run on a Friday morning to compare Fri/Thu/Wed/Tue/Mon at 09:00.</em></p>
+
+      <h3>Daily 4-hour batch window for a week</h3>
+<pre>./run_awr_trend.sh user/pw@svc <span class="s">'2026-05-08 06:00'</span> 4 6 10 0 1 d</pre>
+      <p><em>Six prior days at 02:00–06:00 vs today.</em></p>
+    </section>
+
+    <section id="hourly">
+      <h2><span class="num">§4</span>Hourly cadence (straight line back)</h2>
+
+      <h3>Last 4 hours, hour by hour</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h</pre>
+      <p><em>Five 1-hour windows: the current hour + 4 hours back.</em></p>
+
+      <h3>Last 12 hours, hour by hour</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 11 10 0 1 h</pre>
+      <p><em>Twelve 1-hour windows = a 12-hour span. Good for “what happened this
+      morning?” walk-throughs.</em></p>
+
+      <h3>2-hour windows over the past day</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 2 11 10 0 2 h</pre>
+
+      <h3>Every 4 hours for the past 24 hours</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 5 10 0 4 h</pre>
+      <p><em>Six 1-hour windows separated by 4 hours — sample points across the day.</em></p>
+
+      <h3>Pin the comparison to a specific hour</h3>
+<pre>./run_awr_trend.sh user/pw@svc <span class="s">'2026-05-08 14:00'</span> 1 6 10 0 1 h</pre>
+      <p><em>The 14:00 hour vs 13:00, 12:00, 11:00, 10:00, 09:00, 08:00 of the same day.</em></p>
+
+      <div class="note">
+        For an hourly cadence each compared window must contain at least one full AWR
+        snapshot interval — with <code>win_hours = 1</code> and a 1-hour snap interval, a
+        window covers exactly one snap pair. Cut the snap interval to 30 minutes or set
+        <code>win_hours ≥ 2</code> if you want intra-window resolution.
+      </div>
+    </section>
+
+    <section id="rac">
+      <h2><span class="num">§5</span>RAC / multi-instance</h2>
+
+      <h3>Aggregate across all RAC instances (default)</h3>
+<pre>./run_awr_trend.sh user/pw@svc</pre>
+      <p><em><code>inst_num=0</code> sums per-instance values for cumulative stats and
+      aggregates SYSMETRIC correctly (sums rates, averages ratios).</em></p>
+
+      <h3>Just instance 1</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 4 10 1</pre>
+
+      <h3>Instance 2, hourly cadence, last 6 hours</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 6 10 2 1 h</pre>
+    </section>
+
+    <section id="templates">
+      <h2><span class="num">§6</span>Templates (which metrics &amp; waits to render)</h2>
+      <p>
+        Templates pick the curated set of stats, metrics and wait events the report
+        renders. They don't change cadence or compared windows — they just trim or
+        expand the rows.
+      </p>
+
+      <h3><code>comprehensive</code> (default) — every curated metric and the full firehose of waits</h3>
+<pre>./run_awr_trend.sh user/pw@svc</pre>
+      <p><em>27 load stats, 23 SYSMETRIC metrics, all wait events ranked by time.</em></p>
+
+      <h3><code>simple</code> — triage-friendly subset for a quick glance</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple</pre>
+      <p><em>9 load stats, 8 SYSMETRIC metrics, ~10 commonly-watched wait events. The
+      masthead renders a <code>template: simple</code> pill so you can tell reports apart
+      at a glance.</em></p>
+
+      <h3><code>dev</code> — application-developer view</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w dev</pre>
+      <p><em>17 load stats, 13 metrics, 14 wait events: transaction throughput, query
+      work, cursor/parse behaviour, sorts, SQL*Net chattiness, response time and
+      app-caused contention — no host/OS or storage-engine internals.</em></p>
+
+      <h3>Simple template + hourly cadence — fast walkthrough of the last few hours</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h simple</pre>
+
+      <h3>Roll your own</h3>
+      <p>
+        Drop a directory under <code>sql/lib/templates/&lt;name&gt;/</code> with three
+        files — <code>sysstat_load_targets.sql</code>, <code>sysmetric_targets.sql</code>,
+        <code>wait_event_targets.sql</code> — and add the name to the whitelist
+        <code>CASE</code> in <code>awr_trend.sql</code>. A single <code>'*'</code> row in
+        <code>wait_event_targets.sql</code> means “no filter, top-N firehose”; any other
+        rows form an allowlist.
+      </p>
+    </section>
+
+    <section id="debug">
+      <h2><span class="num">§7</span>Progress markers (<code>debug=Y</code>)</h2>
+      <p>
+        On a busy DB some sections take minutes; with no terminal output it looks hung.
+        <code>debug=Y</code> prints one timestamped line per section to <strong>stdout</strong>
+        — the HTML report is byte-identical with debug on or off.
+      </p>
+
+      <h3>Defaults + debug</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y</pre>
+
+      <h3>Simple template + debug (the lightest combo)</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple Y</pre>
+
+      <p>You'll see output like:</p>
+<pre><span class="c">[awr_trend 08:38:42.369] section 00 params (header + nav)
+[awr_trend 08:38:42.594] section 01 windows (aligned begin/end snap pairs)
+[awr_trend 08:38:42.600] section 02 load_profile (SYSSTAT deltas)
+[awr_trend 08:38:44.188] section 03 sysmetric (SYSMETRIC_SUMMARY averages)
+…
+[awr_trend 08:38:45.142] all sections rendered; writing HTML epilogue</span></pre>
+      <p>
+        Diff two consecutive timestamps to find your slowest section. Any
+        case-insensitive truthy value enables debug (<code>Y</code>, <code>YES</code>,
+        <code>1</code>, <code>ON</code>, <code>TRUE</code>, <code>T</code>).
+      </p>
+
+      <h3>Tee into a log so you keep the timings</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y \
+  | tee reports/last_run_markers.log</pre>
+    </section>
+
+    <section id="markers">
+      <h2><span class="num">§8</span>Timeline markers (<code>marker_file</code>)</h2>
+      <p>
+        Annotate the dated charts (masthead strip, ASH timeline, DB-time summary,
+        per-SQL ASH cards) with your own milestones — a patch, an index rebuild, a stats
+        gather, an incident — so a spike lines up with a known change. Optional: no
+        <code>marker_file</code> means no markers and no change to the report.
+      </p>
+      <p>Write a config file, one milestone per line (<code>YYYY-MM-DD HH24:MI</code> +
+      label). Copy <code>markers.example.sql</code> and edit:</p>
+<pre><span class="c">-- my_markers.sql</span>
+@@sql/lib/marker <span class="s">'2026-04-20 14:00'</span> <span class="s">'Applied patch 19.22'</span>
+@@sql/lib/marker <span class="s">'2026-05-01 02:00'</span> <span class="s">'Index rebuild on SALES'</span>
+@@sql/lib/marker <span class="s">'2026-05-10 09:30'</span> <span class="s">'Optimizer stats gather'</span></pre>
+
+      <h3>Defaults + markers</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive N my_markers.sql</pre>
+
+      <h3>Hourly walkthrough with markers</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 12 10 0 1 h comprehensive N my_markers.sql</pre>
+
+      <ul class="plain">
+        <li>Keep the path exactly <code>@@sql/lib/marker</code> even if your config lives
+            elsewhere — SQL*Plus resolves nested <code>@@</code> paths from the project root.</li>
+        <li>A marker outside a chart's span is dropped for that chart; markers snap to
+            the nearest point on the axis.</li>
+        <li>A malformed datetime is skipped (it becomes an HTML comment), not fatal.
+            Labels with a single quote must double it (<code>'Bob''s change'</code>).</li>
+      </ul>
+
+      <p>See it live: <a href="examples/weekly_with_markers.html">example report with
+      timeline markers</a>.</p>
+    </section>
+
+    <section id="topn">
+      <h2><span class="num">§9</span>Larger Top-N</h2>
+
+      <h3>Top-25 SQL with the default weekly comparison</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 4 25</pre>
+      <p><em>Useful when the top-10 doesn't capture a noisy outlier.</em></p>
+
+      <h3>Top-50 SQL, hourly straight-back</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 6 50 0 1 h</pre>
+    </section>
+
+    <section id="nowrapper">
+      <h2><span class="num">§10</span>Invocation without the wrapper</h2>
+      <p>
+        If you can't run a shell script (Windows shop, restricted host), drive sqlplus
+        directly:
+      </p>
+<pre>SQL&gt; @sql/defaults.sql
+SQL&gt; DEFINE step       = 1
+SQL&gt; DEFINE step_unit  = <span class="s">'h'</span>
+SQL&gt; DEFINE weeks_back = 6
+SQL&gt; DEFINE template   = <span class="s">'simple'</span>
+SQL&gt; @awr_trend.sql</pre>
+
+      <p>Or in one shot, embedded in a sqlplus heredoc:</p>
+<pre>sqlplus -S -L user/pw@svc &lt;&lt;<span class="s">'SQL'</span>
+DEFINE target_end = <span class="s">'2026-05-08 14:00'</span>
+DEFINE win_hours  = 1
+DEFINE weeks_back = 6
+DEFINE top_n      = 10
+DEFINE inst_num   = 0
+DEFINE step       = 1
+DEFINE step_unit  = <span class="s">'h'</span>
+DEFINE template   = <span class="s">'comprehensive'</span>
+DEFINE debug      = <span class="s">'N'</span>
+DEFINE marker_file = <span class="s">''</span>
+@@awr_trend.sql
+EXIT
+SQL</pre>
+      <div class="note">
+        When you set the DEFINEs by hand instead of loading
+        <code>@sql/defaults.sql</code>, include <code>DEFINE marker_file = ''</code> —
+        the driver references it, so an unset value would stop at an
+        “Enter value” prompt.
+      </div>
+    </section>
+
+    <section id="playbooks">
+      <h2><span class="num">§11</span>Scheduling &amp; comparison playbooks</h2>
+
+      <h3>“What's different this morning vs my normal Monday?”</h3>
+<pre><span class="c"># Compare the current hour vs four prior Mondays at this hour.</span>
+./run_awr_trend.sh user/pw@svc</pre>
+
+      <h3>“Walk me through the last 12 hours hour by hour”</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 12 10 0 1 h</pre>
+      <p><em>Open the report and focus on the <strong>ASH timeline</strong> and
+      <strong>DB time</strong> stacked areas — those cover the full span at native snap
+      resolution.</em></p>
+
+      <h3>“Did yesterday's batch differ from the previous five Tuesdays?”</h3>
+<pre><span class="c"># Set target_end to the end of the batch window.</span>
+./run_awr_trend.sh user/pw@svc <span class="s">'2026-05-12 06:00'</span> 4 5 25 0 1 w</pre>
+      <p><em>4-hour windows ending at 06:00, current Tue plus the 5 prior Tuesdays.</em></p>
+
+      <h3>“Quarter-end vs the last three quarter-ends”</h3>
+<pre>./run_awr_trend.sh user/pw@svc <span class="s">'2026-03-31 23:00'</span> 1 3 25 0 13 w</pre>
+      <p><em>Steps back 13 weeks at a time (≈ a quarter). AWR retention must cover ~9
+      months of history.</em></p>
+
+      <h3>“Is this hour unusually slow compared to its immediate neighbors?”</h3>
+<pre>./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h</pre>
+    </section>
+
+    <section id="retention">
+      <h2><span class="num">§12</span>AWR retention check</h2>
+      <p>
+        Before you run any of the longer-lookback recipes, verify your AWR retention
+        covers the span you ask for:
+      </p>
+<pre>SELECT retention FROM dba_hist_wr_control;</pre>
+      <p>
+        Default retention is 8 days on 19c. The report still runs — windows with no
+        history are flagged as skipped — but the full default weekly comparison wants
+        ~29 days, and monthly-cadence recipes 30+. Bump it with:
+      </p>
+<pre>EXEC DBMS_WORKLOAD_REPOSITORY.MODIFY_SNAPSHOT_SETTINGS(retention =&gt; 60*24*60); <span class="c">-- 60 days</span></pre>
+
+      <h3>Defaults reset</h3>
+      <p>
+        The canonical defaults live in <code>sql/defaults.sql</code>. Editing them
+        changes the site-wide behaviour for every wrapper invocation that omits the
+        matching positional argument:
+      </p>
+<pre>DEFINE target_end = <span class="s">'AUTO'</span>
+DEFINE win_hours  = 1
+DEFINE weeks_back = 4
+DEFINE top_n      = 10
+DEFINE inst_num   = 0
+DEFINE step       = 1
+DEFINE step_unit  = <span class="s">'w'</span>
+DEFINE template   = <span class="s">'comprehensive'</span>
+DEFINE debug      = <span class="s">'N'</span>
+DEFINE marker_file = <span class="s">''</span></pre>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div><a href="index.html">← Back to the project page</a></div>
+    <div>
+      <a href="https://github.com/davidbudac/awr_timeline_comparison">github.com/davidbudac/awr_timeline_comparison</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
