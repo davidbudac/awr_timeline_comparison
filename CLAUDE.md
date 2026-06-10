@@ -81,7 +81,12 @@ sql/
         │   ├── sysstat_load_targets.sql
         │   ├── sysmetric_targets.sql
         │   └── wait_event_targets.sql
-        └── simple/              -- triage-friendly subset (9 SYSSTAT + 8 SYSMETRIC + ~10 waits)
+        ├── simple/              -- triage-friendly subset (9 SYSSTAT + 8 SYSMETRIC + ~10 waits)
+        │   ├── sysstat_load_targets.sql
+        │   ├── sysmetric_targets.sql
+        │   └── wait_event_targets.sql
+        └── dev/                 -- application-developer view (17 SYSSTAT + 13 SYSMETRIC + 14 waits;
+            │                       SQL/throughput/contention, no host/OS/storage internals)
             ├── sysstat_load_targets.sql
             ├── sysmetric_targets.sql
             └── wait_event_targets.sql
@@ -134,7 +139,7 @@ every consumer writes the include as
 the `TO_NUMBER('x')` ORA-01722 trick (same pattern as `step_unit`
 validation). To add a new template, drop a directory with all three
 files into `sql/lib/templates/` and extend the whitelist `CASE` in the
-driver. Two templates ship today:
+driver. Three templates ship today:
 - `comprehensive` (default) — the full curated lists used pre-templates.
   The wait-event file is the `'*'` sentinel so the firehose-then-top-N
   behavior is byte-identical to the pre-template report.
@@ -142,6 +147,17 @@ driver. Two templates ship today:
   wait events). Deliberately includes the SYSSTAT/SYSMETRIC names that
   section 08's hero strip hard-references, so the hero cards keep
   rendering instead of falling to `n/a`.
+- `dev` — an application-developer's view (~17 SYSSTAT, ~13 SYSMETRIC,
+  ~14 wait events). Keeps what the app/SQL drives — transaction
+  throughput (commits/rollbacks/executions/user calls), query work
+  (logical/physical reads, full table scans vs rowid fetches),
+  cursor/parse behaviour, sorts, SQL*Net chattiness, response time, and
+  app-caused waits (temp spill, commit latency, row/index/TM lock
+  contention, buffer busy, library-cache/cursor/shared-pool contention)
+  — and drops host/OS and storage-engine internals (Host CPU, physical
+  write bytes, redo internals, IO requests, single-block read latency,
+  background waits). Like `simple`, it deliberately retains the six
+  SYSSTAT/SYSMETRIC names section 08's hero strip hard-references.
 
 Wait-event filter idiom (in every consumer that joins
 `dba_hist_system_event` or `dba_hist_bg_event_summary`):

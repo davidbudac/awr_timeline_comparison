@@ -13,7 +13,9 @@
 # template selects which set of metrics + wait events to display.
 # Defaults to 'comprehensive' (the full curated lists, identical to the
 # pre-template behaviour).  'simple' shows a small triage-friendly
-# subset.  See sql/lib/templates/<name>/ for the metric/wait lists.
+# subset.  'dev' is an application-developer's view (SQL/throughput/
+# contention, no host/OS/storage-engine internals).  See
+# sql/lib/templates/<name>/ for the metric/wait lists.
 #
 # debug = Y prints one-line timestamped progress markers to standard
 # output as each section begins (helpful on large DBs where some sections

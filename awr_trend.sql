@@ -31,8 +31,10 @@
 --   inst_num     0 = aggregate across RAC; otherwise the instance number
 --   step         1     -- cadence count between comparison windows
 --   step_unit    'w'   -- 'h' | 'd' | 'w'  (hours, days, weeks)
---   template     'comprehensive' (default, full lists) or 'simple'
---                  (small triage-friendly subset).  Selects which
+--   template     'comprehensive' (default, full lists), 'simple'
+--                  (small triage-friendly subset), or 'dev'
+--                  (application-developer view: SQL/throughput/contention,
+--                  no host/OS/storage-engine internals).  Selects which
 --                  directory under sql/lib/templates/<name>/ supplies
 --                  the sysstat / sysmetric / wait-event target lists.
 --   debug        'N' (default) or 'Y' -- per-section stdout progress markers.
@@ -314,6 +316,7 @@ CROSS JOIN (
             CASE LOWER(TRIM('~template'))
                 WHEN 'comprehensive' THEN 'comprehensive'
                 WHEN 'simple'        THEN 'simple'
+                WHEN 'dev'           THEN 'dev'
                 ELSE TO_CHAR(TO_NUMBER('x'))   -- force ORA-01722 on unknown template
             END
             AS template_dir

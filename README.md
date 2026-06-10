@@ -62,7 +62,7 @@ Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [
 | `inst_num`   | `0`              | RAC: `0` = aggregate across all instances; `>0` = filter to that instance |
 | `step`       | `1`              | Cadence count between adjacent windows              |
 | `step_unit`  | `w`              | Cadence unit: `h` (hours), `d` (days), `w` (weeks)  |
-| `template`   | `comprehensive`  | Metric + wait-event set: `comprehensive` (full curated lists) or `simple` (triage-friendly subset) |
+| `template`   | `comprehensive`  | Metric + wait-event set: `comprehensive` (full curated lists), `simple` (triage-friendly subset), or `dev` (application-developer view) |
 | `debug`      | `N`              | `Y` (or `YES/1/ON/TRUE/T`, case-insensitive) prints one-line, millisecond-timestamped progress markers to stdout as each section begins — useful when a slow section makes the run look hung. Markers go to stdout only; the HTML report is byte-identical to a `debug=N` run |
 | `marker_file`| *(empty)*        | Optional path to a timeline-marker config file (milestones drawn as vertical dashed lines on the dated charts). Empty = no markers. See "Timeline markers" below |
 
@@ -76,7 +76,11 @@ step_unit=d` runs every-other-day.
 `comprehensive` is the full pre-template content (27 SYSSTAT load stats,
 23 SYSMETRIC metrics, all wait events ranked by time). `simple` is a
 triage-friendly subset (9 load stats, 8 metrics, ~10 wait events) for a
-quick glance. To add your own template, drop a directory under
+quick glance. `dev` is an application-developer's view (17 load stats,
+13 metrics, 14 wait events) that focuses on what the application drives —
+transaction throughput, query work, cursor/parse behaviour, sorts,
+SQL*Net chattiness, response time, and app-caused contention waits — and
+omits host/OS and storage-engine internals. To add your own template, drop a directory under
 `sql/lib/templates/<name>/` with three files
 (`sysstat_load_targets.sql`, `sysmetric_targets.sql`,
 `wait_event_targets.sql`) and extend the whitelist in `awr_trend.sql`.
