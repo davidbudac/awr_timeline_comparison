@@ -67,6 +67,11 @@ sql/
 ├── 11_top_sql_ash_breakdown.sql -- per-Top-N-SQL ASH stacked-area cards
 ├── 12_param_changes.sql         -- init parameters that differ across windows
 │                                   (reads dba_hist_parameter; per-window end snap)
+├── 13_utilization.sql           -- database utilization profile: descriptive usage
+│                                   overview (transaction/call/logon rates, sessions,
+│                                   data + network volume) from SYSMETRIC_SUMMARY;
+│                                   fixed inline target list, template-INDEPENDENT
+│                                   on purpose (same view under every template)
 └── lib/                         -- SQL/PL/SQL fragments shared across sections via @@
     ├── windows_cte.sql          -- run_params → … → valid_windows CTE chain
     ├── nth_csv.plsql            -- INSTR-based PL/SQL CSV parser (preserves empty tokens)
@@ -483,6 +488,16 @@ not reintroduce a second cursor that re-runs the whole recompute just
 to get a different ORDER BY.
 
 ## Verification state
+
+Section 13 (utilization) verified on dbmint in Jun 2026: pinned run
+(`target_end='2026-06-06 12:00'`, hourly cadence into a restart-free
+15-min-snap stretch) rendered all 18 metric rows with data under both
+`comprehensive` and `simple` (the section is template-independent), 3
+h3 sub-groups, nav/numeral `03 Utilization`, zero ORA- in the spool.
+Note dbmint's default-window trap: with `AUTO` + weekly cadence the
+test DB usually has no valid windows (restarts + sparse history), so
+*every* data section renders em-dashes — pin `target_end` into a clean
+snapshot stretch before concluding a section is broken.
 
 Last verified against Oracle 19c on dbmint (CDB1, `connect / as sysdba`)
 in May 2026 after the `fix/codex-review-priorities` round (per-instance

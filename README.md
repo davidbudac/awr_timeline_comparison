@@ -234,6 +234,7 @@ SQL> @side/create_weekly_baselines.sql
 │   ├── 10_db_time_summary.sql       -- full-span DB time stacked area
 │   ├── 11_top_sql_ash_breakdown.sql -- per-Top-N-SQL ASH cards
 │   ├── 12_param_changes.sql         -- parameters that differ across windows
+│   ├── 13_utilization.sql           -- database utilization profile (usage overview)
 │   └── lib/                         -- shared @@-included fragments (CTEs, JS, helpers)
 │       ├── js_markers.plsql         -- inits window.AWR_MARKERS + AWR_markLine()
 │       ├── marker.sql               -- emit one timeline marker (used by marker_file)

@@ -156,14 +156,17 @@ The visual order (and therefore the numerals) is fixed:
 |---|---|---|---|
 | 01 | `db-time-summary` | `10_db_time_summary.sql` | The headline answer: how was DB time spent? |
 | 02 | `overview` | `08_overview.sql` | Six headline-metric hero cards |
-| 03 | `ash-timeline` | `09_ash_timeline.sql` | Visual timeline first, before tables |
-| 04 | `findings` | `07_summary.sql` | Z-scored "what changed" list |
-| 05 | `windows` | `01_windows.sql` | Provenance: which AWR snaps fed it |
-| 06 | `load` | `02_load_profile.sql` | Per-second SYSSTAT counters |
-| 07 | `metrics` | `03_sysmetric.sql` | SYSMETRIC averages |
-| 08 | `waits-fg` | `04_waits_fg.sql` | Foreground waits + class roll-up |
-| 09 | `waits-bg` | `05_waits_bg.sql` | Background waits |
-| 10 | `topsql` | `06_top_sql.sql` | Top-N SQL ranked four ways |
+| 03 | `utilization` | `13_utilization.sql` | Descriptive usage profile: how the apps use the DB |
+| 04 | `ash-timeline` | `09_ash_timeline.sql` | Visual timeline first, before tables |
+| 05 | `waits-fg` | `04_waits_fg.sql` | Foreground waits + class roll-up |
+| 06 | `waits-bg` | `05_waits_bg.sql` | Background waits |
+| 07 | `topsql` | `06_top_sql.sql` | Top-N SQL ranked four ways |
+| 08 | `findings` | `07_summary.sql` | Z-scored "what changed" list |
+| 09 | `windows` | `01_windows.sql` | Provenance: which AWR snaps fed it |
+| 10 | `load` | `02_load_profile.sql` | Per-second SYSSTAT counters |
+| 11 | `metrics` | `03_sysmetric.sql` | SYSMETRIC averages |
+| 12 | `topsql-ash` | `11_top_sql_ash_breakdown.sql` | Per-Top-N-SQL ASH cards |
+| 13 | `param-changes` | `12_param_changes.sql` | Parameters that differ across windows |
 
 > **CSS counters are not used** because counters increment in source
 > order, but `order:` reflows visual order. Per-section explicit

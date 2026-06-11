@@ -67,17 +67,18 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('nav.toc            { order:2; }');
     DBMS_OUTPUT.PUT_LINE('#db-time-summary   { order:3; }');
     DBMS_OUTPUT.PUT_LINE('#overview          { order:4; }');
-    DBMS_OUTPUT.PUT_LINE('#ash-timeline      { order:5; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-fg          { order:6; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-bg          { order:7; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql            { order:8; }');
-    DBMS_OUTPUT.PUT_LINE('#findings          { order:9; }');
-    DBMS_OUTPUT.PUT_LINE('#windows           { order:10; }');
-    DBMS_OUTPUT.PUT_LINE('#load              { order:11; }');
-    DBMS_OUTPUT.PUT_LINE('#metrics           { order:12; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql-ash        { order:13; }');
-    DBMS_OUTPUT.PUT_LINE('#param-changes     { order:14; }');
-    DBMS_OUTPUT.PUT_LINE('footer.report      { order:15; }');
+    DBMS_OUTPUT.PUT_LINE('#utilization       { order:5; }');
+    DBMS_OUTPUT.PUT_LINE('#ash-timeline      { order:6; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-fg          { order:7; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-bg          { order:8; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql            { order:9; }');
+    DBMS_OUTPUT.PUT_LINE('#findings          { order:10; }');
+    DBMS_OUTPUT.PUT_LINE('#windows           { order:11; }');
+    DBMS_OUTPUT.PUT_LINE('#load              { order:12; }');
+    DBMS_OUTPUT.PUT_LINE('#metrics           { order:13; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql-ash        { order:14; }');
+    DBMS_OUTPUT.PUT_LINE('#param-changes     { order:15; }');
+    DBMS_OUTPUT.PUT_LINE('footer.report      { order:16; }');
 
     -- =========================================================
     -- Masthead (header.report)
@@ -247,16 +248,17 @@ BEGIN
     -- Per-section numerals (visual order matches the `order:` set above).
     DBMS_OUTPUT.PUT_LINE('#db-time-summary h2::before { content:"01"; }');
     DBMS_OUTPUT.PUT_LINE('#overview        h2::before { content:"02"; }');
-    DBMS_OUTPUT.PUT_LINE('#ash-timeline    h2::before { content:"03"; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-fg        h2::before { content:"04"; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-bg        h2::before { content:"05"; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql          h2::before { content:"06"; }');
-    DBMS_OUTPUT.PUT_LINE('#findings        h2::before { content:"07"; }');
-    DBMS_OUTPUT.PUT_LINE('#windows         h2::before { content:"08"; }');
-    DBMS_OUTPUT.PUT_LINE('#load            h2::before { content:"09"; }');
-    DBMS_OUTPUT.PUT_LINE('#metrics         h2::before { content:"10"; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql-ash      h2::before { content:"11"; }');
-    DBMS_OUTPUT.PUT_LINE('#param-changes   h2::before { content:"12"; }');
+    DBMS_OUTPUT.PUT_LINE('#utilization     h2::before { content:"03"; }');
+    DBMS_OUTPUT.PUT_LINE('#ash-timeline    h2::before { content:"04"; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-fg        h2::before { content:"05"; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-bg        h2::before { content:"06"; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql          h2::before { content:"07"; }');
+    DBMS_OUTPUT.PUT_LINE('#findings        h2::before { content:"08"; }');
+    DBMS_OUTPUT.PUT_LINE('#windows         h2::before { content:"09"; }');
+    DBMS_OUTPUT.PUT_LINE('#load            h2::before { content:"10"; }');
+    DBMS_OUTPUT.PUT_LINE('#metrics         h2::before { content:"11"; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql-ash      h2::before { content:"12"; }');
+    DBMS_OUTPUT.PUT_LINE('#param-changes   h2::before { content:"13"; }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
         || ' h2 { font-size:22px; gap:12px; }'
         || ' h2::before { font-size:30px; min-width:42px; } }');

@@ -495,6 +495,9 @@ DEFINE _dbg_msg = 'section 11 top_sql_ash_breakdown (per-SQL ASH; one cursor per
 DEFINE _dbg_msg = 'section 12 param_changes (parameters that differ across windows)'
 @@sql/lib/debug_log.sql
 @@sql/12_param_changes.sql
+DEFINE _dbg_msg = 'section 13 utilization (application usage profile)'
+@@sql/lib/debug_log.sql
+@@sql/13_utilization.sql
 DEFINE _dbg_msg = 'all sections rendered; writing HTML epilogue'
 @@sql/lib/debug_log.sql
 
