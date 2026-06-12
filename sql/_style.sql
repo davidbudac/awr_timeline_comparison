@@ -73,13 +73,14 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('#waits-bg          { order:8; }');
     DBMS_OUTPUT.PUT_LINE('#topsql            { order:9; }');
     DBMS_OUTPUT.PUT_LINE('#segment-io        { order:10; }');
-    DBMS_OUTPUT.PUT_LINE('#findings          { order:11; }');
-    DBMS_OUTPUT.PUT_LINE('#windows           { order:12; }');
-    DBMS_OUTPUT.PUT_LINE('#load              { order:13; }');
-    DBMS_OUTPUT.PUT_LINE('#metrics           { order:14; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql-ash        { order:15; }');
-    DBMS_OUTPUT.PUT_LINE('#param-changes     { order:16; }');
-    DBMS_OUTPUT.PUT_LINE('footer.report      { order:17; }');
+    DBMS_OUTPUT.PUT_LINE('#file-io           { order:11; }');
+    DBMS_OUTPUT.PUT_LINE('#findings          { order:12; }');
+    DBMS_OUTPUT.PUT_LINE('#windows           { order:13; }');
+    DBMS_OUTPUT.PUT_LINE('#load              { order:14; }');
+    DBMS_OUTPUT.PUT_LINE('#metrics           { order:15; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql-ash        { order:16; }');
+    DBMS_OUTPUT.PUT_LINE('#param-changes     { order:17; }');
+    DBMS_OUTPUT.PUT_LINE('footer.report      { order:18; }');
 
     -- =========================================================
     -- Masthead (header.report)
@@ -255,12 +256,13 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('#waits-bg        h2::before { content:"06"; }');
     DBMS_OUTPUT.PUT_LINE('#topsql          h2::before { content:"07"; }');
     DBMS_OUTPUT.PUT_LINE('#segment-io      h2::before { content:"08"; }');
-    DBMS_OUTPUT.PUT_LINE('#findings        h2::before { content:"09"; }');
-    DBMS_OUTPUT.PUT_LINE('#windows         h2::before { content:"10"; }');
-    DBMS_OUTPUT.PUT_LINE('#load            h2::before { content:"11"; }');
-    DBMS_OUTPUT.PUT_LINE('#metrics         h2::before { content:"12"; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql-ash      h2::before { content:"13"; }');
-    DBMS_OUTPUT.PUT_LINE('#param-changes   h2::before { content:"14"; }');
+    DBMS_OUTPUT.PUT_LINE('#file-io         h2::before { content:"09"; }');
+    DBMS_OUTPUT.PUT_LINE('#findings        h2::before { content:"10"; }');
+    DBMS_OUTPUT.PUT_LINE('#windows         h2::before { content:"11"; }');
+    DBMS_OUTPUT.PUT_LINE('#load            h2::before { content:"12"; }');
+    DBMS_OUTPUT.PUT_LINE('#metrics         h2::before { content:"13"; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql-ash      h2::before { content:"14"; }');
+    DBMS_OUTPUT.PUT_LINE('#param-changes   h2::before { content:"15"; }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
         || ' h2 { font-size:22px; gap:12px; }'
         || ' h2::before { font-size:30px; min-width:42px; } }');

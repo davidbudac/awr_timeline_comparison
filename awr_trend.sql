@@ -501,6 +501,9 @@ DEFINE _dbg_msg = 'section 13 utilization (application usage profile)'
 DEFINE _dbg_msg = 'section 14 segment_io (top segments by I/O per window)'
 @@sql/lib/debug_log.sql
 @@sql/14_segment_io.sql
+DEFINE _dbg_msg = 'section 15 file_io (per-file and file-type I/O deltas)'
+@@sql/lib/debug_log.sql
+@@sql/15_file_io.sql
 DEFINE _dbg_msg = 'all sections rendered; writing HTML epilogue'
 @@sql/lib/debug_log.sql
 
