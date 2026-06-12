@@ -35,6 +35,9 @@ GRANT SELECT ON DBA_HIST_SQLSTAT             TO <user>;
 GRANT SELECT ON DBA_HIST_SQLTEXT             TO <user>;
 GRANT SELECT ON DBA_HIST_SEG_STAT            TO <user>;
 GRANT SELECT ON DBA_HIST_SEG_STAT_OBJ        TO <user>;
+GRANT SELECT ON DBA_HIST_FILESTATXS          TO <user>;
+GRANT SELECT ON DBA_HIST_TEMPSTATXS          TO <user>;
+GRANT SELECT ON DBA_HIST_IOSTAT_FILETYPE     TO <user>;
 GRANT SELECT ON DBA_HIST_ACTIVE_SESS_HISTORY TO <user>;
 GRANT SELECT ON DBA_HIST_PARAMETER           TO <user>;
 GRANT SELECT ON V_$DATABASE                  TO <user>;
@@ -181,7 +184,12 @@ z-scores.
     activity per window from `DBA_HIST_SEG_STAT`: physical reads/writes
     (blocks) and read/write requests, one line per top segment across
     windows with a per-object-type rollup toggle.
-11. **Parameter changes** — initialization parameters from
+11. **File I/O** — data/temp files with the most I/O per window from
+    `DBA_HIST_FILESTATXS` / `DBA_HIST_TEMPSTATXS` (data read/written in
+    MB plus read/write requests), with a toggle to the AWR-report-style
+    "IOStat by Filetype" view from `DBA_HIST_IOSTAT_FILETYPE` covering
+    all database I/O (control file, redo log, archive log, …).
+12. **Parameter changes** — initialization parameters from
     `DBA_HIST_PARAMETER` whose value differs across the compared windows,
     pivoted parameter × window (value as of each window's end snapshot).
 

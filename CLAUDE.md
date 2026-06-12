@@ -80,6 +80,16 @@ sql/
 │                                   segments keyed by NAME (not obj#) so series
 │                                   survive rebuilds + DBID changes;
 │                                   template-INDEPENDENT like 13
+├── 15_file_io.sql               -- top data/temp files by I/O per window from
+│                                   DBA_HIST_FILESTATXS + DBA_HIST_TEMPSTATXS
+│                                   (no *_DELTA cols: begin/end pair deltas,
+│                                   HAVING COUNT(*)=2 guard) + per-file-type
+│                                   toggle from DBA_HIST_IOSTAT_FILETYPE (the
+│                                   AWR "IOStat by Filetype"; covers ALL DB
+│                                   I/O so totals differ from the file view);
+│                                   4 dims (read/write MB via block_size,
+│                                   read/write reqs); files keyed by FILENAME;
+│                                   template-INDEPENDENT like 13/14
 └── lib/                         -- SQL/PL/SQL fragments shared across sections via @@
     ├── windows_cte.sql          -- run_params → … → valid_windows CTE chain
     ├── nth_csv.plsql            -- INSTR-based PL/SQL CSV parser (preserves empty tokens)
@@ -497,13 +507,16 @@ to get a different ORDER BY.
 
 ## Verification state
 
-**PENDING (Jun 2026): section 14 (segment I/O) and the section-06
-"By physical reads" dimension have NOT yet been run against a real DB**
-— dbmint was unreachable when they were written. Verify with a pinned
-run (see the section-13 note below for the known-good window) and check:
-all five SQL dims render in 07 Top SQL, section 14 renders four h3
-sub-blocks + charts + detail tables, nav numeral `08 Segment I/O`,
-zero ORA- in the spool.
+**PENDING (Jun 2026): section 14 (segment I/O), section 15 (file I/O)
+and the section-06 "By physical reads" dimension have NOT yet been run
+against a real DB** — dbmint was unreachable when they were written.
+Verify with a pinned run (see the section-13 note below for the
+known-good window) and check: all five SQL dims render in 07 Top SQL,
+section 14 renders four h3 sub-blocks + charts + detail tables (nav
+numeral `08 Segment I/O`), section 15 renders four h3 sub-blocks +
+charts + per-file detail tables + the combined "I/O by file type"
+detail table (nav numeral `09 File I/O`), MB values show one decimal
+without a trailing dot, and zero ORA- in the spool.
 
 Section 13 (utilization) verified on dbmint in Jun 2026: pinned run
 (`target_end='2026-06-06 12:00'`, hourly cadence into a restart-free
