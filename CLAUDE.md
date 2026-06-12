@@ -58,7 +58,8 @@ sql/
 ├── 03_sysmetric.sql             -- SYSMETRIC_SUMMARY averages (curated metrics, per template)
 ├── 04_waits_fg.sql              -- foreground waits + wait-class rollup (filtered per template)
 ├── 05_waits_bg.sql              -- background waits (BG_EVENT_SUMMARY; filtered per template)
-├── 06_top_sql.sql               -- Top-N SQL ranked 4 ways + bump chart
+├── 06_top_sql.sql               -- Top-N SQL ranked 5 ways (elapsed, CPU, gets,
+│                                   physical reads, executions) + bump chart
 ├── 07_summary.sql               -- z-score findings + heatmap (recomputed inline)
 ├── 08_overview.sql              -- hero strip: 6 headline-metric cards (recomputed inline)
 ├── 09_ash_timeline.sql          -- hourly ASH stacked-area timeline by wait_class
@@ -72,6 +73,13 @@ sql/
 │                                   data + network volume) from SYSMETRIC_SUMMARY;
 │                                   fixed inline target list, template-INDEPENDENT
 │                                   on purpose (same view under every template)
+├── 14_segment_io.sql            -- top segments (and object types) by I/O per
+│                                   window from DBA_HIST_SEG_STAT (has *_DELTA
+│                                   cols) + DBA_HIST_SEG_STAT_OBJ names; 4 dims
+│                                   (phys reads/writes blocks, read/write reqs);
+│                                   segments keyed by NAME (not obj#) so series
+│                                   survive rebuilds + DBID changes;
+│                                   template-INDEPENDENT like 13
 └── lib/                         -- SQL/PL/SQL fragments shared across sections via @@
     ├── windows_cte.sql          -- run_params → … → valid_windows CTE chain
     ├── nth_csv.plsql            -- INSTR-based PL/SQL CSV parser (preserves empty tokens)
@@ -488,6 +496,14 @@ not reintroduce a second cursor that re-runs the whole recompute just
 to get a different ORDER BY.
 
 ## Verification state
+
+**PENDING (Jun 2026): section 14 (segment I/O) and the section-06
+"By physical reads" dimension have NOT yet been run against a real DB**
+— dbmint was unreachable when they were written. Verify with a pinned
+run (see the section-13 note below for the known-good window) and check:
+all five SQL dims render in 07 Top SQL, section 14 renders four h3
+sub-blocks + charts + detail tables, nav numeral `08 Segment I/O`,
+zero ORA- in the spool.
 
 Section 13 (utilization) verified on dbmint in Jun 2026: pinned run
 (`target_end='2026-06-06 12:00'`, hourly cadence into a restart-free

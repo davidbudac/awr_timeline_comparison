@@ -474,7 +474,7 @@ DEFINE _dbg_msg = 'section 04 waits_fg (foreground waits)'
 DEFINE _dbg_msg = 'section 05 waits_bg (background waits)'
 @@sql/lib/debug_log.sql
 @@sql/05_waits_bg.sql
-DEFINE _dbg_msg = 'section 06 top_sql (Top-N SQL ranked 4 ways + regression)'
+DEFINE _dbg_msg = 'section 06 top_sql (Top-N SQL ranked 5 ways + regression)'
 @@sql/lib/debug_log.sql
 @@sql/06_top_sql.sql
 DEFINE _dbg_msg = 'section 07 summary (z-score findings + heatmap)'
@@ -498,6 +498,9 @@ DEFINE _dbg_msg = 'section 12 param_changes (parameters that differ across windo
 DEFINE _dbg_msg = 'section 13 utilization (application usage profile)'
 @@sql/lib/debug_log.sql
 @@sql/13_utilization.sql
+DEFINE _dbg_msg = 'section 14 segment_io (top segments by I/O per window)'
+@@sql/lib/debug_log.sql
+@@sql/14_segment_io.sql
 DEFINE _dbg_msg = 'all sections rendered; writing HTML epilogue'
 @@sql/lib/debug_log.sql
 
