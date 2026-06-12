@@ -1,9 +1,10 @@
 --
 -- 06_top_sql.sql
 -- Top-N SQL per window from DBA_HIST_SQLSTAT using the pre-computed *_DELTA
--- columns.  Ranks the same SQLs four times: by elapsed_time_delta,
--- cpu_time_delta, buffer_gets_delta, executions_delta.  Joins DBA_HIST_SQLTEXT
--- for a short text snippet.  Read-only: no scratch table.
+-- columns.  Ranks the same SQLs five times: by elapsed_time_delta,
+-- cpu_time_delta, buffer_gets_delta, disk_reads_delta, executions_delta.
+-- Joins DBA_HIST_SQLTEXT for a short text snippet.  Read-only: no scratch
+-- table.
 --
 
 SET DEFINE '~'
@@ -94,7 +95,8 @@ BEGIN
                    SUM(NVL(s.executions_delta, 0))     AS executions_delta,
                    SUM(NVL(s.elapsed_time_delta, 0))   AS elapsed_time_delta_us,
                    SUM(NVL(s.cpu_time_delta, 0))       AS cpu_time_delta_us,
-                   SUM(NVL(s.buffer_gets_delta, 0))    AS buffer_gets_delta
+                   SUM(NVL(s.buffer_gets_delta, 0))    AS buffer_gets_delta,
+                   SUM(NVL(s.disk_reads_delta, 0))     AS disk_reads_delta
             FROM   valid_windows w
             JOIN   dba_hist_sqlstat s
                 ON s.dbid = w.dbid
@@ -110,6 +112,8 @@ BEGIN
                                       ORDER BY cpu_time_delta_us DESC, sql_id)     AS r_cpu,
                    ROW_NUMBER() OVER (PARTITION BY week_offset
                                       ORDER BY buffer_gets_delta DESC, sql_id)     AS r_gets,
+                   ROW_NUMBER() OVER (PARTITION BY week_offset
+                                      ORDER BY disk_reads_delta DESC, sql_id)      AS r_preads,
                    ROW_NUMBER() OVER (PARTITION BY week_offset
                                       ORDER BY executions_delta DESC, sql_id)      AS r_exec
             FROM   agg a
@@ -171,6 +175,10 @@ BEGIN
                    buffer_gets_delta, r_gets
             FROM ranked WHERE r_gets <= (SELECT top_n FROM run_params) AND buffer_gets_delta > 0
             UNION ALL
+            SELECT 'PREADS', week_offset, sql_id, plan_hash_value,
+                   disk_reads_delta, r_preads
+            FROM ranked WHERE r_preads <= (SELECT top_n FROM run_params) AND disk_reads_delta > 0
+            UNION ALL
             SELECT 'EXEC', week_offset, sql_id, plan_hash_value,
                    executions_delta, r_exec
             FROM ranked WHERE r_exec <= (SELECT top_n FROM run_params) AND executions_delta > 0
@@ -192,8 +200,9 @@ BEGIN
             SELECT 'ELAPSED' code, 1 ord, 'By elapsed time'         label, 's'      unit, 1e6 divs FROM dual UNION ALL
             SELECT 'CPU',      2,     'By CPU time',                       's',          1e6      FROM dual UNION ALL
             SELECT 'GETS',     3,     'By buffer gets',                    'gets',       1        FROM dual UNION ALL
-            SELECT 'EXEC',     4,     'By executions',                     'exec',       1        FROM dual UNION ALL
-            SELECT 'PEREXEC',  5,     'By per-exec regression',            's/exec',     1e6      FROM dual
+            SELECT 'PREADS',   4,     'By physical reads',                 'reads',      1        FROM dual UNION ALL
+            SELECT 'EXEC',     5,     'By executions',                     'exec',       1        FROM dual UNION ALL
+            SELECT 'PEREXEC',  6,     'By per-exec regression',            's/exec',     1e6      FROM dual
         ),
         all_weeks AS (
             SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
@@ -419,7 +428,8 @@ BEGIN
                    SUM(NVL(s.executions_delta, 0))   AS executions_delta,
                    SUM(NVL(s.elapsed_time_delta, 0)) AS elapsed_time_delta_us,
                    SUM(NVL(s.cpu_time_delta, 0))     AS cpu_time_delta_us,
-                   SUM(NVL(s.buffer_gets_delta, 0))  AS buffer_gets_delta
+                   SUM(NVL(s.buffer_gets_delta, 0))  AS buffer_gets_delta,
+                   SUM(NVL(s.disk_reads_delta, 0))   AS disk_reads_delta
             FROM   valid_windows w
             JOIN   dba_hist_sqlstat s
                 ON s.dbid = w.dbid
@@ -436,6 +446,8 @@ BEGIN
                    ROW_NUMBER() OVER (PARTITION BY week_offset
                                       ORDER BY buffer_gets_delta DESC, schema_name)     AS r_gets,
                    ROW_NUMBER() OVER (PARTITION BY week_offset
+                                      ORDER BY disk_reads_delta DESC, schema_name)      AS r_preads,
+                   ROW_NUMBER() OVER (PARTITION BY week_offset
                                       ORDER BY executions_delta DESC, schema_name)      AS r_exec
             FROM   agg a
         ),
@@ -450,6 +462,9 @@ BEGIN
             SELECT 'GETS', week_offset, schema_name, buffer_gets_delta, r_gets
             FROM ranked WHERE r_gets <= (SELECT top_n FROM run_params) AND buffer_gets_delta > 0
             UNION ALL
+            SELECT 'PREADS', week_offset, schema_name, disk_reads_delta, r_preads
+            FROM ranked WHERE r_preads <= (SELECT top_n FROM run_params) AND disk_reads_delta > 0
+            UNION ALL
             SELECT 'EXEC', week_offset, schema_name, executions_delta, r_exec
             FROM ranked WHERE r_exec <= (SELECT top_n FROM run_params) AND executions_delta > 0
         ),
@@ -457,7 +472,8 @@ BEGIN
             SELECT 'ELAPSED' code, 1 ord, 1e6 divs FROM dual UNION ALL
             SELECT 'CPU',      2,     1e6      FROM dual UNION ALL
             SELECT 'GETS',     3,     1        FROM dual UNION ALL
-            SELECT 'EXEC',     4,     1        FROM dual
+            SELECT 'PREADS',   4,     1        FROM dual UNION ALL
+            SELECT 'EXEC',     5,     1        FROM dual
         ),
         all_weeks AS (
             SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1

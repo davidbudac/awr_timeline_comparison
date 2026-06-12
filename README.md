@@ -33,6 +33,8 @@ GRANT SELECT ON DBA_HIST_BG_EVENT_SUMMARY    TO <user>;
 GRANT SELECT ON DBA_HIST_SYSMETRIC_SUMMARY   TO <user>;
 GRANT SELECT ON DBA_HIST_SQLSTAT             TO <user>;
 GRANT SELECT ON DBA_HIST_SQLTEXT             TO <user>;
+GRANT SELECT ON DBA_HIST_SEG_STAT            TO <user>;
+GRANT SELECT ON DBA_HIST_SEG_STAT_OBJ        TO <user>;
 GRANT SELECT ON DBA_HIST_ACTIVE_SESS_HISTORY TO <user>;
 GRANT SELECT ON DBA_HIST_PARAMETER           TO <user>;
 GRANT SELECT ON V_$DATABASE                  TO <user>;
@@ -173,9 +175,13 @@ z-scores.
 6. **System metrics** — averages from `DBA_HIST_SYSMETRIC_SUMMARY`.
 7. **Foreground waits** — top-N events + wait-class rollup.
 8. **Background waits** — from `DBA_HIST_BG_EVENT_SUMMARY`.
-9. **Top SQL** — ranked 4 ways (elapsed, CPU, buffer gets, executions)
-   with plan-change badges and full SQL text.
-10. **Parameter changes** — initialization parameters from
+9. **Top SQL** — ranked 5 ways (elapsed, CPU, buffer gets, physical
+   reads, executions) with plan-change badges and full SQL text.
+10. **Segment I/O** — segments (and object types) with the most I/O
+    activity per window from `DBA_HIST_SEG_STAT`: physical reads/writes
+    (blocks) and read/write requests, one line per top segment across
+    windows with a per-object-type rollup toggle.
+11. **Parameter changes** — initialization parameters from
     `DBA_HIST_PARAMETER` whose value differs across the compared windows,
     pivoted parameter × window (value as of each window's end snapshot).
 

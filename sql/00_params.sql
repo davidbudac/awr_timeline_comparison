@@ -663,12 +663,13 @@ BEGIN
         || '<a href="#waits-fg">05 FG waits</a>'
         || '<a href="#waits-bg">06 BG waits</a>'
         || '<a href="#topsql">07 Top SQL</a>'
-        || '<a href="#findings">08 Findings</a>'
-        || '<a href="#windows">09 Windows</a>'
-        || '<a href="#load">10 Load profile</a>'
-        || '<a href="#metrics">11 Metrics</a>'
-        || '<a href="#topsql-ash">12 Top SQL ASH</a>'
-        || '<a href="#param-changes">13 Parameters</a>'
+        || '<a href="#segment-io">08 Segment I/O</a>'
+        || '<a href="#findings">09 Findings</a>'
+        || '<a href="#windows">10 Windows</a>'
+        || '<a href="#load">11 Load profile</a>'
+        || '<a href="#metrics">12 Metrics</a>'
+        || '<a href="#topsql-ash">13 Top SQL ASH</a>'
+        || '<a href="#param-changes">14 Parameters</a>'
         || '</nav>');
 
     -- Temporary CLOBs are session-lived and will free at end-of-session,
