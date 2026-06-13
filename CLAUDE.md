@@ -37,6 +37,25 @@ gracefully.
 
 - `run_awr_trend.sh user/pw@svc [target_end] [win_hours] [weeks_back] [top_n] [inst_num] [step] [step_unit] [template] [debug] [marker_file]`
   — convenience wrapper. Sets all substitution vars via heredoc, then `@@awr_trend.sql`. `debug='Y'` (case-insensitive) emits one timestamped progress marker per section to **stdout** (the HTML is byte-identical). See "Debug logging" below.
+- `run_awr_trend.sh --configure` (also `-c` / `-i` / `--interactive`, or
+  no args at a TTY) — **interactive configurator**: a self-contained
+  bash Q&A that lives in the *same* `run_awr_trend.sh` (not a separate
+  file). It prompts for every substitution var with per-question help,
+  a `[default]`, and a validator that re-asks on bad input, then prints
+  both a minimal `./run_awr_trend.sh …` command and the equivalent pure-
+  SQL\*Plus `DEFINE … @@awr_trend.sql` block, and offers `[r]un / re-[e]dit
+  / [q]uit`. Implementation notes for future edits: the real run was
+  refactored into a single `run_report()` function shared by the
+  positional and configurator paths (so the emitted DEFINE block stays
+  byte-identical — verified with a mock `sqlplus` on PATH); the canonical
+  defaults are duplicated as `DEF_*` shell vars at the top, kept in sync
+  with `sql/defaults.sql`; templates are discovered by globbing
+  `sql/lib/templates/*/` so the menu and `--help` stay in sync; and the
+  whole thing runs under `set -euo pipefail`, so any helper whose last
+  statement is a `[[ … ]] && cmd` (which returns 1 when false) needs an
+  explicit `return 0` or it will trip `set -e` at the call site — see
+  `print_span_hint`. The configurator is pure UX; it issues no SQL itself
+  and does not touch the read-only invariant.
 - `sqlplus user/pw@svc @sql/defaults.sql @awr_trend.sql`
   — pure-SQL\*Plus equivalent. **The driver deliberately does not DEFINE defaults itself** so an explicit caller override is never clobbered. Always load `sql/defaults.sql` (or set DEFINEs manually) before `@awr_trend.sql`.
 - `sqlplus user/pw@svc @side/create_weekly_baselines.sql`

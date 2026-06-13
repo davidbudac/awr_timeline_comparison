@@ -48,7 +48,18 @@ GRANT EXECUTE ON DBMS_WORKLOAD_REPOSITORY    TO <user>;
 
 ## Run
 
-Easiest — the shell wrapper (sets all substitution vars for you):
+**New to it, or don't want to memorize the argument order?** Run the
+interactive configurator. It walks you through every option (with a short
+explanation, a sensible default and input validation for each), then prints
+*both* a ready-to-paste `./run_awr_trend.sh` command and the equivalent
+pure-SQL\*Plus block, and offers to run the report right away:
+
+```bash
+./run_awr_trend.sh --configure     # also: -c, -i, --interactive,
+                                   # or just run with no arguments
+```
+
+Easiest non-interactive — the shell wrapper (sets all substitution vars for you):
 
 ```bash
 ./run_awr_trend.sh user/pw@svc                                  # defaults
