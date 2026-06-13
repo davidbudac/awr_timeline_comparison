@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configurator — AWR Timeline Comparison</title>
+<meta name="description" content="Point-and-click builder for run_awr_trend.sh and the SQL*Plus invocation. Pick your windows, cadence, template and markers; copy a ready-to-run command. 100% in your browser, no data leaves the page.">
+<style>
+  :root{
+    --ink:#1c2433;
+    --ink-soft:#46546b;
+    --ink-faint:#7c8aa0;
+    --paper:#f6f7f9;
+    --card:#ffffff;
+    --line:#e3e8ef;
+    --accent:#c74634;          /* Oracle red */
+    --accent-dark:#9e3424;
+    --teal:#0f766e;
+    --teal-soft:#e6f4f2;
+    --teal-line:#bfe0da;
+    --amber:#b45309;
+    --amber-soft:#fdf3e3;
+    --hero-1:#16202f;
+    --hero-2:#243650;
+    --code-bg:#16202f;
+    --code-ink:#dbe4f0;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.7;
+    font-size:16.5px;
+  }
+  .wrap{max-width:1040px;margin:0 auto;padding:0 28px}
+
+  /* ---------- top nav (shared with index/cheatsheet) ---------- */
+  nav.top{
+    position:sticky;top:0;z-index:50;
+    background:rgba(22,32,47,.96);
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid rgba(255,255,255,.08);
+  }
+  nav.top .wrap{
+    display:flex;align-items:center;gap:18px;
+    padding-top:10px;padding-bottom:10px;flex-wrap:wrap;
+  }
+  nav.top .brand{
+    font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+    color:#fff;text-decoration:none;white-space:nowrap;
+  }
+  nav.top .brand .dot{color:var(--accent)}
+  nav.top .links{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
+  nav.top a.nl{
+    font-size:13px;font-weight:600;color:#c4d0e2;text-decoration:none;
+    padding:4px 10px;border-radius:7px;
+  }
+  nav.top a.nl:hover{color:#fff;background:rgba(255,255,255,.08)}
+  nav.top a.nl.here{color:#fff;background:rgba(255,255,255,.12)}
+  nav.top a.gh{
+    font-size:13px;font-weight:700;color:#fff;text-decoration:none;
+    border:1px solid rgba(255,255,255,.25);border-radius:999px;
+    padding:4px 14px;white-space:nowrap;
+  }
+  nav.top a.gh:hover{background:rgba(255,255,255,.1)}
+
+  /* ---------- hero ---------- */
+  header.hero{
+    background:linear-gradient(135deg,var(--hero-1) 0%,var(--hero-2) 100%);
+    color:#fff;
+    padding:44px 0 38px;
+  }
+  .kicker{
+    display:inline-block;
+    font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:#f0b9ae;
+    border:1px solid rgba(240,185,174,.35);
+    border-radius:999px;
+    padding:4px 14px;
+    margin-bottom:14px;
+  }
+  h1{font-size:34px;line-height:1.15;font-weight:800;letter-spacing:-.02em;margin-bottom:10px}
+  .tagline{font-size:17px;color:#c4d0e2;max-width:720px}
+  .tagline code{background:rgba(255,255,255,.1);border:none;color:#fff;border-radius:5px;padding:1px 6px;font-size:.88em}
+
+  main{padding:36px 0 8px}
+  a{color:var(--accent-dark)}
+  code{
+    font-family:var(--mono);
+    font-size:.88em;
+    background:#edf0f4;border:1px solid var(--line);border-radius:5px;
+    padding:1px 5px;
+  }
+
+  .lead{font-size:16px;color:var(--ink-soft);max-width:780px;margin:0 0 18px}
+
+  /* ---------- how-to orientation strip ---------- */
+  .howto{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 26px}
+  .howto .step{display:flex;align-items:center;gap:10px;flex:1 1 210px;
+    background:var(--card);border:1px solid var(--line);border-radius:11px;padding:11px 14px}
+  .howto .num{flex:0 0 auto;width:24px;height:24px;border-radius:50%;
+    background:var(--accent);color:#fff;font-size:13px;font-weight:800;
+    display:flex;align-items:center;justify-content:center}
+  .howto .txt{font-size:13.5px;color:var(--ink-soft);line-height:1.4}
+  .howto .txt b{color:var(--ink)}
+
+  /* live value echo next to a control label */
+  .echo{font-weight:700;color:var(--teal);text-transform:none;letter-spacing:0;margin-left:8px}
+
+  /* invalid-field cue (pairs with the note in the output column) */
+  input.invalid,select.invalid{border-color:#e0796b !important;
+    box-shadow:0 0 0 3px rgba(199,70,52,.10) !important}
+
+  /* ---------- presets ---------- */
+  .presets-head{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink-faint);margin-bottom:9px}
+  .presets{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 28px}
+  .preset{font-size:13px;font-weight:650;color:var(--ink-soft);background:var(--card);
+    border:1px solid var(--line);border-radius:999px;padding:7px 15px;cursor:pointer}
+  .preset:hover{border-color:var(--accent);color:var(--accent-dark);
+    box-shadow:0 6px 16px -12px rgba(28,36,51,.4)}
+  .preset.reset{border-style:dashed;color:var(--ink-faint)}
+  .preset.reset:hover{color:var(--accent-dark)}
+
+  /* ---------- two-column layout ---------- */
+  .config{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:26px;align-items:start}
+  @media (max-width:900px){.config{grid-template-columns:1fr}}
+
+  /* ---------- panels ---------- */
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:20px 22px;margin-bottom:18px;box-shadow:0 6px 18px -14px rgba(28,36,51,.2)}
+  .panel .ph{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 3px}
+  .panel .ph .n{color:var(--ink-faint);margin-right:7px}
+  .panel .psub{font-size:13px;color:var(--ink-faint);margin:0 0 16px;line-height:1.5}
+
+  .field{margin-bottom:16px}
+  .field:last-child{margin-bottom:0}
+  label.lbl{display:block;font-size:12px;font-weight:700;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px}
+  .help{font-size:12.5px;color:var(--ink-faint);margin-top:6px;line-height:1.5}
+  .help code{font-size:.92em}
+  .help strong{color:var(--ink-soft)}
+
+  input[type=text],input[type=number],input[type=datetime-local],select{
+    width:100%;font-family:inherit;font-size:14.5px;color:var(--ink);
+    background:#fff;border:1px solid var(--line);border-radius:9px;padding:9px 11px;line-height:1.3}
+  input[type=text].mono{font-family:var(--mono);font-size:13.5px}
+  input:focus,select:focus{outline:none;border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(199,70,52,.12)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .row-step{display:grid;grid-template-columns:1fr 150px;gap:12px;align-items:start}
+  @media (max-width:520px){.row2,.row-step{grid-template-columns:1fr}}
+
+  /* segmented radio control */
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:#fff;flex-wrap:wrap}
+  .seg label{padding:8px 15px;font-size:13.5px;font-weight:650;cursor:pointer;color:var(--ink-soft);
+    border-right:1px solid var(--line)}
+  .seg label:last-child{border-right:none}
+  .seg label input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+  .seg label.on{background:var(--accent);color:#fff}
+
+  .chiprow{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .chip{font-size:12px;font-weight:600;color:var(--ink-soft);background:#eef1f5;
+    border:1px solid var(--line);border-radius:999px;padding:3px 11px;cursor:pointer;font-family:var(--mono)}
+  .chip:hover{background:var(--teal-soft);color:var(--teal);border-color:var(--teal-line)}
+
+  .toggle{display:flex;align-items:center;gap:10px}
+  .toggle input{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
+  .toggle label{font-size:14.5px;color:var(--ink);cursor:pointer}
+
+  .hidden{display:none !important}
+
+  /* ---------- window preview ---------- */
+  .preview .cap{font-size:13px;color:var(--ink-soft);margin-bottom:12px;line-height:1.5}
+  .preview .cap b{color:var(--ink)}
+  .wins{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+  .win{flex:0 0 auto;min-width:62px;background:var(--teal-soft);border:1px solid var(--teal-line);
+    border-radius:8px;padding:8px 10px;text-align:center}
+  .win .o{font-size:11px;font-weight:800;color:var(--teal);text-transform:uppercase;letter-spacing:.03em}
+  .win .t{font-size:11px;color:var(--ink-soft);margin-top:3px;font-family:var(--mono);white-space:nowrap}
+  .win.target{background:#fdeae6;border-color:#eab9af}
+  .win.target .o{color:var(--accent-dark)}
+  .win-more{align-self:center;font-size:12px;color:var(--ink-faint);font-style:italic}
+
+  /* ---------- markers ---------- */
+  .mk-row{display:grid;grid-template-columns:200px 1fr 38px;gap:8px;margin-bottom:9px;align-items:center}
+  @media (max-width:560px){.mk-row{grid-template-columns:1fr}}
+  .mk-x{border:1px solid var(--line);background:#fff;border-radius:9px;color:var(--ink-faint);
+    cursor:pointer;font-size:18px;line-height:1;padding:8px 0;height:100%}
+  .mk-x:hover{border-color:var(--accent);color:var(--accent)}
+  .mk-add{font-size:13px;font-weight:650;color:var(--ink-soft);background:#fff;
+    border:1px dashed var(--line);border-radius:9px;padding:9px 14px;cursor:pointer;width:100%}
+  .mk-add:hover{border-color:var(--accent);color:var(--accent-dark)}
+
+  /* ---------- output panel ---------- */
+  .output{position:sticky;top:74px}
+  .output .ph{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 12px}
+  .summary{background:var(--teal-soft);border:1px solid var(--teal-line);border-radius:10px;
+    padding:12px 15px;font-size:13.5px;color:#0b5c54;margin-bottom:16px;line-height:1.55}
+  .tabs{display:flex;gap:6px;margin-bottom:14px}
+  .tab{font-size:13px;font-weight:700;padding:7px 16px;border-radius:9px;cursor:pointer;
+    border:1px solid var(--line);background:#fff;color:var(--ink-soft)}
+  .tab.on{background:var(--hero-1);color:#fff;border-color:var(--hero-1)}
+  .codeblock{margin:0 0 16px}
+  .codeblock .cbhead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
+  .codeblock .cbhead .t{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint)}
+  .copy{font-size:12px;font-weight:700;color:var(--accent-dark);background:#fff;border:1px solid var(--line);
+    border-radius:7px;padding:4px 12px;cursor:pointer;white-space:nowrap}
+  .copy:hover{border-color:var(--accent)}
+  .copy.done{color:var(--teal);border-color:var(--teal)}
+  pre{
+    background:var(--code-bg);color:var(--code-ink);
+    font-family:var(--mono);
+    font-size:13px;line-height:1.6;
+    border-radius:12px;
+    padding:15px 18px;
+    overflow-x:auto;
+    margin:0;
+    white-space:pre-wrap;word-break:break-word;
+    box-shadow:0 6px 18px -14px rgba(28,36,51,.35);
+  }
+  pre .c{color:#7c8aa0}        /* comment */
+  pre .s{color:#9ad7c9}        /* string */
+
+  .notes{margin-top:4px}
+  .note-item{border-radius:9px;padding:9px 13px;font-size:13px;margin-bottom:8px;line-height:1.5}
+  .note-item code{background:rgba(0,0,0,.05)}
+  .note-err{background:#fdecea;border:1px solid #f0c4bd;color:#8a2b1e}
+  .note-info{background:var(--amber-soft);border:1px solid #f3dfc0;color:#7a4a10}
+  .out-foot{font-size:12.5px;color:var(--ink-faint);margin-top:14px;line-height:1.55}
+  .out-foot code{font-size:.92em}
+
+  /* ---------- footer ---------- */
+  footer{
+    border-top:1px solid var(--line);
+    margin-top:40px;padding:26px 0 40px;
+    color:var(--ink-faint);font-size:13.5px;
+  }
+  footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  footer a{color:var(--ink-soft)}
+
+  @media (max-width:720px){
+    h1{font-size:27px}
+    nav.top .links{display:none}
+  }
+
+  /* mobile-only floating jump-to-command button (the output is far below
+     the controls once the two-column layout collapses) */
+  .jump-cmd{display:none}
+  @media (max-width:900px){
+    .jump-cmd{display:inline-flex;align-items:center;gap:7px;position:fixed;right:16px;bottom:16px;z-index:60;
+      background:var(--accent);color:#fff;border:none;border-radius:999px;
+      font-size:14px;font-weight:700;padding:11px 18px;cursor:pointer;
+      box-shadow:0 10px 24px -8px rgba(199,70,52,.6)}
+    .jump-cmd:active{transform:translateY(1px)}
+  }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><span class="dot">●</span> AWR / Timeline Comparison</a>
+    <div class="links">
+      <a class="nl" href="index.html">Home</a>
+      <a class="nl" href="index.html#start">Get started</a>
+      <a class="nl here" href="configurator.html">Configurator</a>
+      <a class="nl" href="cheatsheet.html">Cheat sheet</a>
+      <a class="nl" href="index.html#examples">Examples</a>
+    </div>
+    <a class="gh" href="https://github.com/davidbudac/awr_timeline_comparison">GitHub ↗</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="kicker">Configurator</span>
+    <h1>Build your run command</h1>
+    <p class="tagline">
+      Pick the windows, cadence, scope and template; watch the comparison preview update,
+      then copy a ready-to-run <code>run_awr_trend.sh</code> or SQL*Plus invocation.
+      Everything runs in your browser — nothing is sent anywhere.
+    </p>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+
+    <p class="lead">
+      The driver takes eleven parameters. Below, each one has a control and a plain-language
+      explanation; the panel on the right rebuilds the exact command as you go.
+    </p>
+
+    <div class="howto">
+      <div class="step"><span class="num">1</span><span class="txt"><b>Pick a preset</b> closest to what you need.</span></div>
+      <div class="step"><span class="num">2</span><span class="txt"><b>Tweak the controls</b> — the preview updates live.</span></div>
+      <div class="step"><span class="num">3</span><span class="txt"><b>Copy &amp; run</b> the shell or SQL*Plus command.</span></div>
+    </div>
+
+    <div class="presets-head">Start from a preset</div>
+    <div class="presets" id="presets"></div>
+
+    <div class="config">
+
+      <!-- ============ CONTROLS (left) ============ -->
+      <div class="controls">
+
+        <!-- Connection + target -->
+        <div class="panel">
+          <div class="ph"><span class="n">A</span>Connection &amp; target</div>
+          <div class="psub">Who to connect as, and the end of the most recent window you want to compare.</div>
+
+          <div class="field">
+            <label class="lbl" for="connect">Connect string</label>
+            <input type="text" id="connect" class="mono" value="user/pw@svc" autocomplete="off" spellcheck="false">
+            <div class="chiprow" id="connect_chips"></div>
+            <div class="help">Any SQL*Plus logon: <code>user/pw@host:port/service</code>, a TNS alias, or
+              <code>/ as sysdba</code>. Used locally — the password never leaves this page.</div>
+          </div>
+
+          <div class="field">
+            <label class="lbl">Window end <span style="text-transform:none;font-weight:600;color:var(--ink-faint)">(target_end)</span></label>
+            <div class="seg" id="te_seg">
+              <label data-te="auto" class="on"><input type="radio" name="temode" value="auto" checked>Prior full hour (AUTO)</label>
+              <label data-te="specific"><input type="radio" name="temode" value="specific">Specific date/time</label>
+            </div>
+            <div id="te_specific_wrap" class="hidden" style="margin-top:10px">
+              <input type="datetime-local" id="target_dt">
+            </div>
+            <div class="help"><strong>AUTO</strong> ends the newest window at the most recent completed
+              clock hour. Pick a specific time to pin it — e.g. a Monday 09:00 or the end of a batch run.</div>
+          </div>
+        </div>
+
+        <!-- Windows + cadence -->
+        <div class="panel">
+          <div class="ph"><span class="n">B</span>Windows &amp; cadence</div>
+          <div class="psub">How wide each compared window is, how many you compare, and the gap between them.</div>
+
+          <div class="row2">
+            <div class="field">
+              <label class="lbl" for="win_hours">Window width (win_hours)<span class="echo" id="wh_echo"></span></label>
+              <input type="number" id="win_hours" value="1" min="0.25" step="0.25">
+              <div class="help">Length of every window. Below 1 reads as minutes (<code>0.25</code> = 15 min).</div>
+            </div>
+            <div class="field">
+              <label class="lbl" for="weeks_back">Prior windows (weeks_back)</label>
+              <input type="number" id="weeks_back" value="4" min="1" step="1">
+              <div class="help">How many earlier windows to compare against — a count (the name is historical).
+                The report needs <strong>≥ 3</strong> to compute z-score findings.</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="lbl">Cadence between windows (step × step_unit)</label>
+            <div class="row-step">
+              <input type="number" id="step" value="1" min="0.25" step="1">
+              <select id="step_unit">
+                <option value="w" selected>weeks</option>
+                <option value="d">days</option>
+                <option value="h">hours</option>
+              </select>
+            </div>
+            <div class="help">The gap between adjacent windows. <code>1 week</code> (default) is the classic
+              same-hour-of-week trend; <code>1 hour</code> walks straight back; <code>2 days</code> is every
+              other day.</div>
+          </div>
+
+          <div class="field preview">
+            <label class="lbl">Comparison preview</label>
+            <div class="cap" id="preview_caption"></div>
+            <div class="wins" id="preview_chips"></div>
+          </div>
+        </div>
+
+        <!-- Content + scope -->
+        <div class="panel">
+          <div class="ph"><span class="n">C</span>Content &amp; scope</div>
+          <div class="psub">How much detail to show and which instances to read.</div>
+
+          <div class="row2">
+            <div class="field">
+              <label class="lbl" for="top_n">Top-N SQL / rows (top_n)</label>
+              <input type="number" id="top_n" value="10" min="1" step="1">
+              <div class="help">Rows per ranking in Top SQL and the wait tables.</div>
+            </div>
+            <div class="field">
+              <label class="lbl" for="inst_num">Instance (inst_num)</label>
+              <input type="number" id="inst_num" value="0" min="0" step="1">
+              <div class="help"><code>0</code> aggregates across all RAC instances; any other number filters
+                to that one instance.</div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="lbl" for="template">Template — which metrics &amp; waits</label>
+            <select id="template">
+              <option value="comprehensive" selected>comprehensive — for DBAs (full lists)</option>
+              <option value="simple">simple — triage-friendly subset</option>
+              <option value="dev">dev — application-developer view</option>
+            </select>
+            <div class="help" id="template_help"></div>
+          </div>
+
+          <div class="field">
+            <div class="toggle">
+              <input type="checkbox" id="debug">
+              <label for="debug">Print per-section progress markers to stdout (debug=Y)</label>
+            </div>
+            <div class="help">Timestamped one-liner per section while it runs — handy on a busy DB.
+              The HTML report is byte-identical whether this is on or off.</div>
+          </div>
+        </div>
+
+        <!-- Markers -->
+        <div class="panel">
+          <div class="ph"><span class="n">D</span>Timeline markers <span style="color:var(--ink-faint);font-weight:600;text-transform:none">— optional</span></div>
+          <div class="psub">Annotate the dated charts with milestones (a release, a patch, an incident).
+            Add a few below and the configurator writes the marker file for you.</div>
+
+          <div class="field">
+            <label class="lbl" for="marker_file">Marker file path (marker_file)</label>
+            <input type="text" id="marker_file" class="mono" value="" placeholder="(none)" autocomplete="off" spellcheck="false">
+            <div class="help">Path passed to the driver. Leave empty for no markers; adding a milestone below
+              fills it with <code>my_markers.sql</code>.</div>
+          </div>
+
+          <div class="field">
+            <label class="lbl">Milestones</label>
+            <div id="marker_rows"></div>
+            <button type="button" class="mk-add" id="marker_add">+ Add milestone</button>
+          </div>
+
+          <div class="field hidden" id="marker_out_wrap">
+            <div class="codeblock">
+              <div class="cbhead">
+                <span class="t">Save this as your marker file</span>
+                <span>
+                  <button type="button" class="copy" data-copy="marker_content">Copy</button>
+                  <button type="button" class="copy" id="marker_download">Download</button>
+                </span>
+              </div>
+              <pre id="marker_content"></pre>
+            </div>
+            <div class="help">Each line is <code>@@sql/lib/marker '&lt;when&gt;' '&lt;label&gt;'</code>. Keep the
+              <code>@@sql/lib/marker</code> path verbatim — SQL*Plus resolves it from the repo root.</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ============ OUTPUT (right, sticky) ============ -->
+      <aside class="output">
+        <div class="panel">
+          <div class="ph">Your command</div>
+          <div class="summary" id="out_summary"></div>
+
+          <div class="tabs">
+            <button type="button" class="tab on" data-tab="shell">Shell wrapper</button>
+            <button type="button" class="tab" data-tab="sql">SQL*Plus</button>
+          </div>
+
+          <!-- Shell -->
+          <div id="panel_shell">
+            <div class="codeblock">
+              <div class="cbhead">
+                <span class="t">run_awr_trend.sh</span>
+                <button type="button" class="copy" data-copy="out_shell">Copy</button>
+              </div>
+              <pre id="out_shell"></pre>
+            </div>
+            <div class="out-foot">Run from the repo root. Trailing arguments left at their defaults are
+              omitted automatically.</div>
+          </div>
+
+          <!-- SQL -->
+          <div id="panel_sql" class="hidden">
+            <div class="codeblock">
+              <div class="cbhead">
+                <span class="t">One command (heredoc)</span>
+                <button type="button" class="copy" data-copy="out_sql_heredoc">Copy</button>
+              </div>
+              <pre id="out_sql_heredoc"></pre>
+            </div>
+            <div class="codeblock">
+              <div class="cbhead">
+                <span class="t">Interactive session</span>
+                <button type="button" class="copy" data-copy="out_sql_interactive">Copy</button>
+              </div>
+              <pre id="out_sql_interactive"></pre>
+            </div>
+            <div class="out-foot">No shell needed — Windows-friendly. Every <code>DEFINE</code> is emitted
+              explicitly so it works without loading <code>sql/defaults.sql</code>.</div>
+          </div>
+
+          <div class="notes" id="notes"></div>
+
+          <div class="out-foot">
+            Output lands in <code>reports/awr_trend_&lt;DBID&gt;_&lt;timestamp&gt;_run&lt;id&gt;.html</code>.
+            New here? See <a href="index.html#start">Get started</a> or the
+            <a href="cheatsheet.html">cheat sheet</a>.
+          </div>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+</main>
+
+<button type="button" class="jump-cmd" id="jump_cmd" aria-label="Jump to your command">↓ Your command</button>
+
+<footer>
+  <div class="wrap">
+    <div><a href="index.html">← Back to the project page</a></div>
+    <div><a href="https://github.com/davidbudac/awr_timeline_comparison">github.com/davidbudac/awr_timeline_comparison</a></div>
+  </div>
+</footer>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   Defaults + the positional argument order of run_awr_trend.sh.
+   These mirror sql/defaults.sql exactly. The shell command emits only up
+   to the last argument that differs from its default (the wrapper fills
+   the rest in); the SQL path emits every DEFINE explicitly.
+   ===================================================================== */
+const DEFAULTS = {
+  target_end:'AUTO', win_hours:'1', weeks_back:'4', top_n:'10', inst_num:'0',
+  step:'1', step_unit:'w', template:'comprehensive', debug:'N', marker_file:''
+};
+const ARG_ORDER = ['target_end','win_hours','weeks_back','top_n','inst_num',
+                   'step','step_unit','template','debug','marker_file'];
+const STRING_DEFINES = new Set(['target_end','step_unit','template','debug','marker_file']);
+const UNIT_HOURS = {h:1, d:24, w:168};
+const UNIT_WORD  = {h:'hourly', d:'daily', w:'weekly'};
+const UNIT_NOUN  = {h:'hour', d:'day', w:'week'};
+
+const TEMPLATE_HELP = {
+  comprehensive:'The default: 27 load stats, 23 system metrics and the full firehose of wait events ranked by time.',
+  simple:'A quick-glance subset — 9 load stats, 8 metrics, ~10 commonly-watched waits. The masthead shows a "simple" pill.',
+  dev:'What the application drives: throughput, query work, parsing, sorts, SQL*Net chattiness and app-caused contention — no host/OS or storage internals.'
+};
+
+const $ = id => document.getElementById(id);
+
+/* ---------------------------------------------------------------- utils */
+function pad(n){ return String(n).padStart(2,'0'); }
+
+/* Compact, unit-aware label for a number of hours — mirrors fmt_one() in
+   awr_trend.sql: 0.25 -> "15m", 168 -> "1w", 24 -> "1d", 1 -> "1h". */
+function fmtHours(h){
+  if(h==null || isNaN(h)) return '';
+  const isInt = x => Math.abs(x-Math.round(x)) < 1e-9;
+  if(h < 1 && isInt(h*60)) return Math.round(h*60)+'m';
+  if(isInt(h/168))         return Math.round(h/168)+'w';
+  if(isInt(h/24))          return Math.round(h/24)+'d';
+  if(isInt(h))             return Math.round(h)+'h';
+  return parseFloat(h.toFixed(2))+'h';
+}
+
+/* datetime-local value "YYYY-MM-DDTHH:MM" -> Date (local), or null */
+function parseLocal(v){
+  if(!v) return null;
+  const m = v.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if(!m) return null;
+  return new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5]);
+}
+function fmtFull(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes()); }
+function fmtShort(d){ return pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes()); }
+
+/* Shell single-quote only when needed. */
+function shellQuote(s){
+  if(s === '') return "''";
+  if(/^[A-Za-z0-9_@\/.,:%+=-]+$/.test(s)) return s;
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+/* Oracle string literal (double embedded single quotes). */
+function sqlQuote(s){ return "'" + String(s).replace(/'/g, "''") + "'"; }
+
+/* ---------------------------------------------------------------- read */
+function readConfig(){
+  const mode = document.querySelector('input[name="temode"]:checked').value;
+  let target_end = 'AUTO';
+  let targetDate = null;          // resolved Date for the preview (specific only)
+  let targetMissing = false;
+  if(mode === 'specific'){
+    const v = $('target_dt').value;
+    targetDate = parseLocal(v);
+    if(targetDate){ target_end = fmtFull(targetDate); }
+    else { target_end = ''; targetMissing = true; }
+  }
+  return {
+    connect:    $('connect').value.trim(),
+    mode, target_end, targetDate, targetMissing,
+    win_hours:  $('win_hours').value.trim(),
+    weeks_back: $('weeks_back').value.trim(),
+    top_n:      $('top_n').value.trim(),
+    inst_num:   $('inst_num').value.trim(),
+    step:       $('step').value.trim(),
+    step_unit:  $('step_unit').value,
+    template:   $('template').value,
+    debug:      $('debug').checked ? 'Y' : 'N',
+    marker_file:$('marker_file').value.trim()
+  };
+}
+
+/* ------------------------------------------------------------ validate */
+function validate(cfg){
+  const errors = [], info = [], bad = {};
+  const num = v => (v==='' || isNaN(Number(v))) ? null : Number(v);
+  const fail = (id, msg) => { bad[id] = true; errors.push(msg); };
+
+  if(!cfg.connect) fail('connect', 'Enter a connect string (arg 1).');
+  if(cfg.targetMissing) fail('target_dt', 'Pick a specific date and time, or switch back to AUTO.');
+
+  const wh = num(cfg.win_hours);
+  if(wh===null || wh<=0) fail('win_hours', 'Window width (<code>win_hours</code>) must be a positive number.');
+
+  const wb = num(cfg.weeks_back);
+  if(wb===null || wb<1 || !Number.isInteger(wb)) fail('weeks_back', 'Prior windows (<code>weeks_back</code>) must be a whole number ≥ 1.');
+  else if(wb < 3) info.push('With <code>weeks_back</code> &lt; 3 there is not enough history for z-score findings — the report falls back to "Baseline too short" and simple %-deltas.');
+
+  const tn = num(cfg.top_n);
+  if(tn===null || tn<1 || !Number.isInteger(tn)) fail('top_n', 'Top-N (<code>top_n</code>) must be a whole number ≥ 1.');
+
+  const inst = num(cfg.inst_num);
+  if(inst===null || inst<0 || !Number.isInteger(inst)) fail('inst_num', 'Instance (<code>inst_num</code>) must be 0 (aggregate) or a positive whole number.');
+
+  const st = num(cfg.step);
+  if(st===null || st<=0) fail('step', 'Cadence count (<code>step</code>) must be a positive number.');
+
+  // Hourly cadence resolution hint
+  if(!errors.length && cfg.step_unit==='h' && wh<=1 && st>=1){
+    info.push('Hourly cadence with a 1-hour window needs the AWR snapshot interval ≤ the window — the default 1-hour interval gives exactly one snap pair per window. Cut the interval to 30 min or widen the window for intra-window detail.');
+  }
+  if(cfg.marker_file && cfg.marker_file !== DEFAULTS.marker_file && !markerRows().some(r=>r.label)){
+    info.push('A <code>marker_file</code> is set but you have not added any milestones yet — add one below or clear the path.');
+  }
+  return {errors, info, bad, ok: errors.length===0};
+}
+
+/* "= 60 minutes" / "= 2 hours" plain-language echo for the window width. */
+function whEcho(v){
+  const h = Number(v);
+  if(v==='' || isNaN(h) || h<=0) return '';
+  if(h < 1)                return '= '+Math.round(h*60)+' minutes';
+  if(Number.isInteger(h))  return '= '+h+' hour'+(h===1?'':'s');
+  return '= '+h+' hours ('+Math.round(h*60)+' min)';
+}
+
+/* Toggle a red border on the inputs the validator flagged. */
+function markFields(bad){
+  ['connect','target_dt','win_hours','weeks_back','top_n','inst_num','step']
+    .forEach(id => { const el=$(id); if(el) el.classList.toggle('invalid', !!bad[id]); });
+}
+
+/* ------------------------------------------------------------- preview */
+function renderPreview(cfg){
+  const cap = $('preview_caption'), chips = $('preview_chips');
+  const wh = Number(cfg.win_hours), wb = Number(cfg.weeks_back), st = Number(cfg.step);
+  chips.innerHTML = '';
+  if(isNaN(wh)||wh<=0||isNaN(wb)||wb<1||!Number.isInteger(wb)||isNaN(st)||st<=0){
+    cap.textContent = 'Set valid window, count and cadence values to preview the comparison.';
+    return;
+  }
+  const stepHours = st * UNIT_HOURS[cfg.step_unit];
+  const total = wb + 1;
+  const span = wb*stepHours + wh;
+  cap.innerHTML = '<b>'+total+'</b> windows · each <b>'+fmtHours(wh)+'</b> wide · '+UNIT_WORD[cfg.step_unit]+
+    ' cadence (<b>'+fmtHours(stepHours)+'</b> apart) · spans <b>'+fmtHours(span)+'</b> back from the target.';
+
+  const CAP = 14;                       // keep the strip readable
+  const shown = Math.min(wb, CAP);
+  // oldest -> newest (target on the right), matching the report's spark order
+  for(let k=shown; k>=0; k--){
+    const div = document.createElement('div');
+    div.className = 'win' + (k===0 ? ' target' : '');
+    const o = document.createElement('div'); o.className='o';
+    o.textContent = (k===0) ? 'target' : ('−'+fmtHours(k*stepHours));
+    div.appendChild(o);
+    if(cfg.targetDate){
+      const end = new Date(cfg.targetDate.getTime() - k*stepHours*3600*1000);
+      const begin = new Date(end.getTime() - wh*3600*1000);
+      const t = document.createElement('div'); t.className='t';
+      t.textContent = pad(end.getHours())+':'+pad(end.getMinutes());
+      div.title = fmtFull(begin)+'  →  '+fmtFull(end);
+      const d = document.createElement('div'); d.className='t';
+      d.textContent = fmtShort(end).split(' ')[0];
+      div.appendChild(d); div.appendChild(t);
+    }
+    chips.appendChild(div);
+  }
+  if(wb > CAP){
+    const more = document.createElement('div');
+    more.className = 'win-more';
+    more.textContent = '+ '+(wb-CAP)+' older';
+    chips.insertBefore(more, chips.firstChild);
+  }
+}
+
+/* ------------------------------------------------------------ summary */
+function summarize(cfg){
+  const wh = fmtHours(Number(cfg.win_hours));
+  const stepHours = Number(cfg.step) * UNIT_HOURS[cfg.step_unit];
+  const target = (cfg.mode==='auto') ? 'the prior full hour' : (cfg.target_end || 'a specific time');
+  const inst = (cfg.inst_num==='0') ? 'all RAC instances aggregated' : ('instance '+cfg.inst_num+' only');
+  let s = 'Compares a '+wh+' window ending '+target+' against '+cfg.weeks_back+' prior window'+
+          (cfg.weeks_back==='1'?'':'s')+' at '+UNIT_WORD[cfg.step_unit]+' cadence ('+fmtHours(stepHours)+
+          ' apart). Top '+cfg.top_n+' SQL · '+inst+' · '+cfg.template+' template.';
+  if(cfg.debug==='Y') s += ' Progress markers on.';
+  if(cfg.marker_file) s += ' Markers from '+cfg.marker_file+'.';
+  return s;
+}
+
+/* ------------------------------------------------------- command build */
+function buildShell(cfg){
+  const vals = ARG_ORDER.map(k => cfg[k]);
+  let last = -1;
+  vals.forEach((v,i) => { if(v !== DEFAULTS[ARG_ORDER[i]]) last = i; });
+  const parts = ['./run_awr_trend.sh', shellQuote(cfg.connect || 'user/pw@svc')];
+  for(let i=0; i<=last; i++) parts.push(shellQuote(vals[i]));
+  return parts.join(' ');
+}
+
+function defineLines(cfg){
+  const width = Math.max(...ARG_ORDER.map(k=>k.length));   // align '='
+  return ARG_ORDER.map(k => {
+    const val = STRING_DEFINES.has(k) ? sqlQuote(cfg[k]) : cfg[k];
+    return 'DEFINE '+k.padEnd(width)+' = '+val;
+  });
+}
+function buildSqlHeredoc(cfg){
+  return [ 'sqlplus -S -L '+shellQuote(cfg.connect || 'user/pw@svc')+" <<'SQL'" ]
+    .concat(defineLines(cfg), ['@@awr_trend.sql','EXIT','SQL']).join('\n');
+}
+function buildSqlInteractive(cfg){
+  return [ 'sqlplus -S -L '+shellQuote(cfg.connect || 'user/pw@svc') ]
+    .concat(defineLines(cfg), ['@awr_trend.sql']).join('\n');
+}
+
+/* Render a code block as a coloured comment line + plain command body,
+   built from DOM text nodes so user input is never interpreted as HTML. */
+function setCode(id, comment, body){
+  const pre = $(id);
+  pre.textContent = '';
+  if(comment){
+    const c = document.createElement('span'); c.className='c'; c.textContent = comment;
+    pre.appendChild(c); pre.appendChild(document.createTextNode('\n'));
+  }
+  pre.appendChild(document.createTextNode(body));
+}
+
+/* --------------------------------------------------------- markers ui */
+function markerRows(){
+  return Array.from(document.querySelectorAll('#marker_rows .mk-row')).map(row => ({
+    when: row.querySelector('.mk-when').value,
+    label: row.querySelector('.mk-label').value.trim()
+  }));
+}
+function addMarkerRow(when='', label=''){
+  const row = document.createElement('div');
+  row.className = 'mk-row';
+  const w = document.createElement('input'); w.type='datetime-local'; w.className='mk-when'; w.value=when;
+  const l = document.createElement('input'); l.type='text'; l.className='mk-label';
+  l.placeholder='Label (e.g. Applied patch 19.22)'; l.value=label; l.autocomplete='off';
+  const x = document.createElement('button'); x.type='button'; x.className='mk-x'; x.textContent='×'; x.title='Remove';
+  x.addEventListener('click', () => { row.remove(); afterMarkerChange(); render(); });
+  w.addEventListener('input', render); l.addEventListener('input', render);
+  row.appendChild(w); row.appendChild(l); row.appendChild(x);
+  $('marker_rows').appendChild(row);
+}
+function afterMarkerChange(){
+  // Auto-fill / clear the marker_file path to match whether milestones exist.
+  const has = markerRows().some(r => r.label || r.when);
+  const mf = $('marker_file');
+  if(has && !mf.value.trim()) mf.value = 'my_markers.sql';
+}
+function markerContent(){
+  const rows = markerRows().filter(r => r.label || r.when);
+  if(!rows.length) return null;
+  const lines = ['-- '+( $('marker_file').value.trim() || 'my_markers.sql' )+' — one milestone per line'];
+  rows.forEach(r => {
+    const d = parseLocal(r.when);
+    const when = d ? fmtFull(d) : 'YYYY-MM-DD HH:MI';
+    const label = (r.label || 'milestone').replace(/'/g, "''");
+    lines.push("@@sql/lib/marker '"+when+"' '"+label+"'");
+  });
+  return lines.join('\n');
+}
+
+/* -------------------------------------------------------------- notes */
+function renderNotes(v){
+  const box = $('notes');
+  box.innerHTML = '';
+  v.errors.forEach(e => {
+    const d = document.createElement('div'); d.className='note-item note-err'; d.innerHTML = e; box.appendChild(d);
+  });
+  v.info.forEach(e => {
+    const d = document.createElement('div'); d.className='note-item note-info'; d.innerHTML = e; box.appendChild(d);
+  });
+}
+
+/* ----------------------------------------------------------- orchestrate */
+function render(){
+  const cfg = readConfig();
+  $('template_help').textContent = TEMPLATE_HELP[cfg.template];
+  $('wh_echo').textContent = whEcho(cfg.win_hours);
+
+  renderPreview(cfg);
+  $('out_summary').textContent = summarize(cfg);
+
+  setCode('out_shell', '# '+summarize(cfg), buildShell(cfg));
+  setCode('out_sql_heredoc', null, buildSqlHeredoc(cfg));
+  setCode('out_sql_interactive', '-- connect, then paste into SQL*Plus', buildSqlInteractive(cfg));
+
+  // marker output
+  const mc = markerContent();
+  if(mc){ $('marker_out_wrap').classList.remove('hidden'); $('marker_content').textContent = mc; }
+  else  { $('marker_out_wrap').classList.add('hidden'); }
+
+  const v = validate(cfg);
+  renderNotes(v);
+  markFields(v.bad);
+}
+
+/* ------------------------------------------------------------- presets */
+const PRESETS = [
+  {name:'Default · weekly', set:{temode:'auto', win_hours:'1', weeks_back:'4', top_n:'10', inst_num:'0', step:'1', step_unit:'w', template:'comprehensive', debug:false, marker_file:''}, markers:[]},
+  {name:'Hourly walkthrough (12 h)', set:{temode:'auto', win_hours:'1', weeks_back:'11', step:'1', step_unit:'h', template:'comprehensive'}},
+  {name:'Daily · one week', set:{temode:'auto', win_hours:'1', weeks_back:'6', step:'1', step_unit:'d', template:'comprehensive'}},
+  {name:'Developer view', set:{temode:'auto', template:'dev'}},
+  {name:'Lean triage', set:{temode:'auto', template:'simple'}},
+  {name:'Top-25 SQL', set:{temode:'auto', top_n:'25'}},
+  {name:'Post-release (hourly + marker)', set:{temode:'auto', win_hours:'1', weeks_back:'6', step:'1', step_unit:'h', template:'comprehensive', marker_file:'my_markers.sql'}, markers:[{when:'', label:'Application release'}]}
+];
+function applyPreset(p){
+  const s = p.set;
+  if(s.temode){
+    document.querySelector('input[name="temode"][value="'+s.temode+'"]').checked = true;
+    syncTeSeg();
+    $('te_specific_wrap').classList.toggle('hidden', s.temode!=='specific');
+  }
+  ['win_hours','weeks_back','top_n','inst_num','step','marker_file'].forEach(k=>{ if(s[k]!==undefined) $(k).value = s[k]; });
+  if(s.step_unit!==undefined) $('step_unit').value = s.step_unit;
+  if(s.template!==undefined) $('template').value = s.template;
+  if(s.debug!==undefined) $('debug').checked = !!s.debug;
+  if(p.markers){
+    $('marker_rows').innerHTML='';
+    p.markers.forEach(m => addMarkerRow(m.when, m.label));
+  }
+  render();
+}
+
+/* ---------------------------------------------------------------- copy */
+function copyText(text, btn){
+  const done = () => { const o = btn.textContent; btn.textContent='Copied!'; btn.classList.add('done');
+    setTimeout(()=>{ btn.textContent=o; btn.classList.remove('done'); }, 1300); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done, ()=>fallbackCopy(text,done));
+  } else fallbackCopy(text, done);
+}
+function fallbackCopy(text, done){
+  const ta = document.createElement('textarea'); ta.value=text;
+  ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta);
+  ta.select(); try{ document.execCommand('copy'); done(); }catch(e){} document.body.removeChild(ta);
+}
+
+/* ------------------------------------------------------- te segmented */
+function syncTeSeg(){
+  const mode = document.querySelector('input[name="temode"]:checked').value;
+  document.querySelectorAll('#te_seg label').forEach(l =>
+    l.classList.toggle('on', l.getAttribute('data-te')===mode));
+}
+
+/* ---------------------------------------------------------------- init */
+function init(){
+  // presets
+  const pbox = $('presets');
+  PRESETS.forEach(p => {
+    const b = document.createElement('button'); b.type='button'; b.className='preset'; b.textContent=p.name;
+    b.addEventListener('click', ()=>applyPreset(p)); pbox.appendChild(b);
+  });
+  // explicit reset (applies the first preset = canonical defaults)
+  const rb = document.createElement('button');
+  rb.type='button'; rb.className='preset reset'; rb.textContent='↺ Reset to defaults';
+  rb.addEventListener('click', ()=>applyPreset(PRESETS[0]));
+  pbox.appendChild(rb);
+
+  // connect quick-picks
+  [['user/pw@svc','user / password @ service'],
+   ['/ as sysdba','/ as sysdba'],
+   ['system/pw@//db.example.com:1521/PROD','EZConnect']].forEach(([val,label])=>{
+    const c = document.createElement('span'); c.className='chip'; c.textContent=label; c.title=val;
+    c.addEventListener('click', ()=>{ $('connect').value=val; render(); });
+    $('connect_chips').appendChild(c);
+  });
+
+  // target_end segmented control
+  document.querySelectorAll('input[name="temode"]').forEach(r => r.addEventListener('change', ()=>{
+    syncTeSeg();
+    $('te_specific_wrap').classList.toggle('hidden', r.value!=='specific');
+    render();
+  }));
+
+  // all inputs -> re-render
+  ['connect','target_dt','win_hours','weeks_back','step','step_unit','top_n','inst_num','template','debug','marker_file']
+    .forEach(id => { const el=$(id); el.addEventListener('input', render); el.addEventListener('change', render); });
+
+  $('marker_add').addEventListener('click', ()=>{ addMarkerRow(); afterMarkerChange(); render(); });
+
+  // tabs
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+    t.classList.add('on');
+    const tab = t.getAttribute('data-tab');
+    $('panel_shell').classList.toggle('hidden', tab!=='shell');
+    $('panel_sql').classList.toggle('hidden', tab!=='sql');
+  }));
+
+  // copy buttons (delegated by data-copy = element id)
+  document.addEventListener('click', e=>{
+    const btn = e.target.closest('.copy[data-copy]'); if(!btn) return;
+    copyText($(btn.getAttribute('data-copy')).textContent, btn);
+  });
+
+  // download marker file
+  $('marker_download').addEventListener('click', ()=>{
+    const text = markerContent(); if(!text) return;
+    const name = ($('marker_file').value.trim() || 'my_markers.sql').replace(/[^\w.\-]/g,'_');
+    const blob = new Blob([text+'\n'], {type:'text/plain'});
+    const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+  });
+
+  // select the sample value on focus so it's replaced in one go
+  ['connect','marker_file'].forEach(id => $(id).addEventListener('focus', e => e.target.select()));
+
+  // mobile-only: jump to the generated command
+  $('jump_cmd').addEventListener('click', ()=>{
+    const out = document.querySelector('.output');
+    if(out) out.scrollIntoView({behavior:'smooth', block:'start'});
+  });
+
+  syncTeSeg();
+  render();
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
