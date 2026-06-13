@@ -33,6 +33,32 @@ The total compared span is `weeks_back × step + win_hours` of `step_unit`.
 
 ---
 
+## Don't want to memorize the positional order? Use the configurator
+
+```bash
+./run_awr_trend.sh --configure      # or -c / -i / --interactive
+./run_awr_trend.sh                  # no args at a terminal → offers it too
+```
+
+The configurator is an interactive question-and-answer mode. It asks for
+each option in turn — connection, window end/width, a friendly cadence
+menu (weekly / daily / hourly / custom), how many prior windows, Top-N,
+RAC instance, template, debug, marker file — with a short explanation, a
+`[default]` you can accept with Enter, and validation that re-asks on bad
+input. When you're done it prints a summary plus **two** copy-paste
+artifacts:
+
+- **A)** a minimal `./run_awr_trend.sh …` command (only the args that
+  differ from defaults), and
+- **B)** the equivalent pure-SQL\*Plus block (`DEFINE …` + `@@awr_trend.sql`)
+  for hosts where you can't run the shell wrapper.
+
+Then it offers `[r]un it / re-[e]dit / [q]uit`. `run` generates the report
+immediately; `edit` loops back with your current answers as the new
+defaults; `quit` just leaves the two blocks on screen for you to keep.
+
+---
+
 ## Weekly cadence (the original behaviour)
 
 ### Default — last 4 same-hour-of-week windows
