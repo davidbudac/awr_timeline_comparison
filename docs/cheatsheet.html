@@ -180,7 +180,9 @@
     <p class="tagline">
       Every recipe below is a complete <code>run_awr_trend.sh</code> invocation —
       copy, swap in your connect string, run. All commands assume your working
-      directory is the repo root.
+      directory is the repo root. Don't want to memorize the positional order?
+      Let the <a href="#configurator">interactive configurator</a> build the
+      command for you.
     </p>
   </div>
 </header>
@@ -192,6 +194,7 @@
       <strong>Jump to</strong>
       <ul>
         <li><a href="#args">Argument order</a></li>
+        <li><a href="#configurator">Configurator</a></li>
         <li><a href="#weekly">Weekly cadence</a></li>
         <li><a href="#daily">Daily cadence</a></li>
         <li><a href="#hourly">Hourly cadence</a></li>
@@ -235,6 +238,27 @@
         supply every preceding arg — use <code>AUTO</code> / <code>0</code> as
         placeholders (see the examples). The total compared span is
         <code>weeks_back × step + win_hours</code> of <code>step_unit</code>.
+      </p>
+
+      <h3 id="configurator">Don't want to deal with the positional order? Use the configurator</h3>
+<pre>./run_awr_trend.sh --configure      <span class="c"># or -c / -i / --interactive</span>
+./run_awr_trend.sh                  <span class="c"># no args at a terminal → offers it too</span></pre>
+      <p>
+        The configurator is an interactive question-and-answer mode. It asks for
+        each option in turn — connection, window end/width, a friendly cadence
+        menu (weekly / daily / hourly / custom), prior-window count, Top-N, RAC
+        instance, template, debug, marker file — each with a short explanation, a
+        <code>[default]</code> you accept with Enter, and validation that re-asks
+        on bad input. When you're done it prints a summary plus two copy-paste
+        artifacts: a minimal <code>./run_awr_trend.sh …</code> command (only the
+        args that differ from defaults) and the equivalent pure-SQL*Plus
+        <code>DEFINE … @@awr_trend.sql</code> block for hosts without the shell
+        wrapper. Then it offers <code>[r]un&nbsp;/&nbsp;re-[e]dit&nbsp;/&nbsp;[q]uit</code>:
+        <em>run</em> generates the report, <em>edit</em> loops back with your
+        current answers as the new defaults, <em>quit</em> just leaves the two
+        blocks on screen. Prefer point-and-click? The
+        <a href="configurator.html">web configurator</a> does the same in your
+        browser.
       </p>
     </section>
 
