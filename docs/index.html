@@ -662,7 +662,20 @@
       </ul>
 
       <h3>Run it</h3>
-      <p>Easiest — the shell wrapper, which sets all substitution variables for you:</p>
+      <p>
+        New to it, or don't want to memorize the argument order? Run the
+        <strong>interactive configurator</strong> — it walks you through every
+        option with a short explanation, a sensible default and input validation,
+        then prints both a ready-to-paste <code>./run_awr_trend.sh</code> command
+        and the equivalent pure-SQL*Plus block, and offers to run the report for
+        you. (Prefer point-and-click? The
+        <a href="configurator.html">web configurator</a> does the same in your
+        browser.)
+      </p>
+<pre><span class="c"># interactive: also -c, -i, --interactive, or just run with no arguments</span>
+./run_awr_trend.sh --configure</pre>
+
+      <p>Easiest non-interactive — the shell wrapper, which sets all substitution variables for you:</p>
 <pre><span class="c"># defaults: current hour vs the same hour on the 4 prior weeks</span>
 ./run_awr_trend.sh user/pw@svc
 
