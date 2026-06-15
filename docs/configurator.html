@@ -125,9 +125,27 @@
   .preset.reset{border-style:dashed;color:var(--ink-faint)}
   .preset.reset:hover{color:var(--accent-dark)}
 
+  /* ---------- mode switch + quick pane ---------- */
+  .modebar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 24px}
+  .modebar-label{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
+  .modeseg label{padding:9px 20px;font-size:14px;font-weight:700}
+  .modebar-hint{font-size:13px;color:var(--ink-faint)}
+  .scenarios{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media (max-width:560px){.scenarios{grid-template-columns:1fr}}
+  .scenario{text-align:left;background:#fff;border:1px solid var(--line);border-radius:11px;
+    padding:11px 13px;cursor:pointer;display:flex;flex-direction:column;gap:3px;font-family:inherit}
+  .scenario:hover{border-color:var(--accent);box-shadow:0 6px 16px -12px rgba(28,36,51,.4)}
+  .scenario.sel{border-color:var(--accent);background:#fdeee9;box-shadow:0 0 0 2px rgba(199,70,52,.15)}
+  .scenario .sn{font-size:14px;font-weight:750;color:var(--ink)}
+  .scenario .sd{font-size:12.5px;color:var(--ink-soft);line-height:1.4}
+  .scenario .sm{font-size:11px;color:var(--teal);font-family:var(--mono);margin-top:1px;letter-spacing:.01em}
+  .qp-foot{font-size:13px;color:var(--ink-faint);margin-top:2px}
+  .qp-foot a{font-weight:700}
+
   /* ---------- two-column layout ---------- */
   .config{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:26px;align-items:start}
   @media (max-width:900px){.config{grid-template-columns:1fr}}
+  .leftcol{min-width:0}
 
   /* ---------- panels ---------- */
   .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;
@@ -282,8 +300,8 @@
     <span class="kicker">Configurator</span>
     <h1>Build your run command</h1>
     <p class="tagline">
-      Pick the windows, cadence, scope and template; watch the comparison preview update,
-      then copy a ready-to-run <code>run_awr_trend.sh</code> or SQL*Plus invocation.
+      Pick a scenario in seconds, or fine-tune every parameter — then copy a ready-to-run
+      <code>run_awr_trend.sh</code> or SQL*Plus invocation.
       Everything runs in your browser — nothing is sent anywhere. Prefer the terminal?
       The shell wrapper has the same thing built in — run
       <code>./run_awr_trend.sh --configure</code>.
@@ -295,22 +313,70 @@
   <div class="wrap">
 
     <p class="lead">
-      The driver takes eleven parameters. Below, each one has a control and a plain-language
-      explanation; the panel on the right rebuilds the exact command as you go.
+      Two ways to build your command: <b>Quick</b> — connect, pick a scenario, copy; or
+      <b>Guided</b> — every one of the eleven parameters with a plain-language explanation.
     </p>
 
-    <div class="howto">
-      <div class="step"><span class="num">1</span><span class="txt"><b>Pick a preset</b> closest to what you need.</span></div>
-      <div class="step"><span class="num">2</span><span class="txt"><b>Tweak the controls</b> — the preview updates live.</span></div>
-      <div class="step"><span class="num">3</span><span class="txt"><b>Copy &amp; run</b> the shell or SQL*Plus command.</span></div>
+    <div class="modebar">
+      <span class="modebar-label">Setup mode</span>
+      <div class="seg modeseg" id="modeseg">
+        <label data-mode="quick" class="on"><input type="radio" name="mode" value="quick" checked>⚡ Quick</label>
+        <label data-mode="guided"><input type="radio" name="mode" value="guided">⚙ Guided</label>
+      </div>
+      <span class="modebar-hint" id="mode_hint"></span>
     </div>
 
-    <div class="presets-head">Start from a preset</div>
-    <div class="presets" id="presets"></div>
-
     <div class="config">
+     <div class="leftcol">
 
-      <!-- ============ CONTROLS (left) ============ -->
+      <!-- ============ QUICK PANE ============ -->
+      <div id="quick_pane">
+        <div class="panel">
+          <div class="ph">Quick setup</div>
+          <div class="psub">Two choices and you're set — who to connect as, and what to compare.
+            Everything else uses sensible defaults; switch to Guided any time to fine-tune.</div>
+
+          <div class="field">
+            <label class="lbl" for="q_connect">1 · Connect string</label>
+            <input type="text" id="q_connect" class="mono" value="user/pw@svc" autocomplete="off" spellcheck="false">
+            <div class="chiprow" id="q_connect_chips"></div>
+            <div class="help">Any SQL*Plus logon — <code>user/pw@host:port/service</code>, a TNS alias, or
+              <code>/ as sysdba</code>. Used locally; the password never leaves this page.</div>
+          </div>
+
+          <div class="field">
+            <label class="lbl">2 · What do you want to compare?</label>
+            <div class="scenarios" id="scenarios"></div>
+          </div>
+
+          <div class="field">
+            <label class="lbl">When does the newest window end?</label>
+            <div class="seg" id="q_te_seg">
+              <label data-te="auto" class="on"><input type="radio" name="q_temode" value="auto" checked>Prior full hour</label>
+              <label data-te="specific"><input type="radio" name="q_temode" value="specific">Specific time</label>
+            </div>
+            <div id="q_te_wrap" class="hidden" style="margin-top:10px">
+              <input type="datetime-local" id="q_target_dt">
+            </div>
+          </div>
+
+          <div class="qp-foot">Want every knob? <a href="#" id="to_guided">Switch to Guided →</a></div>
+        </div>
+      </div>
+
+      <!-- ============ GUIDED PANE ============ -->
+      <div id="guided_pane" class="hidden">
+
+        <div class="howto">
+          <div class="step"><span class="num">1</span><span class="txt"><b>Pick a preset</b> closest to what you need.</span></div>
+          <div class="step"><span class="num">2</span><span class="txt"><b>Tweak the controls</b> — the preview updates live.</span></div>
+          <div class="step"><span class="num">3</span><span class="txt"><b>Copy &amp; run</b> the shell or SQL*Plus command.</span></div>
+        </div>
+
+        <div class="presets-head">Start from a preset</div>
+        <div class="presets" id="presets"></div>
+
+      <!-- ============ CONTROLS ============ -->
       <div class="controls">
 
         <!-- Connection + target -->
@@ -420,42 +486,45 @@
           </div>
         </div>
 
-        <!-- Markers -->
-        <div class="panel">
-          <div class="ph"><span class="n">D</span>Timeline markers <span style="color:var(--ink-faint);font-weight:600;text-transform:none">— optional</span></div>
-          <div class="psub">Annotate the dated charts with milestones (a release, a patch, an incident).
-            Add a few below and the configurator writes the marker file for you.</div>
+      </div>
+      </div><!-- /guided_pane -->
 
-          <div class="field">
-            <label class="lbl" for="marker_file">Marker file path (marker_file)</label>
-            <input type="text" id="marker_file" class="mono" value="" placeholder="(none)" autocomplete="off" spellcheck="false">
-            <div class="help">Path passed to the driver. Leave empty for no markers; adding a milestone below
-              fills it with <code>my_markers.sql</code>.</div>
-          </div>
+      <!-- ============ TIMELINE MARKERS (shared by Quick + Guided) ============ -->
+      <div class="panel" id="markers_panel">
+        <div class="ph">Timeline markers <span style="color:var(--ink-faint);font-weight:600;text-transform:none">— optional, works in either mode</span></div>
+        <div class="psub">Annotate the dated charts with milestones — a release, a patch, an incident.
+          Add a few below and the configurator writes the marker file for you and wires up the path.</div>
 
-          <div class="field">
-            <label class="lbl">Milestones</label>
-            <div id="marker_rows"></div>
-            <button type="button" class="mk-add" id="marker_add">+ Add milestone</button>
-          </div>
-
-          <div class="field hidden" id="marker_out_wrap">
-            <div class="codeblock">
-              <div class="cbhead">
-                <span class="t">Save this as your marker file</span>
-                <span>
-                  <button type="button" class="copy" data-copy="marker_content">Copy</button>
-                  <button type="button" class="copy" id="marker_download">Download</button>
-                </span>
-              </div>
-              <pre id="marker_content"></pre>
-            </div>
-            <div class="help">Each line is <code>@@sql/lib/marker '&lt;when&gt;' '&lt;label&gt;'</code>. Keep the
-              <code>@@sql/lib/marker</code> path verbatim — SQL*Plus resolves it from the repo root.</div>
-          </div>
+        <div class="field">
+          <label class="lbl">Milestones</label>
+          <div id="marker_rows"></div>
+          <button type="button" class="mk-add" id="marker_add">+ Add milestone</button>
         </div>
 
+        <div class="field">
+          <label class="lbl" for="marker_file">Marker file path (marker_file)</label>
+          <input type="text" id="marker_file" class="mono" value="" placeholder="(none)" autocomplete="off" spellcheck="false">
+          <div class="help">Path passed to the driver. Auto-fills to <code>my_markers.sql</code> when you add a
+            milestone; leave empty for no markers.</div>
+        </div>
+
+        <div class="field hidden" id="marker_out_wrap">
+          <div class="codeblock">
+            <div class="cbhead">
+              <span class="t">Save this as your marker file</span>
+              <span>
+                <button type="button" class="copy" data-copy="marker_content">Copy</button>
+                <button type="button" class="copy" id="marker_download">Download</button>
+              </span>
+            </div>
+            <pre id="marker_content"></pre>
+          </div>
+          <div class="help">Each line is <code>@@sql/lib/marker '&lt;when&gt;' '&lt;label&gt;'</code>. Keep the
+            <code>@@sql/lib/marker</code> path verbatim — SQL*Plus resolves it from the repo root.</div>
+        </div>
       </div>
+
+     </div><!-- /leftcol -->
 
       <!-- ============ OUTPUT (right, sticky) ============ -->
       <aside class="output">
@@ -485,20 +554,13 @@
           <div id="panel_sql" class="hidden">
             <div class="codeblock">
               <div class="cbhead">
-                <span class="t">One command (heredoc)</span>
-                <button type="button" class="copy" data-copy="out_sql_heredoc">Copy</button>
-              </div>
-              <pre id="out_sql_heredoc"></pre>
-            </div>
-            <div class="codeblock">
-              <div class="cbhead">
-                <span class="t">Interactive session</span>
+                <span class="t">SQL*Plus session</span>
                 <button type="button" class="copy" data-copy="out_sql_interactive">Copy</button>
               </div>
               <pre id="out_sql_interactive"></pre>
             </div>
-            <div class="out-foot">No shell needed — Windows-friendly. Every <code>DEFINE</code> is emitted
-              explicitly so it works without loading <code>sql/defaults.sql</code>.</div>
+            <div class="out-foot">No shell needed — Windows-friendly. Connect, then paste the block. Every
+              <code>DEFINE</code> is emitted explicitly so it works without loading <code>sql/defaults.sql</code>.</div>
           </div>
 
           <div class="notes" id="notes"></div>
@@ -585,6 +647,74 @@ function shellQuote(s){
 }
 /* Oracle string literal (double embedded single quotes). */
 function sqlQuote(s){ return "'" + String(s).replace(/'/g, "''") + "'"; }
+
+/* ----------------------------------------------------- quick / guided */
+const MODE_KEY = 'awrcfg_mode';
+const CONNECT_SAMPLES = [
+  ['user/pw@svc','user / password @ service'],
+  ['/ as sysdba','/ as sysdba'],
+  ['system/pw@//db.example.com:1521/PROD','EZConnect']
+];
+function buildConnectChips(boxId, inputId, onpick){
+  CONNECT_SAMPLES.forEach(([val,label]) => {
+    const c = document.createElement('span'); c.className='chip'; c.textContent=label; c.title=val;
+    c.addEventListener('click', () => { $(inputId).value = val; onpick(); });
+    $(boxId).appendChild(c);
+  });
+}
+
+/* Highlight the active option of a segmented (data-te) control. */
+function syncSeg(segId, name){
+  const mode = document.querySelector('input[name="'+name+'"]:checked').value;
+  document.querySelectorAll('#'+segId+' label').forEach(l =>
+    l.classList.toggle('on', l.getAttribute('data-te')===mode));
+}
+
+/* Quick pane and the (authoritative) guided controls share one state.
+   These two keep them mirrored so switching modes is seamless. */
+function syncQuickToReal(){
+  $('connect').value = $('q_connect').value;
+  const qmode = document.querySelector('input[name="q_temode"]:checked').value;
+  document.querySelector('input[name="temode"][value="'+qmode+'"]').checked = true;
+  $('te_specific_wrap').classList.toggle('hidden', qmode!=='specific');
+  $('target_dt').value = $('q_target_dt').value;
+  syncSeg('te_seg','temode');
+}
+function syncRealToQuick(){
+  $('q_connect').value = $('connect').value;
+  const mode = document.querySelector('input[name="temode"]:checked').value;
+  document.querySelector('input[name="q_temode"][value="'+mode+'"]').checked = true;
+  $('q_te_wrap').classList.toggle('hidden', mode!=='specific');
+  $('q_target_dt').value = $('target_dt').value;
+  syncSeg('q_te_seg','q_temode');
+}
+function applyMode(m){
+  $('quick_pane').classList.toggle('hidden', m!=='quick');
+  $('guided_pane').classList.toggle('hidden', m!=='guided');
+  document.querySelectorAll('#modeseg label').forEach(l =>
+    l.classList.toggle('on', l.getAttribute('data-mode')===m));
+  $('mode_hint').textContent = (m==='quick')
+    ? 'Fewest choices — connect and pick a scenario.'
+    : 'Every parameter, each with an explanation.';
+  if(m==='quick') syncRealToQuick(); else syncQuickToReal();
+  try{ localStorage.setItem(MODE_KEY, m); }catch(e){}
+  render();
+}
+
+/* Effective parameter values a preset resolves to (defaults + its overrides). */
+function effFromPreset(p){
+  const keys = ['win_hours','weeks_back','top_n','inst_num','step','step_unit','template'];
+  const e = Object.assign({}, DEFAULTS);
+  keys.forEach(k => { if(p.set[k]!==undefined) e[k] = String(p.set[k]); });
+  return e;
+}
+/* One-line "shape" caption shown on each scenario card. */
+function scenarioMeta(p){
+  const e = effFromPreset(p);
+  let s = fmtHours(Number(e.win_hours))+' × '+(Number(e.weeks_back)+1)+' windows · '+UNIT_WORD[e.step_unit];
+  if(e.template!=='comprehensive') s += ' · '+e.template;
+  return s;
+}
 
 /* ---------------------------------------------------------------- read */
 function readConfig(){
@@ -738,10 +868,6 @@ function defineLines(cfg){
     return 'DEFINE '+k.padEnd(width)+' = '+val;
   });
 }
-function buildSqlHeredoc(cfg){
-  return [ 'sqlplus -S -L '+shellQuote(cfg.connect || 'user/pw@svc')+" <<'SQL'" ]
-    .concat(defineLines(cfg), ['@@awr_trend.sql','EXIT','SQL']).join('\n');
-}
 function buildSqlInteractive(cfg){
   return [ 'sqlplus -S -L '+shellQuote(cfg.connect || 'user/pw@svc') ]
     .concat(defineLines(cfg), ['@awr_trend.sql']).join('\n');
@@ -774,7 +900,9 @@ function addMarkerRow(when='', label=''){
   l.placeholder='Label (e.g. Applied patch 19.22)'; l.value=label; l.autocomplete='off';
   const x = document.createElement('button'); x.type='button'; x.className='mk-x'; x.textContent='×'; x.title='Remove';
   x.addEventListener('click', () => { row.remove(); afterMarkerChange(); render(); });
-  w.addEventListener('input', render); l.addEventListener('input', render);
+  // auto-wire the marker_file path as soon as a milestone gets any content
+  w.addEventListener('input', () => { afterMarkerChange(); render(); });
+  l.addEventListener('input', () => { afterMarkerChange(); render(); });
   row.appendChild(w); row.appendChild(l); row.appendChild(x);
   $('marker_rows').appendChild(row);
 }
@@ -819,7 +947,6 @@ function render(){
   $('out_summary').textContent = summarize(cfg);
 
   setCode('out_shell', '# '+summarize(cfg), buildShell(cfg));
-  setCode('out_sql_heredoc', null, buildSqlHeredoc(cfg));
   setCode('out_sql_interactive', '-- connect, then paste into SQL*Plus', buildSqlInteractive(cfg));
 
   // marker output
@@ -834,13 +961,13 @@ function render(){
 
 /* ------------------------------------------------------------- presets */
 const PRESETS = [
-  {name:'Default · weekly', set:{temode:'auto', win_hours:'1', weeks_back:'4', top_n:'10', inst_num:'0', step:'1', step_unit:'w', template:'comprehensive', debug:false, marker_file:''}, markers:[]},
-  {name:'Hourly walkthrough (12 h)', set:{temode:'auto', win_hours:'1', weeks_back:'11', step:'1', step_unit:'h', template:'comprehensive'}},
-  {name:'Daily · one week', set:{temode:'auto', win_hours:'1', weeks_back:'6', step:'1', step_unit:'d', template:'comprehensive'}},
-  {name:'Developer view', set:{temode:'auto', template:'dev'}},
-  {name:'Lean triage', set:{temode:'auto', template:'simple'}},
-  {name:'Top-25 SQL', set:{temode:'auto', top_n:'25'}},
-  {name:'Post-release (hourly + marker)', set:{temode:'auto', win_hours:'1', weeks_back:'6', step:'1', step_unit:'h', template:'comprehensive', marker_file:'my_markers.sql'}, markers:[{when:'', label:'Application release'}]}
+  {name:'Default · weekly', desc:'This hour vs the same hour on the 4 previous weeks — the classic like-for-like trend.', set:{temode:'auto', win_hours:'1', weeks_back:'4', top_n:'10', inst_num:'0', step:'1', step_unit:'w', template:'comprehensive', debug:false, marker_file:''}, markers:[]},
+  {name:'Hourly walkthrough (12 h)', desc:'The last 12 consecutive hours, walking straight back — spot an intraday spike.', set:{temode:'auto', win_hours:'1', weeks_back:'11', step:'1', step_unit:'h', template:'comprehensive'}},
+  {name:'Daily · one week', desc:'This hour across each of the last 7 days — the day-over-day pattern.', set:{temode:'auto', win_hours:'1', weeks_back:'6', step:'1', step_unit:'d', template:'comprehensive'}},
+  {name:'Developer view', desc:'Weekly trend with app-focused metrics & waits — throughput, SQL, contention.', set:{temode:'auto', template:'dev'}},
+  {name:'Lean triage', desc:'Weekly trend, minimal metric set — a fast first glance.', set:{temode:'auto', template:'simple'}},
+  {name:'Top-25 SQL', desc:'Weekly trend, but 25 rows in every SQL ranking — a wider net.', set:{temode:'auto', top_n:'25'}},
+  {name:'Post-release (hourly + marker)', desc:'Hourly windows with a release marker line — before/after a deploy.', set:{temode:'auto', win_hours:'1', weeks_back:'6', step:'1', step_unit:'h', template:'comprehensive', marker_file:'my_markers.sql'}, markers:[{when:'', label:'Application release'}]}
 ];
 function applyPreset(p){
   const s = p.set;
@@ -895,13 +1022,46 @@ function init(){
   rb.addEventListener('click', ()=>applyPreset(PRESETS[0]));
   pbox.appendChild(rb);
 
-  // connect quick-picks
-  [['user/pw@svc','user / password @ service'],
-   ['/ as sysdba','/ as sysdba'],
-   ['system/pw@//db.example.com:1521/PROD','EZConnect']].forEach(([val,label])=>{
-    const c = document.createElement('span'); c.className='chip'; c.textContent=label; c.title=val;
-    c.addEventListener('click', ()=>{ $('connect').value=val; render(); });
-    $('connect_chips').appendChild(c);
+  // scenario cards (Quick mode) — each applies a preset
+  const sbox = $('scenarios');
+  PRESETS.forEach(p => {
+    const c = document.createElement('button'); c.type='button'; c.className='scenario';
+    const n = document.createElement('span'); n.className='sn'; n.textContent=p.name;
+    const d = document.createElement('span'); d.className='sd'; d.textContent=p.desc||'';
+    const m = document.createElement('span'); m.className='sm'; m.textContent=scenarioMeta(p);
+    c.appendChild(n); c.appendChild(d); c.appendChild(m);
+    c.addEventListener('click', () => {
+      applyPreset(p);            // sets the authoritative controls + renders
+      syncRealToQuick();         // reflect the new target/connect in the quick inputs
+      document.querySelectorAll('.scenario').forEach(x => x.classList.remove('sel'));
+      c.classList.add('sel');
+    });
+    sbox.appendChild(c);
+  });
+  if(sbox.firstChild) sbox.firstChild.classList.add('sel');   // defaults == first scenario
+
+  // connect quick-picks (both panes)
+  buildConnectChips('connect_chips', 'connect', render);
+  buildConnectChips('q_connect_chips', 'q_connect', () => { syncQuickToReal(); render(); });
+
+  // quick-pane inputs -> mirror into the real controls, then re-render
+  $('q_connect').addEventListener('input', () => { syncQuickToReal(); render(); });
+  $('q_connect').addEventListener('focus', e => e.target.select());
+  ['input','change'].forEach(ev =>
+    $('q_target_dt').addEventListener(ev, () => { syncQuickToReal(); render(); }));
+  document.querySelectorAll('input[name="q_temode"]').forEach(r => r.addEventListener('change', () => {
+    syncSeg('q_te_seg','q_temode');
+    $('q_te_wrap').classList.toggle('hidden', r.value!=='specific');
+    syncQuickToReal(); render();
+  }));
+
+  // mode switch
+  document.querySelectorAll('input[name="mode"]').forEach(r =>
+    r.addEventListener('change', () => applyMode(r.value)));
+  $('to_guided').addEventListener('click', e => {
+    e.preventDefault();
+    document.querySelector('input[name="mode"][value="guided"]').checked = true;
+    applyMode('guided');
   });
 
   // target_end segmented control
@@ -951,7 +1111,12 @@ function init(){
   });
 
   syncTeSeg();
-  render();
+
+  // restore the last-used mode (default Quick), then render via applyMode
+  let initialMode = 'quick';
+  try{ const sv = localStorage.getItem(MODE_KEY); if(sv==='quick'||sv==='guided') initialMode = sv; }catch(e){}
+  document.querySelector('input[name="mode"][value="'+initialMode+'"]').checked = true;
+  applyMode(initialMode);
 }
 document.addEventListener('DOMContentLoaded', init);
 </script>
