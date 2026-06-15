@@ -158,8 +158,9 @@ COLUMN template_name       NEW_VALUE template_name       NOPRINT
 COLUMN template_dir        NEW_VALUE template_dir        NOPRINT
 COLUMN debug_termout       NEW_VALUE debug_termout       NOPRINT
 -- marker_include is the file @@-included in the prologue to load optional
--- user-defined timeline markers: either the caller's ~marker_file or the
--- no-op stub sql/lib/no_markers.sql when ~marker_file is empty/unset.
+-- user-defined timeline markers.  Resolved (see the mk inline view below)
+-- to the caller's marker_file path, else sql/lib/markers_inline.sql when the
+-- file-free markers var is set, else the no-op stub sql/lib/no_markers.sql.
 COLUMN marker_include      NEW_VALUE marker_include      NOPRINT
 -- dbg_ts is refreshed inside sql/lib/debug_log.sql before each marker.
 -- Declaring the COLUMN once here keeps the helper from re-declaring it
@@ -332,15 +333,25 @@ CROSS JOIN (
     FROM dual
 ) dbg
 CROSS JOIN (
-    -- Optional path to a timeline-marker config file (datetime + label
-    -- milestones).  Empty / unset (TRIM of '' is NULL in Oracle) resolves
-    -- to the no-op stub so the prologue can always @@-include exactly one
-    -- marker file.  See sql/lib/marker.sql and sql/lib/js_markers.plsql.
+    -- Resolve which file the prologue @@-includes for optional timeline
+    -- markers (datetime + label milestones), so it can always include
+    -- exactly one.  Three sources, in priority order:
+    --   1. marker_file  -- an on-disk config (one @@sql/lib/marker line per
+    --                      milestone); the original, escape-hatch path.
+    --   2. markers      -- file-free inline list ("WHEN|LABEL;;...") parsed
+    --                      by sql/lib/markers_inline.sql.  Lets a single
+    --                      self-contained SQL*Plus session (or
+    --                      MARKERS=... run_awr_trend.sh) carry markers with
+    --                      nothing on disk.
+    --   3. neither      -- the no-op stub sql/lib/no_markers.sql.
+    -- TRIM of '' is NULL in Oracle, so an empty/unset var is "absent".
     SELECT
         CASE
-            WHEN TRIM('~marker_file') IS NULL
-                THEN 'sql/lib/no_markers.sql'
-            ELSE TRIM('~marker_file')
+            WHEN TRIM('~marker_file') IS NOT NULL
+                THEN TRIM('~marker_file')
+            WHEN TRIM('~markers') IS NOT NULL
+                THEN 'sql/lib/markers_inline.sql'
+            ELSE 'sql/lib/no_markers.sql'
         END AS marker_include
     FROM dual
 ) mk;
@@ -438,8 +449,9 @@ END;
 
 -- Optional user-defined timeline markers (milestones).  js_markers.plsql
 -- inits window.AWR_MARKERS=[] and defines window.AWR_markLine(); the
--- resolved marker_include file then pushes one marker per config line
--- (or is the no-op stub when no marker_file was supplied).  The dated
+-- resolved marker_include file then pushes one marker per milestone --
+-- from an on-disk marker_file, from the file-free inline markers var
+-- (sql/lib/markers_inline.sql), or nothing (the no-op stub).  The dated
 -- charts (sections 00/09/10/11) read these at render time.
 @@sql/lib/js_markers.plsql
 @@~marker_include

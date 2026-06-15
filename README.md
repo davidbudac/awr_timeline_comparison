@@ -68,9 +68,13 @@ Easiest non-interactive — the shell wrapper (sets all substitution vars for yo
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple         # lean triage report
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple Y       # simple + progress markers on stdout
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive N my_markers.sql  # annotate timelines with milestones
+MARKERS='2026-06-10 09:00|Release 2.0' ./run_awr_trend.sh user/pw@svc  # file-free inline markers
 ```
 
 Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template [debug [marker_file]]]]]]]]]]`
+
+Plus one environment variable, `MARKERS`, for file-free inline timeline
+markers (see "Timeline markers" below).
 
 | Arg          | Default          | Meaning                                             |
 |--------------|------------------|-----------------------------------------------------|
@@ -84,6 +88,7 @@ Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [
 | `template`   | `comprehensive`  | Metric + wait-event set: `comprehensive` (full curated lists), `simple` (triage-friendly subset), or `dev` (application-developer view) |
 | `debug`      | `N`              | `Y` (or `YES/1/ON/TRUE/T`, case-insensitive) prints one-line, millisecond-timestamped progress markers to stdout as each section begins — useful when a slow section makes the run look hung. Markers go to stdout only; the HTML report is byte-identical to a `debug=N` run |
 | `marker_file`| *(empty)*        | Optional path to a timeline-marker config file (milestones drawn as vertical dashed lines on the dated charts). Empty = no markers. See "Timeline markers" below |
+| `MARKERS` *(env var)* | *(empty)* | File-free alternative to `marker_file`: inline `WHEN\|LABEL` milestones joined by `;;`. `marker_file` wins when both are set. See "Timeline markers" below |
 
 `step` × `step_unit` defines the gap between adjacent comparison
 windows. `step=1, step_unit=w` (the default) reproduces the original
@@ -126,7 +131,23 @@ HH24:MI`, 24-hour clock) and a label. Copy
 Then pass its path as the `marker_file` argument (wrapper) or
 `DEFINE marker_file = 'my_markers.sql'` (pure SQL\*Plus). Markers appear on
 every calendar-axis chart: the masthead strip, the ASH timeline, the
-DB-time summary, and the per-SQL ASH cards. Notes:
+DB-time summary, and the per-SQL ASH cards.
+
+**File-free markers** — if you'd rather not keep a file on disk, pass the
+same milestones inline. Each is `WHEN|LABEL`, joined by `;;`:
+
+```sh
+MARKERS='2026-04-20 14:00|Applied patch 19.22;;2026-05-01 02:00|Index rebuild' \
+    ./run_awr_trend.sh user/pw@svc
+```
+
+or on the pure-SQL\*Plus path, `DEFINE markers = '2026-04-20 14:00|Applied
+patch 19.22;;…'`. The inline form renders identical markers, but a label
+there must avoid a straight single quote, `|`, `;;` and `~` — use a
+`marker_file` for labels that need those. `marker_file` wins when both are
+set. The [configurator](docs/configurator.html) builds either form for you.
+
+Notes:
 
 - Keep the path exactly `@@sql/lib/marker` even if your config lives
   elsewhere — SQL\*Plus resolves nested `@@` paths from the project root.
@@ -156,6 +177,7 @@ SQL> DEFINE step_unit  = 'w'
 SQL> DEFINE template   = 'comprehensive'
 SQL> DEFINE debug      = 'N'
 SQL> DEFINE marker_file = 'my_markers.sql'   -- optional; '' for none
+SQL> DEFINE markers     = ''                 -- optional file-free markers; '' for none
 SQL> @awr_trend.sql
 ```
 
@@ -263,7 +285,8 @@ SQL> @side/create_weekly_baselines.sql
 │   └── lib/                         -- shared @@-included fragments (CTEs, JS, helpers)
 │       ├── js_markers.plsql         -- inits window.AWR_MARKERS + AWR_markLine()
 │       ├── marker.sql               -- emit one timeline marker (used by marker_file)
-│       ├── no_markers.sql           -- no-op stub when marker_file is empty
+│       ├── markers_inline.sql       -- file-free markers parser (used by the MARKERS var)
+│       ├── no_markers.sql           -- no-op stub when no markers are set
 │       └── templates/               -- per-template metric + wait-event lists
 │           ├── comprehensive/       -- default; full curated lists
 │           │   ├── sysstat_load_targets.sql

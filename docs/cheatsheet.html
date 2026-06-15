@@ -229,6 +229,7 @@
             <tr><td>9</td><td><code>template</code></td><td><code>comprehensive</code></td><td><code>comprehensive</code>, <code>simple</code>, or <code>dev</code></td></tr>
             <tr><td>10</td><td><code>debug</code></td><td><code>N</code></td><td><code>Y</code> prints per-section progress markers to stdout; HTML unaffected</td></tr>
             <tr><td>11</td><td><code>marker_file</code></td><td><em>(empty)</em></td><td>Optional timeline-marker config; empty = none</td></tr>
+            <tr><td>env</td><td><code>MARKERS</code></td><td><em>(empty)</em></td><td>File-free markers: inline <code>WHEN|LABEL</code> pairs joined by <code>;;</code> (not a positional arg)</td></tr>
           </tbody>
         </table>
       </div>
@@ -429,7 +430,7 @@
     </section>
 
     <section id="markers">
-      <h2><span class="num">§8</span>Timeline markers (<code>marker_file</code>)</h2>
+      <h2><span class="num">§8</span>Timeline markers (<code>marker_file</code> / <code>MARKERS</code>)</h2>
       <p>
         Annotate the dated charts (masthead strip, ASH timeline, DB-time summary,
         per-SQL ASH cards) with your own milestones — a patch, an index rebuild, a stats
@@ -449,6 +450,13 @@
       <h3>Hourly walkthrough with markers</h3>
 <pre>./run_awr_trend.sh user/pw@svc AUTO 1 12 10 0 1 h comprehensive N my_markers.sql</pre>
 
+      <h3>File-free — inline markers, no file</h3>
+      <p>Pass the same milestones inline as <code>WHEN|LABEL</code> pairs joined by
+      <code>;;</code> in the <code>MARKERS</code> env var (the
+      <a href="configurator.html">configurator</a> builds this for you):</p>
+<pre>MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22;;2026-05-01 02:00|Index rebuild'</span> \
+    ./run_awr_trend.sh user/pw@svc</pre>
+
       <ul class="plain">
         <li>Keep the path exactly <code>@@sql/lib/marker</code> even if your config lives
             elsewhere — SQL*Plus resolves nested <code>@@</code> paths from the project root.</li>
@@ -456,6 +464,10 @@
             the nearest point on the axis.</li>
         <li>A malformed datetime is skipped (it becomes an HTML comment), not fatal.
             Labels with a single quote must double it (<code>'Bob''s change'</code>).</li>
+        <li><strong>Inline (<code>MARKERS</code>) labels</strong> must avoid a straight
+            single quote, <code>|</code>, <code>;;</code> and <code>~</code> — use a
+            <code>marker_file</code> for labels that need those. <code>marker_file</code>
+            wins when both are set.</li>
       </ul>
 
       <p>See it live: <a href="examples/weekly_with_markers.html">example report with
@@ -498,6 +510,7 @@ DEFINE step_unit  = <span class="s">'h'</span>
 DEFINE template   = <span class="s">'comprehensive'</span>
 DEFINE debug      = <span class="s">'N'</span>
 DEFINE marker_file = <span class="s">''</span>
+DEFINE markers = <span class="s">''</span>
 @@awr_trend.sql
 EXIT
 SQL</pre>
@@ -565,7 +578,8 @@ DEFINE step       = 1
 DEFINE step_unit  = <span class="s">'w'</span>
 DEFINE template   = <span class="s">'comprehensive'</span>
 DEFINE debug      = <span class="s">'N'</span>
-DEFINE marker_file = <span class="s">''</span></pre>
+DEFINE marker_file = <span class="s">''</span>
+DEFINE markers = <span class="s">''</span></pre>
     </section>
 
   </div>

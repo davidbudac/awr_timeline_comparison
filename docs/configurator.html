@@ -493,34 +493,16 @@
       <div class="panel" id="markers_panel">
         <div class="ph">Timeline markers <span style="color:var(--ink-faint);font-weight:600;text-transform:none">— optional, works in either mode</span></div>
         <div class="psub">Annotate the dated charts with milestones — a release, a patch, an incident.
-          Add a few below and the configurator writes the marker file for you and wires up the path.</div>
+          They are baked straight into the command (no separate file to save), so it stays a single copy-paste.</div>
 
         <div class="field">
           <label class="lbl">Milestones</label>
           <div id="marker_rows"></div>
           <button type="button" class="mk-add" id="marker_add">+ Add milestone</button>
-        </div>
-
-        <div class="field">
-          <label class="lbl" for="marker_file">Marker file path (marker_file)</label>
-          <input type="text" id="marker_file" class="mono" value="" placeholder="(none)" autocomplete="off" spellcheck="false">
-          <div class="help">Path passed to the driver. Auto-fills to <code>my_markers.sql</code> when you add a
-            milestone; leave empty for no markers.</div>
-        </div>
-
-        <div class="field hidden" id="marker_out_wrap">
-          <div class="codeblock">
-            <div class="cbhead">
-              <span class="t">Save this as your marker file</span>
-              <span>
-                <button type="button" class="copy" data-copy="marker_content">Copy</button>
-                <button type="button" class="copy" id="marker_download">Download</button>
-              </span>
-            </div>
-            <pre id="marker_content"></pre>
-          </div>
-          <div class="help">Each line is <code>@@sql/lib/marker '&lt;when&gt;' '&lt;label&gt;'</code>. Keep the
-            <code>@@sql/lib/marker</code> path verbatim — SQL*Plus resolves it from the repo root.</div>
+          <div class="help">Each milestone needs a date &amp; time and a label. They ride inline in the command
+            (the <code>MARKERS</code> env var for the shell, <code>DEFINE&nbsp;markers</code> for SQL*Plus).
+            A straight apostrophe in a label is swapped to a typographic one (’) so the command stays one
+            copy-paste; for exotic labels use a <code>marker_file</code> on disk instead.</div>
         </div>
       </div>
 
@@ -597,11 +579,18 @@
    ===================================================================== */
 const DEFAULTS = {
   target_end:'AUTO', win_hours:'1', weeks_back:'4', top_n:'10', inst_num:'0',
-  step:'1', step_unit:'w', template:'comprehensive', debug:'N', marker_file:''
+  step:'1', step_unit:'w', template:'comprehensive', debug:'N', marker_file:'',
+  // File-free inline markers (not a positional arg): the configurator builds
+  // this "WHEN|LABEL;;..." string from the milestone rows and threads it
+  // through the MARKERS env var (shell) / DEFINE markers (SQL*Plus).
+  markers:''
 };
 const ARG_ORDER = ['target_end','win_hours','weeks_back','top_n','inst_num',
                    'step','step_unit','template','debug','marker_file'];
-const STRING_DEFINES = new Set(['target_end','step_unit','template','debug','marker_file']);
+// The SQL*Plus path DEFINEs every positional plus `markers` (which has no
+// positional slot — it rides the MARKERS env var on the shell path).
+const SQL_DEFINES = ARG_ORDER.concat(['markers']);
+const STRING_DEFINES = new Set(['target_end','step_unit','template','debug','marker_file','markers']);
 const UNIT_HOURS = {h:1, d:24, w:168};
 const UNIT_WORD  = {h:'hourly', d:'daily', w:'weekly'};
 const UNIT_NOUN  = {h:'hour', d:'day', w:'week'};
@@ -739,7 +728,11 @@ function readConfig(){
     step_unit:  $('step_unit').value,
     template:   $('template').value,
     debug:      $('debug').checked ? 'Y' : 'N',
-    marker_file:$('marker_file').value.trim()
+    // File-free markers only: marker_file stays empty (the on-disk escape
+    // hatch is still in the driver for power users, but the web UI builds an
+    // inline string instead).
+    marker_file:'',
+    markers:    markersInline()
   };
 }
 
@@ -772,8 +765,15 @@ function validate(cfg){
   if(!errors.length && cfg.step_unit==='h' && wh<=1 && st>=1){
     info.push('Hourly cadence with a 1-hour window needs the AWR snapshot interval ≤ the window — the default 1-hour interval gives exactly one snap pair per window. Cut the interval to 30 min or widen the window for intra-window detail.');
   }
-  if(cfg.marker_file && cfg.marker_file !== DEFAULTS.marker_file && !markerRows().some(r=>r.label)){
-    info.push('A <code>marker_file</code> is set but you have not added any milestones yet — add one below or clear the path.');
+  // Marker milestones: a row with a label but no valid date/time is silently
+  // dropped by the driver, so warn here.  Reference rows by number only so no
+  // user text is interpolated into the notes' innerHTML.
+  const badMk = [];
+  markerRows().forEach((r,i) => { if((r.label || r.when) && !parseLocal(r.when)) badMk.push(i+1); });
+  if(badMk.length){
+    info.push('Milestone'+(badMk.length>1?'s':'')+' '+badMk.join(', ')+
+              ' need'+(badMk.length>1?'':'s')+' a date &amp; time like <code>2026-06-10 09:00</code> — '+
+              (badMk.length>1?'they':'it')+' will be skipped otherwise.');
   }
   return {errors, info, bad, ok: errors.length===0};
 }
@@ -847,7 +847,8 @@ function summarize(cfg){
           (cfg.weeks_back==='1'?'':'s')+' at '+UNIT_WORD[cfg.step_unit]+' cadence ('+fmtHours(stepHours)+
           ' apart). Top '+cfg.top_n+' SQL · '+inst+' · '+cfg.template+' template.';
   if(cfg.debug==='Y') s += ' Progress markers on.';
-  if(cfg.marker_file) s += ' Markers from '+cfg.marker_file+'.';
+  const nmk = cfg.markers ? cfg.markers.split(';;').length : 0;
+  if(nmk) s += ' '+nmk+' timeline marker'+(nmk===1?'':'s')+'.';
   return s;
 }
 
@@ -858,12 +859,13 @@ function buildShell(cfg){
   vals.forEach((v,i) => { if(v !== DEFAULTS[ARG_ORDER[i]]) last = i; });
   const parts = ['./run_awr_trend.sh', shellQuote(cfg.connect || 'user/pw@svc')];
   for(let i=0; i<=last; i++) parts.push(shellQuote(vals[i]));
-  return parts.join(' ');
+  // Inline markers ride the MARKERS env var, prefixed onto the command.
+  return (cfg.markers ? 'MARKERS='+shellQuote(cfg.markers)+' ' : '') + parts.join(' ');
 }
 
 function defineLines(cfg){
-  const width = Math.max(...ARG_ORDER.map(k=>k.length));   // align '='
-  return ARG_ORDER.map(k => {
+  const width = Math.max(...SQL_DEFINES.map(k=>k.length));   // align '='
+  return SQL_DEFINES.map(k => {
     const val = STRING_DEFINES.has(k) ? sqlQuote(cfg[k]) : cfg[k];
     return 'DEFINE '+k.padEnd(width)+' = '+val;
   });
@@ -899,30 +901,34 @@ function addMarkerRow(when='', label=''){
   const l = document.createElement('input'); l.type='text'; l.className='mk-label';
   l.placeholder='Label (e.g. Applied patch 19.22)'; l.value=label; l.autocomplete='off';
   const x = document.createElement('button'); x.type='button'; x.className='mk-x'; x.textContent='×'; x.title='Remove';
-  x.addEventListener('click', () => { row.remove(); afterMarkerChange(); render(); });
-  // auto-wire the marker_file path as soon as a milestone gets any content
-  w.addEventListener('input', () => { afterMarkerChange(); render(); });
-  l.addEventListener('input', () => { afterMarkerChange(); render(); });
+  x.addEventListener('click', () => { row.remove(); render(); });
+  w.addEventListener('input', render);
+  l.addEventListener('input', render);
   row.appendChild(w); row.appendChild(l); row.appendChild(x);
   $('marker_rows').appendChild(row);
 }
-function afterMarkerChange(){
-  // Auto-fill / clear the marker_file path to match whether milestones exist.
-  const has = markerRows().some(r => r.label || r.when);
-  const mf = $('marker_file');
-  if(has && !mf.value.trim()) mf.value = 'my_markers.sql';
-}
-function markerContent(){
-  const rows = markerRows().filter(r => r.label || r.when);
-  if(!rows.length) return null;
-  const lines = ['-- '+( $('marker_file').value.trim() || 'my_markers.sql' )+' — one milestone per line'];
-  rows.forEach(r => {
+
+/* Build the file-free inline markers string the driver parses
+   (sql/lib/markers_inline.sql): milestones "WHEN|LABEL" joined by ";;".
+   The whole value travels through shell single-quotes, a SQL*Plus DEFINE
+   and a PL/SQL string literal, so the transport must be single-quote-free:
+   we swap any straight apostrophe to a typographic one (’) and strip the
+   reserved separators ('|', ';;') and '~' (live DEFINE char in the driver)
+   from labels.  Rows without a valid instant are skipped (the driver would
+   skip them anyway). */
+function markersInline(){
+  return markerRows().map(r => {
     const d = parseLocal(r.when);
-    const when = d ? fmtFull(d) : 'YYYY-MM-DD HH:MI';
-    const label = (r.label || 'milestone').replace(/'/g, "''");
-    lines.push("@@sql/lib/marker '"+when+"' '"+label+"'");
-  });
-  return lines.join('\n');
+    if(!d) return null;                       // no valid instant -> skip
+    const label = (r.label || 'milestone')
+      .replace(/'/g, '’')                // ' -> ’  (single-quote-free transport)
+      .replace(/\|/g, '/')                    // '|' is the WHEN|LABEL separator
+      .replace(/;;/g, ';')                    // ';;' is the milestone separator
+      .replace(/~/g, '-')                     // '~' is the driver's live DEFINE char
+      .replace(/&/g, '+')                     // '&' is SQL*Plus' DEFINE-time substitution char
+      .trim();
+    return fmtFull(d) + '|' + label;
+  }).filter(Boolean).join(';;');
 }
 
 /* -------------------------------------------------------------- notes */
@@ -949,11 +955,6 @@ function render(){
   setCode('out_shell', '# '+summarize(cfg), buildShell(cfg));
   setCode('out_sql_interactive', '-- connect, then paste into SQL*Plus', buildSqlInteractive(cfg));
 
-  // marker output
-  const mc = markerContent();
-  if(mc){ $('marker_out_wrap').classList.remove('hidden'); $('marker_content').textContent = mc; }
-  else  { $('marker_out_wrap').classList.add('hidden'); }
-
   const v = validate(cfg);
   renderNotes(v);
   markFields(v.bad);
@@ -961,13 +962,13 @@ function render(){
 
 /* ------------------------------------------------------------- presets */
 const PRESETS = [
-  {name:'Default · weekly', desc:'This hour vs the same hour on the 4 previous weeks — the classic like-for-like trend.', set:{temode:'auto', win_hours:'1', weeks_back:'4', top_n:'10', inst_num:'0', step:'1', step_unit:'w', template:'comprehensive', debug:false, marker_file:''}, markers:[]},
+  {name:'Default · weekly', desc:'This hour vs the same hour on the 4 previous weeks — the classic like-for-like trend.', set:{temode:'auto', win_hours:'1', weeks_back:'4', top_n:'10', inst_num:'0', step:'1', step_unit:'w', template:'comprehensive', debug:false}, markers:[]},
   {name:'Hourly walkthrough (12 h)', desc:'The last 12 consecutive hours, walking straight back — spot an intraday spike.', set:{temode:'auto', win_hours:'1', weeks_back:'11', step:'1', step_unit:'h', template:'comprehensive'}},
   {name:'Daily · one week', desc:'This hour across each of the last 7 days — the day-over-day pattern.', set:{temode:'auto', win_hours:'1', weeks_back:'6', step:'1', step_unit:'d', template:'comprehensive'}},
   {name:'Developer view', desc:'Weekly trend with app-focused metrics & waits — throughput, SQL, contention.', set:{temode:'auto', template:'dev'}},
   {name:'Lean triage', desc:'Weekly trend, minimal metric set — a fast first glance.', set:{temode:'auto', template:'simple'}},
   {name:'Top-25 SQL', desc:'Weekly trend, but 25 rows in every SQL ranking — a wider net.', set:{temode:'auto', top_n:'25'}},
-  {name:'Post-release (hourly + marker)', desc:'Hourly windows with a release marker line — before/after a deploy.', set:{temode:'auto', win_hours:'1', weeks_back:'6', step:'1', step_unit:'h', template:'comprehensive', marker_file:'my_markers.sql'}, markers:[{when:'', label:'Application release'}]}
+  {name:'Post-release (hourly + marker)', desc:'Hourly windows with a release marker line — before/after a deploy.', set:{temode:'auto', win_hours:'1', weeks_back:'6', step:'1', step_unit:'h', template:'comprehensive'}, markers:[{when:'', label:'Application release'}]}
 ];
 function applyPreset(p){
   const s = p.set;
@@ -976,7 +977,7 @@ function applyPreset(p){
     syncTeSeg();
     $('te_specific_wrap').classList.toggle('hidden', s.temode!=='specific');
   }
-  ['win_hours','weeks_back','top_n','inst_num','step','marker_file'].forEach(k=>{ if(s[k]!==undefined) $(k).value = s[k]; });
+  ['win_hours','weeks_back','top_n','inst_num','step'].forEach(k=>{ if(s[k]!==undefined) $(k).value = s[k]; });
   if(s.step_unit!==undefined) $('step_unit').value = s.step_unit;
   if(s.template!==undefined) $('template').value = s.template;
   if(s.debug!==undefined) $('debug').checked = !!s.debug;
@@ -1072,10 +1073,10 @@ function init(){
   }));
 
   // all inputs -> re-render
-  ['connect','target_dt','win_hours','weeks_back','step','step_unit','top_n','inst_num','template','debug','marker_file']
+  ['connect','target_dt','win_hours','weeks_back','step','step_unit','top_n','inst_num','template','debug']
     .forEach(id => { const el=$(id); el.addEventListener('input', render); el.addEventListener('change', render); });
 
-  $('marker_add').addEventListener('click', ()=>{ addMarkerRow(); afterMarkerChange(); render(); });
+  $('marker_add').addEventListener('click', ()=>{ addMarkerRow(); render(); });
 
   // tabs
   document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', ()=>{
@@ -1092,17 +1093,8 @@ function init(){
     copyText($(btn.getAttribute('data-copy')).textContent, btn);
   });
 
-  // download marker file
-  $('marker_download').addEventListener('click', ()=>{
-    const text = markerContent(); if(!text) return;
-    const name = ($('marker_file').value.trim() || 'my_markers.sql').replace(/[^\w.\-]/g,'_');
-    const blob = new Blob([text+'\n'], {type:'text/plain'});
-    const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
-  });
-
   // select the sample value on focus so it's replaced in one go
-  ['connect','marker_file'].forEach(id => $(id).addEventListener('focus', e => e.target.select()));
+  $('connect').addEventListener('focus', e => e.target.select());
 
   // mobile-only: jump to the generated command
   $('jump_cmd').addEventListener('click', ()=>{

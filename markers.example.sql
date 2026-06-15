@@ -18,6 +18,22 @@
 --   SQL> DEFINE marker_file = 'my_markers.sql'
 --   SQL> @awr_trend.sql
 --
+-- FILE-FREE alternative -- if you don't want a file on disk, pass the same
+-- milestones inline.  Each is "WHEN|LABEL"; join them with ";;":
+--
+--   MARKERS='2026-04-20 14:00|Applied patch 19.22;;2026-05-01 02:00|Index rebuild' \
+--       ./run_awr_trend.sh user/pw@svc
+--
+-- or on the pure-SQL*Plus path:
+--
+--   SQL> @sql/defaults.sql
+--   SQL> DEFINE markers = '2026-04-20 14:00|Applied patch 19.22;;2026-05-01 02:00|Index rebuild'
+--   SQL> @awr_trend.sql
+--
+-- The inline form (parsed by sql/lib/markers_inline.sql) renders identical
+-- markers, but a LABEL there must avoid a straight single quote, '|', ';;'
+-- and '~'.  Use this file (marker_file) for labels that need those.
+--
 -- Each marker is one line:
 --
 --   @@sql/lib/marker '<YYYY-MM-DD HH24:MI>' '<label>'

@@ -49,6 +49,9 @@
 #   ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y
 #   # With user-defined milestone markers on the timeline charts:
 #   ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive N my_markers.sql
+#   # Same, but file-free (markers inline in the MARKERS env var):
+#   MARKERS='2026-06-10 09:00|Release 2.0;;2026-06-11 03:00|Patch 19.22' \
+#       ./run_awr_trend.sh user/pw@svc AUTO
 #   # Don't remember the argument order?  Let the configurator drive:
 #   ./run_awr_trend.sh --configure
 #
@@ -67,6 +70,16 @@ DEF_STEP_UNIT='w'
 DEF_TEMPLATE='comprehensive'
 DEF_DEBUG='N'
 DEF_MARKER_FILE=''
+
+# File-free inline timeline markers travel in the MARKERS environment
+# variable (not a positional arg, so the positional order stays symmetric
+# with awr_trend.sql), e.g.
+#   MARKERS='2026-06-10 09:00|Release 2.0;;2026-06-11 03:00|Patch' \
+#       ./run_awr_trend.sh / AUTO
+# Parsed in-session by sql/lib/markers_inline.sql; a marker_file positional
+# arg, when given, takes precedence.  LABEL must avoid a straight single
+# quote, '|', ';;' and '~' (see sql/lib/markers_inline.sql).  Default empty.
+: "${MARKERS:=}"
 
 # ---- optional terminal styling (degrades to plain text) --------------------
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && tput sgr0 >/dev/null 2>&1; then
@@ -98,6 +111,11 @@ Positional arguments (all but <connect> are optional, left to right):
   template      metric/wait set: $(list_templates | sed 's/ /, /g')   [${DEF_TEMPLATE}]
   debug         Y prints per-section progress markers to stdout  [${DEF_DEBUG}]
   marker_file   optional timeline-marker config file path        [none]
+
+Environment variables:
+  MARKERS       file-free timeline markers, "WHEN|LABEL" pairs joined by ";;",
+                e.g. MARKERS='2026-06-10 09:00|Release 2.0;;...'  (marker_file,
+                if given, wins).  LABEL must avoid ' | ;; and ~.
 
 Tip: not sure which arguments you need?  Run  ./run_awr_trend.sh --configure
 USAGE
@@ -144,6 +162,7 @@ DEFINE step_unit  = '${STEP_UNIT}'
 DEFINE template   = '${TEMPLATE}'
 DEFINE debug      = '${DEBUG}'
 DEFINE marker_file = '${MARKER_FILE}'
+DEFINE markers = '${MARKERS}'
 @@awr_trend.sql
 EXIT
 EOF
@@ -304,7 +323,12 @@ build_shell_cmd() {
     for (( i = 1; i < ${#vals[@]}; i++ )); do
         [[ "${vals[$i]}" != "${defs[$i]}" ]] && last=$i
     done
-    local out='./run_awr_trend.sh'
+    # File-free inline markers ride in the MARKERS env var, so prefix the
+    # command with a MARKERS='...' assignment when one is set (and no
+    # marker_file path overrides it).
+    local out=''
+    [[ -n "$MARKERS" ]] && out+="MARKERS=$(shq "$MARKERS") "
+    out+='./run_awr_trend.sh'
     for (( i = 0; i <= last; i++ )); do
         out+=" $(shq "${vals[$i]}")"
     done
@@ -325,6 +349,7 @@ DEFINE step_unit  = '${STEP_UNIT}'
 DEFINE template   = '${TEMPLATE}'
 DEFINE debug      = '${DEBUG}'
 DEFINE marker_file = '${MARKER_FILE}'
+DEFINE markers = '${MARKERS}'
 @@awr_trend.sql
 EXIT
 EOF
@@ -361,6 +386,7 @@ print_summary() {
     printf '  %-14s %s  %s%s%s\n' 'template'    "$TEMPLATE" "$DIM" "$(template_desc "$TEMPLATE")" "$RST"
     printf '  %-14s %s\n' 'debug'       "$DEBUG"
     printf '  %-14s %s\n' 'marker_file' "${MARKER_FILE:-(none)}"
+    [[ -n "$MARKERS" ]] && printf '  %-14s %s\n' 'markers' "$MARKERS"
     echo "${BOLD}=================================================================${RST}"
     print_span_hint
     echo

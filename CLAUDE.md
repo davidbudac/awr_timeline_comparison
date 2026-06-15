@@ -116,7 +116,10 @@ sql/
     ├── js_wait_colors.plsql     -- shared OEM-13c-aligned wait_class color palette
     ├── js_markers.plsql         -- inits window.AWR_MARKERS + AWR_markLine() (timeline markers)
     ├── marker.sql               -- emit one user-defined timeline marker (~1=instant, ~2=label)
-    ├── no_markers.sql           -- no-op stub used when marker_file is empty
+    ├── markers_inline.sql       -- file-free twin of marker.sql: parses all
+    │                               milestones out of the inline ~markers var
+    │                               ("WHEN|LABEL;;...") so no file is needed
+    ├── no_markers.sql           -- no-op stub used when neither marker_file nor markers is set
     └── templates/               -- per-template metric + wait-event target lists
         ├── comprehensive/       -- default; full curated lists (27 SYSSTAT + 23 SYSMETRIC,
         │   │                       and a '*' sentinel for waits = no event filter)
@@ -241,9 +244,9 @@ will leak into the HTML.** All user-visible strings (SQL text, event
 names, metric names) must be wrapped in `DBMS_XMLGEN.CONVERT(...)`.
 
 ### Substitution variables
-Ten user-facing vars: `target_end`, `win_hours`, `weeks_back`, `top_n`,
-`inst_num`, `step`, `step_unit`, `template`, `debug`, `marker_file`.
-`inst_num = 0` means
+Eleven user-facing vars: `target_end`, `win_hours`, `weeks_back`, `top_n`,
+`inst_num`, `step`, `step_unit`, `template`, `debug`, `marker_file`,
+`markers`. `inst_num = 0` means
 aggregate across RAC instances; any other value filters to that
 instance. `target_end = 'AUTO'` means "prior full hour relative to
 SYSDATE" (resolved in the driver into `target_end_resolved`).
@@ -259,8 +262,13 @@ above. `debug` is a UI-only toggle: any case-insensitive truthy form
 and unmutes the per-section progress markers; everything else
 (including the default `N`) resolves into `'OFF'`. See "Debug logging"
 below. `marker_file` is an optional path to a timeline-marker config
-file; empty/unset (the default) means no markers. See "Timeline markers"
-below. The driver resolves `step_hours = step * (1|24|168)` plus
+file; empty/unset (the default) means no markers. `markers` is the
+**file-free** alternative: an inline list of milestones
+(`'WHEN|LABEL;;WHEN|LABEL'`) parsed in-session by
+`sql/lib/markers_inline.sql`, so a self-contained SQL\*Plus session (or
+`MARKERS=… run_awr_trend.sh`) needs nothing on disk. `marker_file` wins
+when both are set. See "Timeline markers" below. The driver resolves
+`step_hours = step * (1|24|168)` plus
 `period_unit_short` / `period_unit_long` / `period_unit_title` /
 `period_step_label` / `period_axis_fmt` once up front; every section
 uses `~step_hours/24` (NOT the literal `7`) as the cadence multiplier.
@@ -359,13 +367,36 @@ multi-DBID path can only be validated on a real migrated PDB (dbmint is a
 single-DBID CDB).
 
 ### Timeline markers
-`marker_file` lets a user annotate the dated charts with milestones
-(patch applied, index rebuild, incident, release). It is an **optional**
-path to a config file; the driver resolves `marker_include` via the same
-CASE-to-path trick as `template_dir` — empty `marker_file` (TRIM of `''`
-is NULL in Oracle) → `sql/lib/no_markers.sql` (no-op stub), otherwise the
-caller's path. The prologue always `@@`-includes exactly one marker file,
-so there is no conditional-include problem.
+Two vars let a user annotate the dated charts with milestones (patch
+applied, index rebuild, incident, release): `marker_file` (a path to a
+config file on disk) and `markers` (a **file-free** inline list). The
+driver resolves `marker_include` via the same CASE-to-path trick as
+`template_dir`, with a three-way priority (TRIM of `''` is NULL in
+Oracle, so an empty var is "absent"):
+1. `marker_file` set → the caller's path (the on-disk escape hatch).
+2. else `markers` set → `sql/lib/markers_inline.sql` (parses the inline
+   var).
+3. else → `sql/lib/no_markers.sql` (no-op stub).
+The prologue always `@@`-includes exactly one marker file, so there is no
+conditional-include problem.
+
+**File-free path (`markers`).** The inline var is a list of milestones,
+each `WHEN|LABEL`, separated by `;;`, e.g. `DEFINE markers = '2026-06-10
+09:00|Release 2.0;;2026-06-11 03:00|Patch'`. `sql/lib/markers_inline.sql`
+splits it (`INSTR`-based, no regex) and calls the same emit as
+`sql/lib/marker.sql` per milestone, so the pushed `{t,label}` objects —
+and therefore the rendered markers — are identical to the file path. The
+whole value rides through three quoting layers (shell single-quotes →
+SQL\*Plus `DEFINE` → a PL/SQL string literal), so the transport must be
+**single-quote-free**: the configurator swaps a straight apostrophe to a
+typographic `’` and strips the reserved tokens (`|`, `;;`, `~`, and `&`
+— the last because `DEFINE markers='…'` is read while `&` is still the
+live substitution char, before the driver sets `~`). For labels that
+genuinely need those characters, use `marker_file`. The wrapper carries
+`markers` in the **`MARKERS` environment variable** (not a positional
+arg, to keep the positional order symmetric with `awr_trend.sql`); the
+web configurator emits `MARKERS='…' ./run_awr_trend.sh …` for the shell
+and `DEFINE markers='…'` for the SQL\*Plus block.
 
 Flow: `sql/lib/js_markers.plsql` (included right after `js_sparkline.plsql`)
 emits one `<script>` that inits `window.AWR_MARKERS=[]` and defines
@@ -382,6 +413,12 @@ NOT calendar timelines (x-axis is week offsets), so they get no markers.
 Gotchas:
 - `sql/lib/marker.sql` runs under the driver's `SET DEFINE '~'`, so its
   positional parameters are `~1` / `~2`, **not** `&1` / `&2`.
+- `sql/lib/markers_inline.sql` reads its payload from `~markers` (so it
+  too runs under `SET DEFINE '~'`) and emits the **byte-identical** push
+  `<script>` as `marker.sql`. It is the only consumer of the `markers`
+  var; if you change the inline format (the `|` / `;;` separators, or the
+  configurator's character swaps), keep both this file and the
+  configurator's `markersInline()` in lockstep.
 - The config file uses `@@sql/lib/marker` (full path from the project
   root) because SQL\*Plus resolves nested `@@` paths against the outermost
   caller — same rule as every other `@@sql/lib/` include.

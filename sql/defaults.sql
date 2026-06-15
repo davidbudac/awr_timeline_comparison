@@ -29,3 +29,11 @@ DEFINE debug      = 'N'
 -- label milestones drawn as vertical lines on the dated charts).  Empty =
 -- no markers.  See markers.example.sql for the format.
 DEFINE marker_file = ''
+-- markers optional file-free timeline markers: a list of milestones
+-- "WHEN|LABEL" separated by ";;", e.g.
+--   DEFINE markers = '2026-06-10 09:00|Release 2.0;;2026-06-11 03:00|Patch'
+-- Parsed in-session by sql/lib/markers_inline.sql, so no file on disk is
+-- needed.  Ignored when marker_file is set (the file wins).  LABEL must not
+-- contain a straight single quote, '|', ';;', or '~'; see that file's
+-- header.  Empty = no inline markers.
+DEFINE markers = ''

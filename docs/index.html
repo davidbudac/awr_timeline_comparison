@@ -732,6 +732,8 @@ SQL&gt; <span class="k">@awr_trend.sql</span></pre>
                 <td><code>Y</code> prints timestamped per-section progress markers to stdout; the HTML is unaffected</td></tr>
             <tr><td><code>marker_file</code></td><td><em>(empty)</em></td>
                 <td>Optional timeline-marker config — milestones drawn on the dated charts</td></tr>
+            <tr><td><code>MARKERS</code> <em>(env)</em></td><td><em>(empty)</em></td>
+                <td>File-free alternative to <code>marker_file</code> — inline <code>WHEN|LABEL</code> milestones joined by <code>;;</code></td></tr>
           </tbody>
         </table>
       </div>
@@ -789,6 +791,15 @@ SQL&gt; <span class="k">@awr_trend.sql</span></pre>
 @@sql/lib/marker <span class="s">'2026-04-20 14:00'</span> <span class="s">'Applied patch 19.22'</span>
 @@sql/lib/marker <span class="s">'2026-05-01 02:00'</span> <span class="s">'Index rebuild on SALES'</span>
 @@sql/lib/marker <span class="s">'2026-05-10 09:30'</span> <span class="s">'Optimizer stats gather'</span></pre>
+
+      <p>
+        Don't want a file? Pass the same milestones <strong>inline</strong> — each
+        <code>WHEN|LABEL</code>, joined by <code>;;</code> — in the <code>MARKERS</code>
+        environment variable (or <code>DEFINE&nbsp;markers</code> on the pure SQL*Plus
+        path). The <a href="configurator.html">configurator</a> builds it for you.
+      </p>
+<pre>MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22;;2026-05-01 02:00|Index rebuild'</span> \
+    ./run_awr_trend.sh user/pw@svc</pre>
 
       <figure class="diagram">
         <svg viewBox="0 0 840 235" xmlns="http://www.w3.org/2000/svg" role="img"
