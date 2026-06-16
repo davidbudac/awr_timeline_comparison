@@ -56,8 +56,15 @@ gracefully.
   explicit `return 0` or it will trip `set -e` at the call site — see
   `print_span_hint`. The configurator is pure UX; it issues no SQL itself
   and does not touch the read-only invariant.
-- `sqlplus user/pw@svc @sql/defaults.sql @awr_trend.sql`
-  — pure-SQL\*Plus equivalent. **The driver deliberately does not DEFINE defaults itself** so an explicit caller override is never clobbered. Always load `sql/defaults.sql` (or set DEFINEs manually) before `@awr_trend.sql`.
+- pure-SQL\*Plus equivalent — load `sql/defaults.sql` then run the driver as
+  **two separate start commands** (a heredoc, or two `SQL>` commands):
+  ```
+  sqlplus user/pw@svc <<'SQL'
+  @sql/defaults.sql
+  @awr_trend.sql
+  SQL
+  ```
+  **The driver deliberately does not DEFINE defaults itself** so an explicit caller override is never clobbered. Always load `sql/defaults.sql` (or set DEFINEs manually) before `@awr_trend.sql`. **Do not** put both on one command line (`sqlplus … @sql/defaults.sql @awr_trend.sql`): SQL\*Plus runs only the first `@file` and treats `@awr_trend.sql` as a *parameter* to it, so the driver never executes — a silent no-op (exit 0, empty log, no report). Verified on dbmint Jun 2026.
 - `sqlplus user/pw@svc @side/create_weekly_baselines.sql`
   — optional, independent of the main report. Creates `DBA_HIST_BASELINE`
   rows named `WK_<IYYY>_<IW>`. **This is the only script that writes

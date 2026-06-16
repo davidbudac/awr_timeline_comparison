@@ -3,8 +3,15 @@
 -- Canonical default values for awr_trend.sql substitution variables.
 -- awr_trend.sql does NOT load this file itself, so an explicit caller
 -- override (DEFINE before @-loading the driver) is never clobbered.
--- Callers that want defaults must @-load this file first, e.g.:
---   sqlplus user/pw@svc @sql/defaults.sql @awr_trend.sql
+-- Callers that want defaults must @-load this file first, then run the
+-- driver as a SEPARATE start command (a heredoc, or two SQL> commands) --
+-- NOT both @files on one command line: SQL*Plus runs only the first @file
+-- and treats @awr_trend.sql as a parameter to it, so the driver silently
+-- never runs (exit 0, no report).  e.g.:
+--   sqlplus user/pw@svc <<'SQL'
+--   @sql/defaults.sql
+--   @awr_trend.sql
+--   SQL
 -- The run_awr_trend.sh wrapper sets DEFINEs in its own heredoc instead
 -- of loading this file.
 --
