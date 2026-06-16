@@ -82,8 +82,15 @@ DEF_MARKER_FILE=''
 : "${MARKERS:=}"
 
 # ---- optional terminal styling (degrades to plain text) --------------------
+# NB: a missing capability must never be fatal.  Some terminfo entries (notably
+# several AIX terminal types) lack the half-bright `dim` cap, so `tput dim`
+# exits non-zero; without the `|| true` guards the assignment would inherit
+# that status and, under `set -e`, kill the whole script silently before it
+# ever reaches the dispatch below.  `|| true` makes each cap degrade to ''.
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && tput sgr0 >/dev/null 2>&1; then
-    BOLD="$(tput bold)"; DIM="$(tput dim)"; RST="$(tput sgr0)"
+    BOLD="$(tput bold 2>/dev/null || true)"
+    DIM="$(tput dim 2>/dev/null || true)"
+    RST="$(tput sgr0 2>/dev/null || true)"
 else
     BOLD=''; DIM=''; RST=''
 fi
