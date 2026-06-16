@@ -1,11 +1,18 @@
 --
 -- 11_top_sql_ash_breakdown.sql
--- Per-SQL ASH wait-event breakdown: for each SQL in section 06's top-N
--- pool (any of the 4 ranking dimensions + the per-exec regression),
--- render a stacked-area ECharts timeline showing how that SQL spent its
--- active time across individual wait events and CPU, bucketed by
--- bucket_hours and spanning the same target_end .. target_end-weeks_back
--- range as section 09.
+-- Per-SQL ASH breakdown: for each SQL in section 06's top-N pool (any of
+-- the 4 ranking dimensions + the per-exec regression), render a
+-- stacked-area ECharts timeline showing how that SQL spent its active
+-- time, bucketed by bucket_hours and spanning the same target_end ..
+-- target_end-weeks_back range as section 09.
+--
+-- Each card carries a "Group by" toggle that re-stacks the SAME ASH
+-- samples three ways: wait event (default; CPU-mapped), module, or
+-- action (the ASH module/action columns). The three breakdowns are
+-- computed from one shared, pre-aggregated base scan (ash_base, then
+-- three GROUP BY roll-ups tagged with a 'dim' discriminator) so ASH is
+-- read once. module/action buttons hide client-side when the SQL never
+-- set them (the dim collapses to a single '(none)' placeholder).
 --
 -- Pool source: replicates section 06's windows + agg + ranked +
 -- per_exec + delta_ranked + picked CTE chain inline (read-only
@@ -14,15 +21,15 @@
 -- samples and capped at v_max_charts entries so the report stays
 -- bounded on busy DBs.
 --
--- Per-SQL legend cap: top v_top_events individual event names (by
--- sample count) are rendered; the remainder lump into a single 'Other'
--- series. ON-CPU samples are a synthetic 'CPU' series. Idle waits are
--- excluded.
+-- Per-SQL legend cap: top v_top_events values per dimension (by sample
+-- count) are rendered; the remainder lump into a single 'Other' series.
+-- ON-CPU samples are a synthetic 'CPU' series in the event dim (and keep
+-- their real module/action in those dims). Idle waits are excluded.
 --
 -- Coloring: js_wait_colors.plsql is wait_class-only and unusable for
--- individual event names. Section emits a small deterministic
--- event-name -> HSL hash function inline so the same event paints the
--- same color across every per-SQL chart on the page.
+-- individual event/module/action names. Section emits a small
+-- deterministic name -> HSL hash function inline so the same value
+-- paints the same color across every per-SQL chart on the page.
 --
 -- Read-only: pure SELECT against dba_hist_sqlstat, dba_hist_snapshot,
 -- dba_hist_active_sess_history, and dba_hist_sqltext. No scratch table.
@@ -95,6 +102,15 @@ DECLARE
     v_evt_swap      t_evt_rec;
     v_prefix        VARCHAR2(40);
 
+    -- Stacking dimensions offered per SQL card. 'event' is the historic
+    -- default (wait event, CPU-mapped); 'module'/'action' come from the
+    -- ASH module/action columns. Codes are woven into the cell-store keys
+    -- (sql_id|dim|bucket|value) and the per-card toggle's data-dim attr;
+    -- labels are the button text. Keep the two lists positionally aligned.
+    TYPE t_strs IS TABLE OF VARCHAR2(20);
+    v_dim_codes  t_strs := t_strs('event', 'module', 'action');
+    v_dim_labels t_strs := t_strs('Wait event', 'Module', 'Action');
+
     @@sql/lib/put_clob_chunked.plsql
 BEGIN
     DBMS_LOB.CREATETEMPORARY(v_hours_json, TRUE);
@@ -120,12 +136,16 @@ BEGIN
 
     DBMS_OUTPUT.PUT_LINE('<section id="topsql-ash"><h2>Top SQL ASH breakdown '
         || '(' || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
-        || ', per SQL, stacked by wait event)</h2>');
+        || ', per SQL, stacked by wait event / module / action)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 10px 0">'
         || 'For each SQL in the Top-N pool (union across all ranking dimensions), '
         || 'per-bucket ASH samples split by individual wait event '
-        || '(top ' || v_top_events || ' per SQL by sample count; '
+        || '(top ' || v_top_events || ' per dimension by sample count; '
         || 'remainder grouped as <b>Other</b>; <b>CPU</b> = ON-CPU). '
+        || 'Use the <b>Group by</b> toggle on each card to re-stack the same '
+        || 'samples by <b>module</b> or <b>action</b> '
+        || '(<code>module</code>/<code>action</code> from ASH; shown only when '
+        || 'the SQL sets them). '
         || '<code>dba_hist_active_sess_history</code>, '
         || TO_CHAR(CAST(v_range_start AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
         || ' &rarr; '
@@ -175,10 +195,12 @@ BEGIN
     -- Single big ASH cursor:
     --   * re-derive section 06's "picked" pool inline (no shared state),
     --   * rank that pool by total ASH activity, cap to v_max_charts,
-    --   * bucket ASH by (sql_id, bucket_key, event_name) over the
-    --     full timeline range, with ON-CPU mapped to 'CPU',
-    --   * per-SQL DENSE_RANK events by sample count and lump rank >
-    --     v_top_events into 'Other'.
+    --   * bucket ASH once into ash_base keyed by (sql_id, bucket_key,
+    --     event, module, action), with ON-CPU mapped to 'CPU',
+    --   * roll ash_base up three ways (dim = event/module/action) so the
+    --     row stream is one (sql_id, dim, bucket_key, value) per cell,
+    --   * per (sql_id, dim) DENSE_RANK values by sample count and lump
+    --     rank > v_top_events into 'Other'.
     --
     -- agg/ranked/per_exec/delta_ranked/picked are verbatim slices of
     -- sql/06_top_sql.sql lines 91-189. Kept in sync by hand; if 06
@@ -275,12 +297,20 @@ BEGIN
         pool AS (
             SELECT sql_id FROM pool_ranked WHERE rn <= v_max_charts
         ),
-        ash_raw AS (
-            SELECT a.sql_id,
+        -- Single ASH scan, pre-aggregated to (sql_id, bucket, event, module,
+        -- action). MATERIALIZE so the three dimension roll-ups below re-read
+        -- this compact set instead of re-scanning the (busy) ASH view three
+        -- times. ON-CPU samples map to the synthetic 'CPU' event but keep
+        -- their real module/action (a CPU sample still belongs to a module).
+        ash_base AS (
+            SELECT /*+ MATERIALIZE */
+                   a.sql_id,
                    FLOOR(((CAST(a.sample_time AS DATE) - v_range_start) * 24)
                          / v_bucket_hours) AS bucket_key,
                    CASE WHEN a.session_state = 'ON CPU' THEN 'CPU'
-                        ELSE NVL(a.event, 'unknown') END AS event_name,
+                        ELSE NVL(a.event, 'unknown') END AS ev,
+                   NVL(a.module, '(none)') AS modn,
+                   NVL(a.action, '(none)') AS actn,
                    COUNT(*) AS samples
             FROM   dba_hist_active_sess_history a
             JOIN   pool p ON p.sql_id = a.sql_id
@@ -293,49 +323,79 @@ BEGIN
                      FLOOR(((CAST(a.sample_time AS DATE) - v_range_start) * 24)
                            / v_bucket_hours),
                      CASE WHEN a.session_state = 'ON CPU' THEN 'CPU'
-                          ELSE NVL(a.event, 'unknown') END
+                          ELSE NVL(a.event, 'unknown') END,
+                     NVL(a.module, '(none)'),
+                     NVL(a.action, '(none)')
         ),
-        event_totals AS (
-            SELECT sql_id, event_name, SUM(samples) AS evt_total
+        -- Roll the shared base up three ways, each tagged with its dim so the
+        -- top-N lumping and the PL/SQL cell store partition on (sql_id, dim).
+        -- Every sample contributes once to each dim, so per-dim grand totals
+        -- are identical (used below to count the per-SQL total only once).
+        -- CAST the dim discriminator to VARCHAR2: a bare UNION of CHAR
+        -- literals of differing lengths ('event'/'module'/'action') is
+        -- typed CHAR(6) by Oracle and blank-pads 'event' to 'event ',
+        -- which would break both the r.dim='event' test and the
+        -- 'sql_id|dim|' prefix matching in the emission loop below.
+        ash_raw AS (
+            SELECT sql_id, bucket_key, CAST('event'  AS VARCHAR2(6)) AS dim,
+                   ev   AS dim_value, SUM(samples) AS samples
+            FROM   ash_base GROUP BY sql_id, bucket_key, ev
+            UNION ALL
+            SELECT sql_id, bucket_key, CAST('module' AS VARCHAR2(6)) AS dim,
+                   modn AS dim_value, SUM(samples) AS samples
+            FROM   ash_base GROUP BY sql_id, bucket_key, modn
+            UNION ALL
+            SELECT sql_id, bucket_key, CAST('action' AS VARCHAR2(6)) AS dim,
+                   actn AS dim_value, SUM(samples) AS samples
+            FROM   ash_base GROUP BY sql_id, bucket_key, actn
+        ),
+        dim_totals AS (
+            SELECT sql_id, dim, dim_value, SUM(samples) AS dv_total
             FROM   ash_raw
-            GROUP  BY sql_id, event_name
+            GROUP  BY sql_id, dim, dim_value
         ),
         ranked_events AS (
-            SELECT ar.sql_id, ar.bucket_key, ar.event_name, ar.samples,
+            SELECT ar.sql_id, ar.bucket_key, ar.dim, ar.dim_value, ar.samples,
                    DENSE_RANK() OVER (
-                       PARTITION BY ar.sql_id
-                       ORDER BY et.evt_total DESC,
-                                ar.event_name) AS erank
+                       PARTITION BY ar.sql_id, ar.dim
+                       ORDER BY dt.dv_total DESC,
+                                ar.dim_value) AS erank
             FROM   ash_raw ar
-            JOIN   event_totals et
-                ON et.sql_id = ar.sql_id
-               AND et.event_name = ar.event_name
+            JOIN   dim_totals dt
+                ON dt.sql_id    = ar.sql_id
+               AND dt.dim       = ar.dim
+               AND dt.dim_value = ar.dim_value
         ),
         lumped AS (
-            SELECT sql_id, bucket_key,
-                   CASE WHEN erank <= v_top_events THEN event_name ELSE 'Other' END AS event_name,
+            SELECT sql_id, bucket_key, dim,
+                   CASE WHEN erank <= v_top_events THEN dim_value ELSE 'Other' END AS dim_value,
                    SUM(samples) AS samples
             FROM   ranked_events
-            GROUP BY sql_id, bucket_key,
-                     CASE WHEN erank <= v_top_events THEN event_name ELSE 'Other' END
+            GROUP BY sql_id, bucket_key, dim,
+                     CASE WHEN erank <= v_top_events THEN dim_value ELSE 'Other' END
         )
-        SELECT sql_id, bucket_key, event_name, samples
+        SELECT sql_id, bucket_key, dim, dim_value, samples
         FROM   lumped
-        ORDER  BY sql_id, bucket_key, event_name
+        ORDER  BY sql_id, dim, bucket_key, dim_value
     ) LOOP
-        v_cells(r.sql_id || '|' || TO_CHAR(r.bucket_key) || '|' || r.event_name) := r.samples;
+        v_cells(r.sql_id || '|' || r.dim || '|' || TO_CHAR(r.bucket_key)
+                || '|' || r.dim_value) := r.samples;
 
-        v_evt_key := r.sql_id || '|' || r.event_name;
+        v_evt_key := r.sql_id || '|' || r.dim || '|' || r.dim_value;
         IF v_evt_totals.EXISTS(v_evt_key) THEN
             v_evt_totals(v_evt_key) := v_evt_totals(v_evt_key) + r.samples;
         ELSE
             v_evt_totals(v_evt_key) := r.samples;
         END IF;
 
-        IF v_sql_totals.EXISTS(r.sql_id) THEN
-            v_sql_totals(r.sql_id) := v_sql_totals(r.sql_id) + r.samples;
-        ELSE
-            v_sql_totals(r.sql_id) := r.samples;
+        -- Per-dim grand totals are identical, so accumulate the per-SQL
+        -- total from the 'event' dim only (counting all dims would triple it).
+        IF r.dim = 'event' THEN
+            IF v_sql_totals.EXISTS(r.sql_id) THEN
+                v_sql_totals(r.sql_id) := v_sql_totals(r.sql_id) + r.samples;
+            ELSE
+                v_sql_totals(r.sql_id) := r.samples;
+            END IF;
         END IF;
     END LOOP;
 
@@ -369,10 +429,12 @@ BEGIN
         END LOOP;
     END LOOP;
 
-    -- Compute dominant event per SQL by walking v_evt_totals once.
+    -- Compute dominant event per SQL by walking v_evt_totals once. The card
+    -- header reflects the default ('event') view, so scope the scan to that
+    -- dim's keys (sql_id|event|<event name>).
     FOR i IN 1 .. v_order.COUNT LOOP
         v_sid    := v_order(i).sid;
-        v_prefix := v_sid || '|';
+        v_prefix := v_sid || '|event|';
         v_dom_n  := -1;
         v_evt_key := v_evt_totals.FIRST;
         WHILE v_evt_key IS NOT NULL LOOP
@@ -433,6 +495,17 @@ BEGIN
             DBMS_OUTPUT.PUT_LINE('  <pre class="ash-sql-snippet">'
                 || DBMS_XMLGEN.CONVERT(v_sql_text(v_sid))
                 || '</pre>');
+            -- Per-card stacking-dimension toggle. Reuses the shared
+            -- .topsql-toggle pill styling (see _style.sql). JS wires the
+            -- buttons by data-ashdim-target = chart id and hides the
+            -- module/action buttons when the SQL never set them.
+            DBMS_OUTPUT.PUT_LINE('  <div class="topsql-toggle" '
+                || 'data-ashdim-target="ash-sql-' || v_sid || '">'
+                || '<span>Group by:</span>'
+                || '<button type="button" data-dim="event" class="active">Wait event</button>'
+                || '<button type="button" data-dim="module">Module</button>'
+                || '<button type="button" data-dim="action">Action</button>'
+                || '</div>');
             DBMS_OUTPUT.PUT_LINE('  <div class="chart-wrap chart-ash-sql" '
                 || 'id="ash-sql-' || v_sid || '"></div>');
             DBMS_OUTPUT.PUT_LINE('</div>');
@@ -467,70 +540,86 @@ BEGIN
             CONTINUE;
         END IF;
 
-        -- Collect this SQL's events into a sortable list.
-        v_events := t_evt_tab();
-        v_prefix := v_sid || '|';
-        v_evt_key := v_evt_totals.FIRST;
-        WHILE v_evt_key IS NOT NULL LOOP
-            IF INSTR(v_evt_key, v_prefix) = 1 THEN
-                v_events.EXTEND;
-                v_events(v_events.LAST).evt := SUBSTR(v_evt_key, LENGTH(v_prefix) + 1);
-                v_events(v_events.LAST).tot := v_evt_totals(v_evt_key);
-            END IF;
-            v_evt_key := v_evt_totals.NEXT(v_evt_key);
-        END LOOP;
-        -- Selection sort DESC by total then ASC by evt name. <=8 entries.
-        FOR a IN 1 .. v_events.COUNT - 1 LOOP
-            FOR b IN a + 1 .. v_events.COUNT LOOP
-                IF v_events(b).tot > v_events(a).tot
-                   OR (v_events(b).tot = v_events(a).tot AND v_events(b).evt < v_events(a).evt) THEN
-                    v_evt_swap := v_events(a); v_events(a) := v_events(b); v_events(b) := v_evt_swap;
-                END IF;
-            END LOOP;
-        END LOOP;
-
         IF v_first_sql THEN v_first_sql := FALSE;
         ELSE DBMS_OUTPUT.PUT_LINE(','); END IF;
         DBMS_OUTPUT.PUT_LINE('{id:"ash-sql-' || v_sid
             || '",sqlId:"' || v_sid
             || '",total:' || v_sql_totals(v_sid)
-            || ',events:[');
+            || ',dims:{');
 
-        v_first_evt := TRUE;
-        FOR k IN 1 .. v_events.COUNT LOOP
-            v_evt := v_events(k).evt;
-
-            -- Rebuild v_event_vals for this (sql, event) by walking all
-            -- buckets. Reused across iterations: TRIM then WRITEAPPEND.
-            DBMS_LOB.TRIM(v_event_vals, 0);
-            FOR bk IN 0 .. v_total_buckets - 1 LOOP
-                v_cell_key := v_sid || '|' || TO_CHAR(bk) || '|' || v_evt;
-                IF v_cells.EXISTS(v_cell_key) THEN
-                    v_n := v_cells(v_cell_key);
-                ELSE
-                    v_n := 0;
+        -- One series-set per stacking dimension (event / module / action).
+        FOR di IN 1 .. v_dim_codes.COUNT LOOP
+            -- Collect this (SQL, dim)'s values into a sortable list. Keys are
+            -- sql_id|dim|value, so the prefix pins both the SQL and the dim.
+            v_events := t_evt_tab();
+            v_prefix := v_sid || '|' || v_dim_codes(di) || '|';
+            v_evt_key := v_evt_totals.FIRST;
+            WHILE v_evt_key IS NOT NULL LOOP
+                IF INSTR(v_evt_key, v_prefix) = 1 THEN
+                    v_events.EXTEND;
+                    v_events(v_events.LAST).evt := SUBSTR(v_evt_key, LENGTH(v_prefix) + 1);
+                    v_events(v_events.LAST).tot := v_evt_totals(v_evt_key);
                 END IF;
-                v_aas := v_n / (v_bucket_hours * 360);
-                IF bk = 0 THEN
-                    v_buf := TO_CHAR(v_aas, 'FM99999990D0000',
-                                     'NLS_NUMERIC_CHARACTERS=''.,''');
-                ELSE
-                    v_buf := ',' || TO_CHAR(v_aas, 'FM99999990D0000',
-                                            'NLS_NUMERIC_CHARACTERS=''.,''');
-                END IF;
-                DBMS_LOB.WRITEAPPEND(v_event_vals, LENGTH(v_buf), v_buf);
+                v_evt_key := v_evt_totals.NEXT(v_evt_key);
+            END LOOP;
+            -- Selection sort DESC by total then ASC by name. <=8 entries.
+            FOR a IN 1 .. v_events.COUNT - 1 LOOP
+                FOR b IN a + 1 .. v_events.COUNT LOOP
+                    IF v_events(b).tot > v_events(a).tot
+                       OR (v_events(b).tot = v_events(a).tot AND v_events(b).evt < v_events(a).evt) THEN
+                        v_evt_swap := v_events(a); v_events(a) := v_events(b); v_events(b) := v_evt_swap;
+                    END IF;
+                END LOOP;
             END LOOP;
 
-            IF v_first_evt THEN v_first_evt := FALSE;
-            ELSE DBMS_OUTPUT.PUT_LINE(','); END IF;
-            DBMS_OUTPUT.PUT_LINE('{"name":"' || REPLACE(v_evt, '"', '\"')
-                || '","total":' || v_events(k).tot
-                || ',"vals":[');
-            put_clob_chunked(v_event_vals);
-            DBMS_OUTPUT.PUT_LINE(']}');
+            IF di > 1 THEN DBMS_OUTPUT.PUT_LINE(','); END IF;
+            DBMS_OUTPUT.PUT_LINE('"' || v_dim_codes(di) || '":{label:"'
+                || v_dim_labels(di) || '",series:[');
+
+            v_first_evt := TRUE;
+            FOR k IN 1 .. v_events.COUNT LOOP
+                v_evt := v_events(k).evt;
+
+                -- Rebuild v_event_vals for this (sql, dim, value) by walking
+                -- all buckets. Reused across iterations: TRIM then WRITEAPPEND.
+                DBMS_LOB.TRIM(v_event_vals, 0);
+                FOR bk IN 0 .. v_total_buckets - 1 LOOP
+                    v_cell_key := v_sid || '|' || v_dim_codes(di) || '|'
+                        || TO_CHAR(bk) || '|' || v_evt;
+                    IF v_cells.EXISTS(v_cell_key) THEN
+                        v_n := v_cells(v_cell_key);
+                    ELSE
+                        v_n := 0;
+                    END IF;
+                    v_aas := v_n / (v_bucket_hours * 360);
+                    IF bk = 0 THEN
+                        v_buf := TO_CHAR(v_aas, 'FM99999990D0000',
+                                         'NLS_NUMERIC_CHARACTERS=''.,''');
+                    ELSE
+                        v_buf := ',' || TO_CHAR(v_aas, 'FM99999990D0000',
+                                                'NLS_NUMERIC_CHARACTERS=''.,''');
+                    END IF;
+                    DBMS_LOB.WRITEAPPEND(v_event_vals, LENGTH(v_buf), v_buf);
+                END LOOP;
+
+                IF v_first_evt THEN v_first_evt := FALSE;
+                ELSE DBMS_OUTPUT.PUT_LINE(','); END IF;
+                -- Module/action values can carry backslashes, quotes, or
+                -- stray CR/LF; escape all four so the JS string literal and
+                -- the one-line PUT_LINE both stay well-formed.
+                DBMS_OUTPUT.PUT_LINE('{"name":"'
+                    || REPLACE(REPLACE(REPLACE(REPLACE(v_evt,
+                           '\', '\\'), '"', '\"'), CHR(13), ' '), CHR(10), ' ')
+                    || '","total":' || v_events(k).tot
+                    || ',"vals":[');
+                put_clob_chunked(v_event_vals);
+                DBMS_OUTPUT.PUT_LINE(']}');
+            END LOOP;
+
+            DBMS_OUTPUT.PUT_LINE(']}');   -- close series[] + this dim object
         END LOOP;
 
-        DBMS_OUTPUT.PUT_LINE(']}');
+        DBMS_OUTPUT.PUT_LINE('}}');       -- close dims{} + this chart object
     END LOOP;
 
     DBMS_OUTPUT.PUT_LINE(']};');
@@ -544,8 +633,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
     DBMS_OUTPUT.PUT_LINE('var bandColor="rgba(37,99,235,0.10)", bandCurrent="rgba(37,99,235,0.22)";');
     DBMS_OUTPUT.PUT_LINE('function eventColor(name){');
-    DBMS_OUTPUT.PUT_LINE('  if(name==="CPU")   return "#16a34a";');
-    DBMS_OUTPUT.PUT_LINE('  if(name==="Other") return "#94a3b8";');
+    DBMS_OUTPUT.PUT_LINE('  if(name==="CPU")    return "#16a34a";');
+    DBMS_OUTPUT.PUT_LINE('  if(name==="Other")  return "#94a3b8";');
+    DBMS_OUTPUT.PUT_LINE('  if(name==="(none)") return "#cbd5e1";');
     DBMS_OUTPUT.PUT_LINE('  if(window.AWR_WAIT_COLORS && window.AWR_WAIT_COLORS[name]) return window.AWR_WAIT_COLORS[name];');
     DBMS_OUTPUT.PUT_LINE('  var h=0; for(var i=0;i<name.length;i++){h=(h*31 + name.charCodeAt(i))|0;}');
     DBMS_OUTPUT.PUT_LINE('  var hue=((h%360)+360)%360;');
@@ -556,25 +646,50 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('(d.charts||[]).forEach(function(c){');
     DBMS_OUTPUT.PUT_LINE('  var el=document.getElementById(c.id); if(!el) return;');
     DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el);');
-    DBMS_OUTPUT.PUT_LINE('  chart.setOption({');
-    DBMS_OUTPUT.PUT_LINE('    tooltip:{trigger:"axis",axisPointer:{type:"line"},');
-    DBMS_OUTPUT.PUT_LINE('      valueFormatter:function(v){return v==null?"—":(+v).toFixed(2);}},');
-    DBMS_OUTPUT.PUT_LINE('    legend:{top:0,left:"center",textStyle:{color:fg,fontSize:10},itemWidth:10,itemHeight:7,type:"scroll"},');
-    DBMS_OUTPUT.PUT_LINE('    grid:{left:42,right:14,top:30,bottom:46,containLabel:true},');
-    DBMS_OUTPUT.PUT_LINE('    xAxis:{type:"category",data:d.hours,boundaryGap:false,axisLabel:{color:mu,fontSize:9,hideOverlap:true}},');
-    DBMS_OUTPUT.PUT_LINE('    yAxis:{type:"value",name:"AAS",nameTextStyle:{color:mu,fontSize:10},axisLabel:{color:mu,fontSize:9},splitLine:{lineStyle:{color:gr}}},');
-    DBMS_OUTPUT.PUT_LINE('    dataZoom:[{type:"inside"},{type:"slider",bottom:6,height:14,textStyle:{color:mu,fontSize:9}}],');
-    DBMS_OUTPUT.PUT_LINE('    series:c.events.map(function(e,i){');
-    DBMS_OUTPUT.PUT_LINE('      var color=eventColor(e.name);');
-    DBMS_OUTPUT.PUT_LINE('      var s={name:e.name,type:"line",stack:"total",smooth:false,symbol:"none",');
-    DBMS_OUTPUT.PUT_LINE('        areaStyle:{opacity:0.85},emphasis:{focus:"series"},');
-    DBMS_OUTPUT.PUT_LINE('        lineStyle:{width:0.5,color:color},itemStyle:{color:color},');
-    DBMS_OUTPUT.PUT_LINE('        data:e.vals};');
-    DBMS_OUTPUT.PUT_LINE('      if(i===0 && markAreaData.length){');
-    DBMS_OUTPUT.PUT_LINE('        s.markArea={silent:true,data:markAreaData,itemStyle:{opacity:1}};}');
-    DBMS_OUTPUT.PUT_LINE('      if(i===0){var __ml=window.AWR_markLine&&window.AWR_markLine(d.hours); if(__ml) s.markLine=__ml;}');
-    DBMS_OUTPUT.PUT_LINE('      return s;})');
-    DBMS_OUTPUT.PUT_LINE('  });');
+    -- render(dimKey) rebuilds the stack from c.dims[dimKey].series. notMerge
+    -- (the 2nd setOption arg = true) so switching dims fully replaces the
+    -- series set instead of merging stale series by index.
+    DBMS_OUTPUT.PUT_LINE('  function render(dimKey){');
+    DBMS_OUTPUT.PUT_LINE('    var dd=(c.dims&&c.dims[dimKey])||{series:[]};');
+    DBMS_OUTPUT.PUT_LINE('    var rows=dd.series||[];');
+    DBMS_OUTPUT.PUT_LINE('    chart.setOption({');
+    DBMS_OUTPUT.PUT_LINE('      tooltip:{trigger:"axis",axisPointer:{type:"line"},');
+    DBMS_OUTPUT.PUT_LINE('        valueFormatter:function(v){return v==null?"—":(+v).toFixed(2);}},');
+    DBMS_OUTPUT.PUT_LINE('      legend:{top:0,left:"center",textStyle:{color:fg,fontSize:10},itemWidth:10,itemHeight:7,type:"scroll"},');
+    DBMS_OUTPUT.PUT_LINE('      grid:{left:42,right:14,top:30,bottom:46,containLabel:true},');
+    DBMS_OUTPUT.PUT_LINE('      xAxis:{type:"category",data:d.hours,boundaryGap:false,axisLabel:{color:mu,fontSize:9,hideOverlap:true}},');
+    DBMS_OUTPUT.PUT_LINE('      yAxis:{type:"value",name:"AAS",nameTextStyle:{color:mu,fontSize:10},axisLabel:{color:mu,fontSize:9},splitLine:{lineStyle:{color:gr}}},');
+    DBMS_OUTPUT.PUT_LINE('      dataZoom:[{type:"inside"},{type:"slider",bottom:6,height:14,textStyle:{color:mu,fontSize:9}}],');
+    DBMS_OUTPUT.PUT_LINE('      series:rows.map(function(e,i){');
+    DBMS_OUTPUT.PUT_LINE('        var color=eventColor(e.name);');
+    DBMS_OUTPUT.PUT_LINE('        var s={name:e.name,type:"line",stack:"total",smooth:false,symbol:"none",');
+    DBMS_OUTPUT.PUT_LINE('          areaStyle:{opacity:0.85},emphasis:{focus:"series"},');
+    DBMS_OUTPUT.PUT_LINE('          lineStyle:{width:0.5,color:color},itemStyle:{color:color},');
+    DBMS_OUTPUT.PUT_LINE('          data:e.vals};');
+    DBMS_OUTPUT.PUT_LINE('        if(i===0 && markAreaData.length){');
+    DBMS_OUTPUT.PUT_LINE('          s.markArea={silent:true,data:markAreaData,itemStyle:{opacity:1}};}');
+    DBMS_OUTPUT.PUT_LINE('        if(i===0){var __ml=window.AWR_markLine&&window.AWR_markLine(d.hours); if(__ml) s.markLine=__ml;}');
+    DBMS_OUTPUT.PUT_LINE('        return s;})');
+    DBMS_OUTPUT.PUT_LINE('    }, true);');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  render("event");');
+    -- Wire the per-card Group-by toggle. Hide the module/action buttons when
+    -- that dim carries no real value (only the "(none)" placeholder), so a
+    -- SQL that never set module/action does not offer an empty stack.
+    DBMS_OUTPUT.PUT_LINE('  var tog=document.querySelector(''[data-ashdim-target="''+c.id+''"]'');');
+    DBMS_OUTPUT.PUT_LINE('  if(tog){');
+    DBMS_OUTPUT.PUT_LINE('    ["module","action"].forEach(function(dk){');
+    DBMS_OUTPUT.PUT_LINE('      var dd=c.dims&&c.dims[dk];');
+    DBMS_OUTPUT.PUT_LINE('      var ok=dd&&dd.series&&dd.series.some(function(s){return s.name!=="(none)";});');
+    DBMS_OUTPUT.PUT_LINE('      if(!ok){var b=tog.querySelector(''[data-dim="''+dk+''"]''); if(b) b.style.display="none";}');
+    DBMS_OUTPUT.PUT_LINE('    });');
+    DBMS_OUTPUT.PUT_LINE('    tog.addEventListener("click",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('      var btn=ev.target.closest("button"); if(!btn) return;');
+    DBMS_OUTPUT.PUT_LINE('      var dk=btn.getAttribute("data-dim"); if(!dk) return;');
+    DBMS_OUTPUT.PUT_LINE('      Array.prototype.forEach.call(tog.querySelectorAll("button"),function(b){ b.classList.toggle("active", b===btn); });');
+    DBMS_OUTPUT.PUT_LINE('      render(dk);');
+    DBMS_OUTPUT.PUT_LINE('    });');
+    DBMS_OUTPUT.PUT_LINE('  }');
     DBMS_OUTPUT.PUT_LINE('  new ResizeObserver(function(){chart.resize();}).observe(el);');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('})();');
