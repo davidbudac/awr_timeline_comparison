@@ -563,6 +563,42 @@ to get a different ORDER BY.
 
 ## Verification state
 
+Section 11's per-SQL module/action grouping was **verified on dbmint
+(19.27 CDB) in Jun 2026**. Each Top-N SQL's ASH is rolled up three ways
+(wait event / module / action) from one shared, MATERIALIZE-d base scan
+(`ash_base` → three `GROUP BY` roll-ups tagged with a `dim`
+discriminator), and each card gets a `.topsql-toggle` "Group by" button
+group; the JS `render(dimKey)` rebuilds the stack with `notMerge` and
+hides the module/action buttons when the SQL collapses that dim to a
+single `(none)` placeholder. The `dim` literal is `CAST(... AS
+VARCHAR2(6))` to dodge the UNION CHAR-literal blank-padding trap (a bare
+`'event'`/`'module'`/`'action'` UNION is typed `CHAR(6)`, which would
+pad `'event'`→`'event '` and silently break the `r.dim='event'` test and
+the `sql_id|dim|` prefix matching).
+
+Verification details (so a future run can reproduce): pinned
+`target_end='2026-06-16 06:00'`, hourly cadence (`step_unit='h'`,
+`win_hours=1`, `weeks_back=8`) into the restart-free 15-min-snap stretch
+snaps 2524–2568. dbmint is idle, so no SQL clears the 5-sample chart
+threshold under a stock run — that run is still valuable (it proved the
+new cursor parses/executes with **zero ORA-** and the placeholder path
+renders). To exercise the chart/dims/toggle emission, a **temporary**
+`v_min_samples := 1` override (reverted before commit) made the
+background SQLs render: each card showed all three Group-by pills, and
+the `dims{event,module,action}` payload regrouped the **same** single
+sample three ways with **identical total AAS** per dim (e.g.
+`22356bkgsdcnh`: event `CPU` / module `MMON_SLAVE` / action `Monitor FRA
+Space`). Real module/action values flowed through (`DBMS_SCHEDULER`,
+`emagent`, `ORA$AT_SA_SPC_SY_1222` — the `$` needs no escaping), the NVL
+`(none)` placeholder worked (`b3853arjnybzv` had module `emagent` but
+action `(none)`), keys matched (charts populated, not all-zero — the
+CAST fix held), and zero ORA-/SP2-/PLS- in the spool. The dbmint test
+DB has no app workload that sets module/action *and* sustains ≥5 ASH
+samples/SQL, so a fully "natural" (un-overridden) chart render still
+awaits a busy DB. Output is **intentionally not** byte-identical to the
+pre-change report (the toggle markup + `dims{}` payload are new), so
+skip the byte-identity test for this change.
+
 **PENDING (Jun 2026): section 14 (segment I/O), section 15 (file I/O)
 and the section-06 "By physical reads" dimension have NOT yet been run
 against a real DB** — dbmint was unreachable when they were written.
