@@ -44,3 +44,14 @@ DEFINE marker_file = ''
 -- contain a straight single quote, '|', ';;', or '~'; see that file's
 -- header.  Empty = no inline markers.
 DEFINE markers = ''
+-- echarts selects where the report loads the Apache ECharts library from.
+-- Empty (the default) keeps the public CDN
+-- (https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js).  A URL
+-- (http.../https...) is used verbatim as the <script src> -- point it at an
+-- internal mirror on an air-gapped network.  A local filesystem path (e.g.
+-- 'vendor/echarts.min.js') is used as the src here, and run_awr_trend.sh
+-- then INLINES the file's bytes into the report after generation, producing
+-- a single self-contained HTML file that renders charts with no network at
+-- all.  (Pure-SQL*Plus callers get the URL/CDN behaviour; the inline step
+-- lives in the wrapper -- see CLAUDE.md.)  The value must not contain a " .
+DEFINE echarts = ''

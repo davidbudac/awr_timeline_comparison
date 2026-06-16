@@ -29,8 +29,16 @@ tables still render every number, and an amber "Charts hidden" banner
 tells the reader why. Inline-SVG sparklines in the Load/Metrics/Waits
 tables are rendered by a ~30-line pure-DOM JS block shipped in the
 prologue and do **not** depend on the CDN, so they still draw when
-offline. For strict air-gapped environments, remove the ECharts
-`<script>` tag in `awr_trend.sql` — every other element degrades
+offline. For strict air-gapped environments, the **`echarts` var**
+(12th DEFINE, default `''`) redirects where the library loads from
+without touching any section: an `http(s)` URL is used verbatim as the
+`<script src>` (point it at an internal mirror), and a **local file
+path** (e.g. `vendor/echarts.min.js`) is emitted as the src and then
+**inlined** into the finished report by `run_awr_trend.sh`, yielding a
+single self-contained HTML file that renders every chart with no
+network at all. Empty keeps the CDN (byte-identical to before). See
+"Self-contained / offline ECharts (`echarts` var)" below. Removing the
+`<script>` tag entirely still works too — every other element degrades
 gracefully.
 
 ## Entry points
@@ -251,9 +259,9 @@ will leak into the HTML.** All user-visible strings (SQL text, event
 names, metric names) must be wrapped in `DBMS_XMLGEN.CONVERT(...)`.
 
 ### Substitution variables
-Eleven user-facing vars: `target_end`, `win_hours`, `weeks_back`, `top_n`,
+Twelve user-facing vars: `target_end`, `win_hours`, `weeks_back`, `top_n`,
 `inst_num`, `step`, `step_unit`, `template`, `debug`, `marker_file`,
-`markers`. `inst_num = 0` means
+`markers`, `echarts`. `inst_num = 0` means
 aggregate across RAC instances; any other value filters to that
 instance. `target_end = 'AUTO'` means "prior full hour relative to
 SYSDATE" (resolved in the driver into `target_end_resolved`).
@@ -274,7 +282,13 @@ file; empty/unset (the default) means no markers. `markers` is the
 (`'WHEN|LABEL;;WHEN|LABEL'`) parsed in-session by
 `sql/lib/markers_inline.sql`, so a self-contained SQL\*Plus session (or
 `MARKERS=… run_awr_trend.sh`) needs nothing on disk. `marker_file` wins
-when both are set. See "Timeline markers" below. The driver resolves
+when both are set. See "Timeline markers" below. `echarts` selects where
+the ECharts library loads from — empty (default) = public CDN, an
+`http(s)` URL = used verbatim as the `<script src>` (internal mirror), a
+local file path = inlined into the report by the wrapper for a single
+self-contained offline file; see "Self-contained / offline ECharts"
+below. In the wrapper it rides in the **`ECHARTS` environment variable**
+(like `MARKERS`, to keep the positional arg order symmetric). The driver resolves
 `step_hours = step * (1|24|168)` plus
 `period_unit_short` / `period_unit_long` / `period_unit_title` /
 `period_step_label` / `period_axis_fmt` once up front; every section
@@ -372,6 +386,53 @@ normalized to the same md5 (`ea447dac…`). Re-run the byte-identity test after
 touching any of sections 00/06/09/10/11/12 or `windows_cte.sql`. The
 multi-DBID path can only be validated on a real migrated PDB (dbmint is a
 single-DBID CDB).
+
+### Self-contained / offline ECharts (`echarts` var)
+The report's one remaining network dependency is the Apache ECharts
+`<script>` (everything else — CSS, SVG sparklines, marker JS — is already
+inline). The `echarts` var (12th DEFINE, default `''`) controls it and is
+polymorphic on the value:
+- **empty** → emit today's public-CDN tag. **Byte-identical to the
+  pre-feature report** — the driver's `CASE WHEN TRIM('~echarts') IS NULL`
+  takes the CDN branch (`TRIM('')` is NULL in Oracle), producing the exact
+  same `<script src="…cdn.jsdelivr.net…" onerror=…>` line.
+- **an `http(s)` URL** → used verbatim as the `<script src>`. For shops
+  with an internal ECharts mirror / artifact server on an otherwise
+  air-gapped network. Works on the pure-SQL\*Plus path too (driver-only).
+- **a local file path** (e.g. `vendor/echarts.min.js`) → the driver emits
+  it as the `src`, then **`run_awr_trend.sh` inlines the file's bytes**
+  into the finished report (`inline_echarts`), replacing the whole
+  `<script src="…path…" …></script>` line with `<script>…bytes…</script>`.
+  Result: one self-contained HTML file that renders every chart with **no
+  network**. The user supplies their own `echarts.min.js` (none is
+  vendored in the repo); grab it from the CDN URL or an `npm` tarball.
+
+Mechanics / gotchas:
+- The driver change is the `CASE` in `awr_trend.sql` right after
+  `</head><body>`; only the `src` value varies, so the empty-default path
+  stays byte-identical (re-run the byte-identity test only matters for the
+  default — non-empty values intentionally differ).
+- The inlining lives **only in the wrapper** (`run_report` → `inline_echarts`),
+  because SQL\*Plus can't cleanly stream a ~1 MB minified blob through
+  `DBMS_OUTPUT` under `SET DEFINE '~'`. `inline_echarts` splits the HTML at
+  the marker line (`grep -nF 'src="<path>"'`) and splices the library
+  between `head`/`tail` via `cat`, so the single-line minified file never
+  has to be parsed line-by-line (robust on macOS/BSD awk). The DB read-only
+  invariant is untouched — it's pure output-file surgery.
+- `is_url` decides inline-vs-link: `http://` / `https://` prefix → leave as
+  src; anything else non-empty → treat as a path and inline. A path that
+  isn't readable warns and leaves the report linking to it (degrades to the
+  `no-charts` fallback rather than aborting).
+- The pure-SQL\*Plus block printed by the configurator **cannot** inline a
+  local path (no wrapper post-step); `build_sqlplus_block` prints an `# NB:`
+  note telling the user to use the shell wrapper or an `http(s)` mirror URL
+  for that path. A local-path report from the bare heredoc just references
+  the file as a relative `src`.
+- In the wrapper the value travels in the **`ECHARTS` env var** (not a
+  positional arg — symmetric with `MARKERS`), threaded into `run_report`,
+  `build_shell_cmd` (prefixes `ECHARTS=…`), `build_sqlplus_block`, the
+  summary, and `--help`. The value must contain no `"` (it lands in an
+  HTML attribute) — paths/URLs normally don't.
 
 ### Timeline markers
 Two vars let a user annotate the dated charts with milestones (patch

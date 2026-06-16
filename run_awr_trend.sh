@@ -81,6 +81,18 @@ DEF_MARKER_FILE=''
 # quote, '|', ';;' and '~' (see sql/lib/markers_inline.sql).  Default empty.
 : "${MARKERS:=}"
 
+# Where the report loads Apache ECharts from travels in the ECHARTS
+# environment variable (an env var, like MARKERS, so the positional order
+# stays symmetric with awr_trend.sql).  Three forms:
+#   empty (default) -> public CDN (cdn.jsdelivr.net), unchanged behaviour
+#   http(s)://...   -> used verbatim as the <script src> (internal mirror)
+#   a file path     -> the driver emits it as the src, then this wrapper
+#                      INLINES the file's bytes into the finished report so the
+#                      HTML is a single, self-contained, offline-capable file.
+# e.g.  ECHARTS=vendor/echarts.min.js ./run_awr_trend.sh / AUTO
+# The value must not contain a double quote.  Default empty.
+: "${ECHARTS:=}"
+
 # ---- optional terminal styling (degrades to plain text) --------------------
 # NB: a missing capability must never be fatal.  Some terminfo entries (notably
 # several AIX terminal types) lack the half-bright `dim` cap, so `tput dim`
@@ -123,6 +135,10 @@ Environment variables:
   MARKERS       file-free timeline markers, "WHEN|LABEL" pairs joined by ";;",
                 e.g. MARKERS='2026-06-10 09:00|Release 2.0;;...'  (marker_file,
                 if given, wins).  LABEL must avoid ' | ;; and ~.
+  ECHARTS       where to load the ECharts library from.  Empty = public CDN.
+                An http(s) URL is used as-is (internal mirror).  A local file
+                path is inlined into the report -> a single self-contained,
+                offline HTML file.  e.g. ECHARTS=vendor/echarts.min.js
 
 Tip: not sure which arguments you need?  Run  ./run_awr_trend.sh --configure
 USAGE
@@ -148,6 +164,36 @@ list_templates() {
 # This is the single place the report is actually generated; both the
 # positional path and the configurator call it.
 # ---------------------------------------------------------------------------
+# is_url <value> — true when <value> looks like an http(s) URL (used verbatim
+# as the <script src>), false when it's a local file path (to be inlined).
+is_url() { [[ "$1" == http://* || "$1" == https://* ]]; }
+
+# inline_echarts <html> <libfile> — replace the single
+#   <script src="<libfile>" ...></script>
+# line that awr_trend.sql emitted with an inline  <script>...file bytes...</script>,
+# turning the report into one self-contained, offline-capable HTML file.  The
+# HTML is split at the marker line and the library is spliced between head and
+# tail; the (often 1 MB single-line) minified blob flows through `cat`, so no
+# tool ever has to parse it line-by-line.
+inline_echarts() {
+    local html="$1" lib="$2" marker lineno
+    marker="src=\"$lib\""
+    lineno="$(grep -nF "$marker" "$html" | head -1 | cut -d: -f1 || true)"
+    if [[ -z "$lineno" ]]; then
+        echo "warning: could not find the ECharts <script src=\"$lib\"> line in" \
+             "$(basename "$html"); left linked, not inlined." >&2
+        return 0
+    fi
+    {
+        head -n "$((lineno - 1))" "$html"
+        printf '<script>\n'
+        cat "$lib"
+        printf '\n</script>\n'
+        tail -n "+$((lineno + 1))" "$html"
+    } > "$html.inlining" && mv "$html.inlining" "$html"
+    echo "Inlined ECharts ($lib) into $(basename "$html") — report is self-contained."
+}
+
 run_report() {
     local CONN="$1" TARGET_END="$2" WIN_HOURS="$3" WEEKS_BACK="$4" TOP_N="$5" \
           INST_NUM="$6" STEP="$7" STEP_UNIT="$8" TEMPLATE="$9" DEBUG="${10}" \
@@ -170,9 +216,31 @@ DEFINE template   = '${TEMPLATE}'
 DEFINE debug      = '${DEBUG}'
 DEFINE marker_file = '${MARKER_FILE}'
 DEFINE markers = '${MARKERS}'
+DEFINE echarts = '${ECHARTS}'
 @@awr_trend.sql
 EXIT
 EOF
+    # Preserve sqlplus's exit status: it is run_report's return value (the
+    # configurator tests it, and it's the script's final command on the
+    # positional path).  The inline step below must not clobber it.
+    local rc=$?
+
+    # When the run succeeded and `echarts` is a LOCAL FILE path (not empty,
+    # not a URL), inline its bytes into the just-generated report so the HTML
+    # is fully self-contained and renders charts offline.  URLs and the
+    # empty/CDN default are left exactly as the driver emitted them.
+    if [[ "$rc" -eq 0 && -n "$ECHARTS" ]] && ! is_url "$ECHARTS"; then
+        if [[ -r "$ECHARTS" ]]; then
+            local newest
+            newest="$(ls -t "$SCRIPT_DIR"/reports/*.html 2>/dev/null | head -1 || true)"
+            [[ -n "$newest" ]] && inline_echarts "$newest" "$ECHARTS"
+        else
+            echo "warning: ECHARTS file '$ECHARTS' is not readable; the report" \
+                 "links to it as a <script src> rather than inlining it." >&2
+        fi
+    fi
+
+    return "$rc"
 }
 
 # ===========================================================================
@@ -335,6 +403,7 @@ build_shell_cmd() {
     # marker_file path overrides it).
     local out=''
     [[ -n "$MARKERS" ]] && out+="MARKERS=$(shq "$MARKERS") "
+    [[ -n "$ECHARTS" ]] && out+="ECHARTS=$(shq "$ECHARTS") "
     out+='./run_awr_trend.sh'
     for (( i = 0; i <= last; i++ )); do
         out+=" $(shq "${vals[$i]}")"
@@ -357,10 +426,20 @@ DEFINE template   = '${TEMPLATE}'
 DEFINE debug      = '${DEBUG}'
 DEFINE marker_file = '${MARKER_FILE}'
 DEFINE markers = '${MARKERS}'
+DEFINE echarts = '${ECHARTS}'
 @@awr_trend.sql
 EXIT
 EOF
 SQLBLK
+    # The pure-SQL*Plus path can't inline a local ECharts file (that step lives
+    # in the wrapper), so a local path here just becomes the <script src>.  Flag
+    # it so the user isn't surprised the offline report still references a file.
+    if [[ -n "$ECHARTS" ]] && ! is_url "$ECHARTS"; then
+        echo "# NB: echarts='$ECHARTS' is a local path; the SQL*Plus path links"
+        echo "#     to it as a <script src> but does NOT inline it.  Use the shell"
+        echo "#     wrapper (block A) for a single self-contained file, or set"
+        echo "#     echarts to an http(s) mirror URL here."
+    fi
 }
 
 # Human-readable "what windows will I get" + AWR-retention nudge.
@@ -394,6 +473,7 @@ print_summary() {
     printf '  %-14s %s\n' 'debug'       "$DEBUG"
     printf '  %-14s %s\n' 'marker_file' "${MARKER_FILE:-(none)}"
     [[ -n "$MARKERS" ]] && printf '  %-14s %s\n' 'markers' "$MARKERS"
+    [[ -n "$ECHARTS" ]] && printf '  %-14s %s\n' 'echarts' "$ECHARTS"
     echo "${BOLD}=================================================================${RST}"
     print_span_hint
     echo

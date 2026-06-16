@@ -445,12 +445,28 @@ END;
 
 BEGIN
     DBMS_OUTPUT.PUT_LINE('</head><body>');
-    -- Load Apache ECharts from CDN; fall back gracefully if offline.
-    -- CSS `.no-charts` class hides chart containers; tables still render.
-    DBMS_OUTPUT.PUT_LINE('<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"'
-        || ' onerror="document.body.classList.add(''no-charts'')"></script>');
-    DBMS_OUTPUT.PUT_LINE('<div class="cdn-warn">Charts hidden: the ECharts CDN '
-        || '(cdn.jsdelivr.net) could not be reached. Tables still show every number.</div>');
+    -- ECharts source: the `echarts` var picks where the library loads from.
+    -- Empty (the default) keeps the public CDN -- byte-identical to before.
+    -- A non-empty value is used verbatim as the <script src>: a URL points at
+    -- an internal mirror, while a local file path is left here as the src and
+    -- then INLINED into this report by run_awr_trend.sh after generation
+    -- (yielding a single, offline-capable, self-contained HTML file).  Either
+    -- way `onerror` flips body.no-charts so tables still render if the script
+    -- fails to load (TRIM('') is NULL in Oracle, so empty => CDN branch).
+    DBMS_OUTPUT.PUT_LINE('<script src="'
+        || CASE WHEN TRIM('~echarts') IS NULL
+                THEN 'https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js'
+                ELSE '~echarts' END
+        || '" onerror="document.body.classList.add(''no-charts'')"></script>');
+    -- Fallback banner shown (via body.no-charts) only if the script fails to
+    -- load.  Keep the CDN-specific wording when `echarts` is empty so the
+    -- default output stays byte-identical; use generic wording otherwise so a
+    -- mirror/inline run doesn't misleadingly blame cdn.jsdelivr.net.
+    DBMS_OUTPUT.PUT_LINE('<div class="cdn-warn">Charts hidden: '
+        || CASE WHEN TRIM('~echarts') IS NULL
+                THEN 'the ECharts CDN (cdn.jsdelivr.net) could not be reached.'
+                ELSE 'the ECharts library could not be loaded.' END
+        || ' Tables still show every number.</div>');
     -- Namespace for per-section data handoff from PL/SQL to ECharts init blocks.
     DBMS_OUTPUT.PUT_LINE('<script>window.AWR_DATA = window.AWR_DATA || {};</script>');
 END;

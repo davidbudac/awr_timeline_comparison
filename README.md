@@ -69,12 +69,15 @@ Easiest non-interactive — the shell wrapper (sets all substitution vars for yo
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple Y       # simple + progress markers on stdout
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive N my_markers.sql  # annotate timelines with milestones
 MARKERS='2026-06-10 09:00|Release 2.0' ./run_awr_trend.sh user/pw@svc  # file-free inline markers
+ECHARTS=vendor/echarts.min.js ./run_awr_trend.sh user/pw@svc           # self-contained / offline HTML
 ```
 
 Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template [debug [marker_file]]]]]]]]]]`
 
-Plus one environment variable, `MARKERS`, for file-free inline timeline
-markers (see "Timeline markers" below).
+Plus two environment variables: `MARKERS` for file-free inline timeline
+markers (see "Timeline markers" below), and `ECHARTS` to control where the
+chart library loads from / make the report self-contained (see "Offline /
+self-contained report" below).
 
 | Arg          | Default          | Meaning                                             |
 |--------------|------------------|-----------------------------------------------------|
@@ -89,6 +92,7 @@ markers (see "Timeline markers" below).
 | `debug`      | `N`              | `Y` (or `YES/1/ON/TRUE/T`, case-insensitive) prints one-line, millisecond-timestamped progress markers to stdout as each section begins — useful when a slow section makes the run look hung. Markers go to stdout only; the HTML report is byte-identical to a `debug=N` run |
 | `marker_file`| *(empty)*        | Optional path to a timeline-marker config file (milestones drawn as vertical dashed lines on the dated charts). Empty = no markers. See "Timeline markers" below |
 | `MARKERS` *(env var)* | *(empty)* | File-free alternative to `marker_file`: inline `WHEN\|LABEL` milestones joined by `;;`. `marker_file` wins when both are set. See "Timeline markers" below |
+| `ECHARTS` *(env var)* | *(empty)* | Where the ECharts chart library loads from. Empty = public CDN (`cdn.jsdelivr.net`). An `http(s)` URL = used as-is (internal mirror). A local file path = inlined into the report for a single self-contained, offline-capable HTML file. See "Offline / self-contained report" below |
 
 `step` × `step_unit` defines the gap between adjacent comparison
 windows. `step=1, step_unit=w` (the default) reproduces the original
@@ -183,8 +187,53 @@ SQL> @awr_trend.sql
 
 Output: `reports/awr_trend_<DBID>_<YYYYMMDDHH24MI>_run<run_id>.html`. Open
 it in a browser. The report is self-contained (one HTML file with inline
-CSS and inline SVG sparklines; the larger charts load ECharts from
-`cdn.jsdelivr.net` and degrade gracefully when the CDN is blocked).
+CSS and inline SVG sparklines; by default the larger charts load ECharts
+from `cdn.jsdelivr.net` and degrade gracefully when the CDN is blocked).
+For a **fully offline** report — charts and all — see "Offline /
+self-contained report" below.
+
+### Offline / self-contained report
+
+By default only one thing in the report reaches the network: the Apache
+ECharts library that draws the larger visualizations (hero strip, wait
+stacked bars, findings heatmap, top-SQL bump chart, ASH timeline). When
+the CDN is blocked the report still opens and every table renders — an
+amber "Charts hidden" banner explains why, and the inline-SVG sparklines
+still draw. To make the report render its charts with **no network at
+all**, set the `ECHARTS` environment variable (wrapper) or the `echarts`
+substitution variable (pure SQL\*Plus):
+
+```bash
+# 1. Self-contained single file — inline a local ECharts into the report:
+ECHARTS=vendor/echarts.min.js ./run_awr_trend.sh user/pw@svc
+#    The wrapper splices the file's bytes into the finished HTML, so the
+#    one .html opens and charts offline with nothing else alongside it.
+
+# 2. Internal mirror — point the <script src> at your own host (no inlining):
+ECHARTS=https://artifacts.corp.example/echarts@5/echarts.min.js \
+    ./run_awr_trend.sh user/pw@svc
+```
+
+| `echarts` value | What happens |
+|-----------------|--------------|
+| *(empty, default)* | Loads ECharts from the public CDN. Unchanged behaviour |
+| an `http(s)` URL | Used verbatim as the `<script src>` — an internal mirror on an air-gapped network. Works on the pure-SQL\*Plus path too |
+| a local file path | The wrapper **inlines** the file into the report → a single self-contained, offline-capable HTML file |
+
+You supply your own `echarts.min.js` (none ships in this repo). Download
+it once from the CDN URL above, or extract it from the `echarts` npm
+tarball, and keep it anywhere — pass that path as `ECHARTS`.
+
+Notes:
+- The inlining step lives in the `run_awr_trend.sh` wrapper. On the pure
+  SQL\*Plus path a local file path is emitted as a `<script src>` (not
+  inlined), so for a truly single self-contained file use the wrapper, or
+  set `echarts` to an `http(s)` mirror URL. The configurator's printed
+  SQL\*Plus block flags this with an `# NB:` note.
+- The inlined file is read as-is; pin a version you trust. This toolkit is
+  tested against ECharts 5.
+- This adds roughly the size of `echarts.min.js` (~1 MB) to each generated
+  report.
 
 ## Read the report
 
