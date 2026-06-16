@@ -4,832 +4,293 @@ Guidance for future Claude sessions working on this repo.
 
 ## What this is
 
-Pure-SQL Oracle 19c toolkit that compares AWR snapshots of **the same
-hour across weeks** (e.g. Mon 09:00–10:00 today vs the four prior Mondays
-09:00–10:00), flags drastic changes via z-score, and renders a
-self-contained HTML report.
+Pure-SQL Oracle 19c toolkit that compares AWR snapshots of **the same hour
+across periods** (e.g. Mon 09:00–10:00 today vs the four prior Mondays) and
+flags drastic changes via z-score, rendering a single self-contained HTML
+report. Requires Oracle 19c + Diagnostic & Tuning Pack. No Python; only a thin
+`sqlplus` wrapper.
 
-**Read-only invariant:** the driver and every numbered section issue
-`SELECT` only. There is no scratch schema, no DDL step, and no
-`INSERT`/`UPDATE`/`DELETE`/`COMMIT` anywhere on the read path.
-Everything is recomputed in-flight from the `DBA_HIST_*` views on each
-run. The only script that ever writes is
-`side/create_weekly_baselines.sql`, which is optional and orthogonal to
-the main report (it calls `DBMS_WORKLOAD_REPOSITORY.CREATE_BASELINE`).
+**Read-only invariant (the whole point of the design):** the driver and every
+numbered `sql/` section issue `SELECT` only — no DDL/DML/COMMIT, no scratch
+schema. Everything is recomputed in-flight from `DBA_HIST_*` on each run, so it
+runs as a read-only analyst and on a physical standby. The *only* script that
+writes is `side/create_weekly_baselines.sql` (optional, orthogonal, calls
+`CREATE_BASELINE`); the main report never reads its baselines.
 
-Requires Oracle 19c with Diagnostic + Tuning Pack. No Python, no shell
-beyond a thin `sqlplus` wrapper. Output is a single self-contained HTML file.
-
-**Note on offline rendering**: the HTML loads Apache ECharts from
-`cdn.jsdelivr.net` to render the larger visualizations (hero strip
-sparklines, wait-class stacked bars, findings heatmap, top-SQL bump
-chart, windows ribbon, ASH timeline). When the CDN is unreachable,
-`<script onerror>` sets `body.no-charts` which hides chart divs —
-tables still render every number, and an amber "Charts hidden" banner
-tells the reader why. Inline-SVG sparklines in the Load/Metrics/Waits
-tables are rendered by a ~30-line pure-DOM JS block shipped in the
-prologue and do **not** depend on the CDN, so they still draw when
-offline. For strict air-gapped environments, the **`echarts` var**
-(12th DEFINE, default `''`) redirects where the library loads from
-without touching any section: an `http(s)` URL is used verbatim as the
-`<script src>` (point it at an internal mirror), and a **local file
-path** (e.g. `vendor/echarts.min.js`) is emitted as the src and then
-**inlined** into the finished report by `run_awr_trend.sh`, yielding a
-single self-contained HTML file that renders every chart with no
-network at all. Empty keeps the CDN (byte-identical to before). See
-"Self-contained / offline ECharts (`echarts` var)" below. Removing the
-`<script>` tag entirely still works too — every other element degrades
-gracefully.
+**Offline rendering:** the report loads Apache ECharts from a CDN for the large
+charts. If the CDN is unreachable, `<script onerror>` sets `body.no-charts`,
+hiding chart divs (tables still show every number) with an amber banner. Inline
+SVG sparklines and the marker JS are shipped inline and work offline. The
+`echarts` var (below) redirects or inlines the library for air-gapped use.
 
 ## Entry points
 
 - `run_awr_trend.sh user/pw@svc [target_end] [win_hours] [weeks_back] [top_n] [inst_num] [step] [step_unit] [template] [debug] [marker_file]`
-  — convenience wrapper. Sets all substitution vars via heredoc, then `@@awr_trend.sql`. `debug='Y'` (case-insensitive) emits one timestamped progress marker per section to **stdout** (the HTML is byte-identical). See "Debug logging" below.
-- `run_awr_trend.sh --configure` (also `-c` / `-i` / `--interactive`, or
-  no args at a TTY) — **interactive configurator**: a self-contained
-  bash Q&A that lives in the *same* `run_awr_trend.sh` (not a separate
-  file). It prompts for every substitution var with per-question help,
-  a `[default]`, and a validator that re-asks on bad input, then prints
-  both a minimal `./run_awr_trend.sh …` command and the equivalent pure-
-  SQL\*Plus `DEFINE … @@awr_trend.sql` block, and offers `[r]un / re-[e]dit
-  / [q]uit`. Implementation notes for future edits: the real run was
-  refactored into a single `run_report()` function shared by the
-  positional and configurator paths (so the emitted DEFINE block stays
-  byte-identical — verified with a mock `sqlplus` on PATH); the canonical
-  defaults are duplicated as `DEF_*` shell vars at the top, kept in sync
-  with `sql/defaults.sql`; templates are discovered by globbing
-  `sql/lib/templates/*/` so the menu and `--help` stay in sync; and the
-  whole thing runs under `set -euo pipefail`, so any helper whose last
-  statement is a `[[ … ]] && cmd` (which returns 1 when false) needs an
-  explicit `return 0` or it will trip `set -e` at the call site — see
-  `print_span_hint`. The configurator is pure UX; it issues no SQL itself
-  and does not touch the read-only invariant.
-- pure-SQL\*Plus equivalent — load `sql/defaults.sql` then run the driver as
-  **two separate start commands** (a heredoc, or two `SQL>` commands):
+  — wrapper; sets DEFINEs via heredoc then `@@awr_trend.sql`. `MARKERS=` and
+  `ECHARTS=` ride as **env vars** (not positional, to keep arg order symmetric).
+- `run_awr_trend.sh --configure` (also `-c`/`-i`, or no args at a TTY) —
+  interactive bash configurator living in the *same* wrapper. Prompts for every
+  var, then prints both a `./run_awr_trend.sh …` command and the equivalent
+  `DEFINE … @@awr_trend.sql` block. Pure UX, issues no SQL. Shares a single
+  `run_report()` with the positional path; runs under `set -euo pipefail`.
+- pure-SQL\*Plus: load defaults then run the driver as **two separate start
+  commands** (the driver does NOT define defaults itself, so caller overrides
+  survive):
   ```
   sqlplus user/pw@svc <<'SQL'
   @sql/defaults.sql
   @awr_trend.sql
   SQL
   ```
-  **The driver deliberately does not DEFINE defaults itself** so an explicit caller override is never clobbered. Always load `sql/defaults.sql` (or set DEFINEs manually) before `@awr_trend.sql`. **Do not** put both on one command line (`sqlplus … @sql/defaults.sql @awr_trend.sql`): SQL\*Plus runs only the first `@file` and treats `@awr_trend.sql` as a *parameter* to it, so the driver never executes — a silent no-op (exit 0, empty log, no report). Verified on dbmint Jun 2026.
-- `sqlplus user/pw@svc @side/create_weekly_baselines.sql`
-  — optional, independent of the main report. Creates `DBA_HIST_BASELINE`
-  rows named `WK_<IYYY>_<IW>`. **This is the only script that writes
-  to the database.** The main driver does not read these baselines.
+  **Never** put both `@file`s on one command line — SQL\*Plus runs only the
+  first and treats the second as a *parameter*, so the driver silently no-ops.
 
 ## File layout
 
 ```
-awr_trend.sql                    -- driver: prologue, SPOOL, calls sections, epilogue
-markers.example.sql              -- example timeline-marker config (optional marker_file)
+awr_trend.sql            -- driver: prologue, SPOOL, calls sections, epilogue
 sql/
-├── defaults.sql                 -- canonical DEFINEs for the 10 substitution vars
-├── _style.sql                   -- embedded CSS (emitted once from the driver)
-├── 00_params.sql                -- <nav> + <header> card (no DML)
-├── 01_windows.sql               -- aligned windows, snap_id pairs, instance-restart guard
-├── 02_load_profile.sql          -- SYSSTAT deltas (curated stats, per template)
-├── 03_sysmetric.sql             -- SYSMETRIC_SUMMARY averages (curated metrics, per template)
-├── 04_waits_fg.sql              -- foreground waits + wait-class rollup (filtered per template)
-├── 05_waits_bg.sql              -- background waits (BG_EVENT_SUMMARY; filtered per template)
-├── 06_top_sql.sql               -- Top-N SQL ranked 5 ways (elapsed, CPU, gets,
-│                                   physical reads, executions) + bump chart
-├── 07_summary.sql               -- z-score findings + heatmap (recomputed inline)
-├── 08_overview.sql              -- hero strip: 6 headline-metric cards (recomputed inline)
-├── 09_ash_timeline.sql          -- hourly ASH stacked-area timeline by wait_class
-│                                   (reads dba_hist_active_sess_history directly)
-├── 10_db_time_summary.sql       -- stacked DB time across the full compared span
-├── 11_top_sql_ash_breakdown.sql -- per-Top-N-SQL ASH stacked-area cards
-├── 12_param_changes.sql         -- init parameters that differ across windows
-│                                   (reads dba_hist_parameter; per-window end snap)
-├── 13_utilization.sql           -- database utilization profile: descriptive usage
-│                                   overview (transaction/call/logon rates, sessions,
-│                                   data + network volume) from SYSMETRIC_SUMMARY;
-│                                   fixed inline target list, template-INDEPENDENT
-│                                   on purpose (same view under every template)
-├── 14_segment_io.sql            -- top segments (and object types) by I/O per
-│                                   window from DBA_HIST_SEG_STAT (has *_DELTA
-│                                   cols) + DBA_HIST_SEG_STAT_OBJ names; 4 dims
-│                                   (phys reads/writes blocks, read/write reqs);
-│                                   segments keyed by NAME (not obj#) so series
-│                                   survive rebuilds + DBID changes;
-│                                   template-INDEPENDENT like 13
-├── 15_file_io.sql               -- top data/temp files by I/O per window from
-│                                   DBA_HIST_FILESTATXS + DBA_HIST_TEMPSTATXS
-│                                   (no *_DELTA cols: begin/end pair deltas,
-│                                   HAVING COUNT(*)=2 guard) + per-file-type
-│                                   toggle from DBA_HIST_IOSTAT_FILETYPE (the
-│                                   AWR "IOStat by Filetype"; covers ALL DB
-│                                   I/O so totals differ from the file view);
-│                                   4 dims (read/write MB via block_size,
-│                                   read/write reqs); files keyed by FILENAME;
-│                                   template-INDEPENDENT like 13/14
-└── lib/                         -- SQL/PL/SQL fragments shared across sections via @@
-    ├── windows_cte.sql          -- run_params → … → valid_windows CTE chain
-    ├── nth_csv.plsql            -- INSTR-based PL/SQL CSV parser (preserves empty tokens)
-    ├── js_sparkline.plsql       -- ~30-line inline-SVG sparkline renderer (CDN-free)
-    ├── js_wait_colors.plsql     -- shared OEM-13c-aligned wait_class color palette
-    ├── js_markers.plsql         -- inits window.AWR_MARKERS + AWR_markLine() (timeline markers)
-    ├── marker.sql               -- emit one user-defined timeline marker (~1=instant, ~2=label)
-    ├── markers_inline.sql       -- file-free twin of marker.sql: parses all
-    │                               milestones out of the inline ~markers var
-    │                               ("WHEN|LABEL;;...") so no file is needed
-    ├── no_markers.sql           -- no-op stub used when neither marker_file nor markers is set
-    └── templates/               -- per-template metric + wait-event target lists
-        ├── comprehensive/       -- default; full curated lists (27 SYSSTAT + 23 SYSMETRIC,
-        │   │                       and a '*' sentinel for waits = no event filter)
-        │   ├── sysstat_load_targets.sql
-        │   ├── sysmetric_targets.sql
-        │   └── wait_event_targets.sql
-        ├── simple/              -- triage-friendly subset (9 SYSSTAT + 8 SYSMETRIC + ~10 waits)
-        │   ├── sysstat_load_targets.sql
-        │   ├── sysmetric_targets.sql
-        │   └── wait_event_targets.sql
-        └── dev/                 -- application-developer view (17 SYSSTAT + 13 SYSMETRIC + 14 waits;
-            │                       SQL/throughput/contention, no host/OS/storage internals)
-            ├── sysstat_load_targets.sql
-            ├── sysmetric_targets.sql
-            └── wait_event_targets.sql
-side/
-└── create_weekly_baselines.sql  -- optional weekly AWR baselines (writes; orthogonal)
-reports/                         -- generated HTML files
+├── defaults.sql         -- canonical DEFINEs for the substitution vars
+├── _style.sql           -- embedded CSS (emitted once)
+├── 00_params.sql        -- nav + header masthead
+├── 01_windows.sql       -- aligned windows, snap pairs, restart guard
+├── 02_load_profile.sql  -- SYSSTAT deltas (per template)
+├── 03_sysmetric.sql     -- SYSMETRIC_SUMMARY averages (per template)
+├── 04_waits_fg.sql      -- foreground waits + wait-class rollup (per template)
+├── 05_waits_bg.sql      -- background waits (BG_EVENT_SUMMARY, per template)
+├── 06_top_sql.sql       -- Top-N SQL ranked 5 ways + bump chart
+├── 07_summary.sql       -- z-score findings + heatmap
+├── 08_overview.sql      -- hero strip: 6 headline cards
+├── 09_ash_timeline.sql  -- hourly ASH stacked-area timeline by wait_class
+├── 10_db_time_summary.sql      -- stacked DB time across the full span
+├── 11_top_sql_ash_breakdown.sql-- per-Top-N-SQL ASH cards (event/module/action)
+├── 12_param_changes.sql -- init params differing across windows
+├── 13_utilization.sql   -- usage profile (template-INDEPENDENT)
+├── 14_segment_io.sql    -- top segments by I/O (DBA_HIST_SEG_STAT; template-INDEP)
+├── 15_file_io.sql       -- top files by I/O + IOStat-by-filetype (template-INDEP)
+└── lib/                 -- @@-included fragments (see conventions)
+    ├── windows_cte.sql       -- run_params → … → valid_windows CTE chain
+    ├── nth_csv.plsql         -- INSTR-based CSV parser (keeps empty tokens)
+    ├── js_sparkline.plsql    -- inline-SVG sparkline renderer (CDN-free)
+    ├── js_wait_colors.plsql  -- shared wait_class palette
+    ├── js_markers.plsql      -- inits AWR_MARKERS + AWR_markLine()
+    ├── marker.sql / markers_inline.sql / no_markers.sql -- marker emitters
+    ├── debug_log.sql         -- per-section progress markers (no spool pollution)
+    └── templates/<name>/     -- comprehensive (default) / simple / dev
+        ├── sysstat_load_targets.sql
+        ├── sysmetric_targets.sql   -- names + is_additive flag
+        └── wait_event_targets.sql  -- single '*' row = "no filter" sentinel
+side/create_weekly_baselines.sql    -- optional baselines (the only writer)
+reports/                            -- generated HTML
 ```
+
+## Substitution variables
+
+Twelve user-facing vars, all DEFINEs (defaults in `sql/defaults.sql`):
+`target_end` (`'AUTO'`=prior full hour), `win_hours`, `weeks_back`, `top_n`,
+`inst_num` (`0`=aggregate across RAC, else filter to that instance), `step` +
+`step_unit` (`'h'`/`'d'`/`'w'`; default `1`+`'w'` = same hour-of-week N weeks
+back), `template`, `debug`, `marker_file`, `markers`, `echarts`.
+
+The driver resolves many derived vars **once** up front via `COLUMN … NEW_VALUE`
+and every section references them as `~name` (never re-resolves): `step_hours`
+(= step × 1/24/168), period labels, `run_id`, `dbid`, `dbid_list`, `db_name`,
+`host_name`, `report_path`, `template_dir`, `debug_termout`, `marker_include`,
+etc. Sections use `~step_hours/24` as the cadence multiplier — **never the
+literal `7`**.
 
 ## Core conventions (non-obvious, easy to break)
 
-### Read-only invariant
-Every numbered section under `sql/` must stay **pure SELECT**: no
-`INSERT`, `UPDATE`, `DELETE`, `MERGE`, `COMMIT`, `CREATE`, `DROP`,
-`TRUNCATE`. The report has to be runnable by a read-only analyst user
-and safe against a physical standby that exposes AWR. If you need to
-persist something across sections, thread it via a SQL\*Plus
-substitution variable (see `awr_trend.sql` — `run_id`, `dbid`,
-`target_end_resolved`, etc. are resolved once in the driver via
-`COLUMN … NEW_VALUE` and then referenced with `~name` in every
-section), or shape it as a PL/SQL collection inside the section's
-anonymous block.
+### Shared bodies live under `sql/lib/`, included via `@@`
+A view/package would break the no-DDL rule, so common SQL/PL/SQL is factored
+into include files. **Nested `@@` paths resolve against the OUTERMOST caller**
+(the driver at project root), so a section must write `@@sql/lib/windows_cte.sql`
+— never `@@lib/...` or `@@../lib/...`. Curated lists are per-template, so use
+`@@~template_dir/<file>.sql`, never a flat `@@sql/lib/...` path.
 
-### Shared CTE bodies and helpers live under `sql/lib/`
-What used to be six near-identical inline copies of the same SQL/PL/SQL
-fragments now lives under `sql/lib/` and is `@@`-included from each
-section. The `windows` CTE chain (`run_params → offsets → raw_windows →
-snaps → begin_snap → end_snap → windows → valid_windows`) is in
-`sql/lib/windows_cte.sql`; the curated stat/metric/wait lists are
-per-template under `sql/lib/templates/<template>/` (see "Templates"
-below); the `nth_csv` PL/SQL helper is in `sql/lib/nth_csv.plsql`;
-the inline SVG sparkline JS and the wait-class color palette are in
-`js_*.plsql`. A view or helper package would violate the no-DDL rule,
-so include-files are the chosen mechanism. To change the windows
-logic, edit one file under `sql/lib/` and every consumer picks the
-change up.
-
-### Templates: per-run metric + wait-event subsetting
-Sections 02/03/07 (metrics) and 04/05/07 (waits) read their target
-lists from `sql/lib/templates/<template>/`:
-- `sysstat_load_targets.sql`  — SYSSTAT names for the Load Profile
-- `sysmetric_targets.sql`     — SYSMETRIC_SUMMARY names + is_additive flag
-- `wait_event_targets.sql`    — DBA_HIST_(SYSTEM_EVENT|BG_EVENT_SUMMARY)
-                                event_names; a single `'*'` row is a
-                                sentinel meaning "no filter".
-
-The driver resolves `~template` (8th DEFINE, default `'comprehensive'`)
-into `~template_dir = sql/lib/templates/<template>` once up front, so
-every consumer writes the include as
-`@@~template_dir/<file>.sql`. Unknown template names abort the run via
-the `TO_NUMBER('x')` ORA-01722 trick (same pattern as `step_unit`
-validation). To add a new template, drop a directory with all three
-files into `sql/lib/templates/` and extend the whitelist `CASE` in the
-driver. Three templates ship today:
-- `comprehensive` (default) — the full curated lists used pre-templates.
-  The wait-event file is the `'*'` sentinel so the firehose-then-top-N
-  behavior is byte-identical to the pre-template report.
-- `simple` — a triage-friendly subset (~9 SYSSTAT, ~8 SYSMETRIC, ~10
-  wait events). Deliberately includes the SYSSTAT/SYSMETRIC names that
-  section 08's hero strip hard-references, so the hero cards keep
-  rendering instead of falling to `n/a`.
-- `dev` — an application-developer's view (~17 SYSSTAT, ~13 SYSMETRIC,
-  ~14 wait events). Keeps what the app/SQL drives — transaction
-  throughput (commits/rollbacks/executions/user calls), query work
-  (logical/physical reads, full table scans vs rowid fetches),
-  cursor/parse behaviour, sorts, SQL*Net chattiness, response time, and
-  app-caused waits (temp spill, commit latency, row/index/TM lock
-  contention, buffer busy, library-cache/cursor/shared-pool contention)
-  — and drops host/OS and storage-engine internals (Host CPU, physical
-  write bytes, redo internals, IO requests, single-block read latency,
-  background waits). Like `simple`, it deliberately retains the six
-  SYSSTAT/SYSMETRIC names section 08's hero strip hard-references.
-
-Wait-event filter idiom (in every consumer that joins
-`dba_hist_system_event` or `dba_hist_bg_event_summary`):
+### Templates
+`template` (default `comprehensive`) resolves to `~template_dir =
+sql/lib/templates/<name>`. Three ship: `comprehensive` (full lists; wait file is
+the `'*'` sentinel = byte-identical to pre-template behavior), `simple` (triage
+subset), `dev` (app-developer view). `simple`/`dev` deliberately retain the 6
+SYSSTAT/SYSMETRIC names section 08's hero cards hard-reference (else they show
+`n/a`). Add a template = drop a 3-file dir in `templates/` + extend the
+whitelist `CASE` (unknown names abort via the `TO_NUMBER('x')` ORA-01722 trick).
+Wait-event filter idiom in every consumer (keeps comprehensive plan identical
+while still allow-listing curated templates):
 ```sql
 AND ( EXISTS (SELECT 1 FROM wait_targets WHERE event_name = '*')
       OR se.event_name IN (SELECT event_name FROM wait_targets) )
 ```
-This keeps the `comprehensive`-template plan byte-identical (the
-`EXISTS` short-circuits the per-row IN-list) while still applying a
-proper allowlist for curated templates.
 
-**Nested `@@` path gotcha**: SQL\*Plus resolves `@@` paths in nested
-include files relative to the **outermost caller's** directory, not the
-immediate parent. The driver `awr_trend.sql` runs from the project root
-and `@@`-calls section files which in turn `@@`-include files under
-`sql/lib/`. The path written in the section file must therefore be
-`@@sql/lib/windows_cte.sql` — the full path *from the project root* —
-not `@@lib/windows_cte.sql` (which fails with "No such file or
-directory") nor `@@../lib/windows_cte.sql`. This was verified on Oracle
-19c sqlplus; treat it as the canonical path form.
-
-### The `pairs → bounds → deltas` pattern
-For cumulative AWR counters (`DBA_HIST_SYSSTAT`, `DBA_HIST_SYSTEM_EVENT`,
-`DBA_HIST_BG_EVENT_SUMMARY`), always use this pattern. See
-`sql/02_load_profile.sql` for the canonical shape. Do **not** use
-`CROSS JOIN targets` + double `LEFT JOIN` — it silently drops stats that
-appear at only one snap and misbehaves in aggregate (`inst_num = 0`) mode.
-
-**Important**: `DBA_HIST_SYSTEM_EVENT` and `DBA_HIST_BG_EVENT_SUMMARY`
-do **not** expose `*_DELTA` columns. Compute `end - begin` manually.
-Only `DBA_HIST_SQLSTAT` has `*_DELTA` columns (used in `06_top_sql.sql`).
+### `pairs → bounds → deltas` for cumulative counters
+For `DBA_HIST_SYSSTAT` / `SYSTEM_EVENT` / `BG_EVENT_SUMMARY`, follow the shape in
+`02_load_profile.sql`. Do NOT use `CROSS JOIN targets` + double `LEFT JOIN` (it
+drops stats present at only one snap and breaks in aggregate mode). **These views
+have NO `*_DELTA` columns — compute `end - begin` manually.** Only
+`DBA_HIST_SQLSTAT` exposes `*_DELTA` (used in `06_top_sql.sql`).
 
 ### HTML emission
-Every section emits markup via `DBMS_OUTPUT.PUT_LINE` inside anonymous
-PL/SQL blocks. SQL\*Plus is configured with `TERMOUT OFF / PAGESIZE 0 /
-HEADING OFF / LINESIZE 32767 / TRIMSPOOL ON` so only the explicit
-`PUT_LINE` bytes reach the spool. **Any bare `SELECT` in a section file
-will leak into the HTML.** All user-visible strings (SQL text, event
-names, metric names) must be wrapped in `DBMS_XMLGEN.CONVERT(...)`.
+Sections emit markup via `DBMS_OUTPUT.PUT_LINE` in anonymous blocks; SQL\*Plus is
+set `TERMOUT OFF / PAGESIZE 0 / HEADING OFF / LINESIZE 32767 / TRIMSPOOL ON`, so
+**any bare `SELECT` leaks into the HTML.** Wrap all user-visible strings (SQL
+text, event/metric names) in `DBMS_XMLGEN.CONVERT(...)`.
 
-### Substitution variables
-Twelve user-facing vars: `target_end`, `win_hours`, `weeks_back`, `top_n`,
-`inst_num`, `step`, `step_unit`, `template`, `debug`, `marker_file`,
-`markers`, `echarts`. `inst_num = 0` means
-aggregate across RAC instances; any other value filters to that
-instance. `target_end = 'AUTO'` means "prior full hour relative to
-SYSDATE" (resolved in the driver into `target_end_resolved`).
-`step` + `step_unit` (default `1` + `'w'`) control the cadence between
-adjacent comparison windows; `step_unit` is one of `'h'` (hours), `'d'`
-(days), `'w'` (weeks). The original "same hour-of-week, N prior weeks"
-behaviour is the default (`step=1, step_unit='w'`). Setting `step=1,
-step_unit='h'` compares the last `weeks_back+1` consecutive 1-hour
-windows in a straight line back from `target_end`. `template` selects
-which subset of metrics + wait events to display; see "Templates"
-above. `debug` is a UI-only toggle: any case-insensitive truthy form
-(`Y`, `YES`, `1`, `ON`, `TRUE`, `T`) resolves into `debug_termout='ON'`
-and unmutes the per-section progress markers; everything else
-(including the default `N`) resolves into `'OFF'`. See "Debug logging"
-below. `marker_file` is an optional path to a timeline-marker config
-file; empty/unset (the default) means no markers. `markers` is the
-**file-free** alternative: an inline list of milestones
-(`'WHEN|LABEL;;WHEN|LABEL'`) parsed in-session by
-`sql/lib/markers_inline.sql`, so a self-contained SQL\*Plus session (or
-`MARKERS=… run_awr_trend.sh`) needs nothing on disk. `marker_file` wins
-when both are set. See "Timeline markers" below. `echarts` selects where
-the ECharts library loads from — empty (default) = public CDN, an
-`http(s)` URL = used verbatim as the `<script src>` (internal mirror), a
-local file path = inlined into the report by the wrapper for a single
-self-contained offline file; see "Self-contained / offline ECharts"
-below. In the wrapper it rides in the **`ECHARTS` environment variable**
-(like `MARKERS`, to keep the positional arg order symmetric). The driver resolves
-`step_hours = step * (1|24|168)` plus
-`period_unit_short` / `period_unit_long` / `period_unit_title` /
-`period_step_label` / `period_axis_fmt` once up front; every section
-uses `~step_hours/24` (NOT the literal `7`) as the cadence multiplier.
-The driver also resolves `run_id` (17-digit timestamp from
-`SYSTIMESTAMP`), `dbid`, `dbid_list` (comma set of all visible DBIDs;
-see "Cross-DBID continuity" below), `db_name`, `host_name`, `db_version`,
-`caller_user`, `generated_at_s`, `dow_name`, `report_path`,
-`template_name`, `template_dir`, `debug_termout`, and `marker_include`
-up front; every section references them as `~name`. No section ever
-re-resolves these values.
+### Multitenant DBID resolution
+- `~dbid` is **not** `v$database.dbid` (which returns the CDB root's DBID in a
+  PDB). The driver's `dbo` inline view picks the DBID of `MAX(end_interval_time)`
+  in `dba_hist_snapshot`, falling back to `CON_DBID` only when AWR is empty.
+  Handles PDBs with/without local AWR. Used for the report filename + masthead.
+- `~dbid_list` = comma set of ALL DBIDs owning visible snapshots (`dbl` view).
+  Needed because a non-CDB migrated into a PDB keeps pre-migration history under
+  the old DBID and new snapshots under `CON_DBID`. **Every AWR filter uses
+  `dbid IN (~dbid_list)`, not `dbid = ~dbid`.** `windows_cte.sql` resolves snaps
+  by time across the list and carries each snap's `s.dbid` forward, so
+  window-joined sections (02–08, 11, 12) need no change; a window straddling a
+  DBID change is invalidated. Time-range sections (00, 10) scan by TIMESTAMP and
+  key bucket maps by `dbid||'|'||snap_id`. Point-lookups (06, 09, 11) just switch
+  to `IN`.
+- **Single-DBID is byte-identical** to the old `= ~dbid` behavior (verified on
+  dbmint). Re-run byte-identity after touching 00/06/09/10/11/12 or
+  `windows_cte.sql`. Masthead emits the primary `~dbid` exactly as before and
+  only appends "all DBIDs …" when the list has a comma — don't "simplify" that.
 
-**Multitenant `dbid` gotcha (data-driven resolution).** `~dbid` is **not**
-`v$database.dbid` — it is resolved data-drivenly by the `dbo` inline view in
-the driver as *the DBID owning the freshest snapshot visible in the current
-container*. This is required because in multitenant there is no single static
-source that is correct everywhere:
-- In a PDB, `v$database.dbid` returns the **CDB root's** DBID, not the PDB's.
-- Whether the `DBA_HIST_*` rows a PDB can see are stored under the **CDB DBID**
-  or under the **PDB's `CON_DBID`** depends on PDB-level AWR (autoflush):
-  with local AWR on, rows live under the PDB's `CON_DBID` and the root's
-  repository is invisible inside the PDB; with it off, the only visible rows
-  are the root's, under the CDB DBID. So `CON_DBID`-only would return an empty
-  report against a PDB that has *no* local AWR, and `v$database.dbid`-only
-  misses a PDB that *has* local AWR — the original bug.
-The `dbo` view picks `MAX(end_interval_time)`'s DBID from `dba_hist_snapshot`,
-falling back to `CON_DBID` only when AWR is empty (so `~dbid` is never NULL).
-In a non-CDB and in the CDB root this resolves to the same DBID as
-`v$database.dbid`, so existing output (and the dbmint byte-identity test) is
-unchanged. `~dbid` is used for the **report path filename** and the **masthead
-label** only. The header `db_name` is likewise suffixed with `/ <CON_NAME>` in
-a PDB so the report is unambiguous about which container it covers.
-
-**Cross-DBID continuity (`~dbid_list`) — non-CDB → PDB migrations.** AWR is
-keyed by `(dbid, snap_id)`, and a non-CDB migrated into a PDB keeps its
-pre-migration history under the **old non-CDB DBID** while post-migration
-snapshots land under the **new `CON_DBID`**. A report pinned to a single
-`~dbid` therefore goes blank for every window on the far side of the migration
-(the original "AWR not continuous" symptom). The fix: the driver also resolves
-`~dbid_list`, the comma set of **all** DBIDs owning snapshots visible in the
-container (the `dbl` inline view: `LISTAGG(DISTINCT dbid)` over
-`dba_hist_snapshot`, `NVL` to `CON_DBID` so the list is never empty). Because
-`DBA_HIST_*` is container-scoped, in a migrated PDB this set is exactly
-`{old non-CDB DBID, new CON_DBID}`. Every AWR filter uses
-`dbid IN (~dbid_list)` instead of `dbid = ~dbid`:
-- **Window-joined sections (02–08, 11 main, 12)** need *no per-section change*:
-  `sql/lib/windows_cte.sql` now resolves candidate snaps **by time** across
-  `dbid IN (~dbid_list)` and carries each snap's own `s.dbid` forward, so
-  `begin_snap`/`end_snap`/`instance_pairs`/`windows`/`valid_windows`/
-  `windows_rollup` all gain a **per-window dbid**. Those sections already join
-  `ON x.dbid = w.dbid`, so a pre-migration window now resolves against the old
-  DBID and a post-migration window against the new one, automatically. A window
-  that **straddles** the migration (begin and end snaps under different DBIDs)
-  is invalidated with `skip_reason = 'DBID changed inside window …'` — a delta
-  across a DBID change is meaningless. `begin_snap`/`end_snap` also expose
-  `end_ts` (the snap's `end_interval_time`) for the time-axis sections below.
-- **Time-range chart sections (00 masthead strip, 10 DB-time summary)** can no
-  longer scan a single contiguous `snap_id BETWEEN v_min AND v_max` range
-  (snap_ids reset per DBID). They now resolve a **TIMESTAMP** span
-  (`v_range_start`/`v_range_end` = the `end_ts` of the earliest begin / latest
-  end snap across valid windows) and scan `end_interval_time BETWEEN` it with
-  `dbid IN (~dbid_list)`; their `v_snap_idx` bucket map is keyed by
-  `dbid||'|'||snap_id` and every `LAG` partitions by `(dbid, instance_number …)`
-  so deltas never cross the boundary. `dba_hist_sys_time_model` /
-  `dba_hist_system_event` (no `end_interval_time` column) are joined to
-  `dba_hist_snapshot` to get the time bound.
-- **Point-lookup filters (09 ASH pull, 11 ASH + sqltext, 06 sqltext + per-SQL
-  sqlstat)** just switch `= ~dbid` → `IN (~dbid_list)`. The two `dba_hist_sqltext`
-  lookups in 06 drop `dbid` from their `ROW_NUMBER() PARTITION BY` (text is
-  identical across DBIDs for a sql_id) so the result stays one row per `sql_id`.
-- Section 00's masthead emits the **primary DBID label exactly as before**
-  (the `~dbid` NEW_VALUE, padding and all) and only **appends**
-  `&middot; all DBIDs <a>, <b>` when `~dbid_list` actually contains a comma
-  (i.e. the span crosses a DBID change). This is deliberate so the
-  single-DBID masthead stays byte-identical — do NOT "simplify" it to emit
-  `~dbid_list` directly (that drops the NUMBER-column padding and fails the
-  byte-identity test by one line).
-
-**Tilde-in-comments caveat (bit me once).** Because `~dbid_list` / `~dbid`
-are now woven through the code, remember the `SET DEFINE '~'` gotcha (see
-"Tilde gotcha"): a literal `~dbid_list` in a comment **embedded inside a SQL
-statement** (e.g. mid-`SELECT` in the driver prologue, before the SELECT that
-defines it) is parsed as an undefined substitution variable and triggers an
-interactive `Enter value for dbid_list:` prompt — which, against a heredoc,
-reads EOF garbage and aborts with `SP2-0310 … O/S Message: No such file or
-directory`. Keep `~name` out of comments; write the bare name (`dbid_list`).
-
-**Single-DBID invariant (verified).** When only one DBID is present,
-`~dbid_list` is a one-element list equal to `~dbid`, so `dbid IN (~dbid_list)`
-≡ the old `dbid = ~dbid`, the per-window dbid is constant, the straddle check
-never fires, and the time-range scans select exactly the old snap_id range.
-Output is byte-identical — **confirmed on dbmint in Jun 2026**: a fresh
-pre-change (`d2f185f`) report and a post-change report generated back-to-back
-normalized to the same md5 (`ea447dac…`). Re-run the byte-identity test after
-touching any of sections 00/06/09/10/11/12 or `windows_cte.sql`. The
-multi-DBID path can only be validated on a real migrated PDB (dbmint is a
-single-DBID CDB).
-
-### Self-contained / offline ECharts (`echarts` var)
-The report's one remaining network dependency is the Apache ECharts
-`<script>` (everything else — CSS, SVG sparklines, marker JS — is already
-inline). The `echarts` var (12th DEFINE, default `''`) controls it and is
-polymorphic on the value:
-- **empty** → emit today's public-CDN tag. **Byte-identical to the
-  pre-feature report** — the driver's `CASE WHEN TRIM('~echarts') IS NULL`
-  takes the CDN branch (`TRIM('')` is NULL in Oracle), producing the exact
-  same `<script src="…cdn.jsdelivr.net…" onerror=…>` line.
-- **an `http(s)` URL** → used verbatim as the `<script src>`. For shops
-  with an internal ECharts mirror / artifact server on an otherwise
-  air-gapped network. Works on the pure-SQL\*Plus path too (driver-only).
-- **a local file path** (e.g. `vendor/echarts.min.js`) → the driver emits
-  it as the `src`, then **`run_awr_trend.sh` inlines the file's bytes**
-  into the finished report (`inline_echarts`), replacing the whole
-  `<script src="…path…" …></script>` line with `<script>…bytes…</script>`.
-  Result: one self-contained HTML file that renders every chart with **no
-  network**. The user supplies their own `echarts.min.js` (none is
-  vendored in the repo); grab it from the CDN URL or an `npm` tarball.
-
-Mechanics / gotchas:
-- The driver change is the `CASE` in `awr_trend.sql` right after
-  `</head><body>`; only the `src` value varies, so the empty-default path
-  stays byte-identical (re-run the byte-identity test only matters for the
-  default — non-empty values intentionally differ).
-- The inlining lives **only in the wrapper** (`run_report` → `inline_echarts`),
-  because SQL\*Plus can't cleanly stream a ~1 MB minified blob through
-  `DBMS_OUTPUT` under `SET DEFINE '~'`. `inline_echarts` splits the HTML at
-  the marker line (`grep -nF 'src="<path>"'`) and splices the library
-  between `head`/`tail` via `cat`, so the single-line minified file never
-  has to be parsed line-by-line (robust on macOS/BSD awk). The DB read-only
-  invariant is untouched — it's pure output-file surgery.
-- `is_url` decides inline-vs-link: `http://` / `https://` prefix → leave as
-  src; anything else non-empty → treat as a path and inline. A path that
-  isn't readable warns and leaves the report linking to it (degrades to the
-  `no-charts` fallback rather than aborting).
-- The pure-SQL\*Plus block printed by the configurator **cannot** inline a
-  local path (no wrapper post-step); `build_sqlplus_block` prints an `# NB:`
-  note telling the user to use the shell wrapper or an `http(s)` mirror URL
-  for that path. A local-path report from the bare heredoc just references
-  the file as a relative `src`.
-- In the wrapper the value travels in the **`ECHARTS` env var** (not a
-  positional arg — symmetric with `MARKERS`), threaded into `run_report`,
-  `build_shell_cmd` (prefixes `ECHARTS=…`), `build_sqlplus_block`, the
-  summary, and `--help`. The value must contain no `"` (it lands in an
-  HTML attribute) — paths/URLs normally don't.
+### `echarts` var (offline / self-contained)
+Polymorphic on value: **empty** → public CDN (byte-identical to before, via
+`CASE WHEN TRIM('~echarts') IS NULL`); **http(s) URL** → used verbatim as
+`<script src>` (internal mirror); **local path** → emitted as src, then
+`run_awr_trend.sh`'s `inline_echarts` splices the file's bytes into the report
+(`grep -nF` the marker line + `cat` head/body/tail) for a fully offline single
+file. Inlining is wrapper-only (SQL\*Plus can't stream ~1 MB through
+`DBMS_OUTPUT`); the pure-SQL\*Plus path can't inline a local path (it prints an
+`# NB:` note). User supplies their own `echarts.min.js`. Value must contain no
+`"`.
 
 ### Timeline markers
-Two vars let a user annotate the dated charts with milestones (patch
-applied, index rebuild, incident, release): `marker_file` (a path to a
-config file on disk) and `markers` (a **file-free** inline list). The
-driver resolves `marker_include` via the same CASE-to-path trick as
-`template_dir`, with a three-way priority (TRIM of `''` is NULL in
-Oracle, so an empty var is "absent"):
-1. `marker_file` set → the caller's path (the on-disk escape hatch).
-2. else `markers` set → `sql/lib/markers_inline.sql` (parses the inline
-   var).
-3. else → `sql/lib/no_markers.sql` (no-op stub).
-The prologue always `@@`-includes exactly one marker file, so there is no
-conditional-include problem.
+`marker_file` (on-disk config) or `markers` (file-free inline list, single var).
+Priority: `marker_file` > `markers` > `no_markers.sql` stub — the driver
+resolves `~marker_include` to exactly one file (CASE-to-path), so the prologue
+always includes one. Inline format: `WHEN|LABEL` joined by `;;`. The inline value
+must be **single-quote/`|`/`;;`/`~`/`&`-free** (3 quoting layers); the
+configurator swaps apostrophes to `’` and strips reserved tokens — keep
+`markers_inline.sql` and the configurator's `markersInline()` in lockstep.
+`js_markers.plsql` defines `AWR_markLine(catLabels, isoLabels)`; markers attach
+to calendar-axis charts (00/09/10/11, one-arg call, ISO category labels) and
+per-window trend charts (06/14/15, two-arg call with a parallel `weeksIso` array
+because their visible labels are year-less). Sparklines (02/03/08/13) and
+value-axis charts (04/05/07) are not dated, so get no markers. Markers are
+chart-only (don't draw offline). `marker.sql` runs under `SET DEFINE '~'` so its
+params are `~1`/`~2`, not `&1`/`&2`. See `markers.example.sql`.
 
-**File-free path (`markers`).** The inline var is a list of milestones,
-each `WHEN|LABEL`, separated by `;;`, e.g. `DEFINE markers = '2026-06-10
-09:00|Release 2.0;;2026-06-11 03:00|Patch'`. `sql/lib/markers_inline.sql`
-splits it (`INSTR`-based, no regex) and calls the same emit as
-`sql/lib/marker.sql` per milestone, so the pushed `{t,label}` objects —
-and therefore the rendered markers — are identical to the file path. The
-whole value rides through three quoting layers (shell single-quotes →
-SQL\*Plus `DEFINE` → a PL/SQL string literal), so the transport must be
-**single-quote-free**: the configurator swaps a straight apostrophe to a
-typographic `’` and strips the reserved tokens (`|`, `;;`, `~`, and `&`
-— the last because `DEFINE markers='…'` is read while `&` is still the
-live substitution char, before the driver sets `~`). For labels that
-genuinely need those characters, use `marker_file`. The wrapper carries
-`markers` in the **`MARKERS` environment variable** (not a positional
-arg, to keep the positional order symmetric with `awr_trend.sql`); the
-web configurator emits `MARKERS='…' ./run_awr_trend.sh …` for the shell
-and `DEFINE markers='…'` for the SQL\*Plus block.
+### Chart render layer
+Every chart renders from the **same cursor** as its numeric table — never a
+separate slice. Per-row CSVs via `LISTAGG(... ORDER BY week_offset DESC)`
+(oldest→newest), emitted as `data-spark="…"` (SVG renderer) or JSON on
+`window.AWR_DATA` (ECharts). Numeric CSV forces `NLS_NUMERIC_CHARACTERS='.,'` so
+`Number()` parses under any NLS. Sparkline JS has a 2% flatness floor (renders a
+midline instead of magnifying noise). Sections that re-grid one column per week
+parse the CSV with `nth_csv` (INSTR-based, preserves empty tokens; `@@`-included
+just before `BEGIN`).
 
-Flow: `sql/lib/js_markers.plsql` (included right after `js_sparkline.plsql`)
-emits one `<script>` that inits `window.AWR_MARKERS=[]` and defines
-`window.AWR_markLine(catLabels, isoLabels)`. Then `@@~marker_include` runs;
-each line of the user's config is
-`@@sql/lib/marker '<YYYY-MM-DD HH24:MI>' '<label>'`, and `sql/lib/marker.sql`
-emits `window.AWR_MARKERS.push({t,label})`. Markers are attached to two
-kinds of ECharts timeline:
+### `ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,'` is load-bearing
+The driver pins it right after the `WHENEVER` directives. `step_hours` round-trips
+as a trailing-dot string like `'1.'` and is re-parsed with a bare
+`TO_NUMBER('~step_hours')`, which honors session NLS. On a `,`-decimal locale
+(Czech/German) that raises ORA-01722 and — under `WHENEVER SQLERROR EXIT` —
+aborts the whole run. Don't remove it, and don't add a bare `TO_NUMBER('~var')`
+over a `.`-rendered value without it. Writes nothing to the DB.
 
-- **Calendar-axis charts** — sections **00** (masthead), **09** (ASH
-  timeline), **10** (DB-time summary), **11** (per-SQL ASH breakdown) —
-  whose x-axis is `type:"category"` of full `'YYYY-MM-DD HH24:MI'` strings.
-  They call `AWR_markLine(<their category array>)` with **one** arg and
-  attach the result as `series[0].markLine`, alongside the existing
-  `markArea` window bands.
-- **Per-window trend charts** — sections **06** (Top SQL by dimension),
-  **14** (Segment I/O), **15** (File I/O) — whose x-axis labels are the
-  compact, *year-less* `period_axis_fmt` form (`'Mon DD'` /
-  `'Mon DD HH24:MI'`) that `Date.parse` cannot read. Each emits a parallel
-  `weeksIso` array of full `'YYYY-MM-DD HH24:MI'` timestamps (same
-  `week_offset DESC` order as the visible `weeks` labels) and calls
-  `AWR_markLine(weeks, weeksIso)` with **two** args. The helper does the
-  time math (span bounds + nearest-tick snap) on `weeksIso` but emits the
-  matching `weeks` display label as the `xAxis` value, so a marker snaps to
-  the **nearest compared window**. Attached to `series[0].markLine` inside
-  the per-dim `render()` so it survives the chart's sqls/types/schemas
-  re-render (`setOption(..., true)`).
+### Window validity (per-instance in RAC)
+`windows_cte.sql` pairs begin/end snaps per `(week_offset, instance_number)` and
+marks `valid_flag='N'` (with `skip_reason`) when an instance lacks a begin/end
+snap, has begin=end, restarted mid-window (`startup_time` differs), or the window
+straddles a DBID change. `valid_windows` is the per-instance valid-only
+projection consumed by data sections 02–08 (their `GROUP BY week_offset` sums
+only surviving pairs). `windows_rollup` aggregates back to one row per
+`week_offset` for display (sections 01, 09). Single-instance: no-op,
+byte-identical.
 
-The `isoLabels` 2nd arg is optional and length-checked: omit it (or pass a
-mismatched length) and the display labels double as the time source, which
-is exactly what the calendar-axis charts do — so their one-arg call is
-unchanged. The remaining per-window visuals — the inline-SVG sparklines in
-sections **02/03/08/13** and the value-axis bar/heatmap charts in
-**04/05/07** — are NOT dated timelines (x-axis is week offsets, wait
-seconds, or metric names), so they get no markers.
+### SYSMETRIC additive-vs-ratio aggregation
+`DBA_HIST_SYSMETRIC_SUMMARY` is per-(snap, instance). Cross-instance roll-up is
+metric-dependent: **rates/counters** (AAS, *_Per_Sec, Session Count) are
+`SUM(average)`; **ratios/percentages/latencies** are `AVG(average)`. Flat AVG on
+additive metrics undercounts cluster load. Each `sysmetric_targets.sql` tags
+metrics `is_additive`; sections 03/07 read it, section 08's `cards` CTE carries
+an inline `is_add`. Pattern: `snap_value = (SUM|AVG) GROUP BY week,metric,snap`
+then `metric_value = AVG(snap_value) GROUP BY week,metric`. Single-instance:
+no-op.
 
-Gotchas:
-- `sql/lib/marker.sql` runs under the driver's `SET DEFINE '~'`, so its
-  positional parameters are `~1` / `~2`, **not** `&1` / `&2`.
-- `sql/lib/markers_inline.sql` reads its payload from `~markers` (so it
-  too runs under `SET DEFINE '~'`) and emits the **byte-identical** push
-  `<script>` as `marker.sql`. It is the only consumer of the `markers`
-  var; if you change the inline format (the `|` / `;;` separators, or the
-  configurator's character swaps), keep both this file and the
-  configurator's `markersInline()` in lockstep.
-- The config file uses `@@sql/lib/marker` (full path from the project
-  root) because SQL\*Plus resolves nested `@@` paths against the outermost
-  caller — same rule as every other `@@sql/lib/` include.
-- The x-axis is `type:"category"`, not a time axis, so `AWR_markLine` snaps
-  each marker to the nearest category tick (client-side) and drops markers
-  outside a chart's span per chart. The time source is the category labels
-  themselves on the calendar charts (full ISO) and the parallel `weeksIso`
-  array on the per-window trend charts (06/14/15), whose visible labels are
-  year-less and not directly parseable.
-- Markers are chart-only: offline (no ECharts) they don't draw, which is
-  inherent — the init blocks `return` before touching `markLine`.
-- A malformed instant is skipped with an HTML comment, not a fatal error
-  (the marker file is included after SPOOL starts, so aborting there would
-  truncate the report). Labels with a single quote must double it.
-- See `markers.example.sql` for the user-facing format.
-
-### Debug logging
-`sql/lib/debug_log.sql` is the single helper that emits per-section
-progress markers without polluting the HTML spool. The driver
-`@@`-includes it before every section's main include with a
-`DEFINE _dbg_msg = '...'` line setting the label. Mechanism per call:
-`SPOOL OFF` → silent `SELECT TO_CHAR(SYSTIMESTAMP, ...)` (captured via
-`COLUMN dbg_ts NEW_VALUE dbg_ts NOPRINT` declared once in the driver)
-→ `SET TERMOUT ~debug_termout` → `PROMPT [awr_trend ~dbg_ts] ~_dbg_msg`
-→ `SET TERMOUT OFF` → `SPOOL ~report_path APPEND`. Cost when disabled
-is one round-trip per section (≤ 12) — negligible. Verified
-byte-identical HTML output between `debug=N` and `debug=Y` runs.
-
-**Gotcha — Oracle identifiers cannot start with an underscore.** The
-column alias for the timestamp slot is `dbg_ts`, **not** `_dbg_ts`.
-The latter raises `ORA-00911: invalid character`, and because the
-driver runs under `WHENEVER SQLERROR EXIT SQL.SQLCODE` that error
-aborts the entire run right after the prologue — producing a
-213-line truncated HTML stub with zero sections. (The `_dbg_msg`
-substitution variable name is fine because that's a SQL\*Plus DEFINE
-name, not a column identifier.) If you ever rename either slot, keep
-the leading character a letter and re-run the byte-identity smoke
-test on dbmint.
-
-**Tilde gotcha**: every numbered section file issues `SET DEFINE '~'` so
-it can use `~run_id` for parameter substitution. That makes `~` the
-live substitution character for the rest of the file — any literal `~`
-followed by a character (even in comments or strings, e.g. `~0.003`,
-`~/path`) is parsed as a variable reference and triggers an `Enter
-value for 0:` prompt, which silently truncates the section in
-non-interactive runs. If you need a literal tilde, write it out
-("around 0.003", "home dir", etc.) or wrap the affected block in `SET
-DEFINE OFF` / `SET DEFINE '~'`.
-
-### Chart render layer (sections 02, 03, 04, 05, 06, 07, 08, 09)
-Every chart is rendered from the same cursor that produces the numeric
-table — not from a separately persisted slice. The pattern is: the
-section's main cursor builds per-row CSVs via `LISTAGG(... WITHIN GROUP
-(ORDER BY week_offset DESC), ',')` (oldest→newest is the canonical
-spark order) and emits them either as a `data-spark="…"` attribute
-(read by the inline-SVG sparkline renderer in `awr_trend.sql`) or as a
-JSON payload on `window.AWR_DATA` for an ECharts init block. Numeric
-CSV uses `NLS_NUMERIC_CHARACTERS='.,'` so `Number(x)` parses regardless
-of the session NLS. Table cells pick an adaptive decimal format from
-`row_max`: at least 2 decimals, more when all values are small enough
-that 2 decimals would show "0.00" for real movement. The sparkline JS
-has a flatness floor: `(max-min)/|mean| < 2 %` renders a midline
-instead of autoscaling imperceptible noise into a zigzag.
-
-### Session decimal separator is pinned (`ALTER SESSION ... NLS_NUMERIC_CHARACTERS='.,'`)
-The driver issues `ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,'`
-right after the `WHENEVER` directives, before any numeric work. This is
-**load-bearing**, not cosmetic. Several values round-trip through
-SQL\*Plus substitution vars as strings rendered with a *literal* `.`:
-`step_hours` is `TO_CHAR(p.step_hours, 'FM99999999990.999999')`, which
-for an integer cadence yields a **trailing-dot string** like `'1.'` (FM
-strips the trailing zeros but leaves the period — verified on dbmint:
-`TO_CHAR(1,'FM...0.999999')` → `[1.]`). The derived-labels SELECT then
-re-parses it with a *bare* `TO_NUMBER('~step_hours')`, and bare
-`TO_NUMBER` honours the **session's** `NLS_NUMERIC_CHARACTERS`. On a
-client whose locale makes `,` the decimal separator (Czech, German, …),
-`.` becomes the group separator and `TO_NUMBER('1.')` raises
-**ORA-01722 ("invalid number")**, which — under `WHENEVER SQLERROR EXIT
-SQL.SQLCODE` — aborts the whole run right after the prologue (empty/
-truncated report). It is intermittent precisely because it depends on
-the *caller's* session NLS, not on any parameter. Pinning `'.,'` makes
-the render (`.`) and the parse agree everywhere. `ALTER SESSION SET
-NLS_*` writes nothing to the DB, so the read-only invariant and
-physical-standby safety hold. dbmint's default session NLS is already
-`'.,'`, so this is byte-identical there (verified Jun 2026). **Do not
-remove this line, and do not add a new bare `TO_NUMBER('~var')` over a
-value rendered with a `.`-bearing mask without keeping it** — the
-chart-CSV `TO_CHAR`s already force `'.,'` inline for the same reason;
-this `ALTER SESSION` is the session-wide twin that also covers the
-substitution-var round-trips.
-
-### Per-row CSV parsing in PL/SQL (`nth_csv`)
-Sections that need to render a grid with one column per week after
-`LISTAGG(... ORDER BY week_offset ASC)` parse the CSV inside the loop
-with a small `nth_csv(p_str, p_n)` PL/SQL function. The function lives
-in `sql/lib/nth_csv.plsql` and is `@@`-included at the top of the
-anonymous block (just before `BEGIN`). Slot `k+1` corresponds to
-`week_offset = k`. The function is INSTR-based (not `REGEXP_SUBSTR`)
-so empty tokens between commas are preserved.
-
-### Window validity (per-instance in RAC aggregate mode)
-`windows_cte.sql` resolves `begin_snap` and `end_snap` per
-`(week_offset, instance_number)`, FULL OUTER JOINs them into
-`instance_pairs`, and produces `windows` with one row per
-`(week_offset, instance_number)`. `valid_flag = 'N'` (with a
-`skip_reason`) is set per-instance when: an instance has no candidate
-begin or end snap; begin=end (same snap, window shorter than the AWR
-interval); or `startup_time` differs between the two snaps (the
-instance restarted inside the window).
-
-`valid_windows` is the per-instance, valid-only projection consumed by
-every numbered data section (02–08); their joins use
-`v.instance_number = w.instance_number` directly (no NULL fallback —
-`valid_windows.instance_number` is never NULL by construction). The
-final per-week aggregate happens at the section's own `GROUP BY
-week_offset` and naturally sums only over instance pairs that survived
-validation. On a RAC cluster where one instance restarts mid-window,
-its delta is dropped and the others' kept; on single-instance, this is
-a no-op.
-
-For display, `windows_rollup` aggregates `windows` back to one row per
-`week_offset`: `valid_flag = 'Y'` if at least one instance was valid;
-`begin_snap_id`/`end_snap_id` show the MIN/MAX across instances; the
-first non-null `skip_reason` wins. Sections 01 (windows ribbon + table)
-and 09 (ASH band markers) read `windows_rollup`. Single-instance output
-is byte-identical to the per-week-only design that preceded this CTE.
-
-### SYSMETRIC cross-instance aggregation (additive vs ratio)
-`DBA_HIST_SYSMETRIC_SUMMARY` reports per-(snap, instance) averages over
-the snapshot interval. Cross-instance roll-up is metric-dependent:
-**rates and counters** (Average Active Sessions, *_Per_Sec, Session
-Count) are **additive** — the cluster value is `SUM(average)` across
-instances; **ratios, percentages, latencies, response times** (CPU
-Ratios, Wait Time Ratio, Sync SBR Latency, SQL Service Response Time)
-are **averages** — `AVG(average)`. Doing a flat `AVG` across instances
-for additive metrics silently undercounts cluster load.
-
-Each template's `sysmetric_targets.sql` tags every metric with an
-`is_additive` flag ('Y'/'N'). Sections 03 and 07 read the flag from
-the targets file; section 08's hand-maintained `cards` CTE carries an
-inline `is_add` column for the same purpose. The aggregation pattern
-is two-step in every consumer: `snap_value = (SUM|AVG)(sm.average)
-GROUP BY week, metric, snap_id`, then `metric_value = AVG(snap_value)
-GROUP BY week, metric`. On single-instance, SUM and AVG over one row
-are identical, so this is a no-op.
-
-### Severity classes (must stay aligned with CSS in `_style.sql`)
-`CRITICAL` → `crit`, `WARN` → `warn`, `OK` → `ok`,
-`INSUFFICIENT_HISTORY` / `FLAT_BASELINE` → `skip`, informational → `info`.
-If you add a new severity, update both `07_summary.sql`, `08_overview.sql`
-(it computes the same labels inline for the hero cards), and `_style.sql`.
+### Severity classes (keep aligned with `_style.sql`)
+`CRITICAL`→`crit`, `WARN`→`warn`, `OK`→`ok`,
+`INSUFFICIENT_HISTORY`/`FLAT_BASELINE`→`skip`, informational→`info`. A new
+severity must update `07_summary.sql`, `08_overview.sql`, and `_style.sql`.
 
 ### Findings are recomputed, not shared
-Section 07 (findings) and section 08 (overview hero) each recompute
-their own z-scores from the AWR views. They do not share data. The
-LOAD/METRIC/WAIT target lists are now single-sourced per template
-from `sql/lib/templates/<template>/{sysstat_load,sysmetric,wait_event}_targets.sql`
-and `@@`-included by sections 02/03 (LOAD/METRIC), 04/05 (waits) and
-07 (all three), so adding or removing a stat from a template updates
-every consumer for that template in lock-step. Section 08's 6 hero
-cards reference specific LOAD/SYSMETRIC names by hand; if a template's
-target list omits one of those, the hero badge falls back to `n/a` —
-the `simple` template deliberately keeps the 6 names included so this
-doesn't trigger.
+Sections 07 and 08 each recompute their own z-scores. The LOAD/METRIC/WAIT target
+lists are single-sourced per template and `@@`-included by 02/03, 04/05, and 07.
+Inside 07, the unified recompute is `BULK COLLECT`-ed once into a record
+collection tagged via `ROW_NUMBER()`; the heatmap and detail loops both walk that
+one collection — don't reintroduce a second recompute cursor just for a different
+ORDER BY.
 
-Inside section 07 itself, the unified LOAD/METRIC/WAIT recompute is
-`BULK COLLECT`-ed once into a PL/SQL record collection tagged with both
-view positions via `ROW_NUMBER()`, and the heatmap and detail-table
-loops both walk that single collection in their respective orders. Do
-not reintroduce a second cursor that re-runs the whole recompute just
-to get a different ORDER BY.
+### Debug logging
+`sql/lib/debug_log.sql` emits one timestamped progress marker per section to
+**stdout** without touching the spool (`SPOOL OFF` → silent timestamp SELECT →
+`PROMPT` under `~debug_termout` → re-`SPOOL APPEND`). `debug=Y` (any truthy form)
+unmutes; HTML is byte-identical to `debug=N`. **Gotcha:** the timestamp column
+alias is `dbg_ts`, NOT `_dbg_ts` — a leading underscore raises ORA-00911 and
+aborts the run (Oracle identifiers can't start with `_`; the `_dbg_msg` DEFINE
+name is fine).
 
-## Verification state
+### Tilde gotcha
+Every section issues `SET DEFINE '~'`, making `~` the live substitution char.
+Any literal `~x` (even in comments/strings, e.g. `~0.003`, `~/path`, or a stray
+`~dbid_list` in a comment) triggers an `Enter value for …:` prompt that silently
+truncates the section (or aborts a heredoc run with SP2-0310). Write tildes out
+in prose; keep `~name` out of comments (use the bare name).
 
-Section 11's per-SQL module/action grouping was **verified on dbmint
-(19.27 CDB) in Jun 2026**. Each Top-N SQL's ASH is rolled up three ways
-(wait event / module / action) from one shared, MATERIALIZE-d base scan
-(`ash_base` → three `GROUP BY` roll-ups tagged with a `dim`
-discriminator), and each card gets a `.topsql-toggle` "Group by" button
-group; the JS `render(dimKey)` rebuilds the stack with `notMerge` and
-hides the module/action buttons when the SQL collapses that dim to a
-single `(none)` placeholder. The `dim` literal is `CAST(... AS
-VARCHAR2(6))` to dodge the UNION CHAR-literal blank-padding trap (a bare
-`'event'`/`'module'`/`'action'` UNION is typed `CHAR(6)`, which would
-pad `'event'`→`'event '` and silently break the `r.dim='event'` test and
-the `sql_id|dim|` prefix matching).
+## Verification & testing
 
-Verification details (so a future run can reproduce): pinned
-`target_end='2026-06-16 06:00'`, hourly cadence (`step_unit='h'`,
-`win_hours=1`, `weeks_back=8`) into the restart-free 15-min-snap stretch
-snaps 2524–2568. dbmint is idle, so no SQL clears the 5-sample chart
-threshold under a stock run — that run is still valuable (it proved the
-new cursor parses/executes with **zero ORA-** and the placeholder path
-renders). To exercise the chart/dims/toggle emission, a **temporary**
-`v_min_samples := 1` override (reverted before commit) made the
-background SQLs render: each card showed all three Group-by pills, and
-the `dims{event,module,action}` payload regrouped the **same** single
-sample three ways with **identical total AAS** per dim (e.g.
-`22356bkgsdcnh`: event `CPU` / module `MMON_SLAVE` / action `Monitor FRA
-Space`). Real module/action values flowed through (`DBMS_SCHEDULER`,
-`emagent`, `ORA$AT_SA_SPC_SY_1222` — the `$` needs no escaping), the NVL
-`(none)` placeholder worked (`b3853arjnybzv` had module `emagent` but
-action `(none)`), keys matched (charts populated, not all-zero — the
-CAST fix held), and zero ORA-/SP2-/PLS- in the spool. The dbmint test
-DB has no app workload that sets module/action *and* sustains ≥5 ASH
-samples/SQL, so a fully "natural" (un-overridden) chart render still
-awaits a busy DB. Output is **intentionally not** byte-identical to the
-pre-change report (the toggle markup + `dims{}` payload are new), so
-skip the byte-identity test for this change.
-
-**PENDING (Jun 2026): section 14 (segment I/O), section 15 (file I/O)
-and the section-06 "By physical reads" dimension have NOT yet been run
-against a real DB** — dbmint was unreachable when they were written.
-Verify with a pinned run (see the section-13 note below for the
-known-good window) and check: all five SQL dims render in 07 Top SQL,
-section 14 renders four h3 sub-blocks + charts + detail tables (nav
-numeral `08 Segment I/O`), section 15 renders four h3 sub-blocks +
-charts + per-file detail tables + the combined "I/O by file type"
-detail table (nav numeral `09 File I/O`), MB values show one decimal
-without a trailing dot, and zero ORA- in the spool.
-
-Section 13 (utilization) verified on dbmint in Jun 2026: pinned run
-(`target_end='2026-06-06 12:00'`, hourly cadence into a restart-free
-15-min-snap stretch) rendered all 18 metric rows with data under both
-`comprehensive` and `simple` (the section is template-independent), 3
-h3 sub-groups, nav/numeral `03 Utilization`, zero ORA- in the spool.
-Note dbmint's default-window trap: with `AUTO` + weekly cadence the
-test DB usually has no valid windows (restarts + sparse history), so
-*every* data section renders em-dashes — pin `target_end` into a clean
-snapshot stretch before concluding a section is broken.
-
-Last verified against Oracle 19c on dbmint (CDB1, `connect / as sysdba`)
-in May 2026 after the `fix/codex-review-priorities` round (per-instance
-window validity in `windows_cte.sql`, SYSMETRIC additive-vs-ratio
-classification, baselines override regression, generated-report
-gitignore). Single-instance byte-identity confirmed: the normalized
-md5 of a fresh `main`-branch report and a fresh `fix` -branch report
-generated minutes apart on dbmint matched (`fac510ce…`). Density
-matters — the test DB had at most 3 consecutive weeks at any given
-hour-of-week, so findings are forced to `INSUFFICIENT_HISTORY`
-(z-score needs ≥3 prior). Re-verify if you change any of sections
-02/03/04/05/06/07/08/09. Particular spots worth probing on a future
-real run:
-
-- HTML prologue: confirm that the `SELECT` resolving `run_id / dbid /
-  host_name / …` and the `SPOOL ~report_path` don't leak into the
-  spool (they shouldn't — every column is `NOPRINT` and `TERMOUT` is
-  off, but verify the very top of the generated `.html`).
-- `06_top_sql.sql` uses nested `DECLARE … BEGIN … END;` blocks inside a
-  `FOR` loop. Valid PL/SQL, but verbose — performance is fine at
-  `top_n = 10`.
-- `09_ash_timeline.sql` pulls every qualifying ASH row aggregated to
-  (hour_bucket, wait_class) over a `weeks_back*step_hours + win_hours`-
-  hour span. On a very busy DB this can be the single most expensive
-  section; consider narrowing the range (smaller `weeks_back`, or a
-  shorter `step_hours`) if wall-clock matters.
-- RAC aggregate vs per-instance: pick a known-quiet window on a RAC
-  cluster, run with `inst_num = 0` and `inst_num = 1`, cross-check that
-  aggregate ≈ sum of per-instance for cumulative stats.
-
-### Byte-identity convention for behavior-preserving refactors
-When refactoring code that should not change report output, sync the
-project to dbmint (`rsync -az --exclude=.git --exclude=reports
---exclude=.claude ./ oracle@dbmint:~/awr_timeline_comparison/ -e 'ssh
--p 2201'`), generate one HTML report against the pre-change code and
-one against the post-change code at roughly the same wall-clock time
-(AWR data is live — the same hour-of-week run an hour later may pick
-up fresh snapshots), normalize the volatile bits (`run_id`,
-`generated_at`), and compare md5:
-
-```sh
-sed -E '
-  s/run [0-9]{17}/run RUNID/g
-  s/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} \+[0-9]{2}:[0-9]{2}/TIMESTAMP/g
-' "$1" | md5
-```
-
-The report is otherwise deterministic given the AWR state, so a
-byte-identical match is the strongest possible "no behavior change"
-signal.
+- **Test DB: dbmint** (Oracle 19c CDB1, `ssh -p 2201 oracle@dbmint`, `connect /
+  as sysdba`). Single-DBID, idle, sparse history.
+- **dbmint default-window trap:** with `AUTO` + weekly cadence the test DB
+  usually has no valid windows, so *every* data section shows em-dashes. Pin
+  `target_end` into a restart-free 15-min-snap stretch (e.g.
+  `target_end='2026-06-06 12:00'`, `step_unit='h'`, `win_hours=1`) before
+  concluding a section is broken. It's also too idle to clear the 5-sample ASH
+  chart threshold and too sparse for z-scores (forces `INSUFFICIENT_HISTORY`).
+- **Byte-identity test** (the strongest "no behavior change" signal for refactors
+  that shouldn't alter output): rsync to dbmint, generate a pre- and post-change
+  report at ~the same wall-clock, normalize volatile bits and compare md5:
+  ```sh
+  rsync -az --exclude=.git --exclude=reports --exclude=.claude ./ \
+    oracle@dbmint:~/awr_timeline_comparison/ -e 'ssh -p 2201'
+  sed -E 's/run [0-9]{17}/run RUNID/g;
+          s/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} \+[0-9]{2}:[0-9]{2}/TIMESTAMP/g' \
+    "$1" | md5
+  ```
+- **Verified on dbmint (2026):** single-DBID byte-identity of the
+  window-validity / SYSMETRIC / cross-DBID refactors; section 11 module/action
+  grouping; section 13 utilization. **Pending against a real DB:** sections 14
+  (segment I/O), 15 (file I/O), and the 06 "By physical reads" dim were written
+  while dbmint was unreachable. The multi-DBID migration path needs a real
+  migrated PDB.
 
 ## Things NOT to do
 
-- Don't add positional args to `awr_trend.sql` itself — keep it driven
-  purely by pre-set DEFINEs so both the wrapper and the pure-SQL\*Plus
-  path stay symmetric.
-- Don't assume `DBA_HIST_SYSTEM_EVENT` has `*_DELTA` columns. It doesn't.
-- Don't reintroduce a scratch schema to "share" data between sections.
-  The read-only invariant is the whole point of this design. If a
-  computation needs to be reused across sections, extract it as an
-  `@@`-included file under `sql/lib/`. If it needs to be reused inside
-  one section (e.g. driving two views from the same recompute), use
-  `BULK COLLECT` into a PL/SQL collection — section 07 is the canonical
-  example.
-- Don't write `@@lib/...` or `@@../lib/...` from a section file. SQL\*Plus
-  resolves nested `@@` paths against the **outermost caller's**
-  directory, so the only correct form is `@@sql/lib/<file>` from any
-  section. The "Shared CTE bodies and helpers live under `sql/lib/`"
-  section above explains why.
-- Don't hardcode `@@sql/lib/sysstat_load_targets.sql`,
-  `@@sql/lib/sysmetric_targets.sql`, or any flat path under `sql/lib/`
-  for the curated metric / wait-event lists. Those files moved under
-  `sql/lib/templates/<template>/` and every consumer must use
-  `@@~template_dir/<file>.sql` so the active template's lists are
-  picked up. See "Templates" in Core conventions.
-- Don't change the `'*'` sentinel idiom for wait_event_targets without
-  updating every consumer (sections 04/05/07) and the comprehensive
-  template's file in lockstep. The sentinel is what keeps
-  comprehensive-template output byte-identical to the pre-template
-  report.
+- Don't add positional args to `awr_trend.sql` — keep it DEFINE-driven so the
+  wrapper and pure-SQL\*Plus paths stay symmetric.
+- Don't assume `DBA_HIST_SYSTEM_EVENT`/`BG_EVENT_SUMMARY` have `*_DELTA` columns.
+- Don't reintroduce a scratch schema to share data — extract a `@@`-included file
+  (`sql/lib/`), or `BULK COLLECT` into a collection within one section (section 07
+  is the canonical example).
+- Don't write `@@lib/...` / `@@../lib/...` (use `@@sql/lib/<file>`), and don't
+  hardcode flat `@@sql/lib/*_targets.sql` (use `@@~template_dir/<file>.sql`).
+- Don't change the `'*'` wait-target sentinel without updating 04/05/07 and the
+  comprehensive template in lockstep.
 - Don't concat user strings into HTML without `DBMS_XMLGEN.CONVERT`.
-- Don't introduce additional external JS/CSS beyond the single ECharts
-  CDN tag that's already in `awr_trend.sql`. The report is still one
-  HTML file and works offline (charts hide, tables remain) via the
-  `body.no-charts` fallback — any new dependency must degrade the
-  same way. Inline-SVG sparklines and the ribbon are CDN-free and must
-  stay that way.
-- Don't widen the grant list in `README.md` without a concrete reason —
-  everything in there is actually needed by the current SQL.
-- Don't reintroduce the literal `7` as the cadence multiplier inside any
-  `raw_windows` CTE. The cadence is `~step_hours/24` (resolved by the
-  driver from `step` + `step_unit`); typing `7*o.week_offset` re-hardcodes
-  the weekly default and breaks every non-weekly comparison.
+- Don't add external JS/CSS beyond the single ECharts tag — every dependency must
+  degrade via `body.no-charts`. Inline sparklines/ribbon stay CDN-free.
+- Don't widen the `README.md` grant list without a concrete reason.
+- Don't reintroduce the literal `7` as the cadence multiplier — use
+  `~step_hours/24`.
