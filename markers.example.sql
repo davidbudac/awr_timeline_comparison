@@ -2,10 +2,13 @@
 -- markers.example.sql -- example timeline-marker configuration.
 --
 -- Optional milestones (datetime + label) drawn as vertical dashed marker
--- lines on every dated timeline chart in the report (sections 00 masthead,
--- 09 ASH timeline, 10 DB-time summary, 11 per-SQL ASH breakdown).  Use it
--- to correlate load changes with known events: patches, index rebuilds,
--- stats gathers, incidents, releases.
+-- lines on every dated timeline chart in the report: the calendar-axis
+-- charts (sections 00 masthead, 09 ASH timeline, 10 DB-time summary,
+-- 11 per-SQL ASH breakdown) and the per-window trend charts (06 Top SQL
+-- by dimension, 14 Segment I/O, 15 File I/O), where each marker snaps to
+-- the nearest compared window.  Use it to correlate load changes with
+-- known events: patches, index rebuilds, stats gathers, incidents,
+-- releases.
 --
 -- Copy this file, edit the marker lines below, and pass its path as the
 -- marker_file argument:

@@ -19,6 +19,7 @@ DECLARE
     v_header     VARCHAR2(4000);
     v_row        VARCHAR2(32767);
     v_weeks_json VARCHAR2(4000);
+    v_weeks_iso_json VARCHAR2(4000);
     v_cur_dim    VARCHAR2(10);
     v_val        NUMBER;
     v_val_s      VARCHAR2(64);
@@ -80,6 +81,19 @@ BEGIN
                WITHIN GROUP (ORDER BY week_offset DESC)
         || ']'
     INTO   v_weeks_json
+    FROM   (SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1);
+
+    -- Parallel full-ISO timestamps for the same windows, in the same
+    -- (week_offset DESC) order as v_weeks_json. Fed to AWR_markLine as the
+    -- time source so user markers snap to the nearest window even though
+    -- the visible x-axis labels are the compact period_axis_fmt form.
+    SELECT '['
+        || LISTAGG('"' || TO_CHAR(
+               CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
+               - (~step_hours/24)*week_offset, 'YYYY-MM-DD HH24:MI') || '"', ',')
+               WITHIN GROUP (ORDER BY week_offset DESC)
+        || ']'
+    INTO   v_weeks_iso_json
     FROM   (SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1);
 
 
@@ -555,6 +569,7 @@ BEGIN
     IF v_dim_label.COUNT > 0 THEN
         DBMS_OUTPUT.PUT_LINE('<script>(function(){');
         DBMS_OUTPUT.PUT_LINE('AWR_DATA.topSql={weeks:' || v_weeks_json
+            || ',weeksIso:' || v_weeks_iso_json
             || ',topN:' || v_top_n || ',dims:{');
         v_first_dim := TRUE;
         v_dim := v_dim_label.FIRST;
@@ -622,6 +637,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('  var el=document.getElementById("topsql-chart-"+dim); if(!el) return;');
         DBMS_OUTPUT.PUT_LINE('  var d=AWR_DATA.topSql.dims[dim];');
         DBMS_OUTPUT.PUT_LINE('  var weeks=AWR_DATA.topSql.weeks;');
+        DBMS_OUTPUT.PUT_LINE('  var mark=window.AWR_markLine&&window.AWR_markLine(weeks,AWR_DATA.topSql.weeksIso);');
         DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el);');
         DBMS_OUTPUT.PUT_LINE('  function rowName(s){ return s.name || s.sql_id || "?"; }');
         DBMS_OUTPUT.PUT_LINE('  function render(mode){');
@@ -632,7 +648,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('      grid:{left:50,right:90,top:10,bottom:44,containLabel:true},');
         DBMS_OUTPUT.PUT_LINE('      xAxis:{type:"category",data:weeks,axisLabel:{color:fg,fontWeight:600},splitLine:{show:true,lineStyle:{color:gr}}},');
         DBMS_OUTPUT.PUT_LINE('      yAxis:{type:"value",name:d.unit,nameTextStyle:{color:mu,fontSize:10},axisLabel:{color:mu,formatter:function(v){return (+v).toLocaleString(undefined,{maximumFractionDigits:2});}},splitLine:{lineStyle:{color:gr}}},');
-        DBMS_OUTPUT.PUT_LINE('      series:rows.map(function(s,i){return {name:rowName(s),type:"line",connectNulls:false,showSymbol:true,symbolSize:6,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:2},emphasis:{focus:"series",lineStyle:{width:3}},endLabel:{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6},data:s.vals};})');
+        DBMS_OUTPUT.PUT_LINE('      series:rows.map(function(s,i){var o={name:rowName(s),type:"line",connectNulls:false,showSymbol:true,symbolSize:6,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:2},emphasis:{focus:"series",lineStyle:{width:3}},endLabel:{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6},data:s.vals};if(i===0&&mark)o.markLine=mark;return o;})');
         DBMS_OUTPUT.PUT_LINE('    }, true);');
         DBMS_OUTPUT.PUT_LINE('  }');
         DBMS_OUTPUT.PUT_LINE('  render("sqls");');

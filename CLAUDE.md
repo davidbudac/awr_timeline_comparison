@@ -407,15 +407,38 @@ and `DEFINE markers='…'` for the SQL\*Plus block.
 
 Flow: `sql/lib/js_markers.plsql` (included right after `js_sparkline.plsql`)
 emits one `<script>` that inits `window.AWR_MARKERS=[]` and defines
-`window.AWR_markLine(catLabels)`. Then `@@~marker_include` runs; each line
-of the user's config is `@@sql/lib/marker '<YYYY-MM-DD HH24:MI>' '<label>'`,
-and `sql/lib/marker.sql` emits `window.AWR_MARKERS.push({t,label})`. The
-four **calendar-axis** charts — sections **00** (masthead), **09** (ASH
-timeline), **10** (DB-time summary), **11** (per-SQL ASH breakdown) — call
-`AWR_markLine(<their category array>)` in their ECharts init block and
-attach the result as `series[0].markLine`, alongside the existing
-`markArea` window bands. The per-window sparklines (sections 02–08) are
-NOT calendar timelines (x-axis is week offsets), so they get no markers.
+`window.AWR_markLine(catLabels, isoLabels)`. Then `@@~marker_include` runs;
+each line of the user's config is
+`@@sql/lib/marker '<YYYY-MM-DD HH24:MI>' '<label>'`, and `sql/lib/marker.sql`
+emits `window.AWR_MARKERS.push({t,label})`. Markers are attached to two
+kinds of ECharts timeline:
+
+- **Calendar-axis charts** — sections **00** (masthead), **09** (ASH
+  timeline), **10** (DB-time summary), **11** (per-SQL ASH breakdown) —
+  whose x-axis is `type:"category"` of full `'YYYY-MM-DD HH24:MI'` strings.
+  They call `AWR_markLine(<their category array>)` with **one** arg and
+  attach the result as `series[0].markLine`, alongside the existing
+  `markArea` window bands.
+- **Per-window trend charts** — sections **06** (Top SQL by dimension),
+  **14** (Segment I/O), **15** (File I/O) — whose x-axis labels are the
+  compact, *year-less* `period_axis_fmt` form (`'Mon DD'` /
+  `'Mon DD HH24:MI'`) that `Date.parse` cannot read. Each emits a parallel
+  `weeksIso` array of full `'YYYY-MM-DD HH24:MI'` timestamps (same
+  `week_offset DESC` order as the visible `weeks` labels) and calls
+  `AWR_markLine(weeks, weeksIso)` with **two** args. The helper does the
+  time math (span bounds + nearest-tick snap) on `weeksIso` but emits the
+  matching `weeks` display label as the `xAxis` value, so a marker snaps to
+  the **nearest compared window**. Attached to `series[0].markLine` inside
+  the per-dim `render()` so it survives the chart's sqls/types/schemas
+  re-render (`setOption(..., true)`).
+
+The `isoLabels` 2nd arg is optional and length-checked: omit it (or pass a
+mismatched length) and the display labels double as the time source, which
+is exactly what the calendar-axis charts do — so their one-arg call is
+unchanged. The remaining per-window visuals — the inline-SVG sparklines in
+sections **02/03/08/13** and the value-axis bar/heatmap charts in
+**04/05/07** — are NOT dated timelines (x-axis is week offsets, wait
+seconds, or metric names), so they get no markers.
 
 Gotchas:
 - `sql/lib/marker.sql` runs under the driver's `SET DEFINE '~'`, so its
@@ -429,9 +452,12 @@ Gotchas:
 - The config file uses `@@sql/lib/marker` (full path from the project
   root) because SQL\*Plus resolves nested `@@` paths against the outermost
   caller — same rule as every other `@@sql/lib/` include.
-- The x-axis is `type:"category"` of `'YYYY-MM-DD HH24:MI'` strings, not a
-  time axis, so `AWR_markLine` snaps each marker to the nearest category
-  tick (client-side) and drops markers outside a chart's span per chart.
+- The x-axis is `type:"category"`, not a time axis, so `AWR_markLine` snaps
+  each marker to the nearest category tick (client-side) and drops markers
+  outside a chart's span per chart. The time source is the category labels
+  themselves on the calendar charts (full ISO) and the parallel `weeksIso`
+  array on the per-window trend charts (06/14/15), whose visible labels are
+  year-less and not directly parseable.
 - Markers are chart-only: offline (no ECharts) they don't draw, which is
   inherent — the init blocks `return` before touching `markLine`.
 - A malformed instant is skipped with an HTML comment, not a fatal error
