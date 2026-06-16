@@ -513,6 +513,33 @@ that 2 decimals would show "0.00" for real movement. The sparkline JS
 has a flatness floor: `(max-min)/|mean| < 2 %` renders a midline
 instead of autoscaling imperceptible noise into a zigzag.
 
+### Session decimal separator is pinned (`ALTER SESSION ... NLS_NUMERIC_CHARACTERS='.,'`)
+The driver issues `ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,'`
+right after the `WHENEVER` directives, before any numeric work. This is
+**load-bearing**, not cosmetic. Several values round-trip through
+SQL\*Plus substitution vars as strings rendered with a *literal* `.`:
+`step_hours` is `TO_CHAR(p.step_hours, 'FM99999999990.999999')`, which
+for an integer cadence yields a **trailing-dot string** like `'1.'` (FM
+strips the trailing zeros but leaves the period — verified on dbmint:
+`TO_CHAR(1,'FM...0.999999')` → `[1.]`). The derived-labels SELECT then
+re-parses it with a *bare* `TO_NUMBER('~step_hours')`, and bare
+`TO_NUMBER` honours the **session's** `NLS_NUMERIC_CHARACTERS`. On a
+client whose locale makes `,` the decimal separator (Czech, German, …),
+`.` becomes the group separator and `TO_NUMBER('1.')` raises
+**ORA-01722 ("invalid number")**, which — under `WHENEVER SQLERROR EXIT
+SQL.SQLCODE` — aborts the whole run right after the prologue (empty/
+truncated report). It is intermittent precisely because it depends on
+the *caller's* session NLS, not on any parameter. Pinning `'.,'` makes
+the render (`.`) and the parse agree everywhere. `ALTER SESSION SET
+NLS_*` writes nothing to the DB, so the read-only invariant and
+physical-standby safety hold. dbmint's default session NLS is already
+`'.,'`, so this is byte-identical there (verified Jun 2026). **Do not
+remove this line, and do not add a new bare `TO_NUMBER('~var')` over a
+value rendered with a `.`-bearing mask without keeping it** — the
+chart-CSV `TO_CHAR`s already force `'.,'` inline for the same reason;
+this `ALTER SESSION` is the session-wide twin that also covers the
+substitution-var round-trips.
+
 ### Per-row CSV parsing in PL/SQL (`nth_csv`)
 Sections that need to render a grid with one column per week after
 `LISTAGG(... ORDER BY week_offset ASC)` parse the CSV inside the loop

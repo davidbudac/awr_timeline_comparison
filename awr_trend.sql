@@ -71,6 +71,21 @@ SET SERVEROUTPUT  ON SIZE UNLIMITED FORMAT WRAPPED
 WHENEVER SQLERROR EXIT SQL.SQLCODE
 WHENEVER OSERROR  EXIT FAILURE
 
+-- Pin a period decimal separator (and comma group separator) for the whole
+-- session.  Numeric values that round-trip through SQL*Plus substitution
+-- variables are rendered with a literal '.' (e.g. step_hours via
+-- TO_CHAR(1,'FM...0.999999') yields the string '1.') and later re-parsed with
+-- a bare TO_NUMBER('~step_hours').  Bare TO_NUMBER uses the *session's*
+-- NLS_NUMERIC_CHARACTERS, so on a client whose locale makes ',' the decimal
+-- separator (e.g. Czech/German) '.' becomes the group separator and
+-- TO_NUMBER('1.') raises ORA-01722 ("invalid number"), aborting the run.
+-- Forcing '.,' makes the render and the parse agree regardless of the
+-- caller's locale.  ALTER SESSION SET NLS_* writes nothing to the database,
+-- so the read-only invariant (and physical-standby safety) is preserved; and
+-- it matches the rest of the report, which already forces '.,' on every
+-- chart-CSV TO_CHAR.
+ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,';
+
 -- The caller MUST have set target_end / win_hours / weeks_back / top_n /
 -- inst_num before invoking this driver.  For the canonical defaults, do:
 --     @sql/defaults.sql
