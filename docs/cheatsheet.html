@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cheat sheet — AWR Timeline Comparison</title>
-<meta name="description" content="Ready-to-paste recipes for run_awr_trend.sh: weekly, daily and hourly cadences, RAC, templates, debug markers, timeline markers, and comparison playbooks.">
+<meta name="description" content="Ready-to-paste recipes for run_awr_trend.sh: weekly, daily and hourly cadences, RAC, templates, debug markers, timeline markers, offline self-contained reports, and comparison playbooks.">
 <style>
   :root{
     --ink:#1c2433;
@@ -204,6 +204,7 @@
         <li><a href="#markers">Timeline markers</a></li>
         <li><a href="#topn">Larger Top-N</a></li>
         <li><a href="#nowrapper">Without the wrapper</a></li>
+        <li><a href="#offline">Offline / self-contained</a></li>
         <li><a href="#playbooks">Playbooks</a></li>
         <li><a href="#retention">AWR retention</a></li>
       </ul>
@@ -230,6 +231,7 @@
             <tr><td>10</td><td><code>debug</code></td><td><code>N</code></td><td><code>Y</code> prints per-section progress markers to stdout; HTML unaffected</td></tr>
             <tr><td>11</td><td><code>marker_file</code></td><td><em>(empty)</em></td><td>Optional timeline-marker config; empty = none</td></tr>
             <tr><td>env</td><td><code>MARKERS</code></td><td><em>(empty)</em></td><td>File-free markers: inline <code>WHEN|LABEL</code> pairs joined by <code>;;</code> (not a positional arg)</td></tr>
+            <tr><td>env</td><td><code>ECHARTS</code></td><td><em>(empty)</em></td><td>Where the chart library loads from: empty = CDN, an <code>http(s)</code> URL = mirror, a local path = inlined for a self-contained offline file (see <a href="#offline">§11</a>)</td></tr>
           </tbody>
         </table>
       </div>
@@ -511,19 +513,81 @@ DEFINE template   = <span class="s">'comprehensive'</span>
 DEFINE debug      = <span class="s">'N'</span>
 DEFINE marker_file = <span class="s">''</span>
 DEFINE markers = <span class="s">''</span>
+DEFINE echarts = <span class="s">''</span>
 @@awr_trend.sql
 EXIT
 SQL</pre>
       <div class="note">
         When you set the DEFINEs by hand instead of loading
-        <code>@sql/defaults.sql</code>, include <code>DEFINE marker_file = ''</code> —
-        the driver references it, so an unset value would stop at an
-        “Enter value” prompt.
+        <code>@sql/defaults.sql</code>, include the empty
+        <code>DEFINE marker_file = ''</code>, <code>DEFINE markers = ''</code> and
+        <code>DEFINE echarts = ''</code> lines — the driver references all three, so
+        an unset value would stop at an “Enter value” prompt.
+      </div>
+    </section>
+
+    <section id="offline">
+      <h2><span class="num">§11</span>Self-contained / offline report (<code>echarts</code>)</h2>
+      <p>
+        The report is almost entirely self-contained already — inline CSS, inline
+        SVG sparklines, inline marker JS. Its one network dependency is the Apache
+        ECharts library that draws the larger charts (hero strip, wait-class bars,
+        findings heatmap, top-SQL bump chart, ASH timeline). When it can't load, the
+        tables still render every number and an amber “Charts hidden” banner explains
+        why. The <code>echarts</code> var (env var <code>ECHARTS</code> in the wrapper)
+        controls where it loads from:
+      </p>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th><code>echarts</code></th><th>Result</th><th>Offline?</th><th>Single file?</th></tr></thead>
+          <tbody>
+            <tr><td><em>(empty, default)</em></td><td>loads from cdn.jsdelivr.net</td><td>no</td><td>yes</td></tr>
+            <tr><td>an <code>http(s)</code> URL</td><td><code>&lt;script src&gt;</code> your internal mirror, verbatim</td><td>needs the mirror</td><td>yes</td></tr>
+            <tr><td>a local file path</td><td>wrapper <strong>inlines</strong> the file's bytes</td><td>yes</td><td>yes</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Single self-contained file (wrapper does the inlining)</h3>
+      <p>Supply your own <code>echarts.min.js</code> — none ships in the repo; grab it
+      from the CDN URL once, or from an <code>npm</code> tarball — and point
+      <code>ECHARTS</code> at it:</p>
+<pre>ECHARTS=vendor/echarts.min.js ./run_awr_trend.sh user/pw@svc</pre>
+      <p>The wrapper splices the library into the finished HTML, so the one
+      <code>.html</code> opens and renders every chart with no network at all
+      (it adds roughly the size of <code>echarts.min.js</code>, ~1&nbsp;MB, to the file).</p>
+
+      <h3>Internal mirror (no inlining; works on the pure-SQL*Plus path too)</h3>
+<pre>ECHARTS=<span class="s">'https://artifacts.corp/echarts@5/echarts.min.js'</span> \
+    ./run_awr_trend.sh user/pw@svc</pre>
+
+      <h3>Straight from SQL*Plus</h3>
+      <p>The inlining step lives only in the wrapper, so a bare <code>sqlplus</code>
+      run can't produce the single self-contained file on its own. Set the
+      <code>echarts</code> var to pick the source:</p>
+<pre>sqlplus -S -L user/pw@svc &lt;&lt;<span class="s">'SQL'</span>
+@sql/defaults.sql
+DEFINE echarts = <span class="s">'vendor/echarts.min.js'</span>   <span class="c">-- or an https:// mirror URL</span>
+@awr_trend.sql
+SQL</pre>
+      <p>A mirror URL yields a single file that needs the mirror; a local path emits
+      <code>&lt;script src="vendor/echarts.min.js"&gt;</code>, which renders offline
+      only if you keep that <code>.js</code> beside the report. To collapse it into
+      one self-contained file, run the same splice the wrapper does — from the repo
+      root, after generation:</p>
+<pre>html=<span class="s">"$(ls -t reports/*.html | head -1)"</span>
+lib=<span class="s">'vendor/echarts.min.js'</span>   <span class="c"># same path you put in DEFINE echarts</span>
+line=<span class="s">"$(grep -nF "src=\"$lib\"" "$html" | head -1 | cut -d: -f1)"</span>
+{ head -n $((line-1)) <span class="s">"$html"</span>; echo <span class="s">'&lt;script&gt;'</span>; cat <span class="s">"$lib"</span>; echo <span class="s">'&lt;/script&gt;'</span>; tail -n +$((line+1)) <span class="s">"$html"</span>; } \
+  &gt; <span class="s">"$html.tmp"</span> &amp;&amp; mv <span class="s">"$html.tmp"</span> <span class="s">"$html"</span></pre>
+      <div class="note">
+        On a host with no shell at all (plain Windows + SQL*Plus), the mirror-URL
+        form is the only zero-extra-step option for a single file.
       </div>
     </section>
 
     <section id="playbooks">
-      <h2><span class="num">§11</span>Scheduling &amp; comparison playbooks</h2>
+      <h2><span class="num">§12</span>Scheduling &amp; comparison playbooks</h2>
 
       <h3>“What's different this morning vs my normal Monday?”</h3>
 <pre><span class="c"># Compare the current hour vs four prior Mondays at this hour.</span>
@@ -550,7 +614,7 @@ SQL</pre>
     </section>
 
     <section id="retention">
-      <h2><span class="num">§12</span>AWR retention check</h2>
+      <h2><span class="num">§13</span>AWR retention check</h2>
       <p>
         Before you run any of the longer-lookback recipes, verify your AWR retention
         covers the span you ask for:

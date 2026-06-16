@@ -373,14 +373,76 @@ DEFINE step_unit  = 'h'
 DEFINE template   = 'comprehensive'
 DEFINE debug      = 'N'
 DEFINE marker_file = ''
+DEFINE markers = ''
+DEFINE echarts = ''
 @@awr_trend.sql
 EXIT
 SQL
 ```
 
 (When you set the DEFINEs by hand instead of loading `@sql/defaults.sql`,
-include `DEFINE marker_file = ''` — the driver references it, so an unset
+include the empty `DEFINE marker_file = ''`, `DEFINE markers = ''` and
+`DEFINE echarts = ''` lines — the driver references all three, so an unset
 value would stop for an "Enter value" prompt.)
+
+---
+
+## Self-contained / offline report (`echarts`)
+
+The report is almost entirely self-contained already — inline CSS, inline
+SVG sparklines, inline marker JS. Its one network dependency is the Apache
+ECharts library that draws the larger charts (hero strip, wait-class bars,
+findings heatmap, top-SQL bump chart, ASH timeline). When it can't load,
+the tables still render every number and an amber "Charts hidden" banner
+explains why. The `echarts` var (env var `ECHARTS` in the wrapper) picks
+where it loads from:
+
+| `echarts` value | Result | Offline? | Single file? |
+|-----------------|--------|----------|--------------|
+| *(empty, default)* | loads from cdn.jsdelivr.net | no | yes |
+| an `http(s)` URL | `<script src>` your internal mirror, verbatim | needs the mirror | yes |
+| a local file path | wrapper **inlines** the file's bytes | yes | yes |
+
+You supply your own `echarts.min.js` (none ships in the repo — grab it from
+the CDN URL once, or an `npm` tarball).
+
+### Single self-contained file — wrapper inlines a local copy
+```bash
+ECHARTS=vendor/echarts.min.js ./run_awr_trend.sh user/pw@svc
+```
+The wrapper splices the library into the finished HTML, so the one `.html`
+renders every chart with no network at all (adds ~1 MB to the file).
+
+### Internal mirror — no inlining, works on the pure-SQL\*Plus path too
+```bash
+ECHARTS='https://artifacts.corp/echarts@5/echarts.min.js' ./run_awr_trend.sh user/pw@svc
+```
+
+### Straight from SQL\*Plus
+The inlining step lives only in the wrapper, so a bare `sqlplus` run can't
+produce the single self-contained file on its own. Set the `echarts` var to
+choose the source:
+```bash
+sqlplus -S -L user/pw@svc <<'SQL'
+@sql/defaults.sql
+DEFINE echarts = 'vendor/echarts.min.js'   -- or an https:// mirror URL
+@awr_trend.sql
+SQL
+```
+A mirror URL gives a single file that needs the mirror; a local path emits
+`<script src="vendor/echarts.min.js">`, which renders offline only if you
+keep that `.js` beside the report. To collapse it into one self-contained
+file, run the same splice the wrapper does — from the repo root, after
+generation:
+```bash
+html="$(ls -t reports/*.html | head -1)"
+lib='vendor/echarts.min.js'   # same path you put in DEFINE echarts
+line="$(grep -nF "src=\"$lib\"" "$html" | head -1 | cut -d: -f1)"
+{ head -n $((line-1)) "$html"; echo '<script>'; cat "$lib"; echo '</script>'; tail -n +$((line+1)) "$html"; } \
+  > "$html.tmp" && mv "$html.tmp" "$html"
+```
+On a host with no shell at all (plain Windows + SQL\*Plus), the mirror-URL
+form is the only zero-extra-step option for a single file.
 
 ---
 
@@ -438,6 +500,8 @@ DEFINE step_unit  = 'w'
 DEFINE template   = 'comprehensive'
 DEFINE debug      = 'N'
 DEFINE marker_file = ''
+DEFINE markers = ''
+DEFINE echarts = ''
 ```
 
 ---

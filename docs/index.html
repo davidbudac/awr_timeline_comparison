@@ -562,10 +562,14 @@
           quarter-over-quarter.</p>
         </div>
         <div class="fcard">
-          <h4><span class="ico">●</span>Works offline too</h4>
-          <p>The big charts load ECharts from a CDN; when it's unreachable the charts
-          hide, a banner explains why, and every number is still in the tables.
-          Inline-SVG sparklines never need the network.</p>
+          <h4><span class="ico">●</span>Works offline — fully, if you want</h4>
+          <p>By default the big charts load ECharts from a CDN; when it's unreachable
+          the charts hide, a banner explains why, and every number is still in the
+          tables (inline-SVG sparklines never need the network). For a truly
+          air-gapped, single-file report — charts and all — point the
+          <code>echarts</code> var at a local <code>echarts.min.js</code> (or an
+          internal mirror URL); see the
+          <a href="cheatsheet.html#offline">cheat sheet</a>.</p>
         </div>
         <div class="fcard">
           <h4><span class="ico">●</span>RAC-aware</h4>
@@ -734,6 +738,8 @@ SQL&gt; <span class="k">@awr_trend.sql</span></pre>
                 <td>Optional timeline-marker config — milestones drawn on the dated charts</td></tr>
             <tr><td><code>MARKERS</code> <em>(env)</em></td><td><em>(empty)</em></td>
                 <td>File-free alternative to <code>marker_file</code> — inline <code>WHEN|LABEL</code> milestones joined by <code>;;</code></td></tr>
+            <tr><td><code>ECHARTS</code> <em>(env)</em></td><td><em>(empty)</em></td>
+                <td>Where the chart library loads from: empty = CDN, an <code>http(s)</code> URL = internal mirror, a local file path = inlined into the report for a single self-contained, offline HTML file</td></tr>
           </tbody>
         </table>
       </div>
