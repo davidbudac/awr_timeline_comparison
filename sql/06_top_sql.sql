@@ -44,13 +44,13 @@ DECLARE
     -- Per-dimension JSON payloads accumulated while we render the detail
     -- tables; emitted once at the end as AWR_DATA.topSql.dims so each
     -- dimension can drive its own line-chart of metric value across windows.
-    -- Two parallel breakdowns: one series per top-N SQL_ID, one series per
-    -- top-N parsing_schema_name. The browser toggles between them.
+    -- Parallel breakdowns the browser toggles between: one series per top-N
+    -- SQL_ID, plus three group-by views (parsing_schema_name / module /
+    -- action) each carrying one series per top-N group value.
     TYPE t_dim_str  IS TABLE OF VARCHAR2(32767) INDEX BY VARCHAR2(10);
     TYPE t_dim_meta IS TABLE OF VARCHAR2(80)    INDEX BY VARCHAR2(10);
     TYPE t_dim_num  IS TABLE OF NUMBER          INDEX BY VARCHAR2(10);
     v_dim_sqls_json    t_dim_str;
-    v_dim_schemas_json t_dim_str;
     v_dim_label        t_dim_meta;
     v_dim_unit         t_dim_meta;
     -- Per-dim "kept vs total" counters that drive the truncation footnote
@@ -59,8 +59,15 @@ DECLARE
     -- the cursor returns, so kept < total <=> the c_json_cap kicked in.
     v_dim_sqls_kept     t_dim_num;
     v_dim_sqls_total    t_dim_num;
-    v_dim_schemas_kept  t_dim_num;
-    v_dim_schemas_total t_dim_num;
+    -- Group-by accumulators, keyed by dim||'|'||grp_type (e.g. 'ELAPSED|module')
+    -- so one set of arrays covers all three group views (schema/module/action).
+    -- Same kept/total truncation bookkeeping as the SQL_ID accumulators above.
+    TYPE t_grp_str IS TABLE OF VARCHAR2(32767) INDEX BY VARCHAR2(20);
+    TYPE t_grp_num IS TABLE OF NUMBER          INDEX BY VARCHAR2(20);
+    v_grp_json   t_grp_str;
+    v_grp_kept   t_grp_num;
+    v_grp_total  t_grp_num;
+    v_gkey       VARCHAR2(20);
     v_dim              VARCHAR2(10);
     v_first_dim        BOOLEAN;
 
@@ -72,7 +79,10 @@ BEGIN
         || 'Top-' || v_top_n || ' SQLs per dimension per window from '
         || 'DBA_HIST_SQLSTAT <code>*_DELTA</code>. '
         || 'Bump chart per dimension: each line = one SQL across windows, '
-        || 'oldest &rarr; current. Detail tables collapsed; click to expand.</p>');
+        || 'oldest &rarr; current. Use the <b>Break down by</b> toggle to '
+        || 're-aggregate the same metric by <b>SQL_ID</b>, parsing '
+        || '<b>schema</b>, <b>module</b>, or <b>action</b> instead. '
+        || 'Detail tables collapsed; click to expand.</p>');
 
     SELECT '['
         || LISTAGG('"' || TO_CHAR(
@@ -290,14 +300,14 @@ BEGIN
             v_dim_sqls_json(s.dim)     := NULL;
             v_dim_sqls_kept(s.dim)     := 0;
             v_dim_sqls_total(s.dim)    := 0;
-            v_dim_schemas_kept(s.dim)  := 0;
-            v_dim_schemas_total(s.dim) := 0;
 
             DBMS_OUTPUT.PUT_LINE('<h3 style="margin-top:18px">' || s.dim_label || '</h3>');
             DBMS_OUTPUT.PUT_LINE('<div class="topsql-toggle" data-topsql-target="' || s.dim || '">'
                 || '<span>Break down by:</span>'
                 || '<button type="button" data-mode="sqls" class="active">SQL_ID</button>'
                 || '<button type="button" data-mode="schemas">Schema</button>'
+                || '<button type="button" data-mode="modules">Module</button>'
+                || '<button type="button" data-mode="actions">Action</button>'
                 || '</div>');
             DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-medium" id="topsql-chart-'
                 || s.dim || '"></div>');
@@ -429,16 +439,23 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('</tbody></table></details>');
     END IF;
 
-    -- Second pass: per-schema breakdown for the chart toggle. Uses the same
-    -- valid_windows + DBA_HIST_SQLSTAT scan, grouped by parsing_schema_name
-    -- instead of sql_id. Top-N schemas per dimension are picked the same
-    -- way (best rank across windows). No detail table -- chart only.
+    -- Second pass: per-group breakdowns for the chart toggle (schema /
+    -- module / action). Uses the same valid_windows + DBA_HIST_SQLSTAT scan,
+    -- grouped by parsing_schema_name / module / action instead of sql_id.
+    -- One SQLSTAT scan feeds a MATERIALIZE-d (schema,module,action) base that
+    -- is rolled up three ways tagged with a grp_type discriminator, so the
+    -- ranking machinery (top-N per window) runs once across all three views.
+    -- Top-N group values per (dimension, grp_type) are picked the same way
+    -- as SQL_IDs (best rank across windows). No detail table -- chart only.
     FOR sc IN (
         WITH
         @@sql/lib/windows_cte.sql
         ,
-        agg AS (
-            SELECT w.week_offset, NVL(s.parsing_schema_name, '(unknown)') AS schema_name,
+        base AS (
+            SELECT /*+ MATERIALIZE */ w.week_offset,
+                   NVL(s.parsing_schema_name, '(unknown)') AS schema_name,
+                   NVL(s.module, '(none)')                 AS module_name,
+                   NVL(s.action, '(none)')                 AS action_name,
                    SUM(NVL(s.executions_delta, 0))   AS executions_delta,
                    SUM(NVL(s.elapsed_time_delta, 0)) AS elapsed_time_delta_us,
                    SUM(NVL(s.cpu_time_delta, 0))     AS cpu_time_delta_us,
@@ -449,37 +466,65 @@ BEGIN
                 ON s.dbid = w.dbid
                AND s.snap_id BETWEEN w.begin_snap_id + 1 AND w.end_snap_id
                AND s.instance_number = w.instance_number
-            GROUP BY w.week_offset, NVL(s.parsing_schema_name, '(unknown)')
+            GROUP BY w.week_offset,
+                     NVL(s.parsing_schema_name, '(unknown)'),
+                     NVL(s.module, '(none)'),
+                     NVL(s.action, '(none)')
+        ),
+        -- Roll the shared base up three ways. grp_type is CAST to VARCHAR2 so
+        -- the UNION's CHAR-literal blank-padding trap can't pad the shorter
+        -- 'schema'/'module'/'action' tokens to a fixed CHAR width and break
+        -- the grp_type tests / 'dim|grp_type' keying downstream (the same
+        -- trap section 11's ash_raw documents).
+        agg AS (
+            SELECT week_offset, CAST('schema' AS VARCHAR2(8)) AS grp_type,
+                   schema_name AS grp_value,
+                   SUM(executions_delta)      AS executions_delta,
+                   SUM(elapsed_time_delta_us) AS elapsed_time_delta_us,
+                   SUM(cpu_time_delta_us)     AS cpu_time_delta_us,
+                   SUM(buffer_gets_delta)     AS buffer_gets_delta,
+                   SUM(disk_reads_delta)      AS disk_reads_delta
+            FROM   base GROUP BY week_offset, schema_name
+            UNION ALL
+            SELECT week_offset, CAST('module' AS VARCHAR2(8)), module_name,
+                   SUM(executions_delta), SUM(elapsed_time_delta_us),
+                   SUM(cpu_time_delta_us), SUM(buffer_gets_delta), SUM(disk_reads_delta)
+            FROM   base GROUP BY week_offset, module_name
+            UNION ALL
+            SELECT week_offset, CAST('action' AS VARCHAR2(8)), action_name,
+                   SUM(executions_delta), SUM(elapsed_time_delta_us),
+                   SUM(cpu_time_delta_us), SUM(buffer_gets_delta), SUM(disk_reads_delta)
+            FROM   base GROUP BY week_offset, action_name
         ),
         ranked AS (
             SELECT a.*,
-                   ROW_NUMBER() OVER (PARTITION BY week_offset
-                                      ORDER BY elapsed_time_delta_us DESC, schema_name) AS r_ela,
-                   ROW_NUMBER() OVER (PARTITION BY week_offset
-                                      ORDER BY cpu_time_delta_us DESC, schema_name)     AS r_cpu,
-                   ROW_NUMBER() OVER (PARTITION BY week_offset
-                                      ORDER BY buffer_gets_delta DESC, schema_name)     AS r_gets,
-                   ROW_NUMBER() OVER (PARTITION BY week_offset
-                                      ORDER BY disk_reads_delta DESC, schema_name)      AS r_preads,
-                   ROW_NUMBER() OVER (PARTITION BY week_offset
-                                      ORDER BY executions_delta DESC, schema_name)      AS r_exec
+                   ROW_NUMBER() OVER (PARTITION BY week_offset, grp_type
+                                      ORDER BY elapsed_time_delta_us DESC, grp_value) AS r_ela,
+                   ROW_NUMBER() OVER (PARTITION BY week_offset, grp_type
+                                      ORDER BY cpu_time_delta_us DESC, grp_value)     AS r_cpu,
+                   ROW_NUMBER() OVER (PARTITION BY week_offset, grp_type
+                                      ORDER BY buffer_gets_delta DESC, grp_value)     AS r_gets,
+                   ROW_NUMBER() OVER (PARTITION BY week_offset, grp_type
+                                      ORDER BY disk_reads_delta DESC, grp_value)      AS r_preads,
+                   ROW_NUMBER() OVER (PARTITION BY week_offset, grp_type
+                                      ORDER BY executions_delta DESC, grp_value)      AS r_exec
             FROM   agg a
         ),
         picked AS (
-            SELECT 'ELAPSED' AS dim, week_offset, schema_name,
+            SELECT 'ELAPSED' AS dim, week_offset, grp_type, grp_value,
                    elapsed_time_delta_us AS metric_value, r_ela AS rnk
             FROM ranked WHERE r_ela <= (SELECT top_n FROM run_params) AND elapsed_time_delta_us > 0
             UNION ALL
-            SELECT 'CPU', week_offset, schema_name, cpu_time_delta_us, r_cpu
+            SELECT 'CPU', week_offset, grp_type, grp_value, cpu_time_delta_us, r_cpu
             FROM ranked WHERE r_cpu <= (SELECT top_n FROM run_params) AND cpu_time_delta_us > 0
             UNION ALL
-            SELECT 'GETS', week_offset, schema_name, buffer_gets_delta, r_gets
+            SELECT 'GETS', week_offset, grp_type, grp_value, buffer_gets_delta, r_gets
             FROM ranked WHERE r_gets <= (SELECT top_n FROM run_params) AND buffer_gets_delta > 0
             UNION ALL
-            SELECT 'PREADS', week_offset, schema_name, disk_reads_delta, r_preads
+            SELECT 'PREADS', week_offset, grp_type, grp_value, disk_reads_delta, r_preads
             FROM ranked WHERE r_preads <= (SELECT top_n FROM run_params) AND disk_reads_delta > 0
             UNION ALL
-            SELECT 'EXEC', week_offset, schema_name, executions_delta, r_exec
+            SELECT 'EXEC', week_offset, grp_type, grp_value, executions_delta, r_exec
             FROM ranked WHERE r_exec <= (SELECT top_n FROM run_params) AND executions_delta > 0
         ),
         dims AS (
@@ -492,17 +537,18 @@ BEGIN
         all_weeks AS (
             SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
         ),
-        schemas AS (
-            SELECT DISTINCT dim, schema_name FROM picked
+        groups AS (
+            SELECT DISTINCT dim, grp_type, grp_value FROM picked
         ),
         grid AS (
-            SELECT q.dim, q.schema_name, w.week_offset, p.metric_value, p.rnk
-            FROM   schemas q CROSS JOIN all_weeks w
+            SELECT q.dim, q.grp_type, q.grp_value, w.week_offset, p.metric_value, p.rnk
+            FROM   groups q CROSS JOIN all_weeks w
             LEFT JOIN picked p
-                   ON p.dim = q.dim AND p.schema_name = q.schema_name AND p.week_offset = w.week_offset
+                   ON p.dim = q.dim AND p.grp_type = q.grp_type
+                  AND p.grp_value = q.grp_value AND p.week_offset = w.week_offset
         ),
-        per_schema AS (
-            SELECT dim, schema_name,
+        per_group AS (
+            SELECT dim, grp_type, grp_value,
                    MAX(CASE WHEN week_offset = 0 THEN rnk END) AS cur_rnk,
                    MIN(rnk)          AS best_rank,
                    MAX(metric_value) AS best_value,
@@ -511,18 +557,18 @@ BEGIN
                                              'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
                        WITHIN GROUP (ORDER BY week_offset ASC) AS week_vals
             FROM   grid
-            GROUP BY dim, schema_name
+            GROUP BY dim, grp_type, grp_value
         )
-        SELECT d.code AS dim, d.divs AS dim_div, ps.schema_name,
+        SELECT d.code AS dim, d.divs AS dim_div, ps.grp_type, ps.grp_value,
                ps.cur_rnk, ps.week_vals
         FROM   dims d
-        JOIN   per_schema ps ON ps.dim = d.code
-        ORDER BY d.ord,
+        JOIN   per_group ps ON ps.dim = d.code
+        ORDER BY d.ord, ps.grp_type,
             CASE WHEN ps.cur_rnk IS NULL THEN 1 ELSE 0 END,
             ps.cur_rnk NULLS LAST,
             ps.best_rank,
             ps.best_value DESC,
-            ps.schema_name
+            ps.grp_value
     ) LOOP
         v_chart_vals := '';
         FOR k IN REVERSE 1 .. v_weeks_back + 1 LOOP
@@ -540,26 +586,31 @@ BEGIN
                                'NLS_NUMERIC_CHARACTERS=''.,''');
             END IF;
         END LOOP;
-        v_new_entry := '{"name":"' || REPLACE(sc.schema_name, '"', '\"')
+        -- module/action are app-set free text; escape backslash, quote, and
+        -- stray CR/LF so the JS string literal and one-line PUT_LINE both stay
+        -- well-formed (schema names are tame, but route them through the same
+        -- escape for uniformity).
+        v_new_entry := '{"name":"'
+            || REPLACE(REPLACE(REPLACE(REPLACE(sc.grp_value,
+                   '\', '\\'), '"', '\"'), CHR(13), ' '), CHR(10), ' ')
             || '","cur":' || NVL(TO_CHAR(sc.cur_rnk), 'null')
             || ',"vals":[' || v_chart_vals || ']}';
-        -- Defensive init: schemas-loop dims should already be initialized
-        -- by the SQL loop's per-dim block, but a dim with schemas but no
-        -- top-N SQLs would skip that init. Treat as zeroed.
-        IF NOT v_dim_schemas_total.EXISTS(sc.dim) THEN
-            v_dim_schemas_total(sc.dim) := 0;
-            v_dim_schemas_kept(sc.dim)  := 0;
+        -- Accumulate into the (dim, grp_type) bucket. Lazily initialized here:
+        -- the SQL_ID loop only seeds the sqls accumulators, so the group
+        -- buckets are created on first sight of each dim|grp_type pair.
+        v_gkey := sc.dim || '|' || sc.grp_type;
+        IF NOT v_grp_total.EXISTS(v_gkey) THEN
+            v_grp_total(v_gkey) := 0;
+            v_grp_kept(v_gkey)  := 0;
         END IF;
-        v_dim_schemas_total(sc.dim) := v_dim_schemas_total(sc.dim) + 1;
-        IF NOT v_dim_schemas_json.EXISTS(sc.dim)
-           OR v_dim_schemas_json(sc.dim) IS NULL THEN
-            v_dim_schemas_json(sc.dim) := v_new_entry;
-            v_dim_schemas_kept(sc.dim) := v_dim_schemas_kept(sc.dim) + 1;
-        ELSIF LENGTH(v_dim_schemas_json(sc.dim)) + LENGTH(v_new_entry) + 1
+        v_grp_total(v_gkey) := v_grp_total(v_gkey) + 1;
+        IF NOT v_grp_json.EXISTS(v_gkey) OR v_grp_json(v_gkey) IS NULL THEN
+            v_grp_json(v_gkey) := v_new_entry;
+            v_grp_kept(v_gkey) := v_grp_kept(v_gkey) + 1;
+        ELSIF LENGTH(v_grp_json(v_gkey)) + LENGTH(v_new_entry) + 1
               <= c_json_cap THEN
-            v_dim_schemas_json(sc.dim) :=
-                v_dim_schemas_json(sc.dim) || ',' || v_new_entry;
-            v_dim_schemas_kept(sc.dim) := v_dim_schemas_kept(sc.dim) + 1;
+            v_grp_json(v_gkey) := v_grp_json(v_gkey) || ',' || v_new_entry;
+            v_grp_kept(v_gkey) := v_grp_kept(v_gkey) + 1;
         END IF;
     END LOOP;
 
@@ -574,12 +625,14 @@ BEGIN
         v_first_dim := TRUE;
         v_dim := v_dim_label.FIRST;
         WHILE v_dim IS NOT NULL LOOP
-            -- Emit each dim in three PUT_LINE calls so no single concat
-            -- ever holds both the sqls and the schemas accumulator at once;
-            -- their VARCHAR2(32767) slots can otherwise sum past PL/SQL's
-            -- 32767-byte expression limit and raise ORA-06502. The newlines
-            -- the splits inject sit inside a JS object literal and are
-            -- ignored by the parser.
+            -- Emit each dim across several PUT_LINE calls so no single concat
+            -- ever holds more than one VARCHAR2(32767) accumulator at once;
+            -- their slots can otherwise sum past PL/SQL's 32767-byte
+            -- expression limit and raise ORA-06502. The newlines the splits
+            -- inject sit inside a JS object literal and are ignored by the
+            -- parser. Group counts come from v_grp_kept/v_grp_total keyed by
+            -- dim||'|'||grp_type; missing keys (a dim with no rows for that
+            -- group view) read as 0.
             IF NOT v_first_dim THEN
                 DBMS_OUTPUT.PUT_LINE(',');
             END IF;
@@ -589,20 +642,40 @@ BEGIN
                 || '","sqlsKept":' || NVL(TO_CHAR(v_dim_sqls_kept(v_dim)), '0')
                 || ',"sqlsTotal":' || NVL(TO_CHAR(v_dim_sqls_total(v_dim)), '0')
                 || ',"schemasKept":'
-                    || CASE WHEN v_dim_schemas_kept.EXISTS(v_dim)
-                            THEN TO_CHAR(v_dim_schemas_kept(v_dim))
-                            ELSE '0' END
+                    || CASE WHEN v_grp_kept.EXISTS(v_dim || '|schema')
+                            THEN TO_CHAR(v_grp_kept(v_dim || '|schema')) ELSE '0' END
                 || ',"schemasTotal":'
-                    || CASE WHEN v_dim_schemas_total.EXISTS(v_dim)
-                            THEN TO_CHAR(v_dim_schemas_total(v_dim))
-                            ELSE '0' END
+                    || CASE WHEN v_grp_total.EXISTS(v_dim || '|schema')
+                            THEN TO_CHAR(v_grp_total(v_dim || '|schema')) ELSE '0' END
+                || ',"modulesKept":'
+                    || CASE WHEN v_grp_kept.EXISTS(v_dim || '|module')
+                            THEN TO_CHAR(v_grp_kept(v_dim || '|module')) ELSE '0' END
+                || ',"modulesTotal":'
+                    || CASE WHEN v_grp_total.EXISTS(v_dim || '|module')
+                            THEN TO_CHAR(v_grp_total(v_dim || '|module')) ELSE '0' END
+                || ',"actionsKept":'
+                    || CASE WHEN v_grp_kept.EXISTS(v_dim || '|action')
+                            THEN TO_CHAR(v_grp_kept(v_dim || '|action')) ELSE '0' END
+                || ',"actionsTotal":'
+                    || CASE WHEN v_grp_total.EXISTS(v_dim || '|action')
+                            THEN TO_CHAR(v_grp_total(v_dim || '|action')) ELSE '0' END
                 || ',');
             DBMS_OUTPUT.PUT_LINE(
                 '"sqls":[' || NVL(v_dim_sqls_json(v_dim), '') || '],');
             DBMS_OUTPUT.PUT_LINE(
                 '"schemas":[' ||
-                    CASE WHEN v_dim_schemas_json.EXISTS(v_dim)
-                         THEN NVL(v_dim_schemas_json(v_dim), '') ELSE '' END
+                    CASE WHEN v_grp_json.EXISTS(v_dim || '|schema')
+                         THEN NVL(v_grp_json(v_dim || '|schema'), '') ELSE '' END
+                || '],');
+            DBMS_OUTPUT.PUT_LINE(
+                '"modules":[' ||
+                    CASE WHEN v_grp_json.EXISTS(v_dim || '|module')
+                         THEN NVL(v_grp_json(v_dim || '|module'), '') ELSE '' END
+                || '],');
+            DBMS_OUTPUT.PUT_LINE(
+                '"actions":[' ||
+                    CASE WHEN v_grp_json.EXISTS(v_dim || '|action')
+                         THEN NVL(v_grp_json(v_dim || '|action'), '') ELSE '' END
                 || ']}');
             v_first_dim := FALSE;
             v_dim := v_dim_label.NEXT(v_dim);
@@ -619,6 +692,8 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('  var d=AWR_DATA.topSql.dims[dim]; var bits=[];');
         DBMS_OUTPUT.PUT_LINE('  if(d.sqlsKept<d.sqlsTotal){ bits.push("first "+d.sqlsKept+" of "+d.sqlsTotal+" SQL"); }');
         DBMS_OUTPUT.PUT_LINE('  if(d.schemasKept<d.schemasTotal){ bits.push("first "+d.schemasKept+" of "+d.schemasTotal+" parsing schemas"); }');
+        DBMS_OUTPUT.PUT_LINE('  if(d.modulesKept<d.modulesTotal){ bits.push("first "+d.modulesKept+" of "+d.modulesTotal+" modules"); }');
+        DBMS_OUTPUT.PUT_LINE('  if(d.actionsKept<d.actionsTotal){ bits.push("first "+d.actionsKept+" of "+d.actionsTotal+" actions"); }');
         DBMS_OUTPUT.PUT_LINE('  if(!bits.length) return;');
         DBMS_OUTPUT.PUT_LINE('  var note=document.createElement("p");');
         DBMS_OUTPUT.PUT_LINE('  note.className="trunc-note";');
@@ -641,7 +716,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el);');
         DBMS_OUTPUT.PUT_LINE('  function rowName(s){ return s.name || s.sql_id || "?"; }');
         DBMS_OUTPUT.PUT_LINE('  function render(mode){');
-        DBMS_OUTPUT.PUT_LINE('    var rows=(mode==="schemas"?d.schemas:d.sqls)||[];');
+        DBMS_OUTPUT.PUT_LINE('    var rows=(d[mode]||d.sqls)||[];');
         DBMS_OUTPUT.PUT_LINE('    chart.setOption({');
         DBMS_OUTPUT.PUT_LINE('      tooltip:{trigger:"axis",axisPointer:{type:"line"},formatter:function(ps){var hdr="<b>"+ps[0].axisValue+"</b>";var rs=ps.filter(function(p){return p.value!=null;}).sort(function(a,b){return (b.value||0)-(a.value||0);}).map(function(p){return p.marker+" "+p.seriesName+": <b>"+fmt(p.value)+" "+d.unit+"</b>";}).join("<br/>");return hdr+"<br/>"+rs;}},');
         DBMS_OUTPUT.PUT_LINE('      legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},');
@@ -654,10 +729,19 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('  render("sqls");');
         DBMS_OUTPUT.PUT_LINE('  var toggle=document.querySelector(''[data-topsql-target="''+dim+''"]'');');
         DBMS_OUTPUT.PUT_LINE('  if(toggle){');
-        DBMS_OUTPUT.PUT_LINE('    if(!d.schemas || !d.schemas.length){');
-        DBMS_OUTPUT.PUT_LINE('      var sb=toggle.querySelector(''[data-mode="schemas"]'');');
-        DBMS_OUTPUT.PUT_LINE('      if(sb) sb.style.display="none";');
-        DBMS_OUTPUT.PUT_LINE('    }');
+        -- Hide any group-view button whose dim carries no meaningful rows:
+        -- either no rows at all (e.g. PEREXEC, which only has a SQL_ID
+        -- breakdown) or only the "(none)"/"(unknown)" placeholder (every SQL
+        -- left module/action/schema unset). Same idea as section 11's
+        -- per-card toggle that hid empty module/action stacks.
+        DBMS_OUTPUT.PUT_LINE('    ["schemas","modules","actions"].forEach(function(m){');
+        DBMS_OUTPUT.PUT_LINE('      var rows=d[m]||[];');
+        DBMS_OUTPUT.PUT_LINE('      var real=rows.some(function(s){return s.name!=="(none)"&&s.name!=="(unknown)";});');
+        DBMS_OUTPUT.PUT_LINE('      if(!real){');
+        DBMS_OUTPUT.PUT_LINE('        var mb=toggle.querySelector(''[data-mode="''+m+''"]'');');
+        DBMS_OUTPUT.PUT_LINE('        if(mb) mb.style.display="none";');
+        DBMS_OUTPUT.PUT_LINE('      }');
+        DBMS_OUTPUT.PUT_LINE('    });');
         DBMS_OUTPUT.PUT_LINE('    toggle.addEventListener("click",function(ev){');
         DBMS_OUTPUT.PUT_LINE('      var btn=ev.target.closest("button"); if(!btn) return;');
         DBMS_OUTPUT.PUT_LINE('      var mode=btn.getAttribute("data-mode"); if(!mode) return;');

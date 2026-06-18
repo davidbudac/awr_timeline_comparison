@@ -58,12 +58,13 @@ sql/
 ├── 03_sysmetric.sql     -- SYSMETRIC_SUMMARY averages (per template)
 ├── 04_waits_fg.sql      -- foreground waits + wait-class rollup (per template)
 ├── 05_waits_bg.sql      -- background waits (BG_EVENT_SUMMARY, per template)
-├── 06_top_sql.sql       -- Top-N SQL ranked 5 ways + bump chart
+├── 06_top_sql.sql       -- Top-N SQL ranked 5 ways + per-dim bump chart
+│                        --   (break down by SQL_ID / schema / module / action)
 ├── 07_summary.sql       -- z-score findings + heatmap
 ├── 08_overview.sql      -- hero strip: 6 headline cards
 ├── 09_ash_timeline.sql  -- hourly ASH stacked-area timeline by wait_class
 ├── 10_db_time_summary.sql      -- stacked DB time across the full span
-├── 11_top_sql_ash_breakdown.sql-- per-Top-N-SQL ASH cards (event/module/action)
+├── 11_top_sql_ash_breakdown.sql-- per-Top-N-SQL ASH cards (stacked by wait event)
 ├── 12_param_changes.sql -- init params differing across windows
 ├── 13_utilization.sql   -- usage profile (template-INDEPENDENT)
 ├── 14_segment_io.sql    -- top segments by I/O (DBA_HIST_SEG_STAT; template-INDEP)
@@ -273,10 +274,13 @@ in prose; keep `~name` out of comments (use the bare name).
     "$1" | md5
   ```
 - **Verified on dbmint (2026):** single-DBID byte-identity of the
-  window-validity / SYSMETRIC / cross-DBID refactors; section 11 module/action
-  grouping; section 13 utilization. **Pending against a real DB:** sections 14
+  window-validity / SYSMETRIC / cross-DBID refactors; section 13 utilization;
+  section 06 schema/module/action group breakdowns (clean run, all four
+  toggle views populated). **Pending against a real DB:** sections 14
   (segment I/O), 15 (file I/O), and the 06 "By physical reads" dim were written
-  while dbmint was unreachable. The multi-DBID migration path needs a real
+  while dbmint was unreachable; the 06 module/action breakdowns showed only the
+  `(none)` placeholder on idle dbmint (no app sets module/action) — exercise
+  against a workload that sets them. The multi-DBID migration path needs a real
   migrated PDB.
 
 ## Things NOT to do
