@@ -53,5 +53,7 @@ DEFINE markers = ''
 -- then INLINES the file's bytes into the report after generation, producing
 -- a single self-contained HTML file that renders charts with no network at
 -- all.  (Pure-SQL*Plus callers get the URL/CDN behaviour; the inline step
--- lives in the wrapper -- see CLAUDE.md.)  The value must not contain a " .
+-- lives in the wrapper -- see CLAUDE.md.)  A pinned copy ships in the repo at
+-- vendor/echarts.min.js (Apache-2.0), so echarts='vendor/echarts.min.js' is
+-- turnkey offline out of a fresh clone.  The value must not contain a " .
 DEFINE echarts = ''

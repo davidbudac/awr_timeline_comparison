@@ -163,7 +163,10 @@ Polymorphic on value: **empty** → public CDN (byte-identical to before, via
 (`grep -nF` the marker line + `cat` head/body/tail) for a fully offline single
 file. Inlining is wrapper-only (SQL\*Plus can't stream ~1 MB through
 `DBMS_OUTPUT`); the pure-SQL\*Plus path can't inline a local path (it prints an
-`# NB:` note). User supplies their own `echarts.min.js`. Value must contain no
+`# NB:` note). A pinned `vendor/echarts.min.js` (Apache-2.0, v5.6.0) ships in
+the repo so `echarts=vendor/echarts.min.js` is turnkey offline; `vendor/` also
+carries the license + NOTICE (Apache-2.0 §4 compliance) and a README with the
+bump procedure. Users may still point at any other copy. Value must contain no
 `"`.
 
 ### Timeline markers

@@ -403,8 +403,9 @@ where it loads from:
 | an `http(s)` URL | `<script src>` your internal mirror, verbatim | needs the mirror | yes |
 | a local file path | wrapper **inlines** the file's bytes | yes | yes |
 
-You supply your own `echarts.min.js` (none ships in the repo — grab it from
-the CDN URL once, or an `npm` tarball).
+`echarts.min.js` (Apache-2.0, v5.6.0) **ships in the repo** under `vendor/`, so
+the local-path recipes below work out of a fresh clone with no internet. See
+`vendor/README.md` to bump the pinned version.
 
 ### Single self-contained file — wrapper inlines a local copy
 ```bash

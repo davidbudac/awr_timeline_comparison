@@ -220,9 +220,11 @@ ECHARTS=https://artifacts.corp.example/echarts@5/echarts.min.js \
 | an `http(s)` URL | Used verbatim as the `<script src>` — an internal mirror on an air-gapped network. Works on the pure-SQL\*Plus path too |
 | a local file path | The wrapper **inlines** the file into the report → a single self-contained, offline-capable HTML file |
 
-You supply your own `echarts.min.js` (none ships in this repo). Download
-it once from the CDN URL above, or extract it from the `echarts` npm
-tarball, and keep it anywhere — pass that path as `ECHARTS`.
+A copy of `echarts.min.js` (Apache-2.0, v5.6.0) **ships in this repo** under
+`vendor/`, so `ECHARTS=vendor/echarts.min.js` works out of a fresh clone with
+no internet — ideal for air-gapped hosts. You can also point `ECHARTS` at any
+other copy you keep elsewhere. See `vendor/README.md` for provenance and how to
+bump the pinned version.
 
 Notes:
 - The inlining step lives in the `run_awr_trend.sh` wrapper. On the pure
