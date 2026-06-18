@@ -433,6 +433,20 @@ SELECT
 FROM dual
 /
 
+-- When debug is enabled, announce the live database connection -- which
+-- database (name + DBID + host) and the schema we authenticated as -- before
+-- any HTML is spooled, so the progress log makes it unambiguous WHICH
+-- database/schema produced the report.  Gated on ~debug_termout exactly like
+-- sql/lib/debug_log.sql, and prefixed with the same [awr_trend HH24:MI:SS.FFF]
+-- stamp.  No SPOOL OFF/APPEND dance is needed (unlike debug_log.sql) because
+-- the report spool is not open yet, so the silent timestamp SELECT and the
+-- PROMPT cannot leak into the HTML.  All identity vars are already resolved
+-- above; this writes nothing to the database.
+SELECT TO_CHAR(SYSTIMESTAMP, 'HH24:MI:SS.FF3') AS dbg_ts FROM dual;
+SET TERMOUT ~debug_termout
+PROMPT [awr_trend ~dbg_ts] connected to ~db_name (DBID ~dbid) on host ~host_name as schema ~caller_user
+SET TERMOUT OFF
+
 SPOOL ~report_path
 
 -- -------------------------------------------------------------------
