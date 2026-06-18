@@ -133,7 +133,8 @@ ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,';
 --   period_step_label   'h' | 'd' | 'w' when step=1; '<step>h/d/w' otherwise
 --   period_axis_fmt     TO_CHAR fmt mask for chart x-axis labels
 --                       ('Mon DD' for d/w, 'Mon DD HH24:MI' for h)
---   report_path         reports/awr_trend_<dbid>_<YYYYMMDDHH24MI>_run<run_id>.html
+--   report_path         reports/awr_trend_<db_name>_<dbid>_<YYYYMMDDHH24MI>_run<run_id>.html
+--                       (<db_name> = bare CDB/PDB name, non-alphanumerics -> '_')
 --   template_name       lower-cased + trimmed ~template (used in headers)
 --   template_dir        sql/lib/templates/<template_name> (path used by
 --                       every section's @@~template_dir/<file>.sql include)
@@ -244,7 +245,12 @@ SELECT
     CASE WHEN p.period_unit_short = 'h' THEN 'Mon DD HH24:MI'
          ELSE 'Mon DD'
     END                                                            AS period_axis_fmt,
-    'reports/awr_trend_' || dbo.dbid || '_'
+    -- Filename carries a filesystem-safe DB name (non-alphanumerics -> '_',
+    -- collapsed) before the DBID so reports are identifiable at a glance.  Uses
+    -- the bare CDB/PDB name only (no " / CON_NAME" suffix) to keep it tidy.
+    'reports/awr_trend_'
+        || REGEXP_REPLACE(TRIM(d.name), '[^A-Za-z0-9]+', '_') || '_'
+        || dbo.dbid || '_'
         || TO_CHAR(SYSDATE, 'YYYYMMDDHH24MI')
         || '_run' || t.run_id
         || '.html'                                                 AS report_path,
