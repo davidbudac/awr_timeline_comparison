@@ -31,7 +31,8 @@ DEFINE template   = 'comprehensive'
 -- 06 top_sql ...").  Useful for spotting slow sections on large DBs.
 -- Markers are written to stdout only; the HTML report is unaffected.
 -- Any value other than 'Y' (case-insensitive) disables the markers.
-DEFINE debug      = 'N'
+-- Enabled by default; pass debug='N' (or any non-truthy value) to silence.
+DEFINE debug      = 'Y'
 -- marker_file optional path to a timeline-marker config file (datetime +
 -- label milestones drawn as vertical lines on the dated charts).  Empty =
 -- no markers.  See markers.example.sql for the format.

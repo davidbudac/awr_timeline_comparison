@@ -22,7 +22,7 @@ working directory is the repo root and the wrapper is executable.
 | 7   | step         | `1`              | Cadence count between adjacent windows            |
 | 8   | step_unit    | `w`              | `h` hours, `d` days, `w` weeks                    |
 | 9   | template     | `comprehensive`  | `comprehensive` (full lists) or `simple` (triage subset) |
-| 10  | debug        | `N`              | `Y` prints one-line timestamped progress markers to stdout (one per section). HTML report is unaffected |
+| 10  | debug        | `Y`              | `Y` (default) prints one-line timestamped progress markers to stdout (one per section); pass `N` to silence. HTML report is unaffected |
 | 11  | marker_file  | *(empty)*        | Optional path to a timeline-marker config file (milestones drawn as vertical lines on the dated charts). Empty = none. See "Timeline markers" below |
 
 Trailing args you don't care about can be omitted. To pin step / step_unit /
@@ -326,7 +326,7 @@ SQL
 ## Legacy — wrapper without the debug / marker_file slots
 Positional args 10 (`debug`) and 11 (`marker_file`) were added later;
 older invocations that stop at slot 9 (template) still work and run with
-`debug=N` and no markers.
+the default `debug=Y` and no markers.
 
 ---
 
@@ -371,7 +371,7 @@ DEFINE inst_num   = 0
 DEFINE step       = 1
 DEFINE step_unit  = 'h'
 DEFINE template   = 'comprehensive'
-DEFINE debug      = 'N'
+DEFINE debug      = 'Y'
 DEFINE marker_file = ''
 DEFINE markers = ''
 DEFINE echarts = ''
@@ -499,7 +499,7 @@ DEFINE inst_num   = 0
 DEFINE step       = 1
 DEFINE step_unit  = 'w'
 DEFINE template   = 'comprehensive'
-DEFINE debug      = 'N'
+DEFINE debug      = 'Y'
 DEFINE marker_file = ''
 DEFINE markers = ''
 DEFINE echarts = ''

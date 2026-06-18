@@ -37,7 +37,7 @@
 --                  no host/OS/storage-engine internals).  Selects which
 --                  directory under sql/lib/templates/<name>/ supplies
 --                  the sysstat / sysmetric / wait-event target lists.
---   debug        'N' (default) or 'Y' -- per-section stdout progress markers.
+--   debug        'Y' (default) or 'N' -- per-section stdout progress markers.
 --   marker_file  '' (default) or path to an optional timeline-marker config
 --                  file (datetime + label milestones) drawn as vertical
 --                  marker lines on the dated charts.  See markers.example.sql.
@@ -496,7 +496,7 @@ END;
 --
 -- Each section is preceded by a DEFINE _dbg_msg + @@sql/lib/debug_log.sql
 -- pair that prints a one-line progress marker to standard output when
--- ~debug='Y'.  Disabled by default; see sql/defaults.sql / the wrapper
+-- ~debug='Y'.  Enabled by default; see sql/defaults.sql / the wrapper
 -- usage banner.  The helper file documents the mechanism in detail.
 -- -------------------------------------------------------------------
 DEFINE _dbg_msg = 'section 00 params (header + nav)'

@@ -22,7 +22,7 @@
 #
 # debug = Y prints one-line timestamped progress markers to standard
 # output as each section begins (helpful on large DBs where some sections
-# take minutes).  The HTML report is unaffected.  Default: N.
+# take minutes).  The HTML report is unaffected.  Default: Y.
 #
 # marker_file is an optional path to a timeline-marker config file
 # (datetime + label milestones drawn as vertical lines on the dated
@@ -68,7 +68,7 @@ DEF_INST_NUM='0'
 DEF_STEP='1'
 DEF_STEP_UNIT='w'
 DEF_TEMPLATE='comprehensive'
-DEF_DEBUG='N'
+DEF_DEBUG='Y'
 DEF_MARKER_FILE=''
 
 # File-free inline timeline markers travel in the MARKERS environment
