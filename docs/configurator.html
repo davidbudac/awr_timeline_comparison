@@ -583,14 +583,22 @@ const DEFAULTS = {
   // File-free inline markers (not a positional arg): the configurator builds
   // this "WHEN|LABEL;;..." string from the milestone rows and threads it
   // through the MARKERS env var (shell) / DEFINE markers (SQL*Plus).
-  markers:''
+  markers:'',
+  // ECharts source. Empty = public CDN (the driver's default). The web UI
+  // has no control for it, but the SQL*Plus path must still DEFINE it: the
+  // driver references ~echarts unconditionally, so an undefined var stalls
+  // the run at an "Enter value for echarts:" prompt. Emitting the default
+  // keeps the generated block prompt-free.
+  echarts:''
 };
 const ARG_ORDER = ['target_end','win_hours','weeks_back','top_n','inst_num',
                    'step','step_unit','template','debug','marker_file'];
-// The SQL*Plus path DEFINEs every positional plus `markers` (which has no
-// positional slot — it rides the MARKERS env var on the shell path).
-const SQL_DEFINES = ARG_ORDER.concat(['markers']);
-const STRING_DEFINES = new Set(['target_end','step_unit','template','debug','marker_file','markers']);
+// The SQL*Plus path DEFINEs every positional plus the two non-positional vars
+// `markers` (rides the MARKERS env var on the shell path) and `echarts` (rides
+// the ECHARTS env var). Both must be emitted so the driver never prompts for an
+// undefined substitution var.
+const SQL_DEFINES = ARG_ORDER.concat(['markers','echarts']);
+const STRING_DEFINES = new Set(['target_end','step_unit','template','debug','marker_file','markers','echarts']);
 const UNIT_HOURS = {h:1, d:24, w:168};
 const UNIT_WORD  = {h:'hourly', d:'daily', w:'weekly'};
 const UNIT_NOUN  = {h:'hour', d:'day', w:'week'};
@@ -732,7 +740,10 @@ function readConfig(){
     // hatch is still in the driver for power users, but the web UI builds an
     // inline string instead).
     marker_file:'',
-    markers:    markersInline()
+    markers:    markersInline(),
+    // No UI control: always the driver's default (empty = public CDN). Present
+    // so defineLines() emits `DEFINE echarts = ''` instead of stalling the run.
+    echarts:    ''
   };
 }
 
