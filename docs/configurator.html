@@ -484,6 +484,17 @@
             <div class="help">Timestamped one-liner per section while it runs — handy on a busy DB.
               The HTML report is byte-identical whether this is on or off.</div>
           </div>
+
+          <div class="field">
+            <label class="lbl" for="echarts_mode">Charts library (echarts)</label>
+            <select id="echarts_mode">
+              <option value="default" selected>Internet CDN — load ECharts from cdn.jsdelivr.net (default)</option>
+              <option value="custom">Local / mirror path — for air-gapped or offline use</option>
+            </select>
+            <input type="text" id="echarts_path" class="hidden" value="vendor/echarts.min.js"
+                   autocomplete="off" spellcheck="false">
+            <div class="help" id="echarts_help"></div>
+          </div>
         </div>
 
       </div>
@@ -741,9 +752,11 @@ function readConfig(){
     // inline string instead).
     marker_file:'',
     markers:    markersInline(),
-    // No UI control: always the driver's default (empty = public CDN). Present
-    // so defineLines() emits `DEFINE echarts = ''` instead of stalling the run.
-    echarts:    ''
+    // ECharts source. 'default' = empty (public CDN, the driver's default);
+    // 'custom' = the path/URL in echarts_path (a local file the wrapper inlines,
+    // or an internal mirror URL). Emitting it as a DEFINE keeps the run
+    // prompt-free regardless of which option is picked.
+    echarts:    $('echarts_mode').value === 'custom' ? $('echarts_path').value.trim() : ''
   };
 }
 
@@ -785,6 +798,19 @@ function validate(cfg){
     info.push('Milestone'+(badMk.length>1?'s':'')+' '+badMk.join(', ')+
               ' need'+(badMk.length>1?'':'s')+' a date &amp; time like <code>2026-06-10 09:00</code> — '+
               (badMk.length>1?'they':'it')+' will be skipped otherwise.');
+  }
+  // ECharts source: explain what each non-default value does.
+  if(cfg.echarts){
+    if(/^https?:\/\//i.test(cfg.echarts)){
+      info.push('Charts will load ECharts from <code>'+cfg.echarts.replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))+
+                '</code> instead of the public CDN — point this at an internal mirror for air-gapped networks.');
+    } else {
+      info.push('A local path is used as the charts source. The <code>run_awr_trend.sh</code> wrapper '+
+                '<strong>inlines</strong> that file into the report after generation, giving a single, '+
+                'fully-offline HTML. The pure-SQL*Plus path cannot inline — it leaves the path as the '+
+                '<code>&lt;script src&gt;</code> (resolved relative to the report), so prefer the shell '+
+                'wrapper for a self-contained file. A pinned copy ships at <code>vendor/echarts.min.js</code>.');
+    }
   }
   return {errors, info, bad, ok: errors.length===0};
 }
@@ -870,8 +896,13 @@ function buildShell(cfg){
   vals.forEach((v,i) => { if(v !== DEFAULTS[ARG_ORDER[i]]) last = i; });
   const parts = ['./run_awr_trend.sh', shellQuote(cfg.connect || 'user/pw@svc')];
   for(let i=0; i<=last; i++) parts.push(shellQuote(vals[i]));
-  // Inline markers ride the MARKERS env var, prefixed onto the command.
-  return (cfg.markers ? 'MARKERS='+shellQuote(cfg.markers)+' ' : '') + parts.join(' ');
+  // Non-positional vars ride env-var prefixes (kept out of the positional args
+  // to keep the wrapper/SQL*Plus arg order symmetric): MARKERS for inline
+  // timeline markers, ECHARTS for a local/mirror charts library.
+  const env = [];
+  if(cfg.markers) env.push('MARKERS='+shellQuote(cfg.markers));
+  if(cfg.echarts) env.push('ECHARTS='+shellQuote(cfg.echarts));
+  return (env.length ? env.join(' ')+' ' : '') + parts.join(' ');
 }
 
 function defineLines(cfg){
@@ -960,6 +991,12 @@ function render(){
   $('template_help').textContent = TEMPLATE_HELP[cfg.template];
   $('wh_echo').textContent = whEcho(cfg.win_hours);
 
+  const ecCustom = $('echarts_mode').value === 'custom';
+  $('echarts_path').classList.toggle('hidden', !ecCustom);
+  $('echarts_help').textContent = ecCustom
+    ? 'A local ECharts file (the run_awr_trend.sh wrapper inlines it into the report for a fully offline single file) or an http(s):// mirror URL. Prefilled with the copy bundled in the repo.'
+    : 'Loads ECharts from the public jsDelivr CDN. If it is unreachable the report hides charts but every number still shows in the tables.';
+
   renderPreview(cfg);
   $('out_summary').textContent = summarize(cfg);
 
@@ -973,7 +1010,7 @@ function render(){
 
 /* ------------------------------------------------------------- presets */
 const PRESETS = [
-  {name:'Default · weekly', desc:'This hour vs the same hour on the 4 previous weeks — the classic like-for-like trend.', set:{temode:'auto', win_hours:'1', weeks_back:'4', top_n:'10', inst_num:'0', step:'1', step_unit:'w', template:'comprehensive', debug:false}, markers:[]},
+  {name:'Default · weekly', desc:'This hour vs the same hour on the 4 previous weeks — the classic like-for-like trend.', set:{temode:'auto', win_hours:'1', weeks_back:'4', top_n:'10', inst_num:'0', step:'1', step_unit:'w', template:'comprehensive', debug:false, echarts:''}, markers:[]},
   {name:'Hourly walkthrough (12 h)', desc:'The last 12 consecutive hours, walking straight back — spot an intraday spike.', set:{temode:'auto', win_hours:'1', weeks_back:'11', step:'1', step_unit:'h', template:'comprehensive'}},
   {name:'Daily · one week', desc:'This hour across each of the last 7 days — the day-over-day pattern.', set:{temode:'auto', win_hours:'1', weeks_back:'6', step:'1', step_unit:'d', template:'comprehensive'}},
   {name:'Developer view', desc:'Weekly trend with app-focused metrics & waits — throughput, SQL, contention.', set:{temode:'auto', template:'dev'}},
@@ -992,6 +1029,11 @@ function applyPreset(p){
   if(s.step_unit!==undefined) $('step_unit').value = s.step_unit;
   if(s.template!==undefined) $('template').value = s.template;
   if(s.debug!==undefined) $('debug').checked = !!s.debug;
+  if(s.echarts!==undefined){
+    // '' -> CDN default; any other value -> custom path (prefilled into the field).
+    $('echarts_mode').value = s.echarts ? 'custom' : 'default';
+    if(s.echarts) $('echarts_path').value = s.echarts;
+  }
   if(p.markers){
     $('marker_rows').innerHTML='';
     p.markers.forEach(m => addMarkerRow(m.when, m.label));
@@ -1084,7 +1126,8 @@ function init(){
   }));
 
   // all inputs -> re-render
-  ['connect','target_dt','win_hours','weeks_back','step','step_unit','top_n','inst_num','template','debug']
+  ['connect','target_dt','win_hours','weeks_back','step','step_unit','top_n','inst_num','template','debug',
+   'echarts_mode','echarts_path']
     .forEach(id => { const el=$(id); el.addEventListener('input', render); el.addEventListener('change', render); });
 
   $('marker_add').addEventListener('click', ()=>{ addMarkerRow(); render(); });
