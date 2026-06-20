@@ -93,6 +93,17 @@ DEF_MARKER_FILE=''
 # The value must not contain a double quote.  Default empty.
 : "${ECHARTS:=}"
 
+# Which AWR DBID(s) the report trends travels in the DBIDS environment
+# variable (an env var, like MARKERS/ECHARTS, so the positional order stays
+# symmetric with awr_trend.sql).  Empty (default) lets the driver auto-resolve
+# them from the data -- the container's own CON_DBID plus any disjoint, earlier
+# pre-migration DBID, excluding a repository whose snapshots overlap (e.g. the
+# CDB root's AWR leaking into a PDB view).  Set it to one DBID, or a comma list,
+# to pin the report to exactly those, e.g.
+#   DBIDS=3730626044 ./run_awr_trend.sh / AUTO    # just this PDB's own AWR
+# Spaces are ignored; only DBIDs that own snapshots are kept.  Default empty.
+: "${DBIDS:=}"
+
 # ---- optional terminal styling (degrades to plain text) --------------------
 # NB: a missing capability must never be fatal.  Some terminfo entries (notably
 # several AIX terminal types) lack the half-bright `dim` cap, so `tput dim`
@@ -139,6 +150,11 @@ Environment variables:
                 An http(s) URL is used as-is (internal mirror).  A local file
                 path is inlined into the report -> a single self-contained,
                 offline HTML file.  e.g. ECHARTS=vendor/echarts.min.js
+  DBIDS         which AWR DBID(s) to trend.  Empty = auto-resolve from the data
+                (the container's own CON_DBID + disjoint earlier history;
+                an overlapping repository, e.g. the CDB root's AWR leaking into
+                a PDB view, is excluded).  Set to one DBID or a comma list to
+                pin it, e.g. DBIDS=3730626044 for just this PDB's own AWR.
 
 Tip: not sure which arguments you need?  Run  ./run_awr_trend.sh --configure
 USAGE
@@ -210,6 +226,7 @@ DEFINE win_hours  = ${WIN_HOURS}
 DEFINE weeks_back = ${WEEKS_BACK}
 DEFINE top_n      = ${TOP_N}
 DEFINE inst_num   = ${INST_NUM}
+DEFINE dbids      = '${DBIDS}'
 DEFINE step       = ${STEP}
 DEFINE step_unit  = '${STEP_UNIT}'
 DEFINE template   = '${TEMPLATE}'
@@ -404,6 +421,7 @@ build_shell_cmd() {
     local out=''
     [[ -n "$MARKERS" ]] && out+="MARKERS=$(shq "$MARKERS") "
     [[ -n "$ECHARTS" ]] && out+="ECHARTS=$(shq "$ECHARTS") "
+    [[ -n "$DBIDS"   ]] && out+="DBIDS=$(shq "$DBIDS") "
     out+='./run_awr_trend.sh'
     for (( i = 0; i <= last; i++ )); do
         out+=" $(shq "${vals[$i]}")"
@@ -420,6 +438,7 @@ DEFINE win_hours  = ${WIN_HOURS}
 DEFINE weeks_back = ${WEEKS_BACK}
 DEFINE top_n      = ${TOP_N}
 DEFINE inst_num   = ${INST_NUM}
+DEFINE dbids      = '${DBIDS}'
 DEFINE step       = ${STEP}
 DEFINE step_unit  = '${STEP_UNIT}'
 DEFINE template   = '${TEMPLATE}'
@@ -474,6 +493,7 @@ print_summary() {
     printf '  %-14s %s\n' 'marker_file' "${MARKER_FILE:-(none)}"
     [[ -n "$MARKERS" ]] && printf '  %-14s %s\n' 'markers' "$MARKERS"
     [[ -n "$ECHARTS" ]] && printf '  %-14s %s\n' 'echarts' "$ECHARTS"
+    [[ -n "$DBIDS"   ]] && printf '  %-14s %s\n' 'dbids'   "$DBIDS"
     echo "${BOLD}=================================================================${RST}"
     print_span_hint
     echo

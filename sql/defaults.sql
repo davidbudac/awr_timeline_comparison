@@ -23,6 +23,21 @@ DEFINE win_hours  = 1
 DEFINE weeks_back = 4
 DEFINE top_n      = 10
 DEFINE inst_num   = 0
+-- dbids is an OPTIONAL override for which AWR DBID(s) the report trends.
+-- Empty (the default) auto-resolves them from the data: the current
+-- container's own CON_DBID, plus any other DBID whose history ends BEFORE
+-- the anchor's first snapshot (genuine disjoint pre-migration history, e.g.
+-- a non-CDB plugged in as a PDB).  A repository whose snapshots OVERLAP the
+-- anchor's in wall-clock time -- e.g. the CDB root's AWR visible inside a PDB
+-- under a different DBID -- is excluded automatically (it would double-count
+-- and spuriously invalidate every window as "DBID changed inside window").
+-- Set this to a single DBID, or a comma-separated list, to pin the report to
+-- exactly those repositories and bypass the heuristic, e.g.
+--   DEFINE dbids = '3730626044'             -- just this PDB's own AWR
+--   DEFINE dbids = '3730626044,4012345678'  -- stitch two specific DBIDs
+-- Only DBIDs that actually own snapshots are kept; the masthead/filename DBID
+-- becomes the freshest of the resolved set.  Spaces are ignored.
+DEFINE dbids      = ''
 DEFINE step       = 1
 DEFINE step_unit  = 'w'
 DEFINE template   = 'comprehensive'
