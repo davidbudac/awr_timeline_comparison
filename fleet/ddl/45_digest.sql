@@ -3,9 +3,11 @@
 --
 -- The digest archive: one row per notify cycle. awrw_notify.run_digest builds the
 -- HTML Digest, stores it here, and stamps Alert State as notified -- so delivery
--- (email/Slack/an external mailer) is a separate, decoupled step that just reads
--- the latest row. Keeping the rendered Digest persisted also gives a queryable
--- history of "what the fleet looked like" at each cycle.
+-- is a separate, decoupled drain over the rows where delivered_ts IS NULL. Two
+-- delivery methods share this seam: awrw_notify.deliver_to_files (writes each
+-- Digest to the warehouse filesystem via UTL_FILE -- built in) and an external/
+-- UTL_SMTP mailer (site-specific). Keeping the rendered Digest persisted also
+-- gives a queryable history of "what the fleet looked like" at each cycle.
 --
 -- Warehouse-side only.
 --
@@ -15,7 +17,8 @@ CREATE TABLE awrw_digest (
     firing_count    NUMBER,                 -- FIRING subjects at render time
     recovered_count NUMBER,                 -- freshly-recovered, not yet notified
     lagging_count   NUMBER,                 -- non-Current Targets (coverage gaps)
-    delivered_ts    TIMESTAMP,              -- set by the mailer once sent (NULL = pending)
+    delivered_ts    TIMESTAMP,              -- set by a delivery method once sent/written (NULL = pending)
+    file_name       VARCHAR2(512),          -- file the filesystem delivery method wrote (NULL = not written)
     html            CLOB,
     CONSTRAINT awrw_digest_pk PRIMARY KEY (digest_id)
 );

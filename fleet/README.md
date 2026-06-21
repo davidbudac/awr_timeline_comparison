@@ -23,7 +23,8 @@ and serves as the drill-down).
 | Analyzer — headline Detector (marquee hero-six health strip) | **implemented + validated on 19c** — `analyze/awrw_analyze.pkb` |
 | Notifier / Digest (firing alerts + headline movers) | **implemented + validated** — `analyze/awrw_notify.sql` |
 | Orchestration — DBMS_SCHEDULER pipeline job (collect→analyze→digest) | **implemented + validated on 19c** — `schedule/awrw_schedule.sql` |
-| Email/Slack delivery (mailer drains `awrw_digest`) | **next** — seam in place, site-specific |
+| Delivery — filesystem (Digest written to the warehouse host) | **implemented + validated on 19c** — `awrw_notify.deliver_to_files` |
+| Delivery — email/Slack (mailer drains `awrw_digest`) | **next** — seam in place, site-specific |
 
 The collect → analyze → notify pipeline runs end-to-end. It was validated on a
 live Oracle 19c (CDB1) over a loopback DB link: full incremental collection of
@@ -35,8 +36,9 @@ subject type, and a rendered HTML Digest (`examples/digest_sample.html`).
 derivation — the pipelined `awrw_analyze.windows()`, the warehouse equivalent of
 the report's `windows_cte.sql` — and `awrw_schedule` runs the whole cycle
 (collect → analyze → digest) as one DBMS_SCHEDULER job, archiving each Digest to
-`awrw_digest`. Still to build: email/Slack delivery (a mailer drains
-`awrw_digest`; left unbuilt because the SMTP relay + ACL are site-specific).
+`awrw_digest` and writing it to the warehouse filesystem (`deliver_to_files`).
+Still to build: email/Slack delivery (a mailer drains `awrw_digest`; left unbuilt
+because the SMTP relay + ACL are site-specific).
 
 ## Read-only invariant
 
@@ -121,22 +123,37 @@ cadences for collect vs the digest? Create separate jobs over
 `awrw_collect.collect_all`, `awrw_analyze.analyze_all`, and
 `awrw_notify.run_digest` instead of the single pipeline.
 
-## Deliver the Digest (email / Slack)
+## Deliver the Digest
 
-Delivery is **decoupled** so it stays site-specific: the pipeline only *archives*
-the Digest. A mailer reads the latest undelivered row and sends it, then stamps
-`delivered_ts`:
+Delivery is **decoupled** from rendering: the pipeline only *archives* each Digest
+to `awrw_digest`. A delivery method then drains the rows where `delivered_ts IS
+NULL` and stamps them. `awrw_notify.build_digest` (read-only) returns the same
+HTML for an ad-hoc preview without archiving or notifying.
+
+**Filesystem (built in).** The pipeline calls `awrw_notify.deliver_to_files` every
+cycle, which writes each pending Digest to an HTML file on the **warehouse host**:
+
+```sql
+-- one-time, as a privileged user: create + grant the target directory
+@@schedule/digest_dir.sql        -- edit the server path + owner first
+```
+
+After that, each cycle drops `awr_fleet_digest_<id>_<timestamp>.html` (plus a
+stable `awr_fleet_digest_latest.html`) into that directory, and sets
+`delivered_ts` + `file_name`. Until the directory exists, `deliver_to_files` is a
+silent no-op — file delivery is strictly opt-in. Drive it by hand with
+`EXEC awrw_notify.deliver_to_files;`.
+
+**Email / Slack (seam).** Site-specific (SMTP relay + network ACL), so left to the
+caller — read pending rows and send, then stamp:
 
 ```sql
 SELECT digest_id, html FROM awrw_digest
  WHERE delivered_ts IS NULL ORDER BY digest_id;     -- pick up pending digests
--- ... send html as an HTML email (UTL_SMTP needs a network ACL to the relay,
---     or hand off to an external mailer) ...
+-- ... send html as an HTML email (UTL_SMTP needs a network ACL) or hand off
+--     to an external mailer ...
 UPDATE awrw_digest SET delivered_ts = SYSTIMESTAMP WHERE digest_id = :id;
 ```
-
-`awrw_notify.build_digest` (read-only) returns the same HTML for ad-hoc preview
-without archiving or notifying.
 
 ## See what's happening
 
@@ -179,9 +196,10 @@ SELECT t.target_name, m.dbid, m.last_snap_id, m.last_snap_end_ts
 The collect → analyze → notify pipeline and its DBMS_SCHEDULER orchestration are
 complete and validated. Remaining:
 
-- **Delivery wiring** — an actual UTL_SMTP (or external) mailer that drains
-  `awrw_digest` (the seam is in place; see *Deliver the Digest* above). Left
-  unbuilt because the SMTP relay + network ACL are site-specific.
+- **Email/Slack delivery wiring** — filesystem delivery ships and is wired into the
+  pipeline; an actual UTL_SMTP (or external) mailer that drains `awrw_digest` is
+  left unbuilt because the SMTP relay + network ACL are site-specific (the seam is
+  in place — see *Deliver the Digest*).
 - **Retention purge job** — the documented Findings / Alert-State / fact-partition
   purge as a scheduled job (see *Storage notes*).
 

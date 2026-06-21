@@ -12,6 +12,10 @@
 CREATE OR REPLACE PACKAGE awrw_notify AS
     FUNCTION  build_digest RETURN CLOB;     -- read-only HTML digest (safe to preview)
     FUNCTION  run_digest   RETURN NUMBER;   -- build + archive to awrw_digest + mark_notified; returns digest_id
+    -- Filesystem delivery: write every undelivered awrw_digest row to an HTML file
+    -- in p_dir (an Oracle DIRECTORY on the warehouse host), stamping delivered_ts +
+    -- file_name. No-op until the directory object exists (see schedule/digest_dir.sql).
+    PROCEDURE deliver_to_files(p_dir VARCHAR2 DEFAULT 'AWRW_DIGEST_DIR');
     PROCEDURE mark_notified;                -- stamp notified_fired/cleared timestamps
 END awrw_notify;
 /
@@ -167,6 +171,56 @@ CREATE OR REPLACE PACKAGE BODY awrw_notify AS
         mark_notified;   -- stamps notified_fired/cleared and COMMITs (archives the digest too)
         RETURN v_id;
     END run_digest;
+
+    -- Write a CLOB to a server file line-by-line on its own CHR(10) breaks, so no
+    -- single PUT exceeds the line buffer (the Digest's lines are all short).
+    PROCEDURE write_clob_to_file(p_dir VARCHAR2, p_fname VARCHAR2, p_clob CLOB) IS
+        f       UTL_FILE.FILE_TYPE;
+        v_len   NUMBER := DBMS_LOB.GETLENGTH(p_clob);
+        v_start NUMBER := 1;
+        v_nl    NUMBER;
+    BEGIN
+        f := UTL_FILE.FOPEN(p_dir, p_fname, 'w', 32767);
+        WHILE v_len IS NOT NULL AND v_start <= v_len LOOP
+            v_nl := DBMS_LOB.INSTR(p_clob, CHR(10), v_start);
+            IF v_nl = 0 THEN                          -- final segment, no trailing newline
+                UTL_FILE.PUT(f, DBMS_LOB.SUBSTR(p_clob, v_len - v_start + 1, v_start));
+                EXIT;
+            ELSIF v_nl = v_start THEN                 -- empty line
+                UTL_FILE.NEW_LINE(f);
+                v_start := v_nl + 1;
+            ELSE
+                UTL_FILE.PUT_LINE(f, DBMS_LOB.SUBSTR(p_clob, v_nl - v_start, v_start));
+                v_start := v_nl + 1;
+            END IF;
+        END LOOP;
+        UTL_FILE.FFLUSH(f);
+        UTL_FILE.FCLOSE(f);
+    EXCEPTION
+        WHEN OTHERS THEN
+            IF UTL_FILE.IS_OPEN(f) THEN UTL_FILE.FCLOSE(f); END IF;
+            RAISE;
+    END write_clob_to_file;
+
+    PROCEDURE deliver_to_files(p_dir VARCHAR2 DEFAULT 'AWRW_DIGEST_DIR') IS
+        v_cfg   NUMBER;
+        v_fname VARCHAR2(512);
+    BEGIN
+        -- file delivery stays OFF until the DIRECTORY exists and is granted to us
+        SELECT COUNT(*) INTO v_cfg FROM all_directories WHERE directory_name = UPPER(p_dir);
+        IF v_cfg = 0 THEN RETURN; END IF;
+
+        FOR d IN (SELECT digest_id, generated_ts, html FROM awrw_digest
+                   WHERE delivered_ts IS NULL ORDER BY digest_id) LOOP
+            v_fname := 'awr_fleet_digest_'||d.digest_id||'_'||
+                       TO_CHAR(d.generated_ts,'YYYYMMDD_HH24MISS')||'.html';
+            write_clob_to_file(p_dir, v_fname, d.html);              -- per-cycle archive file
+            write_clob_to_file(p_dir, 'awr_fleet_digest_latest.html', d.html); -- stable convenience path
+            UPDATE awrw_digest SET delivered_ts = SYSTIMESTAMP, file_name = v_fname
+             WHERE digest_id = d.digest_id;
+        END LOOP;
+        COMMIT;
+    END deliver_to_files;
 
     PROCEDURE mark_notified IS
     BEGIN

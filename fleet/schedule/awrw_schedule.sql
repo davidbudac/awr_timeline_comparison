@@ -61,6 +61,7 @@ CREATE OR REPLACE PACKAGE BODY awrw_schedule AS
 
         BEGIN
             v_id := awrw_notify.run_digest;
+            awrw_notify.deliver_to_files;   -- write to the warehouse filesystem (no-op if AWRW_DIGEST_DIR unset)
             phase('NOTIFY', 'OK', 'digest_id='||v_id);
         EXCEPTION WHEN OTHERS THEN phase('NOTIFY', 'ERROR', SUBSTR(SQLERRM,1,400));
         END;
