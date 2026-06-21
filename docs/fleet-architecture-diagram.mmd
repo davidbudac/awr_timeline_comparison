@@ -1,0 +1,38 @@
+graph LR
+  subgraph SRC["① Source fleet · dozens of 19c DBs on AIX · READ-ONLY"]
+    direction TB
+    S1[("DB #1<br/>DBA_HIST_*")]
+    S2[("DB #2<br/>DBA_HIST_*")]
+    SN[("DB #N<br/>DBA_HIST_*")]
+  end
+
+  COL["② Collector<br/>PL/SQL INSERT…SELECT @dblink<br/>incremental by high-water mark"]
+
+  subgraph STORE["③ Storage · queryable dataset"]
+    direction TB
+    FACTS[("FACT_* / DIM_*<br/>keyed by dbid, inst, snap_id")]
+    SEAM["AWRV_* views<br/>(DBA_HIST_* shape)"]
+    FACTS --> SEAM
+  end
+
+  ANA["④ Analyzer · scheduled<br/>z-score over curated profile ·<br/>top-regression leaderboard · headline metrics"]
+  FIND[("AWRW_FINDINGS")]
+  NOTE["⑤ Notifier<br/>noise gates + edge/hysteresis"]
+  OUT["Fleet digest · email / Slack<br/>(only interesting DBs)"]
+  DRILL["Drill-down · existing awr_trend.sql report (unchanged)<br/>live vs source for recent · vs warehouse for old"]
+
+  subgraph CP["Control plane · DBMS_SCHEDULER"]
+    direction LR
+    REG["AWRW_TARGET / AWRW_HWM"]
+    LOG["RUN_LOG / ERROR_LOG"]
+    DASH["Status dashboard"]
+  end
+
+  SRC -->|SELECT only| COL
+  COL --> STORE
+  STORE --> ANA
+  ANA --> FIND
+  FIND --> NOTE
+  NOTE --> OUT
+  OUT -.->|drill in| DRILL
+  CP -.->|orchestrates ②–⑤| COL
