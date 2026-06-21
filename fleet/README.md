@@ -90,6 +90,19 @@ link to exactly one container** (a PDB or non-CDB — never a CDB root).
    collection — including the old DBID after a non-CDB→PDB migration. A DBID
    already owned by another Target is logged as a collision, never merged.
 
+**One-call shortcut.** `awrw_admin.add_target_dblink` collapses the link + registry
+steps into a single call — it creates the read-only link, probes it
+(`SELECT 1 FROM dual@link`, so a bad link/credential fails fast), then registers
+the Target. Ideal for a bootstrap loop over a list of databases:
+
+```sql
+EXEC awrw_admin.add_target_dblink('PROD01', '//host:1521/PROD01_SVC', 'awr_reader', '<pw>');
+-- p_password => NULL for a wallet/external-auth link.
+```
+
+The warehouse owner needs `CREATE DATABASE LINK` granted **directly** (definer-rights
+PL/SQL ignores roles). See `GUIDE.html` §6 for the 50-database bootstrap loop.
+
 ## Collect
 
 ```sql

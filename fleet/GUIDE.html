@@ -324,6 +324,10 @@ maintaining <code>tnsnames.ora</code>:</p>
 /</code></pre>
 <p>You don't enter DBIDs — the <b>DBID set is auto-discovered</b> on first collection. Re-running
 <code>add_target</code> for the same name simply updates the registry (it's an upsert).</p>
+<div class="callout tip"><b>Steps 3 + 4 in one call.</b> Prefer
+<code>awrw_admin.add_target_dblink('PROD01', '//host01:1521/PROD01_SVC', 'awr_reader', '&lt;pw&gt;')</code>
+— it creates the link, probes it, and registers the Target in one go (and is what the §6 bootstrap
+loop uses across all 50).</div>
 
 <h3><span class="step-num">5</span>First collection — backfill</h3>
 <pre><code><span class="k">EXEC</span> awrw_collect.collect_all;        <span class="c">-- every enabled Target</span>
@@ -383,15 +387,15 @@ fleet-wide single calls — so this is the only thing left to batch.</p>
 <span class="c">-- ... 49 more rows (or load from a CSV) ...</span>
 <span class="k">COMMIT</span>;
 
-<span class="c">-- 2. one loop builds every link + registers every Target</span>
+<span class="c">-- 2. one loop registers every Target — add_target_dblink creates the link,</span>
+<span class="c">--    probes it, and records the Target in a single call</span>
 <span class="k">BEGIN</span>
   <span class="k">FOR</span> r <span class="k">IN</span> (<span class="k">SELECT</span> * <span class="k">FROM</span> awrw_bootstrap) <span class="k">LOOP</span>
-    <span class="k">BEGIN</span> <span class="k">EXECUTE IMMEDIATE</span> <span class="s">'DROP DATABASE LINK '</span>||r.name; <span class="k">EXCEPTION WHEN OTHERS THEN</span> <span class="k">NULL</span>; <span class="k">END</span>;
-    <span class="k">EXECUTE IMMEDIATE</span>
-      <span class="s">'CREATE DATABASE LINK '</span>||r.name||
-      <span class="s">' CONNECT TO '</span>||r.reader||<span class="s">' IDENTIFIED BY "'</span>||r.pw||<span class="s">'"'</span>||
-      <span class="s">' USING ''//'</span>||r.host||<span class="s">':'</span>||r.port||<span class="s">'/'</span>||r.service||<span class="s">'''';</span>
-    awrw_admin.add_target(p_name =&gt; r.name, p_db_link =&gt; r.name);
+    awrw_admin.add_target_dblink(
+      p_name     =&gt; r.name,
+      p_connect  =&gt; <span class="s">'//'</span>||r.host||<span class="s">':'</span>||r.port||<span class="s">'/'</span>||r.service,
+      p_reader   =&gt; r.reader,
+      p_password =&gt; r.pw);
   <span class="k">END LOOP;</span>
 <span class="k">END;</span>
 /
@@ -431,9 +435,12 @@ in one sweep before scheduling:</p>
   <li><b>Coverage</b> — one query over <code>awrw_target_health</code> shows all 50 at a glance, so silence can never be mistaken for health.</li>
 </ul>
 
-<div class="callout"><b>Possible future helper.</b> An <code>awrw_admin.add_target</code> overload that also
-creates the link in one call would fold steps 3–4 into one — say so if you'd like it added (it's a
-small, testable addition).</div>
+<div class="callout tip"><b>One-call registration.</b> <code>awrw_admin.add_target_dblink(name, connect, reader, password)</code>
+folds steps 3–4 (create link + register) into a single call — it builds the read-only link, probes it
+(<code>SELECT 1 FROM dual@link</code>) so a bad link/credential fails fast, then registers the Target.
+Pass <code>p_password =&gt; NULL</code> for a wallet/external-auth link. The warehouse owner needs
+<code>CREATE DATABASE LINK</code> granted <i>directly</i> (definer-rights PL/SQL ignores roles). The
+bootstrap loop above uses it.</div>
 
 <!-- ============================================================ -->
 <h2 id="operate">7 · Operating the fleet (day 2)</h2>
@@ -504,7 +511,8 @@ tells you <i>where</i> to look; this report tells you <i>what</i> happened.</p>
 <h4>Operations API</h4>
 <table>
   <tr><th>Call</th><th>Does</th></tr>
-  <tr><td><code>awrw_admin.add_target(name, link, [profile], [snap_min], [notes])</code></td><td>Register / update a Target.</td></tr>
+  <tr><td><code>awrw_admin.add_target(name, link, [profile], [snap_min], [notes])</code></td><td>Register / update a Target against an existing link.</td></tr>
+  <tr><td><code>awrw_admin.add_target_dblink(name, connect, reader, [password], …)</code></td><td>Create the link (+ probe) <i>and</i> register, in one call.</td></tr>
   <tr><td><code>awrw_admin.set_enabled(name, 'Y'|'N')</code></td><td>Pause / resume a Target.</td></tr>
   <tr><td><code>awrw_collect.collect_all</code> / <code>collect_target(id)</code></td><td>Pull new snapshots.</td></tr>
   <tr><td><code>awrw_collect.refresh_health</code></td><td>Recompute coverage status.</td></tr>
