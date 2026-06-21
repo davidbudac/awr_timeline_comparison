@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>This toolkit vs Oracle AWR Warehouse — a comparison</title>
+<style>
+  :root{
+    --ink:#1a1a1a; --muted:#5f6368; --line:#e3e6e8; --bg:#fff;
+    --blue:#4285f4; --blue-bg:#e8f0fe; --green:#1e8e3e; --green-bg:#e6f4ea;
+    --amber:#b06000; --amber-bg:#fef7e0; --gray:#5f6368; --gray-bg:#f1f3f4;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+       color:var(--ink);margin:0;background:#f7f8fa}
+  .wrap{max-width:980px;margin:0 auto;padding:0 28px 100px;background:var(--bg);box-shadow:0 0 0 1px var(--line)}
+  header.hero{background:linear-gradient(135deg,#0b3d2e,#1e8e3e);color:#fff;margin:0 -28px 32px;padding:48px 40px 40px}
+  header.hero h1{font-size:28px;margin:0 0 8px;letter-spacing:-.5px}
+  header.hero p{margin:0;font-size:17px;opacity:.92;max-width:720px}
+  header.hero .meta{margin-top:18px;font-size:13px;opacity:.8}
+  h2{font-size:23px;margin:48px 0 14px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:18px;margin:26px 0 8px}
+  p{margin:10px 0}
+  code{font:13.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#eef1f4;padding:1px 5px;border-radius:4px;color:#0b3d2e}
+  a{color:#1a73e8;text-decoration:none} a:hover{text-decoration:underline}
+  svg{width:100%;height:auto;margin:18px 0;border:1px solid var(--line);border-radius:10px;background:#fcfcfd}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14.5px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f6f8fa;font-weight:600}
+  td.win{color:var(--green);font-weight:600}
+  td.lose{color:var(--muted)}
+  thead th:nth-child(2){background:#e8f0fe}
+  thead th:nth-child(3){background:#e6f4ea}
+  .callout{border-left:4px solid var(--blue);background:var(--blue-bg);padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+  .callout.warn{border-color:var(--amber);background:var(--amber-bg)}
+  .callout.tip{border-color:var(--green);background:var(--green-bg)}
+  .callout b{display:block;margin-bottom:2px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:14px 0}
+  .card{border:1px solid var(--line);border-radius:10px;padding:4px 18px 14px}
+  .card.a{border-top:4px solid var(--blue)} .card.b{border-top:4px solid var(--green)}
+  .card h3{margin-top:14px}
+  ul.tight li{margin:4px 0}
+  footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+  .lead{font-size:17px;color:#3c4043}
+  @media(max-width:720px){.two{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <h1>This toolkit vs Oracle AWR Warehouse</h1>
+  <p>Both consolidate AWR from many databases into one place — but they are built for different
+     jobs. Oracle's AWR Warehouse is a full-fidelity retention &amp; reporting store; this toolkit
+     is an active fleet change-detector. Here is how they line up.</p>
+  <div class="meta">Comparison reflects Oracle AWR Warehouse as an Enterprise Manager Cloud Control feature (12.1.0.4 / EM&nbsp;12cR4+).</div>
+</header>
+
+<p class="lead">The single most important difference: <b>Oracle's AWR Warehouse keeps the data so you
+can go look; this toolkit tells you which databases to look at.</b> That goal difference drives
+almost everything below.</p>
+
+<h2>The two approaches at a glance</h2>
+
+<svg viewBox="0 0 960 430" role="img" aria-label="Architecture comparison">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#5f6368"/></marker>
+  </defs>
+  <!-- LEFT PANEL: Oracle AWRW -->
+  <rect x="20" y="46" width="445" height="368" rx="12" fill="#fbfdff" stroke="#c9d6f5" stroke-width="1.5"/>
+  <text x="242" y="74" text-anchor="middle" font-size="16" font-weight="700" fill="#174ea6">Oracle AWR Warehouse (EM)</text>
+  <g text-anchor="middle" font-size="12.5">
+    <rect x="62" y="90"  width="360" height="40" rx="7" fill="#e8f0fe" stroke="#4285f4"/><text x="242" y="115">Source DB &nbsp;+&nbsp; EM agent</text>
+    <rect x="62" y="156" width="360" height="40" rx="7" fill="#f1f3f4" stroke="#5f6368"/><text x="242" y="181">DBMS job → Data Pump dump (on source host)</text>
+    <rect x="62" y="222" width="360" height="40" rx="7" fill="#f1f3f4" stroke="#5f6368"/><text x="242" y="247">EM transfer → Data Pump LOAD</text>
+    <rect x="62" y="288" width="360" height="40" rx="7" fill="#e6f4ea" stroke="#1e8e3e"/><text x="242" y="313">Warehouse — full AWR copy</text>
+    <rect x="62" y="354" width="360" height="40" rx="7" fill="#fef7e0" stroke="#f9ab00"/><text x="242" y="379">EM console: AWR · ADDM · Compare · ASH</text>
+    <line x1="242" y1="130" x2="242" y2="156" stroke="#5f6368" marker-end="url(#ar)"/>
+    <line x1="242" y1="196" x2="242" y2="222" stroke="#5f6368" marker-end="url(#ar)"/>
+    <line x1="242" y1="262" x2="242" y2="288" stroke="#5f6368" marker-end="url(#ar)"/>
+    <line x1="242" y1="328" x2="242" y2="354" stroke="#5f6368" marker-end="url(#ar)"/>
+  </g>
+  <!-- RIGHT PANEL: this toolkit -->
+  <rect x="495" y="46" width="445" height="368" rx="12" fill="#fbfefb" stroke="#bfe3c8" stroke-width="1.5"/>
+  <text x="717" y="74" text-anchor="middle" font-size="16" font-weight="700" fill="#0b3d2e">This toolkit</text>
+  <g text-anchor="middle" font-size="12.5">
+    <rect x="537" y="90"  width="360" height="40" rx="7" fill="#e8f0fe" stroke="#4285f4"/><text x="717" y="115">Source DB — SELECT only (no agent)</text>
+    <rect x="537" y="200" width="360" height="40" rx="7" fill="#e6f4ea" stroke="#1e8e3e"/><text x="717" y="225">Thin warehouse — curated facts</text>
+    <rect x="537" y="266" width="360" height="40" rx="7" fill="#e6f4ea" stroke="#1e8e3e"/><text x="717" y="291">3 detectors → findings + alerts</text>
+    <rect x="537" y="354" width="360" height="40" rx="7" fill="#fef7e0" stroke="#f9ab00"/><text x="717" y="379">Digest → files / email</text>
+    <line x1="717" y1="130" x2="717" y2="200" stroke="#5f6368" marker-end="url(#ar)"/>
+    <text x="717" y="152" font-size="11.5" fill="#3c4043">read-only DB link</text>
+    <text x="717" y="170" font-size="11" fill="#5f6368">INSERT…SELECT (no files)</text>
+    <line x1="717" y1="240" x2="717" y2="266" stroke="#5f6368" marker-end="url(#ar)"/>
+    <line x1="717" y1="306" x2="717" y2="354" stroke="#5f6368" marker-end="url(#ar)"/>
+  </g>
+</svg>
+<p style="text-align:center;color:#5f6368;font-size:13.5px;margin-top:-4px">
+  Left: full-fidelity copy via Data Pump + EM agents (needs source-host access). &nbsp;
+  Right: thin read-only pull over a DB link (nothing on the source host).</p>
+
+<h2>Side by side</h2>
+<table>
+  <thead><tr><th>Dimension</th><th>Oracle AWR Warehouse</th><th>This toolkit</th></tr></thead>
+  <tbody>
+    <tr><td><b>Primary purpose</b></td><td>Consolidate + retain <b>full</b> AWR for long-term reporting</td><td>Detect &amp; notify on fleet-wide <b>change</b></td></tr>
+    <tr><td><b>Infrastructure</b></td><td>Requires <b>Enterprise Manager</b> (OMS, repository, agents)</td><td class="win">None — SQL/PLSQL in one warehouse DB</td></tr>
+    <tr><td><b>Transport</b></td><td>ETL: source job writes <b>Data Pump dumps on the source host</b>, EM transfers them, Data Pump <b>loads</b></td><td class="win"><code>INSERT … SELECT@dblink</code> — read-only pull, no files</td></tr>
+    <tr><td><b>Source-side footprint</b></td><td>EM agent + dump job + host staging space</td><td class="win">Read-only <code>SELECT</code> only; nothing installed</td></tr>
+    <tr><td><b>Read-only standby / locked-down host</b></td><td class="lose">Not really (must write dumps on source host)</td><td class="win">Yes — read-only by design</td></tr>
+    <tr><td><b>Data fidelity</b></td><td class="win"><b>Near-complete</b> AWR copy</td><td>Thin curated extract (no ASH; top-N SQL only)</td></tr>
+    <tr><td><b>What you get out</b></td><td class="win">Full AWR / ADDM / Compare-Period / ASH Analytics in EM</td><td>Seasonal + regression + headline detection, digest, single-DB drill-down report</td></tr>
+    <tr><td><b>Anomaly detection / alerting</b></td><td class="lose">None built in (use EM's separate incident rules)</td><td class="win">Three detectors + fire/clear hysteresis + digest</td></tr>
+    <tr><td><b>Notification</b></td><td class="lose">None from AWRW itself</td><td class="win">Digest → filesystem (built-in) / email-Slack (seam)</td></tr>
+    <tr><td><b>Cross-version sources</b></td><td class="win">Yes — mixed 11g/12c/18c/19c</td><td>19c-homogeneous by design</td></tr>
+    <tr><td><b>Storage footprint</b></td><td>Large (full copy)</td><td class="win">Small (thin facts)</td></tr>
+    <tr><td><b>Queryability for scripts</b></td><td>Full AWR schema in the warehouse</td><td class="win">Clean <code>FACT_/DIM_</code> + <code>AWRV_*</code> seam</td></tr>
+    <tr><td><b>Support model</b></td><td class="win">Oracle-supported product (MOS, patches)</td><td>Bespoke / self-supported</td></tr>
+    <tr><td><b>Access / UI</b></td><td>EM Cloud Control console</td><td>SQL + self-contained HTML</td></tr>
+  </tbody>
+</table>
+<p style="font-size:13px;color:#5f6368">Green = the clearer advantage for that row. Several rows are genuine trade-offs, not wins.</p>
+
+<h2>Where each is genuinely stronger</h2>
+<div class="two">
+  <div class="card a">
+    <h3>Oracle AWR Warehouse</h3>
+    <ul class="tight">
+      <li><b>Full fidelity</b> — it loads complete AWR, so you can run <i>any</i> standard Oracle
+          report (AWR, ADDM, Compare Period, ASH Analytics, SQL history). A thin extract can't.</li>
+      <li><b>Officially supported</b> with MOS notes/patches, and <b>cross-version</b> sources out
+          of the box.</li>
+      <li><b>Integrated</b> with the rest of Enterprise Manager (targets, blackouts, incident
+          rules, ASH UI) if you already run EM.</li>
+    </ul>
+  </div>
+  <div class="card b">
+    <h3>This toolkit</h3>
+    <ul class="tight">
+      <li><b>No EM required</b> — no OMS / agents / repository to stand up or license.</li>
+      <li><b>No Data Pump, no host access on sources</b> — pure DB-link pull. The decisive factor
+          for locked-down <b>AIX</b> fleets and <b>read-only standbys</b>.</li>
+      <li><b>Active detection + notification</b> out of the box — it surfaces the interesting
+          databases automatically instead of being a passive store.</li>
+      <li><b>Tiny footprint</b> and <b>fully transparent</b> SQL you own and can extend.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Licensing — the same on the key point</h2>
+<div class="callout"><b>Both read <code>DBA_HIST_*</code>, so both require the Diagnostic Pack on every
+source.</b> No advantage either way there. Oracle's AWRW additionally brings in Enterprise Manager
+(and its infrastructure / management packs); this toolkit adds nothing beyond the one warehouse
+database.</div>
+
+<h2>Bottom line — more complementary than competing</h2>
+<p>If you run EM and want a supported, full-fidelity historical AWR archive for deep per-database
+forensics, Oracle's AWR Warehouse is the right <i>store</i>. If you want fleet-wide
+<b>change detection and notification</b> — especially without EM, without touching source hosts, and
+across read-only standbys — this toolkit fills a gap AWRW doesn't address.</p>
+<div class="callout tip"><b>A realistic combined setup</b>
+Use AWR Warehouse (or just the sources' own AWR) for deep drill-down, and run this toolkit as the
+fleet <i>"what changed and where"</i> radar on top — it points you at the database, then you open the
+full AWR/ADDM report there.</div>
+
+<div class="callout warn"><b>Status note</b>
+AWR Warehouse is an Enterprise Manager Cloud Control feature (since 12.1.0.4 / EM&nbsp;12cR4).
+Oracle's more recent fleet-performance investment has shifted toward OCI
+<b>Database Management / Operations Insights</b>, so confirm AWRW's support state for your specific
+EM release before standardizing on it.</div>
+
+<h2>Sources</h2>
+<ul class="tight">
+  <li><a href="https://docs.oracle.com/en/database/oracle/oracle-database/18/tdppt/using-automatic-workload-repository-warehouse.html">Using AWR Warehouse for Generating Performance Reports — Oracle docs</a></li>
+  <li><a href="https://support.oracle.com/knowledge/Oracle%20Cloud/1907335_1.html">Primary Note on AWR Warehouse in Enterprise Manager — MOS 1907335.1</a></li>
+  <li><a href="https://support.oracle.com/knowledge/Enterprise%20Management/2652024_1.html">What Is The ETL Method Used In OEM for AWR Warehouse — MOS 2652024.1</a></li>
+  <li><a href="https://www.oracle.com/technical-resources/articles/enterprise-manager/potvin-awr-em12c.html">Advanced Usage of the AWR Warehouse — Oracle</a></li>
+  <li><a href="https://pardydba.wordpress.com/2014/09/11/configuring-awr-warehouse-awrw-in-em12c/">Configuring AWR Warehouse (AWRW) in EM12c — Pardy DBA</a></li>
+</ul>
+
+<footer>
+  Comparison for the AWR Fleet Warehouse toolkit (branch <code>feat/fleet-warehouse</code>).
+  Oracle AWR Warehouse details verified against Oracle documentation and My Oracle Support notes (June 2026).
+</footer>
+
+</div>
+</body>
+</html>
