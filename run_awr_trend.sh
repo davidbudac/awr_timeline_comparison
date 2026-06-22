@@ -203,8 +203,15 @@ run_report() {
     mkdir -p reports
 
     # awr_trend.sql does not DEFINE defaults itself; we set them here and the
-    # driver inherits them from this sqlplus session.
+    # driver inherits them from this sqlplus session.  We load sql/defaults.sql
+    # FIRST as a safety net: it DEFINEs every substitution var to a canonical
+    # value, so even if a var is ever omitted from the explicit list below the
+    # driver still finds a value instead of blocking on an invisible
+    # "Enter value for ...:" prompt (the driver runs under SET TERMOUT OFF, so
+    # such a prompt is silent and hangs the run).  The explicit DEFINEs that
+    # follow override the defaults with the caller's chosen values.
     sqlplus -S -L "$CONN" <<EOF
+@sql/defaults.sql
 DEFINE target_end = '${TARGET_END}'
 DEFINE win_hours  = ${WIN_HOURS}
 DEFINE weeks_back = ${WEEKS_BACK}
@@ -415,6 +422,10 @@ build_shell_cmd() {
 build_sqlplus_block() {
     cat <<SQLBLK
 sqlplus -S -L $(shq "$CONN") <<'EOF'
+-- Load canonical defaults FIRST so every var has a value; the DEFINEs below
+-- then override with your chosen values.  Without this, a missing DEFINE makes
+-- the driver hang on a silent "Enter value for ...:" prompt (TERMOUT is OFF).
+@sql/defaults.sql
 DEFINE target_end = '${TARGET_END}'
 DEFINE win_hours  = ${WIN_HOURS}
 DEFINE weeks_back = ${WEEKS_BACK}
@@ -482,7 +493,8 @@ print_summary() {
     echo "    $(build_shell_cmd)"
     echo
     echo "${BOLD}B) Pure SQL*Plus${RST} — no shell wrapper (e.g. a Windows host).  Paste"
-    echo "   the whole block, or just the DEFINE lines at a SQL> prompt then @awr_trend.sql:"
+    echo "   the whole block; at a SQL> prompt run @sql/defaults.sql first, then the"
+    echo "   DEFINE lines, then @awr_trend.sql (defaults prevent silent var prompts):"
     echo
     build_sqlplus_block | sed 's/^/    /'
     echo
