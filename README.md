@@ -74,10 +74,11 @@ ECHARTS=vendor/echarts.min.js ./run_awr_trend.sh user/pw@svc           # self-co
 
 Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template [debug [marker_file]]]]]]]]]]`
 
-Plus two environment variables: `MARKERS` for file-free inline timeline
-markers (see "Timeline markers" below), and `ECHARTS` to control where the
+Plus three environment variables: `MARKERS` for file-free inline timeline
+markers (see "Timeline markers" below), `ECHARTS` to control where the
 chart library loads from / make the report self-contained (see "Offline /
-self-contained report" below).
+self-contained report" below), and `DBIDS` to pin which AWR DBID(s) the
+report trends (see "Choosing the AWR DBID(s)" below).
 
 | Arg          | Default          | Meaning                                             |
 |--------------|------------------|-----------------------------------------------------|
@@ -93,6 +94,7 @@ self-contained report" below).
 | `marker_file`| *(empty)*        | Optional path to a timeline-marker config file (milestones drawn as vertical dashed lines on the dated charts). Empty = no markers. See "Timeline markers" below |
 | `MARKERS` *(env var)* | *(empty)* | File-free alternative to `marker_file`: inline `WHEN\|LABEL` milestones joined by `;;`. `marker_file` wins when both are set. See "Timeline markers" below |
 | `ECHARTS` *(env var)* | *(empty)* | Where the ECharts chart library loads from. Empty = public CDN (`cdn.jsdelivr.net`). An `http(s)` URL = used as-is (internal mirror). A local file path = inlined into the report for a single self-contained, offline-capable HTML file. See "Offline / self-contained report" below |
+| `DBIDS` *(env var)* | *(empty)* | Which AWR DBID(s) to trend. Empty = auto-resolve from the data (the container's own `CON_DBID` plus disjoint earlier pre-migration history; an *overlapping* repository — e.g. the CDB root's AWR visible inside a PDB under a different DBID — is excluded). Set to one DBID or a comma list to pin it. Equivalent pure-SQL\*Plus DEFINE: `dbids`. See "Choosing the AWR DBID(s)" below |
 
 `step` × `step_unit` defines the gap between adjacent comparison
 windows. `step=1, step_unit=w` (the default) reproduces the original
@@ -237,6 +239,52 @@ Notes:
 - This adds roughly the size of `echarts.min.js` (~1 MB) to each generated
   report.
 
+### Choosing the AWR DBID(s)
+
+AWR snapshots are keyed by **DBID**, and a database can have more than one
+in its history — most often after a **non-CDB is plugged in as a PDB**
+(pre-plug snapshots keep the old non-CDB DBID; new ones use the PDB's
+`CON_DBID`) or after a `nid` / rename. The report stitches such history
+together: every `DBA_HIST_*` filter uses `dbid IN (...)`, not a single DBID.
+
+By default the DBID set is **auto-resolved from the data** — no flags needed.
+The rule: anchor on the current container's `CON_DBID`, then add only DBIDs
+whose history *ends before* the anchor's first snapshot (genuine disjoint
+pre-migration history). A DBID whose snapshots **overlap** the anchor's in
+wall-clock time is **excluded**. This matters inside a PDB: the CDB root's AWR
+repository is sometimes visible there under a *different* DBID covering the
+same recent period. Including it would double-count load and make every recent
+comparison window resolve its begin/end snaps under different DBIDs — so the
+report would invalidate them as *"DBID changed inside window"* and show
+em-dashes. Excluding the overlapping repository fixes both.
+
+Diagnose what's in your AWR (read-only):
+
+```sql
+SELECT dbid,
+       TO_CHAR(MIN(begin_interval_time),'YYYY-MM-DD HH24:MI') AS first_snap,
+       TO_CHAR(MAX(end_interval_time)  ,'YYYY-MM-DD HH24:MI') AS last_snap,
+       COUNT(*) AS snaps
+FROM   dba_hist_snapshot
+GROUP BY dbid
+ORDER BY MAX(end_interval_time);
+```
+
+If the heuristic ever picks the wrong set, **pin it explicitly** with `DBIDS`
+(wrapper) or the `dbids` DEFINE (pure SQL\*Plus) — a single DBID or a comma
+list. Only DBIDs that own snapshots are kept; spaces are ignored.
+
+```bash
+# Trend just this PDB's own AWR (its CON_DBID), ignoring an overlapping repo:
+DBIDS=3730626044 ./run_awr_trend.sh user/pw@pdb
+
+# Stitch two specific DBIDs (e.g. across a deliberate migration boundary):
+DBIDS=3730626044,4012345678 ./run_awr_trend.sh user/pw@pdb
+```
+
+In an ordinary single-DBID database (and in the CDB root / a non-CDB) the
+auto-resolution is a no-op — output is byte-identical to leaving `DBIDS` empty.
+
 ## Read the report
 
 The header card at the top lists **which windows were compared** —
@@ -368,7 +416,11 @@ SQL> @side/create_weekly_baselines.sql
 - Results assume RAC nodes were all up for the window (per-instance mode
   filters by `instance_number`; aggregate mode sums across instances).
 - Pluggable databases: run as a user in the container you want to analyse.
-  The `dbid` is resolved from `v$database` at run time.
+  The DBID(s) are resolved **from the AWR data**, not `v$database.dbid`
+  (which returns the CDB root's DBID inside a PDB). History that spans a DBID
+  change is stitched; a repository that overlaps the container's own in time
+  (e.g. the root's AWR visible in a PDB) is excluded. Override with `DBIDS` /
+  the `dbids` DEFINE — see "Choosing the AWR DBID(s)" above.
 - Because every number is recomputed on each run, comparing the HTML of
   two runs is the only way to look at historical output — there is no
   scratch schema to query. If you need persisted facts, pipe the
