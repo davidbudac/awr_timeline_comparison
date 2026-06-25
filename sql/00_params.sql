@@ -65,6 +65,7 @@ DECLARE
     v_clean_name VARCHAR2(160);
     v_pct_cls    VARCHAR2(8);
     v_pct_txt    VARCHAR2(24);
+    v_z_txt      VARCHAR2(24);
 
     -- Masthead DB-time timeline strip: per-snap total DB time over the
     -- full compared span, with markArea bands for the windows. Same
@@ -543,6 +544,57 @@ BEGIN
         END LOOP;
     END IF;
     DBMS_OUTPUT.PUT_LINE('  </div>');
+
+    -- =========================================================
+    -- Compact "all movers" list. The verdict above names only the
+    -- top 3; this collapsible strip enumerates every metric beyond
+    -- |z| > 2 in the same |z| DESC order produced by the recompute,
+    -- in a smaller font, so the full set is one click away without
+    -- leaving the masthead. Only emitted when there is a mover.
+    -- =========================================================
+    IF v_n_movers > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('  <details class="movers-all">');
+        DBMS_OUTPUT.PUT_LINE('    <summary>All ' || v_n_movers || ' mover'
+            || CASE WHEN v_n_movers = 1 THEN '' ELSE 's' END
+            || ' &middot; |z| &gt; 2</summary>');
+        DBMS_OUTPUT.PUT_LINE('    <ul class="movers-list">');
+        FOR i IN 1 .. v_scored.COUNT LOOP
+            IF v_scored(i).z_score IS NOT NULL
+               AND ABS(v_scored(i).z_score) > 2 THEN
+                v_clean_name := REGEXP_REPLACE(v_scored(i).metric_name,
+                                               '^Wait class: ', '');
+                IF LENGTH(v_clean_name) > 48 THEN
+                    v_clean_name := DBMS_XMLGEN.CONVERT(SUBSTR(v_clean_name, 1, 46))
+                                    || '&hellip;';
+                ELSE
+                    v_clean_name := DBMS_XMLGEN.CONVERT(v_clean_name);
+                END IF;
+
+                v_z_txt := TO_CHAR(v_scored(i).z_score, 'FMS9990D0',
+                                   'NLS_NUMERIC_CHARACTERS=''.,''');
+
+                IF v_scored(i).pct_delta IS NULL THEN
+                    v_pct_cls := 'up';
+                    v_pct_txt := '&mdash;';
+                ELSE
+                    v_pct_cls := CASE WHEN v_scored(i).pct_delta >= 0
+                                      THEN 'up' ELSE 'down' END;
+                    v_pct_txt := TO_CHAR(v_scored(i).pct_delta, 'FMS999990',
+                                         'NLS_NUMERIC_CHARACTERS=''.,''') || '%';
+                END IF;
+
+                DBMS_OUTPUT.PUT_LINE('      <li>'
+                    || '<span class="m-dom">' || v_scored(i).metric_domain || '</span>'
+                    || '<span class="m-name">' || v_clean_name || '</span>'
+                    || '<span class="m-z">z ' || v_z_txt || '</span>'
+                    || '<span class="m-pct ' || v_pct_cls || '">' || v_pct_txt
+                    || '</span>'
+                    || '</li>');
+            END IF;
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('    </ul>');
+        DBMS_OUTPUT.PUT_LINE('  </details>');
+    END IF;
 
     --
     -- Compared windows strip: a single very-narrow line chart of total

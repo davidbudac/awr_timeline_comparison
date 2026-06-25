@@ -201,6 +201,39 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct.up   { color:var(--red); }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct.down { color:var(--ok); }');
 
+    -- Compact "all movers" disclosure under the verdict. The verdict
+    -- only names the top 3; this lists every metric beyond |z| > 2 in
+    -- a smaller font, collapsed by default so it stays unobtrusive.
+    DBMS_OUTPUT.PUT_LINE('header.report .movers-all {'
+        || ' margin-top:8px; font-size:12px; color:var(--ink-soft); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .movers-all summary {'
+        || ' cursor:pointer; user-select:none; padding:4px 0;'
+        || ' font-size:11px; letter-spacing:0.06em; text-transform:uppercase;'
+        || ' color:var(--muted); font-weight:700; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .movers-all summary:hover { color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .movers-list {'
+        || ' list-style:none; margin:6px 0 2px; padding:0;'
+        || ' display:grid;'
+        || ' grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));'
+        || ' gap:1px 20px; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .movers-list li {'
+        || ' display:flex; align-items:baseline; gap:8px;'
+        || ' padding:2px 0; line-height:1.4;'
+        || ' border-bottom:1px solid var(--hairline); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-dom {'
+        || ' font-size:9px; letter-spacing:0.08em; font-weight:700;'
+        || ' color:var(--muted); width:46px; flex:none; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-name {'
+        || ' color:var(--ink); flex:1 1 auto;'
+        || ' overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-z {'
+        || ' font-variant-numeric:tabular-nums; color:var(--muted); flex:none; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct {'
+        || ' font-variant-numeric:tabular-nums; font-weight:700;'
+        || ' flex:none; min-width:54px; text-align:right; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct.up   { color:var(--red); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct.down { color:var(--ok); }');
+
     -- =========================================================
     -- Table-of-contents nav
     -- =========================================================
