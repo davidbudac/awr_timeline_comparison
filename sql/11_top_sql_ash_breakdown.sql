@@ -67,6 +67,11 @@ DECLARE
     v_sql_totals    t_num_by_str;
     v_sql_dom       t_str_by_str;
     v_sql_text      t_str_by_str;
+    -- Oracle-maintained ("system") flag per rendered sql_id ('Y'/'N'),
+    -- derived from its parsing schema; drives the per-card data-sys marker
+    -- the report's "Application only" toggle hides on.
+    v_sql_sys       t_str_by_str;
+    v_sch           VARCHAR2(128);
 
     v_evt_key       VARCHAR2(200);
     v_cell_key      VARCHAR2(200);
@@ -96,6 +101,7 @@ DECLARE
     v_prefix        VARCHAR2(40);
 
     @@sql/lib/put_clob_chunked.plsql
+    @@sql/lib/is_oracle_schema.plsql
 BEGIN
     DBMS_LOB.CREATETEMPORARY(v_hours_json, TRUE);
     DBMS_LOB.CREATETEMPORARY(v_event_vals, TRUE);
@@ -400,6 +406,21 @@ BEGIN
         EXCEPTION
             WHEN NO_DATA_FOUND THEN v_sql_text(v_sid) := '(sql text not available)';
         END;
+        -- Parsing schema -> system/application classification for this SQL.
+        -- KEEP picks the latest snapshot's schema; an aggregate over zero
+        -- rows yields a single NULL row (is_oracle_schema -> 'N'), so the
+        -- handler is belt-and-braces.
+        BEGIN
+            SELECT MAX(parsing_schema_name) KEEP (DENSE_RANK LAST ORDER BY snap_id)
+            INTO   v_sch
+            FROM   dba_hist_sqlstat
+            WHERE  dbid IN (~dbid_list)
+              AND  sql_id = v_sid
+              AND  (~inst_num = 0 OR instance_number = ~inst_num);
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN v_sch := NULL;
+        END;
+        v_sql_sys(v_sid) := is_oracle_schema(v_sch);
     END LOOP;
 
     -- Emit per-SQL HTML cards (chart divs first, JS bootstrap once at the end).
@@ -407,7 +428,8 @@ BEGIN
         v_sid := v_order(i).sid;
         IF NVL(v_sql_totals(v_sid), 0) < v_min_samples THEN
             v_skipped := v_skipped + 1;
-            DBMS_OUTPUT.PUT_LINE('<div class="ash-sql-card insufficient">'
+            DBMS_OUTPUT.PUT_LINE('<div class="ash-sql-card insufficient" data-sys="'
+                || v_sql_sys(v_sid) || '">'
                 || '<div class="ash-sql-head">'
                 || '<code>' || DBMS_XMLGEN.CONVERT(v_sid) || '</code>'
                 || ' &middot; '
@@ -420,7 +442,8 @@ BEGIN
                 || '</div>');
         ELSE
             v_rendered := v_rendered + 1;
-            DBMS_OUTPUT.PUT_LINE('<div class="ash-sql-card">');
+            DBMS_OUTPUT.PUT_LINE('<div class="ash-sql-card" data-sys="'
+                || v_sql_sys(v_sid) || '">');
             DBMS_OUTPUT.PUT_LINE('  <div class="ash-sql-head">'
                 || '<code>' || DBMS_XMLGEN.CONVERT(v_sid) || '</code>'
                 || ' &middot; '

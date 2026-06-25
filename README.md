@@ -277,6 +277,20 @@ z-scores.
     `DBA_HIST_PARAMETER` whose value differs across the compared windows,
     pivoted parameter × window (value as of each window's end snapshot).
 
+### "Application only" view
+
+The sticky section nav carries an **Application only** toggle (top-right).
+Click it to strip the report down to *application* behaviour on the database:
+it hides every system-wide section (load profile, system metrics, FG/BG waits,
+ASH timeline, DB time, findings, windows, parameters) plus the masthead verdict
+and DB-time strip, leaving only **Top SQL**, **Top SQL ASH breakdown**,
+**Segment I/O**, **File I/O**, and **Utilization**. Within those, SQL parsed by
+an Oracle-maintained schema (`SYS`, `SYSTEM`, `XDB`, `DBSNMP`, …) — i.e.
+recursive/background SQL from Oracle itself — is filtered out of the tables,
+charts, and per-SQL detail cards, so you see only your own application's SQL.
+Click again (now labelled **Show all**) to restore the full report. It's a
+purely client-side toggle — no re-run needed, and it works offline.
+
 ## Does it write to the database?
 
 No. Every fact in the report is computed in-flight from the `DBA_HIST_*`

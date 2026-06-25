@@ -723,7 +723,32 @@ BEGIN
         || '<a href="#metrics">13 Metrics</a>'
         || '<a href="#topsql-ash">14 Top SQL ASH</a>'
         || '<a href="#param-changes">15 Parameters</a>'
+        -- "Application only" toggle: flips body.app-only, which (via
+        -- _style.sql) hides every system-wide section plus the masthead
+        -- verdict / DB-time strip and the Oracle-internal SQL rows, leaving
+        -- just application SQL and its related data on screen.
+        || '<button type="button" id="app-filter-toggle" class="app-filter"'
+        || ' aria-pressed="false"'
+        || ' title="Hide system-wide sections and Oracle-internal SQL;'
+        || ' show only application SQL and its related data">'
+        || 'Application only</button>'
         || '</nav>');
+
+    -- Wire the toggle. Toggling body.app-only does all the section/row
+    -- hiding in CSS; the custom awr:appfilter event lets charts that
+    -- aggregate many SQLs into one canvas (section 06's bump chart) re-render
+    -- with the Oracle-internal series dropped. Per-SQL charts need no JS:
+    -- their container card/details is hidden wholesale by CSS.
+    DBMS_OUTPUT.PUT_LINE('<script>(function(){');
+    DBMS_OUTPUT.PUT_LINE('var btn=document.getElementById("app-filter-toggle"); if(!btn) return;');
+    DBMS_OUTPUT.PUT_LINE('btn.addEventListener("click",function(){');
+    DBMS_OUTPUT.PUT_LINE('  var on=document.body.classList.toggle("app-only");');
+    DBMS_OUTPUT.PUT_LINE('  btn.classList.toggle("active",on);');
+    DBMS_OUTPUT.PUT_LINE('  btn.setAttribute("aria-pressed",on?"true":"false");');
+    DBMS_OUTPUT.PUT_LINE('  btn.textContent=on?"Show all":"Application only";');
+    DBMS_OUTPUT.PUT_LINE('  document.dispatchEvent(new CustomEvent("awr:appfilter",{detail:{appOnly:on}}));');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('})();</script>');
 
     -- Temporary CLOBs are session-lived and will free at end-of-session,
     -- but free explicitly so the report can be regenerated in a loop

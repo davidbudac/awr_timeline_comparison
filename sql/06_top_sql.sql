@@ -40,6 +40,12 @@ DECLARE
     v_seen_sqls t_sqlid_tab;
     v_flip_sqls t_sqlid_tab;
     v_plan_flip BOOLEAN;
+    -- Oracle-maintained ("system") flag per sql_id, populated in the detail
+    -- loop from each SQL's parsing schema and reused when emitting the
+    -- per-SQL detail <details> blocks below. Drives the data-sys="Y|N"
+    -- markers the report's "Application only" toggle hides on.
+    v_sys_sqls  t_sqlid_tab;
+    v_is_sys    VARCHAR2(1);
 
     -- Per-dimension JSON payloads accumulated while we render the detail
     -- tables; emitted once at the end as AWR_DATA.topSql.dims so each
@@ -72,6 +78,7 @@ DECLARE
     v_first_dim        BOOLEAN;
 
     @@sql/lib/nth_csv.plsql
+    @@sql/lib/is_oracle_schema.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="topsql"><h2>Top SQL (top ' || v_top_n
         || ' per dimension, per window)</h2>');
@@ -116,6 +123,7 @@ BEGIN
         agg AS (
             SELECT w.week_offset, s.sql_id,
                    MAX(s.plan_hash_value) KEEP (DENSE_RANK LAST ORDER BY s.snap_id) AS plan_hash_value,
+                   MAX(s.parsing_schema_name) KEEP (DENSE_RANK LAST ORDER BY s.snap_id) AS parsing_schema,
                    SUM(NVL(s.executions_delta, 0))     AS executions_delta,
                    SUM(NVL(s.elapsed_time_delta, 0))   AS elapsed_time_delta_us,
                    SUM(NVL(s.cpu_time_delta, 0))       AS cpu_time_delta_us,
@@ -274,15 +282,28 @@ BEGIN
                 FROM   dba_hist_sqltext
                 WHERE  dbid IN (~dbid_list)
             ) WHERE rn = 1
+        ),
+        -- One parsing schema per sql_id (current window wins on ties) so each
+        -- top SQL can be tagged Oracle-maintained vs application for the
+        -- "Application only" filter. Derived from agg (already window-scoped)
+        -- so it adds no extra DBA_HIST_SQLSTAT scan.
+        sql_sys AS (
+            SELECT sql_id,
+                   MAX(parsing_schema) KEEP (DENSE_RANK LAST ORDER BY week_offset DESC)
+                       AS parsing_schema
+            FROM   agg
+            GROUP BY sql_id
         )
         SELECT d.code AS dim, d.ord AS dim_ord, d.label AS dim_label,
                d.unit AS dim_unit, d.divs AS dim_div,
                ps.sql_id, ps.cur_val, ps.cur_rnk, ps.cur_phv,
                ps.week_vals, ps.week_rnks, ps.week_phvs,
-               ts.sql_text_short
+               ts.sql_text_short,
+               ss.parsing_schema
         FROM   dims d
         JOIN   per_sql ps ON ps.dim = d.code
         LEFT JOIN text_snips ts ON ts.sql_id = ps.sql_id
+        LEFT JOIN sql_sys   ss ON ss.sql_id = ps.sql_id
         ORDER BY d.ord,
             CASE WHEN ps.cur_rnk IS NULL THEN 1 ELSE 0 END,
             ps.cur_rnk NULLS LAST,
@@ -327,6 +348,13 @@ BEGIN
 
         v_seen_sqls(s.sql_id) := TRUE;
 
+        -- Oracle-maintained vs application: tag this SQL by its parsing
+        -- schema so the row, its chart series, and its per-SQL detail block
+        -- below can all be hidden together when the "Application only"
+        -- toggle is on. Remembered per sql_id for the detail loop.
+        v_is_sys := is_oracle_schema(s.parsing_schema);
+        v_sys_sqls(s.sql_id) := (v_is_sys = 'Y');
+
         -- Plan-change detection for this row: scan prior-week PHVs (slots
         -- 2..N+1 of s.week_phvs; slot 1 is the current window) and flag
         -- the SQL when any non-null prior PHV differs from s.cur_phv. The
@@ -370,6 +398,7 @@ BEGIN
         END LOOP;
         v_new_entry := '{"sql_id":"' || s.sql_id
             || '","cur":' || NVL(TO_CHAR(s.cur_rnk), 'null')
+            || ',"sys":' || CASE WHEN v_is_sys = 'Y' THEN 'true' ELSE 'false' END
             || ',"vals":[' || v_chart_vals || ']}';
         v_dim_sqls_total(s.dim) := v_dim_sqls_total(s.dim) + 1;
         IF v_dim_sqls_json(s.dim) IS NULL THEN
@@ -385,7 +414,7 @@ BEGIN
         -- SQL_ID links to its detail block in the Per-SQL detail section
         -- below. The hashchange listener emitted at the end of this section
         -- auto-opens the target <details> on click.
-        v_row := '<tr>'
+        v_row := '<tr data-sys="' || v_is_sys || '">'
             || '<td class="mono"><a href="#sql-' || s.sql_id || '">'
             || s.sql_id || '</a>'
             || CASE WHEN v_plan_flip
@@ -594,6 +623,12 @@ BEGIN
             || REPLACE(REPLACE(REPLACE(REPLACE(sc.grp_value,
                    '\', '\\'), '"', '\"'), CHR(13), ' '), CHR(10), ' ')
             || '","cur":' || NVL(TO_CHAR(sc.cur_rnk), 'null')
+            -- Tag system-ness only for the schema breakdown (module/action are
+            -- app-set free text, not schema-derived). Lets the app-only filter
+            -- drop Oracle-maintained schemas from the chart's "Schema" view too.
+            || ',"sys":' || CASE WHEN sc.grp_type = 'schema'
+                                  AND is_oracle_schema(sc.grp_value) = 'Y'
+                                 THEN 'true' ELSE 'false' END
             || ',"vals":[' || v_chart_vals || ']}';
         -- Accumulate into the (dim, grp_type) bucket. Lazily initialized here:
         -- the SQL_ID loop only seeds the sqls accumulators, so the group
@@ -715,8 +750,14 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('  var mark=window.AWR_markLine&&window.AWR_markLine(weeks,AWR_DATA.topSql.weeksIso);');
         DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el);');
         DBMS_OUTPUT.PUT_LINE('  function rowName(s){ return s.name || s.sql_id || "?"; }');
+        -- currentMode persists across renders so the awr:appfilter listener
+        -- can re-render the same breakdown with the Oracle-internal (sys)
+        -- series dropped when "Application only" is toggled on.
+        DBMS_OUTPUT.PUT_LINE('  var currentMode="sqls";');
         DBMS_OUTPUT.PUT_LINE('  function render(mode){');
-        DBMS_OUTPUT.PUT_LINE('    var rows=(d[mode]||d.sqls)||[];');
+        DBMS_OUTPUT.PUT_LINE('    if(mode) currentMode=mode;');
+        DBMS_OUTPUT.PUT_LINE('    var rows=(d[currentMode]||d.sqls)||[];');
+        DBMS_OUTPUT.PUT_LINE('    if(document.body.classList.contains("app-only")) rows=rows.filter(function(s){return !s.sys;});');
         DBMS_OUTPUT.PUT_LINE('    chart.setOption({');
         DBMS_OUTPUT.PUT_LINE('      tooltip:{trigger:"axis",axisPointer:{type:"line"},formatter:function(ps){var hdr="<b>"+ps[0].axisValue+"</b>";var rs=ps.filter(function(p){return p.value!=null;}).sort(function(a,b){return (b.value||0)-(a.value||0);}).map(function(p){return p.marker+" "+p.seriesName+": <b>"+fmt(p.value)+" "+d.unit+"</b>";}).join("<br/>");return hdr+"<br/>"+rs;}},');
         DBMS_OUTPUT.PUT_LINE('      legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},');
@@ -727,6 +768,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('    }, true);');
         DBMS_OUTPUT.PUT_LINE('  }');
         DBMS_OUTPUT.PUT_LINE('  render("sqls");');
+        DBMS_OUTPUT.PUT_LINE('  document.addEventListener("awr:appfilter",function(){render();});');
         DBMS_OUTPUT.PUT_LINE('  var toggle=document.querySelector(''[data-topsql-target="''+dim+''"]'');');
         DBMS_OUTPUT.PUT_LINE('  if(toggle){');
         -- Hide any group-view button whose dim carries no meaningful rows:
@@ -893,7 +935,11 @@ BEGIN
 
             -- Per-SQL collapsible container. The id is the link target for
             -- SQL_ID anchors in the top-N tables above.
-            DBMS_OUTPUT.PUT_LINE('<details id="sql-' || v_sql_id || '"><summary>'
+            DBMS_OUTPUT.PUT_LINE('<details id="sql-' || v_sql_id || '"'
+                || ' data-sys="'
+                || CASE WHEN v_sys_sqls.EXISTS(v_sql_id) AND v_sys_sqls(v_sql_id)
+                        THEN 'Y' ELSE 'N' END
+                || '"><summary>'
                 || '<span class="mono">' || v_sql_id || '</span> &mdash; '
                 || NVL(v_first_seen, '?') || ' &rarr; ' || NVL(v_last_seen, '?')
                 || ' &middot; <b>' || v_phv_count || '</b> distinct plan'

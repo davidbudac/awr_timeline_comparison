@@ -72,6 +72,8 @@ sql/
 └── lib/                 -- @@-included fragments (see conventions)
     ├── windows_cte.sql       -- run_params → … → valid_windows CTE chain
     ├── nth_csv.plsql         -- INSTR-based CSV parser (keeps empty tokens)
+    ├── is_oracle_schema.plsql-- 'Y'/'N' Oracle-maintained parsing-schema test
+    │                         --   (drives the "Application only" data-sys tag)
     ├── js_sparkline.plsql    -- inline-SVG sparkline renderer (CDN-free)
     ├── js_wait_colors.plsql  -- shared wait_class palette
     ├── js_markers.plsql      -- inits AWR_MARKERS + AWR_markLine()
@@ -155,6 +157,30 @@ text, event/metric names) in `DBMS_XMLGEN.CONVERT(...)`.
   dbmint). Re-run byte-identity after touching 00/06/09/10/11/12 or
   `windows_cte.sql`. Masthead emits the primary `~dbid` exactly as before and
   only appends "all DBIDs …" when the list has a comma — don't "simplify" that.
+
+### "Application only" filter (`body.app-only`)
+A client-side toggle in the sticky nav (`#app-filter-toggle`, emitted by
+`00_params.sql`) that flips `body.app-only` — same body-class hook pattern as
+`body.no-charts`, so it's purely CSS-driven and ships in every report (no DEFINE,
+no wrapper change). When on it shows only application SQL and its directly
+related data — **`#topsql`, `#topsql-ash`, `#segment-io`, `#file-io`,
+`#utilization`** — and hides every system-wide section plus the masthead
+`.verdict` and `.windows-strip`. All the hide rules live in `_style.sql`; the
+**kept-sections list is single-sourced three times that must stay in lockstep**:
+the section-hide rule, the `nav.toc a:not([href=…])` link-dim rule, and (by
+omission) the data sections you choose to keep. Change one, change all three.
+
+Oracle-internal SQL is filtered at the row/card level: sections 06 and 11 tag
+each top SQL `data-sys="Y|N"` from its parsing schema via
+`@@sql/lib/is_oracle_schema.plsql` (a curated Oracle-maintained-schema name test
+— **no DBA_USERS grant**, deliberately conservative: unknown ⇒ `'N'` so a real
+app schema is never hidden). CSS hides `tr/details/.ash-sql-card[data-sys="Y"]`.
+Per-SQL charts need no JS (their container is hidden wholesale); the **one**
+multi-SQL canvas — section 06's bump chart — listens for the `awr:appfilter`
+CustomEvent the toggle dispatches and re-renders with `sys` series dropped
+(its series JSON carries a `sys` bool; schema-breakdown entries are tagged too,
+module/action are not). Adding the attrs/`sys` field changes the HTML, so this
+is a feature, not a byte-identity-preserving refactor — verify by eye, not md5.
 
 ### `echarts` var (offline / self-contained)
 Polymorphic on value: **empty** → public CDN (byte-identical to before, via
@@ -282,6 +308,16 @@ in prose; keep `~name` out of comments (use the bare name).
   `(none)` placeholder on idle dbmint (no app sets module/action) — exercise
   against a workload that sets them. The multi-DBID migration path needs a real
   migrated PDB.
+- **"Application only" filter verified on dbmint (2026-06-25, hourly window
+  `target_end='2026-06-25 13:45'` win=1h weeks_back=2):** clean run, all 16
+  sections; toggle button + all three CSS hide rules emitted; `data-sys` tags
+  on rows / per-SQL `<details>` / ASH cards; chart-series `sys` flags present.
+  Classification correct on real data — `SYS`-parsed SQL → `data-sys="Y"`,
+  while the box's own common-user app schemas `C##AWRWH` / `C##AWRRDR` →
+  `data-sys="N"` (kept). Confirms the conservative rule: NOT treating `C##%`
+  as system is load-bearing — those were genuine application schemas. The
+  in-browser hide/re-render was validated by a JS DOM-stub simulation, not a
+  live browser; a visual click-through is still worth doing once.
 
 ## Things NOT to do
 

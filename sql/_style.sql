@@ -256,6 +256,57 @@ BEGIN
         || ' transition:color .12s; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc a:hover { color:var(--red); }');
 
+    -- "Application only" toggle button (lives at the right end of the nav,
+    -- pushed there by margin-left:auto). Pressed state tinted red so it is
+    -- obvious the report is in the filtered view.
+    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter {'
+        || ' margin-left:auto; font:inherit; font-size:11px; font-weight:700;'
+        || ' letter-spacing:0.04em; text-transform:uppercase;'
+        || ' padding:4px 12px; border-radius:999px; cursor:pointer;'
+        || ' border:1px solid var(--rule); background:transparent;'
+        || ' color:var(--ink); transition:color .12s,background .12s,border-color .12s; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter:hover {'
+        || ' border-color:var(--red); color:var(--red); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter.active {'
+        || ' background:var(--red); border-color:var(--red); color:#fff; }');
+
+    -- =========================================================
+    -- "Application only" view (body.app-only).
+    -- Same offline-style body-class hook as body.no-charts: a single class
+    -- on <body> drives every hide rule, toggled by the nav button. When on,
+    -- the report shows only application SQL and its directly related data
+    -- (Top SQL, Top SQL ASH, Segment I/O, File I/O, Utilization) and hides
+    -- all system-wide events/metrics sections plus the masthead's system
+    -- verdict and DB-time strip.
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('body.app-only #db-time-summary,'
+        || ' body.app-only #overview,'
+        || ' body.app-only #ash-timeline,'
+        || ' body.app-only #waits-fg,'
+        || ' body.app-only #waits-bg,'
+        || ' body.app-only #findings,'
+        || ' body.app-only #windows,'
+        || ' body.app-only #load,'
+        || ' body.app-only #metrics,'
+        || ' body.app-only #param-changes,'
+        || ' body.app-only header.report .verdict,'
+        || ' body.app-only header.report .movers-all,'
+        || ' body.app-only header.report .windows-strip { display:none; }');
+    -- Dim/remove the TOC links that point at now-hidden sections, leaving
+    -- only the ones still on screen (kept in sync with the hide rule above).
+    DBMS_OUTPUT.PUT_LINE('body.app-only nav.toc a'
+        || ':not([href="#topsql"])'
+        || ':not([href="#topsql-ash"])'
+        || ':not([href="#segment-io"])'
+        || ':not([href="#file-io"])'
+        || ':not([href="#utilization"]) { display:none; }');
+    -- Row / card / disclosure level: hide SQL parsed by an Oracle-maintained
+    -- schema (tagged data-sys="Y" by sections 06 and 11) so only application
+    -- SQL remains in the tables, the per-SQL detail blocks, and the ASH cards.
+    DBMS_OUTPUT.PUT_LINE('body.app-only tr[data-sys="Y"],'
+        || ' body.app-only details[data-sys="Y"],'
+        || ' body.app-only .ash-sql-card[data-sys="Y"] { display:none; }');
+
     -- =========================================================
     -- Sections + numbered headings (editorial)
     -- =========================================================
