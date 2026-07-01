@@ -282,6 +282,11 @@ in prose; keep `~name` out of comments (use the bare name).
 
 ## Verification & testing
 
+- **`./lint.sh` first** (also runs in CI): grep-based checks that encode the
+  footguns below — bad `@@` include paths, flat template-target includes,
+  stray `~word` substitutions (the tilde gotcha), `dbid = ~dbid` equality,
+  leading-underscore identifiers, literal-7 cadence, missing `SET DEFINE '~'`,
+  incomplete template dirs. No DB needed; add a check when a new gotcha bites.
 - **Test DB: dbmint** (Oracle 19c CDB1, `ssh -p 2201 oracle@dbmint`, `connect /
   as sysdba`). Single-DBID, idle, sparse history.
 - **dbmint default-window trap:** with `AUTO` + weekly cadence the test DB

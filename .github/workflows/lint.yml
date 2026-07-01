@@ -1,0 +1,30 @@
+#
+# Static lint of the SQL*Plus sources (see lint.sh) — catches the footguns
+# documented in CLAUDE.md (bad @@ include paths, stray ~substitutions,
+# dbid equality, literal-7 cadence, …) without needing a database.
+#
+name: Lint SQL sources
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'awr_trend.sql'
+      - 'sql/**'
+      - 'lint.sh'
+      - '.github/workflows/lint.yml'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run lint.sh
+        run: ./lint.sh
