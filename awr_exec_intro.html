@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWR Timeline Comparison — Executive Introduction</title>
+
+<!-- ===========================================
+     FONTS — Electric Studio uses Manrope only
+     =========================================== -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+<style>
+/* ===========================================
+   THEME — Electric Studio
+   Change these variables to restyle the deck
+   =========================================== */
+:root {
+    --bg-dark: #0a0a0a;
+    --bg-white: #ffffff;
+    --bg-soft: #f4f5f8;
+    --accent-blue: #4361ee;
+    --accent-blue-deep: #2c3fb8;
+    --text-dark: #0a0a0a;
+    --text-light: #ffffff;
+    --text-muted: #5c6270;
+    --text-muted-light: rgba(255, 255, 255, 0.72);
+
+    --font-display: 'Manrope', sans-serif;
+    --font-body: 'Manrope', sans-serif;
+
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --duration-normal: 0.65s;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: var(--font-body);
+    background: var(--bg-dark);
+    color: var(--text-dark);
+}
+
+/* ===========================================
+   VIEWPORT FITTING: MANDATORY BASE STYLES
+   (full contents of viewport-base.css)
+   =========================================== */
+
+/* 1. Lock html/body to viewport */
+html, body {
+    height: 100%;
+    overflow-x: hidden;
+}
+
+html {
+    scroll-snap-type: y mandatory;
+    scroll-behavior: smooth;
+}
+
+/* 2. Each slide = exact viewport height */
+.slide {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height for mobile browsers */
+    overflow: hidden; /* CRITICAL: Prevent ANY overflow */
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+/* 3. Content container with flex for centering */
+.slide-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    max-height: 100%;
+    overflow: hidden; /* Double-protection against overflow */
+    padding: var(--slide-padding);
+}
+
+/* 4. ALL typography uses clamp() for responsive scaling */
+:root {
+    /* Titles scale from mobile to desktop */
+    --title-size: clamp(1.5rem, 5vw, 4rem);
+    --h2-size: clamp(1.25rem, 3.5vw, 2.5rem);
+    --h3-size: clamp(1rem, 2.5vw, 1.75rem);
+
+    /* Body text */
+    --body-size: clamp(0.75rem, 1.5vw, 1.125rem);
+    --small-size: clamp(0.65rem, 1vw, 0.875rem);
+
+    /* Spacing scales with viewport */
+    --slide-padding: clamp(1rem, 4vw, 4rem);
+    --content-gap: clamp(0.5rem, 2vw, 2rem);
+    --element-gap: clamp(0.25rem, 1vw, 1rem);
+}
+
+/* 5. Cards/containers use viewport-relative max sizes */
+.card, .container, .content-box {
+    max-width: min(90vw, 1000px);
+    max-height: min(80vh, 700px);
+}
+
+/* 6. Lists auto-scale with viewport */
+.feature-list, .bullet-list {
+    gap: clamp(0.4rem, 1vh, 1rem);
+}
+
+.feature-list li, .bullet-list li {
+    font-size: var(--body-size);
+    line-height: 1.4;
+}
+
+/* 7. Grids adapt to available space */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+    gap: clamp(0.5rem, 1.5vw, 1rem);
+}
+
+/* 8. Images constrained to viewport */
+img, .image-container {
+    max-width: 100%;
+    max-height: min(50vh, 400px);
+    object-fit: contain;
+}
+
+/* Short viewports (< 700px height) */
+@media (max-height: 700px) {
+    :root {
+        --slide-padding: clamp(0.75rem, 3vw, 2rem);
+        --content-gap: clamp(0.4rem, 1.5vw, 1rem);
+        --title-size: clamp(1.25rem, 4.5vw, 2.5rem);
+        --h2-size: clamp(1rem, 3vw, 1.75rem);
+    }
+}
+
+/* Very short viewports (< 600px height) */
+@media (max-height: 600px) {
+    :root {
+        --slide-padding: clamp(0.5rem, 2.5vw, 1.5rem);
+        --content-gap: clamp(0.3rem, 1vw, 0.75rem);
+        --title-size: clamp(1.1rem, 4vw, 2rem);
+        --body-size: clamp(0.7rem, 1.2vw, 0.95rem);
+    }
+
+    /* Hide non-essential elements */
+    .nav-dots, .keyboard-hint, .decorative {
+        display: none;
+    }
+}
+
+/* Extremely short (landscape phones, < 500px height) */
+@media (max-height: 500px) {
+    :root {
+        --slide-padding: clamp(0.4rem, 2vw, 1rem);
+        --title-size: clamp(1rem, 3.5vw, 1.5rem);
+        --h2-size: clamp(0.9rem, 2.5vw, 1.25rem);
+        --body-size: clamp(0.65rem, 1vw, 0.85rem);
+    }
+}
+
+/* Narrow viewports (< 600px width) */
+@media (max-width: 600px) {
+    :root {
+        --title-size: clamp(1.25rem, 7vw, 2.5rem);
+    }
+
+    /* Stack grids vertically */
+    .grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.2s !important;
+    }
+
+    html {
+        scroll-behavior: auto;
+    }
+}
+
+/* ===========================================
+   ANIMATIONS — fade + slide up, staggered.
+   .visible is added by the IntersectionObserver.
+   =========================================== */
+.reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity var(--duration-normal) var(--ease-out-expo),
+                transform var(--duration-normal) var(--ease-out-expo);
+}
+.slide.visible .reveal { opacity: 1; transform: translateY(0); }
+
+/* Stagger — applies to direct sequence of .reveal siblings */
+.reveal:nth-child(1) { transition-delay: 0.08s; }
+.reveal:nth-child(2) { transition-delay: 0.18s; }
+.reveal:nth-child(3) { transition-delay: 0.28s; }
+.reveal:nth-child(4) { transition-delay: 0.38s; }
+.reveal:nth-child(5) { transition-delay: 0.48s; }
+.reveal:nth-child(6) { transition-delay: 0.58s; }
+.reveal:nth-child(7) { transition-delay: 0.68s; }
+
+/* ===========================================
+   SHARED ELEMENTS — kicker, headings, footers
+   =========================================== */
+.kicker {
+    font-size: clamp(0.62rem, 1.3vw, 0.82rem);
+    font-weight: 800;
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: var(--accent-blue);
+    margin-bottom: clamp(0.6rem, 1.8vh, 1.2rem);
+}
+.on-blue .kicker, .on-dark .kicker { color: var(--text-light); opacity: 0.85; }
+
+h1 {
+    font-weight: 800;
+    font-size: var(--title-size);
+    line-height: 1.04;
+    letter-spacing: -0.03em;
+}
+h2 {
+    font-weight: 800;
+    font-size: var(--h2-size);
+    line-height: 1.08;
+    letter-spacing: -0.025em;
+    margin-bottom: var(--content-gap);
+}
+
+.slide-foot {
+    position: absolute;
+    bottom: clamp(0.8rem, 2.4vh, 1.6rem);
+    left: var(--slide-padding);
+    right: var(--slide-padding);
+    display: flex;
+    justify-content: space-between;
+    font-size: clamp(0.55rem, 1.1vw, 0.72rem);
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+/* ===========================================
+   SLIDE 1 — TITLE (signature split panel)
+   =========================================== */
+.s-title { background: var(--bg-white); }
+.s-title .panel-top {
+    flex: 1.35;
+    background: var(--bg-white);
+    color: var(--text-dark);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: var(--slide-padding);
+    position: relative;
+}
+.s-title .panel-bottom {
+    flex: 1;
+    background: var(--accent-blue);
+    color: var(--text-light);
+    padding: clamp(1.2rem, 3.5vh, 2.6rem) var(--slide-padding);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+}
+/* black accent bar on the panel seam */
+.s-title .panel-bottom::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: clamp(4px, 0.8vh, 8px);
+    background: var(--bg-dark);
+}
+.s-title h1 { max-width: 17ch; font-size: clamp(1.9rem, 6vw, 4.4rem); }
+.s-title .sub {
+    font-size: clamp(0.92rem, 1.9vw, 1.28rem);
+    font-weight: 500;
+    max-width: 48ch;
+    line-height: 1.5;
+}
+.s-title .tag {
+    margin-top: clamp(0.7rem, 1.8vh, 1.3rem);
+    font-size: clamp(0.62rem, 1.3vw, 0.8rem);
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+}
+.s-title .tag span { opacity: 0.6; }
+.s-title .corner {
+    position: absolute;
+    top: clamp(1rem, 3vh, 2rem);
+    right: var(--slide-padding);
+    font-size: clamp(0.6rem, 1.2vw, 0.78rem);
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    opacity: 0.45;
+}
+
+/* ===========================================
+   SLIDE 2 — THE PROBLEM (white, stat + bullets)
+   =========================================== */
+.s-problem { background: var(--bg-white); color: var(--text-dark); }
+.s-problem .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: clamp(1.2rem, 4vw, 3.5rem);
+    align-items: center;
+}
+.s-problem .big-stat {
+    border-left: clamp(5px, 0.7vw, 9px) solid var(--accent-blue);
+    padding-left: clamp(0.9rem, 2.2vw, 1.8rem);
+}
+.s-problem .big-stat .num {
+    font-weight: 800;
+    font-size: clamp(2.6rem, 8vw, 6.2rem);
+    line-height: 1;
+    letter-spacing: -0.04em;
+}
+.s-problem .big-stat .lbl {
+    font-size: clamp(0.8rem, 1.7vw, 1.1rem);
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-top: clamp(0.3rem, 1vh, 0.7rem);
+    max-width: 30ch;
+    line-height: 1.45;
+}
+.bullet-list { list-style: none; display: flex; flex-direction: column; }
+.bullet-list li {
+    position: relative;
+    padding-left: clamp(1.2rem, 2.4vw, 1.9rem);
+    font-weight: 500;
+    color: var(--text-dark);
+}
+.bullet-list li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.5em;
+    width: clamp(8px, 1vw, 12px);
+    height: clamp(8px, 1vw, 12px);
+    background: var(--accent-blue);
+}
+@media (max-width: 700px) { .s-problem .cols { grid-template-columns: 1fr; } }
+
+/* ===========================================
+   SLIDE 3 — WHAT IT DOES (blue panel)
+   =========================================== */
+.s-what { background: var(--accent-blue); color: var(--text-light); }
+.s-what::after { /* black accent bar bottom edge */
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: clamp(4px, 0.8vh, 8px);
+    background: var(--bg-dark);
+}
+.s-what .windows-viz {
+    display: flex;
+    gap: clamp(0.4rem, 1.2vw, 1rem);
+    margin: clamp(0.8rem, 2.4vh, 1.6rem) 0;
+    align-items: flex-end;
+}
+.s-what .win {
+    flex: 1;
+    max-width: clamp(70px, 11vw, 130px);
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: clamp(4px, 0.6vw, 8px);
+    padding: clamp(0.4rem, 1.2vh, 0.8rem) clamp(0.3rem, 0.9vw, 0.7rem);
+    text-align: center;
+    font-weight: 700;
+    font-size: clamp(0.55rem, 1.1vw, 0.78rem);
+    letter-spacing: 0.06em;
+}
+.s-what .win em {
+    display: block;
+    font-style: normal;
+    font-weight: 800;
+    font-size: clamp(0.7rem, 1.5vw, 1.05rem);
+    margin-bottom: 0.2em;
+}
+.s-what .win.now {
+    background: var(--bg-white);
+    color: var(--accent-blue-deep);
+    border-color: var(--bg-white);
+    transform: translateY(calc(-1 * clamp(4px, 1vh, 10px)));
+}
+.s-what .on-blue-body {
+    font-size: var(--body-size);
+    font-weight: 500;
+    color: var(--text-muted-light);
+    max-width: 62ch;
+    line-height: 1.55;
+}
+.s-what .on-blue-body strong { color: var(--text-light); font-weight: 800; }
+
+/* ===========================================
+   SLIDE 4 — SAFE BY DESIGN (dark, card grid)
+   =========================================== */
+.s-safe { background: var(--bg-dark); color: var(--text-light); }
+.card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(0.6rem, 1.6vw, 1.2rem);
+}
+.card-grid .card {
+    background: #161616;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-top: clamp(3px, 0.5vh, 5px) solid var(--accent-blue);
+    border-radius: clamp(4px, 0.6vw, 8px);
+    padding: clamp(0.7rem, 2vh, 1.4rem) clamp(0.8rem, 1.8vw, 1.4rem);
+}
+.card-grid .card h3 {
+    font-size: clamp(0.85rem, 1.8vw, 1.2rem);
+    font-weight: 800;
+    margin-bottom: clamp(0.25rem, 0.8vh, 0.5rem);
+}
+.card-grid .card p {
+    font-size: clamp(0.7rem, 1.35vw, 0.95rem);
+    font-weight: 500;
+    color: var(--text-muted-light);
+    line-height: 1.5;
+}
+@media (max-width: 700px) { .card-grid { grid-template-columns: 1fr; } }
+
+/* ===========================================
+   SLIDE 5 — THE REPORT (white, feature grid)
+   =========================================== */
+.s-report { background: var(--bg-soft); color: var(--text-dark); }
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(0.5rem, 1.4vw, 1.1rem);
+}
+.feature-grid .feat {
+    background: var(--bg-white);
+    border: 1px solid rgba(10, 10, 10, 0.1);
+    border-left: clamp(4px, 0.5vw, 6px) solid var(--accent-blue);
+    border-radius: clamp(4px, 0.6vw, 8px);
+    padding: clamp(0.6rem, 1.8vh, 1.2rem) clamp(0.7rem, 1.6vw, 1.2rem);
+}
+.feature-grid .feat h3 {
+    font-size: clamp(0.78rem, 1.6vw, 1.05rem);
+    font-weight: 800;
+    margin-bottom: clamp(0.2rem, 0.7vh, 0.45rem);
+}
+.feature-grid .feat p {
+    font-size: clamp(0.66rem, 1.25vw, 0.9rem);
+    font-weight: 500;
+    color: var(--text-muted);
+    line-height: 1.45;
+}
+@media (max-width: 800px) { .feature-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 540px) { .feature-grid { grid-template-columns: 1fr; } }
+
+/* ===========================================
+   SLIDE 6 — RELEASE PLAYBOOK (white, 3 steps)
+   =========================================== */
+.s-release { background: var(--bg-white); color: var(--text-dark); }
+.steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(0.6rem, 1.8vw, 1.5rem);
+}
+.steps .step {
+    position: relative;
+    padding-top: clamp(0.6rem, 1.8vh, 1.2rem);
+    border-top: clamp(3px, 0.5vh, 5px) solid var(--accent-blue);
+}
+.steps .step .n {
+    font-weight: 800;
+    font-size: clamp(1.4rem, 3.6vw, 2.6rem);
+    color: var(--accent-blue);
+    letter-spacing: -0.03em;
+}
+.steps .step h3 {
+    font-size: clamp(0.85rem, 1.8vw, 1.2rem);
+    font-weight: 800;
+    margin: clamp(0.2rem, 0.7vh, 0.5rem) 0;
+}
+.steps .step p {
+    font-size: clamp(0.68rem, 1.3vw, 0.95rem);
+    font-weight: 500;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+@media (max-width: 700px) { .steps { grid-template-columns: 1fr; } }
+
+/* ===========================================
+   SLIDE 7 — BUSINESS VALUE (blue, big claims)
+   =========================================== */
+.s-value { background: var(--accent-blue); color: var(--text-light); }
+.s-value::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: clamp(4px, 0.8vh, 8px);
+    background: var(--bg-dark);
+}
+.value-rows { display: flex; flex-direction: column; gap: clamp(0.5rem, 1.6vh, 1.1rem); }
+.value-rows .vrow {
+    display: grid;
+    grid-template-columns: minmax(clamp(110px, 22vw, 260px), auto) 1fr;
+    gap: clamp(0.8rem, 2.4vw, 2rem);
+    align-items: baseline;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+    padding-bottom: clamp(0.45rem, 1.4vh, 0.95rem);
+}
+.value-rows .vrow .k {
+    font-weight: 800;
+    font-size: clamp(1.05rem, 2.8vw, 1.9rem);
+    letter-spacing: -0.02em;
+}
+.value-rows .vrow .v {
+    font-weight: 500;
+    font-size: clamp(0.72rem, 1.45vw, 1rem);
+    color: var(--text-muted-light);
+    line-height: 1.45;
+}
+@media (max-width: 600px) { .value-rows .vrow { grid-template-columns: 1fr; gap: 0.2rem; } }
+
+/* ===========================================
+   SLIDE 8 — CLOSING (dark split, CTA)
+   =========================================== */
+.s-close { background: var(--bg-dark); color: var(--text-light); }
+.s-close .slide-content { align-items: flex-start; }
+.s-close h1 { max-width: 16ch; font-size: clamp(1.8rem, 5.6vw, 4.2rem); }
+.s-close .cta {
+    margin-top: clamp(1rem, 3vh, 2rem);
+    display: inline-block;
+    background: var(--accent-blue);
+    color: var(--text-light);
+    font-weight: 800;
+    font-size: clamp(0.75rem, 1.5vw, 1rem);
+    letter-spacing: 0.08em;
+    padding: clamp(0.6rem, 1.6vh, 1rem) clamp(1rem, 2.6vw, 1.9rem);
+    border-radius: clamp(3px, 0.4vw, 6px);
+}
+.s-close .fineprint {
+    margin-top: clamp(0.8rem, 2.2vh, 1.5rem);
+    font-size: clamp(0.66rem, 1.3vw, 0.9rem);
+    font-weight: 500;
+    color: var(--text-muted-light);
+    max-width: 56ch;
+    line-height: 1.55;
+}
+
+/* ===========================================
+   NAVIGATION CHROME — progress bar + dots
+   =========================================== */
+.progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    height: clamp(3px, 0.5vh, 5px);
+    width: 0%;
+    background: var(--accent-blue);
+    z-index: 9000;
+    transition: width 0.25s ease-out;
+}
+.nav-dots {
+    position: fixed;
+    right: clamp(0.6rem, 1.6vw, 1.4rem);
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.4rem, 1.2vh, 0.8rem);
+    z-index: 9000;
+}
+.nav-dots button {
+    width: clamp(8px, 1vw, 11px);
+    height: clamp(8px, 1vw, 11px);
+    border-radius: 50%;
+    border: 1.5px solid var(--accent-blue);
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.25s, transform 0.25s;
+}
+.nav-dots button.active { background: var(--accent-blue); transform: scale(1.25); }
+.keyboard-hint {
+    position: fixed;
+    bottom: clamp(0.6rem, 1.6vh, 1.2rem);
+    right: clamp(0.8rem, 2vw, 1.6rem);
+    font-size: clamp(0.55rem, 1vw, 0.7rem);
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(128, 132, 142, 0.85);
+    z-index: 9000;
+    pointer-events: none;
+}
+
+/* ===========================================
+   INLINE EDITING — toggle, hotzone, edit state
+   (JS-based hover with grace period — see script)
+   =========================================== */
+.edit-hotzone {
+    position: fixed;
+    top: 0; left: 0;
+    width: 80px; height: 80px;
+    z-index: 10000;
+    cursor: pointer;
+}
+.edit-toggle {
+    position: fixed;
+    top: clamp(0.6rem, 1.6vh, 1.2rem);
+    left: clamp(0.6rem, 1.6vw, 1.2rem);
+    z-index: 10001;
+    background: var(--bg-white);
+    border: 1.5px solid var(--accent-blue);
+    border-radius: 6px;
+    font-size: 1rem;
+    padding: 0.35rem 0.55rem;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+.edit-toggle.show, .edit-toggle.active { opacity: 1; pointer-events: auto; }
+.edit-toggle.active { background: var(--accent-blue); }
+body.editing [contenteditable="true"] {
+    outline: 2px dashed rgba(67, 97, 238, 0.65);
+    outline-offset: 3px;
+    cursor: text;
+}
+.edit-banner {
+    position: fixed;
+    bottom: clamp(0.6rem, 1.6vh, 1.2rem);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-dark);
+    color: var(--text-light);
+    font-size: clamp(0.6rem, 1.1vw, 0.78rem);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 0.45rem 0.9rem;
+    border-radius: 6px;
+    z-index: 10001;
+    display: none;
+}
+body.editing .edit-banner { display: block; }
+</style>
+</head>
+<body>
+
+<!-- Navigation chrome -->
+<div class="progress-bar" aria-hidden="true"></div>
+<nav class="nav-dots" aria-label="Slide navigation"></nav>
+<div class="keyboard-hint">← → · Space · E to edit</div>
+
+<!-- Inline editing chrome -->
+<div class="edit-hotzone" aria-hidden="true"></div>
+<button class="edit-toggle" id="editToggle" title="Edit mode (E)">✏️</button>
+<div class="edit-banner">EDIT MODE — click any text · Ctrl/Cmd+S exports the file · E to exit</div>
+
+<!-- ===========================================
+     SLIDE 1 — TITLE
+     =========================================== -->
+<section class="slide s-title" aria-label="Title">
+    <div class="panel-top">
+        <div class="corner reveal">DB Engineering · 2026</div>
+        <div class="kicker reveal">Release confidence, on one page</div>
+        <h1 class="reveal">Knowing the database is healthy — at a glance.</h1>
+    </div>
+    <div class="panel-bottom on-blue">
+        <p class="sub reveal">AWR Timeline Comparison: one report that tells us whether production behaves the way it did before the release.</p>
+        <div class="tag reveal">Built in-house <span>/ read-only / zero install / zero infrastructure</span></div>
+    </div>
+</section>
+
+<!-- ===========================================
+     SLIDE 2 — THE PROBLEM
+     =========================================== -->
+<section class="slide s-problem" aria-label="The problem">
+    <div class="slide-content">
+        <div class="kicker reveal">The problem</div>
+        <h2 class="reveal">Every release carries the same question: did we just make production slower?</h2>
+        <div class="cols reveal">
+            <div class="big-stat">
+                <div class="num">Hours</div>
+                <div class="lbl">of manual report-pulling and eyeballing to answer it today — per database, per incident.</div>
+            </div>
+            <ul class="bullet-list">
+                <li>Oracle already records detailed performance history around the clock — the data exists.</li>
+                <li>But comparing "this Monday morning" against the last four Monday mornings means juggling separate reports by hand.</li>
+                <li>That work is slow, error-prone, and the first thing skipped under release pressure.</li>
+            </ul>
+        </div>
+    </div>
+    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>02 / 08</span></div>
+</section>
+
+<!-- ===========================================
+     SLIDE 3 — WHAT IT DOES
+     =========================================== -->
+<section class="slide s-what on-blue" aria-label="What it does">
+    <div class="slide-content">
+        <div class="kicker reveal">What it does</div>
+        <h2 class="reveal">It compares like with like — the same hour, across weeks.</h2>
+        <div class="windows-viz reveal" aria-hidden="true">
+            <div class="win"><em>−4 wk</em>Mon 9–10</div>
+            <div class="win"><em>−3 wk</em>Mon 9–10</div>
+            <div class="win"><em>−2 wk</em>Mon 9–10</div>
+            <div class="win"><em>−1 wk</em>Mon 9–10</div>
+            <div class="win now"><em>Today</em>Mon 9–10</div>
+        </div>
+        <p class="on-blue-body reveal">Business rhythm — batch jobs, peak hours, quiet weekends — never gets mistaken for a problem. Each metric is scored against its own recent history, and only <strong>genuinely unusual movement</strong> is flagged: OK, Warning, or Critical. No one has to notice that a number "looks high".</p>
+    </div>
+    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>03 / 08</span></div>
+</section>
+
+<!-- ===========================================
+     SLIDE 4 — SAFE BY DESIGN
+     =========================================== -->
+<section class="slide s-safe on-dark" aria-label="Safe by design">
+    <div class="slide-content">
+        <div class="kicker reveal">Safe by design</div>
+        <h2 class="reveal">Zero risk to production. Zero footprint.</h2>
+        <div class="card-grid">
+            <div class="card reveal">
+                <h3>It only reads</h3>
+                <p>The entire report comes from read-only queries against Oracle's own performance history. Nothing is created, modified, or deleted.</p>
+            </div>
+            <div class="card reveal">
+                <h3>Nothing to install</h3>
+                <p>No agents, no schemas, no deployment, no cleanup. One command produces the report; it can be removed by deleting a folder.</p>
+            </div>
+            <div class="card reveal">
+                <h3>Safe on production, anytime</h3>
+                <p>Runs against live production systems and read-only standbys. An analyst account with read access is all it needs.</p>
+            </div>
+            <div class="card reveal">
+                <h3>No new spend</h3>
+                <p>Uses the Oracle diagnostic features we already license. No new tools, vendors, servers, or subscriptions.</p>
+            </div>
+        </div>
+    </div>
+    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>04 / 08</span></div>
+</section>
+
+<!-- ===========================================
+     SLIDE 5 — THE REPORT
+     =========================================== -->
+<section class="slide s-report" aria-label="The report">
+    <div class="slide-content">
+        <div class="kicker reveal">The deliverable</div>
+        <h2 class="reveal">One self-contained page. Every answer in it.</h2>
+        <div class="feature-grid">
+            <div class="feat reveal">
+                <h3>Headline health cards</h3>
+                <p>Six at-a-glance numbers that say "normal" or "look here" in seconds.</p>
+            </div>
+            <div class="feat reveal">
+                <h3>Statistical findings</h3>
+                <p>Unusual changes graded Warning / Critical — with what changed, when, and by how much.</p>
+            </div>
+            <div class="feat reveal">
+                <h3>Activity timeline</h3>
+                <p>The full compared span as one picture, with each compared window highlighted.</p>
+            </div>
+            <div class="feat reveal">
+                <h3>Top SQL statements</h3>
+                <p>The exact queries driving the load, ranked four ways, with plan-change flags.</p>
+            </div>
+            <div class="feat reveal">
+                <h3>Release markers</h3>
+                <p>The go-live drawn as a line on every chart — "before vs. after" is visible, not argued.</p>
+            </div>
+            <div class="feat reveal">
+                <h3>Mail it, attach it</h3>
+                <p>A single HTML file that opens anywhere — tickets, email, audits. No tooling needed to view it.</p>
+            </div>
+        </div>
+    </div>
+    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>05 / 08</span></div>
+</section>
+
+<!-- ===========================================
+     SLIDE 6 — RELEASE PLAYBOOK
+     =========================================== -->
+<section class="slide s-release" aria-label="How it supports the release">
+    <div class="slide-content">
+        <div class="kicker reveal">This month's release</div>
+        <h2 class="reveal">A simple playbook around go-live.</h2>
+        <div class="steps">
+            <div class="step reveal">
+                <div class="n">01</div>
+                <h3>Before</h3>
+                <p>Capture what "normal" looks like for the hours that matter — peak business hours and batch windows.</p>
+            </div>
+            <div class="step reveal">
+                <div class="n">02</div>
+                <h3>Go-live</h3>
+                <p>Re-run with the release marked on the timeline. Hour-by-hour mode compares the first hours after against the hours just before.</p>
+            </div>
+            <div class="step reveal">
+                <div class="n">03</div>
+                <h3>The weeks after</h3>
+                <p>Weekly comparisons confirm post-release Mondays look like pre-release Mondays. Drift surfaces as a graded finding, not a user complaint.</p>
+            </div>
+        </div>
+    </div>
+    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>06 / 08</span></div>
+</section>
+
+<!-- ===========================================
+     SLIDE 7 — BUSINESS VALUE
+     =========================================== -->
+<section class="slide s-value on-blue" aria-label="Business value">
+    <div class="slide-content">
+        <div class="kicker reveal">What it brings to the company</div>
+        <h2 class="reveal">The return, in plain terms.</h2>
+        <div class="value-rows">
+            <div class="vrow reveal">
+                <div class="k">Hours → minutes</div>
+                <div class="v">Post-release health checks and "is it slower?" investigations collapse into one report run.</div>
+            </div>
+            <div class="vrow reveal">
+                <div class="k">We see it first</div>
+                <div class="v">Statistically flagged drift surfaces problems before users and SLAs feel them.</div>
+            </div>
+            <div class="vrow reveal">
+                <div class="k">Zero cost to adopt</div>
+                <div class="v">No licenses, infrastructure, or vendors added — it leverages what we already pay Oracle for.</div>
+            </div>
+            <div class="vrow reveal">
+                <div class="k">Teams self-serve</div>
+                <div class="v">A developer-focused view lets application teams verify their own releases without a DBA in the loop.</div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>07 / 08</span></div>
+</section>
+
+<!-- ===========================================
+     SLIDE 8 — CLOSING
+     =========================================== -->
+<section class="slide s-close on-dark" aria-label="Closing">
+    <div class="slide-content">
+        <div class="kicker reveal">Ready today</div>
+        <h1 class="reveal">One command. One page. Release with confidence.</h1>
+        <div class="cta reveal">In place for this month's go-live</div>
+        <p class="fineprint reveal">Already verified against our Oracle 19c estate. The ask: make the before/after report a standard step in the release runbook.</p>
+    </div>
+    <div class="slide-foot"><span>AWR Timeline Comparison · DB Engineering</span><span>08 / 08</span></div>
+</section>
+
+<script>
+/* ===========================================
+   SLIDE PRESENTATION CONTROLLER
+   Keyboard, touch, dots, progress bar, and
+   IntersectionObserver-driven reveal animations.
+   =========================================== */
+class SlidePresentation {
+    constructor() {
+        this.slides = Array.from(document.querySelectorAll('.slide'));
+        this.currentSlide = 0;
+        this.setupIntersectionObserver();
+        this.setupKeyboardNav();
+        this.setupTouchNav();
+        this.setupNavDots();
+    }
+
+    /* Add .visible when a slide enters the viewport (triggers .reveal
+       transitions) and keep the progress bar + dots in sync. */
+    setupIntersectionObserver() {
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                    this.currentSlide = this.slides.indexOf(entry.target);
+                    this.updateChrome();
+                }
+            });
+        }, { threshold: 0.55 });
+        this.slides.forEach((s) => observer.observe(s));
+    }
+
+    goTo(index) {
+        const i = Math.max(0, Math.min(this.slides.length - 1, index));
+        this.slides[i].scrollIntoView({ behavior: 'smooth' });
+    }
+
+    setupKeyboardNav() {
+        document.addEventListener('keydown', (e) => {
+            // Never hijack keys while the user is editing text
+            if (e.target.getAttribute && e.target.getAttribute('contenteditable')) return;
+            switch (e.key) {
+                case 'ArrowDown': case 'ArrowRight': case ' ': case 'PageDown':
+                    e.preventDefault(); this.goTo(this.currentSlide + 1); break;
+                case 'ArrowUp': case 'ArrowLeft': case 'PageUp':
+                    e.preventDefault(); this.goTo(this.currentSlide - 1); break;
+                case 'Home': e.preventDefault(); this.goTo(0); break;
+                case 'End': e.preventDefault(); this.goTo(this.slides.length - 1); break;
+            }
+        });
+    }
+
+    /* Swipe up/down to change slides on touch devices */
+    setupTouchNav() {
+        let startY = null;
+        document.addEventListener('touchstart', (e) => { startY = e.touches[0].clientY; }, { passive: true });
+        document.addEventListener('touchend', (e) => {
+            if (startY === null) return;
+            const dy = startY - e.changedTouches[0].clientY;
+            if (Math.abs(dy) > 60) this.goTo(this.currentSlide + (dy > 0 ? 1 : -1));
+            startY = null;
+        }, { passive: true });
+    }
+
+    setupNavDots() {
+        const nav = document.querySelector('.nav-dots');
+        this.dots = this.slides.map((slide, i) => {
+            const b = document.createElement('button');
+            b.setAttribute('aria-label', 'Go to slide ' + (i + 1));
+            b.addEventListener('click', () => this.goTo(i));
+            nav.appendChild(b);
+            return b;
+        });
+        this.updateChrome();
+    }
+
+    updateChrome() {
+        const pct = (this.currentSlide / (this.slides.length - 1)) * 100;
+        document.querySelector('.progress-bar').style.width = pct + '%';
+        if (this.dots) this.dots.forEach((d, i) => d.classList.toggle('active', i === this.currentSlide));
+    }
+}
+
+/* ===========================================
+   INLINE EDITOR (opt-in feature)
+   - E key / corner hotzone toggles edit mode
+   - Edits auto-save to localStorage per element
+   - Ctrl/Cmd+S exports the edited HTML file
+   =========================================== */
+class InlineEditor {
+    constructor() {
+        this.isActive = false;
+        this.storageKey = 'awr-exec-intro-edits';
+        // Every user-visible text element is editable in edit mode
+        this.editables = Array.from(document.querySelectorAll(
+            'h1, h2, h3, p, li, .kicker, .tag, .corner, .num, .lbl, .k, .v, .n, .cta, .win, .slide-foot span'
+        ));
+        this.editables.forEach((el, i) => el.dataset.editId = i);
+        this.restore();
+        this.bind();
+    }
+
+    toggleEditMode() {
+        this.isActive = !this.isActive;
+        document.body.classList.toggle('editing', this.isActive);
+        document.getElementById('editToggle').classList.toggle('active', this.isActive);
+        this.editables.forEach((el) =>
+            this.isActive ? el.setAttribute('contenteditable', 'true')
+                          : el.removeAttribute('contenteditable'));
+        if (!this.isActive) this.save();
+    }
+
+    save() {
+        const edits = {};
+        this.editables.forEach((el) => { edits[el.dataset.editId] = el.innerHTML; });
+        localStorage.setItem(this.storageKey, JSON.stringify(edits));
+    }
+
+    restore() {
+        try {
+            const edits = JSON.parse(localStorage.getItem(this.storageKey) || '{}');
+            this.editables.forEach((el) => {
+                if (edits[el.dataset.editId] !== undefined) el.innerHTML = edits[el.dataset.editId];
+            });
+        } catch (e) { /* corrupt storage — ignore and start clean */ }
+    }
+
+    /* Download the current document (with edits baked in) as a new file */
+    exportFile() {
+        this.save();
+        const clone = document.documentElement.cloneNode(true);
+        clone.querySelectorAll('[contenteditable]').forEach((el) => el.removeAttribute('contenteditable'));
+        clone.querySelector('body').classList.remove('editing');
+        const blob = new Blob(['<!DOCTYPE html>\n' + clone.outerHTML], { type: 'text/html' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'awr_exec_intro_edited.html';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    bind() {
+        const toggle = document.getElementById('editToggle');
+        const hotzone = document.querySelector('.edit-hotzone');
+        let hideTimeout = null;
+
+        // 1. Click the toggle button
+        toggle.addEventListener('click', () => this.toggleEditMode());
+
+        // 2. Hotzone hover with a 400ms grace period (JS, not CSS ~ —
+        //    pointer-events:none on the button breaks the CSS hover chain)
+        hotzone.addEventListener('mouseenter', () => {
+            clearTimeout(hideTimeout);
+            toggle.classList.add('show');
+        });
+        hotzone.addEventListener('mouseleave', () => {
+            hideTimeout = setTimeout(() => {
+                if (!this.isActive) toggle.classList.remove('show');
+            }, 400);
+        });
+        toggle.addEventListener('mouseenter', () => clearTimeout(hideTimeout));
+        toggle.addEventListener('mouseleave', () => {
+            hideTimeout = setTimeout(() => {
+                if (!this.isActive) toggle.classList.remove('show');
+            }, 400);
+        });
+
+        // 3. Hotzone direct click
+        hotzone.addEventListener('click', () => this.toggleEditMode());
+
+        // 4. E toggles edit mode; Ctrl/Cmd+S exports while editing
+        document.addEventListener('keydown', (e) => {
+            const inText = e.target.getAttribute && e.target.getAttribute('contenteditable');
+            if ((e.key === 'e' || e.key === 'E') && !inText) this.toggleEditMode();
+            if ((e.metaKey || e.ctrlKey) && e.key === 's' && this.isActive) {
+                e.preventDefault();
+                this.exportFile();
+            }
+        });
+
+        // Auto-save on every edit
+        document.addEventListener('input', (e) => {
+            if (this.isActive && e.target.dataset && e.target.dataset.editId !== undefined) this.save();
+        });
+    }
+}
+
+const editor = new InlineEditor();
+new SlidePresentation();
+</script>
+</body>
+</html>

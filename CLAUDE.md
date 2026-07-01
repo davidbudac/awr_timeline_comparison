@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-Guidance for future Claude sessions working on this repo.
+Guidance for future agent sessions working on this repo. `AGENTS.md` (read by
+Codex and other agents) is a symlink to this file — edit here only.
 
 ## What this is
 
@@ -293,7 +294,7 @@ in prose; keep `~name` out of comments (use the bare name).
   that shouldn't alter output): rsync to dbmint, generate a pre- and post-change
   report at ~the same wall-clock, normalize volatile bits and compare md5:
   ```sh
-  rsync -az --exclude=.git --exclude=reports --exclude=.claude ./ \
+  rsync -az --exclude=.git --exclude=reports --exclude=.claude --exclude=.codex ./ \
     oracle@dbmint:~/awr_timeline_comparison/ -e 'ssh -p 2201'
   sed -E 's/run [0-9]{17}/run RUNID/g;
           s/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} \+[0-9]{2}:[0-9]{2}/TIMESTAMP/g' \

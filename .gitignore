@@ -3,6 +3,12 @@
 /reports/*
 !/reports/.gitkeep
 
+# Rendered introduction documents (self-contained HTML with embedded
+# screenshots, ~1 MB each) — regenerate from INTRODUCTION.md instead.
+/INTRODUCTION.html
+/INTRODUCTION.*.html
+
 # OS / editor / tool noise
 .DS_Store
 .claude/
+.conductor/
