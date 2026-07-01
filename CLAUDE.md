@@ -321,9 +321,16 @@ in prose; keep `~name` out of comments (use the bare name).
   Classification correct on real data — `SYS`-parsed SQL → `data-sys="Y"`,
   while the box's own common-user app schemas `C##AWRWH` / `C##AWRRDR` →
   `data-sys="N"` (kept). Confirms the conservative rule: NOT treating `C##%`
-  as system is load-bearing — those were genuine application schemas. The
-  in-browser hide/re-render was validated by a JS DOM-stub simulation, not a
-  live browser; a visual click-through is still worth doing once.
+  as system is load-bearing — those were genuine application schemas.
+  **Live-browser click-through done (2026-07-01, Chrome preview on the v1.0.0
+  hourly report):** click flips `body.app-only`; exactly the 5 kept sections
+  (+ their TOC links) stay visible, verdict/windows-strip hide, 142/142
+  `data-sys="Y"` rows and 87/87 cards hide, and the `awr:appfilter` event
+  re-renders all six section-06 dimension charts (series 29/24/28/30/21/10 →
+  0 with every series `sys:true` on the idle box; restored on toggle-off).
+  Sections 14/15 and the "By physical reads" dim also ran clean in that
+  report — still unexercised against a *busy* DB (real segment/file I/O
+  volume, app-set module/action); multi-DBID still needs a migrated PDB.
 
 ## Things NOT to do
 
