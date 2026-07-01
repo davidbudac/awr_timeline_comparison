@@ -343,7 +343,7 @@
       <span class="badge"><span class="dot">●</span>No Python, no agents</span>
     </div>
     <div class="cta-row">
-      <a class="btn btn-primary" href="examples/weekly_comprehensive.html">See a live example report</a>
+      <a class="btn btn-primary" href="examples/hourly_comprehensive.html">See a live example report</a>
       <a class="btn btn-ghost" href="configurator.html">Build your command</a>
       <a class="btn btn-ghost" href="#start">Get started</a>
       <a class="btn btn-ghost" href="cheatsheet.html">Cheat sheet</a>
@@ -874,26 +874,27 @@ SQL&gt; <span class="k">@awr_trend.sql</span></pre>
       </p>
 
       <div class="examples">
-        <a class="excard" href="examples/weekly_comprehensive.html">
-          <span class="ex-tag t1">comprehensive · weekly</span>
+        <a class="excard" href="examples/hourly_comprehensive.html">
+          <span class="ex-tag t1">comprehensive · hourly</span>
           <h4>The full report</h4>
-          <p>Default template, week-over-week cadence: hero cards, ASH timeline,
-          findings heatmap, load profile, waits, Top SQL ranked four ways,
-          per-SQL ASH breakdowns, parameter changes.</p>
+          <p>Default template, hour-over-hour cadence (<code>step_unit=h</code>):
+          hero cards, ASH timeline, findings heatmap, load profile, waits, Top SQL
+          ranked five ways, per-SQL ASH breakdowns, segment &amp; file I/O,
+          parameter changes — plus the “Application only” toggle in the nav.</p>
           <span class="open">Open report →</span>
         </a>
-        <a class="excard" href="examples/weekly_simple_template.html">
-          <span class="ex-tag t2">simple · weekly</span>
+        <a class="excard" href="examples/hourly_simple_template.html">
+          <span class="ex-tag t2">simple · hourly</span>
           <h4>The triage view</h4>
           <p>Same engine, <code>template=simple</code>: a lean subset of stats, metrics
           and waits for a thirty-second skim. Note the <code>template: simple</code>
           pill in the masthead.</p>
           <span class="open">Open report →</span>
         </a>
-        <a class="excard" href="examples/weekly_with_markers.html">
-          <span class="ex-tag t3">markers · weekly</span>
+        <a class="excard" href="examples/hourly_with_markers.html">
+          <span class="ex-tag t3">markers · hourly</span>
           <h4>With timeline markers</h4>
-          <p>Run with a <code>marker_file</code>: “Patch 19.22 applied” and “Index
+          <p>Run with inline <code>markers</code>: “Patch 19.22 applied” and “Index
           rebuild on SALES” drawn as vertical dashed lines on every dated chart.</p>
           <span class="open">Open report →</span>
         </a>
