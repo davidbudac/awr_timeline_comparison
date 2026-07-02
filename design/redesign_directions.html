@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWR Timeline Comparison — five redesign directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;900&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============ shell / switcher ============ */
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; }
+body { font-family: Inter, system-ui, sans-serif; background:#111; }
+#switch {
+  position: fixed; inset: auto 0 0 0; z-index: 99;
+  display: flex; gap: 0; justify-content: center; align-items: stretch;
+  background: #14161a; border-top: 1px solid #2a2e35;
+  font: 600 12px/1 Inter, sans-serif;
+}
+#switch button {
+  appearance: none; border: 0; background: transparent; color: #9aa3af;
+  padding: 12px 18px; cursor: pointer; font: inherit; letter-spacing: .04em;
+  border-top: 2px solid transparent;
+}
+#switch button:hover { color: #fff; }
+#switch button.on { color: #fff; border-top-color: #ffb454; background:#1b1e24; }
+#switch .cap { color:#6b7280; align-self: center; padding: 0 14px; font-weight: 400; }
+.opt { display: none; min-height: 100vh; padding-bottom: 64px; }
+.opt.on { display: block; }
+svg { display: block; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ======================================================================
+   OPTION 1 — THE OPS BOARD (mission-control tile grid, one screen)
+   ====================================================================== */
+.o1 { background: #0f141b; color: #c8d0da; font-family: "IBM Plex Mono", monospace; }
+.o1 .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 24px; }
+.o1 header { display:flex; justify-content: space-between; align-items: baseline;
+  border-bottom: 1px solid #232b36; padding-bottom: 12px; margin-bottom: 16px; }
+.o1 .brand { font: 700 13px/1 Archivo, sans-serif; letter-spacing: .22em; color:#ffb454; }
+.o1 .brand small { color:#5c6673; letter-spacing:.1em; font-weight: 500; display:block; margin-top:6px; }
+.o1 .clockrow { display:flex; gap: 18px; font-size: 12px; color:#8b95a3; }
+.o1 .clockrow b { color:#e8edf4; font-weight: 500; }
+.o1 .clockrow .w0 b { color: #ffb454; }
+.o1 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px; }
+.o1 .tile { background: #141b24; border: 1px solid #232b36; border-radius: 4px; padding: 14px 16px; position: relative; }
+.o1 .tile .lbl { font: 600 10px/1 Archivo, sans-serif; letter-spacing: .18em; color: #5c6673; text-transform: uppercase; margin-bottom: 10px; display:flex; align-items:center; gap:7px;}
+.o1 .led { width:7px; height:7px; border-radius:50%; background:#3fb97f; box-shadow: 0 0 6px #3fb97f88; }
+.o1 .led.crit { background:#ff5d5d; box-shadow: 0 0 8px #ff5d5d99; }
+.o1 .led.warn { background:#ffb454; box-shadow: 0 0 8px #ffb45499; }
+.o1 .big { font-size: 34px; font-weight: 600; color: #e8edf4; letter-spacing: -.01em; }
+.o1 .big small { font-size: 13px; color: #8b95a3; font-weight: 400; margin-left: 6px;}
+.o1 .delta-up { color:#ff5d5d; } .o1 .delta-ok { color:#3fb97f; }
+.o1 .sub { font-size: 11px; color:#5c6673; margin-top: 6px; }
+.o1 .verdict-tile { grid-column: span 5; border-color:#5b2020; background: linear-gradient(180deg,#1d1417,#141b24); }
+.o1 .verdict-tile .big { color:#ff5d5d; font-family: Archivo, sans-serif; font-weight: 900; font-size: 30px; letter-spacing:.02em;}
+.o1 .kpi { grid-column: span 2; }
+.o1 .kpi-wide { grid-column: span 3; }
+.o1 .row2 { grid-column: span 6; }
+.o1 .row3 { grid-column: span 12; }
+.o1 table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.o1 th { text-align:left; font: 600 10px/1 Archivo,sans-serif; letter-spacing:.14em; color:#5c6673; padding: 4px 8px 8px 0; text-transform:uppercase;}
+.o1 td { padding: 6px 8px 6px 0; border-top: 1px solid #1d2530; color:#aeb8c4; }
+.o1 td.num { text-align: right; font-variant-numeric: tabular-nums; color:#e8edf4;}
+.o1 tr.hot td { color:#ffb454; }
+.o1 tr.hot td.num b { color:#ff5d5d; }
+.o1 .spark { stroke:#ffb454; fill:none; stroke-width:1.5; }
+.o1 .sparkfill { fill:url(#o1g); stroke:none; opacity:.5;}
+.o1 .barlane { height: 8px; background:#1d2530; border-radius:2px; overflow:hidden;}
+.o1 .barlane i { display:block; height:100%; background:#ffb454; }
+.o1 .foot { margin-top: 14px; font-size: 11px; color:#414b58; display:flex; justify-content:space-between;}
+
+/* ======================================================================
+   OPTION 2 — THE BRIEFING (verdict-first memo, prints to one page)
+   ====================================================================== */
+.o2 { background: #e9e6df; color: #1a2233; font-family: "Source Serif 4", Georgia, serif; padding: 40px 16px; }
+.o2 .sheet { max-width: 760px; margin: 0 auto; background: #fdfdfb; padding: 64px 72px 56px;
+  box-shadow: 0 2px 24px rgba(20,25,40,.18); }
+.o2 .letterhead { display:flex; justify-content:space-between; align-items:flex-start;
+  border-bottom: 3px double #1a2233; padding-bottom: 14px; }
+.o2 .letterhead h1 { font: 700 15px/1.2 "IBM Plex Mono", monospace; letter-spacing:.16em; }
+.o2 .letterhead h1 span { display:block; font-weight:400; font-size:11px; color:#6a7180; letter-spacing:.1em; margin-top:5px;}
+.o2 .meta { font: 400 12px/1.7 "IBM Plex Mono", monospace; color:#3d4657; margin: 18px 0 6px; }
+.o2 .meta b { display:inline-block; width: 64px; font-weight: 600; color:#6a7180;}
+.o2 .stamp { float: right; margin: 8px 0 12px 24px; transform: rotate(4deg);
+  border: 3px solid #b3261e; color:#b3261e; padding: 10px 16px; text-align:center;
+  font: 700 15px/1.25 "IBM Plex Mono", monospace; letter-spacing:.1em; border-radius: 3px; opacity:.9;}
+.o2 .stamp small { display:block; font-size: 10px; font-weight: 400; letter-spacing:.2em;}
+.o2 .lede { font-size: 19px; line-height: 1.55; margin: 26px 0 8px; font-weight: 400; }
+.o2 .lede b { font-weight: 700; }
+.o2 h2 { font: 600 11px/1 "IBM Plex Mono", monospace; letter-spacing:.24em; color:#6a7180;
+  text-transform: uppercase; margin: 34px 0 4px; border-bottom: 1px solid #d8d5cc; padding-bottom: 8px;}
+.o2 .finding { display: grid; grid-template-columns: 44px 1fr; gap: 0 16px; padding: 16px 0 14px; border-bottom: 1px solid #ecebe4;}
+.o2 .finding .no { font: 700 22px/1 "IBM Plex Mono", monospace; color:#b3261e; }
+.o2 .finding .no.warn { color:#a06b00; }
+.o2 .finding p { font-size: 15.5px; line-height: 1.6; }
+.o2 .finding p b { font-weight: 700; }
+.o2 .evi { margin-top: 9px; font: 400 12px/1.8 "IBM Plex Mono", monospace; color:#3d4657;
+  background:#f4f3ee; padding: 8px 12px; border-left: 3px solid #d8d5cc; white-space: pre; overflow-x:auto;}
+.o2 details { margin-top: 22px; }
+.o2 summary { font: 600 12.5px/1 "IBM Plex Mono", monospace; letter-spacing:.06em; color:#3d4657;
+  cursor: pointer; padding: 12px 0; border-top: 1px solid #d8d5cc; }
+.o2 summary:hover { color:#b3261e; }
+.o2 .sig { margin-top: 40px; padding-top: 14px; border-top: 3px double #1a2233;
+  font: 400 11.5px/1.7 "IBM Plex Mono", monospace; color:#6a7180; display:flex; justify-content:space-between;}
+
+/* ======================================================================
+   OPTION 3 — THE WORKBENCH (sidebar + panes, app chrome)
+   ====================================================================== */
+.o3 { background: #eef1f4; color: #1f2530; font-family: Inter, system-ui, sans-serif; min-height:100vh; }
+.o3 .chrome { display: grid; grid-template-columns: 232px 1fr; grid-template-rows: 52px 1fr;
+  height: 100vh; max-width: 1440px; margin: 0 auto; }
+.o3 .topbar { grid-column: 1 / -1; background:#fff; border-bottom:1px solid #dde3ea;
+  display:flex; align-items:center; gap: 18px; padding: 0 18px; }
+.o3 .topbar .logo { font: 700 13px/1 Inter; letter-spacing:.02em; }
+.o3 .topbar .logo i { color:#0d9488; font-style: normal; }
+.o3 .dbchip { font: 500 12px/1 "IBM Plex Mono", monospace; background:#f0f4f8; border:1px solid #dde3ea;
+  padding: 6px 10px; border-radius: 6px; color:#42506a;}
+.o3 .weeks { margin-left:auto; display:flex; gap:6px; }
+.o3 .weeks span { font: 600 11.5px/1 Inter; padding: 7px 11px; border-radius: 999px;
+  border: 1px solid #dde3ea; color:#5b6a80; background:#fff; cursor:pointer;}
+.o3 .weeks span.cur { background:#0d9488; border-color:#0d9488; color:#fff; }
+.o3 .weeks span.base { background:#f0f4f8; }
+.o3 nav.side { background:#f7f9fb; border-right:1px solid #dde3ea; padding: 14px 10px; overflow-y:auto;}
+.o3 nav.side .grp { font: 700 10px/1 Inter; letter-spacing:.16em; color:#8b98ab; margin: 14px 10px 8px; text-transform:uppercase;}
+.o3 nav.side a { display:flex; align-items:center; gap: 9px; padding: 8px 10px; border-radius: 7px;
+  font: 500 13px/1 Inter; color:#42506a; text-decoration:none; }
+.o3 nav.side a:hover { background:#eef1f4; }
+.o3 nav.side a.on { background:#e2ecea; color:#0b3f39; font-weight: 600; }
+.o3 .st { width:8px; height:8px; border-radius:50%; flex:none;}
+.o3 .st.ok{background:#22a06b;} .o3 .st.warn{background:#e2a400;} .o3 .st.crit{background:#d63b3b;} .o3 .st.na{background:#c7cfda;}
+.o3 main { padding: 22px 26px; overflow-y:auto; }
+.o3 .crumb { font: 500 12px/1 Inter; color:#8b98ab; margin-bottom: 6px;}
+.o3 main h1 { font: 700 20px/1.3 Inter; margin-bottom: 4px; }
+.o3 .desc { font: 400 13px/1.6 Inter; color:#5b6a80; max-width: 640px; margin-bottom: 18px;}
+.o3 .panel { background:#fff; border:1px solid #dde3ea; border-radius: 10px; padding: 0; overflow:hidden;}
+.o3 .panel .ph { display:flex; align-items:center; gap:10px; padding: 12px 16px; border-bottom:1px solid #eef1f4;
+  font: 600 13px/1 Inter; }
+.o3 .badge { font: 600 10.5px/1 Inter; letter-spacing:.06em; padding: 4px 8px; border-radius: 5px; }
+.o3 .badge.crit { background:#fdecec; color:#b42121; }
+.o3 table { width:100%; border-collapse:collapse; font: 400 12.5px/1.5 Inter; }
+.o3 th { text-align:left; font: 600 10.5px/1 Inter; letter-spacing:.1em; color:#8b98ab; text-transform:uppercase;
+  padding: 10px 16px; border-bottom: 1px solid #eef1f4; background:#fbfcfd;}
+.o3 td { padding: 9px 16px; border-bottom: 1px solid #f2f5f8; font-variant-numeric: tabular-nums;}
+.o3 td:first-child { font-weight: 500; }
+.o3 .z { font: 600 11px/1 "IBM Plex Mono", monospace; padding: 3px 7px; border-radius: 4px; }
+.o3 .z.crit { background:#fdecec; color:#b42121; } .o3 .z.warn{ background:#fdf6e3; color:#8a6400;} .o3 .z.ok{ background:#e9f7f1; color:#1c7f56;}
+.o3 .lane { position:relative; height: 10px; background:#f0f4f8; border-radius: 3px; min-width: 140px;}
+.o3 .lane i { position:absolute; inset: 0 auto 0 0; background:#7fc8c0; border-radius:3px;}
+.o3 .lane i.cur { background:#0d9488; }
+.o3 .lane u { position:absolute; top:-2px; bottom:-2px; width:2px; background:#42506a; }
+
+/* ======================================================================
+   OPTION 4 — THE TIME SPINE (chronology as the page's skeleton)
+   ====================================================================== */
+.o4 { background: #f2f4f7; color: #10141c; font-family: Archivo, sans-serif; }
+.o4 .head { max-width: 1080px; margin: 0 auto; padding: 44px 24px 20px; }
+.o4 .head .kicker { font: 700 11px/1 Archivo; letter-spacing:.3em; color:#2440c9; text-transform:uppercase;}
+.o4 .head h1 { font: 900 42px/1.05 Archivo; letter-spacing:-.02em; margin: 12px 0 6px; }
+.o4 .head h1 em { font-style: normal; color:#2440c9; }
+.o4 .head p { font: 400 14px/1.6 Inter; color:#4a5468; max-width: 560px;}
+.o4 .spinewrap { max-width: 1080px; margin: 26px auto 0; padding: 0 24px; position: relative; }
+.o4 .spine { position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; background:#10141c;
+  transform: translateX(-50%); }
+.o4 .band { position: relative; display: grid; grid-template-columns: 1fr 120px 1fr; gap: 0; padding: 26px 0; }
+.o4 .tick { grid-column: 2; justify-self: center; align-self: start; background:#10141c; color:#fff;
+  font: 700 12px/1 "IBM Plex Mono", monospace; padding: 8px 10px; border-radius: 3px; z-index: 2; text-align:center;}
+.o4 .tick small { display:block; font-weight:400; color:#9fb0ff; margin-top:4px; font-size:10px;}
+.o4 .band.now .tick { background:#2440c9; }
+.o4 .card { background:#fff; border: 2px solid #10141c; border-radius: 6px; padding: 16px 18px;
+  box-shadow: 4px 4px 0 #10141c14; }
+.o4 .card.L { grid-column: 1; margin-right: 8px; }
+.o4 .card.R { grid-column: 3; margin-left: 8px; }
+.o4 .card h3 { font: 700 12px/1 Archivo; letter-spacing:.14em; text-transform: uppercase; color:#4a5468; margin-bottom: 10px;}
+.o4 .statline { display:flex; justify-content:space-between; align-items:baseline; padding: 5px 0; border-top: 1px solid #edf0f4; font: 500 13px/1.4 Inter;}
+.o4 .statline:first-of-type { border-top: 0; }
+.o4 .statline b { font-variant-numeric: tabular-nums; font: 600 14px/1 "IBM Plex Mono", monospace;}
+.o4 .statline .up { color:#c9243f; } .o4 .statline .dn { color:#1c7f56; }
+.o4 .flag { grid-column: 3; margin-left: 8px; align-self:center; position: relative; }
+.o4 .flag .pole { position:absolute; left:-68px; top:50%; width: 68px; height:3px; background:#2440c9;}
+.o4 .flag .body { display:inline-block; background:#2440c9; color:#fff; font: 700 12px/1.3 Archivo;
+  letter-spacing:.05em; padding: 9px 13px; border-radius: 3px;}
+.o4 .flag .body small { display:block; font: 400 10.5px/1.3 Inter; color:#c8d2ff; margin-top:3px;}
+.o4 .findpin { grid-column: 1; margin-right: 8px; justify-self:end; position:relative; max-width: 420px;}
+.o4 .findpin .pole { position:absolute; right:-68px; top: 22px; width: 68px; height:3px; background:#c9243f;}
+.o4 .findpin .body { background:#fff; border: 2px solid #c9243f; border-radius: 6px; padding: 12px 15px;
+  font: 500 13px/1.5 Inter; color:#10141c;}
+.o4 .findpin .body b { color:#c9243f; font-family:"IBM Plex Mono",monospace; }
+
+/* ======================================================================
+   OPTION 5 — THE DIFF (the week as a pull request)
+   ====================================================================== */
+.o5 { background: #ffffff; color: #1f2328; font-family: Inter, system-ui, sans-serif; }
+.o5 .wrap { max-width: 980px; margin: 0 auto; padding: 28px 24px; }
+.o5 .prhead h1 { font: 400 22px/1.35 Inter; }
+.o5 .prhead h1 b { font-weight: 600; }
+.o5 .prhead h1 .num { color:#59636e; font-weight: 400; }
+.o5 .prmeta { display:flex; align-items:center; gap: 8px; margin: 10px 0 18px; flex-wrap: wrap;}
+.o5 .pill { font: 600 12px/1 Inter; padding: 6px 12px; border-radius: 999px; }
+.o5 .pill.review { background:#cf222e; color:#fff; }
+.o5 .branch { font: 500 11.5px/1 "IBM Plex Mono", monospace; background:#eff2f5; color:#0550ae;
+  padding: 5px 8px; border-radius: 5px; }
+.o5 .prmeta .txt { font: 400 13px/1 Inter; color:#59636e; }
+.o5 .tabs { display:flex; gap: 4px; border-bottom: 1px solid #d1d9e0; margin-bottom: 16px;}
+.o5 .tabs span { font: 500 13px/1 Inter; padding: 9px 14px; border-radius: 7px 7px 0 0; color:#59636e; cursor:pointer;}
+.o5 .tabs span.on { border:1px solid #d1d9e0; border-bottom: 2px solid #fff; margin-bottom:-1px; color:#1f2328; font-weight:600;}
+.o5 .tabs .ct { background:#eff2f5; border-radius: 999px; font-size: 11px; padding: 2px 7px; margin-left: 5px; color:#59636e;}
+.o5 .layout { display:grid; grid-template-columns: 250px 1fr; gap: 18px; }
+.o5 .files { font: 400 12.5px/1.5 Inter; }
+.o5 .files a { display:flex; justify-content:space-between; gap:8px; padding: 6px 9px; border-radius: 6px;
+  color:#1f2328; text-decoration: none; }
+.o5 .files a:hover { background:#f6f8fa; }
+.o5 .files a.on { background:#ddf4ff; }
+.o5 .files .pm { font-family:"IBM Plex Mono",monospace; font-size: 11px; white-space:nowrap;}
+.o5 .files .pm b { color:#1a7f37; font-weight:600;} .o5 .files .pm i { color:#cf222e; font-style:normal; font-weight:600;}
+.o5 .diffbox { border: 1px solid #d1d9e0; border-radius: 8px; overflow: hidden; margin-bottom: 16px;}
+.o5 .diffbox .dh { display:flex; align-items:center; gap: 8px; background:#f6f8fa; border-bottom:1px solid #d1d9e0;
+  padding: 9px 12px; font: 600 12.5px/1 "IBM Plex Mono", monospace; }
+.o5 .diffbox .dh .chev { color:#59636e; }
+.o5 .dtable { width: 100%; border-collapse: collapse; font: 400 12px/1.6 "IBM Plex Mono", monospace; }
+.o5 .dtable td { padding: 2px 10px; white-space: pre; }
+.o5 .gut { width: 30px; text-align: right; color: #59636e88; user-select: none; }
+.o5 .hunk td { background:#ddf4ff; color:#59636e; padding: 5px 10px; font-size: 11.5px;}
+.o5 tr.minus td { background:#ffebe9; } .o5 tr.minus .gut { background:#ffd8d3; }
+.o5 tr.plus td { background:#dafbe1; } .o5 tr.plus .gut { background:#aceebb; }
+.o5 tr.ctx td { color:#59636e; }
+.o5 .collapse td { background:#f6f8fa; color:#0550ae; text-align:center; font-family: Inter; font-size: 12px;
+  padding: 6px; cursor: pointer; border-top: 1px dashed #d1d9e0; border-bottom: 1px dashed #d1d9e0;}
+.o5 .reviewbox { border:1px solid #d1d9e0; border-left: 4px solid #cf222e; border-radius: 8px;
+  padding: 14px 16px; margin-bottom: 18px; background:#fff;}
+.o5 .reviewbox .who { font: 600 13px/1 Inter; margin-bottom: 6px;}
+.o5 .reviewbox .who .tag { font: 600 11px/1 Inter; color:#cf222e; border:1px solid #cf222e55; border-radius: 999px; padding: 3px 8px; margin-left: 8px;}
+.o5 .reviewbox p { font: 400 13.5px/1.6 Inter; color:#1f2328; }
+.o5 .reviewbox p code { background:#eff2f5; padding: 1px 5px; border-radius: 4px; font: 500 12px "IBM Plex Mono",monospace;}
+</style>
+</head>
+<body>
+
+<!-- ================= OPTION 1 : OPS BOARD ================= -->
+<section class="opt o1 on" id="opt1">
+  <div class="wrap">
+    <header>
+      <div class="brand">AWR // OPS BOARD
+        <small>PRODDB · prod-ora-01 · 19.21 · read-only</small>
+      </div>
+      <div class="clockrow">
+        <span class="w0">W0 <b>Mon Jun 29 09–10</b></span>
+        <span>W-1 <b>Jun 22</b></span><span>W-2 <b>Jun 15</b></span>
+        <span>W-3 <b>Jun 08</b></span><span>W-4 <b>Jun 01</b></span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="tile verdict-tile">
+        <div class="lbl"><span class="led crit"></span>VERDICT</div>
+        <div class="big">CHANGED — 2 CRIT / 1 WARN</div>
+        <div class="sub">vs median of 4 prior Mondays · release 2.4.1 deployed Sun 22:40</div>
+      </div>
+      <div class="tile kpi">
+        <div class="lbl"><span class="led crit"></span>DB TIME</div>
+        <div class="big">4.6<small>h</small></div>
+        <div class="sub"><span class="delta-up">▲ +59%</span> · base 2.9h</div>
+      </div>
+      <div class="tile kpi">
+        <div class="lbl"><span class="led warn"></span>AAS</div>
+        <div class="big">4.6</div>
+        <div class="sub"><span class="delta-up">▲ +1.7</span> · base 2.9</div>
+      </div>
+      <div class="tile kpi-wide">
+        <div class="lbl"><span class="led"></span>EXECUTES/S</div>
+        <div class="big">1,842<small>/s</small></div>
+        <svg width="100%" height="26" viewBox="0 0 200 26" preserveAspectRatio="none">
+          <defs><linearGradient id="o1g" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#ffb454"/><stop offset="1" stop-color="#ffb45400"/></linearGradient></defs>
+          <path class="sparkfill" d="M0,20 L50,18 L100,19 L150,14 L200,4 L200,26 L0,26 Z"/>
+          <polyline class="spark" points="0,20 50,18 100,19 150,14 200,4"/>
+        </svg>
+      </div>
+
+      <div class="tile row2">
+        <div class="lbl"><span class="led crit"></span>TOP WAITS — FOREGROUND</div>
+        <table>
+          <tr><th>event</th><th style="text-align:right">avg ms</th><th style="text-align:right">z</th><th style="width:38%">share of DB time</th></tr>
+          <tr class="hot"><td>log file sync</td><td class="num"><b>14.2</b></td><td class="num"><b>+3.4σ</b></td>
+            <td><div class="barlane"><i style="width:64%"></i></div></td></tr>
+          <tr><td>db file sequential read</td><td class="num">0.48</td><td class="num">-0.4σ</td>
+            <td><div class="barlane"><i style="width:22%; background:#3d4c60"></i></div></td></tr>
+          <tr><td>direct path read</td><td class="num">0.91</td><td class="num">+0.2σ</td>
+            <td><div class="barlane"><i style="width:9%; background:#3d4c60"></i></div></td></tr>
+        </table>
+      </div>
+
+      <div class="tile row2">
+        <div class="lbl"><span class="led warn"></span>TOP SQL — MOVERS FIRST</div>
+        <table>
+          <tr><th>sql_id</th><th>module</th><th style="text-align:right">ela s</th><th style="text-align:right">vs base</th></tr>
+          <tr class="hot"><td>7k2m9x4fqz1nc</td><td>ORDERS_API</td><td class="num"><b>1,204</b></td><td class="num"><b>+212%</b></td></tr>
+          <tr><td>gm4hj0aw9x8pc</td><td>INVOICE_BATCH</td><td class="num">644</td><td class="num">+38%</td></tr>
+          <tr><td>4b7ry2msd001w</td><td>ORDERS_API</td><td class="num">401</td><td class="num">-4%</td></tr>
+        </table>
+      </div>
+
+      <div class="tile row3">
+        <div class="lbl"><span class="led"></span>ASH · HOUR TIMELINE · STACKED BY WAIT CLASS</div>
+        <svg width="100%" height="72" viewBox="0 0 1000 72" preserveAspectRatio="none">
+          <path d="M0,66 L200,64 L400,62 L500,50 L600,34 L800,26 L1000,30 L1000,72 L0,72 Z" fill="#ff5d5d55"/>
+          <path d="M0,68 L200,67 L400,66 L500,60 L600,52 L800,48 L1000,50 L1000,72 L0,72 Z" fill="#ffb45466"/>
+          <path d="M0,70 L200,70 L400,69 L500,68 L600,66 L800,66 L1000,67 L1000,72 L0,72 Z" fill="#3fb97f66"/>
+          <line x1="560" y1="0" x2="560" y2="72" stroke="#9fb0ff" stroke-dasharray="4 4"/>
+          <text x="568" y="12" fill="#9fb0ff" font-size="10" font-family="IBM Plex Mono">▸ release 2.4.1</text>
+        </svg>
+        <div class="foot"><span>commit · user i/o · cpu — samples 09:00 → 10:00, all five windows overlaid</span>
+          <span>generated 2026-06-29 10:03 UTC · v1.0.0</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= OPTION 2 : BRIEFING ================= -->
+<section class="opt o2" id="opt2">
+  <div class="sheet">
+    <div class="letterhead">
+      <h1>PERFORMANCE BRIEFING<span>AWR timeline comparison · PRODDB</span></h1>
+      <div style="font:400 11px/1.7 'IBM Plex Mono',monospace; color:#6a7180; text-align:right;">
+        run 20260629100312<br>v1.0.0 · read-only</div>
+    </div>
+
+    <div class="stamp">MATERIAL CHANGE<small>2 CRITICAL · 1 WARNING</small></div>
+
+    <div class="meta">
+      <div><b>Window</b> Monday 09:00–10:00</div>
+      <div><b>Current</b> 2026-06-29</div>
+      <div><b>Baseline</b> the four prior Mondays (Jun 01–22)</div>
+      <div><b>Context</b> release 2.4.1 deployed Sunday 22:40</div>
+    </div>
+
+    <p class="lede">
+      The database did <b>not</b> behave the way it did on the last four Mondays.
+      Total DB time for the hour was <b>4.6&nbsp;hours against a baseline of 2.9</b>,
+      and the growth is concentrated in <b>commit waits</b> and <b>one SQL statement</b>
+      introduced with the release.
+    </p>
+
+    <h2>What changed</h2>
+
+    <div class="finding">
+      <div class="no">1</div>
+      <div>
+        <p><b>Commit latency tripled.</b> Average <b>log file sync</b> wait rose from
+        4.1&nbsp;ms to 14.2&nbsp;ms (+3.4σ) and now accounts for 64% of DB time.
+        Consistent with a new synchronous commit pattern, not with storage degradation —
+        log file parallel write is flat at 0.7&nbsp;ms.</p>
+        <div class="evi">log file sync      14.2 ms   +3.4σ   ████████████▌ 64%
+log file par write  0.7 ms   +0.1σ   unchanged</div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="no">2</div>
+      <div>
+        <p><b>One statement is doing three times the work.</b> <b>7k2m9x4fqz1nc</b>
+        (module ORDERS_API, schema ORDERS) went from ~380&nbsp;s to 1,204&nbsp;s of
+        elapsed time (+212%). First seen in this shape on Sunday's release.</p>
+        <div class="evi">7k2m9x4fqz1nc   ela 1,204 s   execs 214k   +212% vs base</div>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="no warn">3</div>
+      <div>
+        <p><b>Throughput is up, not just latency.</b> Executes/s rose 28% (+2.1σ).
+        Some of the extra DB time is legitimate new load; findings 1–2 are not
+        explained by it.</p>
+      </div>
+    </div>
+
+    <h2>What did not change</h2>
+    <p style="font-size:14.5px; line-height:1.65; color:#3d4657; margin-top:10px;">
+      I/O latencies, background waits, memory and parameter set are all within ±1σ
+      of baseline. No instance restarts in any window. 47 of 52 tracked metrics: quiet.
+    </p>
+
+    <details><summary>▸ Appendix A — full load profile, five windows</summary></details>
+    <details><summary>▸ Appendix B — waits, metrics, Top-N SQL tables</summary></details>
+    <details><summary>▸ Appendix C — ASH timelines and per-SQL breakdown</summary></details>
+
+    <div class="sig">
+      <span>Generated by awr_trend.sql · SELECT-only, standby-safe</span>
+      <span>2026-06-29 10:03 UTC</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= OPTION 3 : WORKBENCH ================= -->
+<section class="opt o3" id="opt3">
+  <div class="chrome">
+    <div class="topbar">
+      <span class="logo"><i>◆</i> AWR Workbench</span>
+      <span class="dbchip">PRODDB · prod-ora-01</span>
+      <div class="weeks">
+        <span class="cur">Jun 29 · current</span><span class="base">Jun 22</span>
+        <span class="base">Jun 15</span><span class="base">Jun 08</span><span class="base">Jun 01</span>
+      </div>
+    </div>
+    <nav class="side">
+      <div class="grp">Triage</div>
+      <a href="#"><span class="st crit"></span>Verdict &amp; findings</a>
+      <a href="#"><span class="st ok"></span>Windows</a>
+      <div class="grp">Workload</div>
+      <a href="#"><span class="st ok"></span>Load profile</a>
+      <a href="#"><span class="st warn"></span>Metrics</a>
+      <a class="on" href="#"><span class="st crit"></span>Waits — foreground</a>
+      <a href="#"><span class="st ok"></span>Waits — background</a>
+      <div class="grp">SQL</div>
+      <a href="#"><span class="st crit"></span>Top SQL</a>
+      <a href="#"><span class="st ok"></span>Top SQL — ASH</a>
+      <div class="grp">Storage &amp; config</div>
+      <a href="#"><span class="st ok"></span>Segment I/O</a>
+      <a href="#"><span class="st ok"></span>File I/O</a>
+      <a href="#"><span class="st na"></span>Parameters</a>
+    </nav>
+    <main>
+      <div class="crumb">Workload / Waits — foreground</div>
+      <h1>Foreground waits <span class="badge crit" style="vertical-align:3px; margin-left:6px;">1 critical</span></h1>
+      <p class="desc">Per-event averages for Monday 09:00–10:00. The lane shows this week
+        (teal) against the spread of the four baseline Mondays (tick = baseline median).</p>
+      <div class="panel">
+        <div class="ph">By total wait time</div>
+        <table>
+          <tr><th>Event</th><th>Class</th><th style="text-align:right">Avg ms</th>
+              <th style="text-align:right">z-score</th><th>vs baseline spread</th></tr>
+          <tr><td>log file sync</td><td>Commit</td><td style="text-align:right"><b>14.2</b></td>
+              <td style="text-align:right"><span class="z crit">+3.4σ</span></td>
+              <td><div class="lane"><i class="cur" style="width:88%"></i><u style="left:29%"></u></div></td></tr>
+          <tr><td>db file sequential read</td><td>User I/O</td><td style="text-align:right">0.48</td>
+              <td style="text-align:right"><span class="z ok">-0.4σ</span></td>
+              <td><div class="lane"><i style="width:24%"></i><u style="left:27%"></u></div></td></tr>
+          <tr><td>direct path read</td><td>User I/O</td><td style="text-align:right">0.91</td>
+              <td style="text-align:right"><span class="z ok">+0.2σ</span></td>
+              <td><div class="lane"><i style="width:33%"></i><u style="left:31%"></u></div></td></tr>
+          <tr><td>SQL*Net message from dblink</td><td>Network</td><td style="text-align:right">2.10</td>
+              <td style="text-align:right"><span class="z warn">+1.6σ</span></td>
+              <td><div class="lane"><i style="width:52%"></i><u style="left:38%"></u></div></td></tr>
+        </table>
+      </div>
+    </main>
+  </div>
+</section>
+
+<!-- ================= OPTION 4 : TIME SPINE ================= -->
+<section class="opt o4" id="opt4">
+  <div class="head">
+    <div class="kicker">AWR Timeline Comparison</div>
+    <h1>Five Mondays,<br>read <em>down the clock.</em></h1>
+    <p>The page is the timeline. Newest window on top; every card, marker and finding
+       hangs off the same spine at the moment it belongs to.</p>
+  </div>
+  <div class="spinewrap">
+    <div class="spine"></div>
+
+    <div class="band now">
+      <div class="card L">
+        <h3>Load — Jun 29</h3>
+        <div class="statline"><span>DB time</span><b class="up">4.6 h ▲</b></div>
+        <div class="statline"><span>AAS</span><b class="up">4.6 ▲</b></div>
+        <div class="statline"><span>Executes/s</span><b class="up">1,842 ▲</b></div>
+      </div>
+      <div class="tick">MON 06-29<small>09:00–10:00 · W0</small></div>
+      <div class="findpin" style="grid-column:3; margin-left:8px; justify-self:start; max-width:420px;">
+        <div class="body" style="border-color:#c9243f;">
+          <b>log file sync +3.4σ</b> — commit waits are 64% of the hour.
+          Top mover: <b>7k2m9x4fqz1nc</b> +212%.
+        </div>
+      </div>
+    </div>
+
+    <div class="band">
+      <div class="card L" style="opacity:.92">
+        <h3>Load — Jun 22</h3>
+        <div class="statline"><span>DB time</span><b>3.0 h</b></div>
+        <div class="statline"><span>AAS</span><b>3.0</b></div>
+        <div class="statline"><span>Executes/s</span><b>1,455</b></div>
+      </div>
+      <div class="tick">MON 06-22<small>W-1</small></div>
+      <div class="flag">
+        <span class="pole"></span>
+        <span class="body">⚑ RELEASE 2.4.1<small>deployed Sun 06-28 22:40 — between W-1 and W0</small></span>
+      </div>
+    </div>
+
+    <div class="band">
+      <div class="card L" style="opacity:.8">
+        <h3>Load — Jun 15</h3>
+        <div class="statline"><span>DB time</span><b>2.9 h</b></div>
+        <div class="statline"><span>AAS</span><b>2.9</b></div>
+        <div class="statline"><span>Executes/s</span><b>1,470</b></div>
+      </div>
+      <div class="tick">MON 06-15<small>W-2</small></div>
+      <div class="card R" style="opacity:.85">
+        <h3>Quiet week</h3>
+        <div class="statline"><span>All 52 metrics</span><b class="dn">within ±1σ</b></div>
+      </div>
+    </div>
+
+    <div class="band">
+      <div class="card L" style="opacity:.7">
+        <h3>Load — Jun 08</h3>
+        <div class="statline"><span>DB time</span><b>2.8 h</b></div>
+        <div class="statline"><span>AAS</span><b>2.8</b></div>
+      </div>
+      <div class="tick">MON 06-08<small>W-3</small></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= OPTION 5 : DIFF REVIEW ================= -->
+<section class="opt o5" id="opt5">
+  <div class="wrap">
+    <div class="prhead">
+      <h1><b>Monday 09:00–10:00 workload</b> — Jun 29 vs baseline <span class="num">#W26</span></h1>
+    </div>
+    <div class="prmeta">
+      <span class="pill review">± Changes detected</span>
+      <span class="txt">wants to merge the week</span>
+      <span class="branch">baseline: median(4 Mondays)</span>
+      <span class="txt">←</span>
+      <span class="branch">current: 2026-06-29</span>
+    </div>
+
+    <div class="tabs">
+      <span>Conversation <span class="ct">3</span></span>
+      <span class="on">Metrics changed <span class="ct">5</span></span>
+      <span>Unchanged <span class="ct">47</span></span>
+    </div>
+
+    <div class="layout">
+      <div class="files">
+        <a class="on" href="#"><span>waits/foreground</span><span class="pm"><b>+3.4σ</b></span></a>
+        <a href="#"><span>sql/top_by_elapsed</span><span class="pm"><b>+212%</b></span></a>
+        <a href="#"><span>load/executes_per_s</span><span class="pm"><b>+28%</b></span></a>
+        <a href="#"><span>metrics/aas</span><span class="pm"><b>+1.7</b></span></a>
+        <a href="#"><span>network/dblink_ms</span><span class="pm"><b>+1.6σ</b></span></a>
+        <a href="#"><span>io/latency</span><span class="pm">±0σ</span></a>
+        <a href="#"><span>config/parameters</span><span class="pm">0 diff</span></a>
+      </div>
+
+      <div>
+        <div class="reviewbox">
+          <div class="who">awr_trend.sql reviewed <span class="tag">✕ Changes detected</span></div>
+          <p>Commit path regressed after <code>release 2.4.1</code>: <code>log file sync</code>
+          +3.4σ while <code>log file parallel write</code> is unchanged — the extra time is
+          waiting on commits, not on the log device. The new cost concentrates in
+          <code>7k2m9x4fqz1nc</code> (ORDERS_API).</p>
+        </div>
+
+        <div class="diffbox">
+          <div class="dh"><span class="chev">▾</span> waits/foreground</div>
+          <table class="dtable">
+            <tr class="hunk"><td class="gut"></td><td>@@ Monday 09:00–10:00 · avg wait ms · share of DB time @@</td></tr>
+            <tr class="ctx"><td class="gut"></td><td>  db file sequential read   0.48 ms    22%   (-0.4σ)</td></tr>
+            <tr class="minus"><td class="gut">−</td><td>  log file sync             4.1 ms     31%   baseline</td></tr>
+            <tr class="plus"><td class="gut">+</td><td>  log file sync            14.2 ms     64%   (+3.4σ)  CRITICAL</td></tr>
+            <tr class="ctx"><td class="gut"></td><td>  direct path read          0.91 ms     9%   (+0.2σ)</td></tr>
+            <tr class="collapse"><td class="gut"></td><td>⋯ 18 unchanged wait events hidden — expand ⋯</td></tr>
+          </table>
+        </div>
+
+        <div class="diffbox">
+          <div class="dh"><span class="chev">▾</span> sql/top_by_elapsed</div>
+          <table class="dtable">
+            <tr class="hunk"><td class="gut"></td><td>@@ elapsed seconds in window · by sql_id @@</td></tr>
+            <tr class="minus"><td class="gut">−</td><td>  7k2m9x4fqz1nc  ORDERS_API      386 s   214k execs</td></tr>
+            <tr class="plus"><td class="gut">+</td><td>  7k2m9x4fqz1nc  ORDERS_API    1,204 s   214k execs  (+212%)</td></tr>
+            <tr class="ctx"><td class="gut"></td><td>  gm4hj0aw9x8pc  INVOICE_BATCH   644 s    12k execs  (+38%)</td></tr>
+            <tr class="ctx"><td class="gut"></td><td>  4b7ry2msd001w  ORDERS_API      401 s   102k execs  (-4%)</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<nav id="switch">
+  <span class="cap">Same incident, five treatments →</span>
+  <button class="on" data-t="opt1">1 · Ops board</button>
+  <button data-t="opt2">2 · Briefing</button>
+  <button data-t="opt3">3 · Workbench</button>
+  <button data-t="opt4">4 · Time spine</button>
+  <button data-t="opt5">5 · Diff review</button>
+</nav>
+
+<script>
+document.querySelectorAll('#switch button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#switch button').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.opt').forEach(o => o.classList.toggle('on', o.id === b.dataset.t));
+    window.scrollTo(0, 0);
+  });
+});
+</script>
+</body>
+</html>
