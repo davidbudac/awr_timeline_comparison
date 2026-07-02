@@ -670,9 +670,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('if(!d.times.length){el.style.display="none"; return;}');
     DBMS_OUTPUT.PUT_LINE('var cs=getComputedStyle(document.body);');
     DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
-    DBMS_OUTPUT.PUT_LINE('var red=cs.getPropertyValue("--red").trim()||"#e2231a";');
+    DBMS_OUTPUT.PUT_LINE('var red=cs.getPropertyValue("--accent").trim()||"#0d9488";');
     DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
-    DBMS_OUTPUT.PUT_LINE('var bandCurrent="rgba(226,35,26,0.22)", bandPrior="rgba(100,116,139,0.10)";');
+    DBMS_OUTPUT.PUT_LINE('var bandCurrent="rgba(13,148,136,0.20)", bandPrior="rgba(100,116,139,0.10)";');
     DBMS_OUTPUT.PUT_LINE('var markAreaData=(d.windows||[]).map(function(w){return [');
     DBMS_OUTPUT.PUT_LINE('  {xAxis:w[0],itemStyle:{color:w[2]==="current"?bandCurrent:bandPrior},');
     DBMS_OUTPUT.PUT_LINE('   label:{show:true,position:"insideTop",color:mu,fontSize:9,formatter:w[2],distance:1}},');
@@ -691,7 +691,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    name:"DB time",type:"line",smooth:true,symbol:"none",');
     DBMS_OUTPUT.PUT_LINE('    data:d.vals,');
     DBMS_OUTPUT.PUT_LINE('    lineStyle:{width:1.2,color:red},');
-    DBMS_OUTPUT.PUT_LINE('    areaStyle:{color:"rgba(226,35,26,0.06)"},');
+    DBMS_OUTPUT.PUT_LINE('    areaStyle:{color:"rgba(13,148,136,0.07)"},');
     DBMS_OUTPUT.PUT_LINE('    markArea:{silent:true,data:markAreaData,itemStyle:{opacity:1},z:0},');
     DBMS_OUTPUT.PUT_LINE('    markLine:(window.AWR_markLine&&window.AWR_markLine(d.times))||{data:[]},');
     DBMS_OUTPUT.PUT_LINE('    z:5');
@@ -706,23 +706,30 @@ BEGIN
     -- design used; numerals match the per-section h2::before
     -- counters in _style.sql.
     -- =========================================================
+    -- Grouped to match the visual section order set in _style.sql
+    -- (Triage / Workload / SQL / Storage and config), so the scrollspy
+    -- walks the rail top-to-bottom.  The hrefs are load-bearing: the
+    -- app-only link-dim rule in _style.sql keys on them.
     DBMS_OUTPUT.PUT_LINE('<nav class="toc">'
-        || '<b>Sections</b>'
-        || '<a href="#db-time-summary">01 DB time</a>'
-        || '<a href="#overview">02 Overview</a>'
-        || '<a href="#utilization">03 Utilization</a>'
-        || '<a href="#ash-timeline">04 ASH timeline</a>'
-        || '<a href="#waits-fg">05 FG waits</a>'
-        || '<a href="#waits-bg">06 BG waits</a>'
-        || '<a href="#topsql">07 Top SQL</a>'
-        || '<a href="#segment-io">08 Segment I/O</a>'
-        || '<a href="#file-io">09 File I/O</a>'
-        || '<a href="#findings">10 Findings</a>'
-        || '<a href="#windows">11 Windows</a>'
-        || '<a href="#load">12 Load profile</a>'
-        || '<a href="#metrics">13 Metrics</a>'
-        || '<a href="#topsql-ash">14 Top SQL ASH</a>'
-        || '<a href="#param-changes">15 Parameters</a>'
+        || '<b>Triage</b>'
+        || '<a href="#db-time-summary">DB time</a>'
+        || '<a href="#overview">Overview</a>'
+        || '<a href="#ash-timeline">ASH timeline</a>'
+        || '<a href="#findings">Findings</a>'
+        || '<a href="#windows">Windows</a>'
+        || '<b>Workload</b>'
+        || '<a href="#utilization">Utilization</a>'
+        || '<a href="#load">Load profile</a>'
+        || '<a href="#metrics">Metrics</a>'
+        || '<a href="#waits-fg">Waits &mdash; foreground</a>'
+        || '<a href="#waits-bg">Waits &mdash; background</a>'
+        || '<b>SQL</b>'
+        || '<a href="#topsql">Top SQL</a>'
+        || '<a href="#topsql-ash">Top SQL &mdash; ASH</a>'
+        || '<b>Storage &amp; config</b>'
+        || '<a href="#segment-io">Segment I/O</a>'
+        || '<a href="#file-io">File I/O</a>'
+        || '<a href="#param-changes">Parameters</a>'
         -- "Application only" toggle: flips body.app-only, which (via
         -- _style.sql) hides every system-wide section plus the masthead
         -- verdict / DB-time strip and the Oracle-internal SQL rows, leaving
@@ -749,6 +756,70 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  document.dispatchEvent(new CustomEvent("awr:appfilter",{detail:{appOnly:on}}));');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('})();</script>');
+
+    -- Live status rail. Runs on DOMContentLoaded because this script is
+    -- emitted before the data sections exist in the DOM.  Two jobs:
+    --   1. Status dots: prepend a span.st to every rail link, graded from
+    --      the severity classes the target section already carries in its
+    --      HTML (worst wins: .crit > .warn > ok; td.chg counts as warn so
+    --      changed parameters surface).  Sections whose only rows are
+    --      skip/insufficient stay "na" (neutral dot).  Pure client-side --
+    --      no extra SQL pass, and the dots always agree with the tables.
+    --   2. Scrollspy: highlight the rail link of the last section whose
+    --      top has passed the upper quarter of the viewport.  A plain
+    --      throttled scroll listener, NOT IntersectionObserver or
+    --      requestAnimationFrame: embedded webviews (and the Claude
+    --      preview browser) throttle both to a standstill, and at 16
+    --      sections the scan is trivially cheap.  Sections hidden by the
+    --      app-only filter (offsetParent null) are skipped, and the
+    --      awr:appfilter event re-runs the spy so the highlight stays
+    --      valid when the section set changes.
+    DBMS_OUTPUT.PUT_LINE('<script>');
+    DBMS_OUTPUT.PUT_LINE('document.addEventListener("DOMContentLoaded",function(){');
+    DBMS_OUTPUT.PUT_LINE('var nav=document.querySelector("nav.toc"); if(!nav) return;');
+    DBMS_OUTPUT.PUT_LINE('var pairs=[];');
+    DBMS_OUTPUT.PUT_LINE('nav.querySelectorAll(''a[href^="#"]'').forEach(function(a){');
+    DBMS_OUTPUT.PUT_LINE('  var sec=document.getElementById(a.getAttribute("href").slice(1));');
+    DBMS_OUTPUT.PUT_LINE('  if(!sec) return;');
+    DBMS_OUTPUT.PUT_LINE('  pairs.push([a,sec]);');
+    DBMS_OUTPUT.PUT_LINE('  var dot=document.createElement("span"); dot.className="st";');
+    -- skip/insufficient rows don't count as data: a findings table made
+    -- entirely of INSUFFICIENT_HISTORY rows keeps the neutral dot.
+    DBMS_OUTPUT.PUT_LINE('  if(sec.querySelector(".crit")) dot.className+=" crit";');
+    DBMS_OUTPUT.PUT_LINE('  else if(sec.querySelector(".warn, td.chg")) dot.className+=" warn";');
+    DBMS_OUTPUT.PUT_LINE('  else if(sec.querySelector("tbody tr:not(.skip) td, .hero-card, .ash-sql-card:not(.insufficient)")) dot.className+=" ok";');
+    DBMS_OUTPUT.PUT_LINE('  a.insertBefore(dot,a.firstChild);');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('var pending=false;');
+    DBMS_OUTPUT.PUT_LINE('function spy(){');
+    DBMS_OUTPUT.PUT_LINE('  pending=false;');
+    DBMS_OUTPUT.PUT_LINE('  var y=window.scrollY+window.innerHeight*0.25;');
+    DBMS_OUTPUT.PUT_LINE('  var best=null, bestTop=-1, firstVis=null;');
+    DBMS_OUTPUT.PUT_LINE('  pairs.forEach(function(p){');
+    DBMS_OUTPUT.PUT_LINE('    if(p[1].offsetParent===null) return;');
+    DBMS_OUTPUT.PUT_LINE('    if(!firstVis) firstVis=p;');
+    DBMS_OUTPUT.PUT_LINE('    var t=p[1].offsetTop;');
+    DBMS_OUTPUT.PUT_LINE('    if(t<=y && t>bestTop){ best=p; bestTop=t; }');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  if(!best) best=firstVis;');
+    DBMS_OUTPUT.PUT_LINE('  pairs.forEach(function(p){ p[0].classList.toggle("on",p===best); });');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function onScroll(){ if(!pending){ pending=true; setTimeout(spy,80); } }');
+    DBMS_OUTPUT.PUT_LINE('window.addEventListener("scroll",onScroll,{passive:true});');
+    DBMS_OUTPUT.PUT_LINE('window.addEventListener("resize",onScroll);');
+    DBMS_OUTPUT.PUT_LINE('document.addEventListener("awr:appfilter",onScroll);');
+    -- Fallback for embedded webviews that suppress scroll events
+    -- entirely (observed in in-app preview browsers): poll scrollY and
+    -- re-run the spy only when it actually changed.  One number
+    -- comparison per 400ms; the scroll listener above still gives
+    -- instant updates in normal browsers.
+    DBMS_OUTPUT.PUT_LINE('var lastY=-1;');
+    DBMS_OUTPUT.PUT_LINE('setInterval(function(){');
+    DBMS_OUTPUT.PUT_LINE('  if(window.scrollY!==lastY){ lastY=window.scrollY; spy(); }');
+    DBMS_OUTPUT.PUT_LINE('},400);');
+    DBMS_OUTPUT.PUT_LINE('spy();');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('</script>');
 
     -- Temporary CLOBs are session-lived and will free at end-of-session,
     -- but free explicitly so the report can be regenerated in a loop

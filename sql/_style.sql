@@ -3,15 +3,17 @@
 -- Emits the <style> shared by every section of the HTML report.  Called
 -- once from awr_trend.sql after the <head> opens.
 --
--- Visual style: "Editorial" -- magazine-style report.
--- Light, warm off-white canvas; large red section numerals; bold
--- masthead; pill-shaped param chips; red-sidebar editorial cards.
--- Class names match those emitted by sections 01-10 verbatim, so the
--- restyle is purely a CSS swap (no section-file changes required).
+-- Visual style: "Workbench" -- app-chrome report.
+-- Cool light-gray canvas, a fixed left sidebar (the restyled nav.toc)
+-- acting as a live status rail (per-section status dots + scrollspy,
+-- wired by JS in 00_params.sql), content sections as white panels,
+-- teal accent for interactive/current elements, red reserved for
+-- severity.  Class names match those emitted by the sections verbatim,
+-- so the restyle is purely a CSS swap (no data-section changes).
 --
 -- Design tokens, section-level layout, table conventions, severity
--- semantics, and the per-section header numbering scheme are documented
--- in design.md at the project root -- read that before iterating.
+-- semantics are documented in design.md at the project root -- read
+-- that before iterating.
 --
 
 SET DEFINE OFF
@@ -23,19 +25,29 @@ BEGIN
     -- Design tokens
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE(':root {'
-        || ' --paper:#f6f4ef;       --panel:#ffffff;        --panel-2:#fbfaf6;'
-        || ' --ink:#111111;         --ink-soft:#2b2b2b;     --muted:#6b6b6b;'
-        || ' --rule:#1f1f1f;        --hairline:#e2dfd7;     --line-soft:#ece9e1;'
-        || ' --red:#e2231a;         --red-deep:#b51a13;     --chip-bg:#ebe8e0;'
-        || ' --track:#e6e2d8;'
-        || ' --crit:#c0231b;        --warn:#d28a00;         --ok:#2f7d3a;'
-        || ' --info:#4a6f8a;        --skip:#8a8a8a;'
-        || ' --crit-bg:#fbeae8;     --warn-bg:#fdf2dd;      --ok-bg:#e6f3e9;'
-        || ' --info-bg:#e8eef4;     --skip-bg:#ececec;'
-        || ' --spark:#111111;       --spark-fill:rgba(17,17,17,.06);'
+        || ' --paper:#eef1f4;       --panel:#ffffff;        --panel-2:#f7f9fb;'
+        || ' --ink:#1f2530;         --ink-soft:#3b4454;     --muted:#5b6a80;'
+        || ' --rule:#c8d2dd;        --hairline:#dde3ea;     --line-soft:#e9eef3;'
+        || ' --red:#d63b3b;         --red-deep:#b42121;     --chip-bg:#f0f4f8;'
+        || ' --track:#e6ebf1;'
+        || ' --accent:#0d9488;      --accent-deep:#0b3f39;  --accent-bg:#e2ecea;'
+        || ' --accent-2:#3c6591;'
+        || ' --rail-w:236px;'
+        -- Read by the chart-init scripts (sections 04-15 and
+        -- js_markers.plsql read fg/border for axis text and gridlines;
+        -- 08 reads crit-fg/warn-fg for severity-tinted hero minis).
+        || ' --fg:#3b4454;           --border:#dde3ea;'
+        || ' --crit-fg:#b42121;      --warn-fg:#9a6b00;'
+        || ' --crit:#b42121;        --warn:#9a6b00;         --ok:#1c7f56;'
+        || ' --info:#3c6591;        --skip:#8492a6;'
+        || ' --crit-bg:#fdecec;     --warn-bg:#fdf6e3;      --ok-bg:#e9f7f1;'
+        || ' --info-bg:#e8eef7;     --skip-bg:#eef1f4;'
+        || ' --dot-ok:#22a06b;      --dot-warn:#e2a400;'
+        || ' --dot-crit:#d63b3b;    --dot-na:#c7cfda;'
+        || ' --spark:#1f2530;       --spark-fill:rgba(31,37,48,.07);'
         -- Wait-class palette: kept in approximate parity with
         -- js_wait_colors.plsql so on-page swatches read the same as the
-        -- ECharts series. Tints are slightly muted for the warm canvas.
+        -- ECharts series.
         || ' --wc-sysio:#1F4E89;       --wc-other:#C77CB0;'
         || ' --wc-userio:#4A90D9;      --wc-commit:#E89B40;'
         || ' --wc-config:#793C32;      --wc-concurrency:#8B0000;'
@@ -46,91 +58,105 @@ BEGIN
         || ' }');
 
     -- =========================================================
-    -- Reset + body
+    -- Reset + body.  The body is a flex column (visual order of the
+    -- sections is set with order: below); the fixed sidebar is cleared
+    -- with padding-left.
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('* { box-sizing:border-box; }');
+    -- No html-level scroll-behavior:smooth: embedded webviews can stall
+    -- the smooth-scroll animation entirely (page refuses to move), and
+    -- instant anchor jumps suit an operational report better anyway.
     DBMS_OUTPUT.PUT_LINE('html,body { margin:0; padding:0; background:var(--paper); color:var(--ink); }');
     DBMS_OUTPUT.PUT_LINE('body {'
         || ' font-family:"Inter","Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;'
-        || ' font-size:15px; line-height:1.55;'
+        || ' font-size:14px; line-height:1.55;'
         || ' -webkit-font-smoothing:antialiased;'
-        || ' max-width:1180px; margin:0 auto; padding:0 56px 96px;'
-        || ' display:flex; flex-direction:column; gap:0; }');
-    DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
-        || ' body { padding:0 22px 64px; font-size:14px; } }');
+        || ' max-width:1560px; margin:0;'
+        || ' padding:0 32px 96px calc(var(--rail-w) + 32px);'
+        || ' display:flex; flex-direction:column; gap:0; align-items:stretch; }');
+    DBMS_OUTPUT.PUT_LINE('body > section, body > header.report, body > footer.report {'
+        || ' width:100%; max-width:1150px; }');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px) {'
+        || ' body { padding:0 20px 64px; } }');
 
     -- =========================================================
-    -- Visual section ordering (kept identical to the dense design,
-    -- so the editorial numerals 01..10 below match the rendered order).
+    -- Visual section ordering.  Grouped to match the sidebar rail:
+    -- Triage, Workload, SQL, Storage and config.  (The DOM order is
+    -- emission order; flex order: repaints it.)
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('header.report      { order:1; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc            { order:2; }');
+    -- Triage
     DBMS_OUTPUT.PUT_LINE('#db-time-summary   { order:3; }');
     DBMS_OUTPUT.PUT_LINE('#overview          { order:4; }');
-    DBMS_OUTPUT.PUT_LINE('#utilization       { order:5; }');
-    DBMS_OUTPUT.PUT_LINE('#ash-timeline      { order:6; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-fg          { order:7; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-bg          { order:8; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql            { order:9; }');
-    DBMS_OUTPUT.PUT_LINE('#segment-io        { order:10; }');
-    DBMS_OUTPUT.PUT_LINE('#file-io           { order:11; }');
-    DBMS_OUTPUT.PUT_LINE('#findings          { order:12; }');
-    DBMS_OUTPUT.PUT_LINE('#windows           { order:13; }');
-    DBMS_OUTPUT.PUT_LINE('#load              { order:14; }');
-    DBMS_OUTPUT.PUT_LINE('#metrics           { order:15; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql-ash        { order:16; }');
+    DBMS_OUTPUT.PUT_LINE('#ash-timeline      { order:5; }');
+    DBMS_OUTPUT.PUT_LINE('#findings          { order:6; }');
+    DBMS_OUTPUT.PUT_LINE('#windows           { order:7; }');
+    -- Workload
+    DBMS_OUTPUT.PUT_LINE('#utilization       { order:8; }');
+    DBMS_OUTPUT.PUT_LINE('#load              { order:9; }');
+    DBMS_OUTPUT.PUT_LINE('#metrics           { order:10; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-fg          { order:11; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-bg          { order:12; }');
+    -- SQL
+    DBMS_OUTPUT.PUT_LINE('#topsql            { order:13; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql-ash        { order:14; }');
+    -- Storage and config
+    DBMS_OUTPUT.PUT_LINE('#segment-io        { order:15; }');
+    DBMS_OUTPUT.PUT_LINE('#file-io           { order:16; }');
     DBMS_OUTPUT.PUT_LINE('#param-changes     { order:17; }');
     DBMS_OUTPUT.PUT_LINE('footer.report      { order:18; }');
 
     -- =========================================================
-    -- Masthead (header.report)
+    -- Masthead (header.report) -- compact identity panel at the top
+    -- of the content column: brandline, small headline, run metadata,
+    -- verdict banner, windows strip.
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('header.report {'
-        || ' background:transparent; color:var(--ink);'
-        || ' padding:56px 0 22px; margin:0;'
-        || ' border-bottom:2px solid var(--rule); }');
+        || ' background:var(--panel); color:var(--ink);'
+        || ' border:1px solid var(--hairline); border-radius:10px;'
+        || ' padding:18px 24px 16px; margin:20px 0 0; }');
     DBMS_OUTPUT.PUT_LINE('header.report .brandline {'
-        || ' font-weight:800; letter-spacing:0.02em; font-size:13px;'
-        || ' text-transform:uppercase; color:var(--ink); margin:0 0 12px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .brandline .dot { color:var(--red); margin-right:6px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .brandline .slash { color:var(--red); font-weight:800; }');
+        || ' font-weight:700; letter-spacing:0.14em; font-size:10.5px;'
+        || ' text-transform:uppercase; color:var(--muted); margin:0 0 10px; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .brandline .dot { color:var(--accent); margin-right:6px; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .brandline .slash { color:var(--accent); font-weight:700; }');
     DBMS_OUTPUT.PUT_LINE('header.report h1 {'
-        || ' font-family:"Soehne","Inter","Helvetica Neue",Helvetica,Arial,sans-serif;'
-        || ' font-weight:800; font-size:48px; line-height:1.04;'
-        || ' letter-spacing:-0.02em; margin:0; color:var(--ink); }');
+        || ' font-weight:700; font-size:24px; line-height:1.2;'
+        || ' letter-spacing:-0.01em; margin:0; color:var(--ink); }');
     DBMS_OUTPUT.PUT_LINE('header.report h1 em {'
-        || ' font-style:normal; color:var(--red); }');
+        || ' font-style:normal; color:var(--accent); }');
     DBMS_OUTPUT.PUT_LINE('header.report h1 .badge { display:none; }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
-        || ' header.report { padding:32px 0 18px; }'
-        || ' header.report h1 { font-size:32px; } }');
+        || ' header.report { padding:14px 16px; }'
+        || ' header.report h1 { font-size:19px; } }');
 
     -- Masthead .topgrid: headline left, run metadata right
     DBMS_OUTPUT.PUT_LINE('header.report .topgrid {'
         || ' display:flex; justify-content:space-between; align-items:flex-end;'
         || ' gap:24px; flex-wrap:wrap; }');
     DBMS_OUTPUT.PUT_LINE('header.report .meta {'
-        || ' text-align:right; font-size:13px; color:var(--muted);'
-        || ' line-height:1.7; min-width:240px;'
+        || ' text-align:right; font-size:12px; color:var(--muted);'
+        || ' line-height:1.65; min-width:240px;'
         || ' display:block; margin-top:0; }');
     DBMS_OUTPUT.PUT_LINE('header.report .meta div {'
         || ' color:var(--muted); }');
     DBMS_OUTPUT.PUT_LINE('header.report .meta b {'
         || ' color:var(--ink); font-weight:600; margin-right:4px; }');
 
-    -- Header windows-strip: narrow full-width DB-time timeline that
-    -- replaces the old <ul> windows-list. .strip-head holds a single
-    -- caption line; .windows-chart is the ECharts target (very short);
-    -- .windows-fallback is shown only when body.no-charts hides the
-    -- chart (offline / CDN-less) and lists windows as plain text.
+    -- Header windows-strip: narrow full-width DB-time timeline.
+    -- .strip-head holds a single caption line; .windows-chart is the
+    -- ECharts target (very short); .windows-fallback is shown only when
+    -- body.no-charts hides the chart (offline / CDN-less) and lists
+    -- windows as plain text.
     DBMS_OUTPUT.PUT_LINE('header.report .windows-strip {'
-        || ' margin-top:18px; font-size:13px; color:var(--ink-soft); }');
+        || ' margin-top:16px; font-size:13px; color:var(--ink-soft); }');
     DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .strip-head {'
         || ' display:flex; align-items:baseline; gap:10px;'
         || ' flex-wrap:wrap; margin-bottom:4px; }');
     DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .strip-head b {'
         || ' color:var(--muted); font-weight:700;'
-        || ' letter-spacing:0.08em; font-size:11px;'
+        || ' letter-spacing:0.08em; font-size:10.5px;'
         || ' text-transform:uppercase; }');
     DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .strip-meta {'
         || ' color:var(--muted); font-size:11px;'
@@ -148,18 +174,16 @@ BEGIN
         || ' color:var(--ink); font-weight:700; margin-right:4px; }');
 
     -- =========================================================
-    -- Masthead verdict: prominent severity-tinted banner emitted by
-    -- 00_params.sql from a recomputed z-score. The container carries a
-    -- v-ok / v-crit / v-skip class so the whole callout is tinted by
-    -- severity (not just the lede text), making the headline judgement
-    -- impossible to miss above the windows strip.
+    -- Masthead verdict: severity-tinted banner emitted by 00_params.sql
+    -- from a recomputed z-score. The container carries a v-ok / v-crit /
+    -- v-skip class so the whole callout is tinted by severity.
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('header.report .verdict {'
-        || ' margin-top:18px; padding:14px 18px;'
+        || ' margin-top:16px; padding:12px 16px;'
         || ' border:1px solid var(--hairline); border-left:5px solid var(--muted);'
-        || ' border-radius:10px;'
+        || ' border-radius:8px;'
         || ' background:var(--panel-2);'
-        || ' font-size:14px; color:var(--ink-soft); line-height:1.5;'
+        || ' font-size:13.5px; color:var(--ink-soft); line-height:1.5;'
         || ' display:flex; flex-wrap:wrap; align-items:center;'
         || ' column-gap:12px; row-gap:8px; }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict.v-crit {'
@@ -172,27 +196,27 @@ BEGIN
         || ' border-left-color:var(--muted);'
         || ' background:var(--skip-bg); }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .label {'
-        || ' font-size:11px; letter-spacing:0.12em; text-transform:uppercase;'
+        || ' font-size:10.5px; letter-spacing:0.12em; text-transform:uppercase;'
         || ' color:var(--muted); font-weight:700; align-self:center; }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede {'
-        || ' color:var(--ink); font-weight:800;'
-        || ' font-size:22px; letter-spacing:-0.01em; line-height:1.15;'
+        || ' color:var(--ink); font-weight:700;'
+        || ' font-size:19px; letter-spacing:-0.01em; line-height:1.15;'
         || ' text-decoration:none; }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict a.lede:hover { text-decoration:underline; }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede.crit { color:var(--crit); }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede.ok   { color:var(--ok); }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede.skip { color:var(--muted); }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .sep {'
-        || ' color:var(--red); font-weight:700; }');
+        || ' color:var(--accent); font-weight:700; }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .body { color:var(--ink-soft); }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .body a {'
-        || ' color:var(--red); text-decoration:none; font-weight:600; }');
+        || ' color:var(--accent); text-decoration:none; font-weight:600; }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .body a:hover { text-decoration:underline; }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover {'
         || ' display:inline-flex; align-items:baseline; gap:6px;'
         || ' white-space:nowrap; }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover::before {'
-        || ' content:"\2022"; color:var(--red); font-weight:700;'
+        || ' content:"\2022"; color:var(--accent); font-weight:700;'
         || ' margin-right:2px; }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .name {'
         || ' color:var(--ink); font-weight:600; }');
@@ -201,14 +225,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct.up   { color:var(--red); }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct.down { color:var(--ok); }');
 
-    -- Compact "all movers" disclosure under the verdict. The verdict
-    -- only names the top 3; this lists every metric beyond |z| > 2 in
-    -- a smaller font, collapsed by default so it stays unobtrusive.
+    -- Compact "all movers" disclosure under the verdict.
     DBMS_OUTPUT.PUT_LINE('header.report .movers-all {'
         || ' margin-top:8px; font-size:12px; color:var(--ink-soft); }');
     DBMS_OUTPUT.PUT_LINE('header.report .movers-all summary {'
         || ' cursor:pointer; user-select:none; padding:4px 0;'
-        || ' font-size:11px; letter-spacing:0.06em; text-transform:uppercase;'
+        || ' font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase;'
         || ' color:var(--muted); font-weight:700; }');
     DBMS_OUTPUT.PUT_LINE('header.report .movers-all summary:hover { color:var(--ink); }');
     DBMS_OUTPUT.PUT_LINE('header.report .movers-list {'
@@ -219,7 +241,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('header.report .movers-list li {'
         || ' display:flex; align-items:baseline; gap:8px;'
         || ' padding:2px 0; line-height:1.4;'
-        || ' border-bottom:1px solid var(--hairline); }');
+        || ' border-bottom:1px solid var(--line-soft); }');
     DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-dom {'
         || ' font-size:9px; letter-spacing:0.08em; font-weight:700;'
         || ' color:var(--muted); width:46px; flex:none; }');
@@ -235,45 +257,81 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct.down { color:var(--ok); }');
 
     -- =========================================================
-    -- Table-of-contents nav
+    -- Sidebar rail (nav.toc): fixed left column with grouped section
+    -- links.  JS in 00_params.sql prepends a status dot (span.st) to
+    -- each link from the section severity classes, and drives the
+    -- scrollspy (.on).  On narrow screens it degrades to a static
+    -- wrapping block above the content.
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('nav.toc {'
-        || ' position:sticky; top:0; z-index:10;'
-        || ' background:var(--paper);'
-        || ' border-top:1px solid var(--hairline);'
-        || ' border-bottom:1px solid var(--hairline);'
-        || ' margin:18px 0 28px; padding:12px 0;'
-        || ' font-size:12px; letter-spacing:0.04em; text-transform:uppercase;'
+        || ' position:fixed; left:0; top:0; bottom:0; z-index:10;'
+        || ' width:var(--rail-w);'
+        || ' background:var(--panel-2);'
+        || ' border-right:1px solid var(--hairline);'
+        || ' margin:0; padding:16px 12px 14px;'
+        || ' font-size:13px; letter-spacing:0; text-transform:none;'
         || ' color:var(--muted);'
-        || ' display:flex; flex-wrap:wrap; gap:14px 22px; align-items:center; }');
+        || ' display:flex; flex-direction:column; gap:2px;'
+        || ' overflow-y:auto; }');
+    -- Rail brand row (pure CSS, no markup needed)
+    DBMS_OUTPUT.PUT_LINE('nav.toc::before {'
+        || ' content:"AWR \00B7 Timeline comparison";'
+        || ' display:block; padding:2px 10px 12px;'
+        || ' font-size:11px; font-weight:700; letter-spacing:0.1em;'
+        || ' text-transform:uppercase; color:var(--ink);'
+        || ' border-bottom:1px solid var(--hairline); margin-bottom:8px; }');
+    -- Group labels
     DBMS_OUTPUT.PUT_LINE('nav.toc b {'
         || ' color:var(--muted); font-weight:700;'
-        || ' letter-spacing:0.10em; font-size:11px;'
-        || ' margin-right:4px; }');
+        || ' letter-spacing:0.14em; font-size:10px;'
+        || ' text-transform:uppercase;'
+        || ' margin:14px 10px 5px; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc b::before { content:none; }');
+    -- Section links
     DBMS_OUTPUT.PUT_LINE('nav.toc a {'
-        || ' color:var(--ink); text-decoration:none; font-weight:600;'
-        || ' transition:color .12s; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc a:hover { color:var(--red); }');
+        || ' display:flex; align-items:center; gap:9px;'
+        || ' padding:6px 10px; border-radius:7px;'
+        || ' color:var(--ink-soft); text-decoration:none; font-weight:500;'
+        || ' transition:color .12s, background .12s; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a:hover { background:var(--paper); color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a.on {'
+        || ' background:var(--accent-bg); color:var(--accent-deep);'
+        || ' font-weight:600; }');
+    -- Status dots (injected by JS; na = no signal found)
+    DBMS_OUTPUT.PUT_LINE('nav.toc a .st {'
+        || ' width:8px; height:8px; border-radius:50%; flex:none;'
+        || ' background:var(--dot-na); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a .st.ok   { background:var(--dot-ok); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a .st.warn { background:var(--dot-warn); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a .st.crit { background:var(--dot-crit); }');
 
-    -- "Application only" toggle button (lives at the right end of the nav,
-    -- pushed there by margin-left:auto). Pressed state tinted red so it is
-    -- obvious the report is in the filtered view.
+    -- "Application only" toggle button pinned to the rail foot.
     DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter {'
-        || ' margin-left:auto; font:inherit; font-size:11px; font-weight:700;'
+        || ' margin-top:auto; font:inherit; font-size:11px; font-weight:700;'
         || ' letter-spacing:0.04em; text-transform:uppercase;'
-        || ' padding:4px 12px; border-radius:999px; cursor:pointer;'
-        || ' border:1px solid var(--rule); background:transparent;'
+        || ' padding:7px 12px; border-radius:8px; cursor:pointer;'
+        || ' border:1px solid var(--rule); background:var(--panel);'
         || ' color:var(--ink); transition:color .12s,background .12s,border-color .12s; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter:hover {'
-        || ' border-color:var(--red); color:var(--red); }');
+        || ' border-color:var(--accent); color:var(--accent); }');
     DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter.active {'
-        || ' background:var(--red); border-color:var(--red); color:#fff; }');
+        || ' background:var(--accent); border-color:var(--accent); color:#fff; }');
+
+    -- Narrow screens: the rail becomes a static wrapping block.
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px) {'
+        || ' nav.toc { position:static; width:auto; overflow:visible;'
+        || '   flex-direction:row; flex-wrap:wrap; align-items:center;'
+        || '   gap:2px 10px; border-right:0;'
+        || '   border-bottom:1px solid var(--hairline);'
+        || '   border-radius:0; margin:14px 0; padding:10px 0; }'
+        || ' nav.toc::before { border-bottom:0; padding:0 8px 0 0; margin:0; }'
+        || ' nav.toc b { margin:0 4px 0 10px; }'
+        || ' nav.toc .app-filter { margin-top:0; margin-left:auto; } }');
 
     -- =========================================================
     -- "Application only" view (body.app-only).
     -- Same offline-style body-class hook as body.no-charts: a single class
-    -- on <body> drives every hide rule, toggled by the nav button. When on,
+    -- on <body> drives every hide rule, toggled by the rail button. When on,
     -- the report shows only application SQL and its directly related data
     -- (Top SQL, Top SQL ASH, Segment I/O, File I/O, Utilization) and hides
     -- all system-wide events/metrics sections plus the masthead's system
@@ -292,14 +350,16 @@ BEGIN
         || ' body.app-only header.report .verdict,'
         || ' body.app-only header.report .movers-all,'
         || ' body.app-only header.report .windows-strip { display:none; }');
-    -- Dim/remove the TOC links that point at now-hidden sections, leaving
-    -- only the ones still on screen (kept in sync with the hide rule above).
+    -- Remove the rail links that point at now-hidden sections, leaving
+    -- only the ones still on screen (kept in sync with the hide rule
+    -- above).  Group labels hide too: the survivors read as a flat list.
     DBMS_OUTPUT.PUT_LINE('body.app-only nav.toc a'
         || ':not([href="#topsql"])'
         || ':not([href="#topsql-ash"])'
         || ':not([href="#segment-io"])'
         || ':not([href="#file-io"])'
         || ':not([href="#utilization"]) { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('body.app-only nav.toc b { display:none; }');
     -- Row / card / disclosure level: hide SQL parsed by an Oracle-maintained
     -- schema (tagged data-sys="Y" by sections 06 and 11) so only application
     -- SQL remains in the tables, the per-SQL detail blocks, and the ASH cards.
@@ -308,48 +368,27 @@ BEGIN
         || ' body.app-only .ash-sql-card[data-sys="Y"] { display:none; }');
 
     -- =========================================================
-    -- Sections + numbered headings (editorial)
+    -- Sections: white panels
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('section {'
-        || ' background:transparent; border:0; padding:0;'
-        || ' margin:48px 0 0; scroll-margin-top:80px; }');
-    DBMS_OUTPUT.PUT_LINE('h1 { font-size:48px; margin:0; }');
+        || ' background:var(--panel); border:1px solid var(--hairline);'
+        || ' border-radius:10px; padding:20px 24px;'
+        || ' margin:18px 0 0; scroll-margin-top:18px; }');
+    DBMS_OUTPUT.PUT_LINE('h1 { font-size:24px; margin:0; }');
 
-    -- The section <h2> rendered as a numbered editorial heading.
-    -- The big red numeral is injected as a ::before pseudo-element;
-    -- per-section content is set further down via #id h2::before.
+    -- Section <h2>: compact panel heading (the rail does the wayfinding,
+    -- so the big editorial numerals are gone).
     DBMS_OUTPUT.PUT_LINE('h2 {'
-        || ' font-family:"Soehne","Inter","Helvetica Neue",Helvetica,Arial,sans-serif;'
-        || ' font-weight:800; font-size:26px; line-height:1.15;'
+        || ' font-weight:700; font-size:18px; line-height:1.25;'
         || ' letter-spacing:-0.01em; color:var(--ink);'
         || ' text-transform:none;'
-        || ' margin:0 0 14px; padding:0; border:0;'
-        || ' display:flex; align-items:baseline; gap:18px; }');
-    DBMS_OUTPUT.PUT_LINE('h2::before {'
-        || ' content:""; color:var(--red); font-weight:800; font-size:38px;'
-        || ' line-height:1; letter-spacing:-0.02em; min-width:56px;'
-        || ' display:inline-block; }');
+        || ' margin:0 0 12px; padding:0 0 10px; border:0;'
+        || ' border-bottom:1px solid var(--line-soft);'
+        || ' display:flex; align-items:baseline; gap:10px; }');
+    DBMS_OUTPUT.PUT_LINE('h2::before { content:none; }');
     DBMS_OUTPUT.PUT_LINE('h2::after { content:none; }');
-
-    -- Per-section numerals (visual order matches the `order:` set above).
-    DBMS_OUTPUT.PUT_LINE('#db-time-summary h2::before { content:"01"; }');
-    DBMS_OUTPUT.PUT_LINE('#overview        h2::before { content:"02"; }');
-    DBMS_OUTPUT.PUT_LINE('#utilization     h2::before { content:"03"; }');
-    DBMS_OUTPUT.PUT_LINE('#ash-timeline    h2::before { content:"04"; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-fg        h2::before { content:"05"; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-bg        h2::before { content:"06"; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql          h2::before { content:"07"; }');
-    DBMS_OUTPUT.PUT_LINE('#segment-io      h2::before { content:"08"; }');
-    DBMS_OUTPUT.PUT_LINE('#file-io         h2::before { content:"09"; }');
-    DBMS_OUTPUT.PUT_LINE('#findings        h2::before { content:"10"; }');
-    DBMS_OUTPUT.PUT_LINE('#windows         h2::before { content:"11"; }');
-    DBMS_OUTPUT.PUT_LINE('#load            h2::before { content:"12"; }');
-    DBMS_OUTPUT.PUT_LINE('#metrics         h2::before { content:"13"; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql-ash      h2::before { content:"14"; }');
-    DBMS_OUTPUT.PUT_LINE('#param-changes   h2::before { content:"15"; }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
-        || ' h2 { font-size:22px; gap:12px; }'
-        || ' h2::before { font-size:30px; min-width:42px; } }');
+        || ' h2 { font-size:16px; gap:8px; } }');
 
     -- h3: subsection (used inside Top SQL etc.)
     DBMS_OUTPUT.PUT_LINE('h3 {'
@@ -357,36 +396,36 @@ BEGIN
         || ' color:var(--muted); font-weight:700; margin:22px 0 8px; }');
 
     -- =========================================================
-    -- Tables (clean magazine-style, hairline rules)
+    -- Tables
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('table {'
         || ' width:100%; border-collapse:collapse;'
-        || ' font-size:13px; background:transparent;'
+        || ' font-size:12.5px; background:transparent;'
         || ' border:0; border-radius:0;'
-        || ' margin:14px 0 18px; }');
+        || ' margin:12px 0 16px; }');
     DBMS_OUTPUT.PUT_LINE('thead th {'
-        || ' background:transparent; color:var(--muted);'
-        || ' text-align:left; padding:10px 10px 8px;'
-        || ' font-size:11px; font-weight:700; letter-spacing:0.10em;'
+        || ' background:var(--panel-2); color:var(--muted);'
+        || ' text-align:left; padding:9px 10px 8px;'
+        || ' font-size:10.5px; font-weight:700; letter-spacing:0.09em;'
         || ' text-transform:uppercase; white-space:nowrap;'
-        || ' border-bottom:1.5px solid var(--rule); }');
+        || ' border-bottom:1px solid var(--rule); }');
     DBMS_OUTPUT.PUT_LINE('tbody td {'
-        || ' padding:9px 10px; border-bottom:1px solid var(--hairline);'
+        || ' padding:8px 10px; border-bottom:1px solid var(--line-soft);'
         || ' vertical-align:middle; }');
     DBMS_OUTPUT.PUT_LINE('tbody tr:last-child td { border-bottom:0; }');
-    DBMS_OUTPUT.PUT_LINE('tbody tr:hover { background:rgba(0,0,0,0.02); }');
+    DBMS_OUTPUT.PUT_LINE('tbody tr:hover { background:var(--panel-2); }');
     DBMS_OUTPUT.PUT_LINE('td.num, th.num {'
         || ' text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }');
     -- text-transform:none is critical: sql_ids are case-sensitive base32
-    -- hashes ("gnj0gxw60apzr" != "GNJ0GXW60APZR"), and at least one parent
-    -- selector (details summary) applies text-transform:uppercase which
-    -- would otherwise cascade in and break copy-paste back into AWR
+    -- hashes ("gnj0gxw60apzr" is not "GNJ0GXW60APZR"), and at least one
+    -- parent selector (details summary) applies text-transform:uppercase
+    -- which would otherwise cascade in and break copy-paste back into AWR
     -- queries.  Pinning it here protects every <code>/.mono usage
     -- regardless of which container it ends up in.
     DBMS_OUTPUT.PUT_LINE('td.mono, code, .mono {'
         || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
         || ' font-size:12px; text-transform:none; }');
-    DBMS_OUTPUT.PUT_LINE('td a { color:var(--red); text-decoration:none; font-weight:600; }');
+    DBMS_OUTPUT.PUT_LINE('td a { color:var(--accent); text-decoration:none; font-weight:600; }');
     DBMS_OUTPUT.PUT_LINE('td a:hover { text-decoration:underline; }');
 
     -- Severity rows: subtle tinted background + colored left rule
@@ -399,22 +438,22 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('tr.skip { color:var(--muted); font-style:italic; }');
 
     -- =========================================================
-    -- Badges
+    -- Badges: soft tinted chips (workbench style)
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('.badge {'
-        || ' display:inline-block; padding:2px 8px; border-radius:999px;'
+        || ' display:inline-block; padding:2px 8px; border-radius:6px;'
         || ' font-size:10.5px; font-weight:700; letter-spacing:0.04em;'
         || ' text-transform:uppercase; vertical-align:middle;'
         || ' border:0; }');
-    DBMS_OUTPUT.PUT_LINE('.badge.crit { background:var(--crit); color:#fff; }');
-    DBMS_OUTPUT.PUT_LINE('.badge.warn { background:var(--warn); color:#fff; }');
-    DBMS_OUTPUT.PUT_LINE('.badge.ok   { background:var(--ok);   color:#fff; }');
-    DBMS_OUTPUT.PUT_LINE('.badge.info { background:var(--info); color:#fff; }');
-    DBMS_OUTPUT.PUT_LINE('.badge.skip { background:var(--skip); color:#fff; }');
+    DBMS_OUTPUT.PUT_LINE('.badge.crit { background:var(--crit-bg); color:var(--crit); }');
+    DBMS_OUTPUT.PUT_LINE('.badge.warn { background:var(--warn-bg); color:var(--warn); }');
+    DBMS_OUTPUT.PUT_LINE('.badge.ok   { background:var(--ok-bg);   color:var(--ok); }');
+    DBMS_OUTPUT.PUT_LINE('.badge.info { background:var(--info-bg); color:var(--info); }');
+    DBMS_OUTPUT.PUT_LINE('.badge.skip { background:var(--skip-bg); color:var(--skip); }');
 
     -- Soft accent bar (legacy hook used by hero card foot deltas)
     DBMS_OUTPUT.PUT_LINE('.bar {'
-        || ' display:block; height:2px; background:var(--red);'
+        || ' display:block; height:2px; background:var(--accent);'
         || ' opacity:.55; border-radius:1px; margin-top:3px; }');
 
     -- =========================================================
@@ -434,20 +473,20 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('dl.sql-meta dd .muted { color:var(--muted); }');
 
     -- =========================================================
-    -- Top-SQL chart breakdown toggle (SQL_ID / Schema)
+    -- Top-SQL chart breakdown toggle (SQL_ID / Schema / ...)
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('.topsql-toggle {'
         || ' display:flex; align-items:center; gap:6px;'
         || ' margin:4px 0 6px; font-size:11px; color:var(--muted); }');
     DBMS_OUTPUT.PUT_LINE('.topsql-toggle button {'
         || ' font:inherit; font-size:11px; font-weight:600;'
-        || ' padding:2px 10px; border-radius:999px; cursor:pointer;'
-        || ' border:1px solid var(--border); background:transparent;'
+        || ' padding:3px 11px; border-radius:999px; cursor:pointer;'
+        || ' border:1px solid var(--hairline); background:var(--panel);'
         || ' color:var(--muted); letter-spacing:0.02em; }');
-    DBMS_OUTPUT.PUT_LINE('.topsql-toggle button:hover { color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('.topsql-toggle button:hover { color:var(--ink); border-color:var(--rule); }');
     DBMS_OUTPUT.PUT_LINE('.topsql-toggle button.active {'
-        || ' background:var(--ink); color:#fff;'
-        || ' border-color:var(--ink); }');
+        || ' background:var(--accent); color:#fff;'
+        || ' border-color:var(--accent); }');
 
     -- =========================================================
     -- Sparkline SVGs (per-row, emitted by js_sparkline.plsql)
@@ -461,7 +500,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('svg.spark .line {'
         || ' fill:none; stroke:currentColor; stroke-width:1.4;'
         || ' stroke-linecap:round; stroke-linejoin:round; }');
-    DBMS_OUTPUT.PUT_LINE('svg.spark .dot { fill:var(--red); }');
+    DBMS_OUTPUT.PUT_LINE('svg.spark .dot { fill:var(--accent); }');
     DBMS_OUTPUT.PUT_LINE('th.trend, td.trend { width:110px; padding:6px 8px; text-align:center; }');
 
     -- =========================================================
@@ -470,8 +509,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('td.cell-bar { position:relative; }');
     DBMS_OUTPUT.PUT_LINE('td.cell-bar .bg {'
         || ' position:absolute; left:0; top:0; bottom:0;'
-        || ' background:rgba(226,35,26,0.10);'
-        || ' border-right:2px solid var(--red); pointer-events:none; }');
+        || ' background:rgba(13,148,136,0.10);'
+        || ' border-right:2px solid var(--accent); pointer-events:none; }');
     DBMS_OUTPUT.PUT_LINE('td.cell-bar .v {'
         || ' position:relative; z-index:1; font-weight:600; }');
 
@@ -497,7 +536,7 @@ BEGIN
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('.chart-wrap {'
         || ' width:100%; background:var(--panel);'
-        || ' border:1px solid var(--hairline); border-radius:0;'
+        || ' border:1px solid var(--line-soft); border-radius:8px;'
         || ' padding:8px; margin:14px 0 6px; }');
     DBMS_OUTPUT.PUT_LINE('.chart-big    { height:340px; }');
     DBMS_OUTPUT.PUT_LINE('.chart-medium { height:240px; }');
@@ -508,7 +547,7 @@ BEGIN
     -- smaller stacked-area chart. Many cards stack vertically.
     DBMS_OUTPUT.PUT_LINE('.chart-ash-sql { height:220px; }');
     DBMS_OUTPUT.PUT_LINE('.ash-sql-card {'
-        || ' border:1px solid var(--hairline); border-radius:0;'
+        || ' border:1px solid var(--hairline); border-radius:8px;'
         || ' padding:12px 14px; margin:14px 0; background:var(--panel); }');
     DBMS_OUTPUT.PUT_LINE('.ash-sql-card.insufficient {'
         || ' opacity:0.65; background:transparent;'
@@ -533,34 +572,33 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.cdn-warn {'
         || ' display:none;'
         || ' background:var(--warn-bg); color:#7c5b00;'
-        || ' padding:8px 12px; border:1px solid #f0d77a; border-radius:0;'
+        || ' padding:8px 12px; border:1px solid #f0d77a; border-radius:8px;'
         || ' font-size:13px; margin:6px 0; }');
 
     -- =========================================================
     -- Overview KPI strip (#overview .hero-grid)
-    -- Editorial card grid: white panels with red sidebar stripes,
-    -- value on top, mini chart, then deltas at the foot.
+    -- Panel cards: value on top, mini chart, then deltas at the foot.
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('#overview .hero-grid {'
-        || ' display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:14px;'
+        || ' display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px;'
         || ' background:transparent; border:0; border-radius:0;'
-        || ' margin-top:14px; padding:0; }');
+        || ' margin-top:12px; padding:0; }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 900px) {'
         || ' #overview .hero-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 520px) {'
         || ' #overview .hero-grid { grid-template-columns:1fr; } }');
     DBMS_OUTPUT.PUT_LINE('.hero-card {'
-        || ' background:var(--panel);'
+        || ' background:var(--panel-2);'
         || ' border:1px solid var(--hairline);'
-        || ' padding:14px 16px;'
+        || ' padding:13px 15px;'
         || ' display:flex; flex-direction:column; gap:6px;'
         || ' position:relative; min-width:0;'
-        || ' border-radius:0; box-shadow:none; }');
+        || ' border-radius:8px; box-shadow:none; }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .label {'
-        || ' font-size:11px; text-transform:uppercase; letter-spacing:0.10em;'
+        || ' font-size:10.5px; text-transform:uppercase; letter-spacing:0.10em;'
         || ' color:var(--muted); font-weight:700; }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .value {'
-        || ' font-size:26px; font-weight:800; letter-spacing:-0.02em;'
+        || ' font-size:25px; font-weight:700; letter-spacing:-0.02em;'
         || ' line-height:1.05; color:var(--ink);'
         || ' font-variant-numeric:tabular-nums; }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .value small {'
@@ -584,7 +622,8 @@ BEGIN
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('.ribbon {'
         || ' width:100%; height:64px; margin:14px 0 8px; position:relative;'
-        || ' background:var(--panel); border:1px solid var(--hairline); }');
+        || ' background:var(--panel-2); border:1px solid var(--hairline);'
+        || ' border-radius:8px; }');
     DBMS_OUTPUT.PUT_LINE('.ribbon svg { width:100%; height:100%; display:block; }');
 
     -- =========================================================
@@ -592,10 +631,10 @@ BEGIN
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('details { margin:6px 0; }');
     DBMS_OUTPUT.PUT_LINE('details summary {'
-        || ' cursor:pointer; padding:4px 0; font-weight:600; color:var(--red);'
+        || ' cursor:pointer; padding:4px 0; font-weight:600; color:var(--accent);'
         || ' font-size:12px; letter-spacing:0.04em; text-transform:uppercase; }');
     DBMS_OUTPUT.PUT_LINE('pre.sql {'
-        || ' background:var(--panel-2); padding:12px; border-radius:0;'
+        || ' background:var(--panel-2); padding:12px; border-radius:8px;'
         || ' border:1px solid var(--hairline);'
         || ' overflow-x:auto; white-space:pre-wrap;'
         || ' font-size:12px;'
@@ -607,7 +646,7 @@ BEGIN
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('footer.report {'
         || ' color:var(--muted); font-size:12px;'
-        || ' margin-top:80px; padding:22px 0 0;'
+        || ' margin-top:48px; padding:18px 4px 0;'
         || ' border-top:1px solid var(--hairline); }');
 
     -- =========================================================
@@ -616,7 +655,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('@media print {'
         || ' nav.toc { display:none; position:static; }'
         || ' body { max-width:none; padding:0 0 24px; background:#fff; }'
-        || ' header.report { padding-top:0; }'
+        || ' section { border:0; padding:12px 0; }'
+        || ' header.report { border:0; padding-top:0; }'
         || ' .chart-wrap { break-inside:avoid; }'
         || ' h2 { break-after:avoid; }'
         || ' }');

@@ -160,7 +160,7 @@ text, event/metric names) in `DBMS_XMLGEN.CONVERT(...)`.
   only appends "all DBIDs …" when the list has a comma — don't "simplify" that.
 
 ### "Application only" filter (`body.app-only`)
-A client-side toggle in the sticky nav (`#app-filter-toggle`, emitted by
+A client-side toggle in the sidebar rail (`#app-filter-toggle`, emitted by
 `00_params.sql`) that flips `body.app-only` — same body-class hook pattern as
 `body.no-charts`, so it's purely CSS-driven and ships in every report (no DEFINE,
 no wrapper change). When on it shows only application SQL and its directly
