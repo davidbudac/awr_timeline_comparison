@@ -261,26 +261,27 @@ BEGIN
            COUNT(CASE WHEN week_offset > 0 AND NVL(total_waits, 0) > 0
                        AND time_waited_us IS NOT NULL
                       THEN 1 END)                                     AS n_ms,
-           LISTAGG(CASE WHEN time_waited_us IS NULL THEN ''
-                        ELSE TO_CHAR(time_waited_us/1e6, 'FM99999999990D000000',
-                                     'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
-               WITHIN GROUP (ORDER BY week_offset DESC) AS spark_vals,
-           LISTAGG(CASE WHEN time_waited_us IS NULL OR NVL(total_waits, 0) = 0 THEN ''
+           -- ','||token + SUBSTR: LISTAGG drops NULL measures (and their
+           -- delimiter), which would left-compact the CSV and misalign the
+           -- positional slots; ','||NULL = ',' keeps the empty slot.
+           SUBSTR(LISTAGG(',' || TO_CHAR(time_waited_us/1e6, 'FM99999999990D000000',
+                                         'NLS_NUMERIC_CHARACTERS=''.,'''))
+               WITHIN GROUP (ORDER BY week_offset DESC), 2) AS spark_vals,
+           SUBSTR(LISTAGG(',' || CASE WHEN NVL(total_waits, 0) = 0 THEN NULL
                         ELSE TO_CHAR(time_waited_us/total_waits/1000,
                                      'FM99999999990D000000',
-                                     'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
-               WITHIN GROUP (ORDER BY week_offset DESC) AS spark_ms_vals,
-           LISTAGG(CASE WHEN time_waited_us IS NULL THEN ''
-                        ELSE TO_CHAR(time_waited_us/1e6, 'FM99999999990D000000',
-                                     'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
-               WITHIN GROUP (ORDER BY week_offset ASC) AS week_us_vals,
-           LISTAGG(CASE WHEN time_waited_us IS NULL OR NVL(total_waits, 0) = 0 THEN ''
+                                     'NLS_NUMERIC_CHARACTERS=''.,''') END)
+               WITHIN GROUP (ORDER BY week_offset DESC), 2) AS spark_ms_vals,
+           SUBSTR(LISTAGG(',' || TO_CHAR(time_waited_us/1e6, 'FM99999999990D000000',
+                                         'NLS_NUMERIC_CHARACTERS=''.,'''))
+               WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_us_vals,
+           SUBSTR(LISTAGG(',' || CASE WHEN NVL(total_waits, 0) = 0 THEN NULL
                         ELSE TO_CHAR(time_waited_us/total_waits/1000,
                                      'FM99999999990D000000',
-                                     'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
-               WITHIN GROUP (ORDER BY week_offset ASC) AS week_ms_vals,
-           LISTAGG(CASE WHEN rnk IS NULL THEN '' ELSE TO_CHAR(rnk) END, ',')
-               WITHIN GROUP (ORDER BY week_offset ASC) AS week_rnk_vals
+                                     'NLS_NUMERIC_CHARACTERS=''.,''') END)
+               WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_ms_vals,
+           SUBSTR(LISTAGG(',' || TO_CHAR(rnk))
+               WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_rnk_vals
     BULK COLLECT INTO v_evts
     FROM   grid
     GROUP BY event_name
@@ -432,10 +433,11 @@ BEGIN
            STDDEV(CASE WHEN week_offset > 0 THEN time_waited_us END) AS sd_us,
            COUNT(CASE WHEN week_offset > 0 AND time_waited_us IS NOT NULL
                       THEN 1 END)                                     AS n_us,
-           LISTAGG(CASE WHEN time_waited_us IS NULL THEN ''
-                        ELSE TO_CHAR(time_waited_us/1e6, 'FM99999999990D000000',
-                                     'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
-               WITHIN GROUP (ORDER BY week_offset ASC) AS week_vals
+           -- ','||token + SUBSTR: keeps empty slots (LISTAGG drops NULL
+           -- measures; see the event query above).
+           SUBSTR(LISTAGG(',' || TO_CHAR(time_waited_us/1e6, 'FM99999999990D000000',
+                                         'NLS_NUMERIC_CHARACTERS=''.,'''))
+               WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_vals
     BULK COLLECT INTO v_classes
     FROM   grid
     GROUP BY wait_class

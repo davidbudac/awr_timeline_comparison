@@ -119,6 +119,21 @@ for d in sql/lib/templates/*/; do
     done
 done
 
+# ----------------------------------------------------------------------
+# 9. LISTAGG drops NULL measures outright -- no token, no delimiter -- so
+#    aggregating a nullable token as LISTAGG(CASE ... THEN '' ...) left-
+#    compacts the positional per-week CSV and silently shifts every later
+#    slot (values render under the wrong week; chart points drift to the
+#    wrong window).  Emitters must fold the delimiter into the measure:
+#    SUBSTR(LISTAGG(','||token) WITHIN GROUP (...), 2).  A non-null
+#    sentinel token like THEN 'null' is fine.  See sql/lib/nth_csv.plsql.
+# ----------------------------------------------------------------------
+while IFS= read -r loc; do
+    finding listagg-null-token "$loc" \
+        "nullable LISTAGG token ('' is NULL; LISTAGG drops it and its delimiter, misaligning the positional CSV); use SUBSTR(LISTAGG(','||token) ..., 2) -- see sql/lib/nth_csv.plsql"
+done < <(sql_files | xargs grep -n -A4 'LISTAGG *(' /dev/null 2>/dev/null \
+         | grep "THEN ''" | sed -E 's/^([^:-]+)[:-]([0-9]+)[:-].*/\1:\2/' | sort -u)
+
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"
 fi

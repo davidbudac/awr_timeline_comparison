@@ -160,10 +160,12 @@ BEGIN
                             ELSE TO_CHAR(val, 'FM99999999990D000000',
                                          'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
                    WITHIN GROUP (ORDER BY week_offset DESC) AS vals_csv,
-               (SELECT LISTAGG(CASE WHEN d.delta_pct IS NULL THEN ''
-                                    ELSE TO_CHAR(d.delta_pct, 'FM99999999990D000000',
-                                                 'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
-                       WITHIN GROUP (ORDER BY d.week_offset DESC)
+               -- ','||token + SUBSTR: LISTAGG drops NULL measures (and their
+               -- delimiter), which would left-compact the CSV and misalign
+               -- the positional slots; ','||NULL = ',' keeps the empty slot.
+               (SELECT SUBSTR(LISTAGG(',' || TO_CHAR(d.delta_pct, 'FM99999999990D000000',
+                                                     'NLS_NUMERIC_CHARACTERS=''.,'''))
+                       WITHIN GROUP (ORDER BY d.week_offset DESC), 2)
                 FROM   deltas d
                 WHERE  d.pos = grid.pos
                   AND  d.week_offset < ~weeks_back) AS deltas_csv

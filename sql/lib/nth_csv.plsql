@@ -6,6 +6,16 @@
 -- a render loop to emit one <td> per week.  INSTR-based (not
 -- REGEXP_SUBSTR) so empty tokens between commas are preserved.
 --
+-- EMITTER CONTRACT: LISTAGG drops NULL measures outright -- no token,
+-- no delimiter -- so LISTAGG(nullable_token, ',') left-compacts the CSV
+-- and silently shifts every later slot.  Emitters must fold the
+-- delimiter into the measure and strip the leading one:
+--
+--   SUBSTR(LISTAGG(',' || nullable_token) WITHIN GROUP (...), 2)
+--
+-- because ','||NULL = ',' still contributes the empty slot.  lint.sh
+-- rejects the bare LISTAGG(CASE...) form.
+--
 -- Usage: include this file *inside* a section's DECLARE block, BEFORE
 -- the BEGIN keyword:
 --

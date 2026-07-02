@@ -236,13 +236,16 @@ BEGIN
                    MAX(CASE WHEN week_offset = 0 THEN rnk END)          AS cur_rnk,
                    MIN(rnk) AS best_rank,
                    MAX(metric_value) AS best_value,
-                   LISTAGG(CASE WHEN metric_value IS NULL THEN ''
-                                ELSE RTRIM(TO_CHAR(ROUND(metric_value, 1),
-                                           'FM99999999999999990D9',
-                                           'NLS_NUMERIC_CHARACTERS=''.,'''), '.') END, ',')
-                       WITHIN GROUP (ORDER BY week_offset ASC) AS week_vals,
-                   LISTAGG(CASE WHEN rnk IS NULL THEN '' ELSE TO_CHAR(rnk) END, ',')
-                       WITHIN GROUP (ORDER BY week_offset ASC) AS week_rnks
+                   -- ','||token + SUBSTR: LISTAGG drops NULL measures (and
+                   -- their delimiter), which would left-compact the CSV and
+                   -- misalign the positional slots; ','||NULL = ',' keeps
+                   -- the empty slot.
+                   SUBSTR(LISTAGG(',' || RTRIM(TO_CHAR(ROUND(metric_value, 1),
+                                               'FM99999999999999990D9',
+                                               'NLS_NUMERIC_CHARACTERS=''.,'''), '.'))
+                       WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_vals,
+                   SUBSTR(LISTAGG(',' || TO_CHAR(rnk))
+                       WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_rnks
             FROM   grid
             GROUP BY dim, filename
         )
@@ -469,13 +472,13 @@ BEGIN
                    MAX(CASE WHEN week_offset = 0 THEN rnk END)          AS cur_rnk,
                    MIN(rnk)          AS best_rank,
                    MAX(metric_value) AS best_value,
-                   LISTAGG(CASE WHEN metric_value IS NULL THEN ''
-                                ELSE RTRIM(TO_CHAR(ROUND(metric_value, 1),
-                                           'FM99999999999999990D9',
-                                           'NLS_NUMERIC_CHARACTERS=''.,'''), '.') END, ',')
-                       WITHIN GROUP (ORDER BY week_offset ASC) AS week_vals,
-                   LISTAGG(CASE WHEN rnk IS NULL THEN '' ELSE TO_CHAR(rnk) END, ',')
-                       WITHIN GROUP (ORDER BY week_offset ASC) AS week_rnks
+                   -- ','||token + SUBSTR: keeps empty slots (see per_file).
+                   SUBSTR(LISTAGG(',' || RTRIM(TO_CHAR(ROUND(metric_value, 1),
+                                               'FM99999999999999990D9',
+                                               'NLS_NUMERIC_CHARACTERS=''.,'''), '.'))
+                       WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_vals,
+                   SUBSTR(LISTAGG(',' || TO_CHAR(rnk))
+                       WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_rnks
             FROM   grid
             GROUP BY dim, filetype_name
         )

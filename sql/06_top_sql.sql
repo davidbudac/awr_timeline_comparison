@@ -256,15 +256,17 @@ BEGIN
                    MAX(CASE WHEN week_offset = 0 THEN plan_hash_value END)  AS cur_phv,
                    MIN(rnk) AS best_rank,
                    MAX(metric_value) AS best_value,
-                   LISTAGG(CASE WHEN metric_value IS NULL THEN ''
-                                ELSE TO_CHAR(metric_value, 'FM99999999999999990D000000',
-                                             'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
-                       WITHIN GROUP (ORDER BY week_offset ASC) AS week_vals,
-                   LISTAGG(CASE WHEN rnk IS NULL THEN '' ELSE TO_CHAR(rnk) END, ',')
-                       WITHIN GROUP (ORDER BY week_offset ASC) AS week_rnks,
-                   LISTAGG(CASE WHEN plan_hash_value IS NULL THEN ''
-                                ELSE TO_CHAR(plan_hash_value) END, ',')
-                       WITHIN GROUP (ORDER BY week_offset ASC) AS week_phvs
+                   -- ','||token folded into the measure + SUBSTR(...,2):
+                   -- LISTAGG drops NULL measures (and their delimiter), which
+                   -- would left-compact the CSV and break nth_csv slot
+                   -- positions; ','||NULL = ',' keeps the empty slot.
+                   SUBSTR(LISTAGG(',' || TO_CHAR(metric_value, 'FM99999999999999990D000000',
+                                                 'NLS_NUMERIC_CHARACTERS=''.,'''))
+                       WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_vals,
+                   SUBSTR(LISTAGG(',' || TO_CHAR(rnk))
+                       WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_rnks,
+                   SUBSTR(LISTAGG(',' || TO_CHAR(plan_hash_value))
+                       WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_phvs
             FROM   grid
             GROUP BY dim, sql_id
         ),
@@ -581,10 +583,11 @@ BEGIN
                    MAX(CASE WHEN week_offset = 0 THEN rnk END) AS cur_rnk,
                    MIN(rnk)          AS best_rank,
                    MAX(metric_value) AS best_value,
-                   LISTAGG(CASE WHEN metric_value IS NULL THEN ''
-                                ELSE TO_CHAR(metric_value, 'FM99999999999999990D000000',
-                                             'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
-                       WITHIN GROUP (ORDER BY week_offset ASC) AS week_vals
+                   -- ','||token + SUBSTR: LISTAGG drops NULL measures; the
+                   -- folded delimiter keeps empty slots (see per_sql above).
+                   SUBSTR(LISTAGG(',' || TO_CHAR(metric_value, 'FM99999999999999990D000000',
+                                                 'NLS_NUMERIC_CHARACTERS=''.,'''))
+                       WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_vals
             FROM   grid
             GROUP BY dim, grp_type, grp_value
         )

@@ -221,7 +221,14 @@ separate slice. Per-row CSVs via `LISTAGG(... ORDER BY week_offset DESC)`
 `Number()` parses under any NLS. Sparkline JS has a 2% flatness floor (renders a
 midline instead of magnifying noise). Sections that re-grid one column per week
 parse the CSV with `nth_csv` (INSTR-based, preserves empty tokens; `@@`-included
-just before `BEGIN`).
+just before `BEGIN`). These CSVs are **positional** (slot k = kth week in the
+ORDER BY) and LISTAGG drops NULL measures *and their delimiter*, so a nullable
+token must fold the delimiter into the measure —
+`SUBSTR(LISTAGG(','||token) WITHIN GROUP (...), 2)` — because a bare
+`LISTAGG(CASE…THEN ''…, ',')` left-compacts the CSV and renders values under
+the wrong week / drifts chart points to the wrong window (lint check
+`listagg-null-token`; emitter contract documented in `sql/lib/nth_csv.plsql`).
+A non-null sentinel token like `THEN 'null'` is fine.
 
 ### `ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,'` is load-bearing
 The driver pins it right after the `WHENEVER` directives. `step_hours` round-trips
@@ -338,6 +345,15 @@ in prose; keep `~name` out of comments (use the bare name).
   `td.chg`, neutral on skip-only Top SQL ASH), scrollspy tracks and re-runs
   on `awr:appfilter` (skips hidden sections), app-only keeps exactly the 5
   sections, masthead chart series emit teal (`#0d9488`), <980px fallback OK.
+- **LISTAGG positional-CSV fix verified on dbmint (2026-07-02, hourly window
+  `target_end='2026-06-30 14:00'` win=1h weeks_back=4):** unit probe on 19.27
+  confirmed LISTAGG drops NULL measures (`11,33,44` vs the folded-delimiter
+  `,11,,33,44`); pre-fix vs post-fix reports at the same wall-clock: post has
+  126/126 sparklines with exactly weeks_back+1 slots (pre: 23 compacted),
+  section 06 phantom series — a value plotted at the wrong window for a SQL
+  with no current-window rank — went 82 → 0 across all dims, and every one of
+  the 454 differing lines was a CSV/series/table-cell realignment (no
+  collateral output change; gap-free rows byte-identical).
 
 ## Things NOT to do
 

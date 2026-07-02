@@ -121,14 +121,15 @@ BEGIN
                MAX(metric_unit) AS metric_unit,
                MAX(CASE WHEN week_offset = 0 THEN avg_value END) AS cur_val,
                MAX(avg_value) AS row_max,
-               LISTAGG(CASE WHEN avg_value IS NULL THEN ''
-                            ELSE TO_CHAR(avg_value, 'FM99999999990D000000',
-                                         'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
-                   WITHIN GROUP (ORDER BY week_offset DESC) AS spark_vals,
-               LISTAGG(CASE WHEN avg_value IS NULL THEN ''
-                            ELSE TO_CHAR(avg_value, 'FM99999999990D000000',
-                                         'NLS_NUMERIC_CHARACTERS=''.,''') END, ',')
-                   WITHIN GROUP (ORDER BY week_offset ASC) AS week_vals
+               -- ','||token + SUBSTR: LISTAGG drops NULL measures (and their
+               -- delimiter), which would left-compact the CSV and misalign
+               -- the positional slots; ','||NULL = ',' keeps the empty slot.
+               SUBSTR(LISTAGG(',' || TO_CHAR(avg_value, 'FM99999999990D000000',
+                                             'NLS_NUMERIC_CHARACTERS=''.,'''))
+                   WITHIN GROUP (ORDER BY week_offset DESC), 2) AS spark_vals,
+               SUBSTR(LISTAGG(',' || TO_CHAR(avg_value, 'FM99999999990D000000',
+                                             'NLS_NUMERIC_CHARACTERS=''.,'''))
+                   WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_vals
         FROM   grid
         GROUP BY grp_ord, grp_label, met_ord, metric_name, disp_label
         ORDER BY grp_ord, met_ord
