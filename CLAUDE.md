@@ -331,6 +331,13 @@ in prose; keep `~name` out of comments (use the bare name).
   Sections 14/15 and the "By physical reads" dim also ran clean in that
   report — still unexercised against a *busy* DB (real segment/file I/O
   volume, app-set module/action); multi-DBID still needs a migrated PDB.
+- **Workbench restyle verified end-to-end on dbmint (2026-07-02, hourly
+  window `target_end='2026-06-30 14:00'`):** clean run, no ORA-; fixed rail
+  with status dots graded from real section content (crit on
+  findings/overview/waits via sparkline tints, warn on parameters via
+  `td.chg`, neutral on skip-only Top SQL ASH), scrollspy tracks and re-runs
+  on `awr:appfilter` (skips hidden sections), app-only keeps exactly the 5
+  sections, masthead chart series emit teal (`#0d9488`), <980px fallback OK.
 
 ## Things NOT to do
 
