@@ -322,7 +322,7 @@ BEGIN
             v_dim_sqls_kept(s.dim)     := 0;
             v_dim_sqls_total(s.dim)    := 0;
 
-            DBMS_OUTPUT.PUT_LINE('<h3 style="margin-top:18px">' || s.dim_label || '</h3>');
+            DBMS_OUTPUT.PUT_LINE('<h3>' || s.dim_label || '</h3>');
             DBMS_OUTPUT.PUT_LINE('<div class="topsql-toggle" data-topsql-target="' || s.dim || '">'
                 || '<span>Break down by:</span>'
                 || '<button type="button" data-mode="sqls" class="active">SQL_ID</button>'
@@ -334,7 +334,7 @@ BEGIN
                 || s.dim || '"></div>');
 
             DBMS_OUTPUT.PUT_LINE('<details>');
-            DBMS_OUTPUT.PUT_LINE('<summary>' || s.dim_label || ' &mdash; detail table</summary>');
+            DBMS_OUTPUT.PUT_LINE('<summary>Detail table</summary>');
 
             v_header := '<thead><tr><th>SQL_ID</th><th class="num">PHV (cur)</th>'
                 || '<th class="num">Current (' || s.dim_unit || ')</th>';
@@ -823,7 +823,7 @@ BEGIN
     -- (x=snap end time, y=avg s/exec, color=plan_hash_value), and the
     -- full SQL text. The aim is to let a reader visually correlate
     -- performance changes in the dimension tables with plan switches.
-    DBMS_OUTPUT.PUT_LINE('<h3 style="margin-top:18px">Per-SQL detail</h3>');
+    DBMS_OUTPUT.PUT_LINE('<h3>Per-SQL detail</h3>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'Per SQL_ID listed above: full text, AWR retention range, '
         || 'plan_hash_value summary, and avg sec/exec colored by PHV across '

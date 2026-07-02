@@ -275,7 +275,7 @@ BEGIN
             v_dim_ftypes_kept(s.dim)  := 0;
             v_dim_ftypes_total(s.dim) := 0;
 
-            DBMS_OUTPUT.PUT_LINE('<h3 style="margin-top:18px">' || s.dim_label || '</h3>');
+            DBMS_OUTPUT.PUT_LINE('<h3>' || s.dim_label || '</h3>');
             DBMS_OUTPUT.PUT_LINE('<div class="topsql-toggle" data-fileio-target="' || s.dim || '">'
                 || '<span>Break down by:</span>'
                 || '<button type="button" data-mode="files" class="active">File</button>'
@@ -285,7 +285,7 @@ BEGIN
                 || s.dim || '"></div>');
 
             DBMS_OUTPUT.PUT_LINE('<details>');
-            DBMS_OUTPUT.PUT_LINE('<summary>' || s.dim_label || ' &mdash; detail table</summary>');
+            DBMS_OUTPUT.PUT_LINE('<summary>Detail table</summary>');
 
             v_header := '<thead><tr><th>File</th><th>Tablespace</th>'
                 || '<th class="num">Current (' || s.dim_unit || ')</th>';

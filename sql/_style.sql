@@ -390,10 +390,26 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
         || ' h2 { font-size:16px; gap:8px; } }');
 
-    -- h3: subsection (used inside Top SQL etc.)
+    -- h3: subsection header (chart-group headers in Top SQL / segment I/O /
+    -- file I/O, severity-group headers in Findings). Sized/colored to read
+    -- as a real heading so it outranks the <details> summary sitting right
+    -- below it in the same block, which also carries the accent color; the
+    -- accent tick echoes the rail's status-dot language.
     DBMS_OUTPUT.PUT_LINE('h3 {'
-        || ' font-size:11px; letter-spacing:0.10em; text-transform:uppercase;'
-        || ' color:var(--muted); font-weight:700; margin:22px 0 8px; }');
+        || ' font-size:13.5px; letter-spacing:0.03em; text-transform:uppercase;'
+        || ' color:var(--ink); font-weight:800; margin:28px 0 10px;'
+        || ' display:flex; align-items:center; gap:8px; }');
+    DBMS_OUTPUT.PUT_LINE('h3::before {'
+        || ' content:""; width:3px; height:12px; flex:none;'
+        || ' background:var(--accent); border-radius:1px; }');
+
+    -- Divider before each repeat chart-group block (Top SQL / segment I/O /
+    -- file I/O): a rule + extra top space between one dimension's
+    -- chart+detail-table and the next, without touching the section's
+    -- first h3 (which follows the intro <p>, not a </details>).
+    DBMS_OUTPUT.PUT_LINE('details + h3 {'
+        || ' margin-top:36px; padding-top:24px;'
+        || ' border-top:1px solid var(--hairline); }');
 
     -- =========================================================
     -- Tables
@@ -477,7 +493,7 @@ BEGIN
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('.topsql-toggle {'
         || ' display:flex; align-items:center; gap:6px;'
-        || ' margin:4px 0 6px; font-size:11px; color:var(--muted); }');
+        || ' margin:10px 0 6px; font-size:11px; color:var(--muted); }');
     DBMS_OUTPUT.PUT_LINE('.topsql-toggle button {'
         || ' font:inherit; font-size:11px; font-weight:600;'
         || ' padding:3px 11px; border-radius:999px; cursor:pointer;'
