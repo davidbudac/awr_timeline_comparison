@@ -25,26 +25,27 @@ BEGIN
     -- Design tokens
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE(':root {'
-        || ' --paper:#eef1f4;       --panel:#ffffff;        --panel-2:#f7f9fb;'
-        || ' --ink:#1f2530;         --ink-soft:#3b4454;     --muted:#5b6a80;'
-        || ' --rule:#c8d2dd;        --hairline:#dde3ea;     --line-soft:#e9eef3;'
-        || ' --red:#d63b3b;         --red-deep:#b42121;     --chip-bg:#f0f4f8;'
-        || ' --track:#e6ebf1;'
-        || ' --accent:#0d9488;      --accent-deep:#0b3f39;  --accent-bg:#e2ecea;'
+        || ' --paper:#eceef1;       --panel:#ffffff;        --panel-2:#f4f6f8;'
+        || ' --ink:#12161d;         --ink-soft:#333a45;     --muted:#5d6672;'
+        || ' --rule:#c4ccd6;        --hairline:#d9dfe6;     --line-soft:#e8ecf1;'
+        || ' --red:#c62828;         --red-deep:#a01c1c;     --chip-bg:#eef1f5;'
+        || ' --track:#e2e7ee;'
+        || ' --cell-bar-bg:rgba(31,95,168,0.10);'
+        || ' --accent:#1f5fa8;      --accent-deep:#123a68;  --accent-bg:#e0eaf4;'
         || ' --accent-2:#3c6591;'
         || ' --rail-w:236px;'
         -- Read by the chart-init scripts (sections 04-15 and
         -- js_markers.plsql read fg/border for axis text and gridlines;
         -- 08 reads crit-fg/warn-fg for severity-tinted hero minis).
-        || ' --fg:#3b4454;           --border:#dde3ea;'
-        || ' --crit-fg:#b42121;      --warn-fg:#9a6b00;'
-        || ' --crit:#b42121;        --warn:#9a6b00;         --ok:#1c7f56;'
-        || ' --info:#3c6591;        --skip:#8492a6;'
-        || ' --crit-bg:#fdecec;     --warn-bg:#fdf6e3;      --ok-bg:#e9f7f1;'
-        || ' --info-bg:#e8eef7;     --skip-bg:#eef1f4;'
-        || ' --dot-ok:#22a06b;      --dot-warn:#e2a400;'
-        || ' --dot-crit:#d63b3b;    --dot-na:#c7cfda;'
-        || ' --spark:#1f2530;       --spark-fill:rgba(31,37,48,.07);'
+        || ' --fg:#333a45;           --border:#d9dfe6;'
+        || ' --crit-fg:#a01c1c;      --warn-fg:#8a5a00;'
+        || ' --crit:#b01c1c;        --warn:#8a5a00;         --ok:#1f7a4d;'
+        || ' --info:#2f6fb0;        --skip:#7a828e;'
+        || ' --crit-bg:#fbeceb;     --warn-bg:#faf2df;      --ok-bg:#e8f3ed;'
+        || ' --info-bg:#e7eef7;     --skip-bg:#eef1f4;'
+        || ' --dot-ok:#1f9d63;      --dot-warn:#d99a1a;'
+        || ' --dot-crit:#c62828;    --dot-na:#c1c9d3;'
+        || ' --spark:#12161d;       --spark-fill:rgba(18,22,29,.07);'
         -- Wait-class palette: kept in approximate parity with
         -- js_wait_colors.plsql so on-page swatches read the same as the
         -- ECharts series.
@@ -56,6 +57,33 @@ BEGIN
         || ' --wc-sched:#88C070;       --wc-queue:#E89BB7;'
         || ' --wc-cpu:#3FB344;'
         || ' }');
+
+    -- =========================================================
+    -- Dark palette (Slate Instrument, dark). Screen-only override of the
+    -- same token set via body.dark; wrapped in @media screen so print
+    -- output always uses the light palette above with zero duplication.
+    -- Does not redeclare --wc-* (wait-class palette, kept in parity with
+    -- js_wait_colors.plsql) or --rail-w (layout, not a color).
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('@media screen { body.dark {'
+        || ' --paper:#0f1319;       --panel:#161b23;        --panel-2:#1d232d;'
+        || ' --ink:#e7ecf2;         --ink-soft:#bcc5d1;     --muted:#8591a0;'
+        || ' --rule:#333d49;        --hairline:#2a323d;     --line-soft:#232a34;'
+        || ' --red:#e5675c;         --red-deep:#f0837a;     --chip-bg:#1d232d;'
+        || ' --track:#2a323d;'
+        || ' --cell-bar-bg:rgba(91,155,216,0.16);'
+        || ' --accent:#5b9bd8;      --accent-deep:#c4dbf2;  --accent-bg:#18314a;'
+        || ' --accent-2:#7ea6cf;'
+        || ' --fg:#bcc5d1;           --border:#2a323d;'
+        || ' --crit-fg:#e5675c;      --warn-fg:#e0a53a;'
+        || ' --crit:#e5675c;        --warn:#e0a53a;         --ok:#43bb82;'
+        || ' --info:#6fa8dc;        --skip:#8591a0;'
+        || ' --crit-bg:#2b1a1a;     --warn-bg:#2a2413;      --ok-bg:#15271e;'
+        || ' --info-bg:#172431;     --skip-bg:#1d232d;'
+        || ' --dot-ok:#43bb82;      --dot-warn:#e0a53a;'
+        || ' --dot-crit:#e5675c;    --dot-na:#3a4350;'
+        || ' --spark:#e7ecf2;       --spark-fill:rgba(231,236,242,.10);'
+        || ' } }');
 
     -- =========================================================
     -- Reset + body.  The body is a flex column (visual order of the
@@ -305,16 +333,21 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('nav.toc a .st.warn { background:var(--dot-warn); }');
     DBMS_OUTPUT.PUT_LINE('nav.toc a .st.crit { background:var(--dot-crit); }');
 
-    -- "Application only" toggle button pinned to the rail foot.
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter {'
-        || ' margin-top:auto; font:inherit; font-size:11px; font-weight:700;'
+    -- Rail foot wrapper: holds the theme-toggle and app-filter buttons
+    -- together, pinned to the bottom of the rail.
+    DBMS_OUTPUT.PUT_LINE('nav.toc .rail-foot {'
+        || ' margin-top:auto; display:flex; flex-direction:column; gap:6px; }');
+
+    -- "Application only" / "Dark mode" toggle buttons in the rail foot.
+    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter, nav.toc .theme-toggle {'
+        || ' font:inherit; font-size:11px; font-weight:700;'
         || ' letter-spacing:0.04em; text-transform:uppercase;'
         || ' padding:7px 12px; border-radius:8px; cursor:pointer;'
         || ' border:1px solid var(--rule); background:var(--panel);'
         || ' color:var(--ink); transition:color .12s,background .12s,border-color .12s; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter:hover {'
+    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter:hover, nav.toc .theme-toggle:hover {'
         || ' border-color:var(--accent); color:var(--accent); }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter.active {'
+    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter.active, nav.toc .theme-toggle.active {'
         || ' background:var(--accent); border-color:var(--accent); color:#fff; }');
 
     -- Narrow screens: the rail becomes a static wrapping block.
@@ -326,7 +359,7 @@ BEGIN
         || '   border-radius:0; margin:14px 0; padding:10px 0; }'
         || ' nav.toc::before { border-bottom:0; padding:0 8px 0 0; margin:0; }'
         || ' nav.toc b { margin:0 4px 0 10px; }'
-        || ' nav.toc .app-filter { margin-top:0; margin-left:auto; } }');
+        || ' nav.toc .rail-foot { margin-top:0; margin-left:auto; flex-direction:row; } }');
 
     -- =========================================================
     -- "Application only" view (body.app-only).
@@ -525,7 +558,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('td.cell-bar { position:relative; }');
     DBMS_OUTPUT.PUT_LINE('td.cell-bar .bg {'
         || ' position:absolute; left:0; top:0; bottom:0;'
-        || ' background:rgba(13,148,136,0.10);'
+        || ' background:var(--cell-bar-bg);'
         || ' border-right:2px solid var(--accent); pointer-events:none; }');
     DBMS_OUTPUT.PUT_LINE('td.cell-bar .v {'
         || ' position:relative; z-index:1; font-weight:600; }');

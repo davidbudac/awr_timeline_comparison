@@ -450,6 +450,11 @@ BEGIN
     -- =========================================================
     -- Editorial masthead (header.report)
     -- =========================================================
+    -- Early theme script: must run before the masthead chart IIFE below
+    -- (which reads --accent/--muted via getComputedStyle) so charts pick
+    -- up the correct palette at first paint. Applies the saved/preferred
+    -- theme by toggling body.dark before any chart initializes.
+    DBMS_OUTPUT.PUT_LINE('<script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.body.classList.add("dark");}catch(e){}})();</script>');
     DBMS_OUTPUT.PUT_LINE('<header class="report">');
 
     -- Brand line above the headline.
@@ -670,9 +675,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('if(!d.times.length){el.style.display="none"; return;}');
     DBMS_OUTPUT.PUT_LINE('var cs=getComputedStyle(document.body);');
     DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
-    DBMS_OUTPUT.PUT_LINE('var red=cs.getPropertyValue("--accent").trim()||"#0d9488";');
+    DBMS_OUTPUT.PUT_LINE('var red=cs.getPropertyValue("--accent").trim()||"#1f5fa8";');
     DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
-    DBMS_OUTPUT.PUT_LINE('var bandCurrent="rgba(13,148,136,0.20)", bandPrior="rgba(100,116,139,0.10)";');
+    DBMS_OUTPUT.PUT_LINE('var bandCurrent="rgba(31,95,168,0.18)", bandPrior="rgba(100,116,139,0.10)";');
     DBMS_OUTPUT.PUT_LINE('var markAreaData=(d.windows||[]).map(function(w){return [');
     DBMS_OUTPUT.PUT_LINE('  {xAxis:w[0],itemStyle:{color:w[2]==="current"?bandCurrent:bandPrior},');
     DBMS_OUTPUT.PUT_LINE('   label:{show:true,position:"insideTop",color:mu,fontSize:9,formatter:w[2],distance:1}},');
@@ -691,7 +696,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    name:"DB time",type:"line",smooth:true,symbol:"none",');
     DBMS_OUTPUT.PUT_LINE('    data:d.vals,');
     DBMS_OUTPUT.PUT_LINE('    lineStyle:{width:1.2,color:red},');
-    DBMS_OUTPUT.PUT_LINE('    areaStyle:{color:"rgba(13,148,136,0.07)"},');
+    DBMS_OUTPUT.PUT_LINE('    areaStyle:{color:"rgba(31,95,168,0.08)"},');
     DBMS_OUTPUT.PUT_LINE('    markArea:{silent:true,data:markAreaData,itemStyle:{opacity:1},z:0},');
     DBMS_OUTPUT.PUT_LINE('    markLine:(window.AWR_markLine&&window.AWR_markLine(d.times))||{data:[]},');
     DBMS_OUTPUT.PUT_LINE('    z:5');
@@ -730,6 +735,13 @@ BEGIN
         || '<a href="#segment-io">Segment I/O</a>'
         || '<a href="#file-io">File I/O</a>'
         || '<a href="#param-changes">Parameters</a>'
+        || '<div class="rail-foot">'
+        -- Dark mode toggle: flips body.dark, which (via _style.sql)
+        -- swaps every color token to the Slate Instrument dark palette.
+        || '<button type="button" id="theme-toggle" class="theme-toggle"'
+        || ' aria-pressed="false"'
+        || ' title="Switch between light and dark color theme">'
+        || 'Dark mode</button>'
         -- "Application only" toggle: flips body.app-only, which (via
         -- _style.sql) hides every system-wide section plus the masthead
         -- verdict / DB-time strip and the Oracle-internal SQL rows, leaving
@@ -739,6 +751,7 @@ BEGIN
         || ' title="Hide system-wide sections and Oracle-internal SQL;'
         || ' show only application SQL and its related data">'
         || 'Application only</button>'
+        || '</div>'
         || '</nav>');
 
     -- Wire the toggle. Toggling body.app-only does all the section/row
@@ -754,6 +767,21 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  btn.setAttribute("aria-pressed",on?"true":"false");');
     DBMS_OUTPUT.PUT_LINE('  btn.textContent=on?"Show all":"Application only";');
     DBMS_OUTPUT.PUT_LINE('  document.dispatchEvent(new CustomEvent("awr:appfilter",{detail:{appOnly:on}}));');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('})();</script>');
+
+    -- Wire the dark-mode toggle. The early theme script (before
+    -- header.report) already applied body.dark from localStorage/OS
+    -- preference at load; this just syncs the button label/state and
+    -- persists future clicks.
+    DBMS_OUTPUT.PUT_LINE('<script>(function(){');
+    DBMS_OUTPUT.PUT_LINE('var btn=document.getElementById("theme-toggle"); if(!btn) return;');
+    DBMS_OUTPUT.PUT_LINE('function sync(on){btn.classList.toggle("active",on);btn.setAttribute("aria-pressed",on?"true":"false");btn.textContent=on?"Light mode":"Dark mode";}');
+    DBMS_OUTPUT.PUT_LINE('sync(document.body.classList.contains("dark"));');
+    DBMS_OUTPUT.PUT_LINE('btn.addEventListener("click",function(){');
+    DBMS_OUTPUT.PUT_LINE('  var on=document.body.classList.toggle("dark");');
+    DBMS_OUTPUT.PUT_LINE('  try{localStorage.setItem("awr-theme",on?"dark":"light");}catch(e){}');
+    DBMS_OUTPUT.PUT_LINE('  sync(on);');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('})();</script>');
 
