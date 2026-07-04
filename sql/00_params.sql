@@ -716,6 +716,27 @@ BEGIN
     -- walks the rail top-to-bottom.  The hrefs are load-bearing: the
     -- app-only link-dim rule in _style.sql keys on them.
     DBMS_OUTPUT.PUT_LINE('<nav class="toc">'
+        || '<div class="rail-brand"><span>AWR &middot; Timeline comparison</span>'
+        -- Dark mode toggle: flips body.dark, which (via _style.sql) swaps
+        -- every color token to the Slate Instrument dark palette. Rendered
+        -- as a sun/moon icon button beside the rail's report-title row.
+        -- Both icons ship inline; CSS shows only the one for the mode
+        -- you'd switch TO (moon while light, sun while dark).
+        || '<button type="button" id="theme-toggle" class="theme-icon-btn"'
+        || ' aria-pressed="false"'
+        || ' aria-label="Toggle dark mode"'
+        || ' title="Switch between light and dark color theme">'
+        || '<svg class="icon-sun" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">'
+        || '<circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/>'
+        || '<path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1'
+        || 'M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"'
+        || ' stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+        || '</svg>'
+        || '<svg class="icon-moon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">'
+        || '<path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5a8.5 8.5 0 1 0 11.2 11.2z" fill="currentColor"/>'
+        || '</svg>'
+        || '</button>'
+        || '</div>'
         || '<b>Triage</b>'
         || '<a href="#db-time-summary">DB time</a>'
         || '<a href="#overview">Overview</a>'
@@ -736,12 +757,15 @@ BEGIN
         || '<a href="#file-io">File I/O</a>'
         || '<a href="#param-changes">Parameters</a>'
         || '<div class="rail-foot">'
-        -- Dark mode toggle: flips body.dark, which (via _style.sql)
-        -- swaps every color token to the Slate Instrument dark palette.
-        || '<button type="button" id="theme-toggle" class="theme-toggle"'
+        -- "Essential rows" toggle: flips body.essential, which (via
+        -- _style.sql) collapses the Load profile / System metrics / wait
+        -- tables to the curated data-imp="Y" rows (crit/warn-scored rows
+        -- stay visible).  Charts are untouched by design.
+        || '<button type="button" id="essential-toggle" class="essential-filter"'
         || ' aria-pressed="false"'
-        || ' title="Switch between light and dark color theme">'
-        || 'Dark mode</button>'
+        || ' title="Show only the curated essential rows in the load,'
+        || ' metric and wait tables; severity-flagged rows stay visible">'
+        || 'Essential rows</button>'
         -- "Application only" toggle: flips body.app-only, which (via
         -- _style.sql) hides every system-wide section plus the masthead
         -- verdict / DB-time strip and the Oracle-internal SQL rows, leaving
@@ -753,6 +777,35 @@ BEGIN
         || 'Application only</button>'
         || '</div>'
         || '</nav>');
+
+    -- Wire the "Essential rows" toggle. Toggling body.essential does all
+    -- the row hiding in CSS (rows tagged data-imp="N" by sections 02-05,
+    -- minus the crit/warn escape hatch). The count pills (.preset-note)
+    -- are appended lazily on first activation -- one per section h2 that
+    -- owns tagged rows -- and recounted from the data-imp attributes plus
+    -- the same severity-badge test the CSS escape hatch uses, so pill and
+    -- hide rule always agree. No custom event: charts are untouched.
+    DBMS_OUTPUT.PUT_LINE('<script>(function(){');
+    DBMS_OUTPUT.PUT_LINE('var btn=document.getElementById("essential-toggle"); if(!btn) return;');
+    DBMS_OUTPUT.PUT_LINE('function kept(tr){return tr.getAttribute("data-imp")==="Y"||!!tr.querySelector(".badge.crit,.badge.warn");}');
+    DBMS_OUTPUT.PUT_LINE('function notes(){');
+    DBMS_OUTPUT.PUT_LINE('  document.querySelectorAll("section").forEach(function(sec){');
+    DBMS_OUTPUT.PUT_LINE('    var rows=sec.querySelectorAll("tr[data-imp]"); if(!rows.length) return;');
+    DBMS_OUTPUT.PUT_LINE('    var h2=sec.querySelector("h2"); if(!h2) return;');
+    DBMS_OUTPUT.PUT_LINE('    var note=h2.querySelector(".preset-note");');
+    DBMS_OUTPUT.PUT_LINE('    if(!note){note=document.createElement("span");note.className="preset-note";h2.appendChild(note);}');
+    DBMS_OUTPUT.PUT_LINE('    var k=0; rows.forEach(function(r){if(kept(r))k++;});');
+    DBMS_OUTPUT.PUT_LINE('    note.textContent="Essential - showing "+k+" of "+rows.length+" rows";');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('btn.addEventListener("click",function(){');
+    DBMS_OUTPUT.PUT_LINE('  var on=document.body.classList.toggle("essential");');
+    DBMS_OUTPUT.PUT_LINE('  btn.classList.toggle("active",on);');
+    DBMS_OUTPUT.PUT_LINE('  btn.setAttribute("aria-pressed",on?"true":"false");');
+    DBMS_OUTPUT.PUT_LINE('  btn.innerHTML=on?"Essential rows &#10003;":"Essential rows";');
+    DBMS_OUTPUT.PUT_LINE('  if(on) notes();');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('})();</script>');
 
     -- Wire the toggle. Toggling body.app-only does all the section/row
     -- hiding in CSS; the custom awr:appfilter event lets charts that
@@ -772,11 +825,12 @@ BEGIN
 
     -- Wire the dark-mode toggle. The early theme script (before
     -- header.report) already applied body.dark from localStorage/OS
-    -- preference at load; this just syncs the button label/state and
-    -- persists future clicks.
+    -- preference at load; this just syncs the button state and persists
+    -- future clicks. Icon visibility (sun vs moon) is pure CSS off
+    -- body.dark, so there's no label/markup to swap here.
     DBMS_OUTPUT.PUT_LINE('<script>(function(){');
     DBMS_OUTPUT.PUT_LINE('var btn=document.getElementById("theme-toggle"); if(!btn) return;');
-    DBMS_OUTPUT.PUT_LINE('function sync(on){btn.classList.toggle("active",on);btn.setAttribute("aria-pressed",on?"true":"false");btn.textContent=on?"Light mode":"Dark mode";}');
+    DBMS_OUTPUT.PUT_LINE('function sync(on){btn.setAttribute("aria-pressed",on?"true":"false");}');
     DBMS_OUTPUT.PUT_LINE('sync(document.body.classList.contains("dark"));');
     DBMS_OUTPUT.PUT_LINE('btn.addEventListener("click",function(){');
     DBMS_OUTPUT.PUT_LINE('  var on=document.body.classList.toggle("dark");');

@@ -52,10 +52,13 @@ DECLARE
     v_heat_json  CLOB;
     v_weeks_back NUMBER := ~weeks_back;
 
+    @@sql/lib/is_essential.plsql
+
     PROCEDURE emit_domain_table(p_dom VARCHAR2, p_title VARCHAR2) IS
         v_row   VARCHAR2(32767);
         v_sev   VARCHAR2(40);
         v_cls   VARCHAR2(10);
+        v_imp   VARCHAR2(1);
         v_count PLS_INTEGER := 0;
         rec     finding_rec;
     BEGIN
@@ -87,9 +90,22 @@ DECLARE
                                     WHEN 'moderate' THEN 'warn'
                                     WHEN 'typical'  THEN 'ok'
                                     ELSE 'skip' END;
+                -- WAIT rows here are rolled up to wait_class (e.g. "Wait
+                -- class: User I/O") -- already a compact high-level
+                -- rollup, so they deliberately carry NO data-imp attribute
+                -- and stay visible in Essential mode (untagged rows are
+                -- never hidden by the CSS rule and never counted by the
+                -- pill JS, which both select only rows with data-imp).
+                -- LOAD/METRIC names are raw stat/metric names and match
+                -- is_essential() directly.
+                v_imp := CASE WHEN rec.metric_domain = 'WAIT' THEN NULL
+                              ELSE is_essential(rec.metric_domain, rec.metric_name) END;
                 v_row := '<tr data-metric="'
                     || REPLACE(DBMS_XMLGEN.CONVERT(rec.metric_name), '"', '&quot;')
-                    || '" class="' || v_cls || '">'
+                    || '"'
+                    || CASE WHEN v_imp IS NOT NULL
+                            THEN ' data-imp="' || v_imp || '"' END
+                    || ' class="' || v_cls || '">'
                     || '<td><span class="badge ' || v_cls || '">' || v_sev || '</span></td>'
                     || '<td>' || DBMS_XMLGEN.CONVERT(rec.metric_name) || '</td>'
                     || '<td class="num">' ||

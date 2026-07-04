@@ -291,6 +291,19 @@ charts, and per-SQL detail cards, so you see only your own application's SQL.
 Click again (now labelled **Show all**) to restore the full report. It's a
 purely client-side toggle — no re-run needed, and it works offline.
 
+### "Essential rows" preset
+
+The nav also carries an **Essential rows** toggle. When on, the Load profile,
+System metrics, FG/BG wait tables, and the Findings summary load/metric
+detail tables collapse to a short curated list of the rows a DBA scans first
+(DB time, DB CPU, AAS, single-block read latency, log file sync, …); each
+affected section header shows a pill with the kept/total row count. Rows
+flagged **crit**/**warn** stay visible even when not on the curated list, so
+the preset never hides an anomaly, and the Findings wait-class rows — already
+a compact high-level rollup — always stay visible. Charts (including the
+findings heatmap) are untouched. Like the other toggles it is purely
+client-side and works offline; click again to show all rows.
+
 ## Does it write to the database?
 
 No. Every fact in the report is computed in-flight from the `DBA_HIST_*`

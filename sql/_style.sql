@@ -301,13 +301,26 @@ BEGIN
         || ' color:var(--muted);'
         || ' display:flex; flex-direction:column; gap:2px;'
         || ' overflow-y:auto; }');
-    -- Rail brand row (pure CSS, no markup needed)
-    DBMS_OUTPUT.PUT_LINE('nav.toc::before {'
-        || ' content:"AWR \00B7 Timeline comparison";'
-        || ' display:block; padding:2px 10px 12px;'
-        || ' font-size:11px; font-weight:700; letter-spacing:0.1em;'
-        || ' text-transform:uppercase; color:var(--ink);'
+    -- Rail brand row: report title plus the dark-mode icon button beside it.
+    DBMS_OUTPUT.PUT_LINE('nav.toc .rail-brand {'
+        || ' display:flex; align-items:center; justify-content:space-between;'
+        || ' gap:8px; padding:2px 10px 12px;'
         || ' border-bottom:1px solid var(--hairline); margin-bottom:8px; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .rail-brand span {'
+        || ' font-size:11px; font-weight:700; letter-spacing:0.1em;'
+        || ' text-transform:uppercase; color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .rail-brand .theme-icon-btn {'
+        || ' flex:none; display:flex; align-items:center; justify-content:center;'
+        || ' width:24px; height:24px; padding:0; border-radius:50%;'
+        || ' border:1px solid var(--rule); background:var(--panel);'
+        || ' color:var(--ink-soft); cursor:pointer;'
+        || ' transition:color .12s,background .12s,border-color .12s; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .rail-brand .theme-icon-btn:hover {'
+        || ' border-color:var(--accent); color:var(--accent); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .rail-brand .theme-icon-btn .icon-sun { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .rail-brand .theme-icon-btn .icon-moon { display:block; }');
+    DBMS_OUTPUT.PUT_LINE('body.dark nav.toc .rail-brand .theme-icon-btn .icon-sun { display:block; }');
+    DBMS_OUTPUT.PUT_LINE('body.dark nav.toc .rail-brand .theme-icon-btn .icon-moon { display:none; }');
     -- Group labels
     DBMS_OUTPUT.PUT_LINE('nav.toc b {'
         || ' color:var(--muted); font-weight:700;'
@@ -333,21 +346,22 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('nav.toc a .st.warn { background:var(--dot-warn); }');
     DBMS_OUTPUT.PUT_LINE('nav.toc a .st.crit { background:var(--dot-crit); }');
 
-    -- Rail foot wrapper: holds the theme-toggle and app-filter buttons
-    -- together, pinned to the bottom of the rail.
+    -- Rail foot wrapper: holds the app-filter and essential-rows buttons
+    -- together, pinned to the bottom of the rail. (Dark mode lives as an
+    -- icon button beside the rail-brand title at the top of the rail.)
     DBMS_OUTPUT.PUT_LINE('nav.toc .rail-foot {'
         || ' margin-top:auto; display:flex; flex-direction:column; gap:6px; }');
 
-    -- "Application only" / "Dark mode" toggle buttons in the rail foot.
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter, nav.toc .theme-toggle {'
+    -- "Essential rows" / "Application only" toggle buttons in the rail foot.
+    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter, nav.toc .essential-filter {'
         || ' font:inherit; font-size:11px; font-weight:700;'
         || ' letter-spacing:0.04em; text-transform:uppercase;'
         || ' padding:7px 12px; border-radius:8px; cursor:pointer;'
         || ' border:1px solid var(--rule); background:var(--panel);'
         || ' color:var(--ink); transition:color .12s,background .12s,border-color .12s; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter:hover, nav.toc .theme-toggle:hover {'
+    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter:hover, nav.toc .essential-filter:hover {'
         || ' border-color:var(--accent); color:var(--accent); }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter.active, nav.toc .theme-toggle.active {'
+    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter.active, nav.toc .essential-filter.active {'
         || ' background:var(--accent); border-color:var(--accent); color:#fff; }');
 
     -- Narrow screens: the rail becomes a static wrapping block.
@@ -357,7 +371,7 @@ BEGIN
         || '   gap:2px 10px; border-right:0;'
         || '   border-bottom:1px solid var(--hairline);'
         || '   border-radius:0; margin:14px 0; padding:10px 0; }'
-        || ' nav.toc::before { border-bottom:0; padding:0 8px 0 0; margin:0; }'
+        || ' nav.toc .rail-brand { border-bottom:0; padding:0 8px 0 0; margin:0; }'
         || ' nav.toc b { margin:0 4px 0 10px; }'
         || ' nav.toc .rail-foot { margin-top:0; margin-left:auto; flex-direction:row; } }');
 
@@ -399,6 +413,27 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('body.app-only tr[data-sys="Y"],'
         || ' body.app-only details[data-sys="Y"],'
         || ' body.app-only .ash-sql-card[data-sys="Y"] { display:none; }');
+
+    -- =========================================================
+    -- "Essential rows" preset (body.essential).
+    -- Same body-class hook: sections 02/03/04/05 tag their per-name data
+    -- rows data-imp="Y|N" (via sql/lib/is_essential.plsql); when on, the
+    -- non-curated rows hide.  Escape hatch: a row whose Change cell holds
+    -- a crit/warn severity badge stays visible even when data-imp="N",
+    -- so the preset can never hide a flagged anomaly (:has degrades to
+    -- hiding flagged rows only on pre-:has browsers -- acceptable).
+    -- Charts and the wait-class rollup are untouched by design.
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('body.essential tr[data-imp="N"]'
+        || ':not(:has(.badge.crit)):not(:has(.badge.warn)) { display:none; }');
+    -- Count pill appended to each affected section h2 by the toggle JS
+    -- (00_params.sql); only visible while the preset is on.
+    DBMS_OUTPUT.PUT_LINE('.preset-note {'
+        || ' display:none; margin-left:auto; align-self:center;'
+        || ' font-size:11.5px; font-weight:700; letter-spacing:0.02em;'
+        || ' padding:2px 10px; border-radius:999px; white-space:nowrap;'
+        || ' background:var(--accent-bg); color:var(--accent-deep); }');
+    DBMS_OUTPUT.PUT_LINE('body.essential .preset-note { display:inline-block; }');
 
     -- =========================================================
     -- Sections: white panels

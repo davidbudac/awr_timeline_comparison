@@ -183,6 +183,66 @@ CustomEvent the toggle dispatches and re-renders with `sys` series dropped
 module/action are not). Adding the attrs/`sys` field changes the HTML, so this
 is a feature, not a byte-identity-preserving refactor — verify by eye, not md5.
 
+### "Essential rows" filter (`body.essential`)
+A client-side toggle in the sidebar rail (`#essential-toggle`, emitted by
+`00_params.sql`, placed first in the rail-foot so it sits above the theme and
+app-filter buttons) that flips `body.essential` — same body-class hook pattern
+as `body.no-charts` / `body.app-only`: no DEFINE, no wrapper change. When on it
+collapses the per-name tables in sections 02 (Load profile), 03 (System
+metrics), 04 (Foreground waits), 05 (Background waits), and 07 (Findings
+summary detail tables) down to a small curated list, hiding the long tail of
+stats/metrics/events/findings most DBAs don't scan on a routine pass.
+
+Each of those sections tags its per-name `<tr>` with `data-imp="Y|N"` via
+a single-sourced classifier, `@@sql/lib/is_essential.plsql` (`is_essential(p_domain,
+p_name)`, domains `'LOAD'` / `'METRIC'` / `'WAIT'` — the wait domain is shared
+by both foreground and background waits since each section only has rows for
+the events that apply to it). In section 04, only the per-event tables are
+tagged; the separate wait-*class* rollup table is left alone (it's an
+aggregate, not a curated-list candidate). No new grant, no DB access — it's a
+plain case-sensitive name test against a curated constant list per domain.
+
+Section 07's findings heatmap is an ECharts canvas (`#findings-heatmap`), not
+an HTML table, so it carries no `data-imp` and is untouched by the preset —
+only the LOAD/METRIC detail tables (`emit_domain_table`) are tagged, using
+the raw stat/metric name against `is_essential()` directly. 07's WAIT rows
+are rolled up to *wait class* (e.g. `"Wait class: User I/O"`) — already a
+compact high-level rollup, not curated-list candidates — so they are
+deliberately emitted with **no `data-imp` attribute at all** and stay always
+visible in Essential mode (untagged rows are never hidden by the CSS rule
+and never counted by the pill JS, which both select only `tr[data-imp]`).
+
+**Escape hatch:** sections 02–05 carry no row- or cell-level severity class of
+their own (unlike section 07's `crit`/`warn`/`ok`/`skip` rows, each already
+`class="<sev>"` on the `<tr>` with a matching `<span class="badge <sev>">` in
+the Change cell) — 02–05's only severity signal is the same
+`<span class="badge crit|warn">` emitted per-cell by `sql/lib/score_cells.plsql`
+in 04/05's Change column (02/03 have no scoring at all, so nothing to protect
+there). Because 07 emits that identical `<span class="badge crit|warn">`
+markup, the existing hide rule and `kept()` test already cover it verbatim —
+no CSS/JS change was needed when 07 was wired in. The hide rule is
+`body.essential tr[data-imp="N"]:not(:has(.badge.crit)):not(:has(.badge.warn))`
+(`sql/_style.sql`) and the JS test is
+`function kept(tr){return tr.getAttribute("data-imp")==="Y"||!!tr.querySelector(".badge.crit,.badge.warn");}`
+(`sql/00_params.sql`) — a row tagged non-essential still shows if its own
+Change cell flagged a crit/warn anomaly, so the preset can never hide
+something actually moving. Keep these two in lockstep if either changes.
+
+**Count pills:** the toggle's click handler (in `00_params.sql`, right after
+the nav emission, above the app-filter wiring) walks every `<section>`
+containing `tr[data-imp]`, finds its `<h2>`, and appends/updates a
+`<span class="preset-note">` reading "Essential - showing X of Y rows" (X =
+rows kept by the same data-imp-or-badge test as the CSS rule, so the pill and
+the hide rule never disagree). Computed purely from `querySelectorAll` counts
+already in the DOM — no `getComputedStyle`/`offsetHeight`. Section 07's
+`<h2 id="findings-heading">` also gets its own counter script (rewriting the
+heading text with crit/warn/total badges) but that runs once at render time,
+before the toggle's click handler ever fires, so the two scripts don't race.
+Charts are untouched by design: no `awr:appfilter`-style CustomEvent is
+dispatched: the affected sections render their sparklines/stacked-bar/heatmap
+visuals from the same rows regardless of the preset, and decluttering the
+tables doesn't change what those charts should plot.
+
 ### `echarts` var (offline / self-contained)
 Polymorphic on value: **empty** → public CDN (byte-identical to before, via
 `CASE WHEN TRIM('~echarts') IS NULL`); **http(s) URL** → used verbatim as

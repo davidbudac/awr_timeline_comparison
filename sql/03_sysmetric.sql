@@ -23,6 +23,7 @@ DECLARE
     v_pct         NUMBER;
 
     @@sql/lib/nth_csv.plsql
+    @@sql/lib/is_essential.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="metrics"><h2>System metrics (DBA_HIST_SYSMETRIC_SUMMARY)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
@@ -138,7 +139,8 @@ BEGIN
             v_pct := 0;
         END IF;
 
-        v_row := '<tr><td>' || DBMS_XMLGEN.CONVERT(m.metric_name) || '</td>'
+        v_row := '<tr data-imp="' || is_essential('METRIC', m.metric_name)
+              || '"><td>' || DBMS_XMLGEN.CONVERT(m.metric_name) || '</td>'
               || '<td>' || DBMS_XMLGEN.CONVERT(NVL(m.metric_unit, '')) || '</td>'
               || '<td class="trend" data-spark="' || NVL(m.spark_vals, '')
               || '" data-spark-title="' || DBMS_XMLGEN.CONVERT(m.metric_name) || '"></td>'

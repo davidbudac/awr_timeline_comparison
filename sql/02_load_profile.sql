@@ -26,6 +26,7 @@ DECLARE
     v_fmt        VARCHAR2(40);
 
     @@sql/lib/nth_csv.plsql
+    @@sql/lib/is_essential.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="load"><h2>Load profile &mdash; per-second rates</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
@@ -142,7 +143,8 @@ BEGIN
             v_label := v_label || ' (/s)';
         END IF;
 
-        v_row := '<tr><td>' || DBMS_XMLGEN.CONVERT(v_label) || '</td>';
+        v_row := '<tr data-imp="' || is_essential('LOAD', m.stat_name)
+              || '"><td>' || DBMS_XMLGEN.CONVERT(v_label) || '</td>';
 
         v_row := v_row || '<td class="trend" data-spark="'
               || NVL(m.spark_vals, '') || '" data-spark-title="'
