@@ -905,7 +905,8 @@ SQL&gt; <span class="k">@awr_trend.sql</span></pre>
           <p>Default template, hour-over-hour cadence (<code>step_unit=h</code>):
           hero cards, ASH timeline, findings heatmap, load profile, waits, Top SQL
           ranked five ways, per-SQL ASH breakdowns, segment &amp; file I/O,
-          parameter changes — plus the “Application only” toggle in the nav.</p>
+          parameter changes — plus the navigation rail with dark mode and the
+          Essential-rows and Application-only toggles.</p>
           <span class="open">Open report →</span>
         </a>
         <a class="excard" href="examples/hourly_simple_template.html">
@@ -926,17 +927,12 @@ SQL&gt; <span class="k">@awr_trend.sql</span></pre>
       </div>
 
       <div class="note">
-        <strong>Heads up:</strong> these examples were spooled by v1.0.0 and predate the
-        1.1.0 navigation-rail redesign and dark mode described above — the sections and
-        numbers are the same, but the on-page chrome looks a little different.
-      </div>
-
-      <div class="note">
-        <strong>About the data:</strong> the lab database is mostly idle and only weeks
-        old, so the examples show tiny load numbers and “Baseline too short” verdicts —
-        which is itself a feature on display: the report refuses to score what it cannot
-        score fairly. On a production system with months of AWR history, the findings
-        section grades every metric OK / WARN / CRITICAL.
+        <strong>About the data:</strong> these examples capture a live workload window on
+        a small Oracle 19c lab box, so they show real per-second load and a findings
+        section that grades metrics from “typical” to “large”. When a window has too
+        little valid history to score fairly, the same report says “Baseline too short”
+        instead of guessing — see the masthead in <a href="#honest">Honest by design</a>
+        above.
       </div>
     </section>
 
