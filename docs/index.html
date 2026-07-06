@@ -465,12 +465,12 @@
       <figure class="shot">
         <span class="shot-tag">From a live test run</span>
         <img src="assets/shot_aligned_windows.jpg" loading="lazy"
-             alt="Report screenshot: the Aligned windows section, five Wednesday-morning windows across five weeks, two valid and three skipped">
+             alt="Report screenshot: the Aligned windows section, five Monday 19:00–20:00 windows across five weeks, one valid and four skipped">
         <figcaption>
-          The same idea in the real report: five Wednesday 08:00–09:00 windows, one per
-          week, lined up side by side. Where the database has no history for a week,
-          the window is dimmed, marked “skipped”, and excluded from the comparison —
-          never silently guessed.
+          The same idea in the real report: five Monday 19:00–20:00 windows, one per
+          week, lined up side by side. Where the database has no history for a week —
+          or an instance restarted mid-window — the window is dimmed, marked “skipped”,
+          and excluded from the comparison — never silently guessed.
         </figcaption>
       </figure>
     </section>
@@ -587,11 +587,13 @@
       <figure class="shot">
         <span class="shot-tag">From a live test run</span>
         <img src="assets/shot_verdict_quiet.jpg" loading="lazy"
-             alt="Report screenshot: the masthead with the verdict 'Quiet — no metric moved beyond |z| greater than 2 vs the prior 4 windows'">
+             alt="Report screenshot: the masthead and navigation rail, with the verdict '16 movers vs the prior 4 windows' listing the biggest jumps inline">
         <figcaption>
-          Every report opens with a one-line verdict in plain language. Here, an
-          hour-over-hour run of a quiet Monday morning: nothing moved beyond two standard
-          deviations of its own recent history — read the first line and move on.
+          Every report opens with a one-line verdict in plain language and a fixed
+          navigation rail. Here, an hour-over-hour run flags <strong>16 movers</strong>
+          against the prior four windows, with the largest — bytes sent via SQL*Net
+          +284%, network traffic +89% — called out inline; expand “all movers” for the
+          rest, or read the first line and move on.
         </figcaption>
       </figure>
     </section>
@@ -623,8 +625,9 @@
              alt="Report screenshot: six headline metric cards with trend sparklines, current values and statistical badges">
         <figcaption>
           Six headline health cards: the trend across the compared windows, the current
-          value, and a statistical badge — “typical” here — instead of a wall of raw
-          numbers to squint at.
+          value, and a statistical badge — “typical” when a metric sits inside its normal
+          range, “large” when it jumps beyond it (DB time and hard parses here) — instead
+          of a wall of raw numbers to squint at.
         </figcaption>
       </figure>
 
