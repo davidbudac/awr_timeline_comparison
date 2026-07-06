@@ -649,6 +649,28 @@
           before/after difference in the shape of this chart is visible at a glance.
         </figcaption>
       </figure>
+
+      <h3>A workbench, not a wall of tables</h3>
+      <p>
+        The report opens with a fixed navigation rail down the left edge: one
+        scrollspy-tracked link per section, each carrying a live status dot graded from
+        that section's own content — red for a critical finding, amber for a warning — so
+        you can see where the trouble is before you scroll. Three controls ride in the
+        rail; every one is client-side, needs no re-run, and works offline:
+      </p>
+      <ul class="plain">
+        <li><strong>Dark mode</strong> — a sun/moon toggle in the rail (the “Slate
+          Instrument” theme). The first load follows your OS <code>prefers-color-scheme</code>;
+          after that your choice is remembered, and the theme is applied before the charts
+          draw so there is no flash.</li>
+        <li><strong>Essential rows</strong> — collapses the load-profile, system-metric,
+          wait and findings tables to a curated shortlist of what a DBA scans first, with a
+          kept/total pill on each section. Anything flagged CRITICAL or WARN stays visible,
+          so the preset never hides an anomaly, and the charts are untouched.</li>
+        <li><strong>Application only</strong> — hides every system-wide section and
+          Oracle's own recursive SQL, leaving just your application's Top SQL, ASH
+          breakdown, segment &amp; file I/O, and utilization.</li>
+      </ul>
     </section>
 
     <section id="start">
@@ -898,6 +920,12 @@ SQL&gt; <span class="k">@awr_trend.sql</span></pre>
           rebuild on SALES” drawn as vertical dashed lines on every dated chart.</p>
           <span class="open">Open report →</span>
         </a>
+      </div>
+
+      <div class="note">
+        <strong>Heads up:</strong> these examples were spooled by v1.0.0 and predate the
+        1.1.0 navigation-rail redesign and dark mode described above — the sections and
+        numbers are the same, but the on-page chrome looks a little different.
       </div>
 
       <div class="note">

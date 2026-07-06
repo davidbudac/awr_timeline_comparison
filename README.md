@@ -277,9 +277,26 @@ z-scores.
     `DBA_HIST_PARAMETER` whose value differs across the compared windows,
     pivoted parameter × window (value as of each window's end snapshot).
 
+### The navigation rail & dark mode
+
+The report opens with a fixed **navigation rail** down the left edge: a
+scrollspy-tracked link per section, each with a small live status dot
+graded from that section's own content (red for a critical finding, amber
+for a warning, neutral otherwise) so you can see at a glance where the
+trouble is before scrolling. Under 980px the rail collapses to a stacked
+layout.
+
+A sun/moon button in the rail's brand row toggles **dark mode** (the
+"Slate Instrument" theme). The first load follows your OS
+`prefers-color-scheme`; after that your choice is remembered in
+`localStorage`, and the theme is applied before the charts initialize so
+there's no flash. Two more toggles sit at the foot of the rail —
+**Essential rows** and **Application only**, described next. All of this is
+purely client-side CSS/JS: no re-run, no DEFINE, and it all works offline.
+
 ### "Application only" view
 
-The sticky section nav carries an **Application only** toggle (top-right).
+The rail foot carries an **Application only** toggle.
 Click it to strip the report down to *application* behaviour on the database:
 it hides every system-wide section (load profile, system metrics, FG/BG waits,
 ASH timeline, DB time, findings, windows, parameters) plus the masthead verdict
@@ -293,7 +310,7 @@ purely client-side toggle — no re-run needed, and it works offline.
 
 ### "Essential rows" preset
 
-The nav also carries an **Essential rows** toggle. When on, the Load profile,
+The rail also carries an **Essential rows** toggle. When on, the Load profile,
 System metrics, FG/BG wait tables, and the Findings summary load/metric
 detail tables collapse to a short curated list of the rows a DBA scans first
 (DB time, DB CPU, AAS, single-block read latency, log file sync, …); each

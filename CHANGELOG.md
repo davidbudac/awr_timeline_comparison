@@ -5,6 +5,35 @@ The report footer stamps the version that produced it
 top of `awr_trend.sql`. Bump it there when cutting a release and add an
 entry here. Dates are release dates.
 
+## 1.1.0 — 2026-07-06
+
+Report redesign and two table presets. Engine and read-only invariant
+unchanged; everything here is client-side chrome or a rendering fix.
+
+### Report
+- **Workbench redesign** — the sticky top nav becomes a fixed left
+  navigation rail: scrollspy-tracked section links, a live per-section
+  status dot graded from that section's own content (crit/warn/neutral),
+  panel-framed sections, and a teal accent. Falls back to a stacked layout
+  under 980px.
+- **Slate Instrument theme + dark mode** — a sun/moon toggle in the rail
+  brand row flips light/dark. First load honours `prefers-color-scheme`;
+  the choice persists in `localStorage`. Applied before charts initialize
+  so there's no flash. Purely client-side; works offline.
+- **"Essential rows" preset** — a rail toggle that collapses the Load
+  profile, System metrics, FG/BG wait, and Findings detail tables to a
+  curated shortlist of the rows a DBA scans first, with a kept/total pill
+  on each affected section header. Rows flagged crit/warn stay visible even
+  when off-list, so the preset never hides an anomaly; charts and the
+  findings heatmap are untouched. Client-side, offline.
+- Both the "Application only" and "Essential rows" toggles live in the rail
+  foot (the app-only toggle moved there from the old top nav).
+
+### Fixes
+- LISTAGG positional-CSV alignment: preserve empty measure slots so
+  per-week sparkline points and chart series line up with the correct
+  window instead of left-compacting into the wrong one.
+
 ## 1.0.0 — 2026-07-01
 
 First versioned release. Everything below shipped unversioned between
