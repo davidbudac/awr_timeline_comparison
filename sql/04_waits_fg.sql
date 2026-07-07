@@ -233,10 +233,18 @@ BEGIN
         SELECT DISTINCT event_name, wait_class FROM top_n_events
     ),
     grid AS (
+        -- Measures (time_waited_us, total_waits) come from `deltas` (FULL
+        -- history) so a prior window where the event ranked below top_n still
+        -- contributes to the mu/sd/n baseline -- otherwise a newly-spiking
+        -- event gets n=0 priors and renders "insufficient history" instead of
+        -- the crit/warn finding this report exists to surface (F1). `rnk` stays
+        -- from top_n_events: NULL below the cutoff is correct for the rank CSV.
         SELECT e.event_name, e.wait_class, w.week_offset,
-               t.time_waited_us, t.total_waits, t.rnk
+               d.time_waited_us, d.total_waits, t.rnk
         FROM   events e
         CROSS JOIN all_weeks w
+        LEFT JOIN deltas d
+               ON d.event_name = e.event_name AND d.week_offset = w.week_offset
         LEFT JOIN top_n_events t
                ON t.event_name = e.event_name AND t.week_offset = w.week_offset
     )

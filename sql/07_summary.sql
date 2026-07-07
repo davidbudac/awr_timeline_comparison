@@ -172,14 +172,18 @@ BEGIN
         GROUP BY week_offset, dur_sec, stat_name, instance_number
     ),
     load_rows AS (
+        -- Divide the summed cross-instance delta by ONE window span
+        -- (MAX(dur_sec) = full wall-clock covered).  dur_sec dropped from the
+        -- GROUP BY so differing per-instance spans can't split a RAC week;
+        -- single-instance is byte-identical (dur_sec constant).
         SELECT 'LOAD' AS metric_domain,
                stat_name AS metric_name,
                week_offset,
-               CASE WHEN dur_sec > 0
-                    THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / dur_sec
+               CASE WHEN MAX(dur_sec) > 0
+                    THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / MAX(dur_sec)
                END AS metric_value
         FROM   load_bounds
-        GROUP BY week_offset, dur_sec, stat_name
+        GROUP BY week_offset, stat_name
     ),
     -- METRIC domain: DBA_HIST_SYSMETRIC_SUMMARY averages over window.
     -- Per-snap cluster value: SUM across instances for additive metrics,
@@ -240,14 +244,16 @@ BEGIN
         GROUP BY week_offset, dur_sec, wait_class, event_name, instance_number
     ),
     wait_rows AS (
+        -- Same single-span divisor as load_rows; MAX(dur_sec) over the
+        -- per-instance spans, dur_sec dropped from the GROUP BY.
         SELECT 'WAIT' AS metric_domain,
                'Wait class: ' || wait_class AS metric_name,
                week_offset,
-               CASE WHEN dur_sec > 0
-                    THEN SUM(NVL(end_us, 0) - NVL(beg_us, 0)) / dur_sec / 1e6
+               CASE WHEN MAX(dur_sec) > 0
+                    THEN SUM(NVL(end_us, 0) - NVL(beg_us, 0)) / MAX(dur_sec) / 1e6
                END AS metric_value
         FROM   wait_bounds
-        GROUP BY week_offset, dur_sec, wait_class
+        GROUP BY week_offset, wait_class
     ),
     unified AS (
         SELECT * FROM load_rows   WHERE metric_value IS NOT NULL

@@ -70,10 +70,17 @@ BEGIN
             GROUP BY week_offset, dur_sec, stat_name, instance_number
         ),
         deltas AS (
-            SELECT week_offset, dur_sec, stat_name,
-                   SUM(NVL(end_val, 0) - NVL(beg_val, 0)) AS stat_value
+            -- Sum the cross-instance delta, then divide by ONE window span.
+            -- dur_sec is per-instance (each instance's resolved snaps jitter);
+            -- MAX collapses them to the full wall-clock span covered.  Grouping
+            -- no longer keys on dur_sec, else differing per-instance spans would
+            -- split a RAC week into partial rows.  Single-instance: dur_sec is
+            -- constant, so MAX and the narrower GROUP BY are byte-identical.
+            SELECT week_offset, stat_name,
+                   SUM(NVL(end_val, 0) - NVL(beg_val, 0)) AS stat_value,
+                   MAX(dur_sec) AS dur_sec
             FROM   bounds
-            GROUP BY week_offset, dur_sec, stat_name
+            GROUP BY week_offset, stat_name
         ),
         facts AS (
             SELECT week_offset, stat_name,

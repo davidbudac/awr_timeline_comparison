@@ -129,9 +129,11 @@
                    NVL(bs.instance_number, es.instance_number) AS instance_number,
                    bs.snap_id      AS begin_snap_id,
                    bs.dbid         AS begin_dbid,
+                   bs.end_ts       AS begin_end_ts,
                    bs.startup_time AS begin_startup_time,
                    es.snap_id      AS end_snap_id,
                    es.dbid         AS end_dbid,
+                   es.end_ts       AS end_end_ts,
                    es.startup_time AS end_startup_time
             FROM   begin_snap bs
             FULL OUTER JOIN end_snap es
@@ -149,6 +151,11 @@
                 CAST(w.win_end_dt   AS TIMESTAMP) AS win_end_ts,
                 ip.begin_snap_id,
                 ip.end_snap_id,
+                -- Resolved snap end-times (NOT the requested window edges).
+                -- The requested edges label the window; these bound the actual
+                -- counter deltas and give dur_sec its true span (F2).
+                ip.begin_end_ts,
+                ip.end_end_ts,
                 CASE
                     WHEN ip.begin_snap_id IS NULL                      THEN 'N'
                     WHEN ip.end_snap_id   IS NULL                      THEN 'N'
@@ -160,6 +167,17 @@
                     -- fully-new windows still report).
                     WHEN ip.begin_dbid <> ip.end_dbid                  THEN 'N'
                     WHEN ip.begin_startup_time <> ip.end_startup_time  THEN 'N'
+                    -- Snaps are resolved with only a one-sided +5min tolerance
+                    -- over a +/-1 day candidate bracket, so a sparse snap grid
+                    -- can resolve begin/end far outside the requested window --
+                    -- e.g. :30 hourly snaps for a :00 1h window span 2h.  The
+                    -- delta then covers the wrong span; flag it invalid so the
+                    -- misalignment surfaces in section 01 rather than silently
+                    -- inflating per-second rates (F2).  15 min: half of AWR's
+                    -- default snap interval; aligned grids stay valid + byte-
+                    -- identical.
+                    WHEN ip.begin_end_ts < CAST(w.win_start_dt AS TIMESTAMP) - INTERVAL '15' MINUTE THEN 'N'
+                    WHEN ip.end_end_ts   > CAST(w.win_end_dt   AS TIMESTAMP) + INTERVAL '15' MINUTE THEN 'N'
                     ELSE 'Y'
                 END AS valid_flag,
                 CASE
@@ -168,6 +186,9 @@
                     WHEN ip.begin_snap_id = ip.end_snap_id THEN 'begin and end snapshot identical (window shorter than AWR interval)'
                     WHEN ip.begin_dbid <> ip.end_dbid THEN 'DBID changed inside window (non-CDB->PDB migration or DB rename)'
                     WHEN ip.begin_startup_time <> ip.end_startup_time THEN 'instance restarted inside window'
+                    WHEN ip.begin_end_ts < CAST(w.win_start_dt AS TIMESTAMP) - INTERVAL '15' MINUTE
+                      OR ip.end_end_ts   > CAST(w.win_end_dt   AS TIMESTAMP) + INTERVAL '15' MINUTE
+                         THEN 'no snapshot within 15 min of window edge'
                     ELSE NULL
                 END AS skip_reason
             FROM   raw_windows w
@@ -177,7 +198,12 @@
             SELECT week_offset, dbid, instance_number,
                    win_start_ts, win_end_ts,
                    begin_snap_id, end_snap_id,
-                   (CAST(win_end_ts AS DATE) - CAST(win_start_ts AS DATE)) * 86400 AS dur_sec
+                   -- dur_sec is the RESOLVED snap-to-snap span (end snap time
+                   -- minus begin snap time), not the requested win_hours.  A
+                   -- misaligned grid is already invalidated above, so here the
+                   -- span is within 15 min of nominal; using the real span
+                   -- keeps per-second rates honest when snaps jitter (F2).
+                   (CAST(end_end_ts AS DATE) - CAST(begin_end_ts AS DATE)) * 86400 AS dur_sec
             FROM   windows
             WHERE  valid_flag = 'Y'
         ),

@@ -89,12 +89,15 @@ BEGIN
             GROUP BY week_offset, dur_sec, stat_name, instance_number
         ),
         load_rows AS (
+            -- Summed cross-instance delta over ONE window span (MAX(dur_sec));
+            -- dur_sec out of the GROUP BY so per-instance span jitter can't
+            -- split a RAC week.  Single-instance byte-identical.
             SELECT 'LOAD' AS src, stat_name AS key, week_offset,
-                   CASE WHEN dur_sec > 0
-                        THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / dur_sec
+                   CASE WHEN MAX(dur_sec) > 0
+                        THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / MAX(dur_sec)
                    END AS val
             FROM   load_bounds
-            GROUP BY week_offset, dur_sec, stat_name
+            GROUP BY week_offset, stat_name
         ),
         -- Per-snap cluster value: SUM across instances for additive
         -- metrics (rates/counters), AVG for ratios. See is_add tagging
