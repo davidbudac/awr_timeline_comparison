@@ -38,7 +38,8 @@
 # Examples:
 #   ./run_awr_trend.sh user/pw@svc
 #   ./run_awr_trend.sh user/pw@svc '2026-04-15 09:00' 1 4 10 0
-#   ./run_awr_trend.sh / '2026-04-15 09:00'                   # connect / as sysdba
+#   ./run_awr_trend.sh / '2026-04-15 09:00'                   # OS auth, ordinary user
+#   ./run_awr_trend.sh '/ as sysdba' '2026-04-15 09:00'       # OS auth AS SYSDBA (quote it)
 #   # Last 4 consecutive 1-hour windows ending at the prior full hour:
 #   ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h
 #   # Every other day for the past 7 days:
@@ -166,7 +167,9 @@ list_templates() {
 # ---------------------------------------------------------------------------
 # is_url <value> — true when <value> looks like an http(s) URL (used verbatim
 # as the <script src>), false when it's a local file path (to be inlined).
-is_url() { [[ "$1" == http://* || "$1" == https://* ]]; }
+# Case-insensitive (HTTPS://... is a URL too) and treats a protocol-relative
+# //host/path as a URL, so only genuine local file paths get inlined.
+is_url() { local v="${1,,}"; [[ "$v" == http://* || "$v" == https://* || "$v" == //* ]]; }
 
 # inline_echarts <html> <libfile> — replace the single
 #   <script src="<libfile>" ...></script>
@@ -201,6 +204,21 @@ run_report() {
 
     cd "$SCRIPT_DIR"
     mkdir -p reports
+
+    # Fail fast on the two runtime footguns that otherwise surface as a broken
+    # or markerless report only after sqlplus has spun up (F12):
+    #   * echarts must be quote-free -- it rides into a "double-quoted" <script
+    #     src> and a '~echarts' DEFINE; a " would break both.
+    #   * a non-existent marker_file dies mid-run with a bare SP2-0310 and
+    #     silently produces a markerless report -- stat it up front instead.
+    if [[ "$ECHARTS" == *'"'* ]]; then
+        echo "error: ECHARTS ('$ECHARTS') must not contain a double-quote (\")." >&2
+        return 2
+    fi
+    if [[ -n "$MARKER_FILE" && ! -r "$MARKER_FILE" ]]; then
+        echo "error: marker_file '$MARKER_FILE' does not exist or is not readable." >&2
+        return 2
+    fi
 
     # awr_trend.sql does not DEFINE defaults itself; we set them here and the
     # driver inherits them from this sqlplus session.  We load sql/defaults.sql
@@ -271,11 +289,25 @@ _abort() { printf '\n'; echo 'Configurator aborted; nothing was run.' >&2; exit 
 v_nonempty()  { [[ -n "$1" ]] && return 0; echo "  -> a value is required." >&2; return 1; }
 v_posint()    { [[ "$1" =~ ^[1-9][0-9]*$ ]] && return 0; echo "  -> enter a positive whole number." >&2; return 1; }
 v_nonneg()    { [[ "$1" =~ ^[0-9]+$ ]] && return 0; echo "  -> enter 0 or a positive whole number." >&2; return 1; }
+# Positive decimal (> 0): the engine accepts fractional win_hours / step
+# (0.25 = a 15-minute window / cadence), so these must not be whole-number-only.
+# Requires a valid number shape AND at least one non-zero digit (rejects 0, 0.0).
+v_posdec()    { { [[ "$1" =~ ^([0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*)$ ]] && [[ "$1" =~ [1-9] ]]; } \
+                  && return 0; echo "  -> enter a positive number (e.g. 1, or 0.25 for 15 min)." >&2; return 1; }
 v_step_unit() { case "$1" in h|d|w) return 0;; esac; echo "  -> enter h, d or w." >&2; return 1; }
 v_cadence()   { [[ "$1" =~ ^[1-4]$ ]] && return 0; echo "  -> enter 1, 2, 3 or 4." >&2; return 1; }
 v_target_end() {
     [[ "$1" =~ ^[Aa][Uu][Tt][Oo]$ ]] && return 0
-    [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]] && return 0
+    if [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]]; then
+        # Shape is right; also reject impossible instants (2026-06-31, hour 25).
+        # Uses GNU `date -d`; if this box's date can't parse a known-good instant
+        # (non-GNU date), skip the calendar check rather than reject valid input.
+        if date -d "2000-01-01 00:00" >/dev/null 2>&1 && ! date -d "$1" >/dev/null 2>&1; then
+            echo "  -> '$1' is not a real calendar date/time." >&2
+            return 1
+        fi
+        return 0
+    fi
     echo "  -> enter AUTO, or a quoted instant like 2026-04-15 09:00." >&2
     return 1
 }
@@ -339,7 +371,7 @@ choose_cadence() {
         1) STEP=1; STEP_UNIT=w;;
         2) STEP=1; STEP_UNIT=d;;
         3) STEP=1; STEP_UNIT=h;;
-        4) prompt_value STEP      "  Step count between windows" "$STEP"      v_posint
+        4) prompt_value STEP      "  Step count between windows (fractions ok, e.g. 0.25)" "$STEP" v_posdec
            prompt_value STEP_UNIT "  Step unit (h=hours, d=days, w=weeks)" "$STEP_UNIT" v_step_unit;;
     esac
 }
@@ -516,8 +548,9 @@ configure() {
 
     while true; do
         echo "${BOLD}-- Connection --${RST}"
-        echo "${DIM}user/pw@svc, a TNS alias, or / for OS authentication (then run as SYSDBA${RST}"
-        echo "${DIM}via your environment).  Note: a password here ends up in the printed command.${RST}"
+        echo "${DIM}user/pw@svc, a TNS alias, / for OS auth as an ordinary user, or${RST}"
+        echo "${DIM}'/ as sysdba' (quote it) for OS auth as SYSDBA.  Note: a password${RST}"
+        echo "${DIM}here ends up in the printed command.${RST}"
         prompt_value CONN "Database connect string" "$CONN" v_nonempty
 
         echo
@@ -525,7 +558,8 @@ configure() {
         echo "${DIM}AUTO ends each report at the prior full hour.  Or pin an explicit end,${RST}"
         echo "${DIM}e.g. 2026-04-15 09:00 (24-hour clock).${RST}"
         prompt_value TARGET_END "Window end (AUTO or 'YYYY-MM-DD HH24:MI')" "$TARGET_END" v_target_end
-        prompt_value WIN_HOURS  "Window width in hours" "$WIN_HOURS" v_posint
+        echo "${DIM}Fractions allowed: 0.25 = 15 min, 0.5 = 30 min.${RST}"
+        prompt_value WIN_HOURS  "Window width in hours" "$WIN_HOURS" v_posdec
 
         choose_cadence
 
@@ -624,6 +658,34 @@ STEP_UNIT="${8:-$DEF_STEP_UNIT}"
 TEMPLATE="${9:-$DEF_TEMPLATE}"
 DEBUG="${10:-$DEF_DEBUG}"
 MARKER_FILE="${11:-$DEF_MARKER_FILE}"
+
+# ---- validate the positional args before building the heredoc --------------
+# Numerics are interpolated UNQUOTED into the DEFINE block and the string values
+# go into single-quoted DEFINEs, so a stray word, an embedded single quote, or a
+# newline would either abort the driver or inject raw SQL*Plus lines (e.g. a
+# HOST command).  The configurator loops on bad input; the positional path has
+# no human in the loop, so it must fail fast with a message naming the argument
+# (F9).  Reuse the same v_* validators the configurator uses.
+_pos_die() { echo "error: argument '$1' = $(printf %q "$2") is invalid -- $3" >&2; exit 2; }
+_pos_clean() {  # reject newline / single-quote in a heredoc-bound string arg
+    case "$2" in *"'"*) _pos_die "$1" "$2" "must not contain a single quote";; esac
+    case "$2" in *$'\n'*) _pos_die "$1" "$2" "must not contain a newline";; esac
+}
+_pos_clean connect     "$CONN"
+_pos_clean target_end  "$TARGET_END"
+_pos_clean step_unit   "$STEP_UNIT"
+_pos_clean template    "$TEMPLATE"
+_pos_clean debug       "$DEBUG"
+_pos_clean marker_file "$MARKER_FILE"
+
+[[ -n "$CONN" ]]                       || _pos_die connect     "$CONN"       "a connect string is required"
+v_target_end "$TARGET_END" 2>/dev/null || _pos_die target_end  "$TARGET_END" "use AUTO or a real 'YYYY-MM-DD HH24:MI' instant"
+v_posdec    "$WIN_HOURS"   2>/dev/null || _pos_die win_hours   "$WIN_HOURS"  "a positive number of hours (e.g. 1 or 0.25)"
+v_posint    "$WEEKS_BACK"  2>/dev/null || _pos_die weeks_back  "$WEEKS_BACK" "a positive whole number"
+v_posint    "$TOP_N"       2>/dev/null || _pos_die top_n       "$TOP_N"      "a positive whole number"
+v_nonneg    "$INST_NUM"    2>/dev/null || _pos_die inst_num    "$INST_NUM"   "0 (aggregate) or a positive instance number"
+v_posdec    "$STEP"        2>/dev/null || _pos_die step        "$STEP"       "a positive number"
+v_step_unit "$STEP_UNIT"   2>/dev/null || _pos_die step_unit   "$STEP_UNIT"  "one of h, d, w"
 
 run_report "$CONN" "$TARGET_END" "$WIN_HOURS" "$WEEKS_BACK" "$TOP_N" \
            "$INST_NUM" "$STEP" "$STEP_UNIT" "$TEMPLATE" "$DEBUG" "$MARKER_FILE"
