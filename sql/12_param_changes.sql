@@ -41,6 +41,7 @@ DECLARE
     v_weeks_back NUMBER := ~weeks_back;
     v_header     VARCHAR2(4000);
     v_row        VARCHAR2(32767);
+    v_cell       VARCHAR2(32767);
     v_n_changed  PLS_INTEGER := 0;
 
     -- (parameter_name || '|' || week_offset) -> value at that window's
@@ -67,7 +68,9 @@ DECLARE
     FUNCTION cell_html(p_has BOOLEAN, p_val VARCHAR2,
                        p_is_cur BOOLEAN, p_chg BOOLEAN) RETURN VARCHAR2 IS
         v_cls  VARCHAR2(40) := 'pval';
-        v_body VARCHAR2(24000);
+        -- 32767, not 24000: a 4000-char value can entity-escape to roughly
+        -- 24000 and the <code> wrapper pushes it past 24000 -> ORA-06502 (F7).
+        v_body VARCHAR2(32767);
     BEGIN
         IF p_is_cur THEN v_cls := v_cls || ' cur'; END IF;
         IF p_chg    THEN v_cls := v_cls || ' chg'; END IF;
@@ -176,6 +179,13 @@ BEGIN
         v_row := v_row || cell_html(v_cur_has, v_cur_val, TRUE, FALSE);
 
         -- Prior windows: highlight when the value differs from current.
+        -- A parameter value can be up to 4000 chars and entity-escaping can
+        -- expand it up to 6-fold, so many long values across windows overflow both
+        -- v_row (VARCHAR2(32767) -> ORA-06502) and the DBMS_OUTPUT single-line
+        -- cap (32767 -> ORU-10028).  We flush the accumulated markup to its own
+        -- line whenever the next cell would breach a safe threshold; a single
+        -- escaped cell always fits under it, so no cell is ever split.  Normal
+        -- short-value rows stay on one line and are byte-identical (F7).
         FOR k IN 1 .. v_weeks_back LOOP
             v_key := v_names(i) || '|' || k;
             v_cell_has := v_cells.EXISTS(v_key);
@@ -192,7 +202,12 @@ BEGIN
                               <> NVL(v_cur_val, '__NULL__'));
             END IF;
 
-            v_row := v_row || cell_html(v_cell_has, v_cell_val, FALSE, v_changed);
+            v_cell := cell_html(v_cell_has, v_cell_val, FALSE, v_changed);
+            IF LENGTH(v_row) + LENGTH(v_cell) > 30000 THEN
+                DBMS_OUTPUT.PUT_LINE(v_row);
+                v_row := NULL;
+            END IF;
+            v_row := v_row || v_cell;
         END LOOP;
 
         v_row := v_row || '</tr>';

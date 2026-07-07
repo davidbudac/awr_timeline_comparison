@@ -80,6 +80,7 @@ DECLARE
     v_first_dim         BOOLEAN;
 
     @@sql/lib/nth_csv.plsql
+    @@sql/lib/json_escape.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="file-io"><h2>File I/O (top ' || v_top_n
         || ' per dimension, per window)</h2>');
@@ -315,7 +316,7 @@ BEGIN
                 v_chart_vals := v_chart_vals || v_val_s;
             END IF;
         END LOOP;
-        v_new_entry := '{"name":"' || REPLACE(s.file_short, '"', '\"')
+        v_new_entry := '{"name":"' || json_escape(s.file_short)
             || '","cur":' || NVL(TO_CHAR(s.cur_rnk), 'null')
             || ',"vals":[' || v_chart_vals || ']}';
         v_dim_files_total(s.dim) := v_dim_files_total(s.dim) + 1;
@@ -506,7 +507,7 @@ BEGIN
                 v_chart_vals := v_chart_vals || v_val_s;
             END IF;
         END LOOP;
-        v_new_entry := '{"name":"' || REPLACE(tc.filetype_name, '"', '\"')
+        v_new_entry := '{"name":"' || json_escape(tc.filetype_name)
             || '","cur":' || NVL(TO_CHAR(tc.cur_rnk), 'null')
             || ',"vals":[' || v_chart_vals || ']}';
         -- Defensive init: a dim with file-type rows but no top-N files

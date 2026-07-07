@@ -221,16 +221,16 @@ BEGIN
                 || ',"sev":' || CASE WHEN v_sev IS NULL THEN 'null'
                                       ELSE '"' || v_sev || '"' END
                 || ',"z":' || CASE WHEN v_z IS NULL THEN 'null'
-                                    ELSE TO_CHAR(v_z, 'FMS990D00',
+                                    ELSE TO_CHAR(v_z, 'FMS99990D00',
                                                  'NLS_NUMERIC_CHARACTERS=''.,''') END
                 || ',"pct":' || CASE WHEN v_pct IS NULL THEN 'null'
-                                      ELSE TO_CHAR(v_pct, 'FMS990D0',
+                                      ELSE TO_CHAR(v_pct, 'FMS99990D0',
                                                    'NLS_NUMERIC_CHARACTERS=''.,''') END
                 || ',"vals":[' || NVL(c.vals_csv, '') || ']}';
 
             v_sev_badge := CASE
                 WHEN v_sev IS NULL THEN 'n/a'
-                WHEN v_z IS NOT NULL THEN v_sev || ' z=' || TO_CHAR(v_z, 'FMS990D0')
+                WHEN v_z IS NOT NULL THEN v_sev || ' z=' || TO_CHAR(v_z, 'FMS99990D0')
                 ELSE v_sev END;
 
             DBMS_OUTPUT.PUT_LINE('<div class="hero-card" data-hero-pos="' || c.pos || '">');
@@ -256,11 +256,11 @@ BEGIN
                     IF v_d > 0 THEN
                         v_chips := v_chips || '<span class="delta up" title="vs -'
                             || v_off || 'p">' || v_off_lbl
-                            || TO_CHAR(v_d, 'FMS990D0') || '%</span>';
+                            || TO_CHAR(v_d, 'FMS99990D0') || '%</span>';
                     ELSIF v_d < 0 THEN
                         v_chips := v_chips || '<span class="delta down" title="vs -'
                             || v_off || 'p">' || v_off_lbl
-                            || TO_CHAR(v_d, 'FMS990D0') || '%</span>';
+                            || TO_CHAR(v_d, 'FMS99990D0') || '%</span>';
                     ELSE
                         v_chips := v_chips || '<span class="delta" title="vs -'
                             || v_off || 'p">' || v_off_lbl || '0%</span>';

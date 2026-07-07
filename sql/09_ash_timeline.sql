@@ -75,7 +75,12 @@ BEGIN
     FROM   dual;
 
     v_total_hours   := GREATEST((v_range_end - v_range_start) * 24, 1);
-    v_total_buckets := GREATEST(ROUND(v_total_hours / v_bucket_hours), 1);
+    -- CEIL, not ROUND: bucket assignment uses FLOOR(elapsed/bucket), so a
+    -- fractional final bucket has index = FLOOR(total/bucket) which equals
+    -- ROUND(total/bucket) only when the tail is >= half a bucket -- otherwise
+    -- ROUND drops it and the last partial bucket vanishes.  CEIL always keeps
+    -- it; integer cadences give ROUND=CEIL, so aligned runs are unchanged (F4).
+    v_total_buckets := GREATEST(CEIL(v_total_hours / v_bucket_hours), 1);
     v_bucket_label  :=
         CASE WHEN v_bucket_hours = 1 THEN '1-hour'
              WHEN v_bucket_hours < 1 AND MOD(v_bucket_hours*60, 1) = 0

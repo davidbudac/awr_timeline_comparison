@@ -120,10 +120,10 @@ DECLARE
                     || '<td class="num">' || NVL(TO_CHAR(rec.n_prior), '0') || '</td>'
                     || '<td class="num">' ||
                         CASE WHEN rec.z_score IS NULL THEN '&mdash;'
-                             ELSE TO_CHAR(rec.z_score, 'FMS990D00') END || '</td>'
+                             ELSE TO_CHAR(rec.z_score, 'FMS99990D00') END || '</td>'
                     || '<td class="num">' ||
                         CASE WHEN rec.pct_delta IS NULL THEN '&mdash;'
-                             ELSE TO_CHAR(rec.pct_delta, 'FMS990D0') || '%' END || '</td>'
+                             ELSE TO_CHAR(rec.pct_delta, 'FMS99990D0') || '%' END || '</td>'
                     || '</tr>';
                 DBMS_OUTPUT.PUT_LINE(v_row);
             END IF;

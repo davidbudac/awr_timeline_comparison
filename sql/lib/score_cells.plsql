@@ -46,12 +46,12 @@
             || '</span></td>'
             || '<td class="num">'
             || CASE WHEN v_z IS NULL THEN '&mdash;'
-                    ELSE TO_CHAR(v_z, 'FMS990D00',
+                    ELSE TO_CHAR(v_z, 'FMS99990D00',
                                  'NLS_NUMERIC_CHARACTERS=''.,''') END
             || '</td>'
             || '<td class="num">'
             || CASE WHEN v_pct IS NULL THEN '&mdash;'
-                    ELSE TO_CHAR(v_pct, 'FMS9990D0',
+                    ELSE TO_CHAR(v_pct, 'FMS99990D0',
                                  'NLS_NUMERIC_CHARACTERS=''.,''') || '%' END
             || '</td>';
     END score_cells;

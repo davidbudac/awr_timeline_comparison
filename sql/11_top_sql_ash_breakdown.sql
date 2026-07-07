@@ -114,7 +114,10 @@ BEGIN
     FROM   dual;
 
     v_total_hours   := GREATEST((v_range_end - v_range_start) * 24, 1);
-    v_total_buckets := GREATEST(ROUND(v_total_hours / v_bucket_hours), 1);
+    -- CEIL, not ROUND: FLOOR-based bucket assignment drops a sub-half-bucket
+    -- tail under ROUND; CEIL keeps the final partial bucket.  Integer cadences
+    -- give ROUND=CEIL, so aligned runs stay byte-identical (F4).  Mirrors 09.
+    v_total_buckets := GREATEST(CEIL(v_total_hours / v_bucket_hours), 1);
     v_bucket_label  :=
         CASE WHEN v_bucket_hours = 1 THEN '1-hour'
              WHEN v_bucket_hours < 1 AND MOD(v_bucket_hours*60, 1) = 0

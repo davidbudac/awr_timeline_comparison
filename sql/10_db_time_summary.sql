@@ -97,11 +97,14 @@ BEGIN
     END IF;
 
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || 'DB time per snap interval, stacked by wait_class, '
+        || 'DB CPU + non-idle wait time per snap interval, stacked by wait_class, '
         || 'earliest compared window &rarr; current. '
-        || '<b>CPU</b>: <code>dba_hist_sys_time_model</code> (stat_name=DB CPU). '
+        || '<b>CPU</b>: <code>dba_hist_sys_time_model</code> (stat_name=DB CPU, '
+        || 'foreground sessions). '
         || 'Waits: <code>dba_hist_system_event</code> grouped by <code>wait_class</code> '
-        || '(Idle excluded). Snap-pairs across an instance restart &rarr; gap.</p>');
+        || '(Idle excluded, <b>all sessions incl. background</b> &mdash; LGWR/DBWR '
+        || 'writes etc.), so this is not a strict foreground DB-time profile. '
+        || 'Snap-pairs across an instance restart &rarr; gap.</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-big" id="db-time-summary-chart"></div>');
 

@@ -70,6 +70,19 @@ while IFS= read -r hit; do
     fi
 done < <(sql_files | xargs grep -noE '~[A-Za-z_][A-Za-z0-9_]*' 2>/dev/null)
 
+# 3b. Tilde followed by a DIGIT (e.g. a stray '~6x' or '~24000' in a comment).
+#     Under SET DEFINE '~' these read as undefined positional params (~1, ~2,
+#     ...) and hang the run at a prompt -> SP2-0546/EOF, silently truncating
+#     the section.  The ONLY legitimate ~digit is marker.sql's ~1/~2 positional
+#     params (it runs under SET DEFINE '~' by design), so exclude just that file.
+while IFS= read -r hit; do
+    file=${hit%%:*}
+    case "$file" in */lib/marker.sql) continue ;; esac
+    rest=${hit#*:}; lineno=${rest%%:*}
+    finding stray-tilde-digit "$file:$lineno" \
+        "'~<digit>' reads as an undefined positional param under SET DEFINE '~' and hangs the run (write the number out in prose, e.g. 'up to 6x')"
+done < <(sql_files | xargs grep -noE '~[0-9]' 2>/dev/null)
+
 # ----------------------------------------------------------------------
 # 4. AWR filters must use dbid IN (~dbid_list), never equality against the
 #    single primary ~dbid (breaks non-CDB -> PDB migrated history).

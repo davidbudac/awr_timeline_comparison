@@ -70,6 +70,7 @@ DECLARE
     v_first_dim       BOOLEAN;
 
     @@sql/lib/nth_csv.plsql
+    @@sql/lib/json_escape.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="segment-io"><h2>Segment I/O (top ' || v_top_n
         || ' per dimension, per window)</h2>');
@@ -312,8 +313,8 @@ BEGIN
                 v_chart_vals := v_chart_vals || v_val_s;
             END IF;
         END LOOP;
-        v_new_entry := '{"name":"' || REPLACE(s.seg_name, '"', '\"')
-            || '","type":"' || REPLACE(s.object_type, '"', '\"')
+        v_new_entry := '{"name":"' || json_escape(s.seg_name)
+            || '","type":"' || json_escape(s.object_type)
             || '","cur":' || NVL(TO_CHAR(s.cur_rnk), 'null')
             || ',"vals":[' || v_chart_vals || ']}';
         v_dim_segs_total(s.dim) := v_dim_segs_total(s.dim) + 1;
@@ -504,7 +505,7 @@ BEGIN
                 v_chart_vals := v_chart_vals || v_val_s;
             END IF;
         END LOOP;
-        v_new_entry := '{"name":"' || REPLACE(tc.object_type, '"', '\"')
+        v_new_entry := '{"name":"' || json_escape(tc.object_type)
             || '","cur":' || NVL(TO_CHAR(tc.cur_rnk), 'null')
             || ',"vals":[' || v_chart_vals || ']}';
         -- Defensive init: a dim with type rows but no top-N segments would
