@@ -42,6 +42,7 @@ BEGIN
         || ' --crit:#b01c1c;        --warn:#8a5a00;         --ok:#1f7a4d;'
         || ' --info:#2f6fb0;        --skip:#7a828e;'
         || ' --crit-bg:#fbeceb;     --warn-bg:#faf2df;      --ok-bg:#e8f3ed;'
+        || ' --warn-border:#f0d77a;'
         || ' --info-bg:#e7eef7;     --skip-bg:#eef1f4;'
         || ' --dot-ok:#1f9d63;      --dot-warn:#d99a1a;'
         || ' --dot-crit:#c62828;    --dot-na:#c1c9d3;'
@@ -79,6 +80,7 @@ BEGIN
         || ' --crit:#e5675c;        --warn:#e0a53a;         --ok:#43bb82;'
         || ' --info:#6fa8dc;        --skip:#8591a0;'
         || ' --crit-bg:#2b1a1a;     --warn-bg:#2a2413;      --ok-bg:#15271e;'
+        || ' --warn-border:#6d5a22;'
         || ' --info-bg:#172431;     --skip-bg:#1d232d;'
         || ' --dot-ok:#43bb82;      --dot-warn:#e0a53a;'
         || ' --dot-crit:#e5675c;    --dot-na:#3a4350;'
@@ -653,10 +655,12 @@ BEGIN
         || ' text-overflow:ellipsis; }');
     DBMS_OUTPUT.PUT_LINE('body.no-charts .chart-wrap, body.no-charts .hero-card .mini { display:none; }');
     DBMS_OUTPUT.PUT_LINE('body.no-charts .cdn-warn { display:block !important; }');
+    -- Theme-aware: var(--warn-fg) / var(--warn-border) keep the offline-charts
+    -- banner legible in dark mode, where --warn-bg is near-black (F13).
     DBMS_OUTPUT.PUT_LINE('.cdn-warn {'
         || ' display:none;'
-        || ' background:var(--warn-bg); color:#7c5b00;'
-        || ' padding:8px 12px; border:1px solid #f0d77a; border-radius:8px;'
+        || ' background:var(--warn-bg); color:var(--warn-fg);'
+        || ' padding:8px 12px; border:1px solid var(--warn-border); border-radius:8px;'
         || ' font-size:13px; margin:6px 0; }');
 
     -- =========================================================

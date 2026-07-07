@@ -568,7 +568,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var fg=cs.getPropertyValue("--fg").trim()||"#333";');
     DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
     DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
-    DBMS_OUTPUT.PUT_LINE('var bandColor="rgba(37,99,235,0.10)", bandCurrent="rgba(37,99,235,0.22)";');
+    DBMS_OUTPUT.PUT_LINE('var bandColor="rgba(37,99,235,0.10)", bandCurrent="rgba(37,99,235,0.22)", bandSkip="rgba(148,163,175,0.12)";');
     DBMS_OUTPUT.PUT_LINE('function eventColor(name){');
     DBMS_OUTPUT.PUT_LINE('  if(name==="CPU")   return "#16a34a";');
     DBMS_OUTPUT.PUT_LINE('  if(name==="Other") return "#94a3b8";');
@@ -577,8 +577,16 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var hue=((h%360)+360)%360;');
     DBMS_OUTPUT.PUT_LINE('  return "hsl("+hue+",58%,52%)";');
     DBMS_OUTPUT.PUT_LINE('}');
+    -- F15: shade skipped windows (w[3]==="0") in muted grey with a "skipped"
+    -- label rather than a real band, and clamp the right edge to the last
+    -- bucket label when the window end is off the category grid (mirrors 09).
+    DBMS_OUTPUT.PUT_LINE('var lastCat=(d.hours&&d.hours.length)?d.hours[d.hours.length-1]:null;');
     DBMS_OUTPUT.PUT_LINE('var markAreaData=(d.windows||[]).map(function(w){'
-        || 'return [{xAxis:w[0],itemStyle:{color:w[2]==="current"?bandCurrent:bandColor}},{xAxis:w[1]}];});');
+        || 'var valid=w[3]!=="0";'
+        || 'var a={xAxis:w[0],itemStyle:{color:valid?(w[2]==="current"?bandCurrent:bandColor):bandSkip}};'
+        || 'if(!valid){a.label={show:true,position:"insideTop",color:mu,fontSize:9,formatter:"skipped",distance:1};}'
+        || 'var end=w[1];if(lastCat!==null&&d.hours.indexOf(end)<0)end=lastCat;'
+        || 'return [a,{xAxis:end}];});');
     DBMS_OUTPUT.PUT_LINE('(d.charts||[]).forEach(function(c){');
     DBMS_OUTPUT.PUT_LINE('  var el=document.getElementById(c.id); if(!el) return;');
     DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el);');
@@ -602,6 +610,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('      return s;})');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  new ResizeObserver(function(){chart.resize();}).observe(el);');
+    -- Inside the per-chart forEach so each chart binds its own theme listener
+    -- (closure over this iteration''s `chart`); re-applies colors on flip (F14).
+    DBMS_OUTPUT.PUT_LINE('  document.addEventListener("awr:theme",function(){var c2=getComputedStyle(document.body),fg2=c2.getPropertyValue("--fg").trim()||"#333",mu2=c2.getPropertyValue("--muted").trim()||"#888",gr2=c2.getPropertyValue("--border").trim()||"#e0e0e0";');
+    DBMS_OUTPUT.PUT_LINE('  chart.setOption({legend:{textStyle:{color:fg2}},xAxis:{axisLabel:{color:mu2}},yAxis:{nameTextStyle:{color:mu2},axisLabel:{color:mu2},splitLine:{lineStyle:{color:gr2}}},dataZoom:[{},{textStyle:{color:mu2}}]});});');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');

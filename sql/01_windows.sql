@@ -53,7 +53,10 @@ BEGIN
 
     DBMS_OUTPUT.PUT_LINE('<div class="ribbon">'
         || '<svg viewBox="0 0 1000 72" preserveAspectRatio="none" role="img" aria-label="Baseline windows timeline">');
-    DBMS_OUTPUT.PUT_LINE('<line x1="0" y1="56" x2="1000" y2="56" stroke="#c8d0dc" stroke-width="1"/>');
+    -- Inline SVG inherits the page CSS vars, so themed tokens keep the ribbon
+    -- axis/labels/skip-fill legible in dark mode (F13). The valid-window box
+    -- stays #2563eb (a vivid blue that reads on either background).
+    DBMS_OUTPUT.PUT_LINE('<line x1="0" y1="56" x2="1000" y2="56" stroke="var(--rule)" stroke-width="1"/>');
 
     -- Emit one <g> per window, oldest on the left. Display uses
     -- windows_rollup so each week_offset gets a single ribbon block
@@ -93,13 +96,13 @@ BEGIN
         ELSE
             DBMS_OUTPUT.PUT_LINE('<rect x="' || TO_CHAR(v_x, 'FM999990D0')
                 || '" y="' || v_box_y || '" width="' || TO_CHAR(v_box_w, 'FM999990D0')
-                || '" height="' || v_box_h || '" rx="4" fill="#9aa3af"'
-                || ' fill-opacity="0.18" stroke="#9aa3af"'
+                || '" height="' || v_box_h || '" rx="4" fill="var(--skip)"'
+                || ' fill-opacity="0.18" stroke="var(--skip)"'
                 || ' stroke-dasharray="4,3"/>');
         END IF;
 
         DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
-            || '" y="10" text-anchor="middle" font-size="10" fill="#666">'
+            || '" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">'
             || TO_CHAR(w.win_end_ts, '~period_axis_fmt') || '</text>');
 
         IF v_is_current THEN
@@ -108,7 +111,7 @@ BEGIN
         END IF;
 
         DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
-            || '" y="68" text-anchor="middle" font-size="10" fill="#666">'
+            || '" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">'
             || v_status || '</text>');
         DBMS_OUTPUT.PUT_LINE('</g>');
     END LOOP;

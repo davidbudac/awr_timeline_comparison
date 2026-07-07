@@ -678,11 +678,18 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var el=document.getElementById("masthead-timeline"); if(!el) return;');
     DBMS_OUTPUT.PUT_LINE('var d=AWR_DATA.mastheadTimeline;');
     DBMS_OUTPUT.PUT_LINE('if(!d.times.length){el.style.display="none"; return;}');
+    DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
+    -- paint() re-reads the CSS vars and theme-picks the hardcoded band/area
+    -- rgba fills each call, so the awr:theme event (F14) re-styles the chart on
+    -- a dark toggle instead of leaving it on the init-time palette.
+    DBMS_OUTPUT.PUT_LINE('function paint(){');
     DBMS_OUTPUT.PUT_LINE('var cs=getComputedStyle(document.body);');
     DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
     DBMS_OUTPUT.PUT_LINE('var red=cs.getPropertyValue("--accent").trim()||"#1f5fa8";');
-    DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
-    DBMS_OUTPUT.PUT_LINE('var bandCurrent="rgba(31,95,168,0.18)", bandPrior="rgba(100,116,139,0.10)";');
+    DBMS_OUTPUT.PUT_LINE('var dark=document.body.classList.contains("dark");');
+    DBMS_OUTPUT.PUT_LINE('var bandCurrent=dark?"rgba(91,155,216,0.20)":"rgba(31,95,168,0.18)";');
+    DBMS_OUTPUT.PUT_LINE('var bandPrior=dark?"rgba(133,145,160,0.12)":"rgba(100,116,139,0.10)";');
+    DBMS_OUTPUT.PUT_LINE('var areaFill=dark?"rgba(91,155,216,0.10)":"rgba(31,95,168,0.08)";');
     DBMS_OUTPUT.PUT_LINE('var markAreaData=(d.windows||[]).map(function(w){return [');
     DBMS_OUTPUT.PUT_LINE('  {xAxis:w[0],itemStyle:{color:w[2]==="current"?bandCurrent:bandPrior},');
     DBMS_OUTPUT.PUT_LINE('   label:{show:true,position:"insideTop",color:mu,fontSize:9,formatter:w[2],distance:1}},');
@@ -701,12 +708,15 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    name:"DB time",type:"line",smooth:true,symbol:"none",');
     DBMS_OUTPUT.PUT_LINE('    data:d.vals,');
     DBMS_OUTPUT.PUT_LINE('    lineStyle:{width:1.2,color:red},');
-    DBMS_OUTPUT.PUT_LINE('    areaStyle:{color:"rgba(31,95,168,0.08)"},');
+    DBMS_OUTPUT.PUT_LINE('    areaStyle:{color:areaFill},');
     DBMS_OUTPUT.PUT_LINE('    markArea:{silent:true,data:markAreaData,itemStyle:{opacity:1},z:0},');
     DBMS_OUTPUT.PUT_LINE('    markLine:(window.AWR_markLine&&window.AWR_markLine(d.times))||{data:[]},');
     DBMS_OUTPUT.PUT_LINE('    z:5');
     DBMS_OUTPUT.PUT_LINE('  }]');
     DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('paint();');
+    DBMS_OUTPUT.PUT_LINE('document.addEventListener("awr:theme",paint);');
     DBMS_OUTPUT.PUT_LINE('new ResizeObserver(function(){chart.resize();}).observe(el);');
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');
@@ -841,6 +851,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var on=document.body.classList.toggle("dark");');
     DBMS_OUTPUT.PUT_LINE('  try{localStorage.setItem("awr-theme",on?"dark":"light");}catch(e){}');
     DBMS_OUTPUT.PUT_LINE('  sync(on);');
+    -- ECharts read their axis/label colors from the CSS vars once at init, so
+    -- a theme flip leaves every chart on the old palette.  Broadcast awr:theme
+    -- (mirroring awr:appfilter); each chart-init listens and re-applies its
+    -- var-derived colors via setOption (F14).
+    DBMS_OUTPUT.PUT_LINE('  document.dispatchEvent(new CustomEvent("awr:theme",{detail:{dark:on}}));');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('})();</script>');
 

@@ -269,8 +269,14 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
     DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
     DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
-    DBMS_OUTPUT.PUT_LINE('var bandColor="rgba(37,99,235,0.10)", bandCurrent="rgba(37,99,235,0.22)";');
-    DBMS_OUTPUT.PUT_LINE('var markAreaData=(d.windows||[]).map(function(w){return [{xAxis:w[0],itemStyle:{color:w[2]==="current"?bandCurrent:bandColor}},{xAxis:w[1]}];});');
+    DBMS_OUTPUT.PUT_LINE('var bandColor="rgba(37,99,235,0.10)", bandCurrent="rgba(37,99,235,0.22)", bandSkip="rgba(148,163,175,0.12)";');
+    -- F15: honor w[3] (valid_flag) -- shade skipped windows in muted grey with
+    -- a "skipped" label instead of a real blue band; and clamp the right edge
+    -- to the last bucket label when the window end has no exact category anchor
+    -- (the current window ends at last-label + bucket, which is off-grid), so
+    -- the final band isn't dropped or short.
+    DBMS_OUTPUT.PUT_LINE('var lastCat=(d.hours&&d.hours.length)?d.hours[d.hours.length-1]:null;');
+    DBMS_OUTPUT.PUT_LINE('var markAreaData=(d.windows||[]).map(function(w){var valid=w[3]!=="0";var a={xAxis:w[0],itemStyle:{color:valid?(w[2]==="current"?bandCurrent:bandColor):bandSkip}};if(!valid){a.label={show:true,position:"insideTop",color:mu,fontSize:9,formatter:"skipped",distance:1};}var end=w[1];if(lastCat!==null&&d.hours.indexOf(end)<0)end=lastCat;return [a,{xAxis:end}];});');
     DBMS_OUTPUT.PUT_LINE('chart.setOption({');
     DBMS_OUTPUT.PUT_LINE('  tooltip:{trigger:"axis",axisPointer:{type:"line"},');
     DBMS_OUTPUT.PUT_LINE('    valueFormatter:function(v){return v==null?"\u2014":(+v).toFixed(2);}},');
@@ -292,6 +298,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    return s;})');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('new ResizeObserver(function(){chart.resize();}).observe(el);');
+    -- Re-apply axis/legend/dataZoom colors from the CSS vars on theme flip (F14).
+    DBMS_OUTPUT.PUT_LINE('document.addEventListener("awr:theme",function(){var c2=getComputedStyle(document.body),fg2=c2.getPropertyValue("--fg").trim()||"#333",mu2=c2.getPropertyValue("--muted").trim()||"#888",gr2=c2.getPropertyValue("--border").trim()||"#e0e0e0";');
+    DBMS_OUTPUT.PUT_LINE('chart.setOption({legend:{textStyle:{color:fg2}},xAxis:{axisLabel:{color:mu2}},yAxis:{nameTextStyle:{color:mu2},axisLabel:{color:mu2},splitLine:{lineStyle:{color:gr2}}},dataZoom:[{},{textStyle:{color:mu2}}]});});');
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');
 

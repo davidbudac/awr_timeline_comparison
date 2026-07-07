@@ -28,7 +28,9 @@
                       THEN NULL
                       ELSE (p_cur - p_mu) / ABS(p_mu) * 100 END;
         v_bucket := CASE
-            WHEN p_cur IS NULL                 THEN 'insufficient history'
+            -- cur missing => 'n/a' (no current value), matching section 08;
+            -- present cur with too few priors => 'insufficient history' (F16).
+            WHEN p_cur IS NULL                 THEN 'n/a'
             WHEN NVL(p_n, 0) < 3               THEN 'insufficient history'
             WHEN p_sd IS NULL OR p_sd = 0      THEN 'flat baseline'
             WHEN ABS(v_z) > 3                  THEN 'large'

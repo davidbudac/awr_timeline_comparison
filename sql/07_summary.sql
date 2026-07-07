@@ -287,7 +287,10 @@ BEGIN
                    ELSE (cur_val - mu) / ABS(mu) * 100
                END AS pct_delta,
                CASE
-                   WHEN cur_val IS NULL THEN 'insufficient history'
+                   -- cur missing => 'n/a' (no current value; history is not the
+                   -- issue), matching section 08's hero cards.  Only a present
+                   -- cur with too few priors is 'insufficient history' (F16).
+                   WHEN cur_val IS NULL THEN 'n/a'
                    WHEN n < 3           THEN 'insufficient history'
                    WHEN sd IS NULL OR sd = 0 THEN 'flat baseline'
                    WHEN ABS((cur_val - mu) / sd) > 3 THEN 'large'
@@ -310,6 +313,7 @@ BEGIN
                                 WHEN 'large'                THEN 1
                                 WHEN 'moderate'             THEN 2
                                 WHEN 'insufficient history' THEN 3
+                                WHEN 'n/a'                  THEN 3
                                 WHEN 'flat baseline'        THEN 4
                                 ELSE 5
                             END,
@@ -397,6 +401,10 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('});');
         DBMS_OUTPUT.PUT_LINE('chart.on("click",function(p){if(!p.data||!p.data.raw)return;var row=document.querySelector("tr[data-metric=\""+CSS.escape(p.data.raw.m)+"\"]");if(row){row.scrollIntoView({behavior:"smooth",block:"center"});row.style.transition="outline 1.5s";row.style.outline="2px solid "+cs.getPropertyValue("--accent");setTimeout(function(){row.style.outline="none";},1600);}});');
         DBMS_OUTPUT.PUT_LINE('new ResizeObserver(function(){chart.resize();}).observe(el);');
+        -- Re-apply the heatmap axis/visualMap label colors on theme flip (F14).
+        -- The visualMap inRange gradient is a fixed hue ramp (theme-independent).
+        DBMS_OUTPUT.PUT_LINE('document.addEventListener("awr:theme",function(){var c2=getComputedStyle(document.body),fg2=c2.getPropertyValue("--fg").trim()||"#333",mu2=c2.getPropertyValue("--muted").trim()||"#888";');
+        DBMS_OUTPUT.PUT_LINE('chart.setOption({xAxis:{axisLabel:{color:mu2}},yAxis:{axisLabel:{color:fg2}},visualMap:{textStyle:{color:mu2}}});});');
         DBMS_OUTPUT.PUT_LINE('})();');
         DBMS_OUTPUT.PUT_LINE('</script>');
     END IF;

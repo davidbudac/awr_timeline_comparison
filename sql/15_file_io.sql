@@ -675,6 +675,9 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('    });');
         DBMS_OUTPUT.PUT_LINE('  }');
         DBMS_OUTPUT.PUT_LINE('  new ResizeObserver(function(){chart.resize();}).observe(el);');
+        -- Re-apply axis/legend colors from the CSS vars on theme flip (F14).
+        DBMS_OUTPUT.PUT_LINE('  document.addEventListener("awr:theme",function(){var c2=getComputedStyle(document.body),fg2=c2.getPropertyValue("--fg").trim()||"#333",mu2=c2.getPropertyValue("--muted").trim()||"#888",gr2=c2.getPropertyValue("--border").trim()||"#e0e0e0";');
+        DBMS_OUTPUT.PUT_LINE('  chart.setOption({legend:{textStyle:{color:fg2}},xAxis:{axisLabel:{color:fg2},splitLine:{lineStyle:{color:gr2}}},yAxis:{nameTextStyle:{color:mu2},axisLabel:{color:mu2},splitLine:{lineStyle:{color:gr2}}}});});');
         DBMS_OUTPUT.PUT_LINE('});');
         DBMS_OUTPUT.PUT_LINE('})();</script>');
     END IF;

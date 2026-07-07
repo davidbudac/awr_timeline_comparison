@@ -795,6 +795,9 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('    });');
         DBMS_OUTPUT.PUT_LINE('  }');
         DBMS_OUTPUT.PUT_LINE('  new ResizeObserver(function(){chart.resize();}).observe(el);');
+        -- Re-apply axis/legend colors from the CSS vars on theme flip (F14).
+        DBMS_OUTPUT.PUT_LINE('  document.addEventListener("awr:theme",function(){var c2=getComputedStyle(document.body),fg2=c2.getPropertyValue("--fg").trim()||"#333",mu2=c2.getPropertyValue("--muted").trim()||"#888",gr2=c2.getPropertyValue("--border").trim()||"#e0e0e0";');
+        DBMS_OUTPUT.PUT_LINE('  chart.setOption({legend:{textStyle:{color:fg2}},xAxis:{axisLabel:{color:fg2},splitLine:{lineStyle:{color:gr2}}},yAxis:{nameTextStyle:{color:mu2},axisLabel:{color:mu2},splitLine:{lineStyle:{color:gr2}}}});});');
         DBMS_OUTPUT.PUT_LINE('});');
         DBMS_OUTPUT.PUT_LINE('})();</script>');
     END IF;
@@ -1147,6 +1150,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    if(details.open) ensure();');
     DBMS_OUTPUT.PUT_LINE('  } else { ensure(); }');
     DBMS_OUTPUT.PUT_LINE('  new ResizeObserver(function(){ if(chart) chart.resize(); }).observe(el);');
+    -- Re-apply axis/legend colors on theme flip (F14). chart is created lazily
+    -- by ensure(), so guard with if(chart) -- the closure sees the latest value.
+    DBMS_OUTPUT.PUT_LINE('  document.addEventListener("awr:theme",function(){if(!chart)return;var c2=getComputedStyle(document.body),fg2=c2.getPropertyValue("--fg").trim()||"#333",mu2=c2.getPropertyValue("--muted").trim()||"#888",gr2=c2.getPropertyValue("--border").trim()||"#e0e0e0";');
+    DBMS_OUTPUT.PUT_LINE('  chart.setOption({legend:{textStyle:{color:fg2}},xAxis:{axisLabel:{color:mu2}},yAxis:{nameTextStyle:{color:mu2},axisLabel:{color:mu2},splitLine:{lineStyle:{color:gr2}}}});});');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('})();</script>');
 
