@@ -290,6 +290,24 @@ the wrong week / drifts chart points to the wrong window (lint check
 `listagg-null-token`; emitter contract documented in `sql/lib/nth_csv.plsql`).
 A non-null sentinel token like `THEN 'null'` is fine.
 
+### ECharts theme re-styling (`awr:theme`)
+Every ECharts chart reads its axis/label/gridline colors from the CSS vars
+(`--fg`/`--muted`/`--border`, via `getComputedStyle`) **once at init**, so a
+dark-mode toggle would otherwise leave charts on the old palette. The theme
+toggle in `00_params.sql` dispatches `document`-level `CustomEvent('awr:theme')`
+(the sibling of `awr:appfilter`); every chart-init registers a listener that
+re-reads those vars and `setOption`-merges the color-bearing options. The
+masthead chart wraps its whole build in a `paint()` re-run (it also theme-picks
+hardcoded rgba band/area fills); the other sections (04/05/06×2/07/09/10/11/
+14/15) append a small merge-only listener. **Section 11 registers the listener
+*inside* its per-chart `forEach`** so each chart binds its own instance (a
+single outer listener would capture only the last chart). New charts must add an
+`awr:theme` listener or they'll ignore a live toggle. Wait-class series colors
+are theme-independent (kept in parity with `js_wait_colors.plsql`), so only
+axis/legend/fill colors need re-applying. Verify headlessly by stubbing
+`getComputedStyle`/`echarts` and asserting every chart re-`setOption`s a
+dark-palette color on the event.
+
 ### `ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,'` is load-bearing
 The driver pins it right after the `WHENEVER` directives. `step_hours` round-trips
 as a trailing-dot string like `'1.'` and is re-parsed with a bare
@@ -301,12 +319,25 @@ over a `.`-rendered value without it. Writes nothing to the DB.
 ### Window validity (per-instance in RAC)
 `windows_cte.sql` pairs begin/end snaps per `(week_offset, instance_number)` and
 marks `valid_flag='N'` (with `skip_reason`) when an instance lacks a begin/end
-snap, has begin=end, restarted mid-window (`startup_time` differs), or the window
-straddles a DBID change. `valid_windows` is the per-instance valid-only
-projection consumed by data sections 02–08 (their `GROUP BY week_offset` sums
-only surviving pairs). `windows_rollup` aggregates back to one row per
-`week_offset` for display (sections 01, 09). Single-instance: no-op,
-byte-identical.
+snap, has begin=end, restarted mid-window (`startup_time` differs), the window
+straddles a DBID change, or a resolved begin/end snap sits **more than 15 min
+outside the requested window edge** (`skip_reason` `'no snapshot within 15 min
+of window edge'`). `valid_windows` is the per-instance valid-only projection
+consumed by data sections 02–08 (their `GROUP BY week_offset` sums only
+surviving pairs). `windows_rollup` aggregates back to one row per `week_offset`
+for display (sections 01, 09). Single-instance: no-op, byte-identical.
+
+**`dur_sec` is the resolved snap-to-snap span, not `win_hours`.** Snaps are
+resolved with only a one-sided ±5-min tolerance over a ±1-day bracket, so the
+real delta span can exceed the nominal window; `valid_windows.dur_sec` therefore
+uses `(end_snap.end_ts − begin_snap.end_ts)` (threaded via `begin_end_ts` /
+`end_end_ts`), and the 15-min guard above rejects grids too far off to compare.
+`dur_sec` is **per-instance** (each instance's snaps jitter independently), so
+the per-sec consumers (00/02/07/08) sum the cross-instance delta and divide by
+`MAX(dur_sec)` with `dur_sec` **out of the second-level GROUP BY** — grouping on
+it would split a RAC week into partial rows. Single-instance is byte-identical
+(one constant `dur_sec` → `MAX` is a no-op and the narrower GROUP BY is
+equivalent).
 
 ### SYSMETRIC additive-vs-ratio aggregation
 `DBA_HIST_SYSMETRIC_SUMMARY` is per-(snap, instance). Cross-instance roll-up is
@@ -414,6 +445,21 @@ in prose; keep `~name` out of comments (use the bare name).
   with no current-window rank — went 82 → 0 across all dims, and every one of
   the 454 differing lines was a CSV/series/table-cell realignment (no
   collateral output change; gap-free rows byte-identical).
+- **Review-fix batch F1–F16 verified on dbmint (2026-07-07, hourly window
+  `target_end='2026-06-30 14:00'` win=1h weeks_back=4, 19.27):** clean runs,
+  16 sections, no ORA-. F1 — wait-table em-dash cells 100→21 and a previously
+  suppressed `direct path write` crit (z +16.78) now surfaces. F2 — resolved
+  span 3603s vs nominal 3600s; aligned window stays valid (35/38-s edge gaps «
+  15 min); HEAD-vs-fix diff confined to sections 00/02/04/05/07/08 (03/06/09–15
+  untouched). F3 — 10 `######%` cells → real numbers, zero `#` remain. F4–F7
+  byte-identical on this aligned grid. F14 — headless DOM stub: all 86 chart
+  instances re-`setOption` a dark-palette color on `awr:theme`; all 90 inline
+  scripts parse. F16 — findings split into `n/a` (cur NULL) vs `insufficient
+  history` (n<3). **Section 06/11 are non-deterministic run-to-run on idle
+  dbmint** (Top-SQL rank ties with no unique tiebreaker), so exclude them when
+  byte-diffing. **Pending a real/busy DB + live browser:** F2's misalignment
+  skip path and RAC per-instance `dur_sec`; F5 backslash-name escaping; F13/F14/
+  F15 pixel-level dark-mode rendering (logic verified headlessly, not visually).
 
 ## Things NOT to do
 

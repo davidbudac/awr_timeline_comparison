@@ -5,6 +5,60 @@ The report footer stamps the version that produced it
 top of `awr_trend.sql`. Bump it there when cutting a release and add an
 entry here. Dates are release dates.
 
+## 1.2.0 — 2026-07-07
+
+Accuracy, robustness and dark-mode fixes from a full-project review (findings
+F1–F16). The read-only invariant is unchanged. Several items change report
+numbers or which findings surface — these are corrections, not cosmetic.
+
+### Accuracy
+- **Wait z-score baselines are no longer censored by the top-N filter**
+  (F1) — sections 04/05 built each event's prior-window baseline from the
+  rank-filtered top-N set, so any prior window where an event ranked below
+  `top_n` contributed no sample. A newly-spiking event got zero priors and
+  read "insufficient history" instead of the crit/warn it deserved. The
+  baseline now draws from full history; the rank badges are unchanged.
+- **Per-second rates use the resolved snap span, not the requested window
+  length** (F2) — begin/end snaps are resolved with a ±5-minute tolerance
+  over a ±1-day bracket, so a sparse or offset snap grid could stretch the
+  real delta span well past the nominal window and inflate every LOAD rate
+  2–4× while the window still read "valid". Rates now divide by the actual
+  snap-to-snap span, and a window whose resolved snaps sit more than 15 min
+  outside the requested edge is flagged invalid with skip reason
+  *"no snapshot within 15 min of window edge"*.
+- **%Δ and z-score cells no longer overflow to `#`** at ≥1000% (F3);
+  format masks widened to 5 integer digits.
+- **ASH timelines keep the final partial bucket** (F4; `ROUND`→`CEIL`).
+- **Section 04's wait-class rollup honours the template wait filter** (F6),
+  so under a curated template the class totals match the per-event tables
+  and the section-07 class findings.
+- Findings label a missing current value as **"n/a"** everywhere (was
+  "insufficient history" in 04/05/07, "n/a" in 08); "insufficient history"
+  now means a present value with too few prior windows (F16).
+
+### Robustness
+- Section 14/15 chart series names are JSON-escaped backslash-first (F5).
+- Section 12 (parameter changes) can't overflow `ORA-06502` on long values;
+  it flushes wide rows across lines instead of buffering a whole `<tr>` (F7).
+- Section 10's chart caption is honest about mixing foreground DB CPU with
+  all-session (incl. background) waits (F8).
+- **Wrapper** (`run_awr_trend.sh`): positional arguments are validated before
+  the driver runs — bad numerics/dates and quote/newline injection are
+  rejected with a message naming the argument (F9); the configurator accepts
+  fractional `win_hours`/`step` (0.25 = 15 min) and rejects impossible dates
+  (F10); the `/`-vs-`/ as sysdba` help text is corrected (F11); `ECHARTS`
+  URLs match case-insensitively, a quote in `ECHARTS` is rejected, and a
+  missing `marker_file` fails fast (F12).
+
+### Dark mode
+- The offline-charts banner and the section-01 window ribbon are legible in
+  dark mode (themed CSS tokens instead of hardcoded colors) (F13).
+- **Toggling the theme now restyles every ECharts chart** — the toggle
+  dispatches `awr:theme` and each chart re-reads the CSS vars and repaints
+  (F14). Previously charts kept the old theme's axis/label colors until reload.
+- ASH window bands shade skipped windows distinctly ("skipped", muted grey)
+  and anchor the current window's right edge to the last bucket (F15).
+
 ## 1.1.0 — 2026-07-06
 
 Report redesign and two table presets. Engine and read-only invariant
