@@ -170,7 +170,7 @@ BEGIN
                   || TO_CHAR(win_end_ts,   'YYYY-MM-DD HH24:MI') || '","'
                   || CASE WHEN week_offset = 0 THEN 'current'
                           ELSE 'w-' || week_offset END || '",'
-                  || CASE WHEN valid_flag = 'Y' THEN '1' ELSE '0' END
+                  || CASE WHEN valid_flag = 'Y' THEN '"1"' ELSE '"0"' END
                   || ']',
                   ',')
                   WITHIN GROUP (ORDER BY week_offset DESC)

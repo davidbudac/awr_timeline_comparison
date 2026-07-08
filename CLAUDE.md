@@ -457,9 +457,36 @@ in prose; keep `~name` out of comments (use the bare name).
   scripts parse. F16 — findings split into `n/a` (cur NULL) vs `insufficient
   history` (n<3). **Section 06/11 are non-deterministic run-to-run on idle
   dbmint** (Top-SQL rank ties with no unique tiebreaker), so exclude them when
-  byte-diffing. **Pending a real/busy DB + live browser:** F2's misalignment
-  skip path and RAC per-instance `dur_sec`; F5 backslash-name escaping; F13/F14/
-  F15 pixel-level dark-mode rendering (logic verified headlessly, not visually).
+  byte-diffing.
+- **F13/F14/F15 live-browser verification done (2026-07-08, Chrome preview on a
+  fresh dbmint report):** F14 — the theme toggle re-styles 20/26 ECharts
+  instances (`--fg` `#333a45`↔`#bcc5d1`, persisted to `localStorage`,
+  `data-theme`); the 6 unchanged are section-08 `hero-mini` cards with
+  `xShow:false`/`yShow:false` (hidden axes → default grey never renders, so
+  correctly excluded). F13 — section-01 window ribbon and the amber `.cdn-warn`
+  banner (`#e0a53a` on dark-brown) both legible in dark mode; `no-charts` text
+  fallback and the <980px static-rail layout clean (no horizontal overflow).
+  **F15 had a real bug the headless stub missed and it is now fixed:** sections
+  09 and 11 emitted the window `valid_flag` as a **bare JSON number** (`0`/`1`)
+  but the markArea JS tests `w[3]!=="0"` (string), so `0 !== "0"` was always
+  true → *every* window rendered valid and the entire skip-shading feature was
+  dead. Fixed by quoting the flag in the LISTAGG (`'"1"'`/`'"0"'`, making the
+  JSON array homogeneous). Verified on a report spanning the 2026-07-07 14:31
+  restart: the 4 straddling windows now shade muted grey with a "skipped" label,
+  current stays blue, current band anchors at the right edge (`boundaryGap:false`).
+  All-valid reports are byte-identical to pre-fix (all flags `"1"`, same blue).
+- **F2 restart skip path + F6 verified on dbmint (2026-07-08):** F2 — a report
+  ending 2026-07-07 16:00 (hourly) skips the 4 pre-restart windows ("instance
+  restarted inside window"); downstream sections 02–08 drop them, verdict falls
+  to "baseline too short" (<3 prior valid), ASH 09 grey-shades them. F6 —
+  `template=simple`, section 04's wait-class rollup matches section 07's class
+  findings (z +2.40 / −2.83 / +0.25 / +2.30 and severities align across System
+  I/O / Commit / User I/O / Concurrency; sub-0.01 z / 0.1 %Δ are cross-section
+  rounding). **Still pending (environment-limited, not browser):** RAC
+  per-instance `dur_sec` (needs a real RAC cluster), F5 backslash-name escaping
+  (needs a series name with `\`), and F2's exact "no snapshot within 15 min of
+  edge" reason (needs a non-restart snapshot gap — restart reason wins the CASE
+  on dbmint).
 
 ## Things NOT to do
 
