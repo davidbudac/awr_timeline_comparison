@@ -11,700 +11,924 @@
 <meta property="og:image" content="https://davidbudac.github.io/awr_timeline_comparison/assets/shot_hero_cards.jpg">
 <style>
   :root{
-    --ink:#1c2433;
-    --ink-soft:#46546b;
-    --ink-faint:#7c8aa0;
-    --paper:#f6f7f9;
-    --card:#ffffff;
-    --line:#e3e8ef;
-    --accent:#c74634;          /* Oracle red */
-    --accent-dark:#9e3424;
-    --teal:#0f766e;
-    --teal-soft:#e6f4f2;
-    --amber:#b45309;
-    --amber-soft:#fdf3e3;
-    --hero-1:#16202f;
-    --hero-2:#243650;
-    --code-bg:#16202f;
-    --code-ink:#dbe4f0;
+    --paper:#f3eee2;          /* warm off-white broadsheet stock */
+    --paper-2:#f7f3ea;        /* raised panel */
+    --paper-3:#efe8d8;        /* inset / code stock */
+    --ink:#241f18;            /* warm near-black */
+    --ink-2:#4c453a;          /* secondary ink */
+    --ink-soft:#736a5a;       /* muted / captions */
+    --ink-faint:#6b6250;      /* hairline text (AA on paper) */
+    --rule:#cfc6b2;           /* hairline rule */
+    --rule-soft:#ded5c1;
+    --accent:#c74634;         /* Oracle red — used sparingly */
+    --accent-ink:#a5301f;     /* red for text on paper (AA) */
+    --teal:#0f6d63;           /* calm "good" */
+    --teal-ink:#0c5a52;
+    --amber:#9a5b12;          /* warning ink */
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --measure:68ch;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html{scroll-behavior:smooth}
+  html{-webkit-text-size-adjust:100%}
+  @media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
   body{
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-family:var(--sans);
     background:var(--paper);
     color:var(--ink);
-    line-height:1.7;
-    font-size:16.5px;
+    font-size:17px;
+    line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
   }
-  .wrap{max-width:900px;margin:0 auto;padding:0 28px}
+  /* subtle paper tooth */
+  body::before{
+    content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background:
+      radial-gradient(circle at 18% 12%,rgba(199,70,52,.03),transparent 42%),
+      radial-gradient(circle at 82% 88%,rgba(15,109,99,.03),transparent 46%);
+  }
+  .shell{max-width:1080px;margin:0 auto;padding:0 32px}
 
-  /* ---------- top nav ---------- */
-  nav.top{
-    position:sticky;top:0;z-index:50;
-    background:rgba(22,32,47,.96);
-    backdrop-filter:blur(6px);
-    border-bottom:1px solid rgba(255,255,255,.08);
-  }
-  nav.top .wrap{
-    display:flex;align-items:center;gap:18px;
-    padding-top:10px;padding-bottom:10px;
-    flex-wrap:wrap;
-  }
-  nav.top .brand{
-    font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
-    color:#fff;text-decoration:none;white-space:nowrap;
-  }
-  nav.top .brand .dot{color:var(--accent)}
-  nav.top .links{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
-  nav.top a.nl{
-    font-size:13px;font-weight:600;color:#c4d0e2;text-decoration:none;
-    padding:4px 10px;border-radius:7px;
-  }
-  nav.top a.nl:hover{color:#fff;background:rgba(255,255,255,.08)}
-  nav.top a.gh{
-    font-size:13px;font-weight:700;color:#fff;text-decoration:none;
-    border:1px solid rgba(255,255,255,.25);border-radius:999px;
-    padding:4px 14px;white-space:nowrap;
-  }
-  nav.top a.gh:hover{background:rgba(255,255,255,.1)}
+  a{color:var(--accent-ink);text-decoration:none;text-underline-offset:2px}
+  a:hover{text-decoration:underline}
+  :focus-visible{outline:2.5px solid var(--accent);outline-offset:3px;border-radius:2px}
 
-  /* ---------- hero ---------- */
-  header.hero{
-    background:linear-gradient(135deg,var(--hero-1) 0%,var(--hero-2) 100%);
-    color:#fff;
-    padding:60px 0 52px;
-    position:relative;
-    overflow:hidden;
+  /* skip-to-content — off-screen until focused */
+  .skip{
+    position:absolute;left:-9999px;top:0;z-index:100;
+    background:var(--paper-2);color:var(--ink);
+    border:1px solid var(--ink);border-radius:2px;
+    font-family:var(--mono);font-size:13px;font-weight:600;
+    padding:8px 14px;text-decoration:none;
   }
-  header.hero .wrap{position:relative;z-index:1}
-  .kicker{
-    display:inline-block;
-    font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
-    color:#f0b9ae;
-    border:1px solid rgba(240,185,174,.35);
-    border-radius:999px;
-    padding:4px 14px;
-    margin-bottom:18px;
-  }
-  h1{font-size:42px;line-height:1.12;font-weight:800;letter-spacing:-.02em;margin-bottom:14px}
-  .tagline{font-size:19px;color:#c4d0e2;max-width:680px;margin-bottom:26px}
-  .tagline strong{color:#fff}
-  .badges{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:30px}
-  .badge{
-    font-size:13px;font-weight:600;
-    background:rgba(255,255,255,.08);
-    border:1px solid rgba(255,255,255,.16);
-    color:#e8edf5;
-    border-radius:999px;
-    padding:6px 14px;
-  }
-  .badge .dot{color:#6ee7b7;margin-right:6px}
-  .cta-row{display:flex;flex-wrap:wrap;gap:12px}
-  a.btn{
-    display:inline-block;text-decoration:none;font-weight:700;font-size:15px;
-    border-radius:10px;padding:11px 22px;
-  }
-  a.btn-primary{background:var(--accent);color:#fff}
-  a.btn-primary:hover{background:var(--accent-dark)}
-  a.btn-ghost{border:1.5px solid rgba(255,255,255,.35);color:#fff}
-  a.btn-ghost:hover{background:rgba(255,255,255,.1)}
-  .hero-spark{
-    position:absolute;right:-40px;bottom:-12px;width:520px;opacity:.35;z-index:0;
-    pointer-events:none;
+  .skip:focus,.skip:focus-visible{left:8px;top:8px}
+
+  .oldstyle{font-feature-settings:"onum" 1,"pnum" 1}
+  .smallcaps{
+    font-variant:small-caps;letter-spacing:.09em;
+    font-family:var(--sans);text-transform:lowercase;
   }
 
-  /* ---------- body ---------- */
-  main{padding:48px 0 8px}
-  section{margin-bottom:60px;scroll-margin-top:64px}
-  h2{
-    font-size:25px;font-weight:800;letter-spacing:-.01em;margin-bottom:16px;
-    display:flex;align-items:center;gap:10px;
+  /* ------------------------------------------------ masthead nav */
+  .topbar{
+    border-bottom:1px solid var(--rule);
+    background:rgba(243,238,226,.9);
+    -webkit-backdrop-filter:saturate(1.1) blur(6px);
+    backdrop-filter:saturate(1.1) blur(6px);
+    position:sticky;top:0;z-index:60;
   }
-  h2 .num{
-    font-size:13px;font-weight:700;color:var(--accent);
-    border:1.5px solid var(--accent);border-radius:8px;
-    padding:1px 8px;letter-spacing:.05em;
+  .topbar .shell{
+    display:flex;align-items:center;gap:20px;
+    height:52px;
   }
-  h3{font-size:18px;font-weight:750;margin:26px 0 10px}
-  p{margin-bottom:16px;color:var(--ink);max-width:800px}
-  p em{color:var(--ink-soft)}
-  ul.plain{margin:0 0 16px 22px;max-width:800px}
-  ul.plain li{margin-bottom:8px}
-  a{color:var(--accent-dark)}
+  .topbar .folio{
+    font-family:var(--serif);font-weight:700;font-size:16px;
+    letter-spacing:.01em;color:var(--ink);white-space:nowrap;
+  }
+  .topbar .folio b{color:var(--accent-ink);font-weight:700}
+  .toc{display:flex;gap:2px;margin-left:auto;align-items:center;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .toc::-webkit-scrollbar{display:none}
+  .toc a{
+    font-size:13px;color:var(--ink-2);padding:6px 9px;border-radius:4px;white-space:nowrap;
+    font-weight:500;
+  }
+  .toc a:hover{color:var(--ink);background:var(--paper-3);text-decoration:none}
+  .toc .sep{width:1px;height:18px;background:var(--rule);margin:0 4px;flex:none}
+  .toc a.gh{color:var(--accent-ink);font-weight:600}
+  .nav-toggle{display:none}
+
+  /* ------------------------------------------------ nameplate / hero */
+  .plate{padding:52px 0 8px}
+  .plate .eyebrow{
+    font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--ink-soft);
+    display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;
+    padding-bottom:22px;
+  }
+  .plate .eyebrow .b{color:var(--accent-ink)}
+  .rule-thick{height:3px;background:var(--ink);border:0}
+  .rule-thin{height:1px;background:var(--ink);border:0;margin-top:3px}
+  .nameplate{
+    font-family:var(--serif);
+    font-weight:700;
+    font-size:clamp(44px,9vw,104px);
+    line-height:.94;
+    letter-spacing:-.015em;
+    margin:26px 0 8px;
+    color:var(--ink);
+  }
+  .nameplate .amp{color:var(--accent-ink);font-style:italic;font-weight:400}
+  .dek{
+    font-family:var(--serif);
+    font-size:clamp(19px,2.4vw,25px);
+    line-height:1.4;
+    color:var(--ink-2);
+    max-width:34ch;
+    margin:18px 0 0;
+    font-feature-settings:"onum" 1;
+  }
+  .dek b{color:var(--ink);font-weight:700}
+  .lead-grid{
+    display:grid;grid-template-columns:1.15fr .85fr;gap:44px;
+    align-items:end;margin-top:30px;
+  }
+  .creed{
+    list-style:none;display:flex;flex-wrap:wrap;gap:0;
+    border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+    margin:0 0 26px;
+  }
+  .creed li{
+    font-size:13.5px;font-weight:600;color:var(--ink-2);
+    padding:11px 18px 11px 0;margin-right:18px;
+    display:flex;align-items:center;gap:8px;
+    border-right:1px solid var(--rule);
+  }
+  .creed li:last-child{border-right:0;margin-right:0}
+  .creed li .tick{color:var(--teal-ink);font-size:15px;line-height:1}
+  .ctas{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px}
+  .btn{
+    font-family:var(--sans);font-weight:650;font-size:15px;
+    padding:11px 20px;border-radius:2px;display:inline-block;
+    border:1px solid var(--ink);color:var(--ink);background:transparent;
+    transition:background .14s ease,color .14s ease,transform .14s ease;
+  }
+  .btn:hover{background:var(--ink);color:var(--paper);text-decoration:none}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:var(--accent-ink);border-color:var(--accent-ink);color:#fff}
+  @media (prefers-reduced-motion:no-preference){.btn:active{transform:translateY(1px)}}
+
+  .hero-fig{
+    border:1px solid var(--rule);background:var(--paper-2);
+    padding:16px 18px 12px;
+  }
+  .hero-fig svg{display:block;width:100%;height:auto}
+  .hero-fig .cap{
+    font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--ink-faint);margin-top:10px;
+  }
+  /* hero field-log plate */
+  .hero-fig .fl-head{
+    font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;
+    color:var(--ink-faint);padding-bottom:10px;margin-bottom:12px;
+    border-bottom:1px solid var(--rule-soft);
+  }
+  .hero-fig .fl-cmd,.hero-fig .fl-status,.hero-fig .fl-verdict{
+    font-family:var(--mono);font-size:12.5px;line-height:1.5;overflow-wrap:anywhere;
+  }
+  .hero-fig .fl-cmd{color:var(--ink)}
+  .hero-fig .fl-cmd .p{color:var(--accent-ink);font-weight:700;margin-right:6px}
+  .hero-fig .fl-status{color:var(--ink-soft);margin-top:6px}
+  .hero-fig .fl-plot{margin-top:14px}
+  .hero-fig .fl-cap{
+    font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--ink-faint);margin-top:8px;
+  }
+  .hero-fig .fl-verdict{
+    display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+    margin-top:14px;padding-top:12px;border-top:1px solid var(--rule-soft);
+    color:var(--ink);font-weight:600;
+  }
+  .hero-fig .fl-badge{
+    font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;
+    color:var(--accent-ink);background:rgba(199,70,52,.1);
+    border:1px solid var(--accent);border-radius:2px;padding:2px 7px;
+  }
+
+  /* ------------------------------------------------ section framing */
+  main{padding-top:40px}
+  .chapter{padding:22px 0 8px;scroll-margin-top:64px}
+  .chap-head{
+    display:grid;grid-template-columns:auto 1fr;align-items:baseline;gap:18px;
+    border-top:2px solid var(--ink);padding-top:12px;margin-bottom:22px;
+  }
+  .chap-num{
+    font-family:var(--serif);font-feature-settings:"onum" 1;
+    font-size:15px;color:var(--accent-ink);font-weight:700;letter-spacing:.02em;
+    white-space:nowrap;
+  }
+  .chap-num::before{content:"§ "}
+  .chap-title{
+    font-family:var(--serif);font-weight:700;
+    font-size:clamp(26px,3.6vw,38px);line-height:1.08;letter-spacing:-.01em;color:var(--ink);
+  }
+  .prose{max-width:var(--measure)}
+  .prose p{margin-bottom:16px;font-feature-settings:"onum" 1}
+  .prose p em{font-style:italic;color:var(--ink-2)}
+  .prose p strong{font-weight:700}
+  .lede{font-size:19px;line-height:1.6}
+  .dropcap::first-letter{
+    font-family:var(--serif);font-weight:700;
+    float:left;font-size:4.4em;line-height:.78;
+    padding:6px 12px 0 0;color:var(--accent-ink);
+  }
+  h3{
+    font-family:var(--serif);font-weight:700;font-size:22px;
+    margin:34px 0 10px;letter-spacing:-.005em;
+  }
+  h3 .lbl{
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-faint);display:block;margin-bottom:3px;font-weight:600;
+  }
+
   code{
-    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    font-size:.88em;
-    background:#edf0f4;border:1px solid var(--line);border-radius:5px;
-    padding:1px 5px;
+    font-family:var(--mono);font-size:.82em;
+    background:var(--paper-3);border:1px solid var(--rule-soft);border-radius:3px;
+    padding:.5px 5px;color:var(--ink);white-space:nowrap;
   }
+  .prose ul{list-style:none;max-width:var(--measure);margin:0 0 18px}
+  .prose ul li{
+    position:relative;padding-left:22px;margin-bottom:10px;
+  }
+  .prose ul li::before{
+    content:"";position:absolute;left:2px;top:.72em;
+    width:7px;height:7px;background:var(--accent);
+  }
+  .prose ul li strong{font-weight:700}
 
-  /* ---------- intro card ---------- */
-  .exec{
-    background:var(--card);
-    border:1px solid var(--line);
-    border-left:5px solid var(--accent);
-    border-radius:14px;
-    padding:30px 34px;
-    box-shadow:0 10px 30px -18px rgba(28,36,51,.25);
-    margin-top:-32px;
-    position:relative;z-index:2;
+  /* ------------------------------------------------ figures / diagrams */
+  figure{margin:28px 0}
+  .diagram{
+    border:1px solid var(--rule);background:var(--paper-2);
+    padding:22px 24px 8px;
   }
-  .exec h2{margin-bottom:10px}
-  .exec p{font-size:17px;margin-bottom:0;max-width:none}
+  .diagram svg{display:block;width:100%;height:auto}
+  .figlabel{
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--accent-ink);font-weight:600;margin-bottom:14px;
+  }
+  figcaption{
+    font-family:var(--serif);font-style:italic;font-size:15.5px;line-height:1.5;
+    color:var(--ink-soft);max-width:74ch;margin-top:14px;
+    font-feature-settings:"onum" 1;
+  }
+  .diagram figcaption{padding:4px 2px 12px}
 
-  /* ---------- diagrams & screenshots ---------- */
-  figure.diagram{
-    background:var(--card);
-    border:1px solid var(--line);
-    border-radius:14px;
-    padding:22px 22px 14px;
-    margin:26px 0;
-    box-shadow:0 6px 18px -14px rgba(28,36,51,.2);
+  /* grade legend — z-score thresholds */
+  .grade-legend{
+    display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;
+    margin:16px 0 6px;
   }
-  figure.diagram svg{display:block;width:100%;height:auto}
-  figure.diagram figcaption,
-  figure.shot figcaption{
-    font-size:13.5px;color:var(--ink-faint);
-    text-align:center;
-    padding:10px 30px 6px;
-    line-height:1.55;
+  .grade-legend .intro{
+    font-family:var(--serif);font-style:italic;font-size:15.5px;color:var(--ink-soft);
   }
-  figure.shot{
-    background:var(--card);
-    border:1px solid var(--line);
-    border-radius:14px;
-    padding:14px 14px 6px;
-    margin:26px 0;
-    box-shadow:0 6px 18px -14px rgba(28,36,51,.2);
+  .grade-legend .chip{
+    display:inline-flex;align-items:center;gap:8px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;
+    border:1px solid var(--rule);border-radius:2px;padding:5px 10px;background:var(--paper-2);
+    white-space:nowrap;
   }
-  figure.shot .shot-tag{
-    display:inline-block;
-    font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-    color:var(--teal);background:var(--teal-soft);
-    border-radius:6px;padding:2px 9px;margin:0 0 10px 2px;
+  .grade-legend .chip .tick{width:9px;height:9px;flex:none}
+  .grade-legend .chip.ok{color:var(--teal-ink)}
+  .grade-legend .chip.ok .tick{background:var(--teal)}
+  .grade-legend .chip.warn{color:var(--amber)}
+  .grade-legend .chip.warn .tick{background:var(--amber)}
+  .grade-legend .chip.crit{color:var(--accent-ink)}
+  .grade-legend .chip.crit .tick{background:var(--accent)}
+
+  /* screenshots — "plates" */
+  .plate-fig{margin:30px 0}
+  .plate-frame{
+    border:1px solid var(--rule);background:var(--paper-2);
+    padding:14px;box-shadow:0 18px 40px -30px rgba(36,31,24,.55);
   }
-  figure.shot img{
+  .plate-frame img{
     display:block;width:100%;height:auto;
-    border:1px solid var(--line);border-radius:8px;
+    border:1px solid var(--rule-soft);
   }
+  .plate-tag{
+    display:inline-block;font-family:var(--mono);
+    font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;
+    color:var(--teal-ink);margin-bottom:11px;
+  }
+  .plate-tag::before{content:"◆ ";color:var(--teal)}
 
-  /* ---------- feature cards ---------- */
-  .cards{
-    display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
-    gap:16px;margin:24px 0;
+  /* ------------------------------------------------ ledger (feature rows) */
+  .ledger{
+    border-top:1px solid var(--ink);margin:24px 0;
   }
-  .fcard{
-    background:var(--card);border:1px solid var(--line);border-radius:12px;
-    padding:18px 20px;
-    box-shadow:0 6px 18px -14px rgba(28,36,51,.2);
+  .ledger .row{
+    display:grid;grid-template-columns:minmax(180px,.9fr) 1.6fr;gap:24px;
+    padding:16px 2px;border-bottom:1px solid var(--rule);
   }
-  .fcard h4{font-size:15.5px;font-weight:750;margin-bottom:6px}
-  .fcard h4 .ico{color:var(--teal);margin-right:7px}
-  .fcard p{font-size:14px;color:var(--ink-soft);margin:0;max-width:none}
-  .fcard code{font-size:.85em}
+  .ledger .row dt{
+    font-family:var(--serif);font-weight:700;font-size:18px;color:var(--ink);
+    display:flex;align-items:baseline;gap:10px;
+  }
+  .ledger .row dt .mk{color:var(--accent);font-size:12px;line-height:1;transform:translateY(-1px)}
+  .ledger .row dd{margin:0;color:var(--ink-2);font-size:15.5px;line-height:1.55}
+  .ledger .row dd code{font-size:.86em}
 
-  /* ---------- code blocks ---------- */
+  /* ------------------------------------------------ report tour */
+  .tour{border-top:1px solid var(--ink);margin:22px 0;max-width:920px}
+  .tour .t{
+    display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:baseline;
+    padding:13px 2px;border-bottom:1px solid var(--rule);
+  }
+  .tour .t .n{
+    font-family:var(--serif);font-feature-settings:"onum" 1;
+    font-size:16px;color:var(--ink-faint);font-weight:700;min-width:2ch;
+  }
+  .tour .t p{margin:0;font-size:15.5px;color:var(--ink-2)}
+  .tour .t p b{color:var(--ink);font-weight:700}
+
+  /* ------------------------------------------------ code listings */
+  .listing{
+    border:1px solid var(--rule);background:var(--paper-3);
+    margin:18px 0;overflow:hidden;
+  }
+  .listing .lh{
+    font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink-faint);padding:8px 16px;border-bottom:1px solid var(--rule-soft);
+    background:var(--paper-2);font-weight:600;
+  }
   pre{
-    background:var(--code-bg);color:var(--code-ink);
-    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    font-size:13.5px;line-height:1.6;
-    border-radius:12px;
-    padding:18px 22px;
-    overflow-x:auto;
-    margin:18px 0;
-    box-shadow:0 6px 18px -14px rgba(28,36,51,.35);
+    font-family:var(--mono);font-size:13.5px;line-height:1.65;
+    color:var(--ink);padding:16px 18px;overflow-x:auto;
   }
-  pre .c{color:#7c8aa0}        /* comment */
-  pre .k{color:#f0b9ae}        /* keyword-ish */
-  pre .s{color:#9ad7c9}        /* string */
+  pre .c{color:var(--ink-faint);font-style:italic}
+  pre .k{color:var(--accent-ink);font-weight:600}
+  pre .s{color:var(--teal-ink)}
 
-  /* ---------- tables ---------- */
-  .tbl-scroll{overflow-x:auto;margin:18px 0;border:1px solid var(--line);border-radius:12px;background:var(--card);
-    box-shadow:0 6px 18px -14px rgba(28,36,51,.2)}
-  table{border-collapse:collapse;width:100%;font-size:14px}
-  th,td{padding:9px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
-  th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);background:#fafbfc}
-  tr:last-child td{border-bottom:none}
+  /* ------------------------------------------------ arguments table */
+  .tbl-scroll{overflow-x:auto;margin:18px 0;border:1px solid var(--rule)}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:640px;background:var(--paper-2)}
+  caption{text-align:left;font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--ink-faint);padding:9px 16px;font-weight:600;
+    border-bottom:1px solid var(--rule-soft)}
+  th,td{padding:10px 16px;text-align:left;vertical-align:top;border-bottom:1px solid var(--rule-soft)}
+  thead th{
+    font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;
+    color:var(--ink-soft);border-bottom:1px solid var(--ink);background:var(--paper-3);font-weight:600;
+  }
+  tbody tr:last-child td{border-bottom:0}
   td code{white-space:nowrap}
+  td em{color:var(--ink-faint);font-style:italic}
 
-  /* ---------- report tour list ---------- */
-  ol.tour{margin:0 0 16px 0;max-width:800px;list-style:none;counter-reset:tour}
-  ol.tour li{
-    counter-increment:tour;
-    background:var(--card);border:1px solid var(--line);border-radius:10px;
-    padding:12px 16px 12px 52px;margin-bottom:8px;position:relative;
-    font-size:14.5px;color:var(--ink-soft);
+  /* ------------------------------------------------ example cards */
+  .exgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-top:1px solid var(--ink);border-left:1px solid var(--rule);margin:24px 0}
+  a.ex{
+    display:block;padding:22px 22px 20px;color:inherit;
+    border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);
+    background:var(--paper-2);transition:background .14s ease;
   }
-  ol.tour li::before{
-    content:counter(tour,decimal-leading-zero);
-    position:absolute;left:14px;top:12px;
-    font-size:12px;font-weight:800;color:var(--accent);
-    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  a.ex:hover{background:var(--paper);text-decoration:none}
+  a.ex .k{
+    font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;font-weight:600;
+    display:inline-block;padding:2px 0 12px;
   }
-  ol.tour li strong{color:var(--ink)}
+  a.ex.t1 .k{color:var(--accent-ink)}
+  a.ex.t2 .k{color:var(--teal-ink)}
+  a.ex.t3 .k{color:var(--amber)}
+  a.ex h4{font-family:var(--serif);font-size:20px;font-weight:700;margin-bottom:8px}
+  a.ex p{font-size:14px;color:var(--ink-2);margin:0;line-height:1.5}
+  a.ex .go{display:inline-block;margin-top:14px;font-size:13px;font-weight:650;color:var(--accent-ink)}
 
-  /* ---------- example report cards ---------- */
-  .examples{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin:24px 0}
-  a.excard{
-    display:block;text-decoration:none;color:inherit;
-    background:var(--card);border:1px solid var(--line);border-radius:12px;
-    padding:20px 22px;
-    box-shadow:0 6px 18px -14px rgba(28,36,51,.2);
-    transition:transform .12s ease, box-shadow .12s ease;
-  }
-  a.excard:hover{transform:translateY(-2px);box-shadow:0 12px 26px -14px rgba(28,36,51,.35);border-color:#cdd6e1}
-  a.excard .ex-tag{
-    display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-    border-radius:6px;padding:2px 9px;margin-bottom:10px;
-  }
-  a.excard .ex-tag.t1{color:var(--accent);background:#fdeae6}
-  a.excard .ex-tag.t2{color:var(--teal);background:var(--teal-soft)}
-  a.excard .ex-tag.t3{color:var(--amber);background:var(--amber-soft)}
-  a.excard h4{font-size:16px;font-weight:750;margin-bottom:6px}
-  a.excard p{font-size:13.5px;color:var(--ink-soft);margin:0;max-width:none}
-  a.excard .open{display:inline-block;margin-top:12px;font-size:13px;font-weight:700;color:var(--accent-dark)}
-
+  /* callout note */
   .note{
-    background:var(--amber-soft);border:1px solid #f3dfc0;border-radius:10px;
-    padding:12px 16px;font-size:14px;color:#7a4a10;max-width:800px;margin:16px 0;
+    border-left:3px solid var(--amber);background:var(--paper-2);
+    padding:14px 18px;font-size:15px;color:var(--ink-2);margin:20px 0;max-width:var(--measure);
   }
-  .note strong{color:#5e3a0c}
+  .note strong{color:var(--ink)}
 
-  /* ---------- cheatsheet teaser ---------- */
-  .recipes{display:grid;grid-template-columns:1fr;gap:10px;margin:20px 0}
-  .recipe{
-    background:var(--card);border:1px solid var(--line);border-radius:10px;
-    padding:12px 16px;
+  /* recipes */
+  .recipes{border-top:1px solid var(--ink);margin:20px 0}
+  .recipe{border-bottom:1px solid var(--rule);padding:16px 0}
+  .recipe .q{
+    font-family:var(--serif);font-size:18px;font-weight:700;color:var(--ink);margin-bottom:9px;
+    font-feature-settings:"onum" 1;
   }
-  .recipe .q{font-size:14px;font-weight:700;margin-bottom:6px}
-  .recipe pre{margin:0;padding:10px 14px;font-size:12.5px;border-radius:8px}
+  .recipe .listing{margin:0}
+  .recipe pre{background:var(--paper-3)}
 
-  /* ---------- footer ---------- */
+  /* ------------------------------------------------ colophon / footer */
   footer{
-    border-top:1px solid var(--line);
-    margin-top:24px;padding:26px 0 40px;
-    color:var(--ink-faint);font-size:13.5px;
+    border-top:3px solid var(--ink);margin-top:56px;padding:30px 0 60px;
   }
-  footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
-  footer strong{color:var(--ink-soft)}
-  footer a{color:var(--ink-soft)}
+  footer .shell{display:grid;grid-template-columns:1.4fr 1fr;gap:28px}
+  footer .col h5{
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-faint);margin-bottom:10px;font-weight:600;
+  }
+  footer .col p{font-size:14.5px;color:var(--ink-2);max-width:52ch}
+  footer .col p b{color:var(--ink)}
+  footer .col a{font-family:var(--mono);font-size:13.5px}
+  .colophon-name{font-family:var(--serif);font-size:20px;font-weight:700;color:var(--ink);margin-bottom:6px}
 
-  /* ---------- responsive ---------- */
-  @media (max-width:720px){
-    h1{font-size:31px}
-    .hero-spark{display:none}
-    .exec{padding:24px}
-    nav.top .links{display:none}
+  /* ------------------------------------------------ responsive */
+  @media (max-width:860px){
+    .lead-grid{grid-template-columns:1fr;gap:30px}
+    .exgrid{grid-template-columns:1fr}
+    footer .shell{grid-template-columns:1fr}
+    .ledger .row{grid-template-columns:1fr;gap:6px}
+    .ledger .row dt{font-size:17px}
   }
+  @media (max-width:900px){
+    .toc{display:none}
+    .nav-toggle{
+      display:inline-flex;margin-left:auto;align-items:center;gap:7px;
+      font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;
+      background:transparent;border:1px solid var(--rule);color:var(--ink);
+      padding:6px 12px;border-radius:2px;cursor:pointer;
+    }
+    .toc.open{
+      display:flex;flex-direction:column;position:absolute;left:0;right:0;top:52px;
+      background:var(--paper);border-bottom:1px solid var(--rule);
+      padding:8px 20px 14px;gap:0;overflow:visible;
+    }
+    .toc.open a{padding:9px 4px;border-bottom:1px solid var(--rule-soft);width:100%}
+    .toc.open .sep{display:none}
+  }
+  @media (max-width:640px){
+    .shell{padding:0 20px}
+    body{font-size:16px}
+    .creed li{border-right:0;width:100%}
+    .chap-head{grid-template-columns:1fr;gap:4px}
+    .tour .t{grid-template-columns:1fr;gap:2px}
+    .dek{max-width:none}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 
-<nav class="top">
-  <div class="wrap">
-    <a class="brand" href="#"><span class="dot">●</span> AWR / Timeline Comparison</a>
-    <div class="links">
-      <a class="nl" href="#why">Why</a>
-      <a class="nl" href="#how">How it works</a>
-      <a class="nl" href="#report">Inside the report</a>
-      <a class="nl" href="#start">Get started</a>
-      <a class="nl" href="#templates">Templates</a>
-      <a class="nl" href="#markers">Markers</a>
-      <a class="nl" href="#examples">Examples</a>
-      <a class="nl" href="configurator.html">Configurator</a>
-      <a class="nl" href="cheatsheet.html">Cheat sheet</a>
+<header>
+  <div class="topbar">
+    <div class="shell">
+      <a class="folio" href="#top">AWR&nbsp;·&nbsp;<b>Timeline&nbsp;Comparison</b></a>
+      <button class="nav-toggle" aria-expanded="false" aria-controls="toc">Sections</button>
+      <nav class="toc" id="toc" aria-label="Sections">
+        <a href="#why">Why</a>
+        <a href="#how">How</a>
+        <a href="#report">Report</a>
+        <a href="#start">Get started</a>
+        <a href="#templates">Templates</a>
+        <a href="#markers">Markers</a>
+        <a href="#examples">Examples</a>
+        <span class="sep" aria-hidden="true"></span>
+        <a href="configurator.html">Configurator</a>
+        <a href="cheatsheet.html">Cheat sheet</a>
+        <a class="gh" href="https://github.com/davidbudac/awr_timeline_comparison">GitHub&nbsp;↗</a>
+      </nav>
     </div>
-    <a class="gh" href="https://github.com/davidbudac/awr_timeline_comparison">GitHub ↗</a>
   </div>
-</nav>
 
-<header class="hero">
-  <svg class="hero-spark" viewBox="0 0 520 180" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <polyline points="0,120 40,118 80,122 120,117 160,121 200,119 240,123 280,118 320,60 360,55 400,62 440,52 480,58 520,50"
-              fill="none" stroke="#f0b9ae" stroke-width="3" stroke-linejoin="round"/>
-    <line x1="300" y1="20" x2="300" y2="170" stroke="#f0b9ae" stroke-width="2" stroke-dasharray="5 5"/>
-    <circle cx="320" cy="60" r="5" fill="#f0b9ae"/>
-    <text x="308" y="34" fill="#f0b9ae" font-size="12" font-weight="600">release</text>
-  </svg>
-  <div class="wrap">
-    <span class="kicker">Oracle 19c · Pure SQL*Plus · Diagnostic + Tuning Pack</span>
-    <h1>AWR Timeline Comparison</h1>
-    <p class="tagline">
-      One command. One self-contained HTML report. A clear, statistical answer to
-      <strong>“is the database behaving the way it did before?”</strong> —
-      the same hour compared like-for-like across weeks, with anything unusual
-      named, dated and graded.
-    </p>
-    <div class="badges">
-      <span class="badge"><span class="dot">●</span>100% read-only</span>
-      <span class="badge"><span class="dot">●</span>Zero install</span>
-      <span class="badge"><span class="dot">●</span>Single-file HTML output</span>
-      <span class="badge"><span class="dot">●</span>No Python, no agents</span>
+  <div class="shell plate" id="top">
+    <div class="eyebrow oldstyle">
+      <span class="b">Oracle Database 19c</span>
+      <span aria-hidden="true">·</span><span>Pure SQL*Plus</span>
+      <span aria-hidden="true">·</span><span>Diagnostic + Tuning Pack</span>
+      <span aria-hidden="true">·</span><span>Read-only field instrument</span>
     </div>
-    <div class="cta-row">
-      <a class="btn btn-primary" href="examples/hourly_comprehensive.html">See a live example report</a>
-      <a class="btn btn-ghost" href="configurator.html">Build your command</a>
-      <a class="btn btn-ghost" href="#start">Get started</a>
-      <a class="btn btn-ghost" href="cheatsheet.html">Cheat sheet</a>
+    <hr class="rule-thick">
+    <hr class="rule-thin">
+    <h1 class="nameplate">AWR Timeline<br>Comparison</h1>
+    <p class="dek">
+      One command, one self-contained HTML report, and a clear statistical answer to
+      <b>“is the database behaving the way it did before?”</b>
+    </p>
+
+    <div class="lead-grid">
+      <div>
+        <ul class="creed" aria-label="Guarantees">
+          <li><span class="tick" aria-hidden="true">✓</span>100% read-only</li>
+          <li><span class="tick" aria-hidden="true">✓</span>Zero install</li>
+          <li><span class="tick" aria-hidden="true">✓</span>Single-file HTML output</li>
+          <li><span class="tick" aria-hidden="true">✓</span>No Python, no agents</li>
+        </ul>
+        <p class="dek" style="font-size:17px;max-width:52ch;color:var(--ink-2);margin-bottom:22px">
+          The same hour is compared like-for-like across weeks, and anything unusual is
+          named, dated and graded — not left for you to eyeball across a stack of reports.
+        </p>
+        <div class="ctas">
+          <a class="btn primary" href="examples/hourly_comprehensive.html">See a live example report</a>
+          <a class="btn" href="configurator.html">Build your command</a>
+          <a class="btn" href="#start">Get started</a>
+          <a class="btn" href="cheatsheet.html">Cheat sheet</a>
+        </div>
+      </div>
+
+      <figure class="hero-fig" aria-label="Field log: one read-only command produces a graded verdict">
+        <div class="fl-head">Field log</div>
+        <div class="fl-cmd"><span class="p" aria-hidden="true">$</span>./run_awr_trend.sh user/pw@svc</div>
+        <div class="fl-status">→ querying DBA_HIST_* — SELECT only, nothing written</div>
+        <div class="fl-plot">
+          <svg viewBox="0 0 520 180" xmlns="http://www.w3.org/2000/svg" role="img"
+               aria-label="A metric trend that steps up sharply at a marked software release">
+            <line x1="0" y1="150" x2="520" y2="150" stroke="#cfc6b2" stroke-width="1"/>
+            <polyline points="0,120 40,118 80,122 120,117 160,121 200,119 240,123 280,118 320,60 360,55 400,62 440,52 480,58 520,50"
+                      fill="none" stroke="#4c453a" stroke-width="2.5" stroke-linejoin="round"/>
+            <polyline points="280,118 320,60 360,55 400,62 440,52 480,58 520,50"
+                      fill="none" stroke="#c74634" stroke-width="2.6" stroke-linejoin="round"/>
+            <line x1="300" y1="20" x2="300" y2="168" stroke="#c74634" stroke-width="1.6" stroke-dasharray="5 5"/>
+            <circle cx="320" cy="60" r="4.5" fill="#c74634"/>
+            <text x="292" y="34" fill="#a5301f" font-size="12" font-weight="700"
+                  font-family="ui-monospace,Menlo,Consolas,monospace">release</text>
+          </svg>
+        </div>
+        <div class="fl-cap">DB time · this hour vs the 4 prior weeks</div>
+        <div class="fl-verdict">16 movers vs the prior 4 windows <span class="fl-badge">Critical</span></div>
+      </figure>
     </div>
   </div>
 </header>
 
-<main>
-  <div class="wrap">
+<main class="shell" id="main" tabindex="-1">
 
-    <section class="exec">
-      <h2>What it is</h2>
-      <p>
-        A pure-SQL toolkit for Oracle 19c that compares AWR snapshots of
-        <em>the same hour across weeks</em> — by default this Monday 09:00–10:00
-        against the four prior Mondays at 09:00–10:00 — flags drastic changes via
-        z-score, and renders everything as a single self-contained HTML file.
-        It runs from SQL*Plus with nothing to deploy: no scratch schema, no Python,
-        no agents, and not a single write to the database. Point it at production,
-        get a report, attach it to a ticket.
+  <!-- WHAT IT IS -->
+  <section class="chapter" id="what" aria-labelledby="h-what">
+    <div class="chap-head">
+      <span class="chap-num oldstyle">00</span>
+      <h2 class="chap-title" id="h-what">What it is</h2>
+    </div>
+    <div class="prose">
+      <p class="lede dropcap">
+        A pure-SQL toolkit for Oracle 19c that compares AWR snapshots of <em>the same hour
+        across weeks</em> — by default this Monday 09:00–10:00 against the four prior Mondays
+        at 09:00–10:00 — flags drastic changes via z-score, and renders everything as a single
+        self-contained HTML file. It runs from SQL*Plus with nothing to deploy: no scratch
+        schema, no Python, no agents, and not a single write to the database. Point it at
+        production, get a report, attach it to a ticket.
       </p>
-    </section>
+    </div>
+  </section>
 
-    <section id="why">
-      <h2><span class="num">01</span>Why aligned windows</h2>
+  <!-- WHY -->
+  <section class="chapter" id="why" aria-labelledby="h-why">
+    <div class="chap-head">
+      <span class="chap-num oldstyle">01</span>
+      <h2 class="chap-title" id="h-why">Why aligned windows</h2>
+    </div>
+    <div class="prose">
       <p>
-        Oracle databases continuously record detailed performance history through a
-        built-in facility called <strong>AWR</strong> — the Automatic Workload
-        Repository. Everything needed to judge whether the system still behaves
-        normally is already being collected, every hour, automatically. What Oracle
-        does <em>not</em> provide is the comparison: putting this Monday morning next
-        to the last four Monday mornings and saying, with confidence, whether anything
-        genuinely changed. Done by hand, that means generating several separate AWR
-        reports and eyeballing them page by page — slow, error-prone, and exactly the
-        kind of task that gets skipped under pressure.
+        Oracle databases continuously record detailed performance history through a built-in
+        facility called <strong>AWR</strong> — the Automatic Workload Repository. Everything
+        needed to judge whether the system still behaves normally is already being collected,
+        every hour, automatically. What Oracle does <em>not</em> provide is the comparison:
+        putting this Monday morning next to the last four Monday mornings and saying, with
+        confidence, whether anything genuinely changed. Done by hand, that means generating
+        several separate AWR reports and eyeballing them page by page — slow, error-prone, and
+        exactly the kind of task that gets skipped under pressure.
       </p>
       <p>
-        The comparison also has to be fair. Workload follows a weekly rhythm — batch
-        jobs, business hours, quiet weekends — so Monday at 09:00 only means something
-        next to <em>other Mondays at 09:00</em>. This toolkit automates precisely that:
-        it lines up the same hour of the same weekday across the past weeks and compares
-        them like-for-like, so the normal weekly heartbeat is never mistaken for a
-        problem, and a real change has nowhere to hide.
+        The comparison also has to be fair. Workload follows a weekly rhythm — batch jobs,
+        business hours, quiet weekends — so Monday at 09:00 only means something next to
+        <em>other Mondays at 09:00</em>. This toolkit automates precisely that: it lines up the
+        same hour of the same weekday across the past weeks and compares them like-for-like, so
+        the normal weekly heartbeat is never mistaken for a problem, and a real change has
+        nowhere to hide.
       </p>
+    </div>
 
-      <figure class="diagram">
-        <svg viewBox="0 0 840 215" xmlns="http://www.w3.org/2000/svg" role="img"
-             aria-label="Five aligned weekly windows compared like-for-like"
-             font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
-          <text x="20" y="26" font-size="12.5" font-weight="700" fill="#0f766e">Mon 09:00–10:00</text>
-          <line x1="33" y1="32" x2="33" y2="66" stroke="#0f766e" stroke-width="1.2"/>
-          <text x="420" y="26" font-size="12" font-style="italic" fill="#7c8aa0" text-anchor="middle">compared like-for-like</text>
-          <line x1="33" y1="81" x2="673" y2="81" stroke="#9aa7b8" stroke-width="1.5" stroke-dasharray="5 5"/>
-          <g>
-            <rect x="20" y="40" width="140" height="110" rx="8" fill="#f7f9fb" stroke="#dfe5ec"/>
-            <g fill="#e9edf3">
-              <rect x="26" y="46" width="15" height="98" fill="#dde6ef"/>
-              <rect x="45" y="46" width="15" height="98"/><rect x="64" y="46" width="15" height="98"/>
-              <rect x="83" y="46" width="15" height="98"/><rect x="102" y="46" width="15" height="98"/>
-              <rect x="121" y="46" width="15" height="98"/><rect x="140" y="46" width="15" height="98"/>
-            </g>
-            <rect x="26" y="70" width="15" height="22" rx="2" fill="#0f766e"/>
-            <rect x="180" y="40" width="140" height="110" rx="8" fill="#f7f9fb" stroke="#dfe5ec"/>
-            <g fill="#e9edf3">
-              <rect x="186" y="46" width="15" height="98" fill="#dde6ef"/>
-              <rect x="205" y="46" width="15" height="98"/><rect x="224" y="46" width="15" height="98"/>
-              <rect x="243" y="46" width="15" height="98"/><rect x="262" y="46" width="15" height="98"/>
-              <rect x="281" y="46" width="15" height="98"/><rect x="300" y="46" width="15" height="98"/>
-            </g>
-            <rect x="186" y="70" width="15" height="22" rx="2" fill="#0f766e"/>
-            <rect x="340" y="40" width="140" height="110" rx="8" fill="#f7f9fb" stroke="#dfe5ec"/>
-            <g fill="#e9edf3">
-              <rect x="346" y="46" width="15" height="98" fill="#dde6ef"/>
-              <rect x="365" y="46" width="15" height="98"/><rect x="384" y="46" width="15" height="98"/>
-              <rect x="403" y="46" width="15" height="98"/><rect x="422" y="46" width="15" height="98"/>
-              <rect x="441" y="46" width="15" height="98"/><rect x="460" y="46" width="15" height="98"/>
-            </g>
-            <rect x="346" y="70" width="15" height="22" rx="2" fill="#0f766e"/>
-            <rect x="500" y="40" width="140" height="110" rx="8" fill="#f7f9fb" stroke="#dfe5ec"/>
-            <g fill="#e9edf3">
-              <rect x="506" y="46" width="15" height="98" fill="#dde6ef"/>
-              <rect x="525" y="46" width="15" height="98"/><rect x="544" y="46" width="15" height="98"/>
-              <rect x="563" y="46" width="15" height="98"/><rect x="582" y="46" width="15" height="98"/>
-              <rect x="601" y="46" width="15" height="98"/><rect x="620" y="46" width="15" height="98"/>
-            </g>
-            <rect x="506" y="70" width="15" height="22" rx="2" fill="#0f766e"/>
-            <rect x="660" y="40" width="140" height="110" rx="8" fill="#fff" stroke="#c74634" stroke-width="2"/>
-            <g fill="#e9edf3">
-              <rect x="666" y="46" width="15" height="98" fill="#dde6ef"/>
-              <rect x="685" y="46" width="15" height="98"/><rect x="704" y="46" width="15" height="98"/>
-              <rect x="723" y="46" width="15" height="98"/><rect x="742" y="46" width="15" height="98"/>
-              <rect x="761" y="46" width="15" height="98"/><rect x="780" y="46" width="15" height="98"/>
-            </g>
-            <rect x="666" y="70" width="15" height="22" rx="2" fill="#c74634"/>
+    <figure class="diagram">
+      <div class="figlabel">Fig. 1 — five aligned weekly windows</div>
+      <svg viewBox="0 0 840 205" xmlns="http://www.w3.org/2000/svg" role="img"
+           aria-label="Five aligned weekly windows compared like-for-like: four green reference windows and one red current window"
+           font-family="'Iowan Old Style',Palatino,Georgia,serif">
+        <text x="20" y="24" font-size="12.5" font-weight="700" fill="#0c5a52" font-family="ui-monospace,Menlo,Consolas,monospace">Mon 09:00–10:00</text>
+        <line x1="33" y1="30" x2="33" y2="64" stroke="#0c5a52" stroke-width="1.2"/>
+        <text x="420" y="24" font-size="12" font-style="italic" fill="#736a5a" text-anchor="middle" font-family="'Iowan Old Style',Palatino,Georgia,serif">compared like-for-like</text>
+        <line x1="33" y1="79" x2="673" y2="79" stroke="#9a917d" stroke-width="1.4" stroke-dasharray="5 5"/>
+        <g>
+          <rect x="20" y="38" width="140" height="110" rx="0" fill="#f3eee2" stroke="#cfc6b2"/>
+          <g fill="#dccfb4">
+            <rect x="26" y="44" width="15" height="98" fill="#d1c2a3"/>
+            <rect x="45" y="44" width="15" height="98"/><rect x="64" y="44" width="15" height="98"/>
+            <rect x="83" y="44" width="15" height="98"/><rect x="102" y="44" width="15" height="98"/>
+            <rect x="121" y="44" width="15" height="98"/><rect x="140" y="44" width="15" height="98"/>
           </g>
-          <g font-size="9" fill="#9aa7b8" text-anchor="middle">
-            <text x="33" y="163">M</text><text x="52" y="163">T</text><text x="71" y="163">W</text><text x="90" y="163">T</text><text x="109" y="163">F</text><text x="128" y="163">S</text><text x="147" y="163">S</text>
-            <text x="193" y="163">M</text><text x="212" y="163">T</text><text x="231" y="163">W</text><text x="250" y="163">T</text><text x="269" y="163">F</text><text x="288" y="163">S</text><text x="307" y="163">S</text>
-            <text x="353" y="163">M</text><text x="372" y="163">T</text><text x="391" y="163">W</text><text x="410" y="163">T</text><text x="429" y="163">F</text><text x="448" y="163">S</text><text x="467" y="163">S</text>
-            <text x="513" y="163">M</text><text x="532" y="163">T</text><text x="551" y="163">W</text><text x="570" y="163">T</text><text x="589" y="163">F</text><text x="608" y="163">S</text><text x="627" y="163">S</text>
-            <text x="673" y="163">M</text><text x="692" y="163">T</text><text x="711" y="163">W</text><text x="730" y="163">T</text><text x="749" y="163">F</text><text x="768" y="163">S</text><text x="787" y="163">S</text>
+          <rect x="26" y="68" width="15" height="22" fill="#0c5a52"/>
+          <rect x="180" y="38" width="140" height="110" fill="#f3eee2" stroke="#cfc6b2"/>
+          <g fill="#dccfb4">
+            <rect x="186" y="44" width="15" height="98" fill="#d1c2a3"/>
+            <rect x="205" y="44" width="15" height="98"/><rect x="224" y="44" width="15" height="98"/>
+            <rect x="243" y="44" width="15" height="98"/><rect x="262" y="44" width="15" height="98"/>
+            <rect x="281" y="44" width="15" height="98"/><rect x="300" y="44" width="15" height="98"/>
           </g>
-          <g font-size="13" fill="#7c8aa0" text-anchor="middle">
-            <text x="90" y="190">4 weeks ago</text>
-            <text x="250" y="190">3 weeks ago</text>
-            <text x="410" y="190">2 weeks ago</text>
-            <text x="570" y="190">last week</text>
-            <text x="730" y="190" font-weight="700" fill="#c74634">this week</text>
+          <rect x="186" y="68" width="15" height="22" fill="#0c5a52"/>
+          <rect x="340" y="38" width="140" height="110" fill="#f3eee2" stroke="#cfc6b2"/>
+          <g fill="#dccfb4">
+            <rect x="346" y="44" width="15" height="98" fill="#d1c2a3"/>
+            <rect x="365" y="44" width="15" height="98"/><rect x="384" y="44" width="15" height="98"/>
+            <rect x="403" y="44" width="15" height="98"/><rect x="422" y="44" width="15" height="98"/>
+            <rect x="441" y="44" width="15" height="98"/><rect x="460" y="44" width="15" height="98"/>
           </g>
-        </svg>
-        <figcaption>
-          The report lines up the same hour of the same weekday across the past weeks —
-          four reference windows (green) and the current one (red) — so the normal weekly
-          rhythm never gets mistaken for a change. The cadence is configurable: hour by
-          hour, day by day, weekly, or any multiple.
-        </figcaption>
-      </figure>
+          <rect x="346" y="68" width="15" height="22" fill="#0c5a52"/>
+          <rect x="500" y="38" width="140" height="110" fill="#f3eee2" stroke="#cfc6b2"/>
+          <g fill="#dccfb4">
+            <rect x="506" y="44" width="15" height="98" fill="#d1c2a3"/>
+            <rect x="525" y="44" width="15" height="98"/><rect x="544" y="44" width="15" height="98"/>
+            <rect x="563" y="44" width="15" height="98"/><rect x="582" y="44" width="15" height="98"/>
+            <rect x="601" y="44" width="15" height="98"/><rect x="620" y="44" width="15" height="98"/>
+          </g>
+          <rect x="506" y="68" width="15" height="22" fill="#0c5a52"/>
+          <rect x="660" y="38" width="140" height="110" fill="#f7f3ea" stroke="#c74634" stroke-width="2"/>
+          <g fill="#dccfb4">
+            <rect x="666" y="44" width="15" height="98" fill="#d1c2a3"/>
+            <rect x="685" y="44" width="15" height="98"/><rect x="704" y="44" width="15" height="98"/>
+            <rect x="723" y="44" width="15" height="98"/><rect x="742" y="44" width="15" height="98"/>
+            <rect x="761" y="44" width="15" height="98"/><rect x="780" y="44" width="15" height="98"/>
+          </g>
+          <rect x="666" y="68" width="15" height="22" fill="#c74634"/>
+        </g>
+        <g font-size="9" fill="#9a917d" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace">
+          <text x="33" y="161">M</text><text x="52" y="161">T</text><text x="71" y="161">W</text><text x="90" y="161">T</text><text x="109" y="161">F</text><text x="128" y="161">S</text><text x="147" y="161">S</text>
+          <text x="193" y="161">M</text><text x="212" y="161">T</text><text x="231" y="161">W</text><text x="250" y="161">T</text><text x="269" y="161">F</text><text x="288" y="161">S</text><text x="307" y="161">S</text>
+          <text x="353" y="161">M</text><text x="372" y="161">T</text><text x="391" y="161">W</text><text x="410" y="161">T</text><text x="429" y="161">F</text><text x="448" y="161">S</text><text x="467" y="161">S</text>
+          <text x="513" y="161">M</text><text x="532" y="161">T</text><text x="551" y="161">W</text><text x="570" y="161">T</text><text x="589" y="161">F</text><text x="608" y="161">S</text><text x="627" y="161">S</text>
+          <text x="673" y="161">M</text><text x="692" y="161">T</text><text x="711" y="161">W</text><text x="730" y="161">T</text><text x="749" y="161">F</text><text x="768" y="161">S</text><text x="787" y="161">S</text>
+        </g>
+        <g font-size="12.5" fill="#736a5a" text-anchor="middle" font-family="'Iowan Old Style',Palatino,Georgia,serif" font-style="italic">
+          <text x="90" y="188">4 weeks ago</text>
+          <text x="250" y="188">3 weeks ago</text>
+          <text x="410" y="188">2 weeks ago</text>
+          <text x="570" y="188">last week</text>
+          <text x="730" y="188" font-weight="700" font-style="normal" fill="#a5301f" font-family="ui-monospace,Menlo,Consolas,monospace">THIS WEEK</text>
+        </g>
+      </svg>
+      <figcaption>
+        The report lines up the same hour of the same weekday across the past weeks — four
+        reference windows and the current one — so the normal weekly rhythm never gets mistaken
+        for a change. The cadence is configurable: hour by hour, day by day, weekly, or any multiple.
+      </figcaption>
+    </figure>
 
-      <figure class="shot">
-        <span class="shot-tag">From a live test run</span>
+    <figure class="plate-fig">
+      <span class="plate-tag">From a live test run</span>
+      <div class="plate-frame">
         <img src="assets/shot_aligned_windows.jpg" loading="lazy"
              alt="Report screenshot: the Aligned windows section, five Monday 19:00–20:00 windows across five weeks, one valid and four skipped">
-        <figcaption>
-          The same idea in the real report: five Monday 19:00–20:00 windows, one per
-          week, lined up side by side. Where the database has no history for a week —
-          or an instance restarted mid-window — the window is dimmed, marked “skipped”,
-          and excluded from the comparison — never silently guessed.
-        </figcaption>
-      </figure>
-    </section>
+      </div>
+      <figcaption>
+        The same idea in the real report: five Monday 19:00–20:00 windows, one per week, lined
+        up side by side. Where the database has no history for a week — or an instance restarted
+        mid-window — the window is dimmed, marked “skipped”, and excluded from the comparison —
+        never silently guessed.
+      </figcaption>
+    </figure>
+  </section>
 
-    <section id="how">
-      <h2><span class="num">02</span>How it works</h2>
+  <!-- HOW -->
+  <section class="chapter" id="how" aria-labelledby="h-how">
+    <div class="chap-head">
+      <span class="chap-num oldstyle">02</span>
+      <h2 class="chap-title" id="h-how">How it works</h2>
+    </div>
+    <div class="prose">
       <p>
-        A single command connects to the database and asks Oracle's own performance
-        history a series of questions. Every one of them is a read-only query against
-        the <code>DBA_HIST_*</code> views: nothing is installed, created, or modified
-        anywhere — which is why the report is safe to run against production at any
-        time of day, or against a read-only standby that exposes AWR.
+        A single command connects to the database and asks Oracle's own performance history a
+        series of questions. Every one of them is a read-only query against the
+        <code>DBA_HIST_*</code> views: nothing is installed, created, or modified anywhere —
+        which is why the report is safe to run against production at any time of day, or against
+        a read-only standby that exposes AWR.
       </p>
       <p>
-        The toolkit then does what a careful analyst would do, but in seconds and
-        without fatigue. Each metric — how much work the database did, how fast it
-        responded, what it spent its time waiting on, which SQL statements were the
-        most expensive — is scored against its own recent history, so the report
-        highlights only movement that is genuinely unusual, graded
+        The toolkit then does what a careful analyst would do, but in seconds and without fatigue.
+        Each metric — how much work the database did, how fast it responded, what it spent its
+        time waiting on, which SQL statements were the most expensive — is scored against its own
+        recent history, so the report highlights only movement that is genuinely unusual, graded
         <em>OK</em>, <em>Warning</em> or <em>Critical</em>.
       </p>
+    </div>
 
-      <figure class="diagram">
-        <svg viewBox="0 0 840 195" xmlns="http://www.w3.org/2000/svg" role="img"
-             aria-label="Pipeline: AWR history, like-for-like comparison, statistical scoring, one HTML report"
-             font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
-          <defs>
-            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-              <path d="M0,0 L10,5 L0,10 z" fill="#7c8aa0"/>
-            </marker>
-          </defs>
-          <g>
-            <path d="M37,48 v84 a58,12 0 0 0 116,0 v-84" fill="#243650"/>
-            <ellipse cx="95" cy="48" rx="58" ry="12" fill="#3a4f70"/>
-            <text x="95" y="100" text-anchor="middle" font-size="16" font-weight="800" fill="#ffffff">AWR</text>
-            <text x="95" y="167" text-anchor="middle" font-size="12" fill="#7c8aa0">performance history,</text>
-            <text x="95" y="182" text-anchor="middle" font-size="12" fill="#7c8aa0">already in the database</text>
-          </g>
-          <line x1="162" y1="90" x2="200" y2="90" stroke="#7c8aa0" stroke-width="2" marker-end="url(#arr)"/>
-          <g>
-            <rect x="205" y="48" width="185" height="84" rx="10" fill="#ffffff" stroke="#e3e8ef"/>
-            <text x="297" y="76" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1c2433">Like-for-like windows</text>
-            <text x="297" y="96" text-anchor="middle" font-size="12" fill="#46546b">the same hour of the week,</text>
-            <text x="297" y="112" text-anchor="middle" font-size="12" fill="#46546b">this week vs the weeks before</text>
-            <text x="297" y="152" text-anchor="middle" font-size="11.5" font-style="italic" fill="#0f766e">read-only — nothing installed</text>
-          </g>
-          <line x1="392" y1="90" x2="430" y2="90" stroke="#7c8aa0" stroke-width="2" marker-end="url(#arr)"/>
-          <g>
-            <rect x="435" y="48" width="185" height="84" rx="10" fill="#ffffff" stroke="#e3e8ef"/>
-            <text x="527" y="74" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1c2433">Statistical scoring</text>
-            <text x="527" y="93" text-anchor="middle" font-size="12" fill="#46546b">each metric judged against</text>
-            <text x="527" y="108" text-anchor="middle" font-size="12" fill="#46546b">its own history; only real</text>
-            <text x="527" y="123" text-anchor="middle" font-size="12" fill="#46546b">movement is flagged</text>
-            <text x="527" y="152" text-anchor="middle" font-size="11.5" font-style="italic" fill="#b45309">OK · Warning · Critical</text>
-          </g>
-          <line x1="622" y1="90" x2="660" y2="90" stroke="#7c8aa0" stroke-width="2" marker-end="url(#arr)"/>
-          <g>
-            <path d="M665,42 h100 l45,45 v61 h-145 z" fill="#ffffff" stroke="#c74634" stroke-width="1.8"/>
-            <path d="M765,42 v45 h45 z" fill="#fdeae6" stroke="#c74634" stroke-width="1.8"/>
-            <text x="730" y="105" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1c2433">One HTML file</text>
-            <text x="737" y="124" text-anchor="middle" font-size="12" fill="#46546b">charts, tables, findings —</text>
-            <text x="737" y="139" text-anchor="middle" font-size="12" fill="#46546b">open it anywhere</text>
-          </g>
-        </svg>
-        <figcaption>
-          From raw history to verdict in one pass: read-only queries pull the aligned
-          windows, statistics decide what is genuinely unusual, and the result is a single
-          page anyone can open — no tooling, no database access required to read it.
-        </figcaption>
-      </figure>
+    <figure class="diagram">
+      <div class="figlabel">Fig. 2 — from raw history to verdict, in one pass</div>
+      <svg viewBox="0 0 840 195" xmlns="http://www.w3.org/2000/svg" role="img"
+           aria-label="Pipeline: AWR history, like-for-like comparison, statistical scoring, one HTML report">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#9a917d"/>
+          </marker>
+        </defs>
+        <g font-family="'Iowan Old Style',Palatino,Georgia,serif">
+          <path d="M37,48 v84 a58,12 0 0 0 116,0 v-84" fill="#241f18"/>
+          <ellipse cx="95" cy="48" rx="58" ry="12" fill="#3d362b"/>
+          <text x="95" y="100" text-anchor="middle" font-size="16" font-weight="700" fill="#f3eee2">AWR</text>
+          <text x="95" y="167" text-anchor="middle" font-size="12" fill="#736a5a" font-style="italic">performance history,</text>
+          <text x="95" y="182" text-anchor="middle" font-size="12" fill="#736a5a" font-style="italic">already in the database</text>
+        </g>
+        <line x1="162" y1="90" x2="200" y2="90" stroke="#9a917d" stroke-width="2" marker-end="url(#arr)"/>
+        <g font-family="'Iowan Old Style',Palatino,Georgia,serif">
+          <rect x="205" y="48" width="185" height="84" fill="#f7f3ea" stroke="#cfc6b2"/>
+          <text x="297" y="76" text-anchor="middle" font-size="13.5" font-weight="700" fill="#241f18">Like-for-like windows</text>
+          <text x="297" y="96" text-anchor="middle" font-size="12" fill="#4c453a">the same hour of the week,</text>
+          <text x="297" y="112" text-anchor="middle" font-size="12" fill="#4c453a">this week vs the weeks before</text>
+          <text x="297" y="152" text-anchor="middle" font-size="11.5" font-style="italic" fill="#0c5a52">read-only — nothing installed</text>
+        </g>
+        <line x1="392" y1="90" x2="430" y2="90" stroke="#9a917d" stroke-width="2" marker-end="url(#arr)"/>
+        <g font-family="'Iowan Old Style',Palatino,Georgia,serif">
+          <rect x="435" y="48" width="185" height="84" fill="#f7f3ea" stroke="#cfc6b2"/>
+          <text x="527" y="74" text-anchor="middle" font-size="13.5" font-weight="700" fill="#241f18">Statistical scoring</text>
+          <text x="527" y="93" text-anchor="middle" font-size="12" fill="#4c453a">each metric judged against</text>
+          <text x="527" y="108" text-anchor="middle" font-size="12" fill="#4c453a">its own history; only real</text>
+          <text x="527" y="123" text-anchor="middle" font-size="12" fill="#4c453a">movement is flagged</text>
+          <text x="527" y="152" text-anchor="middle" font-size="11.5" font-style="italic" fill="#9a5b12">OK · Warning · Critical</text>
+        </g>
+        <line x1="622" y1="90" x2="660" y2="90" stroke="#9a917d" stroke-width="2" marker-end="url(#arr)"/>
+        <g font-family="'Iowan Old Style',Palatino,Georgia,serif">
+          <path d="M665,42 h100 l45,45 v61 h-145 z" fill="#f7f3ea" stroke="#c74634" stroke-width="1.8"/>
+          <path d="M765,42 v45 h45 z" fill="#f2ddd6" stroke="#c74634" stroke-width="1.8"/>
+          <text x="730" y="105" text-anchor="middle" font-size="13.5" font-weight="700" fill="#241f18">One HTML file</text>
+          <text x="737" y="124" text-anchor="middle" font-size="12" fill="#4c453a">charts, tables, findings —</text>
+          <text x="737" y="139" text-anchor="middle" font-size="12" fill="#4c453a">open it anywhere</text>
+        </g>
+      </svg>
+      <figcaption>
+        From raw history to verdict in one pass: read-only queries pull the aligned windows,
+        statistics decide what is genuinely unusual, and the result is a single page anyone can
+        open — no tooling, no database access required to read it.
+      </figcaption>
+    </figure>
 
-      <div class="cards">
-        <div class="fcard">
-          <h4><span class="ico">●</span>Strictly read-only</h4>
-          <p>The driver and every section issue <code>SELECT</code> only. No scratch
-          schema, no DDL, no DML — everything is recomputed in-flight from
-          <code>DBA_HIST_*</code> on each run.</p>
-        </div>
-        <div class="fcard">
-          <h4><span class="ico">●</span>z-score findings</h4>
-          <p>Each metric is scored against its own prior windows: <code>|z| &gt; 3</code>
-          is Critical, <code>|z| &gt; 2</code> is Warning. Too little history? The report
-          says so instead of guessing.</p>
-        </div>
-        <div class="fcard">
-          <h4><span class="ico">●</span>Configurable cadence</h4>
-          <p>Weekly is the default, but <code>step × step_unit</code> gives you
-          hour-by-hour walk-throughs, every-other-day, fortnightly, even
-          quarter-over-quarter.</p>
-        </div>
-        <div class="fcard">
-          <h4><span class="ico">●</span>Works offline — fully, if you want</h4>
-          <p>By default the big charts load ECharts from a CDN; when it's unreachable
-          the charts hide, a banner explains why, and every number is still in the
-          tables (inline-SVG sparklines never need the network). For a truly
-          air-gapped, single-file report — charts and all — point the
-          <code>echarts</code> var at a local <code>echarts.min.js</code> (or an
-          internal mirror URL); see the
-          <a href="cheatsheet.html#offline">cheat sheet</a>.</p>
-        </div>
-        <div class="fcard">
-          <h4><span class="ico">●</span>RAC-aware</h4>
-          <p>Aggregate across all instances or filter to one. Per-instance window
-          validation drops only the instance that restarted mid-window, keeping the
-          rest of the baseline.</p>
-        </div>
-        <div class="fcard">
-          <h4><span class="ico">●</span>Multitenant-aware</h4>
-          <p>Resolves the right DBID inside PDBs (local AWR or not) and survives
-          non-CDB → PDB migrations by following the snapshot history across DBIDs.</p>
-        </div>
+    <div class="grade-legend" aria-label="How movement is graded">
+      <span class="intro">How movement is graded:</span>
+      <span class="chip ok"><span class="tick" aria-hidden="true"></span>OK</span>
+      <span class="chip warn"><span class="tick" aria-hidden="true"></span>Warning · |z| &gt; 2</span>
+      <span class="chip crit"><span class="tick" aria-hidden="true"></span>Critical · |z| &gt; 3</span>
+    </div>
+
+    <dl class="ledger">
+      <div class="row">
+        <dt><span class="mk" aria-hidden="true">●</span>Strictly read-only</dt>
+        <dd>The driver and every section issue <code>SELECT</code> only. No scratch schema, no DDL,
+          no DML — everything is recomputed in-flight from <code>DBA_HIST_*</code> on each run.</dd>
       </div>
+      <div class="row">
+        <dt><span class="mk" aria-hidden="true">●</span>z-score findings</dt>
+        <dd>Each metric is scored against its own prior windows: <code>|z| &gt; 3</code> is Critical,
+          <code>|z| &gt; 2</code> is Warning. Too little history? The report says so instead of guessing.</dd>
+      </div>
+      <div class="row">
+        <dt><span class="mk" aria-hidden="true">●</span>Configurable cadence</dt>
+        <dd>Weekly is the default, but <code>step × step_unit</code> gives you hour-by-hour
+          walk-throughs, every-other-day, fortnightly, even quarter-over-quarter.</dd>
+      </div>
+      <div class="row">
+        <dt><span class="mk" aria-hidden="true">●</span>Works offline — fully, if you want</dt>
+        <dd>By default the big charts load ECharts from a CDN; when it's unreachable the charts hide,
+          a banner explains why, and every number is still in the tables (inline-SVG sparklines never
+          need the network). For a truly air-gapped, single-file report — charts and all — point the
+          <code>echarts</code> var at a local <code>echarts.min.js</code> (or an internal mirror URL);
+          see the <a href="cheatsheet.html#offline">cheat sheet</a>.</dd>
+      </div>
+      <div class="row">
+        <dt><span class="mk" aria-hidden="true">●</span>RAC-aware</dt>
+        <dd>Aggregate across all instances or filter to one. Per-instance window validation drops only
+          the instance that restarted mid-window, keeping the rest of the baseline.</dd>
+      </div>
+      <div class="row">
+        <dt><span class="mk" aria-hidden="true">●</span>Multitenant-aware</dt>
+        <dd>Resolves the right DBID inside PDBs (local AWR or not) and survives non-CDB → PDB
+          migrations by following the snapshot history across DBIDs.</dd>
+      </div>
+    </dl>
 
-      <figure class="shot">
-        <span class="shot-tag">From a live test run</span>
+    <figure class="plate-fig">
+      <span class="plate-tag">From a live test run</span>
+      <div class="plate-frame">
         <img src="assets/shot_verdict_quiet.jpg" loading="lazy"
              alt="Report screenshot: the masthead and navigation rail, with the verdict '16 movers vs the prior 4 windows' listing the biggest jumps inline">
-        <figcaption>
-          Every report opens with a one-line verdict in plain language and a fixed
-          navigation rail. Here, an hour-over-hour run flags <strong>16 movers</strong>
-          against the prior four windows, with the largest — bytes sent via SQL*Net
-          +284%, network traffic +89% — called out inline; expand “all movers” for the
-          rest, or read the first line and move on.
-        </figcaption>
-      </figure>
-    </section>
+      </div>
+      <figcaption>
+        Every report opens with a one-line verdict in plain language and a fixed navigation rail.
+        Here, an hour-over-hour run flags <strong>16 movers</strong> against the prior four windows,
+        with the largest — bytes sent via SQL*Net +284%, network traffic +89% — called out inline;
+        expand “all movers” for the rest, or read the first line and move on.
+      </figcaption>
+    </figure>
+  </section>
 
-    <section id="report">
-      <h2><span class="num">03</span>Inside the report</h2>
+  <!-- INSIDE THE REPORT -->
+  <section class="chapter" id="report" aria-labelledby="h-report">
+    <div class="chap-head">
+      <span class="chap-num oldstyle">03</span>
+      <h2 class="chap-title" id="h-report">Inside the report</h2>
+    </div>
+    <div class="prose">
       <p>
-        The report opens with the masthead verdict and a card listing exactly which
-        windows were compared — explicit start → end timestamps, so you always know
-        what baseline is driving the z-scores. Then, top to bottom:
+        The report opens with the masthead verdict and a card listing exactly which windows were
+        compared — explicit start → end timestamps, so you always know what baseline is driving the
+        z-scores. Then, top to bottom:
       </p>
+    </div>
 
-      <ol class="tour">
-        <li><strong>Overview</strong> — hero strip with the six headline load/metric numbers, each with a trend sparkline and a z-badge.</li>
-        <li><strong>ASH timeline</strong> — hourly stacked-area chart of active sessions by wait class over the full compared span; compared windows shown as background bands.</li>
-        <li><strong>Findings</strong> — every metric with <code>|z| &gt; 3</code> flagged CRITICAL, <code>|z| &gt; 2</code> WARN, plus a heatmap; falls back to %-delta when history is short.</li>
-        <li><strong>Windows</strong> — the compared windows with begin/end snapshot ids; restart-invalidated windows are flagged and excluded.</li>
-        <li><strong>Load profile</strong> — per-second rates for the classic AWR load-profile stats, one column per window, sparkline per stat.</li>
-        <li><strong>System metrics</strong> — averages from <code>DBA_HIST_SYSMETRIC_SUMMARY</code>, additive vs ratio metrics aggregated correctly across RAC.</li>
-        <li><strong>Foreground &amp; background waits</strong> — top-N events plus a wait-class rollup.</li>
-        <li><strong>Top SQL</strong> — ranked four ways (elapsed, CPU, buffer gets, executions) with plan-change badges, full SQL text, and per-statement ASH breakdowns.</li>
-        <li><strong>DB time summary</strong> — stacked DB time across the whole span.</li>
-        <li><strong>Parameter changes</strong> — init parameters whose values differ across the compared windows.</li>
-      </ol>
+    <div class="tour">
+      <div class="t"><span class="n oldstyle">01</span><p><b>Overview</b> — hero strip with the six headline load/metric numbers, each with a trend sparkline and a z-badge.</p></div>
+      <div class="t"><span class="n oldstyle">02</span><p><b>ASH timeline</b> — hourly stacked-area chart of active sessions by wait class over the full compared span; compared windows shown as background bands.</p></div>
+      <div class="t"><span class="n oldstyle">03</span><p><b>Findings</b> — every metric with <code>|z| &gt; 3</code> flagged CRITICAL, <code>|z| &gt; 2</code> WARN, plus a heatmap; falls back to %-delta when history is short.</p></div>
+      <div class="t"><span class="n oldstyle">04</span><p><b>Windows</b> — the compared windows with begin/end snapshot ids; restart-invalidated windows are flagged and excluded.</p></div>
+      <div class="t"><span class="n oldstyle">05</span><p><b>Load profile</b> — per-second rates for the classic AWR load-profile stats, one column per window, sparkline per stat.</p></div>
+      <div class="t"><span class="n oldstyle">06</span><p><b>System metrics</b> — averages from <code>DBA_HIST_SYSMETRIC_SUMMARY</code>, additive vs ratio metrics aggregated correctly across RAC.</p></div>
+      <div class="t"><span class="n oldstyle">07</span><p><b>Foreground &amp; background waits</b> — top-N events plus a wait-class rollup.</p></div>
+      <div class="t"><span class="n oldstyle">08</span><p><b>Top SQL</b> — ranked five ways (elapsed, CPU, buffer gets, physical reads, executions) with plan-change badges, full SQL text, and per-statement ASH breakdowns.</p></div>
+      <div class="t"><span class="n oldstyle">09</span><p><b>DB time summary</b> — stacked DB time across the whole span.</p></div>
+      <div class="t"><span class="n oldstyle">10</span><p><b>Parameter changes</b> — init parameters whose values differ across the compared windows. Two more sections — <b>Segment I/O</b> and <b>File I/O</b> — rank the busiest segments and datafiles.</p></div>
+    </div>
 
-      <figure class="shot">
-        <span class="shot-tag">From a live test run</span>
+    <figure class="plate-fig">
+      <span class="plate-tag">From a live test run</span>
+      <div class="plate-frame">
         <img src="assets/shot_hero_cards.jpg" loading="lazy"
              alt="Report screenshot: six headline metric cards with trend sparklines, current values and statistical badges">
-        <figcaption>
-          Six headline health cards: the trend across the compared windows, the current
-          value, and a statistical badge — “typical” when a metric sits inside its normal
-          range, “large” when it jumps beyond it (DB time and hard parses here) — instead
-          of a wall of raw numbers to squint at.
-        </figcaption>
-      </figure>
+      </div>
+      <figcaption>
+        Six headline health cards: the trend across the compared windows, the current value, and a
+        statistical badge — “typical” when a metric sits inside its normal range, “large” when it
+        jumps beyond it (DB time and hard parses here) — instead of a wall of raw numbers to squint at.
+      </figcaption>
+    </figure>
 
-      <figure class="shot">
-        <span class="shot-tag">From a live test run</span>
+    <figure class="plate-fig">
+      <span class="plate-tag">From a live test run</span>
+      <div class="plate-frame">
         <img src="assets/shot_load_profile.jpg" loading="lazy"
              alt="Report screenshot: the load profile table with one column per compared window and a trend sparkline per measure">
-        <figcaption>
-          For those who want the detail, every measure is laid out with one column per
-          compared window, a small trend line, and the current window highlighted — the
-          side-by-side an analyst would have assembled by hand, already done.
-        </figcaption>
-      </figure>
+      </div>
+      <figcaption>
+        For those who want the detail, every measure is laid out with one column per compared window,
+        a small trend line, and the current window highlighted — the side-by-side an analyst would
+        have assembled by hand, already done.
+      </figcaption>
+    </figure>
 
-      <figure class="shot">
-        <span class="shot-tag">From a live test run</span>
+    <figure class="plate-fig">
+      <span class="plate-tag">From a live test run</span>
+      <div class="plate-frame">
         <img src="assets/shot_ash_timeline.jpg" loading="lazy"
              alt="Report screenshot: a stacked area timeline of database activity by wait category, hour by hour">
-        <figcaption>
-          The ASH timeline: where the database spent its time, hour by hour, split by
-          wait class. This is also the canvas your milestone markers are drawn on — a
-          before/after difference in the shape of this chart is visible at a glance.
-        </figcaption>
-      </figure>
+      </div>
+      <figcaption>
+        The ASH timeline: where the database spent its time, hour by hour, split by wait class. This
+        is also the canvas your milestone markers are drawn on — a before/after difference in the
+        shape of this chart is visible at a glance.
+      </figcaption>
+    </figure>
 
-      <h3>A workbench, not a wall of tables</h3>
+    <div class="prose">
+      <h3><span class="lbl">Client-side, no re-run, works offline</span>A workbench, not a wall of tables</h3>
       <p>
-        The report opens with a fixed navigation rail down the left edge: one
-        scrollspy-tracked link per section, each carrying a live status dot graded from
-        that section's own content — red for a critical finding, amber for a warning — so
-        you can see where the trouble is before you scroll. Three controls ride in the
-        rail; every one is client-side, needs no re-run, and works offline:
+        The report opens with a fixed navigation rail down the left edge: one scrollspy-tracked link
+        per section, each carrying a live status dot graded from that section's own content — red for
+        a critical finding, amber for a warning — so you can see where the trouble is before you
+        scroll. Three controls ride in the rail; every one is client-side, needs no re-run, and works
+        offline:
       </p>
-      <ul class="plain">
-        <li><strong>Dark mode</strong> — a sun/moon toggle in the rail (the “Slate
-          Instrument” theme). The first load follows your OS <code>prefers-color-scheme</code>;
-          after that your choice is remembered, and the theme is applied before the charts
-          draw so there is no flash.</li>
-        <li><strong>Essential rows</strong> — collapses the load-profile, system-metric,
-          wait and findings tables to a curated shortlist of what a DBA scans first, with a
-          kept/total pill on each section. Anything flagged CRITICAL or WARN stays visible,
-          so the preset never hides an anomaly, and the charts are untouched.</li>
-        <li><strong>Application only</strong> — hides every system-wide section and
-          Oracle's own recursive SQL, leaving just your application's Top SQL, ASH
-          breakdown, segment &amp; file I/O, and utilization.</li>
+      <ul>
+        <li><strong>Dark mode</strong> — a sun/moon toggle in the rail (the “Slate Instrument” theme).
+          The first load follows your OS <code>prefers-color-scheme</code>; after that your choice is
+          remembered, and the theme is applied before the charts draw so there is no flash.</li>
+        <li><strong>Essential rows</strong> — collapses the load-profile, system-metric, wait and
+          findings tables to a curated shortlist of what a DBA scans first, with a kept/total pill on
+          each section. Anything flagged CRITICAL or WARN stays visible, so the preset never hides an
+          anomaly, and the charts are untouched.</li>
+        <li><strong>Application only</strong> — hides every system-wide section and Oracle's own
+          recursive SQL, leaving just your application's Top SQL, ASH breakdown, segment &amp; file
+          I/O, and utilization.</li>
       </ul>
-    </section>
+    </div>
+  </section>
 
-    <section id="start">
-      <h2><span class="num">04</span>Get started</h2>
+  <!-- GET STARTED -->
+  <section class="chapter" id="start" aria-labelledby="h-start">
+    <div class="chap-head">
+      <span class="chap-num oldstyle">04</span>
+      <h2 class="chap-title" id="h-start">Get started</h2>
+    </div>
 
-      <h3>Requirements</h3>
-      <ul class="plain">
+    <div class="prose">
+      <h3><span class="lbl">Prerequisites</span>Requirements</h3>
+      <ul>
         <li>Oracle Database 19c with the <strong>Diagnostic + Tuning Pack</strong> licensed
-            (needed for <code>DBA_HIST_*</code> and <code>DBA_HIST_SQLSTAT</code>).</li>
+          (needed for <code>DBA_HIST_*</code> and <code>DBA_HIST_SQLSTAT</code>).</li>
         <li>SQL*Plus and a user that can read the AWR views — the <code>DBA</code> role covers it,
-            or grant a dedicated analyst user <code>SELECT</code> on the handful of
-            <code>DBA_HIST_*</code> views listed in the
-            <a href="https://github.com/davidbudac/awr_timeline_comparison#install">README</a>.</li>
+          or grant a dedicated analyst user <code>SELECT</code> on the handful of
+          <code>DBA_HIST_*</code> views listed in the
+          <a href="https://github.com/davidbudac/awr_timeline_comparison#install">README</a>.</li>
         <li>Nothing to install in the database. Clone the repo, connect, run.</li>
       </ul>
 
-      <h3>Run it</h3>
+      <h3><span class="lbl">The unsure path</span>Run it interactively</h3>
       <p>
-        New to it, or don't want to memorize the argument order? Run the
-        <strong>interactive configurator</strong> — it walks you through every
-        option with a short explanation, a sensible default and input validation,
-        then prints both a ready-to-paste <code>./run_awr_trend.sh</code> command
-        and the equivalent pure-SQL*Plus block, and offers to run the report for
-        you. (Prefer point-and-click? The
-        <a href="configurator.html">web configurator</a> does the same in your
-        browser.)
+        New to it, or don't want to memorize the argument order? Run the <strong>interactive
+        configurator</strong> — it walks you through every option with a short explanation, a
+        sensible default and input validation, then prints both a ready-to-paste
+        <code>./run_awr_trend.sh</code> command and the equivalent pure-SQL*Plus block, and offers to
+        run the report for you. (Prefer point-and-click? The
+        <a href="configurator.html">web configurator</a> does the same in your browser.)
       </p>
+    </div>
+
+    <div class="listing">
+      <div class="lh">interactive configurator</div>
 <pre><span class="c"># interactive: also -c, -i, --interactive, or just run with no arguments</span>
 ./run_awr_trend.sh --configure</pre>
+    </div>
 
-      <p>Easiest non-interactive — the shell wrapper, which sets all substitution variables for you:</p>
+    <div class="prose"><p>Easiest non-interactive — the shell wrapper, which sets all substitution variables for you:</p></div>
+    <div class="listing">
+      <div class="lh">shell wrapper — run_awr_trend.sh</div>
 <pre><span class="c"># defaults: current hour vs the same hour on the 4 prior weeks</span>
 ./run_awr_trend.sh user/pw@svc
 
@@ -719,8 +943,11 @@
 
 <span class="c"># annotate the timelines with your own milestones</span>
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive N my_markers.sql</pre>
+    </div>
 
-      <p>Or pure SQL*Plus, no shell required (Windows-friendly):</p>
+    <div class="prose"><p>Or pure SQL*Plus, no shell required (Windows-friendly):</p></div>
+    <div class="listing">
+      <div class="lh">pure SQL*Plus</div>
 <pre>SQL&gt; <span class="k">@sql/defaults.sql</span>
 SQL&gt; <span class="k">@awr_trend.sql</span>
 
@@ -729,259 +956,331 @@ SQL&gt; DEFINE target_end = <span class="s">'2026-04-15 09:00'</span>
 SQL&gt; DEFINE win_hours  = 2
 SQL&gt; DEFINE weeks_back = 6
 SQL&gt; <span class="k">@awr_trend.sql</span></pre>
+    </div>
 
+    <div class="prose">
       <p>
         The report lands in
-        <code>reports/awr_trend_&lt;DBID&gt;_&lt;timestamp&gt;_run&lt;run_id&gt;.html</code>.
-        Open it in any browser.
+        <code>reports/awr_trend_&lt;DBID&gt;_&lt;timestamp&gt;_run&lt;run_id&gt;.html</code>. Open it in any browser.
       </p>
+      <h3><span class="lbl">The positional arguments</span>Arguments</h3>
+    </div>
 
-      <h3>Arguments</h3>
-      <div class="tbl-scroll">
-        <table>
-          <thead><tr><th>Arg</th><th>Default</th><th>Meaning</th></tr></thead>
-          <tbody>
-            <tr><td><code>target_end</code></td><td><code>AUTO</code></td>
-                <td>Window end — <code>AUTO</code> = prior full hour, or <code>'YYYY-MM-DD HH24:MI'</code></td></tr>
-            <tr><td><code>win_hours</code></td><td><code>1</code></td>
-                <td>Length of each compared window, in hours</td></tr>
-            <tr><td><code>weeks_back</code></td><td><code>4</code></td>
-                <td>Number of prior windows to compare against (a count — the name is historical)</td></tr>
-            <tr><td><code>top_n</code></td><td><code>10</code></td>
-                <td>Top-N rows per ranking in Top SQL / waits</td></tr>
-            <tr><td><code>inst_num</code></td><td><code>0</code></td>
-                <td>RAC: <code>0</code> = aggregate across all instances; <code>&gt;0</code> = that instance only</td></tr>
-            <tr><td><code>step</code></td><td><code>1</code></td>
-                <td>Cadence count between adjacent windows</td></tr>
-            <tr><td><code>step_unit</code></td><td><code>w</code></td>
-                <td>Cadence unit: <code>h</code> hours, <code>d</code> days, <code>w</code> weeks</td></tr>
-            <tr><td><code>template</code></td><td><code>comprehensive</code></td>
-                <td>Metric + wait-event set: <code>comprehensive</code>, <code>simple</code>, or <code>dev</code></td></tr>
-            <tr><td><code>debug</code></td><td><code>N</code></td>
-                <td><code>Y</code> prints timestamped per-section progress markers to stdout; the HTML is unaffected</td></tr>
-            <tr><td><code>marker_file</code></td><td><em>(empty)</em></td>
-                <td>Optional timeline-marker config — milestones drawn on the dated charts</td></tr>
-            <tr><td><code>MARKERS</code> <em>(env)</em></td><td><em>(empty)</em></td>
-                <td>File-free alternative to <code>marker_file</code> — inline <code>WHEN|LABEL</code> milestones joined by <code>;;</code></td></tr>
-            <tr><td><code>ECHARTS</code> <em>(env)</em></td><td><em>(empty)</em></td>
-                <td>Where the chart library loads from: empty = CDN, an <code>http(s)</code> URL = internal mirror, a local file path = inlined into the report for a single self-contained, offline HTML file</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p>
-        <code>step × step_unit</code> defines the gap between adjacent comparison
-        windows: <code>1 w</code> (default) is the classic same-hour-of-week trend,
-        <code>1 h</code> walks straight back hour by hour, <code>2 d</code> runs
-        every other day. Many more combinations are in the
-        <a href="cheatsheet.html">cheat sheet</a>.
-      </p>
-    </section>
+    <div class="tbl-scroll">
+      <table>
+        <caption>run_awr_trend.sh — positional arguments &amp; environment variables</caption>
+        <thead><tr><th>Arg</th><th>Default</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>target_end</code></td><td><code>AUTO</code></td>
+              <td>Window end — <code>AUTO</code> = prior full hour, or <code>'YYYY-MM-DD HH24:MI'</code></td></tr>
+          <tr><td><code>win_hours</code></td><td><code>1</code></td>
+              <td>Length of each compared window, in hours</td></tr>
+          <tr><td><code>weeks_back</code></td><td><code>4</code></td>
+              <td>Number of prior windows to compare against (a count — the name is historical)</td></tr>
+          <tr><td><code>top_n</code></td><td><code>10</code></td>
+              <td>Top-N rows per ranking in Top SQL / waits</td></tr>
+          <tr><td><code>inst_num</code></td><td><code>0</code></td>
+              <td>RAC: <code>0</code> = aggregate across all instances; <code>&gt;0</code> = that instance only</td></tr>
+          <tr><td><code>step</code></td><td><code>1</code></td>
+              <td>Cadence count between adjacent windows</td></tr>
+          <tr><td><code>step_unit</code></td><td><code>w</code></td>
+              <td>Cadence unit: <code>h</code> hours, <code>d</code> days, <code>w</code> weeks</td></tr>
+          <tr><td><code>template</code></td><td><code>comprehensive</code></td>
+              <td>Metric + wait-event set: <code>comprehensive</code>, <code>simple</code>, or <code>dev</code></td></tr>
+          <tr><td><code>debug</code></td><td><code>N</code></td>
+              <td><code>Y</code> prints timestamped per-section progress markers to stdout; the HTML is unaffected</td></tr>
+          <tr><td><code>marker_file</code></td><td><em>(empty)</em></td>
+              <td>Optional timeline-marker config — milestones drawn on the dated charts</td></tr>
+          <tr><td><code>MARKERS</code> <em>(env)</em></td><td><em>(empty)</em></td>
+              <td>File-free alternative to <code>marker_file</code> — inline <code>WHEN|LABEL</code> milestones joined by <code>;;</code></td></tr>
+          <tr><td><code>ECHARTS</code> <em>(env)</em></td><td><em>(empty)</em></td>
+              <td>Where the chart library loads from: empty = CDN, an <code>http(s)</code> URL = internal mirror, a local file path = inlined into the report for a single self-contained, offline HTML file</td></tr>
+        </tbody>
+      </table>
+    </div>
 
-    <section id="templates">
-      <h2><span class="num">05</span>Three views, three audiences</h2>
+    <div class="prose">
       <p>
-        The <code>template</code> argument picks which curated set of metrics and wait
-        events the report renders — same comparison engine, different altitude:
+        <code>step × step_unit</code> defines the gap between adjacent comparison windows:
+        <code>1 w</code> (default) is the classic same-hour-of-week trend, <code>1 h</code> walks
+        straight back hour by hour, <code>2 d</code> runs every other day. Many more combinations are
+        in the <a href="cheatsheet.html">cheat sheet</a>.
       </p>
-      <div class="cards">
-        <div class="fcard">
-          <h4><span class="ico">●</span><code>comprehensive</code> — for DBAs</h4>
-          <p>The default. The full curated lists: 27 load stats, 23 system metrics,
-          and the complete firehose of wait events ranked by time.</p>
-        </div>
-        <div class="fcard">
-          <h4><span class="ico">●</span><code>simple</code> — for triage</h4>
-          <p>A quick-glance subset: 9 load stats, 8 metrics, ~10 commonly-watched wait
-          events. The report you skim in thirty seconds before deciding whether to dig.</p>
-        </div>
-        <div class="fcard">
-          <h4><span class="ico">●</span><code>dev</code> — for application teams</h4>
-          <p>What the application itself drives: transaction throughput, query work,
-          parsing, sorts, SQL*Net chattiness and app-caused contention — with host/OS
-          and storage internals left out.</p>
-        </div>
+    </div>
+  </section>
+
+  <!-- TEMPLATES -->
+  <section class="chapter" id="templates" aria-labelledby="h-templates">
+    <div class="chap-head">
+      <span class="chap-num oldstyle">05</span>
+      <h2 class="chap-title" id="h-templates">Three views, three audiences</h2>
+    </div>
+    <div class="prose">
+      <p>
+        The <code>template</code> argument picks which curated set of metrics and wait events the
+        report renders — same comparison engine, different altitude:
+      </p>
+    </div>
+
+    <dl class="ledger">
+      <div class="row">
+        <dt><code>comprehensive</code></dt>
+        <dd><b>For DBAs.</b> The default. The full curated lists: 27 load stats, 23 system metrics,
+          and the complete firehose of wait events ranked by time.</dd>
       </div>
+      <div class="row">
+        <dt><code>simple</code></dt>
+        <dd><b>For triage.</b> A quick-glance subset: 9 load stats, 8 metrics, ~10 commonly-watched
+          wait events. The report you skim in thirty seconds before deciding whether to dig.</dd>
+      </div>
+      <div class="row">
+        <dt><code>dev</code></dt>
+        <dd><b>For application teams.</b> What the application itself drives — 17 load stats, 13
+          metrics, 14 wait events: transaction throughput, query work, parsing, sorts, SQL*Net
+          chattiness and app-caused contention — with host/OS and storage internals left out.</dd>
+      </div>
+    </dl>
+
+    <div class="prose">
       <p>
         Rolling your own is a directory with three files under
-        <code>sql/lib/templates/&lt;name&gt;/</code> plus one whitelist entry in the
-        driver — the lists feed every section, the findings and the hero cards in
-        lock-step.
+        <code>sql/lib/templates/&lt;name&gt;/</code> plus one whitelist entry in the driver — the lists
+        feed every section, the findings and the hero cards in lock-step.
       </p>
-    </section>
+    </div>
+  </section>
 
-    <section id="markers">
-      <h2><span class="num">06</span>Timeline markers</h2>
+  <!-- MARKERS -->
+  <section class="chapter" id="markers" aria-labelledby="h-markers">
+    <div class="chap-head">
+      <span class="chap-num oldstyle">06</span>
+      <h2 class="chap-title" id="h-markers">Timeline markers</h2>
+    </div>
+    <div class="prose">
       <p>
         A spike means more when it lines up with something you did. The optional
-        <code>marker_file</code> lets you annotate the dated charts with your own
-        milestones — a release, a patch, an index rebuild, a stats gather, an incident —
-        drawn as vertical dashed lines on the masthead strip, the ASH timeline, the
-        DB-time summary and the per-SQL ASH cards.
+        <code>marker_file</code> lets you annotate the dated charts with your own milestones — a
+        release, a patch, an index rebuild, a stats gather, an incident — drawn as vertical dashed
+        lines on the masthead strip, the ASH timeline, the DB-time summary and the per-SQL ASH cards.
       </p>
+    </div>
+
+    <div class="listing">
+      <div class="lh">my_markers.sql — file form</div>
 <pre><span class="c">-- my_markers.sql — one milestone per line</span>
 @@sql/lib/marker <span class="s">'2026-04-20 14:00'</span> <span class="s">'Applied patch 19.22'</span>
 @@sql/lib/marker <span class="s">'2026-05-01 02:00'</span> <span class="s">'Index rebuild on SALES'</span>
 @@sql/lib/marker <span class="s">'2026-05-10 09:30'</span> <span class="s">'Optimizer stats gather'</span></pre>
+    </div>
 
+    <div class="prose">
       <p>
         Don't want a file? Pass the same milestones <strong>inline</strong> — each
-        <code>WHEN|LABEL</code>, joined by <code>;;</code> — in the <code>MARKERS</code>
-        environment variable (or <code>DEFINE&nbsp;markers</code> on the pure SQL*Plus
-        path). The <a href="configurator.html">configurator</a> builds it for you.
+        <code>WHEN|LABEL</code>, joined by <code>;;</code> — in the <code>MARKERS</code> environment
+        variable (or <code>DEFINE&nbsp;markers</code> on the pure SQL*Plus path). The
+        <a href="configurator.html">configurator</a> builds it for you.
       </p>
+    </div>
+
+    <div class="listing">
+      <div class="lh">MARKERS — inline form</div>
 <pre>MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22;;2026-05-01 02:00|Index rebuild'</span> \
     ./run_awr_trend.sh user/pw@svc</pre>
+    </div>
 
-      <figure class="diagram">
-        <svg viewBox="0 0 840 235" xmlns="http://www.w3.org/2000/svg" role="img"
-             aria-label="Timeline with a release marked: baseline windows before, checked windows after"
-             font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
-          <rect x="30" y="50" width="440" height="130" fill="#e6f4f2"/>
-          <rect x="470" y="50" width="340" height="130" fill="#fdf3e3"/>
-          <text x="250" y="72" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0f766e">before — capture what “normal” looks like</text>
-          <text x="640" y="72" text-anchor="middle" font-size="12.5" font-weight="700" fill="#b45309">after — first hours, then weekly checks</text>
-          <polyline points="30,132 70,128 110,131 150,127 190,130 230,126 270,129 310,125 350,128 390,124 430,127 470,125 490,108 510,100 540,104 580,99 620,103 660,98 700,102 740,97 780,100 810,98"
-                    fill="none" stroke="#46546b" stroke-width="2.5" stroke-linejoin="round"/>
-          <line x1="470" y1="38" x2="470" y2="190" stroke="#c74634" stroke-width="2" stroke-dasharray="6 5"/>
-          <text x="470" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="#c74634">application release</text>
-          <g>
-            <rect x="86" y="156" width="18" height="14" rx="3" fill="#0f766e"/>
-            <rect x="181" y="156" width="18" height="14" rx="3" fill="#0f766e"/>
-            <rect x="276" y="156" width="18" height="14" rx="3" fill="#0f766e"/>
-            <rect x="371" y="156" width="18" height="14" rx="3" fill="#0f766e"/>
-            <rect x="521" y="156" width="18" height="14" rx="3" fill="#c74634"/>
-            <rect x="616" y="156" width="18" height="14" rx="3" fill="#c74634"/>
-            <rect x="711" y="156" width="18" height="14" rx="3" fill="#c74634"/>
-          </g>
-          <line x1="30" y1="190" x2="810" y2="190" stroke="#e3e8ef" stroke-width="2"/>
-          <text x="250" y="212" text-anchor="middle" font-size="12" fill="#7c8aa0">reference windows — the baseline</text>
-          <text x="640" y="212" text-anchor="middle" font-size="12" fill="#7c8aa0">new windows, checked against the baseline</text>
-        </svg>
-        <figcaption>
-          The change you ship is drawn directly on the report's charts. Every run after
-          go-live compares the fresh windows (red) against the baseline (green) — a
-          before/after difference cannot hide; it is named, dated, and graded.
-        </figcaption>
-      </figure>
-    </section>
+    <figure class="diagram">
+      <div class="figlabel">Fig. 3 — a release, drawn on the report's own charts</div>
+      <svg viewBox="0 0 840 232" xmlns="http://www.w3.org/2000/svg" role="img"
+           aria-label="Timeline with a release marked: baseline windows before, checked windows after"
+           font-family="'Iowan Old Style',Palatino,Georgia,serif">
+        <rect x="30" y="50" width="440" height="128" fill="#e7efe6"/>
+        <rect x="470" y="50" width="340" height="128" fill="#f2e7d3"/>
+        <text x="250" y="70" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0c5a52" font-family="ui-monospace,Menlo,Consolas,monospace">before — capture what “normal” looks like</text>
+        <text x="640" y="70" text-anchor="middle" font-size="12.5" font-weight="700" fill="#9a5b12" font-family="ui-monospace,Menlo,Consolas,monospace">after — first hours, then weekly checks</text>
+        <polyline points="30,130 70,126 110,129 150,125 190,128 230,124 270,127 310,123 350,126 390,122 430,125 470,123 490,106 510,98 540,102 580,97 620,101 660,96 700,100 740,95 780,98 810,96"
+                  fill="none" stroke="#4c453a" stroke-width="2.4" stroke-linejoin="round"/>
+        <line x1="470" y1="38" x2="470" y2="188" stroke="#c74634" stroke-width="2" stroke-dasharray="6 5"/>
+        <text x="470" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="#a5301f" font-family="ui-monospace,Menlo,Consolas,monospace">application release</text>
+        <g>
+          <rect x="86" y="154" width="18" height="14" fill="#0c5a52"/>
+          <rect x="181" y="154" width="18" height="14" fill="#0c5a52"/>
+          <rect x="276" y="154" width="18" height="14" fill="#0c5a52"/>
+          <rect x="371" y="154" width="18" height="14" fill="#0c5a52"/>
+          <rect x="521" y="154" width="18" height="14" fill="#c74634"/>
+          <rect x="616" y="154" width="18" height="14" fill="#c74634"/>
+          <rect x="711" y="154" width="18" height="14" fill="#c74634"/>
+        </g>
+        <line x1="30" y1="188" x2="810" y2="188" stroke="#cfc6b2" stroke-width="1.4"/>
+        <text x="250" y="210" text-anchor="middle" font-size="12" fill="#736a5a" font-style="italic">reference windows — the baseline</text>
+        <text x="640" y="210" text-anchor="middle" font-size="12" fill="#736a5a" font-style="italic">new windows, checked against the baseline</text>
+      </svg>
+      <figcaption>
+        The change you ship is drawn directly on the report's charts. Every run after go-live compares
+        the fresh windows against the baseline — a before/after difference cannot hide; it is named,
+        dated, and graded.
+      </figcaption>
+    </figure>
+  </section>
 
-    <section id="honest">
-      <h2><span class="num">07</span>Honest by design</h2>
+  <!-- HONEST -->
+  <section class="chapter" id="honest" aria-labelledby="h-honest">
+    <div class="chap-head">
+      <span class="chap-num oldstyle">07</span>
+      <h2 class="chap-title" id="h-honest">Honest by design</h2>
+    </div>
+    <div class="prose">
       <p>
-        The toolkit is deliberately conservative. It never writes to the database, so it
-        can be handed to a restricted analyst account without a second thought. The
-        report is honest about its own limits: when there is too little history to judge
-        a metric fairly, it says so rather than guessing — and a window invalidated by an
-        instance restart is shown, flagged, and excluded rather than silently blended in.
-        Changes to the toolkit itself are verified by regenerating reports before and
-        after a change against a live test database and proving the output
+        The toolkit is deliberately conservative. It never writes to the database, so it can be handed
+        to a restricted analyst account without a second thought. The report is honest about its own
+        limits: when there is too little history to judge a metric fairly, it says so rather than
+        guessing — and a window invalidated by an instance restart is shown, flagged, and excluded
+        rather than silently blended in. Changes to the toolkit itself are verified by regenerating
+        reports before and after a change against a live test database and proving the output
         byte-for-byte identical.
       </p>
+    </div>
 
-      <figure class="shot">
-        <span class="shot-tag">From a live test run</span>
+    <figure class="plate-fig">
+      <span class="plate-tag">From a live test run</span>
+      <div class="plate-frame">
         <img src="assets/shot_verdict_baseline_short.jpg" loading="lazy"
              alt="Report screenshot: the masthead with the verdict 'Baseline too short — need at least 3 prior valid windows to score'">
-        <figcaption>
-          Honesty in practice: run against a database with too little history, the report
-          says so outright — “Baseline too short” — and limits itself to simple
-          comparisons rather than inventing a score.
-        </figcaption>
-      </figure>
-    </section>
-
-    <section id="examples">
-      <h2><span class="num">08</span>Example reports</h2>
-      <p>
-        These are real, unedited reports generated against a small Oracle 19c lab
-        database — open them, scroll around, hover the charts. Each is a single HTML
-        file exactly as the toolkit spooled it.
-      </p>
-
-      <div class="examples">
-        <a class="excard" href="examples/hourly_comprehensive.html">
-          <span class="ex-tag t1">comprehensive · hourly</span>
-          <h4>The full report</h4>
-          <p>Default template, hour-over-hour cadence (<code>step_unit=h</code>):
-          hero cards, ASH timeline, findings heatmap, load profile, waits, Top SQL
-          ranked five ways, per-SQL ASH breakdowns, segment &amp; file I/O,
-          parameter changes — plus the navigation rail with dark mode and the
-          Essential-rows and Application-only toggles.</p>
-          <span class="open">Open report →</span>
-        </a>
-        <a class="excard" href="examples/hourly_simple_template.html">
-          <span class="ex-tag t2">simple · hourly</span>
-          <h4>The triage view</h4>
-          <p>Same engine, <code>template=simple</code>: a lean subset of stats, metrics
-          and waits for a thirty-second skim. Note the <code>template: simple</code>
-          pill in the masthead.</p>
-          <span class="open">Open report →</span>
-        </a>
-        <a class="excard" href="examples/hourly_with_markers.html">
-          <span class="ex-tag t3">markers · hourly</span>
-          <h4>With timeline markers</h4>
-          <p>Run with inline <code>markers</code>: “Patch 19.22 applied” and “Index
-          rebuild on SALES” drawn as vertical dashed lines on every dated chart.</p>
-          <span class="open">Open report →</span>
-        </a>
       </div>
+      <figcaption>
+        Honesty in practice: run against a database with too little history, the report says so
+        outright — “Baseline too short” — and limits itself to simple comparisons rather than
+        inventing a score.
+      </figcaption>
+    </figure>
+  </section>
 
-      <div class="note">
-        <strong>About the data:</strong> these examples capture a live workload window on
-        a small Oracle 19c lab box, so they show real per-second load and a findings
-        section that grades metrics from “typical” to “large”. When a window has too
-        little valid history to score fairly, the same report says “Baseline too short”
-        instead of guessing — see the masthead in <a href="#honest">Honest by design</a>
-        above.
-      </div>
-    </section>
-
-    <section id="cheatsheet">
-      <h2><span class="num">09</span>The cheat sheet</h2>
+  <!-- EXAMPLES -->
+  <section class="chapter" id="examples" aria-labelledby="h-examples">
+    <div class="chap-head">
+      <span class="chap-num oldstyle">08</span>
+      <h2 class="chap-title" id="h-examples">Example reports</h2>
+    </div>
+    <div class="prose">
       <p>
-        Eleven positional arguments sounds like a lot, so the
-        <a href="cheatsheet.html">cheat sheet</a> keeps ready-to-paste recipes for the
-        questions you actually ask. A taste:
+        These are real, unedited reports generated against a small Oracle 19c lab database — open them,
+        scroll around, hover the charts. Each is a single HTML file exactly as the toolkit spooled it.
       </p>
+    </div>
 
-      <div class="recipes">
-        <div class="recipe">
-          <div class="q">“What's different this morning vs my normal Monday?”</div>
-          <pre>./run_awr_trend.sh user/pw@svc</pre>
-        </div>
-        <div class="recipe">
-          <div class="q">“Walk me through the last 12 hours, hour by hour.”</div>
-          <pre>./run_awr_trend.sh user/pw@svc AUTO 1 12 10 0 1 h</pre>
-        </div>
-        <div class="recipe">
-          <div class="q">“Did yesterday's batch differ from the previous five Tuesdays?”</div>
-          <pre>./run_awr_trend.sh user/pw@svc '2026-05-12 06:00' 4 5 25 0 1 w</pre>
-        </div>
-        <div class="recipe">
-          <div class="q">“Quarter-end vs the last three quarter-ends.”</div>
-          <pre>./run_awr_trend.sh user/pw@svc '2026-03-31 23:00' 1 3 25 0 13 w</pre>
-        </div>
-      </div>
+    <div class="exgrid">
+      <a class="ex t1" href="examples/hourly_comprehensive.html">
+        <span class="k">comprehensive · hourly</span>
+        <h4>The full report</h4>
+        <p>Default template, hour-over-hour cadence (<code>step_unit=h</code>): hero cards, ASH
+          timeline, findings heatmap, load profile, waits, Top SQL ranked five ways, per-SQL ASH
+          breakdowns, segment &amp; file I/O, parameter changes — plus the navigation rail with dark
+          mode and the Essential-rows and Application-only toggles.</p>
+        <span class="go">Open report →</span>
+      </a>
+      <a class="ex t2" href="examples/hourly_simple_template.html">
+        <span class="k">simple · hourly</span>
+        <h4>The triage view</h4>
+        <p>Same engine, <code>template=simple</code>: a lean subset of stats, metrics and waits for a
+          thirty-second skim. Note the <code>template: simple</code> pill in the masthead.</p>
+        <span class="go">Open report →</span>
+      </a>
+      <a class="ex t3" href="examples/hourly_with_markers.html">
+        <span class="k">markers · hourly</span>
+        <h4>With timeline markers</h4>
+        <p>Run with inline <code>markers</code>: “Patch 19.22 applied” and “Index rebuild on SALES”
+          drawn as vertical dashed lines on every dated chart.</p>
+        <span class="go">Open report →</span>
+      </a>
+    </div>
 
+    <div class="note">
+      <strong>About the data:</strong> these examples capture a live workload window on a small Oracle
+      19c lab box, so they show real per-second load and a findings section that grades metrics from
+      “typical” to “large”. When a window has too little valid history to score fairly, the same report
+      says “Baseline too short” instead of guessing — see the masthead in
+      <a href="#honest">Honest by design</a> above.
+    </div>
+  </section>
+
+  <!-- CHEAT SHEET -->
+  <section class="chapter" id="cheatsheet" aria-labelledby="h-cheat">
+    <div class="chap-head">
+      <span class="chap-num oldstyle">09</span>
+      <h2 class="chap-title" id="h-cheat">The cheat sheet</h2>
+    </div>
+    <div class="prose">
       <p>
-        <a class="btn btn-primary" href="cheatsheet.html" style="color:#fff">Browse the full cheat sheet →</a>
+        Eleven positional arguments sounds like a lot, so the <a href="cheatsheet.html">cheat sheet</a>
+        keeps ready-to-paste recipes for the questions you actually ask. A taste:
       </p>
-    </section>
+    </div>
 
-  </div>
+    <div class="recipes">
+      <div class="recipe">
+        <div class="q">“What's different this morning vs my normal Monday?”</div>
+        <div class="listing"><pre>./run_awr_trend.sh user/pw@svc</pre></div>
+      </div>
+      <div class="recipe">
+        <div class="q">“Walk me through the last 12 hours, hour by hour.”</div>
+        <div class="listing"><pre>./run_awr_trend.sh user/pw@svc AUTO 1 12 10 0 1 h</pre></div>
+      </div>
+      <div class="recipe">
+        <div class="q">“Did yesterday's batch differ from the previous five Tuesdays?”</div>
+        <div class="listing"><pre>./run_awr_trend.sh user/pw@svc '2026-05-12 06:00' 4 5 25 0 1 w</pre></div>
+      </div>
+      <div class="recipe">
+        <div class="q">“Quarter-end vs the last three quarter-ends.”</div>
+        <div class="listing"><pre>./run_awr_trend.sh user/pw@svc '2026-03-31 23:00' 1 3 25 0 13 w</pre></div>
+      </div>
+    </div>
+
+    <div class="prose" style="margin-top:20px">
+      <a class="btn primary" href="cheatsheet.html">Browse the full cheat sheet →</a>
+    </div>
+  </section>
+
 </main>
 
 <footer>
-  <div class="wrap">
-    <div>
-      <strong>Requirements:</strong> Oracle Database 19c with Diagnostic + Tuning Pack;
-      a user that can read the AWR history views (any DBA account qualifies).
+  <div class="shell">
+    <div class="col">
+      <div class="colophon-name">AWR Timeline Comparison</div>
+      <h5>Requirements</h5>
+      <p>
+        <b>Oracle Database 19c</b> with the Diagnostic + Tuning Pack licensed; SQL*Plus and a user
+        that can read the AWR history views (any DBA account qualifies, or a dedicated analyst with
+        <code>SELECT</code> on the listed <code>DBA_HIST_*</code> views). Nothing to install in the
+        database.
+      </p>
     </div>
-    <div>
-      <a href="https://github.com/davidbudac/awr_timeline_comparison">github.com/davidbudac/awr_timeline_comparison</a>
+    <div class="col">
+      <h5>Source</h5>
+      <p><a href="https://github.com/davidbudac/awr_timeline_comparison">github.com/davidbudac/awr_timeline_comparison</a></p>
+      <h5 style="margin-top:16px">On this page</h5>
+      <p style="font-family:var(--mono);font-size:13px;line-height:1.9">
+        <a href="#why">Why aligned windows</a> · <a href="#how">How it works</a> ·
+        <a href="#report">Inside the report</a> · <a href="#start">Get started</a> ·
+        <a href="configurator.html">Configurator</a> · <a href="cheatsheet.html">Cheat sheet</a>
+      </p>
     </div>
   </div>
 </footer>
+
+<script>
+(function(){
+  var btn=document.querySelector('.nav-toggle');
+  var toc=document.getElementById('toc');
+  if(btn&&toc){
+    btn.addEventListener('click',function(){
+      var open=toc.classList.toggle('open');
+      btn.setAttribute('aria-expanded',open?'true':'false');
+    });
+    toc.addEventListener('click',function(e){
+      if(e.target.tagName==='A'){toc.classList.remove('open');btn.setAttribute('aria-expanded','false');}
+    });
+  }
+})();
+</script>
 
 </body>
 </html>
