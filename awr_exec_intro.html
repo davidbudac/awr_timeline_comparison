@@ -466,7 +466,48 @@ h2 {
 @media (max-width: 540px) { .feature-grid { grid-template-columns: 1fr; } }
 
 /* ===========================================
-   SLIDE 6 — RELEASE PLAYBOOK (white, 3 steps)
+   SLIDE 6 — TAILORED TO EVERY AUDIENCE (dark)
+   =========================================== */
+.s-tailored { background: var(--bg-dark); color: var(--text-light); }
+.tailored-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(0.6rem, 1.6vw, 1.2rem);
+    margin-bottom: clamp(0.7rem, 2vh, 1.4rem);
+}
+.tailored-grid .tcard {
+    background: #161616;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-top: clamp(3px, 0.5vh, 5px) solid var(--accent-blue);
+    border-radius: clamp(4px, 0.6vw, 8px);
+    padding: clamp(0.7rem, 2vh, 1.4rem) clamp(0.8rem, 1.8vw, 1.4rem);
+}
+.tailored-grid .tt {
+    font-size: clamp(0.9rem, 1.9vw, 1.28rem);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin-bottom: clamp(0.3rem, 0.9vh, 0.6rem);
+}
+.tailored-grid .tcard p {
+    font-size: clamp(0.7rem, 1.35vw, 0.95rem);
+    font-weight: 500;
+    color: var(--text-muted-light);
+    line-height: 1.5;
+}
+.tailored-note {
+    font-size: clamp(0.72rem, 1.4vw, 1rem);
+    font-weight: 500;
+    color: var(--text-muted-light);
+    line-height: 1.55;
+    max-width: 74ch;
+    border-left: clamp(3px, 0.4vw, 5px) solid var(--accent-blue);
+    padding-left: clamp(0.7rem, 1.6vw, 1.2rem);
+}
+.tailored-note strong { color: var(--text-light); font-weight: 800; }
+@media (max-width: 700px) { .tailored-grid { grid-template-columns: 1fr; } }
+
+/* ===========================================
+   SLIDE 7 — RELEASE PLAYBOOK (white, 3 steps)
    =========================================== */
 .s-release { background: var(--bg-white); color: var(--text-dark); }
 .steps {
@@ -700,7 +741,7 @@ body.editing .edit-banner { display: block; }
             </ul>
         </div>
     </div>
-    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>02 / 08</span></div>
+    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>02 / 09</span></div>
 </section>
 
 <!-- ===========================================
@@ -719,7 +760,7 @@ body.editing .edit-banner { display: block; }
         </div>
         <p class="on-blue-body reveal">Business rhythm — batch jobs, peak hours, quiet weekends — never gets mistaken for a problem. Each metric is scored against its own recent history, and only <strong>genuinely unusual movement</strong> is flagged: OK, Warning, or Critical. No one has to notice that a number "looks high".</p>
     </div>
-    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>03 / 08</span></div>
+    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>03 / 09</span></div>
 </section>
 
 <!-- ===========================================
@@ -748,7 +789,7 @@ body.editing .edit-banner { display: block; }
             </div>
         </div>
     </div>
-    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>04 / 08</span></div>
+    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>04 / 09</span></div>
 </section>
 
 <!-- ===========================================
@@ -757,35 +798,61 @@ body.editing .edit-banner { display: block; }
 <section class="slide s-report" aria-label="The report">
     <div class="slide-content">
         <div class="kicker reveal">The deliverable</div>
-        <h2 class="reveal">One self-contained page. Every answer in it.</h2>
+        <h2 class="reveal">A 16-section workbench. One self-contained file.</h2>
         <div class="feature-grid">
             <div class="feat reveal">
-                <h3>Headline health cards</h3>
-                <p>Six at-a-glance numbers that say "normal" or "look here" in seconds.</p>
+                <h3>Live status rail</h3>
+                <p>Jump to any section; a status dot flags Critical or Warning before you even scroll.</p>
+            </div>
+            <div class="feat reveal">
+                <h3>16 analysis sections</h3>
+                <p>Health cards, findings, activity timeline, top SQL, waits, and I/O — the full picture.</p>
             </div>
             <div class="feat reveal">
                 <h3>Statistical findings</h3>
                 <p>Unusual changes graded Warning / Critical — with what changed, when, and by how much.</p>
             </div>
             <div class="feat reveal">
-                <h3>Activity timeline</h3>
-                <p>The full compared span as one picture, with each compared window highlighted.</p>
-            </div>
-            <div class="feat reveal">
-                <h3>Top SQL statements</h3>
-                <p>The exact queries driving the load, ranked four ways, with plan-change flags.</p>
-            </div>
-            <div class="feat reveal">
                 <h3>Release markers</h3>
                 <p>The go-live drawn as a line on every chart — "before vs. after" is visible, not argued.</p>
             </div>
             <div class="feat reveal">
-                <h3>Mail it, attach it</h3>
-                <p>A single HTML file that opens anywhere — tickets, email, audits. No tooling needed to view it.</p>
+                <h3>Light &amp; dark, one file</h3>
+                <p>A single HTML page — mailable, attachable to a ticket, and readable in either theme.</p>
+            </div>
+            <div class="feat reveal">
+                <h3>Works offline</h3>
+                <p>No internet needed. Charts embed, and if anything is blocked it falls back to full tables.</p>
             </div>
         </div>
     </div>
-    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>05 / 08</span></div>
+    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>05 / 09</span></div>
+</section>
+
+<!-- ===========================================
+     SLIDE 6 — TAILORED TO EVERY AUDIENCE (dark)
+     =========================================== -->
+<section class="slide s-tailored on-dark" aria-label="Tailored to every audience">
+    <div class="slide-content">
+        <div class="kicker reveal">One tool, many audiences</div>
+        <h2 class="reveal">The right depth for whoever is reading.</h2>
+        <div class="tailored-grid">
+            <div class="tcard reveal">
+                <div class="tt">Comprehensive</div>
+                <p>The full instrument — every metric and wait event, for a database team doing deep analysis.</p>
+            </div>
+            <div class="tcard reveal">
+                <div class="tt">Simple</div>
+                <p>A triage view: the handful of numbers that answer "healthy or not?" at a glance.</p>
+            </div>
+            <div class="tcard reveal">
+                <div class="tt">Developer</div>
+                <p>Focused on what the application drives — so app teams verify their own release without a DBA.</p>
+            </div>
+        </div>
+        <p class="tailored-note reveal">And two one-click filters inside every report: <strong>Application only</strong> hides system internals so a team sees just its own SQL, and <strong>Essential rows</strong> collapses the long tail down to what matters — while never hiding a genuine anomaly.</p>
+    </div>
+    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>06 / 09</span></div>
 </section>
 
 <!-- ===========================================
@@ -813,11 +880,11 @@ body.editing .edit-banner { display: block; }
             </div>
         </div>
     </div>
-    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>06 / 08</span></div>
+    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>07 / 09</span></div>
 </section>
 
 <!-- ===========================================
-     SLIDE 7 — BUSINESS VALUE
+     SLIDE 8 — BUSINESS VALUE
      =========================================== -->
 <section class="slide s-value on-blue" aria-label="Business value">
     <div class="slide-content">
@@ -833,29 +900,29 @@ body.editing .edit-banner { display: block; }
                 <div class="v">Statistically flagged drift surfaces problems before users and SLAs feel them.</div>
             </div>
             <div class="vrow reveal">
+                <div class="k">Numbers you can trust</div>
+                <div class="v">Versioned and accuracy-reviewed (v1.2.0) — decisions rest on audited figures, not a hand-built spreadsheet.</div>
+            </div>
+            <div class="vrow reveal">
                 <div class="k">Zero cost to adopt</div>
                 <div class="v">No licenses, infrastructure, or vendors added — it leverages what we already pay Oracle for.</div>
             </div>
-            <div class="vrow reveal">
-                <div class="k">Teams self-serve</div>
-                <div class="v">A developer-focused view lets application teams verify their own releases without a DBA in the loop.</div>
-            </div>
         </div>
     </div>
-    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>07 / 08</span></div>
+    <div class="slide-foot"><span>AWR Timeline Comparison</span><span>08 / 09</span></div>
 </section>
 
 <!-- ===========================================
-     SLIDE 8 — CLOSING
+     SLIDE 9 — CLOSING
      =========================================== -->
 <section class="slide s-close on-dark" aria-label="Closing">
     <div class="slide-content">
         <div class="kicker reveal">Ready today</div>
         <h1 class="reveal">One command. One page. Release with confidence.</h1>
         <div class="cta reveal">In place for this month's go-live</div>
-        <p class="fineprint reveal">Already verified against our Oracle 19c estate. The ask: make the before/after report a standard step in the release runbook.</p>
+        <p class="fineprint reveal">Now at v1.2.0 — versioned, accuracy-reviewed, and verified against our Oracle 19c estate. The ask: make the before/after report a standard step in the release runbook.</p>
     </div>
-    <div class="slide-foot"><span>AWR Timeline Comparison · DB Engineering</span><span>08 / 08</span></div>
+    <div class="slide-foot"><span>AWR Timeline Comparison · DB Engineering</span><span>09 / 09</span></div>
 </section>
 
 <script>
@@ -952,7 +1019,7 @@ class InlineEditor {
         this.storageKey = 'awr-exec-intro-edits';
         // Every user-visible text element is editable in edit mode
         this.editables = Array.from(document.querySelectorAll(
-            'h1, h2, h3, p, li, .kicker, .tag, .corner, .num, .lbl, .k, .v, .n, .cta, .win, .slide-foot span'
+            'h1, h2, h3, p, li, .kicker, .tag, .corner, .num, .lbl, .k, .v, .n, .cta, .win, .tt, .slide-foot span'
         ));
         this.editables.forEach((el, i) => el.dataset.editId = i);
         this.restore();
