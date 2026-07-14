@@ -95,17 +95,7 @@
     padding:1px 5px;
   }
 
-  .lead{font-size:16px;color:var(--ink-soft);max-width:780px;margin:0 0 18px}
-
-  /* ---------- how-to orientation strip ---------- */
-  .howto{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 26px}
-  .howto .step{display:flex;align-items:center;gap:10px;flex:1 1 210px;
-    background:var(--card);border:1px solid var(--line);border-radius:11px;padding:11px 14px}
-  .howto .num{flex:0 0 auto;width:24px;height:24px;border-radius:50%;
-    background:var(--accent);color:#fff;font-size:13px;font-weight:800;
-    display:flex;align-items:center;justify-content:center}
-  .howto .txt{font-size:13.5px;color:var(--ink-soft);line-height:1.4}
-  .howto .txt b{color:var(--ink)}
+  .lead{font-size:16px;color:var(--ink-soft);max-width:780px;margin:0 0 26px}
 
   /* live value echo next to a control label */
   .echo{font-weight:700;color:var(--teal);text-transform:none;letter-spacing:0;margin-left:8px}
@@ -114,22 +104,7 @@
   input.invalid,select.invalid{border-color:#e0796b !important;
     box-shadow:0 0 0 3px rgba(199,70,52,.10) !important}
 
-  /* ---------- presets ---------- */
-  .presets-head{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
-    color:var(--ink-faint);margin-bottom:9px}
-  .presets{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 28px}
-  .preset{font-size:13px;font-weight:650;color:var(--ink-soft);background:var(--card);
-    border:1px solid var(--line);border-radius:999px;padding:7px 15px;cursor:pointer}
-  .preset:hover{border-color:var(--accent);color:var(--accent-dark);
-    box-shadow:0 6px 16px -12px rgba(28,36,51,.4)}
-  .preset.reset{border-style:dashed;color:var(--ink-faint)}
-  .preset.reset:hover{color:var(--accent-dark)}
-
-  /* ---------- mode switch + quick pane ---------- */
-  .modebar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 24px}
-  .modebar-label{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
-  .modeseg label{padding:9px 20px;font-size:14px;font-weight:700}
-  .modebar-hint{font-size:13px;color:var(--ink-faint)}
+  /* ---------- scenario cards ---------- */
   .scenarios{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   @media (max-width:560px){.scenarios{grid-template-columns:1fr}}
   .scenario{text-align:left;background:#fff;border:1px solid var(--line);border-radius:11px;
@@ -139,8 +114,10 @@
   .scenario .sn{font-size:14px;font-weight:750;color:var(--ink)}
   .scenario .sd{font-size:12.5px;color:var(--ink-soft);line-height:1.4}
   .scenario .sm{font-size:11px;color:var(--teal);font-family:var(--mono);margin-top:1px;letter-spacing:.01em}
-  .qp-foot{font-size:13px;color:var(--ink-faint);margin-top:2px}
-  .qp-foot a{font-weight:700}
+  .scenario-custom{font-size:12.5px;color:var(--ink-faint);font-style:italic;margin-top:10px}
+  .reset-link{font-size:12.5px;font-weight:700;color:var(--ink-faint);text-decoration:none;
+    border-bottom:1px dashed var(--ink-faint);white-space:nowrap}
+  .reset-link:hover{color:var(--accent-dark);border-bottom-color:var(--accent-dark)}
 
   /* ---------- two-column layout ---------- */
   .config{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:26px;align-items:start}
@@ -153,7 +130,29 @@
   .panel .ph{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
     color:var(--accent);margin:0 0 3px}
   .panel .ph .n{color:var(--ink-faint);margin-right:7px}
-  .panel .psub{font-size:13px;color:var(--ink-faint);margin:0 0 16px;line-height:1.5}
+  .ph .opt{color:var(--ink-faint);font-weight:600;text-transform:none;letter-spacing:0;margin-left:6px;font-size:11px}
+  .panel .psub,.fold-body .psub{font-size:13px;color:var(--ink-faint);margin:0 0 16px;line-height:1.5}
+  .panel .psub a{font-weight:700}
+
+  /* ---------- collapsible fold sections (fine-tune / markers) ---------- */
+  details.fold{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    margin-bottom:18px;box-shadow:0 6px 18px -14px rgba(28,36,51,.2);overflow:hidden}
+  details.fold>summary{list-style:none;cursor:pointer;padding:17px 22px;
+    display:flex;align-items:center;gap:10px;user-select:none}
+  details.fold>summary::-webkit-details-marker{display:none}
+  details.fold>summary:hover .ph{color:var(--accent-dark)}
+  details.fold>summary .ph{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--accent);margin:0}
+  details.fold>summary .ph .n{color:var(--ink-faint);margin-right:7px}
+  details.fold>summary .chev{margin-left:auto;color:var(--ink-faint);font-size:12px;
+    transition:transform .15s ease}
+  details.fold[open]>summary .chev{transform:rotate(90deg)}
+  details.fold[open]>summary{border-bottom:1px solid var(--line)}
+  .fold-body{padding:20px 22px}
+  .subhead{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink-soft);margin:0 0 4px}
+  .subhead-sub{font-size:12.5px;color:var(--ink-faint);margin:0 0 16px;line-height:1.5}
+  .subgroup{margin-top:26px}
 
   .field{margin-bottom:16px}
   .field:last-child{margin-bottom:0}
@@ -300,8 +299,8 @@
     <span class="kicker">Configurator</span>
     <h1>Build your run command</h1>
     <p class="tagline">
-      Pick a scenario in seconds, or fine-tune every parameter — then copy a ready-to-run
-      <code>run_awr_trend.sh</code> or SQL*Plus invocation.
+      Connect, pick what to compare, and copy a ready-to-run
+      <code>run_awr_trend.sh</code> or SQL*Plus invocation — fine-tune any parameter if you want to.
       Everything runs in your browser — nothing is sent anywhere. Prefer the terminal?
       The shell wrapper has the same thing built in — run
       <code>./run_awr_trend.sh --configure</code>.
@@ -313,103 +312,61 @@
   <div class="wrap">
 
     <p class="lead">
-      Two ways to build your command: <b>Quick</b> — connect, pick a scenario, copy; or
-      <b>Guided</b> — every one of the eleven parameters with a plain-language explanation.
+      Three steps: <b>connect</b>, choose <b>what to compare</b>, and copy your command. Everything
+      else has a sensible default — open <b>Fine-tune</b> if you want to adjust it; the command on the
+      right updates live as you go.
     </p>
-
-    <div class="modebar">
-      <span class="modebar-label">Setup mode</span>
-      <div class="seg modeseg" id="modeseg">
-        <label data-mode="quick" class="on"><input type="radio" name="mode" value="quick" checked>⚡ Quick</label>
-        <label data-mode="guided"><input type="radio" name="mode" value="guided">⚙ Guided</label>
-      </div>
-      <span class="modebar-hint" id="mode_hint"></span>
-    </div>
 
     <div class="config">
      <div class="leftcol">
 
-      <!-- ============ QUICK PANE ============ -->
-      <div id="quick_pane">
-        <div class="panel">
-          <div class="ph">Quick setup</div>
-          <div class="psub">Two choices and you're set — who to connect as, and what to compare.
-            Everything else uses sensible defaults; switch to Guided any time to fine-tune.</div>
-
-          <div class="field">
-            <label class="lbl" for="q_connect">1 · Connect string</label>
-            <input type="text" id="q_connect" class="mono" value="user/pw@svc" autocomplete="off" spellcheck="false">
-            <div class="chiprow" id="q_connect_chips"></div>
-            <div class="help">Any SQL*Plus logon — <code>user/pw@host:port/service</code>, a TNS alias, or
-              <code>/ as sysdba</code>. Used locally; the password never leaves this page.</div>
-          </div>
-
-          <div class="field">
-            <label class="lbl">2 · What do you want to compare?</label>
-            <div class="scenarios" id="scenarios"></div>
-          </div>
-
-          <div class="field">
-            <label class="lbl">When does the newest window end?</label>
-            <div class="seg" id="q_te_seg">
-              <label data-te="auto" class="on"><input type="radio" name="q_temode" value="auto" checked>Prior full hour</label>
-              <label data-te="specific"><input type="radio" name="q_temode" value="specific">Specific time</label>
-            </div>
-            <div id="q_te_wrap" class="hidden" style="margin-top:10px">
-              <input type="datetime-local" id="q_target_dt">
-            </div>
-          </div>
-
-          <div class="qp-foot">Want every knob? <a href="#" id="to_guided">Switch to Guided →</a></div>
+      <!-- ============ 1 · CONNECT ============ -->
+      <div class="panel">
+        <div class="ph"><span class="n">1 ·</span>Connect</div>
+        <div class="field">
+          <label class="lbl" for="connect">Connect string</label>
+          <input type="text" id="connect" class="mono" value="user/pw@svc" autocomplete="off" spellcheck="false">
+          <div class="chiprow" id="connect_chips"></div>
+          <div class="help">Any SQL*Plus logon: <code>user/pw@host:port/service</code>, a TNS alias, or
+            <code>/ as sysdba</code>. Used locally — the password never leaves this page.</div>
         </div>
       </div>
 
-      <!-- ============ GUIDED PANE ============ -->
-      <div id="guided_pane" class="hidden">
+      <!-- ============ 2 · WHAT TO COMPARE ============ -->
+      <div class="panel">
+        <div class="ph"><span class="n">2 ·</span>What do you want to compare?</div>
+        <div class="psub">Pick the scenario closest to what you need — it fills in the windows, cadence and
+          template in Fine-tune below. <a href="#" class="reset-link" id="reset_link">↺ Reset to defaults</a></div>
 
-        <div class="howto">
-          <div class="step"><span class="num">1</span><span class="txt"><b>Pick a preset</b> closest to what you need.</span></div>
-          <div class="step"><span class="num">2</span><span class="txt"><b>Tweak the controls</b> — the preview updates live.</span></div>
-          <div class="step"><span class="num">3</span><span class="txt"><b>Copy &amp; run</b> the shell or SQL*Plus command.</span></div>
-        </div>
+        <div class="scenarios" id="scenarios"></div>
+        <div class="scenario-custom hidden" id="scenario_custom">Custom configuration — pick a scenario any time to start fresh.</div>
 
-        <div class="presets-head">Start from a preset</div>
-        <div class="presets" id="presets"></div>
-
-      <!-- ============ CONTROLS ============ -->
-      <div class="controls">
-
-        <!-- Connection + target -->
-        <div class="panel">
-          <div class="ph"><span class="n">A</span>Connection &amp; target</div>
-          <div class="psub">Who to connect as, and the end of the most recent window you want to compare.</div>
-
-          <div class="field">
-            <label class="lbl" for="connect">Connect string</label>
-            <input type="text" id="connect" class="mono" value="user/pw@svc" autocomplete="off" spellcheck="false">
-            <div class="chiprow" id="connect_chips"></div>
-            <div class="help">Any SQL*Plus logon: <code>user/pw@host:port/service</code>, a TNS alias, or
-              <code>/ as sysdba</code>. Used locally — the password never leaves this page.</div>
+        <div class="field" style="margin-top:18px">
+          <label class="lbl">When does the newest window end?
+            <span style="text-transform:none;font-weight:600;color:var(--ink-faint)">(target_end)</span></label>
+          <div class="seg" id="te_seg">
+            <label data-te="auto" class="on"><input type="radio" name="temode" value="auto" checked>Prior full hour (AUTO)</label>
+            <label data-te="specific"><input type="radio" name="temode" value="specific">Specific date &amp; time</label>
           </div>
-
-          <div class="field">
-            <label class="lbl">Window end <span style="text-transform:none;font-weight:600;color:var(--ink-faint)">(target_end)</span></label>
-            <div class="seg" id="te_seg">
-              <label data-te="auto" class="on"><input type="radio" name="temode" value="auto" checked>Prior full hour (AUTO)</label>
-              <label data-te="specific"><input type="radio" name="temode" value="specific">Specific date/time</label>
-            </div>
-            <div id="te_specific_wrap" class="hidden" style="margin-top:10px">
-              <input type="datetime-local" id="target_dt">
-            </div>
-            <div class="help"><strong>AUTO</strong> ends the newest window at the most recent completed
-              clock hour. Pick a specific time to pin it — e.g. a Monday 09:00 or the end of a batch run.</div>
+          <div id="te_specific_wrap" class="hidden" style="margin-top:10px">
+            <input type="datetime-local" id="target_dt">
           </div>
+          <div class="help"><strong>AUTO</strong> ends the newest window at the most recent completed
+            clock hour. Pick a specific time to pin it — e.g. a Monday 09:00 or the end of a batch run.</div>
         </div>
+      </div>
 
-        <!-- Windows + cadence -->
-        <div class="panel">
-          <div class="ph"><span class="n">B</span>Windows &amp; cadence</div>
-          <div class="psub">How wide each compared window is, how many you compare, and the gap between them.</div>
+      <!-- ============ 3 · FINE-TUNE (collapsed) ============ -->
+      <details class="fold" id="fold_tune">
+        <summary>
+          <span class="ph"><span class="n">3 ·</span>Fine-tune<span class="opt">optional</span></span>
+          <span class="chev">▸</span>
+        </summary>
+        <div class="fold-body">
+
+          <!-- Windows + cadence -->
+          <div class="subhead">Windows &amp; cadence</div>
+          <div class="subhead-sub">How wide each compared window is, how many you compare, and the gap between them.</div>
 
           <div class="row2">
             <div class="field">
@@ -445,12 +402,10 @@
             <div class="cap" id="preview_caption"></div>
             <div class="wins" id="preview_chips"></div>
           </div>
-        </div>
 
-        <!-- Content + scope -->
-        <div class="panel">
-          <div class="ph"><span class="n">C</span>Content &amp; scope</div>
-          <div class="psub">How much detail to show and which instances to read.</div>
+          <!-- Content + scope -->
+          <div class="subgroup subhead">Content &amp; scope</div>
+          <div class="subhead-sub">How much detail to show and which instances to read.</div>
 
           <div class="row2">
             <div class="field">
@@ -495,27 +450,31 @@
                    autocomplete="off" spellcheck="false">
             <div class="help" id="echarts_help"></div>
           </div>
+
         </div>
+      </details>
 
-      </div>
-      </div><!-- /guided_pane -->
+      <!-- ============ TIMELINE MARKERS (collapsed) ============ -->
+      <details class="fold" id="fold_markers">
+        <summary>
+          <span class="ph">Timeline markers<span class="opt">optional</span></span>
+          <span class="chev">▸</span>
+        </summary>
+        <div class="fold-body">
+          <div class="psub">Annotate the dated charts with milestones — a release, a patch, an incident.
+            They are baked straight into the command (no separate file to save), so it stays a single copy-paste.</div>
 
-      <!-- ============ TIMELINE MARKERS (shared by Quick + Guided) ============ -->
-      <div class="panel" id="markers_panel">
-        <div class="ph">Timeline markers <span style="color:var(--ink-faint);font-weight:600;text-transform:none">— optional, works in either mode</span></div>
-        <div class="psub">Annotate the dated charts with milestones — a release, a patch, an incident.
-          They are baked straight into the command (no separate file to save), so it stays a single copy-paste.</div>
-
-        <div class="field">
-          <label class="lbl">Milestones</label>
-          <div id="marker_rows"></div>
-          <button type="button" class="mk-add" id="marker_add">+ Add milestone</button>
-          <div class="help">Each milestone needs a date &amp; time and a label. They ride inline in the command
-            (the <code>MARKERS</code> env var for the shell, <code>DEFINE&nbsp;markers</code> for SQL*Plus).
-            A straight apostrophe in a label is swapped to a typographic one (’) so the command stays one
-            copy-paste; for exotic labels use a <code>marker_file</code> on disk instead.</div>
+          <div class="field">
+            <label class="lbl">Milestones</label>
+            <div id="marker_rows"></div>
+            <button type="button" class="mk-add" id="marker_add">+ Add milestone</button>
+            <div class="help">Each milestone needs a date &amp; time and a label. They ride inline in the command
+              (the <code>MARKERS</code> env var for the shell, <code>DEFINE&nbsp;markers</code> for SQL*Plus).
+              A straight apostrophe in a label is swapped to a typographic one (’) so the command stays one
+              copy-paste; for exotic labels use a <code>marker_file</code> on disk instead.</div>
+          </div>
         </div>
-      </div>
+      </details>
 
      </div><!-- /leftcol -->
 
@@ -622,6 +581,10 @@ const TEMPLATE_HELP = {
 
 const $ = id => document.getElementById(id);
 
+// Guard: programmatic control changes made by applyPreset must not trip the
+// "user edited a param -> deselect the scenario card" logic.
+let applyingPreset = false;
+
 /* ---------------------------------------------------------------- utils */
 function pad(n){ return String(n).padStart(2,'0'); }
 
@@ -646,6 +609,8 @@ function parseLocal(v){
 }
 function fmtFull(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes()); }
 function fmtShort(d){ return pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes()); }
+/* datetime-local input value "YYYY-MM-DDTHH:MM" from a Date */
+function fmtLocalInput(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes()); }
 
 /* Shell single-quote only when needed. */
 function shellQuote(s){
@@ -656,8 +621,7 @@ function shellQuote(s){
 /* Oracle string literal (double embedded single quotes). */
 function sqlQuote(s){ return "'" + String(s).replace(/'/g, "''") + "'"; }
 
-/* ----------------------------------------------------- quick / guided */
-const MODE_KEY = 'awrcfg_mode';
+/* ------------------------------------------------------ connect samples */
 const CONNECT_SAMPLES = [
   ['user/pw@svc','user / password @ service'],
   ['/ as sysdba','/ as sysdba'],
@@ -671,42 +635,15 @@ function buildConnectChips(boxId, inputId, onpick){
   });
 }
 
-/* Highlight the active option of a segmented (data-te) control. */
-function syncSeg(segId, name){
-  const mode = document.querySelector('input[name="'+name+'"]:checked').value;
-  document.querySelectorAll('#'+segId+' label').forEach(l =>
-    l.classList.toggle('on', l.getAttribute('data-te')===mode));
-}
-
-/* Quick pane and the (authoritative) guided controls share one state.
-   These two keep them mirrored so switching modes is seamless. */
-function syncQuickToReal(){
-  $('connect').value = $('q_connect').value;
-  const qmode = document.querySelector('input[name="q_temode"]:checked').value;
-  document.querySelector('input[name="temode"][value="'+qmode+'"]').checked = true;
-  $('te_specific_wrap').classList.toggle('hidden', qmode!=='specific');
-  $('target_dt').value = $('q_target_dt').value;
-  syncSeg('te_seg','temode');
-}
-function syncRealToQuick(){
-  $('q_connect').value = $('connect').value;
-  const mode = document.querySelector('input[name="temode"]:checked').value;
-  document.querySelector('input[name="q_temode"][value="'+mode+'"]').checked = true;
-  $('q_te_wrap').classList.toggle('hidden', mode!=='specific');
-  $('q_target_dt').value = $('target_dt').value;
-  syncSeg('q_te_seg','q_temode');
-}
-function applyMode(m){
-  $('quick_pane').classList.toggle('hidden', m!=='quick');
-  $('guided_pane').classList.toggle('hidden', m!=='guided');
-  document.querySelectorAll('#modeseg label').forEach(l =>
-    l.classList.toggle('on', l.getAttribute('data-mode')===m));
-  $('mode_hint').textContent = (m==='quick')
-    ? 'Fewest choices — connect and pick a scenario.'
-    : 'Every parameter, each with an explanation.';
-  if(m==='quick') syncRealToQuick(); else syncQuickToReal();
-  try{ localStorage.setItem(MODE_KEY, m); }catch(e){}
-  render();
+/* Resolve a preset's dynamic target marker to a datetime-local value
+   (computed at apply time from the browser clock). */
+function resolveDynamicTarget(spec){
+  const now = new Date();
+  if(spec === 'yesterday@17'){
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate()-1, 17, 0);
+    return fmtLocalInput(d);
+  }
+  return '';
 }
 
 /* Effective parameter values a preset resolves to (defaults + its overrides). */
@@ -1008,37 +945,67 @@ function render(){
   markFields(v.bad);
 }
 
+/* --------------------------------------------------- scenario selection */
+/* Highlight one scenario card (or none, for a custom config) and toggle the
+   subtle "custom" hint under the grid. */
+function selectScenario(card){
+  document.querySelectorAll('.scenario').forEach(x => x.classList.remove('sel'));
+  if(card) card.classList.add('sel');
+  $('scenario_custom').classList.toggle('hidden', !!card);
+}
+/* A user edit to any parameter control (not the connect string, not markers)
+   means the config no longer matches a card, so drop the highlight. Guarded so
+   applyPreset's own programmatic writes don't trip it. */
+function onParamEdit(){
+  if(!applyingPreset) selectScenario(null);
+  render();
+}
+
 /* ------------------------------------------------------------- presets */
+/* Each `set` lists only what differs from the canonical defaults; applyPreset
+   resets everything else, so a card always yields exactly the shape its meta
+   line advertises regardless of what was configured before. */
 const PRESETS = [
-  {name:'Default · weekly', desc:'This hour vs the same hour on the 4 previous weeks — the classic like-for-like trend.', set:{temode:'auto', win_hours:'1', weeks_back:'4', top_n:'10', inst_num:'0', step:'1', step_unit:'w', template:'comprehensive', debug:false, echarts:''}, markers:[]},
-  {name:'Hourly walkthrough (12 h)', desc:'The last 12 consecutive hours, walking straight back — spot an intraday spike.', set:{temode:'auto', win_hours:'1', weeks_back:'11', step:'1', step_unit:'h', template:'comprehensive'}},
-  {name:'Daily · one week', desc:'This hour across each of the last 7 days — the day-over-day pattern.', set:{temode:'auto', win_hours:'1', weeks_back:'6', step:'1', step_unit:'d', template:'comprehensive'}},
-  {name:'Developer view', desc:'Weekly trend with app-focused metrics & waits — throughput, SQL, contention.', set:{temode:'auto', template:'dev'}},
-  {name:'Lean triage', desc:'Weekly trend, minimal metric set — a fast first glance.', set:{temode:'auto', template:'simple'}},
-  {name:'Top-25 SQL', desc:'Weekly trend, but 25 rows in every SQL ranking — a wider net.', set:{temode:'auto', top_n:'25'}},
-  {name:'Post-release (hourly + marker)', desc:'Hourly windows with a release marker line — before/after a deploy.', set:{temode:'auto', win_hours:'1', weeks_back:'6', step:'1', step_unit:'h', template:'comprehensive'}, markers:[{when:'', label:'Application release'}]}
+  {name:'Default · weekly', desc:'This hour vs the same hour on the 4 previous weeks — the classic like-for-like trend.', set:{}, markers:[]},
+  {name:'Yesterday 08–17 · vs 4 weeks', desc:"Yesterday's business hours (08:00–17:00) as one 9-hour window, compared with the same weekday and hours on the 4 previous weeks.", set:{temode:'specific', target:'yesterday@17', win_hours:'9'}},
+  {name:'Hourly walkthrough (12 h)', desc:'The last 12 consecutive hours, walking straight back — spot an intraday spike.', set:{weeks_back:'11', step_unit:'h'}},
+  {name:'Daily · one week', desc:'This hour across each of the last 7 days — the day-over-day pattern.', set:{weeks_back:'6', step_unit:'d'}},
+  {name:'Developer view', desc:'Weekly trend with app-focused metrics & waits — throughput, SQL, contention.', set:{template:'dev'}},
+  {name:'Lean triage', desc:'Weekly trend, minimal metric set — a fast first glance.', set:{template:'simple'}},
+  {name:'Top-25 SQL', desc:'Weekly trend, but 25 rows in every SQL ranking — a wider net.', set:{top_n:'25'}},
+  {name:'Post-release (hourly + marker)', desc:'Hourly windows with a release marker line — before/after a deploy.', set:{weeks_back:'6', step_unit:'h'}, markers:[{when:'', label:'Application release'}]}
 ];
 function applyPreset(p){
-  const s = p.set;
-  if(s.temode){
-    document.querySelector('input[name="temode"][value="'+s.temode+'"]').checked = true;
-    syncTeSeg();
-    $('te_specific_wrap').classList.toggle('hidden', s.temode!=='specific');
+  applyingPreset = true;
+  // Defaults first, then the preset's overrides — cards are deterministic.
+  const s = Object.assign({
+    temode:'auto', win_hours:DEFAULTS.win_hours, weeks_back:DEFAULTS.weeks_back,
+    top_n:DEFAULTS.top_n, inst_num:DEFAULTS.inst_num, step:DEFAULTS.step,
+    step_unit:DEFAULTS.step_unit, template:DEFAULTS.template, debug:false, echarts:''
+  }, p.set);
+  document.querySelector('input[name="temode"][value="'+s.temode+'"]').checked = true;
+  syncTeSeg();
+  $('te_specific_wrap').classList.toggle('hidden', s.temode!=='specific');
+  // Dynamic target (e.g. yesterday@17): resolved against the browser clock now.
+  if(s.target){
+    const tv = resolveDynamicTarget(s.target);
+    if(tv) $('target_dt').value = tv;
   }
-  ['win_hours','weeks_back','top_n','inst_num','step'].forEach(k=>{ if(s[k]!==undefined) $(k).value = s[k]; });
-  if(s.step_unit!==undefined) $('step_unit').value = s.step_unit;
-  if(s.template!==undefined) $('template').value = s.template;
-  if(s.debug!==undefined) $('debug').checked = !!s.debug;
-  if(s.echarts!==undefined){
-    // '' -> CDN default; any other value -> custom path (prefilled into the field).
-    $('echarts_mode').value = s.echarts ? 'custom' : 'default';
-    if(s.echarts) $('echarts_path').value = s.echarts;
-  }
+  ['win_hours','weeks_back','top_n','inst_num','step'].forEach(k=>{ $(k).value = s[k]; });
+  $('step_unit').value = s.step_unit;
+  $('template').value = s.template;
+  $('debug').checked = !!s.debug;
+  // '' -> CDN default; any other value -> custom path (prefilled into the field).
+  $('echarts_mode').value = s.echarts ? 'custom' : 'default';
+  if(s.echarts) $('echarts_path').value = s.echarts;
+  // Markers annotate real-world events, not the comparison shape, so a preset
+  // leaves them alone unless it brings its own list.
   if(p.markers){
     $('marker_rows').innerHTML='';
     p.markers.forEach(m => addMarkerRow(m.when, m.label));
   }
   render();
+  applyingPreset = false;
 }
 
 /* ---------------------------------------------------------------- copy */
@@ -1064,19 +1031,7 @@ function syncTeSeg(){
 
 /* ---------------------------------------------------------------- init */
 function init(){
-  // presets
-  const pbox = $('presets');
-  PRESETS.forEach(p => {
-    const b = document.createElement('button'); b.type='button'; b.className='preset'; b.textContent=p.name;
-    b.addEventListener('click', ()=>applyPreset(p)); pbox.appendChild(b);
-  });
-  // explicit reset (applies the first preset = canonical defaults)
-  const rb = document.createElement('button');
-  rb.type='button'; rb.className='preset reset'; rb.textContent='↺ Reset to defaults';
-  rb.addEventListener('click', ()=>applyPreset(PRESETS[0]));
-  pbox.appendChild(rb);
-
-  // scenario cards (Quick mode) — each applies a preset
+  // scenario cards — each applies a preset and becomes the selected card
   const sbox = $('scenarios');
   PRESETS.forEach(p => {
     const c = document.createElement('button'); c.type='button'; c.className='scenario';
@@ -1086,49 +1041,39 @@ function init(){
     c.appendChild(n); c.appendChild(d); c.appendChild(m);
     c.addEventListener('click', () => {
       applyPreset(p);            // sets the authoritative controls + renders
-      syncRealToQuick();         // reflect the new target/connect in the quick inputs
-      document.querySelectorAll('.scenario').forEach(x => x.classList.remove('sel'));
-      c.classList.add('sel');
+      selectScenario(c);
     });
     sbox.appendChild(c);
   });
-  if(sbox.firstChild) sbox.firstChild.classList.add('sel');   // defaults == first scenario
 
-  // connect quick-picks (both panes)
-  buildConnectChips('connect_chips', 'connect', render);
-  buildConnectChips('q_connect_chips', 'q_connect', () => { syncQuickToReal(); render(); });
-
-  // quick-pane inputs -> mirror into the real controls, then re-render
-  $('q_connect').addEventListener('input', () => { syncQuickToReal(); render(); });
-  $('q_connect').addEventListener('focus', e => e.target.select());
-  ['input','change'].forEach(ev =>
-    $('q_target_dt').addEventListener(ev, () => { syncQuickToReal(); render(); }));
-  document.querySelectorAll('input[name="q_temode"]').forEach(r => r.addEventListener('change', () => {
-    syncSeg('q_te_seg','q_temode');
-    $('q_te_wrap').classList.toggle('hidden', r.value!=='specific');
-    syncQuickToReal(); render();
-  }));
-
-  // mode switch
-  document.querySelectorAll('input[name="mode"]').forEach(r =>
-    r.addEventListener('change', () => applyMode(r.value)));
-  $('to_guided').addEventListener('click', e => {
+  // explicit reset link (applies the first preset = canonical defaults)
+  $('reset_link').addEventListener('click', e => {
     e.preventDefault();
-    document.querySelector('input[name="mode"][value="guided"]').checked = true;
-    applyMode('guided');
+    applyPreset(PRESETS[0]);
+    selectScenario(sbox.firstChild);
   });
 
-  // target_end segmented control
+  // connect quick-picks
+  buildConnectChips('connect_chips', 'connect', render);
+
+  // target_end segmented control — a user pick is a param edit (deselect card)
   document.querySelectorAll('input[name="temode"]').forEach(r => r.addEventListener('change', ()=>{
     syncTeSeg();
     $('te_specific_wrap').classList.toggle('hidden', r.value!=='specific');
+    if(!applyingPreset) selectScenario(null);
     render();
   }));
 
-  // all inputs -> re-render
-  ['connect','target_dt','win_hours','weeks_back','step','step_unit','top_n','inst_num','template','debug',
+  // connect string edits re-render but never deselect a scenario card
+  $('connect').addEventListener('input', render);
+  $('connect').addEventListener('change', render);
+  // select the sample value on focus so it's replaced in one go
+  $('connect').addEventListener('focus', e => e.target.select());
+
+  // every parameter control -> deselect card (if user-driven) + re-render
+  ['target_dt','win_hours','weeks_back','step','step_unit','top_n','inst_num','template','debug',
    'echarts_mode','echarts_path']
-    .forEach(id => { const el=$(id); el.addEventListener('input', render); el.addEventListener('change', render); });
+    .forEach(id => { const el=$(id); el.addEventListener('input', onParamEdit); el.addEventListener('change', onParamEdit); });
 
   $('marker_add').addEventListener('click', ()=>{ addMarkerRow(); render(); });
 
@@ -1147,9 +1092,6 @@ function init(){
     copyText($(btn.getAttribute('data-copy')).textContent, btn);
   });
 
-  // select the sample value on focus so it's replaced in one go
-  $('connect').addEventListener('focus', e => e.target.select());
-
   // mobile-only: jump to the generated command
   $('jump_cmd').addEventListener('click', ()=>{
     const out = document.querySelector('.output');
@@ -1158,11 +1100,9 @@ function init(){
 
   syncTeSeg();
 
-  // restore the last-used mode (default Quick), then render via applyMode
-  let initialMode = 'quick';
-  try{ const sv = localStorage.getItem(MODE_KEY); if(sv==='quick'||sv==='guided') initialMode = sv; }catch(e){}
-  document.querySelector('input[name="mode"][value="'+initialMode+'"]').checked = true;
-  applyMode(initialMode);
+  // defaults == first scenario; select it and render
+  selectScenario(sbox.firstChild);
+  render();
 }
 document.addEventListener('DOMContentLoaded', init);
 </script>
