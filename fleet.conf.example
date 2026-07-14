@@ -1,0 +1,40 @@
+# fleet.conf.example -- fleet.conf template for run_awr_fleet.sh
+#
+# Copy this file to fleet.conf (gitignored -- see .gitignore) and fill in
+# your real connect strings.  run_awr_fleet.sh reads it as:
+#
+#   alias|connect
+#
+# one entry per line.
+#
+#   alias    a short label for this DB in the combined report and its
+#            drill-down command.  Must match [A-Za-z0-9_.-]{1,30} and be
+#            unique within the file -- no spaces, no pipe.
+#   connect  anything sqlplus -S -L accepts after "sqlplus": user/pw@svc,
+#            a bare TNS alias, '/', '/@tns_alias', or '/ as sysdba'
+#            (quoting is handled for you; do not add your own quotes here).
+#            Must not contain a literal single quote, tab, or newline.
+#
+# Blank lines and lines starting with '#' (leading whitespace allowed) are
+# ignored.
+#
+# --- Wallet auth is strongly recommended for a fleet file ------------------
+# fleet.conf commonly lists many production databases in one place.  Prefer
+# an Oracle wallet + tnsnames alias per DB (SQLNET.WALLET_LOCATION, an
+# auto-login wallet, TWO_TASK/TNS_ADMIN pointing at it) so this file never
+# holds a plaintext password:
+#
+#   prod_east|/@prod_east_tns
+#   prod_west|/@prod_west_tns
+#
+# A bare user/pw@svc line works too (below) but the password sits in this
+# file in plaintext -- fine for a throwaway ad-hoc file, not for anything
+# checked in or shared.  run_awr_fleet.sh masks it in every report and log
+# line (user/***@svc) but the source file itself is not encrypted.
+#
+# --- Examples ----------------------------------------------------------
+# prod_east|/@prod_east_tns
+# prod_west|/@prod_west_tns
+# reporting|readonly_user/change_me@reporting_svc
+# staging|/@staging_tns
+# dr_site|/ as sysdba

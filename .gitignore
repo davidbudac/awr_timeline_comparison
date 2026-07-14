@@ -12,3 +12,8 @@
 .DS_Store
 .claude/
 .conductor/
+
+# Real fleet connection list (aliases + connect strings, possibly with
+# plaintext passwords) -- copy fleet.conf.example to fleet.conf and fill it
+# in locally; never commit the real one.
+/fleet.conf

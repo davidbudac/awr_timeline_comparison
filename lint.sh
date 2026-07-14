@@ -22,7 +22,7 @@ finding() {                     # finding <check-name> <file:line-ish> <message>
 
 # All SQL*Plus-parsed sources (the driver + every section/lib/template file).
 sql_files() {
-    printf '%s\n' awr_trend.sql sql/defaults.sql
+    printf '%s\n' awr_trend.sql sql/defaults.sql awr_fleet_extract.sql
     find sql -type f \( -name '*.sql' -o -name '*.plsql' \) | sort
 }
 
@@ -111,13 +111,13 @@ done < <(sql_files | xargs grep -niE '(\bAS[[:space:]]+_[A-Za-z]|^[[:space:]]*CO
 while IFS= read -r hit; do
     finding literal-7-cadence "${hit%%:*}:$(cut -d: -f2 <<<"$hit")" \
         "literal 7 used as a multiplier; the cadence is ~step_hours/24 (step may be hours/days/weeks)"
-done < <(grep -nE '\*[[:space:]]*7\b|\b7[[:space:]]*\*' sql/[0-9][0-9]_*.sql sql/lib/windows_cte.sql 2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*--')
+done < <(grep -nE '\*[[:space:]]*7\b|\b7[[:space:]]*\*' sql/[0-9][0-9]_*.sql sql/fleet/[0-9][0-9]_*.sql sql/lib/windows_cte.sql 2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*--')
 
 # ----------------------------------------------------------------------
 # 7. Every numbered section must pin SET DEFINE '~' (they are @@-included
 #    into a session where '&' may have been restored).
 # ----------------------------------------------------------------------
-for f in sql/[0-9][0-9]_*.sql; do
+for f in sql/[0-9][0-9]_*.sql sql/fleet/[0-9][0-9]_*.sql; do
     grep -qE "^[[:space:]]*SET[[:space:]]+DEFINE[[:space:]]+'~'" "$f" ||
         finding missing-set-define "$f" "section does not SET DEFINE '~'"
 done
