@@ -321,11 +321,87 @@ a compact high-level rollup — always stay visible. Charts (including the
 findings heatmap) are untouched. Like the other toggles it is purely
 client-side and works offline; click again to show all rows.
 
+## Fleet report (many databases)
+
+`run_awr_fleet.sh` runs the same aligned-window comparison across a whole
+list of databases and stitches the results into **one** self-contained,
+worst-database-first HTML page — a triage sweep, not a deep dive. It is a
+companion to `run_awr_trend.sh` (the single-DB, full-detail tool), not a
+replacement: each fleet card links the exact `./run_awr_trend.sh …` command
+to drill into that database.
+
+```bash
+./run_awr_fleet.sh fleet.conf                          # defaults (AUTO, 1h, 4 back)
+./run_awr_fleet.sh fleet.conf '2026-04-15 09:00' 1 4 10 1 h   # explicit window, hourly
+FLEET_PAR=8 FLEET_TIMEOUT=300 ./run_awr_fleet.sh fleet.conf   # 8 at a time, 5-min cap/DB
+./run_awr_fleet.sh --assemble reports/fleet_work_<id>  # re-stitch a kept workdir, no DB
+```
+
+Arguments (all but `fleet.conf` optional, left to right):
+`fleet.conf target_end win_hours weeks_back top_n step step_unit` — the same
+meanings as the single-DB wrapper. There is **no `inst_num` argument**: a
+fleet pass always queries with `inst_num=0` (aggregate across RAC); drilling
+into one instance is a job for the single-DB report.
+
+**`fleet.conf` format** — one `alias|connect` per line; blank lines and
+`#` comments ignored. The alias is a short label (`[A-Za-z0-9_.-]`, ≤30
+chars) shown on the card; the connect string is anything `sqlplus` accepts.
+Wallet / OS-auth connects (`/@tns_alias`, `/ as sysdba`) keep passwords out
+of the file entirely and are recommended:
+
+```
+# alias        | connect
+prod-emea      | /@PRODEMEA
+prod-amer      | /@PRODAMER
+reporting      | reporting_ro/@RPT
+```
+
+See [`fleet.conf.example`](fleet.conf.example). A `user/pw@svc` password is
+masked to `user/***@svc` everywhere it is displayed (cards, drill-down
+lines) and is never written to the workdir or the report — but a wallet or
+`/@tns` connect keeps it out of the config file in the first place.
+
+**How a database is scored and sorted.** Each reachable database gets a
+score `10×critical + 3×warning + min(25, top-SQL points)`; cards sort by
+score descending (ties keep config order), so the database that most needs
+attention is first. "Critical"/"warning" are the count of curated metrics
+whose current window moved past 2σ / a moderate threshold of its own prior
+baseline (the same z-model as the single-DB findings section, over a lean
+`fleet` template of load stats, metrics and wait events). Top-SQL points
+come from SQL that crossed the regression floors (≥5 s elapsed **and** 2σ
+or ≥25 % above its prior mean; or ≥0.1 s/exec slower with ≥3 executions).
+
+**Silence never reads as healthy.** A database that is unreachable, times
+out, or spools a truncated fragment surfaces as a red **error card** (with
+the masked connect and the last 15 log lines) sorted to the very top — it is
+never quietly dropped. Exit code: `0` = report written and at least one
+database was OK; `3` = report written but every database failed; `2` = a
+usage / bad-config error before anything ran.
+
+**Environment variables:**
+
+| Var               | Default | Meaning                                                        |
+|-------------------|---------|----------------------------------------------------------------|
+| `FLEET_PAR`       | `4`     | Max concurrent per-DB `sqlplus` runs                           |
+| `FLEET_TIMEOUT`   | `900`   | Per-DB wall-clock limit (seconds); needs `timeout`/`gtimeout` on PATH, else unbounded with a one-time warning |
+| `FLEET_TEMPLATE`  | `fleet` | `sql/lib/templates/<name>` to score against                    |
+| `FLEET_KEEP_WORK` | `0`     | `1` = keep the per-run `reports/fleet_work_<id>/` workdir even when every DB succeeded (it is always kept if any DB errored, so `--assemble` can re-run) |
+
+**v1 limitations.** The fleet report is deliberately lean: it ships
+**inline-SVG sparklines only — no ECharts**, so it is offline-complete by
+construction; the theme follows the OS / a saved preference (dark-mode
+bootstrap) but there is **no in-page theme-toggle button**; and every
+database is queried in RAC-aggregate mode (`inst_num=0`). For per-instance
+detail, dated marker lines, the full section set, or interactive charts,
+open the single-DB report via the drill-down command on the card.
+
 ## Does it write to the database?
 
 No. Every fact in the report is computed in-flight from the `DBA_HIST_*`
-views; the driver and every numbered section only issue `SELECT`. The
-report is the only output — re-run `awr_trend.sql` whenever you want a
+views; the driver and every numbered section only issue `SELECT` — this is
+equally true of the fleet extract (`awr_fleet_extract.sql`), which spools
+HTML fragments and touches no database objects. The report is the only
+output — re-run `awr_trend.sql` (or `run_awr_fleet.sh`) whenever you want a
 fresh view. You can run it safely against production or read-only
 standbys (assuming the standby exposes AWR).
 
@@ -359,6 +435,10 @@ SQL> @side/create_weekly_baselines.sql
 ```
 .
 ├── awr_trend.sql                    -- driver (pure SELECT, one spooled HTML)
+├── run_awr_trend.sh                 -- single-DB wrapper + interactive configurator
+├── run_awr_fleet.sh                 -- fleet wrapper: run+assemble across many DBs
+├── awr_fleet_extract.sql            -- lean per-DB fleet extractor (spools fragments)
+├── fleet.conf.example               -- fleet config template (alias|connect per line)
 ├── markers.example.sql              -- example timeline-marker config (optional)
 ├── sql/
 │   ├── defaults.sql                 -- canonical default DEFINEs
@@ -377,6 +457,14 @@ SQL> @side/create_weekly_baselines.sql
 │   ├── 11_top_sql_ash_breakdown.sql -- per-Top-N-SQL ASH cards
 │   ├── 12_param_changes.sql         -- parameters that differ across windows
 │   ├── 13_utilization.sql           -- database utilization profile (usage overview)
+│   ├── fleet/                       -- fleet-report sections (spooled by awr_fleet_extract.sql)
+│   │   ├── 00_fleet_chrome.sql      -- shared page head/CSS/JS + sparkline renderer
+│   │   ├── 01_db_card.sql           -- per-DB identity strip
+│   │   ├── 02_headline.sql          -- hero-six headline sparkline cards
+│   │   ├── 03_findings.sql          -- z-score findings table (|z|>2 rows only)
+│   │   ├── 04_topsql.sql            -- gated top-SQL regressions
+│   │   ├── 05_close.sql             -- drill-down command + OK sentinel
+│   │   └── defaults.sql             -- fleet-only default DEFINEs
 │   └── lib/                         -- shared @@-included fragments (CTEs, JS, helpers)
 │       ├── js_markers.plsql         -- inits window.AWR_MARKERS + AWR_markLine()
 │       ├── marker.sql               -- emit one timeline marker (used by marker_file)
@@ -387,7 +475,11 @@ SQL> @side/create_weekly_baselines.sql
 │           │   ├── sysstat_load_targets.sql
 │           │   ├── sysmetric_targets.sql
 │           │   └── wait_event_targets.sql   -- '*' sentinel = no filter
-│           └── simple/              -- triage-friendly subset
+│           ├── simple/              -- triage-friendly subset
+│           │   ├── sysstat_load_targets.sql
+│           │   ├── sysmetric_targets.sql
+│           │   └── wait_event_targets.sql
+│           └── fleet/               -- lean set the fleet report scores against
 │               ├── sysstat_load_targets.sql
 │               ├── sysmetric_targets.sql
 │               └── wait_event_targets.sql

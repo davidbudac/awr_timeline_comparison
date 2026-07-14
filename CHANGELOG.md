@@ -5,6 +5,31 @@ The report footer stamps the version that produced it
 top of `awr_trend.sql`. Bump it there when cutting a release and add an
 entry here. Dates are release dates.
 
+## Fleet report 0.1.0 — 2026-07-14
+
+New, orthogonal tool — a multi-database triage sweep — that does not change
+the single-DB report at all (zero edits to `awr_trend.sql`, its wrapper, or
+any numbered section; the fleet code lives entirely in new files). Versioned
+separately from the single-DB report's `awr_version`.
+
+- **`run_awr_fleet.sh`** reads a `fleet.conf` (`alias|connect` per line),
+  runs the lean `awr_fleet_extract.sql` against every database in parallel
+  (capped by `FLEET_PAR`, per-DB `FLEET_TIMEOUT`), and stitches the spooled
+  per-DB HTML fragments into one self-contained, worst-database-first report.
+- **Scoring & sort:** `10×critical + 3×warning + min(25, top-SQL points)`
+  per database (same z-model as the single-DB findings, over a lean `fleet`
+  template); cards sort by score descending, ties keep config order.
+- **Silence never reads as healthy:** an unreachable / timed-out / truncated
+  database becomes a red error card (masked connect + last 15 log lines)
+  sorted to the top via a fragment sentinel + `FLEET-COUNTS` contract, never
+  quietly dropped. Exit `0` = ≥1 OK, `3` = all failed, `2` = bad config.
+- **Offline-complete:** inline-SVG sparklines only — no ECharts anywhere.
+  Theme follows OS / saved preference; no in-page toggle button in v1.
+- **Credential-safe:** a `user/pw@svc` password is masked to `user/***@svc`
+  in every display and never written to the workdir or report (wallet /
+  `/@tns` connects keep it out of the config file entirely).
+- Verified end-to-end on Oracle 19.27 (dbmint), 2026-07-14 — see CLAUDE.md.
+
 ## 1.2.0 — 2026-07-07
 
 Accuracy, robustness and dark-mode fixes from a full-project review (findings

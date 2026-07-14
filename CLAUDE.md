@@ -378,6 +378,55 @@ Any literal `~x` (even in comments/strings, e.g. `~0.003`, `~/path`, or a stray
 truncates the section (or aborts a heredoc run with SP2-0310). Write tildes out
 in prose; keep `~name` out of comments (use the bare name).
 
+### Semicolon-in-comment gotcha (top-level SQL statements only)
+A `;` inside an inline `--` comment **terminates the statement early** when it
+sits inside a bare SQL statement (SELECT/INSERT/…), because SQL\*Plus scans for
+`;` and does not exempt `--` comment text. It cut the fleet extract's resolving
+`SELECT` short at a comment ending `…awr_trend.sql;` → the buffer sent to Oracle
+ended on a trailing comma → **ORA-00936 "missing expression"**, aborting the run
+(and, with `TERMOUT OFF` set before the SELECT, printing *nothing* — an empty
+`.log` with a nonzero rc; `168 = 936 mod 256`). The same `;` is **harmless
+inside a PL/SQL block** (anonymous blocks terminate on a `/`, not `;`), which is
+why the section emitters can carry `;`-terminated comments but a top-level
+resolving SELECT (in `awr_fleet_extract.sql` / `awr_trend.sql`) must not. No
+lint check: grep can't tell SQL-statement context from PL/SQL-block context, so
+a blanket rule would false-positive on ~15 legitimate in-block comments. Rule of
+thumb: never end an inline comment with `;` inside a `SELECT … FROM …;`.
+
+### Fleet report (`run_awr_fleet.sh` + `sql/fleet/`, `awr_fleet_extract.sql`)
+A separate multi-DB triage tool, **orthogonal to the single-DB report**. The
+cardinal rule: **never touch a single-DB file to add a fleet feature** —
+`awr_trend.sql`, `run_awr_trend.sh`, the numbered `sql/NN_*.sql`, and shared
+`sql/lib/` files stay byte-identical; all fleet code lives in `run_awr_fleet.sh`,
+`awr_fleet_extract.sql`, `sql/fleet/*`, and `sql/lib/templates/fleet/*` (plus
+additive-only edits to `lint.sh`/`.gitignore`). `awr_fleet_extract.sql` reuses
+shared `sql/lib/` fragments via `@@` and has its OWN local template whitelist
+(a deliberate copy of `awr_trend.sql`'s CASE, so that file isn't touched).
+
+- **Fragment/sentinel/FLEET-COUNTS contract** — each per-DB extract spools two
+  files into `reports/fleet_work_<run_id>/`: `<alias>.chrome.html` (page
+  head/CSS/JS) and `<alias>.frag.html` (one `<section class="db-card">`). The
+  frag's **last** line is the sentinel `<!-- AWR-DB: <alias> OK -->`; the
+  assembler treats a frag lacking it as a **truncated spool → error card**
+  (crash/OOM/ORA- mid-section omits it). Two machine-readable comments per frag
+  drive scoring: `<!-- FLEET-COUNTS findings crit=X warn=Y suppressed=Z -->`
+  and `<!-- FLEET-COUNTS topsql n=N pts=P -->`. The wrapper classifies each
+  alias (rc≠0 OR frag missing OR sentinel absent ⇒ error card with masked
+  connect + last 15 log lines), scores OK ones `10*crit + 3*warn + min(25,pts)`,
+  and emits error cards first (conf order) then OK cards score-DESC (ties = conf
+  order). Exit `0`=≥1 OK, `3`=all failed, `2`=bad config.
+- **Chrome-per-extract rationale** — every DB spools its own chrome copy (pure
+  `DBMS_OUTPUT`, so it's race-free under `FLEET_PAR>1`); the assembler keeps only
+  the first successful one and discards the rest. Cheaper and simpler than a
+  separate chrome-only pass or locking.
+- **No ECharts, ever** — inline-SVG sparklines only (CDN-free), so the report is
+  offline-complete by construction. Theme follows OS/localStorage; **no in-page
+  toggle button** in v1 (the `.theme-icon-btn` CSS inherited from `sql/_style.sql`
+  is present but unused — no nav rail renders it). `inst_num` is pinned to `0`.
+- **Credential masking** — `mask_conn` turns `user/pw@svc` into `user/***@svc`
+  for all display; the password is never written to the workdir or report.
+  `/`-prefixed (wallet/OS-auth) connects pass through untouched.
+
 ## Verification & testing
 
 - **`./lint.sh` first** (also runs in CI): grep-based checks that encode the
@@ -487,6 +536,33 @@ in prose; keep `~name` out of comments (use the bare name).
   (needs a series name with `\`), and F2's exact "no snapshot within 15 min of
   edge" reason (needs a non-restart snapshot gap — restart reason wins the CASE
   on dbmint).
+- **Fleet report v0.1.0 verified end-to-end on dbmint (2026-07-14, 19.27,
+  window `target_end='2026-07-11 12:00'` win=1h weeks_back=4 step=1h, conf =
+  cdb_a/cdb_b/cdb_c all `/ as sysdba` + a `deadbox` bad-creds line):** found &
+  fixed one real bug the synthetic-fragment assembler tests missed — the
+  resolving SELECT's inline comment ended in `;`, terminating the statement →
+  ORA-00936, empty log, rc=168 on *every* DB (see "Semicolon-in-comment
+  gotcha"). After the fix: masthead `4 databases / 0 crit / 3 warn / 0 quiet /
+  1 unreachable`; three cdb cards with **identical score=3** in conf order
+  (stable tie-break); `deadbox` error card first with ORA-12514 in the escaped
+  `<pre>` log tail; workdir kept because an error was present; every OK frag
+  ends with its sentinel and carries both `FLEET-COUNTS` comments. Verified
+  paths: **truncation** (strip a frag's last line → `--assemble` demotes it to
+  "sentinel missing", exit still 0); **all-quiet + skip** (restart-adjacent
+  weeks_back=2 window → headline cards show `skip`/n-a badges, findings emit the
+  "No metric moved beyond 2σ" one-liner, no crash); **timeout** (`FLEET_TIMEOUT=1`
+  → cdb rc=124, deadbox rc=1, all error cards, exit 3, no hang); **FLEET_PAR=2**
+  identical correct result; **offline** (0 external `src`/stylesheet/echarts, 40
+  inline sparklines, 5-slot numeric CSVs, dark-mode `--crit-bg` overrides
+  present); **credential masking** (a fake `scott/<pw>@svc` line → password found
+  NOWHERE in workdir/report/stdout, display `scott/***@svc`); **single-DB
+  regression** (`git status` shows only `awr_fleet_extract.sql` changed; a
+  single-DB `run_awr_trend.sh` smoke run on the same window rendered all 15
+  sections, 0 ORA-). **Still pending:** live-browser pixel check of sparklines /
+  dark-mode flip (mechanics static-verified; the renderer + theme bootstrap are
+  verbatim from the browser-proven single-DB report), and a real multi-DB /
+  RAC / migrated-PDB fleet (dbmint is single-DBID, and all three cdb aliases hit
+  the same instance).
 
 ## Things NOT to do
 
@@ -506,3 +582,11 @@ in prose; keep `~name` out of comments (use the bare name).
 - Don't widen the `README.md` grant list without a concrete reason.
 - Don't reintroduce the literal `7` as the cadence multiplier — use
   `~step_hours/24`.
+- Don't edit any single-DB file (`awr_trend.sql`, `run_awr_trend.sh`, numbered
+  `sql/NN_*.sql`, shared `sql/lib/*`) to add a fleet feature — fleet code lives
+  only in `run_awr_fleet.sh`, `awr_fleet_extract.sql`, `sql/fleet/*`, and
+  `sql/lib/templates/fleet/*`.
+- Don't end an inline `--` comment with `;` inside a top-level SQL statement
+  (it terminates the SELECT → ORA-00936; harmless only inside PL/SQL blocks).
+- Don't add ECharts (or any external JS/CSS) to the fleet report — it is
+  inline-SVG-sparkline-only and offline-complete by design.

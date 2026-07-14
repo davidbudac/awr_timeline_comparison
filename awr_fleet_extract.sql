@@ -162,8 +162,13 @@ SELECT
             ELSE TO_DATE('~target_end', 'YYYY-MM-DD HH24:MI')
         END,
         'Day'))                                                    AS dow_name,
-    -- step / step_unit -> step_hours, identical formula to awr_trend.sql;
-    -- an invalid step_unit forces ORA-01722 on purpose.
+    -- step / step_unit -> step_hours, identical formula to awr_trend.sql
+    -- (an invalid step_unit forces ORA-01722 on purpose).
+    -- NB: keep inline comments inside this top-level SELECT free of a
+    -- trailing ';' -- SQL*Plus treats a semicolon in a '--' comment as the
+    -- statement terminator and cuts the SELECT short here (ORA-00936). The
+    -- same ';' is harmless inside a PL/SQL block (those end on '/'), which is
+    -- why the section emitters can carry it but this resolving SELECT cannot.
     TO_CHAR(p.step_hours, 'FM99999999990.999999')                  AS step_hours,
     p.period_unit_short                                            AS period_unit_short,
     p.period_unit_long                                             AS period_unit_long,
