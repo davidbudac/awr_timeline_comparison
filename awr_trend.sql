@@ -29,6 +29,9 @@
 --   weeks_back   4
 --   top_n        10
 --   inst_num     0 = aggregate across RAC; otherwise the instance number
+--   dbids        '' (default) auto-resolves the AWR DBID(s); or a comma list
+--                  to pin the report to specific DBIDs (e.g. a PDB's own
+--                  CON_DBID when the CDB root's repository overlaps its view).
 --   step         1     -- cadence count between comparison windows
 --   step_unit    'w'   -- 'h' | 'd' | 'w'  (hours, days, weeks)
 --   template     'comprehensive' (default, full lists), 'simple'
@@ -105,23 +108,28 @@ DEFINE awr_version = '1.2.0'
 -- so we never have to round-trip through a scratch table.
 --
 --   run_id              17-digit timestamp, unique per invocation
---   dbid                DBID owning the freshest snapshot VISIBLE in the
---                       current container (data-driven; see the `dbo` inline
---                       view below).  Deliberately NOT v$database.dbid: in a
---                       PDB that returns the CDB root's DBID, but the AWR rows
---                       a PDB can see live under the PDB's CON_DBID when
---                       PDB-level AWR is enabled and under the CDB DBID when it
---                       is not -- so the correct DBID can only be discovered
---                       from the data.  Matches v$database.dbid in a non-CDB
---                       and in the CDB root, so existing output is unchanged
---                       there.  Used as dbid for the report path + masthead
---                       label and as the fallback element of dbid_list.
---   dbid_list           comma-separated set of ALL DBIDs owning snapshots
---                       visible in the container (data-driven; see the `dbl`
---                       inline view below).  Every DBA_HIST_* filter uses
---                       `dbid IN (dbid_list)` so AWR that spans a DBID change
---                       (non-CDB -> PDB migration) is continuous.  Equals
---                       {dbid} in a single-DBID database (output unchanged).
+--   dbid                The freshest (latest-ending) DBID within the resolved
+--                       set (see the `dbx` inline view below).  Deliberately
+--                       NOT v$database.dbid: in a PDB that returns the CDB
+--                       root's DBID, but the AWR rows a PDB can see live under
+--                       the PDB's CON_DBID when PDB-level AWR is enabled and
+--                       under the CDB DBID when it is not -- so the correct
+--                       DBID can only be discovered from the data.  Matches
+--                       v$database.dbid in a non-CDB and in the CDB root, so
+--                       existing output is unchanged there.  Used as dbid for
+--                       the report path + masthead label and as the
+--                       fallback element of dbid_list.
+--   dbid_list           comma-separated set of the DBIDs this report trends
+--                       (data-driven; see the `dbx` inline view below).  Every
+--                       DBA_HIST_* filter uses `dbid IN (dbid_list)` so AWR
+--                       that spans a DBID change (non-CDB -> PDB migration) is
+--                       continuous.  Resolution anchors on the container's
+--                       CON_DBID and adds only DBIDs whose history is disjoint
+--                       and earlier; a DBID whose range OVERLAPS the anchor's
+--                       (e.g. the CDB root's repository visible inside a PDB)
+--                       is excluded.  The `dbids` DEFINE overrides this with an
+--                       explicit list.  Equals {dbid} in a single-DBID
+--                       database (output unchanged).
 --   db_name             v$database.name (trimmed); when connected to a PDB,
 --                       suffixed with " / <CON_NAME>" so the report header
 --                       identifies the container whose AWR is shown
@@ -150,16 +158,19 @@ DEFINE awr_version = '1.2.0'
 -- --------------------------------------------------------------------
 COLUMN run_id              NEW_VALUE run_id              NOPRINT
 COLUMN dbid                NEW_VALUE dbid                NOPRINT
--- dbid_list is the comma-separated set of EVERY DBID that owns snapshots
--- visible in the current container (data-driven; see the `dbl` inline view
--- below).  dbid stays the single freshest DBID (used for the report path,
--- the masthead label, and as the always-present fallback element here); but
--- every DBA_HIST_* time-range / point-lookup filter uses `dbid IN (dbid_list)`
--- so AWR history that spans a DBID change -- e.g. a non-CDB migrated into a
--- PDB, where pre-migration snaps live under the old non-CDB DBID and
--- post-migration snaps under the new CON_DBID -- is reported continuously
--- instead of silently truncated at the boundary.  In a DB with a single DBID
--- this resolves to exactly `dbid`, so `dbid IN (dbid_list)` is equivalent
+-- dbid_list is the comma-separated set of the DBIDs this report trends
+-- (data-driven; see the `dbx` inline view below).  dbid stays the single
+-- freshest DBID (used for the report path, the masthead label, and as the
+-- always-present fallback element here); but every DBA_HIST_* time-range /
+-- point-lookup filter uses `dbid IN (dbid_list)` so AWR history that spans a
+-- DBID change -- e.g. a non-CDB migrated into a PDB, where pre-migration snaps
+-- live under the old non-CDB DBID and post-migration snaps under the new
+-- CON_DBID -- is reported continuously instead of silently truncated at the
+-- boundary.  A DBID whose snapshots OVERLAP the container's own CON_DBID in
+-- time (e.g. the CDB root's repository leaking into a PDB view) is excluded so
+-- it cannot double-count or invalidate every window; the `dbids` DEFINE pins
+-- an explicit set when the heuristic needs overriding.  In a DB with a single
+-- DBID this resolves to exactly `dbid`, so `dbid IN (dbid_list)` is equivalent
 -- to the old `dbid = dbid` and output is unchanged.
 COLUMN dbid_list           NEW_VALUE dbid_list           NOPRINT
 COLUMN db_name             NEW_VALUE db_name             NOPRINT
@@ -206,8 +217,8 @@ COLUMN bucket_hours        NEW_VALUE bucket_hours        NOPRINT
 
 SELECT
     t.run_id                                                       AS run_id,
-    dbo.dbid                                                       AS dbid,
-    dbl.dbid_list                                                  AS dbid_list,
+    dbx.dbid                                                       AS dbid,
+    dbx.dbid_list                                                  AS dbid_list,
     -- Show the CDB/database name, and append the container name when we are
     -- connected to a PDB (CON_ID not in 0=non-CDB, 1=root) so the header makes
     -- it unambiguous that the report reflects the PDB's own AWR, not the root's.
@@ -256,7 +267,7 @@ SELECT
     -- the bare CDB/PDB name only (no " / CON_NAME" suffix) to keep it tidy.
     'reports/awr_trend_'
         || REGEXP_REPLACE(TRIM(d.name), '[^A-Za-z0-9]+', '_') || '_'
-        || dbo.dbid || '_'
+        || dbx.dbid || '_'
         || TO_CHAR(SYSDATE, 'YYYYMMDDHH24MI')
         || '_run' || t.run_id
         || '.html'                                                 AS report_path,
@@ -267,47 +278,75 @@ SELECT
 FROM v$database d
 CROSS JOIN v$instance i
 CROSS JOIN (
-    -- DBID resolution must be data-driven, NOT v$database.dbid.  In a PDB,
-    -- v$database.dbid returns the CDB root's DBID; whether the AWR rows the
-    -- current container can see are stored under that DBID or under the PDB's
-    -- own CON_DBID depends on whether PDB-level AWR (autoflush) is enabled:
-    --   * PDB with local AWR  -> rows live under the PDB's CON_DBID, and the
-    --     root's repository is NOT visible inside the PDB.
-    --   * PDB without local AWR -> the only DBA_HIST_* rows visible inside the
-    --     PDB are the root's, stored under the CDB DBID (== v$database.dbid).
-    -- So neither v$database.dbid nor CON_DBID alone is correct in every case.
-    -- Resolve to whichever DBID actually has the freshest snapshot visible in
-    -- the current container -- that is, by construction, the dataset every
-    -- DBA_HIST_* query in this report should trend.  Falls back to CON_DBID
-    -- only when AWR is completely empty (brand-new DB) so dbid is never NULL.
-    -- In a non-CDB and in the CDB root this picks the same DBID as
-    -- v$database.dbid, so existing output is unchanged there.
-    SELECT NVL(
-             (SELECT dbid FROM (
-                  SELECT dbid
-                  FROM   dba_hist_snapshot
-                  GROUP BY dbid
-                  ORDER BY MAX(end_interval_time) DESC
-              ) WHERE ROWNUM = 1),
-             TO_NUMBER(SYS_CONTEXT('USERENV','CON_DBID'))
-           ) AS dbid
+    -- Resolve the DBID(s) this report trends -- a single primary dbid (used for
+    -- the report filename + masthead label) AND the full comma list every
+    -- DBA_HIST_* filter consumes via `dbid IN (dbid_list)`.  NOT v$database.dbid:
+    -- in a PDB that returns the CDB root's DBID, while the AWR rows the container
+    -- actually sees live under its own CON_DBID (PDB-local AWR) or under the CDB
+    -- DBID (PDB without local AWR) -- so the right set is discoverable only from
+    -- the data.  Resolution, in order:
+    --
+    --   1. dbids override (escape hatch): if the caller DEFINEd a comma list of
+    --      DBIDs, exactly those (that own snapshots) are used.  This pins a
+    --      report to a chosen repository when the heuristic below cannot -- e.g.
+    --      a PDB whose view ALSO exposes the CDB root's repository under a
+    --      DIFFERENT DBID whose snapshots OVERLAP the PDB's own in wall-clock
+    --      time (set dbids to just the PDB's CON_DBID).
+    --
+    --   2. Auto: anchor on the current container's CON_DBID and keep it plus
+    --      only those other DBIDs whose history ENDS before the anchor's first
+    --      snapshot -- i.e. genuine disjoint pre-migration history (a non-CDB
+    --      plugged in as a PDB keeps pre-plug snaps under the old DBID, all
+    --      earlier than the new CON_DBID's first snap).  A DBID whose range
+    --      OVERLAPS the anchor's is DROPPED: summing it double-counts, and
+    --      resolving a window's begin/end snaps across it makes begin and end
+    --      land under different DBIDs, so the window is spuriously invalidated
+    --      as "DBID changed inside window".  If the anchor (CON_DBID) owns no
+    --      snapshots of its own -- a PDB without local AWR, which sees only the
+    --      root's repository under a different DBID -- the rule degenerates and
+    --      every visible DBID is kept (the pre-override behaviour), unchanged.
+    --
+    --   3. Fallback to CON_DBID when AWR is empty so neither value is NULL and
+    --      the generated `IN (...)` never degenerates to invalid `IN ()`.
+    --
+    -- dbid = the freshest (latest-ending) DBID within the resolved set.  In a
+    -- single-DBID database, the CDB root and a non-CDB this resolves to exactly
+    -- the old {freshest dbid} / {all visible dbids}, so output stays
+    -- byte-identical there.
+    WITH res AS (
+        SELECT g.dbid, g.last_end
+        FROM   ( SELECT dbid,
+                        MAX(end_interval_time) AS last_end
+                 FROM   dba_hist_snapshot
+                 GROUP BY dbid ) g
+        WHERE  CASE
+                 WHEN TRIM('~dbids') IS NOT NULL
+                   THEN CASE WHEN INSTR(',' || REPLACE('~dbids', ' ') || ',',
+                                        ',' || g.dbid || ',') > 0
+                             THEN 1 ELSE 0 END
+                 WHEN ( SELECT MIN(begin_interval_time)
+                          FROM   dba_hist_snapshot
+                          WHERE  dbid = TO_NUMBER(SYS_CONTEXT('USERENV','CON_DBID')) )
+                      IS NOT NULL
+                   THEN CASE
+                          WHEN g.dbid = TO_NUMBER(SYS_CONTEXT('USERENV','CON_DBID'))
+                            OR g.last_end <= ( SELECT MIN(begin_interval_time)
+                                                 FROM   dba_hist_snapshot
+                                                 WHERE  dbid = TO_NUMBER(SYS_CONTEXT('USERENV','CON_DBID')) )
+                          THEN 1 ELSE 0 END
+                 ELSE 1
+               END = 1
+    )
+    SELECT
+        NVL( ( SELECT dbid FROM (
+                   SELECT dbid FROM res ORDER BY last_end DESC, dbid DESC
+               ) WHERE ROWNUM = 1 ),
+             TO_NUMBER(SYS_CONTEXT('USERENV','CON_DBID')) )           AS dbid,
+        NVL( ( SELECT LISTAGG(dbid, ',') WITHIN GROUP (ORDER BY dbid)
+                 FROM res ),
+             TO_CHAR(SYS_CONTEXT('USERENV','CON_DBID')) )            AS dbid_list
     FROM dual
-) dbo
-CROSS JOIN (
-    -- Every DBID that owns snapshots visible in this container, as a comma
-    -- list for `dbid IN (dbid_list)`.  DBA_HIST_SNAPSHOT is already
-    -- container-scoped (it shows only the current container's AWR rows), so
-    -- in a migrated PDB this set is exactly {old non-CDB DBID, new CON_DBID}
-    -- and in an ordinary single-DBID database it is a one-element list equal
-    -- to dbid.  NVL to CON_DBID keeps the list non-empty (so the generated
-    -- `IN (...)` never degenerates to invalid `IN ()`) when AWR is empty.
-    SELECT NVL(
-             (SELECT LISTAGG(dbid, ',') WITHIN GROUP (ORDER BY dbid)
-              FROM   (SELECT DISTINCT dbid FROM dba_hist_snapshot)),
-             TO_CHAR(SYS_CONTEXT('USERENV','CON_DBID'))
-           ) AS dbid_list
-    FROM dual
-) dbl
+) dbx
 CROSS JOIN (
     SELECT
         TO_CHAR(SYSTIMESTAMP, 'YYYYMMDDHH24MISSFF3')      AS run_id,

@@ -90,9 +90,11 @@ reports/                            -- generated HTML
 
 ## Substitution variables
 
-Twelve user-facing vars, all DEFINEs (defaults in `sql/defaults.sql`):
+Thirteen user-facing vars, all DEFINEs (defaults in `sql/defaults.sql`):
 `target_end` (`'AUTO'`=prior full hour), `win_hours`, `weeks_back`, `top_n`,
-`inst_num` (`0`=aggregate across RAC, else filter to that instance), `step` +
+`inst_num` (`0`=aggregate across RAC, else filter to that instance), `dbids`
+(`''`=auto-resolve the AWR DBID(s), else a comma list pinning them — see
+Multitenant DBID resolution), `step` +
 `step_unit` (`'h'`/`'d'`/`'w'`; default `1`+`'w'` = same hour-of-week N weeks
 back), `template`, `debug`, `marker_file`, `markers`, `echarts`.
 
@@ -141,23 +143,40 @@ set `TERMOUT OFF / PAGESIZE 0 / HEADING OFF / LINESIZE 32767 / TRIMSPOOL ON`, so
 text, event/metric names) in `DBMS_XMLGEN.CONVERT(...)`.
 
 ### Multitenant DBID resolution
-- `~dbid` is **not** `v$database.dbid` (which returns the CDB root's DBID in a
-  PDB). The driver's `dbo` inline view picks the DBID of `MAX(end_interval_time)`
-  in `dba_hist_snapshot`, falling back to `CON_DBID` only when AWR is empty.
-  Handles PDBs with/without local AWR. Used for the report filename + masthead.
-- `~dbid_list` = comma set of ALL DBIDs owning visible snapshots (`dbl` view).
-  Needed because a non-CDB migrated into a PDB keeps pre-migration history under
-  the old DBID and new snapshots under `CON_DBID`. **Every AWR filter uses
-  `dbid IN (~dbid_list)`, not `dbid = ~dbid`.** `windows_cte.sql` resolves snaps
-  by time across the list and carries each snap's `s.dbid` forward, so
-  window-joined sections (02–08, 11, 12) need no change; a window straddling a
-  DBID change is invalidated. Time-range sections (00, 10) scan by TIMESTAMP and
-  key bucket maps by `dbid||'|'||snap_id`. Point-lookups (06, 09, 11) just switch
-  to `IN`.
-- **Single-DBID is byte-identical** to the old `= ~dbid` behavior (verified on
-  dbmint). Re-run byte-identity after touching 00/06/09/10/11/12 or
-  `windows_cte.sql`. Masthead emits the primary `~dbid` exactly as before and
-  only appends "all DBIDs …" when the list has a comma — don't "simplify" that.
+- `~dbid` and `~dbid_list` are both resolved by the single `dbx` inline view in
+  the driver (replaced the former separate `dbo`/`dbl` views). `~dbid` is **not**
+  `v$database.dbid` (which returns the CDB root's DBID in a PDB); it's the
+  freshest (latest-ending) DBID of the **resolved set**, falling back to
+  `CON_DBID` only when AWR is empty. Used for the report filename + masthead.
+- `~dbid_list` = comma set of the DBIDs the report trends. **Every AWR filter
+  uses `dbid IN (~dbid_list)`, not `dbid = ~dbid`.** Resolution (in `dbx`):
+  1. **`dbids` override** — if the `dbids` DEFINE is a non-empty comma list,
+     exactly those DBIDs (that own snapshots) are used. The escape hatch.
+  2. **Auto** — anchor on `CON_DBID` and keep it plus only DBIDs whose history
+     **ends before the anchor's first snapshot** (genuine disjoint pre-migration
+     history: a non-CDB plugged in as a PDB keeps pre-plug snaps under the old
+     DBID). A DBID whose range **OVERLAPS** the anchor's is **excluded** — this
+     is the real-world PDB case where the CDB root's repository is *also* visible
+     inside the PDB under a different DBID with an overlapping time range;
+     including it would double-count *and* make every recent window resolve its
+     begin/end snaps under different DBIDs → spuriously invalidated as "DBID
+     changed inside window". If `CON_DBID` owns no snapshots (PDB without local
+     AWR, sees only root's), the rule degenerates to "all visible DBIDs" (the
+     pre-`dbx` behavior), unchanged.
+- `windows_cte.sql` resolves snaps by time across the list and carries each
+  snap's `s.dbid` forward, so window-joined sections (02–08, 11, 12) need no
+  change; a window straddling a DBID change is invalidated. Time-range sections
+  (00, 10) scan by TIMESTAMP and key bucket maps by `dbid||'|'||snap_id`.
+  Point-lookups (06, 09, 11) just switch to `IN`.
+- **Single-DBID, CDB root and non-CDB are byte-identical** to the old behavior
+  (the resolved set = the one freshest DBID / all visible DBIDs there; verified
+  on dbmint). Re-run byte-identity after touching 00/06/09/10/11/12,
+  `windows_cte.sql`, or the `dbx` view. Masthead emits the primary `~dbid`
+  exactly as before and only appends "all DBIDs …" when the list has a comma —
+  don't "simplify" that. **The overlap-exclusion + `dbids` override path can't
+  be exercised on single-DBID dbmint — validate against a real migrated/leaking
+  PDB** (the prod PDB whose root AWR overlapped its own CON_DBID was the
+  motivating case).
 
 ### "Application only" filter (`body.app-only`)
 A client-side toggle in the sidebar rail (`#app-filter-toggle`, emitted by
