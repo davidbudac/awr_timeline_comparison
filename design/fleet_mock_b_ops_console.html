@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWR Fleet Report — Ops Console</title>
+<style>
+:root{
+  --paper:#eceef1; --panel:#ffffff; --panel-2:#f4f6f8; --ink:#12161d; --ink-soft:#333a45;
+  --muted:#5d6672; --rule:#c4ccd6; --hairline:#d9dfe6; --line-soft:#e8ecf1;
+  --accent:#1f5fa8; --accent-bg:#e0eaf4;
+  --crit:#b01c1c; --warn:#8a5a00; --ok:#1f7a4d;
+  --crit-bg:#fbeceb; --warn-bg:#faf2df; --ok-bg:#e8f3ed;
+}
+@media (prefers-color-scheme: dark){
+  :root:not(.force-light){
+    --paper:#0f1319; --panel:#161b23; --panel-2:#1d232d; --ink:#e7ecf2; --ink-soft:#bcc5d1;
+    --muted:#8591a0; --rule:#333d49; --hairline:#2a323d; --line-soft:#232a34;
+    --accent:#5b9bd8; --accent-bg:#18314a;
+    --crit:#e5675c; --warn:#e0a53a; --ok:#43bb82;
+    --crit-bg:#2b1a1a; --warn-bg:#2a2413; --ok-bg:#15271e;
+  }
+}
+body.dark{
+  --paper:#0f1319; --panel:#161b23; --panel-2:#1d232d; --ink:#e7ecf2; --ink-soft:#bcc5d1;
+  --muted:#8591a0; --rule:#333d49; --hairline:#2a323d; --line-soft:#232a34;
+  --accent:#5b9bd8; --accent-bg:#18314a;
+  --crit:#e5675c; --warn:#e0a53a; --ok:#43bb82;
+  --crit-bg:#2b1a1a; --warn-bg:#2a2413; --ok-bg:#15271e;
+}
+body.light{
+  --paper:#eceef1; --panel:#ffffff; --panel-2:#f4f6f8; --ink:#12161d; --ink-soft:#333a45;
+  --muted:#5d6672; --rule:#c4ccd6; --hairline:#d9dfe6; --line-soft:#e8ecf1;
+  --accent:#1f5fa8; --accent-bg:#e0eaf4;
+  --crit:#b01c1c; --warn:#8a5a00; --ok:#1f7a4d;
+  --crit-bg:#fbeceb; --warn-bg:#faf2df; --ok-bg:#e8f3ed;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:13px; line-height:1.45; -webkit-font-smoothing:antialiased;
+}
+.tnum{font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1}
+.wrap{max-width:1220px; margin:0 auto; padding:20px 18px 60px}
+
+/* ---------- masthead ---------- */
+.masthead{
+  background:var(--panel); border:1px solid var(--hairline); border-radius:8px;
+  padding:16px 18px; margin-bottom:16px;
+}
+.mh-top{display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap}
+.mh-title{flex:1 1 auto; min-width:260px}
+.mh-title h1{font-size:17px; margin:0 0 3px; letter-spacing:.01em; font-weight:650}
+.mh-title .sub{color:var(--muted); font-size:12px}
+.mh-title .run{color:var(--ink-soft); font-size:12px; margin-top:5px}
+.mh-title .run b{font-weight:600; color:var(--ink)}
+.theme-btn{
+  border:1px solid var(--rule); background:var(--panel-2); color:var(--ink-soft);
+  border-radius:6px; padding:6px 11px; font-size:12px; cursor:pointer; white-space:nowrap;
+}
+.theme-btn:hover{border-color:var(--accent); color:var(--accent)}
+
+.badges{display:flex; gap:8px; flex-wrap:wrap; margin-top:14px}
+.stat-badge{
+  border:1px solid var(--hairline); border-radius:6px; padding:6px 11px 5px;
+  background:var(--panel-2); min-width:70px; text-align:center;
+}
+.stat-badge .n{font-size:18px; font-weight:650; line-height:1.1}
+.stat-badge .l{font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:1px}
+.stat-badge.crit .n{color:var(--crit)} .stat-badge.warn .n{color:var(--warn)}
+.stat-badge.ok .n{color:var(--ok)} .stat-badge.dead .n{color:var(--muted)}
+
+.legends{display:flex; gap:26px; flex-wrap:wrap; margin-top:16px; padding-top:13px; border-top:1px solid var(--line-soft)}
+.legend-blk{min-width:200px}
+.legend-blk h3{font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 7px; font-weight:600}
+.wc-legend{display:flex; flex-wrap:wrap; gap:4px 12px}
+.wc-item{display:flex; align-items:center; gap:5px; font-size:11px; color:var(--ink-soft)}
+.wc-swatch{width:10px; height:10px; border-radius:2px; flex:none}
+.mk-legend{display:flex; flex-direction:column; gap:5px}
+.mk-item{display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--ink-soft)}
+.mk-glyph{color:var(--accent); font-weight:700; font-size:13px; line-height:1}
+.mk-glyph.mk2{color:var(--warn)}
+.mk-item time{color:var(--muted); font-variant-numeric:tabular-nums}
+
+/* ---------- console table ---------- */
+.console{
+  background:var(--panel); border:1px solid var(--hairline); border-radius:8px;
+  overflow:hidden;
+}
+table.fleet{width:100%; border-collapse:collapse}
+table.fleet thead th{
+  font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+  font-weight:600; text-align:left; padding:9px 10px; background:var(--panel-2);
+  border-bottom:1px solid var(--rule); white-space:nowrap;
+}
+table.fleet thead th.r{text-align:right}
+table.fleet thead th.c{text-align:center}
+
+tr.dbrow{border-bottom:1px solid var(--line-soft); cursor:pointer}
+tr.dbrow:last-child{border-bottom:none}
+tr.dbrow:hover{background:var(--panel-2)}
+tr.dbrow.open{background:var(--panel-2)}
+tr.dbrow td{padding:8px 10px; vertical-align:middle}
+
+.chev{width:14px; height:14px; color:var(--muted); transition:transform .15s; display:inline-block}
+tr.dbrow.open .chev{transform:rotate(90deg); color:var(--accent)}
+
+.alias-cell{display:flex; align-items:center; gap:9px}
+.dot{width:9px; height:9px; border-radius:50%; flex:none; box-shadow:0 0 0 3px var(--panel)}
+.dot.crit{background:var(--crit)} .dot.warn{background:var(--warn)}
+.dot.ok{background:var(--ok)} .dot.dead{background:var(--muted)}
+.alias{font-weight:600; font-size:13px; letter-spacing:.01em}
+.alias .role{font-weight:400; color:var(--muted); font-size:10.5px; margin-left:1px}
+
+.score{font-weight:650; font-size:15px; text-align:right}
+.score.s-crit{color:var(--crit)} .score.s-warn{color:var(--warn)} .score.s-ok{color:var(--ok)}
+.score.s-dead{color:var(--muted); font-size:12px; font-weight:500}
+
+.cw{display:flex; gap:5px}
+.cw .pill{
+  font-size:11px; font-weight:600; padding:1px 6px; border-radius:4px;
+  font-variant-numeric:tabular-nums; border:1px solid transparent;
+}
+.pill.c{color:var(--crit); background:var(--crit-bg); border-color:var(--crit)}
+.pill.w{color:var(--warn); background:var(--warn-bg); border-color:var(--warn)}
+.pill.z{color:var(--muted); background:var(--panel-2); border-color:var(--hairline)}
+
+.aas{text-align:right; font-weight:600; font-variant-numeric:tabular-nums}
+.aas .u{font-weight:400; color:var(--muted); font-size:10px; margin-left:2px}
+
+.finding{font-size:12px; color:var(--ink-soft); display:flex; align-items:center; gap:7px; min-width:0}
+.finding .txt{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.zbadge{
+  font-size:10.5px; font-weight:650; padding:1px 5px; border-radius:4px; flex:none;
+  font-variant-numeric:tabular-nums;
+}
+.zbadge.c{color:var(--crit); background:var(--crit-bg)}
+.zbadge.w{color:var(--warn); background:var(--warn-bg)}
+.zbadge.o{color:var(--ok); background:var(--ok-bg)}
+
+.spark-cell svg, .ribbon-cell svg{display:block}
+.ribbon-cell{width:186px}
+
+/* ---------- detail panel ---------- */
+tr.detailrow td{padding:0; background:var(--panel-2); border-bottom:1px solid var(--rule)}
+tr.detailrow.hidden{display:none}
+.detail{padding:16px 18px 18px}
+.detail-grid{display:grid; grid-template-columns:1fr; gap:16px}
+@media(min-width:900px){.detail-grid{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr)}}
+
+.panel-h{font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600; margin:0 0 8px}
+.detail-block{background:var(--panel); border:1px solid var(--hairline); border-radius:6px; padding:12px 13px}
+
+.timeline-box svg{display:block; width:100%; height:auto}
+.tl-caption{font-size:11px; color:var(--muted); margin-top:6px; display:flex; gap:14px; flex-wrap:wrap}
+.tl-caption span{display:flex; align-items:center; gap:5px}
+
+/* metric mini cards */
+.metrics{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px}
+.metric{border:1px solid var(--hairline); border-radius:5px; padding:7px 9px; background:var(--panel)}
+.metric .ml{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.metric .mrow{display:flex; align-items:flex-end; justify-content:space-between; gap:6px; margin-top:3px}
+.metric .mv{font-size:15px; font-weight:650; font-variant-numeric:tabular-nums; line-height:1}
+.metric .mv .mu{font-size:9.5px; color:var(--muted); font-weight:400; margin-left:1px}
+.metric .mspark{margin-top:5px}
+.metric .mz{font-size:10px; font-weight:650; padding:1px 4px; border-radius:3px; font-variant-numeric:tabular-nums; align-self:flex-start}
+.mz.c{color:var(--crit); background:var(--crit-bg)} .mz.w{color:var(--warn); background:var(--warn-bg)}
+.mz.o{color:var(--ok); background:var(--ok-bg)} .mz.n{color:var(--muted); background:var(--panel-2)}
+
+/* detail tables */
+table.dt{width:100%; border-collapse:collapse; font-size:11.5px; margin-top:2px}
+table.dt th{text-align:left; font-size:9.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:600; padding:4px 8px 4px 0; border-bottom:1px solid var(--hairline)}
+table.dt th.r{text-align:right}
+table.dt td{padding:5px 8px 5px 0; border-bottom:1px solid var(--line-soft); vertical-align:top}
+table.dt td.r{text-align:right; font-variant-numeric:tabular-nums}
+table.dt tr:last-child td{border-bottom:none}
+table.dt .sqlid{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px; color:var(--accent)}
+table.dt .sev-c{color:var(--crit); font-weight:600}
+table.dt .sev-w{color:var(--warn); font-weight:600}
+.mono-z{font-variant-numeric:tabular-nums; font-weight:600}
+.mono-z.c{color:var(--crit)} .mono-z.w{color:var(--warn)} .mono-z.o{color:var(--ok)}
+
+.drill{
+  margin-top:12px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px;
+  background:var(--ink); color:#e7ecf2; border-radius:5px; padding:8px 10px; overflow-x:auto;
+  white-space:nowrap;
+}
+body.dark .drill, body:not(.light) .drill{background:#0a0d12}
+.drill .cmt{color:#7f8b9c}
+
+/* dead row */
+tr.dbrow.deadrow{background:var(--crit-bg)}
+tr.dbrow.deadrow:hover{background:var(--crit-bg)}
+tr.detailrow.dead td{background:var(--crit-bg)}
+.err-conn{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px; color:var(--ink-soft)}
+.err-code{font-weight:650; color:var(--crit)}
+.logtail{
+  margin-top:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px;
+  background:var(--panel); border:1px solid var(--crit); border-radius:5px; padding:9px 11px;
+  color:var(--ink-soft); white-space:pre-wrap; line-height:1.5;
+}
+
+.foot{color:var(--muted); font-size:11px; margin-top:16px; text-align:center}
+.hint{color:var(--muted); font-size:11px; margin:10px 2px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ MASTHEAD ============ -->
+  <div class="masthead">
+    <div class="mh-top">
+      <div class="mh-title">
+        <h1>AWR Fleet Report</h1>
+        <div class="sub">Multi-database health triage &middot; z-score anomaly scan vs 24 prior windows</div>
+        <div class="run">
+          Window <b>Mon 2026-07-20 09:00&ndash;10:00</b> &middot; step 1h &middot; 24 prior windows &middot;
+          generated <span class="tnum">2026-07-20 10:04:12 +02:00</span>
+        </div>
+      </div>
+      <button class="theme-btn" id="themeToggle" type="button">◐ Toggle theme</button>
+    </div>
+
+    <div class="badges">
+      <div class="stat-badge"><div class="n tnum">7</div><div class="l">Databases</div></div>
+      <div class="stat-badge crit"><div class="n tnum">4</div><div class="l">Crit</div></div>
+      <div class="stat-badge warn"><div class="n tnum">9</div><div class="l">Warn</div></div>
+      <div class="stat-badge ok"><div class="n tnum">2</div><div class="l">Quiet</div></div>
+      <div class="stat-badge dead"><div class="n tnum">1</div><div class="l">Unreach</div></div>
+    </div>
+
+    <div class="legends">
+      <div class="legend-blk" style="flex:2 1 380px">
+        <h3>Wait-class palette (ASH ribbons)</h3>
+        <div class="wc-legend" id="wcLegend"></div>
+      </div>
+      <div class="legend-blk" style="flex:1 1 220px">
+        <h3>Timeline markers</h3>
+        <div class="mk-legend">
+          <div class="mk-item"><span class="mk-glyph">│</span> app v2.3 deploy <time>2026-07-20 03:10</time></div>
+          <div class="mk-item"><span class="mk-glyph mk2">│</span> OS patch + reboot <time>2026-07-19 22:00</time></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CONSOLE TABLE ============ -->
+  <div class="console">
+    <table class="fleet">
+      <thead>
+        <tr>
+          <th style="width:22px"></th>
+          <th style="width:150px">Database</th>
+          <th class="r" style="width:56px">Score</th>
+          <th class="c" style="width:86px">Crit / Warn</th>
+          <th class="r" style="width:62px">AAS</th>
+          <th style="min-width:230px">Worst finding</th>
+          <th class="c" style="width:98px">DB time (24h)</th>
+          <th class="c" style="width:186px">ASH by wait class (24h)</th>
+        </tr>
+      </thead>
+      <tbody id="fleetBody"></tbody>
+    </table>
+  </div>
+  <div class="hint">Click any row to expand its ASH timeline, headline metrics, findings &amp; drill-down. Rows sorted by severity score.</div>
+
+  <div class="foot">AWR Fleet Report &middot; self-contained &middot; inline-SVG charts, no external dependencies &middot; mockup — Design B (ops console)</div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- wait-class palette (theme-independent) ---------- */
+var WC = {
+  "CPU":"#3FB344","Scheduler":"#88C070","User I/O":"#4A90D9","System I/O":"#1F4E89",
+  "Concurrency":"#8B0000","Application":"#D62728","Commit":"#E89B40","Configuration":"#793C32",
+  "Administrative":"#7B6FA8","Network":"#967259","Cluster":"#E5C228","Other":"#C77CB0"
+};
+var WC_ORDER = ["CPU","Scheduler","User I/O","System I/O","Concurrency","Application","Commit","Configuration","Administrative","Network","Cluster","Other"];
+
+/* legend */
+(function(){
+  var el = document.getElementById("wcLegend");
+  WC_ORDER.forEach(function(k){
+    var d=document.createElement("div"); d.className="wc-item";
+    d.innerHTML='<span class="wc-swatch" style="background:'+WC[k]+'"></span>'+k;
+    el.appendChild(d);
+  });
+})();
+
+/* ---------- data generators ---------- */
+var N = 24; // hourly buckets: index 0 = 2026-07-19 10:00 ... index 23 = 2026-07-20 09:00
+function flat(v, jit){ jit=jit||0; var a=[]; for(var i=0;i<N;i++){ a.push(Math.max(0, v + (jit? Math.sin(i*1.7)*jit:0))); } return a; }
+function hump(center, width, amp, floor){ floor=floor||0; var a=[]; for(var i=0;i<N;i++){ var d=(i-center)/width; a.push(floor + amp*Math.exp(-d*d)); } return a; }
+function add(){ var out=new Array(N).fill(0); for(var k=0;k<arguments.length;k++){ var s=arguments[k]; for(var i=0;i<N;i++) out[i]+=s[i]; } return out; }
+function gate(arr, fromIdx){ // zero-out before fromIdx (sharp onset at marker)
+  return arr.map(function(v,i){ return i<fromIdx? v*0.03 : v; });
+}
+
+// markers as fractional bucket indices
+// OS patch 22:00 -> i=12 ; deploy 03:10 next day -> i=17.17
+var MARKERS = [
+  {i:12,    kind:2, short:"OS", label:"OS patch 22:00"},
+  {i:17.17, kind:1, short:"v2.3", label:"app v2.3 deploy 03:10"}
+];
+
+/* ---------- per-DB ASH series ---------- */
+function ash(map){ // map: className -> array
+  var series=[]; WC_ORDER.forEach(function(k){ if(map[k]) series.push({cls:k, vals:map[k]}); }); return series;
+}
+
+var ERPPRD_ASH = ash({
+  "CPU":         add(flat(1.7,.3), gate(hump(19,3.2,2.6), 17)),
+  "User I/O":    flat(1.1,.2),
+  "Concurrency": gate(hump(19.2,2.6,7.4), 17),
+  "Application": gate(hump(19,3,1.2), 17),
+  "Commit":      flat(0.5,.1),
+  "Cluster":     flat(0.25,.05),
+  "Other":       flat(0.2,.05)
+});
+var BILLPRD_ASH = ash({
+  "CPU":      flat(0.9,.2),
+  "User I/O": add(flat(1.9,.3), hump(15,6,2.2), hump(20,3,1.4)),
+  "System I/O": flat(0.5,.1),
+  "Commit":   flat(0.7,.15),
+  "Concurrency": flat(0.35,.1),
+  "Other":    flat(0.2,.05)
+});
+var DWHPRD_ASH = ash({
+  "CPU":        add(flat(0.6,.1), hump(13,5,1.3)),
+  "System I/O": add(hump(11,2.4,3.2), hump(15,2.6,3.6), flat(0.3)),
+  "User I/O":   add(flat(0.5,.1), hump(13,5,1.4)),
+  "Scheduler":  flat(0.3,.05),
+  "Other":      flat(0.15,.03)
+});
+var CRMPRD_ASH = ash({
+  "CPU":      flat(0.55,.12),
+  "User I/O": add(flat(0.4,.1), hump(20,2.5,0.8)),
+  "Commit":   flat(0.3,.08),
+  "Network":  flat(0.2,.05),
+  "Other":    flat(0.12,.03)
+});
+var HRPRD_ASH = ash({
+  "CPU":      flat(0.22,.06),
+  "User I/O": flat(0.15,.04),
+  "Commit":   flat(0.08,.02),
+  "Other":    flat(0.05,.01)
+});
+var ORDSTB_ASH = ash({
+  "System I/O": flat(0.12,.03),
+  "CPU":        flat(0.05,.02),
+  "Other":      flat(0.03,.01)
+});
+
+/* ---------- DB fleet data ---------- */
+function spark(vals){ return vals; }
+function metric(label, val, unit, spk, z, sev){ return {label:label, val:val, unit:unit, spk:spk, z:z, sev:sev}; }
+
+var DBS = [
+{
+  alias:"ERPPRD", role:"CDB / erp1", sev:"crit", score:46, crit:3, warn:2, aas:14.2, open:true,
+  ash:ERPPRD_ASH,
+  worst:{txt:"Concurrency spike after deploy", z:"+6.1σ", sev:"c"},
+  meta:"12c enterprise · 4-node RAC · dbid 3418840201",
+  metrics:[
+    metric("Avg Active Sessions", "14.2", "", hump(19,3,10,1.5), "+6.1σ","c"),
+    metric("Concurrency wait", "7.4", "AAS", gate(hump(19,3,7,0.3),17), "+7.9σ","c"),
+    metric("DB CPU", "4.3", "AAS", add(flat(1.7),gate(hump(19,3,2.6),17)), "+3.4σ","c"),
+    metric("Hard parses/s", "182", "/s", add(flat(40,8),gate(hump(19,3,150),17)), "+4.8σ","c"),
+    metric("Log file sync", "38", "ms", add(flat(8,2),gate(hump(19,4,32),17)), "+2.6σ","w"),
+    metric("Exec/s", "9,410", "/s", add(flat(6000,400),hump(15,8,3200)), "+1.1σ","w")
+  ],
+  findings:[
+    ["Wait class: Concurrency","+7.9","812 ms","198 ms","c"],
+    ["latch: cache buffers chains","+6.1","cur 41.2 AAS","μ 6.8 AAS","c"],
+    ["Wait class: CPU","+3.4","4.3 AAS","1.9 AAS","c"],
+    ["Hard parse count","+4.8","182/s","44/s","w"],
+    ["log file sync","+2.6","38 ms","9 ms","w"]
+  ],
+  topsql:[
+    ["a7d3kf92m1x0p","APP_ERP","spike","4,120","+8.2","c"],
+    ["9fk2m4j8s0d1q","APP_ERP","+310%","2,880","+5.6","c"],
+    ["b1n8v6c3x9z2w","APP_ERP","+240%","1,640","+3.9","w"],
+    ["m4q7r2t8y5u1i","REPORTS","+90%","980","+2.1","w"]
+  ],
+  drill:'./run_awr_trend.sh erp1_user/***@erp1 \'2026-07-20 10:00\' 1 24 20 0 1 h comprehensive'
+},
+{
+  alias:"BILLPRD", role:"CDB / bill", sev:"crit", score:21, crit:1, warn:3, aas:6.8, open:false,
+  ash:BILLPRD_ASH,
+  worst:{txt:"User I/O elevated (single-block reads)", z:"+4.2σ", sev:"c"},
+  meta:"19c enterprise · 2-node RAC · dbid 2740119983",
+  metrics:[
+    metric("Avg Active Sessions","6.8","",add(flat(3.2,.4),hump(15,6,3)),"+2.9σ","w"),
+    metric("User I/O wait","4.1","AAS",add(flat(1.9),hump(15,6,2.2)),"+4.2σ","c"),
+    metric("db file seq read","19","ms",flat(19,3),"+3.1σ","w"),
+    metric("Physical reads/s","74k","/s",add(flat(38000,3000),hump(15,6,34000)),"+3.5σ","w"),
+    metric("Buffer hit %","91.2","%",flat(91,1.5),"-2.4σ","w"),
+    metric("Exec/s","4,210","/s",flat(4100,300),"+0.4σ","n")
+  ],
+  findings:[
+    ["Wait class: User I/O","+4.2","cur 4.1 AAS","μ 1.4 AAS","c"],
+    ["db file sequential read","+3.5","19 ms","7 ms","w"],
+    ["Physical read total bytes","+3.1","1.9 GB/s","0.7 GB/s","w"],
+    ["Buffer cache hit ratio","-2.4","91.2%","96.8%","w"]
+  ],
+  topsql:[
+    ["k9m2x7p4n1a3c","BILLING","+180%","1,940","+4.0","c"],
+    ["q3r8t2y6u9i0o","BILLING","+120%","1,210","+2.8","w"],
+    ["z7x1c4v8b2n5m","BATCH","+70%","760","+1.9","w"]
+  ],
+  drill:'./run_awr_trend.sh bill_user/***@bill \'2026-07-20 10:00\' 1 24 20 0 1 h comprehensive'
+},
+{
+  alias:"DWHPRD", role:"CDB / dwh", sev:"warn", score:9, crit:0, warn:3, aas:8.9, open:false,
+  ash:DWHPRD_ASH,
+  worst:{txt:"System I/O — heavy nightly batch (typical)", z:"+2.7σ", sev:"w"},
+  meta:"19c enterprise · single-instance · dbid 1908772440",
+  metrics:[
+    metric("Avg Active Sessions","8.9","",add(flat(1.5,.3),hump(13,5,7)),"+1.9σ","w"),
+    metric("System I/O wait","6.8","AAS",add(hump(11,2.4,3.2),hump(15,2.6,3.6)),"+2.7σ","w"),
+    metric("Direct path read","44","ms",add(flat(20,3),hump(13,5,26)),"+2.2σ","w"),
+    metric("Physical writes/s","210k","/s",add(flat(40000),hump(13,5,180000)),"+2.5σ","w"),
+    metric("Redo MB/s","88","MB",add(flat(20,4),hump(13,5,70)),"+1.6σ","n"),
+    metric("Exec/s","1,320","/s",flat(1300,120),"+0.2σ","n")
+  ],
+  findings:[
+    ["Wait class: System I/O","+2.7","6.8 AAS","3.1 AAS","w"],
+    ["direct path read temp","+2.2","44 ms","22 ms","w"],
+    ["Physical write total bytes","+2.5","5.4 GB/s","2.6 GB/s","w"]
+  ],
+  topsql:[
+    ["w2e5r8t1y4u7i","DWH_ETL","batch","3,600","+1.8","w"],
+    ["p0o9i8u7y6t5r","DWH_ETL","+40%","2,100","+1.4","n"],
+    ["l1k2j3h4g5f6d","DWH_LOAD","+30%","1,540","+1.1","n"]
+  ],
+  drill:'./run_awr_trend.sh dwh_user/***@dwh \'2026-07-20 10:00\' 1 24 20 0 1 h comprehensive'
+},
+{
+  alias:"CRMPRD", role:"PDB / crm", sev:"warn", score:3, crit:0, warn:1, aas:1.6, open:false,
+  ash:CRMPRD_ASH,
+  worst:{txt:"User I/O mildly up (index range scans)", z:"+2.1σ", sev:"w"},
+  meta:"19c PDB in cdb2 · dbid 3011884556",
+  metrics:[
+    metric("Avg Active Sessions","1.6","",add(flat(1.1,.2),hump(20,2.5,0.9)),"+1.2σ","n"),
+    metric("User I/O wait","0.7","AAS",add(flat(0.4),hump(20,2.5,0.8)),"+2.1σ","w"),
+    metric("db file seq read","9","ms",flat(9,1.5),"+1.3σ","n"),
+    metric("Exec/s","880","/s",flat(870,60),"+0.3σ","n"),
+    metric("Commit wait","3.1","ms",flat(3,.5),"+0.6σ","n"),
+    metric("Sessions","142","",flat(140,10),"+0.2σ","n")
+  ],
+  findings:[
+    ["Wait class: User I/O","+2.1","cur 0.7 AAS","μ 0.3 AAS","w"]
+  ],
+  topsql:[
+    ["c5v8b1n4m7q0w","CRM_APP","+60%","410","+1.7","w"],
+    ["x9z2a5s8d1f4g","CRM_APP","+20%","260","+0.9","n"]
+  ],
+  drill:'./run_awr_trend.sh crm_user/***@crm \'2026-07-20 10:00\' 1 24 20 0 1 h comprehensive'
+},
+{
+  alias:"HRPRD", role:"PDB / hr", sev:"ok", score:0, crit:0, warn:0, aas:0.4, open:false,
+  ash:HRPRD_ASH,
+  worst:{txt:"No metric moved beyond 2σ", z:"—", sev:"o"},
+  meta:"19c PDB in cdb2 · dbid 2266109874",
+  metrics:[
+    metric("Avg Active Sessions","0.4","",flat(0.4,.08),"+0.3σ","n"),
+    metric("User I/O wait","0.15","AAS",flat(0.15,.04),"-0.1σ","n"),
+    metric("db file seq read","5","ms",flat(5,.8),"+0.2σ","n"),
+    metric("Exec/s","210","/s",flat(205,20),"-0.4σ","n"),
+    metric("Commit wait","2.0","ms",flat(2,.3),"+0.1σ","n"),
+    metric("Sessions","38","",flat(37,4),"0.0σ","n")
+  ],
+  findings:[],
+  topsql:[],
+  drill:'./run_awr_trend.sh hr_user/***@hr \'2026-07-20 10:00\' 1 24 20 0 1 h comprehensive'
+},
+{
+  alias:"ORDSTB", role:"physical standby", sev:"ok", score:0, crit:0, warn:0, aas:0.2, open:false,
+  ash:ORDSTB_ASH,
+  worst:{txt:"Standby — near-idle, redo apply only", z:"—", sev:"o"},
+  meta:"19c physical standby · read-only analyst · dbid 3418840201",
+  metrics:[
+    metric("Avg Active Sessions","0.2","",flat(0.2,.04),"0.0σ","n"),
+    metric("System I/O wait","0.12","AAS",flat(0.12,.03),"+0.1σ","n"),
+    metric("Redo apply MB/s","41","MB",flat(41,5),"+0.3σ","n"),
+    metric("Media recovery lag","0","s",flat(0.1,.05),"0.0σ","n"),
+    metric("db file par write","3","ms",flat(3,.4),"-0.2σ","n"),
+    metric("Sessions","6","",flat(6,1),"0.0σ","n")
+  ],
+  findings:[],
+  topsql:[],
+  drill:'./run_awr_trend.sh /@ordstb \'2026-07-20 10:00\' 1 24 20 0 1 h comprehensive'
+},
+{
+  alias:"DEADBOX", role:"unreachable", sev:"dead", dead:true, score:"ERR", crit:0, warn:0, aas:null, open:false,
+  meta:"connect failed at 2026-07-20 10:03:58",
+  conn:"deadbox_user/***@deadbox",
+  errcode:"ORA-12514",
+  errmsg:"TNS: listener does not currently know of service requested in connect descriptor",
+  logtail:"SQL*Plus: Release 19.0.0.0.0 - Production on Mon Jul 20 10:03:57 2026\n"+
+          "ERROR:\n"+
+          "ORA-12514: TNS:listener does not currently know of service requested\n"+
+          "           in connect descriptor\n"+
+          "SP2-0157: unable to CONNECT to ORACLE after 3 attempts, exiting SQL*Plus\n"+
+          "run_awr_fleet.sh: deadbox — rc=1, no fragment spooled → error card"
+}
+];
+
+/* ---------- SVG builders ---------- */
+function svgEl(w,h){ return '<svg viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">'; }
+
+// stacked ASH area chart
+function buildStack(series, w, h, opts){
+  opts = opts||{};
+  var pad = opts.pad || {t:0,r:0,b:0,l:0};
+  var iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
+  var n = N;
+  // cumulative
+  var cum = new Array(n).fill(0);
+  var maxTotal = 0;
+  for(var i=0;i<n;i++){ var t=0; for(var s=0;s<series.length;s++) t+=series[s].vals[i]; if(t>maxTotal) maxTotal=t; }
+  var maxY = opts.maxY || Math.max(maxTotal*1.08, 0.5);
+  function X(i){ return pad.l + (n<=1?0:(i/(n-1))*iw); }
+  function Y(v){ return pad.t + ih - (v/maxY)*ih; }
+
+  var out = svgEl(w,h);
+
+  // background
+  if(opts.bg){ out += '<rect x="'+pad.l+'" y="'+pad.t+'" width="'+iw+'" height="'+ih+'" fill="'+opts.bg+'"/>'; }
+
+  // y gridlines (timeline only)
+  if(opts.grid){
+    var gl = opts.gridLines || 3;
+    for(var g=1; g<=gl; g++){
+      var gv = maxY*g/gl; var gy=Y(gv);
+      out += '<line x1="'+pad.l+'" y1="'+gy.toFixed(1)+'" x2="'+(pad.l+iw)+'" y2="'+gy.toFixed(1)+'" stroke="var(--line-soft)" stroke-width="1"/>';
+      out += '<text x="'+(pad.l-4)+'" y="'+(gy+3).toFixed(1)+'" text-anchor="end" font-size="9" fill="var(--muted)">'+(Math.round(gv*10)/10)+'</text>';
+    }
+    out += '<text x="'+(pad.l-4)+'" y="'+(pad.t+8)+'" text-anchor="end" font-size="9" fill="var(--muted)">AAS</text>';
+  }
+
+  // stacked areas (bottom to top). Recompute cumulative bottom per class.
+  var bottom = new Array(n).fill(0);
+  for(var s=0;s<series.length;s++){
+    var top = new Array(n);
+    for(var i2=0;i2<n;i2++){ top[i2] = bottom[i2] + series[s].vals[i2]; }
+    // polygon: forward top, backward bottom
+    var pts = [];
+    for(var i3=0;i3<n;i3++){ pts.push(X(i3).toFixed(1)+','+Y(top[i3]).toFixed(2)); }
+    for(var i4=n-1;i4>=0;i4--){ pts.push(X(i4).toFixed(1)+','+Y(bottom[i4]).toFixed(2)); }
+    out += '<polygon points="'+pts.join(' ')+'" fill="'+WC[series[s].cls]+'" fill-opacity="'+(opts.fillOpacity||0.92)+'"/>';
+    bottom = top;
+  }
+
+  // x-axis ticks/labels (timeline)
+  if(opts.xLabels){
+    var labs = [[0,"10:00"],[6,"16:00"],[12,"22:00"],[18,"04:00"],[23,"09:00"]];
+    labs.forEach(function(L){
+      var lx=X(L[0]);
+      out += '<line x1="'+lx.toFixed(1)+'" y1="'+(pad.t+ih)+'" x2="'+lx.toFixed(1)+'" y2="'+(pad.t+ih+3)+'" stroke="var(--muted)" stroke-width="1"/>';
+      var anc = L[0]===0?"start":(L[0]===23?"end":"middle");
+      out += '<text x="'+lx.toFixed(1)+'" y="'+(pad.t+ih+13)+'" text-anchor="'+anc+'" font-size="9" fill="var(--muted)">'+L[1]+'</text>';
+    });
+  }
+
+  // markers
+  if(opts.markers){
+    MARKERS.forEach(function(m){
+      var mx = X(m.i);
+      var col = m.kind===1 ? "var(--accent)" : "var(--warn)";
+      if(opts.ribbon){
+        // thin line + tiny triangle at top
+        out += '<line x1="'+mx.toFixed(1)+'" y1="'+pad.t+'" x2="'+mx.toFixed(1)+'" y2="'+(pad.t+ih)+'" stroke="'+col+'" stroke-width="1" stroke-opacity="0.85"/>';
+        out += '<path d="M'+(mx-2.5).toFixed(1)+','+pad.t+' L'+(mx+2.5).toFixed(1)+','+pad.t+' L'+mx.toFixed(1)+','+(pad.t+3.5)+' Z" fill="'+col+'"/>';
+      } else {
+        out += '<line x1="'+mx.toFixed(1)+'" y1="'+pad.t+'" x2="'+mx.toFixed(1)+'" y2="'+(pad.t+ih)+'" stroke="'+col+'" stroke-width="1.2" stroke-dasharray="3 2" stroke-opacity="0.9"/>';
+        // label chip
+        var tx = mx, anc2 = "middle";
+        if(mx > w-70){ anc2="end"; tx=mx-3; } else if(mx < 60){ anc2="start"; tx=mx+3; }
+        out += '<text x="'+tx.toFixed(1)+'" y="'+(pad.t+10)+'" text-anchor="'+anc2+'" font-size="9.5" font-weight="600" fill="'+col+'">'+m.label+'</text>';
+      }
+    });
+  }
+
+  out += '</svg>';
+  return out;
+}
+
+// simple line sparkline (DB time / metric)
+function buildSpark(vals, w, h, color){
+  color = color || "var(--accent)";
+  var n=vals.length, mn=Math.min.apply(null,vals), mx=Math.max.apply(null,vals);
+  var rng = (mx-mn)||1;
+  // 2% flatness floor
+  if(rng/((mx+mn)/2 || 1) < 0.02){ var mid=h/2; return svgEl(w,h)+'<line x1="0" y1="'+mid+'" x2="'+w+'" y2="'+mid+'" stroke="'+color+'" stroke-width="1.3" stroke-opacity="0.6"/></svg>'; }
+  function X(i){ return (i/(n-1))*w; }
+  function Y(v){ return h-2 - ((v-mn)/rng)*(h-4); }
+  var d="";
+  for(var i=0;i<n;i++){ d += (i?"L":"M")+X(i).toFixed(1)+","+Y(vals[i]).toFixed(2); }
+  // area
+  var area = d + "L"+w+","+h+" L0,"+h+" Z";
+  var out = svgEl(w,h);
+  out += '<path d="'+area+'" fill="'+color+'" fill-opacity="0.10"/>';
+  out += '<path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>';
+  out += '<circle cx="'+X(n-1).toFixed(1)+'" cy="'+Y(vals[n-1]).toFixed(2)+'" r="1.6" fill="'+color+'"/>';
+  out += '</svg>';
+  return out;
+}
+
+/* ---------- render fleet table ---------- */
+var body = document.getElementById("fleetBody");
+
+function sevColorVar(sev){ return sev==="crit"?"var(--crit)": sev==="warn"?"var(--warn)": sev==="ok"?"var(--ok)":"var(--muted)"; }
+function scoreClass(sev){ return sev==="crit"?"s-crit": sev==="warn"?"s-warn": sev==="ok"?"s-ok":"s-dead"; }
+
+DBS.forEach(function(db, idx){
+  var tr = document.createElement("tr");
+  tr.className = "dbrow" + (db.dead?" deadrow":"") + (db.open?" open":"");
+  tr.setAttribute("data-idx", idx);
+
+  if(db.dead){
+    tr.innerHTML =
+      '<td><svg class="chev" viewBox="0 0 16 16"><path d="M6 4l5 4-5 4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></td>'+
+      '<td><span class="alias-cell"><span class="dot dead"></span><span class="alias">'+db.alias+' <span class="role">'+db.role+'</span></span></span></td>'+
+      '<td><span class="score '+scoreClass("dead")+'">ERR</span></td>'+
+      '<td style="text-align:center"><span class="pill z">—</span></td>'+
+      '<td class="aas" style="color:var(--muted)">—</td>'+
+      '<td><span class="finding"><span class="zbadge c">'+db.errcode+'</span><span class="txt">connect failed — unreachable</span></span></td>'+
+      '<td style="text-align:center; color:var(--muted); font-size:11px">n/a</td>'+
+      '<td style="text-align:center; color:var(--muted); font-size:11px">no fragment</td>';
+  } else {
+    var ribbon = buildStack(db.ash, 172, 30, {markers:true, ribbon:true, pad:{t:4,r:2,b:2,l:2}, fillOpacity:0.95});
+    var sparkTot = add.apply(null, db.ash.map(function(s){return s.vals;}));
+    var sp = buildSpark(sparkTot, 84, 26, sevColorVar(db.sev));
+    tr.innerHTML =
+      '<td><svg class="chev" viewBox="0 0 16 16"><path d="M6 4l5 4-5 4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></td>'+
+      '<td><span class="alias-cell"><span class="dot '+db.sev+'"></span><span class="alias">'+db.alias+' <span class="role">'+db.role+'</span></span></span></td>'+
+      '<td><span class="score '+scoreClass(db.sev)+'">'+db.score+'</span></td>'+
+      '<td style="text-align:center"><span class="cw" style="justify-content:center">'+
+         (db.crit?'<span class="pill c">'+db.crit+'C</span>':'<span class="pill z">0C</span>')+
+         (db.warn?'<span class="pill w">'+db.warn+'W</span>':'<span class="pill z">0W</span>')+
+       '</span></td>'+
+      '<td class="aas">'+db.aas.toFixed(1)+'<span class="u">AAS</span></td>'+
+      '<td><span class="finding"><span class="zbadge '+db.worst.sev+'">'+db.worst.z+'</span><span class="txt">'+db.worst.txt+'</span></span></td>'+
+      '<td class="spark-cell" style="text-align:center">'+sp+'</td>'+
+      '<td class="ribbon-cell" style="text-align:center">'+ribbon+'</td>';
+  }
+  body.appendChild(tr);
+
+  // detail row
+  var dtr = document.createElement("tr");
+  dtr.className = "detailrow" + (db.dead?" dead":"") + (db.open?"":" hidden");
+  var td = document.createElement("td");
+  td.setAttribute("colspan","8");
+  td.innerHTML = buildDetail(db);
+  dtr.appendChild(td);
+  body.appendChild(dtr);
+
+  // toggle
+  tr.addEventListener("click", function(){
+    var isOpen = tr.classList.toggle("open");
+    if(isOpen) dtr.classList.remove("hidden"); else dtr.classList.add("hidden");
+  });
+});
+
+function buildDetail(db){
+  if(db.dead){
+    return '<div class="detail">'+
+      '<div class="panel-h" style="color:var(--crit)">Connection error</div>'+
+      '<div class="err-conn"><span class="err-code">'+db.errcode+'</span> &nbsp; '+db.errmsg+'</div>'+
+      '<div class="err-conn" style="margin-top:6px">connect: <b>'+db.conn+'</b> &middot; '+db.meta+'</div>'+
+      '<div class="logtail">'+escapeHtml(db.logtail)+'</div>'+
+      '</div>';
+  }
+
+  // timeline
+  var tl = buildStack(db.ash, 640, 108, {markers:true, grid:true, gridLines:3, xLabels:true, bg:"var(--panel-2)",
+                       pad:{t:6,r:8,b:18,l:26}, fillOpacity:0.9});
+
+  // metrics
+  var mhtml = '<div class="metrics">';
+  db.metrics.forEach(function(m){
+    var sp = buildSpark(m.spk, 70, 20, sevMetricColor(m.sev));
+    mhtml += '<div class="metric">'+
+      '<div class="ml">'+m.label+'</div>'+
+      '<div class="mrow"><div class="mv">'+m.val+(m.unit?'<span class="mu">'+m.unit+'</span>':'')+'</div>'+
+        '<div class="mz '+m.sev+'">'+m.z+'</div></div>'+
+      '<div class="mspark">'+sp+'</div>'+
+    '</div>';
+  });
+  mhtml += '</div>';
+
+  // findings table
+  var fhtml;
+  if(db.findings.length){
+    fhtml = '<table class="dt"><thead><tr><th>Finding</th><th class="r">z</th><th class="r">current</th><th class="r">baseline μ</th></tr></thead><tbody>';
+    db.findings.forEach(function(f){
+      var zc = f[4]==="c"?"c":(f[4]==="w"?"w":"o");
+      fhtml += '<tr><td class="sev-'+(f[4]==="c"?"c":"w")+'">'+f[0]+'</td>'+
+               '<td class="r"><span class="mono-z '+zc+'">'+f[1]+'</span></td>'+
+               '<td class="r">'+f[2]+'</td><td class="r">'+f[3]+'</td></tr>';
+    });
+    fhtml += '</tbody></table>';
+  } else {
+    fhtml = '<div style="color:var(--ok); font-size:12px; padding:4px 0">✓ No metric moved beyond 2σ this window.</div>';
+  }
+
+  // top sql
+  var thtml;
+  if(db.topsql.length){
+    thtml = '<table class="dt"><thead><tr><th>SQL_ID</th><th>Schema</th><th>Δ elapsed</th><th class="r">elapsed/s</th><th class="r">z</th></tr></thead><tbody>';
+    db.topsql.forEach(function(s){
+      var zc = s[5]==="c"?"c":(s[5]==="w"?"w":"o");
+      thtml += '<tr><td class="sqlid">'+s[0]+'</td><td>'+s[1]+'</td><td>'+s[2]+'</td>'+
+               '<td class="r">'+s[3]+'</td><td class="r"><span class="mono-z '+zc+'">'+s[4]+'</span></td></tr>';
+    });
+    thtml += '</tbody></table>';
+  } else {
+    thtml = '<div style="color:var(--muted); font-size:12px; padding:4px 0">No SQL regressions beyond threshold.</div>';
+  }
+
+  return '<div class="detail">'+
+    '<div class="detail-grid">'+
+      '<div>'+
+        '<div class="detail-block timeline-box">'+
+          '<div class="panel-h">ASH by wait class — 24h hourly (AAS) &middot; '+db.meta+'</div>'+
+          tl+
+          '<div class="tl-caption">'+
+            '<span><span style="color:var(--accent); font-weight:700">│</span> app v2.3 deploy 03:10</span>'+
+            '<span><span style="color:var(--warn); font-weight:700">│</span> OS patch 22:00</span>'+
+          '</div>'+
+        '</div>'+
+        '<div class="panel-h" style="margin-top:14px">Headline metrics vs 24-window baseline</div>'+
+        mhtml+
+      '</div>'+
+      '<div>'+
+        '<div class="detail-block">'+
+          '<div class="panel-h">Findings (z &ge; 2σ)</div>'+
+          fhtml+
+        '</div>'+
+        '<div class="detail-block" style="margin-top:12px">'+
+          '<div class="panel-h">Top SQL regressions</div>'+
+          thtml+
+        '</div>'+
+        '<div class="drill"><span class="cmt"># drill into this database</span><br>'+escapeHtml(db.drill)+'</div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function sevMetricColor(sev){ return sev==="c"?"var(--crit)": sev==="w"?"var(--warn)": sev==="o"?"var(--ok)":"var(--muted)"; }
+function escapeHtml(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+/* ---------- theme toggle ---------- */
+document.getElementById("themeToggle").addEventListener("click", function(){
+  var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  var isDark;
+  if(document.body.classList.contains("dark")){ isDark=true; }
+  else if(document.body.classList.contains("light")){ isDark=false; }
+  else { isDark = prefersDark; }
+  document.body.classList.remove("dark","light");
+  document.body.classList.add(isDark ? "light" : "dark");
+});
+
+})();
+</script>
+</body>
+</html>

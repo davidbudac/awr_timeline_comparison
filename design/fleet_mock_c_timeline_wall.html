@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWR Fleet Report — Timeline Wall (Mock C)</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --paper:#eceef1; --panel:#ffffff; --panel-2:#f4f6f8; --ink:#12161d; --ink-soft:#333a45;
+    --muted:#5d6672; --rule:#c4ccd6; --hairline:#d9dfe6; --line-soft:#e8ecf1;
+    --accent:#1f5fa8; --accent-bg:#e0eaf4; --crit:#b01c1c; --warn:#8a5a00; --ok:#1f7a4d;
+    --crit-bg:#fbeceb; --warn-bg:#faf2df; --ok-bg:#e8f3ed;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#0f1319; --panel:#161b23; --panel-2:#1d232d; --ink:#e7ecf2; --ink-soft:#bcc5d1;
+      --muted:#8591a0; --rule:#333d49; --hairline:#2a323d; --line-soft:#232a34;
+      --accent:#5b9bd8; --accent-bg:#18314a; --crit:#e5675c; --warn:#e0a53a; --ok:#43bb82;
+      --crit-bg:#2b1a1a; --warn-bg:#2a2413; --ok-bg:#15271e;
+    }
+  }
+  body.dark{
+    --paper:#0f1319; --panel:#161b23; --panel-2:#1d232d; --ink:#e7ecf2; --ink-soft:#bcc5d1;
+    --muted:#8591a0; --rule:#333d49; --hairline:#2a323d; --line-soft:#232a34;
+    --accent:#5b9bd8; --accent-bg:#18314a; --crit:#e5675c; --warn:#e0a53a; --ok:#43bb82;
+    --crit-bg:#2b1a1a; --warn-bg:#2a2413; --ok-bg:#15271e;
+  }
+  body.light{
+    --paper:#eceef1; --panel:#ffffff; --panel-2:#f4f6f8; --ink:#12161d; --ink-soft:#333a45;
+    --muted:#5d6672; --rule:#c4ccd6; --hairline:#d9dfe6; --line-soft:#e8ecf1;
+    --accent:#1f5fa8; --accent-bg:#e0eaf4; --crit:#b01c1c; --warn:#8a5a00; --ok:#1f7a4d;
+    --crit-bg:#fbeceb; --warn-bg:#faf2df; --ok-bg:#e8f3ed;
+  }
+
+  html{-webkit-text-size-adjust:100%}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:13px; line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  .num{font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 22px}
+
+  /* ---- masthead ---- */
+  .mast{padding:26px 0 18px; border-bottom:1px solid var(--rule)}
+  .mast-top{display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap}
+  .mast h1{font-size:19px; font-weight:650; letter-spacing:.01em}
+  .mast .sub{color:var(--muted); font-size:12px; margin-top:3px}
+  .mast .spacer{margin-left:auto}
+  .themebtn{
+    border:1px solid var(--rule); background:var(--panel); color:var(--ink-soft);
+    font:inherit; font-size:12px; padding:6px 12px; border-radius:6px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px;
+  }
+  .themebtn:hover{border-color:var(--accent); color:var(--accent)}
+
+  .badges{display:flex; gap:8px; flex-wrap:wrap; margin-top:16px}
+  .badge{
+    display:inline-flex; align-items:baseline; gap:6px; padding:6px 11px; border-radius:7px;
+    border:1px solid var(--hairline); background:var(--panel); font-size:12px;
+  }
+  .badge b{font-size:15px; font-weight:650}
+  .badge .lbl{color:var(--muted)}
+  .badge.crit{background:var(--crit-bg); border-color:color-mix(in srgb,var(--crit) 30%,transparent)}
+  .badge.crit b{color:var(--crit)}
+  .badge.warn{background:var(--warn-bg); border-color:color-mix(in srgb,var(--warn) 30%,transparent)}
+  .badge.warn b{color:var(--warn)}
+  .badge.ok{background:var(--ok-bg); border-color:color-mix(in srgb,var(--ok) 30%,transparent)}
+  .badge.ok b{color:var(--ok)}
+
+  .legend{display:flex; flex-wrap:wrap; gap:5px 14px; margin-top:16px; font-size:11px; color:var(--muted)}
+  .legend .lg{display:inline-flex; align-items:center; gap:5px}
+  .legend .sw{width:11px; height:11px; border-radius:2px; display:inline-block}
+
+  /* ---- timeline wall ---- */
+  .wallwrap{overflow-x:auto; margin-top:22px}
+  .wall{min-width:820px; border:1px solid var(--rule); border-radius:9px; overflow:hidden; background:var(--panel)}
+
+  .RAIL{width:210px}
+  .axis-row{
+    display:grid; grid-template-columns:var(--railw,210px) 1fr;
+    position:sticky; top:0; z-index:20; background:var(--panel);
+    border-bottom:1px solid var(--rule); box-shadow:0 1px 0 var(--rule);
+  }
+  .axis-rail{
+    padding:10px 14px; border-right:1px solid var(--rule);
+    display:flex; flex-direction:column; justify-content:flex-end;
+  }
+  .axis-rail .t1{font-size:11px; font-weight:600; letter-spacing:.03em; text-transform:uppercase; color:var(--muted)}
+  .axis-rail .t2{font-size:11px; color:var(--muted); margin-top:2px}
+  .axis{position:relative; height:52px}
+  .axis .flag{position:absolute; top:4px; transform:translateX(-50%); text-align:center; white-space:nowrap}
+  .axis .flag .pin{display:inline-block; font-size:10px; font-weight:650; padding:2px 6px; border-radius:4px; line-height:1.3}
+  .axis .flag .pt{font-size:10px; color:var(--muted); margin-top:1px; font-variant-numeric:tabular-nums}
+  .flag.dep .pin{background:var(--crit-bg); color:var(--crit); border:1px solid color-mix(in srgb,var(--crit) 40%,transparent)}
+  .flag.os  .pin{background:var(--panel-2); color:var(--ink-soft); border:1px solid var(--rule)}
+  .axis .tick{position:absolute; bottom:2px; transform:translateX(-50%); font-size:10px; color:var(--muted); font-variant-numeric:tabular-nums}
+  .axis .cmpband{position:absolute; top:0; bottom:0; background:color-mix(in srgb,var(--accent) 9%,transparent); border-left:1px dashed color-mix(in srgb,var(--accent) 55%,transparent)}
+  .axis .cmplab{position:absolute; bottom:20px; transform:translateX(-100%); padding-right:5px; font-size:9.5px; color:var(--accent); white-space:nowrap}
+
+  .band{display:grid; grid-template-columns:var(--railw,210px) 1fr; border-top:1px solid var(--hairline)}
+  .band:first-of-type{border-top:none}
+  .rail{padding:9px 14px; border-right:1px solid var(--rule); display:flex; flex-direction:column; gap:3px; min-width:0}
+  .rail-head{display:flex; align-items:center; gap:7px}
+  .dot{width:8px; height:8px; border-radius:50%; flex:none}
+  .dot.crit{background:var(--crit)} .dot.warn{background:var(--warn)}
+  .dot.ok{background:var(--ok)} .dot.err{background:var(--crit)}
+  .alias{font-size:13px; font-weight:650; letter-spacing:.02em}
+  .score{margin-left:auto; font-size:15px; font-weight:700; font-variant-numeric:tabular-nums}
+  .score.crit{color:var(--crit)} .score.warn{color:var(--warn)} .score.ok{color:var(--muted)}
+  .rail-chips{display:flex; gap:5px; align-items:center; flex-wrap:wrap}
+  .chip{font-size:10.5px; padding:1px 6px; border-radius:4px; border:1px solid var(--hairline); background:var(--panel-2); color:var(--muted); font-variant-numeric:tabular-nums}
+  .chip.crit{color:var(--crit); background:var(--crit-bg); border-color:color-mix(in srgb,var(--crit) 30%,transparent)}
+  .chip.warn{color:var(--warn); background:var(--warn-bg); border-color:color-mix(in srgb,var(--warn) 30%,transparent)}
+  .rail-foot{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:2px}
+  .aas{font-size:11px; color:var(--muted)}
+  .aas b{color:var(--ink); font-size:12px; font-weight:650; font-variant-numeric:tabular-nums}
+  .railspark{width:66px; height:20px; flex:none}
+
+  .tl{position:relative; min-width:0}
+  .tlsvg{display:block; width:100%; height:100%}
+  .ymax{position:absolute; top:3px; right:6px; font-size:9.5px; color:var(--muted); background:color-mix(in srgb,var(--panel) 78%,transparent); padding:0 3px; border-radius:3px; font-variant-numeric:tabular-nums; pointer-events:none}
+  .grid{stroke:var(--line-soft); stroke-width:1}
+  .cmp{fill:var(--accent); opacity:.07}
+  .mk-dep{stroke:var(--crit); stroke-width:1.4; stroke-dasharray:4 2.5; opacity:.75}
+  .mk-os{stroke:var(--muted); stroke-width:1.2; stroke-dasharray:1.5 3; opacity:.6}
+
+  /* error band */
+  .band.err .rail{background:var(--crit-bg)}
+  .band.err .tl{background:
+      repeating-linear-gradient(135deg, transparent 0 8px, color-mix(in srgb,var(--crit) 8%,transparent) 8px 16px);
+      display:flex; align-items:center; padding-left:16px}
+  .band.err .tl .emsg{font-size:11.5px; color:var(--crit); font-weight:600}
+  .conn{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:10.5px; color:var(--muted); word-break:break-all}
+
+  /* ---- detail drawers ---- */
+  .drawers{margin-top:26px}
+  .drawers h2.dh{font-size:13px; font-weight:650; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px}
+  details.dbdet{border:1px solid var(--hairline); border-radius:8px; background:var(--panel); margin-bottom:9px; overflow:hidden}
+  details.dbdet[open]{border-color:var(--rule)}
+  details.dbdet>summary{
+    list-style:none; cursor:pointer; padding:11px 15px; display:flex; align-items:center; gap:10px;
+    font-size:13px;
+  }
+  details.dbdet>summary::-webkit-details-marker{display:none}
+  summary .caret{color:var(--muted); font-size:11px; transition:transform .12s}
+  details[open]>summary .caret{transform:rotate(90deg)}
+  summary .s-alias{font-weight:650; letter-spacing:.02em}
+  summary .s-meta{color:var(--muted); font-size:11.5px}
+  summary .s-score{margin-left:auto; font-size:12px; font-variant-numeric:tabular-nums; color:var(--muted)}
+  .det-body{padding:4px 15px 16px; border-top:1px solid var(--line-soft)}
+
+  .metrics{display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin:14px 0}
+  .mcard{border:1px solid var(--hairline); border-radius:6px; padding:8px 9px; background:var(--panel-2)}
+  .mcard .ml{font-size:10.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mcard .mspark{width:100%; height:22px; display:block; margin:4px 0 3px}
+  .mcard .mv{font-size:15px; font-weight:650; font-variant-numeric:tabular-nums}
+  .zbadge{display:inline-block; font-size:10px; font-weight:650; padding:0 5px; border-radius:4px; font-variant-numeric:tabular-nums}
+  .zbadge.crit{color:var(--crit); background:var(--crit-bg)}
+  .zbadge.warn{color:var(--warn); background:var(--warn-bg)}
+  .zbadge.ok{color:var(--ok); background:var(--ok-bg)}
+
+  .subh{font-size:11px; font-weight:650; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:16px 0 7px}
+  table.t{width:100%; border-collapse:collapse; font-size:12px}
+  table.t th{text-align:left; font-weight:600; color:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; padding:5px 8px; border-bottom:1px solid var(--rule)}
+  table.t td{padding:5px 8px; border-bottom:1px solid var(--line-soft); font-variant-numeric:tabular-nums}
+  table.t td.evt{font-variant-numeric:normal}
+  table.t tr:last-child td{border-bottom:none}
+  .sev{display:inline-block; font-size:10px; font-weight:650; padding:1px 6px; border-radius:4px}
+  .sev.crit{color:var(--crit); background:var(--crit-bg)}
+  .sev.warn{color:var(--warn); background:var(--warn-bg)}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px}
+  .quiet{color:var(--muted); font-size:12px; padding:8px 0}
+  code.drill{
+    display:block; margin-top:14px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px;
+    background:var(--panel-2); border:1px solid var(--hairline); border-radius:6px; padding:9px 11px;
+    color:var(--ink-soft); overflow-x:auto; white-space:pre;
+  }
+  pre.logtail{
+    margin-top:10px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11px; line-height:1.6;
+    background:var(--panel-2); border:1px solid var(--hairline); border-left:3px solid var(--crit);
+    border-radius:6px; padding:9px 11px; color:var(--ink-soft); overflow-x:auto;
+  }
+  .foot{color:var(--muted); font-size:11px; margin:28px 0 40px; text-align:center}
+  .hint{color:var(--muted); font-size:11.5px; margin:10px 0 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="mast">
+    <div class="mast-top">
+      <div>
+        <h1>AWR Fleet Report</h1>
+        <div class="sub num">Mon 2026-07-20 09:00–10:00 &nbsp;·&nbsp; step 1h &nbsp;·&nbsp; 24 prior windows &nbsp;·&nbsp; generated 2026-07-20 09:12</div>
+      </div>
+      <div class="spacer"></div>
+      <button class="themebtn" id="themebtn" type="button">◐ Theme</button>
+    </div>
+
+    <div class="badges num">
+      <span class="badge"><b>7</b><span class="lbl">databases</span></span>
+      <span class="badge crit"><b>4</b><span class="lbl">crit</span></span>
+      <span class="badge warn"><b>9</b><span class="lbl">warn</span></span>
+      <span class="badge ok"><b>2</b><span class="lbl">quiet</span></span>
+      <span class="badge"><b>1</b><span class="lbl">unreachable</span></span>
+    </div>
+
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <p class="hint">Shared 24-hour time axis — every database's ASH timeline is aligned to the same scale, so the two fleet-wide event markers (dashed rules) cut straight across the wall. Look down a marker to see who reacted.</p>
+
+  <div class="wallwrap">
+    <div class="wall" id="wall">
+      <!-- axis + bands injected here -->
+    </div>
+  </div>
+
+  <div class="drawers">
+    <h2 class="dh">Per-database detail</h2>
+    <div id="drawers"></div>
+  </div>
+
+  <div class="foot num">AWR Fleet Report · design mock C (timeline wall) · self-contained · inline-SVG only</div>
+
+</div>
+
+<script>
+/* ---------------- wait-class palette (theme-independent) ---------------- */
+var WC = {
+  'CPU':'#3FB344','Scheduler':'#88C070','User I/O':'#4A90D9','System I/O':'#1F4E89',
+  'Concurrency':'#8B0000','Application':'#D62728','Commit':'#E89B40','Configuration':'#793C32',
+  'Administrative':'#7B6FA8','Network':'#967259','Cluster':'#E5C228','Other':'#C77CB0'
+};
+var ORDER = ['CPU','Scheduler','User I/O','System I/O','Concurrency','Commit',
+             'Application','Configuration','Administrative','Network','Cluster','Other'];
+
+/* ---------------- geometry: 24h window, 10 vb-units/hour ---------------- */
+var VBW = 240;                 // 24 buckets * 10
+var HR = function(h){ return h*10; };       // hour index -> vb x
+var PCT = function(x){ return (x/VBW*100); };// vb x -> % of timeline width
+// start = 2026-07-19 10:00 ; markers:
+var X_OS  = HR(12);            // 2026-07-19 22:00 -> hour 12
+var X_DEP = HR(17 + 10/60);    // 2026-07-20 03:10 -> hour 17.1667
+var X_CMP0= HR(23), X_CMPW = HR(1); // compared window 09:00-10:00 = last bucket
+
+/* ---------------- deterministic tiny PRNG ---------------- */
+function rng(seed){ return function(){ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; }; }
+
+/* ---------------- ASH bucket generators (24 hourly, AAS) ---------------- */
+function erp(){ var r=rng(11),b=[],i,o; for(i=0;i<24;i++){ o={};
+  o['CPU']=0.6+r()*0.4; o['User I/O']=0.3+r()*0.3; o['Commit']=0.1+r()*0.15; o['Concurrency']=0.04+r()*0.06;
+  if(i>=17){ var fade=Math.max(0,(i-20))*0.5;
+    o['Concurrency']=6.5+r()*2.2-fade; o['CPU']=3.0+r()*1.4; o['Application']=1.4+r()*0.9;
+    o['User I/O']=1.0+r()*0.6; o['Commit']=0.5+r()*0.3; o['Other']=0.3+r()*0.2; }
+  b.push(o);} return b; }
+function bill(){ var r=rng(23),b=[],i,o; for(i=0;i<24;i++){ o={};
+  o['User I/O']=3.0+r()*1.1; o['CPU']=1.0+r()*0.5; o['Commit']=0.4+r()*0.25; o['System I/O']=0.5+r()*0.35;
+  if(i>=17){ o['User I/O']+=1.6+r()*0.7; o['CPU']+=0.7+r()*0.4; o['Concurrency']=0.4+r()*0.35; }
+  b.push(o);} return b; }
+function dwh(){ var r=rng(31),b=[],i,o; for(i=0;i<24;i++){ o={};
+  o['CPU']=0.8+r()*0.4; o['User I/O']=0.5+r()*0.3; o['Commit']=0.15+r()*0.15;
+  var hump=Math.exp(-Math.pow((i-11.5)/2.3,2));
+  o['System I/O']=0.4+hump*(6.2+r()*1.4); o['User I/O']+=hump*(2.0+r()*0.6); o['Scheduler']=hump*0.6;
+  b.push(o);} return b; }
+function crm(){ var r=rng(41),b=[],i,o; for(i=0;i<24;i++){ o={};
+  o['CPU']=0.4+r()*0.35; o['User I/O']=0.12+r()*0.18; o['Commit']=0.05+r()*0.08;
+  if(i>=20&&i<=22){ o['Concurrency']=0.35+r()*0.3; } b.push(o);} return b; }
+function hrp(){ var r=rng(51),b=[],i,o; for(i=0;i<24;i++){ o={};
+  o['CPU']=0.14+r()*0.16; o['User I/O']=0.05+r()*0.08; o['Commit']=0.02+r()*0.04; b.push(o);} return b; }
+function stb(){ var r=rng(61),b=[],i,o; for(i=0;i<24;i++){ o={};
+  o['System I/O']=0.03+r()*0.05; o['CPU']=0.01+r()*0.02; b.push(o);} return b; }
+
+/* ---------------- 25-pt metric series ---------------- */
+function series(seed, base, jit, endMul){
+  var r=rng(seed), a=[], i;
+  for(i=0;i<25;i++){ var v=base*(1+(r()-0.5)*jit); if(i>=23) v*=endMul + (r()-0.5)*0.1; a.push(v); }
+  return a;
+}
+
+/* ---------------- fleet data ---------------- */
+var FLEET = [
+  { alias:'ERPPRD', sev:'crit', score:46, crit:3, warn:2, buckets:erp(), ymax:14,
+    meta:'CDB1 · PDB ERP · 4-node RAC · 19.27', open:true,
+    metrics:[
+      {l:'DB time (AAS)', v:'14.2', z:'+5.2', s:'crit', sd:series(1,2.1,0.3,6.8)},
+      {l:'CPU (AAS)',     v:'3.8',  z:'+2.4', s:'warn', sd:series(2,1.4,0.3,2.7)},
+      {l:'Concurrency ms',v:'6420', z:'+7.8', s:'crit', sd:series(3,210,0.4,30)},
+      {l:'Executions/s',  v:'910',  z:'-1.9', s:'ok',   sd:series(4,1450,0.2,0.63)},
+      {l:'Hard parse/s',  v:'34',   z:'+2.9', s:'warn', sd:series(5,11,0.3,3.1)},
+      {l:'Redo MB/s',     v:'8.1',  z:'+0.6', s:'ok',   sd:series(6,7.2,0.25,1.12)}
+    ],
+    findings:[
+      {s:'crit', e:'Wait class: Concurrency', z:'+7.8', cur:'6420 ms', mu:'210 ms'},
+      {s:'crit', e:'enq: TX - row lock contention', z:'+6.1', cur:'3810 ms', mu:'95 ms'},
+      {s:'crit', e:'DB time (SYSSTAT)', z:'+5.2', cur:'14.2 AAS', mu:'2.1 AAS'},
+      {s:'warn', e:'library cache lock', z:'+2.9', cur:'540 ms', mu:'120 ms'},
+      {s:'warn', e:'CPU used by this session', z:'+2.4', cur:'3.8 AAS', mu:'1.4 AAS'}
+    ],
+    topsql:[
+      {id:'7g3kq9m2xz1ab', sch:'APPUSR', el:'4.82', z:'+6.4'},
+      {id:'b8n1v4t0dsq7c', sch:'APPUSR', el:'3.11', z:'+4.9'},
+      {id:'c2p9wl5rk8m3d', sch:'ERPBATCH', el:'1.44', z:'+2.7'}
+    ],
+    drill:'./run_awr_trend.sh erp_user/***@erpprd "2026-07-20 10:00" 1 24 5 0 1 h' },
+
+  { alias:'BILLPRD', sev:'crit', score:21, crit:1, warn:3, buckets:bill(), ymax:7,
+    meta:'CDB2 · PDB BILL · 2-node RAC · 19.27',
+    metrics:[
+      {l:'DB time (AAS)', v:'6.4', z:'+3.0', s:'warn', sd:series(11,3.9,0.25,1.7)},
+      {l:'User I/O ms',   v:'812', z:'+4.2', s:'crit', sd:series(12,210,0.3,3.9)},
+      {l:'CPU (AAS)',     v:'1.9', z:'+1.4', s:'ok',   sd:series(13,1.2,0.25,1.6)},
+      {l:'db seq read ms',v:'11.4',z:'+3.1', s:'warn', sd:series(14,6.1,0.3,1.9)},
+      {l:'log file sync', v:'9.2', z:'+2.6', s:'warn', sd:series(15,5.4,0.3,1.7)},
+      {l:'Phys reads/s',  v:'48k', z:'+2.2', s:'warn', sd:series(16,29000,0.25,1.65)}
+    ],
+    findings:[
+      {s:'crit', e:'Wait class: User I/O', z:'+4.2', cur:'812 ms', mu:'210 ms'},
+      {s:'warn', e:'db file sequential read', z:'+3.1', cur:'11.4 ms', mu:'6.1 ms'},
+      {s:'warn', e:'log file sync', z:'+2.6', cur:'9.2 ms', mu:'5.4 ms'},
+      {s:'warn', e:'physical reads (SYSSTAT)', z:'+2.2', cur:'48k/s', mu:'29k/s'}
+    ],
+    topsql:[
+      {id:'d5r2m8k1qp0xe', sch:'BILLApp', el:'2.06', z:'+3.8'},
+      {id:'f9t3n7v2ws4yg', sch:'BILLApp', el:'1.23', z:'+2.5'},
+      {id:'h1k6b0m4dl2zj', sch:'RATING', el:'0.88', z:'+2.1'}
+    ],
+    drill:'./run_awr_trend.sh bill_user/***@billprd "2026-07-20 10:00" 1 24 5 0 1 h' },
+
+  { alias:'DWHPRD', sev:'warn', score:9, crit:0, warn:3, buckets:dwh(), ymax:9,
+    meta:'CDB3 · PDB DWH · single instance · 19.27',
+    metrics:[
+      {l:'DB time (AAS)', v:'2.3', z:'+1.1', s:'ok',   sd:series(21,2.0,0.4,1.3)},
+      {l:'System I/O ms', v:'640', z:'+2.8', s:'warn', sd:series(22,280,0.5,2.2)},
+      {l:'direct path rd',v:'18.6',z:'+2.3', s:'warn', sd:series(23,9.0,0.4,2.0)},
+      {l:'Phys reads/s',  v:'210k',z:'+2.1', s:'warn', sd:series(24,120000,0.4,1.7)},
+      {l:'CPU (AAS)',     v:'0.9', z:'+0.4', s:'ok',   sd:series(25,0.8,0.3,1.1)},
+      {l:'Redo MB/s',     v:'22.4',z:'+0.9', s:'ok',   sd:series(26,20,0.3,1.12)}
+    ],
+    findings:[
+      {s:'warn', e:'Wait class: System I/O', z:'+2.8', cur:'640 ms', mu:'280 ms'},
+      {s:'warn', e:'direct path read', z:'+2.3', cur:'18.6 ms', mu:'9.0 ms'},
+      {s:'warn', e:'physical reads (SYSSTAT)', z:'+2.1', cur:'210k/s', mu:'120k/s'}
+    ],
+    topsql:[
+      {id:'j4w8p1r6km2ak', sch:'DWHETL', el:'5.90', z:'+1.8'},
+      {id:'k7m2t9b3vn5bl', sch:'DWHETL', el:'4.12', z:'+1.4'}
+    ],
+    note:'Elevated I/O tracks the nightly batch window (predates the deploy marker) — typical seasonal pattern, not a regression.',
+    drill:'./run_awr_trend.sh dwh_user/***@dwhprd "2026-07-20 10:00" 1 24 5 0 1 h' },
+
+  { alias:'CRMPRD', sev:'warn', score:3, crit:0, warn:1, buckets:crm(), ymax:2,
+    meta:'CDB4 · PDB CRM · 2-node RAC · 19.27',
+    metrics:[
+      {l:'DB time (AAS)', v:'1.1', z:'+0.6', s:'ok',   sd:series(31,0.9,0.3,1.2)},
+      {l:'Concurrency ms',v:'190', z:'+2.1', s:'warn', sd:series(32,95,0.4,2.0)},
+      {l:'CPU (AAS)',     v:'0.6', z:'+0.3', s:'ok',   sd:series(33,0.5,0.3,1.1)},
+      {l:'User I/O ms',   v:'160', z:'+0.4', s:'ok',   sd:series(34,140,0.3,1.1)},
+      {l:'Executions/s',  v:'520', z:'-0.2', s:'ok',   sd:series(35,540,0.2,0.98)},
+      {l:'Hard parse/s',  v:'6',   z:'+0.5', s:'ok',   sd:series(36,5,0.3,1.1)}
+    ],
+    findings:[
+      {s:'warn', e:'Wait class: Concurrency', z:'+2.1', cur:'190 ms', mu:'95 ms'}
+    ],
+    topsql:[
+      {id:'m3n8k1v5qp7cm', sch:'CRMAPP', el:'0.42', z:'+1.2'}
+    ],
+    drill:'./run_awr_trend.sh crm_user/***@crmprd "2026-07-20 10:00" 1 24 5 0 1 h' },
+
+  { alias:'HRPRD', sev:'ok', score:0, crit:0, warn:0, buckets:hrp(), ymax:1.5,
+    meta:'CDB4 · PDB HR · single instance · 19.27',
+    metrics:[
+      {l:'DB time (AAS)', v:'0.3', z:'+0.1', s:'ok', sd:series(41,0.3,0.3,1.0)},
+      {l:'CPU (AAS)',     v:'0.2', z:'0.0',  s:'ok', sd:series(42,0.2,0.3,1.0)},
+      {l:'User I/O ms',   v:'120', z:'-0.3', s:'ok', sd:series(43,130,0.3,0.95)},
+      {l:'Executions/s',  v:'90',  z:'+0.2', s:'ok', sd:series(44,88,0.2,1.02)},
+      {l:'Commit ms',     v:'3.1', z:'-0.1', s:'ok', sd:series(45,3.2,0.3,0.98)},
+      {l:'Redo MB/s',     v:'1.2', z:'0.0',  s:'ok', sd:series(46,1.2,0.3,1.0)}
+    ],
+    findings:[], quiet:'No metric moved beyond 2σ this window.',
+    topsql:[],
+    drill:'./run_awr_trend.sh hr_user/***@hrprd "2026-07-20 10:00" 1 24 5 0 1 h' },
+
+  { alias:'ORDSTB', sev:'ok', score:0, crit:0, warn:0, buckets:stb(), ymax:0.5,
+    meta:'CDB5 · physical standby · recovery only · 19.27',
+    metrics:[
+      {l:'DB time (AAS)', v:'0.1', z:'0.0',  s:'ok', sd:series(51,0.08,0.4,1.0)},
+      {l:'System I/O ms', v:'42',  z:'-0.2', s:'ok', sd:series(52,46,0.3,0.95)},
+      {l:'Apply lag s',   v:'3',   z:'+0.1', s:'ok', sd:series(53,3,0.3,1.0)},
+      {l:'Redo appl MB/s',v:'6.4', z:'+0.3', s:'ok', sd:series(54,6.1,0.3,1.05)},
+      {l:'CPU (AAS)',     v:'0.02',z:'0.0',  s:'ok', sd:series(55,0.02,0.3,1.0)},
+      {l:'Reads/s',       v:'2k',  z:'-0.1', s:'ok', sd:series(56,2100,0.3,0.97)}
+    ],
+    findings:[], quiet:'No metric moved beyond 2σ — physical standby, redo-apply only.',
+    topsql:[],
+    drill:'./run_awr_trend.sh ord_user/***@ordstb "2026-07-20 10:00" 1 24 5 0 1 h' },
+
+  { alias:'DEADBOX', sev:'err', error:true, conn:'deadbox_user/***@deadbox',
+    emsg:'unreachable — ORA-12514',
+    log:'ORA-12514: TNS:listener does not currently know of service\n         requested in connect descriptor\nSP2-0640: Not connected\nSP2-0751: Unable to connect to Oracle. Exiting SQL*Plus.\nconnect  : deadbox_user/***@deadbox\nrc=1     2026-07-20 09:04:12' }
+];
+
+/* ---------------- markers meta ---------------- */
+var MARKERS = [
+  { cls:'os',  x:X_OS,  label:'OS patch + reboot', time:'07-19 22:00' },
+  { cls:'dep', x:X_DEP, label:'app v2.3 deploy',    time:'07-20 03:10' }
+];
+
+/* ---------------- helpers ---------------- */
+function el(html){ var d=document.createElement('div'); d.innerHTML=html.trim(); return d.firstChild; }
+
+function bucketTotal(o){ var t=0,k; for(k in o) t+=o[k]; return t; }
+
+function sparkPath(vals, w, h, pad){
+  var mn=Math.min.apply(null,vals), mx=Math.max.apply(null,vals), rng=(mx-mn)||1;
+  // 2% flatness floor
+  if(rng/((mx+mn)/2||1) < 0.02){ var mid=h/2; return 'M'+pad+' '+mid.toFixed(1)+' L'+(w-pad).toFixed(1)+' '+mid.toFixed(1); }
+  var iw=w-2*pad, n=vals.length, p='';
+  for(var i=0;i<n;i++){
+    var x=pad+iw*i/(n-1);
+    var y=pad + (h-2*pad)*(1-(vals[i]-mn)/rng);
+    p += (i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1)+' ';
+  }
+  return p.trim();
+}
+
+/* ---------------- timeline SVG for one band ---------------- */
+function timelineSVG(buckets, ymax){
+  var s='<svg class="tlsvg" viewBox="0 0 '+VBW+' 100" preserveAspectRatio="none" aria-hidden="true">';
+  // gridlines every 3h
+  for(var g=0; g<=VBW; g+=30){
+    s+='<line class="grid" x1="'+g+'" y1="0" x2="'+g+'" y2="100" vector-effect="non-scaling-stroke"/>';
+  }
+  // compared-window shade
+  s+='<rect class="cmp" x="'+X_CMP0+'" y="0" width="'+X_CMPW+'" height="100"/>';
+  // stacked columns
+  for(var i=0;i<buckets.length;i++){
+    var o=buckets[i], x=i*10+1, acc=0;
+    for(var j=0;j<ORDER.length;j++){
+      var cls=ORDER[j], v=o[cls]; if(!v) continue;
+      var hh=v/ymax*100; if(hh>100) hh=100;
+      var y=100-acc-hh;
+      s+='<rect x="'+x+'" y="'+y.toFixed(2)+'" width="8" height="'+hh.toFixed(2)+'" fill="'+WC[cls]+'"/>';
+      acc+=hh;
+    }
+  }
+  // marker rules (drawn last, on top)
+  s+='<line class="mk-os"  x1="'+X_OS.toFixed(2)+'" y1="0" x2="'+X_OS.toFixed(2)+'" y2="100" vector-effect="non-scaling-stroke"/>';
+  s+='<line class="mk-dep" x1="'+X_DEP.toFixed(2)+'" y1="0" x2="'+X_DEP.toFixed(2)+'" y2="100" vector-effect="non-scaling-stroke"/>';
+  s+='</svg>';
+  return s;
+}
+
+/* ---------------- build sticky axis header ---------------- */
+function buildAxis(){
+  var hours=['10:00','13:00','16:00','19:00','22:00','01:00','04:00','07:00','10:00'];
+  var ticks='';
+  for(var k=0;k<hours.length;k++){
+    var xi=k*3; // hour index 0,3,...,24
+    ticks+='<span class="tick" style="left:'+PCT(HR(xi))+'%">'+hours[k]+'</span>';
+  }
+  var flags='';
+  for(var m=0;m<MARKERS.length;m++){
+    var mk=MARKERS[m];
+    flags+='<span class="flag '+mk.cls+'" style="left:'+PCT(mk.x)+'%">'+
+             '<span class="pin">'+mk.label+'</span>'+
+             '<span class="pt num">'+mk.time+'</span></span>';
+  }
+  var cmp='<span class="cmpband" style="left:'+PCT(X_CMP0)+'%; width:'+PCT(X_CMPW)+'%"></span>'+
+          '<span class="cmplab num" style="left:'+PCT(X_CMP0)+'%">compared 09–10</span>';
+  return el(
+    '<div class="axis-row">'+
+      '<div class="axis-rail"><div class="t1">24-hour ASH</div><div class="t2">AAS by wait class</div></div>'+
+      '<div class="axis">'+cmp+flags+ticks+'</div>'+
+    '</div>');
+}
+
+/* ---------------- build one band ---------------- */
+function buildBand(db){
+  if(db.error){
+    var eb=el(
+      '<div class="band err">'+
+        '<div class="rail">'+
+          '<div class="rail-head"><span class="dot err"></span><span class="alias">'+db.alias+'</span>'+
+            '<span class="score crit">—</span></div>'+
+          '<div class="rail-chips"><span class="chip crit">unreachable</span></div>'+
+          '<div class="rail-foot"><span class="conn">'+db.conn+'</span></div>'+
+        '</div>'+
+        '<div class="tl"><span class="emsg">'+db.emsg+'</span></div>'+
+      '</div>');
+    return eb;
+  }
+  var tall = (db.score>=15)?70:(db.score>0?52:38);
+  var totals = db.buckets.map(bucketTotal);
+  var cur = totals[23];
+  var railspark='<svg class="railspark" viewBox="0 0 66 20" preserveAspectRatio="none" aria-hidden="true">'+
+    '<path d="'+sparkPath(totals,66,20,2)+'" fill="none" stroke="var(--accent)" stroke-width="1.3" vector-effect="non-scaling-stroke"/>'+
+    '</svg>';
+  var chips='';
+  if(db.crit) chips+='<span class="chip crit num">'+db.crit+' crit</span>';
+  if(db.warn) chips+='<span class="chip warn num">'+db.warn+' warn</span>';
+  if(!db.crit && !db.warn) chips+='<span class="chip">quiet</span>';
+
+  var band=el(
+    '<div class="band" style="--bh:'+tall+'px">'+
+      '<div class="rail">'+
+        '<div class="rail-head"><span class="dot '+db.sev+'"></span><span class="alias">'+db.alias+'</span>'+
+          '<span class="score '+db.sev+' num">'+db.score+'</span></div>'+
+        '<div class="rail-chips">'+chips+'</div>'+
+        '<div class="rail-foot"><span class="aas num">now <b>'+cur.toFixed(1)+'</b> AAS</span>'+railspark+'</div>'+
+      '</div>'+
+      '<div class="tl" style="height:'+tall+'px">'+
+        '<span class="ymax num">'+db.ymax+' AAS</span>'+
+        timelineSVG(db.buckets, db.ymax)+
+      '</div>'+
+    '</div>');
+  return band;
+}
+
+/* ---------------- build detail drawer ---------------- */
+function metricCard(m){
+  var sp='<svg class="mspark" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true">'+
+    '<path d="'+sparkPath(m.sd,100,22,2)+'" fill="none" stroke="var(--accent)" stroke-width="1.2" vector-effect="non-scaling-stroke"/>'+
+    '</svg>';
+  return '<div class="mcard"><div class="ml">'+m.l+'</div>'+sp+
+    '<div><span class="mv num">'+m.v+'</span> <span class="zbadge '+m.s+' num">z '+m.z+'</span></div></div>';
+}
+function buildDrawer(db){
+  if(db.error){
+    return el(
+      '<details class="dbdet">'+
+        '<summary><span class="caret">▶</span><span class="s-alias">'+db.alias+'</span>'+
+          '<span class="s-meta">'+db.emsg+'</span><span class="s-score">error</span></summary>'+
+        '<div class="det-body">'+
+          '<div class="subh">Connection</div><div class="conn">'+db.conn+'</div>'+
+          '<div class="subh">Log tail</div><pre class="logtail">'+db.log+'</pre>'+
+        '</div>'+
+      '</details>');
+  }
+  var mh=''; for(var i=0;i<db.metrics.length;i++) mh+=metricCard(db.metrics[i]);
+
+  var find;
+  if(db.findings && db.findings.length){
+    var rows='';
+    for(var f=0;f<db.findings.length;f++){ var x=db.findings[f];
+      rows+='<tr><td><span class="sev '+x.s+'">'+x.s+'</span></td>'+
+        '<td class="evt">'+x.e+'</td><td class="num">'+x.z+'</td>'+
+        '<td class="num">'+x.cur+'</td><td class="num">'+x.mu+'</td></tr>';
+    }
+    find='<table class="t"><thead><tr><th>sev</th><th>wait / metric</th><th>z</th><th>current</th><th>μ (24 wk)</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  } else {
+    find='<div class="quiet">'+(db.quiet||'No findings.')+'</div>';
+  }
+
+  var top='';
+  if(db.topsql && db.topsql.length){
+    var tr='';
+    for(var t=0;t<db.topsql.length;t++){ var q=db.topsql[t];
+      tr+='<tr><td class="mono">'+q.id+'</td><td class="evt">'+q.sch+'</td><td class="num">'+q.el+'</td><td class="num">+'+q.z.replace('+','')+'</td></tr>';
+    }
+    top='<div class="subh">Top SQL regressions</div>'+
+      '<table class="t"><thead><tr><th>sql_id</th><th>schema</th><th>elapsed/s</th><th>z</th></tr></thead><tbody>'+tr+'</tbody></table>';
+  }
+
+  var noteHtml = db.note ? '<div class="quiet">▸ '+db.note+'</div>' : '';
+
+  return el(
+    '<details class="dbdet"'+(db.open?' open':'')+'>'+
+      '<summary><span class="caret">▶</span><span class="s-alias">'+db.alias+'</span>'+
+        '<span class="s-meta">'+db.meta+'</span>'+
+        '<span class="s-score num">score '+db.score+' · '+db.crit+'c / '+db.warn+'w</span></summary>'+
+      '<div class="det-body">'+
+        '<div class="metrics">'+mh+'</div>'+
+        '<div class="subh">Findings (|z| ≥ 2)</div>'+find+ noteHtml +
+        top+
+        '<code class="drill">'+db.drill+'</code>'+
+      '</div>'+
+    '</details>');
+}
+
+/* ---------------- legend ---------------- */
+function buildLegend(){
+  var lg=document.getElementById('legend'), h='';
+  for(var j=0;j<ORDER.length;j++){
+    h+='<span class="lg"><span class="sw" style="background:'+WC[ORDER[j]]+'"></span>'+ORDER[j]+'</span>';
+  }
+  lg.innerHTML=h;
+}
+
+/* ---------------- render ---------------- */
+(function(){
+  buildLegend();
+  var wall=document.getElementById('wall');
+  wall.appendChild(buildAxis());
+  var drawers=document.getElementById('drawers');
+  for(var i=0;i<FLEET.length;i++){
+    wall.appendChild(buildBand(FLEET[i]));
+    drawers.appendChild(buildDrawer(FLEET[i]));
+  }
+  // set rail width css var so axis + bands share it
+  document.documentElement.style.setProperty('--railw','210px');
+})();
+
+/* ---------------- theme toggle ---------------- */
+(function(){
+  var btn=document.getElementById('themebtn');
+  function isDark(){
+    if(document.body.classList.contains('dark')) return true;
+    if(document.body.classList.contains('light')) return false;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  btn.addEventListener('click', function(){
+    var dark=isDark();
+    document.body.classList.remove('dark','light');
+    document.body.classList.add(dark?'light':'dark');
+  });
+})();
+</script>
+</body>
+</html>
