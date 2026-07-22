@@ -159,6 +159,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.spark-cell svg, .ribbon-cell svg { display:block; }');
     DBMS_OUTPUT.PUT_LINE('.spark-cell { text-align:center; }');
     DBMS_OUTPUT.PUT_LINE('.spark-cell svg.spark { width:84px; height:24px; }');
+    DBMS_OUTPUT.PUT_LINE('.trendwrap { display:inline-flex; align-items:center; gap:5px; cursor:help; }');
+    DBMS_OUTPUT.PUT_LINE('.taxis { display:flex; flex-direction:column; justify-content:space-between; align-self:stretch;'
+        || ' height:24px; font-size:9px; line-height:1; color:var(--muted); font-variant-numeric:tabular-nums;'
+        || ' text-align:left; white-space:nowrap; }');
     DBMS_OUTPUT.PUT_LINE('.ribbon-cell { width:186px; }');
     DBMS_OUTPUT.PUT_LINE('.ash-ribbon svg, .ash-timeline svg { display:block; }');
     DBMS_OUTPUT.PUT_LINE('.ash-ribbon { width:172px; height:30px; margin:0 auto; }');

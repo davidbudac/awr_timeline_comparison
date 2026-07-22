@@ -31,7 +31,10 @@
 -- recomputed, not shared" convention as sections 04/05 and the single-DB
 -- report's 07/08:
 --   * AAS       -- current-window SYSMETRIC 'Average Active Sessions'
---   * DB-time   -- per-window DB-time-per-sec CSV -> the micro sparkline
+--   * DB-time   -- per-window DB-time-per-sec CSV -> the micro sparkline, now
+--                  paired with a min/max micro y-axis (max top, min bottom)
+--                  and a per-window tooltip so the autoscaled shape has a
+--                  readable magnitude
 --   * worst     -- the max-|z| crit/warn row from the unified LOAD/METRIC/
 --                  WAIT z-score compute (a green "no metric beyond 2sigma"
 --                  when nothing breaches)
@@ -91,6 +94,10 @@ BEGIN
                     THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / MAX(dur_sec)
                END AS val
         FROM   dbt_bounds
+    v_dbt_cur   NUMBER;
+    v_dbt_min   NUMBER;
+    v_dbt_max   NUMBER;
+    v_dbt_tip   VARCHAR2(4000);
         GROUP BY week_offset
     ),
     all_weeks AS (
@@ -98,6 +105,18 @@ BEGIN
         FROM   dual CONNECT BY LEVEL <= ~weeks_back + 1
     ),
     dbt_grid AS (
+
+    FUNCTION fmt(p NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        IF p IS NULL THEN RETURN NULL; END IF;
+        IF ABS(p) >= 100 THEN
+            RETURN TO_CHAR(p, 'FM9999990', 'NLS_NUMERIC_CHARACTERS=''.,''');
+        ELSIF ABS(p) >= 10 THEN
+            RETURN TO_CHAR(p, 'FM990D0', 'NLS_NUMERIC_CHARACTERS=''.,''');
+        ELSE
+            RETURN TO_CHAR(p, 'FM0D00', 'NLS_NUMERIC_CHARACTERS=''.,''');
+        END IF;
+    END;
         SELECT aw.week_offset, r.val
         FROM   all_weeks aw
         LEFT JOIN dbt_rows r ON r.week_offset = aw.week_offset
@@ -123,7 +142,7 @@ BEGIN
                                  'NLS_NUMERIC_CHARACTERS=''.,'''))
                     WITHIN GROUP (ORDER BY week_offset DESC), 2)
          FROM dbt_grid)
-    INTO v_aas_cur, v_dbt_csv
+    INTO v_aas_cur, v_dbt_csv, v_dbt_cur, v_dbt_min, v_dbt_max, v_dbt_tip
     FROM dual;
 
     -- --- worst finding: top crit/warn row of the unified z-score compute --
@@ -160,6 +179,15 @@ BEGIN
                             THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / MAX(dur_sec)
                        END AS metric_value
                 FROM   load_bounds
+         FROM dbt_grid),
+        (SELECT val FROM dbt_grid WHERE week_offset = 0),
+        (SELECT MIN(val) FROM dbt_grid),
+        (SELECT MAX(val) FROM dbt_grid),
+        (SELECT LISTAGG(
+                    CASE WHEN week_offset = 0 THEN 'now' ELSE '-' || week_offset END
+                    || ': '
+                    || NVL(TO_CHAR(val, 'FM99999990D00', 'NLS_NUMERIC_CHARACTERS=''.,'''), 'n/a'),
+                    ', ') WITHIN GROUP (ORDER BY week_offset DESC)
                 GROUP BY week_offset, stat_name
             ),
             metric_targets AS (
@@ -288,8 +316,16 @@ BEGIN
         || '</td>');
     DBMS_OUTPUT.PUT_LINE('<td><span class="finding"><span class="zbadge ' || v_zcls || '">'
         || v_zbadge || '</span><span class="txt">' || v_wtxt || '</span></span></td>');
-    DBMS_OUTPUT.PUT_LINE('<td class="spark-cell"><span class="trend" data-spark="'
-        || NVL(v_dbt_csv, '') || '" data-spark-title="DB time per sec"></span></td>');
+    IF v_dbt_max IS NULL THEN
+        DBMS_OUTPUT.PUT_LINE('<td class="spark-cell">&mdash;</td>');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('<td class="spark-cell"><span class="trendwrap" title="DB time per sec, oldest first: '
+            || v_dbt_tip || '">');
+        DBMS_OUTPUT.PUT_LINE('<span class="trend" data-spark="' || NVL(v_dbt_csv, '')
+            || '" data-spark-title="DB time per sec, oldest first: ' || v_dbt_tip || '"></span>');
+        DBMS_OUTPUT.PUT_LINE('<span class="taxis"><span>' || fmt(v_dbt_max)
+            || '</span><span>' || fmt(v_dbt_min) || '</span></span></span></td>');
+    END IF;
     DBMS_OUTPUT.PUT_LINE('<td class="ribbon-cell"><div class="ash-ribbon" data-ash-of="'
         || DBMS_XMLGEN.CONVERT('~fleet_alias') || '" data-ash-mode="ribbon"></div></td>');
     DBMS_OUTPUT.PUT_LINE('</tr>');

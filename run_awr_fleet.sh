@@ -956,7 +956,7 @@ FALLBACK_CHROME
         printf '<th class="c" style="width:86px">Crit / Warn</th>'
         printf '<th class="r" style="width:62px">AAS</th>'
         printf '<th style="min-width:220px">Worst finding</th>'
-        printf '<th class="c" style="width:98px">DB time trend</th>'
+        printf '<th class="c" style="width:122px">DB time trend</th>'
         printf '<th class="c" style="width:186px">ASH by wait class (span)</th>'
         printf '</tr></thead><tbody>\n'
 
