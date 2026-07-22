@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AWR Timeline Comparison — pure-SQL Oracle AWR trend reports</title>
-<meta name="description" content="Pure-SQL Oracle 19c toolkit that compares AWR snapshots of the same hour across weeks, flags drastic changes via z-score, and renders a single self-contained HTML report. 100% read-only.">
+<meta name="description" content="Pure-SQL Oracle 19c toolkit: one worst-first fleet console for many databases, or a deep statistical comparison of the same hour across weeks for one. 100% read-only, single-file HTML output.">
 <meta property="og:title" content="AWR Timeline Comparison">
-<meta property="og:description" content="Compare the same hour across weeks of Oracle AWR history, flag what genuinely moved, get one self-contained HTML report. Pure SQL*Plus, 100% read-only.">
+<meta property="og:description" content="One read-only command, one self-contained HTML report — for a whole fleet of Oracle databases, or one database in statistical depth.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://davidbudac.github.io/awr_timeline_comparison/assets/shot_hero_cards.jpg">
 <style>
@@ -66,10 +66,6 @@
   .skip:focus,.skip:focus-visible{left:8px;top:8px}
 
   .oldstyle{font-feature-settings:"onum" 1,"pnum" 1}
-  .smallcaps{
-    font-variant:small-caps;letter-spacing:.09em;
-    font-family:var(--sans);text-transform:lowercase;
-  }
 
   /* ------------------------------------------------ masthead nav */
   .topbar{
@@ -119,13 +115,12 @@
     margin:26px 0 8px;
     color:var(--ink);
   }
-  .nameplate .amp{color:var(--accent-ink);font-style:italic;font-weight:400}
   .dek{
     font-family:var(--serif);
     font-size:clamp(19px,2.4vw,25px);
     line-height:1.4;
     color:var(--ink-2);
-    max-width:34ch;
+    max-width:38ch;
     margin:18px 0 0;
     font-feature-settings:"onum" 1;
   }
@@ -164,10 +159,6 @@
     padding:16px 18px 12px;
   }
   .hero-fig svg{display:block;width:100%;height:auto}
-  .hero-fig .cap{
-    font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
-    color:var(--ink-faint);margin-top:10px;
-  }
   /* hero field-log plate */
   .hero-fig .fl-head{
     font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;
@@ -247,47 +238,7 @@
   }
   .prose ul li strong{font-weight:700}
 
-  /* ------------------------------------------------ figures / diagrams */
-  figure{margin:28px 0}
-  .diagram{
-    border:1px solid var(--rule);background:var(--paper-2);
-    padding:22px 24px 8px;
-  }
-  .diagram svg{display:block;width:100%;height:auto}
-  .figlabel{
-    font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
-    color:var(--accent-ink);font-weight:600;margin-bottom:14px;
-  }
-  figcaption{
-    font-family:var(--serif);font-style:italic;font-size:15.5px;line-height:1.5;
-    color:var(--ink-soft);max-width:74ch;margin-top:14px;
-    font-feature-settings:"onum" 1;
-  }
-  .diagram figcaption{padding:4px 2px 12px}
-
-  /* grade legend — z-score thresholds */
-  .grade-legend{
-    display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;
-    margin:16px 0 6px;
-  }
-  .grade-legend .intro{
-    font-family:var(--serif);font-style:italic;font-size:15.5px;color:var(--ink-soft);
-  }
-  .grade-legend .chip{
-    display:inline-flex;align-items:center;gap:8px;
-    font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;
-    border:1px solid var(--rule);border-radius:2px;padding:5px 10px;background:var(--paper-2);
-    white-space:nowrap;
-  }
-  .grade-legend .chip .tick{width:9px;height:9px;flex:none}
-  .grade-legend .chip.ok{color:var(--teal-ink)}
-  .grade-legend .chip.ok .tick{background:var(--teal)}
-  .grade-legend .chip.warn{color:var(--amber)}
-  .grade-legend .chip.warn .tick{background:var(--amber)}
-  .grade-legend .chip.crit{color:var(--accent-ink)}
-  .grade-legend .chip.crit .tick{background:var(--accent)}
-
-  /* screenshots — "plates" */
+  /* ------------------------------------------------ screenshots — "plates" */
   .plate-fig{margin:30px 0}
   .plate-frame{
     border:1px solid var(--rule);background:var(--paper-2);
@@ -303,6 +254,11 @@
     color:var(--teal-ink);margin-bottom:11px;
   }
   .plate-tag::before{content:"◆ ";color:var(--teal)}
+  figcaption{
+    font-family:var(--serif);font-style:italic;font-size:15.5px;line-height:1.5;
+    color:var(--ink-soft);max-width:74ch;margin-top:14px;
+    font-feature-settings:"onum" 1;
+  }
 
   /* ------------------------------------------------ ledger (feature rows) */
   .ledger{
@@ -316,22 +272,8 @@
     font-family:var(--serif);font-weight:700;font-size:18px;color:var(--ink);
     display:flex;align-items:baseline;gap:10px;
   }
-  .ledger .row dt .mk{color:var(--accent);font-size:12px;line-height:1;transform:translateY(-1px)}
   .ledger .row dd{margin:0;color:var(--ink-2);font-size:15.5px;line-height:1.55}
   .ledger .row dd code{font-size:.86em}
-
-  /* ------------------------------------------------ report tour */
-  .tour{border-top:1px solid var(--ink);margin:22px 0;max-width:920px}
-  .tour .t{
-    display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:baseline;
-    padding:13px 2px;border-bottom:1px solid var(--rule);
-  }
-  .tour .t .n{
-    font-family:var(--serif);font-feature-settings:"onum" 1;
-    font-size:16px;color:var(--ink-faint);font-weight:700;min-width:2ch;
-  }
-  .tour .t p{margin:0;font-size:15.5px;color:var(--ink-2)}
-  .tour .t p b{color:var(--ink);font-weight:700}
 
   /* ------------------------------------------------ code listings */
   .listing{
@@ -351,22 +293,7 @@
   pre .k{color:var(--accent-ink);font-weight:600}
   pre .s{color:var(--teal-ink)}
 
-  /* ------------------------------------------------ arguments table */
-  .tbl-scroll{overflow-x:auto;margin:18px 0;border:1px solid var(--rule)}
-  table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:640px;background:var(--paper-2)}
-  caption{text-align:left;font-family:var(--mono);font-size:11px;letter-spacing:.08em;
-    text-transform:uppercase;color:var(--ink-faint);padding:9px 16px;font-weight:600;
-    border-bottom:1px solid var(--rule-soft)}
-  th,td{padding:10px 16px;text-align:left;vertical-align:top;border-bottom:1px solid var(--rule-soft)}
-  thead th{
-    font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;
-    color:var(--ink-soft);border-bottom:1px solid var(--ink);background:var(--paper-3);font-weight:600;
-  }
-  tbody tr:last-child td{border-bottom:0}
-  td code{white-space:nowrap}
-  td em{color:var(--ink-faint);font-style:italic}
-
-  /* ------------------------------------------------ example cards */
+  /* ------------------------------------------------ link / example cards */
   .exgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-top:1px solid var(--ink);border-left:1px solid var(--rule);margin:24px 0}
   a.ex{
     display:block;padding:22px 22px 20px;color:inherit;
@@ -384,23 +311,6 @@
   a.ex h4{font-family:var(--serif);font-size:20px;font-weight:700;margin-bottom:8px}
   a.ex p{font-size:14px;color:var(--ink-2);margin:0;line-height:1.5}
   a.ex .go{display:inline-block;margin-top:14px;font-size:13px;font-weight:650;color:var(--accent-ink)}
-
-  /* callout note */
-  .note{
-    border-left:3px solid var(--amber);background:var(--paper-2);
-    padding:14px 18px;font-size:15px;color:var(--ink-2);margin:20px 0;max-width:var(--measure);
-  }
-  .note strong{color:var(--ink)}
-
-  /* recipes */
-  .recipes{border-top:1px solid var(--ink);margin:20px 0}
-  .recipe{border-bottom:1px solid var(--rule);padding:16px 0}
-  .recipe .q{
-    font-family:var(--serif);font-size:18px;font-weight:700;color:var(--ink);margin-bottom:9px;
-    font-feature-settings:"onum" 1;
-  }
-  .recipe .listing{margin:0}
-  .recipe pre{background:var(--paper-3)}
 
   /* ------------------------------------------------ colophon / footer */
   footer{
@@ -445,7 +355,6 @@
     body{font-size:16px}
     .creed li{border-right:0;width:100%}
     .chap-head{grid-template-columns:1fr;gap:4px}
-    .tour .t{grid-template-columns:1fr;gap:2px}
     .dek{max-width:none}
   }
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -460,13 +369,10 @@
       <a class="folio" href="#top">AWR&nbsp;·&nbsp;<b>Timeline&nbsp;Comparison</b></a>
       <button class="nav-toggle" aria-expanded="false" aria-controls="toc">Sections</button>
       <nav class="toc" id="toc" aria-label="Sections">
-        <a href="#why">Why</a>
-        <a href="#how">How</a>
-        <a href="#report">Report</a>
-        <a href="#start">Get started</a>
-        <a href="#templates">Templates</a>
-        <a href="#markers">Markers</a>
+        <a href="#install">Install</a>
         <a href="#fleet">Fleet</a>
+        <a href="#single">Single DB</a>
+        <a href="#templates">Templates</a>
         <a href="#examples">Examples</a>
         <span class="sep" aria-hidden="true"></span>
         <a href="configurator.html">Configurator</a>
@@ -487,8 +393,9 @@
     <hr class="rule-thin">
     <h1 class="nameplate">AWR Timeline<br>Comparison</h1>
     <p class="dek">
-      One command, one self-contained HTML report, and a clear statistical answer to
-      <b>“is the database behaving the way it did before?”</b>
+      One read-only command, one self-contained HTML report —
+      <b>a worst-first console for your whole fleet</b>, or one database compared
+      against its own history in statistical depth.
     </p>
 
     <div class="lead-grid">
@@ -500,20 +407,19 @@
           <li><span class="tick" aria-hidden="true">✓</span>No Python, no agents</li>
         </ul>
         <p class="dek" style="font-size:17px;max-width:52ch;color:var(--ink-2);margin-bottom:22px">
-          The same hour is compared like-for-like across weeks, and anything unusual is
-          named, dated and graded — not left for you to eyeball across a stack of reports.
+          It compares the same hour like-for-like across weeks, scores every metric against its own
+          history, and grades what genuinely moved — <em>OK</em>, <em>Warning</em>, <em>Critical</em>.
         </p>
         <div class="ctas">
-          <a class="btn primary" href="examples/hourly_comprehensive.html">See a live example report</a>
-          <a class="btn" href="configurator.html">Build your command</a>
-          <a class="btn" href="#start">Get started</a>
-          <a class="btn" href="cheatsheet.html">Cheat sheet</a>
+          <a class="btn primary" href="#fleet">Fleet quick start</a>
+          <a class="btn" href="#single">Single-DB quick start</a>
+          <a class="btn" href="examples/hourly_comprehensive.html">Live example report</a>
         </div>
       </div>
 
       <figure class="hero-fig" aria-label="Field log: one read-only command produces a graded verdict">
         <div class="fl-head">Field log</div>
-        <div class="fl-cmd"><span class="p" aria-hidden="true">$</span>./run_awr_trend.sh user/pw@svc</div>
+        <div class="fl-cmd"><span class="p" aria-hidden="true">$</span>./run_awr_fleet.sh fleet.conf</div>
         <div class="fl-status">→ querying DBA_HIST_* — SELECT only, nothing written</div>
         <div class="fl-plot">
           <svg viewBox="0 0 520 180" xmlns="http://www.w3.org/2000/svg" role="img"
@@ -538,606 +444,51 @@
 
 <main class="shell" id="main" tabindex="-1">
 
-  <!-- WHAT IT IS -->
-  <section class="chapter" id="what" aria-labelledby="h-what">
-    <div class="chap-head">
-      <span class="chap-num oldstyle">00</span>
-      <h2 class="chap-title" id="h-what">What it is</h2>
-    </div>
-    <div class="prose">
-      <p class="lede dropcap">
-        A pure-SQL toolkit for Oracle 19c that compares AWR snapshots of <em>the same hour
-        across weeks</em> — by default this Monday 09:00–10:00 against the four prior Mondays
-        at 09:00–10:00 — flags drastic changes via z-score, and renders everything as a single
-        self-contained HTML file. It runs from SQL*Plus with nothing to deploy: no scratch
-        schema, no Python, no agents, and not a single write to the database. Point it at
-        production, get a report, attach it to a ticket.
-      </p>
-    </div>
-  </section>
-
-  <!-- WHY -->
-  <section class="chapter" id="why" aria-labelledby="h-why">
+  <!-- INSTALL -->
+  <section class="chapter" id="install" aria-labelledby="h-install">
     <div class="chap-head">
       <span class="chap-num oldstyle">01</span>
-      <h2 class="chap-title" id="h-why">Why aligned windows</h2>
+      <h2 class="chap-title" id="h-install">Install</h2>
     </div>
     <div class="prose">
-      <p>
-        Oracle databases continuously record detailed performance history through a built-in
-        facility called <strong>AWR</strong> — the Automatic Workload Repository. Everything
-        needed to judge whether the system still behaves normally is already being collected,
-        every hour, automatically. What Oracle does <em>not</em> provide is the comparison:
-        putting this Monday morning next to the last four Monday mornings and saying, with
-        confidence, whether anything genuinely changed. Done by hand, that means generating
-        several separate AWR reports and eyeballing them page by page — slow, error-prone, and
-        exactly the kind of task that gets skipped under pressure.
+      <p class="lede">
+        There is nothing to install <em>in the database</em> — no scratch schema, no packages, not a
+        single write. Clone the repo on any machine with SQL*Plus and run.
       </p>
-      <p>
-        The comparison also has to be fair. Workload follows a weekly rhythm — batch jobs,
-        business hours, quiet weekends — so Monday at 09:00 only means something next to
-        <em>other Mondays at 09:00</em>. This toolkit automates precisely that: it lines up the
-        same hour of the same weekday across the past weeks and compares them like-for-like, so
-        the normal weekly heartbeat is never mistaken for a problem, and a real change has
-        nowhere to hide.
-      </p>
-    </div>
-
-    <figure class="diagram">
-      <div class="figlabel">Fig. 1 — five aligned weekly windows</div>
-      <svg viewBox="0 0 840 205" xmlns="http://www.w3.org/2000/svg" role="img"
-           aria-label="Five aligned weekly windows compared like-for-like: four green reference windows and one red current window"
-           font-family="'Iowan Old Style',Palatino,Georgia,serif">
-        <text x="20" y="24" font-size="12.5" font-weight="700" fill="#0c5a52" font-family="ui-monospace,Menlo,Consolas,monospace">Mon 09:00–10:00</text>
-        <line x1="33" y1="30" x2="33" y2="64" stroke="#0c5a52" stroke-width="1.2"/>
-        <text x="420" y="24" font-size="12" font-style="italic" fill="#736a5a" text-anchor="middle" font-family="'Iowan Old Style',Palatino,Georgia,serif">compared like-for-like</text>
-        <line x1="33" y1="79" x2="673" y2="79" stroke="#9a917d" stroke-width="1.4" stroke-dasharray="5 5"/>
-        <g>
-          <rect x="20" y="38" width="140" height="110" rx="0" fill="#f3eee2" stroke="#cfc6b2"/>
-          <g fill="#dccfb4">
-            <rect x="26" y="44" width="15" height="98" fill="#d1c2a3"/>
-            <rect x="45" y="44" width="15" height="98"/><rect x="64" y="44" width="15" height="98"/>
-            <rect x="83" y="44" width="15" height="98"/><rect x="102" y="44" width="15" height="98"/>
-            <rect x="121" y="44" width="15" height="98"/><rect x="140" y="44" width="15" height="98"/>
-          </g>
-          <rect x="26" y="68" width="15" height="22" fill="#0c5a52"/>
-          <rect x="180" y="38" width="140" height="110" fill="#f3eee2" stroke="#cfc6b2"/>
-          <g fill="#dccfb4">
-            <rect x="186" y="44" width="15" height="98" fill="#d1c2a3"/>
-            <rect x="205" y="44" width="15" height="98"/><rect x="224" y="44" width="15" height="98"/>
-            <rect x="243" y="44" width="15" height="98"/><rect x="262" y="44" width="15" height="98"/>
-            <rect x="281" y="44" width="15" height="98"/><rect x="300" y="44" width="15" height="98"/>
-          </g>
-          <rect x="186" y="68" width="15" height="22" fill="#0c5a52"/>
-          <rect x="340" y="38" width="140" height="110" fill="#f3eee2" stroke="#cfc6b2"/>
-          <g fill="#dccfb4">
-            <rect x="346" y="44" width="15" height="98" fill="#d1c2a3"/>
-            <rect x="365" y="44" width="15" height="98"/><rect x="384" y="44" width="15" height="98"/>
-            <rect x="403" y="44" width="15" height="98"/><rect x="422" y="44" width="15" height="98"/>
-            <rect x="441" y="44" width="15" height="98"/><rect x="460" y="44" width="15" height="98"/>
-          </g>
-          <rect x="346" y="68" width="15" height="22" fill="#0c5a52"/>
-          <rect x="500" y="38" width="140" height="110" fill="#f3eee2" stroke="#cfc6b2"/>
-          <g fill="#dccfb4">
-            <rect x="506" y="44" width="15" height="98" fill="#d1c2a3"/>
-            <rect x="525" y="44" width="15" height="98"/><rect x="544" y="44" width="15" height="98"/>
-            <rect x="563" y="44" width="15" height="98"/><rect x="582" y="44" width="15" height="98"/>
-            <rect x="601" y="44" width="15" height="98"/><rect x="620" y="44" width="15" height="98"/>
-          </g>
-          <rect x="506" y="68" width="15" height="22" fill="#0c5a52"/>
-          <rect x="660" y="38" width="140" height="110" fill="#f7f3ea" stroke="#c74634" stroke-width="2"/>
-          <g fill="#dccfb4">
-            <rect x="666" y="44" width="15" height="98" fill="#d1c2a3"/>
-            <rect x="685" y="44" width="15" height="98"/><rect x="704" y="44" width="15" height="98"/>
-            <rect x="723" y="44" width="15" height="98"/><rect x="742" y="44" width="15" height="98"/>
-            <rect x="761" y="44" width="15" height="98"/><rect x="780" y="44" width="15" height="98"/>
-          </g>
-          <rect x="666" y="68" width="15" height="22" fill="#c74634"/>
-        </g>
-        <g font-size="9" fill="#9a917d" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace">
-          <text x="33" y="161">M</text><text x="52" y="161">T</text><text x="71" y="161">W</text><text x="90" y="161">T</text><text x="109" y="161">F</text><text x="128" y="161">S</text><text x="147" y="161">S</text>
-          <text x="193" y="161">M</text><text x="212" y="161">T</text><text x="231" y="161">W</text><text x="250" y="161">T</text><text x="269" y="161">F</text><text x="288" y="161">S</text><text x="307" y="161">S</text>
-          <text x="353" y="161">M</text><text x="372" y="161">T</text><text x="391" y="161">W</text><text x="410" y="161">T</text><text x="429" y="161">F</text><text x="448" y="161">S</text><text x="467" y="161">S</text>
-          <text x="513" y="161">M</text><text x="532" y="161">T</text><text x="551" y="161">W</text><text x="570" y="161">T</text><text x="589" y="161">F</text><text x="608" y="161">S</text><text x="627" y="161">S</text>
-          <text x="673" y="161">M</text><text x="692" y="161">T</text><text x="711" y="161">W</text><text x="730" y="161">T</text><text x="749" y="161">F</text><text x="768" y="161">S</text><text x="787" y="161">S</text>
-        </g>
-        <g font-size="12.5" fill="#736a5a" text-anchor="middle" font-family="'Iowan Old Style',Palatino,Georgia,serif" font-style="italic">
-          <text x="90" y="188">4 weeks ago</text>
-          <text x="250" y="188">3 weeks ago</text>
-          <text x="410" y="188">2 weeks ago</text>
-          <text x="570" y="188">last week</text>
-          <text x="730" y="188" font-weight="700" font-style="normal" fill="#a5301f" font-family="ui-monospace,Menlo,Consolas,monospace">THIS WEEK</text>
-        </g>
-      </svg>
-      <figcaption>
-        The report lines up the same hour of the same weekday across the past weeks — four
-        reference windows and the current one — so the normal weekly rhythm never gets mistaken
-        for a change. The cadence is configurable: hour by hour, day by day, weekly, or any multiple.
-      </figcaption>
-    </figure>
-
-    <figure class="plate-fig">
-      <span class="plate-tag">From a live test run</span>
-      <div class="plate-frame">
-        <img src="assets/shot_aligned_windows.jpg" loading="lazy"
-             alt="Report screenshot: the Aligned windows section, five Monday 19:00–20:00 windows across five weeks, one valid and four skipped">
-      </div>
-      <figcaption>
-        The same idea in the real report: five Monday 19:00–20:00 windows, one per week, lined
-        up side by side. Where the database has no history for a week — or an instance restarted
-        mid-window — the window is dimmed, marked “skipped”, and excluded from the comparison —
-        never silently guessed.
-      </figcaption>
-    </figure>
-  </section>
-
-  <!-- HOW -->
-  <section class="chapter" id="how" aria-labelledby="h-how">
-    <div class="chap-head">
-      <span class="chap-num oldstyle">02</span>
-      <h2 class="chap-title" id="h-how">How it works</h2>
-    </div>
-    <div class="prose">
-      <p>
-        A single command connects to the database and asks Oracle's own performance history a
-        series of questions. Every one of them is a read-only query against the
-        <code>DBA_HIST_*</code> views: nothing is installed, created, or modified anywhere —
-        which is why the report is safe to run against production at any time of day, or against
-        a read-only standby that exposes AWR.
-      </p>
-      <p>
-        The toolkit then does what a careful analyst would do, but in seconds and without fatigue.
-        Each metric — how much work the database did, how fast it responded, what it spent its
-        time waiting on, which SQL statements were the most expensive — is scored against its own
-        recent history, so the report highlights only movement that is genuinely unusual, graded
-        <em>OK</em>, <em>Warning</em> or <em>Critical</em>.
-      </p>
-    </div>
-
-    <figure class="diagram">
-      <div class="figlabel">Fig. 2 — from raw history to verdict, in one pass</div>
-      <svg viewBox="0 0 840 195" xmlns="http://www.w3.org/2000/svg" role="img"
-           aria-label="Pipeline: AWR history, like-for-like comparison, statistical scoring, one HTML report">
-        <defs>
-          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-            <path d="M0,0 L10,5 L0,10 z" fill="#9a917d"/>
-          </marker>
-        </defs>
-        <g font-family="'Iowan Old Style',Palatino,Georgia,serif">
-          <path d="M37,48 v84 a58,12 0 0 0 116,0 v-84" fill="#241f18"/>
-          <ellipse cx="95" cy="48" rx="58" ry="12" fill="#3d362b"/>
-          <text x="95" y="100" text-anchor="middle" font-size="16" font-weight="700" fill="#f3eee2">AWR</text>
-          <text x="95" y="167" text-anchor="middle" font-size="12" fill="#736a5a" font-style="italic">performance history,</text>
-          <text x="95" y="182" text-anchor="middle" font-size="12" fill="#736a5a" font-style="italic">already in the database</text>
-        </g>
-        <line x1="162" y1="90" x2="200" y2="90" stroke="#9a917d" stroke-width="2" marker-end="url(#arr)"/>
-        <g font-family="'Iowan Old Style',Palatino,Georgia,serif">
-          <rect x="205" y="48" width="185" height="84" fill="#f7f3ea" stroke="#cfc6b2"/>
-          <text x="297" y="76" text-anchor="middle" font-size="13.5" font-weight="700" fill="#241f18">Like-for-like windows</text>
-          <text x="297" y="96" text-anchor="middle" font-size="12" fill="#4c453a">the same hour of the week,</text>
-          <text x="297" y="112" text-anchor="middle" font-size="12" fill="#4c453a">this week vs the weeks before</text>
-          <text x="297" y="152" text-anchor="middle" font-size="11.5" font-style="italic" fill="#0c5a52">read-only — nothing installed</text>
-        </g>
-        <line x1="392" y1="90" x2="430" y2="90" stroke="#9a917d" stroke-width="2" marker-end="url(#arr)"/>
-        <g font-family="'Iowan Old Style',Palatino,Georgia,serif">
-          <rect x="435" y="48" width="185" height="84" fill="#f7f3ea" stroke="#cfc6b2"/>
-          <text x="527" y="74" text-anchor="middle" font-size="13.5" font-weight="700" fill="#241f18">Statistical scoring</text>
-          <text x="527" y="93" text-anchor="middle" font-size="12" fill="#4c453a">each metric judged against</text>
-          <text x="527" y="108" text-anchor="middle" font-size="12" fill="#4c453a">its own history; only real</text>
-          <text x="527" y="123" text-anchor="middle" font-size="12" fill="#4c453a">movement is flagged</text>
-          <text x="527" y="152" text-anchor="middle" font-size="11.5" font-style="italic" fill="#9a5b12">OK · Warning · Critical</text>
-        </g>
-        <line x1="622" y1="90" x2="660" y2="90" stroke="#9a917d" stroke-width="2" marker-end="url(#arr)"/>
-        <g font-family="'Iowan Old Style',Palatino,Georgia,serif">
-          <path d="M665,42 h100 l45,45 v61 h-145 z" fill="#f7f3ea" stroke="#c74634" stroke-width="1.8"/>
-          <path d="M765,42 v45 h45 z" fill="#f2ddd6" stroke="#c74634" stroke-width="1.8"/>
-          <text x="730" y="105" text-anchor="middle" font-size="13.5" font-weight="700" fill="#241f18">One HTML file</text>
-          <text x="737" y="124" text-anchor="middle" font-size="12" fill="#4c453a">charts, tables, findings —</text>
-          <text x="737" y="139" text-anchor="middle" font-size="12" fill="#4c453a">open it anywhere</text>
-        </g>
-      </svg>
-      <figcaption>
-        From raw history to verdict in one pass: read-only queries pull the aligned windows,
-        statistics decide what is genuinely unusual, and the result is a single page anyone can
-        open — no tooling, no database access required to read it.
-      </figcaption>
-    </figure>
-
-    <div class="grade-legend" aria-label="How movement is graded">
-      <span class="intro">How movement is graded:</span>
-      <span class="chip ok"><span class="tick" aria-hidden="true"></span>OK</span>
-      <span class="chip warn"><span class="tick" aria-hidden="true"></span>Warning · |z| &gt; 2</span>
-      <span class="chip crit"><span class="tick" aria-hidden="true"></span>Critical · |z| &gt; 3</span>
-    </div>
-
-    <dl class="ledger">
-      <div class="row">
-        <dt><span class="mk" aria-hidden="true">●</span>Strictly read-only</dt>
-        <dd>The driver and every section issue <code>SELECT</code> only. No scratch schema, no DDL,
-          no DML — everything is recomputed in-flight from <code>DBA_HIST_*</code> on each run.</dd>
-      </div>
-      <div class="row">
-        <dt><span class="mk" aria-hidden="true">●</span>z-score findings</dt>
-        <dd>Each metric is scored against its own prior windows: <code>|z| &gt; 3</code> is Critical,
-          <code>|z| &gt; 2</code> is Warning. Too little history? The report says so instead of guessing.</dd>
-      </div>
-      <div class="row">
-        <dt><span class="mk" aria-hidden="true">●</span>Configurable cadence</dt>
-        <dd>Weekly is the default, but <code>step × step_unit</code> gives you hour-by-hour
-          walk-throughs, every-other-day, fortnightly, even quarter-over-quarter.</dd>
-      </div>
-      <div class="row">
-        <dt><span class="mk" aria-hidden="true">●</span>Works offline — fully, if you want</dt>
-        <dd>By default the big charts load ECharts from a CDN; when it's unreachable the charts hide,
-          a banner explains why, and every number is still in the tables (inline-SVG sparklines never
-          need the network). For a truly air-gapped, single-file report — charts and all — point the
-          <code>echarts</code> var at a local <code>echarts.min.js</code> (or an internal mirror URL);
-          see the <a href="cheatsheet.html#offline">cheat sheet</a>.</dd>
-      </div>
-      <div class="row">
-        <dt><span class="mk" aria-hidden="true">●</span>RAC-aware</dt>
-        <dd>Aggregate across all instances or filter to one. Per-instance window validation drops only
-          the instance that restarted mid-window, keeping the rest of the baseline.</dd>
-      </div>
-      <div class="row">
-        <dt><span class="mk" aria-hidden="true">●</span>Multitenant-aware</dt>
-        <dd>Resolves the right DBID inside PDBs (local AWR or not) and survives non-CDB → PDB
-          migrations by following the snapshot history across DBIDs.</dd>
-      </div>
-    </dl>
-
-    <figure class="plate-fig">
-      <span class="plate-tag">From a live test run</span>
-      <div class="plate-frame">
-        <img src="assets/shot_verdict_quiet.jpg" loading="lazy"
-             alt="Report screenshot: the masthead and navigation rail, with the verdict '16 movers vs the prior 4 windows' listing the biggest jumps inline">
-      </div>
-      <figcaption>
-        Every report opens with a one-line verdict in plain language and a fixed navigation rail.
-        Here, an hour-over-hour run flags <strong>16 movers</strong> against the prior four windows,
-        with the largest — bytes sent via SQL*Net +284%, network traffic +89% — called out inline;
-        expand “all movers” for the rest, or read the first line and move on.
-      </figcaption>
-    </figure>
-  </section>
-
-  <!-- INSIDE THE REPORT -->
-  <section class="chapter" id="report" aria-labelledby="h-report">
-    <div class="chap-head">
-      <span class="chap-num oldstyle">03</span>
-      <h2 class="chap-title" id="h-report">Inside the report</h2>
-    </div>
-    <div class="prose">
-      <p>
-        The report opens with the masthead verdict and a card listing exactly which windows were
-        compared — explicit start → end timestamps, so you always know what baseline is driving the
-        z-scores. Then, top to bottom:
-      </p>
-    </div>
-
-    <div class="tour">
-      <div class="t"><span class="n oldstyle">01</span><p><b>Overview</b> — hero strip with the six headline load/metric numbers, each with a trend sparkline and a z-badge.</p></div>
-      <div class="t"><span class="n oldstyle">02</span><p><b>ASH timeline</b> — hourly stacked-area chart of active sessions by wait class over the full compared span; compared windows shown as background bands.</p></div>
-      <div class="t"><span class="n oldstyle">03</span><p><b>Findings</b> — every metric with <code>|z| &gt; 3</code> flagged CRITICAL, <code>|z| &gt; 2</code> WARN, plus a heatmap; falls back to %-delta when history is short.</p></div>
-      <div class="t"><span class="n oldstyle">04</span><p><b>Windows</b> — the compared windows with begin/end snapshot ids; restart-invalidated windows are flagged and excluded.</p></div>
-      <div class="t"><span class="n oldstyle">05</span><p><b>Load profile</b> — per-second rates for the classic AWR load-profile stats, one column per window, sparkline per stat.</p></div>
-      <div class="t"><span class="n oldstyle">06</span><p><b>System metrics</b> — averages from <code>DBA_HIST_SYSMETRIC_SUMMARY</code>, additive vs ratio metrics aggregated correctly across RAC.</p></div>
-      <div class="t"><span class="n oldstyle">07</span><p><b>Foreground &amp; background waits</b> — top-N events plus a wait-class rollup.</p></div>
-      <div class="t"><span class="n oldstyle">08</span><p><b>Top SQL</b> — ranked five ways (elapsed, CPU, buffer gets, physical reads, executions) with plan-change badges, full SQL text, and per-statement ASH breakdowns.</p></div>
-      <div class="t"><span class="n oldstyle">09</span><p><b>DB time summary</b> — stacked DB time across the whole span.</p></div>
-      <div class="t"><span class="n oldstyle">10</span><p><b>Parameter changes</b> — init parameters whose values differ across the compared windows. Two more sections — <b>Segment I/O</b> and <b>File I/O</b> — rank the busiest segments and datafiles.</p></div>
-    </div>
-
-    <figure class="plate-fig">
-      <span class="plate-tag">From a live test run</span>
-      <div class="plate-frame">
-        <img src="assets/shot_hero_cards.jpg" loading="lazy"
-             alt="Report screenshot: six headline metric cards with trend sparklines, current values and statistical badges">
-      </div>
-      <figcaption>
-        Six headline health cards: the trend across the compared windows, the current value, and a
-        statistical badge — “typical” when a metric sits inside its normal range, “large” when it
-        jumps beyond it (DB time and hard parses here) — instead of a wall of raw numbers to squint at.
-      </figcaption>
-    </figure>
-
-    <figure class="plate-fig">
-      <span class="plate-tag">From a live test run</span>
-      <div class="plate-frame">
-        <img src="assets/shot_load_profile.jpg" loading="lazy"
-             alt="Report screenshot: the load profile table with one column per compared window and a trend sparkline per measure">
-      </div>
-      <figcaption>
-        For those who want the detail, every measure is laid out with one column per compared window,
-        a small trend line, and the current window highlighted — the side-by-side an analyst would
-        have assembled by hand, already done.
-      </figcaption>
-    </figure>
-
-    <figure class="plate-fig">
-      <span class="plate-tag">From a live test run</span>
-      <div class="plate-frame">
-        <img src="assets/shot_ash_timeline.jpg" loading="lazy"
-             alt="Report screenshot: a stacked area timeline of database activity by wait category, hour by hour">
-      </div>
-      <figcaption>
-        The ASH timeline: where the database spent its time, hour by hour, split by wait class. This
-        is also the canvas your milestone markers are drawn on — a before/after difference in the
-        shape of this chart is visible at a glance.
-      </figcaption>
-    </figure>
-
-    <div class="prose">
-      <h3><span class="lbl">Client-side, no re-run, works offline</span>A workbench, not a wall of tables</h3>
-      <p>
-        The report opens with a fixed navigation rail down the left edge: one scrollspy-tracked link
-        per section, each carrying a live status dot graded from that section's own content — red for
-        a critical finding, amber for a warning — so you can see where the trouble is before you
-        scroll. Three controls ride in the rail; every one is client-side, needs no re-run, and works
-        offline:
-      </p>
-      <ul>
-        <li><strong>Dark mode</strong> — a sun/moon toggle in the rail (the “Slate Instrument” theme).
-          The first load follows your OS <code>prefers-color-scheme</code>; after that your choice is
-          remembered, and the theme is applied before the charts draw so there is no flash.</li>
-        <li><strong>Essential rows</strong> — collapses the load-profile, system-metric, wait and
-          findings tables to a curated shortlist of what a DBA scans first, with a kept/total pill on
-          each section. Anything flagged CRITICAL or WARN stays visible, so the preset never hides an
-          anomaly, and the charts are untouched.</li>
-        <li><strong>Application only</strong> — hides every system-wide section and Oracle's own
-          recursive SQL, leaving just your application's Top SQL, ASH breakdown, segment &amp; file
-          I/O, and utilization.</li>
-      </ul>
-    </div>
-  </section>
-
-  <!-- GET STARTED -->
-  <section class="chapter" id="start" aria-labelledby="h-start">
-    <div class="chap-head">
-      <span class="chap-num oldstyle">04</span>
-      <h2 class="chap-title" id="h-start">Get started</h2>
-    </div>
-
-    <div class="prose">
-      <h3><span class="lbl">Prerequisites</span>Requirements</h3>
       <ul>
         <li>Oracle Database 19c with the <strong>Diagnostic + Tuning Pack</strong> licensed
-          (needed for <code>DBA_HIST_*</code> and <code>DBA_HIST_SQLSTAT</code>).</li>
-        <li>SQL*Plus and a user that can read the AWR views — the <code>DBA</code> role covers it,
-          or grant a dedicated analyst user <code>SELECT</code> on the handful of
-          <code>DBA_HIST_*</code> views listed in the
-          <a href="https://github.com/davidbudac/awr_timeline_comparison#install">README</a>.</li>
-        <li>Nothing to install in the database. Clone the repo, connect, run.</li>
+          (the toolkit reads <code>DBA_HIST_*</code>).</li>
+        <li>A user that can read the AWR views — any <code>DBA</code> account, or a dedicated
+          analyst granted <code>SELECT</code> on the handful of views listed in the
+          <a href="https://github.com/davidbudac/awr_timeline_comparison#install">README</a>.
+          A read-only standby that exposes AWR works too.</li>
       </ul>
-
-      <h3><span class="lbl">The unsure path</span>Run it interactively</h3>
-      <p>
-        New to it, or don't want to memorize the argument order? Run the <strong>interactive
-        configurator</strong> — it walks you through every option with a short explanation, a
-        sensible default and input validation, then prints both a ready-to-paste
-        <code>./run_awr_trend.sh</code> command and the equivalent pure-SQL*Plus block, and offers to
-        run the report for you. (Prefer point-and-click? The
-        <a href="configurator.html">web configurator</a> does the same in your browser.)
-      </p>
     </div>
-
     <div class="listing">
-      <div class="lh">interactive configurator</div>
-<pre><span class="c"># interactive: also -c, -i, --interactive, or just run with no arguments</span>
-./run_awr_trend.sh --configure</pre>
+      <div class="lh">install = clone</div>
+<pre>git clone https://github.com/davidbudac/awr_timeline_comparison.git
+cd awr_timeline_comparison</pre>
     </div>
-
-    <div class="prose"><p>Easiest non-interactive — the shell wrapper, which sets all substitution variables for you:</p></div>
-    <div class="listing">
-      <div class="lh">shell wrapper — run_awr_trend.sh</div>
-<pre><span class="c"># defaults: current hour vs the same hour on the 4 prior weeks</span>
-./run_awr_trend.sh user/pw@svc
-
-<span class="c"># explicit weekly: a specific Monday morning vs the 4 prior Mondays</span>
-./run_awr_trend.sh user/pw@svc <span class="s">'2026-04-13 09:00'</span>
-
-<span class="c"># last 4 hours, hour by hour</span>
-./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h
-
-<span class="c"># lean triage report</span>
-./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple
-
-<span class="c"># annotate the timelines with your own milestones</span>
-./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive N my_markers.sql</pre>
-    </div>
-
-    <div class="prose"><p>Or pure SQL*Plus, no shell required (Windows-friendly):</p></div>
-    <div class="listing">
-      <div class="lh">pure SQL*Plus</div>
-<pre>SQL&gt; <span class="k">@sql/defaults.sql</span>
-SQL&gt; <span class="k">@awr_trend.sql</span>
-
-<span class="c">-- or customize one-off:</span>
-SQL&gt; DEFINE target_end = <span class="s">'2026-04-15 09:00'</span>
-SQL&gt; DEFINE win_hours  = 2
-SQL&gt; DEFINE weeks_back = 6
-SQL&gt; <span class="k">@awr_trend.sql</span></pre>
-    </div>
-
-    <div class="prose">
-      <p>
-        The report lands in
-        <code>reports/awr_trend_&lt;DBID&gt;_&lt;timestamp&gt;_run&lt;run_id&gt;.html</code>. Open it in any browser.
-      </p>
-      <h3><span class="lbl">The positional arguments</span>Arguments</h3>
-    </div>
-
-    <div class="tbl-scroll">
-      <table>
-        <caption>run_awr_trend.sh — positional arguments &amp; environment variables</caption>
-        <thead><tr><th>Arg</th><th>Default</th><th>Meaning</th></tr></thead>
-        <tbody>
-          <tr><td><code>target_end</code></td><td><code>AUTO</code></td>
-              <td>Window end — <code>AUTO</code> = prior full hour, or <code>'YYYY-MM-DD HH24:MI'</code></td></tr>
-          <tr><td><code>win_hours</code></td><td><code>1</code></td>
-              <td>Length of each compared window, in hours</td></tr>
-          <tr><td><code>weeks_back</code></td><td><code>4</code></td>
-              <td>Number of prior windows to compare against (a count — the name is historical)</td></tr>
-          <tr><td><code>top_n</code></td><td><code>10</code></td>
-              <td>Top-N rows per ranking in Top SQL / waits</td></tr>
-          <tr><td><code>inst_num</code></td><td><code>0</code></td>
-              <td>RAC: <code>0</code> = aggregate across all instances; <code>&gt;0</code> = that instance only</td></tr>
-          <tr><td><code>step</code></td><td><code>1</code></td>
-              <td>Cadence count between adjacent windows</td></tr>
-          <tr><td><code>step_unit</code></td><td><code>w</code></td>
-              <td>Cadence unit: <code>h</code> hours, <code>d</code> days, <code>w</code> weeks</td></tr>
-          <tr><td><code>template</code></td><td><code>comprehensive</code></td>
-              <td>Metric + wait-event set: <code>comprehensive</code>, <code>simple</code>, or <code>dev</code></td></tr>
-          <tr><td><code>debug</code></td><td><code>N</code></td>
-              <td><code>Y</code> prints timestamped per-section progress markers to stdout; the HTML is unaffected</td></tr>
-          <tr><td><code>marker_file</code></td><td><em>(empty)</em></td>
-              <td>Optional timeline-marker config — milestones drawn on the dated charts</td></tr>
-          <tr><td><code>MARKERS</code> <em>(env)</em></td><td><em>(empty)</em></td>
-              <td>File-free alternative to <code>marker_file</code> — inline <code>WHEN|LABEL</code> milestones joined by <code>;;</code></td></tr>
-          <tr><td><code>ECHARTS</code> <em>(env)</em></td><td><em>(empty)</em></td>
-              <td>Where the chart library loads from: empty = CDN, an <code>http(s)</code> URL = internal mirror, a local file path = inlined into the report for a single self-contained, offline HTML file</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="prose">
-      <p>
-        <code>step × step_unit</code> defines the gap between adjacent comparison windows:
-        <code>1 w</code> (default) is the classic same-hour-of-week trend, <code>1 h</code> walks
-        straight back hour by hour, <code>2 d</code> runs every other day. Many more combinations are
-        in the <a href="cheatsheet.html">cheat sheet</a>.
-      </p>
-    </div>
-  </section>
-
-  <!-- TEMPLATES -->
-  <section class="chapter" id="templates" aria-labelledby="h-templates">
-    <div class="chap-head">
-      <span class="chap-num oldstyle">05</span>
-      <h2 class="chap-title" id="h-templates">Three views, three audiences</h2>
-    </div>
-    <div class="prose">
-      <p>
-        The <code>template</code> argument picks which curated set of metrics and wait events the
-        report renders — same comparison engine, different altitude:
-      </p>
-    </div>
-
-    <dl class="ledger">
-      <div class="row">
-        <dt><code>comprehensive</code></dt>
-        <dd><b>For DBAs.</b> The default. The full curated lists: 27 load stats, 23 system metrics,
-          and the complete firehose of wait events ranked by time.</dd>
-      </div>
-      <div class="row">
-        <dt><code>simple</code></dt>
-        <dd><b>For triage.</b> A quick-glance subset: 9 load stats, 8 metrics, ~10 commonly-watched
-          wait events. The report you skim in thirty seconds before deciding whether to dig.</dd>
-      </div>
-      <div class="row">
-        <dt><code>dev</code></dt>
-        <dd><b>For application teams.</b> What the application itself drives — 17 load stats, 13
-          metrics, 14 wait events: transaction throughput, query work, parsing, sorts, SQL*Net
-          chattiness and app-caused contention — with host/OS and storage internals left out.</dd>
-      </div>
-    </dl>
-
-    <div class="prose">
-      <p>
-        Rolling your own is a directory with three files under
-        <code>sql/lib/templates/&lt;name&gt;/</code> plus one whitelist entry in the driver — the lists
-        feed every section, the findings and the hero cards in lock-step.
-      </p>
-    </div>
-  </section>
-
-  <!-- MARKERS -->
-  <section class="chapter" id="markers" aria-labelledby="h-markers">
-    <div class="chap-head">
-      <span class="chap-num oldstyle">06</span>
-      <h2 class="chap-title" id="h-markers">Timeline markers</h2>
-    </div>
-    <div class="prose">
-      <p>
-        A spike means more when it lines up with something you did. The optional
-        <code>marker_file</code> lets you annotate the dated charts with your own milestones — a
-        release, a patch, an index rebuild, a stats gather, an incident — drawn as vertical dashed
-        lines on the masthead strip, the ASH timeline, the DB-time summary and the per-SQL ASH cards.
-      </p>
-    </div>
-
-    <div class="listing">
-      <div class="lh">my_markers.sql — file form</div>
-<pre><span class="c">-- my_markers.sql — one milestone per line</span>
-@@sql/lib/marker <span class="s">'2026-04-20 14:00'</span> <span class="s">'Applied patch 19.22'</span>
-@@sql/lib/marker <span class="s">'2026-05-01 02:00'</span> <span class="s">'Index rebuild on SALES'</span>
-@@sql/lib/marker <span class="s">'2026-05-10 09:30'</span> <span class="s">'Optimizer stats gather'</span></pre>
-    </div>
-
-    <div class="prose">
-      <p>
-        Don't want a file? Pass the same milestones <strong>inline</strong> — each
-        <code>WHEN|LABEL</code>, joined by <code>;;</code> — in the <code>MARKERS</code> environment
-        variable (or <code>DEFINE&nbsp;markers</code> on the pure SQL*Plus path). The
-        <a href="configurator.html">configurator</a> builds it for you.
-      </p>
-    </div>
-
-    <div class="listing">
-      <div class="lh">MARKERS — inline form</div>
-<pre>MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22;;2026-05-01 02:00|Index rebuild'</span> \
-    ./run_awr_trend.sh user/pw@svc</pre>
-    </div>
-
-    <figure class="diagram">
-      <div class="figlabel">Fig. 3 — a release, drawn on the report's own charts</div>
-      <svg viewBox="0 0 840 232" xmlns="http://www.w3.org/2000/svg" role="img"
-           aria-label="Timeline with a release marked: baseline windows before, checked windows after"
-           font-family="'Iowan Old Style',Palatino,Georgia,serif">
-        <rect x="30" y="50" width="440" height="128" fill="#e7efe6"/>
-        <rect x="470" y="50" width="340" height="128" fill="#f2e7d3"/>
-        <text x="250" y="70" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0c5a52" font-family="ui-monospace,Menlo,Consolas,monospace">before — capture what “normal” looks like</text>
-        <text x="640" y="70" text-anchor="middle" font-size="12.5" font-weight="700" fill="#9a5b12" font-family="ui-monospace,Menlo,Consolas,monospace">after — first hours, then weekly checks</text>
-        <polyline points="30,130 70,126 110,129 150,125 190,128 230,124 270,127 310,123 350,126 390,122 430,125 470,123 490,106 510,98 540,102 580,97 620,101 660,96 700,100 740,95 780,98 810,96"
-                  fill="none" stroke="#4c453a" stroke-width="2.4" stroke-linejoin="round"/>
-        <line x1="470" y1="38" x2="470" y2="188" stroke="#c74634" stroke-width="2" stroke-dasharray="6 5"/>
-        <text x="470" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="#a5301f" font-family="ui-monospace,Menlo,Consolas,monospace">application release</text>
-        <g>
-          <rect x="86" y="154" width="18" height="14" fill="#0c5a52"/>
-          <rect x="181" y="154" width="18" height="14" fill="#0c5a52"/>
-          <rect x="276" y="154" width="18" height="14" fill="#0c5a52"/>
-          <rect x="371" y="154" width="18" height="14" fill="#0c5a52"/>
-          <rect x="521" y="154" width="18" height="14" fill="#c74634"/>
-          <rect x="616" y="154" width="18" height="14" fill="#c74634"/>
-          <rect x="711" y="154" width="18" height="14" fill="#c74634"/>
-        </g>
-        <line x1="30" y1="188" x2="810" y2="188" stroke="#cfc6b2" stroke-width="1.4"/>
-        <text x="250" y="210" text-anchor="middle" font-size="12" fill="#736a5a" font-style="italic">reference windows — the baseline</text>
-        <text x="640" y="210" text-anchor="middle" font-size="12" fill="#736a5a" font-style="italic">new windows, checked against the baseline</text>
-      </svg>
-      <figcaption>
-        The change you ship is drawn directly on the report's charts. Every run after go-live compares
-        the fresh windows against the baseline — a before/after difference cannot hide; it is named,
-        dated, and graded.
-      </figcaption>
-    </figure>
   </section>
 
   <!-- FLEET -->
   <section class="chapter" id="fleet" aria-labelledby="h-fleet">
     <div class="chap-head">
-      <span class="chap-num oldstyle">07</span>
-      <h2 class="chap-title" id="h-fleet">One page for a whole fleet</h2>
+      <span class="chap-num oldstyle">02</span>
+      <h2 class="chap-title" id="h-fleet">The fleet console</h2>
     </div>
     <div class="prose">
+      <p class="lede dropcap">
+        The mode most people want: point <code>run_awr_fleet.sh</code> at a list of databases and get
+        <em>one</em> self-contained, worst-first ops console. It runs the same aligned-window,
+        z-score comparison against every database in parallel and sorts the results so the sickest
+        database is the first row on the page.
+      </p>
       <p>
-        Watching more than one database? <code>run_awr_fleet.sh</code> runs the exact same
-        aligned-window, z-score comparison against every database listed in a <code>fleet.conf</code>
-        — in parallel — and stitches the results into <em>one</em> self-contained, worst-first
-        <strong>ops console</strong>: a dense table with one collapsed row per database (status dot,
-        severity score, crit/warn pills, current AAS, its worst finding, a DB-time sparkline and a
-        24-hour ASH-by-wait-class ribbon) that you click to expand into a full detail panel — a tall
-        24h ASH timeline, headline metric cards, the findings table and the Top-SQL table.
+        Each database is one dense, collapsed row — status dot, severity score, crit/warn pills,
+        current AAS, its worst finding, a DB-time sparkline and a 24-hour ASH-by-wait-class ribbon.
+        Click a row and it expands in place into a full detail panel: a tall 24h ASH timeline,
+        headline metric cards, the findings table and the Top-SQL table.
       </p>
     </div>
 
@@ -1152,71 +503,169 @@ reporting      | reporting_ro/@RPT</pre>
     <div class="listing">
       <div class="lh">one command, the whole fleet</div>
 <pre>./run_awr_fleet.sh fleet.conf
+
 <span class="c"># mark a fleet-wide event on every DB's 24h ASH chart:</span>
 MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22'</span> ./run_awr_fleet.sh fleet.conf</pre>
     </div>
 
     <div class="prose">
       <ul>
-        <li>Each row carries its own <strong>24-hour ASH timeline</strong>, with fleet-wide
-          <a href="#markers">markers</a> drawn across every database at the same instant.</li>
-        <li>Rows are <strong>collapsed by default</strong> — click one to expand its detail panel
-          without leaving the page.</li>
         <li>A database that is unreachable, times out, or spools a truncated fragment becomes a red
           <strong>error row sorted to the top</strong> — silence is never mistaken for health.</li>
-        <li>Every row prints the exact <code>./run_awr_trend.sh …</code> <strong>drill-down
-          command</strong> to open the full single-DB report for that database.</li>
+        <li>Every row prints the exact <strong>drill-down command</strong> to open the full
+          single-DB report for that database.</li>
+        <li>Fleet-wide <strong>timeline markers</strong> are drawn across every database's ASH chart
+          at the same instant — a release or patch lines up visually across the whole estate.</li>
+        <li>Inline-SVG only, <strong>offline-complete</strong>, read-only; credentials are masked in
+          every log and report.</li>
       </ul>
       <p>
-        It stays true to the toolkit's rules: inline-SVG only (no external charts), offline-complete,
-        read-only. See the <a href="https://github.com/davidbudac/awr_timeline_comparison#fleet-report-many-databases">Fleet report section of the README</a>
-        for the full reference — <code>fleet.conf</code> format, scoring, and every environment variable.
+        Full reference — <code>fleet.conf</code> format, scoring, every environment variable — in the
+        <a href="https://github.com/davidbudac/awr_timeline_comparison#fleet-report-many-databases">Fleet section of the README</a>.
       </p>
     </div>
   </section>
 
-  <!-- HONEST -->
-  <section class="chapter" id="honest" aria-labelledby="h-honest">
+  <!-- SINGLE DB -->
+  <section class="chapter" id="single" aria-labelledby="h-single">
     <div class="chap-head">
-      <span class="chap-num oldstyle">08</span>
-      <h2 class="chap-title" id="h-honest">Honest by design</h2>
+      <span class="chap-num oldstyle">03</span>
+      <h2 class="chap-title" id="h-single">One database, in depth</h2>
     </div>
     <div class="prose">
+      <p class="lede">
+        The single-DB report answers <strong>“is this database behaving the way it did before?”</strong>
+        It lines up the same hour of the same weekday across the past weeks — this Monday
+        09:00–10:00 against the four prior Mondays — so the normal weekly rhythm is never mistaken
+        for a problem, and grades every metric against its own history:
+        <code>|z| &gt; 2</code> Warning, <code>|z| &gt; 3</code> Critical. Inside: hero cards, an
+        ASH timeline, a findings heatmap, load profile, waits, Top SQL ranked five ways with per-SQL
+        ASH breakdowns, segment &amp; file I/O and parameter changes — plus dark mode and the
+        Essential-rows / Application-only toggles, all client-side.
+      </p>
+    </div>
+
+    <div class="listing">
+      <div class="lh">common runs — run_awr_trend.sh</div>
+<pre><span class="c"># defaults: current hour vs the same hour on the 4 prior weeks</span>
+./run_awr_trend.sh user/pw@svc
+
+<span class="c"># a specific Monday morning vs the 4 prior Mondays</span>
+./run_awr_trend.sh user/pw@svc <span class="s">'2026-04-13 09:00'</span>
+
+<span class="c"># last 4 hours, hour by hour</span>
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h
+
+<span class="c"># lean triage report</span>
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple
+
+<span class="c"># annotate the timelines with your own milestones</span>
+MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22'</span> ./run_awr_trend.sh user/pw@svc</pre>
+    </div>
+
+    <div class="prose">
       <p>
-        The toolkit is deliberately conservative. It never writes to the database, so it can be handed
-        to a restricted analyst account without a second thought. The report is honest about its own
-        limits: when there is too little history to judge a metric fairly, it says so rather than
-        guessing — and a window invalidated by an instance restart is shown, flagged, and excluded
-        rather than silently blended in. Changes to the toolkit itself are verified by regenerating
-        reports before and after a change against a live test database and proving the output
-        byte-for-byte identical.
+        Unsure about the argument order? Run the <strong>interactive configurator</strong> — it walks
+        you through every option with defaults and validation, then prints the ready-to-paste command.
+        The <a href="configurator.html">web configurator</a> does the same in your browser, and the
+        <a href="cheatsheet.html">cheat sheet</a> has the full argument reference plus ready-to-paste
+        recipes (hour-by-hour walkthroughs, batch-window checks, quarter-over-quarter, offline
+        reports, markers).
+      </p>
+    </div>
+
+    <div class="listing">
+      <div class="lh">interactive configurator</div>
+<pre><span class="c"># also -c, -i, --interactive, or just run with no arguments</span>
+./run_awr_trend.sh --configure</pre>
+    </div>
+
+    <div class="listing">
+      <div class="lh">pure SQL*Plus — no shell required (Windows-friendly)</div>
+<pre>SQL&gt; <span class="k">@sql/defaults.sql</span>
+SQL&gt; <span class="k">@awr_trend.sql</span>
+
+<span class="c">-- or customize one-off:</span>
+SQL&gt; DEFINE target_end = <span class="s">'2026-04-15 09:00'</span>
+SQL&gt; DEFINE win_hours  = 2
+SQL&gt; DEFINE weeks_back = 6
+SQL&gt; <span class="k">@awr_trend.sql</span></pre>
+    </div>
+
+    <div class="prose">
+      <p>
+        The report lands in
+        <code>reports/awr_trend_&lt;DBID&gt;_&lt;timestamp&gt;_run&lt;run_id&gt;.html</code> —
+        open it in any browser, attach it to a ticket. RAC and multitenant (PDB / migrated-PDB)
+        are handled; when history is too short to score fairly, the report says so instead of guessing.
       </p>
     </div>
 
     <figure class="plate-fig">
       <span class="plate-tag">From a live test run</span>
       <div class="plate-frame">
-        <img src="assets/shot_verdict_baseline_short.jpg" loading="lazy"
-             alt="Report screenshot: the masthead with the verdict 'Baseline too short — need at least 3 prior valid windows to score'">
+        <img src="assets/shot_hero_cards.jpg" loading="lazy"
+             alt="Report screenshot: six headline metric cards with trend sparklines, current values and statistical badges">
       </div>
       <figcaption>
-        Honesty in practice: run against a database with too little history, the report says so
-        outright — “Baseline too short” — and limits itself to simple comparisons rather than
-        inventing a score.
+        Six headline health cards: the trend across the compared windows, the current value, and a
+        statistical badge — “typical” when a metric sits inside its normal range, “large” when it
+        jumps beyond it — instead of a wall of raw numbers to squint at.
       </figcaption>
     </figure>
+  </section>
+
+  <!-- TEMPLATES -->
+  <section class="chapter" id="templates" aria-labelledby="h-templates">
+    <div class="chap-head">
+      <span class="chap-num oldstyle">04</span>
+      <h2 class="chap-title" id="h-templates">Templates</h2>
+    </div>
+    <div class="prose">
+      <p>
+        The <code>template</code> argument picks which curated set of metrics and wait events the
+        single-DB report renders — same comparison engine, different altitude:
+      </p>
+    </div>
+
+    <dl class="ledger">
+      <div class="row">
+        <dt><code>comprehensive</code></dt>
+        <dd><b>For DBAs.</b> The default — the full curated lists and the complete firehose of wait
+          events ranked by time.</dd>
+      </div>
+      <div class="row">
+        <dt><code>simple</code></dt>
+        <dd><b>For triage.</b> A quick-glance subset you skim in thirty seconds before deciding
+          whether to dig.</dd>
+      </div>
+      <div class="row">
+        <dt><code>dev</code></dt>
+        <dd><b>For application teams.</b> What the application itself drives — throughput, query
+          work, parsing, SQL*Net chattiness, app-caused contention — with host/OS and storage
+          internals left out.</dd>
+      </div>
+    </dl>
+
+    <div class="prose">
+      <p>
+        Rolling your own is a directory with three files under
+        <code>sql/lib/templates/&lt;name&gt;/</code> plus one whitelist entry in the driver — see the
+        <a href="https://github.com/davidbudac/awr_timeline_comparison#run">README</a>.
+      </p>
+    </div>
   </section>
 
   <!-- EXAMPLES -->
   <section class="chapter" id="examples" aria-labelledby="h-examples">
     <div class="chap-head">
-      <span class="chap-num oldstyle">09</span>
+      <span class="chap-num oldstyle">05</span>
       <h2 class="chap-title" id="h-examples">Example reports</h2>
     </div>
     <div class="prose">
       <p>
-        These are real, unedited reports generated against a small Oracle 19c lab database — open them,
-        scroll around, hover the charts. Each is a single HTML file exactly as the toolkit spooled it.
+        Real, unedited reports generated against a small Oracle 19c lab database — each a single HTML
+        file exactly as the toolkit spooled it. Open them, scroll around, hover the charts.
       </p>
     </div>
 
@@ -1224,71 +673,24 @@ MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22'</span> ./run_awr_
       <a class="ex t1" href="examples/hourly_comprehensive.html">
         <span class="k">comprehensive · hourly</span>
         <h4>The full report</h4>
-        <p>Default template, hour-over-hour cadence (<code>step_unit=h</code>): hero cards, ASH
-          timeline, findings heatmap, load profile, waits, Top SQL ranked five ways, per-SQL ASH
-          breakdowns, segment &amp; file I/O, parameter changes — plus the navigation rail with dark
-          mode and the Essential-rows and Application-only toggles.</p>
+        <p>Default template, hour-over-hour cadence: hero cards, ASH timeline, findings heatmap,
+          waits, Top SQL, per-SQL ASH breakdowns — plus dark mode and the row filters.</p>
         <span class="go">Open report →</span>
       </a>
       <a class="ex t2" href="examples/hourly_simple_template.html">
         <span class="k">simple · hourly</span>
         <h4>The triage view</h4>
-        <p>Same engine, <code>template=simple</code>: a lean subset of stats, metrics and waits for a
-          thirty-second skim. Note the <code>template: simple</code> pill in the masthead.</p>
+        <p>Same engine, <code>template=simple</code>: a lean subset of stats, metrics and waits for
+          a thirty-second skim.</p>
         <span class="go">Open report →</span>
       </a>
       <a class="ex t3" href="examples/hourly_with_markers.html">
         <span class="k">markers · hourly</span>
         <h4>With timeline markers</h4>
         <p>Run with inline <code>markers</code>: “Patch 19.22 applied” and “Index rebuild on SALES”
-          drawn as vertical dashed lines on every dated chart.</p>
+          drawn on every dated chart.</p>
         <span class="go">Open report →</span>
       </a>
-    </div>
-
-    <div class="note">
-      <strong>About the data:</strong> these examples capture a live workload window on a small Oracle
-      19c lab box, so they show real per-second load and a findings section that grades metrics from
-      “typical” to “large”. When a window has too little valid history to score fairly, the same report
-      says “Baseline too short” instead of guessing — see the masthead in
-      <a href="#honest">Honest by design</a> above.
-    </div>
-  </section>
-
-  <!-- CHEAT SHEET -->
-  <section class="chapter" id="cheatsheet" aria-labelledby="h-cheat">
-    <div class="chap-head">
-      <span class="chap-num oldstyle">10</span>
-      <h2 class="chap-title" id="h-cheat">The cheat sheet</h2>
-    </div>
-    <div class="prose">
-      <p>
-        Eleven positional arguments sounds like a lot, so the <a href="cheatsheet.html">cheat sheet</a>
-        keeps ready-to-paste recipes for the questions you actually ask. A taste:
-      </p>
-    </div>
-
-    <div class="recipes">
-      <div class="recipe">
-        <div class="q">“What's different this morning vs my normal Monday?”</div>
-        <div class="listing"><pre>./run_awr_trend.sh user/pw@svc</pre></div>
-      </div>
-      <div class="recipe">
-        <div class="q">“Walk me through the last 12 hours, hour by hour.”</div>
-        <div class="listing"><pre>./run_awr_trend.sh user/pw@svc AUTO 1 12 10 0 1 h</pre></div>
-      </div>
-      <div class="recipe">
-        <div class="q">“Did yesterday's batch differ from the previous five Tuesdays?”</div>
-        <div class="listing"><pre>./run_awr_trend.sh user/pw@svc '2026-05-12 06:00' 4 5 25 0 1 w</pre></div>
-      </div>
-      <div class="recipe">
-        <div class="q">“Quarter-end vs the last three quarter-ends.”</div>
-        <div class="listing"><pre>./run_awr_trend.sh user/pw@svc '2026-03-31 23:00' 1 3 25 0 13 w</pre></div>
-      </div>
-    </div>
-
-    <div class="prose" style="margin-top:20px">
-      <a class="btn primary" href="cheatsheet.html">Browse the full cheat sheet →</a>
     </div>
   </section>
 
@@ -1311,9 +713,10 @@ MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22'</span> ./run_awr_
       <p><a href="https://github.com/davidbudac/awr_timeline_comparison">github.com/davidbudac/awr_timeline_comparison</a></p>
       <h5 style="margin-top:16px">On this page</h5>
       <p style="font-family:var(--mono);font-size:13px;line-height:1.9">
-        <a href="#why">Why aligned windows</a> · <a href="#how">How it works</a> ·
-        <a href="#report">Inside the report</a> · <a href="#start">Get started</a> ·
-        <a href="configurator.html">Configurator</a> · <a href="cheatsheet.html">Cheat sheet</a>
+        <a href="#install">Install</a> · <a href="#fleet">Fleet console</a> ·
+        <a href="#single">Single DB</a> · <a href="#templates">Templates</a> ·
+        <a href="#examples">Examples</a> · <a href="configurator.html">Configurator</a> ·
+        <a href="cheatsheet.html">Cheat sheet</a>
       </p>
     </div>
   </div>
