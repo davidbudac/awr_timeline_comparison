@@ -101,11 +101,11 @@ BEGIN
         || ' font-family:"Inter","Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;'
         || ' font-size:14px; line-height:1.55;'
         || ' -webkit-font-smoothing:antialiased;'
-        || ' max-width:1560px; margin:0;'
+        || ' margin:0;'
         || ' padding:0 32px 96px calc(var(--rail-w) + 32px);'
         || ' display:flex; flex-direction:column; gap:0; align-items:stretch; }');
     DBMS_OUTPUT.PUT_LINE('body > section, body > header.report, body > footer.report {'
-        || ' width:100%; max-width:1150px; }');
+        || ' width:100%; }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px) {'
         || ' body { padding:0 20px 64px; } }');
 
@@ -511,6 +511,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('td.mono, code, .mono {'
         || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
         || ' font-size:12px; text-transform:none; }');
+    -- Top-SQL text cells: wrap freely and take the leftover column width
+    -- (the numeric columns are all white-space:nowrap).
+    DBMS_OUTPUT.PUT_LINE('td.sqltext {'
+        || ' white-space:normal; word-break:break-word; min-width:320px; }');
     DBMS_OUTPUT.PUT_LINE('td a { color:var(--accent); text-decoration:none; font-weight:600; }');
     DBMS_OUTPUT.PUT_LINE('td a:hover { text-decoration:underline; }');
 

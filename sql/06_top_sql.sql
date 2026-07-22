@@ -273,7 +273,7 @@ BEGIN
         text_snips AS (
             SELECT sql_id, sql_text_short FROM (
                 SELECT sql_id,
-                       DBMS_LOB.SUBSTR(sql_text, 400, 1) AS sql_text_short,
+                       DBMS_LOB.SUBSTR(sql_text, 401, 1) AS sql_text_short,
                        -- ORDER BY NULL, not ROWID: DBA_HIST_SQLTEXT is a join
                        -- view in a PDB and selecting ROWID raises ORA-01445.
                        -- PARTITION BY sql_id only (NOT dbid): when dbid_list
@@ -457,9 +457,9 @@ BEGIN
             v_row := v_row || '</td>';
         END LOOP;
 
-        v_row := v_row || '<td class="mono" style="max-width:500px;">'
-            || DBMS_XMLGEN.CONVERT(SUBSTR(NVL(s.sql_text_short, ''), 1, 180))
-            || CASE WHEN LENGTH(NVL(s.sql_text_short, '')) > 180 THEN '&hellip;' END
+        v_row := v_row || '<td class="mono sqltext">'
+            || DBMS_XMLGEN.CONVERT(SUBSTR(NVL(s.sql_text_short, ''), 1, 400))
+            || CASE WHEN LENGTH(NVL(s.sql_text_short, '')) > 400 THEN '&hellip;' END
             || '</td>';
 
         v_row := v_row || '</tr>';
