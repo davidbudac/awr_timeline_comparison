@@ -662,8 +662,12 @@ detail_bits() {
         *)
             title="rc=$(cat "$work/$alias.detail.rc" 2>/dev/null || echo N/A)"
             ecode=''
-            [[ -f "$work/$alias.detail.log" ]] && \
-                ecode="$(grep -oE 'ORA-[0-9]{4,5}|TNS-[0-9]{4,5}' "$work/$alias.detail.log" | head -1 || true)"
+            if [[ -f "$work/$alias.detail.log" ]]; then
+                # grep -E (POSIX) finds the first offending line; bash =~ then
+                # slices out just the ORA-/TNS- token -- avoids GNU-only grep -o.
+                ecode="$(grep -E 'ORA-[0-9]|TNS-[0-9]' "$work/$alias.detail.log" | head -1 || true)"
+                if [[ "$ecode" =~ (ORA|TNS)-[0-9]+ ]]; then ecode="${BASH_REMATCH[0]}"; else ecode=''; fi
+            fi
             [[ -n "$ecode" ]] && title="$title; $ecode"
             DCHIP="<span class=\"dchip dfail\" title=\"$(printf '%s' "$title" | html_escape)\">detail failed</span>"
             DLINE="<div class=\"detail-link muted\">Full single-DB report failed ($(printf '%s' "$title" | html_escape)).</div>"
@@ -744,18 +748,21 @@ do_assemble() {
         IS_ERR["$alias"]=0
 
         crit=0; warn=0; supp=0; n=0; pts=0
-        line1="$(grep -oE '<!-- FLEET-COUNTS findings crit=[0-9]+ warn=[0-9]+ suppressed=[0-9]+ -->' "$frag" | tail -1 || true)"
-        if [[ -n "$line1" ]]; then
-            crit="$(sed -E 's/.*crit=([0-9]+).*/\1/' <<<"$line1")"
-            warn="$(sed -E 's/.*warn=([0-9]+).*/\1/' <<<"$line1")"
-            supp="$(sed -E 's/.*suppressed=([0-9]+).*/\1/' <<<"$line1")"
+        # Parse the machine-readable FLEET-COUNTS comments with bash's own regex
+        # engine (grep -F to locate the line, then =~ to pull the fields) so we
+        # depend on neither `grep -o` nor `sed -E` -- both are GNU-only and absent
+        # on AIX/Solaris, where -o aborts grep and -E is unrecognized by sed.
+        local re_find='crit=([0-9]+) warn=([0-9]+) suppressed=([0-9]+)'
+        local re_top='topsql n=([0-9]+) pts=([0-9]+)'
+        line1="$(grep -F 'FLEET-COUNTS findings' "$frag" | tail -1 || true)"
+        if [[ "$line1" =~ $re_find ]]; then
+            crit="${BASH_REMATCH[1]}"; warn="${BASH_REMATCH[2]}"; supp="${BASH_REMATCH[3]}"
         else
             echo "warning: $alias: findings FLEET-COUNTS comment not found in fragment; scoring crit=warn=suppressed=0." >&2
         fi
-        line2="$(grep -oE '<!-- FLEET-COUNTS topsql n=[0-9]+ pts=[0-9]+ -->' "$frag" | tail -1 || true)"
-        if [[ -n "$line2" ]]; then
-            n="$(sed -E 's/.*n=([0-9]+).*/\1/' <<<"$line2")"
-            pts="$(sed -E 's/.*pts=([0-9]+).*/\1/' <<<"$line2")"
+        line2="$(grep -F 'FLEET-COUNTS topsql' "$frag" | tail -1 || true)"
+        if [[ "$line2" =~ $re_top ]]; then
+            n="${BASH_REMATCH[1]}"; pts="${BASH_REMATCH[2]}"
         else
             echo "warning: $alias: topsql FLEET-COUNTS comment not found in fragment; scoring n=pts=0." >&2
         fi
@@ -935,8 +942,8 @@ FALLBACK_CHROME
             rcvE="$(printf '%s' "${RCV[$alias]}" | html_escape)"
             ecode='ERR'
             if [[ -f "$work/$alias.log" ]]; then
-                ecode="$(grep -oE 'ORA-[0-9]{4,5}|TNS-[0-9]{4,5}' "$work/$alias.log" | head -1 || true)"
-                [[ -z "$ecode" ]] && ecode='ERR'
+                ecode="$(grep -E 'ORA-[0-9]|TNS-[0-9]' "$work/$alias.log" | head -1 || true)"
+                if [[ "$ecode" =~ (ORA|TNS)-[0-9]+ ]]; then ecode="${BASH_REMATCH[0]}"; else ecode='ERR'; fi
             fi
             printf '<tr class="dbrow deadrow" data-db="%s">' "$aliasE"
             printf '<td><svg class="chev" viewBox="0 0 16 16"><path d="M6 4l5 4-5 4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></td>'
