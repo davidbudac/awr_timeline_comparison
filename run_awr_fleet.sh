@@ -163,6 +163,8 @@ Positional arguments (all but <fleet.conf> are optional, left to right):
   fleet.conf    "alias|connect[|detail]" per line -- see fleet.conf.example
                                                                    (required)
   target_end    AUTO = prior full hour, or 'YYYY-MM-DD HH24:MI'  [${DEF_TARGET_END}]
+                (per DB, snapped back to its last snapshot at/before it if
+                none exists within 15 min)
   win_hours     width of each compared window, in hours          [${DEF_WIN_HOURS}]
   weeks_back    number of prior windows to compare against       [${DEF_WEEKS_BACK}]
   top_n         Top-N rows per Top-SQL ranking                   [${DEF_TOP_N}]

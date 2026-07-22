@@ -24,7 +24,10 @@
 --        SQL> @awr_trend.sql
 --
 -- Substitution variables (with defaults in sql/defaults.sql):
---   target_end   'AUTO' (prior full hour) or 'YYYY-MM-DD HH24:MI'
+--   target_end   'AUTO' (prior full hour) or 'YYYY-MM-DD HH24:MI'. If no
+--                  snapshot exists within 15 minutes of the requested
+--                  instant, it is snapped back to the last snapshot at or
+--                  before it (the masthead notes when this happens).
 --   win_hours    1
 --   weeks_back   4
 --   top_n        10
@@ -129,8 +132,15 @@ DEFINE awr_version = '1.2.0'
 --   db_version          v$instance.version
 --   caller_user         USER
 --   generated_at_s      'YYYY-MM-DD HH24:MI:SS TZR'
---   target_end_resolved 'YYYY-MM-DD HH24:MI:SS'   (AUTO -> prior full hour)
---   dow_name            target_end day-of-week (trimmed)
+--   target_end_resolved 'YYYY-MM-DD HH24:MI:SS'   (AUTO -> prior full hour,
+--                       then snapped back to the last snapshot at or before
+--                       it when the requested instant has no snapshot
+--                       within 15 minutes -- see the snp inline view below)
+--   target_end_requested 'YYYY-MM-DD HH24:MI:SS'  the literal requested
+--                       instant, before any snap-to-snapshot adjustment.
+--                       The masthead compares this to target_end_resolved
+--                       to decide whether to print a "snapped" note.
+--   dow_name            target_end_resolved day-of-week (trimmed)
 --   step_hours          numeric cadence between adjacent windows in hours
 --                       (= step * 1|24|168 depending on step_unit)
 --   period_unit_short   'h' | 'd' | 'w'   used in compact headers like -1w
@@ -168,6 +178,11 @@ COLUMN db_version          NEW_VALUE db_version          NOPRINT
 COLUMN caller_user         NEW_VALUE caller_user         NOPRINT
 COLUMN generated_at_s      NEW_VALUE generated_at_s      NOPRINT
 COLUMN target_end_resolved NEW_VALUE target_end_resolved NOPRINT
+-- target_end_requested is the literal requested instant, BEFORE any
+-- snap-to-last-snapshot adjustment (see the snp inline view below). The
+-- masthead compares it against target_end_resolved to decide whether to
+-- print a "snapped to last snapshot" note.
+COLUMN target_end_requested NEW_VALUE target_end_requested NOPRINT
 COLUMN dow_name            NEW_VALUE dow_name            NOPRINT
 COLUMN step_hours          NEW_VALUE step_hours          NOPRINT
 COLUMN period_unit_short   NEW_VALUE period_unit_short   NOPRINT
@@ -219,21 +234,9 @@ SELECT
     i.version                                                      AS db_version,
     USER                                                           AS caller_user,
     t.generated_at_s                                               AS generated_at_s,
-    TO_CHAR(
-        CASE
-            WHEN UPPER('~target_end') IN ('AUTO','NOW','')
-                THEN TRUNC(SYSDATE, 'HH24')
-            ELSE TO_DATE('~target_end', 'YYYY-MM-DD HH24:MI')
-        END,
-        'YYYY-MM-DD HH24:MI:SS'
-    )                                                              AS target_end_resolved,
-    TRIM(TO_CHAR(
-        CASE
-            WHEN UPPER('~target_end') IN ('AUTO','NOW','')
-                THEN TRUNC(SYSDATE, 'HH24')
-            ELSE TO_DATE('~target_end', 'YYYY-MM-DD HH24:MI')
-        END,
-        'Day'))                                                    AS dow_name,
+    TO_CHAR(snp.eff_ts, 'YYYY-MM-DD HH24:MI:SS')                   AS target_end_resolved,
+    TRIM(TO_CHAR(snp.eff_ts, 'Day'))                                AS dow_name,
+    TO_CHAR(snp.req_ts, 'YYYY-MM-DD HH24:MI:SS')                   AS target_end_requested,
     -- step / step_unit -> step_hours.  step_unit is validated to be one of
     -- 'h','d','w' (case-insensitive); anything else triggers ORA-01722
     -- ("invalid number") on purpose so the run aborts before producing a
@@ -308,6 +311,50 @@ CROSS JOIN (
            ) AS dbid_list
     FROM dual
 ) dbl
+CROSS JOIN (
+    -- Snap the requested target_end down to the DB's actual snapshot grid,
+    -- once, up front, so a caller-supplied target_end that doesn't land on
+    -- a snapshot (e.g. 16:30 against on-the-hour snaps) doesn't make
+    -- windows_cte's 15-min edge guard reject every window and render an
+    -- empty report. req_ts is the literal requested instant (the original,
+    -- unmodified CASE); last_snap_ts is the most recent snapshot at or
+    -- before req_ts, with a +5-min allowance that mirrors windows_cte's
+    -- one-sided snap-resolution tolerance; eff_ts is what every downstream
+    -- section actually sees as target_end_resolved:
+    --   - no snapshot at/before req_ts at all  -> eff_ts = req_ts (behave
+    --     as today; windows_cte's own guard handles the fallout)
+    --   - a snapshot already within the 15-min edge guard -> keep req_ts
+    --     verbatim (byte-identical to current behavior for every request
+    --     that already resolves valid windows)
+    --   - otherwise                             -> snap back to
+    --     last_snap_ts, minute precision
+    -- No dbid filter is needed: dba_hist_snapshot is container-scoped and
+    -- dbid_list above is built from this very same view.
+    SELECT
+        rs.req_ts                                                  AS req_ts,
+        CASE
+            WHEN rs.last_snap_ts IS NULL THEN rs.req_ts
+            WHEN rs.req_ts - rs.last_snap_ts <= 15/1440 THEN rs.req_ts
+            ELSE TRUNC(rs.last_snap_ts, 'MI')
+        END                                                        AS eff_ts
+    FROM (
+        SELECT
+            req.req_ts                                             AS req_ts,
+            (SELECT MAX(CAST(end_interval_time AS DATE))
+             FROM   dba_hist_snapshot
+             WHERE  CAST(end_interval_time AS DATE) <= req.req_ts + 5/1440)
+                                                                    AS last_snap_ts
+        FROM (
+            SELECT
+                CASE
+                    WHEN UPPER('~target_end') IN ('AUTO','NOW','')
+                        THEN TRUNC(SYSDATE, 'HH24')
+                    ELSE TO_DATE('~target_end', 'YYYY-MM-DD HH24:MI')
+                END AS req_ts
+            FROM dual
+        ) req
+    ) rs
+) snp
 CROSS JOIN (
     SELECT
         TO_CHAR(SYSTIMESTAMP, 'YYYYMMDDHH24MISSFF3')      AS run_id,

@@ -103,6 +103,24 @@ and every section references them as `~name` (never re-resolves): `step_hours`
 etc. Sections use `~step_hours/24` as the cadence multiplier — **never the
 literal `7`**.
 
+### `target_end` snap-to-snapshot-grid
+Both resolving SELECTs (`awr_trend.sql` and `awr_fleet_extract.sql` — a
+deliberate lockstep copy, keep them textually parallel) resolve the requested
+end via a `snp` inline view: if a snapshot exists within 15 min of the
+requested instant (mirroring `windows_cte`'s edge guard), the request is kept
+**verbatim** (byte-identical to pre-feature behavior); otherwise it snaps back
+to `TRUNC(last snapshot at or before request + 5 min tolerance, 'MI')`, so an
+off-grid request (e.g. 16:30 against on-the-hour snaps, or a request inside a
+snapshot gap) produces the last real window instead of an all-empty report. No
+AWR history at all → request kept (empty report, as before). `dow_name` follows
+the snapped value. A second DEFINE, `~target_end_requested`, carries the
+pre-snap instant; `00_params.sql` (masthead) and `sql/fleet/06_close.sql`
+(drill panel) emit a "Requested end … snapped to last snapshot …" note **only
+when the two strings differ** — equal strings must emit nothing. The fleet
+drill command uses `~target_end_resolved`, so it echoes the snapped instant and
+reproduces the same window. Dense snap grids (≤15-min spacing) can never
+trigger the snap, by design.
+
 ## Core conventions (non-obvious, easy to break)
 
 ### Shared bodies live under `sql/lib/`, included via `@@`
@@ -682,6 +700,16 @@ scaffold + ASH timeline block), `02_ash` (`window.FLEET_ASH` payload),
   verbatim from the browser-proven single-DB report), and a real multi-DB /
   RAC / migrated-PDB fleet (dbmint is single-DBID, and all three cdb aliases hit
   the same instance).
+- **`target_end` snap-to-grid verified end-to-end on dbmint (2026-07-22,
+  19.27):** aligned window (`target_end='2026-07-20 12:00'` win=1h weeks_back=4
+  step=1h) pre- vs post-change reports **byte-identical** after run-id/timestamp
+  normalization (sections 06/11 included this time); gap request
+  (`'2026-07-21 12:00'` inside dbmint's 07:15→20:57 snapshot gap) snapped to
+  `07:15`, all 5 windows valid, all 6 hero cards populated, masthead note
+  present, 0 ORA-; fleet smoke (2-alias conf, same gap instant) → both rows'
+  metric cards populated, snap note in both drill panels, drill commands echo
+  the snapped `'2026-07-21 07:15'`, zero surviving `__FLEET_`, exit 0. **Not
+  exercised:** the no-AWR-history-at-all branch (needs a brand-new DB).
 
 ## Things NOT to do
 

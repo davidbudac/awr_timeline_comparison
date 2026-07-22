@@ -131,6 +131,12 @@ COLUMN db_name             NEW_VALUE db_name             NOPRINT
 COLUMN host_name           NEW_VALUE host_name           NOPRINT
 COLUMN db_version          NEW_VALUE db_version          NOPRINT
 COLUMN target_end_resolved NEW_VALUE target_end_resolved NOPRINT
+-- target_end_requested is the literal requested instant, BEFORE any
+-- snap-to-last-snapshot adjustment (see the snp inline view below, a
+-- deliberate lockstep copy of awr_trend.sql's). 06_close's drill panel
+-- compares it against target_end_resolved to decide whether to print a
+-- "snapped to last snapshot" note.
+COLUMN target_end_requested NEW_VALUE target_end_requested NOPRINT
 COLUMN dow_name            NEW_VALUE dow_name            NOPRINT
 COLUMN step_hours          NEW_VALUE step_hours          NOPRINT
 COLUMN period_unit_short   NEW_VALUE period_unit_short   NOPRINT
@@ -152,21 +158,9 @@ SELECT
                 ELSE '' END                                        AS db_name,
     i.host_name                                                    AS host_name,
     i.version                                                      AS db_version,
-    TO_CHAR(
-        CASE
-            WHEN UPPER('~target_end') IN ('AUTO','NOW','')
-                THEN TRUNC(SYSDATE, 'HH24')
-            ELSE TO_DATE('~target_end', 'YYYY-MM-DD HH24:MI')
-        END,
-        'YYYY-MM-DD HH24:MI:SS'
-    )                                                              AS target_end_resolved,
-    TRIM(TO_CHAR(
-        CASE
-            WHEN UPPER('~target_end') IN ('AUTO','NOW','')
-                THEN TRUNC(SYSDATE, 'HH24')
-            ELSE TO_DATE('~target_end', 'YYYY-MM-DD HH24:MI')
-        END,
-        'Day'))                                                    AS dow_name,
+    TO_CHAR(snp.eff_ts, 'YYYY-MM-DD HH24:MI:SS')                   AS target_end_resolved,
+    TRIM(TO_CHAR(snp.eff_ts, 'Day'))                                AS dow_name,
+    TO_CHAR(snp.req_ts, 'YYYY-MM-DD HH24:MI:SS')                   AS target_end_requested,
     -- step / step_unit -> step_hours, identical formula to awr_trend.sql
     -- (an invalid step_unit forces ORA-01722 on purpose).
     -- NB: keep inline comments inside this top-level SELECT free of a
@@ -218,6 +212,37 @@ CROSS JOIN (
            ) AS dbid_list
     FROM dual
 ) dbl
+CROSS JOIN (
+    -- Snap the requested target_end down to the DB's actual snapshot grid,
+    -- verbatim (deliberate lockstep copy) from awr_trend.sql's snp inline
+    -- view -- see that file for the full rationale. req_ts is the literal
+    -- requested instant (the original, unmodified CASE); eff_ts is what
+    -- every downstream section actually sees as target_end_resolved.
+    SELECT
+        rs.req_ts                                                  AS req_ts,
+        CASE
+            WHEN rs.last_snap_ts IS NULL THEN rs.req_ts
+            WHEN rs.req_ts - rs.last_snap_ts <= 15/1440 THEN rs.req_ts
+            ELSE TRUNC(rs.last_snap_ts, 'MI')
+        END                                                        AS eff_ts
+    FROM (
+        SELECT
+            req.req_ts                                             AS req_ts,
+            (SELECT MAX(CAST(end_interval_time AS DATE))
+             FROM   dba_hist_snapshot
+             WHERE  CAST(end_interval_time AS DATE) <= req.req_ts + 5/1440)
+                                                                    AS last_snap_ts
+        FROM (
+            SELECT
+                CASE
+                    WHEN UPPER('~target_end') IN ('AUTO','NOW','')
+                        THEN TRUNC(SYSDATE, 'HH24')
+                    ELSE TO_DATE('~target_end', 'YYYY-MM-DD HH24:MI')
+                END AS req_ts
+            FROM dual
+        ) req
+    ) rs
+) snp
 CROSS JOIN (
     SELECT TO_CHAR(SYSTIMESTAMP, 'YYYYMMDDHH24MISSFF3') AS run_id
     FROM dual

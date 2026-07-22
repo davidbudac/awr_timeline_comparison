@@ -43,6 +43,24 @@ BEGIN
         || '~win_hours' || ' ' || '~weeks_back' || ' ' || '~top_n'
         || ' 0 ' || '~step' || ' ' || DBMS_XMLGEN.CONVERT('~step_unit')
         || '</div>');
+
+    -- Only when the requested target_end had no snapshot within the 15-min
+    -- edge guard does the resolving SELECT (in awr_fleet_extract.sql) snap
+    -- it back to the last actual snapshot -- flag that adjustment here so
+    -- it is never silent (the drill command above already echoes the
+    -- snapped instant, since it uses target_end_resolved). Reuses the
+    -- existing .detail-link.muted class from sql/fleet/00_fleet_chrome.sql
+    -- rather than adding new CSS. When the two match (the common case, and
+    -- every run that already worked before this feature), nothing is
+    -- emitted and output stays byte-identical to before.
+    IF '~target_end_requested' <> '~target_end_resolved' THEN
+        DBMS_OUTPUT.PUT_LINE('<div class="detail-link muted">Requested end '
+            || DBMS_XMLGEN.CONVERT(SUBSTR('~target_end_requested', 1, 16))
+            || ' had no snapshot within 15 min &mdash; snapped to last snapshot '
+            || DBMS_XMLGEN.CONVERT(SUBSTR('~target_end_resolved', 1, 16))
+            || '</div>');
+    END IF;
+
     DBMS_OUTPUT.PUT_LINE('__FLEET_DETAIL_LINE__');
 
     DBMS_OUTPUT.PUT_LINE('</div>');   -- .detail-col-right (opened in 03_headline.sql)

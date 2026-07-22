@@ -122,6 +122,8 @@ Usage:
 Positional arguments (all but <connect> are optional, left to right):
   connect       user/pw@svc, /, or any sqlplus connect string   (required)
   target_end    AUTO = prior full hour, or 'YYYY-MM-DD HH24:MI'  [${DEF_TARGET_END}]
+                (snapped back to the last snapshot at/before it if none
+                exists within 15 min)
   win_hours     width of each compared window, in hours          [${DEF_WIN_HOURS}]
   weeks_back    number of prior windows to compare against       [${DEF_WEEKS_BACK}]
   top_n         Top-N rows per ranking in Top SQL / waits        [${DEF_TOP_N}]
@@ -556,7 +558,8 @@ configure() {
         echo
         echo "${BOLD}-- Comparison windows --${RST}"
         echo "${DIM}AUTO ends each report at the prior full hour.  Or pin an explicit end,${RST}"
-        echo "${DIM}e.g. 2026-04-15 09:00 (24-hour clock).${RST}"
+        echo "${DIM}e.g. 2026-04-15 09:00 (24-hour clock).  Snapped back to the last${RST}"
+        echo "${DIM}snapshot at/before it if none exists within 15 min.${RST}"
         prompt_value TARGET_END "Window end (AUTO or 'YYYY-MM-DD HH24:MI')" "$TARGET_END" v_target_end
         echo "${DIM}Fractions allowed: 0.25 = 15 min, 0.5 = 30 min.${RST}"
         prompt_value WIN_HOURS  "Window width in hours" "$WIN_HOURS" v_posdec
