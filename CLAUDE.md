@@ -438,12 +438,21 @@ scaffold + ASH timeline block), `02_ash` (`window.FLEET_ASH` payload),
   the finished report for any surviving `__FLEET_` and warns (that's a bug).
   Worst-finding / AAS / DB-time sparkline are recomputed in `01_row.sql` (same
   "findings are recomputed, not shared" convention).
-- **ASH section (`02_ash.sql`)** — 24 hourly buckets ending at target_end from
+- **ASH section (`02_ash.sql`)** — covers the FULL report span (from the start
+  of the earliest compared window to target_end: span_hours = weeks_back ×
+  step_hours + win_hours) with ADAPTIVE buckets: bucket_hours =
+  GREATEST(span/168, 0.25) — at most 168 buckets, 15-min floor — from
   `DBA_HIST_ACTIVE_SESS_HISTORY` (`dbid IN (~dbid_list)`, all instances, ON-CPU
-  → 'CPU', Idle excluded, AAS = samples/360), emitted once per DB as a
-  `window.FLEET_ASH[<alias>]={t0,bh,classes,vals}` JS payload (NLS-pinned
-  numbers). The renderer draws it into `data-ash-of` divs — ribbon mode in the
-  dbrow, timeline mode in the detailrow. **Do NOT reuse `sql/09_ash_timeline.sql`
+  → 'CPU', Idle excluded, AAS = samples/(360 × bucket_hours)), emitted once per
+  DB as a `window.FLEET_ASH[<alias>]={t0,bh,classes,vals}` JS payload
+  (NLS-pinned numbers; `bh` = real bucket hours, consumed by the renderer for
+  marker positioning and x-label cadence — HH:MM labels for spans ≤48h, MM-DD
+  HH:MM beyond). The renderer draws it into `data-ash-of` divs — ribbon mode in
+  the dbrow, timeline mode in the detailrow. The timeline renders at its
+  container's real width (lazily on first row-expand, since the hidden
+  detailrow measures 0; a debounced resize listener re-renders on width
+  change); the page body has no max-width cap and `.console` scrolls
+  horizontally below `table.fleet`'s 880px min-width. **Do NOT reuse `sql/09_ash_timeline.sql`
   (ECharts).** The renderer's wait-class palette is copied from
   `sql/lib/js_wait_colors.plsql` (and the bash masthead legend) — keep all three
   in **lockstep**.

@@ -299,7 +299,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<div class="detail"><div class="detail-grid">');
     DBMS_OUTPUT.PUT_LINE('<div class="detail-col-left">');
     DBMS_OUTPUT.PUT_LINE('<div class="detail-block timeline-box">');
-    DBMS_OUTPUT.PUT_LINE('<div class="panel-h">ASH by wait class &mdash; 24h hourly (AAS) &middot; '
+    DBMS_OUTPUT.PUT_LINE('<div class="panel-h">ASH by wait class &mdash; full report span (AAS) &middot; '
         || 'Host ' || DBMS_XMLGEN.CONVERT('~host_name')
         || ' &middot; ' || DBMS_XMLGEN.CONVERT('~db_version')
         || ' &middot; DBID ' || '~dbid' || '</div>');

@@ -51,8 +51,12 @@ BEGIN
     -- here would leave the assembled document with unbalanced markup.
     -- Overrides sql/_style.sql's rail-padded flex body (there is no nav rail
     -- in the fleet report) -- this rule wins because it is emitted after it.
-    DBMS_OUTPUT.PUT_LINE('body { max-width:1220px; margin:0 auto;'
-        || ' padding:20px 18px 60px; display:block; }');
+    -- The console now spans the full viewport width (no max-width cap) so
+    -- the widened ASH timelines get all the room a wide window can offer;
+    -- narrow viewports fall back to the .console/table.fleet horizontal
+    -- scroll declared below instead of crushing columns.
+    DBMS_OUTPUT.PUT_LINE('body { margin:0;'
+        || ' padding:20px 22px 60px; display:block; }');
     DBMS_OUTPUT.PUT_LINE('.tnum { font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1; }');
 
     -- ---------- masthead ----------
@@ -105,8 +109,8 @@ BEGIN
 
     -- ---------- console table ----------
     DBMS_OUTPUT.PUT_LINE('.console { background:var(--panel); border:1px solid var(--hairline);'
-        || ' border-radius:8px; overflow:hidden; }');
-    DBMS_OUTPUT.PUT_LINE('table.fleet { width:100%; border-collapse:collapse; margin:0; font-size:13px; }');
+        || ' border-radius:8px; overflow:hidden; overflow-x:auto; }');
+    DBMS_OUTPUT.PUT_LINE('table.fleet { width:100%; min-width:880px; border-collapse:collapse; margin:0; font-size:13px; }');
     DBMS_OUTPUT.PUT_LINE('table.fleet thead th { font-size:10px; text-transform:uppercase; letter-spacing:.06em;'
         || ' color:var(--muted); font-weight:600; text-align:left; padding:9px 10px;'
         || ' background:var(--panel-2); border-bottom:1px solid var(--rule); white-space:nowrap; }');

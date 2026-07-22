@@ -106,7 +106,7 @@ FLEET_DETAIL_ECHARTS="${FLEET_DETAIL_ECHARTS:-}"
 #      `markers` var). Parsed + sanitized by parse_markers into MK_WHEN[] /
 #      MK_LABEL[], persisted to the workdir, emitted at assembly time as
 #      window.FLEET_MARKERS + the masthead marker legend, and positioned in
-#      each DB's 24h ASH span by js_fleet_charts.plsql.
+#      each DB's report-span ASH timeline by js_fleet_charts.plsql.
 MARKERS="${MARKERS:-}"
 MARKER_FILE="${MARKER_FILE:-}"
 
@@ -176,8 +176,8 @@ Environment variables:
   FLEET_TEMPLATE   sql/lib/templates/<name> to use per DB           [fleet]
   FLEET_KEEP_WORK  1 = keep the workdir even when every DB succeeded   [0]
   MARKERS          inline timeline markers "WHEN|LABEL;;WHEN|LABEL"
-                   (WHEN = 'YYYY-MM-DD HH:MM'); drawn on every DB's 24h
-                   ASH chart within span, and in the masthead legend
+                   (WHEN = 'YYYY-MM-DD HH:MM'); drawn on every DB's
+                   report-span ASH timeline, and in the masthead legend
   MARKER_FILE      a file of "WHEN|LABEL" lines; wins over MARKERS
   FLEET_DETAIL     all|none|'' -- force/disable/honor-per-line the
                    optional full single-DB detailed report              []
@@ -926,8 +926,8 @@ FALLBACK_CHROME
         printf '<th class="c" style="width:86px">Crit / Warn</th>'
         printf '<th class="r" style="width:62px">AAS</th>'
         printf '<th style="min-width:220px">Worst finding</th>'
-        printf '<th class="c" style="width:98px">DB time (24h)</th>'
-        printf '<th class="c" style="width:186px">ASH by wait class (24h)</th>'
+        printf '<th class="c" style="width:98px">DB time trend</th>'
+        printf '<th class="c" style="width:186px">ASH by wait class (span)</th>'
         printf '</tr></thead><tbody>\n'
 
         # error rows first (conf order): a red dbrow + a hidden detail row with
