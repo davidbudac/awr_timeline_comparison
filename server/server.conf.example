@@ -1,0 +1,100 @@
+# server.conf.example -- AWR Fleet Server configuration template.
+#
+# Copy this file to server/server.conf (gitignored) and edit it locally.
+# INI format, read with Python's configparser (stdlib; tomllib needs 3.11+,
+# and this server targets a 3.9 floor since it may run on old DB-host
+# Pythons). Every value below is validated at startup with the SAME
+# grammars run_awr_fleet.sh itself enforces, so a typo is rejected before
+# it ever reaches a subprocess argv.
+#
+#   python3 server/awrserve.py -c server/server.conf
+#
+# ---------------------------------------------------------------------------
+# SECURITY WARNING -- read this before exposing the port to anything but
+# localhost. This server has NO built-in authentication. The reports it
+# serves, and the run-history pages it renders, can expose SQL text,
+# hostnames and (masked, but present) usernames from every database in your
+# fleet.conf. Keep bind_host at 127.0.0.1 (the default) and reach it via an
+# SSH tunnel, or front it with a reverse proxy that adds auth (nginx +
+# basic-auth, an internal SSO proxy, etc). Do not bind 0.0.0.0 on a host
+# that isn't already inside a trust boundary you control.
+# ---------------------------------------------------------------------------
+
+[server]
+# Loopback-only by default -- see the security warning above before
+# changing this.
+bind_host = 127.0.0.1
+port = 8765
+
+[fleet]
+# Path to your real fleet.conf (see fleet.conf.example at the repo root).
+# Relative paths are resolved against the repo root.
+conf_path = fleet.conf
+
+# The same six window/cadence params run_awr_fleet.sh takes positionally.
+# target_end: AUTO (prior full hour) or 'YYYY-MM-DD HH:MM'.
+target_end = AUTO
+win_hours = 1
+weeks_back = 4
+top_n = 10
+step = 1
+step_unit = w
+
+# Wall-clock ceiling per subprocess run (fleet OR a single detail regen),
+# in minutes. The server sends SIGTERM to the whole process group, waits
+# 30s, then SIGKILL.
+max_run_minutes = 60
+
+[env]
+# Whitelisted environment variables passed VERBATIM to every
+# run_awr_fleet.sh subprocess (fleet and detail runs alike). Only the keys
+# below are recognized -- anything else here is a startup config error.
+# Leave a line commented out (or omit it) to not set that var at all; the
+# wrapper's own default then applies.
+#
+# FLEET_PAR        = 4
+# FLEET_TIMEOUT    = 900
+# FLEET_TEMPLATE   = fleet
+# FLEET_KEEP_WORK  = 0
+# MARKERS          = 2026-04-15 09:30|deploy
+# MARKER_FILE      = /path/to/markers.txt
+# FLEET_DETAIL     =
+# FLEET_DETAIL_TIMEOUT   = 3600
+# FLEET_DETAIL_TEMPLATE  = comprehensive
+# FLEET_DETAIL_ECHARTS   =
+
+[schedule]
+# enabled=false ships the server as on-demand-only; flip to true and pick a
+# mode to also run automatically.
+enabled = false
+
+# mode = daily | every
+mode = daily
+
+# daily mode: comma-separated 24h local times, e.g. "02:00,14:00". Fires
+# the earliest upcoming one after "now"; naive local time, no DST handling
+# (a daily_at slot can shift an hour across a DST transition -- documented,
+# not solved).
+daily_at = 02:00
+
+# every mode: fire every N hours, anchored to the last actual fire time
+# (persisted in server/data/state.json so a restart doesn't cause a refire
+# or a drift).
+every_hours = 24
+
+# If the server was down across a scheduled fire time, catchup=true fires
+# it once immediately at startup; catchup=false silently skips the missed
+# occurrence(s) and waits for the next one.
+catchup = true
+
+[retention]
+# Prune only what this server has a run record for -- it never touches
+# reports/ files it didn't itself generate and track.
+#
+# Keep the newest N fleet runs' report/detail-report/workdir artifacts...
+keep_fleet_runs = 14
+# ...OR anything younger than this many days, whichever keeps more.
+keep_days = 30
+# Beyond this many total run records (any kind), old .json records and
+# .log files are deleted outright (not just their report artifacts).
+keep_run_records = 200

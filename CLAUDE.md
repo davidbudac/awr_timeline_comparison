@@ -564,6 +564,20 @@ scaffold + ASH timeline block), `02_ash` (`window.FLEET_ASH` payload),
   multi-DB fleet where detail runs take minutes (dbmint's full report is fast;
   the 3600-s default timeout is untested against a genuinely slow DB).
 
+### AWR Fleet Server (`server/`)
+
+`server/` (added 2026-07-22) is a separate, optional pure-stdlib Python
+web app that runs `run_awr_fleet.sh` on a schedule and on demand, serves
+the generated reports, and keeps a run history with live log tails — see
+`server/README.md` for details. It is **orchestration-only**: it shells
+out to `run_awr_fleet.sh` (and, for per-DB detail regen, indirectly to
+`run_awr_trend.sh` via that same wrapper) exactly as a human would from the
+CLI, and the cardinal no-touch rule extends to it verbatim — nothing under
+`server/` may edit `awr_trend.sql`, `run_awr_trend.sh`, `run_awr_fleet.sh`,
+`awr_fleet_extract.sql`, or anything under `sql/`, `side/`, `vendor/`; all
+server code and its own tests live only under `server/` (plus the additive
+`.gitignore`/`README.md`/`CLAUDE.md` lines documenting it).
+
 ## Verification & testing
 
 - **`./lint.sh` first** (also runs in CI): grep-based checks that encode the

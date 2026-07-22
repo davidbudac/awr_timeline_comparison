@@ -17,3 +17,11 @@
 # plaintext passwords) -- copy fleet.conf.example to fleet.conf and fill it
 # in locally; never commit the real one.
 /fleet.conf
+
+# AWR Fleet Server (server/) -- local runtime state and local config;
+# copy server/server.conf.example to server/server.conf and fill it in.
+/server/data/
+/server/server.conf
+
+# Python bytecode (server/ app + tests)
+__pycache__/

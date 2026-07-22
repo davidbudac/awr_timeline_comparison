@@ -403,6 +403,24 @@ all render from inline SVG). Every database is queried in RAC-aggregate mode
 detail or the full section set, open the single-DB report via the drill-down
 command on the row.
 
+## AWR Fleet Server (hosted scheduler + web UI)
+
+`server/` is an optional, separate add-on: a small pure-stdlib Python web
+app that runs `run_awr_fleet.sh` on a schedule and on demand, serves the
+generated reports, and keeps a run history with live log tails. It is
+**orchestration only** — it shells out to the exact same wrapper described
+above and never reimplements or edits any generator file.
+
+```bash
+cp server/server.conf.example server/server.conf   # edit conf_path + window params
+python3 server/awrserve.py -c server/server.conf
+```
+
+Then open `http://127.0.0.1:8765/`. No authentication by default — see
+`server/README.md` for the full security notes, deployment examples
+(systemd / Docker / nohup for AIX), and the test suite
+(`python3 -m unittest discover server/tests`).
+
 ## Does it write to the database?
 
 No. Every fact in the report is computed in-flight from the `DBA_HIST_*`

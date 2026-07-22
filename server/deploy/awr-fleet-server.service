@@ -1,0 +1,35 @@
+# awr-fleet-server.service -- systemd unit example (Linux).
+#
+# Install:
+#   sudo cp server/deploy/awr-fleet-server.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now awr-fleet-server
+#
+# Edit User/WorkingDirectory/ExecStart below to match your checkout and the
+# OS account that owns TNS_ADMIN / the Oracle client (commonly "oracle").
+# Adjust or drop the TNS_ADMIN Environment= line if you use a different
+# connect mechanism (bare user/pw@svc, external auth, ...).
+
+[Unit]
+Description=AWR Fleet Server
+After=network.target
+
+[Service]
+Type=simple
+User=oracle
+Group=oracle
+WorkingDirectory=/home/oracle/awr_timeline_comparison
+Environment=TNS_ADMIN=/home/oracle/wallet
+ExecStart=/usr/bin/python3 server/awrserve.py -c server/server.conf
+Restart=on-failure
+RestartSec=5
+# Uncomment to reserve the wrapper path for a non-default location instead
+# of the repo-root run_awr_fleet.sh:
+# Environment=AWRSERVE_WRAPPER=/home/oracle/awr_timeline_comparison/run_awr_fleet.sh
+
+# Light hardening -- loosen if your Oracle client needs more.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
