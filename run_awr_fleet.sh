@@ -46,7 +46,7 @@
 #                    each fleet.conf line's own |detail flag           []
 #   FLEET_DETAIL_TIMEOUT   per-DB wall-clock limit (seconds) for the
 #                          detailed run, same timeout/gtimeout mechanism
-#                          as FLEET_TIMEOUT                          [1800]
+#                          as FLEET_TIMEOUT; 0 = no limit            [3600]
 #   FLEET_DETAIL_TEMPLATE  awr_trend.sql template for the detailed run
 #                                                            [comprehensive]
 #   FLEET_DETAIL_ECHARTS   passed to the single-DB report's `echarts` var;
@@ -96,7 +96,7 @@ FLEET_KEEP_WORK="${FLEET_KEEP_WORK:-0}"
 # downstream consumer (manifest, run_one_db, the assembler) sees only the
 # effective flag.
 FLEET_DETAIL="${FLEET_DETAIL:-}"
-FLEET_DETAIL_TIMEOUT="${FLEET_DETAIL_TIMEOUT:-1800}"
+FLEET_DETAIL_TIMEOUT="${FLEET_DETAIL_TIMEOUT:-3600}"
 FLEET_DETAIL_TEMPLATE="${FLEET_DETAIL_TEMPLATE:-comprehensive}"
 FLEET_DETAIL_ECHARTS="${FLEET_DETAIL_ECHARTS:-}"
 
@@ -120,8 +120,8 @@ case "${FLEET_DETAIL,,}" in
     ''|all|none) : ;;
     *) echo "error: FLEET_DETAIL must be 'all', 'none', or empty (got '$FLEET_DETAIL')" >&2; exit 2 ;;
 esac
-[[ "$FLEET_DETAIL_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || {
-    echo "error: FLEET_DETAIL_TIMEOUT must be a positive integer (got '$FLEET_DETAIL_TIMEOUT')" >&2; exit 2; }
+[[ "$FLEET_DETAIL_TIMEOUT" =~ ^[0-9]+$ ]] || {
+    echo "error: FLEET_DETAIL_TIMEOUT must be a non-negative integer, 0 = no limit (got '$FLEET_DETAIL_TIMEOUT')" >&2; exit 2; }
 # FLEET_DETAIL_TEMPLATE rides into a single-quoted DEFINE in run_one_detail's
 # heredoc (same footgun as FLEET_TEMPLATE / _pos_clean elsewhere in this file).
 case "$FLEET_DETAIL_TEMPLATE" in
@@ -181,7 +181,8 @@ Environment variables:
   MARKER_FILE      a file of "WHEN|LABEL" lines; wins over MARKERS
   FLEET_DETAIL     all|none|'' -- force/disable/honor-per-line the
                    optional full single-DB detailed report              []
-  FLEET_DETAIL_TIMEOUT   per-DB detailed-run wall-clock limit, seconds [1800]
+  FLEET_DETAIL_TIMEOUT   per-DB detailed-run wall-clock limit, seconds;
+                         0 = no limit                               [3600]
   FLEET_DETAIL_TEMPLATE  awr_trend.sql template for the detailed run
                                                           [comprehensive]
   FLEET_DETAIL_ECHARTS   echarts source for the detailed report; empty =
@@ -563,7 +564,7 @@ run_one_detail() {
     ln -s "$SCRIPT_DIR/sql" "$ddir/sql"
 
     local -a cmd=(sqlplus -S -L "$conn")
-    [[ -n "$TIMEOUT_BIN" ]] && cmd=("$TIMEOUT_BIN" "$FLEET_DETAIL_TIMEOUT" "${cmd[@]}")
+    [[ -n "$TIMEOUT_BIN" && "$FLEET_DETAIL_TIMEOUT" -gt 0 ]] && cmd=("$TIMEOUT_BIN" "$FLEET_DETAIL_TIMEOUT" "${cmd[@]}")
 
     # The log redirection sits on the SUBSHELL, not the inner command: dlog is
     # a workdir-relative path that must resolve against this function's cwd
@@ -604,8 +605,8 @@ SQLEOF
 }
 
 # ---------------------------------------------------------------------------
-# detail_state <workdir> <alias> -- 'ok' | 'skipped' | 'failed'.  Only
-# meaningful when the alias's detail flag is 'Y' (callers check the flag
+# detail_state <workdir> <alias> -- 'ok' | 'skipped' | 'timeout' | 'failed'.
+# Only meaningful when the alias's detail flag is 'Y' (callers check the flag
 # first).  Single-sourced by detail_bits (HTML chip/line for the report) and
 # detail_status_word (the per-DB stdout summary line) so the two can never
 # disagree about success/failure.  Needs RUN_ID in scope (do_assemble sources
@@ -619,6 +620,8 @@ detail_state() {
         printf 'ok'
     elif [[ "$drc" == 'skipped' ]]; then
         printf 'skipped'
+    elif [[ "$drc" == '124' ]]; then
+        printf 'timeout'
     else
         printf 'failed'
     fi
@@ -645,9 +648,22 @@ detail_bits() {
     DCHIP=''; DLINE=''
     [[ "$flag" == 'Y' ]] || return 0
 
-    local state href aliasE title ecode
+    local state href aliasE title ecode last_marker=''
     state="$(detail_state "$work" "$alias")"
     aliasE="$(printf '%s' "$alias" | html_escape)"
+
+    # Last driver progress marker (sql/lib/debug_log.sql format, e.g.
+    # "[awr_trend 10:40:31.808] section 07 summary (...)") from the detail
+    # run's log -- shown on a timeout/failure so the user sees how far the
+    # single-DB driver got.  debug='Y' is sql/defaults.sql's default, but
+    # nothing here assumes it's on, so this may legitimately come up empty.
+    # Sanitized of the DCHIP/DLINE-forbidden '|', '&', '\' before html_escape.
+    if [[ -f "$work/$alias.detail.log" ]]; then
+        # `|| true` guards set -e/pipefail when the log has no marker at all
+        # (killed before the first section, or debug off) -- same pattern as
+        # the ecode grep below.
+        last_marker="$({ grep '^\[awr_trend ' "$work/$alias.detail.log" || true; } | tail -1 | tr -d '|&\\' | html_escape)"
+    fi
 
     case "$state" in
         ok)
@@ -658,6 +674,12 @@ detail_bits() {
         skipped)
             DCHIP='<span class="dchip dfail" title="extract failed before the detail run could start">detail skipped (extract failed)</span>'
             DLINE='<div class="detail-link muted">Detailed report skipped (extract failed).</div>'
+            ;;
+        timeout)
+            DCHIP="<span class=\"dchip dfail\" title=\"timed out after ${FLEET_DETAIL_TIMEOUT}s -- raise FLEET_DETAIL_TIMEOUT (0 = no limit)\">detail timed out</span>"
+            DLINE="<div class=\"detail-link muted\">Detailed report timed out after ${FLEET_DETAIL_TIMEOUT}s (FLEET_DETAIL_TIMEOUT; 0 = no limit)."
+            [[ -n "$last_marker" ]] && DLINE="$DLINE Last progress: <code>${last_marker}</code>"
+            DLINE="$DLINE</div>"
             ;;
         *)
             title="rc=$(cat "$work/$alias.detail.rc" 2>/dev/null || echo N/A)"
@@ -670,12 +692,14 @@ detail_bits() {
             fi
             [[ -n "$ecode" ]] && title="$title; $ecode"
             DCHIP="<span class=\"dchip dfail\" title=\"$(printf '%s' "$title" | html_escape)\">detail failed</span>"
-            DLINE="<div class=\"detail-link muted\">Full single-DB report failed ($(printf '%s' "$title" | html_escape)).</div>"
+            DLINE="<div class=\"detail-link muted\">Full single-DB report failed ($(printf '%s' "$title" | html_escape))."
+            [[ -n "$last_marker" ]] && DLINE="$DLINE Last progress: <code>${last_marker}</code>"
+            DLINE="$DLINE</div>"
             ;;
     esac
 }
 
-# detail_status_word <workdir> <flag> <alias> -- 'ok'|'failed'|'skipped'|'-'
+# detail_status_word <workdir> <flag> <alias> -- 'ok'|'skipped'|'timeout'|'failed'|'-'
 # for the per-DB stdout summary line ('-' = detail not requested).
 detail_status_word() {
     local work="$1" flag="$2" alias="$3"
@@ -687,11 +711,15 @@ detail_status_word() {
 # do_assemble <workdir> -- classifies every alias in workdir/manifest.tsv,
 # scores the OK ones, and writes reports/awr_fleet_<ts>_run<RUN_ID>.html.
 # Sets the globals ASSEMBLE_REPORT_PATH / ASSEMBLE_OK_COUNT /
-# ASSEMBLE_ERR_COUNT / ASSEMBLE_DETAIL_FAIL_COUNT for the caller (the last one
-# counts requested-but-not-successful detail reports, so the caller can decide
-# to keep the workdir for debugging without touching the exit code).  Also
+# ASSEMBLE_ERR_COUNT / ASSEMBLE_DETAIL_FAIL_COUNT / ASSEMBLE_DETAIL_TIMEOUT_COUNT
+# for the caller (ASSEMBLE_DETAIL_FAIL_COUNT counts requested-but-not-
+# successful detail reports -- skipped, timed out, or failed -- so the caller
+# can decide to keep the workdir for debugging without touching the exit
+# code; ASSEMBLE_DETAIL_TIMEOUT_COUNT is the subset of those that hit
+# FLEET_DETAIL_TIMEOUT specifically, so the caller can print a targeted
+# hint).  Also
 # prints one summary line per DB (conf order) to stdout, now with a trailing
-# detail=ok|failed|skipped|- column.  Pure function of the workdir's contents,
+# detail=ok|skipped|timeout|failed|- column.  Pure function of the workdir's contents,
 # so it is exactly what `--assemble` re-runs for debugging.
 # ---------------------------------------------------------------------------
 do_assemble() {
@@ -1013,12 +1041,13 @@ FALLBACK_CHROME
         echo "warning: unresolved __FLEET_* placeholder(s) survived assembly in $report -- this is a bug." >&2
     fi
 
-    local dstat detail_fail_count=0
+    local dstat detail_fail_count=0 detail_timeout_count=0
     for i in "${!A_ALIAS[@]}"; do
         alias="${A_ALIAS[$i]}"
         dstat="$(detail_status_word "$work" "${DETAILFLAG[$alias]:-N}" "$alias")"
         if [[ "${DETAILFLAG[$alias]:-N}" == 'Y' && "$dstat" != 'ok' ]]; then
             detail_fail_count=$((detail_fail_count + 1))
+            [[ "$dstat" == 'timeout' ]] && detail_timeout_count=$((detail_timeout_count + 1))
         fi
         if [[ "${IS_ERR[$alias]}" == 1 ]]; then
             printf '%-24s ERROR  rc=%-5s detail=%-7s %s\n' "$alias" "${RCV[$alias]}" "$dstat" "${REASON[$alias]}"
@@ -1033,6 +1062,7 @@ FALLBACK_CHROME
     ASSEMBLE_OK_COUNT="$n_ok"
     ASSEMBLE_ERR_COUNT="$n_err"
     ASSEMBLE_DETAIL_FAIL_COUNT="$detail_fail_count"
+    ASSEMBLE_DETAIL_TIMEOUT_COUNT="$detail_timeout_count"
 }
 
 # ===========================================================================
@@ -1134,6 +1164,13 @@ if [[ "$ASSEMBLE_ERR_COUNT" -eq 0 && "${ASSEMBLE_DETAIL_FAIL_COUNT:-0}" -eq 0 &&
     rm -rf "$WORK"
 elif [[ "$FLEET_KEEP_WORK" != 1 ]]; then
     echo "Keeping workdir '$WORK' for debugging (${ASSEMBLE_ERR_COUNT} DB error(s), ${ASSEMBLE_DETAIL_FAIL_COUNT:-0} detail failure(s))." >&2
+fi
+
+# A timeout is the one detail failure with an obvious, actionable fix (raise
+# the limit or lift it), so it gets its own targeted stderr hint on top of the
+# generic "Keeping workdir" message above.
+if [[ "${ASSEMBLE_DETAIL_TIMEOUT_COUNT:-0}" -gt 0 ]]; then
+    echo "Hint: ${ASSEMBLE_DETAIL_TIMEOUT_COUNT} detailed report(s) hit the ${FLEET_DETAIL_TIMEOUT}s FLEET_DETAIL_TIMEOUT. Re-run with a higher limit or FLEET_DETAIL_TIMEOUT=0 (no limit), or generate a single DB manually with the drill command shown in its row." >&2
 fi
 
 if [[ "$ASSEMBLE_OK_COUNT" -ge 1 ]]; then

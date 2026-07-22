@@ -502,7 +502,9 @@ scaffold + ASH timeline block), `02_ash` (`window.FLEET_ASH` payload),
   inline marker formats are byte-identical), saved as
   `reports/awr_fleet_detail_<alias>_run<RUN_ID>.html` and linked from that DB's
   row via a relative href. Env knobs: `FLEET_DETAIL` (all|none|''),
-  `FLEET_DETAIL_TIMEOUT` (default 1800), `FLEET_DETAIL_TEMPLATE`,
+  `FLEET_DETAIL_TIMEOUT` (default 3600, 0 = no limit; rc=124 surfaces as a
+  distinct "timed out" state with the last progress marker shown in the
+  report and a stderr hint), `FLEET_DETAIL_TEMPLATE`,
   `FLEET_DETAIL_ECHARTS` (same empty/URL/local-path polymorphism as the
   single-DB var; local path is spliced by a fleet-owned copy of
   `inline_echarts`). Mechanics that keep the cardinal no-single-DB-edits rule:
@@ -520,7 +522,7 @@ scaffold + ASH timeline block), `02_ash` (`window.FLEET_ASH` payload),
   unconditionally; the assembler substitutes '' / link / failure-note per alias
   (sed with `|` delimiter, `&`-free replacements) via the single-sourced
   `detail_state`/`detail_bits`/`detail_status_word` helpers, prints a
-  `detail=ok|failed|skipped|-` column, and manifest.tsv carries the effective
+  `detail=ok|skipped|timeout|failed|-` column, and manifest.tsv carries the effective
   flag as a 3rd column (2-column workdirs read as N). The success chip carries
   inline `onclick="event.stopPropagation()"` so clicking it navigates instead
   of toggling the row (zero-touch on `js_fleet_charts.plsql`'s delegated
@@ -542,7 +544,7 @@ scaffold + ASH timeline block), `02_ash` (`window.FLEET_ASH` payload),
   (stopPropagation verified via dispatched events), `.detail-link` line present,
   linked detail report renders the full workbench. **Still pending:** a real
   multi-DB fleet where detail runs take minutes (dbmint's full report is fast;
-  the 1800-s default timeout is untested against a genuinely slow DB).
+  the 3600-s default timeout is untested against a genuinely slow DB).
 
 ## Verification & testing
 
