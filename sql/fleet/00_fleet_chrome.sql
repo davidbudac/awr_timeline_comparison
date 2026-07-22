@@ -107,6 +107,37 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.mk-item time { color:var(--muted); font-variant-numeric:tabular-nums; }');
     DBMS_OUTPUT.PUT_LINE('.mk-empty { font-size:11.5px; color:var(--muted); }');
 
+    -- ---------- "Compared windows" strip ----------
+    -- Sits inside .masthead, between .badges and .legends (assembler-owned
+    -- markup; see run_awr_fleet.sh's do_assemble). Visual language matches
+    -- .legends/.legend-blk exactly (same h3 treatment, same muted/border
+    -- tokens) so the strip reads as a sibling of the existing legend blocks
+    -- rather than a bolted-on widget. Every color is a CSS var already
+    -- declared by sql/_style.sql's :root / body.dark token set, so no
+    -- dark-mode overrides are needed here.
+    DBMS_OUTPUT.PUT_LINE('.win-strip { margin-top:16px; padding-top:13px; border-top:1px solid var(--line-soft); }');
+    DBMS_OUTPUT.PUT_LINE('.win-strip h3 { font-size:10.5px; text-transform:uppercase; letter-spacing:.06em;'
+        || ' color:var(--muted); margin:0 0 8px; font-weight:600; }');
+    DBMS_OUTPUT.PUT_LINE('.win-strip h3::before { content:none; }');
+    DBMS_OUTPUT.PUT_LINE('.win-chips { display:flex; flex-wrap:wrap; gap:7px; }');
+    DBMS_OUTPUT.PUT_LINE('.win-chip { display:inline-flex; align-items:center; gap:6px;'
+        || ' border:1px solid var(--hairline); border-radius:14px; padding:3px 10px 3px 9px;'
+        || ' background:var(--panel-2); font-size:11.5px; color:var(--ink-soft); line-height:1.5; }');
+    DBMS_OUTPUT.PUT_LINE('.win-chip .wo { font-weight:650; color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('.win-chip time { font-variant-numeric:tabular-nums; color:var(--ink-soft); }');
+    DBMS_OUTPUT.PUT_LINE('.win-chip .wv { font-size:10px; font-weight:600; color:var(--muted);'
+        || ' background:var(--panel); border:1px solid var(--hairline); border-radius:8px;'
+        || ' padding:0px 6px; margin-left:1px; }');
+    DBMS_OUTPUT.PUT_LINE('.win-chip.cur { border-color:var(--accent); background:var(--accent-bg); }');
+    DBMS_OUTPUT.PUT_LINE('.win-chip.cur .wo { color:var(--accent-deep); }');
+    DBMS_OUTPUT.PUT_LINE('.win-chip.part { border-color:var(--warn-border); background:var(--warn-bg); }');
+    DBMS_OUTPUT.PUT_LINE('.win-chip.part .wv { color:var(--warn); border-color:var(--warn-border); background:var(--panel); }');
+    DBMS_OUTPUT.PUT_LINE('.win-chip.skip { border-style:dashed; color:var(--muted); opacity:.75; }');
+    DBMS_OUTPUT.PUT_LINE('.win-chip.skip .wo { color:var(--muted); text-decoration:line-through; text-decoration-thickness:1px; }');
+    DBMS_OUTPUT.PUT_LINE('.win-chip.skip time { color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('.win-note { margin-top:8px; font-size:11px; color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('.win-note b { color:var(--ink-soft); font-weight:600; }');
+
     -- ---------- console table ----------
     DBMS_OUTPUT.PUT_LINE('.console { background:var(--panel); border:1px solid var(--hairline);'
         || ' border-radius:8px; overflow:hidden; overflow-x:auto; }');

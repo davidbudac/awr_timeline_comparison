@@ -752,6 +752,14 @@ do_assemble() {
     declare -A DISP IS_ERR REASON RCV SCORE CRIT WARN SUPP NTOP PTS DETAILFLAG
     local i alias frag chrome log rc reason line1 line2 crit warn supp n pts pts_capped score
 
+    # -- "Compared windows" masthead strip: canonical window list (arrays
+    # indexed by week_offset) from the FIRST OK fragment that carries any
+    # FLEET-WINDOW comment, plus cross-DB validity tallies from every OK
+    # fragment. win_mismatch flags a per-DB snap-to-grid divergence (see
+    # sql/fleet/01_row.sql's FLEET-WINDOW contract comment).
+    declare -A WIN_DOW WIN_BEGIN WIN_END WIN_REASON WIN_VALID WIN_TOTAL
+    local win_canon_alias='' win_maxoff=-1 win_mismatch=0
+
     for i in "${!A_ALIAS[@]}"; do
         alias="${A_ALIAS[$i]}"
         DISP["$alias"]="${A_DISP[$i]}"
@@ -776,6 +784,41 @@ do_assemble() {
             continue
         fi
         IS_ERR["$alias"]=0
+
+        # ---- FLEET-WINDOW comments (Compared-windows masthead strip) -----
+        # Same bash-regex parsing approach as FLEET-COUNTS above (grep -F to
+        # locate lines, =~ to pull fields -- no grep -o / sed -E). Missing
+        # lines are NOT an error: an older workdir re-assembled with
+        # --assemble predates this feature, so it simply contributes
+        # nothing here and the strip is omitted below.
+        # [|] not \| for the literal pipes: backslash-pipe in an ERE is
+        # undefined by POSIX (glibc tolerates it, AIX may not); a bracket
+        # expression is portable everywhere bash's =~ runs.
+        local re_win='off=([0-9]+)[|]dow=([A-Za-z]+)[|]begin=([^|]+)[|]end=([^|]+)[|]valid=([YN])[|]reason=([^|]*) -->'
+        local wline woff wdow wbeg wend wvalid wreason
+        while IFS= read -r wline; do
+            [[ "$wline" =~ $re_win ]] || continue
+            woff="${BASH_REMATCH[1]}"; wdow="${BASH_REMATCH[2]}"
+            wbeg="${BASH_REMATCH[3]}"; wend="${BASH_REMATCH[4]}"
+            wvalid="${BASH_REMATCH[5]}"; wreason="${BASH_REMATCH[6]}"
+            if [[ -z "$win_canon_alias" ]]; then
+                win_canon_alias="$alias"
+            fi
+            if [[ "$alias" == "$win_canon_alias" ]]; then
+                WIN_DOW["$woff"]="$wdow"; WIN_BEGIN["$woff"]="$wbeg"
+                WIN_END["$woff"]="$wend"; WIN_REASON["$woff"]="$wreason"
+                [[ "$woff" -gt "$win_maxoff" ]] && win_maxoff=$woff
+            elif [[ -n "${WIN_BEGIN[$woff]:-}" ]] \
+                 && { [[ "${WIN_BEGIN[$woff]}" != "$wbeg" ]] || [[ "${WIN_END[$woff]}" != "$wend" ]]; }; then
+                # A later OK frag resolved a different begin/end instant for
+                # the same offset -- per-DB target_end snap-to-grid landed on
+                # a different snapshot. Flag it; times shown stay the
+                # canonical (first-frag) ones.
+                win_mismatch=1
+            fi
+            WIN_TOTAL["$woff"]=$(( ${WIN_TOTAL[$woff]:-0} + 1 ))
+            [[ "$wvalid" == 'Y' ]] && WIN_VALID["$woff"]=$(( ${WIN_VALID[$woff]:-0} + 1 ))
+        done < <(grep -F 'FLEET-WINDOW ' "$frag" || true)
 
         crit=0; warn=0; supp=0; n=0; pts=0
         # Parse the machine-readable FLEET-COUNTS comments with bash's own regex
@@ -923,6 +966,57 @@ FALLBACK_CHROME
         printf '<div class="stat-badge ok"><div class="n tnum">%s</div><div class="l">Quiet</div></div>\n' "$n_quiet"
         printf '<div class="stat-badge dead"><div class="n tnum">%s</div><div class="l">Unreach</div></div>\n' "$n_err"
         printf '</div>\n'   # .badges
+
+        # ---- "Compared windows" strip, built from the FLEET-WINDOW
+        # comments parsed above. Omitted entirely when no OK fragment had
+        # any (older workdir re-assembled before this feature, or an
+        # all-down fleet) -- report stays exactly as before in that case.
+        if [[ "$win_maxoff" -ge 0 ]]; then
+            printf '<div class="win-strip"><h3>Compared windows</h3><div class="win-chips">\n'
+            local woff2 wk label dowv beginv endv datepart endpart v_cnt t_cnt \
+                  cls wvtxt tooltip classes
+            for (( woff2 = win_maxoff; woff2 >= 0; woff2-- )); do
+                [[ -n "${WIN_BEGIN[$woff2]:-}" ]] || continue
+                dowv="${WIN_DOW[$woff2]}"; beginv="${WIN_BEGIN[$woff2]}"; endv="${WIN_END[$woff2]}"
+                if [[ "$woff2" -eq 0 ]]; then
+                    label='current'
+                else
+                    wk=$(( woff2 * STEP ))
+                    label="-${wk}${STEP_UNIT}"
+                fi
+                datepart="${beginv:0:10}"
+                if [[ "${endv:0:10}" == "$datepart" ]]; then
+                    endpart="${endv:11:5}"
+                else
+                    endpart="$endv"
+                fi
+                v_cnt="${WIN_VALID[$woff2]:-0}"; t_cnt="${WIN_TOTAL[$woff2]:-0}"
+                cls=''; wvtxt=''; tooltip=''
+                if [[ "$v_cnt" -eq 0 ]]; then
+                    cls='skip'; wvtxt='skipped'
+                    tooltip="${WIN_REASON[$woff2]:-}"
+                elif [[ "$v_cnt" -lt "$t_cnt" ]]; then
+                    cls='part'; wvtxt="${v_cnt}/${t_cnt} DBs"
+                    tooltip="Valid on ${v_cnt} of ${t_cnt} database(s)"
+                fi
+                classes="win-chip"
+                [[ -n "$cls" ]] && classes="$classes $cls"
+                [[ "$woff2" -eq 0 ]] && classes="$classes cur"
+                printf '<div class="%s" title="%s"><span class="wo">%s</span> %s <time class="tnum">%s &rarr; %s</time>' \
+                    "$classes" "$(printf '%s' "$tooltip" | html_escape)" \
+                    "$(printf '%s' "$label" | html_escape)" "$(printf '%s' "$dowv" | html_escape)" \
+                    "$(printf '%s' "$beginv" | html_escape)" "$(printf '%s' "$endpart" | html_escape)"
+                [[ -n "$wvtxt" ]] && printf '<span class="wv">%s</span>' "$(printf '%s' "$wvtxt" | html_escape)"
+                printf '</div>\n'
+            done
+            printf '</div>\n'   # .win-chips
+            if [[ "$win_mismatch" -eq 1 ]]; then
+                printf '<div class="win-note">Window instants differ across databases (per-DB snapshot snapping) &mdash; times shown from <b>%s</b>; see each row&#39;s drill panel.</div>\n' \
+                    "$(printf '%s' "$win_canon_alias" | html_escape)"
+            fi
+            printf '</div>\n'   # .win-strip
+        fi
+
         # legends: wait-class palette + timeline markers
         printf '<div class="legends">\n'
         printf '<div class="legend-blk" style="flex:2 1 380px"><h3>Wait-class palette (ASH ribbons)</h3><div class="wc-legend">'

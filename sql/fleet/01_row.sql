@@ -53,9 +53,51 @@ SET SERVEROUTPUT ON SIZE UNLIMITED FORMAT WRAPPED
 BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: fleet_01 BEGIN -->'); END;
 /
 
+-- FLEET-WINDOW machine-readable comments -- a per-window contract sibling
+-- to the FLEET-COUNTS comments emitted by 04/05.  One line per compared
+-- window (current + weeks_back prior), so the bash assembler can render
+-- the masthead's "Compared windows" strip: the canonical window list comes
+-- from the FIRST OK fragment it parses, and per-offset validity is tallied
+-- across every OK fragment (a window can resolve valid on one DB and
+-- skipped on another).  week_offset 0 is the current, rightmost window.
+-- Byte-exact format, fields joined by '|':
+--   <!-- FLEET-WINDOW off=<week_offset>|dow=<Dy>|begin=<YYYY-MM-DD HH24:MI>|end=<YYYY-MM-DD HH24:MI>|valid=<Y|N>|reason=<skip_reason or empty> -->
+-- reason is windows_cte.sql's raw skip_reason (NVL'd to empty), emitted
+-- without DBMS_XMLGEN.CONVERT like FLEET-COUNTS -- its values are a fixed
+-- internal string set containing no '|', '<', '>', or a literal '-->'
+-- sequence, so no escaping is needed and none would survive the '|' split
+-- anyway.  A fragment predating this feature (old workdir re-assembled
+-- with --assemble) simply has no FLEET-WINDOW lines -- the assembler
+-- tolerates that and omits the strip, this is purely additive.
+BEGIN
+    FOR rec IN (
+        WITH
+        @@sql/lib/windows_cte.sql
+        SELECT week_offset,
+               TO_CHAR(win_end_ts, 'Dy', 'NLS_DATE_LANGUAGE=ENGLISH') AS dow,
+               TO_CHAR(win_start_ts, 'YYYY-MM-DD HH24:MI') AS begin_s,
+               TO_CHAR(win_end_ts,   'YYYY-MM-DD HH24:MI') AS end_s,
+               valid_flag, skip_reason
+        FROM windows_rollup
+        ORDER BY week_offset
+    ) LOOP
+        DBMS_OUTPUT.PUT_LINE('<!-- FLEET-WINDOW off=' || rec.week_offset
+            || '|dow=' || rec.dow
+            || '|begin=' || rec.begin_s
+            || '|end=' || rec.end_s
+            || '|valid=' || rec.valid_flag
+            || '|reason=' || NVL(rec.skip_reason, '') || ' -->');
+    END LOOP;
+END;
+/
+
 DECLARE
     v_aas_cur   NUMBER;
     v_dbt_csv   VARCHAR2(4000);
+    v_dbt_cur   NUMBER;
+    v_dbt_min   NUMBER;
+    v_dbt_max   NUMBER;
+    v_dbt_tip   VARCHAR2(4000);
     v_wf_dom    VARCHAR2(16);
     v_wf_name   VARCHAR2(256);
     v_wf_z      NUMBER;
@@ -63,6 +105,18 @@ DECLARE
     v_zbadge    VARCHAR2(40);
     v_zcls      VARCHAR2(4);
     v_wtxt      VARCHAR2(400);
+
+    FUNCTION fmt(p NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        IF p IS NULL THEN RETURN NULL; END IF;
+        IF ABS(p) >= 100 THEN
+            RETURN TO_CHAR(p, 'FM9999990', 'NLS_NUMERIC_CHARACTERS=''.,''');
+        ELSIF ABS(p) >= 10 THEN
+            RETURN TO_CHAR(p, 'FM990D0', 'NLS_NUMERIC_CHARACTERS=''.,''');
+        ELSE
+            RETURN TO_CHAR(p, 'FM0D00', 'NLS_NUMERIC_CHARACTERS=''.,''');
+        END IF;
+    END;
 BEGIN
     -- --- AAS current + DB-time-per-window CSV (one round trip) -----------
     -- The WITH lives at statement level so the two scalar subqueries below
@@ -94,10 +148,6 @@ BEGIN
                     THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / MAX(dur_sec)
                END AS val
         FROM   dbt_bounds
-    v_dbt_cur   NUMBER;
-    v_dbt_min   NUMBER;
-    v_dbt_max   NUMBER;
-    v_dbt_tip   VARCHAR2(4000);
         GROUP BY week_offset
     ),
     all_weeks AS (
@@ -105,18 +155,6 @@ BEGIN
         FROM   dual CONNECT BY LEVEL <= ~weeks_back + 1
     ),
     dbt_grid AS (
-
-    FUNCTION fmt(p NUMBER) RETURN VARCHAR2 IS
-    BEGIN
-        IF p IS NULL THEN RETURN NULL; END IF;
-        IF ABS(p) >= 100 THEN
-            RETURN TO_CHAR(p, 'FM9999990', 'NLS_NUMERIC_CHARACTERS=''.,''');
-        ELSIF ABS(p) >= 10 THEN
-            RETURN TO_CHAR(p, 'FM990D0', 'NLS_NUMERIC_CHARACTERS=''.,''');
-        ELSE
-            RETURN TO_CHAR(p, 'FM0D00', 'NLS_NUMERIC_CHARACTERS=''.,''');
-        END IF;
-    END;
         SELECT aw.week_offset, r.val
         FROM   all_weeks aw
         LEFT JOIN dbt_rows r ON r.week_offset = aw.week_offset
@@ -141,6 +179,15 @@ BEGIN
         (SELECT SUBSTR(LISTAGG(',' || TO_CHAR(val, 'FM99999999990D000000',
                                  'NLS_NUMERIC_CHARACTERS=''.,'''))
                     WITHIN GROUP (ORDER BY week_offset DESC), 2)
+         FROM dbt_grid),
+        (SELECT val FROM dbt_grid WHERE week_offset = 0),
+        (SELECT MIN(val) FROM dbt_grid),
+        (SELECT MAX(val) FROM dbt_grid),
+        (SELECT LISTAGG(
+                    CASE WHEN week_offset = 0 THEN 'now' ELSE '-' || week_offset END
+                    || ': '
+                    || NVL(TO_CHAR(val, 'FM99999990D00', 'NLS_NUMERIC_CHARACTERS=''.,'''), 'n/a'),
+                    ', ') WITHIN GROUP (ORDER BY week_offset DESC)
          FROM dbt_grid)
     INTO v_aas_cur, v_dbt_csv, v_dbt_cur, v_dbt_min, v_dbt_max, v_dbt_tip
     FROM dual;
@@ -179,15 +226,6 @@ BEGIN
                             THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / MAX(dur_sec)
                        END AS metric_value
                 FROM   load_bounds
-         FROM dbt_grid),
-        (SELECT val FROM dbt_grid WHERE week_offset = 0),
-        (SELECT MIN(val) FROM dbt_grid),
-        (SELECT MAX(val) FROM dbt_grid),
-        (SELECT LISTAGG(
-                    CASE WHEN week_offset = 0 THEN 'now' ELSE '-' || week_offset END
-                    || ': '
-                    || NVL(TO_CHAR(val, 'FM99999990D00', 'NLS_NUMERIC_CHARACTERS=''.,'''), 'n/a'),
-                    ', ') WITHIN GROUP (ORDER BY week_offset DESC)
                 GROUP BY week_offset, stat_name
             ),
             metric_targets AS (

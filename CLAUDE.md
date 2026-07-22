@@ -445,7 +445,21 @@ scaffold + ASH timeline block), `02_ash` (`window.FLEET_ASH` payload),
   + last-15 log lines + any ORA-/TNS- code as the worst-finding cell), scores OK
   ones `10*crit + 3*warn + min(25,pts)`, and emits error rows first (conf order)
   then OK rows score-DESC (ties = conf order). Exit `0`=≥1 OK, `3`=all failed,
-  `2`=bad config.
+  `2`=bad config. `01_row.sql` additionally emits one `<!-- FLEET-WINDOW
+  off=K|dow=Dy|begin=…|end=…|valid=Y|N|reason=… -->` comment per compared
+  window (a per-window sibling of FLEET-COUNTS); the assembler parses these
+  into the masthead's "Compared windows" strip — the canonical window list
+  is taken from the first OK frag that has any, and per-offset validity is
+  tallied across every OK frag (flagging a per-DB `target_end` snap-to-grid
+  mismatch when begin/end differ). Missing lines are tolerated, not an
+  error — an older workdir re-assembled with `--assemble` predates the
+  feature and simply renders no strip. Verified on dbmint (2026-07-22,
+  3-alias conf): hourly aligned run → 5 all-valid chips (current accented,
+  oldest first); weekly run → 2 dashed "skipped" chips with the
+  `no snapshot at/before window start` reason as tooltip; `--assemble` on a
+  kept workdir reproduces the strip byte-identically. The `part` (valid on
+  X/Y DBs) and snap-mismatch-note states need a real multi-DB fleet (all
+  dbmint aliases hit one instance, so their windows never diverge).
 - **Row placeholder injection** — the summary row can't know its own score/sev
   (Top-SQL pts are computed later in the same frag, section 05), so `01_row.sql`
   emits placeholders `__FLEET_SCORE__` / `__FLEET_SEV__` (crit|warn|ok) /
