@@ -589,9 +589,10 @@ SQLEOF
     ) > "$dlog" 2>&1 || rc=$?
 
     if [[ "$rc" -eq 0 ]]; then
-        local -a htmls=()
-        while IFS= read -r -d '' f; do htmls+=("$f"); done \
-            < <(find "$ddir/reports" -maxdepth 1 -name '*.html' -print0 2>/dev/null)
+        # Plain glob, not find: AIX find lacks -maxdepth/-print0, and the
+        # isolated reports/ dir can only ever hold the driver's single spool.
+        local -a htmls=( "$ddir"/reports/*.html )
+        [[ -e "${htmls[0]}" ]] || htmls=()
         if [[ "${#htmls[@]}" -eq 1 ]]; then
             local dest="reports/awr_fleet_detail_${alias}_run${RUN_ID}.html"
             mv "${htmls[0]}" "$dest"

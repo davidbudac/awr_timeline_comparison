@@ -147,6 +147,25 @@ while IFS= read -r loc; do
 done < <(sql_files | xargs grep -n -A4 'LISTAGG *(' /dev/null 2>/dev/null \
          | grep "THEN ''" | sed -E 's/^([^:-]+)[:-]([0-9]+)[:-].*/\1:\2/' | sort -u)
 
+# ----------------------------------------------------------------------
+# 10. The bash wrappers run on AIX/Solaris DB hosts, where GNU-only tool
+#     flags fail -- often silently when stderr is discarded.  Bit us twice
+#     (2026-07-22): grep -oE broke FLEET-COUNTS scoring, then
+#     find -maxdepth/-print0 broke the detail-report harvest ("found 0"
+#     with the report sitting right there).  dbmint has GNU coreutils and
+#     will NEVER surface this class.  Flag: grep -o, sed -E/-r,
+#     find -maxdepth/-mindepth/-print0, and date -d outside the guarded
+#     probe idiom (a line that self-tests `date -d "2000-01-01 ..."` first
+#     is allowed).  Comment lines are skipped.
+# ----------------------------------------------------------------------
+while IFS= read -r hit; do
+    finding gnu-only-flag "${hit%%:*}:$(cut -d: -f2 <<<"$hit")" \
+        "GNU-only flag in a bash wrapper (breaks on AIX/Solaris find/grep/sed/date; use POSIX flags, bash =~, or a plain glob)"
+done < <(grep -nE 'grep +(-[A-Za-z]+ +)*-[A-Za-z]*o|sed +(-[a-z]+ +)*-[Er]\b|find +[^|;]*-(maxdepth|mindepth|print0)|date +-d\b' \
+             run_awr_fleet.sh run_awr_trend.sh 2>/dev/null \
+         | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
+         | grep -vF '2000-01-01')
+
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"
 fi

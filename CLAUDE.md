@@ -598,7 +598,11 @@ server code and its own tests live only under `server/` (plus the additive
   footguns below — bad `@@` include paths, flat template-target includes,
   stray `~word` substitutions (the tilde gotcha), `dbid = ~dbid` equality,
   leading-underscore identifiers, literal-7 cadence, missing `SET DEFINE '~'`,
-  incomplete template dirs. No DB needed; add a check when a new gotcha bites.
+  incomplete template dirs, GNU-only tool flags in the bash wrappers
+  (`grep -o`, `sed -E`, `find -maxdepth`/`-print0`, unguarded `date -d` —
+  they break on AIX/Solaris DB hosts and GNU-coreutils dbmint never catches
+  it; twice bitten 2026-07-22). No DB needed; add a check when a new gotcha
+  bites.
 - **Test DB: dbmint** (Oracle 19c CDB1, `ssh -p 2201 oracle@dbmint`, `connect /
   as sysdba`). Single-DBID, idle, sparse history.
 - **dbmint default-window trap:** with `AUTO` + weekly cadence the test DB
