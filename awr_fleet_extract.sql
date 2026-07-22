@@ -51,11 +51,16 @@
 --                                                  the assembler keeps only
 --                                                  the first successful one.
 --   <fleet_workdir>/<fleet_alias>.frag.html    -- the actual per-DB report
---                                                  fragment: identity card,
---                                                  headline strip, findings,
---                                                  top-SQL regressions,
---                                                  drill-down line.  Ends
---                                                  with the sentinel
+--                                                  fragment (fleet v0.2.0):
+--                                                  TWO table rows -- a summary
+--                                                  tr.dbrow and a hidden
+--                                                  tr.detailrow (ASH timeline,
+--                                                  headline metric cards,
+--                                                  findings, top-SQL, drill).
+--                                                  The assembler wraps every
+--                                                  frag in the <table
+--                                                  class="fleet"> it emits.
+--                                                  Ends with the sentinel
 --                                                  comment the assembler
 --                                                  requires to treat a spool
 --                                                  as complete (a truncated
@@ -267,19 +272,22 @@ SPOOL ~chrome_path
 SPOOL OFF
 
 -- -------------------------------------------------------------------
--- Per-DB report fragment: identity card, headline strip, findings,
--- top-SQL regressions, drill-down + sentinel.  Run order matters: 03
--- (findings) and 04 (top SQL) each recompute their own z-scores from the
--- AWR views directly (same "findings are recomputed, not shared"
--- convention as the single-DB report's sections 07/08), so nothing here
--- depends on an earlier section's PL/SQL state.
+-- Per-DB report fragment (fleet v0.2.0): a summary tr.dbrow + a hidden
+-- tr.detailrow, emitted across 01_row (row + open detail scaffold + ASH
+-- timeline block), 02_ash (window.FLEET_ASH payload), 03_headline (metric
+-- cards, closes left col / opens right col), 04_findings, 05_topsql, and
+-- 06_close (drill + close scaffold + sentinel).  01/04/05 each recompute
+-- their own z-scores from the AWR views directly (same "findings are
+-- recomputed, not shared" convention as the single-DB report's 07/08), so
+-- nothing here depends on an earlier section's PL/SQL state.
 -- -------------------------------------------------------------------
 SPOOL ~frag_path
-@@sql/fleet/01_db_card.sql
-@@sql/fleet/02_headline.sql
-@@sql/fleet/03_findings.sql
-@@sql/fleet/04_topsql.sql
-@@sql/fleet/05_close.sql
+@@sql/fleet/01_row.sql
+@@sql/fleet/02_ash.sql
+@@sql/fleet/03_headline.sql
+@@sql/fleet/04_findings.sql
+@@sql/fleet/05_topsql.sql
+@@sql/fleet/06_close.sql
 SPOOL OFF
 
 SET TERMOUT  ON

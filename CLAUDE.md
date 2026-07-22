@@ -403,29 +403,86 @@ additive-only edits to `lint.sh`/`.gitignore`). `awr_fleet_extract.sql` reuses
 shared `sql/lib/` fragments via `@@` and has its OWN local template whitelist
 (a deliberate copy of `awr_trend.sql`'s CASE, so that file isn't touched).
 
-- **Fragment/sentinel/FLEET-COUNTS contract** — each per-DB extract spools two
-  files into `reports/fleet_work_<run_id>/`: `<alias>.chrome.html` (page
-  head/CSS/JS) and `<alias>.frag.html` (one `<section class="db-card">`). The
-  frag's **last** line is the sentinel `<!-- AWR-DB: <alias> OK -->`; the
-  assembler treats a frag lacking it as a **truncated spool → error card**
-  (crash/OOM/ORA- mid-section omits it). Two machine-readable comments per frag
-  drive scoring: `<!-- FLEET-COUNTS findings crit=X warn=Y suppressed=Z -->`
-  and `<!-- FLEET-COUNTS topsql n=N pts=P -->`. The wrapper classifies each
-  alias (rc≠0 OR frag missing OR sentinel absent ⇒ error card with masked
-  connect + last 15 log lines), scores OK ones `10*crit + 3*warn + min(25,pts)`,
-  and emits error cards first (conf order) then OK cards score-DESC (ties = conf
-  order). Exit `0`=≥1 OK, `3`=all failed, `2`=bad config.
+**v0.2.0 is the "ops console" redesign** (design B): one dense
+`<table class="fleet">` (opened/closed by the assembler), a collapsed summary
+`tr.dbrow` + a hidden `tr.detailrow` per DB, all rows collapsed by default and
+toggled by a delegated click in the chrome JS. The masthead (bash-emitted)
+carries stat badges, a wait-class legend, a timeline-marker legend, and an
+in-page theme toggle. Sections renumbered: `00_fleet_chrome` (chrome + fleet
+CSS + `js_fleet_charts.plsql` renderer), `01_row` (dbrow + opens the detail
+scaffold + ASH timeline block), `02_ash` (`window.FLEET_ASH` payload),
+`03_headline` (metric mini-cards; closes left col / opens right col),
+`04_findings`, `05_topsql`, `06_close` (drill + closes scaffold + sentinel).
+
+- **Fragment/sentinel/FLEET-COUNTS contract (v2)** — each per-DB extract spools
+  two files into `reports/fleet_work_<run_id>/`: `<alias>.chrome.html` (page
+  head/CSS/JS) and `<alias>.frag.html` — now **two table rows** (`tr.dbrow` +
+  `tr.detailrow`), not a `<section class="db-card">`; the assembler wraps every
+  frag in the `<table>` it emits. The frag's **last** line is still the sentinel
+  `<!-- AWR-DB: <alias> OK -->` (a frag lacking it ⇒ **truncated spool → error
+  row**). Two machine-readable comments per frag still drive scoring, **byte-
+  exact**: `<!-- FLEET-COUNTS findings crit=X warn=Y suppressed=Z -->` (04) and
+  `<!-- FLEET-COUNTS topsql n=N pts=P -->` (05). The wrapper classifies each
+  alias (rc≠0 OR frag missing OR sentinel absent ⇒ error row with masked connect
+  + last-15 log lines + any ORA-/TNS- code as the worst-finding cell), scores OK
+  ones `10*crit + 3*warn + min(25,pts)`, and emits error rows first (conf order)
+  then OK rows score-DESC (ties = conf order). Exit `0`=≥1 OK, `3`=all failed,
+  `2`=bad config.
+- **Row placeholder injection** — the summary row can't know its own score/sev
+  (Top-SQL pts are computed later in the same frag, section 05), so `01_row.sql`
+  emits placeholders `__FLEET_SCORE__` / `__FLEET_SEV__` (crit|warn|ok) /
+  `__FLEET_CRIT__` / `__FLEET_WARN__` / `__FLEET_CPILL__` / `__FLEET_WPILL__`
+  (c|z, w|z) that the assembler substitutes via `sed` at assembly time, after it
+  has parsed FLEET-COUNTS and computed the score — single-sourcing the row pills
+  and the sort order. Placeholders carry no tilde/ampersand; the assembler greps
+  the finished report for any surviving `__FLEET_` and warns (that's a bug).
+  Worst-finding / AAS / DB-time sparkline are recomputed in `01_row.sql` (same
+  "findings are recomputed, not shared" convention).
+- **ASH section (`02_ash.sql`)** — 24 hourly buckets ending at target_end from
+  `DBA_HIST_ACTIVE_SESS_HISTORY` (`dbid IN (~dbid_list)`, all instances, ON-CPU
+  → 'CPU', Idle excluded, AAS = samples/360), emitted once per DB as a
+  `window.FLEET_ASH[<alias>]={t0,bh,classes,vals}` JS payload (NLS-pinned
+  numbers). The renderer draws it into `data-ash-of` divs — ribbon mode in the
+  dbrow, timeline mode in the detailrow. **Do NOT reuse `sql/09_ash_timeline.sql`
+  (ECharts).** The renderer's wait-class palette is copied from
+  `sql/lib/js_wait_colors.plsql` (and the bash masthead legend) — keep all three
+  in **lockstep**.
+- **Timeline markers (fleet-wide, wrapper-owned)** — `run_awr_fleet.sh` accepts
+  env `MARKERS` (inline `WHEN|LABEL;;…`, same format as the single-DB var) and
+  `MARKER_FILE` (a file of `WHEN|LABEL` lines; precedence `MARKER_FILE` >
+  `MARKERS`). Bash parses/validates (`WHEN`='YYYY-MM-DD HH:MM'; strips reserved
+  `< > & ' " ~ \` from LABEL), persists them to the workdir, emits
+  `window.FLEET_MARKERS` + the masthead legend; the renderer positions them by
+  timestamp inside each DB's 24h ASH span (markers outside the span drop from the
+  chart but stay in the legend). **The extract SQL never sees markers.**
 - **Chrome-per-extract rationale** — every DB spools its own chrome copy (pure
   `DBMS_OUTPUT`, so it's race-free under `FLEET_PAR>1`); the assembler keeps only
-  the first successful one and discards the rest. Cheaper and simpler than a
-  separate chrome-only pass or locking.
-- **No ECharts, ever** — inline-SVG sparklines only (CDN-free), so the report is
-  offline-complete by construction. Theme follows OS/localStorage; **no in-page
-  toggle button** in v1 (the `.theme-icon-btn` CSS inherited from `sql/_style.sql`
-  is present but unused — no nav rail renders it). `inst_num` is pinned to `0`.
+  the first successful one and discards the rest.
+- **No ECharts, ever** — inline-SVG only (CDN-free), so the report is offline-
+  complete by construction. Theme follows OS/localStorage **and** an in-page
+  toggle (`#themeToggle`, flips `body.dark`, persists localStorage `"awr-theme"`
+  — same key the early-theme bootstrap and single-DB report use). `inst_num` is
+  pinned to `0`.
 - **Credential masking** — `mask_conn` turns `user/pw@svc` into `user/***@svc`
   for all display; the password is never written to the workdir or report.
   `/`-prefixed (wallet/OS-auth) connects pass through untouched.
+- **Verified end-to-end on dbmint (2026-07-22, 19.27, window
+  `target_end='2026-07-20 12:00'` win=1h weeks_back=4 step=1h, conf =
+  cdb_a/cdb_b/cdb_c `/ as sysdba` + a bad-creds `deadbox`, `MARKERS` with two
+  in-span markers):** exit 0; masthead `4 databases / 3 crit / 0 warn / 0 quiet
+  / 1 unreachable`; three OK rows identical `score=16` (crit=1 warn=2) in conf
+  order; `deadbox` error row first with `ORA-12514` in the worst-finding cell;
+  every OK frag ends with its sentinel; **zero** surviving `__FLEET_`
+  placeholders; `window.FLEET_ASH` present for all three with 24-slot arrays;
+  `window.FLEET_MARKERS` has both markers; zero external resources; a fake
+  `scottx/<pw>@svc` line's password appears NOWHERE in workdir/report/stdout
+  (masked `scottx/***@svc`); drill command masked. **Live-browser render
+  (static-snapshot file):** no console errors; 3 ASH ribbons + 3 timelines
+  render (21 wait-class polygons each set), 3 row sparklines, 18 metric cards;
+  clicking a dbrow un-hides its detailrow; the theme toggle flips `body.dark`.
+  Single-DB smoke (`run_awr_trend.sh` same window) rendered all 16 sections,
+  0 ORA-. **Still pending:** a real multi-DB / RAC / migrated-PDB fleet (dbmint
+  is single-DBID, all three cdb aliases hit the same instance).
 
 ## Verification & testing
 

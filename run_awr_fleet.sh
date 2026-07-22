@@ -32,6 +32,9 @@
 #   FLEET_KEEP_WORK  1 = never delete the per-run workdir under
 #                    reports/fleet_work_<run_id>/, even when every
 #                    DB succeeded                                  [0]
+#   MARKERS          inline fleet-wide timeline markers, one string,
+#                    "WHEN|LABEL;;WHEN|LABEL" (WHEN='YYYY-MM-DD HH:MM')
+#   MARKER_FILE      a file of "WHEN|LABEL" lines; wins over MARKERS
 #
 # Examples:
 #   ./run_awr_fleet.sh fleet.conf
@@ -57,11 +60,24 @@ DEF_TOP_N='10'
 DEF_STEP='1'
 DEF_STEP_UNIT='w'
 
+# ---- fleet report version ---------------------------------------------------
+FLEET_VERSION='0.2.0'
+
 # ---- fleet-specific env vars ------------------------------------------------
 FLEET_PAR="${FLEET_PAR:-4}"
 FLEET_TIMEOUT="${FLEET_TIMEOUT:-900}"
 FLEET_TEMPLATE="${FLEET_TEMPLATE:-fleet}"
 FLEET_KEEP_WORK="${FLEET_KEEP_WORK:-0}"
+
+# ---- fleet-wide timeline markers (wrapper-owned; the extract SQL never sees
+#      them). MARKER_FILE (a file of "WHEN|LABEL" lines) wins over MARKERS
+#      (an inline "WHEN|LABEL;;WHEN|LABEL" list, same format as the single-DB
+#      `markers` var). Parsed + sanitized by parse_markers into MK_WHEN[] /
+#      MK_LABEL[], persisted to the workdir, emitted at assembly time as
+#      window.FLEET_MARKERS + the masthead marker legend, and positioned in
+#      each DB's 24h ASH span by js_fleet_charts.plsql.
+MARKERS="${MARKERS:-}"
+MARKER_FILE="${MARKER_FILE:-}"
 
 [[ "$FLEET_PAR" =~ ^[1-9][0-9]*$ ]] || {
     echo "error: FLEET_PAR must be a positive integer (got '$FLEET_PAR')" >&2; exit 2; }
@@ -83,7 +99,7 @@ fi
 
 usage() {
     cat <<USAGE
-${BOLD}AWR fleet report${RST} — one combined report across many databases
+${BOLD}AWR fleet report${RST} v${FLEET_VERSION} — one combined report across many databases
 
 Usage:
   ./run_awr_fleet.sh <fleet.conf> [target_end] [win_hours] [weeks_back] \\
@@ -106,9 +122,14 @@ Environment variables:
                    gtimeout on PATH; otherwise unbounded, warned once)  [900]
   FLEET_TEMPLATE   sql/lib/templates/<name> to use per DB           [fleet]
   FLEET_KEEP_WORK  1 = keep the workdir even when every DB succeeded   [0]
+  MARKERS          inline timeline markers "WHEN|LABEL;;WHEN|LABEL"
+                   (WHEN = 'YYYY-MM-DD HH:MM'); drawn on every DB's 24h
+                   ASH chart within span, and in the masthead legend
+  MARKER_FILE      a file of "WHEN|LABEL" lines; wins over MARKERS
 
 Score shown per DB in the report: 10*critical + 3*warning + min(25, top-SQL
-points); an unreachable/truncated DB scores as an error card (sorts first).
+points); an unreachable/truncated DB scores as an error row (sorts first).
+Rows are collapsed by default -- click a row to expand its detail panel.
 USAGE
 }
 
@@ -173,6 +194,53 @@ mask_conn() {
         return
     fi
     printf '%s' "$c"
+}
+
+# ---------------------------------------------------------------------------
+# parse_markers -- fills the global arrays MK_WHEN[] / MK_LABEL[] (parallel)
+# from MARKER_FILE (a file of "WHEN|LABEL" lines) or, failing that, MARKERS
+# (an inline "WHEN|LABEL;;WHEN|LABEL" list -- same format as the single-DB
+# `markers` var).  Precedence MARKER_FILE > MARKERS, matching the single-DB
+# report.  WHEN must be 'YYYY-MM-DD HH:MM' (whitespace-collapsed); LABEL is
+# sanitized of the reserved chars < > & ' " ~ \ so it is safe both in the
+# masthead HTML legend and inside the window.FLEET_MARKERS JS string.  A
+# malformed marker is warned about and skipped, never fatal.  The extract SQL
+# never sees markers -- they are positioned entirely client-side.
+# ---------------------------------------------------------------------------
+_add_marker() {
+    local item="$1" when label
+    case "$item" in *'|'*) : ;; *)
+        echo "warning: marker '$item' has no WHEN|LABEL separator; skipped." >&2; return ;;
+    esac
+    when="${item%%|*}"
+    label="${item#*|}"
+    when="$(printf '%s' "$when" | tr -s '[:space:]' ' ' | sed -e 's/^ //' -e 's/ $//')"
+    label="$(printf '%s' "$label" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/[<>&"'\''~\\]//g')"
+    if [[ ! "$when" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]]; then
+        echo "warning: marker time '$when' is not 'YYYY-MM-DD HH:MM'; skipped." >&2; return
+    fi
+    MK_WHEN+=("$when")
+    MK_LABEL+=("$label")
+}
+parse_markers() {
+    MK_WHEN=(); MK_LABEL=()
+    local line rest chunk
+    if [[ -n "$MARKER_FILE" ]]; then
+        [[ -r "$MARKER_FILE" ]] || { echo "error: MARKER_FILE '$MARKER_FILE' does not exist or is not readable." >&2; exit 2; }
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            line="${line%$'\r'}"
+            [[ -z "${line//[[:space:]]/}" ]] && continue
+            [[ "$line" =~ ^[[:space:]]*# ]] && continue
+            _add_marker "$line"
+        done < "$MARKER_FILE"
+    elif [[ -n "$MARKERS" ]]; then
+        rest="$MARKERS"
+        while [[ -n "$rest" ]]; do
+            if [[ "$rest" == *';;'* ]]; then chunk="${rest%%;;*}"; rest="${rest#*;;}"; else chunk="$rest"; rest=''; fi
+            [[ -z "${chunk//[[:space:]]/}" ]] && continue
+            _add_marker "$chunk"
+        done
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -249,6 +317,15 @@ write_manifest() {
     for i in "${!ALIASES[@]}"; do
         printf '%s\t%s\n' "${ALIASES[$i]}" "${CONN_DISPS[$i]}" >> "$work/manifest.tsv"
     done
+    # Persist parsed markers so --assemble can rebuild window.FLEET_MARKERS +
+    # the masthead legend from the workdir alone (one "WHEN\tLABEL" per line;
+    # empty file when no markers were configured).
+    : > "$work/markers.tsv"
+    if [[ "${#MK_WHEN[@]}" -gt 0 ]]; then
+        for i in "${!MK_WHEN[@]}"; do
+            printf '%s\t%s\n' "${MK_WHEN[$i]}" "${MK_LABEL[$i]}" >> "$work/markers.tsv"
+        done
+    fi
     cat > "$work/params.env" <<EOF
 TARGET_END='${TARGET_END}'
 WIN_HOURS='${WIN_HOURS}'
@@ -321,6 +398,17 @@ do_assemble() {
         [[ -z "$a" ]] && continue
         A_ALIAS+=("$a"); A_DISP+=("$d")
     done < "$work/manifest.tsv"
+
+    # Rebuild the marker arrays from the workdir so --assemble reproduces the
+    # exact window.FLEET_MARKERS + masthead legend without re-parsing env vars.
+    MK_WHEN=(); MK_LABEL=()
+    if [[ -f "$work/markers.tsv" ]]; then
+        local mw ml
+        while IFS=$'\t' read -r mw ml || [[ -n "$mw" ]]; do
+            [[ -z "$mw" ]] && continue
+            MK_WHEN+=("$mw"); MK_LABEL+=("$ml")
+        done < "$work/markers.tsv"
+    fi
 
     declare -A DISP IS_ERR REASON RCV SCORE CRIT WARN SUPP NTOP PTS
     local i alias frag chrome log rc reason line1 line2 crit warn supp n pts pts_capped score
@@ -409,74 +497,196 @@ do_assemble() {
     report_ts="$(date +%Y%m%d%H%M)"
     report="reports/awr_fleet_${report_ts}_run${RUN_ID}.html"
 
+    # Wait-class palette for the masthead legend -- LOCKSTEP with
+    # sql/lib/js_wait_colors.plsql and sql/fleet/js_fleet_charts.plsql (keep
+    # the hexes identical across all three; do not diverge).
+    local -a WC_LEGEND=(
+        "CPU:#3FB344" "Scheduler:#88C070" "User I/O:#4A90D9" "System I/O:#1F4E89"
+        "Concurrency:#8B0000" "Application:#D62728" "Commit:#E89B40"
+        "Configuration:#793C32" "Administrative:#7B6FA8" "Network:#967259"
+        "Queueing:#E89BB7" "Cluster:#E5C228" "Other:#C77CB0"
+    )
+
     {
         if [[ -n "$chrome_alias" ]]; then
             cat "$work/$chrome_alias.chrome.html"
         else
-            # No DB succeeded -- hardcoded minimal chrome so the report is
-            # still a valid, readable HTML page (coverage principle: every
-            # conf entry appears as a card even when the whole fleet is dark).
+            # No DB succeeded -- minimal chrome so the report is still a valid,
+            # readable HTML page (coverage principle: every conf entry appears
+            # as a row even when the whole fleet is dark).  The ops-console CSS
+            # lives only in a successful DB's chrome copy, so error rows here
+            # fall back to browser-default table styling -- still legible.
             cat <<'FALLBACK_CHROME'
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AWR Fleet Report</title>
 <style>
-  body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:1.5rem;
-       background:#fff;color:#222;}
-  h1{font-size:1.4rem;margin:0 0 .5rem;}
-  .badge{display:inline-block;padding:.15rem .55rem;border-radius:.3rem;
-         font-size:.85rem;margin-right:.4rem;color:#fff;}
-  .badge.crit{background:#b3261e;} .badge.warn{background:#b26a00;}
-  .badge.quiet{background:#4a5568;} .badge.err{background:#6b1414;}
-  section.db-card{border:1px solid #ccc;border-radius:.4rem;padding:1rem;margin:1rem 0;}
-  section.db-card-error{border-color:#b3261e;background:#fff5f5;}
-  pre{white-space:pre-wrap;background:#f5f5f5;padding:.5rem;overflow-x:auto;}
-  code.drill{font-family:monospace;background:#f0f0f0;padding:.1rem .3rem;}
-  footer{margin-top:2rem;font-size:.8rem;color:#666;}
+  body{font-family:system-ui,-apple-system,sans-serif;margin:0;padding:1.25rem;
+       max-width:1220px;color:#222;background:#fff;}
+  h1{font-size:1.3rem;margin:0 0 .4rem;}
+  .masthead{border:1px solid #ccc;border-radius:8px;padding:14px 16px;margin-bottom:14px;}
+  table.fleet{width:100%;border-collapse:collapse;font-size:13px;}
+  table.fleet th,table.fleet td{padding:6px 9px;border-bottom:1px solid #e0e0e0;text-align:left;}
+  tr.detailrow.hidden{display:none;}
+  .logtail{white-space:pre-wrap;background:#f6f6f6;border:1px solid #d33;border-radius:5px;
+           padding:8px 10px;font-family:ui-monospace,Menlo,monospace;font-size:11px;}
+  .stat-badge{display:inline-block;border:1px solid #ccc;border-radius:6px;padding:5px 10px;margin-right:6px;}
+  footer.fleet-footer{margin-top:1.5rem;font-size:.75rem;color:#666;text-align:center;}
 </style>
 </head>
 <body>
 FALLBACK_CHROME
         fi
 
-        printf '<section class="fleet-masthead">\n'
-        printf '<h1>AWR Fleet Report</h1>\n'
-        printf '<p>%s databases &mdash; ' "${#A_ALIAS[@]}"
-        printf '<span class="badge crit">%s critical</span> ' "$n_crit"
-        printf '<span class="badge warn">%s warning</span> ' "$n_warn"
-        printf '<span class="badge quiet">%s quiet</span> ' "$n_quiet"
-        printf '<span class="badge err">%s unreachable</span></p>\n' "$n_err"
-        printf '<p>Window: %sh ending %s, %s prior window(s), cadence %s%s, top_n=%s, template=%s</p>\n' \
-            "$(printf '%s' "$WIN_HOURS" | html_escape)" "$(printf '%s' "$TARGET_END" | html_escape)" \
-            "$(printf '%s' "$WEEKS_BACK" | html_escape)" "$(printf '%s' "$STEP" | html_escape)" \
-            "$(printf '%s' "$STEP_UNIT" | html_escape)" "$(printf '%s' "$TOP_N" | html_escape)" \
-            "$(printf '%s' "$FLEET_TEMPLATE" | html_escape)"
-        printf '<p>Generated: %s &nbsp; Run: %s</p>\n' "$generated_at" "$(printf '%s' "$RUN_ID" | html_escape)"
-        printf '</section>\n'
+        # ---- window.FLEET_MARKERS (positioned client-side by the renderer) --
+        # MK_WHEN/MK_LABEL are already sanitized of < > & ' " ~ \, so they are
+        # safe both here (double-quoted JS string) and in the HTML legend below.
+        printf '<script>window.FLEET_MARKERS=['
+        local j sep=''
+        if [[ "${#MK_WHEN[@]}" -gt 0 ]]; then
+            for j in "${!MK_WHEN[@]}"; do
+                printf '%s{"t":"%s","l":"%s"}' "$sep" "${MK_WHEN[$j]}" "${MK_LABEL[$j]}"
+                sep=','
+            done
+        fi
+        printf '];</script>\n'
 
+        # ---- masthead ----
+        printf '<div class="masthead"><div class="mh-top"><div class="mh-title">\n'
+        printf '<h1>AWR Fleet Report</h1>\n'
+        printf '<div class="sub">Multi-database health triage &middot; z-score anomaly scan vs %s prior window(s)</div>\n' \
+            "$(printf '%s' "$WEEKS_BACK" | html_escape)"
+        printf '<div class="run">Window <b>%sh ending %s</b> &middot; cadence %s%s &middot; %s prior window(s) &middot; top_n %s &middot; template %s &middot; generated <span class="tnum">%s</span></div>\n' \
+            "$(printf '%s' "$WIN_HOURS" | html_escape)" "$(printf '%s' "$TARGET_END" | html_escape)" \
+            "$(printf '%s' "$STEP" | html_escape)" "$(printf '%s' "$STEP_UNIT" | html_escape)" \
+            "$(printf '%s' "$WEEKS_BACK" | html_escape)" "$(printf '%s' "$TOP_N" | html_escape)" \
+            "$(printf '%s' "$FLEET_TEMPLATE" | html_escape)" "$(printf '%s' "$generated_at" | html_escape)"
+        printf '</div>\n'
+        # Theme toggle (reuses the shared .theme-icon-btn; icon swap is pure CSS
+        # off body.dark). Sun/moon SVGs copied from sql/00_params.sql.
+        printf '<button type="button" id="themeToggle" class="theme-icon-btn" aria-pressed="false" aria-label="Toggle dark mode" title="Switch between light and dark color theme">'
+        printf '<svg class="icon-sun" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
+        printf '<svg class="icon-moon" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5a8.5 8.5 0 1 0 11.2 11.2z" fill="currentColor"/></svg>'
+        printf '</button>\n'
+        printf '</div>\n'   # .mh-top
+        # summary stat badges
+        printf '<div class="badges">\n'
+        printf '<div class="stat-badge"><div class="n tnum">%s</div><div class="l">Databases</div></div>\n' "${#A_ALIAS[@]}"
+        printf '<div class="stat-badge crit"><div class="n tnum">%s</div><div class="l">Crit</div></div>\n' "$n_crit"
+        printf '<div class="stat-badge warn"><div class="n tnum">%s</div><div class="l">Warn</div></div>\n' "$n_warn"
+        printf '<div class="stat-badge ok"><div class="n tnum">%s</div><div class="l">Quiet</div></div>\n' "$n_quiet"
+        printf '<div class="stat-badge dead"><div class="n tnum">%s</div><div class="l">Unreach</div></div>\n' "$n_err"
+        printf '</div>\n'   # .badges
+        # legends: wait-class palette + timeline markers
+        printf '<div class="legends">\n'
+        printf '<div class="legend-blk" style="flex:2 1 380px"><h3>Wait-class palette (ASH ribbons)</h3><div class="wc-legend">'
+        local wc name hex
+        for wc in "${WC_LEGEND[@]}"; do
+            name="${wc%%:*}"; hex="${wc#*:}"
+            printf '<div class="wc-item"><span class="wc-swatch" style="background:%s"></span>%s</div>' \
+                "$hex" "$(printf '%s' "$name" | html_escape)"
+        done
+        printf '</div></div>\n'
+        printf '<div class="legend-blk" style="flex:1 1 220px"><h3>Timeline markers</h3><div class="mk-legend">'
+        if [[ "${#MK_WHEN[@]}" -gt 0 ]]; then
+            local mcol
+            for j in "${!MK_WHEN[@]}"; do
+                if [[ $((j % 2)) -eq 0 ]]; then mcol='var(--accent)'; else mcol='var(--warn)'; fi
+                printf '<div class="mk-item"><span class="mk-glyph" style="color:%s">|</span> %s <time>%s</time></div>' \
+                    "$mcol" "$(printf '%s' "${MK_LABEL[$j]}" | html_escape)" "$(printf '%s' "${MK_WHEN[$j]}" | html_escape)"
+            done
+        else
+            printf '<div class="mk-empty">No timeline markers configured.</div>'
+        fi
+        printf '</div></div>\n'
+        printf '</div>\n'   # .legends
+        printf '</div>\n'   # .masthead
+
+        # ---- console table ----
+        printf '<div class="console"><table class="fleet"><thead><tr>'
+        printf '<th style="width:22px"></th>'
+        printf '<th style="width:150px">Database</th>'
+        printf '<th class="r" style="width:56px">Score</th>'
+        printf '<th class="c" style="width:86px">Crit / Warn</th>'
+        printf '<th class="r" style="width:62px">AAS</th>'
+        printf '<th style="min-width:220px">Worst finding</th>'
+        printf '<th class="c" style="width:98px">DB time (24h)</th>'
+        printf '<th class="c" style="width:186px">ASH by wait class (24h)</th>'
+        printf '</tr></thead><tbody>\n'
+
+        # error rows first (conf order): a red dbrow + a hidden detail row with
+        # the masked connect and last-15 log lines.
+        local ecode aliasE dispE reasonE rcvE
         for i in "${!A_ALIAS[@]}"; do
             alias="${A_ALIAS[$i]}"
             [[ "${IS_ERR[$alias]}" == 1 ]] || continue
-            printf '<section class="db-card db-card-error">\n'
-            printf '<h2>%s</h2>\n' "$(printf '%s' "$alias" | html_escape)"
-            printf '<p>connect: <code>%s</code></p>\n' "$(printf '%s' "${DISP[$alias]}" | html_escape)"
-            printf '<p>rc=%s &mdash; %s</p>\n' "$(printf '%s' "${RCV[$alias]}" | html_escape)" \
-                "$(printf '%s' "${REASON[$alias]}" | html_escape)"
+            aliasE="$(printf '%s' "$alias" | html_escape)"
+            dispE="$(printf '%s' "${DISP[$alias]}" | html_escape)"
+            reasonE="$(printf '%s' "${REASON[$alias]}" | html_escape)"
+            rcvE="$(printf '%s' "${RCV[$alias]}" | html_escape)"
+            ecode='ERR'
             if [[ -f "$work/$alias.log" ]]; then
-                printf '<p>Last 15 log lines:</p>\n<pre>%s</pre>\n' "$(tail -n 15 "$work/$alias.log" | html_escape)"
+                ecode="$(grep -oE 'ORA-[0-9]{4,5}|TNS-[0-9]{4,5}' "$work/$alias.log" | head -1 || true)"
+                [[ -z "$ecode" ]] && ecode='ERR'
             fi
-            printf '</section>\n'
+            printf '<tr class="dbrow deadrow" data-db="%s">' "$aliasE"
+            printf '<td><svg class="chev" viewBox="0 0 16 16"><path d="M6 4l5 4-5 4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></td>'
+            printf '<td><span class="alias-cell"><span class="dot dead"></span><span class="alias">%s <span class="role">unreachable</span></span></span></td>' "$aliasE"
+            printf '<td><span class="score s-dead">ERR</span></td>'
+            printf '<td style="text-align:center"><span class="pill z">&mdash;</span></td>'
+            printf '<td class="aas" style="color:var(--muted)">&mdash;</td>'
+            printf '<td><span class="finding"><span class="zbadge c">%s</span><span class="txt">connect failed &mdash; rc=%s</span></span></td>' \
+                "$(printf '%s' "$ecode" | html_escape)" "$rcvE"
+            printf '<td style="text-align:center;color:var(--muted);font-size:11px">n/a</td>'
+            printf '<td style="text-align:center;color:var(--muted);font-size:11px">no fragment</td>'
+            printf '</tr>\n'
+            printf '<tr class="detailrow dead hidden"><td colspan="8"><div class="detail">'
+            printf '<div class="panel-h" style="color:var(--crit)">Connection error</div>'
+            printf '<div class="err-conn">connect: <b>%s</b> &middot; rc=%s &mdash; %s</div>' "$dispE" "$rcvE" "$reasonE"
+            if [[ -f "$work/$alias.log" ]]; then
+                printf '<div class="logtail">%s</div>' "$(tail -n 15 "$work/$alias.log" | html_escape)"
+            fi
+            printf '</div></td></tr>\n'
         done
 
+        # OK rows, score DESC (conf-order tie-break already applied to
+        # sorted_ok).  Substitute the row placeholders the extract emitted --
+        # they are single-sourced here so the row pills, color and sort order
+        # never disagree.  All substituted values are numeric/alpha (no sed
+        # metacharacters).
+        local sscore ssev scpill swpill scrit swarn
         for alias in "${sorted_ok[@]}"; do
-            cat "$work/$alias.frag.html"
+            sscore="${SCORE[$alias]}"; scrit="${CRIT[$alias]}"; swarn="${WARN[$alias]}"
+            if   [[ "$sscore" -ge 10 ]]; then ssev=crit
+            elif [[ "$sscore" -ge 1  ]]; then ssev=warn
+            else ssev=ok; fi
+            if [[ "$scrit" -gt 0 ]]; then scpill=c; else scpill=z; fi
+            if [[ "$swarn" -gt 0 ]]; then swpill=w; else swpill=z; fi
+            sed -e "s/__FLEET_SCORE__/$sscore/g" \
+                -e "s/__FLEET_SEV__/$ssev/g" \
+                -e "s/__FLEET_CRIT__/$scrit/g" \
+                -e "s/__FLEET_WARN__/$swarn/g" \
+                -e "s/__FLEET_CPILL__/$scpill/g" \
+                -e "s/__FLEET_WPILL__/$swpill/g" \
+                "$work/$alias.frag.html"
         done
 
-        printf '<footer>Generated by run_awr_fleet.sh &mdash; score = 10&times;critical + 3&times;warning + min(25, top-SQL points); error cards score as unreachable.</footer>\n'
+        printf '</tbody></table></div>\n'
+        printf '<div class="hint">Click any row to expand its ASH timeline, headline metrics, findings &amp; drill-down. Rows sorted by severity score.</div>\n'
+        printf '<footer class="fleet-footer">AWR Fleet Report v%s &middot; self-contained &middot; inline-SVG charts, no external dependencies &middot; score = 10&times;crit + 3&times;warn + min(25, top-SQL points)</footer>\n' \
+            "$FLEET_VERSION"
         printf '</body>\n</html>\n'
     } > "$report.tmp" && mv "$report.tmp" "$report"
+
+    # Post-assembly guard: no row placeholder may survive substitution.  A
+    # surviving __FLEET_* token means a frag emitted a placeholder the OK-row
+    # sed loop above did not cover (or an error frag leaked one) -- a bug.
+    if grep -q '__FLEET_' "$report" 2>/dev/null; then
+        echo "warning: unresolved __FLEET_* placeholder(s) survived assembly in $report -- this is a bug." >&2
+    fi
 
     for i in "${!A_ALIAS[@]}"; do
         alias="${A_ALIAS[$i]}"
@@ -539,6 +749,7 @@ v_step_unit "$STEP_UNIT"   2>/dev/null || _pos_die step_unit  "$STEP_UNIT"  "one
 _pos_clean fleet_template "$FLEET_TEMPLATE"
 
 parse_conf "$CONF_PATH"
+parse_markers
 
 RUN_ID="$(date +%Y%m%d%H%M%S)$$"
 WORK="reports/fleet_work_${RUN_ID}"

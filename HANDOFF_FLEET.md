@@ -1,4 +1,57 @@
-# HANDOFF: verify the fleet report end-to-end on dbmint
+# HANDOFF: fleet report
+
+## fleet v0.2.0 — "ops console" redesign (2026-07-22, implemented + verified)
+
+The fleet report was redesigned from stacked `<section class="db-card">`s into
+one dense **ops-console table**: a masthead (stat badges + wait-class legend +
+timeline-marker legend + in-page theme toggle) over a single
+`<table class="fleet">` with a collapsed summary `tr.dbrow` + a hidden
+`tr.detailrow` per DB (all collapsed by default; click a row to expand its ASH
+timeline, headline metric cards, findings, Top-SQL, and drill-down). The visual
+spec is `design/fleet_mock_b_ops_console.html`.
+
+**What changed vs v0.1.0**
+
+- **Fragment contract v2**: each `<alias>.frag.html` is now **two `<tr>`s**
+  (dbrow + detailrow), NOT a `<section class="db-card">`. The assembler wraps
+  frags in the `<table>` it emits. Sentinel is still the frag's last line; both
+  `<!-- FLEET-COUNTS … -->` comments are byte-exact and still drive scoring.
+- **Row placeholder injection**: `01_row.sql` emits `__FLEET_SCORE__` /
+  `__FLEET_SEV__` / `__FLEET_CRIT__` / `__FLEET_WARN__` / `__FLEET_CPILL__` /
+  `__FLEET_WPILL__`; the assembler `sed`-substitutes them at assembly time
+  (after parsing FLEET-COUNTS + computing the score) and greps for any survivor.
+- **New ASH section `02_ash.sql`**: emits `window.FLEET_ASH[<alias>]` (24 hourly
+  buckets from `DBA_HIST_ACTIVE_SESS_HISTORY`); the chrome renderer
+  (`sql/fleet/js_fleet_charts.plsql`, inline SVG, no ECharts) draws ribbon +
+  timeline charts, positions markers, wires row-expand + theme toggle.
+- **Markers**: wrapper-owned `MARKERS` / `MARKER_FILE` env vars →
+  `window.FLEET_MARKERS` + masthead legend (extract SQL never sees them).
+- **Theme toggle** now present in the masthead (`#themeToggle`, flips
+  `body.dark`, persists localStorage `"awr-theme"`).
+- Section files renumbered: `00_fleet_chrome`, `01_row`, `02_ash`,
+  `03_headline`, `04_findings`, `05_topsql`, `06_close`, plus
+  `js_fleet_charts.plsql`. Old `01_db_card/02_headline/03_findings/04_topsql/
+  05_close` deleted. **Zero single-DB files touched** (verify with `git diff`).
+
+**Verified on dbmint (2026-07-22, 19.27, window `target_end='2026-07-20 12:00'`
+win=1h weeks_back=4 step=1h)**: `./lint.sh` clean (56 files), `bash -n` clean;
+synthetic `--assemble` (placeholder substitution, sentinel-missing demotion,
+ordering, exit code); full run exit 0, masthead `4 db / 3 crit / 0 warn / 0
+quiet / 1 unreach`, three OK rows identical score=16 conf-order, deadbox error
+row first with ORA-12514, sentinels present, 0 surviving `__FLEET_`, FLEET_ASH
+24-slot arrays for all three, both FLEET_MARKERS, 0 external resources, fake
+`scottx/<pw>@svc` password absent everywhere (masked display), drill masked;
+live-browser render (no console errors, ribbons/timelines/sparklines/metric
+cards render, row-expand + theme flip work); single-DB smoke 16 sections 0 ORA-.
+**Still pending**: a real multi-DB / RAC / migrated-PDB fleet.
+
+To re-verify quickly, follow the v0.1.0 runbook below but with the v0.2.0
+assertions above (and add `MARKERS='2026-07-19 18:00|test marker;;2026-07-20
+03:00|second marker'` to exercise marker rendering inside the 24h ASH span).
+
+---
+
+# HANDOFF: verify the fleet report end-to-end on dbmint (v0.1.0, historical)
 
 You are picking up a feature that is **implemented, reviewed, and lint-clean
 but not yet verified against a live database**. Your job is the live

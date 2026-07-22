@@ -1,20 +1,19 @@
 --
--- sql/fleet/03_findings.sql
--- "Interesting metrics" table: the unified LOAD/METRIC/WAIT z-score
--- compute is unchanged from sql/07_summary.sql's recompute (same CTE
--- chain: windows_cte -> load/metric/wait pairs -> bounds -> deltas ->
--- unified -> pivoted -> scored, using the FLEET template's curated target
--- lists via ~template_dir). Emission differs: this is a fleet triage view,
--- not the full findings table, so only rows the recompute buckets as
--- 'large' or 'moderate' are printed; the rest are counted and summarized
--- in one muted line. A DB with nothing moving prints one reassuring
--- sentence instead of an empty table.
+-- sql/fleet/04_findings.sql
+-- "Findings" detail-block for the detail panel's right column: the unified
+-- LOAD/METRIC/WAIT z-score compute is UNCHANGED from the old 03_findings.sql
+-- (same CTE chain as sql/07_summary.sql: windows_cte -> load/metric/wait
+-- pairs -> bounds -> deltas -> unified -> pivoted -> scored, using the FLEET
+-- template's curated target lists via ~template_dir).  Emission differs only
+-- in wrapping: the table is now class="dt" inside a .detail-block/.panel-h,
+-- and only rows the recompute buckets 'large'/'moderate' are printed; the
+-- rest are counted and summarized in one muted line.
 --
--- Ends with a machine-readable HTML comment (<!-- FLEET-COUNTS ... -->)
--- that is the PL/SQL -> bash handoff: the wrapper's assembler parses it out
--- of the spooled fragment to compute this DB's severity score. Keep the
--- "findings crit=<int> warn=<int> suppressed=<int>" token format and
--- spacing exact -- the assembler regex-matches on it.
+-- Ends with the machine-readable HTML comment (<!-- FLEET-COUNTS ... -->)
+-- that is the PL/SQL -> bash handoff -- the wrapper's assembler regex-matches
+-- "findings crit=<int> warn=<int> suppressed=<int>" out of the spooled
+-- fragment to compute this DB's severity score and substitute the row
+-- placeholders.  Keep the token format and spacing EXACT.
 --
 -- Read-only: recomputes everything in-flight from the AWR views.
 --
@@ -22,7 +21,7 @@
 SET DEFINE '~'
 SET SERVEROUTPUT ON SIZE UNLIMITED FORMAT WRAPPED
 
-BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: fleet_03 BEGIN -->'); END;
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: fleet_04 BEGIN -->'); END;
 /
 
 DECLARE
@@ -33,13 +32,13 @@ DECLARE
 
     @@sql/lib/score_cells.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<h3>Findings</h3>');
+    DBMS_OUTPUT.PUT_LINE('<div class="detail-block">');
+    DBMS_OUTPUT.PUT_LINE('<div class="panel-h">Findings (z &ge; 2&sigma;)</div>');
 
     FOR f IN (
         WITH
         @@sql/lib/windows_cte.sql
         ,
-        -- LOAD domain: DBA_HIST_SYSSTAT cumulative counters, per-sec deltas.
         load_targets AS (
             @@~template_dir/sysstat_load_targets.sql
         ),
@@ -71,7 +70,6 @@ BEGIN
             FROM   load_bounds
             GROUP BY week_offset, stat_name
         ),
-        -- METRIC domain: DBA_HIST_SYSMETRIC_SUMMARY averages over window.
         metric_targets AS (
             @@~template_dir/sysmetric_targets.sql
         ),
@@ -97,9 +95,6 @@ BEGIN
             FROM   metric_per_snap
             GROUP BY week_offset, metric_name
         ),
-        -- WAIT domain: DBA_HIST_SYSTEM_EVENT time-waited per wait_class, as
-        -- rate. The fleet template's wait_event_targets.sql carries no '*'
-        -- sentinel, so this always filters to the 23-event curated list.
         wait_targets AS (
             @@~template_dir/wait_event_targets.sql
         ),
@@ -206,7 +201,7 @@ BEGIN
         END IF;
 
         IF NOT v_open_table THEN
-            DBMS_OUTPUT.PUT_LINE('<table><thead><tr>'
+            DBMS_OUTPUT.PUT_LINE('<table class="dt"><thead><tr>'
                 || '<th>Domain</th><th>Metric</th>'
                 || '<th class="num">Current</th><th class="num">Prior mean</th>'
                 || '<th>Change</th><th class="num">z-score</th><th class="num">% &Delta;</th>'
@@ -214,10 +209,6 @@ BEGIN
             v_open_table := TRUE;
         END IF;
 
-        -- score_cells (Change badge, z-score, %-delta) re-derives the same
-        -- three cells from (cur, mu, sd, n) that the SQL-side compute above
-        -- already scored -- same formula, so it reproduces the identical
-        -- bucket/values; appended last so the header order above matches.
         DBMS_OUTPUT.PUT_LINE('<tr class="' ||
                 CASE f.change_bucket WHEN 'large' THEN 'crit' ELSE 'warn' END || '">'
             || '<td>' || f.metric_domain || '</td>'
@@ -244,10 +235,12 @@ BEGIN
             || ' within normal range (suppressed).</p>');
     END IF;
 
+    DBMS_OUTPUT.PUT_LINE('</div>');  -- .detail-block
+
     DBMS_OUTPUT.PUT_LINE('<!-- FLEET-COUNTS findings crit=' || v_crit
         || ' warn=' || v_warn || ' suppressed=' || v_suppressed || ' -->');
 END;
 /
 
-BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: fleet_03 END -->'); END;
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: fleet_04 END -->'); END;
 /
