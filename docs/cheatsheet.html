@@ -207,6 +207,7 @@
         <li><a href="#offline">Offline / self-contained</a></li>
         <li><a href="#playbooks">Playbooks</a></li>
         <li><a href="#retention">AWR retention</a></li>
+        <li><a href="#fleet">Fleet report</a></li>
       </ul>
     </div>
 
@@ -644,6 +645,29 @@ DEFINE template   = <span class="s">'comprehensive'</span>
 DEFINE debug      = <span class="s">'N'</span>
 DEFINE marker_file = <span class="s">''</span>
 DEFINE markers = <span class="s">''</span></pre>
+    </section>
+
+    <section id="fleet">
+      <h2><span class="num">§14</span>Fleet report (many databases)</h2>
+      <p>
+        A separate wrapper, <code>run_awr_fleet.sh</code>, runs the same comparison across a whole
+        <code>fleet.conf</code> (one <code>alias|connect</code> per line) and stitches every database
+        into a single worst-first ops-console page. No <code>inst_num</code> argument — a fleet pass is
+        always <code>inst_num=0</code>. See the
+        <a href="https://github.com/davidbudac/awr_timeline_comparison#fleet-report-many-databases">README fleet section</a> for the full reference.
+      </p>
+
+      <h3>Default sweep — every DB, prior full hour vs 4 back</h3>
+<pre>./run_awr_fleet.sh fleet.conf</pre>
+
+      <h3>Explicit window, hourly cadence</h3>
+<pre>./run_awr_fleet.sh fleet.conf <span class="s">'2026-05-08 14:00'</span> 1 4 10 1 h</pre>
+
+      <h3>Mark a fleet-wide event on every DB's 24h ASH chart</h3>
+<pre>MARKERS=<span class="s">'2026-05-08 09:30|Applied patch 19.22'</span> ./run_awr_fleet.sh fleet.conf</pre>
+      <p><em>Positional order is
+      <code>fleet.conf [target_end] [win_hours] [weeks_back] [top_n] [step] [step_unit]</code>.
+      <code>MARKER_FILE=&lt;file&gt;</code> of <code>WHEN|LABEL</code> lines wins over <code>MARKERS</code>.</em></p>
     </section>
 
   </div>

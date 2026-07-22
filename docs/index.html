@@ -466,6 +466,7 @@
         <a href="#start">Get started</a>
         <a href="#templates">Templates</a>
         <a href="#markers">Markers</a>
+        <a href="#fleet">Fleet</a>
         <a href="#examples">Examples</a>
         <span class="sep" aria-hidden="true"></span>
         <a href="configurator.html">Configurator</a>
@@ -1122,10 +1123,62 @@ SQL&gt; <span class="k">@awr_trend.sql</span></pre>
     </figure>
   </section>
 
+  <!-- FLEET -->
+  <section class="chapter" id="fleet" aria-labelledby="h-fleet">
+    <div class="chap-head">
+      <span class="chap-num oldstyle">07</span>
+      <h2 class="chap-title" id="h-fleet">One page for a whole fleet</h2>
+    </div>
+    <div class="prose">
+      <p>
+        Watching more than one database? <code>run_awr_fleet.sh</code> runs the exact same
+        aligned-window, z-score comparison against every database listed in a <code>fleet.conf</code>
+        — in parallel — and stitches the results into <em>one</em> self-contained, worst-first
+        <strong>ops console</strong>: a dense table with one collapsed row per database (status dot,
+        severity score, crit/warn pills, current AAS, its worst finding, a DB-time sparkline and a
+        24-hour ASH-by-wait-class ribbon) that you click to expand into a full detail panel — a tall
+        24h ASH timeline, headline metric cards, the findings table and the Top-SQL table.
+      </p>
+    </div>
+
+    <div class="listing">
+      <div class="lh">fleet.conf — one alias|connect per line</div>
+<pre><span class="c"># alias        | connect</span>
+prod-emea      | /@PRODEMEA
+prod-amer      | /@PRODAMER
+reporting      | reporting_ro/@RPT</pre>
+    </div>
+
+    <div class="listing">
+      <div class="lh">one command, the whole fleet</div>
+<pre>./run_awr_fleet.sh fleet.conf
+<span class="c"># mark a fleet-wide event on every DB's 24h ASH chart:</span>
+MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22'</span> ./run_awr_fleet.sh fleet.conf</pre>
+    </div>
+
+    <div class="prose">
+      <ul>
+        <li>Each row carries its own <strong>24-hour ASH timeline</strong>, with fleet-wide
+          <a href="#markers">markers</a> drawn across every database at the same instant.</li>
+        <li>Rows are <strong>collapsed by default</strong> — click one to expand its detail panel
+          without leaving the page.</li>
+        <li>A database that is unreachable, times out, or spools a truncated fragment becomes a red
+          <strong>error row sorted to the top</strong> — silence is never mistaken for health.</li>
+        <li>Every row prints the exact <code>./run_awr_trend.sh …</code> <strong>drill-down
+          command</strong> to open the full single-DB report for that database.</li>
+      </ul>
+      <p>
+        It stays true to the toolkit's rules: inline-SVG only (no external charts), offline-complete,
+        read-only. See the <a href="https://github.com/davidbudac/awr_timeline_comparison#fleet-report-many-databases">Fleet report section of the README</a>
+        for the full reference — <code>fleet.conf</code> format, scoring, and every environment variable.
+      </p>
+    </div>
+  </section>
+
   <!-- HONEST -->
   <section class="chapter" id="honest" aria-labelledby="h-honest">
     <div class="chap-head">
-      <span class="chap-num oldstyle">07</span>
+      <span class="chap-num oldstyle">08</span>
       <h2 class="chap-title" id="h-honest">Honest by design</h2>
     </div>
     <div class="prose">
@@ -1157,7 +1210,7 @@ SQL&gt; <span class="k">@awr_trend.sql</span></pre>
   <!-- EXAMPLES -->
   <section class="chapter" id="examples" aria-labelledby="h-examples">
     <div class="chap-head">
-      <span class="chap-num oldstyle">08</span>
+      <span class="chap-num oldstyle">09</span>
       <h2 class="chap-title" id="h-examples">Example reports</h2>
     </div>
     <div class="prose">
@@ -1205,7 +1258,7 @@ SQL&gt; <span class="k">@awr_trend.sql</span></pre>
   <!-- CHEAT SHEET -->
   <section class="chapter" id="cheatsheet" aria-labelledby="h-cheat">
     <div class="chap-head">
-      <span class="chap-num oldstyle">09</span>
+      <span class="chap-num oldstyle">10</span>
       <h2 class="chap-title" id="h-cheat">The cheat sheet</h2>
     </div>
     <div class="prose">
