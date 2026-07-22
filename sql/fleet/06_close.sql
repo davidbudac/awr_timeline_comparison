@@ -14,6 +14,14 @@
 -- built by the wrapper from fleet.conf -- never the raw connect string, so a
 -- credential never round-trips through this HTML.
 --
+-- Also emits __FLEET_DETAIL_LINE__ on its own line next to the drill command,
+-- unconditionally -- this section stays ignorant of whether this DB was
+-- flagged for a detailed report (same wrapper-owned philosophy as timeline
+-- markers).  The assembler substitutes it with '' (no detail requested), a
+-- link to the generated single-DB report, or an explanatory failed/skipped
+-- note, using the same per-alias detail rc + report file it already knows
+-- about from the __FLEET_DETAIL_CHIP__ substitution in 01_row.sql.
+--
 
 SET DEFINE '~'
 SET SERVEROUTPUT ON SIZE UNLIMITED FORMAT WRAPPED
@@ -35,6 +43,7 @@ BEGIN
         || '~win_hours' || ' ' || '~weeks_back' || ' ' || '~top_n'
         || ' 0 ' || '~step' || ' ' || DBMS_XMLGEN.CONVERT('~step_unit')
         || '</div>');
+    DBMS_OUTPUT.PUT_LINE('__FLEET_DETAIL_LINE__');
 
     DBMS_OUTPUT.PUT_LINE('</div>');   -- .detail-col-right (opened in 03_headline.sql)
     DBMS_OUTPUT.PUT_LINE('</div>');   -- .detail-grid (opened in 01_row.sql)

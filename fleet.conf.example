@@ -3,7 +3,7 @@
 # Copy this file to fleet.conf (gitignored -- see .gitignore) and fill in
 # your real connect strings.  run_awr_fleet.sh reads it as:
 #
-#   alias|connect
+#   alias|connect[|detail]
 #
 # one entry per line.
 #
@@ -14,6 +14,25 @@
 #            a bare TNS alias, '/', '/@tns_alias', or '/ as sysdba'
 #            (quoting is handled for you; do not add your own quotes here).
 #            Must not contain a literal single quote, tab, or newline.
+#   detail   OPTIONAL third field, literally the word "detail" (case-
+#            insensitive; e.g. "Detail" or "DETAIL" work too).  When present,
+#            run_awr_fleet.sh also generates a FULL single-DB report
+#            (awr_trend.sql) for this database in the same run, saved next to
+#            the fleet report and linked from this DB's row.  A detailed run
+#            is slower (it's the full report, not the lean fleet extract), so
+#            reserve it for the DBs you actually want to drill into by
+#            default -- see the FLEET_DETAIL* environment variables in
+#            run_awr_fleet.sh --help to force/disable this fleet-wide or tune
+#            the detailed run's template/timeout/echarts source.
+#
+#            NB: we deliberately do NOT try to detect "an unexpected third
+#            field" -- a connect string could in principle itself contain a
+#            '|', so only a trailing "|detail" suffix (whitespace around the
+#            word tolerated) is ever treated as this flag; anything else
+#            after the second '|' is just taken to be part of the connect
+#            string.  If your connect string would otherwise end in the
+#            literal text "|detail", you have a very unusual setup -- open
+#            an issue rather than relying on this edge case either way.
 #
 # Blank lines and lines starting with '#' (leading whitespace allowed) are
 # ignored.
@@ -33,7 +52,7 @@
 # line (user/***@svc) but the source file itself is not encrypted.
 #
 # --- Examples ----------------------------------------------------------
-# prod_east|/@prod_east_tns
+# prod_east|/@prod_east_tns|detail
 # prod_west|/@prod_west_tns
 # reporting|readonly_user/change_me@reporting_svc
 # staging|/@staging_tns

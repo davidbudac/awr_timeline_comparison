@@ -16,6 +16,14 @@
 --   __FLEET_SEV__    -> crit|warn|ok (dot + score color class)
 --   __FLEET_CRIT__   -> critical finding count      __FLEET_CPILL__ -> c|z
 --   __FLEET_WARN__   -> warning finding count        __FLEET_WPILL__ -> w|z
+--
+-- A third, independent placeholder is emitted unconditionally in the alias
+-- cell, regardless of whether this DB was flagged for a detailed report --
+-- this section stays ignorant of that (same wrapper-owned philosophy as
+-- timeline markers): __FLEET_DETAIL_CHIP__ -> '' (no detail requested) or a
+-- small "report" link / "detail failed" pill, filled in by the assembler
+-- from the per-alias detail rc + report file it already knows about.
+--
 -- None contain a tilde or ampersand; a placeholder that survives assembly is
 -- a bug the wrapper greps for.
 --
@@ -268,7 +276,8 @@ BEGIN
         || '<path d="M6 4l5 4-5 4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></td>');
     DBMS_OUTPUT.PUT_LINE('<td><span class="alias-cell"><span class="dot __FLEET_SEV__"></span>'
         || '<span class="alias">' || DBMS_XMLGEN.CONVERT('~fleet_alias')
-        || ' <span class="role">' || DBMS_XMLGEN.CONVERT('~db_name') || '</span></span></span></td>');
+        || ' <span class="role">' || DBMS_XMLGEN.CONVERT('~db_name') || '</span></span>'
+        || '__FLEET_DETAIL_CHIP__</span></td>');
     DBMS_OUTPUT.PUT_LINE('<td><span class="score s-__FLEET_SEV__">__FLEET_SCORE__</span></td>');
     DBMS_OUTPUT.PUT_LINE('<td style="text-align:center"><span class="cw" style="justify-content:center">'
         || '<span class="pill __FLEET_CPILL__">__FLEET_CRIT__C</span>'

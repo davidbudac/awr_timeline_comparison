@@ -22,6 +22,12 @@
 # (aggregate across RAC) — a fleet triage pass has no business drilling into
 # one instance.
 #
+# Optional per-DB detailed reports: a fleet.conf line may carry a third field,
+# "alias|connect|detail", flagging that DB for a FULL single-DB report
+# (awr_trend.sql) generated in the same run and linked from that DB's row in
+# the fleet report (see FLEET_DETAIL* below to force/disable this fleet-wide,
+# or to tune the detailed run).
+#
 # Environment variables:
 #   FLEET_PAR        max concurrent per-DB sqlplus runs           [4]
 #   FLEET_TIMEOUT    per-DB wall-clock limit in seconds, enforced  [900]
@@ -35,12 +41,26 @@
 #   MARKERS          inline fleet-wide timeline markers, one string,
 #                    "WHEN|LABEL;;WHEN|LABEL" (WHEN='YYYY-MM-DD HH:MM')
 #   MARKER_FILE      a file of "WHEN|LABEL" lines; wins over MARKERS
+#   FLEET_DETAIL     all = force a detailed report for every DB, none =
+#                    disable detailed reports fleet-wide, empty = honor
+#                    each fleet.conf line's own |detail flag           []
+#   FLEET_DETAIL_TIMEOUT   per-DB wall-clock limit (seconds) for the
+#                          detailed run, same timeout/gtimeout mechanism
+#                          as FLEET_TIMEOUT                          [1800]
+#   FLEET_DETAIL_TEMPLATE  awr_trend.sql template for the detailed run
+#                                                            [comprehensive]
+#   FLEET_DETAIL_ECHARTS   passed to the single-DB report's `echarts` var;
+#                          empty = public CDN, http(s) URL = internal
+#                          mirror, local file path = inlined into the
+#                          detailed report for a fully offline file    []
 #
 # Examples:
 #   ./run_awr_fleet.sh fleet.conf
 #   ./run_awr_fleet.sh fleet.conf AUTO 1 4 10 1 h
 #   FLEET_PAR=8 FLEET_TIMEOUT=300 ./run_awr_fleet.sh fleet.conf
 #   ./run_awr_fleet.sh --assemble reports/fleet_work_20260714120000123
+#   # Force a detailed report for every DB, using the app-developer template:
+#   FLEET_DETAIL=all FLEET_DETAIL_TEMPLATE=dev ./run_awr_fleet.sh fleet.conf
 #
 # Exit codes:
 #   0   report written, at least one DB reported OK
@@ -61,13 +81,24 @@ DEF_STEP='1'
 DEF_STEP_UNIT='w'
 
 # ---- fleet report version ---------------------------------------------------
-FLEET_VERSION='0.2.0'
+FLEET_VERSION='0.3.0'
 
 # ---- fleet-specific env vars ------------------------------------------------
 FLEET_PAR="${FLEET_PAR:-4}"
 FLEET_TIMEOUT="${FLEET_TIMEOUT:-900}"
 FLEET_TEMPLATE="${FLEET_TEMPLATE:-fleet}"
 FLEET_KEEP_WORK="${FLEET_KEEP_WORK:-0}"
+
+# ---- optional per-DB detailed (full single-DB) report -----------------------
+# FLEET_DETAIL: '' = honor each fleet.conf line's own "|detail" flag (default),
+# 'all' forces a detailed run for every alias, 'none' disables it fleet-wide.
+# Applied to the parsed per-alias DETAILS[] array in parse_conf() so every
+# downstream consumer (manifest, run_one_db, the assembler) sees only the
+# effective flag.
+FLEET_DETAIL="${FLEET_DETAIL:-}"
+FLEET_DETAIL_TIMEOUT="${FLEET_DETAIL_TIMEOUT:-1800}"
+FLEET_DETAIL_TEMPLATE="${FLEET_DETAIL_TEMPLATE:-comprehensive}"
+FLEET_DETAIL_ECHARTS="${FLEET_DETAIL_ECHARTS:-}"
 
 # ---- fleet-wide timeline markers (wrapper-owned; the extract SQL never sees
 #      them). MARKER_FILE (a file of "WHEN|LABEL" lines) wins over MARKERS
@@ -85,6 +116,27 @@ MARKER_FILE="${MARKER_FILE:-}"
     echo "error: FLEET_TIMEOUT must be a positive integer (got '$FLEET_TIMEOUT')" >&2; exit 2; }
 [[ "$FLEET_KEEP_WORK" =~ ^[01]$ ]] || {
     echo "error: FLEET_KEEP_WORK must be 0 or 1 (got '$FLEET_KEEP_WORK')" >&2; exit 2; }
+case "${FLEET_DETAIL,,}" in
+    ''|all|none) : ;;
+    *) echo "error: FLEET_DETAIL must be 'all', 'none', or empty (got '$FLEET_DETAIL')" >&2; exit 2 ;;
+esac
+[[ "$FLEET_DETAIL_TIMEOUT" =~ ^[1-9][0-9]*$ ]] || {
+    echo "error: FLEET_DETAIL_TIMEOUT must be a positive integer (got '$FLEET_DETAIL_TIMEOUT')" >&2; exit 2; }
+# FLEET_DETAIL_TEMPLATE rides into a single-quoted DEFINE in run_one_detail's
+# heredoc (same footgun as FLEET_TEMPLATE / _pos_clean elsewhere in this file).
+case "$FLEET_DETAIL_TEMPLATE" in
+    *"'"*|*$'\n'*|*$'\t'*)
+        echo "error: FLEET_DETAIL_TEMPLATE must not contain a single quote, newline, or tab (got '$FLEET_DETAIL_TEMPLATE')" >&2
+        exit 2 ;;
+esac
+# FLEET_DETAIL_ECHARTS rides into a double-quoted <script src> AND a single-
+# quoted DEFINE (see run_awr_trend.sh's ECHARTS validation for the <script
+# src> half of this); either quote character would break one of the two.
+case "$FLEET_DETAIL_ECHARTS" in
+    *'"'*|*"'"*)
+        echo "error: FLEET_DETAIL_ECHARTS must not contain a double quote (\") or single quote (') (got '$FLEET_DETAIL_ECHARTS')" >&2
+        exit 2 ;;
+esac
 
 # ---- optional terminal styling (degrades to plain text) --------------------
 # Same guarded pattern as run_awr_trend.sh: a missing terminfo cap (e.g. `tput
@@ -108,7 +160,8 @@ Usage:
   ./run_awr_fleet.sh --help                 this help
 
 Positional arguments (all but <fleet.conf> are optional, left to right):
-  fleet.conf    "alias|connect" per line -- see fleet.conf.example  (required)
+  fleet.conf    "alias|connect[|detail]" per line -- see fleet.conf.example
+                                                                   (required)
   target_end    AUTO = prior full hour, or 'YYYY-MM-DD HH24:MI'  [${DEF_TARGET_END}]
   win_hours     width of each compared window, in hours          [${DEF_WIN_HOURS}]
   weeks_back    number of prior windows to compare against       [${DEF_WEEKS_BACK}]
@@ -126,10 +179,20 @@ Environment variables:
                    (WHEN = 'YYYY-MM-DD HH:MM'); drawn on every DB's 24h
                    ASH chart within span, and in the masthead legend
   MARKER_FILE      a file of "WHEN|LABEL" lines; wins over MARKERS
+  FLEET_DETAIL     all|none|'' -- force/disable/honor-per-line the
+                   optional full single-DB detailed report              []
+  FLEET_DETAIL_TIMEOUT   per-DB detailed-run wall-clock limit, seconds [1800]
+  FLEET_DETAIL_TEMPLATE  awr_trend.sql template for the detailed run
+                                                          [comprehensive]
+  FLEET_DETAIL_ECHARTS   echarts source for the detailed report; empty =
+                         CDN, http(s) URL = mirror, local path = inlined []
 
 Score shown per DB in the report: 10*critical + 3*warning + min(25, top-SQL
 points); an unreachable/truncated DB scores as an error row (sorts first).
 Rows are collapsed by default -- click a row to expand its detail panel.
+A DB flagged "|detail" in fleet.conf (or forced via FLEET_DETAIL=all) also
+gets a full single-DB report (awr_trend.sql) generated alongside the fleet
+report and linked from that DB's row.
 USAGE
 }
 
@@ -194,6 +257,53 @@ mask_conn() {
         return
     fi
     printf '%s' "$c"
+}
+
+# ---------------------------------------------------------------------------
+# is_url <value> / inline_fleet_echarts <html> <libfile> -- fleet-owned copies
+# of run_awr_trend.sh's is_url / inline_echarts (CLAUDE.md forbids touching
+# that file for a fleet feature, so the mechanism is copied here verbatim
+# rather than sourced or shared).  Used only for the optional per-DB detailed
+# report's FLEET_DETAIL_ECHARTS var -- see that file's identically-named
+# functions for the full rationale.
+# ---------------------------------------------------------------------------
+is_url() { local v="${1,,}"; [[ "$v" == http://* || "$v" == https://* || "$v" == //* ]]; }
+
+inline_fleet_echarts() {
+    local html="$1" lib="$2" marker lineno
+    [[ -z "$lib" ]] && return 0
+    is_url "$lib" && return 0
+    marker="src=\"$lib\""
+    lineno="$(grep -nF "$marker" "$html" | head -1 | cut -d: -f1 || true)"
+    if [[ -z "$lineno" ]]; then
+        echo "warning: could not find the ECharts <script src=\"$lib\"> line in" \
+             "$(basename "$html"); left linked, not inlined." >&2
+        return 0
+    fi
+    {
+        head -n "$((lineno - 1))" "$html"
+        printf '<script>\n'
+        cat "$lib"
+        printf '\n</script>\n'
+        tail -n "+$((lineno + 1))" "$html"
+    } > "$html.inlining" && mv "$html.inlining" "$html"
+    echo "Inlined ECharts ($lib) into $(basename "$html") -- detailed report is self-contained."
+}
+
+# resolve_detail_echarts_path -- when FLEET_DETAIL_ECHARTS is set and is not
+# an http(s) URL, it must be a readable local file (relative paths resolved
+# against the project root) BEFORE any DB is queried -- a bad path caught only
+# after every extract has run would waste the whole run.  Empty / URL values
+# need no local file and are left alone (the DEFINE already handles them).
+resolve_detail_echarts_path() {
+    [[ -z "$FLEET_DETAIL_ECHARTS" ]] && return 0
+    is_url "$FLEET_DETAIL_ECHARTS" && return 0
+    local p="$FLEET_DETAIL_ECHARTS"
+    [[ "$p" == /* ]] || p="$SCRIPT_DIR/$p"
+    if [[ ! -r "$p" ]]; then
+        echo "error: FLEET_DETAIL_ECHARTS '$FLEET_DETAIL_ECHARTS' does not exist or is not readable." >&2
+        exit 2
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -262,23 +372,33 @@ resolve_timeout_bin() {
 
 # ---------------------------------------------------------------------------
 # parse_conf <fleet.conf> -- fills the global arrays ALIASES / CONNS /
-# CONN_DISPS (parallel, conf order).  "alias|connect" per line; blank lines
-# and lines whose first non-blank char is '#' are ignored.  Aliases must
-# match [A-Za-z0-9_.-]{1,30} and be unique; connect strings must not embed a
-# quote, newline or tab (see _pos_clean).  Any violation dies with exit 2
-# (usage/conf error) and names the offending line.
+# CONN_DISPS / DETAILS (parallel, conf order).  "alias|connect[|detail]" per
+# line; blank lines and lines whose first non-blank char is '#' are ignored.
+# Aliases must match [A-Za-z0-9_.-]{1,30} and be unique; connect strings must
+# not embed a quote, newline or tab (see _pos_clean).  Any violation dies with
+# exit 2 (usage/conf error) and names the offending line.
+#
+# The optional third field is not a separate '|'-delimited token in the
+# strict sense -- it's detected as a trailing "|detail" suffix (case-
+# insensitive, whitespace around the token tolerated) on the remainder after
+# the alias.  We deliberately do NOT try to detect "an unknown third field":
+# a connect string could in principle contain '|', so anything not matching
+# this exact suffix is just part of the connect string (documented in
+# fleet.conf.example).  FLEET_DETAIL ('all'/'none'/'') overrides every
+# per-line flag once parsing is done, so every downstream consumer (manifest,
+# run_one_db, the assembler) sees only the effective flag.
 # ---------------------------------------------------------------------------
 parse_conf() {
-    local conf="$1" lineno=0 line alias conn seen=':'
+    local conf="$1" lineno=0 line alias conn seen=':' detail_flag
     [[ -r "$conf" ]] || { echo "error: fleet.conf '$conf' does not exist or is not readable." >&2; exit 2; }
-    ALIASES=(); CONNS=(); CONN_DISPS=()
+    ALIASES=(); CONNS=(); CONN_DISPS=(); DETAILS=()
     while IFS= read -r line || [[ -n "$line" ]]; do
         lineno=$((lineno + 1))
         line="${line%$'\r'}"                                  # tolerate CRLF
         [[ -z "${line//[[:space:]]/}" ]] && continue           # blank
         [[ "$line" =~ ^[[:space:]]*# ]] && continue             # comment
         if [[ "$line" != *'|'* ]]; then
-            echo "error: fleet.conf '$conf' line $lineno: expected 'alias|connect', got: $line" >&2
+            echo "error: fleet.conf '$conf' line $lineno: expected 'alias|connect[|detail]', got: $line" >&2
             exit 2
         fi
         alias="${line%%|*}"
@@ -295,27 +415,42 @@ parse_conf() {
             ;;
         esac
         seen="${seen}${alias}:"
+
+        detail_flag='N'
+        if [[ "$conn" =~ ^(.*)\|[[:space:]]*[Dd][Ee][Tt][Aa][Ii][Ll][[:space:]]*$ ]]; then
+            conn="${BASH_REMATCH[1]}"
+            detail_flag='Y'
+        fi
+
         [[ -n "$conn" ]] || { echo "error: fleet.conf '$conf' line $lineno: empty connect string for alias '$alias'" >&2; exit 2; }
         _pos_clean "connect (alias $alias, line $lineno)" "$conn"
         ALIASES+=("$alias")
         CONNS+=("$conn")
         CONN_DISPS+=("$(mask_conn "$conn")")
+        DETAILS+=("$detail_flag")
     done < "$conf"
     [[ "${#ALIASES[@]}" -gt 0 ]] || { echo "error: fleet.conf '$conf' has no usable entries." >&2; exit 2; }
+
+    case "${FLEET_DETAIL,,}" in
+        all)  local k; for k in "${!DETAILS[@]}"; do DETAILS[k]='Y'; done ;;
+        none) local k; for k in "${!DETAILS[@]}"; do DETAILS[k]='N'; done ;;
+    esac
 }
 
 # ---------------------------------------------------------------------------
-# write_manifest <workdir> -- ALIASES/CONNS/CONN_DISPS (conf order) ->
-# workdir/manifest.tsv, and the window/cadence/run params -> workdir/
-# params.env.  Written up front (before any DB is queried) so `--assemble`
-# can reconstruct conf order, masked connects and the masthead window line
-# from the workdir alone -- no need to keep fleet.conf around or re-parse it.
+# write_manifest <workdir> -- ALIASES/CONNS/CONN_DISPS/DETAILS (conf order) ->
+# workdir/manifest.tsv (3 columns: alias, masked connect, detail flag Y/N),
+# and the window/cadence/run params -> workdir/params.env.  Written up front
+# (before any DB is queried) so `--assemble` can reconstruct conf order,
+# masked connects, detail flags and the masthead window line from the workdir
+# alone -- no need to keep fleet.conf around or re-parse it.  do_assemble
+# tolerates a 2-column manifest from an older workdir (defaults the flag to N).
 # ---------------------------------------------------------------------------
 write_manifest() {
     local work="$1" i
     : > "$work/manifest.tsv"
     for i in "${!ALIASES[@]}"; do
-        printf '%s\t%s\n' "${ALIASES[$i]}" "${CONN_DISPS[$i]}" >> "$work/manifest.tsv"
+        printf '%s\t%s\t%s\n' "${ALIASES[$i]}" "${CONN_DISPS[$i]}" "${DETAILS[$i]}" >> "$work/manifest.tsv"
     done
     # Persist parsed markers so --assemble can rebuild window.FLEET_MARKERS +
     # the masthead legend from the workdir alone (one "WHEN\tLABEL" per line;
@@ -335,23 +470,32 @@ STEP='${STEP}'
 STEP_UNIT='${STEP_UNIT}'
 FLEET_TEMPLATE='${FLEET_TEMPLATE}'
 RUN_ID='${RUN_ID}'
+FLEET_DETAIL_TEMPLATE='${FLEET_DETAIL_TEMPLATE}'
+FLEET_DETAIL_TIMEOUT='${FLEET_DETAIL_TIMEOUT}'
+FLEET_DETAIL_ECHARTS='${FLEET_DETAIL_ECHARTS}'
 EOF
 }
 
 # ---------------------------------------------------------------------------
-# run_one_db <alias> <conn> <conn_disp> -- runs the lean fleet extract
-# against one DB.  Loads sql/defaults.sql then sql/fleet/defaults.sql as
-# safety nets (same "defaults first, explicit DEFINEs override, driver as a
-# SEPARATE start command" pattern as run_awr_trend.sh's run_report -- see
+# run_one_db <alias> <conn> <conn_disp> <detail_flag> -- runs the lean fleet
+# extract against one DB.  Loads sql/defaults.sql then sql/fleet/defaults.sql
+# as safety nets (same "defaults first, explicit DEFINEs override, driver as
+# a SEPARATE start command" pattern as run_awr_trend.sh's run_report -- see
 # that file's run_report comment for why loading both @files on one line is
 # a silent no-op), sets inst_num=0 unconditionally (fleet always aggregates
 # RAC), then @@awr_fleet_extract.sql.  stdout+stderr -> workdir/<alias>.log;
 # exit status -> workdir/<alias>.rc (numeric only).  Never lets a per-DB
 # failure escape as a script-fatal error (set -e is defeated by the
 # `|| rc=$?` guard, mirroring run_awr_trend.sh's own idiom).
+#
+# When detail_flag='Y', also runs the optional full single-DB detailed report
+# (run_one_detail) once the extract's rc is known -- inside this SAME
+# background job, so FLEET_PAR still caps total concurrency (a detail run
+# never adds a second job slot).  extract rc!=0 skips the detail run outright
+# (nothing to drill into) and records 'skipped', not a numeric rc.
 # ---------------------------------------------------------------------------
 run_one_db() {
-    local alias="$1" conn="$2" disp="$3"
+    local alias="$1" conn="$2" disp="$3" detail_flag="$4"
     local log="$WORK/$alias.log" rcfile="$WORK/$alias.rc"
     local rc=0
     local -a cmd=(sqlplus -S -L "$conn")
@@ -375,15 +519,176 @@ DEFINE fleet_conn_disp = '${disp}'
 EXIT
 SQLEOF
     printf '%s\n' "$rc" > "$rcfile"
+
+    if [[ "$detail_flag" == 'Y' ]]; then
+        if [[ "$rc" -eq 0 ]]; then
+            run_one_detail "$alias" "$conn"
+        else
+            printf 'skipped\n' > "$WORK/$alias.detail.rc"
+        fi
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# run_one_detail <alias> <conn> -- generates the FULL single-DB report
+# (awr_trend.sql) for one DB flagged "|detail", using the exact same
+# window/cadence params as the fleet extract (inst_num pinned to 0, matching
+# the fleet-wide "aggregate across RAC" stance).  Runs from an isolated
+# per-alias cwd (symlinks to the project's driver + sql/ dir) so:
+#   (a) awr_trend.sql's self-named `reports/awr_trend_<db>_<dbid>_<ts>_run<id>
+#       .html` output can be captured without knowing its name up front,
+#   (b) parallel detail runs under FLEET_PAR>1 never race on a shared
+#       reports/ dir or a shared filename,
+#   (c) no absolute project paths ever ride into the sqlplus heredoc (a
+#       tilde/ampersand substitution hazard per CLAUDE.md's tilde gotcha).
+# Two separate @ start commands (defaults, then the driver) mirror
+# run_awr_trend.sh's run_report -- see that function's comment for why both
+# on one line is a silent no-op.  On success, the single resulting *.html is
+# moved to a predictable project-root path the assembler links to; the
+# isolated dir is removed.  On failure (or if inlining leaves the isolated
+# dir around because of an unexpected *.html count) the dir is LEFT for
+# debugging, mirroring the single-DB workdir-on-error convention.  Writes the
+# numeric rc (or nothing -- the caller already wrote 'skipped') to
+# workdir/<alias>.detail.rc.
+# ---------------------------------------------------------------------------
+run_one_detail() {
+    local alias="$1" conn="$2"
+    local ddir="$WORK/detail_$alias"
+    local dlog="$WORK/$alias.detail.log"
+    local drc="$WORK/$alias.detail.rc"
+    local rc=0
+
+    mkdir -p "$ddir/reports"
+    ln -s "$SCRIPT_DIR/awr_trend.sql" "$ddir/awr_trend.sql"
+    ln -s "$SCRIPT_DIR/sql" "$ddir/sql"
+
+    local -a cmd=(sqlplus -S -L "$conn")
+    [[ -n "$TIMEOUT_BIN" ]] && cmd=("$TIMEOUT_BIN" "$FLEET_DETAIL_TIMEOUT" "${cmd[@]}")
+
+    # The log redirection sits on the SUBSHELL, not the inner command: dlog is
+    # a workdir-relative path that must resolve against this function's cwd
+    # (the project root), not against ddir after the subshell's cd.
+    ( cd "$ddir" && "${cmd[@]}" <<SQLEOF
+@sql/defaults.sql
+DEFINE target_end = '${TARGET_END}'
+DEFINE win_hours  = ${WIN_HOURS}
+DEFINE weeks_back = ${WEEKS_BACK}
+DEFINE top_n      = ${TOP_N}
+DEFINE inst_num   = 0
+DEFINE step       = ${STEP}
+DEFINE step_unit  = '${STEP_UNIT}'
+DEFINE template   = '${FLEET_DETAIL_TEMPLATE}'
+DEFINE markers    = '${DETAIL_MARKERS}'
+DEFINE echarts    = '${FLEET_DETAIL_ECHARTS}'
+@awr_trend.sql
+EXIT
+SQLEOF
+    ) > "$dlog" 2>&1 || rc=$?
+
+    if [[ "$rc" -eq 0 ]]; then
+        local -a htmls=()
+        while IFS= read -r -d '' f; do htmls+=("$f"); done \
+            < <(find "$ddir/reports" -maxdepth 1 -name '*.html' -print0 2>/dev/null)
+        if [[ "${#htmls[@]}" -eq 1 ]]; then
+            local dest="reports/awr_fleet_detail_${alias}_run${RUN_ID}.html"
+            mv "${htmls[0]}" "$dest"
+            inline_fleet_echarts "$dest" "$FLEET_DETAIL_ECHARTS"
+            rm -rf "$ddir"
+        else
+            rc=1
+            echo "error: expected exactly one *.html under $ddir/reports, found ${#htmls[@]}." >> "$dlog"
+        fi
+    fi
+
+    printf '%s\n' "$rc" > "$drc"
+}
+
+# ---------------------------------------------------------------------------
+# detail_state <workdir> <alias> -- 'ok' | 'skipped' | 'failed'.  Only
+# meaningful when the alias's detail flag is 'Y' (callers check the flag
+# first).  Single-sourced by detail_bits (HTML chip/line for the report) and
+# detail_status_word (the per-DB stdout summary line) so the two can never
+# disagree about success/failure.  Needs RUN_ID in scope (do_assemble sources
+# it from params.env before either caller runs).
+# ---------------------------------------------------------------------------
+detail_state() {
+    local work="$1" alias="$2" drc dpath
+    drc="$(cat "$work/$alias.detail.rc" 2>/dev/null || true)"
+    dpath="reports/awr_fleet_detail_${alias}_run${RUN_ID}.html"
+    if [[ "$drc" == '0' && -s "$dpath" ]]; then
+        printf 'ok'
+    elif [[ "$drc" == 'skipped' ]]; then
+        printf 'skipped'
+    else
+        printf 'failed'
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# detail_bits <workdir> <alias> <flag> -- sets globals DCHIP / DLINE: the HTML
+# snippets that replace the __FLEET_DETAIL_CHIP__ / __FLEET_DETAIL_LINE__
+# placeholders 01_row.sql / 06_close.sql emit unconditionally in every OK
+# fragment.  flag='N' (no detail requested) -> both empty.  flag='Y' ->
+# inspects detail_state to decide the success/skipped/failed rendering.
+#
+# The success-case chip carries an inline onclick="event.stopPropagation()":
+# the chip sits inside a tr.dbrow, whose delegated click handler (in
+# js_fleet_charts.plsql, fleet-owned but NOT touched by this feature) toggles
+# the row open on any click inside it.  Stopping propagation here keeps the
+# click from ever reaching that document-level handler, so clicking the chip
+# navigates instead of toggling -- without touching the shared JS file.
+# preventDefault() is never called, so the anchor's normal navigation is
+# unaffected.
+# ---------------------------------------------------------------------------
+detail_bits() {
+    local work="$1" alias="$2" flag="$3"
+    DCHIP=''; DLINE=''
+    [[ "$flag" == 'Y' ]] || return 0
+
+    local state href aliasE title ecode
+    state="$(detail_state "$work" "$alias")"
+    aliasE="$(printf '%s' "$alias" | html_escape)"
+
+    case "$state" in
+        ok)
+            href="awr_fleet_detail_${alias}_run${RUN_ID}.html"
+            DCHIP="<a class=\"dchip\" href=\"$href\" onclick=\"event.stopPropagation()\" title=\"Open the full single-DB AWR report for $aliasE\">report</a>"
+            DLINE="<div class=\"detail-link\">Full single-DB report: <a href=\"$href\">$href</a></div>"
+            ;;
+        skipped)
+            DCHIP='<span class="dchip dfail" title="extract failed before the detail run could start">detail skipped (extract failed)</span>'
+            DLINE='<div class="detail-link muted">Detailed report skipped (extract failed).</div>'
+            ;;
+        *)
+            title="rc=$(cat "$work/$alias.detail.rc" 2>/dev/null || echo N/A)"
+            ecode=''
+            [[ -f "$work/$alias.detail.log" ]] && \
+                ecode="$(grep -oE 'ORA-[0-9]{4,5}|TNS-[0-9]{4,5}' "$work/$alias.detail.log" | head -1 || true)"
+            [[ -n "$ecode" ]] && title="$title; $ecode"
+            DCHIP="<span class=\"dchip dfail\" title=\"$(printf '%s' "$title" | html_escape)\">detail failed</span>"
+            DLINE="<div class=\"detail-link muted\">Full single-DB report failed ($(printf '%s' "$title" | html_escape)).</div>"
+            ;;
+    esac
+}
+
+# detail_status_word <workdir> <flag> <alias> -- 'ok'|'failed'|'skipped'|'-'
+# for the per-DB stdout summary line ('-' = detail not requested).
+detail_status_word() {
+    local work="$1" flag="$2" alias="$3"
+    [[ "$flag" == 'Y' ]] || { printf -- '-'; return 0; }
+    detail_state "$work" "$alias"
 }
 
 # ---------------------------------------------------------------------------
 # do_assemble <workdir> -- classifies every alias in workdir/manifest.tsv,
 # scores the OK ones, and writes reports/awr_fleet_<ts>_run<RUN_ID>.html.
 # Sets the globals ASSEMBLE_REPORT_PATH / ASSEMBLE_OK_COUNT /
-# ASSEMBLE_ERR_COUNT for the caller.  Also prints one summary line per DB
-# (conf order) to stdout.  Pure function of the workdir's contents, so it is
-# exactly what `--assemble` re-runs for debugging.
+# ASSEMBLE_ERR_COUNT / ASSEMBLE_DETAIL_FAIL_COUNT for the caller (the last one
+# counts requested-but-not-successful detail reports, so the caller can decide
+# to keep the workdir for debugging without touching the exit code).  Also
+# prints one summary line per DB (conf order) to stdout, now with a trailing
+# detail=ok|failed|skipped|- column.  Pure function of the workdir's contents,
+# so it is exactly what `--assemble` re-runs for debugging.
 # ---------------------------------------------------------------------------
 do_assemble() {
     local work="$1"
@@ -392,11 +697,11 @@ do_assemble() {
     # shellcheck disable=SC1091
     source "$work/params.env"
 
-    local -a A_ALIAS=() A_DISP=()
-    local a d
-    while IFS=$'\t' read -r a d || [[ -n "$a" ]]; do
+    local -a A_ALIAS=() A_DISP=() A_DETAIL=()
+    local a d det
+    while IFS=$'\t' read -r a d det || [[ -n "$a" ]]; do
         [[ -z "$a" ]] && continue
-        A_ALIAS+=("$a"); A_DISP+=("$d")
+        A_ALIAS+=("$a"); A_DISP+=("$d"); A_DETAIL+=("${det:-N}")
     done < "$work/manifest.tsv"
 
     # Rebuild the marker arrays from the workdir so --assemble reproduces the
@@ -410,12 +715,13 @@ do_assemble() {
         done < "$work/markers.tsv"
     fi
 
-    declare -A DISP IS_ERR REASON RCV SCORE CRIT WARN SUPP NTOP PTS
+    declare -A DISP IS_ERR REASON RCV SCORE CRIT WARN SUPP NTOP PTS DETAILFLAG
     local i alias frag chrome log rc reason line1 line2 crit warn supp n pts pts_capped score
 
     for i in "${!A_ALIAS[@]}"; do
         alias="${A_ALIAS[$i]}"
         DISP["$alias"]="${A_DISP[$i]}"
+        DETAILFLAG["$alias"]="${A_DETAIL[$i]:-N}"
         frag="$work/$alias.frag.html"
         rc="$(cat "$work/$alias.rc" 2>/dev/null || true)"
         reason=''
@@ -649,6 +955,12 @@ FALLBACK_CHROME
             if [[ -f "$work/$alias.log" ]]; then
                 printf '<div class="logtail">%s</div>' "$(tail -n 15 "$work/$alias.log" | html_escape)"
             fi
+            # A detail-flagged alias whose extract failed always lands here
+            # (run_one_db only attempts the detail run when the extract's rc
+            # is 0) -- detail_state resolves this to 'skipped' via the
+            # <alias>.detail.rc sentinel run_one_db wrote unconditionally.
+            detail_bits "$work" "$alias" "${DETAILFLAG[$alias]:-N}"
+            [[ -n "$DLINE" ]] && printf '%s' "$DLINE"
             printf '</div></td></tr>\n'
         done
 
@@ -656,7 +968,10 @@ FALLBACK_CHROME
         # sorted_ok).  Substitute the row placeholders the extract emitted --
         # they are single-sourced here so the row pills, color and sort order
         # never disagree.  All substituted values are numeric/alpha (no sed
-        # metacharacters).
+        # metacharacters) EXCEPT the two detail placeholders, whose HTML can
+        # contain '/' (hrefs) -- hence the '|' delimiter and the '&'-free
+        # construction in detail_bits (sed's replacement '&' means "whole
+        # match", so a literal '&' there would corrupt the substitution).
         local sscore ssev scpill swpill scrit swarn
         for alias in "${sorted_ok[@]}"; do
             sscore="${SCORE[$alias]}"; scrit="${CRIT[$alias]}"; swarn="${WARN[$alias]}"
@@ -665,12 +980,15 @@ FALLBACK_CHROME
             else ssev=ok; fi
             if [[ "$scrit" -gt 0 ]]; then scpill=c; else scpill=z; fi
             if [[ "$swarn" -gt 0 ]]; then swpill=w; else swpill=z; fi
+            detail_bits "$work" "$alias" "${DETAILFLAG[$alias]:-N}"
             sed -e "s/__FLEET_SCORE__/$sscore/g" \
                 -e "s/__FLEET_SEV__/$ssev/g" \
                 -e "s/__FLEET_CRIT__/$scrit/g" \
                 -e "s/__FLEET_WARN__/$swarn/g" \
                 -e "s/__FLEET_CPILL__/$scpill/g" \
                 -e "s/__FLEET_WPILL__/$swpill/g" \
+                -e "s|__FLEET_DETAIL_CHIP__|${DCHIP}|g" \
+                -e "s|__FLEET_DETAIL_LINE__|${DLINE}|g" \
                 "$work/$alias.frag.html"
         done
 
@@ -688,13 +1006,18 @@ FALLBACK_CHROME
         echo "warning: unresolved __FLEET_* placeholder(s) survived assembly in $report -- this is a bug." >&2
     fi
 
+    local dstat detail_fail_count=0
     for i in "${!A_ALIAS[@]}"; do
         alias="${A_ALIAS[$i]}"
+        dstat="$(detail_status_word "$work" "${DETAILFLAG[$alias]:-N}" "$alias")"
+        if [[ "${DETAILFLAG[$alias]:-N}" == 'Y' && "$dstat" != 'ok' ]]; then
+            detail_fail_count=$((detail_fail_count + 1))
+        fi
         if [[ "${IS_ERR[$alias]}" == 1 ]]; then
-            printf '%-24s ERROR  rc=%-5s %s\n' "$alias" "${RCV[$alias]}" "${REASON[$alias]}"
+            printf '%-24s ERROR  rc=%-5s detail=%-7s %s\n' "$alias" "${RCV[$alias]}" "$dstat" "${REASON[$alias]}"
         else
-            printf '%-24s OK     score=%-4s crit=%s warn=%s suppressed=%s topsql_n=%s topsql_pts=%s\n' \
-                "$alias" "${SCORE[$alias]}" "${CRIT[$alias]}" "${WARN[$alias]}" "${SUPP[$alias]}" "${NTOP[$alias]}" "${PTS[$alias]}"
+            printf '%-24s OK     score=%-4s crit=%s warn=%s suppressed=%s topsql_n=%s topsql_pts=%s detail=%s\n' \
+                "$alias" "${SCORE[$alias]}" "${CRIT[$alias]}" "${WARN[$alias]}" "${SUPP[$alias]}" "${NTOP[$alias]}" "${PTS[$alias]}" "$dstat"
         fi
     done
     echo "Report: $report"
@@ -702,6 +1025,7 @@ FALLBACK_CHROME
     ASSEMBLE_REPORT_PATH="$report"
     ASSEMBLE_OK_COUNT="$n_ok"
     ASSEMBLE_ERR_COUNT="$n_err"
+    ASSEMBLE_DETAIL_FAIL_COUNT="$detail_fail_count"
 }
 
 # ===========================================================================
@@ -751,6 +1075,21 @@ _pos_clean fleet_template "$FLEET_TEMPLATE"
 parse_conf "$CONF_PATH"
 parse_markers
 
+# Fail fast on a bad FLEET_DETAIL_ECHARTS local path BEFORE any DB is queried
+# (a whole fleet run is expensive to waste on a typo caught only afterwards).
+resolve_detail_echarts_path
+
+# DETAIL_MARKERS: the already-sanitized fleet-wide MK_WHEN/MK_LABEL arrays,
+# joined once as "WHEN|LABEL;;WHEN|LABEL" -- byte-identical format to the
+# single-DB report's inline `markers` var (parse_markers already strips the
+# reserved ' " ~ \ < > & chars the single-DB format also forbids), so it is
+# safe to embed verbatim into every detail run's DEFINE.  Empty when no
+# markers were configured.
+DETAIL_MARKERS=''
+for i in "${!MK_WHEN[@]}"; do
+    DETAIL_MARKERS+="${DETAIL_MARKERS:+;;}${MK_WHEN[$i]}|${MK_LABEL[$i]}"
+done
+
 RUN_ID="$(date +%Y%m%d%H%M%S)$$"
 WORK="reports/fleet_work_${RUN_ID}"
 mkdir -p "$WORK"
@@ -763,10 +1102,12 @@ resolve_timeout_bin
 # job-control tool; every wait is `|| true`-guarded so one bad DB (or one
 # `wait -n` racing an already-reaped job) never aborts the fleet under
 # set -e.  A per-DB failure is captured entirely inside run_one_db's own rc
-# file -- nothing here needs to see it.
+# file -- nothing here needs to see it.  A requested detail run rides inside
+# the SAME background job (run_one_db calls run_one_detail itself), so
+# FLEET_PAR still caps total concurrency -- it never spawns a second slot.
 running=0
 for i in "${!ALIASES[@]}"; do
-    run_one_db "${ALIASES[$i]}" "${CONNS[$i]}" "${CONN_DISPS[$i]}" &
+    run_one_db "${ALIASES[$i]}" "${CONNS[$i]}" "${CONN_DISPS[$i]}" "${DETAILS[$i]}" &
     running=$((running + 1))
     if [[ "$running" -ge "$FLEET_PAR" ]]; then
         wait -n || true
@@ -777,8 +1118,15 @@ wait || true
 
 do_assemble "$WORK"
 
-if [[ "$ASSEMBLE_ERR_COUNT" -eq 0 && "$FLEET_KEEP_WORK" != 1 ]]; then
+# Keep the workdir when there's something worth debugging: any DB errored
+# (pre-existing behaviour) OR any requested detail report did not complete
+# successfully (so its .detail.log survives) -- either way FLEET_KEEP_WORK=1
+# always wins regardless.  A detail failure never changes the exit code below
+# (still 0 as long as >=1 DB row is OK).
+if [[ "$ASSEMBLE_ERR_COUNT" -eq 0 && "${ASSEMBLE_DETAIL_FAIL_COUNT:-0}" -eq 0 && "$FLEET_KEEP_WORK" != 1 ]]; then
     rm -rf "$WORK"
+elif [[ "$FLEET_KEEP_WORK" != 1 ]]; then
+    echo "Keeping workdir '$WORK' for debugging (${ASSEMBLE_ERR_COUNT} DB error(s), ${ASSEMBLE_DETAIL_FAIL_COUNT:-0} detail failure(s))." >&2
 fi
 
 if [[ "$ASSEMBLE_OK_COUNT" -ge 1 ]]; then

@@ -124,6 +124,16 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.dot.ok { background:var(--ok); } .dot.dead { background:var(--muted); }');
     DBMS_OUTPUT.PUT_LINE('.alias { font-weight:600; font-size:13px; letter-spacing:.01em; color:var(--ink); }');
     DBMS_OUTPUT.PUT_LINE('.alias .role { font-weight:400; color:var(--muted); font-size:10.5px; margin-left:1px; }');
+    -- optional per-DB detailed-report chip (__FLEET_DETAIL_CHIP__, filled in
+    -- by the assembler): a compact pill in the alias cell, linking to the
+    -- generated single-DB report when detail was requested and succeeded, or
+    -- a non-link failure/skip note otherwise.  Empty string (no detail
+    -- requested) renders nothing.
+    DBMS_OUTPUT.PUT_LINE('.dchip { font-size:9.5px; font-weight:650; padding:1px 7px; border-radius:8px;'
+        || ' margin-left:6px; text-decoration:none; letter-spacing:.02em; white-space:nowrap;'
+        || ' border:1px solid var(--accent); color:var(--accent); background:var(--accent-bg); }');
+    DBMS_OUTPUT.PUT_LINE('a.dchip:hover { background:var(--accent); color:#fff; }');
+    DBMS_OUTPUT.PUT_LINE('.dchip.dfail { border-color:var(--crit); color:var(--crit); background:var(--crit-bg); cursor:help; }');
     DBMS_OUTPUT.PUT_LINE('.score { font-weight:650; font-size:15px; text-align:right; }');
     DBMS_OUTPUT.PUT_LINE('.score.s-crit { color:var(--crit); } .score.s-warn { color:var(--warn); } .score.s-ok { color:var(--ok); }');
     DBMS_OUTPUT.PUT_LINE('.score.s-dead { color:var(--muted); font-size:12px; font-weight:500; }');
@@ -206,6 +216,14 @@ BEGIN
         || ' overflow-x:auto; white-space:nowrap; }');
     DBMS_OUTPUT.PUT_LINE('body.dark .drill { background:#0a0d12; }');
     DBMS_OUTPUT.PUT_LINE('.drill .cmt { color:#7f8b9c; }');
+    -- optional per-DB detailed-report line (__FLEET_DETAIL_LINE__, filled in
+    -- by the assembler) next to the drill-down command: empty (no detail
+    -- requested), a link to the generated single-DB report, or a muted
+    -- failed/skipped explanation.
+    DBMS_OUTPUT.PUT_LINE('.detail-link { margin-top:8px; font-size:11.5px; color:var(--ink-soft); }');
+    DBMS_OUTPUT.PUT_LINE('.detail-link a { color:var(--accent); font-weight:600; text-decoration:none; }');
+    DBMS_OUTPUT.PUT_LINE('.detail-link a:hover { text-decoration:underline; }');
+    DBMS_OUTPUT.PUT_LINE('.detail-link.muted { color:var(--muted); }');
 
     -- dead / error row
     DBMS_OUTPUT.PUT_LINE('tr.dbrow.deadrow { background:var(--crit-bg); }');

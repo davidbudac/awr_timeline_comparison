@@ -483,6 +483,57 @@ scaffold + ASH timeline block), `02_ash` (`window.FLEET_ASH` payload),
   Single-DB smoke (`run_awr_trend.sh` same window) rendered all 16 sections,
   0 ORA-. **Still pending:** a real multi-DB / RAC / migrated-PDB fleet (dbmint
   is single-DBID, all three cdb aliases hit the same instance).
+- **Per-DB detailed reports (v0.3.0)** — a fleet.conf line may carry an optional
+  third field, `alias|connect|detail` (case-insensitive trailing token; anything
+  else after the second `|` is treated as connect-string content, deliberately —
+  see fleet.conf.example). A flagged DB also gets the FULL single-DB report
+  (`awr_trend.sql`, template `comprehensive` by default) generated in the same
+  run with the fleet's exact window/cadence params + fleet-wide markers
+  (`DETAIL_MARKERS` re-joins the sanitized MK arrays — the fleet and single-DB
+  inline marker formats are byte-identical), saved as
+  `reports/awr_fleet_detail_<alias>_run<RUN_ID>.html` and linked from that DB's
+  row via a relative href. Env knobs: `FLEET_DETAIL` (all|none|''),
+  `FLEET_DETAIL_TIMEOUT` (default 1800), `FLEET_DETAIL_TEMPLATE`,
+  `FLEET_DETAIL_ECHARTS` (same empty/URL/local-path polymorphism as the
+  single-DB var; local path is spliced by a fleet-owned copy of
+  `inline_echarts`). Mechanics that keep the cardinal no-single-DB-edits rule:
+  `run_one_detail` runs sqlplus from an isolated `$WORK/detail_<alias>/` cwd
+  holding **symlinks** to `awr_trend.sql` + `sql/` — the driver's cwd-relative
+  self-named spool lands in the isolated `reports/`, is captured without knowing
+  its name, then moved/renamed (no rename races under `FLEET_PAR`, no absolute
+  paths in the heredoc = no tilde hazard). **Gotcha (bit us live): the detail
+  log redirection must sit on the SUBSHELL, not the inner command** — `dlog` is
+  workdir-relative and must resolve against the project root, not the isolated
+  cwd after `cd "$ddir"`. The detail run only starts when the extract rc=0
+  (else `.detail.rc` = the literal `skipped`); a detail failure never changes
+  the exit code, but keeps the workdir. Frags emit `__FLEET_DETAIL_CHIP__`
+  (01_row alias cell) and `__FLEET_DETAIL_LINE__` (06_close drill panel)
+  unconditionally; the assembler substitutes '' / link / failure-note per alias
+  (sed with `|` delimiter, `&`-free replacements) via the single-sourced
+  `detail_state`/`detail_bits`/`detail_status_word` helpers, prints a
+  `detail=ok|failed|skipped|-` column, and manifest.tsv carries the effective
+  flag as a 3rd column (2-column workdirs read as N). The success chip carries
+  inline `onclick="event.stopPropagation()"` so clicking it navigates instead
+  of toggling the row (zero-touch on `js_fleet_charts.plsql`'s delegated
+  handler).
+- **v0.3.0 verified end-to-end on dbmint (2026-07-22, 19.27, same window as the
+  v0.2.0 test, conf = cdb_a`|detail` / cdb_b (plain) / cdb_c`| DETAIL` +
+  bad-creds deadbox`|detail`):** exit 0; summary `detail=ok/-/ok/skipped`; both
+  detail reports generated (~1.4 MB, full 15-section workbench + masthead, same
+  window, both markers present, ORA- grep hits are only escaped SQL text);
+  chips/panel links carry correct relative hrefs; deadbox error panel shows
+  "Detailed report skipped (extract failed)"; zero surviving `__FLEET_`;
+  forced-failure run (`FLEET_DETAIL=all FLEET_DETAIL_TIMEOUT=5`) → three
+  `rc=124` dfail chips, workdir + `detail_*` dirs kept, exit still 0;
+  `FLEET_DETAIL=none` → zero chip elements (the 3 `dchip` grep hits are CSS
+  rules); `FLEET_DETAIL_ECHARTS=vendor/echarts.min.js` → "Inlined ECharts"
+  message, 2.4 MB self-contained detail report, zero external `src`;
+  `--assemble` on a kept workdir reproduces identical rows/links. Live-browser
+  (static snapshot): row toggle works, chip click does NOT toggle the row
+  (stopPropagation verified via dispatched events), `.detail-link` line present,
+  linked detail report renders the full workbench. **Still pending:** a real
+  multi-DB fleet where detail runs take minutes (dbmint's full report is fast;
+  the 1800-s default timeout is untested against a genuinely slow DB).
 
 ## Verification & testing
 
