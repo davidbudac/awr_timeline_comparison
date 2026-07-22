@@ -1,10 +1,12 @@
 --
 -- sql/fleet/01_row.sql
 -- Emits this database's SUMMARY ROW (tr.dbrow) for the ops-console table,
--- then OPENS the hidden detail row (tr.detailrow) and its left column with
--- the ASH timeline block.  Replaces the old 01_db_card.sql: the fleet report
--- is now one dense <table class="fleet"> (opened/closed by the assembler),
--- two <tr>s per DB, not a <section class="db-card">.
+-- then OPENS the hidden detail row (tr.detailrow) and emits the ASH timeline
+-- band.  The detail row is a single-column stack of full-width bands (ASH
+-- timeline -> headline metrics -> findings -> Top SQL -> drill), not a
+-- two-column grid.  Replaces the old 01_db_card.sql: the fleet report is now
+-- one dense <table class="fleet"> (opened/closed by the assembler), two <tr>s
+-- per DB, not a <section class="db-card">.
 --
 -- The row's score / severity class / crit-warn pills are NOT knowable here
 -- (the Top-SQL points that feed the score are computed later in this same
@@ -41,8 +43,8 @@
 --   * ASH       -- a data-ash-of ribbon div (rendered by js_fleet_charts from
 --                  window.FLEET_ASH, populated by section 02)
 --
--- The section opened here (detailrow / detail-grid / left column) is
--- continued by 02/03 and closed by 06_close.sql.
+-- The section opened here (detailrow / detail-grid + the ASH timeline band)
+-- is continued by 02/03 (further full-width bands) and closed by 06_close.sql.
 --
 -- Read-only: recomputes everything in-flight from the AWR views.
 --
@@ -368,10 +370,9 @@ BEGIN
         || DBMS_XMLGEN.CONVERT('~fleet_alias') || '" data-ash-mode="ribbon"></div></td>');
     DBMS_OUTPUT.PUT_LINE('</tr>');
 
-    -- --- open the detail row + left column + ASH timeline block ----------
+    -- --- open the detail row (single-column stack) + ASH timeline band ---
     DBMS_OUTPUT.PUT_LINE('<tr class="detailrow hidden"><td colspan="8">');
     DBMS_OUTPUT.PUT_LINE('<div class="detail"><div class="detail-grid">');
-    DBMS_OUTPUT.PUT_LINE('<div class="detail-col-left">');
     DBMS_OUTPUT.PUT_LINE('<div class="detail-block timeline-box">');
     DBMS_OUTPUT.PUT_LINE('<div class="panel-h">ASH by wait class &mdash; full report span (AAS) &middot; '
         || 'Host ' || DBMS_XMLGEN.CONVERT('~host_name')

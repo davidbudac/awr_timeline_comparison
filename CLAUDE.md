@@ -428,9 +428,18 @@ toggled by a delegated click in the chrome JS. The masthead (bash-emitted)
 carries stat badges, a wait-class legend, a timeline-marker legend, and an
 in-page theme toggle. Sections renumbered: `00_fleet_chrome` (chrome + fleet
 CSS + `js_fleet_charts.plsql` renderer), `01_row` (dbrow + opens the detail
-scaffold + ASH timeline block), `02_ash` (`window.FLEET_ASH` payload),
-`03_headline` (metric mini-cards; closes left col / opens right col),
+scaffold + ASH timeline band), `02_ash` (`window.FLEET_ASH` payload),
+`03_headline` (metric mini-cards in a self-contained `.metrics-band`),
 `04_findings`, `05_topsql`, `06_close` (drill + closes scaffold + sentinel).
+The detail panel is a **single-column stack of full-width bands** (ASH
+timeline → 6-across metrics strip → findings → Top SQL → drill; `.metrics`
+goes 6-up ≥1100px, 3-up below, 2-up ≤560px) — the original two-column
+`.detail-grid` was dropped 2026-07-22 because the columns' heights were
+wildly unbalanced (dead space under the short metrics column, Top-SQL text
+cramped). Verified on dbmint same day (3-alias conf, pinned window
+2026-07-20 12:00 win=1h weeks_back=4 step=1h): all bands full width, 6→3
+column metrics fallback, theme toggle intact, zero `detail-col` remnants,
+zero surviving `__FLEET_` placeholders.
 
 - **Fragment/sentinel/FLEET-COUNTS contract (v2)** — each per-DB extract spools
   two files into `reports/fleet_work_<run_id>/`: `<alias>.chrome.html` (page

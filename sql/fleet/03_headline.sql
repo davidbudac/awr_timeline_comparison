@@ -1,6 +1,8 @@
 --
 -- sql/fleet/03_headline.sql
--- Compact headline-metric mini-cards for the detail panel's left column,
+-- Compact headline-metric mini-cards for the detail panel, emitted as a
+-- full-width headline-metrics band (a strip of mini-cards) between the ASH
+-- timeline band and the findings band,
 -- adapted from sql/08_overview.sql's cards CTE (unchanged from the old
 -- 02_headline.sql): same shared-windows x LOAD/METRIC single-pass cursor,
 -- same six metrics (DB time / redo size / logical reads / AAS / Wait Time
@@ -9,8 +11,9 @@
 --
 -- Render is the ops-console .metric card: label, current value + unit, a
 -- z-bucket badge, and a CDN-free per-window sparkline (data-spark, rendered
--- by js_sparkline).  This section also CLOSES the detail row's left column
--- (opened by 01_row.sql) and OPENS the right column that 04/05/06 fill.
+-- by js_sparkline).  This section emits a self-contained band (opens and
+-- closes its own .metrics-band wrapper); it no longer closes or opens any
+-- columns -- 04/05/06 emit their own full-width bands after it.
 --
 -- Read-only: recomputes everything in-flight from the AWR views.
 --
@@ -22,7 +25,8 @@ BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: fleet_03 BEGIN -->'); END;
 /
 
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<div class="panel-h" style="margin-top:14px">Headline metrics vs '
+    DBMS_OUTPUT.PUT_LINE('<div class="metrics-band">');
+    DBMS_OUTPUT.PUT_LINE('<div class="panel-h">Headline metrics vs '
         || '~weeks_back' || '-window baseline</div>');
     DBMS_OUTPUT.PUT_LINE('<div class="metrics">');
 
@@ -159,8 +163,7 @@ BEGIN
     END LOOP;
 
     DBMS_OUTPUT.PUT_LINE('</div>');  -- .metrics
-    DBMS_OUTPUT.PUT_LINE('</div>');  -- .detail-col-left (opened in 01_row.sql)
-    DBMS_OUTPUT.PUT_LINE('<div class="detail-col-right">');  -- filled by 04/05/06
+    DBMS_OUTPUT.PUT_LINE('</div>');  -- .metrics-band
 END;
 /
 

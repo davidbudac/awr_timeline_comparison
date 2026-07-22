@@ -1,8 +1,8 @@
 --
 -- sql/fleet/06_close.sql
 -- Closes this database's detail row: the masked single-DB drill-down command
--- (the deep dive into this same database/window), then closes the right
--- column / detail-grid / detail wrappers and the <td>/<tr> opened across
+-- (the deep dive into this same database/window), then closes the
+-- detail-grid / detail wrappers and the <td>/<tr> opened across
 -- 01_row.sql .. 05_topsql.sql, then the sentinel comment.
 --
 -- The sentinel MUST be the very last line spooled to frag_path -- the
@@ -63,7 +63,6 @@ BEGIN
 
     DBMS_OUTPUT.PUT_LINE('__FLEET_DETAIL_LINE__');
 
-    DBMS_OUTPUT.PUT_LINE('</div>');   -- .detail-col-right (opened in 03_headline.sql)
     DBMS_OUTPUT.PUT_LINE('</div>');   -- .detail-grid (opened in 01_row.sql)
     DBMS_OUTPUT.PUT_LINE('</div>');   -- .detail (opened in 01_row.sql)
     DBMS_OUTPUT.PUT_LINE('</td></tr>');  -- .detailrow

@@ -204,7 +204,6 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('tr.detailrow.hidden { display:none; }');
     DBMS_OUTPUT.PUT_LINE('.detail { padding:16px 18px 18px; }');
     DBMS_OUTPUT.PUT_LINE('.detail-grid { display:grid; grid-template-columns:1fr; gap:16px; }');
-    DBMS_OUTPUT.PUT_LINE('@media(min-width:900px){ .detail-grid { grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); } }');
     DBMS_OUTPUT.PUT_LINE('.panel-h { font-size:10.5px; text-transform:uppercase; letter-spacing:.06em;'
         || ' color:var(--muted); font-weight:600; margin:0 0 8px; }');
     DBMS_OUTPUT.PUT_LINE('.detail-block { background:var(--panel); border:1px solid var(--hairline);'
@@ -214,8 +213,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.tl-caption span { display:flex; align-items:center; gap:5px; }');
 
     -- metric mini cards
-    DBMS_OUTPUT.PUT_LINE('.metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; }');
+    DBMS_OUTPUT.PUT_LINE('.metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:0; }');
     DBMS_OUTPUT.PUT_LINE('@media(max-width:560px){ .metrics { grid-template-columns:repeat(2,1fr); } }');
+    DBMS_OUTPUT.PUT_LINE('@media(min-width:1100px){ .metrics { grid-template-columns:repeat(6,1fr); } }');
     DBMS_OUTPUT.PUT_LINE('.metric { border:1px solid var(--hairline); border-radius:5px; padding:7px 9px; background:var(--panel); }');
     DBMS_OUTPUT.PUT_LINE('.metric .ml { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;'
         || ' white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }');
@@ -251,7 +251,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.detail-block .muted { color:var(--muted); font-size:11.5px; }');
     DBMS_OUTPUT.PUT_LINE('.detail-block .dt-note { margin:6px 0 8px; line-height:1.45; }');
 
-    DBMS_OUTPUT.PUT_LINE('.drill { margin-top:12px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;'
+    DBMS_OUTPUT.PUT_LINE('.drill { margin-top:0; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;'
         || ' font-size:11px; background:var(--ink); color:#e7ecf2; border-radius:5px; padding:8px 10px;'
         || ' overflow-x:auto; white-space:nowrap; }');
     DBMS_OUTPUT.PUT_LINE('body.dark .drill { background:#0a0d12; }');

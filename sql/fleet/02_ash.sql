@@ -17,7 +17,7 @@
 -- ASH persists 1-in-10 ten-second samples, so a fully-busy session
 -- contributes 360 rows/hour -> AAS = sample_count / (360 * bucket_hours).
 --
--- The <script> is emitted INSIDE the detail row's left column (opened by
+-- The <script> is emitted INSIDE the detail row (opened by
 -- 01_row.sql, before the headline strip added by 03_headline.sql), which is
 -- valid: a <script> is legal inside a <div> inside a <td>.  Render order does
 -- not matter -- the renderer runs on DOMContentLoaded, after every payload
