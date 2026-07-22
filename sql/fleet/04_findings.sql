@@ -201,10 +201,20 @@ BEGIN
         END IF;
 
         IF NOT v_open_table THEN
+            DBMS_OUTPUT.PUT_LINE('<p class="muted dt-note">'
+                || 'Compares the <b>current</b> window against the <b>mean of the prior '
+                || 'comparison windows</b> (the same hour across the previous periods) '
+                || '&mdash; not the single preceding window. '
+                || '% &Delta; = (Current &minus; Prior mean) / |Prior mean| &times; 100; '
+                || 'z-score divides that same gap by the baseline&rsquo;s standard deviation.'
+                || '</p>');
             DBMS_OUTPUT.PUT_LINE('<table class="dt"><thead><tr>'
                 || '<th>Domain</th><th>Metric</th>'
-                || '<th class="num">Current</th><th class="num">Prior mean</th>'
-                || '<th>Change</th><th class="num">z-score</th><th class="num">% &Delta;</th>'
+                || '<th class="num">Current</th>'
+                || '<th class="num" title="Average of this metric across the prior comparison windows">Prior mean</th>'
+                || '<th>Change</th>'
+                || '<th class="num" title="(Current &minus; Prior mean) / baseline standard deviation">z-score</th>'
+                || '<th class="num" title="Percent change of the current window vs. the prior-window mean: (Current &minus; Prior mean) / |Prior mean| &times; 100">% &Delta;</th>'
                 || '</tr></thead><tbody>');
             v_open_table := TRUE;
         END IF;

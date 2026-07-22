@@ -214,6 +214,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.detail-block details + h3 { margin-top:14px; padding-top:0; border-top:0; }');
     DBMS_OUTPUT.PUT_LINE('.detail-block p { font-size:11.5px; color:var(--muted); margin:6px 0; }');
     DBMS_OUTPUT.PUT_LINE('.detail-block .muted { color:var(--muted); font-size:11.5px; }');
+    DBMS_OUTPUT.PUT_LINE('.detail-block .dt-note { margin:6px 0 8px; line-height:1.45; }');
 
     DBMS_OUTPUT.PUT_LINE('.drill { margin-top:12px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;'
         || ' font-size:11px; background:var(--ink); color:#e7ecf2; border-radius:5px; padding:8px 10px;'
