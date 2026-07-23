@@ -497,6 +497,33 @@ zero surviving `__FLEET_` placeholders.
   (ECharts).** The renderer's wait-class palette is copied from
   `sql/lib/js_wait_colors.plsql` (and the bash masthead legend) — keep all three
   in **lockstep**.
+- **Per-event ASH timeline (second detail band)** — the SAME single ASH scan
+  in `02_ash.sql` additionally groups by event (ON-CPU → 'CPU') and emits a
+  second payload `window.FLEET_ASH_EV[<alias>]` with the identical
+  `{t0,bh,classes,vals}` shape: the top 14 events by total samples (tie-break
+  name asc; CPU ranks like any series), biggest-total first = bottom of the
+  stack, every remaining event rolled into a synthetic `"Other events"` series
+  emitted LAST (omitted entirely when ≤14 distinct events). The class sums in
+  `FLEET_ASH` are unchanged (event rows re-aggregate to the same totals).
+  `01_row.sql` emits a second `.detail-block.timeline-box` band ("ASH by wait
+  event") whose chart div carries `data-ash-src="ev"` plus a sibling
+  `<div class="ev-legend">`; the renderer picks the payload by that attribute,
+  preserves payload order (no WCO reorder), colors via `evColors()` (CPU = the
+  WC green, "Other events" = fixed grey `#9AA3AD`, everything else cycles the
+  15-hex `EVP` categorical palette counting only non-special series) and fills
+  the legend with one chip per series in stack order (`fillEvLegend`, names
+  through `esc()`). `buildStack` grew `opts.keepOrder`/`opts.colors`; with
+  both absent its behavior is bit-identical to before, so class charts and
+  ribbons are untouched. Verified on dbmint (2026-07-23, 3-alias conf, pinned
+  window 2026-07-20 12:00 win=1h weeks_back=4 step=1h, 2 in-span MARKERS):
+  clean run exit 0, 3 payloads (7 event series on the idle box, no "Other
+  events" rollup — under the 14 cap), live-browser: 7 polygons in payload
+  order, legend chip colors byte-match polygon fills, both marker lines on
+  both timelines, resize re-render tracks container width, zero console
+  errors. Headless DOM smoke (19 asserts) covers escaping (`&`/`<` in event
+  names) and the ribbon ignoring `data-ash-src` absence. **Still pending:** a
+  busy DB with >14 distinct events (exercises the "Other events" rollup and
+  full palette rotation).
 - **Timeline markers (fleet-wide, wrapper-owned)** — `run_awr_fleet.sh` accepts
   env `MARKERS` (inline `WHEN|LABEL;;…`, same format as the single-DB var) and
   `MARKER_FILE` (a file of `WHEN|LABEL` lines; precedence `MARKER_FILE` >

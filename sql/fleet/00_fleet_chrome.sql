@@ -211,6 +211,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.timeline-box svg { display:block; width:100%; height:auto; }');
     DBMS_OUTPUT.PUT_LINE('.tl-caption { font-size:11px; color:var(--muted); margin-top:6px; display:flex; gap:14px; flex-wrap:wrap; }');
     DBMS_OUTPUT.PUT_LINE('.tl-caption span { display:flex; align-items:center; gap:5px; }');
+    -- by-event timeline color legend (mirrors .wc-legend chips; sits under the
+    -- second timeline like .tl-caption does under the first)
+    DBMS_OUTPUT.PUT_LINE('.ev-legend { display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:6px; }');
+    DBMS_OUTPUT.PUT_LINE('.ev-item { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--ink-soft); }');
+    DBMS_OUTPUT.PUT_LINE('.ev-swatch { width:10px; height:10px; border-radius:2px; flex:none; }');
 
     -- metric mini cards
     DBMS_OUTPUT.PUT_LINE('.metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:0; }');

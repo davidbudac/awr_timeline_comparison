@@ -5,13 +5,18 @@
 -- external anything).  @@-included once by sql/fleet/00_fleet_chrome.sql, so
 -- it ships in the shared chrome copy every DB spools (the assembler keeps the
 -- first).  On DOMContentLoaded it:
---   * renders every [data-ash-of] div from window.FLEET_ASH -- a full-
---     report-span ASH stacked-area chart with an adaptive bucket width,
---     either "ribbon" mode (172x30, marker ticks, no labels; in the summary
---     dbrow) or "timeline" mode (container-width x 108, y-gridlines + AAS
---     labels, x date/time labels, dashed labeled marker lines; in the
---     detailrow), positioning markers from window.FLEET_MARKERS by
---     timestamp;
+--   * renders every [data-ash-of] div -- a full-report-span ASH stacked-area
+--     chart with an adaptive bucket width, either "ribbon" mode (172x30,
+--     marker ticks, no labels; in the summary dbrow) or "timeline" mode
+--     (container-width x 108, y-gridlines + AAS labels, x date/time labels,
+--     dashed labeled marker lines; in the detailrow), positioning markers
+--     from window.FLEET_MARKERS by timestamp.  The div's data-ash-src attr
+--     selects the payload: absent/default -> window.FLEET_ASH (stacked by
+--     wait CLASS, colored from the WC map, series reordered into WCO stacking
+--     order), "ev" -> window.FLEET_ASH_EV (stacked by wait EVENT, payload
+--     order preserved, colored from the EVP categorical palette with CPU=WC
+--     green and "Other events"=EVOTHER grey, plus a per-series color legend
+--     filled into the sibling .ev-legend div);
 --   * wires row expand/collapse (delegated click on tr.dbrow -> its sibling
 --     tr.detailrow), re-rendering the newly revealed timeline once the row
 --     opens so it picks up its real container width;
@@ -37,6 +42,12 @@ BEGIN
     -- wait-class palette -- LOCKSTEP with sql/lib/js_wait_colors.plsql
     DBMS_OUTPUT.PUT_LINE('var WC={"CPU":"#3FB344","Scheduler":"#88C070","User I/O":"#4A90D9","System I/O":"#1F4E89","Concurrency":"#8B0000","Application":"#D62728","Commit":"#E89B40","Configuration":"#793C32","Administrative":"#7B6FA8","Network":"#967259","Queueing":"#E89BB7","Cluster":"#E5C228","Other":"#C77CB0"};');
     DBMS_OUTPUT.PUT_LINE('var WCO=["CPU","Scheduler","User I/O","System I/O","Concurrency","Application","Commit","Configuration","Administrative","Network","Queueing","Cluster","Other"];');
+    -- categorical palette for the by-event timeline (events have no fixed
+    -- palette): 15 distinct hexes, no pure greens (green stays reserved for
+    -- CPU) and no confusing overlap with the WC class hexes.  CPU keeps the WC
+    -- green and "Other events" gets EVOTHER grey, both assigned explicitly.
+    DBMS_OUTPUT.PUT_LINE('var EVP=["#1F77B4","#FF7F0E","#9467BD","#17BECF","#BCBD22","#E377C2","#8C564B","#AEC7E8","#FFBB78","#C5B0D5","#9EDAE5","#F7B6D2","#C49C94","#DBDB8D","#5254A3"];');
+    DBMS_OUTPUT.PUT_LINE('var EVOTHER="#9AA3AD";');
     DBMS_OUTPUT.PUT_LINE('function esc(s){return String(s==null?"":s).replace(/[&<>]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;"})[c];});}');
     DBMS_OUTPUT.PUT_LINE('function pad2(n){return (n<10?"0":"")+n;}');
     DBMS_OUTPUT.PUT_LINE('function parseTs(s){if(!s)return NaN;return Date.parse(String(s).replace(" ","T"));}');
@@ -54,7 +65,11 @@ BEGIN
     -- (hours per bucket) are derived from the payload, not a fixed constant
     DBMS_OUTPUT.PUT_LINE('function buildStack(classes,vals,w,h,opts){');
     DBMS_OUTPUT.PUT_LINE('  opts=opts||{};var pad=opts.pad||{t:0,r:0,b:0,l:0};var bh=opts.bh||1;');
-    DBMS_OUTPUT.PUT_LINE('  var iw=w-pad.l-pad.r,ih=h-pad.t-pad.b,series=orderSeries(classes,vals),n=series.length?series[0].vals.length:0,i,s;');
+    DBMS_OUTPUT.PUT_LINE('  var iw=w-pad.l-pad.r,ih=h-pad.t-pad.b,series,n,i,s;');
+    -- ev mode passes opts.keepOrder (payload order = stacking order) + opts.colors;
+    -- class mode omits both, keeping the WCO reorder + WC-map fill bit-identical
+    DBMS_OUTPUT.PUT_LINE('  if(opts.keepOrder){series=[];for(i=0;i<classes.length;i++)series.push({cls:classes[i],vals:vals[i]});}else{series=orderSeries(classes,vals);}');
+    DBMS_OUTPUT.PUT_LINE('  n=series.length?series[0].vals.length:0;');
     DBMS_OUTPUT.PUT_LINE('  if(n<2)return svgEl(w,h)+"</svg>";');
     DBMS_OUTPUT.PUT_LINE('  var maxTotal=0;for(i=0;i<n;i++){var t=0;for(s=0;s<series.length;s++){var v=series[s].vals[i];t+=(v==null||isNaN(v))?0:+v;}if(t>maxTotal)maxTotal=t;}');
     DBMS_OUTPUT.PUT_LINE('  var maxY=opts.maxY||Math.max(maxTotal*1.08,0.5);');
@@ -64,7 +79,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  if(opts.bg){out+="<rect x=\""+pad.l+"\" y=\""+pad.t+"\" width=\""+iw+"\" height=\""+ih+"\" fill=\""+opts.bg+"\"/>";}');
     DBMS_OUTPUT.PUT_LINE('  if(opts.grid){var gl=opts.gridLines||3,g;for(g=1;g<=gl;g++){var gv=maxY*g/gl,gy=Y(gv);out+="<line x1=\""+pad.l+"\" y1=\""+gy.toFixed(1)+"\" x2=\""+(pad.l+iw)+"\" y2=\""+gy.toFixed(1)+"\" stroke=\"var(--line-soft)\" stroke-width=\"1\"/>";out+="<text x=\""+(pad.l-4)+"\" y=\""+(gy+3).toFixed(1)+"\" text-anchor=\"end\" font-size=\"9\" fill=\"var(--muted)\">"+(Math.round(gv*10)/10)+"</text>";}out+="<text x=\""+(pad.l-4)+"\" y=\""+(pad.t+8)+"\" text-anchor=\"end\" font-size=\"9\" fill=\"var(--muted)\">AAS</text>";}');
     DBMS_OUTPUT.PUT_LINE('  var bottom=[];for(i=0;i<n;i++)bottom[i]=0;');
-    DBMS_OUTPUT.PUT_LINE('  for(s=0;s<series.length;s++){var top=[],pts=[];for(i=0;i<n;i++){var vv=series[s].vals[i];vv=(vv==null||isNaN(vv))?0:+vv;top[i]=bottom[i]+vv;}for(i=0;i<n;i++)pts.push(X(i).toFixed(1)+","+Y(top[i]).toFixed(2));for(i=n-1;i>=0;i--)pts.push(X(i).toFixed(1)+","+Y(bottom[i]).toFixed(2));out+="<polygon points=\""+pts.join(" ")+"\" fill=\""+(WC[series[s].cls]||"#888888")+"\" fill-opacity=\""+(opts.fillOpacity||0.92)+"\"/>";bottom=top;}');
+    DBMS_OUTPUT.PUT_LINE('  for(s=0;s<series.length;s++){var top=[],pts=[];for(i=0;i<n;i++){var vv=series[s].vals[i];vv=(vv==null||isNaN(vv))?0:+vv;top[i]=bottom[i]+vv;}for(i=0;i<n;i++)pts.push(X(i).toFixed(1)+","+Y(top[i]).toFixed(2));for(i=n-1;i>=0;i--)pts.push(X(i).toFixed(1)+","+Y(bottom[i]).toFixed(2));out+="<polygon points=\""+pts.join(" ")+"\" fill=\""+(opts.colors?(opts.colors[s]||"#888888"):(WC[series[s].cls]||"#888888"))+"\" fill-opacity=\""+(opts.fillOpacity||0.92)+"\"/>";bottom=top;}');
     DBMS_OUTPUT.PUT_LINE('  if(opts.xLabels){xLabels(opts.t0,bh,n).forEach(function(L){var lx=X(L[0]);out+="<line x1=\""+lx.toFixed(1)+"\" y1=\""+(pad.t+ih)+"\" x2=\""+lx.toFixed(1)+"\" y2=\""+(pad.t+ih+3)+"\" stroke=\"var(--muted)\" stroke-width=\"1\"/>";var anc=L[0]===0?"start":(L[0]===n-1?"end":"middle");out+="<text x=\""+lx.toFixed(1)+"\" y=\""+(pad.t+ih+13)+"\" text-anchor=\""+anc+"\" font-size=\"9\" fill=\"var(--muted)\">"+esc(L[1])+"</text>";});}');
     DBMS_OUTPUT.PUT_LINE('  if(opts.markers){markersFor(opts.t0,bh,n).forEach(function(m){var mx=X(m.i);if(opts.ribbon){out+="<line x1=\""+mx.toFixed(1)+"\" y1=\""+pad.t+"\" x2=\""+mx.toFixed(1)+"\" y2=\""+(pad.t+ih)+"\" stroke=\""+m.color+"\" stroke-width=\"1\" stroke-opacity=\"0.85\"/>";out+="<path d=\"M"+(mx-2.5).toFixed(1)+","+pad.t+" L"+(mx+2.5).toFixed(1)+","+pad.t+" L"+mx.toFixed(1)+","+(pad.t+3.5)+" Z\" fill=\""+m.color+"\"/>";}else{out+="<line x1=\""+mx.toFixed(1)+"\" y1=\""+pad.t+"\" x2=\""+mx.toFixed(1)+"\" y2=\""+(pad.t+ih)+"\" stroke=\""+m.color+"\" stroke-width=\"1.2\" stroke-dasharray=\"3 2\" stroke-opacity=\"0.9\"/>";var tx=mx,anc2="middle";if(mx>w-70){anc2="end";tx=mx-3;}else if(mx<60){anc2="start";tx=mx+3;}out+="<text x=\""+tx.toFixed(1)+"\" y=\""+(pad.t+10)+"\" text-anchor=\""+anc2+"\" font-size=\"9.5\" font-weight=\"600\" fill=\""+m.color+"\">"+esc(m.label)+"</text>";}});}');
     DBMS_OUTPUT.PUT_LINE('  return out+"</svg>";');
@@ -73,11 +88,18 @@ BEGIN
     -- span-info blurb (start timestamp + bucket width) followed by in-span
     -- markers
     DBMS_OUTPUT.PUT_LINE('function fillCaption(el,d){var cap=el.nextElementSibling;if(!cap||String(cap.className).indexOf("tl-caption")<0)return;var bh=(+d.bh)||1;var n=(d.vals&&d.vals[0])?d.vals[0].length:0;var mk=markersFor(d.t0,bh,n);var bucketLabel=bh>=1?(Math.round(bh*10)/10)+"h":Math.round(bh*60)+"m";var items=["<span>"+esc(d.t0)+" to end of window, bucket "+bucketLabel+"</span>"];items=items.concat(mk.map(function(m){return "<span><span style=\"color:"+m.color+";font-weight:700\">|</span> "+esc(m.label)+"</span>";}));cap.innerHTML=items.join("");}');
+    -- by-event colors: payload order preserved; CPU keeps WC green, "Other
+    -- events" the fixed grey, every other event cycles EVP (j counts only the
+    -- non-special series so the rotation is stable regardless of CPU/Other)
+    DBMS_OUTPUT.PUT_LINE('function evColors(names){var out=[],j=0;for(var i=0;i<names.length;i++){var nm=names[i];if(nm==="CPU"){out.push(WC["CPU"]);}else if(nm==="Other events"){out.push(EVOTHER);}else{out.push(EVP[j%EVP.length]);j++;}}return out;}');
+    -- fill the by-event legend (nextElementSibling .ev-legend), one chip per
+    -- series in stack order, colors matching the drawn polygons
+    DBMS_OUTPUT.PUT_LINE('function fillEvLegend(el,names,colors){var lg=el.nextElementSibling;if(!lg||String(lg.className).indexOf("ev-legend")<0)return;var h="";for(var i=0;i<names.length;i++){h+="<span class=\"ev-item\"><span class=\"ev-swatch\" style=\"background:"+colors[i]+"\"></span>"+esc(names[i])+"</span>";}lg.innerHTML=h;}');
     -- ribbon renders at a fixed size; timeline renders at the elements real
     -- container width (skipped, without marking __ashed, while the detail
     -- row is still display:none and clientWidth is 0 -- it renders once the
     -- row opens, via wireToggle below)
-    DBMS_OUTPUT.PUT_LINE('function renderAsh(){var els=document.querySelectorAll("[data-ash-of]");Array.prototype.forEach.call(els,function(el){if(el.__ashed)return;var alias=el.getAttribute("data-ash-of"),mode=el.getAttribute("data-ash-mode")||"ribbon",d=(window.FLEET_ASH||{})[alias];if(!d||!d.classes||!d.classes.length){el.innerHTML="";el.__ashed=true;return;}var bh=(+d.bh)||1;if(mode==="ribbon"){el.innerHTML=buildStack(d.classes,d.vals,172,30,{ribbon:true,markers:true,t0:d.t0,bh:bh,pad:{t:4,r:2,b:2,l:2},fillOpacity:0.95});el.__ashed=true;}else{var w=el.clientWidth;if(!w)return;w=Math.max(480,w);el.innerHTML=buildStack(d.classes,d.vals,w,108,{grid:true,gridLines:3,xLabels:true,markers:true,t0:d.t0,bh:bh,bg:"var(--panel-2)",pad:{t:6,r:8,b:18,l:26},fillOpacity:0.9});fillCaption(el,d);el.__ashW=w;el.__ashed=true;}});}');
+    DBMS_OUTPUT.PUT_LINE('function renderAsh(){var els=document.querySelectorAll("[data-ash-of]");Array.prototype.forEach.call(els,function(el){if(el.__ashed)return;var alias=el.getAttribute("data-ash-of"),mode=el.getAttribute("data-ash-mode")||"ribbon",src=el.getAttribute("data-ash-src"),store=src==="ev"?(window.FLEET_ASH_EV||{}):(window.FLEET_ASH||{}),d=store[alias];if(!d||!d.classes||!d.classes.length){el.innerHTML="";el.__ashed=true;return;}var bh=(+d.bh)||1;if(mode==="ribbon"){el.innerHTML=buildStack(d.classes,d.vals,172,30,{ribbon:true,markers:true,t0:d.t0,bh:bh,pad:{t:4,r:2,b:2,l:2},fillOpacity:0.95});el.__ashed=true;}else{var w=el.clientWidth;if(!w)return;w=Math.max(480,w);if(src==="ev"){var colors=evColors(d.classes);el.innerHTML=buildStack(d.classes,d.vals,w,108,{grid:true,gridLines:3,xLabels:true,markers:true,t0:d.t0,bh:bh,bg:"var(--panel-2)",pad:{t:6,r:8,b:18,l:26},fillOpacity:0.9,keepOrder:true,colors:colors});fillEvLegend(el,d.classes,colors);}else{el.innerHTML=buildStack(d.classes,d.vals,w,108,{grid:true,gridLines:3,xLabels:true,markers:true,t0:d.t0,bh:bh,bg:"var(--panel-2)",pad:{t:6,r:8,b:18,l:26},fillOpacity:0.9});fillCaption(el,d);}el.__ashW=w;el.__ashed=true;}});}');
     -- delegated row expand/collapse: a click anywhere in a dbrow toggles its
     -- sibling detailrow; opening re-runs renderAsh so its timeline (skipped
     -- while hidden, above) picks up its real width

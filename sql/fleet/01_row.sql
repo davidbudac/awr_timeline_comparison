@@ -382,6 +382,15 @@ BEGIN
         || DBMS_XMLGEN.CONVERT('~fleet_alias') || '" data-ash-mode="timeline"></div>');
     DBMS_OUTPUT.PUT_LINE('<div class="tl-caption"></div>');
     DBMS_OUTPUT.PUT_LINE('</div>');   -- .detail-block timeline-box
+    -- second band: same span/bucketing/height, stacked by wait EVENT instead
+    -- of wait class (data-ash-src="ev"), with its own color legend underneath
+    -- (events have no fixed palette, unlike the classes shown in the masthead)
+    DBMS_OUTPUT.PUT_LINE('<div class="detail-block timeline-box">');
+    DBMS_OUTPUT.PUT_LINE('<div class="panel-h">ASH by wait event &mdash; full report span (AAS) &middot; top events</div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="ash-timeline" data-ash-of="'
+        || DBMS_XMLGEN.CONVERT('~fleet_alias') || '" data-ash-mode="timeline" data-ash-src="ev"></div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="ev-legend"></div>');
+    DBMS_OUTPUT.PUT_LINE('</div>');   -- .detail-block timeline-box (by event)
 END;
 /
 
