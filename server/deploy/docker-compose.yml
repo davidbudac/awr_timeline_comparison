@@ -1,0 +1,48 @@
+# docker-compose.yml -- one-command AWR Fleet Server.
+#
+# Run from the REPO ROOT:
+#
+#   docker compose -f server/deploy/docker-compose.yml up -d --build
+#   # open http://127.0.0.1:8765/
+#   docker compose -f server/deploy/docker-compose.yml logs -f
+#   docker compose -f server/deploy/docker-compose.yml down
+#
+# Prereq: a real fleet.conf at the repo root (copy fleet.conf.example and
+# fill it in). Everything else has a working default -- server.conf is
+# auto-seeded from server.conf.example inside the container on first start.
+#
+# Paths below are relative to THIS file (server/deploy/); the build context
+# is the repo root two levels up, because the image needs run_awr_fleet.sh,
+# sql/, vendor/, ... next to server/.
+
+services:
+  awr-fleet-server:
+    build:
+      context: ../..
+      dockerfile: server/deploy/Dockerfile
+    image: awr-fleet-server
+    container_name: awr-fleet-server
+    # Published to the HOST loopback only -- this is the security boundary
+    # (the server has no auth). Front it with an auth proxy before exposing
+    # it beyond localhost. Override the host port with AWRSERVE_PORT.
+    ports:
+      - "127.0.0.1:${AWRSERVE_PORT:-8765}:8765"
+    volumes:
+      # Your real fleet connection list (aliases + connect strings). Required.
+      - ../../fleet.conf:/app/fleet.conf:ro
+      # Generated HTML reports + server run history/logs/state -- persisted
+      # across restarts.
+      - ../../reports:/app/reports
+      - ../data:/app/server/data
+      # Optional: mount a hand-tuned server.conf instead of the auto-seeded
+      # default (window/cadence params, schedule, retention). Uncomment and
+      # copy server.conf.example to server/server.conf first.
+      # - ../server.conf:/app/server/server.conf:ro
+      # Optional: an Oracle wallet / tnsnames dir for wallet or TNS-alias
+      # connect strings. Uncomment and set the host path.
+      # - /path/to/wallet:/app/wallet:ro
+    # Optional: whitelisted knobs passed to the wrapper (mirrors
+    # server.conf's [env]); TNS_ADMIN defaults to /app/wallet in the image.
+    # environment:
+    #   TNS_ADMIN: /app/wallet
+    restart: unless-stopped

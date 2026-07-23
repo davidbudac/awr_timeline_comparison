@@ -79,13 +79,46 @@ generated and recorded -- it never glob-deletes `reports/awr_*`, so ad-hoc
 CLI-run reports are untouched. See the comments in
 `server.conf.example` for the three knobs.
 
-## Deploying
+## Docker (easiest)
+
+Everything for a container lives in `server/deploy/`. From the repo root,
+with a real `fleet.conf` in place (copy `fleet.conf.example` and fill it in):
+
+```bash
+docker compose -f server/deploy/docker-compose.yml up -d --build
+# open http://127.0.0.1:8765/
+docker compose -f server/deploy/docker-compose.yml logs -f
+docker compose -f server/deploy/docker-compose.yml down
+```
+
+The image (Oracle Linux 8 slim + Instant Client `sqlplus` + bash + python3)
+runs the same `run_awr_fleet.sh` a human would. What you get for free:
+
+- **Zero-config start.** No `server.conf`? The entrypoint seeds one from
+  `server.conf.example` (on-demand-only defaults). Mount a hand-tuned
+  `server.conf` later for schedule/retention/window params (see the
+  commented volume in `docker-compose.yml`).
+- **Reachable port, kept safe.** Inside the container the server binds
+  `0.0.0.0` (127.0.0.1 there would be unreachable through the container
+  boundary); the entrypoint forces this even if your `server.conf` says
+  otherwise. The **security boundary is the host publish** -- compose maps
+  the port to `127.0.0.1` only. It still has **no auth**: front it with an
+  auth proxy or an SSH tunnel before exposing it beyond localhost.
+- **Persistent data.** `reports/` and `server/data/` are bind-mounted, so
+  generated reports and run history survive `down`/`up`.
+
+Wallet / TNS-alias connect strings: mount your wallet and point `TNS_ADMIN`
+at it (uncomment the two lines in `docker-compose.yml`). Bare
+`user/pw@host:port/service` connect strings in `fleet.conf` need neither.
+
+Full Docker docs — plain `docker run`, mounts, wallet/TNS, security, and
+troubleshooting — are in [`server/deploy/README.md`](deploy/README.md).
+
+## Other deployments
 
 See `server/deploy/`:
 
 - `awr-fleet-server.service` -- a systemd unit (Linux).
-- `Dockerfile.example` -- an Oracle Linux 8 slim image with Instant Client
-  + bash + python3.
 - `run-nohup.sh` -- a POSIX/AIX-friendly nohup wrapper for hosts without
   systemd.
 

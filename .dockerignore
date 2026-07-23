@@ -1,0 +1,28 @@
+# Keep the Docker build context small and free of local state/secrets.
+# The image bakes in the generator code (run_awr_*.sh, sql/, vendor/, ...)
+# and server/; runtime data and config come in as bind mounts at run time.
+
+.git
+.gitignore
+.claude
+.conductor
+.codex
+
+# Local runtime state + local config (bind-mounted at runtime, never baked).
+server/data/
+server/server.conf
+
+# Local secret: real fleet connection list (bind-mounted read-only instead).
+fleet.conf
+
+# Generated reports (bind-mounted so they persist; no need in the image).
+reports/*
+!reports/.gitkeep
+
+# Rendered docs / OS noise / bytecode.
+INTRODUCTION.html
+INTRODUCTION.*.html
+docs/_mock*.html
+.DS_Store
+**/__pycache__/
+*.pyc
