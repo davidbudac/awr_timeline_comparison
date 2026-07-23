@@ -38,6 +38,10 @@
 #   FLEET_KEEP_WORK  1 = never delete the per-run workdir under
 #                    reports/fleet_work_<run_id>/, even when every
 #                    DB succeeded                                  [0]
+#   FLEET_QUIET      1 = silence the timestamped run narration
+#                    (per-DB start/finish lines + phase timings on
+#                    stderr); the stdout summary + "Report:" line
+#                    and all warnings still print                  [0]
 #   MARKERS          inline fleet-wide timeline markers, one string,
 #                    "WHEN|LABEL;;WHEN|LABEL" (WHEN='YYYY-MM-DD HH:MM')
 #   MARKER_FILE      a file of "WHEN|LABEL" lines; wins over MARKERS
@@ -88,6 +92,10 @@ FLEET_PAR="${FLEET_PAR:-4}"
 FLEET_TIMEOUT="${FLEET_TIMEOUT:-900}"
 FLEET_TEMPLATE="${FLEET_TEMPLATE:-fleet}"
 FLEET_KEEP_WORK="${FLEET_KEEP_WORK:-0}"
+# FLEET_QUIET=1 silences the timestamped run narration (per-DB start/finish
+# lines, phase timings) that otherwise streams to stderr; the machine-readable
+# per-DB summary + "Report: <path>" on stdout and all warnings are unaffected.
+FLEET_QUIET="${FLEET_QUIET:-0}"
 
 # ---- optional per-DB detailed (full single-DB) report -----------------------
 # FLEET_DETAIL: '' = honor each fleet.conf line's own "|detail" flag (default),
@@ -116,6 +124,8 @@ MARKER_FILE="${MARKER_FILE:-}"
     echo "error: FLEET_TIMEOUT must be a positive integer (got '$FLEET_TIMEOUT')" >&2; exit 2; }
 [[ "$FLEET_KEEP_WORK" =~ ^[01]$ ]] || {
     echo "error: FLEET_KEEP_WORK must be 0 or 1 (got '$FLEET_KEEP_WORK')" >&2; exit 2; }
+[[ "$FLEET_QUIET" =~ ^[01]$ ]] || {
+    echo "error: FLEET_QUIET must be 0 or 1 (got '$FLEET_QUIET')" >&2; exit 2; }
 case "${FLEET_DETAIL,,}" in
     ''|all|none) : ;;
     *) echo "error: FLEET_DETAIL must be 'all', 'none', or empty (got '$FLEET_DETAIL')" >&2; exit 2 ;;
@@ -149,6 +159,26 @@ else
     BOLD=''; RST=''
 fi
 
+# ---- run narration (verbose progress + timing) -----------------------------
+# `say` prints a wall-clock-stamped progress line to stderr so stdout keeps
+# carrying only the machine-readable per-DB summary + "Report: <path>" line
+# (still cleanly pipeable).  Silenced by FLEET_QUIET=1.  Durations are measured
+# with bash's builtin $SECONDS (seconds since shell start, inherited correctly
+# by the per-DB background subshells) rather than `date +%s` -- older AIX
+# `date` lacks %s, exactly the kind of GNU-ism CLAUDE.md warns about -- while
+# the HH:MM:SS stamp uses a plain, portable strftime `date`.
+say() {
+    [[ "$FLEET_QUIET" == 1 ]] && return 0
+    printf '%s[%s]%s %s\n' "$BOLD" "$(date '+%H:%M:%S')" "$RST" "$*" >&2
+}
+# fmt_dur <whole-seconds> -> "Ns" under a minute, else "Mm SSs".
+fmt_dur() {
+    local s="$1"
+    [[ "$s" =~ ^[0-9]+$ ]] || { printf '%ss' "$s"; return; }
+    if [[ "$s" -ge 60 ]]; then printf '%dm %02ds' "$((s / 60))" "$((s % 60))"
+    else printf '%ds' "$s"; fi
+}
+
 usage() {
     cat <<USAGE
 ${BOLD}AWR fleet report${RST} v${FLEET_VERSION} — one combined report across many databases
@@ -177,6 +207,8 @@ Environment variables:
                    gtimeout on PATH; otherwise unbounded, warned once)  [900]
   FLEET_TEMPLATE   sql/lib/templates/<name> to use per DB           [fleet]
   FLEET_KEEP_WORK  1 = keep the workdir even when every DB succeeded   [0]
+  FLEET_QUIET      1 = silence timestamped progress narration; the
+                   stdout summary + "Report:" line still print          [0]
   MARKERS          inline timeline markers "WHEN|LABEL;;WHEN|LABEL"
                    (WHEN = 'YYYY-MM-DD HH:MM'); drawn on every DB's
                    report-span ASH timeline, and in the masthead legend
@@ -480,8 +512,10 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# run_one_db <alias> <conn> <conn_disp> <detail_flag> -- runs the lean fleet
-# extract against one DB.  Loads sql/defaults.sql then sql/fleet/defaults.sql
+# run_one_db <alias> <conn> <conn_disp> <detail_flag> <idx> <total> -- runs the
+# lean fleet extract against one DB.  <idx>/<total> are display-only (the
+# "[k/N]" progress counter in the narration).  Loads sql/defaults.sql then
+# sql/fleet/defaults.sql
 # as safety nets (same "defaults first, explicit DEFINEs override, driver as
 # a SEPARATE start command" pattern as run_awr_trend.sh's run_report -- see
 # that file's run_report comment for why loading both @files on one line is
@@ -498,12 +532,13 @@ EOF
 # (nothing to drill into) and records 'skipped', not a numeric rc.
 # ---------------------------------------------------------------------------
 run_one_db() {
-    local alias="$1" conn="$2" disp="$3" detail_flag="$4"
+    local alias="$1" conn="$2" disp="$3" detail_flag="$4" idx="${5:-?}" total="${6:-?}"
     local log="$WORK/$alias.log" rcfile="$WORK/$alias.rc"
-    local rc=0
+    local rc=0 t0=$SECONDS secs
     local -a cmd=(sqlplus -S -L "$conn")
     [[ -n "$TIMEOUT_BIN" ]] && cmd=("$TIMEOUT_BIN" "$FLEET_TIMEOUT" "${cmd[@]}")
 
+    say "[$idx/$total] $alias: extract started ($disp)"
     "${cmd[@]}" > "$log" 2>&1 <<SQLEOF || rc=$?
 @sql/defaults.sql
 @sql/fleet/defaults.sql
@@ -522,6 +557,15 @@ DEFINE fleet_conn_disp = '${disp}'
 EXIT
 SQLEOF
     printf '%s\n' "$rc" > "$rcfile"
+    secs=$((SECONDS - t0))
+    # Persist the per-DB extract duration so the assembler (and --assemble on a
+    # kept workdir) can show "took=..." in the summary line.
+    printf '%s\n' "$secs" > "$WORK/$alias.secs"
+    if [[ "$rc" -eq 0 ]]; then
+        say "[$idx/$total] $alias: extract OK in $(fmt_dur "$secs")"
+    else
+        say "[$idx/$total] $alias: extract FAILED (rc=$rc) after $(fmt_dur "$secs") -- see $log"
+    fi
 
     if [[ "$detail_flag" == 'Y' ]]; then
         if [[ "$rc" -eq 0 ]]; then
@@ -559,7 +603,7 @@ run_one_detail() {
     local ddir="$WORK/detail_$alias"
     local dlog="$WORK/$alias.detail.log"
     local drc="$WORK/$alias.detail.rc"
-    local rc=0
+    local rc=0 t0=$SECONDS secs
 
     mkdir -p "$ddir/reports"
     ln -s "$SCRIPT_DIR/awr_trend.sql" "$ddir/awr_trend.sql"
@@ -567,6 +611,8 @@ run_one_detail() {
 
     local -a cmd=(sqlplus -S -L "$conn")
     [[ -n "$TIMEOUT_BIN" && "$FLEET_DETAIL_TIMEOUT" -gt 0 ]] && cmd=("$TIMEOUT_BIN" "$FLEET_DETAIL_TIMEOUT" "${cmd[@]}")
+
+    say "$alias: detailed single-DB report started (template $FLEET_DETAIL_TEMPLATE)"
 
     # The log redirection sits on the SUBSHELL, not the inner command: dlog is
     # a workdir-relative path that must resolve against this function's cwd
@@ -588,13 +634,14 @@ EXIT
 SQLEOF
     ) > "$dlog" 2>&1 || rc=$?
 
+    local dest=''
     if [[ "$rc" -eq 0 ]]; then
         # Plain glob, not find: AIX find lacks -maxdepth/-print0, and the
         # isolated reports/ dir can only ever hold the driver's single spool.
         local -a htmls=( "$ddir"/reports/*.html )
         [[ -e "${htmls[0]}" ]] || htmls=()
         if [[ "${#htmls[@]}" -eq 1 ]]; then
-            local dest="reports/awr_fleet_detail_${alias}_run${RUN_ID}.html"
+            dest="reports/awr_fleet_detail_${alias}_run${RUN_ID}.html"
             mv "${htmls[0]}" "$dest"
             inline_fleet_echarts "$dest" "$FLEET_DETAIL_ECHARTS"
             rm -rf "$ddir"
@@ -605,6 +652,14 @@ SQLEOF
     fi
 
     printf '%s\n' "$rc" > "$drc"
+    secs=$((SECONDS - t0))
+    if [[ "$rc" -eq 0 ]]; then
+        say "$alias: detailed report OK in $(fmt_dur "$secs") -> $dest"
+    elif [[ "$rc" -eq 124 ]]; then
+        say "$alias: detailed report TIMED OUT after $(fmt_dur "$secs") (FLEET_DETAIL_TIMEOUT=${FLEET_DETAIL_TIMEOUT}s) -- see $dlog"
+    else
+        say "$alias: detailed report FAILED (rc=$rc) after $(fmt_dur "$secs") -- see $dlog"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -1138,22 +1193,27 @@ FALLBACK_CHROME
         echo "warning: unresolved __FLEET_* placeholder(s) survived assembly in $report -- this is a bug." >&2
     fi
 
-    local dstat detail_fail_count=0 detail_timeout_count=0
+    local dstat detail_fail_count=0 detail_timeout_count=0 took secraw
     for i in "${!A_ALIAS[@]}"; do
         alias="${A_ALIAS[$i]}"
         dstat="$(detail_status_word "$work" "${DETAILFLAG[$alias]:-N}" "$alias")"
+        # Per-DB extract duration from the .secs file run_one_db wrote; an
+        # older workdir re-assembled with --assemble predates it -> "?".
+        secraw="$(cat "$work/$alias.secs" 2>/dev/null || true)"
+        if [[ "$secraw" =~ ^[0-9]+$ ]]; then took="$(fmt_dur "$secraw")"; else took='?'; fi
         if [[ "${DETAILFLAG[$alias]:-N}" == 'Y' && "$dstat" != 'ok' ]]; then
             detail_fail_count=$((detail_fail_count + 1))
             [[ "$dstat" == 'timeout' ]] && detail_timeout_count=$((detail_timeout_count + 1))
         fi
         if [[ "${IS_ERR[$alias]}" == 1 ]]; then
-            printf '%-24s ERROR  rc=%-5s detail=%-7s %s\n' "$alias" "${RCV[$alias]}" "$dstat" "${REASON[$alias]}"
+            printf '%-24s ERROR  rc=%-5s took=%-7s detail=%-7s %s\n' "$alias" "${RCV[$alias]}" "$took" "$dstat" "${REASON[$alias]}"
         else
-            printf '%-24s OK     score=%-4s crit=%s warn=%s suppressed=%s topsql_n=%s topsql_pts=%s detail=%s\n' \
-                "$alias" "${SCORE[$alias]}" "${CRIT[$alias]}" "${WARN[$alias]}" "${SUPP[$alias]}" "${NTOP[$alias]}" "${PTS[$alias]}" "$dstat"
+            printf '%-24s OK     score=%-4s crit=%s warn=%s suppressed=%s topsql_n=%s topsql_pts=%s took=%s detail=%s\n' \
+                "$alias" "${SCORE[$alias]}" "${CRIT[$alias]}" "${WARN[$alias]}" "${SUPP[$alias]}" "${NTOP[$alias]}" "${PTS[$alias]}" "$took" "$dstat"
         fi
     done
     echo "Report: $report"
+    say "Assembly complete: $n_ok OK ($n_crit crit, $n_warn warn, $n_quiet quiet), $n_err unreachable/error."
 
     ASSEMBLE_REPORT_PATH="$report"
     ASSEMBLE_OK_COUNT="$n_ok"
@@ -1231,6 +1291,14 @@ mkdir -p "$WORK"
 write_manifest "$WORK"
 resolve_timeout_bin
 
+# ---- run banner ------------------------------------------------------------
+FLEET_T0=$SECONDS
+say "AWR fleet report v${FLEET_VERSION}: ${#ALIASES[@]} database(s); window ${WIN_HOURS}h ending ${TARGET_END}; cadence ${STEP}${STEP_UNIT}; ${WEEKS_BACK} prior window(s); top_n ${TOP_N}; template ${FLEET_TEMPLATE}."
+if [[ -n "$TIMEOUT_BIN" ]]; then to_desc="${FLEET_TIMEOUT}s (via $TIMEOUT_BIN)"; else to_desc="disabled (no timeout/gtimeout on PATH)"; fi
+say "Fan-out: up to ${FLEET_PAR} concurrent; per-DB timeout ${to_desc}; workdir ${WORK}."
+n_detail=0; for _d in "${DETAILS[@]}"; do [[ "$_d" == 'Y' ]] && n_detail=$((n_detail + 1)); done
+[[ "$n_detail" -gt 0 ]] && say "${n_detail} database(s) flagged for a full single-DB detailed report (template ${FLEET_DETAIL_TEMPLATE})."
+
 # ---- parallel fan-out capped at FLEET_PAR ----------------------------------
 # Background jobs + `wait -n` (bash 4.3+) cap concurrency without an external
 # job-control tool; every wait is `|| true`-guarded so one bad DB (or one
@@ -1240,8 +1308,9 @@ resolve_timeout_bin
 # the SAME background job (run_one_db calls run_one_detail itself), so
 # FLEET_PAR still caps total concurrency -- it never spawns a second slot.
 running=0
+_ntotal="${#ALIASES[@]}"
 for i in "${!ALIASES[@]}"; do
-    run_one_db "${ALIASES[$i]}" "${CONNS[$i]}" "${CONN_DISPS[$i]}" "${DETAILS[$i]}" &
+    run_one_db "${ALIASES[$i]}" "${CONNS[$i]}" "${CONN_DISPS[$i]}" "${DETAILS[$i]}" "$((i + 1))" "$_ntotal" &
     running=$((running + 1))
     if [[ "$running" -ge "$FLEET_PAR" ]]; then
         wait -n || true
@@ -1250,7 +1319,10 @@ for i in "${!ALIASES[@]}"; do
 done
 wait || true
 
+say "All per-DB extracts finished in $(fmt_dur "$((SECONDS - FLEET_T0))"). Assembling combined report..."
+_ASM_T0=$SECONDS
 do_assemble "$WORK"
+say "Report assembled in $(fmt_dur "$((SECONDS - _ASM_T0))"); total runtime $(fmt_dur "$((SECONDS - FLEET_T0))")."
 
 # Keep the workdir when there's something worth debugging: any DB errored
 # (pre-existing behaviour) OR any requested detail report did not complete
