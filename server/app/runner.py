@@ -358,7 +358,9 @@ class RunManager:
                 break
         detail_path_str = None
         if summary["wrapper_run_id"]:
-            fname = records.detail_report_filename(alias, summary["wrapper_run_id"])
+            fname = records.detail_report_filename(
+                alias, summary["wrapper_run_id"], report_path=summary.get("report_path")
+            )
             full = self.reports_dir / fname
             if full.is_file():
                 detail_path_str = "reports/%s" % fname

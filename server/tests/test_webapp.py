@@ -242,6 +242,34 @@ class ReportServingTest(WebappTestBase):
         self.assertIn(b"ok", r.body)
         self.assertIn("text/html", r.content_type)
 
+    def test_serves_a_report_inside_the_new_run_folder(self):
+        run_dir = self.reports_dir / "awr_fleet_202607231200_run2"
+        run_dir.mkdir()
+        (run_dir / "index.html").write_text("<html>console</html>", encoding="utf-8")
+        (run_dir / "detail_prod_east.html").write_text("<html>detail</html>", encoding="utf-8")
+
+        r = self.dispatch("GET", "/reports/awr_fleet_202607231200_run2/index.html")
+        self.assertEqual(r.status, 200)
+        self.assertIn(b"console", r.body)
+
+        r2 = self.dispatch("GET", "/reports/awr_fleet_202607231200_run2/detail_prod_east.html")
+        self.assertEqual(r2.status, 200)
+        self.assertIn(b"detail", r2.body)
+
+    def test_rejects_two_levels_deep_inside_run_folder(self):
+        run_dir = self.reports_dir / "awr_fleet_202607231200_run2" / "nested"
+        run_dir.mkdir(parents=True)
+        (run_dir / "index.html").write_text("<html>x</html>", encoding="utf-8")
+        r = self.dispatch("GET", "/reports/awr_fleet_202607231200_run2/nested/index.html")
+        self.assertEqual(r.status, 404)
+
+    def test_rejects_non_run_folder_shaped_subdir(self):
+        odd_dir = self.reports_dir / "not_a_run_folder"
+        odd_dir.mkdir()
+        (odd_dir / "index.html").write_text("<html>x</html>", encoding="utf-8")
+        r = self.dispatch("GET", "/reports/not_a_run_folder/index.html")
+        self.assertEqual(r.status, 404)
+
     def test_missing_report_404(self):
         r = self.dispatch("GET", "/reports/does_not_exist.html")
         self.assertEqual(r.status, 404)
@@ -294,7 +322,7 @@ class SafeReportPathUnitTest(unittest.TestCase):
     """Direct unit coverage of paths.safe_report_path independent of the
     HTTP layer, against the real (non-test) REPORTS_DIR constant."""
 
-    def test_rejects_slash_in_filename(self):
+    def test_rejects_slash_in_filename_when_folder_not_run_shaped(self):
         from app import paths
 
         self.assertIsNone(paths.safe_report_path("sub/dir.html"))
@@ -315,6 +343,41 @@ class SafeReportPathUnitTest(unittest.TestCase):
         p = paths.safe_report_path("awr_fleet_202607221200_run123.html")
         self.assertIsNotNone(p)
         self.assertTrue(str(p).endswith("awr_fleet_202607221200_run123.html"))
+
+    def test_accepts_run_folder_form(self):
+        from app import paths
+
+        p = paths.safe_report_path("awr_fleet_202607221200_run123/index.html")
+        self.assertIsNotNone(p)
+        self.assertTrue(str(p).endswith("awr_fleet_202607221200_run123/index.html"))
+
+    def test_accepts_detail_file_inside_run_folder(self):
+        from app import paths
+
+        p = paths.safe_report_path("awr_fleet_202607221200_run123/detail_prod_east.html")
+        self.assertIsNotNone(p)
+
+    def test_rejects_run_folder_with_bad_filename_extension(self):
+        from app import paths
+
+        self.assertIsNone(paths.safe_report_path("awr_fleet_202607221200_run123/detail.php"))
+
+    def test_rejects_two_folder_segments(self):
+        from app import paths
+
+        self.assertIsNone(paths.safe_report_path("awr_fleet_1_run1/nested/index.html"))
+
+    def test_rejects_dotdot_folder_segment(self):
+        from app import paths
+
+        self.assertIsNone(paths.safe_report_path("../etc/index.html"))
+
+    def test_rejects_folder_not_matching_run_pattern(self):
+        from app import paths
+
+        self.assertIsNone(paths.safe_report_path("not_a_run_folder/index.html"))
+        self.assertIsNone(paths.safe_report_path("awr_fleet_run1/index.html"))
+        self.assertIsNone(paths.safe_report_path("awr_fleet_1_runX/index.html"))
 
 
 if __name__ == "__main__":

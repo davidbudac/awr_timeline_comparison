@@ -207,7 +207,12 @@ ROUTES = [
     ("GET", re.compile(r"^/$"), h_home),
     ("GET", re.compile(r"^/runs$"), h_runs),
     ("GET", re.compile(r"^/runs/(?P<run_id>[^/]+)$"), h_run_detail),
-    ("GET", re.compile(r"^/reports/(?P<filename>[^/]+)$"), h_report_file),
+    # One optional run-folder segment ahead of the filename (the current
+    # per-run folder layout, e.g. "awr_fleet_<ts>_run<id>/index.html") --
+    # safe_report_path() does the real shape/containment validation; this
+    # regex just caps it at "at most one slash" so a deeper traversal
+    # attempt never even reaches that check.
+    ("GET", re.compile(r"^/reports/(?P<filename>[^/]+(?:/[^/]+)?)$"), h_report_file),
     ("POST", re.compile(r"^/api/fleet/run$"), h_api_fleet_run),
     ("POST", re.compile(r"^/api/detail/run$"), h_api_detail_run),
     ("GET", re.compile(r"^/api/status$"), h_api_status),

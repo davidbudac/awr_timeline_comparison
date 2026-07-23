@@ -137,7 +137,13 @@ def recover_stuck_running(data_dir):
 #
 #   %-24s ERROR  rc=%-5s detail=%-7s %s
 #   %-24s OK     score=%-4s crit=%s warn=%s suppressed=%s topsql_n=%s topsql_pts=%s detail=%s
-#   Report: reports/awr_fleet_<YYYYMMDDHHMM>_run<RUN_ID>.html
+#   Report: reports/awr_fleet_<YYYYMMDDHHMM>_run<RUN_ID>/index.html
+#
+# The report path is the per-run folder's index.html (current wrapper,
+# v0.4.0+ folder-per-run layout); _REPORT_RE also still matches the OLD flat
+# form, reports/awr_fleet_<ts>_run<id>.html, so a workdir/log predating the
+# folder layout still parses -- there is no live code path that emits the
+# flat form anymore, this is parser-side back-compat only.
 #
 # printf '%-Ns' left-pads with spaces to width N, so runs of whitespace
 # between fields are variable-width -- match with \s+, never a fixed count.
@@ -151,7 +157,9 @@ _OK_RE = re.compile(
     r"\s+suppressed=(?P<suppressed>\S+)\s+topsql_n=(?P<topsql_n>\S+)\s+topsql_pts=(?P<topsql_pts>\S+)"
     r"\s+detail=(?P<detail>\S+)$"
 )
-_REPORT_RE = re.compile(r"^Report:\s+(?P<path>reports/awr_fleet_(?P<ts>\d+)_run(?P<run_id>\d+)\.html)\s*$")
+_REPORT_RE = re.compile(
+    r"^Report:\s+(?P<path>reports/awr_fleet_(?P<ts>\d+)_run(?P<run_id>\d+)(?:/index\.html|\.html))\s*$"
+)
 
 
 def parse_fleet_summary(text):
@@ -210,9 +218,30 @@ def parse_fleet_summary(text):
     }
 
 
-def detail_report_filename(alias, wrapper_run_id):
-    """reports/awr_fleet_detail_<alias>_run<wrapper_run_id>.html -- port of
-    run_awr_fleet.sh:594/618's `dest`/`dpath` naming."""
+def detail_report_filename(alias, wrapper_run_id, report_path=None):
+    """Path (relative to reports/) to alias's detail report for a wrapper run.
+
+    Current (v0.4.0+) folder-per-run layout: the console report and every
+    requested detail report share one folder,
+    reports/awr_fleet_<ts>_run<id>/, with the detail file named
+    detail_<alias>.html -- port of run_awr_fleet.sh's run_one_detail `dest`
+    / detail_state `dpath` naming. This function has no independent way to
+    learn report_ts, so when the caller has already parsed the console
+    report_path (e.g. from parse_fleet_summary()'s "Report: ..." line,
+    itself in the new folder form), pass it and the detail path is derived
+    from its parent folder -- the only way to construct the new path
+    without re-deriving report_ts by hand.
+
+    Falls back to the OLD flat naming,
+    awr_fleet_detail_<alias>_run<wrapper_run_id>.html, when report_path is
+    absent or still in the pre-folder flat form -- back-compat for older
+    callers/records that never learned a (new-form) report_path.
+    """
+    if report_path and report_path.endswith("/index.html"):
+        folder = report_path.rsplit("/", 1)[0]
+        if folder.startswith("reports/"):
+            folder = folder[len("reports/") :]
+        return "%s/detail_%s.html" % (folder, alias)
     return "awr_fleet_detail_%s_run%s.html" % (alias, wrapper_run_id)
 
 

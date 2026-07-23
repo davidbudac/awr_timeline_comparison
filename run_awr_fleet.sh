@@ -54,9 +54,13 @@
 #   FLEET_DETAIL_TEMPLATE  awr_trend.sql template for the detailed run
 #                                                            [comprehensive]
 #   FLEET_DETAIL_ECHARTS   passed to the single-DB report's `echarts` var;
-#                          empty = public CDN, http(s) URL = internal
-#                          mirror, local file path = inlined into the
-#                          detailed report for a fully offline file    []
+#                          empty (default) = inline vendor/echarts.min.js
+#                          for a fully offline detailed report (falls back
+#                          to the public CDN, with a warning, if that file
+#                          is missing); 'cdn' = force the public CDN (the
+#                          pre-this-feature empty-value behavior); http(s)
+#                          URL = internal mirror; any other local file path
+#                          = inlined into the detailed report            []
 #
 # Examples:
 #   ./run_awr_fleet.sh fleet.conf
@@ -219,8 +223,11 @@ Environment variables:
                          0 = no limit                               [3600]
   FLEET_DETAIL_TEMPLATE  awr_trend.sql template for the detailed run
                                                           [comprehensive]
-  FLEET_DETAIL_ECHARTS   echarts source for the detailed report; empty =
-                         CDN, http(s) URL = mirror, local path = inlined []
+  FLEET_DETAIL_ECHARTS   echarts source for the detailed report; empty
+                         (default) = inline vendor/echarts.min.js (fully
+                         offline; falls back to CDN with a warning if
+                         missing), 'cdn' = force the public CDN, http(s)
+                         URL = mirror, local path = inlined             []
 
 Score shown per DB in the report: 10*critical + 3*warning + min(25, top-SQL
 points); an unreachable/truncated DB scores as an error row (sorts first).
@@ -325,18 +332,56 @@ inline_fleet_echarts() {
     echo "Inlined ECharts ($lib) into $(basename "$html") -- detailed report is self-contained."
 }
 
-# resolve_detail_echarts_path -- when FLEET_DETAIL_ECHARTS is set and is not
+# resolve_detail_echarts_eff -- resolves the EFFECTIVE echarts source for
+# detailed reports into the global DETAIL_ECHARTS_EFF, offline-by-default:
+#   FLEET_DETAIL_ECHARTS empty    -> vendor/echarts.min.js (inlined) when
+#                                    that file exists and is readable; else
+#                                    a warning and fall back to the public
+#                                    CDN (empty), the pre-this-feature
+#                                    empty-value behavior.
+#   FLEET_DETAIL_ECHARTS == 'cdn' (case-insensitive) -> '' (force the public
+#                                    CDN; the escape hatch back to the old
+#                                    default).
+#   anything else (http(s) URL or an explicit local path) -> honored
+#                                    verbatim, exactly as before.
+# Must run BEFORE any DB is queried (same fail-fast rationale as
+# resolve_detail_echarts_path below, which validates DETAIL_ECHARTS_EFF once
+# this has resolved it).
+resolve_detail_echarts_eff() {
+    local v="$FLEET_DETAIL_ECHARTS" lv p
+    lv="${v,,}"
+    if [[ -z "$v" ]]; then
+        p="$SCRIPT_DIR/vendor/echarts.min.js"
+        if [[ -r "$p" ]]; then
+            DETAIL_ECHARTS_EFF='vendor/echarts.min.js'
+        else
+            echo "warning: vendor/echarts.min.js not found or not readable;" \
+                 "detailed reports will link the public ECharts CDN instead" \
+                 "of inlining it. Set FLEET_DETAIL_ECHARTS explicitly, or" \
+                 "'cdn' to silence this warning." >&2
+            DETAIL_ECHARTS_EFF=''
+        fi
+    elif [[ "$lv" == 'cdn' ]]; then
+        DETAIL_ECHARTS_EFF=''
+    else
+        DETAIL_ECHARTS_EFF="$v"
+    fi
+}
+
+# resolve_detail_echarts_path -- when DETAIL_ECHARTS_EFF is set and is not
 # an http(s) URL, it must be a readable local file (relative paths resolved
 # against the project root) BEFORE any DB is queried -- a bad path caught only
 # after every extract has run would waste the whole run.  Empty / URL values
 # need no local file and are left alone (the DEFINE already handles them).
+# Must run AFTER resolve_detail_echarts_eff.
 resolve_detail_echarts_path() {
-    [[ -z "$FLEET_DETAIL_ECHARTS" ]] && return 0
-    is_url "$FLEET_DETAIL_ECHARTS" && return 0
-    local p="$FLEET_DETAIL_ECHARTS"
+    [[ -z "$DETAIL_ECHARTS_EFF" ]] && return 0
+    is_url "$DETAIL_ECHARTS_EFF" && return 0
+    local p="$DETAIL_ECHARTS_EFF"
     [[ "$p" == /* ]] || p="$SCRIPT_DIR/$p"
     if [[ ! -r "$p" ]]; then
-        echo "error: FLEET_DETAIL_ECHARTS '$FLEET_DETAIL_ECHARTS' does not exist or is not readable." >&2
+        echo "error: FLEET_DETAIL_ECHARTS '$FLEET_DETAIL_ECHARTS' resolved to" \
+             "'$DETAIL_ECHARTS_EFF', which does not exist or is not readable." >&2
         exit 2
     fi
 }
@@ -480,6 +525,12 @@ parse_conf() {
 # masked connects, detail flags and the masthead window line from the workdir
 # alone -- no need to keep fleet.conf around or re-parse it.  do_assemble
 # tolerates a 2-column manifest from an older workdir (defaults the flag to N).
+# REPORT_TS is persisted alongside RUN_ID so `--assemble` (which may run in a
+# separate invocation, long after the live run) derives the exact same
+# per-run output folder name, reports/awr_fleet_<REPORT_TS>_run<RUN_ID>/, that
+# run_one_detail already wrote detail_<alias>.html into via the RUN_DIR
+# global -- do_assemble falls back to a freshly-computed timestamp only for a
+# pre-this-feature workdir that predates REPORT_TS ever being written.
 # ---------------------------------------------------------------------------
 write_manifest() {
     local work="$1" i
@@ -505,9 +556,11 @@ STEP='${STEP}'
 STEP_UNIT='${STEP_UNIT}'
 FLEET_TEMPLATE='${FLEET_TEMPLATE}'
 RUN_ID='${RUN_ID}'
+REPORT_TS='${REPORT_TS}'
 FLEET_DETAIL_TEMPLATE='${FLEET_DETAIL_TEMPLATE}'
 FLEET_DETAIL_TIMEOUT='${FLEET_DETAIL_TIMEOUT}'
 FLEET_DETAIL_ECHARTS='${FLEET_DETAIL_ECHARTS}'
+DETAIL_ECHARTS_EFF='${DETAIL_ECHARTS_EFF}'
 EOF
 }
 
@@ -591,9 +644,11 @@ SQLEOF
 # Two separate @ start commands (defaults, then the driver) mirror
 # run_awr_trend.sh's run_report -- see that function's comment for why both
 # on one line is a silent no-op.  On success, the single resulting *.html is
-# moved to a predictable project-root path the assembler links to; the
-# isolated dir is removed.  On failure (or if inlining leaves the isolated
-# dir around because of an unexpected *.html count) the dir is LEFT for
+# moved into RUN_DIR (the same reports/awr_fleet_<ts>_run<id>/ folder the
+# console report lands in, as detail_<alias>.html) so the chip/drill href can
+# stay a bare relative name; the isolated dir is removed.  On failure (or if
+# inlining leaves the isolated dir around because of an unexpected *.html
+# count) the dir is LEFT for
 # debugging, mirroring the single-DB workdir-on-error convention.  Writes the
 # numeric rc (or nothing -- the caller already wrote 'skipped') to
 # workdir/<alias>.detail.rc.
@@ -628,7 +683,7 @@ DEFINE step       = ${STEP}
 DEFINE step_unit  = '${STEP_UNIT}'
 DEFINE template   = '${FLEET_DETAIL_TEMPLATE}'
 DEFINE markers    = '${DETAIL_MARKERS}'
-DEFINE echarts    = '${FLEET_DETAIL_ECHARTS}'
+DEFINE echarts    = '${DETAIL_ECHARTS_EFF}'
 @awr_trend.sql
 EXIT
 SQLEOF
@@ -641,9 +696,9 @@ SQLEOF
         local -a htmls=( "$ddir"/reports/*.html )
         [[ -e "${htmls[0]}" ]] || htmls=()
         if [[ "${#htmls[@]}" -eq 1 ]]; then
-            dest="reports/awr_fleet_detail_${alias}_run${RUN_ID}.html"
+            dest="${RUN_DIR}/detail_${alias}.html"
             mv "${htmls[0]}" "$dest"
-            inline_fleet_echarts "$dest" "$FLEET_DETAIL_ECHARTS"
+            inline_fleet_echarts "$dest" "$DETAIL_ECHARTS_EFF"
             rm -rf "$ddir"
         else
             rc=1
@@ -667,13 +722,16 @@ SQLEOF
 # Only meaningful when the alias's detail flag is 'Y' (callers check the flag
 # first).  Single-sourced by detail_bits (HTML chip/line for the report) and
 # detail_status_word (the per-DB stdout summary line) so the two can never
-# disagree about success/failure.  Needs RUN_ID in scope (do_assemble sources
-# it from params.env before either caller runs).
+# disagree about success/failure.  Needs RUN_DIR_ASM in scope -- do_assemble
+# sets it (from REPORT_TS+RUN_ID, either sourced from params.env or freshly
+# computed) before either caller runs, to the SAME reports/awr_fleet_<ts>_run
+# <id>/ folder run_one_detail wrote detail_<alias>.html into via its own
+# RUN_DIR global on the live-run path.
 # ---------------------------------------------------------------------------
 detail_state() {
     local work="$1" alias="$2" drc dpath
     drc="$(cat "$work/$alias.detail.rc" 2>/dev/null || true)"
-    dpath="reports/awr_fleet_detail_${alias}_run${RUN_ID}.html"
+    dpath="${RUN_DIR_ASM}/detail_${alias}.html"
     if [[ "$drc" == '0' && -s "$dpath" ]]; then
         printf 'ok'
     elif [[ "$drc" == 'skipped' ]]; then
@@ -725,7 +783,11 @@ detail_bits() {
 
     case "$state" in
         ok)
-            href="awr_fleet_detail_${alias}_run${RUN_ID}.html"
+            # Bare relative name -- detail_<alias>.html sits in the SAME
+            # folder as index.html (the report being assembled), which is the
+            # whole point of the per-run folder layout: the report stays
+            # relocatable without any absolute or reports/-prefixed path.
+            href="detail_${alias}.html"
             DCHIP="<a class=\"dchip\" href=\"$href\" onclick=\"event.stopPropagation()\" title=\"Open the full single-DB AWR report for $aliasE\">report</a>"
             DLINE="<div class=\"detail-link\">Full single-DB report: <a href=\"$href\">$href</a></div>"
             ;;
@@ -767,7 +829,16 @@ detail_status_word() {
 
 # ---------------------------------------------------------------------------
 # do_assemble <workdir> -- classifies every alias in workdir/manifest.tsv,
-# scores the OK ones, and writes reports/awr_fleet_<ts>_run<RUN_ID>.html.
+# scores the OK ones, and writes
+# reports/awr_fleet_<ts>_run<RUN_ID>/index.html (the per-run folder that also
+# holds every detail_<alias>.html run_one_detail wrote).  report_ts is read
+# from the sourced params.env (REPORT_TS, written by write_manifest) so
+# `--assemble` reconstructs the SAME folder name a live run already used --
+# it falls back to a freshly-computed timestamp only for a workdir written
+# before REPORT_TS existed, matching that pre-existing workdir's own
+# (necessarily different, since it never had a shared folder) report name.
+# The global RUN_DIR_ASM is set to that folder so detail_state/detail_bits
+# (called later in this function) can locate each alias's detail report.
 # Sets the globals ASSEMBLE_REPORT_PATH / ASSEMBLE_OK_COUNT /
 # ASSEMBLE_ERR_COUNT / ASSEMBLE_DETAIL_FAIL_COUNT / ASSEMBLE_DETAIL_TIMEOUT_COUNT
 # for the caller (ASSEMBLE_DETAIL_FAIL_COUNT counts requested-but-not-
@@ -934,10 +1005,16 @@ do_assemble() {
     fi
 
     mkdir -p reports
-    local generated_at report_ts report
+    local generated_at report_ts run_dir report
     generated_at="$(date '+%Y-%m-%d %H:%M:%S %z')"
-    report_ts="$(date +%Y%m%d%H%M)"
-    report="reports/awr_fleet_${report_ts}_run${RUN_ID}.html"
+    # REPORT_TS comes from the sourced params.env (written by write_manifest
+    # on the live-run path); the date fallback only fires for a workdir from
+    # before REPORT_TS existed, re-assembled standalone via `--assemble`.
+    report_ts="${REPORT_TS:-$(date +%Y%m%d%H%M)}"
+    run_dir="reports/awr_fleet_${report_ts}_run${RUN_ID}"
+    mkdir -p "$run_dir"
+    RUN_DIR_ASM="$run_dir"
+    report="${run_dir}/index.html"
 
     # Wait-class palette for the masthead legend -- LOCKSTEP with
     # sql/lib/js_wait_colors.plsql and sql/fleet/js_fleet_charts.plsql (keep
@@ -1271,6 +1348,7 @@ parse_markers
 
 # Fail fast on a bad FLEET_DETAIL_ECHARTS local path BEFORE any DB is queried
 # (a whole fleet run is expensive to waste on a typo caught only afterwards).
+resolve_detail_echarts_eff
 resolve_detail_echarts_path
 
 # DETAIL_MARKERS: the already-sanitized fleet-wide MK_WHEN/MK_LABEL arrays,
@@ -1285,8 +1363,17 @@ for i in "${!MK_WHEN[@]}"; do
 done
 
 RUN_ID="$(date +%Y%m%d%H%M%S)$$"
+REPORT_TS="$(date +%Y%m%d%H%M)"
+# RUN_DIR: the one per-run output folder every artifact of this run lands in
+# -- the assembled console report as index.html (written later by
+# do_assemble, which recomputes this same path from REPORT_TS+RUN_ID) and
+# each requested detail report as detail_<alias>.html (written by
+# run_one_detail, which reads this global directly).  Created up front so
+# run_one_detail's background jobs can write into it as soon as they finish,
+# without racing do_assemble's own `mkdir -p` of the same path.
+RUN_DIR="reports/awr_fleet_${REPORT_TS}_run${RUN_ID}"
 WORK="reports/fleet_work_${RUN_ID}"
-mkdir -p "$WORK"
+mkdir -p "$WORK" "$RUN_DIR"
 
 write_manifest "$WORK"
 resolve_timeout_bin

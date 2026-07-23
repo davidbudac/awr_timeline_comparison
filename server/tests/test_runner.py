@@ -183,13 +183,20 @@ class DetailRunTest(RunnerTestBase):
         )
         final = records.load_record(self.data_dir, rec["run_id"])
         self.assertEqual(final["state"], records.STATE_SUCCESS)
-        self.assertTrue(final["report_path"].startswith("reports/awr_fleet_detail_good1_run"))
+        # New per-run-folder layout: reports/awr_fleet_<ts>_run<id>/detail_good1.html
+        self.assertTrue(final["report_path"].startswith("reports/awr_fleet_"))
+        self.assertTrue(final["report_path"].endswith("/detail_good1.html"))
         self.assertTrue((self.cwd / final["report_path"]).is_file())
 
-        # the 1-row fleet HTML byproduct must be deleted...
-        byproducts = list((self.cwd / "reports").glob("awr_fleet_2*_run*.html"))
-        byproducts = [p for p in byproducts if "detail" not in p.name]
-        self.assertEqual(byproducts, [], "byproduct fleet HTML was not cleaned up")
+        # the 1-row fleet HTML byproduct (index.html in the same run folder)
+        # must be deleted, while the detail report next to it survives...
+        run_dirs = [
+            p for p in (self.cwd / "reports").glob("awr_fleet_2*_run*") if p.is_dir()
+        ]
+        self.assertEqual(len(run_dirs), 1, "expected exactly one per-run folder")
+        run_dir = run_dirs[0]
+        self.assertFalse((run_dir / "index.html").exists(), "byproduct fleet HTML was not cleaned up")
+        self.assertTrue((run_dir / "detail_good1.html").is_file())
 
         # ...and so must the temp conf
         tmp_confs = list((self.data_dir / "tmp").glob("detail_good1_*"))

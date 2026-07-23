@@ -31,8 +31,14 @@ Then open `http://127.0.0.1:8765/` (or whatever `[server] port` you set).
   output, and a captured log. `/runs` lists them; `/runs/<id>` shows one,
   with a live tail while it's running.
 - **Serving reports**: `/reports/<file>` serves anything already inside
-  `reports/` under a strict filename allowlist -- it never generates or
-  modifies report content itself.
+  `reports/` under a strict allowlist -- it never generates or modifies
+  report content itself. Current wrapper versions (v0.4.0+) write every
+  run's artifacts into one folder, `reports/awr_fleet_<ts>_run<id>/`
+  (`index.html` + one `detail_<alias>.html` per detail-flagged DB), so the
+  allowlist accepts a bare filename OR exactly one such folder segment
+  ahead of it -- e.g. `/reports/awr_fleet_202607231200_run123/index.html`.
+  An older flat report file directly under `reports/` still serves exactly
+  as before.
 
 ## How it runs the wrapper
 
@@ -53,8 +59,9 @@ nothing looks perpetually in-flight.
 A per-DB detail regen copies that DB's `fleet.conf` line into a throwaway
 single-line, 0600 temp conf (appending `|detail` if not already flagged),
 runs the same wrapper against just it, then deletes the incidental 1-row
-fleet HTML byproduct and the temp conf -- only the canonical
-`awr_fleet_detail_<alias>_run<id>.html` is kept.
+fleet HTML byproduct (the run folder's `index.html`) and the temp conf --
+only the canonical `detail_<alias>.html`, alongside it in the same
+`reports/awr_fleet_<ts>_run<id>/` folder, is kept.
 
 ## Data & security
 
@@ -67,10 +74,11 @@ fleet HTML byproduct and the temp conf -- only the canonical
   access, put a reverse proxy with auth (or an SSH tunnel) in front --
   do not bind a non-loopback address without one. See the warning at the
   top of `server.conf.example`.
-- Report files are served only if the filename fullmatches
-  `[A-Za-z0-9._-]+\.html` **and** the resolved path still lives under
-  `reports/` -- both checks run on every request, independent of each
-  other.
+- Report files are served only if the request shape fullmatches either a
+  bare `[A-Za-z0-9._-]+\.html` filename or one `awr_fleet_<digits>_run
+  <digits>/` folder segment followed by such a filename, **and** the
+  resolved path still lives under `reports/` -- both checks run on every
+  request, independent of each other.
 
 ## Retention
 

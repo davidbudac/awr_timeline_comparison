@@ -4,10 +4,17 @@ the server's to touch; only paths the server itself recorded in a run's
 JSON are candidates for deletion.
 """
 
+import re
 import time
 from pathlib import Path
 
 from . import paths, records
+
+# A fleet run's per-run output folder (run_awr_fleet.sh v0.4.0+): shares
+# index.html and every detail_<alias>.html for that run. Matches
+# paths._RUN_FOLDER_RE -- kept as a separate constant (not imported) so this
+# module's safety logic doesn't depend on paths' HTTP-serving concerns.
+_RUN_FOLDER_RE = re.compile(r"^awr_fleet_\d+_run\d+$")
 
 
 def _record_sort_key(rec):
@@ -16,8 +23,20 @@ def _record_sort_key(rec):
 
 def _recorded_artifact_paths(rec, reports_dir):
     """Every on-disk path this record claims responsibility for, already
-    filtered to ones that (a) are set and (b) resolve inside reports_dir."""
+    filtered to ones that (a) are set and (b) resolve inside reports_dir.
+
+    A report/detail file that lives directly inside an
+    "awr_fleet_<ts>_run<id>/" folder is expanded to the WHOLE folder --
+    the per-run folder is the deletable unit, since index.html and every
+    requested detail_<alias>.html for that run share it (and a detail
+    report carries no separate "workdir"-style record field of its own to
+    prune individually). An old flat report file (no such folder) and the
+    extract's own fleet_work_<id> workdir are deleted as themselves,
+    unchanged from before. Deduplicated so a run whose report_path and
+    workdir happen to collapse to the same folder isn't double-counted.
+    """
     out = []
+    seen = set()
     candidates = []
     if rec.get("report_path"):
         candidates.append(rec["report_path"])
@@ -31,8 +50,9 @@ def _recorded_artifact_paths(rec, reports_dir):
 
     base = Path(reports_dir).resolve()
     for c in candidates:
-        # report_path is stored as "reports/<file>"; workdir as
-        # "fleet_work_<id>" (bare name, relative to reports/).
+        # report_path is stored as "reports/<file>" (or "reports/<run
+        # folder>/<file>"); workdir as "fleet_work_<id>" (bare name,
+        # relative to reports/).
         c_str = str(c)
         if c_str.startswith("reports/"):
             c_str = c_str[len("reports/") :]
@@ -42,6 +62,21 @@ def _recorded_artifact_paths(rec, reports_dir):
             resolved.relative_to(base)
         except (ValueError, OSError):
             continue
+        parent = resolved.parent
+        if (
+            resolved.is_file()
+            and parent != base
+            and _RUN_FOLDER_RE.fullmatch(parent.name)
+        ):
+            try:
+                parent.resolve().relative_to(base)
+            except (ValueError, OSError):
+                pass
+            else:
+                resolved = parent
+        if resolved in seen:
+            continue
+        seen.add(resolved)
         out.append(resolved)
     return out
 

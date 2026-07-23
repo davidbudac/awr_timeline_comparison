@@ -3,7 +3,9 @@
 # used only by server/tests. It honors the same positional argv layout and
 # emits stdout in the same summary format (see run_awr_fleet.sh:1053-1059)
 # closely enough for server/app/runner.py + records.py to be exercised
-# end-to-end without a database.
+# end-to-end without a database. Matches the real wrapper's per-run folder
+# output layout: reports/awr_fleet_<ts>_run<id>/index.html plus one
+# detail_<alias>.html per detail-flagged DB, in the same folder.
 #
 # Test knobs (env vars):
 #   FAKE_SLEEP                  seconds to sleep before doing anything (tests
@@ -31,9 +33,10 @@ if [[ -n "${FAKE_SLEEP:-}" ]]; then
 fi
 
 RUN_ID="${FAKE_RUN_ID:-$(date +%Y%m%d%H%M%S)$$}"
-mkdir -p reports
 REPORT_TS="$(date +%Y%m%d%H%M)"
-REPORT="reports/awr_fleet_${REPORT_TS}_run${RUN_ID}.html"
+RUN_DIR="reports/awr_fleet_${REPORT_TS}_run${RUN_ID}"
+mkdir -p "$RUN_DIR"
+REPORT="$RUN_DIR/index.html"
 
 IFS=',' read -r -a FORCE_ERR <<< "${FAKE_FORCE_ERROR_ALIASES:-}"
 IFS=',' read -r -a FORCE_DETAIL_FAIL <<< "${FAKE_DETAIL_FAIL_ALIASES:-}"
@@ -82,7 +85,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
             dstat='failed'
         else
             dstat='ok'
-            dfile="reports/awr_fleet_detail_${db_alias}_run${RUN_ID}.html"
+            dfile="${RUN_DIR}/detail_${db_alias}.html"
             printf '<html><body>fake detail report for %s</body></html>\n' "$db_alias" > "$dfile"
         fi
     fi

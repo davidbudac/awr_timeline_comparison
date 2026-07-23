@@ -28,6 +28,14 @@ REPORTS_DIR = REPO_ROOT / "reports"
 # and suspenders against '..'  and symlink escapes.
 _REPORT_FILENAME_RE = re.compile(r"^[A-Za-z0-9._-]+\.html$")
 
+# A fleet run's per-run output folder (run_awr_fleet.sh v0.4.0+): holds
+# index.html (the console report) plus one detail_<alias>.html per detail-
+# flagged DB. safe_report_path() allows exactly ONE such folder segment
+# ahead of the final filename -- e.g. "awr_fleet_202607231200_run123/
+# index.html" -- and nothing deeper; an old flat report file directly under
+# reports/ (no folder) is still served exactly as before.
+_RUN_FOLDER_RE = re.compile(r"^awr_fleet_\d+_run\d+$")
+
 
 def ensure_data_dirs(data_dir=None):
     """Create <data_dir>/{,runs,tmp} with owner-only perms if missing.
@@ -49,10 +57,16 @@ def safe_report_path(filename, reports_dir=None):
     """Return the absolute Path for a report filename, or None if unsafe.
 
     Two independent checks, both required:
-      1. the filename (not the whole request path) must fullmatch
-         [A-Za-z0-9._-]+\\.html -- no '/', no '..', no leading dot tricks.
+      1. shape: either
+           (a) a bare filename fullmatching [A-Za-z0-9._-]+\\.html -- the
+               old flat layout, no '/', no '..', no leading dot tricks; or
+           (b) exactly one folder segment fullmatching
+               awr_fleet_<digits>_run<digits> followed by '/' and a
+               filename fullmatching (a) -- the current per-run folder
+               layout. No other slash count or folder name is accepted.
       2. the resolved absolute path must sit inside the resolved
-         reports_dir (guards against a symlink planted inside reports/).
+         reports_dir (guards against a symlink planted inside reports/, in
+         either the flat file or the folder).
 
     `reports_dir` defaults to the module-level REPORTS_DIR (the real
     repo-root reports/) but is overridable so tests can point at an
@@ -60,7 +74,14 @@ def safe_report_path(filename, reports_dir=None):
     """
     if filename is None:
         return None
-    if not _REPORT_FILENAME_RE.fullmatch(filename):
+    if "/" in filename:
+        parts = filename.split("/")
+        if len(parts) != 2:
+            return None
+        folder, fname = parts
+        if not _RUN_FOLDER_RE.fullmatch(folder) or not _REPORT_FILENAME_RE.fullmatch(fname):
+            return None
+    elif not _REPORT_FILENAME_RE.fullmatch(filename):
         return None
     reports_dir = Path(reports_dir) if reports_dir is not None else REPORTS_DIR
     base = reports_dir.resolve()

@@ -29,6 +29,19 @@ class ParseFleetSummaryTest(unittest.TestCase):
         self.assertEqual(r["wrapper_run_id"], "20260722120005123")
         self.assertEqual(r["report_path"], "reports/awr_fleet_202607221200_run20260722120005123.html")
 
+    def test_all_ok_new_folder_layout(self):
+        # Current wrapper (v0.4.0+): "Report:" points at index.html inside a
+        # per-run folder rather than a flat file.
+        text = (
+            "prod_east                OK     score=16   crit=1 warn=2 suppressed=0 topsql_n=3 topsql_pts=25 detail=ok\n"
+            "Report: reports/awr_fleet_202607221200_run20260722120005123/index.html\n"
+        )
+        r = records.parse_fleet_summary(text)
+        self.assertEqual(r["wrapper_run_id"], "20260722120005123")
+        self.assertEqual(
+            r["report_path"], "reports/awr_fleet_202607221200_run20260722120005123/index.html"
+        )
+
     def test_mixed_error(self):
         text = (
             "deadbox                  ERROR  rc=1     detail=-       simulated failure for deadbox\n"
@@ -77,11 +90,26 @@ class ParseFleetSummaryTest(unittest.TestCase):
         self.assertIsNone(r["report_path"])
 
     def test_detail_filename_and_workdir_helpers(self):
+        # No report_path -- back-compat old flat naming.
         self.assertEqual(
             records.detail_report_filename("prod_east", "12345"),
             "awr_fleet_detail_prod_east_run12345.html",
         )
         self.assertEqual(records.fleet_workdir_name("12345"), "fleet_work_12345")
+
+    def test_detail_filename_derived_from_new_folder_report_path(self):
+        report_path = "reports/awr_fleet_202607221200_run12345/index.html"
+        self.assertEqual(
+            records.detail_report_filename("prod_east", "12345", report_path=report_path),
+            "awr_fleet_202607221200_run12345/detail_prod_east.html",
+        )
+
+    def test_detail_filename_falls_back_when_report_path_is_old_flat_form(self):
+        report_path = "reports/awr_fleet_202607221200_run12345.html"
+        self.assertEqual(
+            records.detail_report_filename("prod_east", "12345", report_path=report_path),
+            "awr_fleet_detail_prod_east_run12345.html",
+        )
 
 
 class RecordPersistenceTest(unittest.TestCase):

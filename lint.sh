@@ -166,6 +166,23 @@ done < <(grep -nE 'grep +(-[A-Za-z]+ +)*-[A-Za-z]*o|sed +(-[a-z]+ +)*-[Er]\b|fin
          | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
          | grep -vF '2000-01-01')
 
+# ----------------------------------------------------------------------
+# 11. Fleet detail-report links must stay bare relative names inside the
+#     per-run folder (detail_<alias>.html), never the old flat
+#     awr_fleet_detail_<alias>_run<id>.html naming or a reports/-prefixed
+#     href -- either would break the folder's relocatability (CLAUDE.md
+#     "Fleet report" per-run-folder layout).
+# ----------------------------------------------------------------------
+while IFS= read -r hit; do
+    finding fleet-detail-href "${hit%%:*}:$(cut -d: -f2 <<<"$hit")" \
+        "old flat 'awr_fleet_detail_<alias>_run<id>' naming reappeared in run_awr_fleet.sh -- detail report paths/hrefs must use the per-run folder's bare 'detail_<alias>.html'"
+done < <(grep -n 'awr_fleet_detail_' run_awr_fleet.sh 2>/dev/null)
+
+while IFS= read -r hit; do
+    finding fleet-detail-href-prefix "${hit%%:*}:$(cut -d: -f2 <<<"$hit")" \
+        "detail-report href carries a 'reports/' prefix -- it must be a bare relative name so the per-run folder stays relocatable"
+done < <(grep -n 'href="reports/' run_awr_fleet.sh 2>/dev/null)
+
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"
 fi

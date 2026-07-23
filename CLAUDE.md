@@ -560,6 +560,33 @@ zero surviving `__FLEET_` placeholders.
   Single-DB smoke (`run_awr_trend.sh` same window) rendered all 16 sections,
   0 ORA-. **Still pending:** a real multi-DB / RAC / migrated-PDB fleet (dbmint
   is single-DBID, all three cdb aliases hit the same instance).
+- **Per-run output folder (v0.4.0)** — every run's artifacts land under ONE
+  folder, `reports/awr_fleet_<REPORT_TS>_run<RUN_ID>/`, holding the assembled
+  console report as `index.html` plus one `detail_<alias>.html` per detail-
+  flagged DB — replacing the old flat siblings
+  `reports/awr_fleet_<ts>_run<id>.html` +
+  `reports/awr_fleet_detail_<alias>_run<id>.html`. `REPORT_TS` (computed once
+  alongside `RUN_ID`, before the fan-out) is persisted in the workdir's
+  `params.env` so `--assemble` on a saved workdir reconstructs the identical
+  folder name standalone; a workdir from before this feature (no `REPORT_TS`
+  line) falls back to a freshly-computed timestamp — the report it
+  re-assembles was necessarily flat anyway, since it predates the shared
+  folder. `run_one_detail` writes straight into the folder via the `RUN_DIR`
+  global (set once, before the fan-out, alongside `WORK`); the assembler
+  (`do_assemble`) derives the SAME path independently — as local `run_dir`,
+  exposed to `detail_state`/`detail_bits` via the `RUN_DIR_ASM` global —
+  since it may run standalone via `--assemble`, long after the live run's
+  `RUN_DIR` is gone. Because `index.html` and every `detail_<alias>.html` are
+  siblings, the chip/drill-panel href is a **bare relative name**,
+  `detail_<alias>.html` — no `reports/` prefix, no run id in the href — which
+  is the whole point: the folder is relocatable (archive it, rsync it, serve
+  it from anywhere) without rewriting a single link. `lint.sh` check 11
+  guards against the old flat naming or a `reports/`-prefixed href
+  reappearing. The extract's own `fleet_work_<RUN_ID>/` workdir is unrelated
+  and unaffected — it is still deleted on a clean, all-OK run (unless
+  `FLEET_KEEP_WORK=1` or a detail run needs debugging) while `RUN_DIR` (the
+  report folder) is never deleted by the wrapper itself. The AWR Fleet Server
+  (`server/`) was updated in lockstep — see that section below.
 - **Per-DB detailed reports (v0.3.0)** — a fleet.conf line may carry an optional
   third field, `alias|connect|detail` (case-insensitive trailing token; anything
   else after the second `|` is treated as connect-string content, deliberately —
@@ -567,15 +594,25 @@ zero surviving `__FLEET_` placeholders.
   (`awr_trend.sql`, template `comprehensive` by default) generated in the same
   run with the fleet's exact window/cadence params + fleet-wide markers
   (`DETAIL_MARKERS` re-joins the sanitized MK arrays — the fleet and single-DB
-  inline marker formats are byte-identical), saved as
-  `reports/awr_fleet_detail_<alias>_run<RUN_ID>.html` and linked from that DB's
-  row via a relative href. Env knobs: `FLEET_DETAIL` (all|none|''),
-  `FLEET_DETAIL_TIMEOUT` (default 3600, 0 = no limit; rc=124 surfaces as a
-  distinct "timed out" state with the last progress marker shown in the
-  report and a stderr hint), `FLEET_DETAIL_TEMPLATE`,
-  `FLEET_DETAIL_ECHARTS` (same empty/URL/local-path polymorphism as the
-  single-DB var; local path is spliced by a fleet-owned copy of
-  `inline_echarts`). Mechanics that keep the cardinal no-single-DB-edits rule:
+  inline marker formats are byte-identical), saved as `detail_<alias>.html`
+  inside the run's shared output folder (see "Per-run output folder" above)
+  and linked from that DB's row via a bare relative href. Env knobs:
+  `FLEET_DETAIL` (all|none|''), `FLEET_DETAIL_TIMEOUT` (default 3600, 0 = no
+  limit; rc=124 surfaces as a distinct "timed out" state with the last
+  progress marker shown in the report and a stderr hint), `FLEET_DETAIL_TEMPLATE`,
+  `FLEET_DETAIL_ECHARTS` — **offline by default** (v0.4.0): empty inlines
+  `vendor/echarts.min.js` for a fully self-contained detailed report (falls
+  back to the public CDN, with a warning, if that file is missing/unreadable);
+  `cdn` (case-insensitive) is the escape hatch back to the pre-v0.4.0
+  empty-value behavior (link the public CDN); an http(s) URL or any other
+  local path is honored verbatim, same as the single-DB `echarts` var. The
+  resolved effective value lives in the `DETAIL_ECHARTS_EFF` global
+  (`resolve_detail_echarts_eff`, called once before the fan-out, right before
+  the existing `resolve_detail_echarts_path` local-file-exists check, which
+  now validates `DETAIL_ECHARTS_EFF` rather than the raw env var) and is what
+  actually rides into the detail run's `echarts` DEFINE and the
+  `inline_fleet_echarts` call — local path is spliced by a fleet-owned copy
+  of `inline_echarts`. Mechanics that keep the cardinal no-single-DB-edits rule:
   `run_one_detail` runs sqlplus from an isolated `$WORK/detail_<alias>/` cwd
   holding **symlinks** to `awr_trend.sql` + `sql/` — the driver's cwd-relative
   self-named spool lands in the isolated `reports/`, is captured without knowing
@@ -627,6 +664,50 @@ CLI, and the cardinal no-touch rule extends to it verbatim — nothing under
 `awr_fleet_extract.sql`, or anything under `sql/`, `side/`, `vendor/`; all
 server code and its own tests live only under `server/` (plus the additive
 `.gitignore`/`README.md`/`CLAUDE.md` lines documenting it).
+
+**Per-run output folder support (v0.4.0, kept in lockstep with the wrapper's
+"Per-run output folder" note above)** — the server only ever *reads* what the
+wrapper wrote, so every place it parses or serves a report path had to learn
+the new `reports/awr_fleet_<ts>_run<id>/index.html` +
+`.../detail_<alias>.html` shape alongside the old flat one (never replacing
+it — old records/history must keep resolving):
+- `records.py`'s `_REPORT_RE` matches BOTH the new `.../index.html` form and
+  the old flat `....html` form in the same regex (a `(?:/index\.html|\.html)`
+  alternation), so a "Report: …" line from either wrapper version parses.
+- `records.detail_report_filename(alias, wrapper_run_id, report_path=None)`
+  grew an optional `report_path` param: when the caller has already parsed
+  the console report's new-form path, the detail path is derived from its
+  parent folder (`<folder>/detail_<alias>.html`); omitted, or given an
+  old-flat `report_path`, it falls back to the pre-v0.4.0 flat naming —
+  there is no independent way for this function to know `report_ts` other
+  than reading it off an already-parsed folder path. `runner.py`'s
+  `_finalize_detail` is the one caller and always passes
+  `summary.get("report_path")`.
+- `paths.safe_report_path` now accepts **at most one** folder segment ahead
+  of the filename, and only when that segment fullmatches
+  `awr_fleet_<digits>_run<digits>` (`_RUN_FOLDER_RE`) — anything deeper, or a
+  folder not shaped like a run folder, is still rejected. The `/reports/…`
+  route regex in `webapp.py` was widened in lockstep (`[^/]+(?:/[^/]+)?`) so
+  a two-segment request even reaches `safe_report_path` to be checked; the
+  containment-inside-`REPORTS_DIR` check (belt-and-suspenders against a
+  symlink escape) is unchanged and still runs on the resolved path either
+  way.
+- `views.py`'s `_latest_detail_report` pre-server-history glob fallback
+  checks both shapes (`awr_fleet_*_run*/detail_<alias>.html` then the old
+  flat glob) and returns a path relative to `reports_dir` (so a new-form hit
+  correctly carries its folder prefix into the rendered link).
+- `retention.py`'s `_recorded_artifact_paths` treats the **per-run folder**,
+  not the individual file, as the deletable unit once a candidate resolves
+  to a file living directly inside an `awr_fleet_<ts>_run<id>/` folder — so
+  pruning a fleet record's `report_path` (its `index.html`) deletes every
+  detail report sharing that folder too, with no separate per-DB
+  `detail_report` bookkeeping needed. An old flat report file (no such
+  folder) is still deleted as itself, unchanged. The extract's own
+  `fleet_work_<id>/` workdir is a different directory and is never affected
+  by this collapse.
+- `server/tests/fake_bin/run_awr_fleet.sh` (the test double) emits the new
+  folder form so `runner.py`/`records.py` are exercised end-to-end against
+  real (test-double) wrapper output, not just unit-level regexes.
 
 ## Verification & testing
 

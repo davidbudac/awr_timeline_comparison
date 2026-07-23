@@ -257,7 +257,10 @@ def _run_row(rec):
 def _latest_detail_report(ctx, alias):
     """Server record first, then a glob fallback for pre-server history
     (files that predate this server ever running -- see plan section
-    'Per-DB on-demand detail regen')."""
+    'Per-DB on-demand detail regen'). The glob checks both the current
+    per-run-folder layout (awr_fleet_<ts>_run<id>/detail_<alias>.html) and
+    the old flat layout (awr_fleet_detail_<alias>_run<id>.html) so history
+    from before the folder layout still resolves."""
     best = None
     for rec in records.list_records(ctx.data_dir):
         if (
@@ -272,14 +275,18 @@ def _latest_detail_report(ctx, alias):
         rp = best["report_path"]
         return rp.split("/", 1)[-1] if "/" in rp else rp
     try:
-        candidates = sorted(
-            ctx.reports_dir.glob("awr_fleet_detail_%s_run*.html" % alias),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
+        candidates = list(ctx.reports_dir.glob("awr_fleet_*_run*/detail_%s.html" % alias))
+        candidates += list(ctx.reports_dir.glob("awr_fleet_detail_%s_run*.html" % alias))
+        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     except OSError:
         candidates = []
-    return candidates[0].name if candidates else None
+    if not candidates:
+        return None
+    top = candidates[0]
+    try:
+        return str(top.relative_to(ctx.reports_dir))
+    except ValueError:
+        return top.name
 
 
 def _latest_fleet_report(ctx):

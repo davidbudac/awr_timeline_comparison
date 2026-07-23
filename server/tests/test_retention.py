@@ -115,6 +115,67 @@ class PruneRunsTest(unittest.TestCase):
         summary2 = retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, keep_fleet_runs=0, keep_days=0, keep_run_records=999)
         self.assertEqual(summary2["artifacts_pruned"], 0)
 
+    def _make_fleet_record_with_run_folder(self, run_id, age_days, detail_aliases=(), state=records.STATE_SUCCESS):
+        """Current (v0.4.0+) per-run-folder layout: report_path points at
+        index.html inside a shared awr_fleet_<ts>_run<id>/ folder that also
+        holds one detail_<alias>.html per detail-flagged DB. The record's
+        own run_id (a server-side records.py id, e.g. "r0") is independent
+        of the folder's embedded wrapper RUN_ID, which the real wrapper
+        always generates as digits -- so the folder name uses a numeric id
+        derived from run_id, not run_id itself."""
+        rec = records.new_record(run_id, records.KIND_FLEET, "manual")
+        started = self.now - age_days * 86400
+        rec["started_at"] = started
+        rec["queued_at"] = started
+        rec["ended_at"] = started + 60
+        rec["state"] = state
+        wrapper_run_id = "".join(c for c in run_id if c.isdigit()) or "1"
+        folder_name = "awr_fleet_202607230000_run%s" % wrapper_run_id
+        folder = self.reports_dir / folder_name
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "index.html").write_text("<html></html>", encoding="utf-8")
+        for alias in detail_aliases:
+            (folder / ("detail_%s.html" % alias)).write_text("<html></html>", encoding="utf-8")
+        rec["report_path"] = "reports/%s/index.html" % folder_name
+        records.save_record(self.data_dir, rec)
+        return rec, folder
+
+    def test_run_folder_deleted_wholesale_when_pruned(self):
+        rec, folder = self._make_fleet_record_with_run_folder(
+            "r0", age_days=100, detail_aliases=["prod_east", "prod_west"]
+        )
+        self.assertTrue(folder.is_dir())
+        retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, keep_fleet_runs=0, keep_days=0, keep_run_records=999)
+        self.assertFalse(
+            folder.exists(),
+            "the whole per-run folder (index.html + every detail report) must be pruned together",
+        )
+
+    def test_run_folder_kept_when_record_kept(self):
+        rec, folder = self._make_fleet_record_with_run_folder("r0", age_days=1, detail_aliases=["prod_east"])
+        retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, keep_fleet_runs=99, keep_days=99, keep_run_records=999)
+        self.assertTrue(folder.is_dir())
+        self.assertTrue((folder / "index.html").exists())
+        self.assertTrue((folder / "detail_prod_east.html").exists())
+
+    def test_run_folder_never_escapes_reports_dir(self):
+        # Same path-traversal guard as the flat-file case, exercised against
+        # a report_path claiming to live inside a folder.
+        rec = records.new_record("evil2", records.KIND_FLEET, "manual")
+        rec["state"] = records.STATE_SUCCESS
+        rec["started_at"] = self.now - 100 * 86400
+        rec["report_path"] = "reports/awr_fleet_1_run1/../../../etc/index.html"
+        records.save_record(self.data_dir, rec)
+        outside_target = self.reports_dir.parent / "etc_passwd_sentinel"
+        retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, keep_fleet_runs=0, keep_days=0, keep_run_records=999)
+        self.assertFalse(outside_target.exists())
+
+    def test_run_folder_idempotent_second_pass_is_a_noop(self):
+        self._make_fleet_record_with_run_folder("r0", age_days=100, detail_aliases=["prod_east"])
+        retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, keep_fleet_runs=0, keep_days=0, keep_run_records=999)
+        summary2 = retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, keep_fleet_runs=0, keep_days=0, keep_run_records=999)
+        self.assertEqual(summary2["artifacts_pruned"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
