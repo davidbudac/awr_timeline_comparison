@@ -87,11 +87,13 @@ class ConfigTest(unittest.TestCase):
             [env]
             FLEET_PAR = 8
             fleet_timeout = 300
+            FLEET_PROFILE_DAYS = 7
             """
         )
         cfg = config_mod.load_config(p)
         self.assertEqual(cfg.env["FLEET_PAR"], "8")
         self.assertEqual(cfg.env["FLEET_TIMEOUT"], "300")
+        self.assertEqual(cfg.env["FLEET_PROFILE_DAYS"], "7")
 
     def test_schedule_daily_requires_daily_at(self):
         p = self._write(

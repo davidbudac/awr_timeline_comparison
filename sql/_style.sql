@@ -123,19 +123,20 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('#findings          { order:6; }');
     DBMS_OUTPUT.PUT_LINE('#windows           { order:7; }');
     -- Workload
-    DBMS_OUTPUT.PUT_LINE('#utilization       { order:8; }');
-    DBMS_OUTPUT.PUT_LINE('#load              { order:9; }');
-    DBMS_OUTPUT.PUT_LINE('#metrics           { order:10; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-fg          { order:11; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-bg          { order:12; }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile       { order:8; }');
+    DBMS_OUTPUT.PUT_LINE('#utilization       { order:9; }');
+    DBMS_OUTPUT.PUT_LINE('#load              { order:10; }');
+    DBMS_OUTPUT.PUT_LINE('#metrics           { order:11; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-fg          { order:12; }');
+    DBMS_OUTPUT.PUT_LINE('#waits-bg          { order:13; }');
     -- SQL
-    DBMS_OUTPUT.PUT_LINE('#topsql            { order:13; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql-ash        { order:14; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql            { order:14; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql-ash        { order:15; }');
     -- Storage and config
-    DBMS_OUTPUT.PUT_LINE('#segment-io        { order:15; }');
-    DBMS_OUTPUT.PUT_LINE('#file-io           { order:16; }');
-    DBMS_OUTPUT.PUT_LINE('#param-changes     { order:17; }');
-    DBMS_OUTPUT.PUT_LINE('footer.report      { order:18; }');
+    DBMS_OUTPUT.PUT_LINE('#segment-io        { order:16; }');
+    DBMS_OUTPUT.PUT_LINE('#file-io           { order:17; }');
+    DBMS_OUTPUT.PUT_LINE('#param-changes     { order:18; }');
+    DBMS_OUTPUT.PUT_LINE('footer.report      { order:19; }');
 
     -- =========================================================
     -- Masthead (header.report) -- compact identity panel at the top
@@ -387,6 +388,7 @@ BEGIN
     -- verdict and DB-time strip.
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('body.app-only #db-time-summary,'
+        || ' body.app-only #day-profile,'
         || ' body.app-only #overview,'
         || ' body.app-only #ash-timeline,'
         || ' body.app-only #waits-fg,'

@@ -61,6 +61,12 @@
 #                          pre-this-feature empty-value behavior); http(s)
 #                          URL = internal mirror; any other local file path
 #                          = inlined into the detailed report            []
+#   FLEET_PROFILE_DAYS  0 (default) = off; N > 0 adds a "Day profile" band
+#                       to every DB's detail row -- each hour of the 24 h
+#                       ending at target_end scored against the same hour
+#                       on the N prior days (inline-SVG heatmap) -- and
+#                       passes profile_days=N into the detailed reports.
+#                       Informational: never changes a row's score.     [0]
 #
 # Examples:
 #   ./run_awr_fleet.sh fleet.conf
@@ -89,7 +95,7 @@ DEF_STEP='1'
 DEF_STEP_UNIT='w'
 
 # ---- fleet report version ---------------------------------------------------
-FLEET_VERSION='0.3.0'
+FLEET_VERSION='0.5.0'
 
 # ---- fleet-specific env vars ------------------------------------------------
 FLEET_PAR="${FLEET_PAR:-4}"
@@ -111,6 +117,12 @@ FLEET_DETAIL="${FLEET_DETAIL:-}"
 FLEET_DETAIL_TIMEOUT="${FLEET_DETAIL_TIMEOUT:-3600}"
 FLEET_DETAIL_TEMPLATE="${FLEET_DETAIL_TEMPLATE:-comprehensive}"
 FLEET_DETAIL_ECHARTS="${FLEET_DETAIL_ECHARTS:-}"
+
+# ---- optional Day profile band (sql/fleet/06_day_profile.sql) --------------
+# Rides UNQUOTED into the `profile_days` DEFINE of both the extract and the
+# detailed run, so it must be a plain non-negative integer.  0 = off (every
+# fragment byte-identical to a run without the feature).
+FLEET_PROFILE_DAYS="${FLEET_PROFILE_DAYS:-0}"
 
 # ---- fleet-wide timeline markers (wrapper-owned; the extract SQL never sees
 #      them). MARKER_FILE (a file of "WHEN|LABEL" lines) wins over MARKERS
@@ -136,6 +148,8 @@ case "${FLEET_DETAIL,,}" in
 esac
 [[ "$FLEET_DETAIL_TIMEOUT" =~ ^[0-9]+$ ]] || {
     echo "error: FLEET_DETAIL_TIMEOUT must be a non-negative integer, 0 = no limit (got '$FLEET_DETAIL_TIMEOUT')" >&2; exit 2; }
+[[ "$FLEET_PROFILE_DAYS" =~ ^[0-9]+$ ]] || {
+    echo "error: FLEET_PROFILE_DAYS must be a non-negative integer, 0 = no day profile (got '$FLEET_PROFILE_DAYS')" >&2; exit 2; }
 # FLEET_DETAIL_TEMPLATE rides into a single-quoted DEFINE in run_one_detail's
 # heredoc (same footgun as FLEET_TEMPLATE / _pos_clean elsewhere in this file).
 case "$FLEET_DETAIL_TEMPLATE" in
@@ -228,6 +242,10 @@ Environment variables:
                          offline; falls back to CDN with a warning if
                          missing), 'cdn' = force the public CDN, http(s)
                          URL = mirror, local path = inlined             []
+  FLEET_PROFILE_DAYS  N > 0 adds a "Day profile" band per DB (each hour of
+                      the last 24 h vs the same hour on the N prior days,
+                      heatmap) and profile_days=N to detailed reports;
+                      0 = off.  Never affects the score               [0]
 
 Score shown per DB in the report: 10*critical + 3*warning + min(25, top-SQL
 points); an unreachable/truncated DB scores as an error row (sorts first).
@@ -561,6 +579,7 @@ FLEET_DETAIL_TEMPLATE='${FLEET_DETAIL_TEMPLATE}'
 FLEET_DETAIL_TIMEOUT='${FLEET_DETAIL_TIMEOUT}'
 FLEET_DETAIL_ECHARTS='${FLEET_DETAIL_ECHARTS}'
 DETAIL_ECHARTS_EFF='${DETAIL_ECHARTS_EFF}'
+FLEET_PROFILE_DAYS='${FLEET_PROFILE_DAYS}'
 EOF
 }
 
@@ -603,6 +622,7 @@ DEFINE inst_num   = 0
 DEFINE step       = ${STEP}
 DEFINE step_unit  = '${STEP_UNIT}'
 DEFINE template   = '${FLEET_TEMPLATE}'
+DEFINE profile_days = ${FLEET_PROFILE_DAYS}
 DEFINE fleet_alias     = '${alias}'
 DEFINE fleet_workdir   = '${WORK}'
 DEFINE fleet_conn_disp = '${disp}'
@@ -682,6 +702,7 @@ DEFINE inst_num   = 0
 DEFINE step       = ${STEP}
 DEFINE step_unit  = '${STEP_UNIT}'
 DEFINE template   = '${FLEET_DETAIL_TEMPLATE}'
+DEFINE profile_days = ${FLEET_PROFILE_DAYS}
 DEFINE markers    = '${DETAIL_MARKERS}'
 DEFINE echarts    = '${DETAIL_ECHARTS_EFF}'
 @awr_trend.sql
@@ -746,7 +767,7 @@ detail_state() {
 # ---------------------------------------------------------------------------
 # detail_bits <workdir> <alias> <flag> -- sets globals DCHIP / DLINE: the HTML
 # snippets that replace the __FLEET_DETAIL_CHIP__ / __FLEET_DETAIL_LINE__
-# placeholders 01_row.sql / 06_close.sql emit unconditionally in every OK
+# placeholders 01_row.sql / 07_close.sql emit unconditionally in every OK
 # fragment.  flag='N' (no detail requested) -> both empty.  flag='Y' ->
 # inspects detail_state to decide the success/skipped/failed rendering.
 #
@@ -1078,11 +1099,17 @@ FALLBACK_CHROME
         printf '<h1>AWR Fleet Report</h1>\n'
         printf '<div class="sub">Multi-database health triage &middot; z-score anomaly scan vs %s prior window(s)</div>\n' \
             "$(printf '%s' "$WEEKS_BACK" | html_escape)"
-        printf '<div class="run">Window <b>%sh ending %s</b> &middot; cadence %s%s &middot; %s prior window(s) &middot; top_n %s &middot; template %s &middot; generated <span class="tnum">%s</span></div>\n' \
+        # Day-profile note only when the knob was on for this run (params.env
+        # carries it for --assemble; an older workdir has no line -> stays 0).
+        profile_note=''
+        if [[ "${FLEET_PROFILE_DAYS:-0}" != 0 ]]; then
+            profile_note=" &middot; day profile: $(printf '%s' "$FLEET_PROFILE_DAYS" | html_escape) prior days"
+        fi
+        printf '<div class="run">Window <b>%sh ending %s</b> &middot; cadence %s%s &middot; %s prior window(s) &middot; top_n %s &middot; template %s%s &middot; generated <span class="tnum">%s</span></div>\n' \
             "$(printf '%s' "$WIN_HOURS" | html_escape)" "$(printf '%s' "$TARGET_END" | html_escape)" \
             "$(printf '%s' "$STEP" | html_escape)" "$(printf '%s' "$STEP_UNIT" | html_escape)" \
             "$(printf '%s' "$WEEKS_BACK" | html_escape)" "$(printf '%s' "$TOP_N" | html_escape)" \
-            "$(printf '%s' "$FLEET_TEMPLATE" | html_escape)" "$(printf '%s' "$generated_at" | html_escape)"
+            "$(printf '%s' "$FLEET_TEMPLATE" | html_escape)" "$profile_note" "$(printf '%s' "$generated_at" | html_escape)"
         printf '</div>\n'
         # Theme toggle (reuses the shared .theme-icon-btn; icon swap is pure CSS
         # off body.dark). Sun/moon SVGs copied from sql/00_params.sql.

@@ -38,9 +38,11 @@
 --
 -- Substitution variables consumed: the same twelve-ish single-DB vars
 -- (target_end, win_hours, weeks_back, top_n, inst_num, step, step_unit,
--- template) plus the three fleet-only vars from sql/fleet/defaults.sql
--- (fleet_alias, fleet_workdir, fleet_conn_disp).  markers/echarts/debug are
--- NOT consumed here (see "Dropped vs awr_trend.sql" below).
+-- template, profile_days -- the last one gates the optional Day profile
+-- band, sql/fleet/06_day_profile.sql) plus the three fleet-only vars from
+-- sql/fleet/defaults.sql (fleet_alias, fleet_workdir, fleet_conn_disp).
+-- markers/echarts/debug are NOT consumed here (see "Dropped vs
+-- awr_trend.sql" below).
 --
 -- Output: two files under fleet_workdir, both named from fleet_alias:
 --   <fleet_workdir>/<fleet_alias>.chrome.html  -- shared <head>/CSS/<body>
@@ -312,7 +314,8 @@ SPOOL ~frag_path
 @@sql/fleet/03_headline.sql
 @@sql/fleet/04_findings.sql
 @@sql/fleet/05_topsql.sql
-@@sql/fleet/06_close.sql
+@@sql/fleet/06_day_profile.sql
+@@sql/fleet/07_close.sql
 SPOOL OFF
 
 SET TERMOUT  ON

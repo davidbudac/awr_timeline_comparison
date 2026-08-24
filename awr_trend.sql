@@ -44,6 +44,10 @@
 --   marker_file  '' (default) or path to an optional timeline-marker config
 --                  file (datetime + label milestones) drawn as vertical
 --                  marker lines on the dated charts.  See markers.example.sql.
+--   profile_days 0 (default = off) or the number of prior days for the
+--                  optional "Day profile" section (16): every hour of the
+--                  24 h ending at target_end vs the same hour-of-day on the
+--                  N prior days, 1-day cadence regardless of step_unit.
 --
 -- The cadence between adjacent comparison windows is step*step_unit.
 -- Default step=1, step_unit='w' reproduces the original "same hour-of-week,
@@ -93,7 +97,7 @@ ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,';
 -- not in sql/defaults.sql).  Bump on release and record it in CHANGELOG.md;
 -- it is stamped into the report footer so a circulated HTML file can always
 -- be traced back to the build that produced it.
-DEFINE awr_version = '1.2.0'
+DEFINE awr_version = '1.3.0'
 
 -- The caller MUST have set target_end / win_hours / weeks_back / top_n /
 -- inst_num before invoking this driver.  For the canonical defaults, do:
@@ -620,6 +624,9 @@ DEFINE _dbg_msg = 'section 14 segment_io (top segments by I/O per window)'
 DEFINE _dbg_msg = 'section 15 file_io (per-file and file-type I/O deltas)'
 @@sql/lib/debug_log.sql
 @@sql/15_file_io.sql
+DEFINE _dbg_msg = 'section 16 day_profile (hour-of-day vs N prior days; skipped when profile_days=0)'
+@@sql/lib/debug_log.sql
+@@sql/16_day_profile.sql
 DEFINE _dbg_msg = 'all sections rendered; writing HTML epilogue'
 @@sql/lib/debug_log.sql
 

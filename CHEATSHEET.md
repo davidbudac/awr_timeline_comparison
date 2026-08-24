@@ -8,7 +8,7 @@ working directory is the repo root and the wrapper is executable.
 ```
 ./run_awr_trend.sh <connect> [target_end] [win_hours] [weeks_back] \
                               [top_n] [inst_num] [step] [step_unit] \
-                              [template] [debug] [marker_file]
+                              [template] [debug] [marker_file] [profile_days]
 ```
 
 | Pos | Name         | Default          | Notes                                            |
@@ -24,6 +24,7 @@ working directory is the repo root and the wrapper is executable.
 | 9   | template     | `comprehensive`  | `comprehensive` (full lists) or `simple` (triage subset) |
 | 10  | debug        | `Y`              | `Y` (default) prints one-line timestamped progress markers to stdout (one per section); pass `N` to silence. HTML report is unaffected |
 | 11  | marker_file  | *(empty)*        | Optional path to a timeline-marker config file (milestones drawn as vertical lines on the dated charts). Empty = none. See "Timeline markers" below |
+| 12  | profile_days | `0`              | Day profile: `N > 0` scores each hour of the last 24 h against the same hour-of-day on the N prior days (heatmap + per-metric line + table). `0` = off |
 
 Trailing args you don't care about can be omitted. To pin step / step_unit /
 template you must also supply every preceding arg — use `AUTO`/`0` etc. as
@@ -373,6 +374,7 @@ DEFINE step_unit  = 'h'
 DEFINE template   = 'comprehensive'
 DEFINE debug      = 'Y'
 DEFINE marker_file = ''
+DEFINE profile_days = 0
 DEFINE markers = ''
 DEFINE echarts = ''
 @@awr_trend.sql
@@ -381,8 +383,9 @@ SQL
 ```
 
 (When you set the DEFINEs by hand instead of loading `@sql/defaults.sql`,
-include the empty `DEFINE marker_file = ''`, `DEFINE markers = ''` and
-`DEFINE echarts = ''` lines — the driver references all three, so an unset
+include the empty `DEFINE marker_file = ''`, `DEFINE profile_days = 0`,
+`DEFINE markers = ''` and `DEFINE echarts = ''` lines — the driver references
+all four, so an unset
 value would stop for an "Enter value" prompt.)
 
 ---
@@ -501,6 +504,7 @@ DEFINE step_unit  = 'w'
 DEFINE template   = 'comprehensive'
 DEFINE debug      = 'Y'
 DEFINE marker_file = ''
+DEFINE profile_days = 0
 DEFINE markers = ''
 DEFINE echarts = ''
 ```

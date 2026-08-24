@@ -516,6 +516,9 @@ MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22'</span> ./run_awr_
           single-DB report for that database.</li>
         <li>Fleet-wide <strong>timeline markers</strong> are drawn across every database's ASH chart
           at the same instant — a release or patch lines up visually across the whole estate.</li>
+        <li><code>FLEET_PROFILE_DAYS=7</code> adds a <strong>Day profile</strong> heatmap to every
+          database's detail panel — each hour of the last 24&nbsp;h against the same hour on the prior
+          days — so an odd hour stands out fleet-wide.</li>
         <li>Inline-SVG only, <strong>offline-complete</strong>, read-only; credentials are masked in
           every log and report.</li>
       </ul>
@@ -541,7 +544,10 @@ MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22'</span> ./run_awr_
         <code>|z| &gt; 2</code> Warning, <code>|z| &gt; 3</code> Critical. Inside: hero cards, an
         ASH timeline, a findings heatmap, load profile, waits, Top SQL ranked five ways with per-SQL
         ASH breakdowns, segment &amp; file I/O and parameter changes — plus dark mode and the
-        Essential-rows / Application-only toggles, all client-side.
+        Essential-rows / Application-only toggles, all client-side. Add <code>profile_days</code>
+        and you also get a <strong>Day profile</strong>: every hour of the last 24&nbsp;h scored
+        against the same hour on the N prior days, as an hour-of-day heatmap — the answer to
+        “<em>which</em> hour of the day changed?”.
       </p>
     </div>
 
@@ -560,7 +566,10 @@ MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22'</span> ./run_awr_
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple
 
 <span class="c"># annotate the timelines with your own milestones</span>
-MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22'</span> ./run_awr_trend.sh user/pw@svc</pre>
+MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22'</span> ./run_awr_trend.sh user/pw@svc
+
+<span class="c"># + Day profile: each hour of the last 24 h vs the 7 prior days</span>
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y <span class="s">''</span> 7</pre>
     </div>
 
     <div class="prose">

@@ -17,6 +17,13 @@
 --     order preserved, colored from the EVP categorical palette with CPU=WC
 --     green and "Other events"=EVOTHER grey, plus a per-series color legend
 --     filled into the sibling .ev-legend div);
+--   * renders every [data-profile-of] div -- the optional Day profile band:
+--     a 24-column (hour of day) x N-row (stat) inline-SVG heatmap from
+--     window.FLEET_PROFILE, cell fill = signed z-score (red above the
+--     prior-day mean, blue below, alpha scaled by |z| up to 3.5; no-data
+--     cells in var(--panel-2)), a <title> tooltip per cell and a legend of
+--     swatches in the sibling .tl-caption.  Lazy like the timelines (needs
+--     a real clientWidth) and re-rendered on resize;
 --   * wires row expand/collapse (delegated click on tr.dbrow -> its sibling
 --     tr.detailrow), re-rendering the newly revealed timeline once the row
 --     opens so it picks up its real container width;
@@ -103,16 +110,23 @@ BEGIN
     -- delegated row expand/collapse: a click anywhere in a dbrow toggles its
     -- sibling detailrow; opening re-runs renderAsh so its timeline (skipped
     -- while hidden, above) picks up its real width
-    DBMS_OUTPUT.PUT_LINE('function wireToggle(){document.addEventListener("click",function(ev){var tgt=ev.target;if(!tgt||!tgt.closest)return;var row=tgt.closest("tr.dbrow");if(!row)return;var det=row.nextElementSibling;if(!det||String(det.className).indexOf("detailrow")<0)return;var open=row.classList.toggle("open");if(open){det.classList.remove("hidden");renderAsh();}else{det.classList.add("hidden");}});}');
+    -- day-profile heatmap: hours across, stats down; fill alpha from |z|
+    DBMS_OUTPUT.PUT_LINE('function profFill(z){if(z==null||isNaN(+z))return "var(--panel-2)";var a=Math.min(1,Math.abs(+z)/3.5);a=(0.10+0.90*a).toFixed(2);return (+z>=0?"rgba(176,28,28,":"rgba(37,99,235,")+a+")";}');
+    DBMS_OUTPUT.PUT_LINE('function fmtN(v){if(v==null)return "-";v=+v;if(isNaN(v))return "-";return Math.abs(v)>=100?Math.round(v).toLocaleString():v.toFixed(2);}');
+    DBMS_OUTPUT.PUT_LINE('function fillProfLegend(el,d){var cap=el.nextElementSibling;if(!cap||String(cap.className).indexOf("tl-caption")<0)return;var sw=function(z,l){return "<span><span class=\"dp-sw\" style=\"background:"+profFill(z)+"\"></span>"+l+"</span>";};cap.innerHTML=sw(3.5,"z \u2265 +3 (large)")+sw(2.5,"+2 to +3 (moderate)")+sw(0.5,"typical")+sw(-2.5,"\u22122 to \u22123")+sw(-3.5,"z \u2264 \u22123")+sw(null,"no data")+"<span>"+d.ndays+" prior day(s); hover a cell for values</span>";}');
+    DBMS_OUTPUT.PUT_LINE('function buildProfile(d,w){var L=150,T=14,n=d.stats.length,cw=(w-L-4)/24,ch=16,H=T+ch*n+2,s=svgEl(w,H);for(var j=0;j<24;j+=3){s+="<text x=\""+(L+j*cw+1).toFixed(1)+"\" y=\""+(T-4)+"\" font-size=\"9\" fill=\"var(--muted)\">"+esc(d.hours[j])+"</text>";}for(var i=0;i<n;i++){var y=T+i*ch;s+="<text x=\""+(L-6)+"\" y=\""+(y+ch*0.72).toFixed(1)+"\" font-size=\"10\" text-anchor=\"end\" fill=\"var(--muted)\">"+esc(d.stats[i])+"</text>";for(var k=0;k<24;k++){var z=d.z[i][k],tip=esc(d.stats[i])+" @ "+esc(d.hours[k])+": current "+fmtN(d.cur[i][k])+" | prior mean "+fmtN(d.mu[i][k])+" (n="+d.n[i][k]+") | z "+(z==null?"-":(+z).toFixed(2))+" | "+(d.pct[i][k]==null?"-":d.pct[i][k]+"%")+" | "+esc(d.sev[i][k]);s+="<rect x=\""+(L+k*cw).toFixed(1)+"\" y=\""+y+"\" width=\""+Math.max(1,cw-1).toFixed(1)+"\" height=\""+(ch-1)+"\" rx=\"2\" fill=\""+profFill(z)+"\"><title>"+tip+"</title></rect>";}}return s+"</svg>";}');
+    DBMS_OUTPUT.PUT_LINE('function renderProfile(){var els=document.querySelectorAll("[data-profile-of]");Array.prototype.forEach.call(els,function(el){if(el.__profiled)return;var d=(window.FLEET_PROFILE||{})[el.getAttribute("data-profile-of")];if(!d||!d.stats||!d.stats.length||!d.z){el.innerHTML="";el.__profiled=true;return;}var w=el.clientWidth;if(!w)return;w=Math.max(480,w);el.innerHTML=buildProfile(d,w);fillProfLegend(el,d);el.__profW=w;el.__profiled=true;});}');
+    DBMS_OUTPUT.PUT_LINE('function wireToggle(){document.addEventListener("click",function(ev){var tgt=ev.target;if(!tgt||!tgt.closest)return;var row=tgt.closest("tr.dbrow");if(!row)return;var det=row.nextElementSibling;if(!det||String(det.className).indexOf("detailrow")<0)return;var open=row.classList.toggle("open");if(open){det.classList.remove("hidden");renderAsh();renderProfile();}else{det.classList.add("hidden");}});}');
     -- theme toggle: flip body.dark, persist localStorage "awr-theme"
     DBMS_OUTPUT.PUT_LINE('function wireTheme(){var b=document.getElementById("themeToggle");if(!b)return;b.setAttribute("aria-pressed",document.body.classList.contains("dark")?"true":"false");b.addEventListener("click",function(){var on=document.body.classList.toggle("dark");try{localStorage.setItem("awr-theme",on?"dark":"light");}catch(e){}b.setAttribute("aria-pressed",on?"true":"false");});}');
     -- debounced resize: re-render any open (visible, clientWidth>0) timeline
     -- whose container width actually changed, so the SVG tracks a resized
     -- viewport/panel instead of staying stretched from its first render
-    DBMS_OUTPUT.PUT_LINE('function wireResize(){var tmr=null;window.addEventListener("resize",function(){if(tmr)clearTimeout(tmr);tmr=setTimeout(function(){var changed=false;var els=document.querySelectorAll("[data-ash-of][data-ash-mode=\"timeline\"]");Array.prototype.forEach.call(els,function(el){var w=el.clientWidth;if(w>0&&w!==el.__ashW){el.__ashed=false;changed=true;}});if(changed)renderAsh();},150);});}');
-    DBMS_OUTPUT.PUT_LINE('function boot(){renderAsh();wireToggle();wireTheme();wireResize();}');
+    DBMS_OUTPUT.PUT_LINE('function wireResize(){var tmr=null;window.addEventListener("resize",function(){if(tmr)clearTimeout(tmr);tmr=setTimeout(function(){var changed=false;var els=document.querySelectorAll("[data-ash-of][data-ash-mode=\"timeline\"]");Array.prototype.forEach.call(els,function(el){var w=el.clientWidth;if(w>0&&w!==el.__ashW){el.__ashed=false;changed=true;}});if(changed)renderAsh();var pc=false;var pe=document.querySelectorAll("[data-profile-of]");Array.prototype.forEach.call(pe,function(el){var w=el.clientWidth;if(w>0&&w!==el.__profW){el.__profiled=false;pc=true;}});if(pc)renderProfile();},150);});}');
+    DBMS_OUTPUT.PUT_LINE('function boot(){renderAsh();renderProfile();wireToggle();wireTheme();wireResize();}');
     DBMS_OUTPUT.PUT_LINE('if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot);else boot();');
     DBMS_OUTPUT.PUT_LINE('window.__fleetRenderAsh=renderAsh;');
+    DBMS_OUTPUT.PUT_LINE('window.__fleetRenderProfile=renderProfile;');
     DBMS_OUTPUT.PUT_LINE('})();</script>');
 END;
 /

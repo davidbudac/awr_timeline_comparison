@@ -5,6 +5,35 @@ The report footer stamps the version that produced it
 top of `awr_trend.sql`. Bump it there when cutting a release and add an
 entry here. Dates are release dates.
 
+## 1.3.0 — 2026-08-24
+
+- **Day profile (section 16, opt-in via the new `profile_days` var).** Every
+  hour of the 24 h ending at `target_end` is scored against the same
+  hour-of-day on the N prior days (1-day cadence, independent of
+  `step`/`step_unit`): a signed-z heatmap (hour × metric), a per-metric line
+  chart (current day vs prior-day mean with a μ ± 2σ band and faint
+  prior-day lines) and a 24-row table that doubles as the offline fallback.
+  Nine per-second rates from `DBA_HIST_SYSSTAT` snapshot deltas
+  (restart-guarded, `dbid IN (dbid_list)`, RAC-additive); an hour covered
+  by < 30 min of snapshots is blank, never 0. Scoring reuses section 07's
+  bucket rules verbatim. Matrix computed by the shared
+  `sql/lib/day_profile_cte.sql`.
+- `run_awr_trend.sh` gains a 12th positional arg `profile_days` (default
+  `0`), a configurator prompt, and the web configurator mirrors it.
+  `profile_days = 0` keeps every report byte-identical to 1.2.0.
+
+## Fleet report 0.5.0 — 2026-08-24
+
+- New `FLEET_PROFILE_DAYS` env knob (default `0`): `N > 0` adds a "Day
+  profile" band to every DB's detail row — an inline-SVG heatmap (24 hour
+  columns × 9 stat rows, signed z, hover tooltips, legend) from the same
+  shared CTE the single-DB section 16 uses — and passes `profile_days=N`
+  into the per-DB detailed reports and the drill command. Informational:
+  never changes a row's score or sort. `06_close.sql` became `07_close.sql`
+  (the new band is `06_day_profile.sql`); the knob is persisted in
+  `params.env` for `--assemble`. The AWR Fleet Server whitelists it in
+  `[env]`.
+
 ## Fleet report 0.1.0 — 2026-07-14
 
 New, orthogonal tool — a multi-database triage sweep — that does not change

@@ -635,6 +635,9 @@ BEGIN
         || CASE WHEN '~template_name' = 'comprehensive' THEN ''
                 ELSE ' &middot; template: <code>~template_name</code>'
            END
+        || CASE WHEN ~profile_days > 0
+                THEN ' &middot; day profile: ' || '~profile_days' || ' prior days'
+                ELSE '' END
         || '</span>'
         || '</div>');
     DBMS_OUTPUT.PUT_LINE('    <div class="windows-chart" id="masthead-timeline"></div>');
@@ -772,6 +775,10 @@ BEGIN
         || '<a href="#findings">Findings</a>'
         || '<a href="#windows">Windows</a>'
         || '<b>Workload</b>'
+        -- Day profile link only when the section exists (profile_days > 0);
+        -- '' otherwise keeps the nav byte-identical.
+        || CASE WHEN ~profile_days > 0
+                THEN '<a href="#day-profile">Day profile</a>' ELSE '' END
         || '<a href="#utilization">Utilization</a>'
         || '<a href="#load">Load profile</a>'
         || '<a href="#metrics">Metrics</a>'

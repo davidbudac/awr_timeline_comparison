@@ -215,7 +215,7 @@
       <h2><span class="num">§1</span>Argument order (positional)</h2>
 <pre>./run_awr_trend.sh &lt;connect&gt; [target_end] [win_hours] [weeks_back] \
                               [top_n] [inst_num] [step] [step_unit] \
-                              [template] [debug] [marker_file]</pre>
+                              [template] [debug] [marker_file] [profile_days]</pre>
       <div class="tbl-scroll">
         <table>
           <thead><tr><th>Pos</th><th>Name</th><th>Default</th><th>Notes</th></tr></thead>
@@ -231,6 +231,7 @@
             <tr><td>9</td><td><code>template</code></td><td><code>comprehensive</code></td><td><code>comprehensive</code>, <code>simple</code>, or <code>dev</code></td></tr>
             <tr><td>10</td><td><code>debug</code></td><td><code>N</code></td><td><code>Y</code> prints per-section progress markers to stdout; HTML unaffected</td></tr>
             <tr><td>11</td><td><code>marker_file</code></td><td><em>(empty)</em></td><td>Optional timeline-marker config; empty = none</td></tr>
+            <tr><td>12</td><td><code>profile_days</code></td><td><code>0</code></td><td>Day profile: <code>N &gt; 0</code> scores each hour of the last 24 h against the same hour-of-day on the N prior days (heatmap + line + table); <code>0</code> = off</td></tr>
             <tr><td>env</td><td><code>MARKERS</code></td><td><em>(empty)</em></td><td>File-free markers: inline <code>WHEN|LABEL</code> pairs joined by <code>;;</code> (not a positional arg)</td></tr>
             <tr><td>env</td><td><code>ECHARTS</code></td><td><em>(empty)</em></td><td>Where the chart library loads from: empty = CDN, an <code>http(s)</code> URL = mirror, a local path = inlined for a self-contained offline file (see <a href="#offline">§11</a>)</td></tr>
           </tbody>
@@ -513,6 +514,7 @@ DEFINE step_unit  = <span class="s">'h'</span>
 DEFINE template   = <span class="s">'comprehensive'</span>
 DEFINE debug      = <span class="s">'N'</span>
 DEFINE marker_file = <span class="s">''</span>
+DEFINE profile_days = 0
 DEFINE markers = <span class="s">''</span>
 DEFINE echarts = <span class="s">''</span>
 @@awr_trend.sql
@@ -521,8 +523,9 @@ SQL</pre>
       <div class="note">
         When you set the DEFINEs by hand instead of loading
         <code>@sql/defaults.sql</code>, include the empty
-        <code>DEFINE marker_file = ''</code>, <code>DEFINE markers = ''</code> and
-        <code>DEFINE echarts = ''</code> lines — the driver references all three, so
+        <code>DEFINE marker_file = ''</code>, <code>DEFINE profile_days = 0</code>,
+        <code>DEFINE markers = ''</code> and <code>DEFINE echarts = ''</code> lines — the
+        driver references all four, so
         an unset value would stop at an “Enter value” prompt.
       </div>
     </section>
@@ -644,6 +647,7 @@ DEFINE step_unit  = <span class="s">'w'</span>
 DEFINE template   = <span class="s">'comprehensive'</span>
 DEFINE debug      = <span class="s">'N'</span>
 DEFINE marker_file = <span class="s">''</span>
+DEFINE profile_days = 0
 DEFINE markers = <span class="s">''</span></pre>
     </section>
 
@@ -653,7 +657,8 @@ DEFINE markers = <span class="s">''</span></pre>
         A separate wrapper, <code>run_awr_fleet.sh</code>, runs the same comparison across a whole
         <code>fleet.conf</code> (one <code>alias|connect</code> per line) and stitches every database
         into a single worst-first ops-console page. No <code>inst_num</code> argument — a fleet pass is
-        always <code>inst_num=0</code>. See the
+        always <code>inst_num=0</code>. <code>FLEET_PROFILE_DAYS=N</code> adds the Day-profile heatmap band
+        to every database's detail panel (and <code>profile_days=N</code> to its detailed report). See the
         <a href="https://github.com/davidbudac/awr_timeline_comparison#fleet-report-many-databases">README fleet section</a> for the full reference.
       </p>
 

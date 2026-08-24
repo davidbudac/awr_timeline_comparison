@@ -441,6 +441,15 @@
           </div>
 
           <div class="field">
+            <label for="profile_days">Day profile — prior days (<code>profile_days</code>)</label>
+            <input type="number" id="profile_days" min="0" step="1" value="0">
+            <div class="help">0 = off. N &gt; 0 adds a section scoring <b>each hour of the last 24 h</b>
+              against the same hour-of-day on the N prior days (1-day cadence, independent of the
+              cadence above) — an hour-of-day × metric heatmap showing <em>which hour</em> changed.
+              z-scores need at least 3 prior days.</div>
+          </div>
+
+          <div class="field">
             <label class="lbl" for="echarts_mode">Charts library (echarts)</label>
             <select id="echarts_mode">
               <option value="default" selected>Internet CDN — load ECharts from cdn.jsdelivr.net (default)</option>
@@ -549,7 +558,7 @@
    ===================================================================== */
 const DEFAULTS = {
   target_end:'AUTO', win_hours:'1', weeks_back:'4', top_n:'10', inst_num:'0',
-  step:'1', step_unit:'w', template:'comprehensive', debug:'N', marker_file:'',
+  step:'1', step_unit:'w', template:'comprehensive', debug:'N', marker_file:'', profile_days:'0',
   // File-free inline markers (not a positional arg): the configurator builds
   // this "WHEN|LABEL;;..." string from the milestone rows and threads it
   // through the MARKERS env var (shell) / DEFINE markers (SQL*Plus).
@@ -562,7 +571,7 @@ const DEFAULTS = {
   echarts:''
 };
 const ARG_ORDER = ['target_end','win_hours','weeks_back','top_n','inst_num',
-                   'step','step_unit','template','debug','marker_file'];
+                   'step','step_unit','template','debug','marker_file','profile_days'];
 // The SQL*Plus path DEFINEs every positional plus the two non-positional vars
 // `markers` (rides the MARKERS env var on the shell path) and `echarts` (rides
 // the ECHARTS env var). Both must be emitted so the driver never prompts for an
@@ -684,6 +693,7 @@ function readConfig(){
     step_unit:  $('step_unit').value,
     template:   $('template').value,
     debug:      $('debug').checked ? 'Y' : 'N',
+    profile_days: $('profile_days').value.trim() || '0',
     // File-free markers only: marker_file stays empty (the on-disk escape
     // hatch is still in the driver for power users, but the web UI builds an
     // inline string instead).
@@ -721,6 +731,10 @@ function validate(cfg){
 
   const st = num(cfg.step);
   if(st===null || st<=0) fail('step', 'Cadence count (<code>step</code>) must be a positive number.');
+
+  const pd = num(cfg.profile_days);
+  if(pd===null || pd<0 || !Number.isInteger(pd)) fail('profile_days', 'Day profile (<code>profile_days</code>) must be 0 (off) or a whole number of prior days.');
+  else if(pd>0 && pd<3) info.push('A day profile with fewer than 3 prior days cannot compute z-scores — every hour shows "insufficient history" (values and %-deltas still render).');
 
   // Hourly cadence resolution hint
   if(!errors.length && cfg.step_unit==='h' && wh<=1 && st>=1){
@@ -821,6 +835,7 @@ function summarize(cfg){
           (cfg.weeks_back==='1'?'':'s')+' at '+UNIT_WORD[cfg.step_unit]+' cadence ('+fmtHours(stepHours)+
           ' apart). Top '+cfg.top_n+' SQL · '+inst+' · '+cfg.template+' template.';
   if(cfg.debug==='Y') s += ' Progress markers on.';
+  if(Number(cfg.profile_days)>0) s += ' Day profile: each hour of the last 24 h vs the '+cfg.profile_days+' prior days.';
   const nmk = cfg.markers ? cfg.markers.split(';;').length : 0;
   if(nmk) s += ' '+nmk+' timeline marker'+(nmk===1?'':'s')+'.';
   return s;
@@ -981,7 +996,8 @@ function applyPreset(p){
   const s = Object.assign({
     temode:'auto', win_hours:DEFAULTS.win_hours, weeks_back:DEFAULTS.weeks_back,
     top_n:DEFAULTS.top_n, inst_num:DEFAULTS.inst_num, step:DEFAULTS.step,
-    step_unit:DEFAULTS.step_unit, template:DEFAULTS.template, debug:false, echarts:''
+    step_unit:DEFAULTS.step_unit, template:DEFAULTS.template, debug:false, echarts:'',
+    profile_days:DEFAULTS.profile_days
   }, p.set);
   document.querySelector('input[name="temode"][value="'+s.temode+'"]').checked = true;
   syncTeSeg();
@@ -995,6 +1011,7 @@ function applyPreset(p){
   $('step_unit').value = s.step_unit;
   $('template').value = s.template;
   $('debug').checked = !!s.debug;
+  $('profile_days').value = s.profile_days;
   // '' -> CDN default; any other value -> custom path (prefilled into the field).
   $('echarts_mode').value = s.echarts ? 'custom' : 'default';
   if(s.echarts) $('echarts_path').value = s.echarts;
@@ -1072,7 +1089,7 @@ function init(){
 
   // every parameter control -> deselect card (if user-driven) + re-render
   ['target_dt','win_hours','weeks_back','step','step_unit','top_n','inst_num','template','debug',
-   'echarts_mode','echarts_path']
+   'profile_days','echarts_mode','echarts_path']
     .forEach(id => { const el=$(id); el.addEventListener('input', onParamEdit); el.addEventListener('change', onParamEdit); });
 
   $('marker_add').addEventListener('click', ()=>{ addMarkerRow(); render(); });

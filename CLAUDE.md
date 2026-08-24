@@ -26,7 +26,7 @@ SVG sparklines and the marker JS are shipped inline and work offline. The
 
 ## Entry points
 
-- `run_awr_trend.sh user/pw@svc [target_end] [win_hours] [weeks_back] [top_n] [inst_num] [step] [step_unit] [template] [debug] [marker_file]`
+- `run_awr_trend.sh user/pw@svc [target_end] [win_hours] [weeks_back] [top_n] [inst_num] [step] [step_unit] [template] [debug] [marker_file] [profile_days]`
   — wrapper; sets DEFINEs via heredoc then `@@awr_trend.sql`. `MARKERS=` and
   `ECHARTS=` ride as **env vars** (not positional, to keep arg order symmetric).
 - `run_awr_trend.sh --configure` (also `-c`/`-i`, or no args at a TTY) —
@@ -70,8 +70,10 @@ sql/
 ├── 13_utilization.sql   -- usage profile (template-INDEPENDENT)
 ├── 14_segment_io.sql    -- top segments by I/O (DBA_HIST_SEG_STAT; template-INDEP)
 ├── 15_file_io.sql       -- top files by I/O + IOStat-by-filetype (template-INDEP)
+├── 16_day_profile.sql   -- Day profile: hour-of-day × N prior days (profile_days>0; template-INDEP)
 └── lib/                 -- @@-included fragments (see conventions)
     ├── windows_cte.sql       -- run_params → … → valid_windows CTE chain
+    ├── day_profile_cte.sql   -- dp_params → … → dp_scored (shared by 16 + fleet 06)
     ├── nth_csv.plsql         -- INSTR-based CSV parser (keeps empty tokens)
     ├── is_oracle_schema.plsql-- 'Y'/'N' Oracle-maintained parsing-schema test
     │                         --   (drives the "Application only" data-sys tag)
@@ -90,11 +92,12 @@ reports/                            -- generated HTML
 
 ## Substitution variables
 
-Twelve user-facing vars, all DEFINEs (defaults in `sql/defaults.sql`):
+Thirteen user-facing vars, all DEFINEs (defaults in `sql/defaults.sql`):
 `target_end` (`'AUTO'`=prior full hour), `win_hours`, `weeks_back`, `top_n`,
 `inst_num` (`0`=aggregate across RAC, else filter to that instance), `step` +
 `step_unit` (`'h'`/`'d'`/`'w'`; default `1`+`'w'` = same hour-of-week N weeks
-back), `template`, `debug`, `marker_file`, `markers`, `echarts`.
+back), `template`, `debug`, `marker_file`, `profile_days` (`0`=off; the 12th
+wrapper positional), `markers`, `echarts`.
 
 The driver resolves many derived vars **once** up front via `COLUMN … NEW_VALUE`
 and every section references them as `~name` (never re-resolves): `step_hours`
@@ -114,7 +117,7 @@ off-grid request (e.g. 16:30 against on-the-hour snaps, or a request inside a
 snapshot gap) produces the last real window instead of an all-empty report. No
 AWR history at all → request kept (empty report, as before). `dow_name` follows
 the snapped value. A second DEFINE, `~target_end_requested`, carries the
-pre-snap instant; `00_params.sql` (masthead) and `sql/fleet/06_close.sql`
+pre-snap instant; `00_params.sql` (masthead) and `sql/fleet/07_close.sql`
 (drill panel) emit a "Requested end … snapped to last snapshot …" note **only
 when the two strings differ** — equal strings must emit nothing. The fleet
 drill command uses `~target_end_resolved`, so it echoes the snapped instant and
@@ -188,6 +191,7 @@ related data — **`#topsql`, `#topsql-ash`, `#segment-io`, `#file-io`,
 **kept-sections list is single-sourced three times that must stay in lockstep**:
 the section-hide rule, the `nav.toc a:not([href=…])` link-dim rule, and (by
 omission) the data sections you choose to keep. Change one, change all three.
+(`#day-profile` is system-wide, so it sits in the hide list, not the kept set.)
 
 Oracle-internal SQL is filtered at the row/card level: sections 06 and 11 tag
 each top SQL `data-sys="Y|N"` from its parsing schema via
@@ -274,6 +278,36 @@ the repo so `echarts=vendor/echarts.min.js` is turnkey offline; `vendor/` also
 carries the license + NOTICE (Apache-2.0 §4 compliance) and a README with the
 bump procedure. Users may still point at any other copy. Value must contain no
 `"`.
+
+### Day profile (`profile_days`, section 16 + fleet band 06)
+Opt-in via `profile_days` (single-DB, default `0`) / `FLEET_PROFILE_DAYS`
+(fleet, default `0`). Every hour of the 24 h ending at `target_end` is scored
+against the same hour-of-day on the N prior days at a **fixed 1-day cadence**
+(deliberately independent of `step`/`step_unit` — the main comparison keeps
+its own cadence). The 9 × 24 × (N+1) matrix lives in ONE shared include,
+`sql/lib/day_profile_cte.sql` (`dp_params → dp_targets → dp_snaps → dp_pairs
+→ dp_deltas → dp_cells → dp_grid → dp_pivot → dp_scored`), consumed by
+`sql/16_day_profile.sql` (ECharts heatmap + per-stat line + always-emitted
+table) and `sql/fleet/06_day_profile.sql` (`window.FLEET_PROFILE[alias]`
+payload → inline-SVG heatmap in `js_fleet_charts.plsql`'s `renderProfile`).
+It is the **LAG-delta time-range scan** of 00/10, NOT `windows_cte` (which
+only yields `weeks_back+1` windows): consecutive `dba_hist_snapshot` pairs
+per `(dbid, instance)` that survive the `startup_time` restart guard, joined
+to `DBA_HIST_SYSSTAT` with the extra `pr.prev_snap_id = d.prev_snap_id`
+match (a missing sysstat row can never widen a delta across a gap); each
+pair lands in the cell containing its midpoint; cell = `SUM(delta)/SUM(span)`
+summed across instances. **Coverage guard:** `< 1800 s` of span in an hour
+⇒ NULL (2-h snap intervals, gaps), never 0. The stat list is fixed inline
+(template-independent, like 13) — do NOT turn it into a `*_targets.sql`
+(lint check 2). Scoring is section 07's `scored` CASE verbatim. `hour_slot 0`
+is the hour ending at `target_end`; consumers `ORDER BY hour_slot DESC` for a
+chronological axis; `hour_label` is the hour's START. The section's heatmap
+is **signed** z (diverging ramp), unlike 07's |z|. **Byte-identity at 0:**
+the section emits only its two `AWR-SECTION` markers (no `<section>`), the
+nav link and the masthead `strip-meta` clause are `CASE … ELSE ''`, the
+fleet band and the drill command's 12-slot tail are likewise guarded. The
+fleet band is **informational**: no `FLEET-COUNTS`, no score/sort impact.
+Table rows carry `class="crit|warn"` (rail dot grading) but no `data-imp`.
 
 ### Timeline markers
 `marker_file` (on-disk config) or `markers` (file-free inline list, single var).
@@ -430,7 +464,9 @@ in-page theme toggle. Sections renumbered: `00_fleet_chrome` (chrome + fleet
 CSS + `js_fleet_charts.plsql` renderer), `01_row` (dbrow + opens the detail
 scaffold + ASH timeline band), `02_ash` (`window.FLEET_ASH` payload),
 `03_headline` (metric mini-cards in a self-contained `.metrics-band`),
-`04_findings`, `05_topsql`, `06_close` (drill + closes scaffold + sentinel).
+`04_findings`, `05_topsql`, `06_day_profile` (optional Day profile band, see
+that convention above; `FLEET_PROFILE_DAYS`), `07_close` (drill + closes
+scaffold + sentinel — renamed from `06_close` in fleet 0.5.0).
 The detail panel is a **single-column stack of full-width bands** (ASH
 timeline → 6-across metrics strip → findings → Top SQL → drill; `.metrics`
 goes 6-up ≥1100px, 3-up below, 2-up ≤560px) — the original two-column
@@ -623,7 +659,7 @@ zero surviving `__FLEET_` placeholders.
   cwd after `cd "$ddir"`. The detail run only starts when the extract rc=0
   (else `.detail.rc` = the literal `skipped`); a detail failure never changes
   the exit code, but keeps the workdir. Frags emit `__FLEET_DETAIL_CHIP__`
-  (01_row alias cell) and `__FLEET_DETAIL_LINE__` (06_close drill panel)
+  (01_row alias cell) and `__FLEET_DETAIL_LINE__` (07_close drill panel)
   unconditionally; the assembler substitutes '' / link / failure-note per alias
   (sed with `|` delimiter, `&`-free replacements) via the single-sourced
   `detail_state`/`detail_bits`/`detail_status_word` helpers, prints a

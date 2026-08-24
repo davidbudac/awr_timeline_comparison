@@ -12,8 +12,8 @@
 --   @sql/defaults.sql
 --   @awr_trend.sql
 --   SQL
--- The run_awr_trend.sh wrapper sets DEFINEs in its own heredoc instead
--- of loading this file.
+-- The run_awr_trend.sh wrapper loads this file first (as a prompt-safety
+-- net) and then sets its own DEFINEs in the same heredoc.
 --
 -- Edit these per environment if you want site-wide defaults.
 --
@@ -37,6 +37,15 @@ DEFINE debug      = 'Y'
 -- label milestones drawn as vertical lines on the dated charts).  Empty =
 -- no markers.  See markers.example.sql for the format.
 DEFINE marker_file = ''
+-- profile_days optional "Day profile" section: every hour of the 24 h
+-- ending at target_end is scored against the SAME hour-of-day on the N
+-- prior days (1-day cadence, independent of step / step_unit) -- a
+-- hour-of-day x metric heatmap that shows WHICH hour of the day changed.
+-- 0 (the default) disables the section entirely (report byte-identical to
+-- before the feature); a positive whole number is the number of prior
+-- days to compare against (z-scores need at least 3).  Section 16 /
+-- sql/lib/day_profile_cte.sql.
+DEFINE profile_days = 0
 -- markers optional file-free timeline markers: a list of milestones
 -- "WHEN|LABEL" separated by ";;", e.g.
 --   DEFINE markers = '2026-06-10 09:00|Release 2.0;;2026-06-11 03:00|Patch'

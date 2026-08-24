@@ -68,11 +68,12 @@ Easiest non-interactive — the shell wrapper (sets all substitution vars for yo
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple         # lean triage report
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple Y       # simple + progress markers on stdout
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive N my_markers.sql  # annotate timelines with milestones
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y '' 7  # + Day profile: each hour of the last 24 h vs the 7 prior days
 MARKERS='2026-06-10 09:00|Release 2.0' ./run_awr_trend.sh user/pw@svc  # file-free inline markers
 ECHARTS=vendor/echarts.min.js ./run_awr_trend.sh user/pw@svc           # self-contained / offline HTML
 ```
 
-Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template [debug [marker_file]]]]]]]]]]`
+Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template [debug [marker_file [profile_days]]]]]]]]]]]`
 
 Plus two environment variables: `MARKERS` for file-free inline timeline
 markers (see "Timeline markers" below), and `ECHARTS` to control where the
@@ -91,6 +92,7 @@ self-contained report" below).
 | `template`   | `comprehensive`  | Metric + wait-event set: `comprehensive` (full curated lists), `simple` (triage-friendly subset), or `dev` (application-developer view) |
 | `debug`      | `Y`              | `Y` (or `YES/1/ON/TRUE/T`, case-insensitive; the default) prints one-line, millisecond-timestamped progress markers to stdout as each section begins — useful when a slow section makes the run look hung. Pass any other value (e.g. `N`) to silence them. Markers go to stdout only; the HTML report is byte-identical to a `debug=N` run |
 | `marker_file`| *(empty)*        | Optional path to a timeline-marker config file (milestones drawn as vertical dashed lines on the dated charts). Empty = no markers. See "Timeline markers" below |
+| `profile_days`| `0`             | Optional **Day profile** section: `N > 0` scores **each hour of the 24 h ending at `target_end`** against the same hour-of-day on the N prior days (1-day cadence, independent of `step`/`step_unit`) — an hour-of-day × metric heatmap, a per-metric line vs its prior-day band, and a 24-row table — so you can see *which hour of the day* changed. `0` = off (report byte-identical). z-scores need `N ≥ 3`. See "Day profile" below |
 | `MARKERS` *(env var)* | *(empty)* | File-free alternative to `marker_file`: inline `WHEN\|LABEL` milestones joined by `;;`. `marker_file` wins when both are set. See "Timeline markers" below |
 | `ECHARTS` *(env var)* | *(empty)* | Where the ECharts chart library loads from. Empty = public CDN (`cdn.jsdelivr.net`). An `http(s)` URL = used as-is (internal mirror). A local file path = inlined into the report for a single self-contained, offline-capable HTML file. See "Offline / self-contained report" below |
 
@@ -181,6 +183,7 @@ SQL> DEFINE step_unit  = 'w'
 SQL> DEFINE template   = 'comprehensive'
 SQL> DEFINE debug      = 'N'
 SQL> DEFINE marker_file = 'my_markers.sql'   -- optional; '' for none
+SQL> DEFINE profile_days = 7                 -- optional Day profile; 0 = off
 SQL> DEFINE markers     = ''                 -- optional file-free markers; '' for none
 SQL> @awr_trend.sql
 ```
@@ -191,6 +194,36 @@ CSS and inline SVG sparklines; by default the larger charts load ECharts
 from `cdn.jsdelivr.net` and degrade gracefully when the CDN is blocked).
 For a **fully offline** report — charts and all — see "Offline /
 self-contained report" below.
+
+### Day profile (which hour of the day changed?)
+
+The compared windows above answer "is *this* hour unusual?". Pass a
+`profile_days` (12th positional, or `DEFINE profile_days = N`) and the report
+grows a **Day profile** section that scores **every hour of the 24 h ending
+at `target_end`** against the same hour-of-day on the N prior days — a
+1-day cadence that is independent of `step`/`step_unit`, so it combines
+freely with a weekly or hourly main comparison:
+
+```sh
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y '' 7
+```
+
+You get a signed-z heatmap (hour × metric; red = above the prior days, blue
+= below, hover for current / mean / σ / n / %Δ), a per-metric line chart
+(current day against the prior-day mean with a μ ± 2σ band and the
+individual prior days as faint lines; click a heatmap cell to switch metric
+and jump to that hour's row), and a 24-row table that also serves as the
+offline fallback. Nine per-second rates come from `DBA_HIST_SYSSTAT`
+snapshot deltas (DB time and DB CPU as average active sessions / CPUs busy,
+user calls, executions, logical and physical reads, physical writes, redo
+bytes, commits) — restart-guarded, summed across RAC instances, and blank
+(not 0) for any hour covered by less than 30 minutes of snapshots (2-hour
+snapshot intervals, gaps). Scoring is the Findings summary's rule set:
+`|z| > 3` large, `|z| > 2` moderate, at least 3 prior values required, so
+`profile_days ≥ 3` is the useful minimum (7 or 14 are good defaults).
+`profile_days = 0` (the default) leaves the report byte-identical. The fleet
+console has the same feature as a per-DB heatmap band via
+`FLEET_PROFILE_DAYS` (see below).
 
 ### Offline / self-contained report
 
@@ -276,6 +309,18 @@ z-scores.
 12. **Parameter changes** — initialization parameters from
     `DBA_HIST_PARAMETER` whose value differs across the compared windows,
     pivoted parameter × window (value as of each window's end snapshot).
+13. **Utilization** — descriptive usage profile (transaction / call / logon
+    rates, sessions, data and network volume), template-independent.
+14. **Day profile** *(only with `profile_days > 0`)* — every hour of the
+    24 h ending at `target_end` scored against the same hour-of-day on the
+    N prior days: a signed-z heatmap (hour × metric; red = above the prior
+    days, blue = below), a per-metric line chart (current day vs the
+    prior-day mean with a μ ± 2σ band), and a 24-row table. Nine
+    per-second rates from `DBA_HIST_SYSSTAT` (DB time, DB CPU, user calls,
+    executions, logical/physical reads, physical writes, redo, commits),
+    restart-guarded; an hour covered by < 30 min of snapshots is blank, not
+    0. Independent of the report cadence — the answer to "which hour of
+    the day changed?" without running 24 reports.
 
 ### The navigation rail & dark mode
 
@@ -394,6 +439,7 @@ usage / bad-config error before anything ran.
 | `FLEET_KEEP_WORK` | `0`     | `1` = keep the per-run `reports/fleet_work_<id>/` workdir even when every DB succeeded (it is always kept if any DB errored, so `--assemble` can re-run) |
 | `MARKERS`         | (none)  | Inline fleet-wide timeline markers, one string of `WHEN\|LABEL` entries joined by `;;` (WHEN = `YYYY-MM-DD HH:MM`), drawn on every DB's 24h ASH chart within its span and in the masthead legend; malformed entries are warned and skipped |
 | `MARKER_FILE`     | (none)  | A file of `WHEN\|LABEL` lines, same format; **wins over `MARKERS`** when both are set |
+| `FLEET_PROFILE_DAYS` | `0`  | `N > 0` adds a **Day profile** band to every DB's detail row — each hour of the 24 h ending at `target_end` vs the same hour on the N prior days, as an inline-SVG heatmap (hour × metric, signed z) — and passes `profile_days=N` into the per-DB detailed reports. Informational only: never changes a row's score or sort order |
 
 **By design (not limitations).** The fleet report is deliberately lean: it
 ships **inline-SVG only — no ECharts**, so it is offline-complete by
@@ -483,15 +529,21 @@ SQL> @side/create_weekly_baselines.sql
 │   ├── 11_top_sql_ash_breakdown.sql -- per-Top-N-SQL ASH cards
 │   ├── 12_param_changes.sql         -- parameters that differ across windows
 │   ├── 13_utilization.sql           -- database utilization profile (usage overview)
+│   ├── 14_segment_io.sql            -- top segments by I/O per window
+│   ├── 15_file_io.sql               -- per-file / file-type I/O deltas
+│   ├── 16_day_profile.sql           -- Day profile: hour-of-day vs N prior days (profile_days > 0)
 │   ├── fleet/                       -- fleet-report sections (spooled by awr_fleet_extract.sql)
-│   │   ├── 00_fleet_chrome.sql      -- shared page head/CSS/JS + sparkline renderer
-│   │   ├── 01_db_card.sql           -- per-DB identity strip
-│   │   ├── 02_headline.sql          -- hero-six headline sparkline cards
-│   │   ├── 03_findings.sql          -- z-score findings table (|z|>2 rows only)
-│   │   ├── 04_topsql.sql            -- gated top-SQL regressions
-│   │   ├── 05_close.sql             -- drill-down command + OK sentinel
+│   │   ├── 00_fleet_chrome.sql      -- shared page head/CSS/JS + inline-SVG renderers
+│   │   ├── 01_row.sql               -- summary row + detail scaffold + ASH bands
+│   │   ├── 02_ash.sql               -- ASH payloads (by wait class / by event)
+│   │   ├── 03_headline.sql          -- headline metric mini-cards
+│   │   ├── 04_findings.sql          -- z-score findings table (|z|>2 rows only)
+│   │   ├── 05_topsql.sql            -- gated top-SQL regressions
+│   │   ├── 06_day_profile.sql       -- Day profile heatmap band (FLEET_PROFILE_DAYS > 0)
+│   │   ├── 07_close.sql             -- drill-down command + OK sentinel
 │   │   └── defaults.sql             -- fleet-only default DEFINEs
 │   └── lib/                         -- shared @@-included fragments (CTEs, JS, helpers)
+│       ├── day_profile_cte.sql      -- hour-of-day x N-day matrix (shared by 16 + fleet 06)
 │       ├── js_markers.plsql         -- inits window.AWR_MARKERS + AWR_markLine()
 │       ├── marker.sql               -- emit one timeline marker (used by marker_file)
 │       ├── markers_inline.sql       -- file-free markers parser (used by the MARKERS var)

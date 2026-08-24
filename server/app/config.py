@@ -61,7 +61,7 @@ def v_hhmm(value):
 
 # Env vars the [env] section may whitelist through to the subprocess --
 # anything else in that section is a config error. Mirrors run_awr_fleet.sh's
-# documented FLEET_*/MARKERS*/MARKER_FILE knobs (usage() at :172-189).
+# documented FLEET_*/MARKERS*/MARKER_FILE knobs (see its usage() env table).
 ENV_WHITELIST_KEYS = frozenset(
     [
         "FLEET_PAR",
@@ -74,6 +74,7 @@ ENV_WHITELIST_KEYS = frozenset(
         "FLEET_DETAIL_TIMEOUT",
         "FLEET_DETAIL_TEMPLATE",
         "FLEET_DETAIL_ECHARTS",
+        "FLEET_PROFILE_DAYS",
     ]
 )
 

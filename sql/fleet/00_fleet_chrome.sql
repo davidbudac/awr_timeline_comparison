@@ -209,6 +209,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.detail-block { background:var(--panel); border:1px solid var(--hairline);'
         || ' border-radius:6px; padding:12px 13px; }');
     DBMS_OUTPUT.PUT_LINE('.timeline-box svg { display:block; width:100%; height:auto; }');
+    -- day-profile heatmap band (inline SVG from renderProfile); the legend
+    -- chips reuse .tl-caption
+    DBMS_OUTPUT.PUT_LINE('.day-profile { width:100%; }');
+    DBMS_OUTPUT.PUT_LINE('.dp-sw { display:inline-block; width:10px; height:10px; border-radius:2px; border:1px solid var(--hairline); }');
     DBMS_OUTPUT.PUT_LINE('.tl-caption { font-size:11px; color:var(--muted); margin-top:6px; display:flex; gap:14px; flex-wrap:wrap; }');
     DBMS_OUTPUT.PUT_LINE('.tl-caption span { display:flex; align-items:center; gap:5px; }');
     -- by-event timeline color legend (mirrors .wc-legend chips; sits under the

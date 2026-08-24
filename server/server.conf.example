@@ -62,6 +62,7 @@ max_run_minutes = 60
 # FLEET_DETAIL_TIMEOUT   = 3600
 # FLEET_DETAIL_TEMPLATE  = comprehensive
 # FLEET_DETAIL_ECHARTS   =
+# FLEET_PROFILE_DAYS     = 0     # N > 0 adds the per-DB "Day profile" band
 
 [schedule]
 # enabled=false ships the server as on-demand-only; flip to true and pick a

@@ -5,7 +5,7 @@
 # Usage:
 #   ./run_awr_trend.sh <connect_string> [target_end] [win_hours] [weeks_back] \
 #                      [top_n] [inst_num] [step] [step_unit] [template] [debug] \
-#                      [marker_file]
+#                      [marker_file] [profile_days]
 #   ./run_awr_trend.sh --configure        # interactive configurator (see below)
 #   ./run_awr_trend.sh --help
 #
@@ -27,6 +27,12 @@
 # marker_file is an optional path to a timeline-marker config file
 # (datetime + label milestones drawn as vertical lines on the dated
 # charts).  Default: empty (no markers).  See markers.example.sql.
+#
+# profile_days enables the optional "Day profile" section: every hour of
+# the 24 h ending at target_end is scored against the same hour-of-day on
+# the N prior days (1-day cadence, independent of step/step_unit), shown
+# as an hour-of-day x metric heatmap.  0 (default) = section off; the
+# report is then byte-identical to a run without the feature.
 #
 # --configure / -c / --interactive / -i  drops into an interactive
 # "configurator": it walks you through every option (with explanations,
@@ -50,6 +56,8 @@
 #   ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y
 #   # With user-defined milestone markers on the timeline charts:
 #   ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive N my_markers.sql
+#   # Add the Day profile: each hour of the last 24 h vs the 7 prior days:
+#   ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y '' 7
 #   # Same, but file-free (markers inline in the MARKERS env var):
 #   MARKERS='2026-06-10 09:00|Release 2.0;;2026-06-11 03:00|Patch 19.22' \
 #       ./run_awr_trend.sh user/pw@svc AUTO
@@ -71,6 +79,7 @@ DEF_STEP_UNIT='w'
 DEF_TEMPLATE='comprehensive'
 DEF_DEBUG='Y'
 DEF_MARKER_FILE=''
+DEF_PROFILE_DAYS='0'
 
 # File-free inline timeline markers travel in the MARKERS environment
 # variable (not a positional arg, so the positional order stays symmetric
@@ -115,7 +124,7 @@ ${BOLD}AWR timeline comparison${RST} — wrapper around awr_trend.sql
 Usage:
   ./run_awr_trend.sh <connect> [target_end] [win_hours] [weeks_back] \\
                      [top_n] [inst_num] [step] [step_unit] [template] \\
-                     [debug] [marker_file]
+                     [debug] [marker_file] [profile_days]
   ./run_awr_trend.sh --configure        interactive configurator
   ./run_awr_trend.sh --help             this help
 
@@ -133,6 +142,8 @@ Positional arguments (all but <connect> are optional, left to right):
   template      metric/wait set: $(list_templates | sed 's/ /, /g')   [${DEF_TEMPLATE}]
   debug         Y prints per-section progress markers to stdout  [${DEF_DEBUG}]
   marker_file   optional timeline-marker config file path        [none]
+  profile_days  Day profile: prior days to score each hour of the [${DEF_PROFILE_DAYS}]
+                last 24 h against (0 = section off)
 
 Environment variables:
   MARKERS       file-free timeline markers, "WHEN|LABEL" pairs joined by ";;",
@@ -162,6 +173,7 @@ list_templates() {
 # ---------------------------------------------------------------------------
 # run_report <connect> <target_end> <win_hours> <weeks_back> <top_n>
 #            <inst_num> <step> <step_unit> <template> <debug> <marker_file>
+#            <profile_days>
 #
 # Sets every awr_trend.sql substitution variable and runs the driver.
 # This is the single place the report is actually generated; both the
@@ -202,7 +214,7 @@ inline_echarts() {
 run_report() {
     local CONN="$1" TARGET_END="$2" WIN_HOURS="$3" WEEKS_BACK="$4" TOP_N="$5" \
           INST_NUM="$6" STEP="$7" STEP_UNIT="$8" TEMPLATE="$9" DEBUG="${10}" \
-          MARKER_FILE="${11}"
+          MARKER_FILE="${11}" PROFILE_DAYS="${12:-$DEF_PROFILE_DAYS}"
 
     cd "$SCRIPT_DIR"
     mkdir -p reports
@@ -242,6 +254,7 @@ DEFINE step_unit  = '${STEP_UNIT}'
 DEFINE template   = '${TEMPLATE}'
 DEFINE debug      = '${DEBUG}'
 DEFINE marker_file = '${MARKER_FILE}'
+DEFINE profile_days = ${PROFILE_DAYS}
 DEFINE markers = '${MARKERS}'
 DEFINE echarts = '${ECHARTS}'
 @@awr_trend.sql
@@ -432,9 +445,10 @@ prompt_marker() {
 # present).
 build_shell_cmd() {
     local -a vals=("$CONN" "$TARGET_END" "$WIN_HOURS" "$WEEKS_BACK" "$TOP_N" \
-                   "$INST_NUM" "$STEP" "$STEP_UNIT" "$TEMPLATE" "$DEBUG" "$MARKER_FILE")
+                   "$INST_NUM" "$STEP" "$STEP_UNIT" "$TEMPLATE" "$DEBUG" "$MARKER_FILE" "$PROFILE_DAYS")
     local -a defs=("" "$DEF_TARGET_END" "$DEF_WIN_HOURS" "$DEF_WEEKS_BACK" "$DEF_TOP_N" \
-                   "$DEF_INST_NUM" "$DEF_STEP" "$DEF_STEP_UNIT" "$DEF_TEMPLATE" "$DEF_DEBUG" "$DEF_MARKER_FILE")
+                   "$DEF_INST_NUM" "$DEF_STEP" "$DEF_STEP_UNIT" "$DEF_TEMPLATE" "$DEF_DEBUG" "$DEF_MARKER_FILE" \
+                   "$DEF_PROFILE_DAYS")
     local last=0 i
     for (( i = 1; i < ${#vals[@]}; i++ )); do
         [[ "${vals[$i]}" != "${defs[$i]}" ]] && last=$i
@@ -470,6 +484,7 @@ DEFINE step_unit  = '${STEP_UNIT}'
 DEFINE template   = '${TEMPLATE}'
 DEFINE debug      = '${DEBUG}'
 DEFINE marker_file = '${MARKER_FILE}'
+DEFINE profile_days = ${PROFILE_DAYS}
 DEFINE markers = '${MARKERS}'
 DEFINE echarts = '${ECHARTS}'
 @@awr_trend.sql
@@ -517,6 +532,7 @@ print_summary() {
     printf '  %-14s %s  %s%s%s\n' 'template'    "$TEMPLATE" "$DIM" "$(template_desc "$TEMPLATE")" "$RST"
     printf '  %-14s %s\n' 'debug'       "$DEBUG"
     printf '  %-14s %s\n' 'marker_file' "${MARKER_FILE:-(none)}"
+    printf '  %-14s %s\n' 'profile_days' "$([[ "$PROFILE_DAYS" == 0 ]] && echo '0  (day profile off)' || echo "$PROFILE_DAYS  (each hour of the last 24 h vs $PROFILE_DAYS prior days)")"
     [[ -n "$MARKERS" ]] && printf '  %-14s %s\n' 'markers' "$MARKERS"
     [[ -n "$ECHARTS" ]] && printf '  %-14s %s\n' 'echarts' "$ECHARTS"
     echo "${BOLD}=================================================================${RST}"
@@ -543,6 +559,7 @@ configure() {
     TARGET_END="$DEF_TARGET_END"; WIN_HOURS="$DEF_WIN_HOURS"; WEEKS_BACK="$DEF_WEEKS_BACK"
     TOP_N="$DEF_TOP_N"; INST_NUM="$DEF_INST_NUM"; STEP="$DEF_STEP"; STEP_UNIT="$DEF_STEP_UNIT"
     TEMPLATE="$DEF_TEMPLATE"; DEBUG="$DEF_DEBUG"; MARKER_FILE="$DEF_MARKER_FILE"
+    PROFILE_DAYS="$DEF_PROFILE_DAYS"
 
     echo "${BOLD}AWR timeline comparison — interactive configurator${RST}"
     echo "${DIM}Press Enter to accept the [default] shown for each question.  Ctrl-C to abort.${RST}"
@@ -581,6 +598,7 @@ configure() {
         echo "${BOLD}-- Extras --${RST}"
         prompt_yesno DEBUG "Print per-section progress markers to stdout?" "$DEBUG"
         prompt_marker
+        prompt_value PROFILE_DAYS "Day profile: score each hour of the last 24 h against how many prior days? (0 = off)" "$PROFILE_DAYS" v_nonneg
 
         print_summary
 
@@ -592,7 +610,8 @@ configure() {
                 echo "Running the report${DEBUG:+ }$([[ "$DEBUG" == Y ]] && echo '(progress markers below)')..."
                 local rc=0
                 if run_report "$CONN" "$TARGET_END" "$WIN_HOURS" "$WEEKS_BACK" "$TOP_N" \
-                               "$INST_NUM" "$STEP" "$STEP_UNIT" "$TEMPLATE" "$DEBUG" "$MARKER_FILE"; then
+                               "$INST_NUM" "$STEP" "$STEP_UNIT" "$TEMPLATE" "$DEBUG" "$MARKER_FILE" \
+                               "$PROFILE_DAYS"; then
                     rc=0
                 else
                     rc=$?
@@ -661,6 +680,7 @@ STEP_UNIT="${8:-$DEF_STEP_UNIT}"
 TEMPLATE="${9:-$DEF_TEMPLATE}"
 DEBUG="${10:-$DEF_DEBUG}"
 MARKER_FILE="${11:-$DEF_MARKER_FILE}"
+PROFILE_DAYS="${12:-$DEF_PROFILE_DAYS}"
 
 # ---- validate the positional args before building the heredoc --------------
 # Numerics are interpolated UNQUOTED into the DEFINE block and the string values
@@ -689,6 +709,8 @@ v_posint    "$TOP_N"       2>/dev/null || _pos_die top_n       "$TOP_N"      "a 
 v_nonneg    "$INST_NUM"    2>/dev/null || _pos_die inst_num    "$INST_NUM"   "0 (aggregate) or a positive instance number"
 v_posdec    "$STEP"        2>/dev/null || _pos_die step        "$STEP"       "a positive number"
 v_step_unit "$STEP_UNIT"   2>/dev/null || _pos_die step_unit   "$STEP_UNIT"  "one of h, d, w"
+v_nonneg    "$PROFILE_DAYS" 2>/dev/null || _pos_die profile_days "$PROFILE_DAYS" "0 (off) or a positive number of prior days"
 
 run_report "$CONN" "$TARGET_END" "$WIN_HOURS" "$WEEKS_BACK" "$TOP_N" \
-           "$INST_NUM" "$STEP" "$STEP_UNIT" "$TEMPLATE" "$DEBUG" "$MARKER_FILE"
+           "$INST_NUM" "$STEP" "$STEP_UNIT" "$TEMPLATE" "$DEBUG" "$MARKER_FILE" \
+           "$PROFILE_DAYS"

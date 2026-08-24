@@ -1,9 +1,9 @@
 --
--- sql/fleet/06_close.sql
+-- sql/fleet/07_close.sql
 -- Closes this database's detail row: the masked single-DB drill-down command
 -- (the deep dive into this same database/window), then closes the
 -- detail-grid / detail wrappers and the <td>/<tr> opened across
--- 01_row.sql .. 05_topsql.sql, then the sentinel comment.
+-- 01_row.sql .. 06_day_profile.sql, then the sentinel comment.
 --
 -- The sentinel MUST be the very last line spooled to frag_path -- the
 -- wrapper's assembler treats its absence (crashed section, ORA- mid-run, OOM,
@@ -26,7 +26,7 @@
 SET DEFINE '~'
 SET SERVEROUTPUT ON SIZE UNLIMITED FORMAT WRAPPED
 
-BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: fleet_06 BEGIN -->'); END;
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: fleet_07 BEGIN -->'); END;
 /
 
 BEGIN
@@ -34,7 +34,10 @@ BEGIN
     -- run_awr_trend.sh's v_target_end validator accepts only minute
     -- precision, so trim to the first 16 chars.  The positional tail
     -- (inst_num=0 + step + step_unit) reproduces the exact same comparison
-    -- windows.
+    -- windows.  When the fleet ran with a Day profile (profile_days > 0) the
+    -- tail grows to the 12-slot form (template / debug / marker_file /
+    -- profile_days) so the drill reproduces that section too; at 0 the
+    -- command is byte-identical to before the feature.
     DBMS_OUTPUT.PUT_LINE('<div class="drill">'
         || '<span class="cmt"># drill into this database</span><br>'
         || './run_awr_trend.sh '''
@@ -42,6 +45,8 @@ BEGIN
         || DBMS_XMLGEN.CONVERT(SUBSTR('~target_end_resolved', 1, 16)) || ''' '
         || '~win_hours' || ' ' || '~weeks_back' || ' ' || '~top_n'
         || ' 0 ' || '~step' || ' ' || DBMS_XMLGEN.CONVERT('~step_unit')
+        || CASE WHEN ~profile_days > 0
+                THEN ' comprehensive Y '''' ' || '~profile_days' ELSE '' END
         || '</div>');
 
     -- Only when the requested target_end had no snapshot within the 15-min
@@ -69,7 +74,7 @@ BEGIN
 END;
 /
 
-BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: fleet_06 END -->'); END;
+BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: fleet_07 END -->'); END;
 /
 
 -- Sentinel: the very last spooled line of this fragment. Do not add anything
