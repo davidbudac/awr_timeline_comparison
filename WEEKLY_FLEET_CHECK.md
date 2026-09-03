@@ -1,0 +1,94 @@
+# Weekly fleet check — last 7 days vs the previous 8 weeks
+
+One combined HTML report across every DB in `fleet.conf`. Current window = the
+last 7 days; baseline = the same 7-day window in each of the 8 preceding weeks
+(9 windows total). Read-only: `SELECT` on `DBA_HIST_*` only, safe on standbys.
+
+## Prerequisites (once)
+
+- `fleet.conf` in the repo root, one `alias|connect[|detail]` per line (already done).
+- `sqlplus` on `PATH`; run from the repo root (the wrapper `cd`s there itself).
+- `timeout` or `gtimeout` on `PATH`, otherwise per-DB timeouts are not enforced (macOS: `brew install coreutils`).
+- **AWR retention ≥ 63 days on every DB** (default is 8). Check and fix:
+  ```sql
+  SELECT retention FROM dba_hist_wr_control;
+  EXEC DBMS_WORKLOAD_REPOSITORY.MODIFY_SNAPSHOT_SETTINGS(retention => 70*24*60);
+  ```
+  Without it, baseline windows are missing and findings degrade to
+  `insufficient history` (needs ≥ 3 valid prior windows for z-scores).
+
+## Run (Monday morning)
+
+Anchor the window end at Monday 00:00 of the current week so the current window
+is exactly last Mon 00:00 → Sun 24:00, and every baseline window is the same
+Mon–Sun in the prior 8 weeks:
+
+```bash
+./run_awr_fleet.sh fleet.conf '2026-08-31 00:00' 168 8
+```
+
+Positional args, left to right: `fleet.conf`, `target_end`, `win_hours`,
+`weeks_back`, `[top_n=10]`, `[step=1]`, `[step_unit=w]`. `168 8` = 7-day window,
+8 prior weeks, weekly cadence (the last three defaults are what you want).
+
+Rolling alternative (7 days ending at the last full hour, no fixed anchor):
+
+```bash
+./run_awr_fleet.sh fleet.conf AUTO 168 8
+```
+
+Cron (Monday 06:00; `date +%F` on a Monday is that Monday):
+
+```
+0 6 * * 1  cd /path/to/awr_timeline_comparison && FLEET_QUIET=1 ./run_awr_fleet.sh fleet.conf "$(date +\%F) 00:00" 168 8 >> logs/fleet.log 2>&1
+```
+
+## Useful env knobs (prefix to the command)
+
+| Var | Default | Use |
+|---|---|---|
+| `FLEET_PAR` | 4 | concurrent sqlplus runs; raise for big fleets |
+| `FLEET_TIMEOUT` | 900 | per-DB seconds for the fleet extract. 7-day windows scan more history, use `1800` on busy DBs |
+| `FLEET_DETAIL` | (per conf line) | `all` = full single-DB report for every DB, `none` = skip all |
+| `FLEET_DETAIL_TIMEOUT` | 3600 | per-DB seconds for the detailed report, `0` = unlimited |
+| `MARKERS` | | `'2026-08-28 14:00\|Patch 19.28;;2026-08-30 02:00\|Storage move'` — vertical lines on every ASH timeline |
+| `MARKER_FILE` | | file of `WHEN\|LABEL` lines, wins over `MARKERS` |
+| `FLEET_KEEP_WORK` | 0 | `1` keeps `reports/fleet_work_<id>/` (per-DB logs) even on success |
+| `FLEET_QUIET` | 0 | `1` silences progress narration (cron) |
+
+## Output
+
+- `reports/awr_fleet_<ts>_run<id>/index.html` — the console. `detail_<alias>.html`
+  beside it for every `|detail` DB. Folder is self-contained and offline (no CDN);
+  archive or copy it anywhere, links stay valid.
+- stdout ends with a per-DB summary line and `Report: <path>`.
+- Exit `0` = at least one DB OK, `3` = every DB failed, `2` = bad args/conf (nothing ran).
+
+## Reading it (5 minutes)
+
+1. **Masthead**: N databases / crit / warn / quiet / unreachable. Check the
+   **Compared windows** strip: dashed chips = skipped windows (hover for the
+   reason: no snapshot, restart inside window, DBID change). Many skipped →
+   retention or a restart; with a 7-day window *any* restart in that week
+   invalidates it for that DB.
+2. **Rows** are error rows first, then by score = `10*crit + 3*warn + min(25, Top-SQL points)`.
+   Row shows worst finding, AAS, DB-time sparkline across the 9 windows, ASH ribbon.
+3. **Click a row**: ASH timeline by wait class and by event over the full 9-week
+   span, metric mini-cards (current vs baseline, z-score), findings, Top SQL
+   that moved, and a ready-made drill command for the full single-DB report.
+4. **Error rows** carry the masked connect string, the ORA-/TNS- code, and the
+   last 15 log lines. Fix creds/TNS and rerun; the good rows do not need rerunning.
+5. Numbers are 7-day averages: daily peaks are smoothed, Top SQL ranks by 7-day
+   cumulative cost. Drill into the detailed report (or run a 1-hour window with
+   `step_unit d`) when a finding needs a time-of-day view.
+
+## When it goes wrong
+
+- All rows failed (exit 3): workdir kept at `reports/fleet_work_<id>/`, read
+  `<alias>.log`. Typical: ORA-12514 (service), ORA-01017 (creds), ORA-00942
+  (missing `SELECT_CATALOG_ROLE` / Diagnostic Pack), rc=124 (timeout, raise `FLEET_TIMEOUT`).
+- Reassemble without touching any DB: `./run_awr_fleet.sh --assemble reports/fleet_work_<id>`.
+- Metric cards all `n/a` / `skip`: no valid windows. Verify snapshots exist at
+  the window edges (`dba_hist_snapshot`); the wrapper snaps `target_end` back to
+  the last snapshot when none is within 15 min, and the drill panel says so.
+- `--help` prints the full argument and env reference.
