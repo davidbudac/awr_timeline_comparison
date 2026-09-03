@@ -71,6 +71,7 @@ Easiest non-interactive — the shell wrapper (sets all substitution vars for yo
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y '' 7  # + Day profile: each hour of the last 24 h vs the 7 prior days
 MARKERS='2026-06-10 09:00|Release 2.0' ./run_awr_trend.sh user/pw@svc  # file-free inline markers
 ECHARTS=vendor/echarts.min.js ./run_awr_trend.sh user/pw@svc           # self-contained / offline HTML
+ARCHIVE=zip ./run_awr_trend.sh user/pw@svc                             # also zip the finished report
 ```
 
 Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template [debug [marker_file [profile_days]]]]]]]]]]]`
@@ -95,6 +96,7 @@ self-contained report" below).
 | `profile_days`| `0`             | Optional **Day profile** section: `N > 0` scores **each hour of the 24 h ending at `target_end`** against the same hour-of-day on the N prior days (1-day cadence, independent of `step`/`step_unit`) — an hour-of-day × metric heatmap, a per-metric line vs its prior-day band, and a 24-row table — so you can see *which hour of the day* changed. `0` = off (report byte-identical). z-scores need `N ≥ 3`. See "Day profile" below |
 | `MARKERS` *(env var)* | *(empty)* | File-free alternative to `marker_file`: inline `WHEN\|LABEL` milestones joined by `;;`. `marker_file` wins when both are set. See "Timeline markers" below |
 | `ECHARTS` *(env var)* | *(empty)* | Where the ECharts chart library loads from. Empty = public CDN (`cdn.jsdelivr.net`). An `http(s)` URL = used as-is (internal mirror). A local file path = inlined into the report for a single self-contained, offline-capable HTML file. See "Offline / self-contained report" below |
+| `ARCHIVE` *(env var)* | *(empty)* | Also zip/tar the finished report. Empty/`0`/`N`/`no`/`off` = disabled. `1`/`Y`/`yes`/`on`/`auto` = auto-pick zip, else tar+gzip, else plain tar. `zip`/`tgz`/`tar` force that format. See "Archive the output (zip)" below |
 
 `step` × `step_unit` defines the gap between adjacent comparison
 windows. `step=1, step_unit=w` (the default) reproduces the original
@@ -270,6 +272,51 @@ Notes:
 - This adds roughly the size of `echarts.min.js` (~1 MB) to each generated
   report.
 
+### Archive the output (zip)
+
+Both wrappers can package the finished output into a single archive
+alongside it, via `ARCHIVE` (single-DB) / `FLEET_ARCHIVE` (fleet) — off by
+default, so behaviour is unchanged unless you opt in:
+
+```bash
+ARCHIVE=zip ./run_awr_trend.sh user/pw@svc                 # reports/awr_trend_..._run<id>.zip
+FLEET_ARCHIVE=auto ./run_awr_fleet.sh fleet.conf            # reports/awr_fleet_<ts>_run<id>.zip
+```
+
+| Value | Meaning |
+|-------|---------|
+| *(empty)*, `0`, `N`, `no`, `off` | Disabled (default) |
+| `1`, `Y`, `yes`, `on`, `auto` | Auto-pick: `zip` if it's on `PATH`, else `tar`+`gzip` (`.tar.gz`), else plain `tar` (`.tar`) — a one-line note on stderr explains any fallback |
+| `zip` | Force zip; errors out if `zip` isn't on `PATH` |
+| `tgz` | Force `tar` piped through `gzip` (`.tar.gz`); errors out if `gzip` isn't on `PATH` |
+| `tar` | Force a plain, uncompressed `tar` |
+
+What goes in the archive differs by wrapper, since the two reports are
+shaped differently:
+- **Single-DB (`ARCHIVE`)** — the archive holds just the one finished
+  `.html` report (after any `ECHARTS` inlining), as the archive's only,
+  bare-filename entry: `reports/<report-basename>.<zip|tar.gz|tar>`.
+- **Fleet (`FLEET_ARCHIVE`)** — the archive holds the **entire per-run
+  output folder** (`reports/awr_fleet_<ts>_run<id>/`, i.e. `index.html`
+  plus every `detail_<alias>.html`), with that folder itself as the
+  archive's single top-level entry, so unzipping reproduces the folder
+  intact: `reports/awr_fleet_<ts>_run<id>.<zip|tar.gz|tar>`. It's applied
+  both after a live run and after `./run_awr_fleet.sh --assemble
+  <workdir>`. The `fleet_work_<id>/` extract workdir is never included.
+
+A pre-existing archive of the same name is overwritten. Archiving is applied
+last — after the report is already written successfully — so a failure to
+archive never destroys the report itself; it prints a `warning:` on stderr
+and the wrapper exits `4` instead of `0` (documented in each script's
+`--help`/usage text) so automation can tell the difference.
+
+**AIX note:** AIX's bundled `tar` has no compression flag at all (no `-z`),
+so this toolkit never shells out to it — `tgz` always pipes plain `tar`
+through a separate `gzip` process instead. `zip` on AIX comes from the AIX
+Toolbox for Linux Applications; when it isn't installed, `ARCHIVE=auto` /
+`FLEET_ARCHIVE=auto` quietly falls back to `tgz`, then to plain `tar` if
+even `gzip` is missing.
+
 ## Read the report
 
 The header card at the top lists **which windows were compared** —
@@ -385,6 +432,7 @@ command to drill into that database.
 ./run_awr_fleet.sh fleet.conf '2026-04-15 09:00' 1 4 10 1 h   # explicit window, hourly
 FLEET_PAR=8 FLEET_TIMEOUT=300 ./run_awr_fleet.sh fleet.conf   # 8 at a time, 5-min cap/DB
 MARKERS='2026-04-15 09:30|deploy' ./run_awr_fleet.sh fleet.conf   # mark an event on every ASH chart
+FLEET_ARCHIVE=auto ./run_awr_fleet.sh fleet.conf       # also zip/tar the whole run folder
 ./run_awr_fleet.sh --assemble reports/fleet_work_<id>  # re-stitch a kept workdir, no DB
 ```
 
@@ -440,6 +488,7 @@ usage / bad-config error before anything ran.
 | `MARKERS`         | (none)  | Inline fleet-wide timeline markers, one string of `WHEN\|LABEL` entries joined by `;;` (WHEN = `YYYY-MM-DD HH:MM`), drawn on every DB's 24h ASH chart within its span and in the masthead legend; malformed entries are warned and skipped |
 | `MARKER_FILE`     | (none)  | A file of `WHEN\|LABEL` lines, same format; **wins over `MARKERS`** when both are set |
 | `FLEET_PROFILE_DAYS` | `0`  | `N > 0` adds a **Day profile** band to every DB's detail row — each hour of the 24 h ending at `target_end` vs the same hour on the N prior days, as an inline-SVG heatmap (hour × metric, signed z) — and passes `profile_days=N` into the per-DB detailed reports. Informational only: never changes a row's score or sort order |
+| `FLEET_ARCHIVE`   | (empty) | Also zip/tar the **entire per-run output folder** (`index.html` + every `detail_<alias>.html`) as a sibling archive, applied after both a live run and `--assemble`. Same value semantics as the single-DB `ARCHIVE` var. See "Archive the output (zip)" above |
 
 **By design (not limitations).** The fleet report is deliberately lean: it
 ships **inline-SVG only — no ECharts**, so it is offline-complete by

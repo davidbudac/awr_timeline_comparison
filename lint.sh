@@ -154,14 +154,17 @@ done < <(sql_files | xargs grep -n -A4 'LISTAGG *(' /dev/null 2>/dev/null \
 #     find -maxdepth/-print0 broke the detail-report harvest ("found 0"
 #     with the report sitting right there).  dbmint has GNU coreutils and
 #     will NEVER surface this class.  Flag: grep -o, sed -E/-r,
-#     find -maxdepth/-mindepth/-print0, and date -d outside the guarded
-#     probe idiom (a line that self-tests `date -d "2000-01-01 ..."` first
-#     is allowed).  Comment lines are skipped.
+#     find -maxdepth/-mindepth/-print0, date -d outside the guarded probe
+#     idiom (a line that self-tests `date -d "2000-01-01 ..."` first is
+#     allowed), and tar -z/-j/-J (AIX 7.2 tar has no compression flag at
+#     all -- use tar piped through gzip instead, see the ARCHIVE/
+#     FLEET_ARCHIVE archive_report / archive_fleet_run helpers for the
+#     pattern).  Comment lines are skipped.
 # ----------------------------------------------------------------------
 while IFS= read -r hit; do
     finding gnu-only-flag "${hit%%:*}:$(cut -d: -f2 <<<"$hit")" \
-        "GNU-only flag in a bash wrapper (breaks on AIX/Solaris find/grep/sed/date; use POSIX flags, bash =~, or a plain glob)"
-done < <(grep -nE 'grep +(-[A-Za-z]+ +)*-[A-Za-z]*o|sed +(-[a-z]+ +)*-[Er]\b|find +[^|;]*-(maxdepth|mindepth|print0)|date +-d\b' \
+        "GNU-only flag or unsupported tar compression flag in a bash wrapper (breaks on AIX/Solaris find/grep/sed/date, or AIX tar, which has no -z/-j/-J at all; use POSIX flags, bash =~, a plain glob, or tar piped through gzip)"
+done < <(grep -nE 'grep +(-[A-Za-z]+ +)*-[A-Za-z]*o|sed +(-[a-z]+ +)*-[Er]\b|find +[^|;]*-(maxdepth|mindepth|print0)|date +-d\b|\btar\b[[:space:]]+-?[A-Za-z]*[zjJ][A-Za-z]*\b' \
              run_awr_fleet.sh run_awr_trend.sh 2>/dev/null \
          | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
          | grep -vF '2000-01-01')

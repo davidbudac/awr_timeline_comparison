@@ -309,6 +309,38 @@ fleet band and the drill command's 12-slot tail are likewise guarded. The
 fleet band is **informational**: no `FLEET-COUNTS`, no score/sort impact.
 Table rows carry `class="crit|warn"` (rail dot grading) but no `data-imp`.
 
+### Output archiving (`ARCHIVE` / `FLEET_ARCHIVE`)
+Both wrappers can zip/tar their finished output, wrapper-owned only (the SQL
+never sees these vars). Value semantics, identical on both: **empty/`0`/`N`/
+`no`/`off`** → disabled (default, byte-identical to before this feature);
+**`1`/`Y`/`yes`/`on`/`auto`** → auto-pick the best available tool (`zip` if
+on `PATH`, else `tar` piped through `gzip` → `.tar.gz`, else plain `tar`),
+noting any fallback on stderr; **`zip`**/**`tgz`**/**`tar`** → force that
+format, erroring (before anything runs) if the required tool (`zip`, or
+`gzip` for `tgz`) isn't on `PATH`. Applied LAST, after the report/run folder
+already exists and (single-DB) after any `ECHARTS` inlining — so an archive
+failure never undoes a successful run; it warns on stderr and the wrapper's
+exit code becomes **4** instead of 0 (documented in both `--help`/usage
+texts). A pre-existing archive of the same name is `rm -f`'d first (so zip
+doesn't "update" into a stale one); the archiving tool always runs from
+inside `reports/` in a subshell so the archive entry is a bare filename, per
+`ARCHIVE`/`FLEET_ARCHIVE`'s different scopes:
+- `run_awr_trend.sh` (`ARCHIVE`, via `archive_report`) archives the single
+  finished `.html` as `reports/<report-basename>.<ext>`.
+- `run_awr_fleet.sh` (`FLEET_ARCHIVE`, via `archive_fleet_run`) archives the
+  **entire per-run output folder** (`reports/awr_fleet_<ts>_run<id>/`,
+  i.e. `index.html` + every `detail_<alias>.html`) with that folder as the
+  archive's one top-level entry — `reports/awr_fleet_<ts>_run<id>.<ext>` —
+  applied after BOTH a live run and `--assemble` (the `fleet_work_<id>/`
+  extract workdir is never included). Per the cardinal no-single-DB-edits
+  rule, this is a fleet-owned copy of the resolve/archive helpers, not a
+  shared function.
+`tar -z`/`-j`/`-J` (or any GNU-only tar compression flag) is **banned** —
+AIX 7.2's bundled `tar` has no compression flag at all, so `tgz` always
+shells out to a separate `gzip` process instead. `lint.sh` check 10 greps
+both wrappers for `tar`+`z`/`j`/`J` alongside its existing GNU-only-flag
+checks.
+
 ### Timeline markers
 `marker_file` (on-disk config) or `markers` (file-free inline list, single var).
 Priority: `marker_file` > `markers` > `no_markers.sql` stub — the driver

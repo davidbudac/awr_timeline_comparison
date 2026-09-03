@@ -61,6 +61,8 @@
 #   # Same, but file-free (markers inline in the MARKERS env var):
 #   MARKERS='2026-06-10 09:00|Release 2.0;;2026-06-11 03:00|Patch 19.22' \
 #       ./run_awr_trend.sh user/pw@svc AUTO
+#   # Also zip the finished report alongside it:
+#   ARCHIVE=zip ./run_awr_trend.sh user/pw@svc AUTO
 #   # Don't remember the argument order?  Let the configurator drive:
 #   ./run_awr_trend.sh --configure
 #
@@ -102,6 +104,26 @@ DEF_PROFILE_DAYS='0'
 # e.g.  ECHARTS=vendor/echarts.min.js ./run_awr_trend.sh / AUTO
 # The value must not contain a double quote.  Default empty.
 : "${ECHARTS:=}"
+
+# Whether to also zip/tar the finished report travels in the ARCHIVE
+# environment variable (an env var, like MARKERS/ECHARTS, so the positional
+# order stays symmetric with awr_trend.sql).  Case-insensitive:
+#   empty / 0 / N / no / off   -> disabled (default; byte-identical behaviour)
+#   1 / Y / yes / on / auto    -> auto-pick: zip if on PATH, else tar+gzip,
+#                                 else plain tar (a one-line stderr note
+#                                 explains any fallback)
+#   zip                        -> require zip (error if not on PATH)
+#   tgz                        -> tar piped through gzip (.tar.gz; requires
+#                                 gzip on PATH)
+#   tar                        -> plain, uncompressed tar
+# The archive is written as reports/<report-basename>.<zip|tar.gz|tar>,
+# built from the FINAL report (after any ECharts inlining), with the report
+# as the archive's only, bare-filename entry (no reports/ prefix).  A bad
+# value, or an explicitly-requested tool missing from PATH, is caught before
+# sqlplus ever runs (exit 2).  An archiving failure after a successful run
+# does not undo the report -- it's a warning on stderr and the script exits 4.
+# e.g.  ARCHIVE=zip ./run_awr_trend.sh / AUTO
+: "${ARCHIVE:=}"
 
 # ---- optional terminal styling (degrades to plain text) --------------------
 # NB: a missing capability must never be fatal.  Some terminfo entries (notably
@@ -153,6 +175,15 @@ Environment variables:
                 An http(s) URL is used as-is (internal mirror).  A local file
                 path is inlined into the report -> a single self-contained,
                 offline HTML file.  e.g. ECHARTS=vendor/echarts.min.js
+  ARCHIVE       also zip/tar the finished report.  Empty/0/N/no/off (default)
+                = disabled.  1/Y/yes/on/auto = auto-pick zip, else tar+gzip,
+                else plain tar.  zip / tgz / tar force that format (zip/tgz
+                error out if the required tool isn't on PATH).  Written as
+                reports/<report-basename>.<zip|tar.gz|tar>, entry = the bare
+                report filename.  e.g. ARCHIVE=zip
+                A bad ARCHIVE value or a missing required tool exits 2 before
+                sqlplus runs; an archive failure AFTER a successful report
+                exits 4 (the report itself still succeeded).
 
 Tip: not sure which arguments you need?  Run  ./run_awr_trend.sh --configure
 USAGE
@@ -211,6 +242,100 @@ inline_echarts() {
     echo "Inlined ECharts ($lib) into $(basename "$html") — report is self-contained."
 }
 
+# newest_report — path to the most recently generated reports/*.html file, or
+# empty when none exist.  Single-sourced so the ECharts-inlining step and the
+# archiving step (both in run_report) operate on the exact same just-
+# generated file, computed once.
+newest_report() {
+    ls -t "$SCRIPT_DIR"/reports/*.html 2>/dev/null | head -1 || true
+}
+
+# resolve_archive_fmt <value> — validates ARCHIVE and prints the resolved
+# format tag on stdout: '' (disabled), 'zip', 'tgz', or 'tar'.  An explicit
+# zip/tgz choice errors (on stderr, return 1) when its tool isn't on PATH;
+# auto/1/Y/yes/on picks the best available tool, noting any fallback off zip
+# on stderr.  An unrecognized value errors the same way.  Callers must check
+# the return status -- run_report reacts to a non-zero return with `return 2`
+# so a bad ARCHIVE is caught before sqlplus ever runs (mirrors the ECHARTS
+# quote-check / marker_file existence check immediately above it).
+resolve_archive_fmt() {
+    local raw="$1" v="${1,,}"
+    case "$v" in
+        ''|0|n|no|off)
+            printf ''
+            ;;
+        1|y|yes|on|auto)
+            if command -v zip >/dev/null 2>&1; then
+                printf 'zip'
+            elif command -v gzip >/dev/null 2>&1; then
+                echo "note: ARCHIVE='$raw' — 'zip' not found on PATH; falling back to tar+gzip (.tar.gz)." >&2
+                printf 'tgz'
+            else
+                echo "note: ARCHIVE='$raw' — neither 'zip' nor 'gzip' found on PATH; falling back to plain tar (.tar)." >&2
+                printf 'tar'
+            fi
+            ;;
+        zip)
+            command -v zip >/dev/null 2>&1 || {
+                echo "error: ARCHIVE=zip requires 'zip' on PATH, which was not found." >&2
+                return 1
+            }
+            printf 'zip'
+            ;;
+        tgz)
+            command -v gzip >/dev/null 2>&1 || {
+                echo "error: ARCHIVE=tgz requires 'gzip' on PATH, which was not found." >&2
+                return 1
+            }
+            printf 'tgz'
+            ;;
+        tar)
+            printf 'tar'
+            ;;
+        *)
+            echo "error: ARCHIVE='$raw' must be one of: (empty)/0/N/no/off, 1/Y/yes/on/auto, zip, tgz, tar." >&2
+            return 1
+            ;;
+    esac
+}
+
+# archive_report <html> <fmt> — zips/tars <html> as a sibling under reports/,
+# named after its own basename (no reports/ prefix inside the archive: the
+# tool runs from inside reports/ in a subshell so the entry is the bare
+# filename).  Any pre-existing archive of the same name is removed first (so
+# zip doesn't "update" into a stale one).  Prints "Archive: reports/<name>.
+# <ext>" on success, plus a one-line note when ECHARTS is empty (the archived
+# HTML still links the public CDN for charts).  Never fatal to the run: on
+# failure it warns on stderr and returns 1 for the caller to turn into exit 4.
+archive_report() {
+    local html="$1" fmt="$2" file base name ext ok=1
+    file="$(basename "$html")"
+    base="${file%.html}"
+    case "$fmt" in
+        zip) ext='zip' ;;
+        tgz) ext='tar.gz' ;;
+        tar) ext='tar' ;;
+        *) return 1 ;;
+    esac
+    name="$base"
+    rm -f "$SCRIPT_DIR/reports/$name.$ext"
+    case "$fmt" in
+        zip) ( cd "$SCRIPT_DIR/reports" && zip -q "$name.zip" "$file" ) || ok=0 ;;
+        tgz) ( cd "$SCRIPT_DIR/reports" && tar -cf - "$file" | gzip -c > "$name.tar.gz" ) || ok=0 ;;
+        tar) ( cd "$SCRIPT_DIR/reports" && tar -cf "$name.tar" "$file" ) || ok=0 ;;
+    esac
+    if [[ "$ok" -eq 1 && -s "$SCRIPT_DIR/reports/$name.$ext" ]]; then
+        echo "Archive: reports/$name.$ext"
+        if [[ -z "$ECHARTS" ]]; then
+            echo "Note: the HTML inside links ECharts from the public CDN;" \
+                 "set ECHARTS=vendor/echarts.min.js for a fully offline file."
+        fi
+        return 0
+    fi
+    echo "warning: could not create archive reports/$name.$ext" >&2
+    return 1
+}
+
 run_report() {
     local CONN="$1" TARGET_END="$2" WIN_HOURS="$3" WEEKS_BACK="$4" TOP_N="$5" \
           INST_NUM="$6" STEP="$7" STEP_UNIT="$8" TEMPLATE="$9" DEBUG="${10}" \
@@ -233,6 +358,8 @@ run_report() {
         echo "error: marker_file '$MARKER_FILE' does not exist or is not readable." >&2
         return 2
     fi
+    local ARCHIVE_FMT
+    ARCHIVE_FMT="$(resolve_archive_fmt "$ARCHIVE")" || return 2
 
     # awr_trend.sql does not DEFINE defaults itself; we set them here and the
     # driver inherits them from this sqlplus session.  We load sql/defaults.sql
@@ -265,19 +392,29 @@ EOF
     # positional path).  The inline step below must not clobber it.
     local rc=$?
 
+    # Discover the just-generated report once so the inlining step and the
+    # archiving step below both operate on the exact same file.
+    local newest=''
+    [[ "$rc" -eq 0 ]] && newest="$(newest_report)"
+
     # When the run succeeded and `echarts` is a LOCAL FILE path (not empty,
     # not a URL), inline its bytes into the just-generated report so the HTML
     # is fully self-contained and renders charts offline.  URLs and the
     # empty/CDN default are left exactly as the driver emitted them.
     if [[ "$rc" -eq 0 && -n "$ECHARTS" ]] && ! is_url "$ECHARTS"; then
         if [[ -r "$ECHARTS" ]]; then
-            local newest
-            newest="$(ls -t "$SCRIPT_DIR"/reports/*.html 2>/dev/null | head -1 || true)"
             [[ -n "$newest" ]] && inline_echarts "$newest" "$ECHARTS"
         else
             echo "warning: ECHARTS file '$ECHARTS' is not readable; the report" \
                  "links to it as a <script src> rather than inlining it." >&2
         fi
+    fi
+
+    # Archive the FINAL report (after any ECharts inlining above) when ARCHIVE
+    # requested one.  An archiving failure never undoes the successful report
+    # -- it just changes the script's exit status to 4 (documented in usage()).
+    if [[ "$rc" -eq 0 && -n "$ARCHIVE_FMT" && -n "$newest" ]]; then
+        archive_report "$newest" "$ARCHIVE_FMT" || rc=4
     fi
 
     return "$rc"
@@ -459,6 +596,7 @@ build_shell_cmd() {
     local out=''
     [[ -n "$MARKERS" ]] && out+="MARKERS=$(shq "$MARKERS") "
     [[ -n "$ECHARTS" ]] && out+="ECHARTS=$(shq "$ECHARTS") "
+    [[ -n "$ARCHIVE" ]] && out+="ARCHIVE=$(shq "$ARCHIVE") "
     out+='./run_awr_trend.sh'
     for (( i = 0; i <= last; i++ )); do
         out+=" $(shq "${vals[$i]}")"
@@ -535,6 +673,7 @@ print_summary() {
     printf '  %-14s %s\n' 'profile_days' "$([[ "$PROFILE_DAYS" == 0 ]] && echo '0  (day profile off)' || echo "$PROFILE_DAYS  (each hour of the last 24 h vs $PROFILE_DAYS prior days)")"
     [[ -n "$MARKERS" ]] && printf '  %-14s %s\n' 'markers' "$MARKERS"
     [[ -n "$ECHARTS" ]] && printf '  %-14s %s\n' 'echarts' "$ECHARTS"
+    [[ -n "$ARCHIVE" ]] && printf '  %-14s %s\n' 'archive' "$ARCHIVE"
     echo "${BOLD}=================================================================${RST}"
     print_span_hint
     echo

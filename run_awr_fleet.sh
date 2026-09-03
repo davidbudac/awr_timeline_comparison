@@ -67,6 +67,16 @@
 #                       on the N prior days (inline-SVG heatmap) -- and
 #                       passes profile_days=N into the detailed reports.
 #                       Informational: never changes a row's score.     [0]
+#   FLEET_ARCHIVE    also zip/tar the ENTIRE per-run output folder
+#                    (reports/awr_fleet_<ts>_run<id>/, index.html + every
+#                    detail_<alias>.html) as a sibling archive.  Same
+#                    value semantics as the single-DB ARCHIVE var: empty/
+#                    0/N/no/off = disabled (default); 1/Y/yes/on/auto =
+#                    auto-pick zip, else tar+gzip, else plain tar; zip /
+#                    tgz / tar force that format (error if the required
+#                    tool isn't on PATH).  The folder itself is the
+#                    archive's single top-level entry.  Applied after
+#                    both a live run and `--assemble`                   []
 #
 # Examples:
 #   ./run_awr_fleet.sh fleet.conf
@@ -75,11 +85,15 @@
 #   ./run_awr_fleet.sh --assemble reports/fleet_work_20260714120000123
 #   # Force a detailed report for every DB, using the app-developer template:
 #   FLEET_DETAIL=all FLEET_DETAIL_TEMPLATE=dev ./run_awr_fleet.sh fleet.conf
+#   # Also zip the whole run folder alongside it:
+#   FLEET_ARCHIVE=zip ./run_awr_fleet.sh fleet.conf
 #
 # Exit codes:
 #   0   report written, at least one DB reported OK
 #   2   usage error or a bad fleet.conf / argument (nothing run)
 #   3   report written, but every DB failed (unreachable/truncated/error)
+#   4   report written (>=1 DB OK), but FLEET_ARCHIVE was requested and
+#       archiving the run folder failed
 #
 set -euo pipefail
 
@@ -106,6 +120,10 @@ FLEET_KEEP_WORK="${FLEET_KEEP_WORK:-0}"
 # lines, phase timings) that otherwise streams to stderr; the machine-readable
 # per-DB summary + "Report: <path>" on stdout and all warnings are unaffected.
 FLEET_QUIET="${FLEET_QUIET:-0}"
+# FLEET_ARCHIVE: also zip/tar the entire per-run output folder (see the
+# header comment above for full value semantics).  Empty/disabled by
+# default -- byte-identical behaviour to before this var existed.
+FLEET_ARCHIVE="${FLEET_ARCHIVE:-}"
 
 # ---- optional per-DB detailed (full single-DB) report -----------------------
 # FLEET_DETAIL: '' = honor each fleet.conf line's own "|detail" flag (default),
@@ -164,6 +182,18 @@ case "$FLEET_DETAIL_ECHARTS" in
     *'"'*|*"'"*)
         echo "error: FLEET_DETAIL_ECHARTS must not contain a double quote (\") or single quote (') (got '$FLEET_DETAIL_ECHARTS')" >&2
         exit 2 ;;
+esac
+# FLEET_ARCHIVE shape-only check (same enumerated set as the single-DB
+# ARCHIVE var); done here, up front with the other env-var checks, so a typo
+# is caught before anything runs.  The deeper tool-availability check (does
+# the chosen/auto-picked format actually have zip/gzip on PATH) happens later
+# via resolve_fleet_archive_fmt, once per invocation, right before it's used
+# (both the --assemble and the live-run dispatch paths) -- doing it here too
+# would print its fallback "note:" even for a plain --help.
+case "${FLEET_ARCHIVE,,}" in
+    ''|0|n|no|off|1|y|yes|on|auto|zip|tgz|tar) : ;;
+    *) echo "error: FLEET_ARCHIVE must be one of: (empty)/0/N/no/off, 1/Y/yes/on/auto, zip, tgz, tar (got '$FLEET_ARCHIVE')" >&2
+       exit 2 ;;
 esac
 
 # ---- optional terminal styling (degrades to plain text) --------------------
@@ -246,6 +276,13 @@ Environment variables:
                       the last 24 h vs the same hour on the N prior days,
                       heatmap) and profile_days=N to detailed reports;
                       0 = off.  Never affects the score               [0]
+  FLEET_ARCHIVE    also zip/tar the ENTIRE per-run output folder (the
+                   report folder itself as the archive's one top-level
+                   entry).  Empty/0/N/no/off (default) = disabled; 1/Y/
+                   yes/on/auto = auto-pick zip, else tar+gzip, else plain
+                   tar; zip / tgz / tar force that format (error if the
+                   required tool isn't on PATH).  Applied after both a
+                   live run and --assemble                              []
 
 Score shown per DB in the report: 10*critical + 3*warning + min(25, top-SQL
 points); an unreachable/truncated DB scores as an error row (sorts first).
@@ -253,6 +290,10 @@ Rows are collapsed by default -- click a row to expand its detail panel.
 A DB flagged "|detail" in fleet.conf (or forced via FLEET_DETAIL=all) also
 gets a full single-DB report (awr_trend.sql) generated alongside the fleet
 report and linked from that DB's row.
+
+Exit codes: 0 = report written, >=1 DB OK; 2 = usage/config error (nothing
+run); 3 = report written but every DB failed; 4 = report written (>=1 DB
+OK) but FLEET_ARCHIVE was requested and archiving the run folder failed.
 USAGE
 }
 
@@ -402,6 +443,104 @@ resolve_detail_echarts_path() {
              "'$DETAIL_ECHARTS_EFF', which does not exist or is not readable." >&2
         exit 2
     fi
+}
+
+# ---------------------------------------------------------------------------
+# resolve_fleet_archive_fmt <value> -- fleet-owned copy of
+# run_awr_trend.sh's resolve_archive_fmt (CLAUDE.md forbids touching that
+# file for a fleet feature, so this is copied rather than sourced -- see
+# that function for the full rationale).  Validates FLEET_ARCHIVE and prints
+# the resolved format tag on stdout: '' (disabled), 'zip', 'tgz', or 'tar'.
+# The enumerated-value shape was already checked up front with the other
+# env-var checks (see the FLEET_ARCHIVE case block near the top of this
+# file); this additionally requires the chosen/auto-picked tool to actually
+# be on PATH, printing a one-line stderr fallback note when auto/1/Y/...
+# quietly drops off zip.  Non-zero return -> caller must not proceed (exit
+# 2), matching resolve_detail_echarts_path's fail-fast contract.
+# ---------------------------------------------------------------------------
+resolve_fleet_archive_fmt() {
+    local raw="$1" v="${1,,}"
+    case "$v" in
+        ''|0|n|no|off)
+            printf ''
+            ;;
+        1|y|yes|on|auto)
+            if command -v zip >/dev/null 2>&1; then
+                printf 'zip'
+            elif command -v gzip >/dev/null 2>&1; then
+                echo "note: FLEET_ARCHIVE='$raw' -- 'zip' not found on PATH; falling back to tar+gzip (.tar.gz)." >&2
+                printf 'tgz'
+            else
+                echo "note: FLEET_ARCHIVE='$raw' -- neither 'zip' nor 'gzip' found on PATH; falling back to plain tar (.tar)." >&2
+                printf 'tar'
+            fi
+            ;;
+        zip)
+            command -v zip >/dev/null 2>&1 || {
+                echo "error: FLEET_ARCHIVE=zip requires 'zip' on PATH, which was not found." >&2
+                return 1
+            }
+            printf 'zip'
+            ;;
+        tgz)
+            command -v gzip >/dev/null 2>&1 || {
+                echo "error: FLEET_ARCHIVE=tgz requires 'gzip' on PATH, which was not found." >&2
+                return 1
+            }
+            printf 'tgz'
+            ;;
+        tar)
+            printf 'tar'
+            ;;
+        *)
+            echo "error: FLEET_ARCHIVE='$raw' must be one of: (empty)/0/N/no/off, 1/Y/yes/on/auto, zip, tgz, tar." >&2
+            return 1
+            ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
+# archive_fleet_run <run_dir> <fmt> -- zips/tars the ENTIRE per-run output
+# folder <run_dir> (reports/awr_fleet_<ts>_run<id>, holding index.html plus
+# every detail_<alias>.html) as the sibling archive
+# reports/awr_fleet_<ts>_run<id>.<zip|tar.gz|tar>, with the folder itself as
+# the archive's ONE top-level entry (extracting reproduces
+# awr_fleet_<ts>_run<id>/index.html etc. unpacked alongside each other,
+# never bare files at the archive root).  The tool runs from inside
+# reports/ in a subshell for the same bare-entry reason as
+# run_awr_trend.sh's archive_report.  Any pre-existing archive of the same
+# name is removed first (so zip doesn't "update" into a stale one).  Prints
+# "Archive: <path>" plus a `say` narration line with the archive's size on
+# success (du -h, not stat -- flags differ across OSes).  Never fatal: warns
+# on stderr and returns 1 on failure, for the caller to turn into exit 4.
+# The fleet_work_<id>/ extract workdir is a different directory and is
+# never included.
+# ---------------------------------------------------------------------------
+archive_fleet_run() {
+    local run_dir="$1" fmt="$2" parent base name ext ok=1 sz
+    parent="$(dirname "$run_dir")"
+    base="$(basename "$run_dir")"
+    name="$base"
+    case "$fmt" in
+        zip) ext='zip' ;;
+        tgz) ext='tar.gz' ;;
+        tar) ext='tar' ;;
+        *) return 1 ;;
+    esac
+    rm -f "$parent/$name.$ext"
+    case "$fmt" in
+        zip) ( cd "$parent" && zip -q -r "$name.zip" "$base" ) || ok=0 ;;
+        tgz) ( cd "$parent" && tar -cf - "$base" | gzip -c > "$name.tar.gz" ) || ok=0 ;;
+        tar) ( cd "$parent" && tar -cf "$name.tar" "$base" ) || ok=0 ;;
+    esac
+    if [[ "$ok" -eq 1 && -s "$parent/$name.$ext" ]]; then
+        echo "Archive: $parent/$name.$ext"
+        sz="$(du -h "$parent/$name.$ext" 2>/dev/null | awk '{print $1}')"
+        say "Archive written: $parent/$name.$ext (${sz:-unknown size})"
+        return 0
+    fi
+    echo "warning: could not create archive $parent/$name.$ext" >&2
+    return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -1340,8 +1479,18 @@ case "${1:-}" in
             echo "error: --assemble requires an existing workdir (usage: --assemble <workdir>)." >&2
             exit 2
         fi
+        # Resolved here (not just the shape-check up top) so a missing
+        # explicitly-requested tool is caught before assembling, not after.
+        ASM_ARCHIVE_FMT="$(resolve_fleet_archive_fmt "$FLEET_ARCHIVE")" || exit 2
         do_assemble "$WORK"
-        [[ "$ASSEMBLE_OK_COUNT" -ge 1 ]] && exit 0
+        asm_archive_ok=1
+        if [[ -n "$ASM_ARCHIVE_FMT" ]]; then
+            archive_fleet_run "$(dirname "$ASSEMBLE_REPORT_PATH")" "$ASM_ARCHIVE_FMT" || asm_archive_ok=0
+        fi
+        if [[ "$ASSEMBLE_OK_COUNT" -ge 1 ]]; then
+            [[ "$asm_archive_ok" -eq 0 ]] && exit 4
+            exit 0
+        fi
         exit 3
         ;;
     '')
@@ -1377,6 +1526,10 @@ parse_markers
 # (a whole fleet run is expensive to waste on a typo caught only afterwards).
 resolve_detail_echarts_eff
 resolve_detail_echarts_path
+
+# Same fail-fast rationale for FLEET_ARCHIVE: an explicitly-requested zip/tgz
+# with the tool missing from PATH is caught now, not after every DB has run.
+ARCHIVE_FMT="$(resolve_fleet_archive_fmt "$FLEET_ARCHIVE")" || exit 2
 
 # DETAIL_MARKERS: the already-sanitized fleet-wide MK_WHEN/MK_LABEL arrays,
 # joined once as "WHEN|LABEL;;WHEN|LABEL" -- byte-identical format to the
@@ -1438,6 +1591,14 @@ _ASM_T0=$SECONDS
 do_assemble "$WORK"
 say "Report assembled in $(fmt_dur "$((SECONDS - _ASM_T0))"); total runtime $(fmt_dur "$((SECONDS - FLEET_T0))")."
 
+# Archive the whole per-run output folder (index.html + every
+# detail_<alias>.html) when FLEET_ARCHIVE requested one.  Never undoes a
+# successful report -- a failure here only flips the exit code below to 4.
+archive_ok=1
+if [[ -n "$ARCHIVE_FMT" ]]; then
+    archive_fleet_run "$(dirname "$ASSEMBLE_REPORT_PATH")" "$ARCHIVE_FMT" || archive_ok=0
+fi
+
 # Keep the workdir when there's something worth debugging: any DB errored
 # (pre-existing behaviour) OR any requested detail report did not complete
 # successfully (so its .detail.log survives) -- either way FLEET_KEEP_WORK=1
@@ -1457,6 +1618,7 @@ if [[ "${ASSEMBLE_DETAIL_TIMEOUT_COUNT:-0}" -gt 0 ]]; then
 fi
 
 if [[ "$ASSEMBLE_OK_COUNT" -ge 1 ]]; then
+    [[ "$archive_ok" -eq 0 ]] && exit 4
     exit 0
 fi
 exit 3
