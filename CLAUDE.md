@@ -71,6 +71,7 @@ sql/
 ├── 14_segment_io.sql    -- top segments by I/O (DBA_HIST_SEG_STAT; template-INDEP)
 ├── 15_file_io.sql       -- top files by I/O + IOStat-by-filetype (template-INDEP)
 ├── 16_day_profile.sql   -- Day profile: hour-of-day × N prior days (profile_days>0; template-INDEP)
+├── 18_sqlmon.sql        -- SQL Monitor summaries (DBA_HIST_REPORTS; template-INDEP, always on)
 ├── 17_narrative.sql     -- "What changed": rule-based prose, relocated into the masthead by JS
 └── lib/                 -- @@-included fragments (see conventions)
     ├── windows_cte.sql       -- run_params → … → valid_windows CTE chain
@@ -194,8 +195,8 @@ A client-side toggle in the sidebar rail (`#app-filter-toggle`, emitted by
 `00_params.sql`) that flips `body.app-only` — same body-class hook pattern as
 `body.no-charts`, so it's purely CSS-driven and ships in every report (no DEFINE,
 no wrapper change). When on it shows only application SQL and its directly
-related data — **`#topsql`, `#topsql-ash`, `#segment-io`, `#file-io`,
-`#utilization`** — and hides every system-wide section plus the masthead
+related data — **`#topsql`, `#topsql-ash`, `#sqlmon`, `#segment-io`,
+`#file-io`, `#utilization`** — and hides every system-wide section plus the masthead
 `.verdict` and `.windows-strip`. All the hide rules live in `_style.sql`; the
 **kept-sections list is single-sourced three times that must stay in lockstep**:
 the section-hide rule, the `nav.toc a:not([href=…])` link-dim rule, and (by
@@ -404,6 +405,72 @@ nav link and the masthead `strip-meta` clause are `CASE … ELSE ''`, the
 fleet band and the drill command's 12-slot tail are likewise guarded. The
 fleet band is **informational**: no `FLEET-COUNTS`, no score/sort impact.
 Table rows carry `class="crit|warn"` (rail dot grading) but no `data-imp`.
+
+### SQL Monitor (`sql/18_sqlmon.sql`, phase 1)
+Template-independent, always on (like 13-16, but unlike 16 it still renders
+a one-line note when empty rather than staying silent). Source:
+`DBA_HIST_REPORTS` where `component_name = 'sqlmonitor'` — one row per
+persisted execution, `key1` = sql_id, `key2` = sql_exec_id, `key3` =
+sql_exec_start as the **string** `'MM:DD:YYYY HH24:MI:SS'` (numeric-only, so
+NLS-safe, but parse it with an explicit `TO_DATE(key3,'MM:DD:YYYY
+HH24:MI:SS')` mask — never trust it as a DATE). `report_summary` is a
+VARCHAR2 XML parsed via `XMLTABLE('/report_repository_summary/sql' ...)`;
+`dbid` is the CDB dbid, so `dbid IN (dbid_list)` applies unchanged. Phase 1
+is summaries only — `DBA_HIST_REPORTS_DETAILS` (the multi-KB per-execution
+plan CLOB) is never touched, so there is no plan-line drift / diff feature
+yet (see `design/SQLMON_DESIGN.md`'s "Phase 2", not implemented).
+
+**Noise floor** is at the sql_id level, not per-execution: a sql_id is
+included in the comparison table only if ANY of its captured executions in
+the full compared span has `elapsed_time >= 1,000,000` microseconds, OR
+`status = 'DONE (ERROR)'`, OR shows more than one distinct non-zero
+`plan_hash` — then every execution of that sql_id is aggregated (no per-exec
+floor). This keeps a lightly-loaded instance's table from being dominated by
+tiny parallel-execution noise (SQL Monitor's capture policy always persists
+parallel statements) while never hiding a real regression. The **execution
+scatter** chart plots every captured execution in the full span regardless
+of the floor (capped at the 3,000 most recent) — the floor only shapes the
+summary table and its Current-window-max-elapsed ranking.
+
+**Sampling caveats** (stated in the section's own caption, and see the
+design doc): only completed, expensive-enough, or parallel executions are
+ever persisted, so a sql_id's absence does not mean it ran fast, and row
+counts (`n`) are never execution-rate counts. An execution still running at
+`target_end` has no report yet, so the Current window can under-report its
+slowest statement. Attribution to a compared window is by parsed
+`sql_exec_start`, i.e. execution *start* time, against a *valid*
+`windows_rollup` row — an execution that starts inside a skipped window (or
+outside every window) still appears in the full-span scatter but not in the
+per-window table numbers.
+
+Scoring reuses section 07's `scored` CASE verbatim via
+`sql/lib/score_cells.plsql`, on max elapsed time (Current vs. prior valid
+windows). `data-sys="Y|N"` comes from `is_oracle_schema()` on the
+executing user (not a parsing-schema lookup — SQL Monitor's XML reports the
+session's `user`, not the parsing schema), so `#sqlmon` stays in the
+"Application only" kept-sections list. `sql/17_narrative.sql` gained rules
+R6-R9 (plan change / DOP downgrade / errors / new sql_ids in the Current
+window), each its own bounded `dba_hist_reports` scan per the "findings are
+recomputed, not shared" convention. "New" means *no capture anywhere in the
+span before the Current window starts* (both the section's chip and R9) —
+"absent from the prior compared windows" would fire for statements that run
+all day but missed a sparse 1-h slot. A sql_id whose every capture sits in a
+skipped window still gets a table row (empty window cells) so its error flag
+and drill line survive. `key3` is parsed with `DEFAULT NULL ON CONVERSION
+ERROR`: `DBA_HIST_REPORTS` holds other components (`perf`, ...) whose key3 is
+not a date, and Oracle may evaluate the `TO_DATE` before the
+`component_name` filter. The pool table is `data-nosort data-notools`
+(each statement row is paired with a detail row right below it). Cost: the
+section plus R6-R9 scan `dba_hist_reports` (with `XMLTYPE` parsing) six
+times over the span — fine at thousands of rows, worth a single BULK COLLECT
+if a busy DB ever makes it slow.
+
+**Not implemented / phase 2:** `DBA_HIST_REPORTS_DETAILS` plan-line drift
+(diffing a baseline execution's plan against the Current window's slowest,
+per statement), and a fleet `FLEET-COUNTS sqlmon ...` band (informational,
+like Day profile's fleet band) — both deliberately deferred per the design
+doc; do not add either without re-reading `design/SQLMON_DESIGN.md`'s
+"Open items" first (the phase-2 detail XPath was never pinned down there).
 
 ### Output archiving (`ARCHIVE` / `FLEET_ARCHIVE`)
 Both wrappers can zip/tar their finished output, wrapper-owned only (the SQL

@@ -434,6 +434,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('body.app-only nav.toc a'
         || ':not([href="#topsql"])'
         || ':not([href="#topsql-ash"])'
+        || ':not([href="#sqlmon"])'
         || ':not([href="#segment-io"])'
         || ':not([href="#file-io"])'
         || ':not([href="#utilization"]) { display:none; }');

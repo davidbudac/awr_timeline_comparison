@@ -27,12 +27,25 @@
 --                                      per-commit payload grew or shrank
 --   R3  init parameters differing inside the baseline
 --   R4  invalid (skipped) prior windows -> the baseline is thin
--- Emitted in the order R1, R5, R2, R3, R4.
+--   R6  SQL Monitor: statements with a plan change in the Current window
+--                                      -> #sqlmon
+--   R7  SQL Monitor: statements with a DOP downgrade in the Current window
+--                                      -> #sqlmon
+--   R8  SQL Monitor: DONE (ERROR) executions in the Current window
+--                                      -> #sqlmon
+--   R9  SQL Monitor: sql_ids first seen in the Current window
+--                                      -> #sqlmon
+-- Emitted in the order R1, R5, R2, R3, R4, R6, R7, R8, R9.
 --
 -- "LARGE" mirrors section 07's `scored` CASE (recomputed here, not shared,
 -- for the handful of stats used below): |z| > 3 against the prior valid
 -- windows; when the baseline sigma is degenerate (sd = 0 or below 1% of
 -- the mean) z is meaningless, so a 2x ratio test stands in.
+--
+-- R6-R9 recompute their own bounded DBA_HIST_REPORTS scan (component_name =
+-- 'sqlmonitor', dbid IN (dbid_list), span bounded by the earliest compared
+-- window's start through target_end) rather than sharing section 18's PL/SQL
+-- state -- same "findings are recomputed, not shared" convention as R1-R5.
 --
 -- Nothing to say => the section emits ONLY its two AWR-SECTION markers:
 -- no <div>, no <script>.
@@ -659,6 +672,179 @@ BEGIN
                 || '<a href="#windows">compared windows</a>.');
         END IF;
     END LOOP;
+
+    ------------------------------------------------------------------
+    -- R6-R9: SQL Monitor (dba_hist_reports, component_name='sqlmonitor').
+    -- Bounded scan: dbid IN (dbid_list), inst_num filter, parsed exec_start
+    -- (key3) within [earliest compared window start, target_end). R6-R8
+    -- look only at executions that started inside the Current window; R9
+    -- compares Current against every prior *valid* window. Recomputed here
+    -- rather than shared with section 18's PL/SQL state (see header note).
+    ------------------------------------------------------------------
+    DECLARE
+        v_sm_span_start DATE;
+        v_sm_span_end   DATE;
+        v_sm_plan_n     PLS_INTEGER := 0;
+        v_sm_plan_ids   VARCHAR2(4000) := '';
+        v_sm_dop_n      PLS_INTEGER := 0;
+        v_sm_err_n      PLS_INTEGER := 0;
+        v_sm_new_n      PLS_INTEGER := 0;
+        v_sm_new_ids    VARCHAR2(4000) := '';
+    BEGIN
+        SELECT MIN(win_start_ts), MAX(win_end_ts)
+        INTO   v_sm_span_start, v_sm_span_end
+        FROM (
+            WITH
+            @@sql/lib/windows_cte.sql
+            SELECT week_offset, win_start_ts, win_end_ts FROM windows_rollup
+        );
+
+        -- R6/R7/R8: plan change / DOP downgrade / error, scoped to
+        -- executions that started inside the CURRENT window.
+        FOR m IN (
+            WITH
+            @@sql/lib/windows_cte.sql
+            ,
+            cur_win AS (
+                SELECT win_start_ts, win_end_ts FROM windows_rollup
+                WHERE  week_offset = 0 AND valid_flag = 'Y'
+            ),
+            base AS (
+                SELECT r.key1 AS sql_id,
+                       TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') AS exec_start,
+                       x.status, x.plan_hash, x.px_req, x.px_alloc
+                FROM   dba_hist_reports r,
+                       XMLTABLE('/report_repository_summary/sql'
+                           PASSING XMLTYPE(r.report_summary)
+                           COLUMNS
+                               status    VARCHAR2(30) PATH 'status',
+                               plan_hash NUMBER       PATH 'plan_hash',
+                               px_req    NUMBER       PATH 'px_servers_requested',
+                               px_alloc  NUMBER       PATH 'px_servers_allocated'
+                       ) x
+                WHERE  r.component_name = 'sqlmonitor'
+                  AND  r.dbid IN (~dbid_list)
+                  AND  (~inst_num = 0 OR r.instance_number = ~inst_num)
+                  AND  r.report_summary IS NOT NULL
+                  AND  r.key1 IS NOT NULL
+                  AND  r.period_start_time >= CAST(v_sm_span_start AS TIMESTAMP) - INTERVAL '1' DAY
+                  AND  r.period_start_time <= CAST(v_sm_span_end   AS TIMESTAMP) + INTERVAL '1' DAY
+                  AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') >= v_sm_span_start
+                  AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') <  v_sm_span_end
+            ),
+            cur_execs AS (
+                SELECT b.* FROM base b, cur_win w
+                WHERE  b.exec_start >= w.win_start_ts AND b.exec_start < w.win_end_ts
+            ),
+            plan_counts AS (
+                SELECT sql_id,
+                       COUNT(DISTINCT CASE WHEN plan_hash <> 0 THEN plan_hash END) AS n_plans
+                FROM   base
+                GROUP  BY sql_id
+                HAVING COUNT(DISTINCT CASE WHEN plan_hash <> 0 THEN plan_hash END) > 1
+            )
+            SELECT
+                (SELECT COUNT(*) FROM plan_counts pc
+                  WHERE EXISTS (SELECT 1 FROM cur_execs c WHERE c.sql_id = pc.sql_id)) AS plan_n,
+                (SELECT LISTAGG(sql_id, ', ') WITHIN GROUP (ORDER BY sql_id) FROM (
+                     SELECT DISTINCT pc.sql_id FROM plan_counts pc
+                     WHERE EXISTS (SELECT 1 FROM cur_execs c WHERE c.sql_id = pc.sql_id)
+                     ORDER BY pc.sql_id FETCH FIRST 3 ROWS ONLY)) AS plan_ids,
+                (SELECT COUNT(DISTINCT sql_id) FROM cur_execs WHERE px_alloc < px_req) AS dop_n,
+                (SELECT COUNT(*) FROM cur_execs WHERE status = 'DONE (ERROR)') AS err_n
+            FROM dual
+        ) LOOP
+            v_sm_plan_n   := m.plan_n;
+            v_sm_plan_ids := m.plan_ids;
+            v_sm_dop_n    := m.dop_n;
+            v_sm_err_n    := m.err_n;
+        END LOOP;
+
+        -- R9: sql_ids with an execution in Current but none in any prior
+        -- valid window. No XML parsing needed -- key1/key3 only.
+        FOR m IN (
+            WITH
+            @@sql/lib/windows_cte.sql
+            ,
+            base AS (
+                SELECT r.key1 AS sql_id,
+                       TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') AS exec_start
+                FROM   dba_hist_reports r
+                WHERE  r.component_name = 'sqlmonitor'
+                  AND  r.dbid IN (~dbid_list)
+                  AND  (~inst_num = 0 OR r.instance_number = ~inst_num)
+                  AND  r.report_summary IS NOT NULL
+                  AND  r.key1 IS NOT NULL
+                  AND  r.period_start_time >= CAST(v_sm_span_start AS TIMESTAMP) - INTERVAL '1' DAY
+                  AND  r.period_start_time <= CAST(v_sm_span_end   AS TIMESTAMP) + INTERVAL '1' DAY
+                  AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') >= v_sm_span_start
+                  AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') <  v_sm_span_end
+            ),
+            -- "new" = no capture anywhere in the span BEFORE the Current
+            -- window starts (same definition as section 18's `new` chip;
+            -- "absent from the prior compared windows" would be the
+            -- sampling trap the section's caption warns about).
+            cur_win AS (
+                SELECT win_start_ts, win_end_ts FROM windows_rollup
+                WHERE  week_offset = 0 AND valid_flag = 'Y'
+            ),
+            per_sql AS (
+                SELECT b.sql_id,
+                       SUM(CASE WHEN b.exec_start >= c.win_start_ts
+                                 AND b.exec_start <  c.win_end_ts THEN 1 ELSE 0 END) AS n_cur,
+                       SUM(CASE WHEN b.exec_start <  c.win_start_ts THEN 1 ELSE 0 END) AS n_prior
+                FROM   base b CROSS JOIN cur_win c
+                GROUP BY b.sql_id
+            )
+            -- Both columns as independent scalar subqueries, not an outer
+            -- COUNT(*) alongside one: Oracle raises ORA-00937 on
+            -- `SELECT COUNT(*), (SELECT <agg> FROM ...) FROM t` even when the
+            -- subquery is uncorrelated -- verified live on dbmint.
+            SELECT
+                (SELECT COUNT(*) FROM per_sql WHERE n_cur > 0 AND n_prior = 0) AS new_n,
+                (SELECT LISTAGG(sql_id, ', ') WITHIN GROUP (ORDER BY sql_id) FROM (
+                     SELECT sql_id FROM per_sql WHERE n_cur > 0 AND n_prior = 0
+                     ORDER BY sql_id FETCH FIRST 3 ROWS ONLY)) AS new_ids
+            FROM   dual
+        ) LOOP
+            v_sm_new_n   := m.new_n;
+            v_sm_new_ids := m.new_ids;
+        END LOOP;
+
+        IF v_sm_plan_n > 0 THEN
+            add_sentence('<b>' || TO_CHAR(v_sm_plan_n) || ' monitored statement'
+                || CASE WHEN v_sm_plan_n = 1 THEN '' ELSE 's' END
+                || '</b> ran with more than one execution plan in the compared span, '
+                || 'including the Current window: ' || esc(v_sm_plan_ids)
+                || CASE WHEN v_sm_plan_n > 3
+                        THEN ' (and ' || TO_CHAR(v_sm_plan_n - 3) || ' more)' ELSE '' END
+                || ' &mdash; see <a href="#sqlmon">SQL Monitor</a>.');
+        END IF;
+
+        IF v_sm_dop_n > 0 THEN
+            add_sentence('<b>' || TO_CHAR(v_sm_dop_n) || ' statement'
+                || CASE WHEN v_sm_dop_n = 1 THEN '' ELSE 's' END
+                || '</b> got fewer parallel servers than requested in the Current window '
+                || '(DOP downgrade) &mdash; see <a href="#sqlmon">SQL Monitor</a>.');
+        END IF;
+
+        IF v_sm_err_n > 0 THEN
+            add_sentence('<b>' || TO_CHAR(v_sm_err_n) || ' SQL Monitor execution'
+                || CASE WHEN v_sm_err_n = 1 THEN '' ELSE 's' END
+                || '</b> ended <code>DONE (ERROR)</code> in the Current window &mdash; see '
+                || '<a href="#sqlmon">SQL Monitor</a>.');
+        END IF;
+
+        IF v_sm_new_n > 0 THEN
+            add_sentence('<b>' || TO_CHAR(v_sm_new_n) || ' sql_id'
+                || CASE WHEN v_sm_new_n = 1 THEN '' ELSE 's' END
+                || '</b> appeared in SQL Monitor for the first time in the Current window: '
+                || esc(v_sm_new_ids)
+                || CASE WHEN v_sm_new_n > 3
+                        THEN ' (and ' || TO_CHAR(v_sm_new_n - 3) || ' more)' ELSE '' END
+                || ' &mdash; see <a href="#sqlmon">SQL Monitor</a>.');
+        END IF;
+    END;
 
     ------------------------------------------------------------------
     -- Emit.  Nothing to say => nothing at all (not even an empty div).
