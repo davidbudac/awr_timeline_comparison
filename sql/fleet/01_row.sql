@@ -327,13 +327,18 @@ BEGIN
     END;
 
     -- --- worst-finding cell content -------------------------------------
+    -- F5: direction is shown as a glyph (up = increase, down = decrease)
+    -- with the absolute magnitude; color comes only from the badge's
+    -- crit/warn/ok class, never from the sign of z, so a big drop doesn't
+    -- read as "good" just because the arrow happens to be green-adjacent.
     IF v_wf_name IS NULL THEN
         v_zbadge := '&mdash;';
         v_zcls   := 'o';
         v_wtxt   := 'No metric beyond 2&sigma;';
     ELSE
         v_zcls   := CASE WHEN v_wf_bucket = 'large' THEN 'c' ELSE 'w' END;
-        v_zbadge := TO_CHAR(v_wf_z, 'FMS9990D0') || '&sigma;';
+        v_zbadge := CASE WHEN v_wf_z >= 0 THEN '&#9650; ' ELSE '&#9660; ' END
+                    || TO_CHAR(ABS(v_wf_z), 'FM9990D0') || '&sigma;';
         v_wtxt   := DBMS_XMLGEN.CONVERT(v_wf_name);
     END IF;
 
@@ -346,7 +351,12 @@ BEGIN
         || '<span class="alias">' || DBMS_XMLGEN.CONVERT('~fleet_alias')
         || ' <span class="role">' || DBMS_XMLGEN.CONVERT('~db_name') || '</span></span>'
         || '__FLEET_DETAIL_CHIP__</span></td>');
-    DBMS_OUTPUT.PUT_LINE('<td><span class="score s-__FLEET_SEV__">__FLEET_SCORE__</span></td>');
+    -- F2: __FLEET_SBAR__ is a sibling placeholder to __FLEET_SCORE__ -- the
+    -- assembler already knows this alias's crit/warn/pts components (they
+    -- feed __FLEET_SCORE__ itself) and the run-wide max score, so it fills
+    -- in a three-segment bar sized relative to that max, letting rows be
+    -- compared visually without a chart.
+    DBMS_OUTPUT.PUT_LINE('<td><span class="score s-__FLEET_SEV__">__FLEET_SCORE__</span>__FLEET_SBAR__</td>');
     DBMS_OUTPUT.PUT_LINE('<td style="text-align:center"><span class="cw" style="justify-content:center">'
         || '<span class="pill __FLEET_CPILL__">__FLEET_CRIT__C</span>'
         || '<span class="pill __FLEET_WPILL__">__FLEET_WARN__W</span></span></td>');
@@ -372,7 +382,15 @@ BEGIN
 
     -- --- open the detail row (single-column stack) + ASH timeline band ---
     DBMS_OUTPUT.PUT_LINE('<tr class="detailrow hidden"><td colspan="8">');
-    DBMS_OUTPUT.PUT_LINE('<div class="detail"><div class="detail-grid">');
+    DBMS_OUTPUT.PUT_LINE('<div class="detail">');
+    -- F4: a second, top-right placement of the detail-report chip, styled as
+    -- the primary call-to-action ("Open full report") -- a sibling of the
+    -- small alias-cell chip above, sharing the same __FLEET_DETAIL_CHIP_TOP__
+    -- token so the assembler's single detail_bits() call fills both. Empty
+    -- (no detail requested, or the wrapper has nothing to show) collapses to
+    -- nothing via .detail-topbar:empty in sql/fleet/00_fleet_chrome.sql.
+    DBMS_OUTPUT.PUT_LINE('<div class="detail-topbar">__FLEET_DETAIL_CHIP_TOP__</div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="detail-grid">');
     DBMS_OUTPUT.PUT_LINE('<div class="detail-block timeline-box">');
     DBMS_OUTPUT.PUT_LINE('<div class="panel-h">ASH by wait class &mdash; full report span (AAS) &middot; '
         || 'Host ' || DBMS_XMLGEN.CONVERT('~host_name')

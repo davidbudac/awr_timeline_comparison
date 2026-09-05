@@ -5,6 +5,54 @@ The report footer stamps the version that produced it
 top of `awr_trend.sql`. Bump it there when cutting a release and add an
 entry here. Dates are release dates.
 
+## 1.4.0 — 2026-09-05
+
+Visual facelift: no new substitution vars, no schema/behavior change to the
+underlying queries — byte-identity is **not** preserved (markup/CSS/JS
+changed throughout). Highlights, grouped:
+
+- **Findings & numbers.** The findings heatmap (`#findings-heatmap`, ECharts)
+  is replaced by an HTML "Biggest movers" table (`#findings-movers`, top 8 by
+  `|z|`, log-scaled bars) — cheaper, greppable, and usable with charts off.
+  z display now clamps `|z| > 99` and shows a `σ≈0` pill when the baseline
+  sigma is degenerate. Every value cell reports through the new
+  `sql/lib/fmt_num.plsql` (4 significant digits, k/M/G suffix, raw value in
+  the `title`) for consistent formatting across sections.
+- **Long tables.** `sql/lib/dev_bucket.plsql` heat-tints prior-window cells
+  by how far they deviate from the current value. Long detail tables collapse
+  a tail behind an expander; every section table gained click-to-sort,
+  CSV/Markdown copy, and a permalink on its heading.
+- **Navigation & filtering.** A new Triage toggle (`body.triage`) shows only
+  the masthead, Overview, and Findings/Top SQL sections. A rail row filter
+  (⌘K) narrows the nav. Top SQL's five ranking dimensions moved into one tab
+  group, and the per-SQL detail list became a sortable pool table.
+- **New section 17 ("What changed"), `sql/17_narrative.sql`.** 2-5 rule-based
+  sentences generated after the rest of the report has run, joining physical
+  reads to the file/segment/SQL that moved, DB time to wait- vs CPU-bound,
+  throughput ratios, and baseline health — relocated into the masthead by an
+  inline script. Emits nothing when it has nothing to say.
+- **Small-screen and print.** ≤980px now gets a sticky top bar + hamburger
+  menu instead of the wrapping rail block; print output reflects the new
+  components (tabs open, expanders open, movers table instead of a canvas).
+- Wait-class chart colors now consistently reuse `AWR_WAIT_COLORS` in 04/05;
+  hero cards gained a small bar strip and a "vs prior mean · range" line.
+
+## Fleet report 0.6.0 — 2026-09-05
+
+Companion facelift for the fleet console — same visual language, still
+zero ECharts, still offline-complete.
+
+- Client-side toolbar (`#fleetToolbar`): filter, sort by score/name/AAS/
+  errors-first, show all/crit/warn+, expand/collapse all.
+- `.score-bar` stacked crit/warn/sql segment bar per row
+  (`__FLEET_SBAR__` placeholder, substituted at assembly time like the
+  existing score/severity placeholders).
+- Primary "Open full report ↗" chip on the detail top bar plus a Copy
+  button on the drill-command block.
+- Direction glyphs (▲/▼) alongside severity color in the row worst-finding
+  cell, headline cards, and findings table.
+- ASH band unit label moved from the ribbon into its caption.
+
 ## 1.3.0 — 2026-08-24
 
 - **Day profile (section 16, opt-in via the new `profile_days` var).** Every

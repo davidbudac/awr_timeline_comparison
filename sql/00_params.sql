@@ -64,7 +64,9 @@ DECLARE
 
     v_clean_name VARCHAR2(160);
     v_pct_cls    VARCHAR2(8);
-    v_pct_txt    VARCHAR2(24);
+    -- Wide enough for the F5 direction-glyph markup wrapped around the
+    -- percentage (a bare signed number used to fit in 24 bytes).
+    v_pct_txt    VARCHAR2(200);
     v_z_txt      VARCHAR2(24);
 
     -- Masthead DB-time timeline strip: per-snap total DB time over the
@@ -460,7 +462,11 @@ BEGIN
     -- up the correct palette at first paint. Applies the saved/preferred
     -- theme by toggling body.dark before any chart initializes.
     DBMS_OUTPUT.PUT_LINE('<script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.body.classList.add("dark");}catch(e){}})();</script>');
-    DBMS_OUTPUT.PUT_LINE('<header class="report">');
+    -- data-triage marks the masthead as a triage-mode survivor (X3). The
+    -- hide rule only targets <section>, so this is documentation as much as
+    -- function; the parts of the masthead triage does NOT want (the DB-time
+    -- strip and its chart) carry .hidetri instead.
+    DBMS_OUTPUT.PUT_LINE('<header class="report" data-triage="Y">');
 
     -- Brand line above the headline.
     DBMS_OUTPUT.PUT_LINE('  <div class="brandline">'
@@ -550,14 +556,22 @@ BEGIN
                 v_clean_name := SUBSTR(v_clean_name, 1, 34) || '&hellip;';
             END IF;
 
+            -- F5: direction is a glyph, not a color.  The up/down class is
+            -- kept (it is a stable hook) but both now render in --ink; only
+            -- the leading triangle inside span.g carries a severity color,
+            -- and only within the verdict block.
             IF v_top(i).pct_delta IS NULL THEN
                 v_pct_cls := 'up';
                 v_pct_txt := '&mdash;';
             ELSE
                 v_pct_cls := CASE WHEN v_top(i).pct_delta >= 0 THEN 'up' ELSE 'down' END;
-                v_pct_txt := TO_CHAR(v_top(i).pct_delta,
-                                     'FMS999990',
-                                     'NLS_NUMERIC_CHARACTERS=''.,''') || '%';
+                v_pct_txt := '<span class="g">'
+                             || CASE WHEN v_top(i).pct_delta >= 0
+                                     THEN '&#9650;' ELSE '&#9660;' END
+                             || '</span> '
+                             || TO_CHAR(ABS(v_top(i).pct_delta),
+                                        'FM999990',
+                                        'NLS_NUMERIC_CHARACTERS=''.,''') || '%';
             END IF;
 
             DBMS_OUTPUT.PUT_LINE('    <span class="mover">'
@@ -596,14 +610,19 @@ BEGIN
                 v_z_txt := TO_CHAR(v_scored(i).z_score, 'FMS9990D0',
                                    'NLS_NUMERIC_CHARACTERS=''.,''');
 
+                -- Same F5 glyph treatment as the verdict movers above.
                 IF v_scored(i).pct_delta IS NULL THEN
                     v_pct_cls := 'up';
                     v_pct_txt := '&mdash;';
                 ELSE
                     v_pct_cls := CASE WHEN v_scored(i).pct_delta >= 0
                                       THEN 'up' ELSE 'down' END;
-                    v_pct_txt := TO_CHAR(v_scored(i).pct_delta, 'FMS999990',
-                                         'NLS_NUMERIC_CHARACTERS=''.,''') || '%';
+                    v_pct_txt := '<span class="g">'
+                                 || CASE WHEN v_scored(i).pct_delta >= 0
+                                         THEN '&#9650;' ELSE '&#9660;' END
+                                 || '</span> '
+                                 || TO_CHAR(ABS(v_scored(i).pct_delta), 'FM999990',
+                                            'NLS_NUMERIC_CHARACTERS=''.,''') || '%';
                 END IF;
 
                 DBMS_OUTPUT.PUT_LINE('      <li>'
@@ -619,13 +638,28 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('  </details>');
     END IF;
 
+    -- =========================================================
+    -- Narrative slot (section 17).  Deliberately EMPTY here: section 17
+    -- runs last (it needs its own file / segment / SQL / parameter
+    -- queries and must not depend on any other section's PL/SQL state),
+    -- emits its block at the end of the document and a one-line inline
+    -- script moves the node in here.  Always emitted, even when the
+    -- narrative turns out to have nothing to say -- an empty div has no
+    -- box (no padding/border/margin of its own), so a silent run looks
+    -- exactly as it did before.
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('  <div id="narrative-slot"></div>');
+
     --
     -- Compared windows strip: a single very-narrow line chart of total
     -- DB time over the full compared span, with markArea bands marking
     -- each compared window (current = red tint, prior = neutral). Text
     -- fallback for body.no-charts mirrors the old <ul> list.
     --
-    DBMS_OUTPUT.PUT_LINE('  <div class="windows-strip">');
+    -- .hidetri: triage mode (X3) keeps only the verdict + movers in the
+    -- masthead, so the whole DB-time strip (caption, chips, chart and the
+    -- offline fallback list) drops out together.
+    DBMS_OUTPUT.PUT_LINE('  <div class="windows-strip hidetri">');
     DBMS_OUTPUT.PUT_LINE('    <div class="strip-head">'
         || '<b>Compared windows</b>'
         || ' <span class="strip-meta">'
@@ -640,6 +674,42 @@ BEGIN
                 ELSE '' END
         || '</span>'
         || '</div>');
+    -- X2: clickable window chips above the strip chart.  One chip per
+    -- compared window, carrying data-w=<offset> -- the same attribute the
+    -- per-window table columns use -- so a click lights that window up
+    -- everywhere at once and broadcasts awr:window for the chart sections.
+    -- Built from the same CONNECT BY grid as the offline fallback list
+    -- below, so chips and fallback can never disagree.
+    DBMS_OUTPUT.PUT_LINE('    <div class="windows-chips">');
+    FOR w IN (
+        SELECT LEVEL - 1 AS wk,
+               TO_CHAR(
+                   TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
+                       - (LEVEL-1)*(~step_hours/24) - ~win_hours/24,
+                   'HH24:MI') AS w_start,
+               TO_CHAR(
+                   TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
+                       - (LEVEL-1)*(~step_hours/24),
+                   'HH24:MI') AS w_end
+        FROM   dual
+        CONNECT BY LEVEL <= ~weeks_back + 1
+        ORDER  BY LEVEL - 1
+    ) LOOP
+        DBMS_OUTPUT.PUT_LINE('      <span class="wchip'
+            || CASE WHEN w.wk = 0 THEN ' cur' ELSE '' END
+            || '" data-w="' || w.wk || '" title="Highlight this window everywhere">'
+            || CASE WHEN w.wk = 0
+                    THEN '<b>current</b>'
+                    ELSE '<b>&minus;'
+                         || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, w.wk)
+                         || '</b>'
+               END
+            || ' <span>' || w.w_start || ' &rarr; ' || w.w_end || '</span>'
+            || '</span>');
+    END LOOP;
+    DBMS_OUTPUT.PUT_LINE('    </div>');
+    DBMS_OUTPUT.PUT_LINE('    <div class="windows-hint">click a window to '
+        || 'highlight it everywhere &middot; Esc clears</div>');
     DBMS_OUTPUT.PUT_LINE('    <div class="windows-chart" id="masthead-timeline"></div>');
 
     -- Plain-text fallback (visible only when body.no-charts hides the chart).
@@ -708,7 +778,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var areaFill=dark?"rgba(91,155,216,0.10)":"rgba(31,95,168,0.08)";');
     DBMS_OUTPUT.PUT_LINE('var markAreaData=(d.windows||[]).map(function(w){return [');
     DBMS_OUTPUT.PUT_LINE('  {xAxis:w[0],itemStyle:{color:w[2]==="current"?bandCurrent:bandPrior},');
-    DBMS_OUTPUT.PUT_LINE('   label:{show:true,position:"insideTop",color:mu,fontSize:9,formatter:w[2],distance:1}},');
+    -- B1: label only the current band; the oldest band hugs the left grid
+    -- edge and is narrower than its label, so a centered "w-4" bled past
+    -- x=0 and rendered as a stray "-4".
+    DBMS_OUTPUT.PUT_LINE('   label:w[2]==="current"?{show:true,position:"insideTop",color:mu,fontSize:9,formatter:w[2],distance:1}:{show:false}},');
     DBMS_OUTPUT.PUT_LINE('  {xAxis:w[1]}];});');
     DBMS_OUTPUT.PUT_LINE('chart.setOption({');
     DBMS_OUTPUT.PUT_LINE('  animation:false,');
@@ -768,6 +841,25 @@ BEGIN
         || '</svg>'
         || '</button>'
         || '</div>'
+        -- B8 (narrow layout only, display:none on desktop): the current
+        -- section name, kept in sync by the scrollspy, plus the hamburger
+        -- that drops nav.toc .rail-list down as a panel.
+        || '<span class="rail-cur"></span>'
+        || '<button type="button" class="rail-menu-btn" id="rail-menu-btn"'
+        || ' aria-expanded="false" aria-label="Show section list">&#9776;</button>'
+        -- T4: row filter.  Narrows every section table to the rows whose
+        -- first two cells match; Cmd/Ctrl-K focuses it, Esc clears it.
+        || '<div class="rail-filter">'
+        || '<input type="text" id="row-filter" autocomplete="off"'
+        || ' placeholder="Filter rows&#8230;"'
+        || ' aria-label="Filter table rows across the report">'
+        || '<span class="kbd">&#8984;K</span>'
+        || '</div>'
+        -- The section links live in .rail-list so the narrow layout can
+        -- turn them into a dropdown.  Every existing selector that targets
+        -- them (nav.toc a / nav.toc b, the app-only link rule, the rail JS)
+        -- is a descendant match, so desktop rendering is unchanged.
+        || '<div class="rail-list">'
         || '<b>Triage</b>'
         || '<a href="#db-time-summary">DB time</a>'
         || '<a href="#overview">Overview</a>'
@@ -791,7 +883,17 @@ BEGIN
         || '<a href="#segment-io">Segment I/O</a>'
         || '<a href="#file-io">File I/O</a>'
         || '<a href="#param-changes">Parameters</a>'
+        || '</div>'
         || '<div class="rail-foot">'
+        -- X3 "Triage mode": flips body.triage, which (via _style.sql) keeps
+        -- only the sections that opted in with data-triage plus the
+        -- masthead verdict, and dims the rail links of the rest.  First in
+        -- the rail foot, above Essential rows and Application only.
+        || '<button type="button" id="triage-toggle" class="triage-filter"'
+        || ' aria-pressed="false"'
+        || ' title="Collapse the report to the triage-critical sections'
+        || ' and the verdict">'
+        || 'Triage mode</button>'
         -- "Essential rows" toggle: flips body.essential, which (via
         -- _style.sql) collapses the Load profile / System metrics / wait
         -- tables to the curated data-imp="Y" rows (crit/warn-scored rows
@@ -810,6 +912,13 @@ BEGIN
         || ' title="Hide system-wide sections and Oracle-internal SQL;'
         || ' show only application SQL and its related data">'
         || 'Application only</button>'
+        -- C2: jump to the next crit finding (J / K also work from anywhere
+        -- outside a text field).
+        || '<button type="button" id="next-finding" class="next-finding"'
+        || ' title="Jump to the next large (critical) finding">'
+        || '<span>&darr; next large finding</span>'
+        || '<span class="keys">J K</span>'
+        || '</button>'
         || '</div>'
         || '</nav>');
 
@@ -829,10 +938,17 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    var h2=sec.querySelector("h2"); if(!h2) return;');
     DBMS_OUTPUT.PUT_LINE('    var note=h2.querySelector(".preset-note");');
     DBMS_OUTPUT.PUT_LINE('    if(!note){note=document.createElement("span");note.className="preset-note";h2.appendChild(note);}');
-    DBMS_OUTPUT.PUT_LINE('    var k=0; rows.forEach(function(r){if(kept(r))k++;});');
-    DBMS_OUTPUT.PUT_LINE('    note.textContent="Essential - showing "+k+" of "+rows.length+" rows";');
+    -- T4 interaction: rows the row-filter has hidden are out of scope for
+    -- the preset entirely -- they count neither as shown nor as total, so
+    -- the pill describes what is actually on screen.
+    DBMS_OUTPUT.PUT_LINE('    var k=0,n=0;');
+    DBMS_OUTPUT.PUT_LINE('    rows.forEach(function(r){if(r.hidden)return;n++;if(kept(r))k++;});');
+    DBMS_OUTPUT.PUT_LINE('    note.textContent="Essential - showing "+k+" of "+n+" rows";');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('}');
+    -- Exposed so the row filter can re-run the counts after it changes
+    -- which rows are hidden (see the chrome script further down).
+    DBMS_OUTPUT.PUT_LINE('window.AWR_presetNotes=notes;');
     DBMS_OUTPUT.PUT_LINE('btn.addEventListener("click",function(){');
     DBMS_OUTPUT.PUT_LINE('  var on=document.body.classList.toggle("essential");');
     DBMS_OUTPUT.PUT_LINE('  btn.classList.toggle("active",on);');
@@ -903,6 +1019,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('nav.querySelectorAll(''a[href^="#"]'').forEach(function(a){');
     DBMS_OUTPUT.PUT_LINE('  var sec=document.getElementById(a.getAttribute("href").slice(1));');
     DBMS_OUTPUT.PUT_LINE('  if(!sec) return;');
+    -- Capture the pristine link label BEFORE the status dot and the C2
+    -- count pills are appended; the narrow-screen top bar (B8) shows it as
+    -- the current-section name.
+    DBMS_OUTPUT.PUT_LINE('  a.setAttribute("data-label",(a.textContent||"").trim());');
     DBMS_OUTPUT.PUT_LINE('  pairs.push([a,sec]);');
     DBMS_OUTPUT.PUT_LINE('  var dot=document.createElement("span"); dot.className="st";');
     -- skip/insufficient rows don't count as data: a findings table made
@@ -925,6 +1045,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  if(!best) best=firstVis;');
     DBMS_OUTPUT.PUT_LINE('  pairs.forEach(function(p){ p[0].classList.toggle("on",p===best); });');
+    -- B8: mirror the active section name into the narrow-screen top bar.
+    DBMS_OUTPUT.PUT_LINE('  var cur=nav.querySelector(".rail-cur");');
+    DBMS_OUTPUT.PUT_LINE('  if(cur) cur.textContent=best?(best[0].getAttribute("data-label")||""):"";');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function onScroll(){ if(!pending){ pending=true; setTimeout(spy,80); } }');
     DBMS_OUTPUT.PUT_LINE('window.addEventListener("scroll",onScroll,{passive:true});');
@@ -940,6 +1063,379 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  if(window.scrollY!==lastY){ lastY=window.scrollY; spy(); }');
     DBMS_OUTPUT.PUT_LINE('},400);');
     DBMS_OUTPUT.PUT_LINE('spy();');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('</script>');
+
+    -- =========================================================
+    -- Report chrome: the page-level JS half of the facelift hook
+    -- contract.  Everything here is delegated / injected at
+    -- DOMContentLoaded (this script is emitted before the data
+    -- sections exist), CDN-free, and degrades to a plain readable
+    -- report when it does not run.  What it wires up:
+    --   T1  .expander[data-for] toggles .open on its table
+    --       (tr[data-tail="Y"] rows are CSS-hidden until then)
+    --   T2  --navh / --h2h so the sticky h2 + thead stack correctly
+    --   T3  click-to-sort on section table thead th (data-nosort
+    --       opts out; th[data-w] drives the window highlight instead)
+    --   T4  #row-filter narrows every table by its first two cells
+    --   T8  folds the section intro <p> into details.method and
+    --       keeps its first sentence on the h2 as small.h2sub
+    --   C1  .tabs[data-tabs] / .tabpanel switching (+ ECharts resize)
+    --   C2  crit/warn count pills on the rail links, J / K jumping
+    --   C4  copy buttons: .copy-btn, per-table CSV / MD toolbars,
+    --       the h2 permalink anchor
+    --   X2  window highlight: click a th[data-w] or a masthead
+    --       .wchip to toggle .hl on every [data-w] element and
+    --       broadcast the awr:window CustomEvent for chart sections
+    --   X3  #triage-toggle flips body.triage
+    --   B8  the narrow-screen hamburger dropdown
+    -- No literal tilde anywhere below: this file runs under
+    -- SET DEFINE tilde (see the CLAUDE.md tilde gotcha).
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('<script>');
+    DBMS_OUTPUT.PUT_LINE('document.addEventListener("DOMContentLoaded",function(){');
+    DBMS_OUTPUT.PUT_LINE('var doc=document, bd=doc.body, nav=doc.querySelector("nav.toc");');
+    DBMS_OUTPUT.PUT_LINE('function closest(t,sel){return (t&&t.closest)?t.closest(sel):null;}');
+    DBMS_OUTPUT.PUT_LINE('function cellText(td){');
+    DBMS_OUTPUT.PUT_LINE('  var c=td.cloneNode(true);');
+    DBMS_OUTPUT.PUT_LINE('  c.querySelectorAll("svg").forEach(function(s){s.parentNode.removeChild(s);});');
+    DBMS_OUTPUT.PUT_LINE('  return (c.textContent||"").replace(/\s+/g," ").trim();');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* ---- clipboard (async API, hidden-textarea fallback) ---- */');
+    DBMS_OUTPUT.PUT_LINE('function paste(s){');
+    DBMS_OUTPUT.PUT_LINE('  try{');
+    DBMS_OUTPUT.PUT_LINE('    var ta=doc.createElement("textarea");');
+    DBMS_OUTPUT.PUT_LINE('    ta.value=s; ta.setAttribute("readonly","");');
+    DBMS_OUTPUT.PUT_LINE('    ta.style.position="fixed"; ta.style.top="-1000px"; ta.style.opacity="0";');
+    DBMS_OUTPUT.PUT_LINE('    bd.appendChild(ta); ta.select(); doc.execCommand("copy"); bd.removeChild(ta);');
+    DBMS_OUTPUT.PUT_LINE('  }catch(e){}');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function flash(el,done){');
+    DBMS_OUTPUT.PUT_LINE('  if(!el||el.getAttribute("data-busy")) return;');
+    DBMS_OUTPUT.PUT_LINE('  var old=el.textContent;');
+    DBMS_OUTPUT.PUT_LINE('  el.setAttribute("data-busy","1");');
+    DBMS_OUTPUT.PUT_LINE('  el.textContent=done||"Copied";');
+    DBMS_OUTPUT.PUT_LINE('  setTimeout(function(){el.textContent=old;el.removeAttribute("data-busy");},1200);');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function copyText(s,el,done){');
+    DBMS_OUTPUT.PUT_LINE('  var ok=function(){flash(el,done);};');
+    DBMS_OUTPUT.PUT_LINE('  try{');
+    DBMS_OUTPUT.PUT_LINE('    if(navigator.clipboard&&navigator.clipboard.writeText){');
+    DBMS_OUTPUT.PUT_LINE('      navigator.clipboard.writeText(s).then(ok,function(){paste(s);ok();});');
+    DBMS_OUTPUT.PUT_LINE('      return;');
+    DBMS_OUTPUT.PUT_LINE('    }');
+    DBMS_OUTPUT.PUT_LINE('  }catch(e){}');
+    DBMS_OUTPUT.PUT_LINE('  paste(s); ok();');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* ---- T8: fold each section intro into details.method ---- */');
+    DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("section").forEach(function(sec){');
+    DBMS_OUTPUT.PUT_LINE('  var h2=sec.querySelector(":scope > h2"); if(!h2) return;');
+    DBMS_OUTPUT.PUT_LINE('  var p=h2.nextElementSibling;');
+    DBMS_OUTPUT.PUT_LINE('  if(!p||p.tagName!=="P"||p.classList.contains("cdn-warn")) return;');
+    DBMS_OUTPUT.PUT_LINE('  var t=(p.textContent||"").replace(/\s+/g," ").trim(); if(!t) return;');
+    DBMS_OUTPUT.PUT_LINE('  var i=t.indexOf(". ");');
+    DBMS_OUTPUT.PUT_LINE('  var sub=doc.createElement("small");');
+    DBMS_OUTPUT.PUT_LINE('  sub.className="h2sub"; sub.textContent=(i>0?t.slice(0,i+1):t);');
+    DBMS_OUTPUT.PUT_LINE('  h2.appendChild(sub);');
+    DBMS_OUTPUT.PUT_LINE('  var d=doc.createElement("details"); d.className="method";');
+    DBMS_OUTPUT.PUT_LINE('  var s=doc.createElement("summary"); s.textContent="How this is computed";');
+    DBMS_OUTPUT.PUT_LINE('  d.appendChild(s);');
+    DBMS_OUTPUT.PUT_LINE('  p.parentNode.insertBefore(d,p);');
+    DBMS_OUTPUT.PUT_LINE('  p.removeAttribute("style");');
+    DBMS_OUTPUT.PUT_LINE('  d.appendChild(p);');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('/* ---- C4: permalink anchor on every section heading ---- */');
+    DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("section > h2").forEach(function(h2){');
+    DBMS_OUTPUT.PUT_LINE('  var sec=h2.parentNode; if(!sec.id) return;');
+    DBMS_OUTPUT.PUT_LINE('  var a=doc.createElement("a");');
+    DBMS_OUTPUT.PUT_LINE('  a.className="permalink"; a.href="#"+sec.id; a.textContent="#";');
+    DBMS_OUTPUT.PUT_LINE('  a.title="Copy a link to this section";');
+    DBMS_OUTPUT.PUT_LINE('  a.addEventListener("click",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('    ev.preventDefault();');
+    DBMS_OUTPUT.PUT_LINE('    copyText(location.href.split("#")[0]+"#"+sec.id,a,"\u2713");');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  h2.appendChild(a);');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('/* ---- C4: per-table CSV / Markdown copy toolbar ---- */');
+    DBMS_OUTPUT.PUT_LINE('function visRows(tb){');
+    DBMS_OUTPUT.PUT_LINE('  var out=[];');
+    DBMS_OUTPUT.PUT_LINE('  tb.querySelectorAll("tbody tr").forEach(function(tr){');
+    DBMS_OUTPUT.PUT_LINE('    if(tr.hidden) return;');
+    DBMS_OUTPUT.PUT_LINE('    if(getComputedStyle(tr).display==="none") return;');
+    DBMS_OUTPUT.PUT_LINE('    out.push(tr);');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return out;');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function tableRows(tb){');
+    DBMS_OUTPUT.PUT_LINE('  var hr=tb.querySelectorAll("thead tr"), rows=[];');
+    DBMS_OUTPUT.PUT_LINE('  if(hr.length){');
+    DBMS_OUTPUT.PUT_LINE('    rows.push(Array.prototype.map.call(hr[hr.length-1].cells,cellText));');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  visRows(tb).forEach(function(tr){');
+    DBMS_OUTPUT.PUT_LINE('    rows.push(Array.prototype.map.call(tr.cells,cellText));');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return rows;');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function toCSV(tb){');
+    DBMS_OUTPUT.PUT_LINE('  return tableRows(tb).map(function(r){');
+    DBMS_OUTPUT.PUT_LINE('    return r.map(function(v){');
+    DBMS_OUTPUT.PUT_LINE('      return /[",\n]/.test(v)?"\""+v.replace(/"/g,"\"\"")+"\"":v;');
+    DBMS_OUTPUT.PUT_LINE('    }).join(",");');
+    DBMS_OUTPUT.PUT_LINE('  }).join("\n");');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function toMD(tb){');
+    DBMS_OUTPUT.PUT_LINE('  var rows=tableRows(tb); if(!rows.length) return "";');
+    DBMS_OUTPUT.PUT_LINE('  var esc=function(v){return v.replace(/\|/g,"\\|");};');
+    DBMS_OUTPUT.PUT_LINE('  var out=["| "+rows[0].map(esc).join(" | ")+" |",');
+    DBMS_OUTPUT.PUT_LINE('           "|"+rows[0].map(function(){return " --- |";}).join("")];');
+    DBMS_OUTPUT.PUT_LINE('  rows.slice(1).forEach(function(r){');
+    DBMS_OUTPUT.PUT_LINE('    out.push("| "+r.map(esc).join(" | ")+" |");');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return out.join("\n");');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("section table").forEach(function(tb){');
+    DBMS_OUTPUT.PUT_LINE('  if(!tb.querySelector("thead")) return;');
+    DBMS_OUTPUT.PUT_LINE('  if(tb.hasAttribute("data-notools")) return;');
+    DBMS_OUTPUT.PUT_LINE('  if(tb.closest("tr.sql-detail")||tb.closest("details")) return;');
+    DBMS_OUTPUT.PUT_LINE('  if(tb.querySelectorAll("tbody tr").length<4) return;');
+    DBMS_OUTPUT.PUT_LINE('  var bar=doc.createElement("div");');
+    DBMS_OUTPUT.PUT_LINE('  bar.className="tbl-tools"+(tb.classList.contains("hidetri")?" hidetri":"");');
+    DBMS_OUTPUT.PUT_LINE('  var mk=function(label,fn){');
+    DBMS_OUTPUT.PUT_LINE('    var b=doc.createElement("button");');
+    DBMS_OUTPUT.PUT_LINE('    b.type="button"; b.className="tool-btn"; b.textContent=label;');
+    DBMS_OUTPUT.PUT_LINE('    b.addEventListener("click",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('      ev.stopPropagation();');
+    DBMS_OUTPUT.PUT_LINE('      copyText(fn(tb),b,"Copied");');
+    DBMS_OUTPUT.PUT_LINE('    });');
+    DBMS_OUTPUT.PUT_LINE('    bar.appendChild(b);');
+    DBMS_OUTPUT.PUT_LINE('  };');
+    DBMS_OUTPUT.PUT_LINE('  mk("\u29C9 CSV",toCSV); mk("\u29C9 MD",toMD);');
+    DBMS_OUTPUT.PUT_LINE('  tb.parentNode.insertBefore(bar,tb);');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('/* ---- C4: delegated .copy-btn (pre / code blocks) ---- */');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('  var b=closest(ev.target,".copy-btn"); if(!b) return;');
+    DBMS_OUTPUT.PUT_LINE('  var sel=b.getAttribute("data-copy");');
+    DBMS_OUTPUT.PUT_LINE('  var target=sel?doc.querySelector(sel):b.parentNode;');
+    DBMS_OUTPUT.PUT_LINE('  if(!target) return;');
+    DBMS_OUTPUT.PUT_LINE('  var c=target.cloneNode(true);');
+    DBMS_OUTPUT.PUT_LINE('  c.querySelectorAll(".copy-btn").forEach(function(x){x.parentNode.removeChild(x);});');
+    DBMS_OUTPUT.PUT_LINE('  copyText((c.textContent||"").replace(/^\s+|\s+$/g,""),b,"Copied");');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('/* ---- T1: long-tail expanders ---- */');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('  var e=closest(ev.target,".expander"); if(!e) return;');
+    DBMS_OUTPUT.PUT_LINE('  var id=e.getAttribute("data-for");');
+    DBMS_OUTPUT.PUT_LINE('  var tb=id?doc.getElementById(id):null; if(!tb) return;');
+    DBMS_OUTPUT.PUT_LINE('  var on=tb.classList.toggle("open");');
+    DBMS_OUTPUT.PUT_LINE('  var n=e.getAttribute("data-n")||"";');
+    DBMS_OUTPUT.PUT_LINE('  var noun=e.getAttribute("data-noun")||"rows";');
+    DBMS_OUTPUT.PUT_LINE('  e.textContent=(on?"\u25BE Hide ":"\u25B8 Show ")+n+" "+noun;');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('/* ---- C1: tabs ---- */');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('  var t=closest(ev.target,".tabs [data-t]"); if(!t) return;');
+    DBMS_OUTPUT.PUT_LINE('  var bar=closest(t,".tabs"); if(!bar) return;');
+    DBMS_OUTPUT.PUT_LINE('  var g=bar.getAttribute("data-tabs"), key=t.getAttribute("data-t");');
+    DBMS_OUTPUT.PUT_LINE('  bar.querySelectorAll("[data-t]").forEach(function(x){x.classList.toggle("on",x===t);});');
+    DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll(".tabpanel[data-tabs=\""+g+"\"]").forEach(function(p){');
+    DBMS_OUTPUT.PUT_LINE('    var on=p.getAttribute("data-t")===key;');
+    DBMS_OUTPUT.PUT_LINE('    p.classList.toggle("on",on);');
+    DBMS_OUTPUT.PUT_LINE('    if(on&&window.echarts){');
+    DBMS_OUTPUT.PUT_LINE('      p.querySelectorAll("[_echarts_instance_]").forEach(function(el){');
+    DBMS_OUTPUT.PUT_LINE('        var inst=echarts.getInstanceByDom(el); if(inst) inst.resize();');
+    DBMS_OUTPUT.PUT_LINE('      });');
+    DBMS_OUTPUT.PUT_LINE('    }');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('/* ---- X2: cross-report window highlight ---- */');
+    DBMS_OUTPUT.PUT_LINE('var curW=null;');
+    DBMS_OUTPUT.PUT_LINE('function applyW(){');
+    DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("[data-w]").forEach(function(el){');
+    DBMS_OUTPUT.PUT_LINE('    el.classList.toggle("hl",curW!==null&&el.getAttribute("data-w")===curW);');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  doc.dispatchEvent(new CustomEvent("awr:window",');
+    DBMS_OUTPUT.PUT_LINE('    {detail:{w:curW===null?null:Number(curW)}}));');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function setW(w){ curW=(w===curW)?null:w; applyW(); }');
+    DBMS_OUTPUT.PUT_LINE('function clearW(){ if(curW!==null){ curW=null; applyW(); } }');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('  var el=closest(ev.target,"th[data-w],.wchip[data-w]"); if(!el) return;');
+    DBMS_OUTPUT.PUT_LINE('  setW(el.getAttribute("data-w"));');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('/* ---- T3: click-to-sort ---- */');
+    DBMS_OUTPUT.PUT_LINE('function numOf(s){');
+    DBMS_OUTPUT.PUT_LINE('  var t=s.replace(/\u2212/g,"-")');
+    DBMS_OUTPUT.PUT_LINE('         .replace(/[\u25B2\u25BC\u25B8\u25BE\u2191\u2193\u00A0]/g,"")');
+    DBMS_OUTPUT.PUT_LINE('         .replace(/,/g,"").replace(/%/g,"").replace(/\+/g,"").replace(/\s/g,"");');
+    DBMS_OUTPUT.PUT_LINE('  if(!t) return null;');
+    DBMS_OUTPUT.PUT_LINE('  var m=/^(-?(?:\d+\.?\d*|\.\d+))([kMG])?$/.exec(t);');
+    DBMS_OUTPUT.PUT_LINE('  if(!m) return null;');
+    DBMS_OUTPUT.PUT_LINE('  var v=parseFloat(m[1]);');
+    DBMS_OUTPUT.PUT_LINE('  if(m[2]==="k") v*=1e3; else if(m[2]==="M") v*=1e6; else if(m[2]==="G") v*=1e9;');
+    DBMS_OUTPUT.PUT_LINE('  return v;');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('  if(closest(ev.target,".tool-btn")) return;');
+    DBMS_OUTPUT.PUT_LINE('  var th=closest(ev.target,"section table thead th"); if(!th) return;');
+    DBMS_OUTPUT.PUT_LINE('  if(th.hasAttribute("data-w")) return;');
+    DBMS_OUTPUT.PUT_LINE('  var tb=closest(th,"table");');
+    DBMS_OUTPUT.PUT_LINE('  if(!tb||tb.hasAttribute("data-nosort")) return;');
+    DBMS_OUTPUT.PUT_LINE('  var body=tb.tBodies[0]; if(!body) return;');
+    DBMS_OUTPUT.PUT_LINE('  var hr=th.parentNode;');
+    DBMS_OUTPUT.PUT_LINE('  var idx=Array.prototype.indexOf.call(hr.cells,th);');
+    DBMS_OUTPUT.PUT_LINE('  var desc=!th.classList.contains("desc");');
+    DBMS_OUTPUT.PUT_LINE('  hr.querySelectorAll("th").forEach(function(x){x.classList.remove("asc","desc");});');
+    DBMS_OUTPUT.PUT_LINE('  th.classList.add(desc?"desc":"asc");');
+    DBMS_OUTPUT.PUT_LINE('  var dec=Array.prototype.slice.call(body.rows).map(function(r,i){');
+    DBMS_OUTPUT.PUT_LINE('    var c=r.cells[idx], s=c?cellText(c):"";');
+    DBMS_OUTPUT.PUT_LINE('    return {r:r,i:i,s:s,n:c?numOf(s):null};');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  var blank=function(d){return !d.s||d.s==="\u2014"||d.s==="\u2013"||d.s==="-";};');
+    DBMS_OUTPUT.PUT_LINE('  dec.sort(function(a,b){');
+    DBMS_OUTPUT.PUT_LINE('    var ab=blank(a), bb=blank(b);');
+    DBMS_OUTPUT.PUT_LINE('    if(ab!==bb) return ab?1:-1;');
+    DBMS_OUTPUT.PUT_LINE('    if(ab&&bb) return a.i-b.i;');
+    DBMS_OUTPUT.PUT_LINE('    if(a.n!==null&&b.n!==null){');
+    DBMS_OUTPUT.PUT_LINE('      if(a.n!==b.n) return desc?b.n-a.n:a.n-b.n;');
+    DBMS_OUTPUT.PUT_LINE('      return a.i-b.i;');
+    DBMS_OUTPUT.PUT_LINE('    }');
+    DBMS_OUTPUT.PUT_LINE('    if(a.n!==null) return -1;');
+    DBMS_OUTPUT.PUT_LINE('    if(b.n!==null) return 1;');
+    DBMS_OUTPUT.PUT_LINE('    var c=a.s.localeCompare(b.s);');
+    DBMS_OUTPUT.PUT_LINE('    return c?(desc?-c:c):a.i-b.i;');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  dec.forEach(function(d){body.appendChild(d.r);});');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('/* ---- T4: row filter ---- */');
+    DBMS_OUTPUT.PUT_LINE('var fi=doc.getElementById("row-filter");');
+    DBMS_OUTPUT.PUT_LINE('function dimRail(){');
+    DBMS_OUTPUT.PUT_LINE('  if(!nav) return;');
+    DBMS_OUTPUT.PUT_LINE('  nav.querySelectorAll("a[href^=\"#\"]").forEach(function(a){');
+    DBMS_OUTPUT.PUT_LINE('    var sec=doc.getElementById(a.getAttribute("href").slice(1));');
+    DBMS_OUTPUT.PUT_LINE('    if(!sec){ a.classList.remove("dim"); return; }');
+    DBMS_OUTPUT.PUT_LINE('    var rows=sec.querySelectorAll("tbody tr");');
+    DBMS_OUTPUT.PUT_LINE('    if(!rows.length){ a.classList.remove("dim"); return; }');
+    DBMS_OUTPUT.PUT_LINE('    var vis=0;');
+    DBMS_OUTPUT.PUT_LINE('    rows.forEach(function(r){ if(!r.hidden) vis++; });');
+    DBMS_OUTPUT.PUT_LINE('    a.classList.toggle("dim",vis===0);');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function applyFilter(){');
+    DBMS_OUTPUT.PUT_LINE('  var q=((fi&&fi.value)||"").trim().toLowerCase();');
+    DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("section tbody tr").forEach(function(tr){');
+    DBMS_OUTPUT.PUT_LINE('    if(!q){ tr.hidden=false; return; }');
+    DBMS_OUTPUT.PUT_LINE('    var s="", n=Math.min(2,tr.cells.length);');
+    DBMS_OUTPUT.PUT_LINE('    for(var i=0;i<n;i++) s+=" "+cellText(tr.cells[i]);');
+    DBMS_OUTPUT.PUT_LINE('    tr.hidden=s.toLowerCase().indexOf(q)<0;');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  dimRail();');
+    DBMS_OUTPUT.PUT_LINE('  if(window.AWR_presetNotes) window.AWR_presetNotes();');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('if(fi) fi.addEventListener("input",applyFilter);');
+    DBMS_OUTPUT.PUT_LINE('/* ---- C2: per-section crit / warn counts on the rail links ---- */');
+    DBMS_OUTPUT.PUT_LINE('if(nav){');
+    DBMS_OUTPUT.PUT_LINE('  nav.querySelectorAll("a[href^=\"#\"]").forEach(function(a){');
+    DBMS_OUTPUT.PUT_LINE('    var id=a.getAttribute("href").slice(1);');
+    DBMS_OUTPUT.PUT_LINE('    if(id==="overview") return;');
+    DBMS_OUTPUT.PUT_LINE('    var sec=doc.getElementById(id); if(!sec) return;');
+    DBMS_OUTPUT.PUT_LINE('    var c=0,w=0;');
+    DBMS_OUTPUT.PUT_LINE('    sec.querySelectorAll("tbody tr").forEach(function(tr){');
+    DBMS_OUTPUT.PUT_LINE('      if(tr.closest("table[data-nocount]")) return;');
+    DBMS_OUTPUT.PUT_LINE('      if(tr.classList.contains("crit")||tr.querySelector(".badge.crit")) c++;');
+    DBMS_OUTPUT.PUT_LINE('      else if(tr.classList.contains("warn")||tr.querySelector(".badge.warn")) w++;');
+    DBMS_OUTPUT.PUT_LINE('    });');
+    DBMS_OUTPUT.PUT_LINE('    if(c){ var p=doc.createElement("span"); p.className="cnt c"; p.textContent=c; a.appendChild(p); }');
+    DBMS_OUTPUT.PUT_LINE('    if(w){ var q=doc.createElement("span"); q.className="cnt w"; q.textContent=w; a.appendChild(q); }');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* ---- C2: next / previous large finding (J / K) ---- */');
+    DBMS_OUTPUT.PUT_LINE('var jIdx=-1;');
+    DBMS_OUTPUT.PUT_LINE('function findingRows(){');
+    DBMS_OUTPUT.PUT_LINE('  var out=[];');
+    DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("section tbody tr").forEach(function(tr){');
+    DBMS_OUTPUT.PUT_LINE('    if(tr.hidden||tr.offsetParent===null) return;');
+    DBMS_OUTPUT.PUT_LINE('    if(tr.classList.contains("crit")||tr.querySelector(".badge.crit")) out.push(tr);');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return out;');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function jump(d){');
+    DBMS_OUTPUT.PUT_LINE('  var list=findingRows(); if(!list.length) return;');
+    DBMS_OUTPUT.PUT_LINE('  jIdx=(jIdx+d+list.length*2)%list.length;');
+    DBMS_OUTPUT.PUT_LINE('  var tr=list[jIdx];');
+    DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("tr.jump-hi").forEach(function(x){x.classList.remove("jump-hi");});');
+    DBMS_OUTPUT.PUT_LINE('  tr.scrollIntoView({block:"center"});');
+    DBMS_OUTPUT.PUT_LINE('  tr.classList.add("jump-hi");');
+    DBMS_OUTPUT.PUT_LINE('  setTimeout(function(){tr.classList.remove("jump-hi");},1600);');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('var nf=doc.getElementById("next-finding");');
+    DBMS_OUTPUT.PUT_LINE('if(nf) nf.addEventListener("click",function(){jump(1);});');
+    DBMS_OUTPUT.PUT_LINE('/* ---- X3: triage mode ---- */');
+    DBMS_OUTPUT.PUT_LINE('if(nav){');
+    DBMS_OUTPUT.PUT_LINE('  nav.querySelectorAll("a[href^=\"#\"]").forEach(function(a){');
+    DBMS_OUTPUT.PUT_LINE('    var sec=doc.getElementById(a.getAttribute("href").slice(1));');
+    DBMS_OUTPUT.PUT_LINE('    if(!sec||!sec.hasAttribute("data-triage")) a.classList.add("tri-dim");');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('var tg=doc.getElementById("triage-toggle");');
+    DBMS_OUTPUT.PUT_LINE('if(tg) tg.addEventListener("click",function(){');
+    DBMS_OUTPUT.PUT_LINE('  var on=bd.classList.toggle("triage");');
+    DBMS_OUTPUT.PUT_LINE('  tg.classList.toggle("active",on);');
+    DBMS_OUTPUT.PUT_LINE('  tg.setAttribute("aria-pressed",on?"true":"false");');
+    DBMS_OUTPUT.PUT_LINE('  tg.innerHTML=on?"Triage mode &#10003;":"Triage mode";');
+    DBMS_OUTPUT.PUT_LINE('  measure();');
+    DBMS_OUTPUT.PUT_LINE('  window.dispatchEvent(new Event("resize"));');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('/* ---- B8: narrow-screen section dropdown ---- */');
+    DBMS_OUTPUT.PUT_LINE('var mb=doc.getElementById("rail-menu-btn");');
+    DBMS_OUTPUT.PUT_LINE('if(mb&&nav){');
+    DBMS_OUTPUT.PUT_LINE('  mb.addEventListener("click",function(){');
+    DBMS_OUTPUT.PUT_LINE('    var on=nav.classList.toggle("menu-open");');
+    DBMS_OUTPUT.PUT_LINE('    mb.setAttribute("aria-expanded",on?"true":"false");');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  nav.querySelectorAll(".rail-list a").forEach(function(a){');
+    DBMS_OUTPUT.PUT_LINE('    a.addEventListener("click",function(){');
+    DBMS_OUTPUT.PUT_LINE('      nav.classList.remove("menu-open");');
+    DBMS_OUTPUT.PUT_LINE('      mb.setAttribute("aria-expanded","false");');
+    DBMS_OUTPUT.PUT_LINE('    });');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* ---- T2: sticky offsets (--navh page-wide, --h2h per section) ---- */');
+    DBMS_OUTPUT.PUT_LINE('function measure(){');
+    DBMS_OUTPUT.PUT_LINE('  var navh=0;');
+    DBMS_OUTPUT.PUT_LINE('  if(nav&&getComputedStyle(nav).position==="sticky") navh=nav.offsetHeight;');
+    DBMS_OUTPUT.PUT_LINE('  bd.style.setProperty("--navh",navh+"px");');
+    DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("section").forEach(function(sec){');
+    DBMS_OUTPUT.PUT_LINE('    var h=sec.querySelector(":scope > h2");');
+    DBMS_OUTPUT.PUT_LINE('    sec.style.setProperty("--h2h",(h?h.offsetHeight:48)+"px");');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('var mt=null;');
+    DBMS_OUTPUT.PUT_LINE('window.addEventListener("resize",function(){');
+    DBMS_OUTPUT.PUT_LINE('  if(mt) clearTimeout(mt);');
+    DBMS_OUTPUT.PUT_LINE('  mt=setTimeout(measure,120);');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("awr:appfilter",measure);');
+    DBMS_OUTPUT.PUT_LINE('measure();');
+    DBMS_OUTPUT.PUT_LINE('setTimeout(measure,300);');
+    DBMS_OUTPUT.PUT_LINE('/* ---- keyboard: Cmd/Ctrl-K focus filter, Esc clears, J / K jump ---- */');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("keydown",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('  var t=ev.target||{}, tag=(t.tagName||"").toLowerCase();');
+    DBMS_OUTPUT.PUT_LINE('  var typing=(tag==="input"||tag==="textarea"||tag==="select"||t.isContentEditable);');
+    DBMS_OUTPUT.PUT_LINE('  if((ev.metaKey||ev.ctrlKey)&&(ev.key==="k"||ev.key==="K")){');
+    DBMS_OUTPUT.PUT_LINE('    ev.preventDefault(); if(fi){ fi.focus(); fi.select(); } return;');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  if(ev.key==="Escape"){');
+    DBMS_OUTPUT.PUT_LINE('    clearW();');
+    DBMS_OUTPUT.PUT_LINE('    if(fi&&fi.value){ fi.value=""; applyFilter(); }');
+    DBMS_OUTPUT.PUT_LINE('    if(typing&&t.blur) t.blur();');
+    DBMS_OUTPUT.PUT_LINE('    if(nav) nav.classList.remove("menu-open");');
+    DBMS_OUTPUT.PUT_LINE('    return;');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  if(typing||ev.metaKey||ev.ctrlKey||ev.altKey) return;');
+    DBMS_OUTPUT.PUT_LINE('  if(ev.key==="j"||ev.key==="J"){ ev.preventDefault(); jump(1); }');
+    DBMS_OUTPUT.PUT_LINE('  else if(ev.key==="k"||ev.key==="K"){ ev.preventDefault(); jump(-1); }');
+    DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('</script>');
 

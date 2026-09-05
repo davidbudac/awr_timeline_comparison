@@ -231,8 +231,9 @@ console has the same feature as a per-DB heatmap band via
 
 By default only one thing in the report reaches the network: the Apache
 ECharts library that draws the larger visualizations (hero strip, wait
-stacked bars, findings heatmap, top-SQL bump chart, ASH timeline). When
-the CDN is blocked the report still opens and every table renders — an
+stacked bars, top-SQL bump chart, ASH timeline — the Findings "Biggest
+movers" table is a plain HTML table, so it renders with charts off too).
+When the CDN is blocked the report still opens and every table renders — an
 amber "Charts hidden" banner explains why, and the inline-SVG sparklines
 still draw. To make the report render its charts with **no network at
 all**, set the `ECHARTS` environment variable (wrapper) or the `echarts`
@@ -323,7 +324,15 @@ The header card at the top lists **which windows were compared** —
 the current window plus the prior windows, stepped back by `step ×
 step_unit` each time (default: 7 days), with explicit start → end
 timestamps so you always know exactly what baseline is driving the
-z-scores.
+z-scores. Click a window chip (or a per-window column header anywhere in
+the report) to highlight that window across every table and chart at once.
+
+Directly under the verdict, a **"What changed"** paragraph or two — 2 to 5
+auto-generated sentences that join findings across sections (e.g. a
+physical-reads spike to the file/segment/SQL it landed on, or DB time
+growth to wait- vs CPU-bound) — appears whenever the report has something
+rule-based to say; it's silent otherwise. Every fact it states is also
+rendered in the section it links to.
 
 1. **Overview** — hero strip with the six headline load/metric numbers.
 2. **ASH timeline** — hourly stacked-area chart of Active Sessions by wait
@@ -331,9 +340,10 @@ z-scores.
    span; compared windows are highlighted as background bands. If you pass
    a `marker_file`, your milestones appear here (and on the other dated
    charts) as vertical dashed lines — see "Timeline markers" above.
-3. **Findings** — each metric with `|z|>3` is CRITICAL, `|z|>2` is WARN.
-   Metrics with fewer than 3 valid prior windows fall back to a
-   `%`-delta only.
+3. **Findings** — a "Biggest movers" table (top 8 by `|z|`, log-scaled
+   bars) leads the section, followed by the full per-name detail tables:
+   each metric with `|z|>3` is CRITICAL, `|z|>2` is WARN. Metrics with
+   fewer than 3 valid prior windows fall back to a `%`-delta only.
 4. **Windows** — the compared windows used, with begin/end snap_ids.
    Windows where the instance restarted mid-window are SKIPPED and
    excluded from the baseline.
@@ -342,8 +352,9 @@ z-scores.
 6. **System metrics** — averages from `DBA_HIST_SYSMETRIC_SUMMARY`.
 7. **Foreground waits** — top-N events + wait-class rollup.
 8. **Background waits** — from `DBA_HIST_BG_EVENT_SUMMARY`.
-9. **Top SQL** — ranked 5 ways (elapsed, CPU, buffer gets, physical
-   reads, executions) with plan-change badges and full SQL text.
+9. **Top SQL** — one tab group covering the 5 rankings (elapsed, CPU,
+   buffer gets, physical reads, executions) plus a sortable SQL-pool
+   table (plan-change badges, full SQL text) for the per-SQL detail.
 10. **Segment I/O** — segments (and object types) with the most I/O
     activity per window from `DBA_HIST_SEG_STAT`: physical reads/writes
     (blocks) and read/write requests, one line per top segment across
@@ -375,16 +386,25 @@ The report opens with a fixed **navigation rail** down the left edge: a
 scrollspy-tracked link per section, each with a small live status dot
 graded from that section's own content (red for a critical finding, amber
 for a warning, neutral otherwise) so you can see at a glance where the
-trouble is before scrolling. Under 980px the rail collapses to a stacked
-layout.
+trouble is before scrolling. A row filter at the top of the rail (`⌘K` /
+`Ctrl+K` to focus it, `Esc` to clear) narrows the rail to matching
+sections as you type. Under 980px the rail is replaced by a sticky top
+bar with a ☰ menu holding the same links and toggles.
 
 A sun/moon button in the rail's brand row toggles **dark mode** (the
 "Slate Instrument" theme). The first load follows your OS
 `prefers-color-scheme`; after that your choice is remembered in
 `localStorage`, and the theme is applied before the charts initialize so
-there's no flash. Two more toggles sit at the foot of the rail —
-**Essential rows** and **Application only**, described next. All of this is
-purely client-side CSS/JS: no re-run, no DEFINE, and it all works offline.
+there's no flash. Three more toggles sit at the foot of the rail —
+**Essential rows**, **Application only**, and **Triage mode**, described
+next. All of this is purely client-side CSS/JS: no re-run, no DEFINE, and
+it all works offline.
+
+Every table in the report also supports **click-to-sort** on its column
+headers, and any table with 4+ rows gets a small toolbar above it for
+**copying as CSV or Markdown**; hovering a section heading reveals a `#`
+permalink. Long detail tables collapse their tail behind a "Show N more
+rows" link. None of this needs the network or a re-run.
 
 ### "Application only" view
 
@@ -409,9 +429,18 @@ detail tables collapse to a short curated list of the rows a DBA scans first
 affected section header shows a pill with the kept/total row count. Rows
 flagged **crit**/**warn** stay visible even when not on the curated list, so
 the preset never hides an anomaly, and the Findings wait-class rows — already
-a compact high-level rollup — always stay visible. Charts (including the
-findings heatmap) are untouched. Like the other toggles it is purely
+a compact high-level rollup — always stay visible. Charts and the "Biggest
+movers" table are untouched. Like the other toggles it is purely
 client-side and works offline; click again to show all rows.
+
+### "Triage mode"
+
+The third rail-foot toggle, **Triage mode**, collapses the report down to
+the masthead, **Overview**, **Findings**, and **Top SQL** — the sections
+you'd check first on a "is anything on fire" pass — hiding everything
+else (and, within the masthead itself, the DB-time strip). Click again to
+restore the full report. Purely client-side, works offline, and
+combines freely with Essential rows / Application only.
 
 ## Fleet report (many databases)
 
@@ -425,7 +454,10 @@ pills, current AAS, worst finding, DB-time sparkline, and a 24-hour
 ASH-by-wait-class ribbon) that you click to expand into a detail panel — a
 tall 24h ASH timeline with labeled marker lines, headline metric cards, the
 findings table, the Top-SQL table, and the exact `./run_awr_trend.sh …`
-command to drill into that database.
+command to drill into that database. A toolbar above the table lets you
+filter by name, sort by score/name/AAS/errors-first, show only crit/warn+
+rows, and expand or collapse every row at once — all client-side, no
+re-run.
 
 ```bash
 ./run_awr_fleet.sh fleet.conf                          # defaults (AUTO, 1h, 4 back)
@@ -571,7 +603,7 @@ SQL> @side/create_weekly_baselines.sql
 │   ├── 04_waits_fg.sql              -- foreground waits (per template)
 │   ├── 05_waits_bg.sql              -- background waits (per template)
 │   ├── 06_top_sql.sql               -- Top-N SQL
-│   ├── 07_summary.sql               -- z-score findings
+│   ├── 07_summary.sql               -- z-score findings + "Biggest movers" table
 │   ├── 08_overview.sql              -- hero strip (headline metrics)
 │   ├── 09_ash_timeline.sql          -- hourly ASH stacked-area timeline
 │   ├── 10_db_time_summary.sql       -- full-span DB time stacked area
@@ -581,6 +613,7 @@ SQL> @side/create_weekly_baselines.sql
 │   ├── 14_segment_io.sql            -- top segments by I/O per window
 │   ├── 15_file_io.sql               -- per-file / file-type I/O deltas
 │   ├── 16_day_profile.sql           -- Day profile: hour-of-day vs N prior days (profile_days > 0)
+│   ├── 17_narrative.sql             -- "What changed": rule-based prose, relocated into the masthead
 │   ├── fleet/                       -- fleet-report sections (spooled by awr_fleet_extract.sql)
 │   │   ├── 00_fleet_chrome.sql      -- shared page head/CSS/JS + inline-SVG renderers
 │   │   ├── 01_row.sql               -- summary row + detail scaffold + ASH bands
@@ -593,6 +626,8 @@ SQL> @side/create_weekly_baselines.sql
 │   │   └── defaults.sql             -- fleet-only default DEFINEs
 │   └── lib/                         -- shared @@-included fragments (CTEs, JS, helpers)
 │       ├── day_profile_cte.sql      -- hour-of-day x N-day matrix (shared by 16 + fleet 06)
+│       ├── fmt_num.plsql            -- consistent value-cell number formatting (fmt_num/fmt_int)
+│       ├── dev_bucket.plsql         -- heat-tint bucket for prior-window cells (data-dev)
 │       ├── js_markers.plsql         -- inits window.AWR_MARKERS + AWR_markLine()
 │       ├── marker.sql               -- emit one timeline marker (used by marker_file)
 │       ├── markers_inline.sql       -- file-free markers parser (used by the MARKERS var)

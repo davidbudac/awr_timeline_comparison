@@ -23,10 +23,11 @@ DECLARE
     v_per_sec_s  VARCHAR2(64);
     v_row_max    NUMBER;
     v_pct        NUMBER;
-    v_fmt        VARCHAR2(40);
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/is_essential.plsql
+    @@sql/lib/dev_bucket.plsql
+    @@sql/lib/fmt_num.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="load"><h2>Load profile &mdash; per-second rates</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
@@ -34,13 +35,13 @@ BEGIN
         || '<b>Trend</b>: per-window values, oldest &rarr; current. '
         || '<b>Current</b> cell bar = value &divide; row max.</p>');
 
-    v_header := '<thead><tr><th>Metric</th><th class="trend">Trend</th><th class="num">Current</th>';
+    v_header := '<thead><tr><th>Metric</th><th class="trend">Trend</th><th class="num" data-w="0">Current</th>';
     FOR k IN 1 .. v_weeks_back LOOP
-        v_header := v_header || '<th class="num">&minus;'
+        v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
             || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
     END LOOP;
     v_header := v_header || '</tr></thead>';
-    DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
+    DBMS_OUTPUT.PUT_LINE('<table id="load-profile">' || v_header || '<tbody>');
 
     FOR m IN (
         WITH
@@ -158,12 +159,6 @@ BEGIN
               || DBMS_XMLGEN.CONVERT(v_label) || '"></td>';
 
         v_row_max := NVL(m.row_max, 0);
-        v_fmt := CASE
-            WHEN v_row_max = 0 OR v_row_max >= 1   THEN 'FM999G999G999G990D00'
-            WHEN v_row_max >= 0.01                  THEN 'FM990D0000'
-            WHEN v_row_max >= 0.0001                THEN 'FM990D000000'
-            ELSE                                         'FM0D00EEEE'
-        END;
 
         IF v_row_max > 0 AND m.cur_ps IS NOT NULL THEN
             v_pct := LEAST(100, ABS(m.cur_ps) / v_row_max * 100);
@@ -171,22 +166,21 @@ BEGIN
             v_pct := 0;
         END IF;
 
-        v_row := v_row || '<td class="num cell-bar">'
+        v_row := v_row || '<td class="num cell-bar" data-w="0"' || fmt_num_title(m.cur_ps) || '>'
               || '<span class="bg" style="width:' || TO_CHAR(v_pct, 'FM990D0') || '%"></span>'
-              || '<span class="v"><b>' ||
-                CASE WHEN m.cur_ps IS NULL THEN '&mdash;'
-                     ELSE TO_CHAR(m.cur_ps, v_fmt) END
+              || '<span class="v"><b>' || fmt_num(m.cur_ps)
               || '</b></span></td>';
 
         FOR k IN 1 .. v_weeks_back LOOP
             v_per_sec_s := nth_csv(m.week_vals, k + 1);
             IF v_per_sec_s IS NULL OR v_per_sec_s = '' THEN
-                v_row := v_row || '<td class="num">&mdash;</td>';
+                v_row := v_row || '<td class="num" data-w="' || k || '">&mdash;</td>';
             ELSE
                 v_per_sec := TO_NUMBER(v_per_sec_s, 'FM99999999990D000000',
                                        'NLS_NUMERIC_CHARACTERS=''.,''');
-                v_row := v_row || '<td class="num">'
-                      || TO_CHAR(v_per_sec, v_fmt) || '</td>';
+                v_row := v_row || '<td class="num" data-w="' || k || '"'
+                      || dev_attr(m.cur_ps, v_per_sec) || '>'
+                      || fmt_num(v_per_sec) || '</td>';
             END IF;
         END LOOP;
         v_row := v_row || '</tr>';

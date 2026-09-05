@@ -11,14 +11,28 @@
 -- invariant: z and pct cancel units, so callers can pass raw counters
 -- (microseconds, gets, executions) without unit conversion.
 --
+-- Display-only rules (B5/F5, do not affect scoring/severity above):
+--   - |z| > 99 is clamped to "&gt;+99" / "&lt;&minus;99" rather than the
+--     raw (and often meaningless) magnified number.
+--   - When the prior baseline barely moved (sd < 1% of |mean|, or both are
+--     exactly 0) a sigma-approx-0 badge is appended after the z value and
+--     the %-delta cell is rendered bold, nudging the reader toward %-delta
+--     instead of a z-score that a near-zero sigma would blow out of scale.
+--   - The %-delta cell always carries a leading direction glyph (up/down
+--     triangle) instead of a signed number; no per-direction color class is
+--     used (severity color stays on .badge only).
+--
     FUNCTION score_cells(p_cur NUMBER,
                          p_mu  NUMBER,
                          p_sd  NUMBER,
                          p_n   NUMBER) RETURN VARCHAR2 IS
-        v_z      NUMBER;
-        v_pct    NUMBER;
-        v_bucket VARCHAR2(40);
-        v_cls    VARCHAR2(10);
+        v_z       NUMBER;
+        v_pct     NUMBER;
+        v_bucket  VARCHAR2(40);
+        v_cls     VARCHAR2(10);
+        v_sig     VARCHAR2(1) := 'N';
+        v_z_txt   VARCHAR2(40);
+        v_pct_txt VARCHAR2(80);
     BEGIN
         v_z := CASE WHEN p_cur IS NULL OR p_mu IS NULL
                       OR p_sd IS NULL OR p_sd = 0
@@ -43,17 +57,44 @@
                      WHEN 'typical'  THEN 'ok'
                      ELSE                 'skip'
                  END;
+
+        -- B5: baseline-barely-moved flag (display-only, no scoring impact).
+        IF p_mu IS NOT NULL AND p_sd IS NOT NULL THEN
+            IF (p_mu = 0 AND p_sd = 0)
+               OR (p_mu <> 0 AND p_sd < 0.01 * ABS(p_mu)) THEN
+                v_sig := 'Y';
+            END IF;
+        END IF;
+
+        v_z_txt := CASE
+            WHEN v_z IS NULL THEN '&mdash;'
+            WHEN v_z > 99    THEN '&gt;+99'
+            WHEN v_z < -99   THEN '&lt;&minus;99'
+            ELSE TO_CHAR(v_z, 'FMS99990D00', 'NLS_NUMERIC_CHARACTERS=''.,''')
+        END;
+
+        -- F5: direction glyph instead of a signed number, no color class.
+        v_pct_txt := CASE
+            WHEN v_pct IS NULL THEN '&mdash;'
+            WHEN v_pct < 0     THEN '&#9660; ' || TO_CHAR(ABS(v_pct), 'FM99990D0',
+                                         'NLS_NUMERIC_CHARACTERS=''.,''') || '%'
+            ELSE '&#9650; ' || TO_CHAR(v_pct, 'FM99990D0',
+                                        'NLS_NUMERIC_CHARACTERS=''.,''') || '%'
+        END;
+
         RETURN '<td><span class="badge ' || v_cls || '">'
             || v_bucket
             || '</span></td>'
             || '<td class="num">'
-            || CASE WHEN v_z IS NULL THEN '&mdash;'
-                    ELSE TO_CHAR(v_z, 'FMS99990D00',
-                                 'NLS_NUMERIC_CHARACTERS=''.,''') END
+            || v_z_txt
+            || CASE WHEN v_sig = 'Y' THEN
+                   ' <span class="badge sig" title="baseline barely moved: '
+                   || '&sigma; below 1% of mean; read the % delta instead">'
+                   || '&sigma;&approx;0</span>'
+               END
             || '</td>'
             || '<td class="num">'
-            || CASE WHEN v_pct IS NULL THEN '&mdash;'
-                    ELSE TO_CHAR(v_pct, 'FMS99990D0',
-                                 'NLS_NUMERIC_CHARACTERS=''.,''') || '%' END
+            || CASE WHEN v_sig = 'Y' THEN '<b>' || v_pct_txt || '</b>'
+                    ELSE v_pct_txt END
             || '</td>';
     END score_cells;

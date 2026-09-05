@@ -83,8 +83,11 @@ rule is load-bearing for case-sensitive sql_ids.
 - The rail is `position:fixed; left:0; width:var(--rail-w)`; the body
   clears it with `padding-left:calc(var(--rail-w) + 32px)` and caps the
   content column at 1150px.
-- Below 980px the rail degrades to a **static wrapping block** and the
-  body padding resets (single-column mobile flow).
+- Below 980px the rail is replaced by a **sticky top bar** (brand strip +
+  a ☰ hamburger button, tracking the scrollspy's current section name)
+  instead of degrading to a wrapping block; the hamburger opens a dropdown
+  holding the same links/dots and the Essential/App-only/Triage toggles,
+  and the body padding resets to single-column flow.
 - Sections are white panels (`border:1px solid var(--hairline);
   border-radius:10px`). The old numbered `h2::before` numerals are gone
   — the rail does the wayfinding.
@@ -132,11 +135,50 @@ active link is `nav.toc a.on`. If you rename those, change both files.
   The kept-section list is still single-sourced in three places that
   must stay in lockstep (section-hide rule, link-hide rule, and the
   set itself); group labels hide wholesale when the filter is on.
+- **Tabs** (`.tabs[data-tabs]` / `.tabpanel`): a flat underline-style tab
+  bar (active tab gets the teal underline + ink text, inactive tabs
+  `--muted`). Used to fold Top SQL's five ranking dimensions into one
+  group instead of five stacked tables.
+- **Chips** (`.chip`, and the `.wchip` window-chip variant): small
+  rounded-pill badges — window chips in the masthead, rank chips
+  (E/C/G/R/X) in the Top SQL pool table. `.wchip.hl` (the active/
+  highlighted state broadcast by `awr:window`) gets the teal fill;
+  otherwise a neutral `--panel-2` pill with a hairline border.
+- **Expander** (`.expander[data-for]`): a plain-text "Show N more rows"
+  link-button under a long table; toggles `.open` on the table named by
+  `data-for` (rows past the fold carry `data-tail="Y"` and are CSS-hidden
+  until then). No icon — the label text itself flips to "Show fewer".
+- **Heat-tinted prior cells** (`td[data-dev]`): a soft background tint
+  (increasing opacity 1→2→3) on a prior-window value cell when it
+  deviates from that row's Current value — a fast visual "this one
+  didn't move much" vs "this one is way off" scan across a wide table
+  without reading every number.
+- **"Biggest movers" table** (`#findings-movers`): replaced the old
+  `#findings-heatmap` ECharts canvas. A plain table, top 8 rows by
+  `|z|`, each with a horizontal log-scaled bar (`.zbar`) sized off
+  `|z|` and colored by severity — same severity tokens as the badges,
+  no new color introduced. Renders identically with `body.no-charts`.
+- **Narrative block** (`#narrative-slot` in the masthead / `.narr`
+  content from section 17): plain paragraphs, no card chrome of its own
+  — it sits directly under the verdict banner so it reads like part of
+  the masthead. Links inside it (`<a href="#topsql">` etc.) use the
+  ordinary link color, not a special "narrative link" style.
 
 ## 7. Print
 
-Rail hidden, body padding reset, panels borderless. Charts keep
-`break-inside:avoid`.
+Rail/top-bar hidden, body padding reset, panels borderless, one section
+per printed page (`section { break-before:page }`, first section
+exempted), charts keep `break-inside:avoid`. Long-tail rows print in
+full regardless of expander state (`tr[data-tail="Y"] { display:
+table-row !important }`) and `details.method` prints open with its
+`<summary>` hidden, so the reader gets the full methodology text, not a
+closed disclosure triangle. Controls that have no meaning on paper
+(`.tbl-tools`, `.copy-btn`, `.permalink`, `.expander`, `.tag`,
+`.preset-note`, `.next-finding`, `.windows-hint`, the theme button) are
+hidden outright. Tabs are **not** specially handled — a `.tabpanel`
+prints only if it currently has `.on` (whichever tab was last active in
+the browser), same as any other client-side visibility toggle; there is
+no "print all tabs" behavior.
 
 ## 8. What you can change without breaking anything
 

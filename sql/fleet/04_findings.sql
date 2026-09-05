@@ -30,7 +30,59 @@ DECLARE
     v_suppressed PLS_INTEGER := 0;
     v_open_table BOOLEAN := FALSE;
 
-    @@sql/lib/score_cells.plsql
+    -- F5: a fleet-local twin of sql/lib/score_cells.plsql (a SHARED lib file
+    -- also used by the single-DB report's sql/07_summary.sql -- off limits
+    -- to a fleet-only visual change per CLAUDE.md's cardinal no-touch rule).
+    -- Same badge/z/pct scoring math, but the z-score and %-delta cells render
+    -- an up/down direction glyph + absolute value instead of a signed number;
+    -- color still comes only from the badge's crit/warn/ok class below, never
+    -- from the glyph or the sign.
+    FUNCTION score_cells_dir(p_cur NUMBER,
+                              p_mu  NUMBER,
+                              p_sd  NUMBER,
+                              p_n   NUMBER) RETURN VARCHAR2 IS
+        v_z      NUMBER;
+        v_pct    NUMBER;
+        v_bucket VARCHAR2(40);
+        v_cls    VARCHAR2(10);
+        v_zt     VARCHAR2(40);
+        v_pt     VARCHAR2(40);
+    BEGIN
+        v_z := CASE WHEN p_cur IS NULL OR p_mu IS NULL
+                      OR p_sd IS NULL OR p_sd = 0
+                    THEN NULL
+                    ELSE (p_cur - p_mu) / p_sd END;
+        v_pct := CASE WHEN p_cur IS NULL OR p_mu IS NULL OR p_mu = 0
+                      THEN NULL
+                      ELSE (p_cur - p_mu) / ABS(p_mu) * 100 END;
+        v_bucket := CASE
+            WHEN p_cur IS NULL                 THEN 'n/a'
+            WHEN NVL(p_n, 0) < 3               THEN 'insufficient history'
+            WHEN p_sd IS NULL OR p_sd = 0       THEN 'flat baseline'
+            WHEN ABS(v_z) > 3                  THEN 'large'
+            WHEN ABS(v_z) > 2                  THEN 'moderate'
+            ELSE                                    'typical'
+        END;
+        v_cls := CASE v_bucket
+                     WHEN 'large'    THEN 'crit'
+                     WHEN 'moderate' THEN 'warn'
+                     WHEN 'typical'  THEN 'ok'
+                     ELSE                 'skip'
+                 END;
+        v_zt := CASE WHEN v_z IS NULL THEN '&mdash;'
+            ELSE (CASE WHEN v_z >= 0 THEN '&#9650; ' ELSE '&#9660; ' END)
+                 || TO_CHAR(ABS(v_z), 'FM99990D00',
+                            'NLS_NUMERIC_CHARACTERS=''.,''') END;
+        v_pt := CASE WHEN v_pct IS NULL THEN '&mdash;'
+            ELSE (CASE WHEN v_pct >= 0 THEN '&#9650; ' ELSE '&#9660; ' END)
+                 || TO_CHAR(ABS(v_pct), 'FM99990D0',
+                            'NLS_NUMERIC_CHARACTERS=''.,''') || '%' END;
+        RETURN '<td><span class="badge ' || v_cls || '">'
+            || v_bucket
+            || '</span></td>'
+            || '<td class="num">' || v_zt || '</td>'
+            || '<td class="num">' || v_pt || '</td>';
+    END score_cells_dir;
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<div class="detail-block">');
     DBMS_OUTPUT.PUT_LINE('<div class="panel-h">Findings (z &ge; 2&sigma;)</div>');
@@ -229,7 +281,7 @@ BEGIN
             || '<td class="num">' ||
                 CASE WHEN f.prior_mean IS NULL THEN '&mdash;'
                      ELSE TO_CHAR(f.prior_mean, 'FM999G999G999G990D0000') END || '</td>'
-            || score_cells(f.cur_val, f.prior_mean, f.prior_sd, f.n_prior)
+            || score_cells_dir(f.cur_val, f.prior_mean, f.prior_sd, f.n_prior)
             || '</tr>');
     END LOOP;
 

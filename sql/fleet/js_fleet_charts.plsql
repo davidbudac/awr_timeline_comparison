@@ -30,7 +30,20 @@
 --   * wires the masthead theme toggle (flip body.dark, persist localStorage
 --     "awr-theme" -- same key the early bootstrap + single-DB report use);
 --   * wires a debounced window-resize handler that re-renders any open
---     timeline chart whose container width has changed.
+--     timeline chart whose container width has changed;
+--   * wires the masthead-adjacent #fleetToolbar (facelift F1): a text filter,
+--     Score/Name/AAS/Errors-first sort pills, All/Crit/Warn+ show pills, and
+--     Expand-all/Collapse-all -- all read straight from the already-rendered
+--     DOM (score span text, .dot severity class, .aas cell, .alias text) so
+--     no new payload or data-* plumbing is needed from the SQL sections.
+--     Expand/collapse-all share setRowOpen with the delegated row-toggle
+--     click handler, so the lazy chart render on first expand is single-
+--     sourced;
+--   * wires a delegated ".copy-btn" click handler (facelift F4) that copies
+--     the text of the element named by its data-copy selector (the drill-
+--     down command block) via navigator.clipboard, falling back to a hidden
+--     textarea + document.execCommand("copy") where the Clipboard API is
+--     unavailable, flipping the button's label to "Copied" for 1.2s.
 --
 -- Axis/label/gridline colors are emitted as var(--muted)/var(--line-soft)
 -- CSS-var references inside the SVG, so they re-resolve automatically on a
@@ -84,11 +97,23 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  function Y(v){return pad.t+ih-(v/maxY)*ih;}');
     DBMS_OUTPUT.PUT_LINE('  var out=svgEl(w,h);');
     DBMS_OUTPUT.PUT_LINE('  if(opts.bg){out+="<rect x=\""+pad.l+"\" y=\""+pad.t+"\" width=\""+iw+"\" height=\""+ih+"\" fill=\""+opts.bg+"\"/>";}');
-    DBMS_OUTPUT.PUT_LINE('  if(opts.grid){var gl=opts.gridLines||3,g;for(g=1;g<=gl;g++){var gv=maxY*g/gl,gy=Y(gv);out+="<line x1=\""+pad.l+"\" y1=\""+gy.toFixed(1)+"\" x2=\""+(pad.l+iw)+"\" y2=\""+gy.toFixed(1)+"\" stroke=\"var(--line-soft)\" stroke-width=\"1\"/>";out+="<text x=\""+(pad.l-4)+"\" y=\""+(gy+3).toFixed(1)+"\" text-anchor=\"end\" font-size=\"9\" fill=\"var(--muted)\">"+(Math.round(gv*10)/10)+"</text>";}out+="<text x=\""+(pad.l-4)+"\" y=\""+(pad.t+8)+"\" text-anchor=\"end\" font-size=\"9\" fill=\"var(--muted)\">AAS</text>";}');
+    -- B3: the y-axis unit ("AAS") used to be drawn as a corner text label at
+    -- (pad.l-4, pad.t+8), which overprinted the topmost gridline's own value
+    -- label (e.g. "0.5") sitting almost the same spot. The unit now lives
+    -- once in the band's caption line (sql/fleet/01_row.sql's panel-h
+    -- already reads "... (AAS) ..."), so the corner label is dropped rather
+    -- than repositioned -- nothing else needs to render there.
+    DBMS_OUTPUT.PUT_LINE('  if(opts.grid){var gl=opts.gridLines||3,g;for(g=1;g<=gl;g++){var gv=maxY*g/gl,gy=Y(gv);out+="<line x1=\""+pad.l+"\" y1=\""+gy.toFixed(1)+"\" x2=\""+(pad.l+iw)+"\" y2=\""+gy.toFixed(1)+"\" stroke=\"var(--line-soft)\" stroke-width=\"1\"/>";out+="<text x=\""+(pad.l-4)+"\" y=\""+(gy+3).toFixed(1)+"\" text-anchor=\"end\" font-size=\"9\" fill=\"var(--muted)\">"+(Math.round(gv*10)/10)+"</text>";}}');
     DBMS_OUTPUT.PUT_LINE('  var bottom=[];for(i=0;i<n;i++)bottom[i]=0;');
     DBMS_OUTPUT.PUT_LINE('  for(s=0;s<series.length;s++){var top=[],pts=[];for(i=0;i<n;i++){var vv=series[s].vals[i];vv=(vv==null||isNaN(vv))?0:+vv;top[i]=bottom[i]+vv;}for(i=0;i<n;i++)pts.push(X(i).toFixed(1)+","+Y(top[i]).toFixed(2));for(i=n-1;i>=0;i--)pts.push(X(i).toFixed(1)+","+Y(bottom[i]).toFixed(2));out+="<polygon points=\""+pts.join(" ")+"\" fill=\""+(opts.colors?(opts.colors[s]||"#888888"):(WC[series[s].cls]||"#888888"))+"\" fill-opacity=\""+(opts.fillOpacity||0.92)+"\"/>";bottom=top;}');
     DBMS_OUTPUT.PUT_LINE('  if(opts.xLabels){xLabels(opts.t0,bh,n).forEach(function(L){var lx=X(L[0]);out+="<line x1=\""+lx.toFixed(1)+"\" y1=\""+(pad.t+ih)+"\" x2=\""+lx.toFixed(1)+"\" y2=\""+(pad.t+ih+3)+"\" stroke=\"var(--muted)\" stroke-width=\"1\"/>";var anc=L[0]===0?"start":(L[0]===n-1?"end":"middle");out+="<text x=\""+lx.toFixed(1)+"\" y=\""+(pad.t+ih+13)+"\" text-anchor=\""+anc+"\" font-size=\"9\" fill=\"var(--muted)\">"+esc(L[1])+"</text>";});}');
-    DBMS_OUTPUT.PUT_LINE('  if(opts.markers){markersFor(opts.t0,bh,n).forEach(function(m){var mx=X(m.i);if(opts.ribbon){out+="<line x1=\""+mx.toFixed(1)+"\" y1=\""+pad.t+"\" x2=\""+mx.toFixed(1)+"\" y2=\""+(pad.t+ih)+"\" stroke=\""+m.color+"\" stroke-width=\"1\" stroke-opacity=\"0.85\"/>";out+="<path d=\"M"+(mx-2.5).toFixed(1)+","+pad.t+" L"+(mx+2.5).toFixed(1)+","+pad.t+" L"+mx.toFixed(1)+","+(pad.t+3.5)+" Z\" fill=\""+m.color+"\"/>";}else{out+="<line x1=\""+mx.toFixed(1)+"\" y1=\""+pad.t+"\" x2=\""+mx.toFixed(1)+"\" y2=\""+(pad.t+ih)+"\" stroke=\""+m.color+"\" stroke-width=\"1.2\" stroke-dasharray=\"3 2\" stroke-opacity=\"0.9\"/>";var tx=mx,anc2="middle";if(mx>w-70){anc2="end";tx=mx-3;}else if(mx<60){anc2="start";tx=mx+3;}out+="<text x=\""+tx.toFixed(1)+"\" y=\""+(pad.t+10)+"\" text-anchor=\""+anc2+"\" font-size=\"9.5\" font-weight=\"600\" fill=\""+m.color+"\">"+esc(m.label)+"</text>";}});}');
+    -- F3: the ribbon (dbrow summary) draws markers as short 6px ticks at the
+    -- top edge only -- a full-height line was too heavy for the compact
+    -- 30px-tall ribbon and fought with the stacked-area fill. The expanded
+    -- timeline (opts.ribbon falsy) is unchanged: full-height dashed lines
+    -- with a label, since it has the vertical room and the marker is the
+    -- primary way to correlate an event with the wider chart.
+    DBMS_OUTPUT.PUT_LINE('  if(opts.markers){markersFor(opts.t0,bh,n).forEach(function(m){var mx=X(m.i);if(opts.ribbon){out+="<line x1=\""+mx.toFixed(1)+"\" y1=\""+pad.t+"\" x2=\""+mx.toFixed(1)+"\" y2=\""+(pad.t+6)+"\" stroke=\""+m.color+"\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-opacity=\"0.95\"/>";}else{out+="<line x1=\""+mx.toFixed(1)+"\" y1=\""+pad.t+"\" x2=\""+mx.toFixed(1)+"\" y2=\""+(pad.t+ih)+"\" stroke=\""+m.color+"\" stroke-width=\"1.2\" stroke-dasharray=\"3 2\" stroke-opacity=\"0.9\"/>";var tx=mx,anc2="middle";if(mx>w-70){anc2="end";tx=mx-3;}else if(mx<60){anc2="start";tx=mx+3;}out+="<text x=\""+tx.toFixed(1)+"\" y=\""+(pad.t+10)+"\" text-anchor=\""+anc2+"\" font-size=\"9.5\" font-weight=\"600\" fill=\""+m.color+"\">"+esc(m.label)+"</text>";}});}');
     DBMS_OUTPUT.PUT_LINE('  return out+"</svg>";');
     DBMS_OUTPUT.PUT_LINE('}');
     -- fill the timeline caption (nextElementSibling .tl-caption) with a
@@ -116,14 +141,51 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('function fillProfLegend(el,d){var cap=el.nextElementSibling;if(!cap||String(cap.className).indexOf("tl-caption")<0)return;var sw=function(z,l){return "<span><span class=\"dp-sw\" style=\"background:"+profFill(z)+"\"></span>"+l+"</span>";};cap.innerHTML=sw(3.5,"z \u2265 +3 (large)")+sw(2.5,"+2 to +3 (moderate)")+sw(0.5,"typical")+sw(-2.5,"\u22122 to \u22123")+sw(-3.5,"z \u2264 \u22123")+sw(null,"no data")+"<span>"+d.ndays+" prior day(s); hover a cell for values</span>";}');
     DBMS_OUTPUT.PUT_LINE('function buildProfile(d,w){var L=150,T=14,n=d.stats.length,cw=(w-L-4)/24,ch=16,H=T+ch*n+2,s=svgEl(w,H);for(var j=0;j<24;j+=3){s+="<text x=\""+(L+j*cw+1).toFixed(1)+"\" y=\""+(T-4)+"\" font-size=\"9\" fill=\"var(--muted)\">"+esc(d.hours[j])+"</text>";}for(var i=0;i<n;i++){var y=T+i*ch;s+="<text x=\""+(L-6)+"\" y=\""+(y+ch*0.72).toFixed(1)+"\" font-size=\"10\" text-anchor=\"end\" fill=\"var(--muted)\">"+esc(d.stats[i])+"</text>";for(var k=0;k<24;k++){var z=d.z[i][k],tip=esc(d.stats[i])+" @ "+esc(d.hours[k])+": current "+fmtN(d.cur[i][k])+" | prior mean "+fmtN(d.mu[i][k])+" (n="+d.n[i][k]+") | z "+(z==null?"-":(+z).toFixed(2))+" | "+(d.pct[i][k]==null?"-":d.pct[i][k]+"%")+" | "+esc(d.sev[i][k]);s+="<rect x=\""+(L+k*cw).toFixed(1)+"\" y=\""+y+"\" width=\""+Math.max(1,cw-1).toFixed(1)+"\" height=\""+(ch-1)+"\" rx=\"2\" fill=\""+profFill(z)+"\"><title>"+tip+"</title></rect>";}}return s+"</svg>";}');
     DBMS_OUTPUT.PUT_LINE('function renderProfile(){var els=document.querySelectorAll("[data-profile-of]");Array.prototype.forEach.call(els,function(el){if(el.__profiled)return;var d=(window.FLEET_PROFILE||{})[el.getAttribute("data-profile-of")];if(!d||!d.stats||!d.stats.length||!d.z){el.innerHTML="";el.__profiled=true;return;}var w=el.clientWidth;if(!w)return;w=Math.max(480,w);el.innerHTML=buildProfile(d,w);fillProfLegend(el,d);el.__profW=w;el.__profiled=true;});}');
-    DBMS_OUTPUT.PUT_LINE('function wireToggle(){document.addEventListener("click",function(ev){var tgt=ev.target;if(!tgt||!tgt.closest)return;var row=tgt.closest("tr.dbrow");if(!row)return;var det=row.nextElementSibling;if(!det||String(det.className).indexOf("detailrow")<0)return;var open=row.classList.toggle("open");if(open){det.classList.remove("hidden");renderAsh();renderProfile();}else{det.classList.add("hidden");}});}');
+    -- setRowOpen is the single code path for opening/closing a detailrow --
+    -- the delegated click handler AND the F1 toolbar's Expand/Collapse-all
+    -- buttons both call it, so the lazy first-render of a row's charts
+    -- (renderAsh/renderProfile, needed once a hidden container gets a real
+    -- clientWidth) only ever lives in one place.
+    DBMS_OUTPUT.PUT_LINE('function setRowOpen(row,open){var det=row.nextElementSibling;if(!det||String(det.className).indexOf("detailrow")<0)return;var isOpen=row.classList.contains("open");if(open===isOpen)return;if(open){row.classList.add("open");det.classList.remove("hidden");renderAsh();renderProfile();}else{row.classList.remove("open");det.classList.add("hidden");}}');
+    DBMS_OUTPUT.PUT_LINE('function wireToggle(){document.addEventListener("click",function(ev){var tgt=ev.target;if(!tgt||!tgt.closest)return;var row=tgt.closest("tr.dbrow");if(!row)return;setRowOpen(row,!row.classList.contains("open"));});}');
     -- theme toggle: flip body.dark, persist localStorage "awr-theme"
     DBMS_OUTPUT.PUT_LINE('function wireTheme(){var b=document.getElementById("themeToggle");if(!b)return;b.setAttribute("aria-pressed",document.body.classList.contains("dark")?"true":"false");b.addEventListener("click",function(){var on=document.body.classList.toggle("dark");try{localStorage.setItem("awr-theme",on?"dark":"light");}catch(e){}b.setAttribute("aria-pressed",on?"true":"false");});}');
     -- debounced resize: re-render any open (visible, clientWidth>0) timeline
     -- whose container width actually changed, so the SVG tracks a resized
     -- viewport/panel instead of staying stretched from its first render
     DBMS_OUTPUT.PUT_LINE('function wireResize(){var tmr=null;window.addEventListener("resize",function(){if(tmr)clearTimeout(tmr);tmr=setTimeout(function(){var changed=false;var els=document.querySelectorAll("[data-ash-of][data-ash-mode=\"timeline\"]");Array.prototype.forEach.call(els,function(el){var w=el.clientWidth;if(w>0&&w!==el.__ashW){el.__ashed=false;changed=true;}});if(changed)renderAsh();var pc=false;var pe=document.querySelectorAll("[data-profile-of]");Array.prototype.forEach.call(pe,function(el){var w=el.clientWidth;if(w>0&&w!==el.__profW){el.__profiled=false;pc=true;}});if(pc)renderProfile();},150);});}');
-    DBMS_OUTPUT.PUT_LINE('function boot(){renderAsh();renderProfile();wireToggle();wireTheme();wireResize();}');
+    -- F1 toolbar: filter/sort/show/expand-collapse, all client-side over the
+    -- existing tr.dbrow/tr.detailrow pairs -- no payload or markup changes.
+    -- Reads every value straight out of the already-rendered DOM (the score
+    -- span's text, the .dot's severity class, the .aas cell, the .alias
+    -- text) rather than adding new data-* plumbing through the SQL sections.
+    DBMS_OUTPUT.PUT_LINE('function wireToolbar(){var tb=document.getElementById("fleetToolbar");if(!tb)return;var tbody=document.querySelector("table.fleet tbody");if(!tbody)return;');
+    DBMS_OUTPUT.PUT_LINE('  var pairs=[];Array.prototype.forEach.call(tbody.querySelectorAll("tr.dbrow"),function(tr,i){var det=tr.nextElementSibling;if(!det||String(det.className).indexOf("detailrow")<0)det=null;tr.setAttribute("data-orig-idx",i);pairs.push({row:tr,det:det});});');
+    DBMS_OUTPUT.PUT_LINE('  var state={q:"",sort:"score",show:"all"};');
+    DBMS_OUTPUT.PUT_LINE('  function numOf(sel,row){var el=row.querySelector(sel);if(!el)return NaN;var v=parseFloat(el.textContent);return v;}');
+    DBMS_OUTPUT.PUT_LINE('  function sevOf(row){var dot=row.querySelector(".dot");if(!dot)return "";return String(dot.className).replace("dot","").replace(/\\s+/g,"");}');
+    DBMS_OUTPUT.PUT_LINE('  function nameOf(row){var el=row.querySelector(".alias");return el?el.textContent.toLowerCase():"";}');
+    DBMS_OUTPUT.PUT_LINE('  function apply(){var q=state.q.trim().toLowerCase();pairs.forEach(function(p){var show=true;if(q&&nameOf(p.row).indexOf(q)<0)show=false;if(show&&state.show!=="all"){var sev=sevOf(p.row);if(state.show==="crit"){show=(sev==="crit"||sev==="dead");}else if(state.show==="warn"){show=(sev==="crit"||sev==="warn"||sev==="dead");}}p.row.hidden=!show;if(p.det)p.det.hidden=!show;});}');
+    -- comparators: "errors" == original assembled order (unreachable rows
+    -- first, then OK rows score-desc) since that IS the DOM order captured
+    -- into data-orig-idx above; the other three are pure single-field sorts.
+    DBMS_OUTPUT.PUT_LINE('  function cmpScore(a,b){var sa=numOf(".score",a.row),sb=numOf(".score",b.row);if(isNaN(sa))sa=-1;if(isNaN(sb))sb=-1;return sb-sa;}');
+    DBMS_OUTPUT.PUT_LINE('  function cmpName(a,b){var na=nameOf(a.row),nb=nameOf(b.row);return na<nb?-1:(na>nb?1:0);}');
+    DBMS_OUTPUT.PUT_LINE('  function cmpAas(a,b){var sa=numOf(".aas",a.row),sb=numOf(".aas",b.row);if(isNaN(sa))sa=-1;if(isNaN(sb))sb=-1;return sb-sa;}');
+    DBMS_OUTPUT.PUT_LINE('  function cmpErrors(a,b){return (+a.row.getAttribute("data-orig-idx"))-(+b.row.getAttribute("data-orig-idx"));}');
+    DBMS_OUTPUT.PUT_LINE('  function sortRows(){var cmp=state.sort==="name"?cmpName:state.sort==="aas"?cmpAas:state.sort==="errors"?cmpErrors:cmpScore;var ordered=pairs.slice().sort(cmp);ordered.forEach(function(p){tbody.appendChild(p.row);if(p.det)tbody.appendChild(p.det);});}');
+    DBMS_OUTPUT.PUT_LINE('  var inp=tb.querySelector("#dbFilter");if(inp)inp.addEventListener("input",function(){state.q=inp.value;apply();});');
+    DBMS_OUTPUT.PUT_LINE('  Array.prototype.forEach.call(tb.querySelectorAll("[data-sort]"),function(btn){btn.addEventListener("click",function(){state.sort=btn.getAttribute("data-sort");Array.prototype.forEach.call(tb.querySelectorAll("[data-sort]"),function(b){b.classList.toggle("active",b===btn);});sortRows();});});');
+    DBMS_OUTPUT.PUT_LINE('  Array.prototype.forEach.call(tb.querySelectorAll("[data-show]"),function(btn){btn.addEventListener("click",function(){state.show=btn.getAttribute("data-show");Array.prototype.forEach.call(tb.querySelectorAll("[data-show]"),function(b){b.classList.toggle("active",b===btn);});apply();});});');
+    DBMS_OUTPUT.PUT_LINE('  var ea=tb.querySelector("#expandAll"),ca=tb.querySelector("#collapseAll");if(ea)ea.addEventListener("click",function(){pairs.forEach(function(p){setRowOpen(p.row,true);});});if(ca)ca.addEventListener("click",function(){pairs.forEach(function(p){setRowOpen(p.row,false);});});');
+    DBMS_OUTPUT.PUT_LINE('}');
+    -- F4 copy-to-clipboard for the drill-down command block: one delegated
+    -- click handler for every ".copy-btn" (data-copy holds a CSS selector
+    -- for the text to copy), navigator.clipboard with a textarea fallback
+    -- for browsers/contexts without it (e.g. non-HTTPS file:// preview).
+    DBMS_OUTPUT.PUT_LINE('function fallbackCopy(text){try{var ta=document.createElement("textarea");ta.value=text;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.focus();ta.select();document.execCommand("copy");document.body.removeChild(ta);}catch(e){}}');
+    DBMS_OUTPUT.PUT_LINE('function wireCopy(){document.addEventListener("click",function(ev){var btn=ev.target&&ev.target.closest?ev.target.closest(".copy-btn"):null;if(!btn)return;ev.stopPropagation();var sel=btn.getAttribute("data-copy");var el=sel?document.querySelector(sel):null;var text=el?(el.innerText||el.textContent||""):"";function done(){var orig=btn.textContent;btn.textContent="Copied";btn.classList.add("copied");setTimeout(function(){btn.textContent=orig;btn.classList.remove("copied");},1200);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,function(){fallbackCopy(text);done();});}else{fallbackCopy(text);done();}});}');
+    DBMS_OUTPUT.PUT_LINE('function boot(){renderAsh();renderProfile();wireToggle();wireTheme();wireResize();wireToolbar();wireCopy();}');
     DBMS_OUTPUT.PUT_LINE('if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot);else boot();');
     DBMS_OUTPUT.PUT_LINE('window.__fleetRenderAsh=renderAsh;');
     DBMS_OUTPUT.PUT_LINE('window.__fleetRenderProfile=renderProfile;');

@@ -29,12 +29,13 @@ DECLARE
     v_row         VARCHAR2(32767);
     v_val         NUMBER;
     v_val_s       VARCHAR2(64);
-    v_fmt         VARCHAR2(40);
     v_row_max     NUMBER;
     v_pct         NUMBER;
     v_last_grp    NUMBER := -1;
 
     @@sql/lib/nth_csv.plsql
+    @@sql/lib/dev_bucket.plsql
+    @@sql/lib/fmt_num.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="utilization"><h2>Database utilization '
         || '&mdash; how the applications use this DB</h2>');
@@ -46,9 +47,9 @@ BEGIN
         || 'schedules, user load), not database trouble. '
         || '<b>Trend</b>: per-window values, oldest &rarr; current.</p>');
 
-    v_header := '<thead><tr><th>Metric</th><th>Unit</th><th class="trend">Trend</th><th class="num">Current</th>';
+    v_header := '<thead><tr><th>Metric</th><th>Unit</th><th class="trend">Trend</th><th class="num" data-w="0">Current</th>';
     FOR k IN 1 .. v_weeks_back LOOP
-        v_header := v_header || '<th class="num">&minus;'
+        v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
             || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
     END LOOP;
     v_header := v_header || '</tr></thead>';
@@ -140,17 +141,16 @@ BEGIN
                 DBMS_OUTPUT.PUT_LINE('</tbody></table>');
             END IF;
             DBMS_OUTPUT.PUT_LINE('<h3>' || DBMS_XMLGEN.CONVERT(m.grp_label) || '</h3>');
-            DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
+            DBMS_OUTPUT.PUT_LINE('<table id="util-' || CASE m.grp_ord
+                    WHEN 1 THEN 'transactions'
+                    WHEN 2 THEN 'connections'
+                    WHEN 3 THEN 'data'
+                    ELSE 'other' || m.grp_ord END
+                || '">' || v_header || '<tbody>');
             v_last_grp := m.grp_ord;
         END IF;
 
         v_row_max := NVL(m.row_max, 0);
-        v_fmt := CASE
-            WHEN v_row_max = 0 OR v_row_max >= 1   THEN 'FM999G999G999G990D00'
-            WHEN v_row_max >= 0.01                  THEN 'FM990D0000'
-            WHEN v_row_max >= 0.0001                THEN 'FM990D000000'
-            ELSE                                         'FM0D00EEEE'
-        END;
 
         IF v_row_max > 0 AND m.cur_val IS NOT NULL THEN
             v_pct := LEAST(100, ABS(m.cur_val) / v_row_max * 100);
@@ -164,21 +164,20 @@ BEGIN
               || '<td>' || DBMS_XMLGEN.CONVERT(NVL(m.metric_unit, '')) || '</td>'
               || '<td class="trend" data-spark="' || NVL(m.spark_vals, '')
               || '" data-spark-title="' || DBMS_XMLGEN.CONVERT(m.disp_label) || '"></td>'
-              || '<td class="num cell-bar">'
+              || '<td class="num cell-bar" data-w="0"' || fmt_num_title(m.cur_val) || '>'
               || '<span class="bg" style="width:' || TO_CHAR(v_pct, 'FM990D0') || '%"></span>'
-              || '<span class="v"><b>' ||
-                 CASE WHEN m.cur_val IS NULL THEN '&mdash;'
-                      ELSE TO_CHAR(m.cur_val, v_fmt) END || '</b></span></td>';
+              || '<span class="v"><b>' || fmt_num(m.cur_val) || '</b></span></td>';
 
         FOR k IN 1 .. v_weeks_back LOOP
             v_val_s := nth_csv(m.week_vals, k + 1);
             IF v_val_s IS NULL OR v_val_s = '' THEN
-                v_row := v_row || '<td class="num">&mdash;</td>';
+                v_row := v_row || '<td class="num" data-w="' || k || '">&mdash;</td>';
             ELSE
                 v_val := TO_NUMBER(v_val_s, 'FM99999999990D000000',
                                    'NLS_NUMERIC_CHARACTERS=''.,''');
-                v_row := v_row || '<td class="num">'
-                      || TO_CHAR(v_val, v_fmt) || '</td>';
+                v_row := v_row || '<td class="num" data-w="' || k || '"'
+                      || dev_attr(m.cur_val, v_val) || '>'
+                      || fmt_num(v_val) || '</td>';
             END IF;
         END LOOP;
         v_row := v_row || '</tr>';

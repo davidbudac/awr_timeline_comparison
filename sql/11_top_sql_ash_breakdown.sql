@@ -100,6 +100,11 @@ DECLARE
     v_evt_swap      t_evt_rec;
     v_prefix        VARCHAR2(40);
 
+    -- T1: SQLs below the ASH sample threshold are listed in one collapsed
+    -- <details> instead of one placeholder card each. Accumulated as
+    -- "sqlid (samples)" tokens, joined with middot separators at emit time.
+    v_below_list    VARCHAR2(32000);
+
     @@sql/lib/put_clob_chunked.plsql
     @@sql/lib/is_oracle_schema.plsql
 BEGIN
@@ -431,18 +436,11 @@ BEGIN
         v_sid := v_order(i).sid;
         IF NVL(v_sql_totals(v_sid), 0) < v_min_samples THEN
             v_skipped := v_skipped + 1;
-            DBMS_OUTPUT.PUT_LINE('<div class="ash-sql-card insufficient" data-sys="'
-                || v_sql_sys(v_sid) || '">'
-                || '<div class="ash-sql-head">'
-                || '<code>' || DBMS_XMLGEN.CONVERT(v_sid) || '</code>'
-                || ' &middot; '
-                || '<span class="ash-sql-meta">' || v_sql_totals(v_sid)
-                || ' ASH samples &mdash; insufficient for a stacked timeline</span>'
-                || '</div>'
-                || '<pre class="ash-sql-snippet">'
-                || DBMS_XMLGEN.CONVERT(v_sql_text(v_sid))
-                || '</pre>'
-                || '</div>');
+            -- T1: collect into the single below-threshold list instead of
+            -- emitting a full placeholder card per SQL.
+            v_below_list := v_below_list
+                || CASE WHEN v_below_list IS NULL THEN '' ELSE ' &middot; ' END
+                || DBMS_XMLGEN.CONVERT(v_sid) || ' (' || v_sql_totals(v_sid) || ')';
         ELSE
             v_rendered := v_rendered + 1;
             DBMS_OUTPUT.PUT_LINE('<div class="ash-sql-card" data-sys="'
@@ -466,6 +464,11 @@ BEGIN
     END LOOP;
 
     IF v_skipped > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('<details class="method">'
+            || '<summary>' || v_skipped || ' SQLs below the ' || v_min_samples
+            || '-sample ASH threshold, listed without a chart</summary>'
+            || '<p class="mono">' || v_below_list || '</p>'
+            || '</details>');
         DBMS_OUTPUT.PUT_LINE('<p class="ash-sql-footnote" '
             || 'style="font-size:11px;color:var(--muted);margin:8px 0 0 0">'
             || 'Showing ' || v_rendered || ' SQL chart(s); '
@@ -581,23 +584,28 @@ BEGIN
     -- label rather than a real band, and clamp the right edge to the last
     -- bucket label when the window end is off the category grid (mirrors 09).
     DBMS_OUTPUT.PUT_LINE('var lastCat=(d.hours&&d.hours.length)?d.hours[d.hours.length-1]:null;');
-    DBMS_OUTPUT.PUT_LINE('var markAreaData=(d.windows||[]).map(function(w){'
-        || 'var valid=w[3]!=="0";'
-        || 'var a={xAxis:w[0],itemStyle:{color:valid?(w[2]==="current"?bandCurrent:bandColor):bandSkip}};'
+    DBMS_OUTPUT.PUT_LINE('function buildMarkAreas(hiSlot){return (d.windows||[]).map(function(w){'
+        || 'var valid=w[3]!=="0";var isCur=w[2]==="current";'
+        || 'var hi=(hiSlot!=null)&&((hiSlot===0&&isCur)||("w-"+hiSlot===w[2]));'
+        || 'var a={xAxis:w[0],name:w[2],itemStyle:{color:valid?(isCur?bandCurrent:bandColor):bandSkip,opacity:hi?1:(hiSlot!=null?0.35:1),borderColor:hi?fg:null,borderWidth:hi?1.5:0}};'
         || 'if(!valid){a.label={show:true,position:"insideTop",color:mu,fontSize:9,formatter:"skipped",distance:1};}'
         || 'var end=w[1];if(lastCat!==null&&d.hours.indexOf(end)<0)end=lastCat;'
-        || 'return [a,{xAxis:end}];});');
+        || 'return [a,{xAxis:end}];});}');
+    -- C3: hide the slider dataZoom when there are few enough buckets to
+    -- read directly (shared bucket grid, same for every per-SQL chart).
+    DBMS_OUTPUT.PUT_LINE('var showSlider=(d.hours||[]).length>24;');
     DBMS_OUTPUT.PUT_LINE('(d.charts||[]).forEach(function(c){');
     DBMS_OUTPUT.PUT_LINE('  var el=document.getElementById(c.id); if(!el) return;');
     DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el);');
+    DBMS_OUTPUT.PUT_LINE('  var markAreaData=buildMarkAreas(null);');
     DBMS_OUTPUT.PUT_LINE('  chart.setOption({');
     DBMS_OUTPUT.PUT_LINE('    tooltip:{trigger:"axis",axisPointer:{type:"line"},');
     DBMS_OUTPUT.PUT_LINE('      valueFormatter:function(v){return v==null?"—":(+v).toFixed(2);}},');
     DBMS_OUTPUT.PUT_LINE('    legend:{top:0,left:"center",textStyle:{color:fg,fontSize:10},itemWidth:10,itemHeight:7,type:"scroll"},');
-    DBMS_OUTPUT.PUT_LINE('    grid:{left:42,right:14,top:30,bottom:46,containLabel:true},');
+    DBMS_OUTPUT.PUT_LINE('    grid:{left:42,right:14,top:30,bottom:showSlider?46:26,containLabel:true},');
     DBMS_OUTPUT.PUT_LINE('    xAxis:{type:"category",data:d.hours,boundaryGap:false,axisLabel:{color:mu,fontSize:9,hideOverlap:true}},');
     DBMS_OUTPUT.PUT_LINE('    yAxis:{type:"value",name:"AAS",nameTextStyle:{color:mu,fontSize:10},axisLabel:{color:mu,fontSize:9},splitLine:{lineStyle:{color:gr}}},');
-    DBMS_OUTPUT.PUT_LINE('    dataZoom:[{type:"inside"},{type:"slider",bottom:6,height:14,textStyle:{color:mu,fontSize:9}}],');
+    DBMS_OUTPUT.PUT_LINE('    dataZoom:[{type:"inside"},{type:"slider",show:showSlider,bottom:6,height:14,textStyle:{color:mu,fontSize:9}}],');
     DBMS_OUTPUT.PUT_LINE('    series:c.events.map(function(e,i){');
     DBMS_OUTPUT.PUT_LINE('      var color=eventColor(e.name);');
     DBMS_OUTPUT.PUT_LINE('      var s={name:e.name,type:"line",stack:"total",smooth:false,symbol:"none",');
@@ -614,6 +622,9 @@ BEGIN
     -- (closure over this iteration''s `chart`); re-applies colors on flip (F14).
     DBMS_OUTPUT.PUT_LINE('  document.addEventListener("awr:theme",function(){var c2=getComputedStyle(document.body),fg2=c2.getPropertyValue("--fg").trim()||"#333",mu2=c2.getPropertyValue("--muted").trim()||"#888",gr2=c2.getPropertyValue("--border").trim()||"#e0e0e0";');
     DBMS_OUTPUT.PUT_LINE('  chart.setOption({legend:{textStyle:{color:fg2}},xAxis:{axisLabel:{color:mu2}},yAxis:{nameTextStyle:{color:mu2},axisLabel:{color:mu2},splitLine:{lineStyle:{color:gr2}}},dataZoom:[{},{textStyle:{color:mu2}}]});});');
+    -- X2: registered per-chart inside this forEach (one outer listener would
+    -- only capture the last chart's `chart`/`markAreaData` closure).
+    DBMS_OUTPUT.PUT_LINE('  document.addEventListener("awr:window",function(e){var w=e.detail?e.detail.w:null;chart.setOption({series:[{markArea:{data:buildMarkAreas(w)}}]});});');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');

@@ -5,10 +5,23 @@
 --   - metric label
 --   - mini ECharts line+area chart across windows (oldest -> newest)
 --   - current value (+ unit)
+--   - an inline-SVG bar strip (oldest -> current) on a lowered baseline so
+--     small differences stay visible, plus a "vs prior mean" delta line
+--     with the prior min-max range (B6)
 --   - change-bucket badge (large/moderate/typical) from an inline z-score
 --
 -- Read-only: recomputes everything in-flight from the AWR views; does NOT
 -- read or persist any scratch table.
+--
+-- Display-only rules layered on top of the z/pct computed below (B5/F5,
+-- same convention as sql/07_summary.sql / sql/lib/score_cells.plsql -- not
+-- shared, recomputed locally):
+--   - |z| > 99 is clamped to "&gt;+99" / "&lt;&minus;99" for the hero badge.
+--   - A near-zero baseline sigma (sd < 1% of |mean|, or both exactly 0)
+--     gets a sibling "sigma approx 0" badge next to the severity badge.
+--   - The "vs prior mean" delta always carries a leading up/down triangle
+--     instead of a signed number; no per-direction color class is used
+--     (severity color stays on .badge only).
 --
 
 SET DEFINE '~'
@@ -23,8 +36,9 @@ DECLARE
     v_weeks_back  NUMBER := ~weeks_back;
 
     @@sql/lib/nth_csv.plsql
+    @@sql/lib/fmt_num.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="overview"><h2>Headline metrics</h2>');
+    DBMS_OUTPUT.PUT_LINE('<section id="overview" data-triage="Y"><h2>Headline metrics</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
         || 'Six headline metrics across the compared windows, oldest &rarr; current. '
         || 'Badge = z bucket: |z|&gt;3 large, |z|&gt;2 moderate, else typical.</p>');
@@ -177,16 +191,33 @@ BEGIN
         ORDER BY pos
     ) LOOP
         DECLARE
-            v_z    NUMBER;
-            v_pct  NUMBER;
-            v_sev  VARCHAR2(40);
-            v_sev_cls VARCHAR2(10);
+            TYPE num_arr IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
+
+            v_z         NUMBER;
+            v_pct       NUMBER;
+            v_sev       VARCHAR2(40);
+            v_sev_cls   VARCHAR2(10);
+            v_z_txt     VARCHAR2(40);
             v_sev_badge VARCHAR2(80);
-            v_chips    VARCHAR2(32767);
-            v_d_s      VARCHAR2(64);
-            v_d        NUMBER;
-            v_off      PLS_INTEGER;
-            v_off_lbl  VARCHAR2(80);
+            v_sig       VARCHAR2(1) := 'N';
+
+            -- B6: bar-strip + "vs prior mean" delta line (replaces the old
+            -- per-window "-Np +x%" chip row).
+            v_n         PLS_INTEGER := v_weeks_back + 1;
+            v_vals      num_arr;      -- 1..v_n, oldest -> current
+            v_tok       VARCHAR2(64);
+            v_min_all   NUMBER;
+            v_max_all   NUMBER;
+            v_min_prior NUMBER;
+            v_max_prior NUMBER;
+            v_lo        NUMBER;
+            v_hi        NUMBER;
+            v_h         NUMBER;
+            v_bars      VARCHAR2(32767);
+            v_range_txt VARCHAR2(120);
+            v_pct_txt   VARCHAR2(80);
+            v_bw        CONSTANT NUMBER := 34;
+            v_gap       CONSTANT NUMBER := 6;
         BEGIN
             v_z := CASE
                 WHEN c.cur IS NULL OR c.mu IS NULL THEN NULL
@@ -211,6 +242,21 @@ BEGIN
                 WHEN 'typical'  THEN 'ok'
                 ELSE 'skip' END;
 
+            -- B5: display-only clamp + baseline-barely-moved flag (no
+            -- scoring/severity impact -- v_sev/v_sev_cls above are untouched).
+            IF c.mu IS NOT NULL AND c.sd IS NOT NULL THEN
+                IF (c.mu = 0 AND c.sd = 0)
+                   OR (c.mu <> 0 AND c.sd < 0.01 * ABS(c.mu)) THEN
+                    v_sig := 'Y';
+                END IF;
+            END IF;
+            v_z_txt := CASE
+                WHEN v_z IS NULL THEN NULL
+                WHEN v_z > 99    THEN '&gt;+99'
+                WHEN v_z < -99   THEN '&lt;&minus;99'
+                ELSE TO_CHAR(v_z, 'FMS99990D0')
+            END;
+
             v_cards_json := CASE WHEN v_cards_json IS NULL THEN '' ELSE v_cards_json || ',' END
                 || '{"pos":' || c.pos
                 || ',"label":"' || c.label
@@ -230,52 +276,91 @@ BEGIN
 
             v_sev_badge := CASE
                 WHEN v_sev IS NULL THEN 'n/a'
-                WHEN v_z IS NOT NULL THEN v_sev || ' z=' || TO_CHAR(v_z, 'FMS99990D0')
+                WHEN v_z IS NOT NULL THEN v_sev || ' z=' || v_z_txt
                 ELSE v_sev END;
 
             DBMS_OUTPUT.PUT_LINE('<div class="hero-card" data-hero-pos="' || c.pos || '">');
             DBMS_OUTPUT.PUT_LINE('  <div class="label">' || c.label || '</div>');
+            -- data-spark keeps its existing CSV contract untouched -- only
+            -- the foot below changes.
             DBMS_OUTPUT.PUT_LINE('  <div class="mini" id="hero-mini-' || c.pos
                 || '" data-spark="' || NVL(c.vals_csv, '')
                 || '" data-spark-title="' || c.label || '"></div>');
-            DBMS_OUTPUT.PUT_LINE('  <div class="value">'
-                || CASE WHEN c.cur IS NULL THEN '&mdash;'
-                        ELSE TO_CHAR(c.cur, 'FM999G999G990D00') END
+            DBMS_OUTPUT.PUT_LINE('  <div class="value"' || fmt_num_title(c.cur) || '>'
+                || fmt_num(c.cur)
                 || ' <small>' || c.unit || '</small></div>');
-            v_chips := NULL;
-            FOR k IN 1 .. v_weeks_back LOOP
-                v_off     := v_weeks_back - k + 1;
-                v_off_lbl := '<span class="dp">-' || v_off || 'p</span>';
-                v_d_s := nth_csv(c.deltas_csv, k);
-                IF v_d_s IS NULL OR v_d_s = '' THEN
-                    v_chips := v_chips || '<span class="delta" title="vs -'
-                        || v_off || 'p">' || v_off_lbl || '&mdash;</span>';
+
+            --
+            -- B6: parse the same vals_csv (oldest -> current, positional,
+            -- 'null' token for a missing window) that data-spark already
+            -- carries, into a bar strip with a lowered baseline so small
+            -- differences stay visible, plus the prior min-max range.
+            --
+            FOR k IN 1 .. v_n LOOP
+                v_tok := nth_csv(c.vals_csv, k);
+                IF v_tok IS NULL OR v_tok = '' OR LOWER(v_tok) = 'null' THEN
+                    v_vals(k) := NULL;
                 ELSE
-                    v_d := TO_NUMBER(v_d_s, 'FM99999999990D000000',
-                                     'NLS_NUMERIC_CHARACTERS=''.,''');
-                    IF v_d > 0 THEN
-                        v_chips := v_chips || '<span class="delta up" title="vs -'
-                            || v_off || 'p">' || v_off_lbl
-                            || TO_CHAR(v_d, 'FMS99990D0') || '%</span>';
-                    ELSIF v_d < 0 THEN
-                        v_chips := v_chips || '<span class="delta down" title="vs -'
-                            || v_off || 'p">' || v_off_lbl
-                            || TO_CHAR(v_d, 'FMS99990D0') || '%</span>';
-                    ELSE
-                        v_chips := v_chips || '<span class="delta" title="vs -'
-                            || v_off || 'p">' || v_off_lbl || '0%</span>';
+                    v_vals(k) := TO_NUMBER(v_tok, 'FM99999999990D000000',
+                                            'NLS_NUMERIC_CHARACTERS=''.,''');
+                END IF;
+                IF v_vals(k) IS NOT NULL THEN
+                    v_min_all := LEAST(NVL(v_min_all, v_vals(k)), v_vals(k));
+                    v_max_all := GREATEST(NVL(v_max_all, v_vals(k)), v_vals(k));
+                    IF k < v_n THEN
+                        v_min_prior := LEAST(NVL(v_min_prior, v_vals(k)), v_vals(k));
+                        v_max_prior := GREATEST(NVL(v_max_prior, v_vals(k)), v_vals(k));
                     END IF;
                 END IF;
             END LOOP;
 
+            v_bars := NULL;
+            IF v_min_all IS NOT NULL THEN
+                v_lo := GREATEST(v_min_all - 1.5 * (v_max_all - v_min_all), 0);
+                v_hi := CASE WHEN v_max_all = v_lo THEN v_lo + 1 ELSE v_max_all END;
+                FOR k IN 1 .. v_n LOOP
+                    IF v_vals(k) IS NOT NULL THEN
+                        v_h := GREATEST(1, LEAST(38, ROUND((v_vals(k) - v_lo) / (v_hi - v_lo) * 38, 2)));
+                        v_bars := v_bars
+                            || '<rect x="' || ((k - 1) * (v_bw + v_gap))
+                            || '" y="' || (40 - v_h)
+                            || '" width="' || v_bw
+                            || '" height="' || v_h
+                            || '" rx="2" fill="var(--accent)" opacity="'
+                            || CASE WHEN k = v_n THEN '1' ELSE '0.3' END
+                            || '"></rect>';
+                    END IF;
+                END LOOP;
+            END IF;
+            IF v_bars IS NOT NULL THEN
+                DBMS_OUTPUT.PUT_LINE('  <svg class="hbars" viewBox="0 0 '
+                    || TO_CHAR(GREATEST(200, v_n * (v_bw + v_gap) - v_gap)) || ' 42" aria-hidden="true">'
+                    || v_bars || '</svg>');
+            END IF;
+
+            -- F5: direction glyph, no color class.
+            v_pct_txt := CASE
+                WHEN v_pct IS NULL THEN '&mdash;'
+                WHEN v_pct < 0     THEN '&#9660; ' || TO_CHAR(ABS(v_pct), 'FM99990D0') || '%'
+                ELSE '&#9650; ' || TO_CHAR(v_pct, 'FM99990D0') || '%'
+            END;
+            v_range_txt := CASE
+                WHEN v_min_prior IS NULL OR v_max_prior IS NULL THEN '&mdash;'
+                ELSE fmt_num(v_min_prior) || ' &ndash; ' || fmt_num(v_max_prior)
+            END;
+            DBMS_OUTPUT.PUT_LINE('  <div class="hc-delta">vs prior mean <b>'
+                || v_pct_txt || '</b> &middot; range ' || v_range_txt || '</div>');
+
             DBMS_OUTPUT.PUT_LINE('  <div class="foot">'
-                || '<span class="deltas" title="Period-over-period change'
-                || ' (oldest &rarr; current, every ~step_label)">'
-                || NVL(v_chips, '<span class="delta">&mdash;</span>')
-                || '</span>'
                 || '<span class="badge ' || v_sev_cls || '">'
                 || v_sev_badge
-                || '</span></div>');
+                || '</span>'
+                || CASE WHEN v_sig = 'Y' THEN
+                       ' <span class="badge sig" title="baseline barely moved: '
+                       || '&sigma; below 1% of mean; read the % delta instead">'
+                       || '&sigma;&approx;0</span>'
+                   END
+                || '</div>');
             DBMS_OUTPUT.PUT_LINE('</div>');
         END;
     END LOOP;
