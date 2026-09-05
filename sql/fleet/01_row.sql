@@ -44,7 +44,7 @@
 --                  window.FLEET_ASH, populated by section 02)
 --
 -- The section opened here (detailrow / detail-grid + the ASH timeline band)
--- is continued by 02/03 (further full-width bands) and closed by 06_close.sql.
+-- is continued by 02/03 (further full-width bands) and closed by 07_close.sql.
 --
 -- Read-only: recomputes everything in-flight from the AWR views.
 --

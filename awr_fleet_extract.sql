@@ -135,7 +135,7 @@ COLUMN db_version          NEW_VALUE db_version          NOPRINT
 COLUMN target_end_resolved NEW_VALUE target_end_resolved NOPRINT
 -- target_end_requested is the literal requested instant, BEFORE any
 -- snap-to-last-snapshot adjustment (see the snp inline view below, a
--- deliberate lockstep copy of awr_trend.sql's). 06_close's drill panel
+-- deliberate lockstep copy of awr_trend.sql's). 07_close's drill panel
 -- compares it against target_end_resolved to decide whether to print a
 -- "snapped to last snapshot" note.
 COLUMN target_end_requested NEW_VALUE target_end_requested NOPRINT
@@ -303,7 +303,7 @@ SPOOL OFF
 -- tr.detailrow, emitted across 01_row (row + open detail scaffold + ASH
 -- timeline block), 02_ash (window.FLEET_ASH payload), 03_headline (metric
 -- cards, closes left col / opens right col), 04_findings, 05_topsql, and
--- 06_close (drill + close scaffold + sentinel).  01/04/05 each recompute
+-- 07_close (drill + close scaffold + sentinel).  01/04/05 each recompute
 -- their own z-scores from the AWR views directly (same "findings are
 -- recomputed, not shared" convention as the single-DB report's 07/08), so
 -- nothing here depends on an earlier section's PL/SQL state.

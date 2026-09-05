@@ -78,6 +78,10 @@ sql/
     ├── nth_csv.plsql         -- INSTR-based CSV parser (keeps empty tokens)
     ├── is_oracle_schema.plsql-- 'Y'/'N' Oracle-maintained parsing-schema test
     │                         --   (drives the "Application only" data-sys tag)
+    ├── is_essential.plsql    -- curated LOAD/METRIC/WAIT name test (Essential rows data-imp tag)
+    ├── score_cells.plsql     -- change-pill / z / %delta <td> triple (04/05 Change column)
+    ├── json_escape.plsql     -- escapes a string for a JSON literal on one PUT_LINE
+    ├── put_clob_chunked.plsql-- emits a CLOB payload in PUT_LINE-sized chunks
     ├── fmt_num.plsql         -- T7: consistent value-cell number formatting (fmt_num/fmt_int)
     ├── dev_bucket.plsql      -- T5: data-dev="1|2|3" heat-tint bucket for prior-window cells
     ├── js_sparkline.plsql    -- inline-SVG sparkline renderer (CDN-free)
@@ -85,11 +89,13 @@ sql/
     ├── js_markers.plsql      -- inits AWR_MARKERS + AWR_markLine()
     ├── marker.sql / markers_inline.sql / no_markers.sql -- marker emitters
     ├── debug_log.sql         -- per-section progress markers (no spool pollution)
-    └── templates/<name>/     -- comprehensive (default) / simple / dev
+    └── templates/<name>/     -- comprehensive (default) / simple / dev (+ fleet/, fleet-owned)
         ├── sysstat_load_targets.sql
         ├── sysmetric_targets.sql   -- names + is_additive flag
         └── wait_event_targets.sql  -- single '*' row = "no filter" sentinel
 side/create_weekly_baselines.sql    -- optional baselines (the only writer)
+run_awr_fleet.sh, awr_fleet_extract.sql, sql/fleet/ -- fleet report (see that section)
+server/                             -- optional scheduler web app (see that section)
 reports/                            -- generated HTML
 ```
 
@@ -588,16 +594,13 @@ scaffold + ASH timeline band), `02_ash` (`window.FLEET_ASH` payload),
 `03_headline` (metric mini-cards in a self-contained `.metrics-band`),
 `04_findings`, `05_topsql`, `06_day_profile` (optional Day profile band, see
 that convention above; `FLEET_PROFILE_DAYS`), `07_close` (drill + closes
-scaffold + sentinel — renamed from `06_close` in fleet 0.5.0).
+scaffold + sentinel).
 The detail panel is a **single-column stack of full-width bands** (ASH
 timeline → 6-across metrics strip → findings → Top SQL → drill; `.metrics`
-goes 6-up ≥1100px, 3-up below, 2-up ≤560px) — the original two-column
-`.detail-grid` was dropped 2026-07-22 because the columns' heights were
+goes 6-up ≥1100px, 3-up below, 2-up ≤560px). Keep `.detail-grid` at
+`grid-template-columns:1fr`: a two-column layout leaves the columns' heights
 wildly unbalanced (dead space under the short metrics column, Top-SQL text
-cramped). Verified on dbmint same day (3-alias conf, pinned window
-2026-07-20 12:00 win=1h weeks_back=4 step=1h): all bands full width, 6→3
-column metrics fallback, theme toggle intact, zero `detail-col` remnants,
-zero surviving `__FLEET_` placeholders.
+cramped).
 
 - **Fragment/sentinel/FLEET-COUNTS contract (v2)** — each per-DB extract spools
   two files into `reports/fleet_work_<run_id>/`: `<alias>.chrome.html` (page
@@ -620,13 +623,9 @@ zero surviving `__FLEET_` placeholders.
   tallied across every OK frag (flagging a per-DB `target_end` snap-to-grid
   mismatch when begin/end differ). Missing lines are tolerated, not an
   error — an older workdir re-assembled with `--assemble` predates the
-  feature and simply renders no strip. Verified on dbmint (2026-07-22,
-  3-alias conf): hourly aligned run → 5 all-valid chips (current accented,
-  oldest first); weekly run → 2 dashed "skipped" chips with the
-  `no snapshot at/before window start` reason as tooltip; `--assemble` on a
-  kept workdir reproduces the strip byte-identically. The `part` (valid on
-  X/Y DBs) and snap-mismatch-note states need a real multi-DB fleet (all
-  dbmint aliases hit one instance, so their windows never diverge).
+  feature and simply renders no strip. The `part` (valid on X/Y DBs) and
+  snap-mismatch-note states need a real multi-DB fleet (all dbmint aliases hit
+  one instance, so their windows never diverge).
 - **Row placeholder injection** — the summary row can't know its own score/sev
   (Top-SQL pts are computed later in the same frag, section 05), so `01_row.sql`
   emits placeholders `__FLEET_SCORE__` / `__FLEET_SEV__` (crit|warn|ok) /
@@ -672,16 +671,8 @@ zero surviving `__FLEET_` placeholders.
   the legend with one chip per series in stack order (`fillEvLegend`, names
   through `esc()`). `buildStack` grew `opts.keepOrder`/`opts.colors`; with
   both absent its behavior is bit-identical to before, so class charts and
-  ribbons are untouched. Verified on dbmint (2026-07-23, 3-alias conf, pinned
-  window 2026-07-20 12:00 win=1h weeks_back=4 step=1h, 2 in-span MARKERS):
-  clean run exit 0, 3 payloads (7 event series on the idle box, no "Other
-  events" rollup — under the 14 cap), live-browser: 7 polygons in payload
-  order, legend chip colors byte-match polygon fills, both marker lines on
-  both timelines, resize re-render tracks container width, zero console
-  errors. Headless DOM smoke (19 asserts) covers escaping (`&`/`<` in event
-  names) and the ribbon ignoring `data-ash-src` absence. **Still pending:** a
-  busy DB with >14 distinct events (exercises the "Other events" rollup and
-  full palette rotation).
+  ribbons are untouched. Unexercised: a DB with >14 distinct ASH events (the
+  "Other events" rollup and full palette rotation).
 - **Timeline markers (fleet-wide, wrapper-owned)** — `run_awr_fleet.sh` accepts
   env `MARKERS` (inline `WHEN|LABEL;;…`, same format as the single-DB var) and
   `MARKER_FILE` (a file of `WHEN|LABEL` lines; precedence `MARKER_FILE` >
@@ -701,23 +692,8 @@ zero surviving `__FLEET_` placeholders.
 - **Credential masking** — `mask_conn` turns `user/pw@svc` into `user/***@svc`
   for all display; the password is never written to the workdir or report.
   `/`-prefixed (wallet/OS-auth) connects pass through untouched.
-- **Verified end-to-end on dbmint (2026-07-22, 19.27, window
-  `target_end='2026-07-20 12:00'` win=1h weeks_back=4 step=1h, conf =
-  cdb_a/cdb_b/cdb_c `/ as sysdba` + a bad-creds `deadbox`, `MARKERS` with two
-  in-span markers):** exit 0; masthead `4 databases / 3 crit / 0 warn / 0 quiet
-  / 1 unreachable`; three OK rows identical `score=16` (crit=1 warn=2) in conf
-  order; `deadbox` error row first with `ORA-12514` in the worst-finding cell;
-  every OK frag ends with its sentinel; **zero** surviving `__FLEET_`
-  placeholders; `window.FLEET_ASH` present for all three with 24-slot arrays;
-  `window.FLEET_MARKERS` has both markers; zero external resources; a fake
-  `scottx/<pw>@svc` line's password appears NOWHERE in workdir/report/stdout
-  (masked `scottx/***@svc`); drill command masked. **Live-browser render
-  (static-snapshot file):** no console errors; 3 ASH ribbons + 3 timelines
-  render (21 wait-class polygons each set), 3 row sparklines, 18 metric cards;
-  clicking a dbrow un-hides its detailrow; the theme toggle flips `body.dark`.
-  Single-DB smoke (`run_awr_trend.sh` same window) rendered all 16 sections,
-  0 ORA-. **Still pending:** a real multi-DB / RAC / migrated-PDB fleet (dbmint
-  is single-DBID, all three cdb aliases hit the same instance).
+- **Unexercised:** a real multi-DB / RAC / migrated-PDB fleet (dbmint is
+  single-DBID, and all three cdb aliases hit the same instance).
 - **Per-run output folder (v0.4.0)** — every run's artifacts land under ONE
   folder, `reports/awr_fleet_<REPORT_TS>_run<RUN_ID>/`, holding the assembled
   console report as `index.html` plus one `detail_<alias>.html` per detail-
@@ -790,24 +766,9 @@ zero surviving `__FLEET_` placeholders.
   inline `onclick="event.stopPropagation()"` so clicking it navigates instead
   of toggling the row (zero-touch on `js_fleet_charts.plsql`'s delegated
   handler).
-- **v0.3.0 verified end-to-end on dbmint (2026-07-22, 19.27, same window as the
-  v0.2.0 test, conf = cdb_a`|detail` / cdb_b (plain) / cdb_c`| DETAIL` +
-  bad-creds deadbox`|detail`):** exit 0; summary `detail=ok/-/ok/skipped`; both
-  detail reports generated (~1.4 MB, full 15-section workbench + masthead, same
-  window, both markers present, ORA- grep hits are only escaped SQL text);
-  chips/panel links carry correct relative hrefs; deadbox error panel shows
-  "Detailed report skipped (extract failed)"; zero surviving `__FLEET_`;
-  forced-failure run (`FLEET_DETAIL=all FLEET_DETAIL_TIMEOUT=5`) → three
-  `rc=124` dfail chips, workdir + `detail_*` dirs kept, exit still 0;
-  `FLEET_DETAIL=none` → zero chip elements (the 3 `dchip` grep hits are CSS
-  rules); `FLEET_DETAIL_ECHARTS=vendor/echarts.min.js` → "Inlined ECharts"
-  message, 2.4 MB self-contained detail report, zero external `src`;
-  `--assemble` on a kept workdir reproduces identical rows/links. Live-browser
-  (static snapshot): row toggle works, chip click does NOT toggle the row
-  (stopPropagation verified via dispatched events), `.detail-link` line present,
-  linked detail report renders the full workbench. **Still pending:** a real
-  multi-DB fleet where detail runs take minutes (dbmint's full report is fast;
-  the 3600-s default timeout is untested against a genuinely slow DB).
+- **Unexercised:** a real multi-DB fleet where detail runs take minutes
+  (dbmint's full report is fast; the 3600-s default timeout is untested
+  against a genuinely slow DB).
 - **v0.6.0 visual facelift** — same chrome hooks as the single-DB report
   where they translate (glyphs, `.chip` styling), plus fleet-only additions:
   a client-side toolbar (`#fleetToolbar`: filter, sort by score/name/AAS/
@@ -840,49 +801,33 @@ CLI, and the cardinal no-touch rule extends to it verbatim — nothing under
 server code and its own tests live only under `server/` (plus the additive
 `.gitignore`/`README.md`/`CLAUDE.md` lines documenting it).
 
-**Per-run output folder support (v0.4.0, kept in lockstep with the wrapper's
+**Per-run output folder support (v0.4.0, in lockstep with the wrapper's
 "Per-run output folder" note above)** — the server only ever *reads* what the
-wrapper wrote, so every place it parses or serves a report path had to learn
-the new `reports/awr_fleet_<ts>_run<id>/index.html` +
-`.../detail_<alias>.html` shape alongside the old flat one (never replacing
-it — old records/history must keep resolving):
-- `records.py`'s `_REPORT_RE` matches BOTH the new `.../index.html` form and
-  the old flat `....html` form in the same regex (a `(?:/index\.html|\.html)`
-  alternation), so a "Report: …" line from either wrapper version parses.
-- `records.detail_report_filename(alias, wrapper_run_id, report_path=None)`
-  grew an optional `report_path` param: when the caller has already parsed
-  the console report's new-form path, the detail path is derived from its
-  parent folder (`<folder>/detail_<alias>.html`); omitted, or given an
-  old-flat `report_path`, it falls back to the pre-v0.4.0 flat naming —
-  there is no independent way for this function to know `report_ts` other
-  than reading it off an already-parsed folder path. `runner.py`'s
-  `_finalize_detail` is the one caller and always passes
-  `summary.get("report_path")`.
-- `paths.safe_report_path` now accepts **at most one** folder segment ahead
-  of the filename, and only when that segment fullmatches
-  `awr_fleet_<digits>_run<digits>` (`_RUN_FOLDER_RE`) — anything deeper, or a
-  folder not shaped like a run folder, is still rejected. The `/reports/…`
-  route regex in `webapp.py` was widened in lockstep (`[^/]+(?:/[^/]+)?`) so
-  a two-segment request even reaches `safe_report_path` to be checked; the
-  containment-inside-`REPORTS_DIR` check (belt-and-suspenders against a
-  symlink escape) is unchanged and still runs on the resolved path either
-  way.
-- `views.py`'s `_latest_detail_report` pre-server-history glob fallback
-  checks both shapes (`awr_fleet_*_run*/detail_<alias>.html` then the old
-  flat glob) and returns a path relative to `reports_dir` (so a new-form hit
-  correctly carries its folder prefix into the rendered link).
-- `retention.py`'s `_recorded_artifact_paths` treats the **per-run folder**,
-  not the individual file, as the deletable unit once a candidate resolves
-  to a file living directly inside an `awr_fleet_<ts>_run<id>/` folder — so
-  pruning a fleet record's `report_path` (its `index.html`) deletes every
-  detail report sharing that folder too, with no separate per-DB
-  `detail_report` bookkeeping needed. An old flat report file (no such
-  folder) is still deleted as itself, unchanged. The extract's own
-  `fleet_work_<id>/` workdir is a different directory and is never affected
-  by this collapse.
-- `server/tests/fake_bin/run_awr_fleet.sh` (the test double) emits the new
-  folder form so `runner.py`/`records.py` are exercised end-to-end against
-  real (test-double) wrapper output, not just unit-level regexes.
+wrapper wrote, and every path it parses or serves accepts BOTH the per-run
+folder shape (`reports/awr_fleet_<ts>_run<id>/index.html` +
+`.../detail_<alias>.html`) and the old flat
+`reports/awr_fleet_<ts>_run<id>.html` one — old records and history must keep
+resolving:
+- `server/app/records.py` — `_REPORT_RE` matches both forms in one regex.
+  `detail_report_filename(alias, wrapper_run_id, report_path=None)` derives
+  the detail path from the parsed console-report folder when given one and
+  falls back to the flat naming otherwise (there is no other way for it to
+  learn `report_ts`); its one caller, `runner.py`'s `_finalize_detail`,
+  always passes `summary.get("report_path")`.
+- `server/app/paths.py` — `safe_report_path` accepts at most one folder
+  segment ahead of the filename, and only when it fullmatches
+  `awr_fleet_<digits>_run<digits>` (`_RUN_FOLDER_RE`); the `/reports/…` route
+  regex in `webapp.py` admits the same two-segment shape, and the
+  containment-inside-`REPORTS_DIR` check runs on the resolved path either way.
+- `server/app/views.py` — `_latest_detail_report`'s pre-server-history glob
+  fallback checks both shapes and returns a path relative to `reports_dir`.
+- `server/app/retention.py` — `_recorded_artifact_paths` treats the per-run
+  folder as the deletable unit when a candidate resolves to a file directly
+  inside one, so pruning a fleet record's `index.html` removes its detail
+  reports too; a flat report file is deleted as itself. The extract's
+  `fleet_work_<id>/` workdir is a different directory and is never affected.
+- `server/tests/fake_bin/run_awr_fleet.sh` (the test double) emits the folder
+  form so `runner.py`/`records.py` are exercised end-to-end.
 
 ## Verification & testing
 
@@ -895,8 +840,12 @@ it — old records/history must keep resolving):
   they break on AIX/Solaris DB hosts and GNU-coreutils dbmint never catches
   it; twice bitten 2026-07-22). No DB needed; add a check when a new gotcha
   bites.
-- **Test DB: dbmint** (Oracle 19c CDB1, `ssh -p 2201 oracle@dbmint`, `connect /
-  as sysdba`). Single-DBID, idle, sparse history.
+- **Test DB: dbmint** (Oracle 19c CDB1, `connect / as sysdba`). The host name
+  fronts two Data Guard boxes on different SSH ports — use **`ssh -p 2200
+  oracle@dbmint`** (`cdb1` PRIMARY, read-write; every report run needs an open
+  DB). Port 2201 is the mounted physical standby: sqlplus exits 195 with empty
+  logs on every section there, and the standby must not be opened to "fix"
+  it. Single-DBID, idle, sparse history.
 - **dbmint default-window trap:** with `AUTO` + weekly cadence the test DB
   usually has no valid windows, so *every* data section shows em-dashes. Pin
   `target_end` into a restart-free 15-min-snap stretch (e.g.
@@ -908,132 +857,38 @@ it — old records/history must keep resolving):
   report at ~the same wall-clock, normalize volatile bits and compare md5:
   ```sh
   rsync -az --exclude=.git --exclude=reports --exclude=.claude --exclude=.codex ./ \
-    oracle@dbmint:~/awr_timeline_comparison/ -e 'ssh -p 2201'
+    oracle@dbmint:~/awr_timeline_comparison/ -e 'ssh -p 2200'
   sed -E 's/run [0-9]{17}/run RUNID/g;
           s/[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} \+[0-9]{2}:[0-9]{2}/TIMESTAMP/g' \
     "$1" | md5
   ```
-- **Verified on dbmint (2026):** single-DBID byte-identity of the
-  window-validity / SYSMETRIC / cross-DBID refactors; section 13 utilization;
-  section 06 schema/module/action group breakdowns (clean run, all four
-  toggle views populated). **Pending against a real DB:** sections 14
-  (segment I/O), 15 (file I/O), and the 06 "By physical reads" dim were written
-  while dbmint was unreachable; the 06 module/action breakdowns showed only the
-  `(none)` placeholder on idle dbmint (no app sets module/action) — exercise
-  against a workload that sets them. The multi-DBID migration path needs a real
-  migrated PDB.
-- **"Application only" filter verified on dbmint (2026-06-25, hourly window
-  `target_end='2026-06-25 13:45'` win=1h weeks_back=2):** clean run, all 16
-  sections; toggle button + all three CSS hide rules emitted; `data-sys` tags
-  on rows / per-SQL `<details>` / ASH cards; chart-series `sys` flags present.
-  Classification correct on real data — `SYS`-parsed SQL → `data-sys="Y"`,
-  while the box's own common-user app schemas `C##AWRWH` / `C##AWRRDR` →
-  `data-sys="N"` (kept). Confirms the conservative rule: NOT treating `C##%`
-  as system is load-bearing — those were genuine application schemas.
-  **Live-browser click-through done (2026-07-01, Chrome preview on the v1.0.0
-  hourly report):** click flips `body.app-only`; exactly the 5 kept sections
-  (+ their TOC links) stay visible, verdict/windows-strip hide, 142/142
-  `data-sys="Y"` rows and 87/87 cards hide, and the `awr:appfilter` event
-  re-renders all six section-06 dimension charts (series 29/24/28/30/21/10 →
-  0 with every series `sys:true` on the idle box; restored on toggle-off).
-  Sections 14/15 and the "By physical reads" dim also ran clean in that
-  report — still unexercised against a *busy* DB (real segment/file I/O
-  volume, app-set module/action); multi-DBID still needs a migrated PDB.
-- **Workbench restyle verified end-to-end on dbmint (2026-07-02, hourly
-  window `target_end='2026-06-30 14:00'`):** clean run, no ORA-; fixed rail
-  with status dots graded from real section content (crit on
-  findings/overview/waits via sparkline tints, warn on parameters via
-  `td.chg`, neutral on skip-only Top SQL ASH), scrollspy tracks and re-runs
-  on `awr:appfilter` (skips hidden sections), app-only keeps exactly the 5
-  sections, masthead chart series emit teal (`#0d9488`), <980px fallback OK.
-- **LISTAGG positional-CSV fix verified on dbmint (2026-07-02, hourly window
-  `target_end='2026-06-30 14:00'` win=1h weeks_back=4):** unit probe on 19.27
-  confirmed LISTAGG drops NULL measures (`11,33,44` vs the folded-delimiter
-  `,11,,33,44`); pre-fix vs post-fix reports at the same wall-clock: post has
-  126/126 sparklines with exactly weeks_back+1 slots (pre: 23 compacted),
-  section 06 phantom series — a value plotted at the wrong window for a SQL
-  with no current-window rank — went 82 → 0 across all dims, and every one of
-  the 454 differing lines was a CSV/series/table-cell realignment (no
-  collateral output change; gap-free rows byte-identical).
-- **Review-fix batch F1–F16 verified on dbmint (2026-07-07, hourly window
-  `target_end='2026-06-30 14:00'` win=1h weeks_back=4, 19.27):** clean runs,
-  16 sections, no ORA-. F1 — wait-table em-dash cells 100→21 and a previously
-  suppressed `direct path write` crit (z +16.78) now surfaces. F2 — resolved
-  span 3603s vs nominal 3600s; aligned window stays valid (35/38-s edge gaps «
-  15 min); HEAD-vs-fix diff confined to sections 00/02/04/05/07/08 (03/06/09–15
-  untouched). F3 — 10 `######%` cells → real numbers, zero `#` remain. F4–F7
-  byte-identical on this aligned grid. F14 — headless DOM stub: all 86 chart
-  instances re-`setOption` a dark-palette color on `awr:theme`; all 90 inline
-  scripts parse. F16 — findings split into `n/a` (cur NULL) vs `insufficient
-  history` (n<3). **Section 06/11 are non-deterministic run-to-run on idle
-  dbmint** (Top-SQL rank ties with no unique tiebreaker), so exclude them when
-  byte-diffing.
-- **F13/F14/F15 live-browser verification done (2026-07-08, Chrome preview on a
-  fresh dbmint report):** F14 — the theme toggle re-styles 20/26 ECharts
-  instances (`--fg` `#333a45`↔`#bcc5d1`, persisted to `localStorage`,
-  `data-theme`); the 6 unchanged are section-08 `hero-mini` cards with
-  `xShow:false`/`yShow:false` (hidden axes → default grey never renders, so
-  correctly excluded). F13 — section-01 window ribbon and the amber `.cdn-warn`
-  banner (`#e0a53a` on dark-brown) both legible in dark mode; `no-charts` text
-  fallback and the <980px static-rail layout clean (no horizontal overflow).
-  **F15 had a real bug the headless stub missed and it is now fixed:** sections
-  09 and 11 emitted the window `valid_flag` as a **bare JSON number** (`0`/`1`)
-  but the markArea JS tests `w[3]!=="0"` (string), so `0 !== "0"` was always
-  true → *every* window rendered valid and the entire skip-shading feature was
-  dead. Fixed by quoting the flag in the LISTAGG (`'"1"'`/`'"0"'`, making the
-  JSON array homogeneous). Verified on a report spanning the 2026-07-07 14:31
-  restart: the 4 straddling windows now shade muted grey with a "skipped" label,
-  current stays blue, current band anchors at the right edge (`boundaryGap:false`).
-  All-valid reports are byte-identical to pre-fix (all flags `"1"`, same blue).
-- **F2 restart skip path + F6 verified on dbmint (2026-07-08):** F2 — a report
-  ending 2026-07-07 16:00 (hourly) skips the 4 pre-restart windows ("instance
-  restarted inside window"); downstream sections 02–08 drop them, verdict falls
-  to "baseline too short" (<3 prior valid), ASH 09 grey-shades them. F6 —
-  `template=simple`, section 04's wait-class rollup matches section 07's class
-  findings (z +2.40 / −2.83 / +0.25 / +2.30 and severities align across System
-  I/O / Commit / User I/O / Concurrency; sub-0.01 z / 0.1 %Δ are cross-section
-  rounding). **Still pending (environment-limited, not browser):** RAC
-  per-instance `dur_sec` (needs a real RAC cluster), F5 backslash-name escaping
-  (needs a series name with `\`), and F2's exact "no snapshot within 15 min of
-  edge" reason (needs a non-restart snapshot gap — restart reason wins the CASE
-  on dbmint).
-- **Fleet report v0.1.0 verified end-to-end on dbmint (2026-07-14, 19.27,
-  window `target_end='2026-07-11 12:00'` win=1h weeks_back=4 step=1h, conf =
-  cdb_a/cdb_b/cdb_c all `/ as sysdba` + a `deadbox` bad-creds line):** found &
-  fixed one real bug the synthetic-fragment assembler tests missed — the
-  resolving SELECT's inline comment ended in `;`, terminating the statement →
-  ORA-00936, empty log, rc=168 on *every* DB (see "Semicolon-in-comment
-  gotcha"). After the fix: masthead `4 databases / 0 crit / 3 warn / 0 quiet /
-  1 unreachable`; three cdb cards with **identical score=3** in conf order
-  (stable tie-break); `deadbox` error card first with ORA-12514 in the escaped
-  `<pre>` log tail; workdir kept because an error was present; every OK frag
-  ends with its sentinel and carries both `FLEET-COUNTS` comments. Verified
-  paths: **truncation** (strip a frag's last line → `--assemble` demotes it to
-  "sentinel missing", exit still 0); **all-quiet + skip** (restart-adjacent
-  weeks_back=2 window → headline cards show `skip`/n-a badges, findings emit the
-  "No metric moved beyond 2σ" one-liner, no crash); **timeout** (`FLEET_TIMEOUT=1`
-  → cdb rc=124, deadbox rc=1, all error cards, exit 3, no hang); **FLEET_PAR=2**
-  identical correct result; **offline** (0 external `src`/stylesheet/echarts, 40
-  inline sparklines, 5-slot numeric CSVs, dark-mode `--crit-bg` overrides
-  present); **credential masking** (a fake `scott/<pw>@svc` line → password found
-  NOWHERE in workdir/report/stdout, display `scott/***@svc`); **single-DB
-  regression** (`git status` shows only `awr_fleet_extract.sql` changed; a
-  single-DB `run_awr_trend.sh` smoke run on the same window rendered all 15
-  sections, 0 ORA-). **Still pending:** live-browser pixel check of sparklines /
-  dark-mode flip (mechanics static-verified; the renderer + theme bootstrap are
-  verbatim from the browser-proven single-DB report), and a real multi-DB /
-  RAC / migrated-PDB fleet (dbmint is single-DBID, and all three cdb aliases hit
-  the same instance).
-- **`target_end` snap-to-grid verified end-to-end on dbmint (2026-07-22,
-  19.27):** aligned window (`target_end='2026-07-20 12:00'` win=1h weeks_back=4
-  step=1h) pre- vs post-change reports **byte-identical** after run-id/timestamp
-  normalization (sections 06/11 included this time); gap request
-  (`'2026-07-21 12:00'` inside dbmint's 07:15→20:57 snapshot gap) snapped to
-  `07:15`, all 5 windows valid, all 6 hero cards populated, masthead note
-  present, 0 ORA-; fleet smoke (2-alias conf, same gap instant) → both rows'
-  metric cards populated, snap note in both drill panels, drill commands echo
-  the snapped `'2026-07-21 07:15'`, zero surviving `__FLEET_`, exit 0. **Not
-  exercised:** the no-AWR-history-at-all branch (needs a brand-new DB).
+- **Coverage so far (dbmint = single-DBID, 19.27, idle):** single-DBID
+  byte-identity of the window-validity / SYSMETRIC / cross-DBID / snap-to-grid
+  refactors; sections 13/14/15 and every 06 dimension run clean; the
+  "Application only" and Essential toggles, the workbench rail/scrollspy,
+  `awr:theme` re-styling of every ECharts instance, the LISTAGG positional-CSV
+  fix, the F1–F16 review batch (CHANGELOG 1.2.0), the restart-skip path
+  (windows straddling a restart are skipped, verdict falls to "baseline too
+  short", ASH 09 grey-shades them), `template=simple` cross-section z-score
+  agreement, and the fleet report end-to-end (truncation, all-quiet, timeout,
+  `FLEET_PAR`, offline, credential masking, single-DB regression).
+- **Lessons those runs left behind (still apply):**
+  - Sections 06/11 are non-deterministic run-to-run on idle dbmint (Top-SQL
+    rank ties with no unique tiebreaker) — exclude them when byte-diffing.
+  - `C##%` common users on dbmint are genuine application schemas, so the
+    conservative unknown-⇒-app rule in `is_oracle_schema.plsql` is load-bearing.
+  - A JSON value that JS compares as a string must be emitted as a string: a
+    bare `0`/`1` `valid_flag` (F15) silently disabled all skip-shading because
+    `0 !== "0"`. Headless DOM stubs miss this class of bug — chart/JS changes
+    need a live-browser pass too.
+- **Still unexercised (environment-limited):** a busy DB (real segment/file
+  I/O volume, app-set module/action, >14 distinct ASH events for the fleet
+  "Other events" rollup); RAC per-instance `dur_sec`; a migrated PDB
+  (multi-DBID); a genuinely slow DB against the 3600-s detail timeout; the
+  "no snapshot within 15 min of edge" skip reason (restart wins the CASE on
+  dbmint); a series name containing `\`; the no-AWR-history-at-all branch of
+  the `target_end` snap; the fleet "Compared windows" `part` and
+  snap-mismatch states (all dbmint aliases hit one instance).
 - **Visual facelift (1.4.0 / fleet 0.6.0) verified on dbmint (2026-09-05):**
   single-DB hourly window (`target_end='2026-09-04 12:00'` win=1h
   weeks_back=4) and a separate `AUTO`-weekly-cadence run — the movers table,
