@@ -66,6 +66,8 @@ DECLARE
     @@sql/lib/nth_csv.plsql
     @@sql/lib/score_cells.plsql
     @@sql/lib/is_essential.plsql
+    @@sql/lib/dev_bucket.plsql
+    @@sql/lib/fmt_num.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="waits-fg"><h2>Foreground wait events (top '
         || v_top_n || ' by time waited)</h2>');
@@ -170,12 +172,25 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  grid:{left:60,right:16,top:10,bottom:42,containLabel:true},');
     DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"value",axisLabel:{color:mu,formatter:"{value}s"},splitLine:{lineStyle:{color:gr}}},');
     DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"category",data:d.weeks,axisLabel:{color:fg,fontWeight:600}},');
-    DBMS_OUTPUT.PUT_LINE('  series:d.classes.map(function(c,i){return {name:c.name,type:"bar",stack:"total",barWidth:"55%",emphasis:{focus:"series"},itemStyle:{color:palette[i%palette.length]},data:c.vals.map(function(v){return v==null?0:v;})};})');
+    -- B7: color each wait_class series from the shared AWR_WAIT_COLORS map
+    -- (sql/lib/js_wait_colors.plsql), falling back to the positional palette
+    -- for any class not in that map -- same idiom as sections 09/10, so
+    -- colors match the ASH/DB-time charts. Legend follows automatically.
+    DBMS_OUTPUT.PUT_LINE('  series:d.classes.map(function(c,i){var color=(window.AWR_WAIT_COLORS||{})[c.name]||palette[i%palette.length];return {name:c.name,type:"bar",stack:"total",barWidth:"55%",emphasis:{focus:"series"},itemStyle:{color:color},data:c.vals.map(function(v){return v==null?0:v;})};})');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('new ResizeObserver(function(){chart.resize();}).observe(el);');
     -- Re-apply axis/legend colors from the CSS vars when the theme flips (F14).
     DBMS_OUTPUT.PUT_LINE('document.addEventListener("awr:theme",function(){var c2=getComputedStyle(document.body),fg2=c2.getPropertyValue("--fg").trim()||"#333",mu2=c2.getPropertyValue("--muted").trim()||"#888",gr2=c2.getPropertyValue("--border").trim()||"#e0e0e0";');
     DBMS_OUTPUT.PUT_LINE('chart.setOption({legend:{textStyle:{color:fg2}},xAxis:{axisLabel:{color:mu2},splitLine:{lineStyle:{color:gr2}}},yAxis:{axisLabel:{color:fg2}}});});');
+    -- X2: highlight the bar for the window clicked/selected elsewhere on the
+    -- page. d.weeks is ordered oldest..current (week_offset v_weeks_back..0),
+    -- so window offset w maps to array index (n-1-w); e.detail.w===null clears.
+    DBMS_OUTPUT.PUT_LINE('document.addEventListener("awr:window",function(e){');
+    DBMS_OUTPUT.PUT_LINE('  var w=e.detail?e.detail.w:null, n=d.weeks.length;');
+    DBMS_OUTPUT.PUT_LINE('  chart.dispatchAction({type:"downplay"});');
+    DBMS_OUTPUT.PUT_LINE('  if(w===null||w===undefined||!n) return;');
+    DBMS_OUTPUT.PUT_LINE('  chart.dispatchAction({type:"highlight",dataIndex:n-1-w});');
+    DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');
 
@@ -304,23 +319,22 @@ BEGIN
 
     -- Table A: total time waited (s)
     DBMS_OUTPUT.PUT_LINE('<h3>Top ' || v_top_n || ' events &mdash; time waited (s)</h3>');
-    v_header := '<thead><tr><th>Event</th><th class="trend">Trend</th><th class="num">Current (s)</th>';
+    v_header := '<thead><tr><th>Event</th><th class="trend">Trend</th><th class="num" data-w="0">Current (s)</th>';
     FOR k IN 1 .. v_weeks_back LOOP
-        v_header := v_header || '<th class="num">&minus;'
+        v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
             || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || ' (s)</th>';
     END LOOP;
     v_header := v_header || '<th>Change</th><th class="num">z-score</th>'
                          || '<th class="num">% &Delta;</th></tr></thead>';
-    DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
+    DBMS_OUTPUT.PUT_LINE('<table id="waits-fg-time">' || v_header || '<tbody>');
 
     FOR i IN 1 .. NVL(v_evts.COUNT, 0) LOOP
         v_row := '<tr data-imp="' || is_essential('WAIT', v_evts(i).event_name) || '">'
             || '<td>' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '</td>'
             || '<td class="trend" data-spark="' || NVL(v_evts(i).spark_vals, '')
             || '" data-spark-title="' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '"></td>'
-            || '<td class="num"><b>' ||
-                CASE WHEN v_evts(i).cur_us IS NULL THEN '&mdash;'
-                     ELSE TO_CHAR(v_evts(i).cur_us/1e6, 'FM999G999G990D00') END
+            || '<td class="num" data-w="0"' || fmt_num_title(v_evts(i).cur_us/1e6) || '><b>' ||
+                fmt_num(v_evts(i).cur_us/1e6)
             || CASE WHEN v_evts(i).cur_rnk IS NOT NULL
                     THEN ' <span class="badge info">#' || v_evts(i).cur_rnk || '</span>' ELSE '' END
             || '</b></td>';
@@ -329,12 +343,13 @@ BEGIN
             v_us_s   := nth_csv(v_evts(i).week_us_vals,  k + 1);
             v_rank_s := nth_csv(v_evts(i).week_rnk_vals, k + 1);
             IF v_us_s IS NULL OR v_us_s = '' THEN
-                v_row := v_row || '<td class="num">&mdash;';
+                v_row := v_row || '<td class="num" data-w="' || k || '">&mdash;';
             ELSE
                 v_us := TO_NUMBER(v_us_s, 'FM99999999990D000000',
                                   'NLS_NUMERIC_CHARACTERS=''.,''');
-                v_row := v_row || '<td class="num">'
-                      || TO_CHAR(v_us, 'FM999G999G990D00');
+                v_row := v_row || '<td class="num" data-w="' || k || '"'
+                      || dev_attr(v_evts(i).cur_us/1e6, v_us) || '>'
+                      || fmt_num(v_us);
             END IF;
             IF v_rank_s IS NOT NULL AND v_rank_s <> '' THEN
                 v_row := v_row || ' <span class="badge skip">#' || v_rank_s || '</span>';
@@ -352,34 +367,34 @@ BEGIN
 
     -- Table B: avg time per wait (ms)
     DBMS_OUTPUT.PUT_LINE('<h3>Top ' || v_top_n || ' events &mdash; avg time per wait (ms)</h3>');
-    v_header := '<thead><tr><th>Event</th><th class="trend">Trend</th><th class="num">Current (ms)</th>';
+    v_header := '<thead><tr><th>Event</th><th class="trend">Trend</th><th class="num" data-w="0">Current (ms)</th>';
     FOR k IN 1 .. v_weeks_back LOOP
-        v_header := v_header || '<th class="num">&minus;'
+        v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
             || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || ' (ms)</th>';
     END LOOP;
     v_header := v_header || '<th>Change</th><th class="num">z-score</th>'
                          || '<th class="num">% &Delta;</th></tr></thead>';
-    DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
+    DBMS_OUTPUT.PUT_LINE('<table id="waits-fg-avg">' || v_header || '<tbody>');
 
     FOR i IN 1 .. NVL(v_evts.COUNT, 0) LOOP
         v_row := '<tr data-imp="' || is_essential('WAIT', v_evts(i).event_name) || '">'
             || '<td>' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '</td>'
             || '<td class="trend" data-spark="' || NVL(v_evts(i).spark_ms_vals, '')
             || '" data-spark-title="' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '"></td>'
-            || '<td class="num"><b>' ||
-                CASE WHEN v_evts(i).cur_ms IS NULL THEN '&mdash;'
-                     ELSE TO_CHAR(v_evts(i).cur_ms, 'FM999G999G990D00') END
+            || '<td class="num" data-w="0"' || fmt_num_title(v_evts(i).cur_ms) || '><b>'
+            || fmt_num(v_evts(i).cur_ms)
             || '</b></td>';
 
         FOR k IN 1 .. v_weeks_back LOOP
             v_ms_s := nth_csv(v_evts(i).week_ms_vals, k + 1);
             IF v_ms_s IS NULL OR v_ms_s = '' THEN
-                v_row := v_row || '<td class="num">&mdash;</td>';
+                v_row := v_row || '<td class="num" data-w="' || k || '">&mdash;</td>';
             ELSE
                 v_ms := TO_NUMBER(v_ms_s, 'FM99999999990D000000',
                                   'NLS_NUMERIC_CHARACTERS=''.,''');
-                v_row := v_row || '<td class="num">'
-                      || TO_CHAR(v_ms, 'FM999G999G990D00') || '</td>';
+                v_row := v_row || '<td class="num" data-w="' || k || '"'
+                      || dev_attr(v_evts(i).cur_ms, v_ms) || '>'
+                      || fmt_num(v_ms) || '</td>';
             END IF;
         END LOOP;
         v_row := v_row || score_cells(v_evts(i).cur_ms,
@@ -465,31 +480,31 @@ BEGIN
     ORDER BY MAX(CASE WHEN week_offset = 0 THEN time_waited_us END) DESC NULLS LAST;
 
     DBMS_OUTPUT.PUT_LINE('<h3>Wait-class rollup &mdash; time waited (s)</h3>');
-    v_header := '<thead><tr><th>Wait class</th><th class="num">Current (s)</th>';
+    v_header := '<thead><tr><th>Wait class</th><th class="num" data-w="0">Current (s)</th>';
     FOR k IN 1 .. v_weeks_back LOOP
-        v_header := v_header || '<th class="num">&minus;'
+        v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
             || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || ' (s)</th>';
     END LOOP;
     v_header := v_header || '<th>Change</th><th class="num">z-score</th>'
                          || '<th class="num">% &Delta;</th></tr></thead>';
-    DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
+    DBMS_OUTPUT.PUT_LINE('<table id="waits-fg-class">' || v_header || '<tbody>');
 
     FOR i IN 1 .. NVL(v_classes.COUNT, 0) LOOP
         v_row := '<tr>'
             || '<td>' || DBMS_XMLGEN.CONVERT(v_classes(i).wait_class) || '</td>'
-            || '<td class="num"><b>' ||
-                CASE WHEN v_classes(i).cur_us IS NULL THEN '&mdash;'
-                     ELSE TO_CHAR(v_classes(i).cur_us/1e6, 'FM999G999G990D00') END
+            || '<td class="num" data-w="0"' || fmt_num_title(v_classes(i).cur_us/1e6) || '><b>'
+            || fmt_num(v_classes(i).cur_us/1e6)
             || '</b></td>';
         FOR k IN 1 .. v_weeks_back LOOP
             v_us_s := nth_csv(v_classes(i).week_vals, k + 1);
             IF v_us_s IS NULL OR v_us_s = '' THEN
-                v_row := v_row || '<td class="num">&mdash;</td>';
+                v_row := v_row || '<td class="num" data-w="' || k || '">&mdash;</td>';
             ELSE
                 v_us := TO_NUMBER(v_us_s, 'FM99999999990D000000',
                                   'NLS_NUMERIC_CHARACTERS=''.,''');
-                v_row := v_row || '<td class="num">'
-                      || TO_CHAR(v_us, 'FM999G999G990D00') || '</td>';
+                v_row := v_row || '<td class="num" data-w="' || k || '"'
+                      || dev_attr(v_classes(i).cur_us/1e6, v_us) || '>'
+                      || fmt_num(v_us) || '</td>';
             END IF;
         END LOOP;
         v_row := v_row || score_cells(v_classes(i).cur_us,

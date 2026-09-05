@@ -138,6 +138,30 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.win-note { margin-top:8px; font-size:11px; color:var(--muted); }');
     DBMS_OUTPUT.PUT_LINE('.win-note b { color:var(--ink-soft); font-weight:600; }');
 
+    -- ---------- F1: filter/sort/show toolbar ----------
+    -- Sits between .masthead and .console (assembler-owned markup, right
+    -- above <table class="fleet">). Same card language as .masthead (panel
+    -- background, hairline border) so it reads as a control strip attached
+    -- to the table beneath it rather than a second masthead.
+    DBMS_OUTPUT.PUT_LINE('.toolbar { display:flex; align-items:center; gap:14px; flex-wrap:wrap;'
+        || ' background:var(--panel); border:1px solid var(--hairline); border-radius:8px;'
+        || ' padding:10px 14px; margin-bottom:10px; }');
+    DBMS_OUTPUT.PUT_LINE('.toolbar #dbFilter { flex:1 1 200px; min-width:160px; max-width:280px;'
+        || ' font:inherit; font-size:12.5px; padding:6px 10px; border-radius:6px;'
+        || ' border:1px solid var(--rule); background:var(--panel-2); color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('.toolbar #dbFilter::placeholder { color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('.toolbar #dbFilter:focus { outline:none; border-color:var(--accent); }');
+    DBMS_OUTPUT.PUT_LINE('.toolbar-group { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }');
+    DBMS_OUTPUT.PUT_LINE('.tb-label { font-size:10px; text-transform:uppercase; letter-spacing:.05em;'
+        || ' color:var(--muted); font-weight:600; margin-right:2px; }');
+    DBMS_OUTPUT.PUT_LINE('.tb-pill, .tb-btn { font:inherit; font-size:11.5px; font-weight:600;'
+        || ' padding:4px 10px; border-radius:12px; border:1px solid var(--hairline);'
+        || ' background:var(--panel-2); color:var(--ink-soft); cursor:pointer;'
+        || ' transition:color .12s,background .12s,border-color .12s; }');
+    DBMS_OUTPUT.PUT_LINE('.tb-pill:hover, .tb-btn:hover { border-color:var(--accent); color:var(--accent); }');
+    DBMS_OUTPUT.PUT_LINE('.tb-pill.active { border-color:var(--accent); background:var(--accent-bg); color:var(--accent-deep); }');
+    DBMS_OUTPUT.PUT_LINE('.tb-btn { border-radius:6px; }');
+
     -- ---------- console table ----------
     DBMS_OUTPUT.PUT_LINE('.console { background:var(--panel); border:1px solid var(--hairline);'
         || ' border-radius:8px; overflow:hidden; overflow-x:auto; }');
@@ -169,9 +193,27 @@ BEGIN
         || ' border:1px solid var(--accent); color:var(--accent); background:var(--accent-bg); }');
     DBMS_OUTPUT.PUT_LINE('a.dchip:hover { background:var(--accent); color:#fff; }');
     DBMS_OUTPUT.PUT_LINE('.dchip.dfail { border-color:var(--crit); color:var(--crit); background:var(--crit-bg); cursor:help; }');
+    -- F4 top-right primary CTA (a sibling of the small .dchip above, filled
+    -- from the same __FLEET_DETAIL_CHIP_TOP__ token): a solid accent button
+    -- rather than the outline pill, since this is the detail panel's one
+    -- deliberate call to action. .detail-topbar:empty collapses to nothing
+    -- when no detail report was requested/available for this DB.
+    DBMS_OUTPUT.PUT_LINE('.detail-topbar { display:flex; justify-content:flex-end; margin-bottom:10px; }');
+    DBMS_OUTPUT.PUT_LINE('.detail-topbar:empty { margin-bottom:0; }');
+    DBMS_OUTPUT.PUT_LINE('.detail-chip.primary { display:inline-flex; align-items:center; gap:5px;'
+        || ' font-size:12px; font-weight:650; padding:6px 13px; border-radius:6px;'
+        || ' border:1px solid var(--accent); background:var(--accent); color:#fff;'
+        || ' text-decoration:none; transition:background .12s,border-color .12s; }');
+    DBMS_OUTPUT.PUT_LINE('.detail-chip.primary:hover { background:var(--accent-deep); border-color:var(--accent-deep); }');
     DBMS_OUTPUT.PUT_LINE('.score { font-weight:650; font-size:15px; text-align:right; }');
     DBMS_OUTPUT.PUT_LINE('.score.s-crit { color:var(--crit); } .score.s-warn { color:var(--warn); } .score.s-ok { color:var(--ok); }');
     DBMS_OUTPUT.PUT_LINE('.score.s-dead { color:var(--muted); font-size:12px; font-weight:500; }');
+    -- F2 score-bar: crit/warn/top-SQL point components as a share of the
+    -- run''s max score, so bars are only comparable within one report render.
+    DBMS_OUTPUT.PUT_LINE('.score-bar { display:inline-flex; width:72px; height:8px; border-radius:2px;'
+        || ' overflow:hidden; background:var(--line-soft); vertical-align:middle;'
+        || ' margin-left:7px; }');
+    DBMS_OUTPUT.PUT_LINE('.score-bar i { display:block; height:100%; }');
     DBMS_OUTPUT.PUT_LINE('.cw { display:flex; gap:5px; }');
     DBMS_OUTPUT.PUT_LINE('.cw .pill { font-size:11px; font-weight:600; padding:1px 6px; border-radius:4px;'
         || ' font-variant-numeric:tabular-nums; border:1px solid transparent; }');
@@ -265,6 +307,16 @@ BEGIN
         || ' overflow-x:auto; white-space:nowrap; }');
     DBMS_OUTPUT.PUT_LINE('body.dark .drill { background:#0a0d12; }');
     DBMS_OUTPUT.PUT_LINE('.drill .cmt { color:#7f8b9c; }');
+    -- F4 Copy button: .drill-wrap gives the absolutely-positioned button a
+    -- containing block so it stays pinned at the top-right of the visible
+    -- box while the .drill content itself scrolls horizontally underneath.
+    DBMS_OUTPUT.PUT_LINE('.drill-wrap { position:relative; }');
+    DBMS_OUTPUT.PUT_LINE('.copy-btn { position:absolute; top:6px; right:6px; font:inherit;'
+        || ' font-size:10.5px; font-weight:600; padding:2px 9px; border-radius:4px;'
+        || ' border:1px solid #3a4552; background:#1c232c; color:#c7d0dc; cursor:pointer;'
+        || ' transition:color .12s,border-color .12s; }');
+    DBMS_OUTPUT.PUT_LINE('.copy-btn:hover { border-color:var(--accent); color:var(--accent-deep); }');
+    DBMS_OUTPUT.PUT_LINE('.copy-btn.copied { border-color:var(--ok); color:var(--ok); }');
     -- optional per-DB detailed-report line (__FLEET_DETAIL_LINE__, filled in
     -- by the assembler) next to the drill-down command: empty (no detail
     -- requested), a link to the generated single-DB report, or a muted

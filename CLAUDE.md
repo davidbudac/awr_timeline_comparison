@@ -61,7 +61,7 @@ sql/
 ├── 05_waits_bg.sql      -- background waits (BG_EVENT_SUMMARY, per template)
 ├── 06_top_sql.sql       -- Top-N SQL ranked 5 ways + per-dim bump chart
 │                        --   (break down by SQL_ID / schema / module / action)
-├── 07_summary.sql       -- z-score findings + heatmap
+├── 07_summary.sql       -- z-score findings + "Biggest movers" table
 ├── 08_overview.sql      -- hero strip: 6 headline cards
 ├── 09_ash_timeline.sql  -- hourly ASH stacked-area timeline by wait_class
 ├── 10_db_time_summary.sql      -- stacked DB time across the full span
@@ -71,12 +71,15 @@ sql/
 ├── 14_segment_io.sql    -- top segments by I/O (DBA_HIST_SEG_STAT; template-INDEP)
 ├── 15_file_io.sql       -- top files by I/O + IOStat-by-filetype (template-INDEP)
 ├── 16_day_profile.sql   -- Day profile: hour-of-day × N prior days (profile_days>0; template-INDEP)
+├── 17_narrative.sql     -- "What changed": rule-based prose, relocated into the masthead by JS
 └── lib/                 -- @@-included fragments (see conventions)
     ├── windows_cte.sql       -- run_params → … → valid_windows CTE chain
     ├── day_profile_cte.sql   -- dp_params → … → dp_scored (shared by 16 + fleet 06)
     ├── nth_csv.plsql         -- INSTR-based CSV parser (keeps empty tokens)
     ├── is_oracle_schema.plsql-- 'Y'/'N' Oracle-maintained parsing-schema test
     │                         --   (drives the "Application only" data-sys tag)
+    ├── fmt_num.plsql         -- T7: consistent value-cell number formatting (fmt_num/fmt_int)
+    ├── dev_bucket.plsql      -- T5: data-dev="1|2|3" heat-tint bucket for prior-window cells
     ├── js_sparkline.plsql    -- inline-SVG sparkline renderer (CDN-free)
     ├── js_wait_colors.plsql  -- shared wait_class palette
     ├── js_markers.plsql      -- inits AWR_MARKERS + AWR_markLine()
@@ -224,15 +227,18 @@ tagged; the separate wait-*class* rollup table is left alone (it's an
 aggregate, not a curated-list candidate). No new grant, no DB access — it's a
 plain case-sensitive name test against a curated constant list per domain.
 
-Section 07's findings heatmap is an ECharts canvas (`#findings-heatmap`), not
-an HTML table, so it carries no `data-imp` and is untouched by the preset —
-only the LOAD/METRIC detail tables (`emit_domain_table`) are tagged, using
-the raw stat/metric name against `is_essential()` directly. 07's WAIT rows
-are rolled up to *wait class* (e.g. `"Wait class: User I/O"`) — already a
-compact high-level rollup, not curated-list candidates — so they are
-deliberately emitted with **no `data-imp` attribute at all** and stay always
-visible in Essential mode (untagged rows are never hidden by the CSS rule
-and never counted by the pill JS, which both select only `tr[data-imp]`).
+Section 07's "Biggest movers" table (`#findings-movers`, an HTML table that
+replaced the old ECharts findings heatmap in the facelift) carries
+`data-nocount` so the rail count pills don't double-count its rows against
+the detail tables below it, and it carries no `data-imp` either — it's a
+top-8-by-`|z|` summary, not a curated-list candidate. Only the LOAD/METRIC
+detail tables (`emit_domain_table`) are tagged, using the raw stat/metric
+name against `is_essential()` directly. 07's WAIT rows are rolled up to
+*wait class* (e.g. `"Wait class: User I/O"`) — already a compact high-level
+rollup, not curated-list candidates — so they are deliberately emitted with
+**no `data-imp` attribute at all** and stay always visible in Essential mode
+(untagged rows are never hidden by the CSS rule and never counted by the
+pill JS, which both select only `tr[data-imp]`).
 
 **Escape hatch:** sections 02–05 carry no row- or cell-level severity class of
 their own (unlike section 07's `crit`/`warn`/`ok`/`skip` rows, each already
@@ -260,10 +266,94 @@ already in the DOM — no `getComputedStyle`/`offsetHeight`. Section 07's
 `<h2 id="findings-heading">` also gets its own counter script (rewriting the
 heading text with crit/warn/total badges) but that runs once at render time,
 before the toggle's click handler ever fires, so the two scripts don't race.
-Charts are untouched by design: no `awr:appfilter`-style CustomEvent is
-dispatched: the affected sections render their sparklines/stacked-bar/heatmap
-visuals from the same rows regardless of the preset, and decluttering the
-tables doesn't change what those charts should plot.
+Charts and 07's "Biggest movers" table are untouched by design: no
+`awr:appfilter`-style CustomEvent is dispatched: the affected sections
+render their sparklines/stacked-bar/movers visuals from the same rows
+regardless of the preset, and decluttering the tables doesn't change what
+those visuals should plot.
+
+### Facelift chrome hooks (v1.4.0)
+A grab-bag of small, single-sourced HTML attribute/class contracts wired up
+by `00_params.sql`'s inline JS and `_style.sql`'s CSS, reused across
+sections. All are purely client-side (no DEFINE, no wrapper change) and
+degrade to "just show everything" with JS off:
+- **`tr[data-tail="Y"]` + `.expander[data-for][data-n][data-noun]`** — long-
+  tail row collapse. The expander's click handler toggles `.open` on the
+  table named by `data-for`; `data-n`/`data-noun` feed the "Show N more
+  rows" label. Used by 07's detail tables, 06's SQL pool, 11's sub-threshold
+  ASH cards.
+- **`td[data-dev="1|2|3"]`** — prior-cell heat tint from
+  `sql/lib/dev_bucket.plsql`'s `dev_attr(cur, prior)`; no attribute at all
+  means "close enough to Current, don't tint" (see that file for the exact
+  bucket thresholds).
+- **`[data-w="N"]` (0 = current) + `awr:window`** — every window-indexed
+  `<th>`/`<td>` and the masthead's `.wchip` chips carry `data-w`; clicking a
+  chip (or a `th[data-w]`) toggles `.hl` on every element sharing that
+  offset and dispatches a `document`-level `awr:window` CustomEvent (sibling
+  of `awr:theme`/`awr:appfilter`) that chart sections turn into a markArea/
+  highlight on the matching series.
+- **`.badge.sig`** — the "σ≈0" pill `score_cells.plsql` appends after a
+  z-value when the baseline sigma is degenerate (< 1% of |mean|), pairing
+  with a bolded %-delta cell so the reader isn't misled by a blown-out z.
+- **`section[data-triage]` + `.hidetri`** — Triage mode (`#triage-toggle`
+  flips `body.triage`, same body-class hook pattern as `essential`/
+  `app-only`): shows only sections tagged `data-triage` (masthead,
+  Overview, Findings, Top SQL) minus any `.hidetri` element inside them
+  (e.g. the masthead's DB-time strip opts out even though its parent
+  `<header>` is tagged). A third toggle alongside Essential rows and
+  Application only, same rail-foot location, same "purely CSS/JS, no
+  DEFINE" contract.
+- **`.tabs[data-tabs]` / `.tabpanel[data-tabs][data-t]`** — a delegated
+  click on `.tabs [data-t]` shows the matching `.tabpanel` in the same
+  group and hides its siblings; used by Top SQL's five ranking dimensions.
+  Panels holding an ECharts instance must resize on activation (a chart
+  built while its container was `display:none` measures zero width).
+- **`.copy-btn[data-copy]`** — delegated click copies the text of the
+  element `data-copy` selects (clipboard API with a `<textarea>`
+  fallback); inline by default, absolutely positioned only inside `pre`/
+  `.codewrap`. Per-table CSV/MD toolbars (`.tbl-tools`) auto-inject above
+  any table with ≥4 rows and no `data-notools`.
+- **`data-nosort` / `data-nocount` / `data-notools`** — table-level opt-outs:
+  `data-nosort` disables the click-to-sort header wiring (numeric parser
+  handles `,` `%` `▲` `▼` `−` and k/M/G suffixes — keep that letter set in
+  sync with `sql/lib/fmt_num.plsql`'s suffix choice), `data-nocount` keeps a
+  table's rows out of the rail count pills (07's movers table), `data-notools`
+  suppresses the CSV/MD toolbar.
+- **`.chip`** — generic small pill styling shared by window chips, rank
+  chips (Top SQL pool E/C/G/R/X), and similar inline badges; not a
+  behavioral hook, just a shared visual class.
+- **Narrative section pattern** (`sql/17_narrative.sql`) — a section that
+  needs data only cheap to gather after the rest of the report has run
+  emits its block hidden at the end of the document
+  (`<div id="narrative-src" class="narr" hidden>`) and a one-line inline
+  script relocates it into a slot the masthead already reserved
+  (`<div id="narrative-slot">` in `00_params.sql`), clearing `hidden` after
+  the move. JS off → the block stays hidden, which is fine because every
+  fact it states is also rendered in the section it links to. Nothing to
+  say ⇒ the section emits only its two `AWR-SECTION` markers, no `<div>`.
+- **Number formatting (T7, `sql/lib/fmt_num.plsql`)** — `fmt_num` renders
+  value cells (Current / prior / mean / sd, hero headline text) at ~4
+  significant digits with a k/M/G suffix ≥1e4/1e6/1e9 and the full-precision
+  number in the cell's `title`; `fmt_int` is for naturally-integer counts
+  (executions, snap ids, ranks). Neither touches `%`-delta/z cells (still
+  `score_cells.plsql`'s job) nor `data-spark`/`window.AWR_DATA` JSON, which
+  stay raw numbers under the driver's pinned NLS setting.
+
+New gotchas from this pass:
+- PL/SQL `v <> ''` is never TRUE — an empty string `IS NULL` in Oracle, so
+  a guard must be `v IS NOT NULL`, not `v <> ''''` (bit `17_narrative.sql`'s
+  `v_tail` guard live).
+- `DB time`/`DB CPU` live in `DBA_HIST_SYS_TIME_MODEL` (microseconds), not
+  `DBA_HIST_SYSSTAT` — `v$sysstat`/`dba_hist_sysstat` has no such row at all.
+- `DBA_HIST_PARAMETER` is per-container in a CDB: a bare join fans out one
+  row per container per (dbid, snap_id, instance_number), so any consumer
+  comparing values across windows must collapse by `con_id`/`con_dbid`
+  (lowest wins — the instance-level value a DBA means by "the parameter").
+  `17_narrative.sql`'s R3 does this; `12_param_changes.sql` was fixed the
+  same way concurrently.
+- A `.copy-btn` is inline by default and absolutely positioned only inside
+  `pre`/`.codewrap` — placing one elsewhere without that ancestor needs an
+  explicit position context or it flows inline unexpectedly.
 
 ### `echarts` var (offline / self-contained)
 Polymorphic on value: **empty** → public CDN (byte-identical to before, via
@@ -442,9 +532,9 @@ severity must update `07_summary.sql`, `08_overview.sql`, and `_style.sql`.
 Sections 07 and 08 each recompute their own z-scores. The LOAD/METRIC/WAIT target
 lists are single-sourced per template and `@@`-included by 02/03, 04/05, and 07.
 Inside 07, the unified recompute is `BULK COLLECT`-ed once into a record
-collection tagged via `ROW_NUMBER()`; the heatmap and detail loops both walk that
-one collection — don't reintroduce a second recompute cursor just for a different
-ORDER BY.
+collection tagged via `ROW_NUMBER()`; the "Biggest movers" table and detail
+loops both walk that one collection — don't reintroduce a second recompute
+cursor just for a different ORDER BY.
 
 ### Debug logging
 `sql/lib/debug_log.sql` emits one timestamped progress marker per section to
@@ -718,6 +808,23 @@ zero surviving `__FLEET_` placeholders.
   linked detail report renders the full workbench. **Still pending:** a real
   multi-DB fleet where detail runs take minutes (dbmint's full report is fast;
   the 3600-s default timeout is untested against a genuinely slow DB).
+- **v0.6.0 visual facelift** — same chrome hooks as the single-DB report
+  where they translate (glyphs, `.chip` styling), plus fleet-only additions:
+  a client-side toolbar (`#fleetToolbar`: filter, sort by score/name/AAS/
+  errors-first, show all/crit/warn+, expand/collapse all — reuses the
+  existing row-toggle path via `setRowOpen()`, so it never diverges from a
+  manual row click); a `.score-bar` stacked crit/warn/sql-points segment bar
+  per row via a new `__FLEET_SBAR__` placeholder (substituted at assembly
+  time alongside the existing `__FLEET_SCORE__`/`__FLEET_SEV__` family, same
+  "row can't know its own score yet" reason); a primary "Open full report
+  ↗" chip in `.detail-topbar` plus a Copy button on the drill block
+  (`#drill-<alias>`); direction glyphs in `01_row.sql`'s worst-finding cell,
+  `03_headline.sql`, and `04_findings.sql` via a fleet-local
+  `score_cells_dir()` (a fleet-owned copy, not a shared include — same
+  cardinal rule as everything else fleet-side); the ASH band's unit label
+  moved from the ribbon into its caption (B3). Sed-safety: `↗` and `·` are
+  embedded as raw UTF-8, not HTML entities, so they survive the assembler's
+  `sed`-based placeholder substitution unescaped.
 
 ### AWR Fleet Server (`server/`)
 
@@ -927,6 +1034,15 @@ it — old records/history must keep resolving):
   metric cards populated, snap note in both drill panels, drill commands echo
   the snapped `'2026-07-21 07:15'`, zero surviving `__FLEET_`, exit 0. **Not
   exercised:** the no-AWR-history-at-all branch (needs a brand-new DB).
+- **Visual facelift (1.4.0 / fleet 0.6.0) verified on dbmint (2026-09-05):**
+  single-DB hourly window (`target_end='2026-09-04 12:00'` win=1h
+  weeks_back=4) and a separate `AUTO`-weekly-cadence run — the movers table,
+  narrative block, triage toggle, tab groups, sortable Top SQL pool, row
+  filter, click-to-sort, copy buttons, CSV/MD toolbars, expanders, and the
+  ≤980px sticky-bar/hamburger layout all render clean, 0 ORA-; a fleet run
+  with `FLEET_DETAIL=all` exercised the toolbar, `.score-bar`, and the
+  "Open full report ↗" chip end to end. Byte-identity was **not** checked
+  (feature release — markup/CSS/JS changed throughout by design).
 
 ## Things NOT to do
 

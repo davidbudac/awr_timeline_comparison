@@ -38,7 +38,15 @@ BEGIN
     -- tail grows to the 12-slot form (template / debug / marker_file /
     -- profile_days) so the drill reproduces that section too; at 0 the
     -- command is byte-identical to before the feature.
-    DBMS_OUTPUT.PUT_LINE('<div class="drill">'
+    -- F4: id="drill-<alias>" + a position:relative wrapper give the Copy
+    -- button (wired by the delegated handler in js_fleet_charts.plsql) a
+    -- selector to grab this block's rendered text from. fleet_alias is
+    -- validated to [A-Za-z0-9_.-]{1,30} by the wrapper, so it is already a
+    -- safe bare id/selector token; DBMS_XMLGEN.CONVERT is applied anyway for
+    -- consistency with every other user-facing string in this file.
+    DBMS_OUTPUT.PUT_LINE('<div class="drill-wrap">');
+    DBMS_OUTPUT.PUT_LINE('<div class="drill" id="drill-'
+        || DBMS_XMLGEN.CONVERT('~fleet_alias') || '">'
         || '<span class="cmt"># drill into this database</span><br>'
         || './run_awr_trend.sh '''
         || DBMS_XMLGEN.CONVERT('~fleet_conn_disp') || ''' '''
@@ -48,6 +56,9 @@ BEGIN
         || CASE WHEN ~profile_days > 0
                 THEN ' comprehensive Y '''' ' || '~profile_days' ELSE '' END
         || '</div>');
+    DBMS_OUTPUT.PUT_LINE('<button type="button" class="copy-btn" data-copy="#drill-'
+        || DBMS_XMLGEN.CONVERT('~fleet_alias') || '">Copy</button>');
+    DBMS_OUTPUT.PUT_LINE('</div>');  -- .drill-wrap
 
     -- Only when the requested target_end had no snapshot within the 15-min
     -- edge guard does the resolving SELECT (in awr_fleet_extract.sql) snap

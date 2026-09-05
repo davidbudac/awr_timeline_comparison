@@ -71,6 +71,7 @@ DECLARE
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/json_escape.plsql
+    @@sql/lib/fmt_num.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="segment-io"><h2>Segment I/O (top ' || v_top_n
         || ' per dimension, per window)</h2>');
@@ -289,13 +290,13 @@ BEGIN
             DBMS_OUTPUT.PUT_LINE('<summary>Detail table</summary>');
 
             v_header := '<thead><tr><th>Segment</th><th>Type</th>'
-                || '<th class="num">Current (' || s.dim_unit || ')</th>';
+                || '<th class="num" data-w="0">Current (' || s.dim_unit || ')</th>';
             FOR k IN 1 .. v_weeks_back LOOP
-                v_header := v_header || '<th class="num">&minus;'
+                v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
                     || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
             END LOOP;
             v_header := v_header || '</tr></thead>';
-            DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
+            DBMS_OUTPUT.PUT_LINE('<table id="segio-detail-' || v_cur_dim || '">' || v_header || '<tbody>');
         END IF;
 
         -- Build oldest->newest values array for this segment (chart series).
@@ -328,28 +329,52 @@ BEGIN
             v_dim_segs_kept(s.dim) := v_dim_segs_kept(s.dim) + 1;
         END IF;
 
-        v_row := '<tr>'
-            || '<td class="mono"><span title="tablespace '
-            || DBMS_XMLGEN.CONVERT(s.tablespace_name) || '">'
-            || DBMS_XMLGEN.CONVERT(s.seg_name) || '</span></td>'
-            || '<td>' || DBMS_XMLGEN.CONVERT(s.object_type) || '</td>'
-            || '<td class="num"><b>' ||
-                CASE WHEN s.cur_val IS NULL THEN '&mdash;'
-                     ELSE TO_CHAR(s.cur_val, 'FM999G999G999G999G990') END
-            || CASE WHEN s.cur_rnk IS NOT NULL
-                    THEN ' <span class="badge info">#' || s.cur_rnk || '</span>' ELSE '' END
-            || '</b></td>';
+        -- X2: "new in current" -- a value in the current window but null/0
+        -- in every prior window, cheap to derive from the same week_vals
+        -- CSV already parsed for the chart series above.
+        DECLARE
+            v_new_in_cur BOOLEAN := (s.cur_val IS NOT NULL AND s.cur_val > 0);
+            v_prior_s    VARCHAR2(64);
+        BEGIN
+            IF v_new_in_cur THEN
+                FOR k IN 1 .. v_weeks_back LOOP
+                    v_prior_s := nth_csv(s.week_vals, k + 1);
+                    IF v_prior_s IS NOT NULL AND v_prior_s <> ''
+                       AND TO_NUMBER(v_prior_s, 'FM99999999999999990',
+                                     'NLS_NUMERIC_CHARACTERS=''.,''') > 0 THEN
+                        v_new_in_cur := FALSE;
+                        EXIT;
+                    END IF;
+                END LOOP;
+            END IF;
+
+            v_row := '<tr>'
+                || '<td class="mono"><span title="tablespace '
+                || DBMS_XMLGEN.CONVERT(s.tablespace_name) || '">'
+                || DBMS_XMLGEN.CONVERT(s.seg_name) || '</span>'
+                || CASE WHEN v_new_in_cur
+                        THEN ' <span class="badge info" title="in the top-N '
+                             || 'only in the current window">new</span>'
+                        ELSE '' END
+                || '</td>'
+                || '<td>' || DBMS_XMLGEN.CONVERT(s.object_type) || '</td>'
+                || '<td class="num" data-w="0"' || fmt_num_title(s.cur_val) || '><b>'
+                    || fmt_num(s.cur_val)
+                || CASE WHEN s.cur_rnk IS NOT NULL
+                        THEN ' <span class="badge info">#' || s.cur_rnk || '</span>' ELSE '' END
+                || '</b></td>';
+        END;
 
         FOR k IN 1 .. v_weeks_back LOOP
             v_val_s := nth_csv(s.week_vals, k + 1);
             v_rnk_s := nth_csv(s.week_rnks, k + 1);
             IF v_val_s IS NULL OR v_val_s = '' THEN
-                v_row := v_row || '<td class="num">&mdash;';
+                v_row := v_row || '<td class="num" data-w="' || k || '">&mdash;';
             ELSE
                 v_val := TO_NUMBER(v_val_s, 'FM99999999999999990',
                                    'NLS_NUMERIC_CHARACTERS=''.,''');
-                v_row := v_row || '<td class="num">'
-                      || TO_CHAR(v_val, 'FM999G999G999G999G990');
+                v_row := v_row || '<td class="num" data-w="' || k || '">'
+                      || fmt_num(v_val);
             END IF;
             IF v_rnk_s IS NOT NULL AND v_rnk_s <> '' THEN
                 v_row := v_row || ' <span class="badge skip">#' || v_rnk_s || '</span>';
@@ -595,18 +620,30 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('  var weeks=AWR_DATA.segIo.weeks;');
         DBMS_OUTPUT.PUT_LINE('  var mark=window.AWR_markLine&&window.AWR_markLine(weeks,AWR_DATA.segIo.weeksIso);');
         DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el);');
+        -- X2: window-axis highlight state. hiSlot: 0=current, 1=first prior...
+        -- Slot -> category index: weeks is oldest-first, so index =
+        -- weeks.length-1-slot.
+        DBMS_OUTPUT.PUT_LINE('  var lastMode="segs", hiSlot=null;');
         DBMS_OUTPUT.PUT_LINE('  function render(mode){');
-        DBMS_OUTPUT.PUT_LINE('    var rows=(mode==="types"?d.types:d.segs)||[];');
+        DBMS_OUTPUT.PUT_LINE('    if(mode) lastMode=mode;');
+        DBMS_OUTPUT.PUT_LINE('    var rows=(lastMode==="types"?d.types:d.segs)||[];');
+        -- B2: label only the 3 series with the largest current-window value;
+        -- dim the rest so the labelled ones read first (mirrors section 06).
+        DBMS_OUTPUT.PUT_LINE('    var lastVal=function(a){for(var k=a.length-1;k>=0;k--){if(a[k]!=null)return a[k];}return null;};');
+        DBMS_OUTPUT.PUT_LINE('    var top3=rows.map(function(s,i){return i;}).sort(function(a,b){return (lastVal(rows[b].vals)==null?-Infinity:lastVal(rows[b].vals))-(lastVal(rows[a].vals)==null?-Infinity:lastVal(rows[a].vals));}).slice(0,3);');
         DBMS_OUTPUT.PUT_LINE('    chart.setOption({');
+        DBMS_OUTPUT.PUT_LINE('      labelLayout:{moveOverlap:"shiftY"},');
         DBMS_OUTPUT.PUT_LINE('      tooltip:{trigger:"axis",axisPointer:{type:"line"},formatter:function(ps){var hdr="<b>"+ps[0].axisValue+"</b>";var rs=ps.filter(function(p){return p.value!=null;}).sort(function(a,b){return (b.value||0)-(a.value||0);}).map(function(p){return p.marker+" "+p.seriesName+": <b>"+fmt(p.value)+" "+d.unit+"</b>";}).join("<br/>");return hdr+"<br/>"+rs;}},');
         DBMS_OUTPUT.PUT_LINE('      legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},');
         DBMS_OUTPUT.PUT_LINE('      grid:{left:50,right:110,top:10,bottom:44,containLabel:true},');
         DBMS_OUTPUT.PUT_LINE('      xAxis:{type:"category",data:weeks,axisLabel:{color:fg,fontWeight:600},splitLine:{show:true,lineStyle:{color:gr}}},');
         DBMS_OUTPUT.PUT_LINE('      yAxis:{type:"value",name:d.unit,nameTextStyle:{color:mu,fontSize:10},axisLabel:{color:mu,formatter:function(v){return (+v).toLocaleString(undefined,{maximumFractionDigits:0});}},splitLine:{lineStyle:{color:gr}}},');
-        DBMS_OUTPUT.PUT_LINE('      series:rows.map(function(s,i){var o={name:s.name,type:"line",connectNulls:false,showSymbol:true,symbolSize:6,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:2},emphasis:{focus:"series",lineStyle:{width:3}},endLabel:{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6},data:s.vals};if(i===0&&mark)o.markLine=mark;return o;})');
+        DBMS_OUTPUT.PUT_LINE('      series:rows.map(function(s,i){var isTop=top3.indexOf(i)>=0;var o={name:s.name,type:"line",connectNulls:false,showSymbol:true,symbolSize:6,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:isTop?2:1.25,opacity:isTop?1:.45},emphasis:{focus:"series",lineStyle:{width:3,opacity:1}},endLabel:isTop?{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6,labelLine:{show:true,length2:4}}:{show:false},data:s.vals};if(i===0&&mark)o.markLine=mark;if(i===0&&hiSlot!=null){var idx=weeks.length-1-hiSlot;if(idx>=0&&idx<weeks.length)o.markArea={silent:true,itemStyle:{color:"rgba(37,99,235,0.14)"},data:[[{xAxis:idx},{xAxis:idx}]]};}return o;})');
         DBMS_OUTPUT.PUT_LINE('    }, true);');
         DBMS_OUTPUT.PUT_LINE('  }');
         DBMS_OUTPUT.PUT_LINE('  render("segs");');
+        -- X2: highlight the compared-window column for slot w; null clears.
+        DBMS_OUTPUT.PUT_LINE('  document.addEventListener("awr:window",function(e){hiSlot=e.detail?e.detail.w:null;render();});');
         DBMS_OUTPUT.PUT_LINE('  var toggle=document.querySelector(''[data-segio-target="''+dim+''"]'');');
         DBMS_OUTPUT.PUT_LINE('  if(toggle){');
         DBMS_OUTPUT.PUT_LINE('    if(!d.types || !d.types.length){');

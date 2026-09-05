@@ -28,6 +28,13 @@
 -- instance number present (param_inst CTE).  Per-instance parameter
 -- differences in aggregate mode are out of scope for this pivot.
 --
+-- CDB: DBA_HIST_PARAMETER also carries one row per container (con_id /
+-- con_dbid) for the same (dbid, snap_id, instance_number).  We collapse to
+-- the LOWEST con_id (0 / the root -- the instance-level value a DBA means
+-- by "the init parameter") via KEEP (DENSE_RANK FIRST ORDER BY con_id,
+-- con_dbid), same tiebreak as section 17 rule R3 -- keep in lockstep. A
+-- non-CDB has a single con_id, so this is a no-op there.
+--
 -- Read-only: pure SELECT against DBA_HIST_PARAMETER, no scratch table.
 --
 
@@ -64,9 +71,11 @@ DECLARE
     v_changed    BOOLEAN;
 
     -- Render one parameter value cell.  p_is_cur marks the reference
-    -- (current) column; p_chg adds the change highlight class.
+    -- (current) column; p_chg adds the change highlight class; p_w is the
+    -- window offset (0 = current, k = k-th prior window) exposed as
+    -- data-w for the chrome's window-highlight wiring (X2).
     FUNCTION cell_html(p_has BOOLEAN, p_val VARCHAR2,
-                       p_is_cur BOOLEAN, p_chg BOOLEAN) RETURN VARCHAR2 IS
+                       p_is_cur BOOLEAN, p_chg BOOLEAN, p_w PLS_INTEGER) RETURN VARCHAR2 IS
         v_cls  VARCHAR2(40) := 'pval';
         -- 32767, not 24000: a 4000-char value can entity-escape to roughly
         -- 24000 and the <code> wrapper pushes it past 24000 -> ORA-06502 (F7).
@@ -81,7 +90,7 @@ DECLARE
         ELSE
             v_body := '<code>' || DBMS_XMLGEN.CONVERT(p_val) || '</code>';
         END IF;
-        RETURN '<td class="' || v_cls || '">' || v_body || '</td>';
+        RETURN '<td class="' || v_cls || '" data-w="' || p_w || '">' || v_body || '</td>';
     END cell_html;
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="param-changes"><h2>Parameter changes</h2>');
@@ -122,12 +131,26 @@ BEGIN
                        AND w.dbid        = p.dbid
         ),
         pv AS (
-            SELECT w.week_offset, p.parameter_name, p.value
+            -- One value per (window, parameter), taken from the LOWEST con_id
+            -- (0 in a non-CDB, the root in a CDB) -- i.e. the instance-level
+            -- value a DBA means by "the init parameter".  In a CDB
+            -- DBA_HIST_PARAMETER carries one row per container for the same
+            -- (dbid, snap_id, instance_number), so a bare join fans out: it
+            -- would invent phantom changes when the arbitrary per-window pick
+            -- alternates between the root value and a PDB's. (Verified on
+            -- dbmint: sga_target reads 1610612736 in the root and 0 in both
+            -- PDBs at EVERY compared snapshot, so it never changed.) Same
+            -- tiebreak as section 17 rule R3 -- keep in lockstep. A non-CDB
+            -- has a single con_id, so this is a no-op there.
+            SELECT w.week_offset, p.parameter_name,
+                   MAX(p.value) KEEP (DENSE_RANK FIRST
+                       ORDER BY p.con_id, p.con_dbid) AS value
             FROM   win w
             JOIN   dba_hist_parameter p
               ON   p.dbid = w.dbid
              AND   p.snap_id = w.end_snap_id
              AND   p.instance_number = (SELECT inst FROM param_inst)
+            GROUP BY w.week_offset, p.parameter_name
         ),
         changed AS (
             SELECT parameter_name
@@ -158,13 +181,13 @@ BEGIN
     END IF;
 
     -- Header: Parameter | Current | -1w | -2w | ...
-    v_header := '<thead><tr><th>Parameter</th><th>Current</th>';
+    v_header := '<thead><tr><th>Parameter</th><th data-w="0">Current</th>';
     FOR k IN 1 .. v_weeks_back LOOP
-        v_header := v_header || '<th>&minus;'
+        v_header := v_header || '<th data-w="' || k || '">&minus;'
             || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
     END LOOP;
     v_header := v_header || '</tr></thead>';
-    DBMS_OUTPUT.PUT_LINE('<table>' || v_header || '<tbody>');
+    DBMS_OUTPUT.PUT_LINE('<table id="param-changes-table">' || v_header || '<tbody>');
 
     FOR i IN 1 .. v_names.COUNT LOOP
         v_cur_key := v_names(i) || '|0';
@@ -176,7 +199,7 @@ BEGIN
               || DBMS_XMLGEN.CONVERT(v_names(i)) || '</code></td>';
 
         -- Current column (the reference; never highlighted).
-        v_row := v_row || cell_html(v_cur_has, v_cur_val, TRUE, FALSE);
+        v_row := v_row || cell_html(v_cur_has, v_cur_val, TRUE, FALSE, 0);
 
         -- Prior windows: highlight when the value differs from current.
         -- A parameter value can be up to 4000 chars and entity-escaping can
@@ -202,7 +225,7 @@ BEGIN
                               <> NVL(v_cur_val, '__NULL__'));
             END IF;
 
-            v_cell := cell_html(v_cell_has, v_cell_val, FALSE, v_changed);
+            v_cell := cell_html(v_cell_has, v_cell_val, FALSE, v_changed, k);
             IF LENGTH(v_row) + LENGTH(v_cell) > 30000 THEN
                 DBMS_OUTPUT.PUT_LINE(v_row);
                 v_row := NULL;

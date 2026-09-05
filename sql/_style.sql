@@ -253,8 +253,14 @@ BEGIN
         || ' color:var(--ink); font-weight:600; }');
     DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct {'
         || ' font-variant-numeric:tabular-nums; font-weight:700; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct.up   { color:var(--red); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct.down { color:var(--ok); }');
+    -- F5: direction is carried by the glyph, not by color.  The percentage
+    -- text stays --ink in BOTH directions (red/green delta coloring is gone
+    -- report-wide: red is reserved for severity).  Only the small triangle
+    -- glyph inside the verdict block keeps a severity color.
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct.up   { color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct.down { color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct .g {'
+        || ' color:var(--crit); font-weight:700; margin-right:1px; }');
 
     -- Compact "all movers" disclosure under the verdict.
     DBMS_OUTPUT.PUT_LINE('header.report .movers-all {'
@@ -284,8 +290,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct {'
         || ' font-variant-numeric:tabular-nums; font-weight:700;'
         || ' flex:none; min-width:54px; text-align:right; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct.up   { color:var(--red); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct.down { color:var(--ok); }');
+    -- F5: neutralized (see the verdict .pct rules above).  The glyph in the
+    -- all-movers list is muted -- only the verdict block gets the crit glyph.
+    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct.up   { color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct.down { color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct .g {'
+        || ' color:var(--muted); font-weight:700; margin-right:1px; }');
 
     -- =========================================================
     -- Sidebar rail (nav.toc): fixed left column with grouped section
@@ -356,27 +366,43 @@ BEGIN
         || ' margin-top:auto; display:flex; flex-direction:column; gap:6px; }');
 
     -- "Essential rows" / "Application only" toggle buttons in the rail foot.
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter, nav.toc .essential-filter {'
+    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter, nav.toc .essential-filter,'
+        || ' nav.toc .triage-filter {'
         || ' font:inherit; font-size:11px; font-weight:700;'
         || ' letter-spacing:0.04em; text-transform:uppercase;'
         || ' padding:7px 12px; border-radius:8px; cursor:pointer;'
         || ' border:1px solid var(--rule); background:var(--panel);'
         || ' color:var(--ink); transition:color .12s,background .12s,border-color .12s; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter:hover, nav.toc .essential-filter:hover {'
+    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter:hover, nav.toc .essential-filter:hover,'
+        || ' nav.toc .triage-filter:hover {'
         || ' border-color:var(--accent); color:var(--accent); }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter.active, nav.toc .essential-filter.active {'
+    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter.active, nav.toc .essential-filter.active,'
+        || ' nav.toc .triage-filter.active {'
         || ' background:var(--accent); border-color:var(--accent); color:#fff; }');
 
-    -- Narrow screens: the rail becomes a static wrapping block.
-    DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px) {'
-        || ' nav.toc { position:static; width:auto; overflow:visible;'
-        || '   flex-direction:row; flex-wrap:wrap; align-items:center;'
-        || '   gap:2px 10px; border-right:0;'
-        || '   border-bottom:1px solid var(--hairline);'
-        || '   border-radius:0; margin:14px 0; padding:10px 0; }'
-        || ' nav.toc .rail-brand { border-bottom:0; padding:0 8px 0 0; margin:0; }'
-        || ' nav.toc b { margin:0 4px 0 10px; }'
-        || ' nav.toc .rail-foot { margin-top:0; margin-left:auto; flex-direction:row; } }');
+    -- =========================================================
+    -- "What changed" narrative (section 17), relocated into the masthead
+    -- slot by its own inline script.  A quiet accent-tinted note, not a
+    -- banner: the verdict above it already carries the severity color.
+    -- Kept visible in triage mode (no .hidetri) -- it IS the triage view --
+    -- but hidden by body.app-only with the rest of the system-wide masthead.
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('.narr {'
+        || ' border-left:3px solid var(--accent);'
+        || ' background:var(--accent-bg);'
+        || ' font-size:13px; line-height:1.6;'
+        || ' padding:10px 14px; border-radius:0 6px 6px 0;'
+        || ' margin-top:10px; color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('.narr p { margin:0 0 4px; }');
+    DBMS_OUTPUT.PUT_LINE('.narr p:last-child { margin-bottom:0; }');
+    DBMS_OUTPUT.PUT_LINE('.narr b { font-weight:600; }');
+    DBMS_OUTPUT.PUT_LINE('.narr code {'
+        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
+        || ' font-size:11.5px; }');
+    DBMS_OUTPUT.PUT_LINE('.narr a { color:var(--accent-deep);'
+        || ' text-decoration:none; font-weight:600;'
+        || ' border-bottom:1px solid var(--border); }');
+    DBMS_OUTPUT.PUT_LINE('.narr a:hover { border-bottom-color:var(--accent); }');
 
     -- =========================================================
     -- "Application only" view (body.app-only).
@@ -400,6 +426,7 @@ BEGIN
         || ' body.app-only #param-changes,'
         || ' body.app-only header.report .verdict,'
         || ' body.app-only header.report .movers-all,'
+        || ' body.app-only header.report .narr,'
         || ' body.app-only header.report .windows-strip { display:none; }');
     -- Remove the rail links that point at now-hidden sections, leaving
     -- only the ones still on screen (kept in sync with the hide rule
@@ -442,21 +469,42 @@ BEGIN
     -- =========================================================
     -- Sections: white panels
     -- =========================================================
+    -- T2: the section's own top padding moved into the sticky h2 (6 + 14 =
+    -- the old 20px of headroom) so the heading can sit flush against the
+    -- viewport top when it sticks, with no transparent gap above it.
     DBMS_OUTPUT.PUT_LINE('section {'
         || ' background:var(--panel); border:1px solid var(--hairline);'
-        || ' border-radius:10px; padding:20px 24px;'
+        || ' border-radius:10px; padding:6px 24px 20px;'
         || ' margin:18px 0 0; scroll-margin-top:18px; }');
     DBMS_OUTPUT.PUT_LINE('h1 { font-size:24px; margin:0; }');
 
     -- Section <h2>: compact panel heading (the rail does the wayfinding,
     -- so the big editorial numerals are gone).
+    -- T2 (sticky headers): the section heading sticks to the top of the
+    -- viewport while its section scrolls past.  --navh is 0 on desktop and
+    -- the height of the narrow-screen top bar below 980px (set by the rail
+    -- JS in 00_params.sql); z-index 6 keeps it above .chart-wrap (a z:0
+    -- stacking context) and above the sticky thead (z:4).
     DBMS_OUTPUT.PUT_LINE('h2 {'
         || ' font-weight:700; font-size:18px; line-height:1.25;'
         || ' letter-spacing:-0.01em; color:var(--ink);'
         || ' text-transform:none;'
-        || ' margin:0 0 12px; padding:0 0 10px; border:0;'
+        || ' margin:0 0 12px; padding:14px 0 10px; border:0;'
         || ' border-bottom:1px solid var(--line-soft);'
+        || ' background:var(--panel);'
         || ' display:flex; align-items:baseline; gap:10px; }');
+    DBMS_OUTPUT.PUT_LINE('section > h2 {'
+        || ' position:sticky; top:var(--navh, 0px); z-index:6;'
+        || ' white-space:nowrap; }');
+    -- T8: the first sentence of the section intro, kept inline on the
+    -- heading as a muted subtitle (the rest folds into details.method).
+    -- flex:0 1 auto + min-width:0 lets the subtitle shrink and ellipsize
+    -- instead of forcing the h2 (now nowrap) onto a second line when the
+    -- title + subtitle together are wider than the panel.
+    DBMS_OUTPUT.PUT_LINE('h2 .h2sub {'
+        || ' font-weight:400; font-size:12px; color:var(--muted);'
+        || ' letter-spacing:0; flex:0 1 auto; min-width:0; overflow:hidden;'
+        || ' text-overflow:ellipsis; white-space:nowrap; }');
     DBMS_OUTPUT.PUT_LINE('h2::before { content:none; }');
     DBMS_OUTPUT.PUT_LINE('h2::after { content:none; }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
@@ -497,6 +545,21 @@ BEGIN
         || ' font-size:10.5px; font-weight:700; letter-spacing:0.09em;'
         || ' text-transform:uppercase; white-space:nowrap;'
         || ' border-bottom:1px solid var(--rule); }');
+    -- T2: header row sticks just under the sticky section h2.  --h2h is
+    -- written per section by the rail JS (default 48px), --navh is the
+    -- narrow-screen top-bar height (0 on desktop).
+    DBMS_OUTPUT.PUT_LINE('section table thead th {'
+        || ' position:sticky; top:calc(var(--navh, 0px) + var(--h2h, 48px));'
+        || ' z-index:4; }');
+    -- T3: click-to-sort affordance.  Tables opting out carry data-nosort;
+    -- per-window header cells (th[data-w]) drive the X2 window highlight
+    -- instead of sorting, so they keep the default cursor.
+    DBMS_OUTPUT.PUT_LINE('section table thead th { cursor:pointer;'
+        || ' user-select:none; }');
+    DBMS_OUTPUT.PUT_LINE('section table[data-nosort] thead th { cursor:default; }');
+    DBMS_OUTPUT.PUT_LINE('section table thead th[data-w] { cursor:pointer; }');
+    DBMS_OUTPUT.PUT_LINE('thead th.asc::after  { content:" \2191"; color:var(--accent); }');
+    DBMS_OUTPUT.PUT_LINE('thead th.desc::after { content:" \2193"; color:var(--accent); }');
     DBMS_OUTPUT.PUT_LINE('tbody td {'
         || ' padding:8px 10px; border-bottom:1px solid var(--line-soft);'
         || ' vertical-align:middle; }');
@@ -517,6 +580,9 @@ BEGIN
     -- (the numeric columns are all white-space:nowrap).
     DBMS_OUTPUT.PUT_LINE('td.sqltext {'
         || ' white-space:normal; word-break:break-word; min-width:320px; }');
+    -- sql-pool SQL_ID cell: keep the id and its copy button on one line
+    -- instead of the button wrapping under the id.
+    DBMS_OUTPUT.PUT_LINE('td.sqlid-cell { white-space:nowrap; }');
     DBMS_OUTPUT.PUT_LINE('td a { color:var(--accent); text-decoration:none; font-weight:600; }');
     DBMS_OUTPUT.PUT_LINE('td a:hover { text-decoration:underline; }');
 
@@ -626,7 +692,11 @@ BEGIN
     -- =========================================================
     -- ECharts containers
     -- =========================================================
+    -- position/z-index: charts must paint UNDER the sticky h2 and thead
+    -- (T2).  z-index:0 makes each chart wrapper its own stacking context
+    -- at level 0, below the heading (6) and the sticky header row (4).
     DBMS_OUTPUT.PUT_LINE('.chart-wrap {'
+        || ' position:relative; z-index:0;'
         || ' width:100%; background:var(--panel);'
         || ' border:1px solid var(--line-soft); border-radius:8px;'
         || ' padding:8px; margin:14px 0 6px; }');
@@ -641,9 +711,6 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ash-sql-card {'
         || ' border:1px solid var(--hairline); border-radius:8px;'
         || ' padding:12px 14px; margin:14px 0; background:var(--panel); }');
-    DBMS_OUTPUT.PUT_LINE('.ash-sql-card.insufficient {'
-        || ' opacity:0.65; background:transparent;'
-        || ' padding:8px 12px; }');
     DBMS_OUTPUT.PUT_LINE('.ash-sql-head {'
         || ' display:flex; flex-wrap:wrap; gap:10px; align-items:baseline;'
         || ' font-size:13px; color:var(--ink); margin-bottom:6px; }');
@@ -708,8 +775,16 @@ BEGIN
         || ' font-variant-numeric:tabular-nums; white-space:nowrap; font-weight:600; }');
     DBMS_OUTPUT.PUT_LINE('.hero-card .delta .dp {'
         || ' color:var(--muted); margin-right:2px; font-size:10.5px; font-weight:500; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta.up   { color:var(--red); }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta.down { color:var(--ok); }');
+    -- F5: hero deltas read direction from the glyph, not from red/green.
+    DBMS_OUTPUT.PUT_LINE('.hero-card .delta.up   { color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('.hero-card .delta.down { color:var(--ink); }');
+    -- B6: per-card "vs prior mean ... / range ..." caption line (section 08).
+    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-delta, .hc-delta {'
+        || ' font-size:11.5px; color:var(--muted); line-height:1.45;'
+        || ' font-variant-numeric:tabular-nums; }');
+    DBMS_OUTPUT.PUT_LINE('.hc-delta b { color:var(--ink); font-weight:700; }');
+    -- Generic full-width horizontal-bar SVG (section 08 and friends).
+    DBMS_OUTPUT.PUT_LINE('svg.hbars { display:block; width:100%; height:42px; }');
 
     -- =========================================================
     -- Windows ribbon
@@ -744,15 +819,296 @@ BEGIN
         || ' border-top:1px solid var(--hairline); }');
 
     -- =========================================================
+    -- Facelift chrome.  Everything below is the CSS half of the
+    -- hook contract between _style.sql / 00_params.sql (which own the
+    -- page-level JS) and the numbered sections (which only emit markup
+    -- carrying these classes / data-attributes).  Grouped by feature.
+    -- =========================================================
+
+    -- T1: long-tail collapse.  Sections tag the uninteresting tail of a
+    -- table tr[data-tail="Y"] and emit a .expander[data-for=<table id>]
+    -- right after the table; the delegated click in 00_params.sql adds
+    -- .open to the table.  Hidden by default, so a report opened with JS
+    -- disabled still shows every headline row (and print un-hides them).
+    DBMS_OUTPUT.PUT_LINE('tr[data-tail="Y"] { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('table.open tr[data-tail="Y"] { display:table-row; }');
+    DBMS_OUTPUT.PUT_LINE('.expander {'
+        || ' display:inline-block; cursor:pointer; user-select:none;'
+        || ' color:var(--accent); font-size:12px; font-weight:700;'
+        || ' letter-spacing:0.01em; padding:8px 9px; }');
+    DBMS_OUTPUT.PUT_LINE('.expander:hover { text-decoration:underline; }');
+
+    -- T5: heat tint on a value cell, graded by how far it deviates
+    -- (1 = mild/amber, 2 = strong, 3 = extreme).  color-mix keeps the
+    -- tint derived from the severity tokens, so dark mode follows for
+    -- free (the tokens are re-declared in the body.dark block above).
+    DBMS_OUTPUT.PUT_LINE('td[data-dev="1"] {'
+        || ' background:color-mix(in srgb, var(--warn) 12%, transparent); }');
+    DBMS_OUTPUT.PUT_LINE('td[data-dev="2"] {'
+        || ' background:color-mix(in srgb, var(--crit) 14%, transparent); }');
+    DBMS_OUTPUT.PUT_LINE('td[data-dev="3"] {'
+        || ' background:color-mix(in srgb, var(--crit) 28%, transparent); }');
+
+    -- X2: cross-report window highlight.  Any element carrying data-w=<N>
+    -- (window offset; 0 = current) lights up when that window is selected
+    -- by clicking a per-window th or a masthead .wchip.  The class is put
+    -- on / taken off by the JS in 00_params.sql, which also broadcasts the
+    -- awr:window CustomEvent for chart sections to draw their own markArea.
+    DBMS_OUTPUT.PUT_LINE('th[data-w], .wchip[data-w] { cursor:pointer; }');
+    DBMS_OUTPUT.PUT_LINE('[data-w].hl {'
+        || ' outline:2px solid var(--accent); outline-offset:-2px;'
+        || ' background:color-mix(in srgb, var(--accent) 12%, transparent); }');
+    -- Masthead clickable window chips + the one-line usage hint under them.
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-chips {'
+        || ' display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 2px; }');
+    DBMS_OUTPUT.PUT_LINE('.wchip {'
+        || ' display:inline-flex; align-items:baseline; gap:6px;'
+        || ' font-size:11px; color:var(--ink-soft); white-space:nowrap;'
+        || ' background:var(--panel-2); border:1px solid var(--hairline);'
+        || ' border-radius:999px; padding:3px 10px;'
+        || ' transition:color .12s,border-color .12s; }');
+    DBMS_OUTPUT.PUT_LINE('.wchip b {'
+        || ' color:var(--ink); font-weight:700;'
+        || ' font-variant-numeric:tabular-nums; }');
+    DBMS_OUTPUT.PUT_LINE('.wchip:hover { border-color:var(--accent); color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('.wchip.cur {'
+        || ' background:var(--accent-bg); border-color:var(--accent);'
+        || ' color:var(--accent-deep); }');
+    DBMS_OUTPUT.PUT_LINE('.wchip.cur b { color:var(--accent-deep); }');
+    -- Emitted after .wchip.cur so a selected current-window chip still
+    -- reads as selected (both selectors are 0,2,0 -- source order decides).
+    DBMS_OUTPUT.PUT_LINE('.wchip.hl {'
+        || ' background:color-mix(in srgb, var(--accent) 22%, transparent); }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-hint {'
+        || ' font-size:10.5px; color:var(--muted); margin:2px 0 4px;'
+        || ' letter-spacing:0.02em; }');
+
+    -- B5: "sigma is approximately zero" pill -- a flat-baseline marker.
+    -- Grey like .badge.skip but neither italic nor upper-cased, because it
+    -- carries a literal glyph rather than a severity word.
+    DBMS_OUTPUT.PUT_LINE('.badge.sig {'
+        || ' background:var(--skip-bg); color:var(--skip);'
+        || ' font-style:normal; text-transform:none; letter-spacing:0;'
+        || ' font-weight:600; }');
+
+    -- X3: triage mode (body.triage).  Same body-class hook as
+    -- body.no-charts / body.app-only / body.essential: sections opt IN by
+    -- carrying data-triage, everything else (and anything tagged .hidetri)
+    -- drops out.  Rail links pointing at dropped sections are dimmed by the
+    -- .tri-dim class the rail JS computes from the same data-triage test.
+    DBMS_OUTPUT.PUT_LINE('body.triage section:not([data-triage]) { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('body.triage .hidetri { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('body.triage nav.toc a.tri-dim { opacity:.35; }');
+
+    -- C1: tab bars.  A .tabs[data-tabs=G] bar of [data-t] spans switches
+    -- the sibling .tabpanel[data-tabs=G][data-t=...] panels.
+    DBMS_OUTPUT.PUT_LINE('.tabs {'
+        || ' display:flex; flex-wrap:wrap; gap:2px; margin:14px 0 0;'
+        || ' border-bottom:1px solid var(--rule); }');
+    DBMS_OUTPUT.PUT_LINE('.tabs [data-t] {'
+        || ' cursor:pointer; user-select:none; padding:6px 12px;'
+        || ' font-size:12px; font-weight:600; color:var(--muted);'
+        || ' border-bottom:2px solid transparent; margin-bottom:-1px; }');
+    DBMS_OUTPUT.PUT_LINE('.tabs [data-t]:hover { color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('.tabs [data-t].on {'
+        || ' color:var(--accent); border-bottom-color:var(--accent); }');
+    DBMS_OUTPUT.PUT_LINE('.tabpanel { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('.tabpanel.on { display:block; }');
+
+    -- C4: copy affordances.  .copy-btn sits absolutely in the top-right of
+    -- a positioned pre/code block and only materializes on hover; .tbl-tools
+    -- is the small right-aligned CSV / Markdown toolbar the JS injects above
+    -- every section table with a thead; .permalink is the hover-only "#"
+    -- anchor appended to each section heading.
+    DBMS_OUTPUT.PUT_LINE('pre.sql, pre.copyable, .codewrap { position:relative; }');
+    -- Inline by default (table cells, headings); absolutely positioned and
+    -- hover-revealed only inside a positioned pre / .codewrap block.
+    DBMS_OUTPUT.PUT_LINE('.copy-btn {'
+        || ' font:inherit; font-size:10.5px; font-weight:700; letter-spacing:0.04em;'
+        || ' text-transform:uppercase; padding:1px 6px; border-radius:6px;'
+        || ' border:1px solid var(--hairline); background:var(--panel);'
+        || ' color:var(--muted); cursor:pointer; vertical-align:middle;'
+        || ' transition:opacity .12s,color .12s,border-color .12s; }');
+    DBMS_OUTPUT.PUT_LINE('pre > .copy-btn, .codewrap > .copy-btn {'
+        || ' position:absolute; top:6px; right:6px; padding:3px 8px;'
+        || ' opacity:0; pointer-events:none; z-index:2; }');
+    DBMS_OUTPUT.PUT_LINE('pre:hover > .copy-btn, .codewrap:hover > .copy-btn, .copy-btn:focus {'
+        || ' opacity:1; pointer-events:auto; }');
+    DBMS_OUTPUT.PUT_LINE('.copy-btn:hover { color:var(--accent); border-color:var(--accent); }');
+    -- T6: inline |z| bar in the Biggest-movers table (07).
+    DBMS_OUTPUT.PUT_LINE('.zbar { display:inline-block; height:8px; vertical-align:middle;'
+        || ' border-radius:2px; margin-right:6px; }');
+    DBMS_OUTPUT.PUT_LINE('.tbl-tools {'
+        || ' display:flex; justify-content:flex-end; gap:6px;'
+        || ' margin:10px 0 -8px; }');
+    DBMS_OUTPUT.PUT_LINE('.tbl-tools .tool-btn {'
+        || ' font:inherit; font-size:11px; font-weight:600; line-height:1.4;'
+        || ' padding:2px 8px; border-radius:6px; cursor:pointer;'
+        || ' border:1px solid var(--hairline); background:var(--panel);'
+        || ' color:var(--muted);'
+        || ' transition:color .12s,border-color .12s; }');
+    DBMS_OUTPUT.PUT_LINE('.tbl-tools .tool-btn:hover {'
+        || ' color:var(--accent); border-color:var(--accent); }');
+    DBMS_OUTPUT.PUT_LINE('h2 .permalink {'
+        || ' margin-left:auto; font-size:13px; font-weight:700;'
+        || ' color:var(--muted); text-decoration:none; cursor:pointer;'
+        || ' opacity:0; transition:opacity .12s,color .12s; }');
+    DBMS_OUTPUT.PUT_LINE('h2:hover .permalink, h2 .permalink:focus { opacity:1; }');
+    DBMS_OUTPUT.PUT_LINE('h2 .permalink:hover { color:var(--accent); }');
+
+    -- Small mono letter chip (dimension / flag markers in the sections).
+    DBMS_OUTPUT.PUT_LINE('.chip {'
+        || ' display:inline-block; border:1px solid var(--rule);'
+        || ' border-radius:4px; font-size:10px; font-weight:700;'
+        || ' line-height:1.5; padding:0 4px; color:var(--muted);'
+        || ' text-transform:none; letter-spacing:0;'
+        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; }');
+    DBMS_OUTPUT.PUT_LINE('.chip.on {'
+        || ' background:var(--accent); border-color:var(--accent); color:#fff; }');
+
+    -- T8: methodology disclosure.  The rail JS folds each section intro
+    -- paragraph into details.method, keeping its first sentence inline on
+    -- the heading as h2 .h2sub (styled with the h2 rules above).
+    DBMS_OUTPUT.PUT_LINE('details.method { margin:0 0 12px; }');
+    DBMS_OUTPUT.PUT_LINE('details.method > summary {'
+        || ' cursor:pointer; list-style:none; padding:2px 0;'
+        || ' color:var(--accent); font-size:12px; font-weight:600;'
+        || ' text-transform:none; letter-spacing:0; }');
+    DBMS_OUTPUT.PUT_LINE('details.method > summary::-webkit-details-marker { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('details.method > summary::before { content:"\25B8 "; }');
+    DBMS_OUTPUT.PUT_LINE('details.method[open] > summary::before { content:"\25BE "; }');
+    DBMS_OUTPUT.PUT_LINE('details.method > p {'
+        || ' font-size:12px; color:var(--muted); margin:4px 0 0; }');
+
+    -- =========================================================
+    -- Rail additions: filter box (T4), per-section finding counts and the
+    -- next-finding control (C2), the narrow-screen top bar (B8).
+    -- =========================================================
+    -- The section links now live in a .rail-list wrapper so the narrow
+    -- layout can drop them into a dropdown panel.  Every existing selector
+    -- (nav.toc a / nav.toc b, the app-only link rule, the rail JS) is a
+    -- descendant match, so wrapping them changes nothing on desktop.
+    DBMS_OUTPUT.PUT_LINE('nav.toc .rail-list {'
+        || ' display:flex; flex-direction:column; gap:2px; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .rail-filter {'
+        || ' position:relative; margin:0 2px 8px; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .rail-filter input {'
+        || ' width:100%; font:inherit; font-size:12px;'
+        || ' padding:5px 38px 5px 9px; border-radius:7px;'
+        || ' border:1px solid var(--rule); background:var(--panel);'
+        || ' color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .rail-filter input:focus {'
+        || ' outline:none; border-color:var(--accent); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .rail-filter .kbd {'
+        || ' position:absolute; right:6px; top:50%; transform:translateY(-50%);'
+        || ' font-size:9.5px; color:var(--muted); pointer-events:none;'
+        || ' border:1px solid var(--hairline); border-radius:4px;'
+        || ' padding:0 4px; background:var(--panel-2); }');
+    -- Rail link dimmed because the row filter left its section with no
+    -- visible rows.
+    DBMS_OUTPUT.PUT_LINE('nav.toc a.dim { opacity:.35; }');
+    -- C2: crit / warn row counts appended to each rail link.
+    DBMS_OUTPUT.PUT_LINE('nav.toc a .cnt {'
+        || ' margin-left:auto; font-size:9.5px; font-weight:700;'
+        || ' line-height:1.7; padding:0 5px; border-radius:999px;'
+        || ' font-variant-numeric:tabular-nums; flex:none; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a .cnt + .cnt { margin-left:3px; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a .cnt.c { background:var(--crit-bg); color:var(--crit); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a .cnt.w { background:var(--warn-bg); color:var(--warn); }');
+    -- C2: "next large finding" jump control (J / K also work anywhere).
+    DBMS_OUTPUT.PUT_LINE('nav.toc .next-finding {'
+        || ' display:flex; align-items:center; justify-content:space-between;'
+        || ' gap:8px; font:inherit; font-size:11px; font-weight:600;'
+        || ' text-align:left; padding:6px 10px; border-radius:8px;'
+        || ' border:1px dashed var(--rule); background:transparent;'
+        || ' color:var(--muted); cursor:pointer;'
+        || ' transition:color .12s,border-color .12s; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .next-finding:hover {'
+        || ' color:var(--accent); border-color:var(--accent); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .next-finding .keys {'
+        || ' font-size:9.5px; letter-spacing:0.08em; color:var(--muted);'
+        || ' border:1px solid var(--hairline); border-radius:4px;'
+        || ' padding:0 4px; flex:none; }');
+    -- Transient outline on the row the J / K jump landed on.
+    DBMS_OUTPUT.PUT_LINE('tr.jump-hi td {'
+        || ' box-shadow:inset 0 2px 0 var(--crit), inset 0 -2px 0 var(--crit); }');
+    DBMS_OUTPUT.PUT_LINE('tr.jump-hi td:first-child {'
+        || ' box-shadow:inset 0 2px 0 var(--crit), inset 0 -2px 0 var(--crit),'
+        || ' inset 2px 0 0 var(--crit); }');
+    DBMS_OUTPUT.PUT_LINE('tr.jump-hi td:last-child {'
+        || ' box-shadow:inset 0 2px 0 var(--crit), inset 0 -2px 0 var(--crit),'
+        || ' inset -2px 0 0 var(--crit); }');
+    -- Narrow-screen-only rail bits, hidden on desktop.
+    DBMS_OUTPUT.PUT_LINE('nav.toc .rail-cur, nav.toc .rail-menu-btn { display:none; }');
+
+    -- B8: below 980px the rail stops being a sidebar and becomes a sticky
+    -- top bar: brand + current section (fed by the scrollspy) + a hamburger
+    -- that drops the section list down as a panel.  --navh (written by the
+    -- rail JS) keeps the sticky h2 / thead clear of the bar.
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px) {'
+        -- order:0 lifts the bar above the masthead (it is order:2 on
+        -- desktop, where it is a fixed sidebar and the order is moot).
+        || ' nav.toc { order:0; position:sticky; top:0; left:auto; bottom:auto;'
+        || '   width:auto; overflow:visible; z-index:30;'
+        || '   flex-direction:row; flex-wrap:nowrap; align-items:center;'
+        || '   gap:8px; border-right:0;'
+        || '   border-bottom:1px solid var(--hairline);'
+        || '   border-radius:0; margin:0 -20px; padding:8px 20px; }'
+        || ' nav.toc .rail-brand { border-bottom:0; padding:0; margin:0;'
+        || '   flex:0 0 auto; gap:6px; }'
+        || ' nav.toc .rail-brand > span { font-size:10px; }'
+        || ' nav.toc .rail-cur { display:block; flex:1 1 auto; min-width:0;'
+        || '   font-size:12px; font-weight:600; color:var(--ink);'
+        || '   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;'
+        || '   text-transform:none; letter-spacing:0; }'
+        || ' nav.toc .rail-menu-btn { display:flex; flex:none;'
+        || '   align-items:center; justify-content:center;'
+        || '   width:28px; height:26px; padding:0; border-radius:7px;'
+        || '   border:1px solid var(--rule); background:var(--panel);'
+        || '   color:var(--ink); font:inherit; font-size:14px; cursor:pointer; }'
+        || ' nav.toc .rail-filter { display:none; }'
+        || ' nav.toc .rail-list { display:none; position:absolute;'
+        || '   top:100%; left:0; right:0; z-index:31;'
+        || '   background:var(--panel-2);'
+        || '   border-bottom:1px solid var(--hairline);'
+        || '   box-shadow:0 8px 18px rgba(0,0,0,.10);'
+        || '   padding:8px 20px 12px; max-height:70vh; overflow:auto; }'
+        || ' nav.toc.menu-open .rail-list { display:flex; }'
+        || ' nav.toc .rail-foot { margin-top:0; flex:none;'
+        || '   flex-direction:row; gap:4px; }'
+        || ' nav.toc .rail-foot .next-finding { display:none; }'
+        || ' nav.toc .app-filter, nav.toc .essential-filter,'
+        || ' nav.toc .triage-filter { font-size:9.5px; padding:5px 7px;'
+        || '   letter-spacing:0; }'
+        || ' }');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 700px) {'
+        || ' h2 .h2sub { display:none; }'
+        || ' nav.toc .rail-brand > span { display:none; } }');
+
+    -- =========================================================
     -- Print
     -- =========================================================
+    -- The dark palette lives inside @media screen, so print always renders
+    -- the light tokens declared on :root -- nothing to force here.  What
+    -- does need undoing: the sticky headers, every interactive affordance,
+    -- and the two collapse mechanisms (long-tail rows and the methodology
+    -- disclosure) whose content must be on the printed page.
     DBMS_OUTPUT.PUT_LINE('@media print {'
         || ' nav.toc { display:none; position:static; }'
         || ' body { max-width:none; padding:0 0 24px; background:#fff; }'
-        || ' section { border:0; padding:12px 0; }'
+        || ' section { border:0; padding:12px 0; break-before:page; }'
+        || ' body > section:first-of-type { break-before:auto; }'
         || ' header.report { border:0; padding-top:0; }'
         || ' .chart-wrap { break-inside:avoid; }'
-        || ' h2 { break-after:avoid; }'
+        || ' h2 { break-after:avoid; position:static; padding-top:0;'
+        || '   background:transparent; }'
+        || ' section table thead th { position:static; }'
+        || ' .tbl-tools, .copy-btn, .permalink, .expander, .tag,'
+        || ' .preset-note, .next-finding, .windows-hint,'
+        || ' .theme-icon-btn { display:none !important; }'
+        || ' details.method > summary { display:none; }'
+        || ' details.method > * { display:block; }'
+        || ' tr[data-tail="Y"] { display:table-row !important; }'
         || ' }');
 
     DBMS_OUTPUT.PUT_LINE('</style>');

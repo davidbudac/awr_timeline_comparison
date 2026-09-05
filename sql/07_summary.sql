@@ -3,20 +3,31 @@
 -- For every scalar metric rendered by sections 02-04, compute the z-score
 -- of the current window against the mean/stddev of the prior valid windows,
 -- bucket the change magnitude (large / moderate / typical) and render the
--- findings heatmap + detail table.  Buckets describe how far the current
--- value sits from its baseline of prior comparison windows; "large" is not
--- a value judgement, just a |z| > 3 outlier.
+-- "Biggest movers" table + per-domain findings detail tables.  Buckets
+-- describe how far the current value sits from its baseline of prior
+-- comparison windows; "large" is not a value judgement, just a |z| > 3
+-- outlier.
 -- Read-only: recomputes everything in-flight from the AWR views; does NOT
 -- persist anything.
 --
 -- Implementation note: the same set of findings drives two views (the
--- heatmap and the detail table), each with a different ORDER BY.  We
--- BULK COLLECT the unified LOAD/METRIC/WAIT recompute exactly once into a
--- PL/SQL collection, attach both view positions via ROW_NUMBER(), and then
--- walk the collection twice -- first emitting the heatmap JSON in heatmap
--- order, then the table rows in detail-table order via an index array.
--- This keeps the (substantial) recompute single-pass while preserving the
--- two distinct sort orders the report expects.
+-- "Biggest movers" top-8-by-|z| table and the per-domain detail tables),
+-- each with a different ordering.  We BULK COLLECT the unified
+-- LOAD/METRIC/WAIT recompute exactly once into a PL/SQL collection, attach
+-- the detail-table view position via ROW_NUMBER(), and then walk the
+-- collection: once to build tallies / the table-order index / the top-8
+-- "movers" shortlist (all in the same pass, so no second query is ever
+-- run), and again per domain to emit the detail tables in table order.
+--
+-- Display-only rules layered on top of the scoring above (do not change
+-- change_bucket / severity):
+--   - |z| > 99 is clamped to "&gt;+99" / "&lt;&minus;99" for display.
+--   - A near-zero baseline sigma (sd < 1% of |mean|, or both exactly 0)
+--     gets a "sigma approx 0" badge next to the z value and a bold %-delta
+--     cell, nudging the reader toward %-delta instead of an inflated z.
+--   - Every displayed %-delta carries a leading up/down triangle instead of
+--     a signed number; no per-direction color class is used (severity
+--     color stays on .badge only).
 --
 
 SET DEFINE '~'
@@ -49,28 +60,89 @@ DECLARE
     v_total      NUMBER := 0;
     v_crit       NUMBER := 0;
     v_warn       NUMBER := 0;
-    v_heat_json  CLOB;
+    v_typical    NUMBER := 0;
     v_weeks_back NUMBER := ~weeks_back;
 
+    -- "Biggest movers" (T6): top 8 rows by |z| across all domains, tracked
+    -- via a tiny sorted array while the SAME collection above is walked for
+    -- tallies -- no second cursor/query.
+    v_top        findings_t;
+    v_top_n      PLS_INTEGER := 0;
+    v_tmp        finding_rec;
+    v_az         NUMBER;
+    v_bar_w      PLS_INTEGER;
+    j            PLS_INTEGER;
+
     @@sql/lib/is_essential.plsql
+    @@sql/lib/fmt_num.plsql
+
+    -- Shared display-only formatting (B5/F5): clamp |z|>99, flag a
+    -- near-zero baseline sigma, and render %-delta with a direction glyph.
+    -- Duplicated (not shared) with sql/lib/score_cells.plsql on purpose --
+    -- same "findings are recomputed, not shared" convention as the scoring
+    -- above; the two stay in sync by inspection, not by a shared function.
+    FUNCTION fmt_z(p_z NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN CASE
+            WHEN p_z IS NULL THEN '&mdash;'
+            WHEN p_z > 99    THEN '&gt;+99'
+            WHEN p_z < -99   THEN '&lt;&minus;99'
+            ELSE TO_CHAR(p_z, 'FMS99990D00')
+        END;
+    END fmt_z;
+
+    FUNCTION fmt_pct(p_pct NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN CASE
+            WHEN p_pct IS NULL THEN '&mdash;'
+            WHEN p_pct < 0     THEN '&#9660; ' || TO_CHAR(ABS(p_pct), 'FM99990D0') || '%'
+            ELSE '&#9650; ' || TO_CHAR(p_pct, 'FM99990D0') || '%'
+        END;
+    END fmt_pct;
+
+    FUNCTION is_sig(p_mu NUMBER, p_sd NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        IF p_mu IS NOT NULL AND p_sd IS NOT NULL THEN
+            IF (p_mu = 0 AND p_sd = 0)
+               OR (p_mu <> 0 AND p_sd < 0.01 * ABS(p_mu)) THEN
+                RETURN 'Y';
+            END IF;
+        END IF;
+        RETURN 'N';
+    END is_sig;
 
     PROCEDURE emit_domain_table(p_dom VARCHAR2, p_title VARCHAR2) IS
-        v_row   VARCHAR2(32767);
-        v_sev   VARCHAR2(40);
-        v_cls   VARCHAR2(10);
-        v_imp   VARCHAR2(1);
-        v_count PLS_INTEGER := 0;
-        rec     finding_rec;
+        v_row      VARCHAR2(32767);
+        v_sev      VARCHAR2(40);
+        v_cls      VARCHAR2(10);
+        v_imp      VARCHAR2(1);
+        v_sig      VARCHAR2(1);
+        v_count    PLS_INTEGER := 0;
+        v_tail_cnt PLS_INTEGER := 0;
+        v_tbl_id   VARCHAR2(30);
+        rec        finding_rec;
     BEGIN
         FOR p IN 1 .. v_table_idx.COUNT LOOP
-            IF v_findings(v_table_idx(p)).metric_domain = p_dom THEN
+            rec := v_findings(v_table_idx(p));
+            IF rec.metric_domain = p_dom THEN
                 v_count := v_count + 1;
+                -- T1: rows whose severity is "typical" (OK), flat baseline
+                -- or insufficient history are tail candidates the sidebar
+                -- toggle collapses behind an expander.
+                IF rec.change_bucket IN ('typical', 'flat baseline', 'insufficient history') THEN
+                    v_tail_cnt := v_tail_cnt + 1;
+                END IF;
             END IF;
         END LOOP;
         IF v_count = 0 THEN RETURN; END IF;
 
-        DBMS_OUTPUT.PUT_LINE('<h3>' || p_title || '</h3>');
-        DBMS_OUTPUT.PUT_LINE('<table>'
+        v_tbl_id := 'findings-' || LOWER(p_dom);
+
+        -- X3: hidetri hides the per-domain detail tables (and their
+        -- headings/expanders) when the triage view is on; only the
+        -- "Biggest movers" table stays visible there.
+        DBMS_OUTPUT.PUT_LINE('<h3 class="hidetri">' || p_title || '</h3>');
+        DBMS_OUTPUT.PUT_LINE('<table id="' || v_tbl_id || '" class="hidetri">'
             || '<thead><tr>'
             || '<th>Change</th>'
             || '<th>Metric</th>'
@@ -100,51 +172,63 @@ DECLARE
                 -- is_essential() directly.
                 v_imp := CASE WHEN rec.metric_domain = 'WAIT' THEN NULL
                               ELSE is_essential(rec.metric_domain, rec.metric_name) END;
+                v_sig := is_sig(rec.prior_mean, rec.prior_sd);
                 v_row := '<tr data-metric="'
                     || REPLACE(DBMS_XMLGEN.CONVERT(rec.metric_name), '"', '&quot;')
                     || '"'
                     || CASE WHEN v_imp IS NOT NULL
                             THEN ' data-imp="' || v_imp || '"' END
+                    || CASE WHEN v_sev IN ('typical', 'flat baseline', 'insufficient history')
+                            THEN ' data-tail="Y"' END
                     || ' class="' || v_cls || '">'
                     || '<td><span class="badge ' || v_cls || '">' || v_sev || '</span></td>'
                     || '<td>' || DBMS_XMLGEN.CONVERT(rec.metric_name) || '</td>'
-                    || '<td class="num">' ||
-                        CASE WHEN rec.cur_val IS NULL THEN '&mdash;'
-                             ELSE TO_CHAR(rec.cur_val, 'FM999G999G999G990D0000') END || '</td>'
-                    || '<td class="num">' ||
-                        CASE WHEN rec.prior_mean IS NULL THEN '&mdash;'
-                             ELSE TO_CHAR(rec.prior_mean, 'FM999G999G999G990D0000') END || '</td>'
-                    || '<td class="num">' ||
-                        CASE WHEN rec.prior_sd IS NULL THEN '&mdash;'
-                             ELSE TO_CHAR(rec.prior_sd, 'FM999G999G999G990D0000') END || '</td>'
+                    || '<td class="num"' || fmt_num_title(rec.cur_val) || '>'
+                        || fmt_num(rec.cur_val) || '</td>'
+                    || '<td class="num">' || fmt_num(rec.prior_mean) || '</td>'
+                    || '<td class="num">' || fmt_num(rec.prior_sd) || '</td>'
                     || '<td class="num">' || NVL(TO_CHAR(rec.n_prior), '0') || '</td>'
-                    || '<td class="num">' ||
-                        CASE WHEN rec.z_score IS NULL THEN '&mdash;'
-                             ELSE TO_CHAR(rec.z_score, 'FMS99990D00') END || '</td>'
-                    || '<td class="num">' ||
-                        CASE WHEN rec.pct_delta IS NULL THEN '&mdash;'
-                             ELSE TO_CHAR(rec.pct_delta, 'FMS99990D0') || '%' END || '</td>'
+                    || '<td class="num">' || fmt_z(rec.z_score)
+                        || CASE WHEN v_sig = 'Y' THEN
+                               ' <span class="badge sig" title="baseline barely moved: '
+                               || '&sigma; below 1% of mean; read the % delta instead">'
+                               || '&sigma;&approx;0</span>'
+                           END
+                        || '</td>'
+                    || '<td class="num">'
+                        || CASE WHEN v_sig = 'Y' THEN '<b>' || fmt_pct(rec.pct_delta) || '</b>'
+                                ELSE fmt_pct(rec.pct_delta) END
+                        || '</td>'
                     || '</tr>';
                 DBMS_OUTPUT.PUT_LINE(v_row);
             END IF;
         END LOOP;
         DBMS_OUTPUT.PUT_LINE('</tbody></table>');
+
+        IF v_tail_cnt > 0 THEN
+            DBMS_OUTPUT.PUT_LINE('<span class="expander hidetri" data-for="' || v_tbl_id
+                || '" data-n="' || v_tail_cnt || '" data-noun="typical / flat rows">'
+                || '&#9656; Show ' || v_tail_cnt || ' typical / flat rows</span>');
+        END IF;
     END emit_domain_table;
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="findings"><h2 id="findings-heading">Findings summary</h2>');
+    -- X3: data-triage="Y" lets the triage view show only "Biggest movers"
+    -- (the per-domain detail tables/headings/expanders carry class
+    -- "hidetri" and are hidden by the chrome CSS in that mode).
+    DBMS_OUTPUT.PUT_LINE('<section id="findings" data-triage="Y"><h2 id="findings-heading">Findings summary</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'z = (current &minus; &mu;) &divide; &sigma; over prior valid windows. '
         || '|z|&gt;3 large, |z|&gt;2 moderate, else typical. '
         || 'n&lt;3 &rarr; %-delta only. '
-        || 'Heatmap: |z| per (domain &times; metric); gray = no baseline.</p>');
-
-    DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-medium" id="findings-heatmap"></div>');
+        || '|z| beyond &plusmn;99 is capped for display; '
+        || '&sigma;&approx;0 flags a baseline that barely moved &mdash; read the %-delta there instead.</p>');
 
     --
     -- Recompute LOAD / METRIC / WAIT values per (week_offset, metric) from
     -- the AWR views, pivot to cur vs prior AVG/STDDEV, derive the change
-    -- bucket, and tag each row with both view positions via ROW_NUMBER.
-    -- Bulk-collected once; both report views below iterate the collection.
+    -- bucket, and tag each row with its detail-table view position via
+    -- ROW_NUMBER.  Bulk-collected once; every view below iterates the
+    -- collection.
     --
     WITH
     @@sql/lib/windows_cte.sql
@@ -331,11 +415,11 @@ BEGIN
     ORDER  BY heat_pos;
 
     --
-    -- First pass: heatmap JSON + counters, in heatmap order
-    -- (which is the bulk-collect order).  Also builds the index array
-    -- that the second pass uses to walk in detail-table order.
+    -- Single pass over the bulk-collected findings: tallies (large/
+    -- moderate/typical), the detail-table order index, and the "Biggest
+    -- movers" top-8-by-|z| shortlist (kept sorted in a tiny array as we go,
+    -- so no second query is ever issued against v_findings).
     --
-    v_heat_json := NULL;
     FOR i IN 1 .. v_findings.COUNT LOOP
         f := v_findings(i);
         v_total := v_total + 1;
@@ -343,75 +427,116 @@ BEGIN
         ELSIF f.change_bucket = 'moderate' THEN v_warn := v_warn + 1;
         END IF;
 
-        v_heat_json := CASE WHEN v_heat_json IS NULL THEN '' ELSE v_heat_json || ',' END
-            || '{"dom":"' || f.metric_domain
-            || '","m":"' || REPLACE(REPLACE(f.metric_name, '\', '\\'), '"', '\"')
-            || '","z":' || CASE WHEN f.z_score IS NULL THEN 'null'
-                                ELSE TO_CHAR(f.z_score, 'FMS99990D00',
-                                             'NLS_NUMERIC_CHARACTERS=''.,''') END
-            || ',"sev":"' || f.change_bucket
-            || '","cur":' || CASE WHEN f.cur_val IS NULL THEN 'null'
-                                  ELSE TO_CHAR(f.cur_val, 'FM99999999990D000000',
-                                               'NLS_NUMERIC_CHARACTERS=''.,''') END
-            || ',"mu":' || CASE WHEN f.prior_mean IS NULL THEN 'null'
-                                ELSE TO_CHAR(f.prior_mean, 'FM99999999990D000000',
-                                             'NLS_NUMERIC_CHARACTERS=''.,''') END
-            || ',"sd":' || CASE WHEN f.prior_sd IS NULL THEN 'null'
-                                ELSE TO_CHAR(f.prior_sd, 'FM99999999990D000000',
-                                             'NLS_NUMERIC_CHARACTERS=''.,''') END
-            || ',"n":' || NVL(TO_CHAR(f.n_prior), '0')
-            || ',"pct":' || CASE WHEN f.pct_delta IS NULL THEN 'null'
-                                 ELSE TO_CHAR(f.pct_delta, 'FMS99990D0',
-                                              'NLS_NUMERIC_CHARACTERS=''.,''') END
-            || '}';
+        v_az := ABS(NVL(f.z_score, 0));
+        j := 0;
+        IF v_top_n < 8 THEN
+            v_top_n := v_top_n + 1;
+            v_top(v_top_n) := f;
+            j := v_top_n;
+        ELSIF v_az > ABS(NVL(v_top(8).z_score, 0)) THEN
+            v_top(8) := f;
+            j := 8;
+        END IF;
+        WHILE j > 1 AND ABS(NVL(v_top(j - 1).z_score, 0)) < ABS(NVL(v_top(j).z_score, 0)) LOOP
+            v_tmp := v_top(j - 1);
+            v_top(j - 1) := v_top(j);
+            v_top(j) := v_tmp;
+            j := j - 1;
+        END LOOP;
 
         v_table_idx(f.table_pos) := i;
     END LOOP;
 
-    -- Rewrite the heading now that we have the counters.
+    v_typical := v_total - v_crit - v_warn;
+
+    -- B4: rewrite the heading now that we have the counters (no trailing
+    -- em dash; third badge is the typical count, colored like the rest of
+    -- the report's "typical/flat/insufficient" rows -> badge skip).
     DBMS_OUTPUT.PUT_LINE('<script>(function(){var h=document.getElementById("findings-heading");'
-        || 'if(h)h.innerHTML=''Findings summary &mdash; '
+        || 'if(h)h.innerHTML=''Findings summary '
         || '<span class="badge crit">' || v_crit || ' large</span> '
         || '<span class="badge warn">' || v_warn || ' moderate</span> '
-        || '<span class="badge ok">'   || v_total || ' total</span>'';})();</script>');
+        || '<span class="badge skip">' || v_typical || ' typical</span>'';})();</script>');
 
-    IF v_heat_json IS NOT NULL THEN
-        DBMS_OUTPUT.PUT_LINE('<script>');
-        DBMS_OUTPUT.PUT_LINE('(function(){');
-        DBMS_OUTPUT.PUT_LINE('AWR_DATA.findings = [' || v_heat_json || '];');
-        DBMS_OUTPUT.PUT_LINE('if(!window.echarts) return;');
-        DBMS_OUTPUT.PUT_LINE('var el=document.getElementById("findings-heatmap"); if(!el) return;');
-        DBMS_OUTPUT.PUT_LINE('var raw=AWR_DATA.findings;');
-        DBMS_OUTPUT.PUT_LINE('var doms=[],mets=[],domIdx={},metIdx={};');
-        DBMS_OUTPUT.PUT_LINE('raw.forEach(function(f){if(!(f.dom in domIdx)){domIdx[f.dom]=doms.length;doms.push(f.dom);} if(!(f.m in metIdx)){metIdx[f.m]=mets.length;mets.push(f.m);}});');
-        DBMS_OUTPUT.PUT_LINE('var data=raw.map(function(f){var zval=f.z==null?null:Math.abs(f.z);return {value:[metIdx[f.m],domIdx[f.dom],zval],raw:f};});');
-        DBMS_OUTPUT.PUT_LINE('var maxAbs=3.5;');
-        DBMS_OUTPUT.PUT_LINE('var cs=getComputedStyle(document.body);');
-        DBMS_OUTPUT.PUT_LINE('var fg=cs.getPropertyValue("--fg").trim()||"#333";');
-        DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
-        DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
-        DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
-        DBMS_OUTPUT.PUT_LINE('chart.setOption({');
-        DBMS_OUTPUT.PUT_LINE('  tooltip:{formatter:function(p){var f=p.data.raw;var fmt=function(v){return v==null?"\u2014":(+v).toLocaleString(undefined,{maximumFractionDigits:3});};return "<b>"+f.m+"</b><br/>domain: "+f.dom+"<br/>change: <b>"+f.sev+"</b><br/>current: "+fmt(f.cur)+"<br/>prior \u03BC: "+fmt(f.mu)+"<br/>z-score: "+(f.z==null?"\u2014":(+f.z).toFixed(2))+"<br/>% \u0394: "+(f.pct==null?"\u2014":f.pct+"%");}},');
-        DBMS_OUTPUT.PUT_LINE('  grid:{left:10,right:10,top:30,bottom:70,containLabel:true},');
-        DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"category",data:mets,axisLabel:{color:mu,rotate:55,fontSize:10,interval:0,formatter:function(v){return v.length>22?v.slice(0,22)+"\u2026":v;}},splitArea:{show:true}},');
-        DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"category",data:doms,axisLabel:{color:fg,fontWeight:600},splitArea:{show:true}},');
-        DBMS_OUTPUT.PUT_LINE('  visualMap:{min:0,max:maxAbs,calculable:true,orient:"horizontal",left:"center",bottom:8,itemWidth:12,itemHeight:160,textStyle:{color:mu,fontSize:10},inRange:{color:["#eaf6ea","#eef2ff","#fff4d6","#ffe5e5","#8a1c1c"]},text:["|z|\u22653","0"]},');
-        DBMS_OUTPUT.PUT_LINE('  series:[{name:"|z|",type:"heatmap",data:data,label:{show:false},emphasis:{itemStyle:{borderColor:fg,borderWidth:1.5}}}]');
-        DBMS_OUTPUT.PUT_LINE('});');
-        DBMS_OUTPUT.PUT_LINE('chart.on("click",function(p){if(!p.data||!p.data.raw)return;var row=document.querySelector("tr[data-metric=\""+CSS.escape(p.data.raw.m)+"\"]");if(row){row.scrollIntoView({behavior:"smooth",block:"center"});row.style.transition="outline 1.5s";row.style.outline="2px solid "+cs.getPropertyValue("--accent");setTimeout(function(){row.style.outline="none";},1600);}});');
-        DBMS_OUTPUT.PUT_LINE('new ResizeObserver(function(){chart.resize();}).observe(el);');
-        -- Re-apply the heatmap axis/visualMap label colors on theme flip (F14).
-        -- The visualMap inRange gradient is a fixed hue ramp (theme-independent).
-        DBMS_OUTPUT.PUT_LINE('document.addEventListener("awr:theme",function(){var c2=getComputedStyle(document.body),fg2=c2.getPropertyValue("--fg").trim()||"#333",mu2=c2.getPropertyValue("--muted").trim()||"#888";');
-        DBMS_OUTPUT.PUT_LINE('chart.setOption({xAxis:{axisLabel:{color:mu2}},yAxis:{axisLabel:{color:fg2}},visualMap:{textStyle:{color:mu2}}});});');
-        DBMS_OUTPUT.PUT_LINE('})();');
-        DBMS_OUTPUT.PUT_LINE('</script>');
+    --
+    -- T6: "Biggest movers" -- top 8 rows by |z| across all domains, replacing
+    -- the old ECharts findings heatmap with a plain HTML table so it degrades
+    -- with body.no-charts like everything else and never needs a chart lib.
+    --
+    IF v_top_n > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('<h3>Biggest movers</h3>');
+        DBMS_OUTPUT.PUT_LINE('<p style="font-size:11px;color:var(--muted);margin:-4px 0 8px 0">'
+            || 'top ' || v_top_n || ' by |z|, log-scaled bar</p>');
+        DBMS_OUTPUT.PUT_LINE('<table id="findings-movers" data-nocount><thead><tr>'
+            || '<th>Metric</th>'
+            || '<th>Domain</th>'
+            || '<th class="num">|z|</th>'
+            || '<th class="num">Current</th>'
+            || '<th class="num">Prior mean</th>'
+            || '<th class="num">% &Delta;</th>'
+            || '</tr></thead><tbody>');
+
+        FOR i IN 1 .. v_top_n LOOP
+            f := v_top(i);
+            DECLARE
+                v_cls     VARCHAR2(10);
+                v_sig     VARCHAR2(1);
+                v_bar_col VARCHAR2(20);
+                v_dashed  VARCHAR2(200);
+            BEGIN
+                v_cls := CASE f.change_bucket WHEN 'large'    THEN 'crit'
+                                               WHEN 'moderate' THEN 'warn'
+                                               WHEN 'typical'  THEN 'ok'
+                                               ELSE 'skip' END;
+                v_sig := is_sig(f.prior_mean, f.prior_sd);
+                v_az  := ABS(NVL(f.z_score, 0));
+                -- Log-scaled bar width, capped at 150px; a barely-moved
+                -- baseline (sigma approx 0) always draws a full-width
+                -- dashed/low-opacity bar instead of a (misleadingly huge)
+                -- log-scaled one.
+                IF v_sig = 'Y' THEN
+                    v_bar_w  := 150;
+                    v_dashed := 'background-image:repeating-linear-gradient('
+                        || '90deg,transparent 0 4px,var(--panel) 4px 6px);opacity:.55;';
+                ELSE
+                    v_bar_w  := LEAST(150, ROUND(20 + 40 * LN(1 + v_az)));
+                    v_dashed := NULL;
+                END IF;
+                v_bar_col := CASE v_cls WHEN 'crit' THEN 'var(--crit)'
+                                        WHEN 'warn' THEN 'var(--warn)'
+                                        WHEN 'ok'   THEN 'var(--ok)'
+                                        ELSE             'var(--skip)' END;
+
+                DBMS_OUTPUT.PUT_LINE('<tr class="' || v_cls || '">'
+                    || '<td>' || DBMS_XMLGEN.CONVERT(f.metric_name) || '</td>'
+                    || '<td><span class="chip">' || f.metric_domain || '</span></td>'
+                    || '<td class="num">'
+                    || '<span class="zbar" style="width:' || v_bar_w || 'px;'
+                    || NVL(v_dashed, '') || 'background-color:' || v_bar_col || '"></span>'
+                    || fmt_z(f.z_score)
+                    || CASE WHEN v_sig = 'Y' THEN
+                           ' <span class="badge sig" title="baseline barely moved: '
+                           || '&sigma; below 1% of mean; read the % delta instead">'
+                           || '&sigma;&approx;0</span>'
+                       END
+                    || '</td>'
+                    || '<td class="num"' || fmt_num_title(f.cur_val) || '>'
+                        || fmt_num(f.cur_val) || '</td>'
+                    || '<td class="num">' || fmt_num(f.prior_mean) || '</td>'
+                    || '<td class="num">'
+                        || CASE WHEN v_sig = 'Y' THEN '<b>' || fmt_pct(f.pct_delta) || '</b>'
+                                ELSE fmt_pct(f.pct_delta) END
+                        || '</td>'
+                    || '</tr>');
+            END;
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('</tbody></table>');
     END IF;
 
     --
     -- Detail tables: one per domain, ordered by sev / |z| / |pct| / name.
-    -- v_table_idx[p] -> index in v_findings, populated above.
+    -- v_table_idx[p] -> index in v_findings, populated above.  Hidden under
+    -- the triage view (X3, class "hidetri") -- only "Biggest movers" shows.
     --
     emit_domain_table('LOAD',   'Load profile');
     emit_domain_table('METRIC', 'System metrics');

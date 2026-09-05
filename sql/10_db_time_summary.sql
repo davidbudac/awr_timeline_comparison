@@ -357,18 +357,28 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
     DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
     DBMS_OUTPUT.PUT_LINE('var bandColor="rgba(37,99,235,0.10)", bandCurrent="rgba(37,99,235,0.22)";');
-    DBMS_OUTPUT.PUT_LINE('var markAreaData=(d.windows||[]).map(function(w){return [');
-    DBMS_OUTPUT.PUT_LINE('  {xAxis:w[0],itemStyle:{color:w[2]==="current"?bandCurrent:bandColor},');
-    DBMS_OUTPUT.PUT_LINE('   label:{show:true,position:"insideTop",color:mu,fontSize:10,formatter:w[2]}},');
-    DBMS_OUTPUT.PUT_LINE('  {xAxis:w[1]}];});');
+    -- B1: only label the "current" band. Labeling every band (incl. the
+    -- oldest, which sits flush against the chart's left edge and is much
+    -- narrower than its "w-N" text) centered the label past x=0, clipping
+    -- the leading "w" and leaving a stray "-N" visible at the top-left of
+    -- the plot. The current band is wide enough / clear of the edge, and
+    -- historical bands are already distinguished by color + the caption.
+    DBMS_OUTPUT.PUT_LINE('function buildMarkAreas(hiSlot){return (d.windows||[]).map(function(w){var isCur=w[2]==="current";var hi=(hiSlot!=null)&&((hiSlot===0&&isCur)||("w-"+hiSlot===w[2]));return [');
+    DBMS_OUTPUT.PUT_LINE('  {xAxis:w[0],name:w[2],itemStyle:{color:isCur?bandCurrent:bandColor,opacity:hi?1:(hiSlot!=null?0.35:1),borderColor:hi?fg:null,borderWidth:hi?1.5:0},');
+    DBMS_OUTPUT.PUT_LINE('   label:isCur?{show:true,position:"insideTop",color:mu,fontSize:10,formatter:w[2]}:{show:false}},');
+    DBMS_OUTPUT.PUT_LINE('  {xAxis:w[1]}];});}');
+    DBMS_OUTPUT.PUT_LINE('var markAreaData=buildMarkAreas(null);');
+    -- C3: hide the slider dataZoom when there are few enough snap-buckets
+    -- to read directly, and reclaim the vertical space it would have used.
+    DBMS_OUTPUT.PUT_LINE('var showSlider=(d.times||[]).length>24;');
     DBMS_OUTPUT.PUT_LINE('chart.setOption({');
     DBMS_OUTPUT.PUT_LINE('  tooltip:{trigger:"axis",axisPointer:{type:"line"},');
     DBMS_OUTPUT.PUT_LINE('    valueFormatter:function(v){return v==null?"\u2014":(+v).toFixed(1)+" s";}},');
     DBMS_OUTPUT.PUT_LINE('  legend:{top:0,left:"center",textStyle:{color:fg,fontSize:11},itemWidth:12,itemHeight:8,type:"scroll"},');
-    DBMS_OUTPUT.PUT_LINE('  grid:{left:50,right:16,top:40,bottom:60,containLabel:true},');
+    DBMS_OUTPUT.PUT_LINE('  grid:{left:50,right:16,top:40,bottom:showSlider?60:24,containLabel:true},');
     DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"category",data:d.times,boundaryGap:false,axisLabel:{color:mu,fontSize:10,hideOverlap:true}},');
     DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"value",name:"DB time (s)",nameTextStyle:{color:mu,fontSize:11},axisLabel:{color:mu},splitLine:{lineStyle:{color:gr}}},');
-    DBMS_OUTPUT.PUT_LINE('  dataZoom:[{type:"inside"},{type:"slider",bottom:8,height:18,textStyle:{color:mu,fontSize:10}}],');
+    DBMS_OUTPUT.PUT_LINE('  dataZoom:[{type:"inside"},{type:"slider",show:showSlider,bottom:8,height:18,textStyle:{color:mu,fontSize:10}}],');
     DBMS_OUTPUT.PUT_LINE('  series:d.classes.map(function(c,i){');
     DBMS_OUTPUT.PUT_LINE('    var color=(window.AWR_WAIT_COLORS||{})[c.name]||palette[i%palette.length];');
     DBMS_OUTPUT.PUT_LINE('    var s={name:c.name,type:"line",stack:"total",smooth:false,symbol:"none",');
@@ -385,6 +395,9 @@ BEGIN
     -- Re-apply axis/legend/dataZoom colors from the CSS vars on theme flip (F14).
     DBMS_OUTPUT.PUT_LINE('document.addEventListener("awr:theme",function(){var c2=getComputedStyle(document.body),fg2=c2.getPropertyValue("--fg").trim()||"#333",mu2=c2.getPropertyValue("--muted").trim()||"#888",gr2=c2.getPropertyValue("--border").trim()||"#e0e0e0";');
     DBMS_OUTPUT.PUT_LINE('chart.setOption({legend:{textStyle:{color:fg2}},xAxis:{axisLabel:{color:mu2}},yAxis:{nameTextStyle:{color:mu2},axisLabel:{color:mu2},splitLine:{lineStyle:{color:gr2}}},dataZoom:[{},{textStyle:{color:mu2}}]});});');
+    -- X2: highlight the compared-window markArea band for slot w (0=current,
+    -- 1=first prior, ...); null clears back to the default appearance.
+    DBMS_OUTPUT.PUT_LINE('document.addEventListener("awr:window",function(e){var w=e.detail?e.detail.w:null;chart.setOption({series:[{markArea:{data:buildMarkAreas(w)}}]});});');
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');
 

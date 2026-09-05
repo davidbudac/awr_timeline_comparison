@@ -144,8 +144,14 @@ BEGIN
                 WHEN 'moderate' THEN 'w'
                 WHEN 'typical'  THEN 'o'
                 ELSE 'n' END;
+            -- F5: direction as an up/down glyph + absolute magnitude; the
+            -- badge's crit/warn/ok class (v_mz_cls, unchanged) is still the
+            -- only thing carrying color -- an increase and a decrease of the
+            -- same severity look equally alarming, just pointed differently.
             v_mz_txt := CASE
-                WHEN v_z IS NOT NULL THEN TO_CHAR(v_z, 'FMS9990D0') || '&sigma;'
+                WHEN v_z IS NOT NULL THEN
+                    (CASE WHEN v_z >= 0 THEN '&#9650; ' ELSE '&#9660; ' END)
+                    || TO_CHAR(ABS(v_z), 'FM9990D0') || '&sigma;'
                 WHEN c.cur IS NULL   THEN 'n/a'
                 ELSE 'n/a' END;
 

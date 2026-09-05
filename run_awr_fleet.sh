@@ -109,7 +109,7 @@ DEF_STEP='1'
 DEF_STEP_UNIT='w'
 
 # ---- fleet report version ---------------------------------------------------
-FLEET_VERSION='0.5.0'
+FLEET_VERSION='0.6.0'
 
 # ---- fleet-specific env vars ------------------------------------------------
 FLEET_PAR="${FLEET_PAR:-4}"
@@ -904,24 +904,31 @@ detail_state() {
 }
 
 # ---------------------------------------------------------------------------
-# detail_bits <workdir> <alias> <flag> -- sets globals DCHIP / DLINE: the HTML
-# snippets that replace the __FLEET_DETAIL_CHIP__ / __FLEET_DETAIL_LINE__
-# placeholders 01_row.sql / 07_close.sql emit unconditionally in every OK
-# fragment.  flag='N' (no detail requested) -> both empty.  flag='Y' ->
-# inspects detail_state to decide the success/skipped/failed rendering.
+# detail_bits <workdir> <alias> <flag> -- sets globals DCHIP / DCHIP_TOP /
+# DLINE: the HTML snippets that replace the __FLEET_DETAIL_CHIP__ /
+# __FLEET_DETAIL_CHIP_TOP__ / __FLEET_DETAIL_LINE__ placeholders 01_row.sql /
+# 07_close.sql emit unconditionally in every OK fragment.  flag='N' (no
+# detail requested) -> all three empty.  flag='Y' -> inspects detail_state to
+# decide the success/skipped/failed rendering.
 #
-# The success-case chip carries an inline onclick="event.stopPropagation()":
-# the chip sits inside a tr.dbrow, whose delegated click handler (in
-# js_fleet_charts.plsql, fleet-owned but NOT touched by this feature) toggles
-# the row open on any click inside it.  Stopping propagation here keeps the
-# click from ever reaching that document-level handler, so clicking the chip
-# navigates instead of toggling -- without touching the shared JS file.
-# preventDefault() is never called, so the anchor's normal navigation is
-# unaffected.
+# F4: DCHIP_TOP is the top-right "primary" restyling of the same success
+# state, shown at the top of the expanded detail panel (class="detail-chip
+# primary", text "Open full report") -- everywhere else (no detail requested,
+# skipped/timeout/failed) it reuses the exact same small dfail pill as DCHIP
+# so the panel's top-right slot still communicates status, just not as a CTA.
+#
+# The success-case chips carry an inline onclick="event.stopPropagation()":
+# each sits inside (or, for DCHIP_TOP, directly above) a tr.dbrow, whose
+# delegated click handler (in js_fleet_charts.plsql, fleet-owned but NOT
+# touched by this feature) toggles the row open on any click inside it.
+# Stopping propagation here keeps the click from ever reaching that
+# document-level handler, so clicking either chip navigates instead of
+# toggling -- without touching the shared JS file. preventDefault() is never
+# called, so the anchor's normal navigation is unaffected.
 # ---------------------------------------------------------------------------
 detail_bits() {
     local work="$1" alias="$2" flag="$3"
-    DCHIP=''; DLINE=''
+    DCHIP=''; DCHIP_TOP=''; DLINE=''
     [[ "$flag" == 'Y' ]] || return 0
 
     local state href aliasE title ecode last_marker=''
@@ -949,14 +956,22 @@ detail_bits() {
             # relocatable without any absolute or reports/-prefixed path.
             href="detail_${alias}.html"
             DCHIP="<a class=\"dchip\" href=\"$href\" onclick=\"event.stopPropagation()\" title=\"Open the full single-DB AWR report for $aliasE\">report</a>"
+            # The arrow is the raw UTF-8 glyph (U+2197 NORTH EAST ARROW), not
+            # an &#8599; entity: DCHIP_TOP is later used as a sed REPLACEMENT
+            # string (do_assemble), where a literal '&' means "insert the
+            # whole match" -- same reason the rest of this function stays
+            # '&'-free (see the function banner above).
+            DCHIP_TOP="<a class=\"detail-chip primary\" href=\"$href\" onclick=\"event.stopPropagation()\" title=\"Open the full single-DB AWR report for $aliasE\">Open full report ↗</a>"
             DLINE="<div class=\"detail-link\">Full single-DB report: <a href=\"$href\">$href</a></div>"
             ;;
         skipped)
             DCHIP='<span class="dchip dfail" title="extract failed before the detail run could start">detail skipped (extract failed)</span>'
+            DCHIP_TOP="$DCHIP"
             DLINE='<div class="detail-link muted">Detailed report skipped (extract failed).</div>'
             ;;
         timeout)
             DCHIP="<span class=\"dchip dfail\" title=\"timed out after ${FLEET_DETAIL_TIMEOUT}s -- raise FLEET_DETAIL_TIMEOUT (0 = no limit)\">detail timed out</span>"
+            DCHIP_TOP="$DCHIP"
             DLINE="<div class=\"detail-link muted\">Detailed report timed out after ${FLEET_DETAIL_TIMEOUT}s (FLEET_DETAIL_TIMEOUT; 0 = no limit)."
             [[ -n "$last_marker" ]] && DLINE="$DLINE Last progress: <code>${last_marker}</code>"
             DLINE="$DLINE</div>"
@@ -972,6 +987,7 @@ detail_bits() {
             fi
             [[ -n "$ecode" ]] && title="$title; $ecode"
             DCHIP="<span class=\"dchip dfail\" title=\"$(printf '%s' "$title" | html_escape)\">detail failed</span>"
+            DCHIP_TOP="$DCHIP"
             DLINE="<div class=\"detail-link muted\">Full single-DB report failed ($(printf '%s' "$title" | html_escape))."
             [[ -n "$last_marker" ]] && DLINE="$DLINE Last progress: <code>${last_marker}</code>"
             DLINE="$DLINE</div>"
@@ -985,6 +1001,29 @@ detail_status_word() {
     local work="$1" flag="$2" alias="$3"
     [[ "$flag" == 'Y' ]] || { printf -- '-'; return 0; }
     detail_state "$work" "$alias"
+}
+
+# ---------------------------------------------------------------------------
+# score_bar_html <crit> <warn> <ptscap> <max> -- F2's __FLEET_SBAR__ content:
+# a three-segment bar sized as each component's share of the run-wide max
+# score (so bars are only comparable within one report render, never across
+# runs). Pure integer bash arithmetic (no bc/awk); truncation is fine for a
+# decorative bar. max=0 (an all-quiet fleet, every score 0) yields three
+# zero-width segments, which is correct since every row's own score is 0 too.
+# The interpunct is the raw UTF-8 "\xc2\xb7" character, not an &middot;
+# entity: the caller feeds this string into a sed REPLACEMENT string, where a
+# literal '&' means "insert the whole match" (same reason detail_bits above
+# stays '&'-free).
+# ---------------------------------------------------------------------------
+score_bar_html() {
+    local crit="$1" warn="$2" ptscap="$3" max="$4"
+    local cc=$(( 10 * crit )) wc=$(( 3 * warn )) sc="$ptscap"
+    local pc=0 pw=0 ps=0
+    if [[ "$max" -gt 0 ]]; then
+        pc=$(( cc * 100 / max )); pw=$(( wc * 100 / max )); ps=$(( sc * 100 / max ))
+    fi
+    printf '<span class="score-bar" title="crit %s \xc2\xb7 warn %s \xc2\xb7 sql %s"><i style="width:%s%%;background:var(--crit)"></i><i style="width:%s%%;background:var(--warn)"></i><i style="width:%s%%;background:var(--accent)"></i></span>' \
+        "$cc" "$wc" "$sc" "$pc" "$pw" "$ps"
 }
 
 # ---------------------------------------------------------------------------
@@ -1036,7 +1075,8 @@ do_assemble() {
         done < "$work/markers.tsv"
     fi
 
-    declare -A DISP IS_ERR REASON RCV SCORE CRIT WARN SUPP NTOP PTS DETAILFLAG
+    declare -A DISP IS_ERR REASON RCV SCORE CRIT WARN SUPP NTOP PTS PTSCAP DETAILFLAG
+    local max_score=0   # F2: run-wide max score, for scaling every row's score-bar
     local i alias frag chrome log rc reason line1 line2 crit warn supp n pts pts_capped score
 
     # -- "Compared windows" masthead strip: canonical window list (arrays
@@ -1130,7 +1170,8 @@ do_assemble() {
         score=$(( 10 * crit + 3 * warn + pts_capped ))
 
         CRIT["$alias"]=$crit; WARN["$alias"]=$warn; SUPP["$alias"]=$supp
-        NTOP["$alias"]=$n; PTS["$alias"]=$pts; SCORE["$alias"]=$score
+        NTOP["$alias"]=$n; PTS["$alias"]=$pts; PTSCAP["$alias"]=$pts_capped; SCORE["$alias"]=$score
+        [[ "$score" -gt "$max_score" ]] && max_score=$score
     done
 
     # -- chrome: first successful alias in conf order with a non-empty chrome file
@@ -1341,11 +1382,32 @@ FALLBACK_CHROME
         printf '</div>\n'   # .legends
         printf '</div>\n'   # .masthead
 
+        # ---- F1 toolbar: filter / sort / show / expand-collapse ----
+        # Pure markup here -- all behavior is wired client-side in
+        # js_fleet_charts.plsql's wireToolbar() against these ids/data-*
+        # attributes, reading the row data straight out of the already-
+        # rendered table cells (no new payload).
+        printf '<div class="toolbar" id="fleetToolbar">\n'
+        printf '<input type="search" id="dbFilter" placeholder="Filter databases%s" aria-label="Filter databases by name">\n' "&#8230;"
+        printf '<div class="toolbar-group" role="group" aria-label="Sort by"><span class="tb-label">Sort</span>'
+        printf '<button type="button" class="tb-pill active" data-sort="score">Score</button>'
+        printf '<button type="button" class="tb-pill" data-sort="name">Name</button>'
+        printf '<button type="button" class="tb-pill" data-sort="aas">AAS</button>'
+        printf '<button type="button" class="tb-pill" data-sort="errors">Errors first</button></div>\n'
+        printf '<div class="toolbar-group" role="group" aria-label="Show"><span class="tb-label">Show</span>'
+        printf '<button type="button" class="tb-pill active" data-show="all">All</button>'
+        printf '<button type="button" class="tb-pill" data-show="crit">Crit</button>'
+        printf '<button type="button" class="tb-pill" data-show="warn">Warn+</button></div>\n'
+        printf '<div class="toolbar-group">'
+        printf '<button type="button" class="tb-btn" id="expandAll">Expand all</button>'
+        printf '<button type="button" class="tb-btn" id="collapseAll">Collapse all</button></div>\n'
+        printf '</div>\n'   # .toolbar
+
         # ---- console table ----
         printf '<div class="console"><table class="fleet"><thead><tr>'
         printf '<th style="width:22px"></th>'
         printf '<th style="width:150px">Database</th>'
-        printf '<th class="r" style="width:56px">Score</th>'
+        printf '<th class="r" style="width:56px" title="10 &times; crit + 3 &times; warn + min(25, top-SQL points)">Score</th>'
         printf '<th class="c" style="width:86px">Crit / Warn</th>'
         printf '<th class="r" style="width:62px">AAS</th>'
         printf '<th style="min-width:220px">Worst finding</th>'
@@ -1398,11 +1460,12 @@ FALLBACK_CHROME
         # sorted_ok).  Substitute the row placeholders the extract emitted --
         # they are single-sourced here so the row pills, color and sort order
         # never disagree.  All substituted values are numeric/alpha (no sed
-        # metacharacters) EXCEPT the two detail placeholders, whose HTML can
-        # contain '/' (hrefs) -- hence the '|' delimiter and the '&'-free
-        # construction in detail_bits (sed's replacement '&' means "whole
-        # match", so a literal '&' there would corrupt the substitution).
-        local sscore ssev scpill swpill scrit swarn
+        # metacharacters) EXCEPT the detail/score-bar placeholders, whose HTML
+        # can contain '/' (hrefs) -- hence the '|' delimiter and the '&'-free
+        # construction in detail_bits/score_bar_html (sed's replacement '&'
+        # means "whole match", so a literal '&' there would corrupt the
+        # substitution).
+        local sscore ssev scpill swpill scrit swarn ssbar
         for alias in "${sorted_ok[@]}"; do
             sscore="${SCORE[$alias]}"; scrit="${CRIT[$alias]}"; swarn="${WARN[$alias]}"
             if   [[ "$sscore" -ge 10 ]]; then ssev=crit
@@ -1410,6 +1473,7 @@ FALLBACK_CHROME
             else ssev=ok; fi
             if [[ "$scrit" -gt 0 ]]; then scpill=c; else scpill=z; fi
             if [[ "$swarn" -gt 0 ]]; then swpill=w; else swpill=z; fi
+            ssbar="$(score_bar_html "$scrit" "$swarn" "${PTSCAP[$alias]}" "$max_score")"
             detail_bits "$work" "$alias" "${DETAILFLAG[$alias]:-N}"
             sed -e "s/__FLEET_SCORE__/$sscore/g" \
                 -e "s/__FLEET_SEV__/$ssev/g" \
@@ -1417,7 +1481,9 @@ FALLBACK_CHROME
                 -e "s/__FLEET_WARN__/$swarn/g" \
                 -e "s/__FLEET_CPILL__/$scpill/g" \
                 -e "s/__FLEET_WPILL__/$swpill/g" \
+                -e "s|__FLEET_SBAR__|${ssbar}|g" \
                 -e "s|__FLEET_DETAIL_CHIP__|${DCHIP}|g" \
+                -e "s|__FLEET_DETAIL_CHIP_TOP__|${DCHIP_TOP}|g" \
                 -e "s|__FLEET_DETAIL_LINE__|${DLINE}|g" \
                 "$work/$alias.frag.html"
         done

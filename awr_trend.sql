@@ -97,7 +97,7 @@ ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,';
 -- not in sql/defaults.sql).  Bump on release and record it in CHANGELOG.md;
 -- it is stamped into the report footer so a circulated HTML file can always
 -- be traced back to the build that produced it.
-DEFINE awr_version = '1.3.0'
+DEFINE awr_version = '1.4.0'
 
 -- The caller MUST have set target_end / win_hours / weeks_back / top_n /
 -- inst_num before invoking this driver.  For the canonical defaults, do:
@@ -627,6 +627,9 @@ DEFINE _dbg_msg = 'section 15 file_io (per-file and file-type I/O deltas)'
 DEFINE _dbg_msg = 'section 16 day_profile (hour-of-day vs N prior days; skipped when profile_days=0)'
 @@sql/lib/debug_log.sql
 @@sql/16_day_profile.sql
+DEFINE _dbg_msg = 'section 17 narrative (cross-section What changed sentences)'
+@@sql/lib/debug_log.sql
+@@sql/17_narrative.sql
 DEFINE _dbg_msg = 'all sections rendered; writing HTML epilogue'
 @@sql/lib/debug_log.sql
 
