@@ -67,6 +67,12 @@
 #                       on the N prior days (inline-SVG heatmap) -- and
 #                       passes profile_days=N into the detailed reports.
 #                       Informational: never changes a row's score.     [0]
+#   FLEET_SQLMON_DETAIL 0 (default) = off; N > 0 passes sqlmon_detail=N into
+#                       the optional per-DB detailed reports only (Plan-line
+#                       drift, sql/18_sqlmon.sql phase 2) -- the always-on
+#                       fleet-row "SQL Monitor" band (sql/fleet/06b_sqlmon.sql)
+#                       never reads a DBA_HIST_REPORTS_DETAILS CLOB and is
+#                       unaffected by this var.                          [0]
 #   FLEET_ARCHIVE    also zip/tar the ENTIRE per-run output folder
 #                    (reports/awr_fleet_<ts>_run<id>/, index.html + every
 #                    detail_<alias>.html) as a sibling archive.  Same
@@ -142,6 +148,12 @@ FLEET_DETAIL_ECHARTS="${FLEET_DETAIL_ECHARTS:-}"
 # fragment byte-identical to a run without the feature).
 FLEET_PROFILE_DAYS="${FLEET_PROFILE_DAYS:-0}"
 
+# ---- optional per-DB detailed-report Plan-line drift (sql/18_sqlmon.sql
+#      phase 2) -- rides ONLY into the detailed single-DB report's
+#      sqlmon_detail DEFINE, never the lean extract's (the always-on fleet
+#      "SQL Monitor" band never reads a DBA_HIST_REPORTS_DETAILS CLOB).
+FLEET_SQLMON_DETAIL="${FLEET_SQLMON_DETAIL:-0}"
+
 # ---- fleet-wide timeline markers (wrapper-owned; the extract SQL never sees
 #      them). MARKER_FILE (a file of "WHEN|LABEL" lines) wins over MARKERS
 #      (an inline "WHEN|LABEL;;WHEN|LABEL" list, same format as the single-DB
@@ -168,6 +180,8 @@ esac
     echo "error: FLEET_DETAIL_TIMEOUT must be a non-negative integer, 0 = no limit (got '$FLEET_DETAIL_TIMEOUT')" >&2; exit 2; }
 [[ "$FLEET_PROFILE_DAYS" =~ ^[0-9]+$ ]] || {
     echo "error: FLEET_PROFILE_DAYS must be a non-negative integer, 0 = no day profile (got '$FLEET_PROFILE_DAYS')" >&2; exit 2; }
+[[ "$FLEET_SQLMON_DETAIL" =~ ^[0-9]+$ ]] || {
+    echo "error: FLEET_SQLMON_DETAIL must be a non-negative integer, 0 = off (got '$FLEET_SQLMON_DETAIL')" >&2; exit 2; }
 # FLEET_DETAIL_TEMPLATE rides into a single-quoted DEFINE in run_one_detail's
 # heredoc (same footgun as FLEET_TEMPLATE / _pos_clean elsewhere in this file).
 case "$FLEET_DETAIL_TEMPLATE" in
@@ -276,6 +290,9 @@ Environment variables:
                       the last 24 h vs the same hour on the N prior days,
                       heatmap) and profile_days=N to detailed reports;
                       0 = off.  Never affects the score               [0]
+  FLEET_SQLMON_DETAIL N > 0 passes sqlmon_detail=N (Plan-line drift) to the
+                      optional per-DB detailed reports only; the always-on
+                      fleet-row SQL Monitor band is unaffected.  0 = off [0]
   FLEET_ARCHIVE    also zip/tar the ENTIRE per-run output folder (the
                    report folder itself as the archive's one top-level
                    entry).  Empty/0/N/no/off (default) = disabled; 1/Y/
@@ -719,6 +736,7 @@ FLEET_DETAIL_TIMEOUT='${FLEET_DETAIL_TIMEOUT}'
 FLEET_DETAIL_ECHARTS='${FLEET_DETAIL_ECHARTS}'
 DETAIL_ECHARTS_EFF='${DETAIL_ECHARTS_EFF}'
 FLEET_PROFILE_DAYS='${FLEET_PROFILE_DAYS}'
+FLEET_SQLMON_DETAIL='${FLEET_SQLMON_DETAIL}'
 EOF
 }
 
@@ -842,6 +860,7 @@ DEFINE step       = ${STEP}
 DEFINE step_unit  = '${STEP_UNIT}'
 DEFINE template   = '${FLEET_DETAIL_TEMPLATE}'
 DEFINE profile_days = ${FLEET_PROFILE_DAYS}
+DEFINE sqlmon_detail = ${FLEET_SQLMON_DETAIL}
 DEFINE markers    = '${DETAIL_MARKERS}'
 DEFINE echarts    = '${DETAIL_ECHARTS_EFF}'
 @awr_trend.sql

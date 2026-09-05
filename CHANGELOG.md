@@ -20,6 +20,30 @@ entry here. Dates are release dates.
   downgrade / errors / new sql_ids in the Current window). Template-
   independent, always on; kept under "Application only" (rows carry
   `data-sys`). No new DEFINE.
+- **Phase 2: "Plan-line drift", opt-in `sqlmon_detail` (default 0, 14th
+  substitution var / 13th `run_awr_trend.sh` positional).** At 0 the report
+  is byte-identical to phase-1-only output. A positive N renders, for the top
+  N regressed sql_ids, a plan-line diff between the Current window's slowest
+  execution and a prior-window baseline (elapsed closest to the prior
+  median), reading exactly 2 `DBA_HIST_REPORTS_DETAILS` CLOBs per candidate
+  and `XMLTABLE`-parsing `/report/sql_monitor_report/plan_monitor/operation`
+  (starts / actual rows / duration / max memory per line -- the stored XML
+  carries no activity-% block). Highlights lines whose duration share moved
+  >=10 points or whose actual rows changed >=10x, and lines present on only
+  one side (a plan change). A one-sentence "what moved" lede names the
+  biggest duration-share mover. `sql/17_narrative.sql` gained rule R10
+  (recomputes just the single top candidate; emits nothing at
+  `sqlmon_detail=0`). Wired through `run_awr_trend.sh` (13th positional,
+  configurator prompt) exactly like `profile_days`, and through
+  `run_awr_fleet.sh`'s `FLEET_SQLMON_DETAIL` env knob into the optional
+  per-DB detailed report only.
+- **New fleet band, `sql/fleet/06b_sqlmon.sql` (always on).** Cheap,
+  DBA_HIST_REPORTS-only "SQL Monitor" summary per DB: executions in Current /
+  full span, errors, plan changes, DOP downgrades, and a top-5 table by
+  Current max elapsed with flag chips. Emits `<!-- FLEET-COUNTS sqlmon cur=A
+  span=B err=X planchg=Y downgrade=Z -->`, informational only -- never
+  affects the row score or sort order (the assembler's scoring regexes only
+  match `FLEET-COUNTS findings` / `FLEET-COUNTS topsql`).
 
 ## 1.4.0 — 2026-09-05
 

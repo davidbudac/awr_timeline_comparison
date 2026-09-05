@@ -67,3 +67,12 @@ DEFINE markers = ''
 -- vendor/echarts.min.js (Apache-2.0), so echarts='vendor/echarts.min.js' is
 -- turnkey offline out of a fresh clone.  The value must not contain a " .
 DEFINE echarts = ''
+-- sqlmon_detail optional "Plan-line drift" phase 2 of the SQL Monitor
+-- section (sql/18_sqlmon.sql): 0 (the default) disables it entirely (the
+-- section stays phase-1-only, report byte-identical to before the
+-- feature). A positive whole number N renders a plan-line drift block for
+-- up to N regressed sql_ids, diffing a Current-window execution's plan
+-- lines (starts/rows/duration/memory) against a prior-window baseline via
+-- DBA_HIST_REPORTS_DETAILS' per-execution XML. Reads at most 2*N CLOBs, so
+-- keep N small. See design/SQLMON_DESIGN.md.
+DEFINE sqlmon_detail = 0

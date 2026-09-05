@@ -36,11 +36,15 @@
 --   @@awr_fleet_extract.sql
 --   SQL
 --
--- Substitution variables consumed: the same twelve-ish single-DB vars
--- (target_end, win_hours, weeks_back, top_n, inst_num, step, step_unit,
--- template, profile_days -- the last one gates the optional Day profile
--- band, sql/fleet/06_day_profile.sql) plus the three fleet-only vars from
+-- Substitution variables consumed: the same single-DB vars (target_end,
+-- win_hours, weeks_back, top_n, inst_num, step, step_unit, template,
+-- profile_days -- gates the optional Day profile band,
+-- sql/fleet/06_day_profile.sql) plus the three fleet-only vars from
 -- sql/fleet/defaults.sql (fleet_alias, fleet_workdir, fleet_conn_disp).
+-- sqlmon_detail is set (default 0) but NOT consumed by this extract -- the
+-- always-on sql/fleet/06b_sqlmon.sql band never reads a
+-- DBA_HIST_REPORTS_DETAILS CLOB; sqlmon_detail only reaches the optional
+-- per-DB detailed report (run_awr_fleet.sh's FLEET_SQLMON_DETAIL knob).
 -- markers/echarts/debug are NOT consumed here (see "Dropped vs
 -- awr_trend.sql" below).
 --
@@ -302,11 +306,13 @@ SPOOL OFF
 -- Per-DB report fragment (fleet v0.2.0): a summary tr.dbrow + a hidden
 -- tr.detailrow, emitted across 01_row (row + open detail scaffold + ASH
 -- timeline block), 02_ash (window.FLEET_ASH payload), 03_headline (metric
--- cards, closes left col / opens right col), 04_findings, 05_topsql, and
--- 07_close (drill + close scaffold + sentinel).  01/04/05 each recompute
--- their own z-scores from the AWR views directly (same "findings are
--- recomputed, not shared" convention as the single-DB report's 07/08), so
--- nothing here depends on an earlier section's PL/SQL state.
+-- cards, closes left col / opens right col), 04_findings, 05_topsql,
+-- 06_day_profile (optional band), 06b_sqlmon (always-on, informational SQL
+-- Monitor band), and 07_close (drill + close scaffold + sentinel).
+-- 01/04/05/06b each recompute their own z-scores/counts from the AWR views
+-- directly (same "findings are recomputed, not shared" convention as the
+-- single-DB report's 07/08), so nothing here depends on an earlier
+-- section's PL/SQL state.
 -- -------------------------------------------------------------------
 SPOOL ~frag_path
 @@sql/fleet/01_row.sql
@@ -315,6 +321,7 @@ SPOOL ~frag_path
 @@sql/fleet/04_findings.sql
 @@sql/fleet/05_topsql.sql
 @@sql/fleet/06_day_profile.sql
+@@sql/fleet/06b_sqlmon.sql
 @@sql/fleet/07_close.sql
 SPOOL OFF
 

@@ -69,12 +69,13 @@ Easiest non-interactive — the shell wrapper (sets all substitution vars for yo
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple Y       # simple + progress markers on stdout
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive N my_markers.sql  # annotate timelines with milestones
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y '' 7  # + Day profile: each hour of the last 24 h vs the 7 prior days
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y '' 7 3  # + plan-line drift for the top 3 regressed statements
 MARKERS='2026-06-10 09:00|Release 2.0' ./run_awr_trend.sh user/pw@svc  # file-free inline markers
 ECHARTS=vendor/echarts.min.js ./run_awr_trend.sh user/pw@svc           # self-contained / offline HTML
 ARCHIVE=zip ./run_awr_trend.sh user/pw@svc                             # also zip the finished report
 ```
 
-Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template [debug [marker_file [profile_days]]]]]]]]]]]`
+Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template [debug [marker_file [profile_days [sqlmon_detail]]]]]]]]]]]]`
 
 Plus two environment variables: `MARKERS` for file-free inline timeline
 markers (see "Timeline markers" below), and `ECHARTS` to control where the
@@ -94,6 +95,7 @@ self-contained report" below).
 | `debug`      | `Y`              | `Y` (or `YES/1/ON/TRUE/T`, case-insensitive; the default) prints one-line, millisecond-timestamped progress markers to stdout as each section begins — useful when a slow section makes the run look hung. Pass any other value (e.g. `N`) to silence them. Markers go to stdout only; the HTML report is byte-identical to a `debug=N` run |
 | `marker_file`| *(empty)*        | Optional path to a timeline-marker config file (milestones drawn as vertical dashed lines on the dated charts). Empty = no markers. See "Timeline markers" below |
 | `profile_days`| `0`             | Optional **Day profile** section: `N > 0` scores **each hour of the 24 h ending at `target_end`** against the same hour-of-day on the N prior days (1-day cadence, independent of `step`/`step_unit`) — an hour-of-day × metric heatmap, a per-metric line vs its prior-day band, and a 24-row table — so you can see *which hour of the day* changed. `0` = off (report byte-identical). z-scores need `N ≥ 3`. See "Day profile" below |
+| `sqlmon_detail`| `0`            | Optional **Plan-line drift** detail in the SQL Monitor section: `N > 0` diffs the Current window's slowest execution against a prior-window baseline for the top N regressed sql_ids, reading `DBA_HIST_REPORTS_DETAILS` plan-line XML (starts / actual rows / duration / memory per line). `0` = off (report byte-identical) |
 | `MARKERS` *(env var)* | *(empty)* | File-free alternative to `marker_file`: inline `WHEN\|LABEL` milestones joined by `;;`. `marker_file` wins when both are set. See "Timeline markers" below |
 | `ECHARTS` *(env var)* | *(empty)* | Where the ECharts chart library loads from. Empty = public CDN (`cdn.jsdelivr.net`). An `http(s)` URL = used as-is (internal mirror). A local file path = inlined into the report for a single self-contained, offline-capable HTML file. See "Offline / self-contained report" below |
 | `ARCHIVE` *(env var)* | *(empty)* | Also zip/tar the finished report. Empty/`0`/`N`/`no`/`off` = disabled. `1`/`Y`/`yes`/`on`/`auto` = auto-pick zip, else tar+gzip, else plain tar. `zip`/`tgz`/`tar` force that format. See "Archive the output (zip)" below |
@@ -520,6 +522,7 @@ usage / bad-config error before anything ran.
 | `MARKERS`         | (none)  | Inline fleet-wide timeline markers, one string of `WHEN\|LABEL` entries joined by `;;` (WHEN = `YYYY-MM-DD HH:MM`), drawn on every DB's 24h ASH chart within its span and in the masthead legend; malformed entries are warned and skipped |
 | `MARKER_FILE`     | (none)  | A file of `WHEN\|LABEL` lines, same format; **wins over `MARKERS`** when both are set |
 | `FLEET_PROFILE_DAYS` | `0`  | `N > 0` adds a **Day profile** band to every DB's detail row — each hour of the 24 h ending at `target_end` vs the same hour on the N prior days, as an inline-SVG heatmap (hour × metric, signed z) — and passes `profile_days=N` into the per-DB detailed reports. Informational only: never changes a row's score or sort order |
+| `FLEET_SQLMON_DETAIL` | `0` | `N > 0` passes `sqlmon_detail=N` (Plan-line drift) into the optional per-DB detailed reports only; the always-on fleet-row "SQL Monitor" band never reads a `DBA_HIST_REPORTS_DETAILS` CLOB and is unaffected |
 | `FLEET_ARCHIVE`   | (empty) | Also zip/tar the **entire per-run output folder** (`index.html` + every `detail_<alias>.html`) as a sibling archive, applied after both a live run and `--assemble`. Same value semantics as the single-DB `ARCHIVE` var. See "Archive the output (zip)" above |
 
 **By design (not limitations).** The fleet report is deliberately lean: it
@@ -614,6 +617,7 @@ SQL> @side/create_weekly_baselines.sql
 │   ├── 15_file_io.sql               -- per-file / file-type I/O deltas
 │   ├── 16_day_profile.sql           -- Day profile: hour-of-day vs N prior days (profile_days > 0)
 │   ├── 17_narrative.sql             -- "What changed": rule-based prose, relocated into the masthead
+│   ├── 18_sqlmon.sql                -- SQL Monitor summaries + plan-line drift (sqlmon_detail > 0)
 │   ├── fleet/                       -- fleet-report sections (spooled by awr_fleet_extract.sql)
 │   │   ├── 00_fleet_chrome.sql      -- shared page head/CSS/JS + inline-SVG renderers
 │   │   ├── 01_row.sql               -- summary row + detail scaffold + ASH bands
@@ -622,6 +626,7 @@ SQL> @side/create_weekly_baselines.sql
 │   │   ├── 04_findings.sql          -- z-score findings table (|z|>2 rows only)
 │   │   ├── 05_topsql.sql            -- gated top-SQL regressions
 │   │   ├── 06_day_profile.sql       -- Day profile heatmap band (FLEET_PROFILE_DAYS > 0)
+│   │   ├── 06b_sqlmon.sql           -- always-on SQL Monitor summary band (informational)
 │   │   ├── 07_close.sql             -- drill-down command + OK sentinel
 │   │   └── defaults.sql             -- fleet-only default DEFINEs
 │   └── lib/                         -- shared @@-included fragments (CTEs, JS, helpers)

@@ -48,6 +48,11 @@
 --                  optional "Day profile" section (16): every hour of the
 --                  24 h ending at target_end vs the same hour-of-day on the
 --                  N prior days, 1-day cadence regardless of step_unit.
+--   sqlmon_detail 0 (default = off) or the number of regressed sql_ids to
+--                  render "Plan-line drift" detail for in section 18 (SQL
+--                  Monitor): diffs a Current-window execution's plan lines
+--                  against a prior-window baseline via
+--                  DBA_HIST_REPORTS_DETAILS. Reads at most 2*N CLOBs.
 --
 -- The cadence between adjacent comparison windows is step*step_unit.
 -- Default step=1, step_unit='w' reproduces the original "same hour-of-week,
