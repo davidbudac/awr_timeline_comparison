@@ -1,8 +1,10 @@
 # SQL Monitor section — design notes (2026-09-05)
 
 Status: phase 1 implemented 2026-09-05 (`sql/18_sqlmon.sql`, narrative R6-R9);
-phase 2 (plan-line drift) and the fleet band are still open. Census run
-against dbmint (19.27) the same day.
+phase 2 (plan-line drift, opt-in `sqlmon_detail`) + the fleet band
+(`sql/fleet/06b_sqlmon.sql`) implemented 2026-09-05. Census run against
+dbmint (19.27) the same day; phase 2 + fleet band tested against a window
+with a real Current + prior-window monitored execution the same session.
 
 Implementation notes that differ from / refine the proposal below:
 - Noise floor is at the sql_id level (any capture >= 1 s, errored, or >1 plan
@@ -101,29 +103,60 @@ Nav link + `AWR-SECTION` markers as every other section.
    `.codewrap` with `.copy-btn`. No embedding (ACTIVE needs Oracle's CDN, HTML
    is huge).
 
-## Phase 2 (opt-in, `sqlmon_detail=N`, default 0): plan-line drift
+## Phase 2 (opt-in, `sqlmon_detail=N`, default 0): plan-line drift -- IMPLEMENTED
 
-For the top-N regressed sql_ids only: pick one baseline execution (prior
-window, median elapsed) and the Current window's slowest; `XMLTABLE` both
-CLOBs' plan lines; diff activity % / actual rows / starts per `(id, name,
-object)`; render "line 7 HASH JOIN: 10 % → 70 %, rows 1k → 40M". Gate hard:
-2 CLOBs × N sql_ids, and a `fetch first` on the candidate list. This is the
-one signal nothing else in the toolkit provides.
+For the top-N regressed sql_ids only (same noise-floor `included` set as
+phase 1, `plan_hash <> 0`, a Current-window execution AND a prior-*valid*-
+window execution; ranked by change bucket then Current max elapsed DESC):
+pick one baseline execution (prior window, elapsed closest to the prior
+median, tie -> most recent) and the Current window's slowest; `XMLTABLE`
+both CLOBs' plan lines (see the verified XPath below); diff actual rows /
+starts / duration / memory per `(line id, operation name+options,
+owner.object)`; render "line 7 HASH JOIN: 10% -> 70% of execution time;
+actual rows 1.2k -> 40M". Gated hard: 2 CLOBs x N sql_ids via `FETCH FIRST N
+ROWS ONLY` on the candidate list, and each pair's CLOB read + XML parse is
+wrapped in its own `BEGIN/EXCEPTION WHEN OTHERS` so a corrupt/oversized
+report can never abort the run. `sql/17_narrative.sql` R10 recomputes just
+the single top candidate (one CLOB pair, bounded regardless of N) and states
+its lede when `sqlmon_detail>0`; at 0 no such query runs.
 
-## Fleet later
+**Verified detail XML shape** (`DBA_HIST_REPORTS_DETAILS.report`, joined on
+`report_id`+`dbid` -- no `component_name` column there): root
+`/report/sql_monitor_report/plan_monitor/operation[@id,@parent_id,@name,
+@options,@depth,@position,@skp,@px_type]`, with `object/owner` + `object/name`
+(absent on non-object lines), `optimizer/cardinality` (estimated rows,
+absent on some lines), and `stats[@type="plan_monitor"]/stat[@name=...]` for
+`starts` / `cardinality` (ACTUAL rows) / `duration` (seconds) / `max_memory`
+(bytes) / `dop` / `first_active` / `last_active` / `max_card` / `max_starts`.
+**There is no activity-% / ASH block in the stored XML** (the first-guess
+XPaths from the "Open items" below never existed), so the drift diff is
+necessarily limited to starts/rows/duration/memory -- "duration share" (a
+line's `duration` divided by the whole execution's `elapsed_time` from the
+summary XML) stands in for the activity-% signal SQL Monitor's live report
+shows. `plan_hash = 0` executions (PL/SQL blocks) have no plan lines and are
+excluded as drift candidates by the `plan_hash <> 0` filter above.
 
-`FLEET-COUNTS sqlmon err=X planchg=Y downgrade=Z` band; no score impact at
-first (informational, like the Day profile band). Single-DB first.
+## Fleet band -- IMPLEMENTED (`sql/fleet/06b_sqlmon.sql`)
 
-## Open items
+Always on (no opt-in var; cheap DBA_HIST_REPORTS-only aggregates, no CLOB
+reads ever). Emits `<!-- FLEET-COUNTS sqlmon cur=A span=B err=X planchg=Y
+downgrade=Z -->`; informational only -- the assembler's scoring regexes
+match only `FLEET-COUNTS findings` and `FLEET-COUNTS topsql`, so this
+comment can never move the row score or sort order, same as the Day profile
+band. `FLEET_SQLMON_DETAIL` (default 0) rides `sqlmon_detail` into the
+optional per-DB detailed report ONLY, never the lean extract.
 
-- Pin the XPath for per-line runtime stats in the detail XML
-  (`plan_monitor`? `rwsstats`? `activity_sampled`?) — dump one full CLOB via
-  `REPORT_REPOSITORY_DETAIL(type=>'XML')` and read it.
-- Decide whether tiny parallel executions (elapsed < 1 s) get a floor filter
-  so the table isn't 90 % emagent noise; probably `elapsed >= 1 s OR error OR
-  plan change`, with the raw count in the caption.
-- `key3` parse mask under a non-US NLS_DATE_LANGUAGE — use an explicit
-  `TO_DATE(key3,'MM:DD:YYYY HH24:MI:SS')`; it is numeric-only, so safe.
-- Verify `period_start_time` vs `sql_exec_start` for attribution on a long
-  run (dbmint has none > 30 s).
+## Open items (resolved)
+
+- ~~Pin the XPath for per-line runtime stats in the detail XML~~ -- pinned
+  above; there is no `rwsstats`/`activity_sampled` block, only
+  `stats[@type="plan_monitor"]`.
+- ~~Decide whether tiny parallel executions get a floor filter~~ -- phase 1's
+  sql_id-level floor (elapsed >= 1s OR error OR >1 plan) already covers this;
+  phase 2 candidates are drawn from that same `included` set.
+- ~~`key3` parse mask under a non-US NLS_DATE_LANGUAGE~~ -- confirmed safe,
+  used verbatim by both phase 1 and phase 2 (`TO_DATE(key3 DEFAULT NULL ON
+  CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS')`).
+- Still open: verify `period_start_time` vs `sql_exec_start` for attribution
+  on a long run (dbmint has none > 30 s) -- unchanged from phase 1, not
+  exercised by phase 2 either.

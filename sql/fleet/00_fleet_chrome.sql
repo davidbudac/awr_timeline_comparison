@@ -220,6 +220,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.pill.c { color:var(--crit); background:var(--crit-bg); border-color:var(--crit); }');
     DBMS_OUTPUT.PUT_LINE('.pill.w { color:var(--warn); background:var(--warn-bg); border-color:var(--warn); }');
     DBMS_OUTPUT.PUT_LINE('.pill.z { color:var(--muted); background:var(--panel-2); border-color:var(--hairline); }');
+    -- sql/fleet/06b_sqlmon.sql's per-sql_id flag chips (plan change / DOP
+    -- downgrade / error) -- fleet-owned, unrelated to the single-DB
+    -- sql/_style.sql .chip rule (never touched for a fleet feature).
+    DBMS_OUTPUT.PUT_LINE('.chip { display:inline-block; font-size:10.5px; font-weight:600;'
+        || ' padding:1px 6px; border-radius:4px; margin:0 3px 2px 0;'
+        || ' color:var(--muted); background:var(--panel-2); border:1px solid var(--hairline); }');
     DBMS_OUTPUT.PUT_LINE('.aas { text-align:right; font-weight:600; font-variant-numeric:tabular-nums; color:var(--ink); }');
     DBMS_OUTPUT.PUT_LINE('.aas .u { font-weight:400; color:var(--muted); font-size:10px; margin-left:2px; }');
     DBMS_OUTPUT.PUT_LINE('.finding { font-size:12px; color:var(--ink-soft); display:flex; align-items:center; gap:7px; min-width:0; }');

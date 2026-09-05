@@ -35,7 +35,10 @@
 --                                      -> #sqlmon
 --   R9  SQL Monitor: sql_ids first seen in the Current window
 --                                      -> #sqlmon
--- Emitted in the order R1, R5, R2, R3, R4, R6, R7, R8, R9.
+--   R10 SQL Monitor: plan-line drift lede for the top regressed statement
+--                     (opt-in, sqlmon_detail>0 only; emits nothing at 0)
+--                                      -> #sqlmon
+-- Emitted in the order R1, R5, R2, R3, R4, R6, R7, R8, R9, R10.
 --
 -- "LARGE" mirrors section 07's `scored` CASE (recomputed here, not shared,
 -- for the handful of stats used below): |z| > 3 against the prior valid
@@ -46,6 +49,12 @@
 -- 'sqlmonitor', dbid IN (dbid_list), span bounded by the earliest compared
 -- window's start through target_end) rather than sharing section 18's PL/SQL
 -- state -- same "findings are recomputed, not shared" convention as R1-R5.
+--
+-- R10 additionally reads exactly ONE pair of DBA_HIST_REPORTS_DETAILS CLOBs
+-- (the same top candidate section 18's phase 2 would rank first) when
+-- sqlmon_detail>0, to state the single biggest plan-line mover; at
+-- sqlmon_detail=0 no such query runs at all, so the narrative -- and the
+-- whole report -- is byte-identical to a run without the feature.
 --
 -- Nothing to say => the section emits ONLY its two AWR-SECTION markers:
 -- no <div>, no <script>.
@@ -845,6 +854,219 @@ BEGIN
                 || ' &mdash; see <a href="#sqlmon">SQL Monitor</a>.');
         END IF;
     END;
+
+    ------------------------------------------------------------------
+    -- R10: SQL Monitor plan-line drift (opt-in, sqlmon_detail>0 only) ->
+    -- #sqlmon. At sqlmon_detail=0 this block does nothing at all (no query
+    -- runs), so the narrative is byte-identical to before this rule. Bounded
+    -- to exactly ONE candidate pair (the same top candidate section 18 would
+    -- rank first) so the narrative's cost stays fixed regardless of
+    -- sqlmon_detail's value; recomputed independently of section 18's PL/SQL
+    -- state (see header note).
+    ------------------------------------------------------------------
+    IF ~sqlmon_detail > 0 THEN
+        DECLARE
+            v_r10_span_start DATE;
+            v_r10_span_end   DATE;
+            v_r10_sql_id       VARCHAR2(13);
+            v_r10_cur_report   NUMBER;
+            v_r10_cur_dbid     NUMBER;
+            v_r10_base_report  NUMBER;
+            v_r10_base_dbid    NUMBER;
+            v_r10_cur_total_s  NUMBER;
+            v_r10_base_total_s NUMBER;
+            v_r10_cur_clob     CLOB;
+            v_r10_base_clob    CLOB;
+            v_r10_best_line    NUMBER;
+            v_r10_best_op      VARCHAR2(200);
+            v_r10_best_base    NUMBER;
+            v_r10_best_cur     NUMBER;
+            v_r10_best_delta   NUMBER := 0;
+            v_r10_found        BOOLEAN := FALSE;
+        BEGIN
+            SELECT MIN(win_start_ts), MAX(win_end_ts)
+            INTO   v_r10_span_start, v_r10_span_end
+            FROM (
+                WITH
+                @@sql/lib/windows_cte.sql
+                SELECT week_offset, win_start_ts, win_end_ts FROM windows_rollup
+            );
+
+            FOR d IN (
+                WITH
+                @@sql/lib/windows_cte.sql
+                ,
+                base_execs AS (
+                    SELECT r.report_id, r.dbid, r.key1 AS sql_id, r.instance_number,
+                           TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') AS exec_start,
+                           x.status, x.plan_hash, NVL(x.elapsed_us, 0) AS elapsed_us
+                    FROM   dba_hist_reports r,
+                           XMLTABLE('/report_repository_summary/sql'
+                               PASSING XMLTYPE(r.report_summary)
+                               COLUMNS
+                                   status     VARCHAR2(30) PATH 'status',
+                                   plan_hash  NUMBER       PATH 'plan_hash',
+                                   elapsed_us NUMBER       PATH 'stats[@type="monitor"]/stat[@name="elapsed_time"]'
+                           ) x
+                    WHERE  r.component_name = 'sqlmonitor'
+                      AND  r.dbid IN (~dbid_list)
+                      AND  (~inst_num = 0 OR r.instance_number = ~inst_num)
+                      AND  r.report_summary IS NOT NULL
+                      AND  r.key1 IS NOT NULL
+                      AND  r.period_start_time >= CAST(v_r10_span_start AS TIMESTAMP) - INTERVAL '1' DAY
+                      AND  r.period_start_time <= CAST(v_r10_span_end   AS TIMESTAMP) + INTERVAL '1' DAY
+                      AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') >= v_r10_span_start
+                      AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') <  v_r10_span_end
+                ),
+                with_offset AS (
+                    SELECT e.*, wr.week_offset
+                    FROM   base_execs e
+                    LEFT JOIN windows_rollup wr
+                        ON  wr.valid_flag = 'Y'
+                       AND  e.exec_start >= wr.win_start_ts
+                       AND  e.exec_start <  wr.win_end_ts
+                ),
+                sqlid_span_stats AS (
+                    SELECT sql_id,
+                           MAX(CASE WHEN elapsed_us >= 1000000 THEN 1 ELSE 0 END) AS has_long,
+                           MAX(CASE WHEN status = 'DONE (ERROR)' THEN 1 ELSE 0 END) AS has_error,
+                           COUNT(DISTINCT CASE WHEN plan_hash <> 0 THEN plan_hash END) AS distinct_plans
+                    FROM   with_offset
+                    GROUP BY sql_id
+                ),
+                included AS (
+                    SELECT sql_id FROM sqlid_span_stats
+                    WHERE  has_long = 1 OR has_error = 1 OR distinct_plans > 1
+                ),
+                cur_best AS (
+                    SELECT sql_id, report_id, dbid, elapsed_us,
+                           ROW_NUMBER() OVER (PARTITION BY sql_id
+                               ORDER BY elapsed_us DESC NULLS LAST, report_id) AS rn
+                    FROM   with_offset
+                    WHERE  week_offset = 0 AND plan_hash <> 0
+                ),
+                prior_stats AS (
+                    SELECT sql_id, MEDIAN(elapsed_us) AS med_elapsed
+                    FROM   with_offset
+                    WHERE  week_offset > 0 AND plan_hash <> 0
+                    GROUP BY sql_id
+                ),
+                prior_best AS (
+                    SELECT w.sql_id, w.report_id, w.dbid, w.elapsed_us,
+                           ROW_NUMBER() OVER (PARTITION BY w.sql_id
+                               ORDER BY ABS(w.elapsed_us - ps.med_elapsed) ASC, w.exec_start DESC) AS rn
+                    FROM   with_offset w
+                    JOIN   prior_stats ps ON ps.sql_id = w.sql_id
+                    WHERE  w.week_offset > 0 AND w.plan_hash <> 0
+                ),
+                per_window AS (
+                    SELECT sql_id, week_offset, MAX(elapsed_us) / 1e6 AS max_elapsed_s
+                    FROM   with_offset
+                    WHERE  week_offset IS NOT NULL
+                      AND  sql_id IN (SELECT sql_id FROM included)
+                    GROUP BY sql_id, week_offset
+                ),
+                pivoted AS (
+                    SELECT sql_id,
+                           MAX(CASE WHEN week_offset = 0 THEN max_elapsed_s END) AS cur_val,
+                           AVG(CASE WHEN week_offset > 0 THEN max_elapsed_s END) AS mu,
+                           STDDEV(CASE WHEN week_offset > 0 THEN max_elapsed_s END) AS sd,
+                           COUNT(CASE WHEN week_offset > 0 THEN max_elapsed_s END) AS n_prior
+                    FROM   per_window
+                    GROUP BY sql_id
+                )
+                SELECT i.sql_id,
+                       cb.report_id AS cur_report_id, cb.dbid AS cur_dbid, cb.elapsed_us AS cur_elapsed_us,
+                       pb.report_id AS base_report_id, pb.dbid AS base_dbid, pb.elapsed_us AS base_elapsed_us
+                FROM   included i
+                JOIN   cur_best   cb ON cb.sql_id = i.sql_id AND cb.rn = 1
+                JOIN   prior_best pb ON pb.sql_id = i.sql_id AND pb.rn = 1
+                LEFT JOIN pivoted p  ON p.sql_id  = i.sql_id
+                ORDER BY
+                    CASE WHEN p.n_prior >= 3 AND p.sd IS NOT NULL AND p.sd <> 0
+                              AND ABS((p.cur_val - p.mu) / p.sd) > 3 THEN 1
+                         WHEN p.n_prior >= 3 AND p.sd IS NOT NULL AND p.sd <> 0
+                              AND ABS((p.cur_val - p.mu) / p.sd) > 2 THEN 2
+                         ELSE 3 END,
+                    cb.elapsed_us DESC NULLS LAST
+                FETCH FIRST 1 ROWS ONLY
+            ) LOOP
+                v_r10_sql_id       := d.sql_id;
+                v_r10_cur_report   := d.cur_report_id;
+                v_r10_cur_dbid     := d.cur_dbid;
+                v_r10_base_report  := d.base_report_id;
+                v_r10_base_dbid    := d.base_dbid;
+                v_r10_cur_total_s  := d.cur_elapsed_us / 1e6;
+                v_r10_base_total_s := d.base_elapsed_us / 1e6;
+            END LOOP;
+
+            IF v_r10_sql_id IS NOT NULL THEN
+                BEGIN
+                    SELECT report INTO v_r10_cur_clob FROM dba_hist_reports_details
+                    WHERE  report_id = v_r10_cur_report AND dbid = v_r10_cur_dbid;
+                    SELECT report INTO v_r10_base_clob FROM dba_hist_reports_details
+                    WHERE  report_id = v_r10_base_report AND dbid = v_r10_base_dbid;
+
+                    FOR ln IN (
+                        SELECT COALESCE(cl.line_id, bl.line_id) AS line_id,
+                               NVL(cl.op, bl.op)
+                                   || CASE WHEN NVL(cl.options, bl.options) IS NOT NULL
+                                           THEN ' (' || NVL(cl.options, bl.options) || ')' END AS op_txt,
+                               bl.act_rows AS base_rows, cl.act_rows AS cur_rows,
+                               CASE WHEN bl.line_id IS NOT NULL AND v_r10_base_total_s > 0
+                                    THEN bl.dur_s / v_r10_base_total_s * 100 END AS base_share,
+                               CASE WHEN cl.line_id IS NOT NULL AND v_r10_cur_total_s > 0
+                                    THEN cl.dur_s / v_r10_cur_total_s * 100 END AS cur_share
+                        FROM (
+                            SELECT x.* FROM
+                                XMLTABLE('/report/sql_monitor_report/plan_monitor/operation'
+                                    PASSING XMLTYPE(v_r10_cur_clob)
+                                    COLUMNS
+                                        line_id  NUMBER       PATH '@id',
+                                        op       VARCHAR2(64) PATH '@name',
+                                        options  VARCHAR2(64) PATH '@options',
+                                        act_rows NUMBER       PATH 'stats[@type="plan_monitor"]/stat[@name="cardinality"]',
+                                        dur_s    NUMBER       PATH 'stats[@type="plan_monitor"]/stat[@name="duration"]'
+                                ) x
+                        ) cl
+                        FULL OUTER JOIN (
+                            SELECT x.* FROM
+                                XMLTABLE('/report/sql_monitor_report/plan_monitor/operation'
+                                    PASSING XMLTYPE(v_r10_base_clob)
+                                    COLUMNS
+                                        line_id  NUMBER       PATH '@id',
+                                        op       VARCHAR2(64) PATH '@name',
+                                        options  VARCHAR2(64) PATH '@options',
+                                        act_rows NUMBER       PATH 'stats[@type="plan_monitor"]/stat[@name="cardinality"]',
+                                        dur_s    NUMBER       PATH 'stats[@type="plan_monitor"]/stat[@name="duration"]'
+                                ) x
+                        ) bl
+                        ON cl.line_id = bl.line_id AND NVL(cl.op, '-') = NVL(bl.op, '-')
+                    ) LOOP
+                        IF ln.cur_share IS NOT NULL AND ln.base_share IS NOT NULL
+                           AND ln.cur_share - ln.base_share > v_r10_best_delta THEN
+                            v_r10_best_delta := ln.cur_share - ln.base_share;
+                            v_r10_best_line  := ln.line_id;
+                            v_r10_best_op    := ln.op_txt;
+                            v_r10_best_base  := ln.base_share;
+                            v_r10_best_cur   := ln.cur_share;
+                            v_r10_found      := TRUE;
+                        END IF;
+                    END LOOP;
+                EXCEPTION WHEN OTHERS THEN
+                    v_r10_found := FALSE;
+                END;
+            END IF;
+
+            IF v_r10_found AND v_r10_best_delta >= 5 THEN
+                add_sentence('SQL Monitor plan-line drift: <b>' || esc(v_r10_sql_id) || '</b> spends '
+                    || TO_CHAR(ROUND(v_r10_best_cur)) || '% of its time on line '
+                    || v_r10_best_line || ' ' || esc(v_r10_best_op) || ', up from '
+                    || TO_CHAR(ROUND(v_r10_best_base)) || '% in the baseline &mdash; see '
+                    || '<a href="#sqlmon">SQL Monitor</a>.');
+            END IF;
+        END;
+    END IF;
 
     ------------------------------------------------------------------
     -- Emit.  Nothing to say => nothing at all (not even an empty div).
