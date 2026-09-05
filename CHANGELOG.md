@@ -5,6 +5,22 @@ The report footer stamps the version that produced it
 top of `awr_trend.sql`. Bump it there when cutting a release and add an
 entry here. Dates are release dates.
 
+## Unreleased
+
+- **New section 18 ("SQL Monitor"), `sql/18_sqlmon.sql`.** Phase 1 (summaries
+  only, from `DBA_HIST_REPORTS.report_summary`; no `DBA_HIST_REPORTS_DETAILS`
+  CLOB access, no plan-line drift). Per-sql_id comparison table (max/median
+  elapsed, max I/O, DOP req/alloc, plan count, error count, per-window
+  detail + a copyable `DBMS_AUTO_REPORT.REPORT_REPOSITORY_DETAIL(...,
+  type=>'ACTIVE')` drill line) scored with section 07's `scored` CASE
+  verbatim, plus a full-span execution scatter (ECharts, log-scale elapsed,
+  compared-window shading). A sql_id is included once any of its captured
+  executions is >= 1 s, errored, or shows more than one execution plan in
+  the span. `sql/17_narrative.sql` gained rules R6-R9 (plan change / DOP
+  downgrade / errors / new sql_ids in the Current window). Template-
+  independent, always on; kept under "Application only" (rows carry
+  `data-sys`). No new DEFINE.
+
 ## 1.4.0 — 2026-09-05
 
 Visual facelift: no new substitution vars, no schema/behavior change to the
