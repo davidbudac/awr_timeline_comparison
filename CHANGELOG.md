@@ -7,6 +7,19 @@ entry here. Dates are release dates.
 
 ## Unreleased
 
+- **Demo report + generator (`demo/`, `docs/examples/demo_busy_db.html`).**
+  A synthetic showcase report of a very busy production database over a
+  3-month weekly comparison (12 prior Thursdays), with five marked
+  releases/upgrades each leaving a distinct spike, and a Current window that
+  is an ongoing plan regression. Rendered by pure Python from one coherent
+  hourly model; CSS/JS chrome is lifted verbatim from the SQL sources, and
+  every section is a hand-ported twin of its `sql/NN_*.sql` emitter (see
+  `demo/README.md`, `demo/PORTING.md`). Linked from the docs site. Docs
+  tooling only -- nothing in the toolkit depends on it.
+- **Fix: SQL Monitor section rendered above the masthead.** `sql/_style.sql`
+  never assigned a flex `order` to `#sqlmon`, so it defaulted to 0 and sorted
+  before `header.report`. It now sits after Top SQL -- ASH, where the nav
+  places it (segment-io / file-io / param-changes / footer shifted by one).
 - **New section 18 ("SQL Monitor"), `sql/18_sqlmon.sql`.** Phase 1 (summaries
   only, from `DBA_HIST_REPORTS.report_summary`; no `DBA_HIST_REPORTS_DETAILS`
   CLOB access, no plan-line drift). Per-sql_id comparison table (max/median
