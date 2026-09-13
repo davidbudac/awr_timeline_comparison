@@ -822,7 +822,7 @@ def hour(ts: datetime) -> HourMetrics:
             m *= e.commit
         if ev.wait_class == "User I/O":
             m *= 1 + 0.35 * (e.phys_reads - 1)
-        mult[ev.name] = m
+        mult[ev.name] = m * _noise(r, 0.09)
     tot = sum(shares[k] * mult[k] for k in shares) or 1.0
     for k in shares:
         ev_us[k] = ev_us.get(k, 0.0) + resid_wait * shares[k] * mult[k] / tot
