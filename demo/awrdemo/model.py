@@ -848,7 +848,7 @@ def hour(ts: datetime) -> HourMetrics:
             fg[ev.name] = (ev.wait_class, cnt, tw)
             continue
         us = ev_us.get(ev.name, 0.0)
-        lat = ev.avg_us
+        lat = ev.avg_us * _noise(r, 0.035)
         if ev.name == "log file sync":
             lat *= 1 + 0.8 * (e.commit - 1)
         if ev.name == "enq: TX - row lock contention":
@@ -876,7 +876,7 @@ def hour(ts: datetime) -> HourMetrics:
         if ev.name == "db file parallel write":
             m *= 1 + 0.6 * bf
         us = bg_wait * ev.share * m / tot
-        bg[ev.name] = (ev.wait_class, us / ev.avg_us, us)
+        bg[ev.name] = (ev.wait_class, us / (ev.avg_us * _noise(r, 0.035)), us)
     tm = {"DB time": db_time_us, "DB CPU": db_cpu_us,
           "background elapsed time": bg_ela, "background cpu time": bg_cpu}
 

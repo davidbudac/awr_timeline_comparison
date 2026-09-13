@@ -161,7 +161,12 @@ def mean_sd(vals):
     if n < 2:
         return mu, None, n
     var = sum((x - mu) ** 2 for x in v) / (n - 1)
-    return mu, math.sqrt(var), n
+    sd = math.sqrt(var)
+    # Oracle's decimal arithmetic yields STDDEV = 0 for identical values;
+    # binary floats leave ~1e-16 residue that would blow z up to 1e15.
+    if sd <= 1e-9 * abs(mu):
+        sd = 0.0
+    return mu, sd, n
 
 
 def z_and_pct(cur, mu, sd):
