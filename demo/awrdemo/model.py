@@ -1184,6 +1184,11 @@ def _plan(sql_id: str, plan_hash: int, x: SqlHour | None, execs_scale: float = 1
             PlanLine(4, 3, 4, "TABLE ACCESS", "FULL", "INVENTORY", "INV_FEED_STAGE", 210_000, 1, 209_884, 2.2, 0),
             PlanLine(5, 3, 4, "TABLE ACCESS", "FULL", "INVENTORY", "INVENTORY", 2_400_000, 1, 2_418_331, 14.5, 0),
         ]
+    if sql_id == "v8c2l5qs3wd7m":
+        return [
+            PlanLine(0, None, 0, "SELECT STATEMENT", "", "", "", 18300, 1, 18412, 41, 0),
+            PlanLine(1, 0, 1, "TABLE ACCESS", "FULL", "INVENTORY", "INVENTORY", 18300, 1, 18412, 40.6, 0),
+        ]
     if sql_id == "e1k8s4yn7pw2j":
         return [
             PlanLine(0, None, 0, "UPDATE STATEMENT", "", "", "", 110_000, 1, 109_412, 74, 0),
@@ -1265,7 +1270,9 @@ def _monexecs() -> list[MonExec]:
                 rid += 1
         # pre-4.2 the same bulk lookups on the good plan occasionally cross the
         # 1-s floor too (thousands of orders for one customer), ~twice a day
-        elif x and 9 <= hs <= 17 and r.random() < 0.22:
+        elif x and 9 <= hs <= 17 and (hs == 9 and t.weekday() < 5 or r.random() < 0.22):
+            # the 09:00 customer-service bulk lookup runs every weekday, so the
+            # compared hour always has a capture (drift needs >= 3 priors)
             ela = 1.05e6 + r.random() * 0.9e6
             start = t + timedelta(minutes=r.randint(0, 59), seconds=r.randint(0, 59))
             out.append(MonExec(rid, ORDER_LOOKUP_SQL, 16_777_216 + rid % 100000, start, "DONE (ALL ROWS)",
@@ -1288,7 +1295,7 @@ def plan_lines(sql_id: str, plan_hash: int, m: MonExec | None = None) -> list[Pl
     r = rng("plan", m.report_id)
     out = []
     for l in base:
-        j = 1.0 + r.gauss(0, 0.06)
+        j = 1.0 if l.id == 0 else min(1.0 + r.gauss(0, 0.06), 0.995 * ref / max(l.duration_s, 1e-9))
         out.append(PlanLine(l.id, l.parent_id, l.depth, l.name, l.options, l.owner, l.obj,
                             l.est_rows, l.starts, l.act_rows * (1.0 + r.gauss(0, 0.01) if l.act_rows > 100 else 1.0),
                             l.duration_s * k * j, l.max_mem))
