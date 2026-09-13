@@ -583,7 +583,7 @@ def effects(ts: datetime) -> Effects:
         e.phys_reads *= 1 + 0.9 * ramp
         e.scans *= 1 + 7 * ramp
         e.dbtime *= 1 + 0.30 * ramp
-        e.cpu *= 1 + 0.15 * ramp
+        e.cpu *= 1 + 0.02 * ramp
     return e
 
 
@@ -735,7 +735,7 @@ def _sql_hour(s: SqlDef, ts: datetime, inten: float, e: Effects, r: random.Rando
         ela = s.ela_us * (1 - b) + 9_000 * b
         gets = s.gets * (1 - b) + 700 * b
         reads = s.reads * (1 - b) + 14 * b
-        cpu_frac = 0.72 * (1 - b) + 0.35 * b
+        cpu_frac = 0.72 * (1 - b) + 0.16 * b
         waits = {"db file scattered read": 0.55, "direct path read": 0.30,
                  "SQL*Net more data to client": 0.15} if b > 0.5 else waits
         plan = ORDER_LOOKUP_BAD_PLAN if b > 0.5 else s.plan_hash
