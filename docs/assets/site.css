@@ -72,6 +72,7 @@ p { margin:0 0 10px; }
 .mono { font-family:var(--mono); text-transform:none; }
 code { font-family:var(--mono); font-size:.92em; background:var(--panel-2); border:1px solid var(--hairline);
   border-radius:5px; padding:.5px 5px; color:var(--ink); white-space:nowrap; }
+p code, li code, td code, dd code, figcaption code { white-space:normal; overflow-wrap:anywhere; }
 pre code { background:transparent; border:0; padding:0; white-space:inherit; font-size:inherit; }
 kbd { font-family:var(--mono); font-size:10px; border:1px solid var(--hairline); border-radius:4px; padding:0 4px; color:var(--muted); background:var(--panel-2); }
 
