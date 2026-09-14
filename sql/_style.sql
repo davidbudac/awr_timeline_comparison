@@ -132,11 +132,14 @@ BEGIN
     -- SQL
     DBMS_OUTPUT.PUT_LINE('#topsql            { order:14; }');
     DBMS_OUTPUT.PUT_LINE('#topsql-ash        { order:15; }');
+    -- Without an explicit order the SQL Monitor section defaulted to 0 and
+    -- sorted ABOVE the masthead; keep it where the nav places it.
+    DBMS_OUTPUT.PUT_LINE('#sqlmon            { order:16; }');
     -- Storage and config
-    DBMS_OUTPUT.PUT_LINE('#segment-io        { order:16; }');
-    DBMS_OUTPUT.PUT_LINE('#file-io           { order:17; }');
-    DBMS_OUTPUT.PUT_LINE('#param-changes     { order:18; }');
-    DBMS_OUTPUT.PUT_LINE('footer.report      { order:19; }');
+    DBMS_OUTPUT.PUT_LINE('#segment-io        { order:17; }');
+    DBMS_OUTPUT.PUT_LINE('#file-io           { order:18; }');
+    DBMS_OUTPUT.PUT_LINE('#param-changes     { order:19; }');
+    DBMS_OUTPUT.PUT_LINE('footer.report      { order:20; }');
 
     -- =========================================================
     -- Masthead (header.report) -- compact identity panel at the top

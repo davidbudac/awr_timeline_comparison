@@ -97,6 +97,7 @@ sql/
 side/create_weekly_baselines.sql    -- optional baselines (the only writer)
 run_awr_fleet.sh, awr_fleet_extract.sql, sql/fleet/ -- fleet report (see that section)
 server/                             -- optional scheduler web app (see that section)
+demo/                               -- docs-only synthetic demo report generator (Python; see demo/README.md)
 reports/                            -- generated HTML
 ```
 
@@ -946,6 +947,18 @@ resolving:
   `fleet_work_<id>/` workdir is a different directory and is never affected.
 - `server/tests/fake_bin/run_awr_fleet.sh` (the test double) emits the folder
   form so `runner.py`/`records.py` are exercised end-to-end.
+
+### Demo report (`demo/`, docs-only)
+`docs/examples/demo_busy_db.html` is synthetic: `python3 demo/gen_demo_report.py`
+renders it from `demo/awrdemo/model.py` (one deterministic hourly model of a
+busy 19c DB over 3 months with marked releases). `demo/awrdemo/chrome.py`
+lifts the CSS/JS literally from `sql/_style.sql` and `sql/lib/js_*.plsql`;
+each `demo/awrdemo/sections/sNN_*.py` is a hand-ported twin of `sql/NN_*.sql`
+(contract: `demo/PORTING.md`). **When a section's markup/JS changes, re-port
+its twin and regenerate**; `node demo/verify_report.js <html> [shots/]` is the
+headless smoke test (0 console errors, chart count, toggles, screenshots).
+The "No Python" rule applies to the toolkit, not to this docs tooling --
+nothing under `sql/`, `awr_trend.sql` or the wrappers may depend on `demo/`.
 
 ## Verification & testing
 
