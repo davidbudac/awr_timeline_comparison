@@ -1,8 +1,7 @@
 /*
- * Project website chrome behaviour — a small subset of what the report's
- * sql/00_params.sql wires: theme toggle (same localStorage key as the
- * report, "awr-theme"), rail scrollspy, the narrow-layout rail menu, and
- * copy buttons on code blocks.
+ * Project website behaviour: theme toggle (same localStorage key as the
+ * generated report, "awr-theme"), top-bar scrollspy, the narrow-layout
+ * menu, and copy buttons on code blocks.
  */
 (function () {
   var doc = document, body = doc.body;
@@ -23,29 +22,28 @@
     });
   });
 
-  // ---- rail: narrow-layout menu + scrollspy ----
-  var nav = doc.querySelector("nav.toc");
-  if (nav) {
-    var mb = nav.querySelector(".rail-menu-btn");
-    if (mb) {
+  // ---- top bar: narrow-layout menu + scrollspy ----
+  var bar = doc.querySelector(".topbar");
+  if (bar) {
+    var mb = bar.querySelector(".menu-btn"), links = bar.querySelector(".links");
+    if (mb && links) {
       mb.addEventListener("click", function () {
-        var open = nav.classList.toggle("open");
+        var open = links.classList.toggle("open");
         mb.setAttribute("aria-expanded", open ? "true" : "false");
       });
-      nav.querySelectorAll(".rail-list a, .rail-foot a").forEach(function (a) {
-        a.addEventListener("click", function () { nav.classList.remove("open"); mb.setAttribute("aria-expanded", "false"); });
+      links.addEventListener("click", function (e) {
+        if (e.target.tagName === "A") { links.classList.remove("open"); mb.setAttribute("aria-expanded", "false"); }
       });
     }
-    var links = [].slice.call(nav.querySelectorAll('.rail-list a[href^="#"]'));
-    var cur = nav.querySelector(".rail-cur");
-    var targets = links.map(function (a) { return doc.getElementById(a.getAttribute("href").slice(1)); });
+    var spyLinks = [].slice.call(doc.querySelectorAll('.topbar .links a[href^="#"], .subnav a[href^="#"]'));
+    var targets = spyLinks.map(function (a) { return doc.getElementById(a.getAttribute("href").slice(1)); });
     function spy() {
-      var y = window.scrollY + 90, best = -1;
-      for (var i = 0; i < targets.length; i++) { if (targets[i] && targets[i].offsetTop <= y) best = i; }
-      links.forEach(function (a, i) { a.classList.toggle("on", i === best); });
-      if (cur) cur.textContent = best >= 0 ? links[best].textContent.trim() : "";
+      var y = window.scrollY + 100;
+      var bestId = null, bestTop = -Infinity;
+      targets.forEach(function (t) { if (t && t.offsetTop <= y && t.offsetTop > bestTop) { bestTop = t.offsetTop; bestId = t.id; } });
+      spyLinks.forEach(function (a) { a.classList.toggle("on", bestId !== null && a.getAttribute("href") === "#" + bestId); });
     }
-    if (links.length) { spy(); window.addEventListener("scroll", spy, { passive: true }); window.addEventListener("resize", spy); }
+    if (spyLinks.length) { spy(); window.addEventListener("scroll", spy, { passive: true }); window.addEventListener("resize", spy); }
   }
 
   // ---- copy buttons (data-copy = selector of the element whose text to copy) ----
@@ -56,8 +54,8 @@
     if (!el) return;
     var txt = el.textContent.replace(/\n$/, "");
     function done() { var old = b.textContent; b.textContent = "Copied"; b.classList.add("done"); setTimeout(function () { b.textContent = old; b.classList.remove("done"); }, 1400); }
+    function fallback(t) { var ta = doc.createElement("textarea"); ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0"; doc.body.appendChild(ta); ta.select(); try { doc.execCommand("copy"); } catch (x) {} doc.body.removeChild(ta); }
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, function () { fallback(txt); done(); });
     else { fallback(txt); done(); }
-    function fallback(t) { var ta = doc.createElement("textarea"); ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0"; doc.body.appendChild(ta); ta.select(); try { doc.execCommand("copy"); } catch (x) {} doc.body.removeChild(ta); }
   });
 })();

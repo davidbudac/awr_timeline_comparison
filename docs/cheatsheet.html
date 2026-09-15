@@ -13,7 +13,7 @@
   section > p > em:only-child code { font-size:.9em; }
   h2 code { font-size:.72em; font-weight:600; vertical-align:middle; }
   h3 code { text-transform:none; font-size:12.5px; }
-  h3 { scroll-margin-top:18px; }
+  h3 { scroll-margin-top:calc(var(--topbar-h) + 16px); }
   .codewrap { margin-top:6px; }
   .tbl-scroll td:first-child { white-space:nowrap; }
   .tbl-scroll td em { color:var(--muted); }
@@ -23,80 +23,62 @@
 <body>
 <a class="skip" href="#main">Skip to content</a>
 
-<nav class="toc" aria-label="Site sections">
-  <div class="rail-brand">
-    <a class="brand" href="index.html"><span class="dot">&#9679;</span>AWR &middot; Timeline comparison</a>
-    <button type="button" class="theme-icon-btn" aria-label="Toggle dark mode" title="Toggle dark mode">
-      <svg class="icon-moon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-      <svg class="icon-sun" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-    </button>
+<div class="topbar">
+  <div class="wrap">
+    <a class="brand" href="index.html"><span class="dot"></span>AWR &middot; Timeline comparison</a>
+    <button type="button" class="menu-btn" aria-expanded="false" aria-controls="site-links">Menu</button>
+    <nav class="links" id="site-links" aria-label="Site">
+      <a href="index.html">Home</a>
+      <a href="index.html#fleet">Fleet</a>
+      <a href="index.html#single">Single DB</a>
+      <a href="index.html#examples">Examples</a>
+      <a href="configurator.html">Configurator</a>
+      <a href="cheatsheet.html" class="on">Cheat sheet</a>
+      <a class="mobile-only" href="https://github.com/davidbudac/awr_timeline_comparison">GitHub &#8599;</a>
+    </nav>
+    <div class="tools">
+      <button type="button" class="theme-icon-btn" aria-label="Toggle dark mode" title="Toggle dark mode">
+        <svg class="icon-moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <svg class="icon-sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <a class="btn sm" href="https://github.com/davidbudac/awr_timeline_comparison">GitHub &#8599;</a>
+    </div>
   </div>
-  <span class="rail-cur"></span>
-  <button type="button" class="rail-menu-btn" aria-expanded="false" aria-controls="rail-list">Sections</button>
-  <div class="rail-list" id="rail-list">
-    <b>Reference</b>
-    <a href="#args"><span class="st acc"></span>Argument order</a>
-    <a href="#configurator"><span class="st acc"></span>Configurator</a>
-    <b>Cadence</b>
-    <a href="#weekly"><span class="st ok"></span>Weekly</a>
-    <a href="#daily"><span class="st ok"></span>Daily</a>
-    <a href="#hourly"><span class="st ok"></span>Hourly</a>
-    <a href="#rac"><span class="st ok"></span>RAC</a>
-    <b>Options</b>
-    <a href="#templates"><span class="st ok"></span>Templates</a>
-    <a href="#debug"><span class="st ok"></span>Progress markers</a>
-    <a href="#markers"><span class="st ok"></span>Timeline markers</a>
-    <a href="#topn"><span class="st ok"></span>Larger Top-N</a>
-    <a href="#nowrapper"><span class="st ok"></span>Without the wrapper</a>
-    <a href="#offline"><span class="st ok"></span>Offline</a>
-    <b>Playbooks</b>
-    <a href="#playbooks"><span class="st warn"></span>Playbooks</a>
-    <a href="#retention"><span class="st warn"></span>AWR retention</a>
-    <a href="#fleet"><span class="st warn"></span>Fleet report</a>
-    <b>Pages</b>
-    <a href="index.html"><span class="st"></span>Home <span class="ext">&rarr;</span></a>
-    <a href="configurator.html"><span class="st"></span>Configurator <span class="ext">&rarr;</span></a>
-    <a href="https://github.com/davidbudac/awr_timeline_comparison"><span class="st"></span>GitHub <span class="ext">&#8599;</span></a>
-  </div>
-  <div class="rail-foot">
-    <a class="rail-btn primary" href="configurator.html">Build a command</a>
-    <a class="rail-btn" href="index.html">Project page</a>
-    <div class="rail-note">Every recipe is a complete run_awr_trend.sh call &middot; copy, swap the connect string, run.</div>
-  </div>
-</nav>
+</div>
 
-<header class="report" id="top">
-  <div class="brandline"><span class="dot">&#9679;</span>AWR <span class="slash">/</span> Timeline comparison <span class="slash">/</span> cheat sheet</div>
-  <div class="topgrid">
-    <div>
-      <h1>Ready-to-paste <em>recipes</em></h1>
-      <p class="lede-p">
-        Every recipe below is a complete <code>run_awr_trend.sh</code> invocation &mdash;
+<header class="page-hero" id="top">
+  <div class="wrap">
+    <span class="eyebrow"><span class="dot"></span>Cheat sheet &middot; run_awr_trend.sh</span>
+    <h1>Ready-to-paste <em>recipes</em></h1>
+    <p class="lede">Every recipe below is a complete <code>run_awr_trend.sh</code> invocation &mdash;
         copy, swap in your connect string, run. All commands assume your working
         directory is the repo root. Don't want to memorize the positional order?
         Let the <a href="#configurator">interactive configurator</a> build the
-        command for you.
-      </p>
-    </div>
-    <div class="meta">
-      <div><b>Wrapper</b> run_awr_trend.sh &middot; 12 positionals + 2 env vars</div>
-      <div><b>Cadence</b> weekly &middot; daily &middot; hourly &middot; custom step</div>
-      <div><b>Templates</b> comprehensive &middot; simple &middot; dev</div>
-      <div><b>Also</b> markers &middot; offline &middot; RAC &middot; fleet</div>
-    </div>
-  </div>
-  <div class="ctas">
-    <a class="btn primary" href="#args">Argument order</a>
-    <a class="btn" href="#weekly">Weekly recipes</a>
-    <a class="btn" href="#playbooks">Playbooks</a>
-    <a class="btn" href="#offline">Offline report</a>
-    <a class="btn" href="configurator.html">Web configurator</a>
+        command for you.</p>
+    <div class="ctas"><a class="btn primary" href="configurator.html">Build a command instead</a><a class="btn" href="#args">Argument order</a><a class="btn ghost" href="#fleet">Fleet report</a></div>
+    <nav class="subnav" aria-label="On this page">
+      <a href="#args">Argument order</a>
+      <a href="#configurator">Configurator</a>
+      <a href="#weekly">Weekly</a>
+      <a href="#daily">Daily</a>
+      <a href="#hourly">Hourly</a>
+      <a href="#rac">RAC</a>
+      <a href="#templates">Templates</a>
+      <a href="#debug">Progress markers</a>
+      <a href="#markers">Timeline markers</a>
+      <a href="#topn">Larger Top-N</a>
+      <a href="#nowrapper">Without the wrapper</a>
+      <a href="#offline">Offline</a>
+      <a href="#playbooks">Playbooks</a>
+      <a href="#retention">AWR retention</a>
+      <a href="#fleet">Fleet report</a>
+    </nav>
   </div>
 </header>
 
-<main id="main" tabindex="-1" style="display:contents">
+<main id="main" tabindex="-1" class="wrap">
 
-<section id="args">
+<section class="panel" id="args">
 <h2>Argument order <span class="h2sub">the 12 positional arguments, two env vars, and how to skip the ones you don't care about</span></h2>
 <div class="codewrap"><button type="button" class="copy-btn" data-copy="#cs-args-1">Copy</button>
 <pre class="sql" id="cs-args-1">./run_awr_trend.sh &lt;connect&gt; [target_end] [win_hours] [weeks_back] \
@@ -156,7 +138,7 @@
   </p>
 </section>
 
-<section id="weekly">
+<section class="panel" id="weekly">
 <h2>Weekly cadence <span class="h2sub">the original behaviour &mdash; same hour of the same weekday, N weeks back</span></h2>
 
   <h3>Default — last 4 same-hour-of-week windows</h3>
@@ -199,7 +181,7 @@
   <p><em>Spans ~24 weeks. AWR retention must cover that range.</em></p>
 </section>
 
-<section id="daily">
+<section class="panel" id="daily">
 <h2>Daily cadence <span class="h2sub">same hour, N days back &mdash; is today unusual for this week?</span></h2>
 
   <h3>Each of the last 7 days at this hour</h3>
@@ -226,7 +208,7 @@
   <p><em>Six prior days at 02:00–06:00 vs today.</em></p>
 </section>
 
-<section id="hourly">
+<section class="panel" id="hourly">
 <h2>Hourly cadence <span class="h2sub">straight line back, hour by hour &mdash; step_unit h</span></h2>
 
   <h3>Last 4 hours, hour by hour</h3>
@@ -267,7 +249,7 @@
   </div>
 </section>
 
-<section id="rac">
+<section class="panel" id="rac">
 <h2>RAC / multi-instance <span class="h2sub">aggregate across instances or pin one &mdash; inst_num</span></h2>
 
   <h3>Aggregate across all RAC instances (default)</h3>
@@ -288,7 +270,7 @@
 </div>
 </section>
 
-<section id="templates">
+<section class="panel" id="templates">
 <h2>Templates <span class="h2sub">comprehensive, simple, dev &mdash; which metrics and waits to render</span></h2>
   <p>
     Templates pick the curated set of stats, metrics and wait events the report
@@ -334,7 +316,7 @@
   </p>
 </section>
 
-<section id="debug">
+<section class="panel" id="debug">
 <h2>Progress markers (<code>debug=Y</code>) <span class="h2sub">per-section timings on stdout; the HTML is byte-identical</span></h2>
   <p>
     On a busy DB some sections take minutes; with no terminal output it looks hung.
@@ -374,7 +356,7 @@
 </div>
 </section>
 
-<section id="markers">
+<section class="panel" id="markers">
 <h2>Timeline markers <span class="h2sub">marker_file / MARKERS &mdash; annotate the dated charts with patches, rebuilds, incidents</span></h2>
   <p>
     Annotate the dated charts (masthead strip, ASH timeline, DB-time summary,
@@ -427,7 +409,7 @@
   timeline markers</a>.</p>
 </section>
 
-<section id="topn">
+<section class="panel" id="topn">
 <h2>Larger Top-N <span class="h2sub">when the top-10 doesn't capture the outlier</span></h2>
 
   <h3>Top-25 SQL with the default weekly comparison</h3>
@@ -442,7 +424,7 @@
 </div>
 </section>
 
-<section id="nowrapper">
+<section class="panel" id="nowrapper">
 <h2>Without the wrapper <span class="h2sub">pure SQL*Plus &mdash; Windows shops and restricted hosts</span></h2>
   <p>
     If you can't run a shell script (Windows shop, restricted host), drive sqlplus
@@ -487,7 +469,7 @@ SQL</pre>
   </div>
 </section>
 
-<section id="offline">
+<section class="panel" id="offline">
 <h2>Self-contained / offline report <span class="h2sub">echarts &mdash; CDN, internal mirror, or one fully self-contained file</span></h2>
   <p>
     The report is almost entirely self-contained already — inline CSS, inline
@@ -555,7 +537,7 @@ line=<span class="s">"$(grep -nF "src=\"$lib\"" "$html" | head -1 | cut -d: -f1)
   </div>
 </section>
 
-<section id="playbooks">
+<section class="panel" id="playbooks">
 <h2>Scheduling &amp; comparison playbooks <span class="h2sub">questions DBAs actually ask, as ready-to-paste commands</span></h2>
 
   <h3>“What's different this morning vs my normal Monday?”</h3>
@@ -592,7 +574,7 @@ line=<span class="s">"$(grep -nF "src=\"$lib\"" "$html" | head -1 | cut -d: -f1)
 </div>
 </section>
 
-<section id="retention">
+<section class="panel" id="retention">
 <h2>AWR retention check <span class="h2sub">check dba_hist_wr_control before any long-lookback recipe</span></h2>
   <p>
     Before you run any of the longer-lookback recipes, verify your AWR retention
@@ -632,7 +614,7 @@ DEFINE markers = <span class="s">''</span></pre>
 </div>
 </section>
 
-<section id="fleet">
+<section class="panel" id="fleet">
 <h2>Fleet report <span class="h2sub">run_awr_fleet.sh &mdash; many databases, one worst-first page</span></h2>
   <p>
     A separate wrapper, <code>run_awr_fleet.sh</code>, runs the same comparison across a whole
@@ -664,14 +646,12 @@ DEFINE markers = <span class="s">''</span></pre>
 
 </main>
 
-<footer class="report">
-  AWR Timeline Comparison &mdash; <a href="https://github.com/davidbudac/awr_timeline_comparison">github.com/davidbudac/awr_timeline_comparison</a>
+<footer class="site"><div class="wrap"><div>AWR Timeline Comparison &mdash; <a href="https://github.com/davidbudac/awr_timeline_comparison">github.com/davidbudac/awr_timeline_comparison</a>
   &mdash; Oracle Database 19c with the Diagnostic + Tuning Pack; SQL*Plus and a user that can read the AWR history views.
   Nothing to install in the database, nothing written to it.
   &mdash; <a href="index.html">Home</a> &middot; <a href="index.html#install">Get started</a> &middot; <a href="index.html#examples">Examples</a> &middot; <a href="#args">Arguments</a> &middot; <a href="#weekly">Weekly</a> &middot;
   <a href="#hourly">Hourly</a> &middot; <a href="#markers">Markers</a> &middot; <a href="#offline">Offline</a> &middot;
-  <a href="#fleet">Fleet</a> &middot; <a href="configurator.html">Configurator</a>
-</footer>
+  <a href="#fleet">Fleet</a> &middot; <a href="configurator.html">Configurator</a></div></div></footer>
 
 <script src="assets/site.js"></script>
 </body>

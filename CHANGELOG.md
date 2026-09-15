@@ -7,13 +7,13 @@ entry here. Dates are release dates.
 
 ## Unreleased
 
-- **Website redesign (`docs/`).** The project site now uses the report's own
-  "workbench" look: the same tokens, fixed rail with scrollspy and dark-mode
-  toggle (shared `localStorage` key `awr-theme`), white section panels,
-  severity chips, light code panels with copy buttons. Chrome is shared by
-  `docs/assets/site.css` + `site.js` across `index.html`, `cheatsheet.html`
-  and `configurator.html`; the home page leads with the demo report's
-  verdict, compared-window chips and screenshots.
+- **Website redesign (`docs/`), second pass.** The project site now uses the
+  report's design language (tokens, severity chips, mono details, light code
+  panels, dark mode with the report's `awr-theme` key) in a modern
+  product-site layout: sticky top bar, large hero with a framed screenshot of
+  the demo report, stat tiles, numbered "how it works", card grids, a
+  screenshot tour, and panelled cheat sheet / configurator pages. Shared
+  chrome in `docs/assets/site.css` + `site.js`.
 - **Demo report + generator (`demo/`, `docs/examples/demo_busy_db.html`).**
   A synthetic showcase report of a very busy production database over a
   3-month weekly comparison (12 prior Thursdays), with five marked
