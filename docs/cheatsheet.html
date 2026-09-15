@@ -25,8 +25,9 @@
 
 <div class="topbar">
   <div class="wrap">
-    <a class="brand" href="index.html"><span class="dot"></span>AWR &middot; Timeline comparison</a>
-    <button type="button" class="menu-btn" aria-expanded="false" aria-controls="site-links">Menu</button>
+    <a class="brand" href="index.html"><span class="dot"></span>AWR Timeline Comparison</a>
+    <span class="rev">Cheat sheet &middot; Rev 1.4.0</span>
+    <button type="button" class="menu-btn" aria-expanded="false" aria-controls="site-links">Contents</button>
     <nav class="links" id="site-links" aria-label="Site">
       <a href="index.html">Home</a>
       <a href="index.html#fleet">Fleet</a>
@@ -48,6 +49,7 @@
 
 <header class="page-hero" id="top">
   <div class="wrap">
+    <div class="meta-row"><span>AWR Timeline Comparison &middot; Cheat sheet</span><span>Rev 1.4.0 &middot; September 2026 &middot; Oracle Database 19c</span></div>
     <span class="eyebrow"><span class="dot"></span>Cheat sheet &middot; run_awr_trend.sh</span>
     <h1>Ready-to-paste <em>recipes</em></h1>
     <p class="lede">Every recipe below is a complete <code>run_awr_trend.sh</code> invocation &mdash;
@@ -56,7 +58,7 @@
         Let the <a href="#configurator">interactive configurator</a> build the
         command for you.</p>
     <div class="ctas"><a class="btn primary" href="configurator.html">Build a command instead</a><a class="btn" href="#args">Argument order</a><a class="btn ghost" href="#fleet">Fleet report</a></div>
-    <nav class="subnav" aria-label="On this page">
+    <nav class="subnav" aria-label="On this page"><span class="muted mono" style="font-size:12px">Contents:</span>
       <a href="#args">Argument order</a>
       <a href="#configurator">Configurator</a>
       <a href="#weekly">Weekly</a>
@@ -80,6 +82,7 @@
 
 <section class="panel" id="args">
 <h2>Argument order <span class="h2sub">the 12 positional arguments, two env vars, and how to skip the ones you don't care about</span></h2>
+<div class="body">
 <div class="codewrap"><button type="button" class="copy-btn" data-copy="#cs-args-1">Copy</button>
 <pre class="sql" id="cs-args-1">./run_awr_trend.sh &lt;connect&gt; [target_end] [win_hours] [weeks_back] \
                               [top_n] [inst_num] [step] [step_unit] \
@@ -136,10 +139,12 @@
     <a href="configurator.html">web configurator</a> does the same in your
     browser.
   </p>
+</div>
 </section>
 
 <section class="panel" id="weekly">
 <h2>Weekly cadence <span class="h2sub">the original behaviour &mdash; same hour of the same weekday, N weeks back</span></h2>
+<div class="body">
 
   <h3>Default — last 4 same-hour-of-week windows</h3>
 <div class="codewrap"><button type="button" class="copy-btn" data-copy="#cs-weekly-1">Copy</button>
@@ -179,10 +184,12 @@
 <pre class="sql" id="cs-weekly-6">./run_awr_trend.sh user/pw@svc AUTO 1 6 10 0 4 w</pre>
 </div>
   <p><em>Spans ~24 weeks. AWR retention must cover that range.</em></p>
+</div>
 </section>
 
 <section class="panel" id="daily">
 <h2>Daily cadence <span class="h2sub">same hour, N days back &mdash; is today unusual for this week?</span></h2>
+<div class="body">
 
   <h3>Each of the last 7 days at this hour</h3>
 <div class="codewrap"><button type="button" class="copy-btn" data-copy="#cs-daily-1">Copy</button>
@@ -206,10 +213,12 @@
 <pre class="sql" id="cs-daily-4">./run_awr_trend.sh user/pw@svc <span class="s">'2026-05-08 06:00'</span> 4 6 10 0 1 d</pre>
 </div>
   <p><em>Six prior days at 02:00–06:00 vs today.</em></p>
+</div>
 </section>
 
 <section class="panel" id="hourly">
 <h2>Hourly cadence <span class="h2sub">straight line back, hour by hour &mdash; step_unit h</span></h2>
+<div class="body">
 
   <h3>Last 4 hours, hour by hour</h3>
 <div class="codewrap"><button type="button" class="copy-btn" data-copy="#cs-hourly-1">Copy</button>
@@ -247,10 +256,12 @@
     window covers exactly one snap pair. Cut the snap interval to 30 minutes or set
     <code>win_hours ≥ 2</code> if you want intra-window resolution.
   </div>
+</div>
 </section>
 
 <section class="panel" id="rac">
 <h2>RAC / multi-instance <span class="h2sub">aggregate across instances or pin one &mdash; inst_num</span></h2>
+<div class="body">
 
   <h3>Aggregate across all RAC instances (default)</h3>
 <div class="codewrap"><button type="button" class="copy-btn" data-copy="#cs-rac-1">Copy</button>
@@ -268,10 +279,12 @@
 <div class="codewrap"><button type="button" class="copy-btn" data-copy="#cs-rac-3">Copy</button>
 <pre class="sql" id="cs-rac-3">./run_awr_trend.sh user/pw@svc AUTO 1 6 10 2 1 h</pre>
 </div>
+</div>
 </section>
 
 <section class="panel" id="templates">
 <h2>Templates <span class="h2sub">comprehensive, simple, dev &mdash; which metrics and waits to render</span></h2>
+<div class="body">
   <p>
     Templates pick the curated set of stats, metrics and wait events the report
     renders. They don't change cadence or compared windows — they just trim or
@@ -314,10 +327,12 @@
     <code>wait_event_targets.sql</code> means “no filter, top-N firehose”; any other
     rows form an allowlist.
   </p>
+</div>
 </section>
 
 <section class="panel" id="debug">
 <h2>Progress markers (<code>debug=Y</code>) <span class="h2sub">per-section timings on stdout; the HTML is byte-identical</span></h2>
+<div class="body">
   <p>
     On a busy DB some sections take minutes; with no terminal output it looks hung.
     <code>debug=Y</code> prints one timestamped line per section to <strong>stdout</strong>
@@ -354,10 +369,12 @@
 <pre class="sql" id="cs-debug-4">./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y \
   | tee reports/last_run_markers.log</pre>
 </div>
+</div>
 </section>
 
 <section class="panel" id="markers">
 <h2>Timeline markers <span class="h2sub">marker_file / MARKERS &mdash; annotate the dated charts with patches, rebuilds, incidents</span></h2>
+<div class="body">
   <p>
     Annotate the dated charts (masthead strip, ASH timeline, DB-time summary,
     per-SQL ASH cards) with your own milestones — a patch, an index rebuild, a stats
@@ -407,10 +424,12 @@
 
   <p>See it live: <a href="examples/hourly_with_markers.html">example report with
   timeline markers</a>.</p>
+</div>
 </section>
 
 <section class="panel" id="topn">
 <h2>Larger Top-N <span class="h2sub">when the top-10 doesn't capture the outlier</span></h2>
+<div class="body">
 
   <h3>Top-25 SQL with the default weekly comparison</h3>
 <div class="codewrap"><button type="button" class="copy-btn" data-copy="#cs-topn-1">Copy</button>
@@ -422,10 +441,12 @@
 <div class="codewrap"><button type="button" class="copy-btn" data-copy="#cs-topn-2">Copy</button>
 <pre class="sql" id="cs-topn-2">./run_awr_trend.sh user/pw@svc AUTO 1 6 50 0 1 h</pre>
 </div>
+</div>
 </section>
 
 <section class="panel" id="nowrapper">
 <h2>Without the wrapper <span class="h2sub">pure SQL*Plus &mdash; Windows shops and restricted hosts</span></h2>
+<div class="body">
   <p>
     If you can't run a shell script (Windows shop, restricted host), drive sqlplus
     directly:
@@ -467,10 +488,12 @@ SQL</pre>
     driver references all four, so
     an unset value would stop at an “Enter value” prompt.
   </div>
+</div>
 </section>
 
 <section class="panel" id="offline">
 <h2>Self-contained / offline report <span class="h2sub">echarts &mdash; CDN, internal mirror, or one fully self-contained file</span></h2>
+<div class="body">
   <p>
     The report is almost entirely self-contained already — inline CSS, inline
     SVG sparklines, inline marker JS. Its one network dependency is the Apache
@@ -535,10 +558,12 @@ line=<span class="s">"$(grep -nF "src=\"$lib\"" "$html" | head -1 | cut -d: -f1)
     On a host with no shell at all (plain Windows + SQL*Plus), the mirror-URL
     form is the only zero-extra-step option for a single file.
   </div>
+</div>
 </section>
 
 <section class="panel" id="playbooks">
 <h2>Scheduling &amp; comparison playbooks <span class="h2sub">questions DBAs actually ask, as ready-to-paste commands</span></h2>
+<div class="body">
 
   <h3>“What's different this morning vs my normal Monday?”</h3>
 <div class="codewrap"><button type="button" class="copy-btn" data-copy="#cs-playbooks-1">Copy</button>
@@ -572,10 +597,12 @@ line=<span class="s">"$(grep -nF "src=\"$lib\"" "$html" | head -1 | cut -d: -f1)
 <div class="codewrap"><button type="button" class="copy-btn" data-copy="#cs-playbooks-5">Copy</button>
 <pre class="sql" id="cs-playbooks-5">./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h</pre>
 </div>
+</div>
 </section>
 
 <section class="panel" id="retention">
 <h2>AWR retention check <span class="h2sub">check dba_hist_wr_control before any long-lookback recipe</span></h2>
+<div class="body">
   <p>
     Before you run any of the longer-lookback recipes, verify your AWR retention
     covers the span you ask for:
@@ -612,10 +639,12 @@ DEFINE marker_file = <span class="s">''</span>
 DEFINE profile_days = 0
 DEFINE markers = <span class="s">''</span></pre>
 </div>
+</div>
 </section>
 
 <section class="panel" id="fleet">
 <h2>Fleet report <span class="h2sub">run_awr_fleet.sh &mdash; many databases, one worst-first page</span></h2>
+<div class="body">
   <p>
     A separate wrapper, <code>run_awr_fleet.sh</code>, runs the same comparison across a whole
     <code>fleet.conf</code> (one <code>alias|connect</code> per line) and stitches every database
@@ -642,6 +671,7 @@ DEFINE markers = <span class="s">''</span></pre>
   <p><em>Positional order is
   <code>fleet.conf [target_end] [win_hours] [weeks_back] [top_n] [step] [step_unit]</code>.
   <code>MARKER_FILE=&lt;file&gt;</code> of <code>WHEN|LABEL</code> lines wins over <code>MARKERS</code>.</em></p>
+</div>
 </section>
 
 </main>
