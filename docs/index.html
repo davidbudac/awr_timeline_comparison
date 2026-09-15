@@ -16,11 +16,14 @@
 
 <div class="topbar">
   <div class="wrap">
-    <a class="brand" href="index.html"><span class="dot"></span>AWR Timeline Comparison</a>
+    <a class="brand" href="index.html"><span class="dot"></span><span class="long">AWR Timeline Comparison</span><span class="short">AWR TC</span></a>
     <span class="rev">Datasheet &middot; Rev 1.4.0</span>
+    <div class="quick" aria-label="Quick access">
+      <a class="ql demo" href="examples/demo_busy_db.html"><span class="g">&#9654;</span><span class="t">Demo report</span><span class="ts">Demo</span></a>
+      <a class="ql" href="#s-install"><span class="g">&#8595;</span>Install</a>
+    </div>
     <button type="button" class="menu-btn" aria-expanded="false" aria-controls="site-links">Contents</button>
     <nav class="links" id="site-links" aria-label="Site">
-      <a href="#s-overview">Overview</a>
       <a href="#s-spec">Characteristics</a>
       <a href="#s-fleet">Fleet</a>
       <a href="#s-single">Single DB</a>
@@ -89,17 +92,37 @@
   </div>
 </header>
 
+<div class="landmarks" id="quick-access">
+  <a class="lm demo" href="examples/demo_busy_db.html">
+    <span class="ico">&#9654;</span>
+    <span><span class="kicker">Quick access &middot; Demo report</span><h3>Open the demo report</h3><p>A busy production database over twelve weeks: four releases, a patch, a plan flip in the current window. Every section live.</p></span>
+    <span class="go">open &rarr;</span>
+  </a>
+  <a class="lm" href="#s-install">
+    <span class="ico">&#8595;</span>
+    <span><span class="kicker">Quick access &middot; Installation</span><h3>Install and run in four steps</h3><p>Clone, point SQL*Plus at a user that can read the AWR views, run one command. Nothing is created in the database.</p></span>
+    <span class="go">section 4 &rarr;</span>
+  </a>
+</div>
+
+<aside class="quickrail" aria-label="Quick access">
+  <h6>Quick access</h6>
+  <a class="rl demo" href="examples/demo_busy_db.html"><span class="kicker">&#9654; Demo report</span><b>Open the demo</b><span>Busy database, 12 weeks, releases marked</span></a>
+  <a class="rl" href="#s-install"><span class="kicker">&#8595; Installation</span><b>Install &amp; first run</b><span>Section 4, four steps</span></a>
+  <a class="rl" href="#s-examples"><span class="kicker">&#9654; Examples</span><b>All example reports</b><span>Section 8</span></a>
+</aside>
+
 <div class="contents">
   <h5>Contents</h5>
   <ol>
     <li><span class="n">1</span><a href="#s-overview">Overview</a></li>
     <li><span class="n">2</span><a href="#s-spec">Key characteristics</a></li>
     <li><span class="n">3</span><a href="#s-method">Method of operation</a></li>
-    <li><span class="n">4</span><a href="#s-install">Installation</a></li>
+    <li class="hot"><span class="n">4</span><a href="#s-install">Installation</a><span class="qmark">Quick access</span></li>
     <li><span class="n">5</span><a href="#s-fleet">Fleet console</a></li>
     <li><span class="n">6</span><a href="#s-single">Single-database report</a></li>
     <li><span class="n">7</span><a href="#s-templates">Templates</a></li>
-    <li><span class="n">8</span><a href="#s-examples">Example reports</a></li>
+    <li class="hot"><span class="n">8</span><a href="#s-examples">Example reports</a><span class="qmark">Quick access</span></li>
     <li><span class="n">9</span><a href="#s-refs">References</a></li>
   </ol>
 </div>
@@ -200,8 +223,8 @@
   </div>
 </section>
 
-<section class="ds" id="s-install">
-  <h2>Installation</h2>
+<section class="ds hot" id="s-install">
+  <h2>Installation <span class="qmark">Quick access</span></h2>
   <div class="body">
     <p class="prose">Nothing is installed in the database. Clone the repository on any machine with SQL*Plus and a user that can read the AWR views; a read-only standby that exposes AWR works too.</p>
     <div class="proc" id="p-install">
@@ -347,8 +370,8 @@ SQL&gt; <span class="k">@awr_trend.sql</span></pre></div></li>
   </div>
 </section>
 
-<section class="ds" id="s-examples">
-  <h2>Example reports</h2>
+<section class="ds hot" id="s-examples">
+  <h2>Example reports <span class="qmark">Quick access</span></h2>
   <div class="body">
     <p class="prose">Single HTML files exactly as the toolkit spooled them. Three are real reports from a small lab database; the first is synthetic (a generated dataset of a busy production database over three months) so that every section has something to show.</p>
     <div class="ex-rows">

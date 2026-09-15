@@ -35,7 +35,7 @@
         if (e.target.tagName === "A") { links.classList.remove("open"); mb.setAttribute("aria-expanded", "false"); }
       });
     }
-    var spyLinks = [].slice.call(doc.querySelectorAll('.topbar .links a[href^="#"], .subnav a[href^="#"]'));
+    var spyLinks = [].slice.call(doc.querySelectorAll('.topbar .links a[href^="#"], .topbar .quick a[href^="#"], .subnav a[href^="#"]'));
     var targets = spyLinks.map(function (a) { return doc.getElementById(a.getAttribute("href").slice(1)); });
     function spy() {
       var y = window.scrollY + 100;

@@ -7,6 +7,12 @@ entry here. Dates are release dates.
 
 ## Unreleased
 
+- **Website (`docs/`): quick access to the demo report and installation.**
+  Filled "Demo report" / "Install" pills in the top bar of every page (kept
+  on phones), a two-card "Quick access" strip under the title block, a
+  sticky quick-access rail on wide screens, and a "Quick access" mark on
+  the Installation and Example reports headings and contents entries. The
+  top bar collapses to its menu below 1120px so the pills always fit.
 - **Website redesign (`docs/`): "Datasheet" direction.** Light paper,
   hairline tables, numbered sections / figures / tables / procedures, a Key
   characteristics spec table up front, a Contents block; sober and
