@@ -160,8 +160,9 @@
 
 <div class="topbar">
   <div class="wrap">
-    <a class="brand" href="index.html"><span class="dot"></span>AWR &middot; Timeline comparison</a>
-    <button type="button" class="menu-btn" aria-expanded="false" aria-controls="site-links">Menu</button>
+    <a class="brand" href="index.html"><span class="dot"></span>AWR Timeline Comparison</a>
+    <span class="rev">Configurator &middot; Rev 1.4.0</span>
+    <button type="button" class="menu-btn" aria-expanded="false" aria-controls="site-links">Contents</button>
     <nav class="links" id="site-links" aria-label="Site">
       <a href="index.html">Home</a>
       <a href="index.html#fleet">Fleet</a>
@@ -183,6 +184,7 @@
 
 <header class="page-hero" id="top">
   <div class="wrap">
+    <div class="meta-row"><span>AWR Timeline Comparison &middot; Configurator</span><span>Rev 1.4.0 &middot; September 2026 &middot; Oracle Database 19c</span></div>
     <span class="eyebrow"><span class="dot"></span>Configurator &middot; runs in your browser</span>
     <h1>Build your <em>run command</em></h1>
     <p class="lede">Connect, pick what to compare, and copy a ready-to-run
@@ -191,7 +193,7 @@
         The shell wrapper has the same thing built in &mdash; run
         <code>./run_awr_trend.sh --configure</code>.</p>
     <div class="ctas"><a class="btn primary" href="#output">Your command</a><a class="btn" href="#step-compare">Pick a scenario</a><a class="btn ghost" href="cheatsheet.html">Cheat sheet</a></div>
-    <nav class="subnav" aria-label="On this page">
+    <nav class="subnav" aria-label="On this page"><span class="muted mono" style="font-size:12px">Contents:</span>
       <a href="#step-connect">1 &middot; Connect</a>
       <a href="#step-compare">2 &middot; What to compare</a>
       <a href="#step-tune">3 &middot; Fine-tune</a>
@@ -203,8 +205,9 @@
 
 <main id="main" tabindex="-1" class="wrap">
 
-<section class="panel" id="build">
+<section class="ds" id="build">
   <h2>Build the command <span class="h2sub">three steps; the command on the right updates live as you go</span></h2>
+<div class="body">
   <p class="lede">
     Three steps: <b>connect</b>, choose <b>what to compare</b>, and copy your command. Everything
     else has a sensible default &mdash; open <b>Fine-tune</b> if you want to adjust it.
@@ -428,6 +431,7 @@
     </aside>
 
   </div>
+</div>
 </section>
 
 </main>
