@@ -596,8 +596,21 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('tr.warn { background:var(--warn-bg); }'
         || ' tr.warn td:first-child { box-shadow:inset 3px 0 0 var(--warn); }');
     DBMS_OUTPUT.PUT_LINE('tr.ok   { background:transparent; }');
-    DBMS_OUTPUT.PUT_LINE('tr.info { background:var(--info-bg); }');
+    DBMS_OUTPUT.PUT_LINE('tr.info { background:var(--info-bg); }'
+        || ' tr.info td:first-child { box-shadow:inset 3px 0 0 var(--info); }');
     DBMS_OUTPUT.PUT_LINE('tr.skip { color:var(--muted); font-style:italic; }');
+    -- v1.5.0 findings rollup: non-canonical twins are muted, family
+    -- members under a movers lead row are indented, and the table-wide
+    -- shift note (04/05) reads as a callout.
+    DBMS_OUTPUT.PUT_LINE('tr.twin td { color:var(--muted); }'
+        || ' tr.twin td:first-child { box-shadow:none; }'
+        || ' tr.twin { background:transparent; }');
+    DBMS_OUTPUT.PUT_LINE('tr.member td:first-child { padding-left:26px; }');
+    DBMS_OUTPUT.PUT_LINE('.movers-list li.twin { color:var(--muted); }'
+        || ' .movers-list li.improved .m-z { color:var(--info); }');
+    DBMS_OUTPUT.PUT_LINE('.shift-note { font-size:12px; color:var(--ink-soft);'
+        || ' background:var(--warn-bg); border-left:3px solid var(--warn);'
+        || ' padding:6px 10px; border-radius:6px; margin:6px 0 8px; }');
 
     -- =========================================================
     -- Badges: soft tinted chips (workbench style)

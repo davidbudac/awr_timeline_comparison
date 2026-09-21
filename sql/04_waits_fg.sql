@@ -63,6 +63,21 @@ DECLARE
     TYPE t_class_tab IS TABLE OF t_class_rec;
     v_classes t_class_tab;
 
+    -- Materiality + table-wide shift (v1.5.0): the Current window's total
+    -- non-idle wait time (share denominator for score_cells), and a
+    -- pre-pass over the time table that detects a table-wide shift --
+    -- >= 5 flagged rows whose % deltas sit within a narrow band (CV < 0.15),
+    -- i.e. one throughput-style story, not N separate findings.
+    v_tot_cur_us NUMBER;
+    v_shift      VARCHAR2(1) := 'N';
+    v_n_flag     PLS_INTEGER := 0;
+    v_sum_pct    NUMBER := 0;
+    v_sumsq_pct  NUMBER := 0;
+    v_pct        NUMBER;
+    v_mean_pct   NUMBER;
+    v_sd_pct     NUMBER;
+    v_share      NUMBER;
+
     @@sql/lib/nth_csv.plsql
     @@sql/lib/score_cells.plsql
     @@sql/lib/is_essential.plsql
@@ -317,8 +332,65 @@ BEGIN
         MAX(CASE WHEN week_offset = 0 THEN rnk END) NULLS LAST,
         MAX(time_waited_us) DESC;
 
+    -- Current window's total non-idle foreground wait (materiality share).
+    SELECT SUM(NVL(end_us, 0) - NVL(beg_us, 0))
+    INTO   v_tot_cur_us
+    FROM (
+        WITH
+        @@sql/lib/windows_cte.sql
+        ,
+        wait_targets AS (
+            @@~template_dir/wait_event_targets.sql
+        ),
+        pairs AS (
+            SELECT se.event_name, se.instance_number, se.snap_id, se.time_waited_micro,
+                   w.begin_snap_id, w.end_snap_id
+            FROM   valid_windows w
+            JOIN   dba_hist_system_event se
+                ON se.dbid = w.dbid
+               AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
+               AND se.instance_number = w.instance_number
+               AND se.wait_class <> 'Idle'
+               AND ( EXISTS (SELECT 1 FROM wait_targets WHERE event_name = '*')
+                     OR se.event_name IN (SELECT event_name FROM wait_targets) )
+            WHERE  w.week_offset = 0
+        )
+        SELECT SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro END) AS beg_us,
+               SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us
+        FROM   pairs
+        GROUP BY instance_number, event_name
+    );
+
+    -- Pre-pass for the table-wide-shift note (time table only).
+    FOR i IN 1 .. NVL(v_evts.COUNT, 0) LOOP
+        v_share := CASE WHEN v_tot_cur_us > 0 THEN v_evts(i).cur_us / v_tot_cur_us END;
+        IF score_bucket(v_evts(i).cur_us, v_evts(i).mu_us, v_evts(i).sd_us,
+                        v_evts(i).n_us, v_share, 'Y') IN ('large', 'moderate')
+           AND v_evts(i).mu_us <> 0 THEN
+            v_pct := (v_evts(i).cur_us - v_evts(i).mu_us) / ABS(v_evts(i).mu_us) * 100;
+            v_n_flag    := v_n_flag + 1;
+            v_sum_pct   := v_sum_pct + v_pct;
+            v_sumsq_pct := v_sumsq_pct + v_pct * v_pct;
+        END IF;
+    END LOOP;
+    IF v_n_flag >= 5 THEN
+        v_mean_pct := v_sum_pct / v_n_flag;
+        v_sd_pct   := SQRT(GREATEST(v_sumsq_pct / v_n_flag - v_mean_pct * v_mean_pct, 0));
+        IF v_mean_pct <> 0 AND v_sd_pct / ABS(v_mean_pct) < 0.15 THEN
+            v_shift := 'Y';
+        END IF;
+    END IF;
+
     -- Table A: total time waited (s)
     DBMS_OUTPUT.PUT_LINE('<h3>Top ' || v_top_n || ' events &mdash; time waited (s)</h3>');
+    IF v_shift = 'Y' THEN
+        DBMS_OUTPUT.PUT_LINE('<p class="shift-note"><b>Table-wide shift:</b> '
+            || v_n_flag || ' of ' || v_evts.COUNT || ' events moved together ('
+            || CASE WHEN v_mean_pct >= 0 THEN '&#9650; ' ELSE '&#9660; ' END
+            || TO_CHAR(ABS(v_mean_pct), 'FM99990') || '% &plusmn; '
+            || TO_CHAR(v_sd_pct, 'FM99990') || ' points) &mdash; one throughput-style change, '
+            || 'not ' || v_n_flag || ' separate findings. Per-row badges are demoted to moderate.</p>');
+    END IF;
     v_header := '<thead><tr><th>Event</th><th class="trend">Trend</th><th class="num" data-w="0">Current (s)</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
@@ -356,10 +428,12 @@ BEGIN
             END IF;
             v_row := v_row || '</td>';
         END LOOP;
+        v_share := CASE WHEN v_tot_cur_us > 0 THEN v_evts(i).cur_us / v_tot_cur_us END;
         v_row := v_row || score_cells(v_evts(i).cur_us,
                                        v_evts(i).mu_us,
                                        v_evts(i).sd_us,
-                                       v_evts(i).n_us);
+                                       v_evts(i).n_us,
+                                       v_share, 'Y', v_shift);
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
     END LOOP;
@@ -400,7 +474,8 @@ BEGIN
         v_row := v_row || score_cells(v_evts(i).cur_ms,
                                        v_evts(i).mu_ms,
                                        v_evts(i).sd_ms,
-                                       v_evts(i).n_ms);
+                                       v_evts(i).n_ms,
+                                       NULL, 'Y');
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
     END LOOP;
@@ -507,10 +582,12 @@ BEGIN
                       || fmt_num(v_us) || '</td>';
             END IF;
         END LOOP;
+        v_share := CASE WHEN v_tot_cur_us > 0 THEN v_classes(i).cur_us / v_tot_cur_us END;
         v_row := v_row || score_cells(v_classes(i).cur_us,
                                        v_classes(i).mu_us,
                                        v_classes(i).sd_us,
-                                       v_classes(i).n_us);
+                                       v_classes(i).n_us,
+                                       v_share, 'Y');
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
     END LOOP;

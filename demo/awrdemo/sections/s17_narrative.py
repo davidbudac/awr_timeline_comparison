@@ -87,8 +87,10 @@ class _Stats:
         cur, mu, sd, n = self.d[p]
         if n is None or n < 3:
             return False
-        if sd is not None and sd > 0 and sd >= 0.01 * abs(mu):
-            return abs((cur - mu) / sd) > 3
+        if mu != 0 and abs((cur - mu) / abs(mu) * 100) < 10:
+            return False
+        if sd is not None and max(sd, 0.02 * abs(mu)) > 0:
+            return abs((cur - mu) / max(sd, 0.02 * abs(mu))) > 3
         if mu == 0:
             return cur != 0
         if cur == 0:
@@ -308,8 +310,8 @@ def _r10(w):
         cur_val = per_win.get(0)
         mu, sd, n = mean_sd([v for k, v in per_win.items() if k > 0])
         rank = 3
-        if n >= 3 and sd is not None and sd != 0 and cur_val is not None:
-            z = abs((cur_val - mu) / sd)
+        if n >= 3 and sd is not None and max(sd, 0.02 * abs(mu)) > 0 and cur_val is not None:
+            z = abs((cur_val - mu) / max(sd, 0.02 * abs(mu)))
             rank = 1 if z > 3 else (2 if z > 2 else 3)
         cands.append((rank, -cb.elapsed_us, sid, cb, pb))
     if not cands:

@@ -1,6 +1,9 @@
 # UI/UX improvements + findings reduction — implementation plan (2026-09-21)
 
-Status: **proposed, not implemented.** This document is the outcome of a
+Status: **in progress on `claude/ui-ux-improvements-buwjzo`.** Phase 1
+implemented 2026-09-21 (see the per-item notes marked DONE below and the
+CHANGELOG "Unreleased" entry); phases 2-6 pending. This document is the
+outcome of a
 UI/UX audit of the single-DB report (v1.4.0 chrome) rendered from
 `docs/examples/demo_busy_db.html` at 1440 px and 390 px in light, dark,
 Triage and Essential modes, plus a markup audit of `sql/00_params.sql`
@@ -157,7 +160,17 @@ with the pinned test window (`target_end='2026-09-04 12:00'`, `win_hours=1`,
 expected from any phase (markup changes throughout); verify by eye and by
 the headless checks. Version bump: 1.5.0, one CHANGELOG entry per phase.
 
-### Phase 1 — Fewer findings, same information (scoring presentation)
+### Phase 1 — Fewer findings, same information (scoring presentation) — DONE 2026-09-21
+
+Implementation notes that differ from the proposal: the wait share gate
+uses the Current window's **total non-idle wait time** (07: across
+classes; 04/05: one scalar query over all events), not DB time, so all
+three sections agree; the movers table is `data-nosort` (lead rows and
+their member rows must stay adjacent); the verdict and the 07 heading
+count **families** with a flagged lead ("9 findings"), the 07 row badges
+still count canonical rows ("11 large"); hero cards got the rule but no
+"lead of family" foot (low value); the day-wide rollup also stops those
+stats' cells from grading the hour rows.
 
 **1.1 Canonical-quantity map (`sql/lib/finding_family.plsql`, new).**
 A `@@`-included PL/SQL function trio, single-sourced for 00/07/08/17 and

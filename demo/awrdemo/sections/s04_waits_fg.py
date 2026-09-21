@@ -42,8 +42,11 @@ def emit(w) -> str:
 
     # ---- top-N events, two tables
     rows = C.event_rows(w, deltas)
+    tot = C.current_total_us(deltas)
+    shift, n_flag, mean_pct, sd_pct = C.shift_pass(rows, tot)
     L.extend(C.table_time(w, rows, "waits-fg-time",
-                          "Top " + str(top_n) + " events &mdash; time waited (s)"))
+                          "Top " + str(top_n) + " events &mdash; time waited (s)",
+                          tot, shift, C.shift_note(rows, shift, n_flag, mean_pct, sd_pct)))
     L.extend(C.table_avg(w, rows, "waits-fg-avg",
                          "Top " + str(top_n) + " events &mdash; avg time per wait (ms)"))
 
@@ -75,7 +78,8 @@ def emit(w) -> str:
                 us = float(us_s)
                 row += ('<td class="num" data-w="' + str(k) + '"' + h.dev_attr(cur_s, us) + ">"
                         + h.fmt_num(us) + "</td>")
-        row += h.score_cells(r["cur_us"], r["mu_us"], r["sd_us"], r["n_us"])
+        share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
+        row += h.score_cells(r["cur_us"], r["mu_us"], r["sd_us"], r["n_us"], share, "Y")
         row += "</tr>"
         L.append(row)
     L.append("</tbody></table></section>")

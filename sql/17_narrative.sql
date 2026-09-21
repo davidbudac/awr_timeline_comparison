@@ -164,16 +164,20 @@ DECLARE
         RETURN v_stats(p).cur / v_stats(p).mu;
     END ratio;
 
-    -- "LARGE": section 07's |z| > 3, with a 2x ratio stand-in when the
-    -- baseline sigma is degenerate and z would be meaningless / infinite.
+    -- "LARGE": section 07's |z| > 3 over the floored sigma (max(sd, 2% of
+    -- |mu|)) AND a material move (|pct| >= 10), with a 2x ratio stand-in
+    -- when the baseline sigma is degenerate and z would be meaningless.
     FUNCTION big(p VARCHAR2) RETURN BOOLEAN IS
         r stat_rec;
     BEGIN
         IF NOT has(p) THEN RETURN FALSE; END IF;
         r := v_stats(p);
         IF r.n IS NULL OR r.n < 3 THEN RETURN FALSE; END IF;
-        IF r.sd IS NOT NULL AND r.sd > 0 AND r.sd >= 0.01 * ABS(r.mu) THEN
-            RETURN ABS((r.cur - r.mu) / r.sd) > 3;
+        IF r.mu <> 0 AND ABS((r.cur - r.mu) / ABS(r.mu) * 100) < 10 THEN
+            RETURN FALSE;
+        END IF;
+        IF r.sd IS NOT NULL AND GREATEST(r.sd, 0.02 * ABS(r.mu)) > 0 THEN
+            RETURN ABS((r.cur - r.mu) / GREATEST(r.sd, 0.02 * ABS(r.mu))) > 3;
         END IF;
         IF r.mu  = 0 THEN RETURN r.cur <> 0; END IF;
         IF r.cur = 0 THEN RETURN TRUE;       END IF;
@@ -983,10 +987,12 @@ BEGIN
                 JOIN   prior_best pb ON pb.sql_id = i.sql_id AND pb.rn = 1
                 LEFT JOIN pivoted p  ON p.sql_id  = i.sql_id
                 ORDER BY
-                    CASE WHEN p.n_prior >= 3 AND p.sd IS NOT NULL AND p.sd <> 0
-                              AND ABS((p.cur_val - p.mu) / p.sd) > 3 THEN 1
-                         WHEN p.n_prior >= 3 AND p.sd IS NOT NULL AND p.sd <> 0
-                              AND ABS((p.cur_val - p.mu) / p.sd) > 2 THEN 2
+                    CASE WHEN p.n_prior >= 3 AND p.sd IS NOT NULL
+                              AND GREATEST(p.sd, 0.02 * ABS(p.mu)) > 0
+                              AND ABS((p.cur_val - p.mu) / GREATEST(p.sd, 0.02 * ABS(p.mu))) > 3 THEN 1
+                         WHEN p.n_prior >= 3 AND p.sd IS NOT NULL
+                              AND GREATEST(p.sd, 0.02 * ABS(p.mu)) > 0
+                              AND ABS((p.cur_val - p.mu) / GREATEST(p.sd, 0.02 * ABS(p.mu))) > 2 THEN 2
                          ELSE 3 END,
                     cb.elapsed_us DESC NULLS LAST
                 FETCH FIRST 1 ROWS ONLY

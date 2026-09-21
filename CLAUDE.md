@@ -80,7 +80,8 @@ sql/
     ├── is_oracle_schema.plsql-- 'Y'/'N' Oracle-maintained parsing-schema test
     │                         --   (drives the "Application only" data-sys tag)
     ├── is_essential.plsql    -- curated LOAD/METRIC/WAIT name test (Essential rows data-imp tag)
-    ├── score_cells.plsql     -- change-pill / z / %delta <td> triple (04/05 Change column)
+    ├── finding_family.plsql  -- family / canonical / higher-is-worse per scored name (00/07/08)
+    ├── score_cells.plsql     -- score_z / score_bucket / score_cells (04/05/06/14/15/18 Change column)
     ├── json_escape.plsql     -- escapes a string for a JSON literal on one PUT_LINE
     ├── put_clob_chunked.plsql-- emits a CLOB payload in PUT_LINE-sized chunks
     ├── fmt_num.plsql         -- T7: consistent value-cell number formatting (fmt_num/fmt_int)
@@ -649,8 +650,24 @@ no-op.
 
 ### Severity classes (keep aligned with `_style.sql`)
 `CRITICAL`→`crit`, `WARN`→`warn`, `OK`→`ok`,
-`INSUFFICIENT_HISTORY`/`FLAT_BASELINE`→`skip`, informational→`info`. A new
-severity must update `07_summary.sql`, `08_overview.sql`, and `_style.sql`.
+`INSUFFICIENT_HISTORY`/`FLAT_BASELINE`→`skip`, informational and the
+`improved` bucket→`info`. A new severity must update `07_summary.sql`,
+`08_overview.sql`, `score_cells.plsql`, and `_style.sql`.
+
+### Scoring rule (v1.5.0) — one rule, six copies
+z = (cur − μ) ÷ **max(σ, 2% of |μ|)**; large > 3, moderate > 2, but only
+when **material**: |%Δ| ≥ 10 and, for wait rows, share of the Current
+total ≥ 2% (else `typical` + an "immaterial" badge); a material drop in a
+name whose `higher_is_worse()` is `'Y'` is `improved`. The rule is
+duplicated, by design, in `07_summary.sql` (SQL CASE + PL/SQL improved
+pass), `00_params.sql` (verdict), `08_overview.sql`, `day_profile_cte.sql`
+(no share gate), `17_narrative.sql` (`big()` + R10 ORDER BY) and
+`sql/lib/score_cells.plsql` (`score_bucket`, used by 04/05 with a share
+and by 06/14/15/18 with defaults) — change one, change all, and the demo
+twins in `demo/awrdemo/helpers.py` (`z_and_pct` / `bucket_of`).
+`finding_family.plsql` decides which names fold: a non-canonical twin is
+scored and rendered (`tr.twin`, muted) but never counted (07 heading, 00
+verdict, rail pills, J/K jumps all skip `tr.twin` / `tr.member`).
 
 ### Findings are recomputed, not shared
 Sections 07 and 08 each recompute their own z-scores. The LOAD/METRIC/WAIT target

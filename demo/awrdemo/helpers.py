@@ -170,27 +170,41 @@ def mean_sd(vals):
 
 
 def z_and_pct(cur, mu, sd):
-    z = None if (cur is None or mu is None or sd is None or sd == 0) else (cur - mu) / sd
+    """z over the floored sigma max(sd, 2% of |mu|) (v1.5.0), % delta."""
+    if cur is None or mu is None or sd is None:
+        z = None
+    else:
+        den = max(sd, 0.02 * abs(mu))
+        z = None if den == 0 else (cur - mu) / den
     pct = None if (cur is None or mu is None or mu == 0) else (cur - mu) / abs(mu) * 100
     return z, pct
 
 
-def bucket_of(cur, n, sd, z):
-    """The report's change bucket (07/08/score_cells 'scored' CASE)."""
+def bucket_of(cur, n, sd, z, pct=None, share=None, dir="-", demote=False, mu=None):
+    """The report's change bucket (07/08/score_bucket rule, v1.5.0):
+    |z| tiers, then the materiality floor (|pct| >= 10, share >= 2%), then
+    the 'improved' override for a drop in a cost-type name, then demotion.
+    `pct` / `mu` are only consulted when given (07's SQL computes pct from
+    cur/mu; pass mu so the improved test can compare)."""
     if cur is None:
         return "n/a"
     if (n or 0) < 3:
         return "insufficient history"
-    if sd is None or sd == 0:
+    if sd is None or z is None:
         return "flat baseline"
-    if abs(z) > 3:
-        return "large"
-    if abs(z) > 2:
+    if abs(z) <= 2:
+        return "typical"
+    if (pct is not None and abs(pct) < 10) or (share is not None and share < 0.02):
+        return "typical"
+    raw = "large" if abs(z) > 3 else "moderate"
+    if dir == "Y" and mu is not None and cur < mu:
+        return "improved"
+    if demote and raw == "large":
         return "moderate"
-    return "typical"
+    return raw
 
 
-BUCKET_CLS = {"large": "crit", "moderate": "warn", "typical": "ok"}
+BUCKET_CLS = {"large": "crit", "moderate": "warn", "typical": "ok", "improved": "info"}
 
 
 def bucket_cls(bucket: str) -> str:
@@ -224,20 +238,107 @@ def pct_txt(pct) -> str:
 
 
 SIG_BADGE = (' <span class="badge sig" title="baseline barely moved: '
-             '&sigma; below 1% of mean; read the % delta instead">'
+             '&sigma; below 1% of mean (floored to 2% for z); read the % delta instead">'
              '&sigma;&approx;0</span>')
 
+IMM_BADGE = (' <span class="badge sig" title="|z| above 2 but the move is below the '
+             'materiality floor (10% delta, 2% share of the Current total)">'
+             'immaterial</span>')
 
-def score_cells(cur, mu, sd, n) -> str:
+# 07's variant of the immaterial badge (different wording of the title)
+IMM_BADGE_07 = (' <span class="badge sig" title="|z| above 2 but the move is below '
+                'the materiality floor (10% delta; 2% of the Current total for waits)">'
+                'immaterial</span>')
+
+
+def score_cells(cur, mu, sd, n, share=None, dir="-", demote=False) -> str:
+    """sql/lib/score_cells.plsql score_cells(cur, mu, sd, n, share, dir, demote)."""
     z, pct = z_and_pct(cur, mu, sd)
-    bucket = bucket_of(cur, n, sd, z)
+    bucket = bucket_of(cur, n, sd, z, pct=pct, share=share, dir=dir, demote=demote, mu=mu)
     cls = bucket_cls(bucket)
     sig = sigma_flag(mu, sd)
+    imm = bucket == "typical" and z is not None and abs(z) > 2
     zt = z_txt(z, 2)
     pt = pct_txt(pct)
-    return ('<td><span class="badge ' + cls + '">' + bucket + '</span></td>'
-            '<td class="num">' + zt + (SIG_BADGE if sig else "") + '</td>'
+    title = (' title="part of a table-wide shift; see the note above the table"'
+             if demote and bucket == "moderate" else "")
+    return ('<td><span class="badge ' + cls + '"' + title + '>' + bucket + '</span></td>'
+            '<td class="num">' + zt + (SIG_BADGE if sig else "") + (IMM_BADGE if imm else "") + '</td>'
             '<td class="num">' + ("<b>" + pt + "</b>" if sig else pt) + '</td>')
+
+
+# ---------------------------------------------------------------------
+# sql/lib/finding_family.plsql
+# ---------------------------------------------------------------------
+
+_FAM_LOAD = {
+    "DB time": "DB_TIME", "DB CPU": "CPU", "CPU used by this session": "CPU",
+    "session logical reads": "LOGICAL_IO", "physical reads": "READ_IO",
+    "physical read total bytes": "READ_IO", "table scans (long tables)": "SCANS",
+    "table fetch by rowid": "LOGICAL_IO", "physical writes": "WRITE_IO",
+    "physical write total bytes": "WRITE_IO", "redo size": "REDO",
+    "redo size for lost write detection": "REDO", "redo writes": "REDO",
+    "user calls": "CALLS", "execute count": "EXEC", "user commits": "COMMIT",
+    "user rollbacks": "ROLLBACK", "parse count (total)": "PARSE",
+    "parse count (hard)": "HARD_PARSE", "parse count (failures)": "HARD_PARSE",
+    "sorts (memory)": "SORTS", "sorts (rows)": "SORTS", "sorts (disk)": "SORTS_DISK",
+    "logons cumulative": "SESSIONS", "opened cursors cumulative": "CURSORS",
+    "bytes sent via SQL*Net to client": "NETWORK",
+    "bytes received via SQL*Net from client": "NETWORK",
+}
+_FAM_METRIC = {
+    "Average Active Sessions": "DB_TIME", "Host CPU Utilization (%)": "CPU",
+    "Database CPU Time Ratio": "CPU_WAIT_RATIO", "Database Wait Time Ratio": "CPU_WAIT_RATIO",
+    "Logical Reads Per Sec": "LOGICAL_IO", "Physical Reads Per Sec": "READ_IO",
+    "Physical Read Total IO Requests Per Sec": "READ_IO",
+    "Physical Read Total Bytes Per Sec": "READ_IO",
+    "Average Synchronous Single-Block Read Latency": "READ_IO",
+    "Physical Writes Per Sec": "WRITE_IO", "Physical Write Total IO Requests Per Sec": "WRITE_IO",
+    "Physical Write Total Bytes Per Sec": "WRITE_IO", "Redo Generated Per Sec": "REDO",
+    "User Calls Per Sec": "CALLS", "Executions Per Sec": "EXEC", "User Commits Per Sec": "COMMIT",
+    "User Rollbacks Per Sec": "ROLLBACK", "Total Parse Count Per Sec": "PARSE",
+    "Hard Parse Count Per Sec": "HARD_PARSE", "Logons Per Sec": "SESSIONS",
+    "Session Count": "SESSIONS", "Network Traffic Volume Per Sec": "NETWORK",
+    "SQL Service Response Time": "RESPONSE",
+}
+_NON_CANON = {
+    "Average Active Sessions", "Logical Reads Per Sec", "Physical Reads Per Sec",
+    "Physical Read Total Bytes Per Sec", "Physical Writes Per Sec",
+    "Physical Write Total Bytes Per Sec", "Redo Generated Per Sec", "User Calls Per Sec",
+    "Executions Per Sec", "User Commits Per Sec", "User Rollbacks Per Sec",
+    "Total Parse Count Per Sec", "Hard Parse Count Per Sec", "Logons Per Sec",
+    "Database CPU Time Ratio",
+}
+_WORSE_LOAD = {"parse count (hard)", "parse count (failures)", "sorts (disk)",
+               "user rollbacks", "table scans (long tables)"}
+_WORSE_METRIC = {"Average Synchronous Single-Block Read Latency", "SQL Service Response Time",
+                 "Database Wait Time Ratio", "Hard Parse Count Per Sec", "User Rollbacks Per Sec"}
+
+
+def finding_family(domain, name) -> str:
+    if not name:
+        return "OTHER"
+    if domain == "WAIT":
+        return "WAIT:" + (name[len("Wait class: "):] if name.startswith("Wait class: ") else name)
+    if domain == "LOAD":
+        return _FAM_LOAD.get(name, "OTHER")
+    if domain == "METRIC":
+        return _FAM_METRIC.get(name, "OTHER")
+    return "OTHER"
+
+
+def is_canonical(domain, name) -> str:
+    return "N" if (domain == "METRIC" and name in _NON_CANON) else "Y"
+
+
+def higher_is_worse(domain, name) -> str:
+    if domain == "WAIT":
+        return "Y"
+    if domain == "LOAD" and name in _WORSE_LOAD:
+        return "Y"
+    if domain == "METRIC" and name in _WORSE_METRIC:
+        return "Y"
+    return "-"
 
 
 # ---------------------------------------------------------------------

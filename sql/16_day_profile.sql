@@ -72,6 +72,17 @@ DECLARE
     v_crit      NUMBER := 0;
     v_warn      NUMBER := 0;
     v_hours_hit NUMBER := 0;
+    -- Day-wide shifts: a stat with >= 12 flagged hours in the same
+    -- direction is ONE finding (median z, hour count), not 12-24 cells.
+    v_up        num_t;        -- per ord: flagged hours above the prior days
+    v_down      num_t;        -- per ord: flagged hours below
+    v_shift     num_t;        -- per ord: +1 / -1 when day-wide, else 0
+    v_zs        num_t;        -- scratch: |z| of the flagged hours, for the median
+    v_nz        PLS_INTEGER;
+    v_medz      NUMBER;
+    v_nshift    NUMBER := 0;
+    v_isolated  NUMBER := 0;
+    v_tmpz      NUMBER;
     v_hour_hit  BOOLEAN;
     v_has_cur   BOOLEAN := FALSE;   -- any current-day cell populated?
     v_key       VARCHAR2(40);
@@ -138,8 +149,25 @@ BEGIN
             v_colmax(c.ord) := 0;
         END IF;
         v_colmax(c.ord) := GREATEST(v_colmax(c.ord), NVL(ABS(c.cur_val), 0), NVL(ABS(c.mu), 0));
+        IF NOT v_up.EXISTS(c.ord) THEN
+            v_up(c.ord) := 0; v_down(c.ord) := 0; v_shift(c.ord) := 0;
+        END IF;
         IF c.change_bucket = 'large' THEN v_crit := v_crit + 1;
         ELSIF c.change_bucket = 'moderate' THEN v_warn := v_warn + 1;
+        END IF;
+        IF c.change_bucket IN ('large', 'moderate') THEN
+            IF c.z_score >= 0 THEN v_up(c.ord) := v_up(c.ord) + 1;
+            ELSE                   v_down(c.ord) := v_down(c.ord) + 1;
+            END IF;
+        END IF;
+    END LOOP;
+    -- Day-wide classification per stat.
+    FOR o IN 1 .. v_nstat LOOP
+        IF v_up(o) >= 12 THEN v_shift(o) := 1;
+        ELSIF v_down(o) >= 12 THEN v_shift(o) := -1;
+        END IF;
+        IF v_shift(o) <> 0 THEN v_nshift := v_nshift + 1;
+        ELSE v_isolated := v_isolated + v_up(o) + v_down(o);
         END IF;
     END LOOP;
     FOR o IN 1 .. v_nstat LOOP
@@ -166,9 +194,14 @@ BEGIN
 
     DBMS_OUTPUT.PUT_LINE('<h2>Day profile &mdash; hour-of-day vs the ' || v_days
         || ' prior day' || CASE WHEN v_days = 1 THEN '' ELSE 's' END || ' '
-        || '<span class="badge crit">' || v_crit || ' large</span> '
-        || '<span class="badge warn">' || v_warn || ' moderate</span> '
-        || '<span class="badge info">' || v_hours_hit || ' of 24 hours flagged</span></h2>');
+        || CASE WHEN v_nshift > 0
+                THEN '<span class="badge crit">' || v_nshift || ' day-wide shift'
+                     || CASE WHEN v_nshift = 1 THEN '' ELSE 's' END || '</span> '
+                ELSE '' END
+        || '<span class="badge warn">' || v_isolated || ' isolated hour'
+        || CASE WHEN v_isolated = 1 THEN '' ELSE 's' END || '</span> '
+        || '<span class="badge skip" title="' || v_crit || ' large / ' || v_warn
+        || ' moderate cells">' || v_hours_hit || ' of 24 hours flagged</span></h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'Each hour of the 24 h ending <b>' || TO_CHAR(v_tend, 'Dy YYYY-MM-DD HH24:MI') || '</b> '
         || 'is compared with the <b>same hour-of-day</b> on the ' || v_days || ' prior day'
@@ -179,9 +212,59 @@ BEGIN
         || 'an hour covered by less than 30 min of snapshots is left blank rather than shown as 0. '
         || 'Cells are scored like the Findings summary: <b>large</b> = |z| &gt; 3, '
         || '<b>moderate</b> = |z| &gt; 2, against the mean and standard deviation of the prior days '
-        || '(needs at least 3 prior values). The heatmap shows <b>signed</b> z '
+        || '(needs at least 3 prior values; z over max(&sigma;, 2% of &mu;), moves under 10% are typical). '
+        || 'A stat flagged in 12 or more hours in the same direction is one <b>day-wide shift</b>; '
+        || 'its cells stay tinted in the table but are not counted as isolated hours. '
+        || 'The heatmap shows <b>signed</b> z '
         || '(red = above the prior days, blue = below); pick a metric to see the hour-by-hour '
         || 'line against its prior-day band.</p>');
+
+    -- Day-wide shifts table (only when there is one).
+    IF v_nshift > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('<table id="day-profile-shifts" data-nocount data-notools><thead><tr>'
+            || '<th>Day-wide shift</th><th>Direction</th>'
+            || '<th class="num">Hours flagged</th><th class="num">Median z</th>'
+            || '</tr></thead><tbody>');
+        FOR o IN 1 .. v_nstat LOOP
+            IF v_shift(o) <> 0 THEN
+                -- median |z| over the flagged hours (insertion-sorted scratch)
+                v_nz := 0;
+                FOR h IN 0 .. 23 LOOP
+                    v_key := o || '|' || h;
+                    IF v_idx.EXISTS(v_key)
+                       AND v_cells(v_idx(v_key)).change_bucket IN ('large', 'moderate')
+                       AND SIGN(v_cells(v_idx(v_key)).z_score) = v_shift(o) THEN
+                        v_tmpz := ABS(v_cells(v_idx(v_key)).z_score);
+                        v_nz := v_nz + 1;
+                        v_zs(v_nz) := v_tmpz;
+                        FOR k IN REVERSE 2 .. v_nz LOOP
+                            IF v_zs(k - 1) > v_zs(k) THEN
+                                v_tmpz := v_zs(k - 1); v_zs(k - 1) := v_zs(k); v_zs(k) := v_tmpz;
+                            END IF;
+                        END LOOP;
+                    END IF;
+                END LOOP;
+                IF v_nz = 0 THEN
+                    v_medz := NULL;
+                ELSIF MOD(v_nz, 2) = 1 THEN
+                    v_medz := v_zs((v_nz + 1) / 2);
+                ELSE
+                    v_medz := (v_zs(v_nz / 2) + v_zs(v_nz / 2 + 1)) / 2;
+                END IF;
+                DBMS_OUTPUT.PUT_LINE('<tr class="crit" data-stat="' || o || '">'
+                    || '<td>' || DBMS_XMLGEN.CONVERT(v_labels(o)) || '</td>'
+                    || '<td>' || CASE WHEN v_shift(o) > 0
+                                      THEN '<span class="g">&#9650;</span> above the prior days'
+                                      ELSE '<span class="g">&#9660;</span> below the prior days' END
+                    || '</td>'
+                    || '<td class="num">' || v_nz || ' of 24</td>'
+                    || '<td class="num">' || CASE WHEN v_medz IS NULL THEN '&mdash;'
+                                                  ELSE TO_CHAR(v_medz * v_shift(o), 'FMS9990D0') END
+                    || '</td></tr>');
+            END IF;
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('</tbody></table>');
+    END IF;
 
     -- Charts (hidden wholesale by body.no-charts; the table below is the fallback).
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-big" id="day-profile-heatmap"></div>');
@@ -213,8 +296,12 @@ BEGIN
             END IF;
             c := v_cells(v_idx(v_key));
             v_cls := bucket_cls(c.change_bucket);
-            IF v_cls = 'crit' THEN v_row_cls := 'crit';
-            ELSIF v_cls = 'warn' AND v_row_cls <> 'crit' THEN v_row_cls := 'warn';
+            -- a day-wide stat's cells keep their badge but do not grade the
+            -- hour row (that is what the shifts table above is for)
+            IF v_shift(o) = 0 THEN
+                IF v_cls = 'crit' THEN v_row_cls := 'crit';
+                ELSIF v_cls = 'warn' AND v_row_cls <> 'crit' THEN v_row_cls := 'warn';
+                END IF;
             END IF;
             v_row := v_row || '<td class="num" title="'
                 || 'prior mean ' || CASE WHEN c.mu IS NULL THEN '-' ELSE TO_CHAR(c.mu, v_fmt(o)) END

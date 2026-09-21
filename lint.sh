@@ -186,6 +186,25 @@ while IFS= read -r hit; do
         "detail-report href carries a 'reports/' prefix -- it must be a bare relative name so the per-run folder stays relocatable"
 done < <(grep -n 'href="reports/' run_awr_fleet.sh 2>/dev/null)
 
+# ----------------------------------------------------------------------
+# 12. Every LOAD / METRIC name in every template's target list must be
+#     mapped in sql/lib/finding_family.plsql (family rollup, v1.5.0); an
+#     unmapped name silently lands in the OTHER family and never folds.
+# ----------------------------------------------------------------------
+for d in sql/lib/templates/*/; do
+    for t in sysstat_load_targets sysmetric_targets; do
+        f="$d$t.sql"
+        [ -f "$f" ] || continue
+        while IFS= read -r name; do
+            [ -n "$name" ] || continue
+            if ! grep -qF "'$name'" sql/lib/finding_family.plsql; then
+                finding family-map "$f" \
+                    "target name '$name' is not mapped in sql/lib/finding_family.plsql (add it to finding_family / is_canonical / higher_is_worse as appropriate)"
+            fi
+        done < <(sed -n "s/^[[:space:]]*SELECT '\([^']*\)'.*/\1/p" "$f")
+    done
+done
+
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"
 fi

@@ -7,6 +7,49 @@ entry here. Dates are release dates.
 
 ## Unreleased
 
+Findings rollup + UI/UX pass (v1.5.0; plan and audit in
+`design/UI_UX_IMPROVEMENT_PLAN.md`). No new substitution vars, no new
+grants, no query-shape change beyond one scalar Current-total query in
+04/05; byte-identity is **not** preserved (scoring presentation, markup
+and CSS changed by design).
+
+- **Fewer findings, same information (phase 1).**
+  - `sql/lib/finding_family.plsql` (new): `finding_family` /
+    `is_canonical` / `higher_is_worse` classify every scored LOAD /
+    METRIC / WAIT name into a family (READ_IO, DB_TIME, ...), mark the
+    SYSMETRIC rate twin of a SYSSTAT counter (and the CPU half of the
+    CPU/wait ratio pair) as non-canonical, and say whether a rise is bad.
+    `lint.sh` check 12 verifies every template name is mapped.
+  - Scoring rule, applied in lockstep in 00 (verdict), 07, 08, 16
+    (`day_profile_cte.sql`), 17 and `score_cells.plsql`: z over the
+    floored sigma `GREATEST(sd, 2% of |mean|)`; large / moderate only
+    when the move is material (`|%-delta| >= 10`, and for wait rows a
+    share of the Current total `>= 2%`) -- an immaterial |z| > 2 renders
+    as typical with an "immaterial" badge; a material drop in a cost-type
+    name is the new `improved` bucket (class `info`), excluded from the
+    crit / warn counts and the rail pills.
+  - Section 07: twins are scored and shown (muted, class `twin`, never
+    counted); "Biggest movers" is one lead row per family with its
+    flagged relatives folded under an expander, and its bar is now
+    |%-delta| (log-scaled) instead of |z|; the heading gains a
+    "N findings" badge (flagged families) and a "folded" badge; the
+    detail-table order is computed in PL/SQL (the improved bucket needs
+    the direction flag).
+  - Masthead verdict is two numbers: "K findings / N metrics moved",
+    K = flagged families, plus an "improved" count; the top-3 movers are
+    distinct-family leads; the all-movers list mutes twins.
+  - 04/05: `score_cells` takes the row's share of the Current window's
+    total wait and the direction; a table-wide-shift pre-pass (>= 5
+    flagged rows whose % deltas sit within CV < 0.15) emits one
+    `.shift-note` callout and demotes the per-row badges to moderate.
+  - 16: a stat flagged in >= 12 hours in the same direction is one
+    "day-wide shift" (new `#day-profile-shifts` table: direction, hours,
+    median z); the heading reads "S day-wide shifts / H isolated hours"
+    and those stats' cells no longer grade the hour rows.
+  - Demo: `21 -> 9` summary findings (5 twins folded), foreground waits
+    `20 -> 9`, background waits `13 -> 11 moderate + one shift note`,
+    day profile `80 cells -> 3 day-wide shifts + 9 isolated hours`; every
+    row is still rendered and exported.
 - **Website (`docs/`): quick access to the demo report and installation.**
   Filled "Demo report" / "Install" pills in the top bar of every page (kept
   on phones), a two-card "Quick access" strip under the title block, a

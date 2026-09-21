@@ -95,7 +95,7 @@ def _cells(w):
             cur = rates[0]
             mu, sd, n = H.mean_sd(rates[1:])
             z, pct = H.z_and_pct(cur, mu, sd)
-            bucket = H.bucket_of(cur, n, sd, z)
+            bucket = H.bucket_of(cur, n, sd, z, pct=pct)
             start = t_end - timedelta(hours=h + 1)
             cells[(ord_, h)] = {
                 "label": label, "hour_slot": h,
@@ -144,13 +144,28 @@ def emit(w) -> str:
     for h in range(24):
         if any(cells[(o, h)]["change_bucket"] in ("large", "moderate") for o in labels):
             hours_hit += 1
+    # Day-wide shifts: >= 12 flagged hours in the same direction per stat.
+    up = {o: 0 for o in labels}
+    down = {o: 0 for o in labels}
+    for (o, _h), c in cells.items():
+        if c["change_bucket"] in ("large", "moderate"):
+            if c["z_score"] >= 0:
+                up[o] += 1
+            else:
+                down[o] += 1
+    shift = {o: (1 if up[o] >= 12 else (-1 if down[o] >= 12 else 0)) for o in labels}
+    nshift = sum(1 for o in labels if shift[o] != 0)
+    isolated = sum(up[o] + down[o] for o in labels if shift[o] == 0)
 
     plural = "" if days == 1 else "s"
     put("<h2>Day profile &mdash; hour-of-day vs the " + str(days)
         + " prior day" + plural + " "
-        + '<span class="badge crit">' + str(crit) + " large</span> "
-        + '<span class="badge warn">' + str(warn) + " moderate</span> "
-        + '<span class="badge info">' + str(hours_hit) + " of 24 hours flagged</span></h2>")
+        + ('<span class="badge crit">' + str(nshift) + " day-wide shift"
+           + ("" if nshift == 1 else "s") + "</span> " if nshift > 0 else "")
+        + '<span class="badge warn">' + str(isolated) + " isolated hour"
+        + ("" if isolated == 1 else "s") + "</span> "
+        + '<span class="badge skip" title="' + str(crit) + " large / " + str(warn)
+        + ' moderate cells">' + str(hours_hit) + " of 24 hours flagged</span></h2>")
     put('<p style="font-size:12px;color:var(--muted)">'
         "Each hour of the 24 h ending <b>" + H.dy(t_end) + " " + H.ts_min(t_end) + "</b> "
         "is compared with the <b>same hour-of-day</b> on the " + str(days) + " prior day"
@@ -161,9 +176,40 @@ def emit(w) -> str:
         "an hour covered by less than 30 min of snapshots is left blank rather than shown as 0. "
         "Cells are scored like the Findings summary: <b>large</b> = |z| &gt; 3, "
         "<b>moderate</b> = |z| &gt; 2, against the mean and standard deviation of the prior days "
-        "(needs at least 3 prior values). The heatmap shows <b>signed</b> z "
+        "(needs at least 3 prior values; z over max(&sigma;, 2% of &mu;), moves under 10% are typical). "
+        "A stat flagged in 12 or more hours in the same direction is one <b>day-wide shift</b>; "
+        "its cells stay tinted in the table but are not counted as isolated hours. "
+        "The heatmap shows <b>signed</b> z "
         "(red = above the prior days, blue = below); pick a metric to see the hour-by-hour "
         "line against its prior-day band.</p>")
+
+    if nshift > 0:
+        put('<table id="day-profile-shifts" data-nocount data-notools><thead><tr>'
+            "<th>Day-wide shift</th><th>Direction</th>"
+            '<th class="num">Hours flagged</th><th class="num">Median z</th>'
+            "</tr></thead><tbody>")
+        for o in range(1, nstat + 1):
+            if shift[o] == 0:
+                continue
+            zs = sorted(abs(cells[(o, h)]["z_score"]) for h in range(24)
+                        if cells[(o, h)]["change_bucket"] in ("large", "moderate")
+                        and (1 if cells[(o, h)]["z_score"] >= 0 else -1) == shift[o])
+            nz = len(zs)
+            if nz == 0:
+                medz = None
+            elif nz % 2 == 1:
+                medz = zs[(nz + 1) // 2 - 1]
+            else:
+                medz = (zs[nz // 2 - 1] + zs[nz // 2]) / 2
+            put('<tr class="crit" data-stat="' + str(o) + '">'
+                "<td>" + H.esc(labels[o]) + "</td>"
+                "<td>" + ('<span class="g">&#9650;</span> above the prior days' if shift[o] > 0
+                          else '<span class="g">&#9660;</span> below the prior days') + "</td>"
+                '<td class="num">' + str(nz) + " of 24</td>"
+                '<td class="num">' + ("&mdash;" if medz is None
+                                      else H.to_char_fixed(medz * shift[o], 1, plus=True))
+                + "</td></tr>")
+        put("</tbody></table>")
 
     # Charts (hidden wholesale by body.no-charts; the table below is the fallback).
     put('<div class="chart-wrap chart-big" id="day-profile-heatmap"></div>')
@@ -190,10 +236,11 @@ def emit(w) -> str:
                 row += '<td class="num">&mdash;</td>'
                 continue
             cls = H.bucket_cls(c["change_bucket"])
-            if cls == "crit":
-                row_cls = "crit"
-            elif cls == "warn" and row_cls != "crit":
-                row_cls = "warn"
+            if shift[o] == 0:
+                if cls == "crit":
+                    row_cls = "crit"
+                elif cls == "warn" and row_cls != "crit":
+                    row_cls = "warn"
             f = fmt[o]
             row += ('<td class="num" title="'
                     "prior mean " + ("-" if c["mu"] is None else f(c["mu"]))

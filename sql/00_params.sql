@@ -52,15 +52,27 @@ DECLARE
         metric_name   VARCHAR2(120),
         z_score       NUMBER,
         pct_delta     NUMBER,
-        n_prior       NUMBER
+        n_prior       NUMBER,
+        change_bucket VARCHAR2(40),
+        cur_val       NUMBER,
+        prior_mean    NUMBER,
+        family        VARCHAR2(64),
+        canonical     VARCHAR2(1)
     );
     TYPE mover_t IS TABLE OF mover_rec INDEX BY PLS_INTEGER;
+    TYPE seen_t  IS TABLE OF PLS_INTEGER INDEX BY VARCHAR2(64);
 
     v_scored     mover_t;
     v_top        mover_t;
-    v_n_movers   PLS_INTEGER := 0;
+    v_seen       seen_t;        -- families already represented in v_top
+    v_fams       seen_t;        -- families with a canonical large / moderate row
+    v_n_movers   PLS_INTEGER := 0;   -- = v_fams.COUNT: one finding per family
+    v_n_moved    PLS_INTEGER := 0;   -- every flagged row, twins included
+    v_n_impr     PLS_INTEGER := 0;   -- canonical improved
     v_n_usable   PLS_INTEGER := 0;
     v_max_n      NUMBER      := 0;
+    v_dir        VARCHAR2(1);
+    @@sql/lib/finding_family.plsql
 
     v_clean_name VARCHAR2(160);
     v_pct_cls    VARCHAR2(8);
@@ -220,40 +232,87 @@ BEGIN
         FROM   unified
         GROUP BY metric_domain, metric_name
     ),
-    scored AS (
-        SELECT metric_domain, metric_name,
+    -- Same sigma floor + materiality rule as sql/07_summary.sql (kept in
+    -- sync by inspection): z over max(sd, 2% of |mu|); large / moderate
+    -- only when |pct| >= 10 and, for wait classes, share of the Current
+    -- window's total wait >= 2%.
+    wait_total AS (
+        SELECT SUM(metric_value) AS tot
+        FROM   wait_rows
+        WHERE  week_offset = 0
+    ),
+    measured AS (
+        SELECT p.metric_domain, p.metric_name, p.cur_val, p.mu, p.sd, p.n,
                CASE
-                   WHEN cur_val IS NULL OR mu IS NULL THEN NULL
-                   WHEN n < 3                         THEN NULL
-                   WHEN sd IS NULL OR sd = 0          THEN NULL
-                   ELSE (cur_val - mu) / sd
+                   WHEN p.cur_val IS NULL OR p.mu IS NULL OR p.sd IS NULL THEN NULL
+                   WHEN p.n < 3 THEN NULL
+                   WHEN GREATEST(p.sd, 0.02 * ABS(p.mu)) = 0 THEN NULL
+                   ELSE (p.cur_val - p.mu) / GREATEST(p.sd, 0.02 * ABS(p.mu))
                END AS z_score,
                CASE
-                   WHEN cur_val IS NULL OR mu IS NULL OR mu = 0 THEN NULL
-                   ELSE (cur_val - mu) / ABS(mu) * 100
+                   WHEN p.cur_val IS NULL OR p.mu IS NULL OR p.mu = 0 THEN NULL
+                   ELSE (p.cur_val - p.mu) / ABS(p.mu) * 100
                END AS pct_delta,
-               n AS n_prior
-        FROM   pivoted
+               CASE
+                   WHEN p.metric_domain = 'WAIT' AND t.tot > 0 THEN p.cur_val / t.tot
+               END AS share
+        FROM   pivoted p
+        CROSS JOIN wait_total t
+    ),
+    scored AS (
+        SELECT metric_domain, metric_name, z_score, pct_delta,
+               n AS n_prior,
+               CASE
+                   WHEN z_score IS NULL THEN NULL
+                   WHEN ABS(z_score) <= 2 THEN 'typical'
+                   WHEN (pct_delta IS NOT NULL AND ABS(pct_delta) < 10)
+                     OR (share IS NOT NULL AND share < 0.02) THEN 'typical'
+                   WHEN ABS(z_score) > 3 THEN 'large'
+                   ELSE 'moderate'
+               END AS change_bucket,
+               cur_val, mu AS prior_mean
+        FROM   measured
         WHERE  cur_val IS NOT NULL OR mu IS NOT NULL
     )
-    SELECT metric_domain, metric_name, z_score, pct_delta, n_prior
+    SELECT metric_domain, metric_name, z_score, pct_delta, n_prior,
+           change_bucket, cur_val, prior_mean,
+           CAST(NULL AS VARCHAR2(64)) AS family,
+           CAST(NULL AS VARCHAR2(1))  AS canonical
     BULK COLLECT INTO v_scored
     FROM   scored
     ORDER  BY ABS(NVL(z_score, 0)) DESC, metric_name;
 
-    -- Single pass: count movers above |z| > 2, remember max n_prior
-    -- (for the "vs prior N windows" phrasing), and slice the top 3
-    -- into v_top in the same |z| DESC order produced by the SQL.
+    -- Single pass: family / canonical / 'improved' per row, count the
+    -- canonical large + moderate findings (the verdict number) and every
+    -- flagged row (the "metrics moved" number), remember max n_prior, and
+    -- slice the first 3 distinct-family canonical findings into v_top in
+    -- the same |z| DESC order produced by the SQL.
     FOR i IN 1 .. v_scored.COUNT LOOP
+        v_scored(i).family    := finding_family(v_scored(i).metric_domain, v_scored(i).metric_name);
+        v_scored(i).canonical := is_canonical(v_scored(i).metric_domain, v_scored(i).metric_name);
+        v_dir := higher_is_worse(v_scored(i).metric_domain, v_scored(i).metric_name);
+        IF v_scored(i).change_bucket IN ('large', 'moderate') AND v_dir = 'Y'
+           AND v_scored(i).cur_val < v_scored(i).prior_mean THEN
+            v_scored(i).change_bucket := 'improved';
+        END IF;
         IF NVL(v_scored(i).n_prior, 0) > v_max_n THEN
             v_max_n := v_scored(i).n_prior;
         END IF;
         IF v_scored(i).z_score IS NOT NULL THEN
             v_n_usable := v_n_usable + 1;
-            IF ABS(v_scored(i).z_score) > 2 THEN
-                v_n_movers := v_n_movers + 1;
-                IF v_top.COUNT < 3 THEN
-                    v_top(v_top.COUNT + 1) := v_scored(i);
+            IF v_scored(i).change_bucket IN ('large', 'moderate', 'improved') THEN
+                v_n_moved := v_n_moved + 1;
+                IF v_scored(i).canonical = 'Y' THEN
+                    IF v_scored(i).change_bucket = 'improved' THEN
+                        v_n_impr := v_n_impr + 1;
+                    ELSE
+                        v_fams(v_scored(i).family) := i;
+                        v_n_movers := v_fams.COUNT;
+                        IF v_top.COUNT < 3 AND NOT v_seen.EXISTS(v_scored(i).family) THEN
+                            v_top(v_top.COUNT + 1) := v_scored(i);
+                            v_seen(v_scored(i).family) := i;
+                        END IF;
+                    END IF;
                 END IF;
             END IF;
         END IF;
@@ -534,20 +593,29 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('    <span class="label">Verdict</span>');
         DBMS_OUTPUT.PUT_LINE('    <span class="lede ok">Quiet</span>'
             || ' <span class="sep">/</span> '
-            || '<span class="body">no metric moved beyond |z| &gt; 2 vs the prior '
+            || '<span class="body">no material regression vs the prior '
             || TO_CHAR(v_max_n) || ' window'
             || CASE WHEN v_max_n = 1 THEN '' ELSE 's' END
+            || CASE WHEN v_n_impr > 0
+                    THEN '; ' || v_n_impr || ' metric'
+                         || CASE WHEN v_n_impr = 1 THEN '' ELSE 's' END
+                         || ' <a href="#findings">improved</a>'
+                    ELSE '' END
             || '.</span>');
     ELSE
         DBMS_OUTPUT.PUT_LINE('  <div class="verdict v-crit">');
         DBMS_OUTPUT.PUT_LINE('    <span class="label">Verdict</span>');
         DBMS_OUTPUT.PUT_LINE('    <a href="#findings" class="lede crit">'
-            || v_n_movers || ' mover'
+            || v_n_movers || ' finding'
             || CASE WHEN v_n_movers = 1 THEN '' ELSE 's' END
             || '</a>'
             || ' <span class="sep">/</span> '
-            || '<span class="body">vs prior ' || TO_CHAR(v_max_n) || ' window'
+            || '<span class="body">' || v_n_moved || ' metric'
+            || CASE WHEN v_n_moved = 1 THEN '' ELSE 's' END
+            || ' moved vs prior ' || TO_CHAR(v_max_n) || ' window'
             || CASE WHEN v_max_n = 1 THEN '' ELSE 's' END
+            || CASE WHEN v_n_impr > 0
+                    THEN ' &middot; ' || v_n_impr || ' improved' ELSE '' END
             || '</span>');
 
         FOR i IN 1 .. v_top.COUNT LOOP
@@ -589,15 +657,14 @@ BEGIN
     -- in a smaller font, so the full set is one click away without
     -- leaving the masthead. Only emitted when there is a mover.
     -- =========================================================
-    IF v_n_movers > 0 THEN
+    IF v_n_moved > 0 THEN
         DBMS_OUTPUT.PUT_LINE('  <details class="movers-all">');
-        DBMS_OUTPUT.PUT_LINE('    <summary>All ' || v_n_movers || ' mover'
-            || CASE WHEN v_n_movers = 1 THEN '' ELSE 's' END
-            || ' &middot; |z| &gt; 2</summary>');
+        DBMS_OUTPUT.PUT_LINE('    <summary>All ' || v_n_moved || ' moved metric'
+            || CASE WHEN v_n_moved = 1 THEN '' ELSE 's' END
+            || ' &middot; material |z| &gt; 2, twins muted</summary>');
         DBMS_OUTPUT.PUT_LINE('    <ul class="movers-list">');
         FOR i IN 1 .. v_scored.COUNT LOOP
-            IF v_scored(i).z_score IS NOT NULL
-               AND ABS(v_scored(i).z_score) > 2 THEN
+            IF v_scored(i).change_bucket IN ('large', 'moderate', 'improved') THEN
                 v_clean_name := REGEXP_REPLACE(v_scored(i).metric_name,
                                                '^Wait class: ', '');
                 IF LENGTH(v_clean_name) > 48 THEN
@@ -625,7 +692,11 @@ BEGIN
                                             'NLS_NUMERIC_CHARACTERS=''.,''') || '%';
                 END IF;
 
-                DBMS_OUTPUT.PUT_LINE('      <li>'
+                DBMS_OUTPUT.PUT_LINE('      <li'
+                    || CASE WHEN v_scored(i).canonical = 'N' THEN ' class="twin"'
+                            WHEN v_scored(i).change_bucket = 'improved' THEN ' class="improved"'
+                            ELSE '' END
+                    || '>'
                     || '<span class="m-dom">' || v_scored(i).metric_domain || '</span>'
                     || '<span class="m-name">' || v_clean_name || '</span>'
                     || '<span class="m-z">z ' || v_z_txt || '</span>'
@@ -1343,6 +1414,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    var c=0,w=0;');
     DBMS_OUTPUT.PUT_LINE('    sec.querySelectorAll("tbody tr").forEach(function(tr){');
     DBMS_OUTPUT.PUT_LINE('      if(tr.closest("table[data-nocount]")) return;');
+    DBMS_OUTPUT.PUT_LINE('      if(tr.classList.contains("twin")||tr.classList.contains("member")) return;');
     DBMS_OUTPUT.PUT_LINE('      if(tr.classList.contains("crit")||tr.querySelector(".badge.crit")) c++;');
     DBMS_OUTPUT.PUT_LINE('      else if(tr.classList.contains("warn")||tr.querySelector(".badge.warn")) w++;');
     DBMS_OUTPUT.PUT_LINE('    });');
@@ -1356,6 +1428,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var out=[];');
     DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("section tbody tr").forEach(function(tr){');
     DBMS_OUTPUT.PUT_LINE('    if(tr.hidden||tr.offsetParent===null) return;');
+    DBMS_OUTPUT.PUT_LINE('    if(tr.classList.contains("twin")||tr.classList.contains("member")) return;');
     DBMS_OUTPUT.PUT_LINE('    if(tr.classList.contains("crit")||tr.querySelector(".badge.crit")) out.push(tr);');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  return out;');

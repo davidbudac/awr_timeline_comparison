@@ -15,7 +15,7 @@ from datetime import timedelta
 
 from .. import chrome
 from ..helpers import (esc, mean_sd, z_and_pct, ts_min, ts_sec, hh24,
-                       to_char_fixed)
+                       to_char_fixed, finding_family, is_canonical, higher_is_worse)
 
 SQL_PATH = chrome.sql_path("sql/00_params.sql")
 H = timedelta(hours=1)
@@ -88,9 +88,13 @@ def _window_values(w):
 
 
 def scored_rows(w):
-    """[(domain, name, z, pct, n_prior)] ORDER BY ABS(NVL(z,0)) DESC, name."""
+    """[(domain, name, z, pct, n_prior, bucket, family, canonical)]
+    ORDER BY ABS(NVL(z,0)) DESC, name -- bucket already carries the
+    'improved' override of the PL/SQL pass."""
     rows = []
-    for (dom, name), vals in _window_values(w).items():
+    allv = _window_values(w)
+    wait_tot = sum(v.get(0, 0.0) for (d, _n), v in allv.items() if d == "WAIT")
+    for (dom, name), vals in allv.items():
         cur = vals.get(0)
         priors = [v for k, v in vals.items() if k > 0]
         mu, sd, n = mean_sd(priors)
@@ -106,7 +110,17 @@ def scored_rows(w):
         z, pct = z_and_pct(cur, mu, sd)
         if n < 3:
             z = None
-        rows.append((dom, name, z, pct, n))
+        share = (cur / wait_tot) if (dom == "WAIT" and wait_tot > 0 and cur is not None) else None
+        if z is None:
+            bucket = None
+        elif abs(z) <= 2 or (pct is not None and abs(pct) < 10) or (share is not None and share < 0.02):
+            bucket = "typical"
+        else:
+            bucket = "large" if abs(z) > 3 else "moderate"
+        fam, canon = finding_family(dom, name), is_canonical(dom, name)
+        if bucket in ("large", "moderate") and higher_is_worse(dom, name) == "Y" and cur < mu:
+            bucket = "improved"
+        rows.append((dom, name, z, pct, n, bucket, fam, canon))
     rows.sort(key=lambda r: (-abs(r[2] or 0.0), r[1]))
     return rows
 
@@ -216,18 +230,27 @@ def emit(w) -> str:
     put("<!-- AWR-SECTION: 00_params BEGIN -->")
 
     scored = scored_rows(w)
-    n_movers = n_usable = 0
+    n_movers = n_moved = n_impr = n_usable = 0
     max_n = 0
     top = []
+    seen = set()
+    fams = set()
     for r in scored:
         if (r[4] or 0) > max_n:
             max_n = r[4]
         if r[2] is not None:
             n_usable += 1
-            if abs(r[2]) > 2:
-                n_movers += 1
-                if len(top) < 3:
-                    top.append(r)
+            if r[5] in ("large", "moderate", "improved"):
+                n_moved += 1
+                if r[7] == "Y":
+                    if r[5] == "improved":
+                        n_impr += 1
+                    else:
+                        fams.add(r[6])
+                        n_movers = len(fams)
+                        if len(top) < 3 and r[6] not in seen:
+                            top.append(r)
+                            seen.add(r[6])
 
     times_json, vals_json, windows_json = _timeline(w)
     target_end_s = ts_sec(w.target_end)
@@ -270,15 +293,21 @@ def emit(w) -> str:
         put('  <div class="verdict v-ok">')
         put('    <span class="label">Verdict</span>')
         put('    <span class="lede ok">Quiet</span> <span class="sep">/</span> '
-            '<span class="body">no metric moved beyond |z| &gt; 2 vs the prior '
-            + str(max_n) + ' window' + plural(max_n) + '.</span>')
+            '<span class="body">no material regression vs the prior '
+            + str(max_n) + ' window' + plural(max_n)
+            + ('; ' + str(n_impr) + ' metric' + plural(n_impr)
+               + ' <a href="#findings">improved</a>' if n_impr > 0 else '')
+            + '.</span>')
     else:
         put('  <div class="verdict v-crit">')
         put('    <span class="label">Verdict</span>')
-        put('    <a href="#findings" class="lede crit">' + str(n_movers) + ' mover'
+        put('    <a href="#findings" class="lede crit">' + str(n_movers) + ' finding'
             + plural(n_movers) + '</a> <span class="sep">/</span> '
-            '<span class="body">vs prior ' + str(max_n) + ' window' + plural(max_n) + '</span>')
-        for dom, name, z, pct, n in top:
+            '<span class="body">' + str(n_moved) + ' metric' + plural(n_moved)
+            + ' moved vs prior ' + str(max_n) + ' window' + plural(max_n)
+            + (' &middot; ' + str(n_impr) + ' improved' if n_impr > 0 else '')
+            + '</span>')
+        for dom, name, z, pct, n, _b, _f, _c in top:
             clean = name[len("Wait class: "):] if name.startswith("Wait class: ") else name
             if len(clean) > 36:
                 clean = clean[:34] + "&hellip;"
@@ -289,13 +318,13 @@ def emit(w) -> str:
     put('  </div>')
 
     # ---- all movers list --------------------------------------------
-    if n_movers > 0:
+    if n_moved > 0:
         put('  <details class="movers-all">')
-        put('    <summary>All ' + str(n_movers) + ' mover' + plural(n_movers)
-            + ' &middot; |z| &gt; 2</summary>')
+        put('    <summary>All ' + str(n_moved) + ' moved metric' + plural(n_moved)
+            + ' &middot; material |z| &gt; 2, twins muted</summary>')
         put('    <ul class="movers-list">')
-        for dom, name, z, pct, n in scored:
-            if z is None or abs(z) <= 2:
+        for dom, name, z, pct, n, bucket, fam, canon in scored:
+            if bucket not in ("large", "moderate", "improved"):
                 continue
             clean = name[len("Wait class: "):] if name.startswith("Wait class: ") else name
             if len(clean) > 48:
@@ -304,7 +333,8 @@ def emit(w) -> str:
                 clean = esc(clean)
             z_txt = to_char_fixed(z, 1, plus=True)
             cls, txt = _pct_markup(pct)
-            put('      <li><span class="m-dom">' + dom + '</span>'
+            li_cls = ' class="twin"' if canon == "N" else (' class="improved"' if bucket == "improved" else '')
+            put('      <li' + li_cls + '><span class="m-dom">' + dom + '</span>'
                 '<span class="m-name">' + clean + '</span>'
                 '<span class="m-z">z ' + z_txt + '</span>'
                 '<span class="m-pct ' + cls + '">' + txt + '</span></li>')
