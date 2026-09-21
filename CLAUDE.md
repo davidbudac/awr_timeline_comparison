@@ -283,6 +283,19 @@ render their sparklines/stacked-bar/movers visuals from the same rows
 regardless of the preset, and decluttering the tables doesn't change what
 those visuals should plot.
 
+### Section order (v1.5.0)
+`awr_trend.sql` includes the sections in **visual** order (00, 10, 08, 09,
+07, 01, 16, 13, 02, 03, 04, 05, 06, 11, 18, 14, 15, 12, 17); `_style.sql`
+no longer re-sorts them with flex `order:` (only the masthead / rail /
+footer keep a rank for the narrow layout). Adding a section = insert its
+`@@` at the right visual spot in the driver, its link at the same spot in
+`00_params.sql`'s rail, and the same slot in `demo/gen_demo_report.py`'s
+`SECTIONS`. Sections are independent recomputes, so the order is free
+except 17 (last, relocates itself). The report body is a
+`<main id="main-start">` (display:contents) opened at the end of 00 and
+closed in the driver epilogue; `body > section` selectors must also match
+`main > section`.
+
 ### Facelift chrome hooks (v1.4.0)
 A grab-bag of small, single-sourced HTML attribute/class contracts wired up
 by `00_params.sql`'s inline JS and `_style.sql`'s CSS, reused across

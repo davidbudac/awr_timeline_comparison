@@ -32,7 +32,7 @@ const { chromium } = require('/opt/node22/lib/node_modules/playwright');
   await page.waitForTimeout(1500);
 
   const info = await page.evaluate(() => {
-    const sections = [...document.querySelectorAll('body > section')].map(s => s.id);
+    const sections = [...document.querySelectorAll('main > section, body > section')].map(s => s.id);
     let charts = 0;
     if (window.echarts) {
       document.querySelectorAll('div, .mini, .windows-chart').forEach(el => { if (echarts.getInstanceByDom(el)) charts++; });

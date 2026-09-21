@@ -1,8 +1,8 @@
 # UI/UX improvements + findings reduction — implementation plan (2026-09-21)
 
 Status: **in progress on `claude/ui-ux-improvements-buwjzo`.** Phase 1
-to 3 implemented 2026-09-21 (see the per-item notes marked DONE below
-and the CHANGELOG "Unreleased" entry); phases 4-6 pending. This document is the
+to 4 implemented 2026-09-21 (see the per-item notes marked DONE below
+and the CHANGELOG "Unreleased" entry); phases 5-6 pending. This document is the
 outcome of a
 UI/UX audit of the single-DB report (v1.4.0 chrome) rendered from
 `docs/examples/demo_busy_db.html` at 1440 px and 390 px in light, dark,
@@ -382,7 +382,29 @@ for the permalinks.
 `position:sticky; bottom:0`; add a "What changed" link that appears only
 when `#narrative-src` was relocated.
 
-### Phase 4 — Accessibility
+### Phase 4 — Accessibility — DONE 2026-09-21
+
+Implementation notes: option (a) -- `awr_trend.sql` now includes the
+sections in visual order (00, 10, 08, 09, 07, 01, 16, 13, 02, 03, 04, 05,
+06, 11, 18, 14, 15, 12, 17) and `_style.sql` keeps only the narrow-layout
+ranks (masthead 1, rail 2 / 0 narrow, sections 3, footer 4); the demo's
+`SECTIONS` list and the 09/10/11 twins (which sliced their lifted script
+by fixed index -- now sliced to the closing `</script>`) follow.  The
+report body is a `<main id="main-start">` (display:contents) opened at the
+end of 00 and closed in the driver epilogue, with a focus-revealed skip
+link.  Top SQL tabs are `<button role="tab">` in a `role="tablist"` with
+roving tabindex and Left/Right/Home/End; panels carry `role="tabpanel"`;
+sortable `<th>` get `scope`, `tabindex`, `role="button"`, `aria-sort` and
+Enter/Space; window chips are `<button>`s; every section table gets an
+`sr-only` caption from its h2 (+ h3).  A global `:focus-visible` ring,
+`prefers-reduced-motion`, dark-mode `.chip.on` / `thead th` contrast, and
+copy / permalink buttons visible on focus and below 980 px.  Tap-to-pin:
+clicking any titled element inside a section opens a `.tip` popover
+(Esc / scroll / outside click closes).  Colour-only charts: ECharts
+`aria.decal` on the stacked wait-class areas (09/10/11, which also
+gives each chart an aria-label), a sign glyph on |z| >= 3 heatmap cells
+(16), and a `&ne;` glyph on changed parameter cells (12).  The PHV
+scatter (06) keeps colour-only series -- its tooltip names the plan.
 
 **4.1 DOM order = visual order.** Two options; pick (a): (a) reorder the
 `@@` calls in `awr_trend.sql` to the visual order and drop the `order:`

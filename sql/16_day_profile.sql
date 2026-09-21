@@ -417,7 +417,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"category",data:d.hours,axisLabel:{color:mu,fontSize:10,interval:0},splitArea:{show:true}},');
     DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"category",data:d.stats.map(function(s){return s.name;}),inverse:true,axisLabel:{color:fg,fontSize:10},splitArea:{show:true}},');
     DBMS_OUTPUT.PUT_LINE('  visualMap:{min:-3.5,max:3.5,calculable:true,orient:"horizontal",left:"center",bottom:8,itemWidth:12,itemHeight:160,textStyle:{color:mu,fontSize:10},inRange:{color:["#1d4ed8","#93c5fd","#eef1f5","#fca5a5","#8a1c1c"]},text:["z\u2265+3","z\u2264\u22123"]},');
-    DBMS_OUTPUT.PUT_LINE('  series:[{name:"z",type:"heatmap",data:data,label:{show:false},emphasis:{itemStyle:{borderColor:fg,borderWidth:1.5}}}]');
+    -- Phase 4: a sign glyph on the |z| > 3 cells so the heatmap is not
+    -- colour-only (up / down triangle, same as the table badges).
+    DBMS_OUTPUT.PUT_LINE('  series:[{name:"z",type:"heatmap",data:data,label:{show:true,fontSize:9,color:"#fff",formatter:function(p){var z=p.data&&p.data.value?p.data.value[2]:null;return z==null?"":(z>=3?"\u25B2":(z<=-3?"\u25BC":""));}},emphasis:{itemStyle:{borderColor:fg,borderWidth:1.5}}}]');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('new ResizeObserver(function(){chart.resize();}).observe(el);');
     -- Line chart: current day vs prior-day mean and mu +/- 2 sigma band.

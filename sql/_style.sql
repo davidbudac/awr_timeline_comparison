@@ -104,42 +104,25 @@ BEGIN
         || ' margin:0;'
         || ' padding:0 32px 96px calc(var(--rail-w) + 32px);'
         || ' display:flex; flex-direction:column; gap:0; align-items:stretch; }');
-    DBMS_OUTPUT.PUT_LINE('body > section, body > header.report, body > footer.report {'
+    DBMS_OUTPUT.PUT_LINE('main > section, body > section, body > header.report, body > footer.report {'
         || ' width:100%; }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px) {'
         || ' body { padding:0 20px 64px; } }');
 
     -- =========================================================
-    -- Visual section ordering.  Grouped to match the sidebar rail:
-    -- Triage, Workload, SQL, Storage and config.  (The DOM order is
-    -- emission order; flex order: repaints it.)
+    -- Body-level ordering (narrow layout only) and the main landmark.
     -- =========================================================
+    -- v1.5.0 (phase 4): sections are EMITTED in visual order (see the
+    -- include list in awr_trend.sql), so no per-section order: remains.
+    -- The masthead / rail / main / footer ranks below only exist for the
+    -- narrow layout, where the rail (order:0 there) must precede the
+    -- masthead; <main> is display:contents so its sections take part in
+    -- the body flex column directly.
     DBMS_OUTPUT.PUT_LINE('header.report      { order:1; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc            { order:2; }');
-    -- Triage
-    DBMS_OUTPUT.PUT_LINE('#db-time-summary   { order:3; }');
-    DBMS_OUTPUT.PUT_LINE('#overview          { order:4; }');
-    DBMS_OUTPUT.PUT_LINE('#ash-timeline      { order:5; }');
-    DBMS_OUTPUT.PUT_LINE('#findings          { order:6; }');
-    DBMS_OUTPUT.PUT_LINE('#windows           { order:7; }');
-    -- Workload
-    DBMS_OUTPUT.PUT_LINE('#day-profile       { order:8; }');
-    DBMS_OUTPUT.PUT_LINE('#utilization       { order:9; }');
-    DBMS_OUTPUT.PUT_LINE('#load              { order:10; }');
-    DBMS_OUTPUT.PUT_LINE('#metrics           { order:11; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-fg          { order:12; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-bg          { order:13; }');
-    -- SQL
-    DBMS_OUTPUT.PUT_LINE('#topsql            { order:14; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql-ash        { order:15; }');
-    -- Without an explicit order the SQL Monitor section defaulted to 0 and
-    -- sorted ABOVE the masthead; keep it where the nav places it.
-    DBMS_OUTPUT.PUT_LINE('#sqlmon            { order:16; }');
-    -- Storage and config
-    DBMS_OUTPUT.PUT_LINE('#segment-io        { order:17; }');
-    DBMS_OUTPUT.PUT_LINE('#file-io           { order:18; }');
-    DBMS_OUTPUT.PUT_LINE('#param-changes     { order:19; }');
-    DBMS_OUTPUT.PUT_LINE('footer.report      { order:20; }');
+    DBMS_OUTPUT.PUT_LINE('main               { display:contents; }');
+    DBMS_OUTPUT.PUT_LINE('main > section, body > section { order:3; }');
+    DBMS_OUTPUT.PUT_LINE('footer.report      { order:4; }');
 
     -- =========================================================
     -- Masthead (header.report) -- compact identity panel at the top
@@ -973,6 +956,38 @@ BEGIN
         || ' font-size:12px; font-weight:600; color:var(--muted);'
         || ' border-bottom:2px solid transparent; margin-bottom:-1px; }');
     DBMS_OUTPUT.PUT_LINE('.tabs [data-t]:hover { color:var(--ink); }');
+    -- Phase 4: the tabs are real <button role="tab"> elements now.
+    DBMS_OUTPUT.PUT_LINE('.tabs button[data-t] { font:inherit; font-size:12px; font-weight:600;'
+        || ' background:none; border:0; border-bottom:2px solid transparent;'
+        || ' color:var(--muted); border-radius:0; }');
+    DBMS_OUTPUT.PUT_LINE('button.wchip { font:inherit; cursor:pointer; }');
+    -- Phase 4: keyboard focus ring for every interactive element, the
+    -- skip link, the tap-to-pin tooltip, reduced motion, dark-mode chip
+    -- contrast, and always-visible copy / permalink affordances on touch.
+    DBMS_OUTPUT.PUT_LINE(':focus-visible { outline:2px solid var(--accent); outline-offset:2px; }');
+    DBMS_OUTPUT.PUT_LINE('th[tabindex]:focus-visible { outline-offset:-2px; }');
+    DBMS_OUTPUT.PUT_LINE('a.skip { position:absolute; left:8px; top:-40px; z-index:100;'
+        || ' padding:6px 10px; border-radius:6px; background:var(--accent);'
+        || ' color:#fff; font-weight:700; text-decoration:none; }');
+    DBMS_OUTPUT.PUT_LINE('a.skip:focus { top:8px; }');
+    DBMS_OUTPUT.PUT_LINE('.sr-only { position:absolute; width:1px; height:1px; padding:0;'
+        || ' margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }');
+    DBMS_OUTPUT.PUT_LINE('.tip { position:absolute; z-index:60; max-width:320px;'
+        || ' font-size:12px; line-height:1.4; color:var(--ink);'
+        || ' background:var(--panel); border:1px solid var(--rule); border-radius:8px;'
+        || ' padding:6px 10px; box-shadow:0 6px 18px rgba(0,0,0,.14); }');
+    DBMS_OUTPUT.PUT_LINE('[title]:not(a):not(button):not(th):not(summary) { cursor:help; }');
+    DBMS_OUTPUT.PUT_LINE('@media (prefers-reduced-motion: reduce) {'
+        || ' *, *::before, *::after { transition:none !important; animation:none !important;'
+        || ' scroll-behavior:auto !important; } }');
+    DBMS_OUTPUT.PUT_LINE('@media screen { body.dark .chip.on {'
+        || ' background:var(--accent-bg); color:var(--accent-deep); border-color:var(--accent); }'
+        || ' body.dark thead th { color:var(--ink-soft); } }');
+    DBMS_OUTPUT.PUT_LINE('.copy-btn:focus-visible, h2 .permalink:focus-visible {'
+        || ' opacity:1; pointer-events:auto; }');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px) {'
+        || ' pre > .copy-btn, .codewrap > .copy-btn { opacity:1; pointer-events:auto; }'
+        || ' h2 .permalink { opacity:1; } }');
     DBMS_OUTPUT.PUT_LINE('.tabs [data-t].on {'
         || ' color:var(--accent); border-bottom-color:var(--accent); }');
     DBMS_OUTPUT.PUT_LINE('.tabpanel { display:none; }');
@@ -1189,7 +1204,7 @@ BEGIN
         || ' nav.toc { display:none; position:static; }'
         || ' body { max-width:none; padding:0 0 24px; background:#fff; }'
         || ' section { border:0; padding:12px 0; break-before:page; }'
-        || ' body > section:first-of-type { break-before:auto; }'
+        || ' main > section:first-of-type, body > section:first-of-type { break-before:auto; }'
         || ' header.report { border:0; padding-top:0; }'
         || ' .chart-wrap { break-inside:avoid; }'
         || ' h2 { break-after:avoid; position:static; padding-top:0;'

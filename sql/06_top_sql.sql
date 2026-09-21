@@ -108,13 +108,13 @@ BEGIN
     -- wrapped in a matching .tabpanel as its <h3> is emitted). Dim codes
     -- and order are hardcoded here to match the `dims` CTE inside the
     -- cursor below -- they are static, not derived per-DB.
-    DBMS_OUTPUT.PUT_LINE('<div class="tabs hidetri" data-tabs="topsql">'
-        || '<span class="on" data-t="ELAPSED">Elapsed time</span>'
-        || '<span data-t="CPU">CPU time</span>'
-        || '<span data-t="GETS">Buffer gets</span>'
-        || '<span data-t="PREADS">Physical reads</span>'
-        || '<span data-t="EXEC">Executions</span>'
-        || '<span data-t="PEREXEC">Per-exec regression</span>'
+    DBMS_OUTPUT.PUT_LINE('<div class="tabs hidetri" data-tabs="topsql" role="tablist" aria-label="Top SQL ranking dimension">'
+        || '<button type="button" role="tab" aria-selected="true" class="on" data-t="ELAPSED" id="tab-topsql-ELAPSED">Elapsed time</button>'
+        || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="CPU" id="tab-topsql-CPU">CPU time</button>'
+        || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="GETS" id="tab-topsql-GETS">Buffer gets</button>'
+        || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="PREADS" id="tab-topsql-PREADS">Physical reads</button>'
+        || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="EXEC" id="tab-topsql-EXEC">Executions</button>'
+        || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="PEREXEC" id="tab-topsql-PEREXEC">Per-exec regression</button>'
         || '</div>');
 
     SELECT '['
@@ -353,7 +353,8 @@ BEGIN
             -- C1: open this dim's tabpanel (first one starts visible).
             DBMS_OUTPUT.PUT_LINE('<div class="tabpanel hidetri'
                 || CASE WHEN s.dim = 'ELAPSED' THEN ' on' ELSE '' END
-                || '" data-tabs="topsql" data-t="' || s.dim || '">');
+                || '" data-tabs="topsql" data-t="' || s.dim || '" role="tabpanel"'
+                || ' aria-labelledby="tab-topsql-' || s.dim || '">');
             DBMS_OUTPUT.PUT_LINE('<h3>' || s.dim_label || '</h3>');
             DBMS_OUTPUT.PUT_LINE('<div class="topsql-toggle" data-topsql-target="' || s.dim || '">'
                 || '<span>Break down by:</span>'

@@ -601,6 +601,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el);');
     DBMS_OUTPUT.PUT_LINE('  var markAreaData=buildMarkAreas(null);');
     DBMS_OUTPUT.PUT_LINE('  chart.setOption({');
+    DBMS_OUTPUT.PUT_LINE('    aria:{enabled:true,decal:{show:true}},');
     DBMS_OUTPUT.PUT_LINE('    tooltip:{trigger:"axis",axisPointer:{type:"line"},');
     DBMS_OUTPUT.PUT_LINE('      valueFormatter:function(v){return v==null?"—":(+v).toFixed(2);}},');
     DBMS_OUTPUT.PUT_LINE('    legend:{top:0,left:"center",textStyle:{color:fg,fontSize:10},itemWidth:10,itemHeight:7,type:"scroll"},');

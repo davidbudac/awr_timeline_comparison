@@ -257,6 +257,7 @@ def emit(w) -> str:
 
     # ---- editorial masthead ------------------------------------------
     put('<script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.body.classList.add("dark");}catch(e){}})();</script>')
+    put('<a class="skip" href="#main-start">Skip to report</a>')
     put('<header class="report" data-triage="Y">')
     put('  <div class="brandline"><span class="dot">&#9679;</span> AWR <span class="slash">/</span> TIMELINE COMPARISON</div>')
     put('  <div class="topgrid">')
@@ -363,12 +364,12 @@ def emit(w) -> str:
         w_start = w_end - width
         same_day = w_start.date() == cur_day
         w_day = dy(w_start) + " " + w_start.strftime("%d") + " " + mon_dd(w_start)[:3]
-        put('      <span class="wchip' + (' cur' if wk == 0 else '')
+        put('      <button type="button" class="wchip' + (' cur' if wk == 0 else '')
             + '" data-w="' + str(wk) + '" title="' + ts_min(w_start) + ' &rarr; ' + ts_min(w_end)
             + ' &middot; click to highlight this window everywhere">'
             + ('<b>current</b>' if wk == 0 else '<b>&minus;' + w.offset_labels[wk - 1] + '</b>')
             + ' <span>' + ('' if same_day else '<em>' + w_day + '</em> ')
-            + hh24(w_start) + ' &rarr; ' + hh24(w_end) + '</span></span>')
+            + hh24(w_start) + ' &rarr; ' + hh24(w_end) + '</span></button>')
     put('    </div>')
     put('    <div class="windows-hint">click a window to highlight it everywhere &middot; Esc clears</div>')
     put('    <div class="windows-chart" id="masthead-timeline"></div>')

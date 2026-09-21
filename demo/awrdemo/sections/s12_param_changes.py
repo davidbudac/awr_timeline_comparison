@@ -23,7 +23,9 @@ def _cell_html(has: bool, val, is_cur: bool, chg: bool, k: int) -> str:
         body = '<span class="muted">(unset)</span>'
     else:
         body = "<code>" + h.esc(val) + "</code>"
-    return '<td class="' + cls + '" data-w="' + str(k) + '">' + body + "</td>"
+    return ('<td class="' + cls + '" data-w="' + str(k) + '">'
+            + ('<span class="g" title="differs from the Current value">&ne;</span> ' if chg else "")
+            + body + "</td>")
 
 
 def emit(w) -> str:

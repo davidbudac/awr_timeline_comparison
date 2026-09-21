@@ -243,13 +243,13 @@ def emit(w) -> str:
         "re-aggregate the same metric by <b>SQL_ID</b>, parsing "
         "<b>schema</b>, <b>module</b>, or <b>action</b> instead. "
         "Detail tables collapsed; click to expand.</p>")
-    put('<div class="tabs hidetri" data-tabs="topsql">'
-        '<span class="on" data-t="ELAPSED">Elapsed time</span>'
-        '<span data-t="CPU">CPU time</span>'
-        '<span data-t="GETS">Buffer gets</span>'
-        '<span data-t="PREADS">Physical reads</span>'
-        '<span data-t="EXEC">Executions</span>'
-        '<span data-t="PEREXEC">Per-exec regression</span>'
+    put('<div class="tabs hidetri" data-tabs="topsql" role="tablist" aria-label="Top SQL ranking dimension">'
+        '<button type="button" role="tab" aria-selected="true" class="on" data-t="ELAPSED" id="tab-topsql-ELAPSED">Elapsed time</button>'
+        '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="CPU" id="tab-topsql-CPU">CPU time</button>'
+        '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="GETS" id="tab-topsql-GETS">Buffer gets</button>'
+        '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="PREADS" id="tab-topsql-PREADS">Physical reads</button>'
+        '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="EXEC" id="tab-topsql-EXEC">Executions</button>'
+        '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="PEREXEC" id="tab-topsql-PEREXEC">Per-exec regression</button>'
         "</div>")
 
     # weeks / weeksIso JSON (week_offset DESC = oldest first)
@@ -284,7 +284,8 @@ def emit(w) -> str:
             dim_sqls_kept[dim] = 0
             dim_sqls_total[dim] = 0
             put('<div class="tabpanel hidetri' + (" on" if dim == "ELAPSED" else "")
-                + '" data-tabs="topsql" data-t="' + dim + '">')
+                + '" data-tabs="topsql" data-t="' + dim + '" role="tabpanel"'
+                + ' aria-labelledby="tab-topsql-' + dim + '">')
             put("<h3>" + dim_label[dim] + "</h3>")
             put('<div class="topsql-toggle" data-topsql-target="' + dim + '">'
                 "<span>Break down by:</span>"

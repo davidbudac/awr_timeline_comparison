@@ -250,7 +250,7 @@ def emit(w) -> str:
             out.append("]}")
         out.append("]}")
     out.append("]};")
-    out.extend(L[26:74])     # verbatim bootstrap .. </script>
+    out.extend(L[26:L.index("</script>", 26) + 1])     # verbatim bootstrap .. </script>
     out.append("</section>")
     out.append(L[75])
     return "\n".join(out)

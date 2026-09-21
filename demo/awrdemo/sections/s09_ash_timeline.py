@@ -123,7 +123,7 @@ def emit(w) -> str:
     out.append(L[15])
     out.append(L[16])
     out.append("var d=AWR_DATA.ashTimeline, palette=" + PALETTE + ";")
-    out.extend(L[18:54])      # verbatim ECharts init .. </script>
+    out.extend(L[18:L.index("</script>", 18) + 1])      # verbatim ECharts init .. </script>
     out.append("</section>")
-    out.append(L[55])
+    out.append(L[-1])
     return "\n".join(out)

@@ -90,7 +90,10 @@ DECLARE
         ELSE
             v_body := '<code>' || DBMS_XMLGEN.CONVERT(p_val) || '</code>';
         END IF;
-        RETURN '<td class="' || v_cls || '" data-w="' || p_w || '">' || v_body || '</td>';
+        -- Phase 4: a changed cell also carries a glyph (not colour-only).
+        RETURN '<td class="' || v_cls || '" data-w="' || p_w || '">'
+            || CASE WHEN p_chg THEN '<span class="g" title="differs from the Current value">&ne;</span> ' ELSE '' END
+            || v_body || '</td>';
     END cell_html;
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="param-changes"><h2>Parameter changes</h2>');

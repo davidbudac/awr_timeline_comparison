@@ -521,6 +521,10 @@ BEGIN
     -- up the correct palette at first paint. Applies the saved/preferred
     -- theme by toggling body.dark before any chart initializes.
     DBMS_OUTPUT.PUT_LINE('<script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.body.classList.add("dark");}catch(e){}})();</script>');
+    -- Phase 4: skip link (visible on keyboard focus only) to the <main>
+    -- landmark that opens right after this section's scripts and closes
+    -- in the driver's epilogue, just before the footer.
+    DBMS_OUTPUT.PUT_LINE('<a class="skip" href="#main-start">Skip to report</a>');
     -- data-triage marks the masthead as a triage-mode survivor (X3). The
     -- hide rule only targets <section>, so this is documentation as much as
     -- function; the parts of the masthead triage does NOT want (the DB-time
@@ -787,7 +791,7 @@ BEGIN
         CONNECT BY LEVEL <= ~weeks_back + 1
         ORDER  BY LEVEL - 1
     ) LOOP
-        DBMS_OUTPUT.PUT_LINE('      <span class="wchip'
+        DBMS_OUTPUT.PUT_LINE('      <button type="button" class="wchip'
             || CASE WHEN w.wk = 0 THEN ' cur' ELSE '' END
             || '" data-w="' || w.wk || '" title="' || w.w_start_iso || ' &rarr; '
             || w.w_end_iso || ' &middot; click to highlight this window everywhere">'
@@ -800,7 +804,7 @@ BEGIN
             || ' <span>'
             || CASE WHEN w.same_day = 'N' THEN '<em>' || w.w_day || '</em> ' ELSE '' END
             || w.w_start || ' &rarr; ' || w.w_end || '</span>'
-            || '</span>');
+            || '</button>');
     END LOOP;
     DBMS_OUTPUT.PUT_LINE('    </div>');
     DBMS_OUTPUT.PUT_LINE('    <div class="windows-hint">click a window to '
@@ -1345,7 +1349,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var t=closest(ev.target,".tabs [data-t]"); if(!t) return;');
     DBMS_OUTPUT.PUT_LINE('  var bar=closest(t,".tabs"); if(!bar) return;');
     DBMS_OUTPUT.PUT_LINE('  var g=bar.getAttribute("data-tabs"), key=t.getAttribute("data-t");');
-    DBMS_OUTPUT.PUT_LINE('  bar.querySelectorAll("[data-t]").forEach(function(x){x.classList.toggle("on",x===t);});');
+    DBMS_OUTPUT.PUT_LINE('  bar.querySelectorAll("[data-t]").forEach(function(x){var on=(x===t);x.classList.toggle("on",on);x.setAttribute("aria-selected",on?"true":"false");x.setAttribute("tabindex",on?"0":"-1");});');
     DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll(".tabpanel[data-tabs=\""+g+"\"]").forEach(function(p){');
     DBMS_OUTPUT.PUT_LINE('    var on=p.getAttribute("data-t")===key;');
     DBMS_OUTPUT.PUT_LINE('    p.classList.toggle("on",on);');
@@ -1419,8 +1423,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var hr=th.parentNode;');
     DBMS_OUTPUT.PUT_LINE('  var idx=Array.prototype.indexOf.call(hr.cells,th);');
     DBMS_OUTPUT.PUT_LINE('  var desc=!th.classList.contains("desc");');
-    DBMS_OUTPUT.PUT_LINE('  hr.querySelectorAll("th").forEach(function(x){x.classList.remove("asc","desc");});');
-    DBMS_OUTPUT.PUT_LINE('  th.classList.add(desc?"desc":"asc");');
+    DBMS_OUTPUT.PUT_LINE('  hr.querySelectorAll("th").forEach(function(x){x.classList.remove("asc","desc");x.removeAttribute("aria-sort");});');
+    DBMS_OUTPUT.PUT_LINE('  th.classList.add(desc?"desc":"asc"); th.setAttribute("aria-sort",desc?"descending":"ascending");');
     DBMS_OUTPUT.PUT_LINE('  var dec=Array.prototype.slice.call(body.rows).map(function(r,i){');
     DBMS_OUTPUT.PUT_LINE('    var c=r.cells[idx], s=c?cellText(c):"";');
     DBMS_OUTPUT.PUT_LINE('    return {r:r,i:i,s:s,n:c?numOf(s):null};');
@@ -1619,6 +1623,54 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){ if(closest(ev.target,"#triage-toggle,#essential-toggle,#app-filter-toggle,.tabs [data-t]")) pushState(); });');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("awr:window",pushState);');
     DBMS_OUTPUT.PUT_LINE('applyState();');
+    DBMS_OUTPUT.PUT_LINE('/* ---- P4: keyboard-operable tabs, sortable headers and window chips; table captions ---- */');
+    DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("section table:not([data-nosort]) thead th").forEach(function(th){');
+    DBMS_OUTPUT.PUT_LINE('  th.setAttribute("scope","col");');
+    DBMS_OUTPUT.PUT_LINE('  if(!th.hasAttribute("tabindex")) th.setAttribute("tabindex","0");');
+    DBMS_OUTPUT.PUT_LINE('  th.setAttribute("role","button");');
+    DBMS_OUTPUT.PUT_LINE('  if(!th.getAttribute("title")) th.setAttribute("title",th.hasAttribute("data-w")?"Highlight this window everywhere":"Sort by this column");');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("section table[data-nosort] thead th").forEach(function(th){ th.setAttribute("scope","col"); });');
+    DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("section table").forEach(function(tb){');
+    DBMS_OUTPUT.PUT_LINE('  if(tb.querySelector("caption")) return;');
+    DBMS_OUTPUT.PUT_LINE('  var sec=closest(tb,"section"), h2=sec?sec.querySelector(":scope > h2"):null;');
+    DBMS_OUTPUT.PUT_LINE('  var p=tb.parentNode&&tb.parentNode.classList.contains("tblwrap")?tb.parentNode:tb, h3=null, x=p.previousElementSibling;');
+    DBMS_OUTPUT.PUT_LINE('  while(x&&!h3){ if(x.tagName==="H3") h3=x; else if(x.tagName==="TABLE"||x.classList.contains("tblwrap")) break; x=x.previousElementSibling; }');
+    DBMS_OUTPUT.PUT_LINE('  var t=(h2?(h2.firstChild&&h2.firstChild.textContent||h2.textContent):"").trim();');
+    DBMS_OUTPUT.PUT_LINE('  if(h3) t+=" \u2014 "+(h3.textContent||"").trim();');
+    DBMS_OUTPUT.PUT_LINE('  if(!t) return;');
+    DBMS_OUTPUT.PUT_LINE('  var c=doc.createElement("caption"); c.className="sr-only"; c.textContent=t; tb.insertBefore(c,tb.firstChild);');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("keydown",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('  var t=ev.target;');
+    DBMS_OUTPUT.PUT_LINE('  if(closest(t,".tabs [data-t]")){');
+    DBMS_OUTPUT.PUT_LINE('    var tabs=Array.prototype.slice.call(closest(t,".tabs").querySelectorAll("[data-t]")), i=tabs.indexOf(closest(t,"[data-t]")), j=-1;');
+    DBMS_OUTPUT.PUT_LINE('    if(ev.key==="ArrowRight") j=(i+1)%tabs.length; else if(ev.key==="ArrowLeft") j=(i-1+tabs.length)%tabs.length;');
+    DBMS_OUTPUT.PUT_LINE('    else if(ev.key==="Home") j=0; else if(ev.key==="End") j=tabs.length-1;');
+    DBMS_OUTPUT.PUT_LINE('    if(j>=0){ ev.preventDefault(); tabs[j].click(); tabs[j].focus(); }');
+    DBMS_OUTPUT.PUT_LINE('    return;');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  if((ev.key==="Enter"||ev.key===" ")&&t&&t.tagName==="TH"&&t.getAttribute("role")==="button"){ ev.preventDefault(); t.click(); }');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('/* ---- P4: tap-to-pin tooltip for title-only data (touch / keyboard) ---- */');
+    DBMS_OUTPUT.PUT_LINE('var tipEl=null;');
+    DBMS_OUTPUT.PUT_LINE('function hideTip(){ if(tipEl&&tipEl.parentNode) tipEl.parentNode.removeChild(tipEl); tipEl=null; }');
+    DBMS_OUTPUT.PUT_LINE('function showTip(t){');
+    DBMS_OUTPUT.PUT_LINE('  var txt=t.getAttribute("title"); if(!txt) return;');
+    DBMS_OUTPUT.PUT_LINE('  hideTip(); tipEl=doc.createElement("div"); tipEl.className="tip"; tipEl.setAttribute("role","status"); tipEl.textContent=txt;');
+    DBMS_OUTPUT.PUT_LINE('  bd.appendChild(tipEl);');
+    DBMS_OUTPUT.PUT_LINE('  var r=t.getBoundingClientRect(), cw=doc.documentElement.clientWidth;');
+    DBMS_OUTPUT.PUT_LINE('  tipEl.style.top=(window.scrollY+r.bottom+6)+"px";');
+    DBMS_OUTPUT.PUT_LINE('  tipEl.style.left=Math.max(8,Math.min(window.scrollX+r.left,window.scrollX+cw-tipEl.offsetWidth-8))+"px";');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('  if(closest(ev.target,".tip")) return;');
+    DBMS_OUTPUT.PUT_LINE('  var t=closest(ev.target,"[title]");');
+    DBMS_OUTPUT.PUT_LINE('  if(!t||closest(ev.target,"a,button,summary,input,select,th,.tabs,.wchip,tr.sql-row")||!closest(t,"section,header.report")){ hideTip(); return; }');
+    DBMS_OUTPUT.PUT_LINE('  showTip(t);');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("keydown",function(ev){ if(ev.key==="Escape") hideTip(); });');
+    DBMS_OUTPUT.PUT_LINE('window.addEventListener("scroll",function(){ if(tipEl) hideTip(); },{passive:true});');
     DBMS_OUTPUT.PUT_LINE('/* ---- keyboard: Cmd/Ctrl-K focus filter, Esc clears, J / K jump ---- */');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("keydown",function(ev){');
     DBMS_OUTPUT.PUT_LINE('  var t=ev.target||{}, tag=(t.tagName||"").toLowerCase();');
@@ -1639,6 +1691,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('</script>');
+    -- Phase 4: the report body is one <main> landmark (display:contents,
+    -- so the body flex layout is unchanged); closed in awr_trend.sql.
+    DBMS_OUTPUT.PUT_LINE('<main id="main-start">');
 
     -- Temporary CLOBs are session-lived and will free at end-of-session,
     -- but free explicitly so the report can be regenerated in a loop

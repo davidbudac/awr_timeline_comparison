@@ -79,6 +79,20 @@ and CSS changed by design).
   the window's date when it differs from the Current window's day and
   carry the full ISO range in their title. The rail gains a "What changed"
   link when the narrative has something to say.
+- **Accessibility (phase 4).** Sections are emitted in visual order
+  (`awr_trend.sql` include order = the rail order; the per-section flex
+  `order:` rules are gone), so keyboard and screen-reader order match the
+  page; the body is a `<main>` landmark with a skip link. Top SQL tabs
+  are real `role="tab"` buttons with arrow-key navigation; sortable
+  headers are focusable, announce `aria-sort` and sort on Enter/Space;
+  window chips are buttons; every table gets a screen-reader caption
+  and `th[scope]`. Global `:focus-visible` ring, `prefers-reduced-motion`,
+  AA contrast for dark-mode chips and headers, copy/permalink buttons
+  visible on focus and on phones. Any titled element inside a section
+  can be tapped to pin its tooltip. Stacked wait-class charts carry
+  ECharts decal patterns (+ aria labels), the day-profile heatmap marks
+  |z| >= 3 cells with a sign glyph, changed parameter cells carry a
+  `&ne;` glyph.
 - **Website (`docs/`): quick access to the demo report and installation.**
   Filled "Demo report" / "Install" pills in the top bar of every page (kept
   on phones), a two-card "Quick access" strip under the title block, a
