@@ -91,7 +91,7 @@ BEGIN
                           'NLS_NUMERIC_CHARACTERS=''.,''') || '-hour'
         END;
 
-    DBMS_OUTPUT.PUT_LINE('<section id="ash-timeline"><h2>ASH timeline '
+    DBMS_OUTPUT.PUT_LINE('<section id="ash-timeline" data-normal="Y"><h2>ASH timeline '
         || '(' || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
         || ', stacked by wait class)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'

@@ -83,6 +83,7 @@ DECLARE
     v_sqlid_count NUMBER := 0;
     v_tail_cnt    NUMBER := 0;
     v_nocur_cnt   NUMBER := 0;
+    v_normal      BOOLEAN := FALSE;   -- section opted into the Normal view
     v_any_row     BOOLEAN := FALSE;
 
     v_header      VARCHAR2(4000);
@@ -107,6 +108,7 @@ DECLARE
     @@sql/lib/json_escape.plsql
     @@sql/lib/fmt_num.plsql
     @@sql/lib/dev_bucket.plsql
+    @@sql/lib/metric_policy.plsql
     @@sql/lib/score_cells.plsql
     @@sql/lib/is_oracle_schema.plsql
     @@sql/lib/put_clob_chunked.plsql
@@ -382,6 +384,15 @@ BEGIN
         END IF;
         IF s.is_new = 'Y' THEN
             v_flags := v_flags || '<span class="chip" title="no captured execution anywhere in the span before the Current window">new</span> ';
+        END IF;
+        -- Normal view opt-in: an error, a plan change or a DOP downgrade on
+        -- a statement that ran in the Current window is worth the short
+        -- report; plain slow-vs-baseline rows stay Detailed-only.
+        IF s.cur_val IS NOT NULL AND s.rnk <= v_top_n
+           AND (s.has_error = 1 OR s.distinct_plans > 1 OR s.has_downgrade = 1)
+           AND NOT v_normal THEN
+            v_normal := TRUE;
+            DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("sqlmon").setAttribute("data-normal","Y");</script>');
         END IF;
 
         -- Phase 5: a statement with no Current-window execution folds under

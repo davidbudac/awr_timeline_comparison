@@ -95,7 +95,7 @@ def _cells(w):
             cur = rates[0]
             mu, sd, n = H.mean_sd(rates[1:])
             z, pct = H.z_and_pct(cur, mu, sd)
-            bucket = H.bucket_of(cur, n, sd, z, pct=pct)
+            bucket = H.policy_bucket("LOAD", stat, None, cur, mu, sd, n)
             start = t_end - timedelta(hours=h + 1)
             cells[(ord_, h)] = {
                 "label": label, "hour_slot": h,
@@ -156,6 +156,9 @@ def emit(w) -> str:
     shift = {o: (1 if up[o] >= 12 else (-1 if down[o] >= 12 else 0)) for o in labels}
     nshift = sum(1 for o in labels if shift[o] != 0)
     isolated = sum(up[o] + down[o] for o in labels if shift[o] == 0)
+
+    if nshift > 0:
+        put('<script>document.getElementById("day-profile").setAttribute("data-normal","Y");</script>')
 
     plural = "" if days == 1 else "s"
     put("<h2>Day profile &mdash; hour-of-day vs the " + str(days)
@@ -223,7 +226,7 @@ def emit(w) -> str:
         '<div id="day-profile-line" style="height:240px"></div></div>')
 
     # Table: one row per hour (chronological), one column per stat.
-    row = "<table><thead><tr><th>Hour</th>"
+    row = "<table class=\"detail-only\"><thead><tr><th>Hour</th>"
     for o in range(1, nstat + 1):
         row += '<th class="num">' + H.esc(labels[o]) + "</th>"
     put(row + "</tr></thead><tbody>")

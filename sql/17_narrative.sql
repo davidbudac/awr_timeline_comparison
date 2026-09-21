@@ -88,6 +88,7 @@ DECLARE
     v_txt    VARCHAR2(32767);
     v_tail   VARCHAR2(32767);
     v_r      stat_rec;
+    @@sql/lib/metric_policy.plsql
 
     -- R1 detail carriers
     v_file      VARCHAR2(600);
@@ -164,24 +165,18 @@ DECLARE
         RETURN v_stats(p).cur / v_stats(p).mu;
     END ratio;
 
-    -- "LARGE": section 07's |z| > 3 over the floored sigma (max(sd, 2% of
-    -- |mu|)) AND a material move (|pct| >= 10), with a 2x ratio stand-in
-    -- when the baseline sigma is degenerate and z would be meaningless.
+    -- "LARGE": section 07's bucket through the per-metric policy
+    -- (sql/lib/metric_policy.plsql): |z| > 3 over the floored sigma AND a
+    -- material move past the stat's own floors AND in the bad direction
+    -- (a drop in physical reads is 'improved', not a story).  'TM:' keys
+    -- are the time-model twins of the LOAD names.
     FUNCTION big(p VARCHAR2) RETURN BOOLEAN IS
         r stat_rec;
     BEGIN
         IF NOT has(p) THEN RETURN FALSE; END IF;
         r := v_stats(p);
-        IF r.n IS NULL OR r.n < 3 THEN RETURN FALSE; END IF;
-        IF r.mu <> 0 AND ABS((r.cur - r.mu) / ABS(r.mu) * 100) < 10 THEN
-            RETURN FALSE;
-        END IF;
-        IF r.sd IS NOT NULL AND GREATEST(r.sd, 0.02 * ABS(r.mu)) > 0 THEN
-            RETURN ABS((r.cur - r.mu) / GREATEST(r.sd, 0.02 * ABS(r.mu))) > 3;
-        END IF;
-        IF r.mu  = 0 THEN RETURN r.cur <> 0; END IF;
-        IF r.cur = 0 THEN RETURN TRUE;       END IF;
-        RETURN GREATEST(r.cur / r.mu, r.mu / r.cur) >= 2;
+        RETURN policy_bucket('LOAD', REGEXP_REPLACE(p, '^TM:', ''), NULL,
+                             r.cur, r.mu, r.sd, r.n) = 'large';
     END big;
 
     FUNCTION went_up(p VARCHAR2) RETURN BOOLEAN IS

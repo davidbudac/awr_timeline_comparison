@@ -271,6 +271,7 @@ def emit(w) -> str:
                   '<th class="num">% &Delta;</th><th>Flags</th></tr></thead>')
         put('<table id="sqlmon-pool" data-nosort data-notools>' + header + "<tbody>")
 
+    normal = False
     for rnk, sid in enumerate(ranked, start=1):
         st = stats[sid]
         p = pivot[sid] or {"cur_val": None, "mu": None, "sd": None, "n_prior": 0}
@@ -287,6 +288,12 @@ def emit(w) -> str:
             flags += '<span class="chip" title="at least one execution ended DONE (ERROR)">error</span> '
         if st["is_new"] == "Y":
             flags += '<span class="chip" title="no captured execution anywhere in the span before the Current window">new</span> '
+
+        if (p["cur_val"] is not None and rnk <= top_n
+                and (st["has_error"] == 1 or st["distinct_plans"] > 1 or st["has_downgrade"] == 1)
+                and not normal):
+            normal = True
+            put('<script>document.getElementById("sqlmon").setAttribute("data-normal","Y");</script>')
 
         sysflag = is_oracle_schema(st["last_username"])
         tail = ' data-tail="Y" hidden' if (rnk > top_n or p["cur_val"] is None) else ""

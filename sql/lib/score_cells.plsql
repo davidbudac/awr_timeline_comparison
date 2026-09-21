@@ -1,28 +1,19 @@
 -- sql/lib/score_cells.plsql
 -- Local functions shared by the per-row scoring consumers (04/05 wait
--- tables, 06/14/15/18):
---   score_z(cur, mu, sd)              -> z with the sigma floor
---   score_bucket(cur, mu, sd, n, share, dir, demote) -> change bucket
---   score_cells(cur, mu, sd, n, share, dir, demote)  -> three <td> cells
--- Same scoring rule as sql/07_summary.sql (kept in sync by inspection):
---   z = (cur - mu) / GREATEST(sd, 0.02 * |mu|) over prior valid windows
---       (the 2 % sigma floor keeps a dead-flat baseline from blowing a
---       trivial wobble up to |z| > 99);
---   bucket by |z| (> 3 large, > 2 moderate, else typical), but only when
---   the move is MATERIAL: |% delta| >= 10 (when a % delta exists) and,
---   for wait rows, the row's share of the Current total >= 2 %.  An
---   immaterial |z| > 2 renders as typical with an "immaterial" badge;
---   n < 3 -> insufficient history; sd NULL, or sd = 0 with mu = 0 ->
---   flat baseline;
---   a material drop in a cost-type name (dir = 'Y', see
---   sql/lib/finding_family.plsql) is 'improved' rather than large /
---   moderate; p_demote = 'Y' turns 'large' into 'moderate' (04/05's
---   table-wide-shift note).
+-- tables, 18 SQL Monitor):
+--   score_z(cur, mu, sd)                         -> z with the sigma floor
+--   score_bucket(cur, mu, sd, n, share, domain, name, class, demote)
+--                                                -> change bucket
+--   score_cells(... same ...)                    -> three <td> cells
+-- The rule (sigma floor, per-metric materiality floors, direction) is
+-- sql/lib/metric_policy.plsql's policy_bucket -- include that file FIRST.
 -- CSS classes: large -> crit, moderate -> warn, typical -> ok,
--- improved -> info, insufficient / flat / n/a -> skip.
--- Designed to be @@-included into a DECLARE block. The functions are
--- unit-invariant: z and pct cancel units, so callers can pass raw
--- counters (microseconds, gets, executions) without unit conversion.
+-- improved -> info (muted, never highlighted), noted -> note,
+-- insufficient / flat / n/a -> skip.
+-- The functions are unit-invariant: z and pct cancel units, so callers can
+-- pass raw counters (microseconds, gets, executions) without unit
+-- conversion -- but a policy min_abs floor is compared against the raw
+-- value the caller passes, so 04/05 pass wait rows with their SHARE.
 -- Display-only rules (B5/F5, do not affect scoring/severity above):
 --   - |z| > 99 is clamped to "&gt;+99" / "&lt;&minus;99".
 --   - When the prior baseline barely moved (sd < 1% of |mean|, or both
@@ -45,44 +36,22 @@
         RETURN (p_cur - p_mu) / v_den;
     END score_z;
 
+    -- Thin wrapper: the rule itself lives in sql/lib/metric_policy.plsql
+    -- (policy_bucket), which must be included BEFORE this file.  The
+    -- domain / name / class pick the per-metric policy (direction and
+    -- materiality floors); 'SQL' / 'SEG' / 'FILE' callers pass no name.
     FUNCTION score_bucket(p_cur    NUMBER,
                           p_mu     NUMBER,
                           p_sd     NUMBER,
                           p_n      NUMBER,
                           p_share  NUMBER   DEFAULT NULL,
-                          p_dir    VARCHAR2 DEFAULT '-',
+                          p_domain VARCHAR2 DEFAULT 'SQL',
+                          p_name   VARCHAR2 DEFAULT NULL,
+                          p_class  VARCHAR2 DEFAULT NULL,
                           p_demote VARCHAR2 DEFAULT 'N') RETURN VARCHAR2 IS
-        v_z      NUMBER := score_z(p_cur, p_mu, p_sd);
-        v_pct    NUMBER;
-        v_raw    VARCHAR2(40);
     BEGIN
-        IF p_cur IS NULL THEN
-            RETURN 'n/a';
-        ELSIF NVL(p_n, 0) < 3 THEN
-            RETURN 'insufficient history';
-        ELSIF p_sd IS NULL OR v_z IS NULL THEN
-            RETURN 'flat baseline';
-        END IF;
-        v_raw := CASE WHEN ABS(v_z) > 3 THEN 'large'
-                      WHEN ABS(v_z) > 2 THEN 'moderate'
-                      ELSE 'typical' END;
-        IF v_raw = 'typical' THEN
-            RETURN v_raw;
-        END IF;
-        -- Materiality gate: a tiny % move, or a wait that is a sliver of
-        -- the Current total, is not a finding however many sigmas it is.
-        v_pct := CASE WHEN p_mu = 0 THEN NULL ELSE (p_cur - p_mu) / ABS(p_mu) * 100 END;
-        IF (v_pct IS NOT NULL AND ABS(v_pct) < 10)
-           OR (p_share IS NOT NULL AND p_share < 0.02) THEN
-            RETURN 'typical';
-        END IF;
-        IF p_dir = 'Y' AND p_cur < p_mu THEN
-            RETURN 'improved';
-        END IF;
-        IF p_demote = 'Y' AND v_raw = 'large' THEN
-            RETURN 'moderate';
-        END IF;
-        RETURN v_raw;
+        RETURN policy_bucket(p_domain, p_name, p_class,
+                             p_cur, p_mu, p_sd, p_n, p_share, p_demote);
     END score_bucket;
 
     FUNCTION score_cells(p_cur    NUMBER,
@@ -90,7 +59,9 @@
                          p_sd     NUMBER,
                          p_n      NUMBER,
                          p_share  NUMBER   DEFAULT NULL,
-                         p_dir    VARCHAR2 DEFAULT '-',
+                         p_domain VARCHAR2 DEFAULT 'SQL',
+                         p_name   VARCHAR2 DEFAULT NULL,
+                         p_class  VARCHAR2 DEFAULT NULL,
                          p_demote VARCHAR2 DEFAULT 'N') RETURN VARCHAR2 IS
         v_z       NUMBER;
         v_pct     NUMBER;
@@ -105,12 +76,14 @@
         v_pct := CASE WHEN p_cur IS NULL OR p_mu IS NULL OR p_mu = 0
                       THEN NULL
                       ELSE (p_cur - p_mu) / ABS(p_mu) * 100 END;
-        v_bucket := score_bucket(p_cur, p_mu, p_sd, p_n, p_share, p_dir, p_demote);
+        v_bucket := score_bucket(p_cur, p_mu, p_sd, p_n, p_share,
+                                 p_domain, p_name, p_class, p_demote);
         v_cls := CASE v_bucket
                      WHEN 'large'    THEN 'crit'
                      WHEN 'moderate' THEN 'warn'
                      WHEN 'typical'  THEN 'ok'
-                     WHEN 'improved' THEN 'info'
+                     WHEN 'improved' THEN 'imp'
+                     WHEN 'noted'    THEN 'note'
                      ELSE                 'skip'
                  END;
         -- "immaterial": |z| cleared 2 but the materiality gate held it back.
@@ -156,8 +129,8 @@
                    || '&sigma;&approx;0</span>'
                END
             || CASE WHEN v_imm = 'Y' THEN
-                   ' <span class="badge sig" title="|z| above 2 but the move is below the '
-                   || 'materiality floor (10% delta, 2% share of the Current total)">'
+                   ' <span class="badge sig" title="|z| above 2 but the move is below this '
+                   || 'metric&#39;s materiality floor (sql/lib/metric_policy.plsql)">'
                    || 'immaterial</span>'
                END
             || '</td>'

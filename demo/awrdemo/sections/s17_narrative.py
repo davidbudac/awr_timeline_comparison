@@ -19,7 +19,7 @@ import math
 import re
 import statistics
 
-from awrdemo.helpers import esc, mean_sd, ora_round, to_char_trim
+from awrdemo.helpers import esc, mean_sd, ora_round, to_char_trim, policy_bucket
 
 _STATS = ['physical reads', 'bytes sent via SQL*Net to client', 'user calls',
           'redo size', 'user commits']
@@ -82,20 +82,12 @@ class _Stats:
         return cur / mu
 
     def big(self, p):
+        # section 07's bucket through the per-metric policy
         if not self.has(p):
             return False
         cur, mu, sd, n = self.d[p]
-        if n is None or n < 3:
-            return False
-        if mu != 0 and abs((cur - mu) / abs(mu) * 100) < 10:
-            return False
-        if sd is not None and max(sd, 0.02 * abs(mu)) > 0:
-            return abs((cur - mu) / max(sd, 0.02 * abs(mu))) > 3
-        if mu == 0:
-            return cur != 0
-        if cur == 0:
-            return True
-        return max(cur / mu, mu / cur) >= 2
+        name = p[3:] if p.startswith("TM:") else p
+        return policy_bucket("LOAD", name, None, cur, mu, sd, n) == "large"
 
     def went_up(self, p):
         return self.has(p) and self.d[p][0] >= self.d[p][1]

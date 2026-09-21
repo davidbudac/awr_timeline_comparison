@@ -13,6 +13,47 @@ grants, no query-shape change beyond one scalar Current-total query in
 04/05; byte-identity is **not** preserved (scoring presentation, markup
 and CSS changed by design).
 
+- **Normal / Detailed views (phase 7).** The report now opens in a
+  **Normal** view -- masthead, Headline metrics, the Findings movers,
+  the ASH timeline, Top SQL, plus Parameter changes / SQL Monitor / Day
+  profile only when they have something to say (`data-normal="Y"` on the
+  section, set by a one-line inline script for the conditional three) --
+  and a **Detailed** view that is the whole report. A two-button switch
+  in the rail foot (`#mode-normal` / `#mode-detailed`, `body.normal` /
+  `body.detailed`, persisted as localStorage `awr-mode`, shared in the
+  hash as `!v=d`) replaces the **Triage mode** and **Essential rows**
+  toggles, which are gone (their `data-imp` row tags stay, unused by
+  CSS). `.detail-only` marks Detailed-only content inside a kept section
+  (07's per-domain tables, 06's per-SQL pool, 16's hour table); the rail
+  hides links to hidden sections behind a "+ N more in Detailed" line, a
+  `.mode-note` at the end of `<main>` names them, `revealHash()` flips to
+  Detailed when a link targets hidden content, and `setMode()` resizes
+  every ECharts instance that measured zero width while hidden. With JS
+  off neither body class exists and everything shows.
+- **Per-metric policy (phase 7).** `sql/lib/metric_policy.plsql` (new,
+  replaces `finding_family.plsql`) is a one-line-per-metric table --
+  `pol(family, canonical, dir, min_pct, min_abs)` for every LOAD /
+  METRIC name, `wpol(class, dir, min_pct, min_share)` per wait class
+  with per-event overrides, and defaults for SQL / SEG / FILE and
+  unmapped names -- plus `policy_bucket()`, the one implementation of the
+  scoring rule that 00 (verdict), 07, 08, 16, 17 and
+  `score_cells.plsql` (04/05/18) now all call. `dir` is `UP` (rise is
+  bad, drop is `improved`), `DOWN` (drop is bad), `ANY` (both directions
+  are findings: throughput, session count) or `INFO` (never a finding; a
+  material move is `noted`). `min_abs` is a value floor in the metric's
+  own unit (e.g. hard parses below 2/s, redo below 10 KB/s, read latency
+  below 1 ms never fire), a minimum share for waits. `improved` and
+  `noted` are never highlighted: no row tint, outlined grey/green badges
+  (`.badge.imp` / `.badge.note`), never a movers lead or member, not in
+  the verdict count or the all-movers list (the verdict still says
+  "N improved"). `score_bucket` / `score_cells` take
+  `(share, domain, name, class, demote)` instead of `(share, dir,
+  demote)`; `lint.sh` check 12 now verifies every template name has a
+  policy line and check 13 that `metric_policy.plsql` precedes
+  `score_cells.plsql` wherever the latter is included.
+  `demo/awrdemo/helpers.py` parses the policy file, so the demo can never
+  drift from it.
+
 - **Fewer findings, same information (phase 1).**
   - `sql/lib/finding_family.plsql` (new): `finding_family` /
     `is_canonical` / `higher_is_worse` classify every scored LOAD /

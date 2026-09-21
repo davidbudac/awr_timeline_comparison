@@ -37,15 +37,16 @@ DECLARE
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/fmt_num.plsql
-    @@sql/lib/finding_family.plsql
+    @@sql/lib/metric_policy.plsql
     @@sql/lib/anchor_id.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="overview" data-triage="Y"><h2>Headline metrics</h2>');
+    DBMS_OUTPUT.PUT_LINE('<section id="overview" data-normal="Y"><h2>Headline metrics</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
         || 'Six headline metrics across the compared windows, oldest &rarr; current. '
         || 'Badge = z bucket: |z|&gt;3 large, |z|&gt;2 moderate, else typical '
-        || '(z over max(&sigma;, 2% of &mu;); a move under 10% is typical; '
-        || 'a material drop in a cost-type metric is <b>improved</b>).</p>');
+        || '(z over max(&sigma;, 2% of &mu;); each metric has its own materiality floors and '
+        || 'direction, see sql/lib/metric_policy.plsql; a move in the good direction is '
+        || '<b>improved</b> and never highlighted).</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="hero-grid">');
 
@@ -235,19 +236,14 @@ BEGIN
             END;
             v_sev := CASE
                 WHEN c.cur IS NULL THEN NULL
-                WHEN c.n < 3 THEN 'insufficient history'
-                WHEN c.sd IS NULL OR v_z IS NULL THEN 'flat baseline'
-                WHEN ABS(v_z) <= 2 THEN 'typical'
-                WHEN v_pct IS NOT NULL AND ABS(v_pct) < 10 THEN 'typical'
-                WHEN higher_is_worse(c.src, c.key) = 'Y' AND c.cur < c.mu THEN 'improved'
-                WHEN ABS(v_z) > 3 THEN 'large'
-                ELSE 'moderate'
+                ELSE policy_bucket(c.src, c.key, NULL, c.cur, c.mu, c.sd, c.n)
             END;
             v_sev_cls := CASE v_sev
                 WHEN 'large'    THEN 'crit'
                 WHEN 'moderate' THEN 'warn'
                 WHEN 'typical'  THEN 'ok'
-                WHEN 'improved' THEN 'info'
+                WHEN 'improved' THEN 'imp'
+                WHEN 'noted'    THEN 'note'
                 ELSE 'skip' END;
 
             -- B5: display-only clamp + baseline-barely-moved flag (no

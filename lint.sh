@@ -187,9 +187,10 @@ while IFS= read -r hit; do
 done < <(grep -n 'href="reports/' run_awr_fleet.sh 2>/dev/null)
 
 # ----------------------------------------------------------------------
-# 12. Every LOAD / METRIC name in every template's target list must be
-#     mapped in sql/lib/finding_family.plsql (family rollup, v1.5.0); an
-#     unmapped name silently lands in the OTHER family and never folds.
+# 12. Every LOAD / METRIC name in every template's target list must have
+#     a policy line in sql/lib/metric_policy.plsql (family / direction /
+#     floors); an unmapped name falls through to the generic default and
+#     never folds or gets a direction.
 # ----------------------------------------------------------------------
 for d in sql/lib/templates/*/; do
     for t in sysstat_load_targets sysmetric_targets; do
@@ -197,12 +198,25 @@ for d in sql/lib/templates/*/; do
         [ -f "$f" ] || continue
         while IFS= read -r name; do
             [ -n "$name" ] || continue
-            if ! grep -qF "'$name'" sql/lib/finding_family.plsql; then
-                finding family-map "$f" \
-                    "target name '$name' is not mapped in sql/lib/finding_family.plsql (add it to finding_family / is_canonical / higher_is_worse as appropriate)"
+            if ! grep -qF "WHEN '$name'" sql/lib/metric_policy.plsql; then
+                finding metric-policy "$f" \
+                    "target name '$name' has no line in sql/lib/metric_policy.plsql (add a WHEN 'name' THEN RETURN pol(...) line)"
             fi
         done < <(sed -n "s/^[[:space:]]*SELECT '\([^']*\)'.*/\1/p" "$f")
     done
+done
+
+# ----------------------------------------------------------------------
+# 13. sql/lib/score_cells.plsql calls policy_bucket(), so every file that
+#     includes it must include sql/lib/metric_policy.plsql first.
+# ----------------------------------------------------------------------
+for f in $(grep -l '@@sql/lib/score_cells.plsql' sql/*.sql sql/fleet/*.sql awr_fleet_extract.sql 2>/dev/null); do
+    a=$(grep -n '@@sql/lib/metric_policy.plsql' "$f" | head -1 | cut -d: -f1)
+    b=$(grep -n '@@sql/lib/score_cells.plsql' "$f" | head -1 | cut -d: -f1)
+    if [ -z "$a" ] || [ "$a" -gt "$b" ]; then
+        finding policy-include-order "$f:${b:-0}" \
+            "sql/lib/score_cells.plsql is included without sql/lib/metric_policy.plsql before it (policy_bucket would be undefined)"
+    fi
 done
 
 if [ "$fail" -eq 0 ]; then

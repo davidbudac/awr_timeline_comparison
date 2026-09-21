@@ -93,7 +93,7 @@ DECLARE
     @@sql/lib/is_oracle_schema.plsql
     @@sql/lib/fmt_num.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="topsql" data-triage="Y"><h2>Top SQL (top ' || v_top_n
+    DBMS_OUTPUT.PUT_LINE('<section id="topsql" data-normal="Y"><h2>Top SQL (top ' || v_top_n
         || ' per dimension, per window)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'Top-' || v_top_n || ' SQLs per dimension per window from '
@@ -108,7 +108,7 @@ BEGIN
     -- wrapped in a matching .tabpanel as its <h3> is emitted). Dim codes
     -- and order are hardcoded here to match the `dims` CTE inside the
     -- cursor below -- they are static, not derived per-DB.
-    DBMS_OUTPUT.PUT_LINE('<div class="tabs hidetri" data-tabs="topsql" role="tablist" aria-label="Top SQL ranking dimension">'
+    DBMS_OUTPUT.PUT_LINE('<div class="tabs" data-tabs="topsql" role="tablist" aria-label="Top SQL ranking dimension">'
         || '<button type="button" role="tab" aria-selected="true" class="on" data-t="ELAPSED" id="tab-topsql-ELAPSED">Elapsed time</button>'
         || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="CPU" id="tab-topsql-CPU">CPU time</button>'
         || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="GETS" id="tab-topsql-GETS">Buffer gets</button>'
@@ -351,7 +351,7 @@ BEGIN
             v_dim_sqls_total(s.dim)    := 0;
 
             -- C1: open this dim's tabpanel (first one starts visible).
-            DBMS_OUTPUT.PUT_LINE('<div class="tabpanel hidetri'
+            DBMS_OUTPUT.PUT_LINE('<div class="tabpanel'
                 || CASE WHEN s.dim = 'ELAPSED' THEN ' on' ELSE '' END
                 || '" data-tabs="topsql" data-t="' || s.dim || '" role="tabpanel"'
                 || ' aria-labelledby="tab-topsql-' || s.dim || '">');
@@ -883,8 +883,9 @@ BEGIN
     -- text -- previously one <details> block per SQL. Ordered by
     -- current-window elapsed time desc; rows beyond the first 8 are
     -- tagged data-tail="Y" and collapsed behind an expander.
-    DBMS_OUTPUT.PUT_LINE('<h3 class="hidetri">Per-SQL detail</h3>');
-    DBMS_OUTPUT.PUT_LINE('<p class="hidetri" style="font-size:12px;color:var(--muted)">'
+    -- detail-only: the per-SQL pool shows in the Detailed view only.
+    DBMS_OUTPUT.PUT_LINE('<h3 class="detail-only">Per-SQL detail</h3>');
+    DBMS_OUTPUT.PUT_LINE('<p class="detail-only" style="font-size:12px;color:var(--muted)">'
         || 'Every SQL ID listed above: click a row for full text, AWR '
         || 'retention range, plan_hash_value summary, and avg sec/exec '
         || 'colored by PHV across every snapshot the SQL appeared in. '
@@ -896,7 +897,7 @@ BEGIN
     -- single ECharts init pass at the end of the section.
     DBMS_OUTPUT.PUT_LINE('<script>AWR_DATA.sqlDetails = AWR_DATA.sqlDetails || {};</script>');
 
-    DBMS_OUTPUT.PUT_LINE('<table id="sql-pool"><thead><tr>'
+    DBMS_OUTPUT.PUT_LINE('<table id="sql-pool" class="detail-only"><thead><tr>'
         || '<th>SQL ID</th><th>Ranked in</th><th>Schema</th>'
         || '<th class="num" title="distinct plan_hash_values seen across the span">Plans</th><th class="num">Executions</th>'
         || '<th class="num" title="AWR snapshots in which the SQL appeared">Snapshots</th><th>First seen</th><th>Text</th>'
@@ -1262,7 +1263,7 @@ BEGIN
     -- desc); a generic .expander[data-for] handler (chrome-owned) reveals
     -- every [data-tail="Y"] row in the target table's <tbody>.
     IF v_seen_sqls.COUNT > 8 THEN
-        DBMS_OUTPUT.PUT_LINE('<span class="expander" data-for="sql-pool" data-n="'
+        DBMS_OUTPUT.PUT_LINE('<span class="expander detail-only" data-for="sql-pool" data-n="'
             || (v_seen_sqls.COUNT - 8) || '" data-noun="more statements">'
             || '&#9656; Show ' || (v_seen_sqls.COUNT - 8) || ' more statements</span>');
     END IF;

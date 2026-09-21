@@ -183,6 +183,10 @@ BEGIN
         RETURN;
     END IF;
 
+    -- A parameter that differs across the compared windows is worth the
+    -- Normal view (the section is otherwise Detailed-only).
+    DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("param-changes").setAttribute("data-normal","Y");</script>');
+
     -- Header: Parameter | Current | -1w | -2w | ...
     v_header := '<thead><tr><th>Parameter</th><th data-w="0">Current</th>';
     FOR k IN 1 .. v_weeks_back LOOP

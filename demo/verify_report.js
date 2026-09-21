@@ -51,7 +51,7 @@ const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 
   // toggles
   const toggles = {};
-  for (const [id, cls] of [['#essential-toggle', 'essential'], ['#app-filter-toggle', 'app-only'], ['#triage-toggle', 'triage']]) {
+  for (const [id, cls] of [['#app-filter-toggle', 'app-only']]) {
     const el = await page.$(id);
     if (!el) { toggles[id] = 'MISSING'; continue; }
     await el.click();
@@ -62,6 +62,20 @@ const { chromium } = require('/opt/node22/lib/node_modules/playwright');
     const off = await page.evaluate(c => document.body.classList.contains(c), cls);
     toggles[id] = on && !off ? 'ok' : `FAIL on=${on} off=${off}`;
   }
+  // Normal / Detailed mode switch: Normal is the default; Detailed reveals every section
+  {
+    const normal0 = await page.evaluate(() => document.body.classList.contains('normal'));
+    const vis0 = await page.evaluate(() => [...document.querySelectorAll('main > section')].filter(s => s.offsetParent !== null).length);
+    const bd = await page.$('#mode-detailed');
+    if (!bd) { toggles.mode = 'MISSING'; } else {
+      await bd.click(); await page.waitForTimeout(300);
+      const det = await page.evaluate(() => document.body.classList.contains('detailed'));
+      const vis1 = await page.evaluate(() => [...document.querySelectorAll('main > section')].filter(s => s.offsetParent !== null).length);
+      const bn = await page.$('#mode-normal'); await bn.click(); await page.waitForTimeout(300);
+      const back = await page.evaluate(() => document.body.classList.contains('normal'));
+      toggles.mode = (normal0 && det && back && vis1 > vis0) ? `ok (${vis0} of ${vis1} sections in Normal)` : `FAIL normal0=${normal0} det=${det} back=${back} vis=${vis0}/${vis1}`;
+    }
+  }
   // theme toggle: any button whose id/class mentions theme
   const theme = await page.$('#theme-toggle, .theme-icon-btn, [data-theme-toggle], #themeToggle');
   if (theme) {
@@ -71,6 +85,9 @@ const { chromium } = require('/opt/node22/lib/node_modules/playwright');
     if (shots) await page.screenshot({ path: path.join(shots, 'dark.png'), fullPage: true });
     await theme.click(); await page.waitForTimeout(300);
   } else toggles.theme = 'MISSING';
+  // the interactions below hit elements that only exist on screen in the Detailed view
+  await page.evaluate(() => window.AWR_setMode && window.AWR_setMode(true));
+  await page.waitForTimeout(300);
   // tabs
   const tab = await page.$('.tabs [data-t]:nth-child(2)');
   if (tab) {

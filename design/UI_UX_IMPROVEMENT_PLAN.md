@@ -502,6 +502,59 @@ stdlib only; the `$` in the sort regex is escaped as `$$` for
 
 ---
 
+### Phase 7 — Normal / Detailed views and the per-metric policy — DONE 2026-09-21
+
+Requested after phases 1-6 landed ("a lot of visual clutter ... two modes,
+normal and detailed ... don't highlight a change that is positive ...
+something is not worth reporting, individually per metric ... editable by
+a human"). Same branch, same constraints (no new DEFINE, no grant, no DB
+available here).
+
+**7.1 Two views.** `body.normal` (default) / `body.detailed`, decided
+before first paint from localStorage `awr-mode` or a `!v=d` hash. Normal
+keeps the masthead (verdict, narrative, windows, DB-time strip), 08
+Headline metrics, 07's Biggest movers, 09 ASH timeline and 06 Top SQL
+(tabs + ranking tables, no per-SQL pool); 12 / 16 / 18 join only when
+they have something to say (differing parameter / day-wide shift / error,
+plan change or DOP downgrade on a Current-window statement) via a one-line
+inline script that sets `data-normal` after the section knows.
+`.detail-only` hides 07's per-domain tables, 06's pool and 16's hour
+table inside kept sections. Rail: hidden sections' links (and empty group
+headers) drop out behind "+ N more in Detailed"; a `.mode-note` closes
+`<main>`; a cross-link into hidden content flips to Detailed by itself;
+`setMode` resizes every ECharts instance that measured zero width while
+hidden. The Triage and Essential toggles were removed (Normal subsumes
+both); Application only stays. Measured on the demo: Normal renders 7 of
+17 sections and a 9,000 px page instead of 33,400 px.
+
+**7.2 Per-metric policy.** `sql/lib/metric_policy.plsql` replaces
+`finding_family.plsql`: one line per name --
+`pol(family, canonical, dir, min_pct, min_abs)` for all 27 LOAD and 23
+METRIC names, `wpol(class, dir, min_pct, min_share)` for 12 wait classes
+plus 17 per-event overrides (locks / configuration faults fire at 10% and
+1% share, SQL*Net payload and PX plumbing only at 30% / 5%), defaults for
+SQL / SEG / FILE and unmapped names. Direction per metric: cost-type
+names (`UP`: CPU, DB time, I/O, redo, parses, latencies, waits) only fire
+on a rise; throughput (`ANY`: user calls, commits, executions, session
+count) fires both ways because a drop can be an outage; the CPU-time
+ratio is `DOWN`; bookkeeping counters (`INFO`: sorts in memory / rows,
+opened cursors, table fetch by rowid, redo for lost-write detection) are
+never findings. Value floors in the metric's own unit (hard parses 2/s,
+disk sorts 0.5/s, read latency 1 ms, redo 10 KB/s, DB time 0.2 AAS, ...)
+stop tiny-base percentage blow-ups. `policy_bucket()` in the same file
+is now the single implementation of the rule; 00 / 07 / 08 / 16 / 17 and
+`score_cells.plsql` (04/05/18) all call it, so "one rule, six copies" is
+gone. `improved` / `noted` are never highlighted (outlined badges, no row
+tint, never a mover, not counted). `demo/awrdemo/helpers.py` parses the
+policy file, lint check 12 verifies template coverage, check 13 the
+include order.
+
+**Still open:** the dbmint run (below) -- the new include declares a
+record type and a function with a `CASE ... WHEN ... THEN RETURN` body,
+both plain 19c PL/SQL but unexecuted here; the fleet findings band
+(`sql/fleet/04_findings.sql`) still uses the pre-policy rule (fleet files
+were left alone on purpose, see the cardinal rule).
+
 ## Verification checklist (every phase)
 
 0. **dbmint run (NOT DONE YET -- required before tagging):** pinned
@@ -521,8 +574,12 @@ stdlib only; the `$` in the sort regex is escaped as `$$` for
 3. Playwright checks (run ad hoc this pass, not yet folded into
    `demo/verify_report.js`): `scrollWidth <= clientWidth` at 390 and 1440
    (both 0 leaks); every `.xlink` target exists or the link is hidden;
-   `#findings!v=t,e&tab=CPU&w=2` restores Triage + Essential, the CPU tab
-   and the window highlight; ArrowRight moves the Top SQL tab, Enter
+   `#findings!v=d&tab=CPU&w=2` restores Detailed, the CPU tab
+   and the window highlight (phase 7 re-ran: Normal by default, `!v=d`
+   on a fresh profile gives Detailed without persisting, an xlink from
+   the movers table into a `.detail-only` row flips to Detailed, 0
+   zero-width canvases after the flip, `#essential-toggle` /
+   `#triage-toggle` gone); ArrowRight moves the Top SQL tab, Enter
    sorts a header (`aria-sort`); a tapped titled cell opens a `.tip`;
    dark `.chip.on` renders `--accent-deep` on `--accent-bg`.
 4. dbmint: pinned window + `AUTO`, `template=comprehensive|simple|dev`,

@@ -93,6 +93,7 @@ DECLARE
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/put_clob_chunked.plsql
+    @@sql/lib/metric_policy.plsql
 
     -- JSON number token: null-safe, NLS-pinned.
     FUNCTION jn(p NUMBER) RETURN VARCHAR2 IS
@@ -108,7 +109,8 @@ DECLARE
     FUNCTION bucket_cls(p VARCHAR2) RETURN VARCHAR2 IS
     BEGIN
         RETURN CASE p WHEN 'large' THEN 'crit' WHEN 'moderate' THEN 'warn'
-                      WHEN 'typical' THEN 'ok' ELSE 'skip' END;
+                      WHEN 'typical' THEN 'ok' WHEN 'improved' THEN 'imp'
+                      WHEN 'noted' THEN 'note' ELSE 'skip' END;
     END;
 BEGIN
     IF v_days <= 0 THEN
@@ -141,7 +143,13 @@ BEGIN
     END IF;
 
     -- Pass 1: index cells, per-column format masks, severity counters.
+    -- The bucket is re-derived through the per-metric policy (direction
+    -- and floors, sql/lib/metric_policy.plsql): a drop in a cost-type stat
+    -- is 'improved', never a flagged hour.
     FOR i IN 1 .. v_cells.COUNT LOOP
+        v_cells(i).change_bucket := policy_bucket('LOAD', v_cells(i).stat_name, NULL,
+                                                  v_cells(i).cur_val, v_cells(i).mu,
+                                                  v_cells(i).sd, v_cells(i).n);
         c := v_cells(i);
         v_idx(c.ord || '|' || c.hour_slot) := i;
         IF NOT v_labels.EXISTS(c.ord) THEN
@@ -171,6 +179,10 @@ BEGIN
         ELSE v_isolated := v_isolated + v_up(o) + v_down(o);
         END IF;
     END LOOP;
+    -- A day-wide shift is worth the Normal view; isolated hours are not.
+    IF v_nshift > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("day-profile").setAttribute("data-normal","Y");</script>');
+    END IF;
     FOR o IN 1 .. v_nstat LOOP
         v_max := v_colmax(o);
         v_fmt(o) := CASE
@@ -281,7 +293,9 @@ BEGIN
         || '<div id="day-profile-line" style="height:240px"></div></div>');
 
     -- Table: one row per hour (chronological), one column per stat.
-    v_row := '<table><thead><tr><th>Hour</th>';
+    -- detail-only: the hour-by-hour table is Detailed-view material; the
+    -- shifts table and the heatmap above carry the Normal view.
+    v_row := '<table class="detail-only"><thead><tr><th>Hour</th>';
     FOR o IN 1 .. v_nstat LOOP
         v_row := v_row || '<th class="num">' || DBMS_XMLGEN.CONVERT(v_labels(o)) || '</th>';
     END LOOP;

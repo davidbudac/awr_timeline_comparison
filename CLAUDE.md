@@ -79,9 +79,11 @@ sql/
     ├── nth_csv.plsql         -- INSTR-based CSV parser (keeps empty tokens)
     ├── is_oracle_schema.plsql-- 'Y'/'N' Oracle-maintained parsing-schema test
     │                         --   (drives the "Application only" data-sys tag)
-    ├── is_essential.plsql    -- curated LOAD/METRIC/WAIT name test (Essential rows data-imp tag)
-    ├── finding_family.plsql  -- family / canonical / higher-is-worse per scored name (00/07/08)
-    ├── score_cells.plsql     -- score_z / score_bucket / score_cells (04/05/06/14/15/18 Change column)
+    ├── is_essential.plsql    -- curated LOAD/METRIC/WAIT name test (data-imp row tag; no CSS reads it since v1.5.0)
+    ├── metric_policy.plsql   -- THE per-metric policy table (family / canonical / dir / floors)
+    │                         --   + policy_bucket(), the one scoring rule (00/07/08/16/17 + score_cells)
+    ├── score_cells.plsql     -- score_z / score_bucket / score_cells (04/05/18 Change column;
+    │                         --   thin wrapper over policy_bucket -- include metric_policy first)
     ├── json_escape.plsql     -- escapes a string for a JSON literal on one PUT_LINE
     ├── put_clob_chunked.plsql-- emits a CLOB payload in PUT_LINE-sized chunks
     ├── fmt_num.plsql         -- T7: consistent value-cell number formatting (fmt_num/fmt_int)
@@ -219,69 +221,37 @@ CustomEvent the toggle dispatches and re-renders with `sys` series dropped
 module/action are not). Adding the attrs/`sys` field changes the HTML, so this
 is a feature, not a byte-identity-preserving refactor — verify by eye, not md5.
 
-### "Essential rows" filter (`body.essential`)
-A client-side toggle in the sidebar rail (`#essential-toggle`, emitted by
-`00_params.sql`, placed first in the rail-foot so it sits above the theme and
-app-filter buttons) that flips `body.essential` — same body-class hook pattern
-as `body.no-charts` / `body.app-only`: no DEFINE, no wrapper change. When on it
-collapses the per-name tables in sections 02 (Load profile), 03 (System
-metrics), 04 (Foreground waits), 05 (Background waits), and 07 (Findings
-summary detail tables) down to a small curated list, hiding the long tail of
-stats/metrics/events/findings most DBAs don't scan on a routine pass.
-
-Each of those sections tags its per-name `<tr>` with `data-imp="Y|N"` via
-a single-sourced classifier, `@@sql/lib/is_essential.plsql` (`is_essential(p_domain,
-p_name)`, domains `'LOAD'` / `'METRIC'` / `'WAIT'` — the wait domain is shared
-by both foreground and background waits since each section only has rows for
-the events that apply to it). In section 04, only the per-event tables are
-tagged; the separate wait-*class* rollup table is left alone (it's an
-aggregate, not a curated-list candidate). No new grant, no DB access — it's a
-plain case-sensitive name test against a curated constant list per domain.
-
-Section 07's "Biggest movers" table (`#findings-movers`, an HTML table that
-replaced the old ECharts findings heatmap in the facelift) carries
-`data-nocount` so the rail count pills don't double-count its rows against
-the detail tables below it, and it carries no `data-imp` either — it's a
-top-8-by-`|z|` summary, not a curated-list candidate. Only the LOAD/METRIC
-detail tables (`emit_domain_table`) are tagged, using the raw stat/metric
-name against `is_essential()` directly. 07's WAIT rows are rolled up to
-*wait class* (e.g. `"Wait class: User I/O"`) — already a compact high-level
-rollup, not curated-list candidates — so they are deliberately emitted with
-**no `data-imp` attribute at all** and stay always visible in Essential mode
-(untagged rows are never hidden by the CSS rule and never counted by the
-pill JS, which both select only `tr[data-imp]`).
-
-**Escape hatch:** sections 02–05 carry no row- or cell-level severity class of
-their own (unlike section 07's `crit`/`warn`/`ok`/`skip` rows, each already
-`class="<sev>"` on the `<tr>` with a matching `<span class="badge <sev>">` in
-the Change cell) — 02–05's only severity signal is the same
-`<span class="badge crit|warn">` emitted per-cell by `sql/lib/score_cells.plsql`
-in 04/05's Change column (02/03 have no scoring at all, so nothing to protect
-there). Because 07 emits that identical `<span class="badge crit|warn">`
-markup, the existing hide rule and `kept()` test already cover it verbatim —
-no CSS/JS change was needed when 07 was wired in. The hide rule is
-`body.essential tr[data-imp="N"]:not(:has(.badge.crit)):not(:has(.badge.warn))`
-(`sql/_style.sql`) and the JS test is
-`function kept(tr){return tr.getAttribute("data-imp")==="Y"||!!tr.querySelector(".badge.crit,.badge.warn");}`
-(`sql/00_params.sql`) — a row tagged non-essential still shows if its own
-Change cell flagged a crit/warn anomaly, so the preset can never hide
-something actually moving. Keep these two in lockstep if either changes.
-
-**Count pills:** the toggle's click handler (in `00_params.sql`, right after
-the nav emission, above the app-filter wiring) walks every `<section>`
-containing `tr[data-imp]`, finds its `<h2>`, and appends/updates a
-`<span class="preset-note">` reading "Essential - showing X of Y rows" (X =
-rows kept by the same data-imp-or-badge test as the CSS rule, so the pill and
-the hide rule never disagree). Computed purely from `querySelectorAll` counts
-already in the DOM — no `getComputedStyle`/`offsetHeight`. Section 07's
-`<h2 id="findings-heading">` also gets its own counter script (rewriting the
-heading text with crit/warn/total badges) but that runs once at render time,
-before the toggle's click handler ever fires, so the two scripts don't race.
-Charts and 07's "Biggest movers" table are untouched by design: no
-`awr:appfilter`-style CustomEvent is dispatched: the affected sections
-render their sparklines/stacked-bar/movers visuals from the same rows
-regardless of the preset, and decluttering the tables doesn't change what
-those visuals should plot.
+### Normal / Detailed views (`body.normal` / `body.detailed`, v1.5.0)
+The report opens in the **Normal** view. An early inline script in
+`00_params.sql` (right after the theme script) adds `body.normal` or
+`body.detailed` before first paint from localStorage `awr-mode` (a hash
+`!v=d` wins); with JS off neither class exists and the CSS shows
+everything. Sections opt INTO Normal with `data-normal="Y"`: 06 Top SQL,
+07 Findings, 08 Headline metrics, 09 ASH timeline always; 12 Parameter
+changes, 16 Day profile and 18 SQL Monitor only when they have something
+to say (a differing parameter / a day-wide shift / an error, plan change
+or DOP downgrade on a Current-window statement), which they signal with a
+one-line inline `<script>` that sets the attribute after the fact.
+`.detail-only` hides Detailed-only content inside a kept section (07's
+per-domain tables + expanders, 06's per-SQL pool, 16's hour table). The
+chrome JS (`00_params.sql`, "Normal / Detailed view") dims rail links to
+hidden sections (`.norm-dim`, group `<b>` headers too when every link
+under them is dimmed), appends a "+ N more in Detailed" rail line and a
+`.mode-note` at the end of `<main>` (flex `order:3`, same rank as the
+sections, so it lands last), and `setMode(det, silent)` flips the
+classes, persists (only on an explicit click -- a shared link never
+overwrites the reader's choice), re-measures sticky offsets and table
+wrappers, and calls `resize()` on every ECharts instance (a chart built
+inside `display:none` measured zero width). `revealHash()` switches to
+Detailed by itself when a cross-link targets hidden content. The old
+**Triage mode** and **Essential rows** toggles are gone (v1.5.0); the
+`data-imp` row tags from `is_essential.plsql` are still emitted but no
+CSS reads them. "Application only" is orthogonal and combines with either
+view. The demo smoke test (`demo/verify_report.js`) switches to Detailed
+before it clicks tabs / sort headers / expanders, since those are hidden
+in Normal. Section 07's "Biggest movers" table (`#findings-movers`)
+carries `data-nocount` so the rail count pills don't double-count its
+rows against the detail tables below it.
 
 ### Section order (v1.5.0)
 `awr_trend.sql` includes the sections in **visual** order (00, 10, 08, 09,
@@ -319,14 +289,9 @@ degrade to "just show everything" with JS off:
 - **`.badge.sig`** — the "σ≈0" pill `score_cells.plsql` appends after a
   z-value when the baseline sigma is degenerate (< 1% of |mean|), pairing
   with a bolded %-delta cell so the reader isn't misled by a blown-out z.
-- **`section[data-triage]` + `.hidetri`** — Triage mode (`#triage-toggle`
-  flips `body.triage`, same body-class hook pattern as `essential`/
-  `app-only`): shows only sections tagged `data-triage` (masthead,
-  Overview, Findings, Top SQL) minus any `.hidetri` element inside them
-  (e.g. the masthead's DB-time strip opts out even though its parent
-  `<header>` is tagged). A third toggle alongside Essential rows and
-  Application only, same rail-foot location, same "purely CSS/JS, no
-  DEFINE" contract.
+- **`section[data-normal]` + `.detail-only`** — the Normal / Detailed
+  views (see that section above); replaced the v1.4.0 `data-triage` /
+  `.hidetri` triage mode.
 - **`.tabs[data-tabs]` / `.tabpanel[data-tabs][data-t]`** — a delegated
   click on `.tabs [data-t]` shows the matching `.tabpanel` in the same
   group and hides its siblings; used by Top SQL's five ranking dimensions.
@@ -662,25 +627,50 @@ then `metric_value = AVG(snap_value) GROUP BY week,metric`. Single-instance:
 no-op.
 
 ### Severity classes (keep aligned with `_style.sql`)
-`CRITICAL`→`crit`, `WARN`→`warn`, `OK`→`ok`,
-`INSUFFICIENT_HISTORY`/`FLAT_BASELINE`→`skip`, informational and the
-`improved` bucket→`info`. A new severity must update `07_summary.sql`,
-`08_overview.sql`, `score_cells.plsql`, and `_style.sql`.
+`large`→`crit`, `moderate`→`warn`, `typical`→`ok`, `improved`→`imp`,
+`noted`→`note`, `insufficient history`/`flat baseline`/`n/a`→`skip`;
+`info` is the rank-chip / informational badge class (not a bucket). A
+new bucket must update `policy_bucket` (`metric_policy.plsql`),
+`07_summary.sql`, `08_overview.sql`, `16_day_profile.sql`,
+`score_cells.plsql`, `_style.sql` and `demo/awrdemo/helpers.py`.
 
-### Scoring rule (v1.5.0) — one rule, six copies
-z = (cur − μ) ÷ **max(σ, 2% of |μ|)**; large > 3, moderate > 2, but only
-when **material**: |%Δ| ≥ 10 and, for wait rows, share of the Current
-total ≥ 2% (else `typical` + an "immaterial" badge); a material drop in a
-name whose `higher_is_worse()` is `'Y'` is `improved`. The rule is
-duplicated, by design, in `07_summary.sql` (SQL CASE + PL/SQL improved
-pass), `00_params.sql` (verdict), `08_overview.sql`, `day_profile_cte.sql`
-(no share gate), `17_narrative.sql` (`big()` + R10 ORDER BY) and
-`sql/lib/score_cells.plsql` (`score_bucket`, used by 04/05 with a share
-and by 06/14/15/18 with defaults) — change one, change all, and the demo
-twins in `demo/awrdemo/helpers.py` (`z_and_pct` / `bucket_of`).
-`finding_family.plsql` decides which names fold: a non-canonical twin is
-scored and rendered (`tr.twin`, muted) but never counted (07 heading, 00
-verdict, rail pills, J/K jumps all skip `tr.twin` / `tr.member`).
+### Scoring rule (v1.5.0) — one rule, one function, one policy table
+`sql/lib/metric_policy.plsql` is BOTH the human-editable per-metric policy
+and the rule. `metric_policy(domain, name, class)` returns
+`policy_rec(family, canonical, dir, min_pct, min_abs)` from a one-line-
+per-name CASE table: every LOAD (SYSSTAT) and METRIC (SYSMETRIC) name,
+per-event overrides then per-class lines for WAIT (`wpol(class, dir,
+min_pct, min_share)`), defaults for `SQL` (06/18), `SEG`/`FILE` (14/15)
+and a conservative fallback for unmapped names (own family, `ANY`, 10%,
+no floor). `dir`: `UP` = a rise is a finding and a drop is `improved`;
+`DOWN` = the reverse (CPU-time ratio); `ANY` = both directions are
+findings (throughput, session count: a drop can be an outage); `INFO` =
+never a finding, a material move is `noted`. `min_abs` is a floor in the
+metric's OWN unit (LOAD = per-second rate of the raw counter; DB time /
+DB CPU are centiseconds per second; METRIC = the SYSMETRIC unit; WAIT =
+share 0..1 of the Current total). `policy_bucket(domain, name, class,
+cur, mu, sd, n, share, demote)` is the rule: z = (cur − μ) ÷
+max(σ, 2% of |μ|); |z| > 3 large, > 2 moderate, but only when material
+(|%Δ| ≥ min_pct AND value ≥ min_abs / share ≥ min_share), else `typical`
+(callers badge it "immaterial"); then the direction: `noted` for INFO,
+`improved` for a move in the good direction; `demote` turns large into
+moderate (04/05's table-wide shift). Every consumer calls it: 00 verdict,
+07 (PL/SQL pass 1 -- the SQL CTEs only compute z / pct / share now), 08
+hero cards, 16 (re-buckets every `day_profile_cte` cell), 17 `big()`,
+and `score_cells.plsql`'s `score_bucket` / `score_cells(cur, mu, sd, n,
+share, domain, name, class, demote)` for 04/05/18. **Include order:**
+`metric_policy.plsql` must precede `score_cells.plsql` (lint check 13),
+and a `policy_rec` variable must be declared AFTER the include. lint check
+12 verifies every template LOAD/METRIC name has a policy line.
+`day_profile_cte.sql`'s own CASE (used by the fleet band) still carries
+the plain 07-style rule without direction. `improved` / `noted` are
+never highlighted: class `imp` / `note` (outlined badges, no row tint),
+never a movers lead or member, not in the verdict count / all-movers
+list / rail pills / J-K jumps; the verdict and 07's heading say "N
+improved" in muted text. A non-canonical twin is scored and rendered
+(`tr.twin`, muted) but never counted. `demo/awrdemo/helpers.py` PARSES
+`metric_policy.plsql` (regex over the `WHEN 'name' THEN RETURN pol(...)`
+lines), so keep that one-line shape when editing.
 
 ### Findings are recomputed, not shared
 Sections 07 and 08 each recompute their own z-scores. The LOAD/METRIC/WAIT target
@@ -1063,13 +1053,15 @@ nothing under `sql/`, `awr_trend.sql` or the wrappers may depend on `demo/`.
   horizontal overflow at 1440/390 px, cross-link targets, hash view-state
   restore, keyboard tabs/sort and the tap-to-pin tooltip; the server
   suite (137 tests) passes. The PL/SQL edits (new includes
-  `finding_family.plsql`, `anchor_id.plsql`, the `score_bucket` rule, the
-  04/05 Current-total scalar query, 07's PL/SQL table ordering, 16's
-  day-wide rollup, 18's tail rule, the visual include order in
-  `awr_trend.sql`) have **not yet run against dbmint** -- first thing to
-  do next session: the pinned window + `AUTO` run, all three templates,
-  `profile_days=7`, `sqlmon_detail=3`, and re-read every `AWR-SECTION`
-  pair (see `design/UI_UX_IMPROVEMENT_PLAN.md`, "Verification checklist").
+  `metric_policy.plsql` with its `policy_rec` / `policy_bucket`,
+  `anchor_id.plsql`, the new `score_cells` signature, the 04/05
+  Current-total scalar query, 07's PL/SQL pass, 16's per-cell re-bucket
+  and day-wide rollup, 17's `big()`, 18's tail rule, the visual include
+  order in `awr_trend.sql`, and the three inline `data-normal` scripts)
+  have **not yet run against dbmint** -- first thing to do next session:
+  the pinned window + `AUTO` run, all three templates, `profile_days=7`,
+  `sqlmon_detail=3`, and re-read every `AWR-SECTION` pair (see
+  `design/UI_UX_IMPROVEMENT_PLAN.md`, "Verification checklist").
 - **Visual facelift (1.4.0 / fleet 0.6.0) verified on dbmint (2026-09-05):**
   single-DB hourly window (`target_end='2026-09-04 12:00'` win=1h
   weeks_back=4) and a separate `AUTO`-weekly-cadence run — the movers table,

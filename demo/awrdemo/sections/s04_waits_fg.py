@@ -79,7 +79,8 @@ def emit(w) -> str:
                 row += ('<td class="num" data-w="' + str(k) + '"' + h.dev_attr(cur_s, us) + ">"
                         + h.fmt_num(us) + "</td>")
         share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
-        row += h.score_cells(r["cur_us"], r["mu_us"], r["sd_us"], r["n_us"], share, "Y")
+        row += h.score_cells(r["cur_us"], r["mu_us"], r["sd_us"], r["n_us"], share,
+                             "WAIT", "Wait class: " + r["wait_class"], r["wait_class"])
         row += "</tr>"
         L.append(row)
     L.append("</tbody></table></section>")

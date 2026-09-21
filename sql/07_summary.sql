@@ -69,7 +69,8 @@ DECLARE
         heat_pos       NUMBER,
         family         VARCHAR2(64),
         canonical      VARCHAR2(1),
-        dir            VARCHAR2(1)
+        dir            VARCHAR2(4),
+        share          NUMBER
     );
     TYPE findings_t  IS TABLE OF finding_rec INDEX BY PLS_INTEGER;
     TYPE idx_t       IS TABLE OF PLS_INTEGER INDEX BY PLS_INTEGER;
@@ -83,6 +84,7 @@ DECLARE
     v_crit       NUMBER := 0;
     v_warn       NUMBER := 0;
     v_impr       NUMBER := 0;
+    v_noted      NUMBER := 0;
     v_folded     NUMBER := 0;
     v_typical    NUMBER := 0;
     v_n_tbl      PLS_INTEGER := 0;
@@ -105,7 +107,8 @@ DECLARE
     j            PLS_INTEGER;
 
     @@sql/lib/is_essential.plsql
-    @@sql/lib/finding_family.plsql
+    @@sql/lib/metric_policy.plsql
+    v_pol        policy_rec;      -- declared after the include (policy_rec lives there)
     @@sql/lib/fmt_num.plsql
     @@sql/lib/anchor_id.plsql
 
@@ -139,6 +142,7 @@ DECLARE
         RETURN CASE p_bucket WHEN 'large'                THEN 1
                              WHEN 'moderate'             THEN 2
                              WHEN 'improved'             THEN 3
+                             WHEN 'noted'                THEN 3
                              WHEN 'insufficient history' THEN 4
                              WHEN 'n/a'                  THEN 4
                              WHEN 'flat baseline'        THEN 5
@@ -164,7 +168,8 @@ DECLARE
         RETURN CASE p_bucket WHEN 'large'    THEN 'crit'
                              WHEN 'moderate' THEN 'warn'
                              WHEN 'typical'  THEN 'ok'
-                             WHEN 'improved' THEN 'info'
+                             WHEN 'improved' THEN 'imp'
+                             WHEN 'noted'    THEN 'note'
                              ELSE 'skip' END;
     END bucket_cls;
 
@@ -173,7 +178,7 @@ DECLARE
     BEGIN
         IF p_bucket = 'typical' AND p_z IS NOT NULL AND ABS(p_z) > 2 THEN
             RETURN ' <span class="badge sig" title="|z| above 2 but the move is below '
-                || 'the materiality floor (10% delta; 2% of the Current total for waits)">'
+                || 'this metric&#39;s materiality floor (sql/lib/metric_policy.plsql)">'
                 || 'immaterial</span>';
         END IF;
         RETURN '';
@@ -232,7 +237,8 @@ DECLARE
                 -- T1: rows whose severity is "typical" (OK), flat baseline
                 -- or insufficient history are tail candidates the sidebar
                 -- toggle collapses behind an expander.
-                IF rec.change_bucket IN ('typical', 'flat baseline', 'insufficient history') THEN
+                IF rec.change_bucket IN ('typical', 'flat baseline', 'insufficient history',
+                                         'improved', 'noted') THEN
                     v_tail_cnt := v_tail_cnt + 1;
                 END IF;
             END IF;
@@ -241,11 +247,11 @@ DECLARE
 
         v_tbl_id := 'findings-' || LOWER(p_dom);
 
-        -- X3: hidetri hides the per-domain detail tables (and their
+        -- detail-only: the per-domain detail tables (and their
         -- headings/expanders) when the triage view is on; only the
         -- "Biggest movers" table stays visible there.
-        DBMS_OUTPUT.PUT_LINE('<h3 class="hidetri">' || p_title || '</h3>');
-        DBMS_OUTPUT.PUT_LINE('<table id="' || v_tbl_id || '" class="hidetri">'
+        DBMS_OUTPUT.PUT_LINE('<h3 class="detail-only">' || p_title || '</h3>');
+        DBMS_OUTPUT.PUT_LINE('<table id="' || v_tbl_id || '" class="detail-only">'
             || '<thead><tr>'
             || '<th>Change</th>'
             || '<th>Metric</th>'
@@ -279,7 +285,8 @@ DECLARE
                     || '" data-family="' || rec.family || '"'
                     || CASE WHEN v_imp IS NOT NULL
                             THEN ' data-imp="' || v_imp || '"' END
-                    || CASE WHEN v_sev IN ('typical', 'flat baseline', 'insufficient history')
+                    || CASE WHEN v_sev IN ('typical', 'flat baseline', 'insufficient history',
+                                           'improved', 'noted')
                             THEN ' data-tail="Y"' END
                     || ' class="' || v_cls
                     || CASE WHEN rec.canonical = 'N' THEN ' twin' ELSE '' END || '">'
@@ -315,22 +322,24 @@ DECLARE
         DBMS_OUTPUT.PUT_LINE('</tbody></table>');
 
         IF v_tail_cnt > 0 THEN
-            DBMS_OUTPUT.PUT_LINE('<span class="expander hidetri" data-for="' || v_tbl_id
-                || '" data-n="' || v_tail_cnt || '" data-noun="typical / flat rows">'
-                || '&#9656; Show ' || v_tail_cnt || ' typical / flat rows</span>');
+            DBMS_OUTPUT.PUT_LINE('<span class="expander detail-only" data-for="' || v_tbl_id
+                || '" data-n="' || v_tail_cnt || '" data-noun="typical / improved / flat rows">'
+                || '&#9656; Show ' || v_tail_cnt || ' typical / improved / flat rows</span>');
         END IF;
     END emit_domain_table;
 BEGIN
-    -- X3: data-triage="Y" lets the triage view show only "Biggest movers"
-    -- (the per-domain detail tables/headings/expanders carry class
-    -- "hidetri" and are hidden by the chrome CSS in that mode).
-    DBMS_OUTPUT.PUT_LINE('<section id="findings" data-triage="Y"><h2 id="findings-heading">Findings summary</h2>');
+    -- data-normal="Y" keeps this section in the Normal view; the
+    -- per-domain detail tables/headings/expanders carry class
+    -- "detail-only" and show only in the Detailed view.
+    DBMS_OUTPUT.PUT_LINE('<section id="findings" data-normal="Y"><h2 id="findings-heading">Findings summary</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'z = (current &minus; &mu;) &divide; max(&sigma;, 2% of &mu;) over prior valid windows. '
         || '|z|&gt;3 large, |z|&gt;2 moderate, else typical &mdash; but only when the move is material: '
         || '|%-delta| &ge; 10 and, for wait classes, &ge; 2% of the Current window''s wait time '
         || '(otherwise typical, tagged immaterial). '
-        || 'A material drop in a cost-type metric (waits, latency, hard parses) is <b>improved</b>. '
+        || 'Each metric has its own direction and floors (sql/lib/metric_policy.plsql): '
+        || 'a move in the good direction is <b>improved</b>, an informational counter is <b>noted</b> '
+        || '&mdash; neither is highlighted or counted. '
         || 'Twins &mdash; the SYSMETRIC rate of a SYSSTAT counter, the CPU half of the CPU/wait ratio '
         || '&mdash; are shown muted and never counted. '
         || 'n&lt;3 &rarr; %-delta only. '
@@ -501,27 +510,18 @@ BEGIN
                sd       AS prior_sd,
                n        AS n_prior,
                z_score, pct_delta,
-               CASE
-                   -- cur missing => 'n/a' (no current value; history is not the
-                   -- issue), matching section 08's hero cards.  Only a present
-                   -- cur with too few priors is 'insufficient history' (F16).
-                   WHEN cur_val IS NULL THEN 'n/a'
-                   WHEN n < 3           THEN 'insufficient history'
-                   WHEN sd IS NULL OR z_score IS NULL THEN 'flat baseline'
-                   WHEN ABS(z_score) <= 2 THEN 'typical'
-                   -- materiality floor: 10% delta; 2% share for wait rows
-                   WHEN (pct_delta IS NOT NULL AND ABS(pct_delta) < 10)
-                     OR (share IS NOT NULL AND share < 0.02) THEN 'typical'
-                   WHEN ABS(z_score) > 3 THEN 'large'
-                   ELSE 'moderate'
-               END AS change_bucket
+               -- the bucket is assigned by policy_bucket() in the PL/SQL
+               -- pass below (per-metric direction and floors); the share
+               -- rides along for the WAIT rows' materiality test.
+               CAST(NULL AS VARCHAR2(40)) AS change_bucket,
+               share
         FROM   measured
         WHERE  cur_val IS NOT NULL OR mu IS NOT NULL
     ),
     ranked AS (
         SELECT metric_domain, metric_name,
                cur_val, prior_mean, prior_sd, n_prior,
-               z_score, pct_delta, change_bucket,
+               z_score, pct_delta, change_bucket, share,
                ROW_NUMBER() OVER (
                    ORDER BY metric_domain,
                             ABS(NVL(z_score, 0)) DESC,
@@ -535,7 +535,8 @@ BEGIN
            -- family / canonical / dir are filled in by the PL/SQL pass below
            CAST(NULL AS VARCHAR2(64)) AS family,
            CAST(NULL AS VARCHAR2(1))  AS canonical,
-           CAST(NULL AS VARCHAR2(1))  AS dir
+           CAST(NULL AS VARCHAR2(4))  AS dir,
+           share
     BULK COLLECT INTO v_findings
     FROM   ranked
     ORDER  BY heat_pos;
@@ -546,34 +547,38 @@ BEGIN
     -- movers" top-8-by-|z| shortlist (kept sorted in a tiny array as we go,
     -- so no second query is ever issued against v_findings).
     --
-    -- Pass 1: family / canonical / direction per row, the 'improved'
-    -- override, tallies over CANONICAL rows only, the per-family lead, and
-    -- the detail-table order (insertion sort on tbl_before).
+    -- Pass 1: per-metric policy (family / canonical / direction) and the
+    -- change bucket per row, tallies over CANONICAL rows only, the
+    -- per-family lead, and the detail-table order (insertion sort on
+    -- tbl_before).  'improved' / 'noted' rows are counted separately and
+    -- never highlighted.
     FOR i IN 1 .. v_findings.COUNT LOOP
+        v_pol := metric_policy(v_findings(i).metric_domain, v_findings(i).metric_name);
         v_findings(i).family    := finding_family(v_findings(i).metric_domain,
                                                   v_findings(i).metric_name);
-        v_findings(i).canonical := is_canonical(v_findings(i).metric_domain,
-                                                v_findings(i).metric_name);
-        v_findings(i).dir       := higher_is_worse(v_findings(i).metric_domain,
-                                                   v_findings(i).metric_name);
-        IF v_findings(i).change_bucket IN ('large', 'moderate')
-           AND v_findings(i).dir = 'Y'
-           AND v_findings(i).cur_val < v_findings(i).prior_mean THEN
-            v_findings(i).change_bucket := 'improved';
-        END IF;
+        v_findings(i).canonical := v_pol.canonical;
+        v_findings(i).dir       := v_pol.dir;
+        v_findings(i).change_bucket :=
+            policy_bucket(v_findings(i).metric_domain, v_findings(i).metric_name, NULL,
+                          v_findings(i).cur_val, v_findings(i).prior_mean,
+                          v_findings(i).prior_sd, v_findings(i).n_prior,
+                          v_findings(i).share);
         f := v_findings(i);
         v_total := v_total + 1;
-        IF f.change_bucket IN ('large', 'moderate', 'improved') THEN
+        IF f.change_bucket IN ('large', 'moderate', 'improved', 'noted') THEN
             IF f.canonical = 'N' THEN
                 v_folded := v_folded + 1;
             ELSIF f.change_bucket = 'large'    THEN v_crit := v_crit + 1;
             ELSIF f.change_bucket = 'moderate' THEN v_warn := v_warn + 1;
-            ELSE                                    v_impr := v_impr + 1;
+            ELSIF f.change_bucket = 'improved' THEN v_impr := v_impr + 1;
+            ELSE                                    v_noted := v_noted + 1;
             END IF;
         END IF;
 
-        -- family lead = canonical member with the largest |z|
-        IF f.canonical = 'Y' THEN
+        -- family lead = canonical LARGE / MODERATE member with the largest
+        -- |z| (improved / noted / typical rows never lead a family, so
+        -- "Biggest movers" lists real findings only)
+        IF f.canonical = 'Y' AND f.change_bucket IN ('large', 'moderate') THEN
             IF NOT v_lead.EXISTS(f.family)
                OR ABS(NVL(f.z_score, 0)) > ABS(NVL(v_findings(v_lead(f.family)).z_score, 0)) THEN
                 v_lead(f.family) := i;
@@ -617,7 +622,7 @@ BEGIN
         v_fam := v_lead.NEXT(v_fam);
     END LOOP;
 
-    v_typical := v_total - v_crit - v_warn - v_impr - v_folded;
+    v_typical := v_total - v_crit - v_warn - v_impr - v_noted - v_folded;
 
     -- B4: rewrite the heading now that we have the counters.  Counts are
     -- canonical rows only; folded twins get their own muted badge.
@@ -629,7 +634,11 @@ BEGIN
         || '<span class="badge crit">' || v_crit || ' large</span> '
         || '<span class="badge warn">' || v_warn || ' moderate</span> '
         || CASE WHEN v_impr > 0
-                THEN '<span class="badge info">' || v_impr || ' improved</span> ' ELSE '' END
+                THEN '<span class="badge info" title="moved in the good direction; not counted">'
+                     || v_impr || ' improved</span> ' ELSE '' END
+        || CASE WHEN v_noted > 0
+                THEN '<span class="badge note" title="informational counters that moved; not counted">'
+                     || v_noted || ' noted</span> ' ELSE '' END
         || '<span class="badge skip">' || v_typical || ' typical</span>'
         || CASE WHEN v_folded > 0
                 THEN ' <span class="badge skip" title="flagged twins of a counted row '
@@ -638,10 +647,17 @@ BEGIN
         || ''';})();</script>');
 
     --
-    -- T6: "Biggest movers" -- top 8 rows by |z| across all domains, replacing
-    -- the old ECharts findings heatmap with a plain HTML table so it degrades
-    -- with body.no-charts like everything else and never needs a chart lib.
+    -- T6: "Biggest movers" -- top 8 flagged family leads by |z| across all
+    -- domains, replacing the old ECharts findings heatmap with a plain HTML
+    -- table so it degrades with body.no-charts like everything else and
+    -- never needs a chart lib.  Improved / noted rows never appear here.
     --
+    IF v_top_n = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">No material regression: nothing moved beyond its '
+            || 'own floors in the bad direction'
+            || CASE WHEN v_impr > 0 THEN ' (' || v_impr || ' improved)' ELSE '' END
+            || '. The per-domain tables below list every scored metric.</p>');
+    END IF;
     IF v_top_n > 0 THEN
         DBMS_OUTPUT.PUT_LINE('<h3>Biggest movers</h3>');
         DBMS_OUTPUT.PUT_LINE('<p style="font-size:11px;color:var(--muted);margin:-4px 0 8px 0">'
@@ -668,7 +684,7 @@ BEGIN
                     f := v_findings(m);
                     IF f.family <> v_top(i).family
                        OR f.metric_name = v_top(i).metric_name
-                       OR f.change_bucket NOT IN ('large', 'moderate', 'improved') THEN
+                       OR f.change_bucket NOT IN ('large', 'moderate') THEN
                         CONTINUE;
                     END IF;
                     v_members := v_members + 1;
@@ -691,8 +707,6 @@ BEGIN
                     END IF;
                     v_bar_col := CASE v_cls WHEN 'crit' THEN 'var(--crit)'
                                             WHEN 'warn' THEN 'var(--warn)'
-                                            WHEN 'ok'   THEN 'var(--ok)'
-                                            WHEN 'info' THEN 'var(--info)'
                                             ELSE             'var(--skip)' END;
 
                     DBMS_OUTPUT.PUT_LINE('<tr class="' || v_cls
@@ -743,7 +757,7 @@ BEGIN
     --
     -- Detail tables: one per domain, ordered by sev / |z| / |pct| / name.
     -- v_table_idx[p] -> index in v_findings, populated above.  Hidden under
-    -- the triage view (X3, class "hidetri") -- only "Biggest movers" shows.
+    -- the Normal view (class "detail-only") -- only "Biggest movers" shows.
     --
     emit_domain_table('LOAD',   'Load profile');
     emit_domain_table('METRIC', 'System metrics');

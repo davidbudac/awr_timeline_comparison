@@ -15,7 +15,7 @@ from datetime import timedelta
 
 from .. import chrome
 from ..helpers import (esc, mean_sd, z_and_pct, ts_min, ts_sec, hh24, dy, mon_dd,
-                       to_char_fixed, finding_family, is_canonical, higher_is_worse)
+                       to_char_fixed, finding_family, is_canonical, policy_bucket)
 
 SQL_PATH = chrome.sql_path("sql/00_params.sql")
 H = timedelta(hours=1)
@@ -111,15 +111,9 @@ def scored_rows(w):
         if n < 3:
             z = None
         share = (cur / wait_tot) if (dom == "WAIT" and wait_tot > 0 and cur is not None) else None
-        if z is None:
-            bucket = None
-        elif abs(z) <= 2 or (pct is not None and abs(pct) < 10) or (share is not None and share < 0.02):
-            bucket = "typical"
-        else:
-            bucket = "large" if abs(z) > 3 else "moderate"
+        # the PL/SQL pass: per-metric policy (sql/lib/metric_policy.plsql)
+        bucket = None if z is None else policy_bucket(dom, name, None, cur, mu, sd, n, share)
         fam, canon = finding_family(dom, name), is_canonical(dom, name)
-        if bucket in ("large", "moderate") and higher_is_worse(dom, name) == "Y" and cur < mu:
-            bucket = "improved"
         rows.append((dom, name, z, pct, n, bucket, fam, canon))
     rows.sort(key=lambda r: (-abs(r[2] or 0.0), r[1]))
     return rows
@@ -240,25 +234,25 @@ def emit(w) -> str:
             max_n = r[4]
         if r[2] is not None:
             n_usable += 1
-            if r[5] in ("large", "moderate", "improved"):
+            if r[5] == "improved" and r[7] == "Y":
+                n_impr += 1
+            elif r[5] in ("large", "moderate"):
                 n_moved += 1
                 if r[7] == "Y":
-                    if r[5] == "improved":
-                        n_impr += 1
-                    else:
-                        fams.add(r[6])
-                        n_movers = len(fams)
-                        if len(top) < 3 and r[6] not in seen:
-                            top.append(r)
-                            seen.add(r[6])
+                    fams.add(r[6])
+                    n_movers = len(fams)
+                    if len(top) < 3 and r[6] not in seen:
+                        top.append(r)
+                        seen.add(r[6])
 
     times_json, vals_json, windows_json = _timeline(w)
     target_end_s = ts_sec(w.target_end)
 
     # ---- editorial masthead ------------------------------------------
     put('<script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.body.classList.add("dark");}catch(e){}})();</script>')
+    put('<script>(function(){var m="normal";try{if(localStorage.getItem("awr-mode")==="detailed")m="detailed";}catch(e){}var h=location.hash||"",i=h.indexOf("!v=");if(i>=0&&h.slice(i+3).split("&")[0].split(",").indexOf("d")>=0)m="detailed";document.body.classList.add(m);})();</script>')
     put('<a class="skip" href="#main-start">Skip to report</a>')
-    put('<header class="report" data-triage="Y">')
+    put('<header class="report">')
     put('  <div class="brandline"><span class="dot">&#9679;</span> AWR <span class="slash">/</span> TIMELINE COMPARISON</div>')
     put('  <div class="topgrid">')
     put('    <h1>' + esc(w.dow_name)
@@ -322,10 +316,12 @@ def emit(w) -> str:
     if n_moved > 0:
         put('  <details class="movers-all">')
         put('    <summary>All ' + str(n_moved) + ' moved metric' + plural(n_moved)
-            + ' &middot; material |z| &gt; 2, twins muted</summary>')
+            + ' &middot; material, in the bad direction; twins muted'
+            + ('; ' + str(n_impr) + ' improved not listed' if n_impr > 0 else '')
+            + '</summary>')
         put('    <ul class="movers-list">')
         for dom, name, z, pct, n, bucket, fam, canon in scored:
-            if bucket not in ("large", "moderate", "improved"):
+            if bucket not in ("large", "moderate"):
                 continue
             clean = name[len("Wait class: "):] if name.startswith("Wait class: ") else name
             if len(clean) > 48:
@@ -334,7 +330,7 @@ def emit(w) -> str:
                 clean = esc(clean)
             z_txt = to_char_fixed(z, 1, plus=True)
             cls, txt = _pct_markup(pct)
-            li_cls = ' class="twin"' if canon == "N" else (' class="improved"' if bucket == "improved" else '')
+            li_cls = ' class="twin"' if canon == "N" else ''
             put('      <li' + li_cls + '><span class="m-dom">' + dom + '</span>'
                 '<span class="m-name">' + clean + '</span>'
                 '<span class="m-z">z ' + z_txt + '</span>'
@@ -345,7 +341,7 @@ def emit(w) -> str:
     put('  <div id="narrative-slot"></div>')
 
     # ---- compared windows strip -------------------------------------
-    put('  <div class="windows-strip hidetri">')
+    put('  <div class="windows-strip">')
     put('    <div class="strip-head"><b>Compared windows</b> <span class="strip-meta">'
         + esc(w.dow_name)
         + ' &middot; ' + w.win_label + ' each &middot; every ' + w.step_label
@@ -456,16 +452,14 @@ def emit(w) -> str:
         ' aria-expanded="false" aria-controls="view-panel"'
         ' title="Report view options">View &#9662;</button>'
         '<div class="view-panel" id="view-panel">'
-        '<button type="button" id="triage-toggle" class="triage-filter"'
-        ' aria-pressed="false"'
-        ' title="Collapse the report to the triage-critical sections'
-        ' and the verdict">'
-        'Triage mode</button>'
-        '<button type="button" id="essential-toggle" class="essential-filter"'
-        ' aria-pressed="false"'
-        ' title="Show only the curated essential rows in the load,'
-        ' metric and wait tables; severity-flagged rows stay visible">'
-        'Essential rows</button>'
+        '<div class="mode-switch" role="group" aria-label="Report detail level">'
+        '<button type="button" id="mode-normal" class="mode-btn" aria-pressed="true"'
+        ' title="Normal view: verdict, headline metrics, findings, ASH timeline, Top SQL">'
+        'Normal</button>'
+        '<button type="button" id="mode-detailed" class="mode-btn" aria-pressed="false"'
+        ' title="Detailed view: every section and every scored row">'
+        'Detailed</button>'
+        '</div>'
         '<button type="button" id="app-filter-toggle" class="app-filter"'
         ' aria-pressed="false"'
         ' title="Hide system-wide sections and Oracle-internal SQL;'

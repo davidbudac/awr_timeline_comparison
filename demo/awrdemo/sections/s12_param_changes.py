@@ -64,6 +64,8 @@ def emit(w) -> str:
         L.append("<!-- AWR-SECTION: " + TAG + " END -->")
         return "\n".join(L)
 
+    L.append('<script>document.getElementById("param-changes").setAttribute("data-normal","Y");</script>')
+
     hdr = '<thead><tr><th>Parameter</th><th data-w="0">Current</th>'
     for k in range(1, w.weeks_back + 1):
         hdr += '<th data-w="' + str(k) + '">&minus;' + w.offset_labels[k - 1] + "</th>"

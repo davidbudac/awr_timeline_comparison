@@ -40,10 +40,11 @@ METRIC_TARGETS = [
     "Network Traffic Volume Per Sec", "SQL Service Response Time",
 ]
 
-_BUCKET_RANK = {"large": 1, "moderate": 2, "improved": 3, "insufficient history": 4,
+_BUCKET_RANK = {"large": 1, "moderate": 2, "improved": 3, "noted": 3, "insufficient history": 4,
                 "n/a": 4, "flat baseline": 5}
-_TAIL = ("typical", "flat baseline", "insufficient history")
-_FLAGGED = ("large", "moderate", "improved")
+_TAIL = ("typical", "flat baseline", "insufficient history", "improved", "noted")
+_FLAGGED = ("large", "moderate", "improved", "noted")
+_MOVED = ("large", "moderate")
 
 
 class Finding:
@@ -54,15 +55,13 @@ class Finding:
         self.domain, self.name = domain, name
         self.cur, self.mu, self.sd, self.n = cur, mu, sd, n
         self.z, self.pct = h.z_and_pct(cur, mu, sd)
-        # the 'scored' CASE (cur missing => 'n/a', matching section 08):
-        # sigma floor + materiality (10% delta; 2% share for wait rows)
-        self.bucket = h.bucket_of(cur, n, sd, self.z, pct=self.pct, share=share)
-        # pass 1 of the PL/SQL: family / canonical / dir + the improved override
+        # pass 1 of the PL/SQL: per-metric policy (sql/lib/metric_policy.plsql)
+        # -> family / canonical / direction and the change bucket
+        pol = h.metric_policy(domain, name)
+        self.bucket = h.policy_bucket(domain, name, None, cur, mu, sd, n, share)
         self.family = h.finding_family(domain, name)
-        self.canonical = h.is_canonical(domain, name)
-        self.dir = h.higher_is_worse(domain, name)
-        if self.bucket in ("large", "moderate") and self.dir == "Y" and cur < mu:
-            self.bucket = "improved"
+        self.canonical = pol[1]
+        self.dir = pol[2]
 
     @property
     def az(self):
@@ -167,8 +166,8 @@ def _emit_domain_table(out: list[str], ordered: list[Finding], dom: str, title: 
         return
     tail_cnt = sum(1 for f in rows if f.bucket in _TAIL)
     tbl_id = "findings-" + dom.lower()
-    out.append('<h3 class="hidetri">' + title + "</h3>")
-    out.append('<table id="' + tbl_id + '" class="hidetri">'
+    out.append('<h3 class="detail-only">' + title + "</h3>")
+    out.append('<table id="' + tbl_id + '" class="detail-only">'
                "<thead><tr>"
                "<th>Change</th>"
                "<th>Metric</th>"
@@ -199,20 +198,22 @@ def _emit_domain_table(out: list[str], ordered: list[Finding], dom: str, title: 
                    + "</tr>")
     out.append("</tbody></table>")
     if tail_cnt > 0:
-        out.append('<span class="expander hidetri" data-for="' + tbl_id
-                   + '" data-n="' + str(tail_cnt) + '" data-noun="typical / flat rows">'
-                   + "&#9656; Show " + str(tail_cnt) + " typical / flat rows</span>")
+        out.append('<span class="expander detail-only" data-for="' + tbl_id
+                   + '" data-n="' + str(tail_cnt) + '" data-noun="typical / improved / flat rows">'
+                   + "&#9656; Show " + str(tail_cnt) + " typical / improved / flat rows</span>")
 
 
 def emit(w) -> str:
     out = ["<!-- AWR-SECTION: 07_summary BEGIN -->"]
-    out.append('<section id="findings" data-triage="Y"><h2 id="findings-heading">Findings summary</h2>')
+    out.append('<section id="findings" data-normal="Y"><h2 id="findings-heading">Findings summary</h2>')
     out.append('<p style="font-size:12px;color:var(--muted)">'
                "z = (current &minus; &mu;) &divide; max(&sigma;, 2% of &mu;) over prior valid windows. "
                "|z|&gt;3 large, |z|&gt;2 moderate, else typical &mdash; but only when the move is material: "
                "|%-delta| &ge; 10 and, for wait classes, &ge; 2% of the Current window's wait time "
                "(otherwise typical, tagged immaterial). "
-               "A material drop in a cost-type metric (waits, latency, hard parses) is <b>improved</b>. "
+               "Each metric has its own direction and floors (sql/lib/metric_policy.plsql): "
+               "a move in the good direction is <b>improved</b>, an informational counter is <b>noted</b> "
+               "&mdash; neither is highlighted or counted. "
                "Twins &mdash; the SYSMETRIC rate of a SYSSTAT counter, the CPU half of the CPU/wait ratio "
                "&mdash; are shown muted and never counted. "
                "n&lt;3 &rarr; %-delta only. "
@@ -225,13 +226,16 @@ def emit(w) -> str:
     crit = sum(1 for f in canon if f.bucket == "large")
     warn = sum(1 for f in canon if f.bucket == "moderate")
     impr = sum(1 for f in canon if f.bucket == "improved")
+    noted = sum(1 for f in canon if f.bucket == "noted")
     folded = sum(1 for f in findings if f.canonical == "N" and f.bucket in _FLAGGED)
-    typical = total - crit - warn - impr - folded
+    typical = total - crit - warn - impr - noted - folded
     # family lead = canonical member with the largest |z| (first seen wins
     # ties, like the PL/SQL '>' test); movers = top 8 leads by |z|.  The
     # PL/SQL walks v_lead in family-key order, so ties keep key order.
     lead: dict[str, Finding] = {}
     for f in canon:
+        if f.bucket not in _MOVED:
+            continue
         if f.family not in lead or f.az > lead[f.family].az:
             lead[f.family] = f
     top = sorted((lead[k] for k in sorted(lead)), key=lambda f: -f.az)[:8]
@@ -244,13 +248,21 @@ def emit(w) -> str:
                'verdict counts the same">' + str(n_fam) + " finding" + ("" if n_fam == 1 else "s") + "</span> "
                '<span class="badge crit">' + str(crit) + " large</span> "
                '<span class="badge warn">' + str(warn) + " moderate</span> "
-               + ('<span class="badge info">' + str(impr) + " improved</span> " if impr > 0 else "")
+               + ('<span class="badge info" title="moved in the good direction; not counted">'
+                  + str(impr) + " improved</span> " if impr > 0 else "")
+               + ('<span class="badge note" title="informational counters that moved; not counted">'
+                  + str(noted) + " noted</span> " if noted > 0 else "")
                + '<span class="badge skip">' + str(typical) + " typical</span>"
                + (' <span class="badge skip" title="flagged twins of a counted row '
                   '(SYSMETRIC rate of a SYSSTAT counter, CPU half of the CPU/wait ratio)">'
                   + str(folded) + " folded</span>" if folded > 0 else "")
                + "';})();</script>")
 
+    if not top:
+        out.append('<p style="font-size:12px;color:var(--muted)">No material regression: nothing moved beyond its '
+                   "own floors in the bad direction"
+                   + (" (" + str(impr) + " improved)" if impr > 0 else "")
+                   + ". The per-domain tables below list every scored metric.</p>")
     if top:
         out.append("<h3>Biggest movers</h3>")
         out.append('<p style="font-size:11px;color:var(--muted);margin:-4px 0 8px 0">'
@@ -269,15 +281,14 @@ def emit(w) -> str:
         for lead_f in top:
             rows = [(0, lead_f)] + [(1, f) for f in findings
                                     if f.family == lead_f.family and f.name != lead_f.name
-                                    and f.bucket in _FLAGGED]
+                                    and f.bucket in _MOVED]
             members += len(rows) - 1
             for m, f in rows:
                 cls = f.cls
                 sig = h.sigma_flag(f.mu, f.sd)
                 apct = None if f.pct is None else abs(f.pct)
                 bar_w = 0 if apct is None else min(150, int(h.ora_round(20 + 40 * math.log(1 + apct / 50), 0)))
-                bar_col = {"crit": "var(--crit)", "warn": "var(--warn)", "ok": "var(--ok)",
-                           "info": "var(--info)"}.get(cls, "var(--skip)")
+                bar_col = {"crit": "var(--crit)", "warn": "var(--warn)"}.get(cls, "var(--skip)")
                 out.append('<tr class="' + cls + (" member" if m else "")
                            + (" twin" if f.canonical == "N" else "")
                            + '" data-family="' + f.family + '"'

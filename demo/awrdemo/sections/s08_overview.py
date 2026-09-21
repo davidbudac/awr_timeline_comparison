@@ -66,12 +66,13 @@ def _script(overview_line: str) -> list[str]:
 
 def emit(w) -> str:
     out = ["<!-- AWR-SECTION: 08_overview BEGIN -->"]
-    out.append('<section id="overview" data-triage="Y"><h2>Headline metrics</h2>')
+    out.append('<section id="overview" data-normal="Y"><h2>Headline metrics</h2>')
     out.append('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
                "Six headline metrics across the compared windows, oldest &rarr; current. "
                "Badge = z bucket: |z|&gt;3 large, |z|&gt;2 moderate, else typical "
-               "(z over max(&sigma;, 2% of &mu;); a move under 10% is typical; "
-               "a material drop in a cost-type metric is <b>improved</b>).</p>")
+               "(z over max(&sigma;, 2% of &mu;); each metric has its own materiality floors and "
+               "direction, see sql/lib/metric_policy.plsql; "
+               "a move in the good direction is <b>improved</b> and never highlighted).</p>")
     out.append('<div class="hero-grid">')
 
     n_win = w.weeks_back + 1
@@ -89,8 +90,7 @@ def emit(w) -> str:
         vals_csv = ",".join("null" if v is None else h.num6(v) for v in vals)
 
         z, pct = h.z_and_pct(cur, mu, sd)
-        sev = None if cur is None else h.bucket_of(cur, n, sd, z, pct=pct,
-                                                   dir=h.higher_is_worse(src, key), mu=mu)
+        sev = None if cur is None else h.policy_bucket(src, key, None, cur, mu, sd, n)
         sev_cls = h.bucket_cls(sev) if sev is not None else "skip"
         sig = h.sigma_flag(mu, sd)
         z_txt = None if z is None else h.z_txt(z, 1)

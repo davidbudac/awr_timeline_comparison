@@ -397,16 +397,50 @@ A sun/moon button in the rail's brand row toggles **dark mode** (the
 "Slate Instrument" theme). The first load follows your OS
 `prefers-color-scheme`; after that your choice is remembered in
 `localStorage`, and the theme is applied before the charts initialize so
-there's no flash. Three more toggles sit at the foot of the rail —
-**Essential rows**, **Application only**, and **Triage mode**, described
-next. All of this is purely client-side CSS/JS: no re-run, no DEFINE, and
-it all works offline.
+there's no flash. The foot of the rail carries the **Normal / Detailed**
+mode switch and the **Application only** toggle, described next. All of
+this is purely client-side CSS/JS: no re-run, no DEFINE, and it all works
+offline.
 
 Every table in the report also supports **click-to-sort** on its column
 headers, and any table with 4+ rows gets a small toolbar above it for
 **copying as CSV or Markdown**; hovering a section heading reveals a `#`
 permalink. Long detail tables collapse their tail behind a "Show N more
 rows" link. None of this needs the network or a re-run.
+
+### Normal and Detailed views
+
+The report opens in the **Normal** view: the masthead (verdict, "what
+changed" narrative, compared windows, DB-time strip), **Headline
+metrics**, the **Findings** "Biggest movers" table, the **ASH timeline**
+and **Top SQL**. Three more sections join it only when they have something
+to say: **Parameter changes** (a parameter differs across the compared
+windows), **SQL Monitor** (an error, plan change or DOP downgrade on a
+statement that ran in the Current window) and the **Day profile** (a
+day-wide shift). Everything else -- load profile, system metrics, the wait
+tables, per-SQL ASH cards, segment / file I/O, the per-domain findings
+tables, the per-SQL pool -- is one click away in the **Detailed** view
+(the full report). The rail lists only the sections on screen plus a
+"+ N more in Detailed" line, a note at the end of the page names the
+hidden sections, and any cross-link into hidden content switches to
+Detailed by itself. Your choice is remembered in `localStorage`; a shared
+link carries it in the hash (`#findings!v=d`). With JavaScript off the
+whole report shows.
+
+### Per-metric policy: direction and floors
+
+Every scored name -- each load statistic, each system metric, each wait
+class and event -- has its own line in `sql/lib/metric_policy.plsql`
+saying which **direction** is bad news (`UP`, `DOWN`, `ANY` or `INFO`)
+and how big a move must be to matter (a minimum |%-delta| and a value
+floor in the metric's own unit; for waits, a minimum share of the Current
+window's wait time). A move in the good direction -- fewer physical reads,
+a lower read latency, fewer hard parses -- is tagged **improved** and is
+never highlighted, never a mover and never counted in the verdict; a
+purely informational counter that moved is **noted**. The file is a plain
+one-line-per-metric table meant to be edited: change a floor or a
+direction there and every section (verdict, findings, hero cards, wait
+tables, day profile, narrative) follows.
 
 ### "Application only" view
 
@@ -420,29 +454,10 @@ an Oracle-maintained schema (`SYS`, `SYSTEM`, `XDB`, `DBSNMP`, …) — i.e.
 recursive/background SQL from Oracle itself — is filtered out of the tables,
 charts, and per-SQL detail cards, so you see only your own application's SQL.
 Click again (now labelled **Show all**) to restore the full report. It's a
-purely client-side toggle — no re-run needed, and it works offline.
+purely client-side toggle — no re-run needed, and it works offline — and it
+combines with either view (in Normal it keeps just Top SQL and, when
+flagged, SQL Monitor).
 
-### "Essential rows" preset
-
-The rail also carries an **Essential rows** toggle. When on, the Load profile,
-System metrics, FG/BG wait tables, and the Findings summary load/metric
-detail tables collapse to a short curated list of the rows a DBA scans first
-(DB time, DB CPU, AAS, single-block read latency, log file sync, …); each
-affected section header shows a pill with the kept/total row count. Rows
-flagged **crit**/**warn** stay visible even when not on the curated list, so
-the preset never hides an anomaly, and the Findings wait-class rows — already
-a compact high-level rollup — always stay visible. Charts and the "Biggest
-movers" table are untouched. Like the other toggles it is purely
-client-side and works offline; click again to show all rows.
-
-### "Triage mode"
-
-The third rail-foot toggle, **Triage mode**, collapses the report down to
-the masthead, **Overview**, **Findings**, and **Top SQL** — the sections
-you'd check first on a "is anything on fire" pass — hiding everything
-else (and, within the masthead itself, the DB-time strip). Click again to
-restore the full report. Purely client-side, works offline, and
-combines freely with Essential rows / Application only.
 
 ## Fleet report (many databases)
 

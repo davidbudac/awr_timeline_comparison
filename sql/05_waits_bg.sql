@@ -68,6 +68,7 @@ DECLARE
     v_share      NUMBER;
 
     @@sql/lib/nth_csv.plsql
+    @@sql/lib/metric_policy.plsql
     @@sql/lib/score_cells.plsql
     @@sql/lib/is_essential.plsql
     @@sql/lib/anchor_id.plsql
@@ -393,7 +394,8 @@ BEGIN
     FOR i IN 1 .. NVL(v_evts.COUNT, 0) LOOP
         v_share := CASE WHEN v_tot_cur_us > 0 THEN v_evts(i).cur_us / v_tot_cur_us END;
         IF score_bucket(v_evts(i).cur_us, v_evts(i).mu_us, v_evts(i).sd_us,
-                        v_evts(i).n_us, v_share, 'Y') IN ('large', 'moderate')
+                        v_evts(i).n_us, v_share, 'WAIT',
+                        v_evts(i).event_name, v_evts(i).wait_class) IN ('large', 'moderate')
            AND v_evts(i).mu_us <> 0 THEN
             v_pct := (v_evts(i).cur_us - v_evts(i).mu_us) / ABS(v_evts(i).mu_us) * 100;
             v_n_flag    := v_n_flag + 1;
@@ -462,7 +464,8 @@ BEGIN
                                        v_evts(i).mu_us,
                                        v_evts(i).sd_us,
                                        v_evts(i).n_us,
-                                       v_share, 'Y', v_shift);
+                                       v_share, 'WAIT', v_evts(i).event_name,
+                                       v_evts(i).wait_class, v_shift);
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
     END LOOP;
@@ -505,7 +508,8 @@ BEGIN
                                        v_evts(i).mu_ms,
                                        v_evts(i).sd_ms,
                                        v_evts(i).n_ms,
-                                       NULL, 'Y');
+                                       NULL, 'WAIT', v_evts(i).event_name,
+                                       v_evts(i).wait_class);
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
     END LOOP;

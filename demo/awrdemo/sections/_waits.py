@@ -206,8 +206,8 @@ def shift_pass(rows, tot):
     for r in rows:
         share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
         z, pct = h.z_and_pct(r["cur_us"], r["mu_us"], r["sd_us"])
-        b = h.bucket_of(r["cur_us"], r["n_us"], r["sd_us"], z, pct=pct, share=share,
-                        dir="Y", mu=r["mu_us"])
+        b = h.policy_bucket("WAIT", r["event_name"], r["wait_class"], r["cur_us"], r["mu_us"],
+                            r["sd_us"], r["n_us"], share)
         if b in ("large", "moderate") and r["mu_us"] != 0:
             n += 1
             s += pct
@@ -260,7 +260,8 @@ def table_time(w, rows, table_id, heading, tot=None, shift=False, note=(), prefi
                 row += ' <span class="badge skip">#' + rank_s + "</span>"
             row += "</td>"
         share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
-        row += h.score_cells(r["cur_us"], r["mu_us"], r["sd_us"], r["n_us"], share, "Y", shift)
+        row += h.score_cells(r["cur_us"], r["mu_us"], r["sd_us"], r["n_us"], share,
+                             "WAIT", r["event_name"], r["wait_class"], shift)
         row += "</tr>"
         L.append(row)
     L.append("</tbody></table>")
@@ -286,7 +287,8 @@ def table_avg(w, rows, table_id, heading, prefix="fgms"):
                 ms = float(ms_s)
                 row += ('<td class="num" data-w="' + str(k) + '"' + h.dev_attr(r["cur_ms"], ms) + ">"
                         + h.fmt_num(ms) + "</td>")
-        row += h.score_cells(r["cur_ms"], r["mu_ms"], r["sd_ms"], r["n_ms"], None, "Y")
+        row += h.score_cells(r["cur_ms"], r["mu_ms"], r["sd_ms"], r["n_ms"], None,
+                             "WAIT", r["event_name"], r["wait_class"])
         row += "</tr>"
         L.append(row)
     L.append("</tbody></table>")
