@@ -104,6 +104,13 @@ and CSS changed by design).
   contiguous window lists. SQL Monitor statements without a Current-window
   execution fold under the expander and the detail row joins its statement
   row; Top SQL detail tables open by default on phones.
+- **Fleet console 0.7.0 and server parity (phase 6).** Fleet chrome
+  (fleet-owned copies): a `:focus-visible` ring, `prefers-reduced-motion`,
+  and the summary rows are focusable `role="button"` rows that toggle on
+  Enter / Space and announce `aria-expanded`. The scheduler server gets
+  an in-page dark toggle on the same `awr-theme` localStorage key as the
+  reports (falling back to the OS preference), click-to-sort on every
+  table header, and a row filter on the run-history table.
 - **Website (`docs/`): quick access to the demo report and installation.**
   Filled "Demo report" / "Install" pills in the top bar of every page (kept
   on phones), a two-card "Quick access" strip under the title block, a

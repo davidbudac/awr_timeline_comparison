@@ -115,7 +115,7 @@ DEF_STEP='1'
 DEF_STEP_UNIT='w'
 
 # ---- fleet report version ---------------------------------------------------
-FLEET_VERSION='0.6.0'
+FLEET_VERSION='0.7.0'
 
 # ---- fleet-specific env vars ------------------------------------------------
 FLEET_PAR="${FLEET_PAR:-4}"

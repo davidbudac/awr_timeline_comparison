@@ -918,6 +918,12 @@ cramped).
 - **Unexercised:** a real multi-DB fleet where detail runs take minutes
   (dbmint's full report is fast; the 3600-s default timeout is untested
   against a genuinely slow DB).
+- **v0.7.0 accessibility** — fleet-owned copies of the single-DB phase-4
+  rules: `:focus-visible` ring and `prefers-reduced-motion` in
+  `00_fleet_chrome.sql`; `tr.dbrow` carries `tabindex="0" role="button"
+  aria-expanded` (01_row.sql) and `js_fleet_charts.plsql`'s `wireToggle`
+  also toggles on Enter / Space while `setRowOpen` keeps `aria-expanded`
+  in sync (still the single open/close code path).
 - **v0.6.0 visual facelift** — same chrome hooks as the single-DB report
   where they translate (glyphs, `.chip` styling), plus fleet-only additions:
   a client-side toolbar (`#fleetToolbar`: filter, sort by score/name/AAS/
@@ -1050,6 +1056,20 @@ nothing under `sql/`, `awr_trend.sql` or the wrappers may depend on `demo/`.
   dbmint); a series name containing `\`; the no-AWR-history-at-all branch of
   the `target_end` snap; the fleet "Compared windows" `part` and
   snap-mismatch states (all dbmint aliases hit one instance).
+- **v1.5.0 UI/UX pass (2026-09-21) was built and verified WITHOUT a
+  database:** every phase was exercised on the synthetic demo
+  (`python3 demo/gen_demo_report.py` + `node demo/verify_report.js`, 0
+  console errors, 45 charts, all toggles) plus Playwright checks for
+  horizontal overflow at 1440/390 px, cross-link targets, hash view-state
+  restore, keyboard tabs/sort and the tap-to-pin tooltip; the server
+  suite (137 tests) passes. The PL/SQL edits (new includes
+  `finding_family.plsql`, `anchor_id.plsql`, the `score_bucket` rule, the
+  04/05 Current-total scalar query, 07's PL/SQL table ordering, 16's
+  day-wide rollup, 18's tail rule, the visual include order in
+  `awr_trend.sql`) have **not yet run against dbmint** -- first thing to
+  do next session: the pinned window + `AUTO` run, all three templates,
+  `profile_days=7`, `sqlmon_detail=3`, and re-read every `AWR-SECTION`
+  pair (see `design/UI_UX_IMPROVEMENT_PLAN.md`, "Verification checklist").
 - **Visual facelift (1.4.0 / fleet 0.6.0) verified on dbmint (2026-09-05):**
   single-DB hourly window (`target_end='2026-09-04 12:00'` win=1h
   weeks_back=4) and a separate `AUTO`-weekly-cadence run — the movers table,

@@ -171,6 +171,14 @@ BEGIN
         || ' background:var(--panel-2); border-bottom:1px solid var(--rule); white-space:nowrap; }');
     DBMS_OUTPUT.PUT_LINE('table.fleet thead th.r { text-align:right; } table.fleet thead th.c { text-align:center; }');
     DBMS_OUTPUT.PUT_LINE('tr.dbrow { border-bottom:1px solid var(--line-soft); cursor:pointer; }');
+    -- v0.7.0 accessibility (fleet-owned copy of the single-DB phase-4 rules):
+    -- keyboard focus ring everywhere, reduced-motion opt-out, and the
+    -- summary rows are focusable buttons (01_row.sql tabindex/role,
+    -- js_fleet_charts.plsql Enter/Space + aria-expanded).
+    DBMS_OUTPUT.PUT_LINE(':focus-visible { outline:2px solid var(--accent); outline-offset:2px; }');
+    DBMS_OUTPUT.PUT_LINE('tr.dbrow:focus-visible { outline-offset:-2px; }');
+    DBMS_OUTPUT.PUT_LINE('@media (prefers-reduced-motion: reduce) {'
+        || ' *, *::before, *::after { transition:none !important; animation:none !important; } }');
     DBMS_OUTPUT.PUT_LINE('tr.dbrow:last-child { border-bottom:none; }');
     DBMS_OUTPUT.PUT_LINE('tr.dbrow:hover { background:var(--panel-2); }');
     DBMS_OUTPUT.PUT_LINE('tr.dbrow.open { background:var(--panel-2); }');

@@ -1,8 +1,11 @@
 # UI/UX improvements + findings reduction — implementation plan (2026-09-21)
 
-Status: **in progress on `claude/ui-ux-improvements-buwjzo`.** Phase 1
-to 5 implemented 2026-09-21 (see the per-item notes marked DONE below
-and the CHANGELOG "Unreleased" entry); phase 6 pending. This document is the
+Status: **implemented on `claude/ui-ux-improvements-buwjzo`, 2026-09-21
+(all six phases; see the per-item notes marked DONE below and the
+CHANGELOG "Unreleased" entry).** Verified on the synthetic demo and with
+headless Playwright checks only -- the PL/SQL has NOT yet run against
+dbmint; that run is the first item of the verification checklist at the
+end and must happen before a release tag. This document is the
 outcome of a
 UI/UX audit of the single-DB report (v1.4.0 chrome) rendered from
 `docs/examples/demo_busy_db.html` at 1440 px and 390 px in light, dark,
@@ -481,7 +484,17 @@ and collapse the bump chart behind an expander (inverse of desktop).
 **5.5 Narrative wording.** R3 collapses a full-range list to "in all N
 prior windows" / "in -5w..-12w" when contiguous.
 
-### Phase 6 — Fleet console and server (separate PRs, fleet-owned files)
+### Phase 6 — Fleet console and server — DONE 2026-09-21 (same branch, fleet-owned files only)
+
+Implementation notes: fleet chrome gained the focus ring,
+reduced-motion rule and keyboard-operable summary rows (`tabindex` /
+`role="button"` / `aria-expanded`, Enter / Space in `wireToggle`); the
+marker band was not ported (the fleet ASH ribbons place markers by
+timestamp with no legend collision).  The server got the `awr-theme`
+dark toggle (early script + `body.dark` token block), click-to-sort on
+every table and a filter input on the run-history table -- all inline,
+stdlib only; the `$` in the sort regex is escaped as `$$` for
+`string.Template`.  Fleet version bumped to 0.7.0.
 - `sql/fleet/00_fleet_chrome.sql`: `.chip` contrast, tab-order/focus
   rules, `prefers-reduced-motion`, marker band as in 2.5 (fleet copy).
 - `server/app/views.py`: dark toggle on the report's `awr-theme` key,
@@ -491,20 +504,31 @@ prior windows" / "in -5w..-12w" when contiguous.
 
 ## Verification checklist (every phase)
 
-1. `./lint.sh` clean (add the Phase 1 family-coverage check and, in
-   Phase 4, a check that `awr_trend.sql`'s `@@` order matches the nav
-   order in `00_params.sql`).
+0. **dbmint run (NOT DONE YET -- required before tagging):** pinned
+   window (`target_end='2026-09-04 12:00'` win=1h weeks_back=4) and
+   `AUTO`; `template=comprehensive|simple|dev`; `profile_days=7`;
+   `sqlmon_detail=3`; `markers=` inline; 0 ORA-; every `AWR-SECTION`
+   BEGIN/END pair present in the new visual order; a fleet run with
+   `FLEET_DETAIL=all`.
+1. `./lint.sh` clean (check 12, the family-map coverage, was added in
+   phase 1; the include-order-vs-rail check was not added -- the demo's
+   `SECTIONS` list and `verify_report.js`'s section listing catch a
+   mismatch instead).
 2. `python3 demo/gen_demo_report.py` after re-porting the touched
    sections' twins; `node demo/verify_report.js docs/examples/
    demo_busy_db.html shots/` -> 0 console errors, chart count unchanged
    (Phase 2.5 may change it), toggles still flip.
-3. Playwright checks to add to `demo/verify_report.js`:
-   `document.documentElement.scrollWidth <= clientWidth` at 390 and 1440;
-   no two marker labels' bounding boxes intersect a legend item; every
-   `[data-w]` th and `.tabs [data-t]` is focusable; dark `.chip`
-   contrast >= 4.5.
+3. Playwright checks (run ad hoc this pass, not yet folded into
+   `demo/verify_report.js`): `scrollWidth <= clientWidth` at 390 and 1440
+   (both 0 leaks); every `.xlink` target exists or the link is hidden;
+   `#findings!v=t,e&tab=CPU&w=2` restores Triage + Essential, the CPU tab
+   and the window highlight; ArrowRight moves the Top SQL tab, Enter
+   sorts a header (`aria-sort`); a tapped titled cell opens a `.tip`;
+   dark `.chip.on` renders `--accent-deep` on `--accent-bg`.
 4. dbmint: pinned window + `AUTO`, `template=comprehensive|simple|dev`,
    `profile_days=7`, `sqlmon_detail=3`, `markers=` inline; 0 ORA-, every
    section's `AWR-SECTION` pair present.
-5. Findings counts before/after on the demo recorded in the CHANGELOG
-   entry (21 -> K summary, 20 -> K FG, 13 -> K BG, 80 -> K day profile).
+5. Findings counts before/after on the demo (recorded in the CHANGELOG
+   entry): summary 21 -> 9 (5 twins folded), foreground waits 20 -> 9,
+   background waits 13 -> 11 moderate + one table-wide-shift note, day
+   profile 80 cells -> 3 day-wide shifts + 9 isolated hours.

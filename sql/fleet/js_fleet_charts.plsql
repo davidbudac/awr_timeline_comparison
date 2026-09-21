@@ -146,8 +146,11 @@ BEGIN
     -- buttons both call it, so the lazy first-render of a row's charts
     -- (renderAsh/renderProfile, needed once a hidden container gets a real
     -- clientWidth) only ever lives in one place.
-    DBMS_OUTPUT.PUT_LINE('function setRowOpen(row,open){var det=row.nextElementSibling;if(!det||String(det.className).indexOf("detailrow")<0)return;var isOpen=row.classList.contains("open");if(open===isOpen)return;if(open){row.classList.add("open");det.classList.remove("hidden");renderAsh();renderProfile();}else{row.classList.remove("open");det.classList.add("hidden");}}');
-    DBMS_OUTPUT.PUT_LINE('function wireToggle(){document.addEventListener("click",function(ev){var tgt=ev.target;if(!tgt||!tgt.closest)return;var row=tgt.closest("tr.dbrow");if(!row)return;setRowOpen(row,!row.classList.contains("open"));});}');
+    DBMS_OUTPUT.PUT_LINE('function setRowOpen(row,open){var det=row.nextElementSibling;if(!det||String(det.className).indexOf("detailrow")<0)return;var isOpen=row.classList.contains("open");if(open===isOpen)return;if(open){row.classList.add("open");det.classList.remove("hidden");renderAsh();renderProfile();}else{row.classList.remove("open");det.classList.add("hidden");}row.setAttribute("aria-expanded",open?"true":"false");}');
+    -- Rows toggle on click and, for keyboard users, on Enter / Space when
+    -- the row itself has focus (links and buttons inside keep their own
+    -- default behaviour).
+    DBMS_OUTPUT.PUT_LINE('function wireToggle(){document.addEventListener("click",function(ev){var tgt=ev.target;if(!tgt||!tgt.closest)return;var row=tgt.closest("tr.dbrow");if(!row)return;setRowOpen(row,!row.classList.contains("open"));});document.addEventListener("keydown",function(ev){var t=ev.target;if(!t||!t.classList||!t.classList.contains("dbrow"))return;if(ev.key==="Enter"||ev.key===" "){ev.preventDefault();setRowOpen(t,!t.classList.contains("open"));}});}');
     -- theme toggle: flip body.dark, persist localStorage "awr-theme"
     DBMS_OUTPUT.PUT_LINE('function wireTheme(){var b=document.getElementById("themeToggle");if(!b)return;b.setAttribute("aria-pressed",document.body.classList.contains("dark")?"true":"false");b.addEventListener("click",function(){var on=document.body.classList.toggle("dark");try{localStorage.setItem("awr-theme",on?"dark":"light");}catch(e){}b.setAttribute("aria-pressed",on?"true":"false");});}');
     -- debounced resize: re-render any open (visible, clientWidth>0) timeline

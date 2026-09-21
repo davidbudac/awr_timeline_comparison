@@ -344,7 +344,9 @@ BEGIN
 
     -- --- summary row (8 cells, matches the assembler's <thead>) ----------
     DBMS_OUTPUT.PUT_LINE('<tr class="dbrow" data-db="'
-        || DBMS_XMLGEN.CONVERT('~fleet_alias') || '">');
+        || DBMS_XMLGEN.CONVERT('~fleet_alias')
+        || '" tabindex="0" role="button" aria-expanded="false"'
+        || ' title="Expand / collapse this database (Enter or Space)">');
     DBMS_OUTPUT.PUT_LINE('<td><svg class="chev" viewBox="0 0 16 16">'
         || '<path d="M6 4l5 4-5 4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></td>');
     DBMS_OUTPUT.PUT_LINE('<td><span class="alias-cell"><span class="dot __FLEET_SEV__"></span>'
