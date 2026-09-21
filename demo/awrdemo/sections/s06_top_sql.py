@@ -485,6 +485,12 @@ def emit(w) -> str:
             '<span id="sqlid-' + sid + '">' + sid + "</span> "
             '<button type="button" class="copy-btn" '
             'data-copy="#sqlid-' + sid + '">&#10687;</button>'
+            '<span class="xlinks">'
+            '<a class="xlink" href="#ash-card-' + sid
+            + '" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a>'
+            '<a class="xlink" href="#sqlmon-' + sid
+            + '" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a>'
+            "</span>"
             "</td>")
         chips = ""
         for letter, dim in (("E", "ELAPSED"), ("C", "CPU"), ("G", "GETS"),

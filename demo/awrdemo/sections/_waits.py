@@ -232,13 +232,14 @@ def shift_note(rows, shift, n_flag, mean_pct, sd_pct):
             "not " + str(n_flag) + " separate findings. Per-row badges are demoted to moderate.</p>"]
 
 
-def table_time(w, rows, table_id, heading, tot=None, shift=False, note=()):
+def table_time(w, rows, table_id, heading, tot=None, shift=False, note=(), prefix="fg"):
     L = ["<h3>" + heading + "</h3>"]
     L.extend(note)
     L.append('<table id="' + table_id + '">' + header(w, "<th>Event</th>", "s") + "<tbody>")
     for r in rows:
         cur_s = None if r["cur_us"] is None else r["cur_us"] / 1e6
-        row = ('<tr data-imp="' + h.is_essential("WAIT", r["event_name"]) + '">'
+        row = ('<tr id="' + h.anchor_id(prefix, r["event_name"]) + '" data-imp="'
+               + h.is_essential("WAIT", r["event_name"]) + '">'
                + "<td>" + h.esc(r["event_name"]) + "</td>"
                + '<td class="trend" data-spark="' + r["spark_vals"]
                + '" data-spark-title="' + h.esc(r["event_name"]) + '"></td>'
@@ -266,11 +267,12 @@ def table_time(w, rows, table_id, heading, tot=None, shift=False, note=()):
     return L
 
 
-def table_avg(w, rows, table_id, heading):
+def table_avg(w, rows, table_id, heading, prefix="fgms"):
     L = ["<h3>" + heading + "</h3>",
          '<table id="' + table_id + '">' + header(w, "<th>Event</th>", "ms") + "<tbody>"]
     for r in rows:
-        row = ('<tr data-imp="' + h.is_essential("WAIT", r["event_name"]) + '">'
+        row = ('<tr id="' + h.anchor_id(prefix, r["event_name"]) + '" data-imp="'
+               + h.is_essential("WAIT", r["event_name"]) + '">'
                + "<td>" + h.esc(r["event_name"]) + "</td>"
                + '<td class="trend" data-spark="' + r["spark_ms_vals"]
                + '" data-spark-title="' + h.esc(r["event_name"]) + '"></td>'

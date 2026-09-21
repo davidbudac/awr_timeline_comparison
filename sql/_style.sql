@@ -641,6 +641,18 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('tr.member td:first-child { padding-left:26px; }');
     DBMS_OUTPUT.PUT_LINE('.movers-list li.twin { color:var(--muted); }'
         || ' .movers-list li.improved .m-z { color:var(--info); }');
+    -- Phase 3 cross-links between sections (07 -> 02/03/04, 08 -> 07,
+    -- 06 <-> 11 / 18).  Hidden by the chrome JS when the target id is
+    -- absent; a jumped-to card gets the same transient outline as a row.
+    DBMS_OUTPUT.PUT_LINE('.xlink { font-size:10px; font-weight:700; letter-spacing:0.04em;'
+        || ' color:var(--accent); text-decoration:none; margin-left:6px;'
+        || ' white-space:nowrap; opacity:.85; }');
+    DBMS_OUTPUT.PUT_LINE('.xlink:hover { text-decoration:underline; opacity:1; }');
+    DBMS_OUTPUT.PUT_LINE('.xlink[hidden] { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('.xlinks { display:inline-flex; gap:2px; margin-left:4px; }');
+    DBMS_OUTPUT.PUT_LINE('.ash-sql-card.jump-hi, .hero-card.jump-hi, div.jump-hi {'
+        || ' outline:2px solid var(--crit); outline-offset:2px; }');
+    DBMS_OUTPUT.PUT_LINE('.wchip em { font-style:normal; color:var(--ink-soft); font-weight:600; }');
     DBMS_OUTPUT.PUT_LINE('.shift-note { font-size:12px; color:var(--ink-soft);'
         || ' background:var(--warn-bg); border-left:3px solid var(--warn);'
         || ' padding:6px 10px; border-radius:6px; margin:6px 0 8px; }');

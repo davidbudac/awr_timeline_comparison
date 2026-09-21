@@ -752,6 +752,10 @@ BEGIN
     -- Built from the same CONNECT BY grid as the offline fallback list
     -- below, so chips and fallback can never disagree.
     DBMS_OUTPUT.PUT_LINE('    <div class="windows-chips">');
+    -- Phase 3: each chip carries its DATE when the window starts on a
+    -- different day than the Current window (weekly / daily cadence --
+    -- every chip used to read the same clock range), and the full ISO
+    -- range in its title.
     FOR w IN (
         SELECT LEVEL - 1 AS wk,
                TO_CHAR(
@@ -761,21 +765,41 @@ BEGIN
                TO_CHAR(
                    TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
                        - (LEVEL-1)*(~step_hours/24),
-                   'HH24:MI') AS w_end
+                   'HH24:MI') AS w_end,
+               TO_CHAR(
+                   TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
+                       - (LEVEL-1)*(~step_hours/24) - ~win_hours/24,
+                   'Dy DD Mon') AS w_day,
+               CASE WHEN TRUNC(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
+                               - (LEVEL-1)*(~step_hours/24) - ~win_hours/24)
+                       = TRUNC(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
+                               - ~win_hours/24)
+                    THEN 'Y' ELSE 'N' END AS same_day,
+               TO_CHAR(
+                   TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
+                       - (LEVEL-1)*(~step_hours/24) - ~win_hours/24,
+                   'YYYY-MM-DD HH24:MI') AS w_start_iso,
+               TO_CHAR(
+                   TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
+                       - (LEVEL-1)*(~step_hours/24),
+                   'YYYY-MM-DD HH24:MI') AS w_end_iso
         FROM   dual
         CONNECT BY LEVEL <= ~weeks_back + 1
         ORDER  BY LEVEL - 1
     ) LOOP
         DBMS_OUTPUT.PUT_LINE('      <span class="wchip'
             || CASE WHEN w.wk = 0 THEN ' cur' ELSE '' END
-            || '" data-w="' || w.wk || '" title="Highlight this window everywhere">'
+            || '" data-w="' || w.wk || '" title="' || w.w_start_iso || ' &rarr; '
+            || w.w_end_iso || ' &middot; click to highlight this window everywhere">'
             || CASE WHEN w.wk = 0
                     THEN '<b>current</b>'
                     ELSE '<b>&minus;'
                          || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, w.wk)
                          || '</b>'
                END
-            || ' <span>' || w.w_start || ' &rarr; ' || w.w_end || '</span>'
+            || ' <span>'
+            || CASE WHEN w.same_day = 'N' THEN '<em>' || w.w_day || '</em> ' ELSE '' END
+            || w.w_start || ' &rarr; ' || w.w_end || '</span>'
             || '</span>');
     END LOOP;
     DBMS_OUTPUT.PUT_LINE('    </div>');
@@ -932,6 +956,9 @@ BEGIN
         -- is a descendant match, so desktop rendering is unchanged.
         || '<div class="rail-list">'
         || '<b>Triage</b>'
+        -- Unhidden by the chrome JS when section 17 relocated a narrative
+        -- block into the masthead slot.
+        || '<a href="#narrative-slot" class="narr-link" hidden>What changed</a>'
         || '<a href="#db-time-summary">DB time</a>'
         || '<a href="#overview">Overview</a>'
         || '<a href="#ash-timeline">ASH timeline</a>'
@@ -1232,7 +1259,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  a.title="Copy a link to this section";');
     DBMS_OUTPUT.PUT_LINE('  a.addEventListener("click",function(ev){');
     DBMS_OUTPUT.PUT_LINE('    ev.preventDefault();');
-    DBMS_OUTPUT.PUT_LINE('    copyText(location.href.split("#")[0]+"#"+sec.id,a,"\u2713");');
+    DBMS_OUTPUT.PUT_LINE('    var st=stateStr();');
+    DBMS_OUTPUT.PUT_LINE('    copyText(location.href.split("#")[0]+"#"+sec.id+(st?"!"+st:""),a,"\u2713");');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  h2.appendChild(a);');
     DBMS_OUTPUT.PUT_LINE('});');
@@ -1527,6 +1555,70 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("awr:appfilter",measure);');
     DBMS_OUTPUT.PUT_LINE('measure();');
     DBMS_OUTPUT.PUT_LINE('setTimeout(measure,300);');
+    DBMS_OUTPUT.PUT_LINE('/* ---- P3: cross-links -- hide a link whose target does not exist, reveal a linked row ---- */');
+    DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("a.xlink").forEach(function(a){');
+    DBMS_OUTPUT.PUT_LINE('  var id=(a.getAttribute("href")||"").slice(1);');
+    DBMS_OUTPUT.PUT_LINE('  if(!id||!doc.getElementById(id)) a.hidden=true;');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('var nl=nav?nav.querySelector(".narr-link"):null;');
+    DBMS_OUTPUT.PUT_LINE('if(nl&&doc.querySelector("#narrative-slot .narr")) nl.hidden=false;');
+    DBMS_OUTPUT.PUT_LINE('function revealHash(){');
+    DBMS_OUTPUT.PUT_LINE('  var id=(location.hash||"").slice(1).split("!")[0]; if(!id) return;');
+    DBMS_OUTPUT.PUT_LINE('  var el=doc.getElementById(id); if(!el) return;');
+    DBMS_OUTPUT.PUT_LINE('  var tr=closest(el,"tr");');
+    DBMS_OUTPUT.PUT_LINE('  if(tr&&tr.hasAttribute("data-tail")){');
+    DBMS_OUTPUT.PUT_LINE('    var tb=closest(tr,"table");');
+    DBMS_OUTPUT.PUT_LINE('    if(tb&&!tb.classList.contains("open")){');
+    DBMS_OUTPUT.PUT_LINE('      tb.classList.add("open");');
+    DBMS_OUTPUT.PUT_LINE('      var ex=tb.id?doc.querySelector(".expander[data-for=\""+tb.id+"\"]"):null;');
+    DBMS_OUTPUT.PUT_LINE('      if(ex) ex.textContent="\u25BE Hide "+(ex.getAttribute("data-n")||"")+" "+(ex.getAttribute("data-noun")||"rows");');
+    DBMS_OUTPUT.PUT_LINE('    }');
+    DBMS_OUTPUT.PUT_LINE('    tr.hidden=false;');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  var tp=closest(el,".tabpanel");');
+    DBMS_OUTPUT.PUT_LINE('  if(tp&&!tp.classList.contains("on")){');
+    DBMS_OUTPUT.PUT_LINE('    var t=doc.querySelector(".tabs[data-tabs=\""+tp.getAttribute("data-tabs")+"\"] [data-t=\""+tp.getAttribute("data-t")+"\"]");');
+    DBMS_OUTPUT.PUT_LINE('    if(t) t.click();');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  var dt=closest(el,"details"); while(dt){ dt.open=true; dt=dt.parentNode?closest(dt.parentNode,"details"):null; }');
+    DBMS_OUTPUT.PUT_LINE('  var hi=tr||el; hi.classList.add("jump-hi"); setTimeout(function(){hi.classList.remove("jump-hi");},1600);');
+    DBMS_OUTPUT.PUT_LINE('  setTimeout(fitTables,60);');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('window.addEventListener("hashchange",revealHash);');
+    DBMS_OUTPUT.PUT_LINE('if(location.hash) setTimeout(revealHash,0);');
+    DBMS_OUTPUT.PUT_LINE('/* ---- P3: shareable view state in the hash (#anchor!v=t,e,a&tab=CPU&w=3) ---- */');
+    DBMS_OUTPUT.PUT_LINE('function stateStr(){');
+    DBMS_OUTPUT.PUT_LINE('  var v=[]; if(bd.classList.contains("triage")) v.push("t");');
+    DBMS_OUTPUT.PUT_LINE('  if(bd.classList.contains("essential")) v.push("e");');
+    DBMS_OUTPUT.PUT_LINE('  if(bd.classList.contains("app-only")) v.push("a");');
+    DBMS_OUTPUT.PUT_LINE('  var parts=[]; if(v.length) parts.push("v="+v.join(","));');
+    DBMS_OUTPUT.PUT_LINE('  var tab=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t].on");');
+    DBMS_OUTPUT.PUT_LINE('  if(tab&&tab.getAttribute("data-t")!=="ELAPSED") parts.push("tab="+tab.getAttribute("data-t"));');
+    DBMS_OUTPUT.PUT_LINE('  if(curW!==null&&curW!==undefined) parts.push("w="+curW);');
+    DBMS_OUTPUT.PUT_LINE('  return parts.join("&");');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('var stTimer=null;');
+    DBMS_OUTPUT.PUT_LINE('function pushState(){');
+    DBMS_OUTPUT.PUT_LINE('  if(stTimer) clearTimeout(stTimer);');
+    DBMS_OUTPUT.PUT_LINE('  stTimer=setTimeout(function(){');
+    DBMS_OUTPUT.PUT_LINE('    var h=location.hash||"", anchor=h.slice(1).split("!")[0], st=stateStr();');
+    DBMS_OUTPUT.PUT_LINE('    var nh=(anchor||st)?("#"+anchor+(st?"!"+st:"")):"";');
+    DBMS_OUTPUT.PUT_LINE('    if(nh!==h){ try{ history.replaceState(null,"",location.pathname+location.search+nh); }catch(e){} }');
+    DBMS_OUTPUT.PUT_LINE('  },60);');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function applyState(){');
+    DBMS_OUTPUT.PUT_LINE('  var h=location.hash||"", i=h.indexOf("!"); if(i<0) return;');
+    DBMS_OUTPUT.PUT_LINE('  var q={}; h.slice(i+1).split("&").forEach(function(kv){var p=kv.split("="); if(p[0]) q[p[0]]=decodeURIComponent(p[1]||"");});');
+    DBMS_OUTPUT.PUT_LINE('  var v=(q.v||"").split(",");');
+    DBMS_OUTPUT.PUT_LINE('  [["t","triage","triage-toggle"],["e","essential","essential-toggle"],["a","app-only","app-filter-toggle"]].forEach(function(p){');
+    DBMS_OUTPUT.PUT_LINE('    if(v.indexOf(p[0])>=0&&!bd.classList.contains(p[1])){ var b=doc.getElementById(p[2]); if(b) b.click(); }');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  if(q.tab){ var t=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t=\""+q.tab+"\"]"); if(t&&!t.classList.contains("on")) t.click(); }');
+    DBMS_OUTPUT.PUT_LINE('  if(q.w!==undefined&&q.w!==""){ curW=String(q.w); applyW(); }');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){ if(closest(ev.target,"#triage-toggle,#essential-toggle,#app-filter-toggle,.tabs [data-t]")) pushState(); });');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("awr:window",pushState);');
+    DBMS_OUTPUT.PUT_LINE('applyState();');
     DBMS_OUTPUT.PUT_LINE('/* ---- keyboard: Cmd/Ctrl-K focus filter, Esc clears, J / K jump ---- */');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("keydown",function(ev){');
     DBMS_OUTPUT.PUT_LINE('  var t=ev.target||{}, tag=(t.tagName||"").toLowerCase();');

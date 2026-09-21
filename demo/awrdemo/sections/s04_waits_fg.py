@@ -67,7 +67,7 @@ def emit(w) -> str:
              + C.header(w, "<th>Wait class</th>", "s", with_trend=False) + "<tbody>")
     for r in crows:
         cur_s = None if r["cur_us"] is None else r["cur_us"] / 1e6
-        row = ("<tr><td>" + h.esc(r["wait_class"]) + "</td>"
+        row = ('<tr id="' + h.anchor_id("fgc", r["wait_class"]) + '"><td>' + h.esc(r["wait_class"]) + "</td>"
                + '<td class="num" data-w="0"' + h.fmt_num_title(cur_s) + "><b>"
                + h.fmt_num(cur_s) + "</b></td>")
         for k in range(1, w.weeks_back + 1):

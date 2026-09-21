@@ -153,6 +153,8 @@ def emit(w) -> str:
         out.append('  <div class="foot">'
                    + '<span class="badge ' + sev_cls + '">' + sev_badge + "</span>"
                    + (h.SIG_BADGE if sig else "")
+                   + ' <a class="xlink" href="#' + h.anchor_id("find-" + src.lower(), key)
+                   + '" title="Go to this metric in the Findings summary">&#8599; finding</a>'
                    + "</div>")
         out.append("</div>")
 

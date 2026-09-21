@@ -107,6 +107,29 @@ DECLARE
     @@sql/lib/is_essential.plsql
     @@sql/lib/finding_family.plsql
     @@sql/lib/fmt_num.plsql
+    @@sql/lib/anchor_id.plsql
+
+    -- Phase 3 cross-links: the id of THIS finding's row, and a link to the
+    -- source row in 02 / 03 / 04 that produced it (same anchor_id rule).
+    FUNCTION find_id(p_dom VARCHAR2, p_name VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN anchor_id('find-' || LOWER(p_dom), p_name);
+    END find_id;
+
+    FUNCTION src_link(p_dom VARCHAR2, p_name VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN ' <a class="xlink" href="#'
+            || CASE p_dom
+                   WHEN 'LOAD'   THEN anchor_id('load', p_name)
+                   WHEN 'METRIC' THEN anchor_id('metric', p_name)
+                   ELSE anchor_id('fgc', REGEXP_REPLACE(p_name, '^Wait class: ', ''))
+               END
+            || '" title="Go to this metric''s row in '
+            || CASE p_dom WHEN 'LOAD' THEN 'Load profile'
+                          WHEN 'METRIC' THEN 'System metrics'
+                          ELSE 'Foreground waits' END
+            || '">&#8599; row</a>';
+    END src_link;
 
     -- Detail-table order: severity rank, |z| DESC, |pct| DESC, name.
     -- Computed here (not by ROW_NUMBER in the SQL) because the 'improved'
@@ -250,7 +273,8 @@ DECLARE
                 v_imp := CASE WHEN rec.metric_domain = 'WAIT' THEN NULL
                               ELSE is_essential(rec.metric_domain, rec.metric_name) END;
                 v_sig := is_sig(rec.prior_mean, rec.prior_sd);
-                v_row := '<tr data-metric="'
+                v_row := '<tr id="' || find_id(rec.metric_domain, rec.metric_name)
+                    || '" data-metric="'
                     || REPLACE(DBMS_XMLGEN.CONVERT(rec.metric_name), '"', '&quot;')
                     || '" data-family="' || rec.family || '"'
                     || CASE WHEN v_imp IS NOT NULL
@@ -265,6 +289,7 @@ DECLARE
                                 THEN ' <span class="chip" title="same quantity as a counted '
                                      || 'row; not counted again">twin</span>'
                                 ELSE '' END
+                        || src_link(rec.metric_domain, rec.metric_name)
                         || '</td>'
                     || '<td class="num"' || fmt_num_title(rec.cur_val) || '>'
                         || fmt_num(rec.cur_val) || '</td>'
@@ -680,6 +705,8 @@ BEGIN
                                 THEN ' <span class="chip" title="same quantity as the lead; '
                                      || 'not counted again">twin</span>'
                                 ELSE '' END
+                        || ' <a class="xlink" href="#' || find_id(f.metric_domain, f.metric_name)
+                        || '" title="Go to this finding''s detail row">&#8599; detail</a>'
                         || '</td>'
                         || '<td><span class="chip">' || f.metric_domain || '</span></td>'
                         || '<td class="num">'

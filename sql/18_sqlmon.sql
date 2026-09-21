@@ -381,10 +381,12 @@ BEGIN
             v_flags := v_flags || '<span class="chip" title="no captured execution anywhere in the span before the Current window">new</span> ';
         END IF;
 
-        v_row := '<tr data-sys="' || is_oracle_schema(s.last_username) || '"'
+        v_row := '<tr id="sqlmon-' || s.sql_id || '" data-sys="' || is_oracle_schema(s.last_username) || '"'
             || CASE WHEN s.rnk > v_top_n THEN ' data-tail="Y" hidden' ELSE '' END
             || '>'
-            || '<td class="mono">' || s.sql_id || '</td>'
+            || '<td class="mono">' || s.sql_id
+            || ' <a class="xlink" href="#sql-' || s.sql_id
+            || '" title="This SQL in the Top SQL pool">&#8599; Top SQL</a></td>'
             || '<td>' || DBMS_XMLGEN.CONVERT(NVL(s.last_username, '?'))
                 || ' / ' || DBMS_XMLGEN.CONVERT(NVL(s.last_module, '?')) || '</td>'
             || '<td class="trend" data-spark="' || NVL(s.elapsed_spark_csv, '')

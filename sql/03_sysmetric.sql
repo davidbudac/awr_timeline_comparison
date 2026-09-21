@@ -23,6 +23,7 @@ DECLARE
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/is_essential.plsql
+    @@sql/lib/anchor_id.plsql
     @@sql/lib/dev_bucket.plsql
     @@sql/lib/fmt_num.plsql
 BEGIN
@@ -134,7 +135,8 @@ BEGIN
             v_pct := 0;
         END IF;
 
-        v_row := '<tr data-imp="' || is_essential('METRIC', m.metric_name)
+        v_row := '<tr id="' || anchor_id('metric', m.metric_name)
+              || '" data-imp="' || is_essential('METRIC', m.metric_name)
               || '"><td>' || DBMS_XMLGEN.CONVERT(m.metric_name) || '</td>'
               || '<td>' || DBMS_XMLGEN.CONVERT(NVL(m.metric_unit, '')) || '</td>'
               || '<td class="trend" data-spark="' || NVL(m.spark_vals, '')

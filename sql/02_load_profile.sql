@@ -26,6 +26,7 @@ DECLARE
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/is_essential.plsql
+    @@sql/lib/anchor_id.plsql
     @@sql/lib/dev_bucket.plsql
     @@sql/lib/fmt_num.plsql
 BEGIN
@@ -151,7 +152,8 @@ BEGIN
             v_label := v_label || ' (/s)';
         END IF;
 
-        v_row := '<tr data-imp="' || is_essential('LOAD', m.stat_name)
+        v_row := '<tr id="' || anchor_id('load', m.stat_name)
+              || '" data-imp="' || is_essential('LOAD', m.stat_name)
               || '"><td>' || DBMS_XMLGEN.CONVERT(v_label) || '</td>';
 
         v_row := v_row || '<td class="trend" data-spark="'

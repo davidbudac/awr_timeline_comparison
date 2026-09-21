@@ -38,6 +38,7 @@ DECLARE
     @@sql/lib/nth_csv.plsql
     @@sql/lib/fmt_num.plsql
     @@sql/lib/finding_family.plsql
+    @@sql/lib/anchor_id.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="overview" data-triage="Y"><h2>Headline metrics</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
@@ -367,6 +368,8 @@ BEGIN
                        || '&sigma; below 1% of mean; read the % delta instead">'
                        || '&sigma;&approx;0</span>'
                    END
+                || ' <a class="xlink" href="#' || anchor_id('find-' || LOWER(c.src), c.key)
+                || '" title="Go to this metric in the Findings summary">&#8599; finding</a>'
                 || '</div>');
             DBMS_OUTPUT.PUT_LINE('</div>');
         END;

@@ -137,6 +137,22 @@ def _imm(f: Finding) -> bool:
 
 _TWIN_CHIP = (' <span class="chip" title="same quantity as a counted row; '
               'not counted again">twin</span>')
+
+
+def _find_id(f) -> str:
+    return h.anchor_id("find-" + f.domain.lower(), f.name)
+
+
+def _src_link(f) -> str:
+    if f.domain == "LOAD":
+        tid, sec = h.anchor_id("load", f.name), "Load profile"
+    elif f.domain == "METRIC":
+        tid, sec = h.anchor_id("metric", f.name), "System metrics"
+    else:
+        cls = f.name[len("Wait class: "):] if f.name.startswith("Wait class: ") else f.name
+        tid, sec = h.anchor_id("fgc", cls), "Foreground waits"
+    return (' <a class="xlink" href="#' + tid + '" title="Go to this metric\'s row in '
+            + sec + '">&#8599; row</a>')
 _TWIN_CHIP_MOVERS = (' <span class="chip" title="same quantity as the lead; '
                      'not counted again">twin</span>')
 
@@ -167,13 +183,13 @@ def _emit_domain_table(out: list[str], ordered: list[Finding], dom: str, title: 
         cls = f.cls
         imp = None if dom == "WAIT" else h.is_essential(dom, f.name)
         sig = h.sigma_flag(f.mu, f.sd)
-        out.append('<tr data-metric="' + h.esc(f.name).replace('"', "&quot;") + '"'
+        out.append('<tr id="' + _find_id(f) + '" data-metric="' + h.esc(f.name).replace('"', "&quot;") + '"'
                    + ' data-family="' + f.family + '"'
                    + ((' data-imp="' + imp + '"') if imp is not None else "")
                    + (' data-tail="Y"' if f.bucket in _TAIL else "")
                    + ' class="' + cls + (" twin" if f.canonical == "N" else "") + '">'
                    + '<td><span class="badge ' + cls + '">' + f.bucket + "</span></td>"
-                   + "<td>" + h.esc(f.name) + (_TWIN_CHIP if f.canonical == "N" else "") + "</td>"
+                   + "<td>" + h.esc(f.name) + (_TWIN_CHIP if f.canonical == "N" else "") + _src_link(f) + "</td>"
                    + '<td class="num"' + h.fmt_num_title(f.cur) + ">" + h.fmt_num(f.cur) + "</td>"
                    + '<td class="num">' + h.fmt_num(f.mu) + "</td>"
                    + '<td class="num">' + h.fmt_num(f.sd) + "</td>"
@@ -266,7 +282,9 @@ def emit(w) -> str:
                            + (" twin" if f.canonical == "N" else "")
                            + '" data-family="' + f.family + '"'
                            + (' data-tail="Y"' if m else "") + ">"
-                           + "<td>" + h.esc(f.name) + (_TWIN_CHIP_MOVERS if f.canonical == "N" else "") + "</td>"
+                           + "<td>" + h.esc(f.name) + (_TWIN_CHIP_MOVERS if f.canonical == "N" else "")
+                           + ' <a class="xlink" href="#' + _find_id(f)
+                           + '" title="Go to this finding\'s detail row">&#8599; detail</a></td>'
                            + '<td><span class="chip">' + f.domain + "</span></td>"
                            + '<td class="num">' + _z_cell_tail(f, sig) + "</td>"
                            + '<td class="num"' + h.fmt_num_title(f.cur) + ">" + h.fmt_num(f.cur) + "</td>"

@@ -443,10 +443,12 @@ BEGIN
                 || DBMS_XMLGEN.CONVERT(v_sid) || ' (' || v_sql_totals(v_sid) || ')';
         ELSE
             v_rendered := v_rendered + 1;
-            DBMS_OUTPUT.PUT_LINE('<div class="ash-sql-card" data-sys="'
-                || v_sql_sys(v_sid) || '">');
+            DBMS_OUTPUT.PUT_LINE('<div class="ash-sql-card" id="ash-card-' || v_sid
+                || '" data-sys="' || v_sql_sys(v_sid) || '">');
             DBMS_OUTPUT.PUT_LINE('  <div class="ash-sql-head">'
                 || '<code>' || DBMS_XMLGEN.CONVERT(v_sid) || '</code>'
+                || ' <a class="xlink" href="#sql-' || v_sid
+                || '" title="This SQL in the Top SQL pool">&#8599; Top SQL</a>'
                 || ' &middot; '
                 || '<span class="ash-sql-meta">'
                 || v_sql_totals(v_sid) || ' ASH samples'

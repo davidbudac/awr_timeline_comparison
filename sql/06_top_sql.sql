@@ -1041,10 +1041,18 @@ BEGIN
                         THEN 'Y' ELSE 'N' END || '"'
                 || CASE WHEN v_idx > 8 THEN ' data-tail="Y" hidden' ELSE '' END
                 || '>');
+            -- Phase 3 cross-links: the chrome JS hides an .xlink whose
+            -- target id does not exist (no ASH card / no SQL Monitor row).
             DBMS_OUTPUT.PUT_LINE('<td class="mono sqlid-cell">'
                 || '<span id="sqlid-' || v_sql_id || '">' || v_sql_id || '</span> '
                 || '<button type="button" class="copy-btn" '
                 || 'data-copy="#sqlid-' || v_sql_id || '">&#10687;</button>'
+                || '<span class="xlinks">'
+                || '<a class="xlink" href="#ash-card-' || v_sql_id
+                || '" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a>'
+                || '<a class="xlink" href="#sqlmon-' || v_sql_id
+                || '" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a>'
+                || '</span>'
                 || '</td>');
             -- Ranked-in chips: E/C/G/R/X, solid ("on") when the SQL is in
             -- that dimension's current-window top-3, plain when it merely
@@ -1346,7 +1354,7 @@ BEGIN
     -- every hashchange (i.e. every click of an in-page SQL_ID link).
     DBMS_OUTPUT.PUT_LINE('<script>(function(){');
     DBMS_OUTPUT.PUT_LINE('function openHash(){');
-    DBMS_OUTPUT.PUT_LINE('  var h=window.location.hash;');
+    DBMS_OUTPUT.PUT_LINE('  var h=(window.location.hash||"").split("!")[0];');
     DBMS_OUTPUT.PUT_LINE('  if(!h || h.length<2) return;');
     DBMS_OUTPUT.PUT_LINE('  var el; try{ el=document.querySelector(h); } catch(e){ return; }');
     DBMS_OUTPUT.PUT_LINE('  if(!el) return;');

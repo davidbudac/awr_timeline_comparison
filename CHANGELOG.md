@@ -64,6 +64,21 @@ and CSS changed by design).
   the masthead strip no longer clips its edge labels; parameter values
   stop breaking mid-number; the rail foot is sticky at the bottom of a
   short viewport.
+- **Navigation and cross-links (phase 3).** New `sql/lib/anchor_id.plsql`
+  gives every scored row and card a stable id (`load-<stat>`,
+  `metric-<name>`, `fg-/fgms-/fgc-<event|class>`, `bg-/bgms-<event>`,
+  `find-<domain>-<name>`, `ash-card-<sql_id>`, `sqlmon-<sql_id>`).
+  Findings rows link to their source row in 02/03/04 and the movers to
+  their detail row; hero cards link to their finding; Top SQL pool rows
+  link to the ASH card and the SQL Monitor row, which link back. Links
+  whose target is absent are hidden by the chrome JS; following a link
+  opens the collapsed table / tab / details around the target and
+  flashes it. The view state (Triage / Essential / App-only, Top SQL tab,
+  highlighted window) is kept in the URL hash after `!` and restored at
+  load, and the section permalink carries it. Masthead window chips show
+  the window's date when it differs from the Current window's day and
+  carry the full ISO range in their title. The rail gains a "What changed"
+  link when the narrative has something to say.
 - **Website (`docs/`): quick access to the demo report and installation.**
   Filled "Demo report" / "Install" pills in the top bar of every page (kept
   on phones), a two-card "Quick access" strip under the title block, a

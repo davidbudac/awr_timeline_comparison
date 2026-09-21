@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from .. import chrome
-from ..helpers import (esc, mean_sd, z_and_pct, ts_min, ts_sec, hh24,
+from ..helpers import (esc, mean_sd, z_and_pct, ts_min, ts_sec, hh24, dy, mon_dd,
                        to_char_fixed, finding_family, is_canonical, higher_is_worse)
 
 SQL_PATH = chrome.sql_path("sql/00_params.sql")
@@ -357,13 +357,18 @@ def emit(w) -> str:
     put('    <div class="windows-chips">')
     step = timedelta(hours=w.step_hours)
     width = timedelta(hours=w.win_hours)
+    cur_day = (w.target_end - width).date()
     for wk in range(w.weeks_back + 1):
         w_end = w.target_end - wk * step
         w_start = w_end - width
+        same_day = w_start.date() == cur_day
+        w_day = dy(w_start) + " " + w_start.strftime("%d") + " " + mon_dd(w_start)[:3]
         put('      <span class="wchip' + (' cur' if wk == 0 else '')
-            + '" data-w="' + str(wk) + '" title="Highlight this window everywhere">'
+            + '" data-w="' + str(wk) + '" title="' + ts_min(w_start) + ' &rarr; ' + ts_min(w_end)
+            + ' &middot; click to highlight this window everywhere">'
             + ('<b>current</b>' if wk == 0 else '<b>&minus;' + w.offset_labels[wk - 1] + '</b>')
-            + ' <span>' + hh24(w_start) + ' &rarr; ' + hh24(w_end) + '</span></span>')
+            + ' <span>' + ('' if same_day else '<em>' + w_day + '</em> ')
+            + hh24(w_start) + ' &rarr; ' + hh24(w_end) + '</span></span>')
     put('    </div>')
     put('    <div class="windows-hint">click a window to highlight it everywhere &middot; Esc clears</div>')
     put('    <div class="windows-chart" id="masthead-timeline"></div>')
@@ -423,6 +428,7 @@ def emit(w) -> str:
         '</div>'
         '<div class="rail-list">'
         '<b>Triage</b>'
+        '<a href="#narrative-slot" class="narr-link" hidden>What changed</a>'
         '<a href="#db-time-summary">DB time</a>'
         '<a href="#overview">Overview</a>'
         '<a href="#ash-timeline">ASH timeline</a>'

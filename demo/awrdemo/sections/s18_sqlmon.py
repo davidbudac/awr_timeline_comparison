@@ -289,8 +289,9 @@ def emit(w) -> str:
 
         sysflag = is_oracle_schema(st["last_username"])
         tail = ' data-tail="Y" hidden' if rnk > top_n else ""
-        put('<tr data-sys="' + sysflag + '"' + tail + ">"
-            + '<td class="mono">' + sid + "</td>"
+        put('<tr id="sqlmon-' + sid + '" data-sys="' + sysflag + '"' + tail + ">"
+            + '<td class="mono">' + sid
+            + ' <a class="xlink" href="#sql-' + sid + '" title="This SQL in the Top SQL pool">&#8599; Top SQL</a></td>'
             + "<td>" + esc(st["last_username"] if st["last_username"] is not None else "?")
             + " / " + esc(st["last_module"] if st["last_module"] is not None else "?") + "</td>"
             + '<td class="trend" data-spark="' + spark

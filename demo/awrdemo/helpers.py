@@ -9,6 +9,7 @@ with the PL/SQL originals named in each docstring.
 from __future__ import annotations
 
 import math
+import re
 from decimal import Decimal, ROUND_HALF_UP
 
 # ---------------------------------------------------------------------
@@ -407,6 +408,13 @@ _ESS = {
              "gc buffer busy acquire", "gc buffer busy release",
              "gc cr block busy", "gc current block busy"},
 }
+
+
+def anchor_id(prefix: str, name) -> str:
+    """sql/lib/anchor_id.plsql: lower-case, non [a-z0-9] runs -> '-', trimmed, 64 max."""
+    v = re.sub(r"[^a-z0-9]+", "-", (name or "").lower())
+    v = re.sub(r"^-+|-+$", "", v)
+    return prefix + "-" + v[:64]
 
 
 def is_essential(domain: str, name: str) -> str:

@@ -81,6 +81,7 @@ DECLARE
     @@sql/lib/nth_csv.plsql
     @@sql/lib/score_cells.plsql
     @@sql/lib/is_essential.plsql
+    @@sql/lib/anchor_id.plsql
     @@sql/lib/dev_bucket.plsql
     @@sql/lib/fmt_num.plsql
 BEGIN
@@ -401,7 +402,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table id="waits-fg-time">' || v_header || '<tbody>');
 
     FOR i IN 1 .. NVL(v_evts.COUNT, 0) LOOP
-        v_row := '<tr data-imp="' || is_essential('WAIT', v_evts(i).event_name) || '">'
+        v_row := '<tr id="' || anchor_id('fg', v_evts(i).event_name)
+            || '" data-imp="' || is_essential('WAIT', v_evts(i).event_name) || '">'
             || '<td>' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '</td>'
             || '<td class="trend" data-spark="' || NVL(v_evts(i).spark_vals, '')
             || '" data-spark-title="' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '"></td>'
@@ -451,7 +453,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table id="waits-fg-avg">' || v_header || '<tbody>');
 
     FOR i IN 1 .. NVL(v_evts.COUNT, 0) LOOP
-        v_row := '<tr data-imp="' || is_essential('WAIT', v_evts(i).event_name) || '">'
+        v_row := '<tr id="' || anchor_id('fgms', v_evts(i).event_name)
+            || '" data-imp="' || is_essential('WAIT', v_evts(i).event_name) || '">'
             || '<td>' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '</td>'
             || '<td class="trend" data-spark="' || NVL(v_evts(i).spark_ms_vals, '')
             || '" data-spark-title="' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '"></td>'
@@ -565,7 +568,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table id="waits-fg-class">' || v_header || '<tbody>');
 
     FOR i IN 1 .. NVL(v_classes.COUNT, 0) LOOP
-        v_row := '<tr>'
+        v_row := '<tr id="' || anchor_id('fgc', v_classes(i).wait_class) || '">'
             || '<td>' || DBMS_XMLGEN.CONVERT(v_classes(i).wait_class) || '</td>'
             || '<td class="num" data-w="0"' || fmt_num_title(v_classes(i).cur_us/1e6) || '><b>'
             || fmt_num(v_classes(i).cur_us/1e6)

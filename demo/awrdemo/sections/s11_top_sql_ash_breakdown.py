@@ -200,8 +200,10 @@ def emit(w) -> str:
             below.append(esc(sid) + " (" + str(tot) + ")")
             continue
         rendered += 1
-        out.append('<div class="ash-sql-card" data-sys="' + sql_sys(sid) + '">')
-        out.append('  <div class="ash-sql-head"><code>' + esc(sid) + '</code> &middot; '
+        out.append('<div class="ash-sql-card" id="ash-card-' + sid + '" data-sys="' + sql_sys(sid) + '">')
+        out.append('  <div class="ash-sql-head"><code>' + esc(sid) + '</code>'
+                   ' <a class="xlink" href="#sql-' + sid + '" title="This SQL in the Top SQL pool">&#8599; Top SQL</a>'
+                   ' &middot; '
                    '<span class="ash-sql-meta">' + str(tot) + ' ASH samples &middot; dominant: <b>'
                    + esc(dom.get(sid, "n/a")) + '</b></span></div>')
         out.append('  <pre class="ash-sql-snippet">' + esc(sql_text(sid)) + '</pre>')

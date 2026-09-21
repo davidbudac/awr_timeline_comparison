@@ -1,8 +1,8 @@
 # UI/UX improvements + findings reduction — implementation plan (2026-09-21)
 
 Status: **in progress on `claude/ui-ux-improvements-buwjzo`.** Phase 1
-and Phase 2 implemented 2026-09-21 (see the per-item notes marked DONE
-below and the CHANGELOG "Unreleased" entry); phases 3-6 pending. This document is the
+to 3 implemented 2026-09-21 (see the per-item notes marked DONE below
+and the CHANGELOG "Unreleased" entry); phases 4-6 pending. This document is the
 outcome of a
 UI/UX audit of the single-DB report (v1.4.0 chrome) rendered from
 `docs/examples/demo_busy_db.html` at 1440 px and 390 px in light, dark,
@@ -337,7 +337,24 @@ showMaxLabel:false`; 14/15 end labels `labelLayout:{hideOverlap:true}`
 plus `grid.right` for the longest name; 16 date cell `white-space:nowrap`;
 12 value cells `overflow-wrap:anywhere` only for `>=` 24-char values.
 
-### Phase 3 — Navigation and cross-links
+### Phase 3 — Navigation and cross-links — DONE 2026-09-21
+
+Implementation notes: `sql/lib/anchor_id.plsql` (+ `helpers.anchor_id`
+twin) builds the ids; 02/03/04/05 rows, 07 detail rows
+(`find-<domain>-<name>`), 11 cards (`ash-card-<sql_id>`) and 18 rows
+(`sqlmon-<sql_id>`) carry them.  Links are `a.xlink` (07 -> source row,
+07 movers -> detail row, 08 hero foot -> finding, 06 pool -> ASH card and
+SQL Monitor row, 11 / 18 -> Top SQL pool row); the chrome JS hides any
+xlink whose target id is absent (24 of 147 on the demo) and a generic
+`revealHash()` opens a collapsed table / tab / details around a linked
+row and flashes it.  View state rides in the hash after a `!`
+(`#anchor!v=t,e,a&tab=CPU&w=3`), written with `history.replaceState` on
+every toggle / tab / window click, restored at load, and appended to the
+h2 permalink; 06's own hash opener now strips the `!` part.  Window chips
+show the date (`<em>Thu 03 Sep</em>`) whenever a window starts on a
+different day than the Current one and carry the ISO range in their
+title.  Rail: "What changed" link (unhidden when 17 relocated a
+narrative) and the sticky foot from phase 2.
 
 **3.1 Anchor convention.** Every scored row/card gets a stable id built by
 one PL/SQL helper `anchor_id(prefix, name)` (new `sql/lib/anchor_id.plsql`:

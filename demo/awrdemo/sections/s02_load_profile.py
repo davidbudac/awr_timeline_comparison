@@ -2,7 +2,7 @@
 over the comprehensive template's sysstat_load_targets.sql."""
 from __future__ import annotations
 
-from awrdemo.helpers import esc, is_essential
+from awrdemo.helpers import esc, is_essential, anchor_id
 from awrdemo.sections._pivot import header, spark_vals, value_cells
 
 # sql/lib/templates/comprehensive/sysstat_load_targets.sql (27 stats)
@@ -52,7 +52,8 @@ def emit(w) -> str:
             label = stat + ' (cs/s, 1/100s)'
         else:
             label = stat + ' (/s)'
-        row = ('<tr data-imp="' + is_essential('LOAD', stat) + '"><td>' + esc(label) + '</td>'
+        row = ('<tr id="' + anchor_id('load', stat) + '" data-imp="' + is_essential('LOAD', stat)
+               + '"><td>' + esc(label) + '</td>'
                + '<td class="trend" data-spark="' + spark_vals(vals)
                + '" data-spark-title="' + esc(label) + '"></td>'
                + value_cells(vals) + '</tr>')
