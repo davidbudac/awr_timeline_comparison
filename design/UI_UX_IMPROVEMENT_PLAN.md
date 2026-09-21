@@ -1,8 +1,8 @@
 # UI/UX improvements + findings reduction — implementation plan (2026-09-21)
 
 Status: **in progress on `claude/ui-ux-improvements-buwjzo`.** Phase 1
-implemented 2026-09-21 (see the per-item notes marked DONE below and the
-CHANGELOG "Unreleased" entry); phases 2-6 pending. This document is the
+and Phase 2 implemented 2026-09-21 (see the per-item notes marked DONE
+below and the CHANGELOG "Unreleased" entry); phases 3-6 pending. This document is the
 outcome of a
 UI/UX audit of the single-DB report (v1.4.0 chrome) rendered from
 `docs/examples/demo_busy_db.html` at 1440 px and 390 px in light, dark,
@@ -279,7 +279,25 @@ day profile ~5; CSV export of each table still carries every row. On
 dbmint: the pinned window and `AUTO` both run 0 ORA-; `template=simple`
 and `dev` agree with `comprehensive` on every canonical row.
 
-### Phase 2 — Overflow and the phone layout
+### Phase 2 — Overflow and the phone layout — DONE 2026-09-21
+
+Implementation notes: the wrapper is added by the chrome JS to every
+section table (`div.tblwrap`) and gets `.scroll` only when the table is
+wider than its panel (re-measured on resize, tab/expander clicks and the
+app filter); inside a scrolling wrapper the thead loses its top-stickiness
+(it would stick to the wrapper, not the viewport) and the first column is
+sticky-left instead.  Measured result on the demo: document width
+1914 -> 1440 px at 1440, 1666 -> 390 px at 390, zero leaking elements.
+The phone bar collapses the three toggles into a "View" popover
+(`#view-btn` / `.view-panel`, `display:contents` on desktop so the rail is
+unchanged) and shows the row filter inside the hamburger panel; controls
+get a 32 px minimum below 980 px.  Marker labels moved inside the plot
+(`insideEndTop`, alternating offset for neighbouring markers) rather than
+a separate band; the windows strip keeps the date caption, moves the
+snap ids / skip reason into an SVG `<title>` and prints only "skipped";
+06/14/15 end labels truncate at 112 px with a wider right gutter; the
+masthead strip drops its clipped first/last axis labels; `section > h2`
+wraps below 700 px.  Rail foot is sticky-bottom (3.5 done here).
 
 **2.1 Table scroll containers (`_style.sql`, `00_params.sql`).**
 Rather than editing every emitter, the DOMContentLoaded chrome JS wraps

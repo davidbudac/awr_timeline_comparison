@@ -102,7 +102,9 @@ nav.toc a .st { width:8px; height:8px; border-radius:50%; flex:none; background:
 nav.toc a .st.ok   { background:var(--dot-ok); }
 nav.toc a .st.warn { background:var(--dot-warn); }
 nav.toc a .st.crit { background:var(--dot-crit); }
-nav.toc .rail-foot { margin-top:auto; display:flex; flex-direction:column; gap:6px; }
+nav.toc .rail-foot { margin-top:auto; display:flex; flex-direction:column; gap:6px; position:sticky; bottom:0; background:var(--panel-2); padding-top:8px; }
+nav.toc .view-btn { display:none; }
+nav.toc .view-panel { display:contents; }
 nav.toc .app-filter, nav.toc .essential-filter, nav.toc .triage-filter { font:inherit; font-size:11px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; padding:7px 12px; border-radius:8px; cursor:pointer; border:1px solid var(--rule); background:var(--panel); color:var(--ink); transition:color .12s,background .12s,border-color .12s; }
 nav.toc .app-filter:hover, nav.toc .essential-filter:hover, nav.toc .triage-filter:hover { border-color:var(--accent); color:var(--accent); }
 nav.toc .app-filter.active, nav.toc .essential-filter.active, nav.toc .triage-filter.active { background:var(--accent); border-color:var(--accent); color:#fff; }
@@ -120,7 +122,8 @@ body.app-only tr[data-sys="Y"], body.app-only details[data-sys="Y"], body.app-on
 body.essential tr[data-imp="N"]:not(:has(.badge.crit)):not(:has(.badge.warn)) { display:none; }
 .preset-note { display:none; margin-left:auto; align-self:center; font-size:11.5px; font-weight:700; letter-spacing:0.02em; padding:2px 10px; border-radius:999px; white-space:nowrap; background:var(--accent-bg); color:var(--accent-deep); }
 body.essential .preset-note { display:inline-block; }
-section { background:var(--panel); border:1px solid var(--hairline); border-radius:10px; padding:6px 24px 20px; margin:18px 0 0; scroll-margin-top:18px; }
+section { background:var(--panel); border:1px solid var(--hairline); border-radius:10px; padding:6px 24px 20px; margin:18px 0 0; scroll-margin-top:calc(var(--navh, 0px) + 18px); }
+section tr[id], section [id].ash-sql-card, section h3[id], section div[id].sqlmon-drift { scroll-margin-top:calc(var(--navh, 0px) + var(--h2h, 48px) + 44px); }
 h1 { font-size:24px; margin:0; }
 h2 { font-weight:700; font-size:18px; line-height:1.25; letter-spacing:-0.01em; color:var(--ink); text-transform:none; margin:0 0 12px; padding:14px 0 10px; border:0; border-bottom:1px solid var(--line-soft); background:var(--panel); display:flex; align-items:baseline; gap:10px; }
 section > h2 { position:sticky; top:var(--navh, 0px); z-index:6; white-space:nowrap; }
@@ -131,6 +134,13 @@ h2::after { content:none; }
 h3 { font-size:13.5px; letter-spacing:0.03em; text-transform:uppercase; color:var(--ink); font-weight:800; margin:28px 0 10px; display:flex; align-items:center; gap:8px; }
 h3::before { content:""; width:3px; height:12px; flex:none; background:var(--accent); border-radius:1px; }
 details + h3 { margin-top:36px; padding-top:24px; border-top:1px solid var(--hairline); }
+.tblwrap { max-width:100%; }
+.tblwrap.scroll { overflow-x:auto; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; margin:12px 0 16px; box-shadow:inset -14px 0 12px -14px rgba(0,0,0,.18); }
+.tblwrap.scroll table { margin:0; }
+.tblwrap.scroll thead th { position:static; }
+.tblwrap.scroll tr > :first-child { position:sticky; left:0; top:auto; z-index:2; background:var(--panel); }
+.tblwrap.scroll thead th:first-child { background:var(--panel-2); z-index:5; }
+.tblwrap.scroll tr.crit > td:first-child { background:var(--crit-bg); } .tblwrap.scroll tr.warn > td:first-child { background:var(--warn-bg); } .tblwrap.scroll tr.info > td:first-child { background:var(--info-bg); }
 table { width:100%; border-collapse:collapse; font-size:12.5px; background:transparent; border:0; border-radius:0; margin:12px 0 16px; }
 thead th { background:var(--panel-2); color:var(--muted); text-align:left; padding:9px 10px 8px; font-size:10.5px; font-weight:700; letter-spacing:0.09em; text-transform:uppercase; white-space:nowrap; border-bottom:1px solid var(--rule); }
 section table thead th { position:sticky; top:calc(var(--navh, 0px) + var(--h2h, 48px)); z-index:4; }
@@ -184,7 +194,8 @@ td.cell-bar { position:relative; }
 td.cell-bar .bg { position:absolute; left:0; top:0; bottom:0; background:var(--cell-bar-bg); border-right:2px solid var(--accent); pointer-events:none; }
 td.cell-bar .v { position:relative; z-index:1; font-weight:600; }
 #param-changes td.pname code { font-weight:600; color:var(--ink); }
-#param-changes td.pval { white-space:normal; word-break:break-word; max-width:320px; vertical-align:top; }
+#param-changes td.pval { white-space:normal; overflow-wrap:break-word; max-width:320px; vertical-align:top; }
+#day-profile td:first-child, #windows-table td { white-space:nowrap; }
 #param-changes td.pval code { font-size:11.5px; color:var(--ink-soft); }
 #param-changes td.cur code { font-weight:700; color:var(--ink); }
 #param-changes td.chg { background:var(--warn-bg); box-shadow:inset 3px 0 0 var(--warn); }
@@ -292,9 +303,9 @@ tr.jump-hi td { box-shadow:inset 0 2px 0 var(--crit), inset 0 -2px 0 var(--crit)
 tr.jump-hi td:first-child { box-shadow:inset 0 2px 0 var(--crit), inset 0 -2px 0 var(--crit), inset 2px 0 0 var(--crit); }
 tr.jump-hi td:last-child { box-shadow:inset 0 2px 0 var(--crit), inset 0 -2px 0 var(--crit), inset -2px 0 0 var(--crit); }
 nav.toc .rail-cur, nav.toc .rail-menu-btn { display:none; }
-@media (max-width: 980px) { nav.toc { order:0; position:sticky; top:0; left:auto; bottom:auto;   width:auto; overflow:visible; z-index:30;   flex-direction:row; flex-wrap:nowrap; align-items:center;   gap:8px; border-right:0;   border-bottom:1px solid var(--hairline);   border-radius:0; margin:0 -20px; padding:8px 20px; } nav.toc .rail-brand { border-bottom:0; padding:0; margin:0;   flex:0 0 auto; gap:6px; } nav.toc .rail-brand > span { font-size:10px; } nav.toc .rail-cur { display:block; flex:1 1 auto; min-width:0;   font-size:12px; font-weight:600; color:var(--ink);   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;   text-transform:none; letter-spacing:0; } nav.toc .rail-menu-btn { display:flex; flex:none;   align-items:center; justify-content:center;   width:28px; height:26px; padding:0; border-radius:7px;   border:1px solid var(--rule); background:var(--panel);   color:var(--ink); font:inherit; font-size:14px; cursor:pointer; } nav.toc .rail-filter { display:none; } nav.toc .rail-list { display:none; position:absolute;   top:100%; left:0; right:0; z-index:31;   background:var(--panel-2);   border-bottom:1px solid var(--hairline);   box-shadow:0 8px 18px rgba(0,0,0,.10);   padding:8px 20px 12px; max-height:70vh; overflow:auto; } nav.toc.menu-open .rail-list { display:flex; } nav.toc .rail-foot { margin-top:0; flex:none;   flex-direction:row; gap:4px; } nav.toc .rail-foot .next-finding { display:none; } nav.toc .app-filter, nav.toc .essential-filter, nav.toc .triage-filter { font-size:9.5px; padding:5px 7px;   letter-spacing:0; } }
-@media (max-width: 700px) { h2 .h2sub { display:none; } nav.toc .rail-brand > span { display:none; } }
-@media print { nav.toc { display:none; position:static; } body { max-width:none; padding:0 0 24px; background:#fff; } section { border:0; padding:12px 0; break-before:page; } body > section:first-of-type { break-before:auto; } header.report { border:0; padding-top:0; } .chart-wrap { break-inside:avoid; } h2 { break-after:avoid; position:static; padding-top:0;   background:transparent; } section table thead th { position:static; } .tbl-tools, .copy-btn, .permalink, .expander, .tag, .preset-note, .next-finding, .windows-hint, .theme-icon-btn { display:none !important; } details.method > summary { display:none; } details.method > * { display:block; } tr[data-tail="Y"] { display:table-row !important; } }
+@media (max-width: 980px) { nav.toc { order:0; position:sticky; top:0; left:auto; bottom:auto;   width:auto; overflow:visible; z-index:30;   flex-direction:row; flex-wrap:nowrap; align-items:center;   gap:8px; border-right:0;   border-bottom:1px solid var(--hairline);   border-radius:0; margin:0 -20px; padding:8px 20px; } nav.toc .rail-brand { border-bottom:0; padding:0; margin:0;   flex:0 0 auto; gap:6px; } nav.toc .rail-brand > span { font-size:10px; } nav.toc .rail-cur { display:block; flex:1 1 auto; min-width:0;   font-size:12px; font-weight:600; color:var(--ink);   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;   text-transform:none; letter-spacing:0; } nav.toc .rail-menu-btn { display:flex; flex:none;   align-items:center; justify-content:center;   width:28px; height:26px; padding:0; border-radius:7px;   border:1px solid var(--rule); background:var(--panel);   color:var(--ink); font:inherit; font-size:14px; cursor:pointer; } nav.toc .rail-filter { display:none; } nav.toc.menu-open .rail-filter { display:block; position:absolute;   top:calc(100% + 8px); left:20px; right:20px; z-index:32; margin:0; } nav.toc .rail-list { display:none; position:absolute;   top:100%; left:0; right:0; z-index:31;   background:var(--panel-2);   border-bottom:1px solid var(--hairline);   box-shadow:0 8px 18px rgba(0,0,0,.10);   padding:48px 20px 12px; max-height:70vh; overflow:auto; } nav.toc.menu-open .rail-list { display:flex; } nav.toc .rail-foot { margin-top:0; flex:none; position:static;   padding:0; flex-direction:row; gap:4px; } nav.toc .view-btn { display:flex; align-items:center; gap:4px;   font:inherit; font-size:11px; font-weight:700; min-height:32px;   padding:0 10px; border-radius:7px; border:1px solid var(--rule);   background:var(--panel); color:var(--ink); cursor:pointer; } nav.toc .view-btn[aria-expanded="true"] { border-color:var(--accent); color:var(--accent); } nav.toc .view-panel { display:none; position:absolute; right:12px;   top:calc(100% + 6px); z-index:33; flex-direction:column; gap:6px;   min-width:220px; padding:10px; border-radius:10px;   background:var(--panel); border:1px solid var(--hairline);   box-shadow:0 8px 18px rgba(0,0,0,.14); } nav.toc .rail-foot.open .view-panel { display:flex; } nav.toc .app-filter, nav.toc .essential-filter, nav.toc .triage-filter { min-height:34px; } .tabs [data-t], .tbl-tools .tool-btn, .copy-btn, .expander, details > summary, .chipbar button, nav.toc .theme-icon-btn, nav.toc .rail-menu-btn { min-height:32px; } nav.toc .theme-icon-btn, nav.toc .rail-menu-btn { width:32px; height:32px; } }
+@media (max-width: 700px) { h2 .h2sub { display:none; } section > h2 { white-space:normal; flex-wrap:wrap; row-gap:4px; } nav.toc .rail-brand > span { display:none; } }
+@media print { nav.toc { display:none; position:static; } body { max-width:none; padding:0 0 24px; background:#fff; } section { border:0; padding:12px 0; break-before:page; } body > section:first-of-type { break-before:auto; } header.report { border:0; padding-top:0; } .chart-wrap { break-inside:avoid; } h2 { break-after:avoid; position:static; padding-top:0;   background:transparent; } section table thead th { position:static; } .tbl-tools, .copy-btn, .permalink, .expander, .tag, .preset-note, .next-finding, .windows-hint, .theme-icon-btn { display:none !important; } details.method > summary { display:none; } details.method > * { display:block; } tr[data-tail="Y"] { display:table-row !important; } .tblwrap.scroll { overflow:visible; box-shadow:none; } .tblwrap.scroll tr > :first-child { position:static; } }
 </style>
 </head><body>
 <script>
@@ -407,14 +418,17 @@ window.AWR_markLine = function(cats, isoCats){
   var ink = cs.getPropertyValue("--ink").trim() || "#333";
   var paper = cs.getPropertyValue("--paper").trim() || "#fff";
   var data = [];
+  var lastBest = -99, stagger = 0;
   ms.forEach(function(m){
     var t = ts(m.t); if(isNaN(t) || t < lo || t > hi) return;
     var best = 0, bd = Infinity;
     for(var i=0;i<cats.length;i++){var dd=Math.abs(ts(tc[i])-t); if(dd<bd){bd=dd;best=i;}}
+    stagger = (Math.abs(best - lastBest) * 1000 / Math.max(1, cats.length) < 25) ? (stagger ? 0 : 1) : 0;
+    lastBest = best;
     data.push({xAxis:cats[best],
       label:{show:true,formatter:(function(lbl){return function(){return lbl;};})(m.label),
-        rotate:90,position:"end",color:ink,fontSize:9,
-        backgroundColor:paper,padding:[1,2,1,2],borderRadius:2,distance:3}});
+        rotate:90,position:"insideEndTop",color:ink,fontSize:9,align:"right",
+        backgroundColor:paper,padding:[1,2,1,2],borderRadius:2,distance:4+stagger*72}});
   });
   if(!data.length) return null;
   return {symbol:["none","none"],silent:true,emphasis:{disabled:true},
@@ -541,7 +555,7 @@ chart.setOption({
   grid:{left:0,right:0,top:12,bottom:18,containLabel:false},
   xAxis:{type:"category",data:d.times,boundaryGap:false,
     axisLine:{show:false},axisTick:{show:false},
-    axisLabel:{color:mu,fontSize:9,hideOverlap:true,showMinLabel:true,showMaxLabel:true,
+    axisLabel:{color:mu,fontSize:9,hideOverlap:true,showMinLabel:false,showMaxLabel:false,
       interval:Math.max(0,Math.floor(d.times.length/8))}},
   yAxis:{type:"value",show:false},
   series:[{
@@ -560,7 +574,7 @@ document.addEventListener("awr:theme",paint);
 new ResizeObserver(function(){chart.resize();}).observe(el);
 })();
 </script>
-<nav class="toc"><div class="rail-brand"><span>AWR &middot; Timeline comparison</span><button type="button" id="theme-toggle" class="theme-icon-btn" aria-pressed="false" aria-label="Toggle dark mode" title="Switch between light and dark color theme"><svg class="icon-sun" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="icon-moon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5a8.5 8.5 0 1 0 11.2 11.2z" fill="currentColor"/></svg></button></div><span class="rail-cur"></span><button type="button" class="rail-menu-btn" id="rail-menu-btn" aria-expanded="false" aria-label="Show section list">&#9776;</button><div class="rail-filter"><input type="text" id="row-filter" autocomplete="off" placeholder="Filter rows&#8230;" aria-label="Filter table rows across the report"><span class="kbd">&#8984;K</span></div><div class="rail-list"><b>Triage</b><a href="#db-time-summary">DB time</a><a href="#overview">Overview</a><a href="#ash-timeline">ASH timeline</a><a href="#findings">Findings</a><a href="#windows">Windows</a><b>Workload</b><a href="#day-profile">Day profile</a><a href="#utilization">Utilization</a><a href="#load">Load profile</a><a href="#metrics">Metrics</a><a href="#waits-fg">Waits &mdash; foreground</a><a href="#waits-bg">Waits &mdash; background</a><b>SQL</b><a href="#topsql">Top SQL</a><a href="#topsql-ash">Top SQL &mdash; ASH</a><a href="#sqlmon">SQL Monitor</a><b>Storage &amp; config</b><a href="#segment-io">Segment I/O</a><a href="#file-io">File I/O</a><a href="#param-changes">Parameters</a></div><div class="rail-foot"><button type="button" id="triage-toggle" class="triage-filter" aria-pressed="false" title="Collapse the report to the triage-critical sections and the verdict">Triage mode</button><button type="button" id="essential-toggle" class="essential-filter" aria-pressed="false" title="Show only the curated essential rows in the load, metric and wait tables; severity-flagged rows stay visible">Essential rows</button><button type="button" id="app-filter-toggle" class="app-filter" aria-pressed="false" title="Hide system-wide sections and Oracle-internal SQL; show only application SQL and its related data">Application only</button><button type="button" id="next-finding" class="next-finding" title="Jump to the next large (critical) finding"><span>&darr; next large finding</span><span class="keys">J K</span></button></div></nav>
+<nav class="toc"><div class="rail-brand"><span>AWR &middot; Timeline comparison</span><button type="button" id="theme-toggle" class="theme-icon-btn" aria-pressed="false" aria-label="Toggle dark mode" title="Switch between light and dark color theme"><svg class="icon-sun" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="icon-moon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5a8.5 8.5 0 1 0 11.2 11.2z" fill="currentColor"/></svg></button></div><span class="rail-cur"></span><button type="button" class="rail-menu-btn" id="rail-menu-btn" aria-expanded="false" aria-label="Show section list">&#9776;</button><div class="rail-filter"><input type="text" id="row-filter" autocomplete="off" placeholder="Filter rows&#8230;" aria-label="Filter table rows across the report"><span class="kbd">&#8984;K</span></div><div class="rail-list"><b>Triage</b><a href="#db-time-summary">DB time</a><a href="#overview">Overview</a><a href="#ash-timeline">ASH timeline</a><a href="#findings">Findings</a><a href="#windows">Windows</a><b>Workload</b><a href="#day-profile">Day profile</a><a href="#utilization">Utilization</a><a href="#load">Load profile</a><a href="#metrics">Metrics</a><a href="#waits-fg">Waits &mdash; foreground</a><a href="#waits-bg">Waits &mdash; background</a><b>SQL</b><a href="#topsql">Top SQL</a><a href="#topsql-ash">Top SQL &mdash; ASH</a><a href="#sqlmon">SQL Monitor</a><b>Storage &amp; config</b><a href="#segment-io">Segment I/O</a><a href="#file-io">File I/O</a><a href="#param-changes">Parameters</a></div><div class="rail-foot"><button type="button" class="view-btn" id="view-btn" aria-expanded="false" aria-controls="view-panel" title="Report view options">View &#9662;</button><div class="view-panel" id="view-panel"><button type="button" id="triage-toggle" class="triage-filter" aria-pressed="false" title="Collapse the report to the triage-critical sections and the verdict">Triage mode</button><button type="button" id="essential-toggle" class="essential-filter" aria-pressed="false" title="Show only the curated essential rows in the load, metric and wait tables; severity-flagged rows stay visible">Essential rows</button><button type="button" id="app-filter-toggle" class="app-filter" aria-pressed="false" title="Hide system-wide sections and Oracle-internal SQL; show only application SQL and its related data">Application only</button><button type="button" id="next-finding" class="next-finding" title="Jump to the next large (critical) finding"><span>&darr; next large finding</span><span class="keys">J K</span></button></div></div></nav>
 <script>(function(){
 var btn=document.getElementById("essential-toggle"); if(!btn) return;
 function kept(tr){return tr.getAttribute("data-imp")==="Y"||!!tr.querySelector(".badge.crit,.badge.warn");}
@@ -803,6 +817,32 @@ doc.addEventListener("click",function(ev){
     }
   });
 });
+/* ---- P2: wide tables scroll inside their panel ---- */
+doc.querySelectorAll("section table").forEach(function(tb){
+  var p=tb.parentNode; if(p&&p.classList&&p.classList.contains("tblwrap")) return;
+  var w=doc.createElement("div"); w.className="tblwrap";
+  p.insertBefore(w,tb); w.appendChild(tb);
+});
+function fitTables(){
+  doc.querySelectorAll(".tblwrap").forEach(function(w){
+    var tb=w.firstElementChild; if(!tb||w.offsetParent===null) return;
+    w.classList.remove("scroll");
+    if(tb.scrollWidth>w.clientWidth+1) w.classList.add("scroll");
+  });
+}
+window.AWR_fitTables=fitTables;
+fitTables(); setTimeout(fitTables,400);
+var ft=null;
+window.addEventListener("resize",function(){ if(ft) clearTimeout(ft); ft=setTimeout(fitTables,150); });
+doc.addEventListener("awr:appfilter",function(){ setTimeout(fitTables,50); });
+doc.addEventListener("click",function(ev){ if(closest(ev.target,".expander,.tabs [data-t],details > summary")) setTimeout(fitTables,50); });
+/* ---- P2: narrow-screen "View" popover ---- */
+var vb=doc.getElementById("view-btn"), vf=vb?closest(vb,".rail-foot"):null;
+function closeView(){ if(vf){ vf.classList.remove("open"); vb.setAttribute("aria-expanded","false"); } }
+if(vb&&vf){
+  vb.addEventListener("click",function(ev){ ev.stopPropagation(); var on=vf.classList.toggle("open"); vb.setAttribute("aria-expanded",on?"true":"false"); if(nav) nav.classList.remove("menu-open"); });
+  doc.addEventListener("click",function(ev){ if(vf.classList.contains("open")&&!closest(ev.target,".rail-foot")) closeView(); });
+}
 /* ---- X2: cross-report window highlight ---- */
 var curW=null;
 function applyW(){
@@ -942,6 +982,7 @@ if(tg) tg.addEventListener("click",function(){
   tg.innerHTML=on?"Triage mode &#10003;":"Triage mode";
   measure();
   window.dispatchEvent(new Event("resize"));
+  closeView();
 });
 /* ---- B8: narrow-screen section dropdown ---- */
 var mb=doc.getElementById("rail-menu-btn");
@@ -983,7 +1024,7 @@ doc.addEventListener("keydown",function(ev){
     ev.preventDefault(); if(fi){ fi.focus(); fi.select(); } return;
   }
   if(ev.key==="Escape"){
-    clearW();
+    clearW(); closeView();
     if(fi&&fi.value){ fi.value=""; applyFilter(); }
     if(typing&&t.blur) t.blur();
     if(nav) nav.classList.remove("menu-open");
@@ -1001,71 +1042,58 @@ doc.addEventListener("keydown",function(ev){
 <p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">One bar per window. Dimmed = skipped (missing snap, zero-length, or instance restart) and dropped from the z-score baseline.</p>
 <div class="ribbon"><svg viewBox="0 0 1000 72" preserveAspectRatio="none" role="img" aria-label="Baseline windows timeline">
 <line x1="0" y1="56" x2="1000" y2="56" stroke="var(--rule)" stroke-width="1"/>
-<g>
+<g><title>2026-06-18 10:00 &middot; valid &middot; snaps 41417&rarr;41418</title>
 <rect x="25.0" y="20" width="63.8" height="26" rx="4" fill="#2563eb" opacity="0.55"/>
 <text x="56.9" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">Jun 18</text>
-<text x="56.9" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">valid &middot; snaps 41417&rarr;41418</text>
 </g>
-<g>
+<g><title>2026-06-25 10:00 &middot; valid &middot; snaps 41585&rarr;41586</title>
 <rect x="98.8" y="20" width="63.8" height="26" rx="4" fill="#2563eb" opacity="0.55"/>
 <text x="130.8" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">Jun 25</text>
-<text x="130.8" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">valid &middot; snaps 41585&rarr;41586</text>
 </g>
-<g>
+<g><title>2026-07-02 10:00 &middot; valid &middot; snaps 41753&rarr;41754</title>
 <rect x="172.7" y="20" width="63.8" height="26" rx="4" fill="#2563eb" opacity="0.55"/>
 <text x="204.6" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">Jul 02</text>
-<text x="204.6" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">valid &middot; snaps 41753&rarr;41754</text>
 </g>
-<g>
+<g><title>2026-07-09 10:00 &middot; valid &middot; snaps 41921&rarr;41922</title>
 <rect x="246.5" y="20" width="63.8" height="26" rx="4" fill="#2563eb" opacity="0.55"/>
 <text x="278.5" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">Jul 09</text>
-<text x="278.5" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">valid &middot; snaps 41921&rarr;41922</text>
 </g>
-<g>
+<g><title>2026-07-16 10:00 &middot; valid &middot; snaps 42089&rarr;42090</title>
 <rect x="320.4" y="20" width="63.8" height="26" rx="4" fill="#2563eb" opacity="0.55"/>
 <text x="352.3" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">Jul 16</text>
-<text x="352.3" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">valid &middot; snaps 42089&rarr;42090</text>
 </g>
-<g>
+<g><title>2026-07-23 10:00 &middot; valid &middot; snaps 42257&rarr;42258</title>
 <rect x="394.2" y="20" width="63.8" height="26" rx="4" fill="#2563eb" opacity="0.55"/>
 <text x="426.2" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">Jul 23</text>
-<text x="426.2" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">valid &middot; snaps 42257&rarr;42258</text>
 </g>
-<g>
+<g><title>2026-07-30 10:00 &middot; valid &middot; snaps 42425&rarr;42426</title>
 <rect x="468.1" y="20" width="63.8" height="26" rx="4" fill="#2563eb" opacity="0.55"/>
 <text x="500.0" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">Jul 30</text>
-<text x="500.0" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">valid &middot; snaps 42425&rarr;42426</text>
 </g>
-<g>
+<g><title>2026-08-06 10:00 &middot; valid &middot; snaps 42593&rarr;42594</title>
 <rect x="541.9" y="20" width="63.8" height="26" rx="4" fill="#2563eb" opacity="0.55"/>
 <text x="573.8" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">Aug 06</text>
-<text x="573.8" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">valid &middot; snaps 42593&rarr;42594</text>
 </g>
-<g>
+<g><title>2026-08-13 10:00 &middot; valid &middot; snaps 42761&rarr;42762</title>
 <rect x="615.8" y="20" width="63.8" height="26" rx="4" fill="#2563eb" opacity="0.55"/>
 <text x="647.7" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">Aug 13</text>
-<text x="647.7" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">valid &middot; snaps 42761&rarr;42762</text>
 </g>
-<g>
+<g><title>2026-08-20 10:00 &middot; valid &middot; snaps 42929&rarr;42930</title>
 <rect x="689.6" y="20" width="63.8" height="26" rx="4" fill="#2563eb" opacity="0.55"/>
 <text x="721.5" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">Aug 20</text>
-<text x="721.5" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">valid &middot; snaps 42929&rarr;42930</text>
 </g>
-<g>
+<g><title>2026-08-27 10:00 &middot; valid &middot; snaps 43097&rarr;43098</title>
 <rect x="763.5" y="20" width="63.8" height="26" rx="4" fill="#2563eb" opacity="0.55"/>
 <text x="795.4" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">Aug 27</text>
-<text x="795.4" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">valid &middot; snaps 43097&rarr;43098</text>
 </g>
-<g>
+<g><title>2026-09-03 10:00 &middot; valid &middot; snaps 43265&rarr;43266</title>
 <rect x="837.3" y="20" width="63.8" height="26" rx="4" fill="#2563eb" opacity="0.55"/>
 <text x="869.2" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">Sep 03</text>
-<text x="869.2" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">valid &middot; snaps 43265&rarr;43266</text>
 </g>
-<g>
+<g><title>2026-09-10 10:00 &middot; valid &middot; snaps 43433&rarr;43434</title>
 <rect x="911.2" y="14" width="63.8" height="34" rx="4" fill="#2563eb" opacity="1.0"/>
 <text x="943.1" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">Sep 10</text>
 <text x="943.1" y="35" text-anchor="middle" font-size="11" font-weight="600" fill="#ffffff">current</text>
-<text x="943.1" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">valid &middot; snaps 43433&rarr;43434</text>
 </g>
 </svg></div>
 <table id="windows-table">
@@ -1565,10 +1593,10 @@ Object.keys(AWR_DATA.topSql.dims).forEach(function(dim){
       labelLayout:{moveOverlap:"shiftY"},
       tooltip:{trigger:"axis",axisPointer:{type:"line"},formatter:function(ps){var hdr="<b>"+ps[0].axisValue+"</b>";var rs=ps.filter(function(p){return p.value!=null;}).sort(function(a,b){return (b.value||0)-(a.value||0);}).map(function(p){return p.marker+" "+p.seriesName+": <b>"+fmt(p.value)+" "+d.unit+"</b>";}).join("<br/>");return hdr+"<br/>"+rs;}},
       legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},
-      grid:{left:50,right:90,top:10,bottom:44,containLabel:true},
+      grid:{left:50,right:128,top:10,bottom:44,containLabel:true},
       xAxis:{type:"category",data:weeks,axisLabel:{color:fg,fontWeight:600},splitLine:{show:true,lineStyle:{color:gr}}},
       yAxis:{type:"value",name:d.unit,nameTextStyle:{color:mu,fontSize:10},axisLabel:{color:mu,formatter:function(v){return (+v).toLocaleString(undefined,{maximumFractionDigits:2});}},splitLine:{lineStyle:{color:gr}}},
-      series:rows.map(function(s,i){var isTop=top3.indexOf(i)>=0;var o={name:rowName(s),type:"line",connectNulls:false,showSymbol:true,symbolSize:6,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:isTop?2:1.25,opacity:isTop?1:.45},emphasis:{focus:"series",lineStyle:{width:3,opacity:1}},endLabel:isTop?{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6,labelLine:{show:true,length2:4}}:{show:false},data:s.vals};if(i===0&&mark)o.markLine=mark;if(i===0&&hiSlot!=null){var idx=weeks.length-1-hiSlot;if(idx>=0&&idx<weeks.length)o.markArea={silent:true,itemStyle:{color:"rgba(37,99,235,0.14)"},data:[[{xAxis:idx},{xAxis:idx}]]};}return o;})
+      series:rows.map(function(s,i){var isTop=top3.indexOf(i)>=0;var o={name:rowName(s),type:"line",connectNulls:false,showSymbol:true,symbolSize:6,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:isTop?2:1.25,opacity:isTop?1:.45},emphasis:{focus:"series",lineStyle:{width:3,opacity:1}},endLabel:isTop?{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6,width:112,overflow:"truncate",labelLine:{show:true,length2:4}}:{show:false},data:s.vals};if(i===0&&mark)o.markLine=mark;if(i===0&&hiSlot!=null){var idx=weeks.length-1-hiSlot;if(idx>=0&&idx<weeks.length)o.markArea={silent:true,itemStyle:{color:"rgba(37,99,235,0.14)"},data:[[{xAxis:idx},{xAxis:idx}]]};}return o;})
     }, true);
   }
   render("sqls");
@@ -48174,10 +48202,10 @@ Object.keys(AWR_DATA.segIo.dims).forEach(function(dim){
       labelLayout:{moveOverlap:"shiftY"},
       tooltip:{trigger:"axis",axisPointer:{type:"line"},formatter:function(ps){var hdr="<b>"+ps[0].axisValue+"</b>";var rs=ps.filter(function(p){return p.value!=null;}).sort(function(a,b){return (b.value||0)-(a.value||0);}).map(function(p){return p.marker+" "+p.seriesName+": <b>"+fmt(p.value)+" "+d.unit+"</b>";}).join("<br/>");return hdr+"<br/>"+rs;}},
       legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},
-      grid:{left:50,right:110,top:10,bottom:44,containLabel:true},
+      grid:{left:50,right:128,top:10,bottom:44,containLabel:true},
       xAxis:{type:"category",data:weeks,axisLabel:{color:fg,fontWeight:600},splitLine:{show:true,lineStyle:{color:gr}}},
       yAxis:{type:"value",name:d.unit,nameTextStyle:{color:mu,fontSize:10},axisLabel:{color:mu,formatter:function(v){return (+v).toLocaleString(undefined,{maximumFractionDigits:0});}},splitLine:{lineStyle:{color:gr}}},
-      series:rows.map(function(s,i){var isTop=top3.indexOf(i)>=0;var o={name:s.name,type:"line",connectNulls:false,showSymbol:true,symbolSize:6,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:isTop?2:1.25,opacity:isTop?1:.45},emphasis:{focus:"series",lineStyle:{width:3,opacity:1}},endLabel:isTop?{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6,labelLine:{show:true,length2:4}}:{show:false},data:s.vals};if(i===0&&mark)o.markLine=mark;if(i===0&&hiSlot!=null){var idx=weeks.length-1-hiSlot;if(idx>=0&&idx<weeks.length)o.markArea={silent:true,itemStyle:{color:"rgba(37,99,235,0.14)"},data:[[{xAxis:idx},{xAxis:idx}]]};}return o;})
+      series:rows.map(function(s,i){var isTop=top3.indexOf(i)>=0;var o={name:s.name,type:"line",connectNulls:false,showSymbol:true,symbolSize:6,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:isTop?2:1.25,opacity:isTop?1:.45},emphasis:{focus:"series",lineStyle:{width:3,opacity:1}},endLabel:isTop?{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6,width:112,overflow:"truncate",labelLine:{show:true,length2:4}}:{show:false},data:s.vals};if(i===0&&mark)o.markLine=mark;if(i===0&&hiSlot!=null){var idx=weeks.length-1-hiSlot;if(idx>=0&&idx<weeks.length)o.markArea={silent:true,itemStyle:{color:"rgba(37,99,235,0.14)"},data:[[{xAxis:idx},{xAxis:idx}]]};}return o;})
     }, true);
   }
   render("segs");
@@ -48361,10 +48389,10 @@ Object.keys(AWR_DATA.fileIo.dims).forEach(function(dim){
       labelLayout:{moveOverlap:"shiftY"},
       tooltip:{trigger:"axis",axisPointer:{type:"line"},formatter:function(ps){var hdr="<b>"+ps[0].axisValue+"</b>";var rs=ps.filter(function(p){return p.value!=null;}).sort(function(a,b){return (b.value||0)-(a.value||0);}).map(function(p){return p.marker+" "+p.seriesName+": <b>"+fmt(p.value)+" "+d.unit+"</b>";}).join("<br/>");return hdr+"<br/>"+rs;}},
       legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},
-      grid:{left:50,right:110,top:10,bottom:44,containLabel:true},
+      grid:{left:50,right:128,top:10,bottom:44,containLabel:true},
       xAxis:{type:"category",data:weeks,axisLabel:{color:fg,fontWeight:600},splitLine:{show:true,lineStyle:{color:gr}}},
       yAxis:{type:"value",name:d.unit,nameTextStyle:{color:mu,fontSize:10},axisLabel:{color:mu,formatter:function(v){return (+v).toLocaleString(undefined,{maximumFractionDigits:1});}},splitLine:{lineStyle:{color:gr}}},
-      series:rows.map(function(s,i){var isTop=top3.indexOf(i)>=0;var o={name:s.name,type:"line",connectNulls:false,showSymbol:true,symbolSize:6,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:isTop?2:1.25,opacity:isTop?1:.45},emphasis:{focus:"series",lineStyle:{width:3,opacity:1}},endLabel:isTop?{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6,labelLine:{show:true,length2:4}}:{show:false},data:s.vals};if(i===0&&mark)o.markLine=mark;if(i===0&&hiSlot!=null){var idx=weeks.length-1-hiSlot;if(idx>=0&&idx<weeks.length)o.markArea={silent:true,itemStyle:{color:"rgba(37,99,235,0.14)"},data:[[{xAxis:idx},{xAxis:idx}]]};}return o;})
+      series:rows.map(function(s,i){var isTop=top3.indexOf(i)>=0;var o={name:s.name,type:"line",connectNulls:false,showSymbol:true,symbolSize:6,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:isTop?2:1.25,opacity:isTop?1:.45},emphasis:{focus:"series",lineStyle:{width:3,opacity:1}},endLabel:isTop?{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6,width:112,overflow:"truncate",labelLine:{show:true,length2:4}}:{show:false},data:s.vals};if(i===0&&mark)o.markLine=mark;if(i===0&&hiSlot!=null){var idx=weeks.length-1-hiSlot;if(idx>=0&&idx<weeks.length)o.markArea={silent:true,itemStyle:{color:"rgba(37,99,235,0.14)"},data:[[{xAxis:idx},{xAxis:idx}]]};}return o;})
     }, true);
   }
   render("files");

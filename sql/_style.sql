@@ -366,7 +366,13 @@ BEGIN
     -- together, pinned to the bottom of the rail. (Dark mode lives as an
     -- icon button beside the rail-brand title at the top of the rail.)
     DBMS_OUTPUT.PUT_LINE('nav.toc .rail-foot {'
-        || ' margin-top:auto; display:flex; flex-direction:column; gap:6px; }');
+        || ' margin-top:auto; display:flex; flex-direction:column; gap:6px;'
+        || ' position:sticky; bottom:0; background:var(--panel-2);'
+        || ' padding-top:8px; }');
+    -- Narrow-screen "View" popover: display:contents on desktop keeps the
+    -- toggle buttons as direct flex children of .rail-foot.
+    DBMS_OUTPUT.PUT_LINE('nav.toc .view-btn { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .view-panel { display:contents; }');
 
     -- "Essential rows" / "Application only" toggle buttons in the rail foot.
     DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter, nav.toc .essential-filter,'
@@ -476,10 +482,15 @@ BEGIN
     -- T2: the section's own top padding moved into the sticky h2 (6 + 14 =
     -- the old 20px of headroom) so the heading can sit flush against the
     -- viewport top when it sticks, with no transparent gap above it.
+    -- scroll-margin clears the narrow-screen top bar (--navh, 0 on
+    -- desktop); anchors INSIDE a section (rows, cards -- phase 3 links)
+    -- also clear the sticky h2 + thead stack.
     DBMS_OUTPUT.PUT_LINE('section {'
         || ' background:var(--panel); border:1px solid var(--hairline);'
         || ' border-radius:10px; padding:6px 24px 20px;'
-        || ' margin:18px 0 0; scroll-margin-top:18px; }');
+        || ' margin:18px 0 0; scroll-margin-top:calc(var(--navh, 0px) + 18px); }');
+    DBMS_OUTPUT.PUT_LINE('section tr[id], section [id].ash-sql-card, section h3[id], section div[id].sqlmon-drift {'
+        || ' scroll-margin-top:calc(var(--navh, 0px) + var(--h2h, 48px) + 44px); }');
     DBMS_OUTPUT.PUT_LINE('h1 { font-size:24px; margin:0; }');
 
     -- Section <h2>: compact panel heading (the rail does the wayfinding,
@@ -538,6 +549,28 @@ BEGIN
     -- =========================================================
     -- Tables
     -- =========================================================
+    -- v1.5.0 (phase 2): the chrome JS wraps every section table in
+    -- div.tblwrap and adds .scroll when the table is wider than its
+    -- panel, so wide per-window tables scroll sideways inside the panel
+    -- instead of pushing the whole page wide.  A scrolling table keeps its
+    -- first column pinned (sticky-left) and loses the sticky thead (a
+    -- scroll container ends the viewport-relative stickiness).
+    DBMS_OUTPUT.PUT_LINE('.tblwrap { max-width:100%; }');
+    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll { overflow-x:auto; overscroll-behavior-x:contain;'
+        || ' -webkit-overflow-scrolling:touch; margin:12px 0 16px;'
+        || ' box-shadow:inset -14px 0 12px -14px rgba(0,0,0,.18); }');
+    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll table { margin:0; }');
+    -- Inside a scroll container the viewport-relative top-stickiness of
+    -- thead th would stick to the WRAPPER instead (the header row floats
+    -- down through the rows as the page scrolls), so it is switched off
+    -- there and only the first column stays sticky-left.
+    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll thead th { position:static; }');
+    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll tr > :first-child {'
+        || ' position:sticky; left:0; top:auto; z-index:2; background:var(--panel); }');
+    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll thead th:first-child { background:var(--panel-2); z-index:5; }');
+    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll tr.crit > td:first-child { background:var(--crit-bg); }'
+        || ' .tblwrap.scroll tr.warn > td:first-child { background:var(--warn-bg); }'
+        || ' .tblwrap.scroll tr.info > td:first-child { background:var(--info-bg); }');
     DBMS_OUTPUT.PUT_LINE('table {'
         || ' width:100%; border-collapse:collapse;'
         || ' font-size:12.5px; background:transparent;'
@@ -696,8 +729,9 @@ BEGIN
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('#param-changes td.pname code { font-weight:600; color:var(--ink); }');
     DBMS_OUTPUT.PUT_LINE('#param-changes td.pval {'
-        || ' white-space:normal; word-break:break-word;'
+        || ' white-space:normal; overflow-wrap:break-word;'
         || ' max-width:320px; vertical-align:top; }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile td:first-child, #windows-table td { white-space:nowrap; }');
     DBMS_OUTPUT.PUT_LINE('#param-changes td.pval code {'
         || ' font-size:11.5px; color:var(--ink-soft); }');
     DBMS_OUTPUT.PUT_LINE('#param-changes td.cur code { font-weight:700; color:var(--ink); }');
@@ -1088,23 +1122,47 @@ BEGIN
         || '   width:28px; height:26px; padding:0; border-radius:7px;'
         || '   border:1px solid var(--rule); background:var(--panel);'
         || '   color:var(--ink); font:inherit; font-size:14px; cursor:pointer; }'
+        -- The row filter rides inside the open hamburger panel (absolute,
+        -- above the list, which reserves its height with padding-top).
         || ' nav.toc .rail-filter { display:none; }'
+        || ' nav.toc.menu-open .rail-filter { display:block; position:absolute;'
+        || '   top:calc(100% + 8px); left:20px; right:20px; z-index:32; margin:0; }'
         || ' nav.toc .rail-list { display:none; position:absolute;'
         || '   top:100%; left:0; right:0; z-index:31;'
         || '   background:var(--panel-2);'
         || '   border-bottom:1px solid var(--hairline);'
         || '   box-shadow:0 8px 18px rgba(0,0,0,.10);'
-        || '   padding:8px 20px 12px; max-height:70vh; overflow:auto; }'
+        || '   padding:48px 20px 12px; max-height:70vh; overflow:auto; }'
         || ' nav.toc.menu-open .rail-list { display:flex; }'
-        || ' nav.toc .rail-foot { margin-top:0; flex:none;'
-        || '   flex-direction:row; gap:4px; }'
-        || ' nav.toc .rail-foot .next-finding { display:none; }'
+        -- The three view toggles collapse into one "View" button whose
+        -- popover holds them (plus the next-finding control) stacked.
+        || ' nav.toc .rail-foot { margin-top:0; flex:none; position:static;'
+        || '   padding:0; flex-direction:row; gap:4px; }'
+        || ' nav.toc .view-btn { display:flex; align-items:center; gap:4px;'
+        || '   font:inherit; font-size:11px; font-weight:700; min-height:32px;'
+        || '   padding:0 10px; border-radius:7px; border:1px solid var(--rule);'
+        || '   background:var(--panel); color:var(--ink); cursor:pointer; }'
+        || ' nav.toc .view-btn[aria-expanded="true"] { border-color:var(--accent); color:var(--accent); }'
+        || ' nav.toc .view-panel { display:none; position:absolute; right:12px;'
+        || '   top:calc(100% + 6px); z-index:33; flex-direction:column; gap:6px;'
+        || '   min-width:220px; padding:10px; border-radius:10px;'
+        || '   background:var(--panel); border:1px solid var(--hairline);'
+        || '   box-shadow:0 8px 18px rgba(0,0,0,.14); }'
+        || ' nav.toc .rail-foot.open .view-panel { display:flex; }'
         || ' nav.toc .app-filter, nav.toc .essential-filter,'
-        || ' nav.toc .triage-filter { font-size:9.5px; padding:5px 7px;'
-        || '   letter-spacing:0; }'
+        || ' nav.toc .triage-filter { min-height:34px; }'
+        -- Tap targets: 32px minimum for the small controls below 980px.
+        || ' .tabs [data-t], .tbl-tools .tool-btn, .copy-btn, .expander,'
+        || ' details > summary, .chipbar button, nav.toc .theme-icon-btn,'
+        || ' nav.toc .rail-menu-btn { min-height:32px; }'
+        || ' nav.toc .theme-icon-btn, nav.toc .rail-menu-btn { width:32px; height:32px; }'
         || ' }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 700px) {'
         || ' h2 .h2sub { display:none; }'
+        -- headings wrap on phones (badges + permalink no longer push the
+        -- page wider than the viewport); the sticky offset (--h2h) is
+        -- measured after layout, so a two-line heading still stacks right.
+        || ' section > h2 { white-space:normal; flex-wrap:wrap; row-gap:4px; }'
         || ' nav.toc .rail-brand > span { display:none; } }');
 
     -- =========================================================
@@ -1131,6 +1189,8 @@ BEGIN
         || ' details.method > summary { display:none; }'
         || ' details.method > * { display:block; }'
         || ' tr[data-tail="Y"] { display:table-row !important; }'
+        || ' .tblwrap.scroll { overflow:visible; box-shadow:none; }'
+        || ' .tblwrap.scroll tr > :first-child { position:static; }'
         || ' }');
 
     DBMS_OUTPUT.PUT_LINE('</style>');

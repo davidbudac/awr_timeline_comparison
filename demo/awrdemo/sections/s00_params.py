@@ -445,6 +445,10 @@ def emit(w) -> str:
         '<a href="#param-changes">Parameters</a>'
         '</div>'
         '<div class="rail-foot">'
+        '<button type="button" class="view-btn" id="view-btn"'
+        ' aria-expanded="false" aria-controls="view-panel"'
+        ' title="Report view options">View &#9662;</button>'
+        '<div class="view-panel" id="view-panel">'
         '<button type="button" id="triage-toggle" class="triage-filter"'
         ' aria-pressed="false"'
         ' title="Collapse the report to the triage-critical sections'
@@ -465,6 +469,7 @@ def emit(w) -> str:
         '<span>&darr; next large finding</span>'
         '<span class="keys">J K</span>'
         '</button>'
+        '</div>'
         '</div>'
         '</nav>')
 

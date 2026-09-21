@@ -50,6 +50,20 @@ and CSS changed by design).
     `20 -> 9`, background waits `13 -> 11 moderate + one shift note`,
     day profile `80 cells -> 3 day-wide shifts + 9 isolated hours`; every
     row is still rendered and exported.
+- **Overflow and phone layout (phase 2).** Every section table is wrapped
+  in `div.tblwrap` by the chrome JS and scrolls sideways inside its panel
+  (`.scroll`, sticky first column) when wider than the panel -- the page
+  no longer grows past the viewport (1914 -> 1440 px on the demo at
+  1440, 1666 -> 390 px at 390). Below 980 px the three view toggles fold
+  into a "View" popover and the row filter rides in the hamburger panel;
+  small controls get 32 px tap targets; headings wrap below 700 px.
+  Anchors inside sections clear the sticky h2 + thead. Marker labels
+  draw inside the plot (`insideEndTop`, staggered) instead of over the
+  legend; the aligned-windows strip keeps only the date caption (snap
+  ids / skip reason in an SVG tooltip); 06/14/15 end labels truncate;
+  the masthead strip no longer clips its edge labels; parameter values
+  stop breaking mid-number; the rail foot is sticky at the bottom of a
+  short viewport.
 - **Website (`docs/`): quick access to the demo report and installation.**
   Filled "Demo report" / "Install" pills in the top bar of every page (kept
   on phones), a two-card "Quick access" strip under the title block, a

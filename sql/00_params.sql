@@ -861,7 +861,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  grid:{left:0,right:0,top:12,bottom:18,containLabel:false},');
     DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"category",data:d.times,boundaryGap:false,');
     DBMS_OUTPUT.PUT_LINE('    axisLine:{show:false},axisTick:{show:false},');
-    DBMS_OUTPUT.PUT_LINE('    axisLabel:{color:mu,fontSize:9,hideOverlap:true,showMinLabel:true,showMaxLabel:true,');
+    DBMS_OUTPUT.PUT_LINE('    axisLabel:{color:mu,fontSize:9,hideOverlap:true,showMinLabel:false,showMaxLabel:false,');
     DBMS_OUTPUT.PUT_LINE('      interval:Math.max(0,Math.floor(d.times.length/8))}},');
     DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"value",show:false},');
     DBMS_OUTPUT.PUT_LINE('  series:[{');
@@ -957,6 +957,13 @@ BEGIN
         || '<a href="#param-changes">Parameters</a>'
         || '</div>'
         || '<div class="rail-foot">'
+        -- Narrow-screen "View" button: opens .view-panel (the three toggles
+        -- + next-finding) as a popover; display:none on desktop, where
+        -- .view-panel is display:contents and the buttons sit in the rail.
+        || '<button type="button" class="view-btn" id="view-btn"'
+        || ' aria-expanded="false" aria-controls="view-panel"'
+        || ' title="Report view options">View &#9662;</button>'
+        || '<div class="view-panel" id="view-panel">'
         -- X3 "Triage mode": flips body.triage, which (via _style.sql) keeps
         -- only the sections that opted in with data-triage plus the
         -- masthead verdict, and dims the rail links of the rest.  First in
@@ -991,6 +998,7 @@ BEGIN
         || '<span>&darr; next large finding</span>'
         || '<span class="keys">J K</span>'
         || '</button>'
+        || '</div>'
         || '</div>'
         || '</nav>');
 
@@ -1320,6 +1328,32 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    }');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('/* ---- P2: wide tables scroll inside their panel ---- */');
+    DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("section table").forEach(function(tb){');
+    DBMS_OUTPUT.PUT_LINE('  var p=tb.parentNode; if(p&&p.classList&&p.classList.contains("tblwrap")) return;');
+    DBMS_OUTPUT.PUT_LINE('  var w=doc.createElement("div"); w.className="tblwrap";');
+    DBMS_OUTPUT.PUT_LINE('  p.insertBefore(w,tb); w.appendChild(tb);');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('function fitTables(){');
+    DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll(".tblwrap").forEach(function(w){');
+    DBMS_OUTPUT.PUT_LINE('    var tb=w.firstElementChild; if(!tb||w.offsetParent===null) return;');
+    DBMS_OUTPUT.PUT_LINE('    w.classList.remove("scroll");');
+    DBMS_OUTPUT.PUT_LINE('    if(tb.scrollWidth>w.clientWidth+1) w.classList.add("scroll");');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('window.AWR_fitTables=fitTables;');
+    DBMS_OUTPUT.PUT_LINE('fitTables(); setTimeout(fitTables,400);');
+    DBMS_OUTPUT.PUT_LINE('var ft=null;');
+    DBMS_OUTPUT.PUT_LINE('window.addEventListener("resize",function(){ if(ft) clearTimeout(ft); ft=setTimeout(fitTables,150); });');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("awr:appfilter",function(){ setTimeout(fitTables,50); });');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){ if(closest(ev.target,".expander,.tabs [data-t],details > summary")) setTimeout(fitTables,50); });');
+    DBMS_OUTPUT.PUT_LINE('/* ---- P2: narrow-screen "View" popover ---- */');
+    DBMS_OUTPUT.PUT_LINE('var vb=doc.getElementById("view-btn"), vf=vb?closest(vb,".rail-foot"):null;');
+    DBMS_OUTPUT.PUT_LINE('function closeView(){ if(vf){ vf.classList.remove("open"); vb.setAttribute("aria-expanded","false"); } }');
+    DBMS_OUTPUT.PUT_LINE('if(vb&&vf){');
+    DBMS_OUTPUT.PUT_LINE('  vb.addEventListener("click",function(ev){ ev.stopPropagation(); var on=vf.classList.toggle("open"); vb.setAttribute("aria-expanded",on?"true":"false"); if(nav) nav.classList.remove("menu-open"); });');
+    DBMS_OUTPUT.PUT_LINE('  doc.addEventListener("click",function(ev){ if(vf.classList.contains("open")&&!closest(ev.target,".rail-foot")) closeView(); });');
+    DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* ---- X2: cross-report window highlight ---- */');
     DBMS_OUTPUT.PUT_LINE('var curW=null;');
     DBMS_OUTPUT.PUT_LINE('function applyW(){');
@@ -1459,6 +1493,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  tg.innerHTML=on?"Triage mode &#10003;":"Triage mode";');
     DBMS_OUTPUT.PUT_LINE('  measure();');
     DBMS_OUTPUT.PUT_LINE('  window.dispatchEvent(new Event("resize"));');
+    DBMS_OUTPUT.PUT_LINE('  closeView();');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('/* ---- B8: narrow-screen section dropdown ---- */');
     DBMS_OUTPUT.PUT_LINE('var mb=doc.getElementById("rail-menu-btn");');
@@ -1500,7 +1535,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    ev.preventDefault(); if(fi){ fi.focus(); fi.select(); } return;');
     DBMS_OUTPUT.PUT_LINE('  }');
     DBMS_OUTPUT.PUT_LINE('  if(ev.key==="Escape"){');
-    DBMS_OUTPUT.PUT_LINE('    clearW();');
+    DBMS_OUTPUT.PUT_LINE('    clearW(); closeView();');
     DBMS_OUTPUT.PUT_LINE('    if(fi&&fi.value){ fi.value=""; applyFilter(); }');
     DBMS_OUTPUT.PUT_LINE('    if(typing&&t.blur) t.blur();');
     DBMS_OUTPUT.PUT_LINE('    if(nav) nav.classList.remove("menu-open");');
