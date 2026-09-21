@@ -93,6 +93,17 @@ and CSS changed by design).
   ECharts decal patterns (+ aria labels), the day-profile heatmap marks
   |z| >= 3 cells with a sign glyph, changed parameter cells carry a
   `&ne;` glyph.
+- **Content and wording (phase 5).** Every empty state now ends with the
+  same remedy hint (wider `win_hours`, more `weeks_back`, a busier
+  `target_end`); 03, 04, 09 and 13 gained guards (09 also hides its empty
+  chart). `SQL ID`, `Window`, `Plan hash (Current)`, `Executions`,
+  `Snapshots`, `Max I/O (bytes)`, `Errors`, `Line`, `requests` replace
+  the abbreviations, with titles on the ones that stay; the Load profile
+  gets a `Unit` column; hero cards say `bytes/s` and explain `cs/s`; the
+  narrative says "prior windows" (not "baseline") and collapses
+  contiguous window lists. SQL Monitor statements without a Current-window
+  execution fold under the expander and the detail row joins its statement
+  row; Top SQL detail tables open by default on phones.
 - **Website (`docs/`): quick access to the demo report and installation.**
   Filled "Demo report" / "Install" pills in the top bar of every page (kept
   on phones), a two-card "Quick access" strip under the title block, a

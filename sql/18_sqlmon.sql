@@ -81,6 +81,8 @@ DECLARE
     v_raw_total   NUMBER := 0;
     v_shown_total NUMBER := 0;
     v_sqlid_count NUMBER := 0;
+    v_tail_cnt    NUMBER := 0;
+    v_nocur_cnt   NUMBER := 0;
     v_any_row     BOOLEAN := FALSE;
 
     v_header      VARCHAR2(4000);
@@ -158,7 +160,8 @@ BEGIN
             || 'No SQL Monitor reports persisted in the compared windows '
             || '(' || TO_CHAR(CAST(v_span_start AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
             || ' &rarr; ' || TO_CHAR(CAST(v_span_end AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
-            || ').</p></section>');
+            || '). SQL Monitor only persists completed executions that ran long enough '
+            || 'or in parallel. Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p></section>');
         -- The closing AWR-SECTION marker is emitted by this file's own
         -- trailing block, so nothing else to do here.
         RETURN;
@@ -381,8 +384,14 @@ BEGIN
             v_flags := v_flags || '<span class="chip" title="no captured execution anywhere in the span before the Current window">new</span> ';
         END IF;
 
+        -- Phase 5: a statement with no Current-window execution folds under
+        -- the expander too (its flags / drill still survive there).
+        IF s.rnk > v_top_n OR s.cur_val IS NULL THEN
+            v_tail_cnt := v_tail_cnt + 1;
+            IF s.cur_val IS NULL THEN v_nocur_cnt := v_nocur_cnt + 1; END IF;
+        END IF;
         v_row := '<tr id="sqlmon-' || s.sql_id || '" data-sys="' || is_oracle_schema(s.last_username) || '"'
-            || CASE WHEN s.rnk > v_top_n THEN ' data-tail="Y" hidden' ELSE '' END
+            || CASE WHEN s.rnk > v_top_n OR s.cur_val IS NULL THEN ' data-tail="Y" hidden' ELSE '' END
             || '>'
             || '<td class="mono">' || s.sql_id
             || ' <a class="xlink" href="#sql-' || s.sql_id
@@ -403,13 +412,15 @@ BEGIN
         -- copyable SQL Monitor Active Report drill line (C4 codewrap/copy-btn
         -- markup, same pattern as sql/01_windows.sql's AWR-report listing).
         DBMS_OUTPUT.PUT_LINE('<tr class="sqlmon-detail" data-sys="' || is_oracle_schema(s.last_username) || '"'
-            || CASE WHEN s.rnk > v_top_n THEN ' data-tail="Y" hidden' ELSE '' END
+            || CASE WHEN s.rnk > v_top_n OR s.cur_val IS NULL THEN ' data-tail="Y" hidden' ELSE '' END
             || '><td colspan="9">');
         DBMS_OUTPUT.PUT_LINE('<details><summary>Per-window detail &amp; drill</summary>');
         v_header := '<table data-notools><thead><tr><th>Window</th><th class="num">n</th>'
             || '<th class="num">Max elapsed (s)</th><th class="num">Median elapsed (s)</th>'
-            || '<th class="num">Max IO</th><th class="num">DOP req/alloc</th>'
-            || '<th class="num">Plans</th><th class="num">Err</th></tr></thead><tbody>';
+            || '<th class="num" title="largest read + write bytes of one execution">Max I/O (bytes)</th>'
+            || '<th class="num" title="parallel servers requested / allocated (max per execution)">DOP req/alloc</th>'
+            || '<th class="num" title="distinct plan_hash_values">Plans</th>'
+            || '<th class="num" title="executions that ended DONE (ERROR)">Errors</th></tr></thead><tbody>';
         DBMS_OUTPUT.PUT_LINE(v_header);
         FOR k IN 0 .. v_weeks_back LOOP
             DECLARE
@@ -465,10 +476,16 @@ BEGIN
 
     IF v_any_row THEN
         DBMS_OUTPUT.PUT_LINE('</tbody></table>');
-        IF v_sqlid_count > v_top_n THEN
+        IF v_tail_cnt > 0 THEN
             DBMS_OUTPUT.PUT_LINE('<span class="expander" data-for="sqlmon-pool" data-n="'
-                || (v_sqlid_count - v_top_n) || '" data-noun="more statements">'
-                || '&#9656; Show ' || (v_sqlid_count - v_top_n) || ' more statements</span>');
+                || v_tail_cnt || '" data-noun="more statements'
+                || CASE WHEN v_nocur_cnt > 0
+                        THEN ' (' || v_nocur_cnt || ' without a Current-window execution)'
+                        ELSE '' END || '">'
+                || '&#9656; Show ' || v_tail_cnt || ' more statements'
+                || CASE WHEN v_nocur_cnt > 0
+                        THEN ' (' || v_nocur_cnt || ' without a Current-window execution)'
+                        ELSE '' END || '</span>');
         END IF;
         DBMS_OUTPUT.PUT_LINE('<p style="font-size:11px;color:var(--muted);margin:6px 0 0">'
             || fmt_int(v_raw_total) || ' execution' || CASE WHEN v_raw_total = 1 THEN '' ELSE 's' END
@@ -759,7 +776,7 @@ BEGIN
                     END IF;
 
                     DBMS_OUTPUT.PUT_LINE('<table class="sqlmon-drift-tbl" data-notools><thead><tr>'
-                        || '<th>Id</th><th>Operation</th><th>Object</th><th class="num">Est rows</th>'
+                        || '<th title="plan line id">Line</th><th>Operation</th><th>Object</th><th class="num">Est rows</th>'
                         || '<th class="num">Starts (base&rarr;cur)</th>'
                         || '<th class="num">Actual rows (base&rarr;cur)</th>'
                         || '<th class="num">Duration s (base&rarr;cur, % share)</th>'

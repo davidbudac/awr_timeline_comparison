@@ -59,7 +59,7 @@ def emit(w) -> str:
     out.append('</svg></div>')
 
     out.append('<table id="windows-table">')
-    out.append('<thead><tr><th>' + w.period_unit_title + '</th>'
+    out.append('<thead><tr><th>Window</th>'
                '<th>Window start</th><th>Window end</th>'
                '<th class="num">Begin snap</th><th class="num">End snap</th>'
                '<th>Status</th><th>Detail</th></tr></thead><tbody>')

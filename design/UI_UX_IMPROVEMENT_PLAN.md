@@ -1,8 +1,8 @@
 # UI/UX improvements + findings reduction — implementation plan (2026-09-21)
 
 Status: **in progress on `claude/ui-ux-improvements-buwjzo`.** Phase 1
-to 4 implemented 2026-09-21 (see the per-item notes marked DONE below
-and the CHANGELOG "Unreleased" entry); phases 5-6 pending. This document is the
+to 5 implemented 2026-09-21 (see the per-item notes marked DONE below
+and the CHANGELOG "Unreleased" entry); phase 6 pending. This document is the
 outcome of a
 UI/UX audit of the single-DB report (v1.4.0 chrome) rendered from
 `docs/examples/demo_busy_db.html` at 1440 px and 390 px in light, dark,
@@ -436,7 +436,27 @@ on stacked wait-class charts (09/10/11) and the PHV scatter (06); 16 keeps
 the diverging ramp but adds the sign glyph in `label.formatter` for
 |z| > 3; 12's changed cells gain a leading `*` glyph in the cell.
 
-### Phase 5 — Content and wording
+### Phase 5 — Content and wording — DONE 2026-09-21
+
+Implementation notes: one shared remedy sentence ("Try a wider
+`win_hours`, more `weeks_back`, or a busier `target_end`") is appended to
+every empty state; 03 and 04 gained a guard (03 as an in-table note row,
+04 as a paragraph above the empty tables), 13 emits a note when no group
+rendered, 09 counts samples and, when none, prints a note and hides the
+chart box (after its script, so the demo twin's slice is untouched).
+Terminology: `SQL ID` everywhere (headers, prose, the break-down
+button); `Window` as 01's first header; `Plan hash (Current)`,
+`Executions`, `Snapshots`, `Max I/O (bytes)`, `Errors`, `Line` with
+`title`s on the remaining abbreviations; `requests` instead of `reqs` in
+14/15; 02 gained a `Unit` column (name / `/s` / `bytes/s` / `cs/s` with a
+title explaining centiseconds), the hero card says `bytes/s` and explains
+`cs/s` in a title; the narrative says "prior windows" instead of
+"baseline" and collapses contiguous offset lists ("every prior window",
+"-5w to -12w").  SQL Monitor: statements without a Current-window
+execution fold under the expander (counted in its label) and the detail
+row is visually joined to its statement row.  Top SQL detail tables open
+by default below 700 px.  `unit_of()` in the family map was not needed
+(02 keeps its three-way unit CASE).
 
 **5.1 Empty states.** One shared phrasing, emitted by every section with a
 guard (add guards to 03, 04, 09, 13): "<what is empty> in <view> for the

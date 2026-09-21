@@ -22,8 +22,8 @@ from awrdemo.sections import _iodims as D
 DIMS = [  # code, ord, label, unit  (file-level dims CTE)
     ("READMB", 1, "By data read (MB)", "MB"),
     ("WRITEMB", 2, "By data written (MB)", "MB"),
-    ("RREQ", 3, "By read requests", "reqs"),
-    ("WREQ", 4, "By write requests", "reqs"),
+    ("RREQ", 3, "By read requests", "requests"),
+    ("WREQ", 4, "By write requests", "requests"),
 ]
 FT_DIMS = [  # the file-type pass has its own (shorter) labels
     ("READMB", 1, "Data read (MB)", "MB"),

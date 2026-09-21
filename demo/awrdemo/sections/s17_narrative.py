@@ -359,7 +359,7 @@ def emit(w) -> str:
         tail = ''
         if v_file is not None:
             tail += (' The reads land on <a href="#file-io">' + esc(v_file) + '</a> ('
-                     + ('no prior baseline; ' if v_file_mu is None else fmt3(v_file_mu) + ' &rarr; ')
+                     + ('no prior windows; ' if v_file_mu is None else fmt3(v_file_mu) + ' &rarr; ')
                      + fmt3(v_file_cur) + ' MB read this window)')
         if v_seg is not None:
             tail += ((' T' if tail == '' else '; t')
@@ -411,9 +411,15 @@ def emit(w) -> str:
         shown = diff[:3]
         names = ''
         for i, (name, offs) in enumerate(shown):
-            names += (('' if i == 0 else '; ') + '<code>' + esc(name) + '</code> in '
-                      + ', '.join(_off_lbl(w, k) for k in offs))
-        sent.append('<b>Configuration differs inside the baseline:</b> ' + names
+            contig = all(b == a + 1 for a, b in zip(offs, offs[1:]))
+            if len(offs) == w.weeks_back and contig:
+                acc = 'every prior window'
+            elif contig and len(offs) >= 3:
+                acc = _off_lbl(w, offs[0]) + ' to ' + _off_lbl(w, offs[-1])
+            else:
+                acc = ', '.join(_off_lbl(w, k) for k in offs)
+            names += ('' if i == 0 else '; ') + '<code>' + esc(name) + '</code> in ' + acc
+        sent.append('<b>Configuration differs among the prior windows:</b> ' + names
                     + (' (and ' + _tc(total - len(shown)) + ' more)' if total > len(shown) else '')
                     + '. Treat those windows as a different configuration &mdash; see '
                     '<a href="#param-changes">parameter changes</a>.')
@@ -431,7 +437,7 @@ def emit(w) -> str:
                     + ('' if n_all == 1 else 's') + '</b>'
                     + (' was' if len(bad) == 1 else ' were') + ' skipped'
                     + ('' if reason is None else ' (' + esc(reason) + ')')
-                    + ', so the baseline is thin &mdash; see '
+                    + ', so the prior-window set is thin &mdash; see '
                     '<a href="#windows">compared windows</a>.')
 
     # R6-R9

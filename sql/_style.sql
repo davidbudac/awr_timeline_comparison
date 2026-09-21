@@ -636,6 +636,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ash-sql-card.jump-hi, .hero-card.jump-hi, div.jump-hi {'
         || ' outline:2px solid var(--crit); outline-offset:2px; }');
     DBMS_OUTPUT.PUT_LINE('.wchip em { font-style:normal; color:var(--ink-soft); font-weight:600; }');
+    -- Phase 5: the SQL Monitor pool's detail row reads as part of its
+    -- statement row (no rule between them, tighter padding).
+    DBMS_OUTPUT.PUT_LINE('#sqlmon-pool tbody tr:not(.sqlmon-detail) > td { border-bottom:0; padding-bottom:4px; }'
+        || ' #sqlmon-pool tr.sqlmon-detail > td { padding-top:0; }'
+        || ' #sqlmon-pool tr.sqlmon-detail > td > details > summary { font-size:11px; }');
     DBMS_OUTPUT.PUT_LINE('.shift-note { font-size:12px; color:var(--ink-soft);'
         || ' background:var(--warn-bg); border-left:3px solid var(--warn);'
         || ' padding:6px 10px; border-radius:6px; margin:6px 0 8px; }');

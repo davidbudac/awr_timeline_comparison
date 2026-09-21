@@ -382,6 +382,11 @@ BEGIN
         END IF;
     END IF;
 
+    IF NVL(v_evts.COUNT, 0) = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('<p style="color:var(--muted)">No foreground wait activity in '
+            || 'DBA_HIST_SYSTEM_EVENT for any valid window. Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p>');
+    END IF;
+
     -- Table A: total time waited (s)
     DBMS_OUTPUT.PUT_LINE('<h3>Top ' || v_top_n || ' events &mdash; time waited (s)</h3>');
     IF v_shift = 'Y' THEN

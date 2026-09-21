@@ -129,7 +129,7 @@ BEGIN
 
     DBMS_OUTPUT.PUT_LINE('<table id="windows-table">');
     DBMS_OUTPUT.PUT_LINE('<thead><tr>'
-        || '<th>~period_unit_title</th>'
+        || '<th>Window</th>'
         || '<th>Window start</th>'
         || '<th>Window end</th>'
         || '<th class="num">Begin snap</th>'

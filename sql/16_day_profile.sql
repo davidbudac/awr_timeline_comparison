@@ -135,7 +135,8 @@ BEGIN
             || v_days || ' prior days</h2>');
         DBMS_OUTPUT.PUT_LINE('<p style="color:var(--muted)">No usable snapshot pairs in the '
             || '24 h ending ' || TO_CHAR(v_tend, 'YYYY-MM-DD HH24:MI')
-            || ' &mdash; cannot build the profile.</p></section>');
+            || ' &mdash; cannot build the profile. Try a smaller <code>profile_days</code>, '
+            || 'or a <code>target_end</code> inside the retained AWR history.</p></section>');
         RETURN;
     END IF;
 

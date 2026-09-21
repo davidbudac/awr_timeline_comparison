@@ -258,6 +258,7 @@ def emit(w) -> str:
         -stats[sid]["span_max_all"], sid))
     sqlid_count = len(ranked)
     shown_total = 0
+    tail_cnt = nocur_cnt = 0
 
     # -- per-statement comparison table ---------------------------------
     if ranked:
@@ -288,7 +289,11 @@ def emit(w) -> str:
             flags += '<span class="chip" title="no captured execution anywhere in the span before the Current window">new</span> '
 
         sysflag = is_oracle_schema(st["last_username"])
-        tail = ' data-tail="Y" hidden' if rnk > top_n else ""
+        tail = ' data-tail="Y" hidden' if (rnk > top_n or p["cur_val"] is None) else ""
+        if tail:
+            tail_cnt += 1
+            if p["cur_val"] is None:
+                nocur_cnt += 1
         put('<tr id="sqlmon-' + sid + '" data-sys="' + sysflag + '"' + tail + ">"
             + '<td class="mono">' + sid
             + ' <a class="xlink" href="#sql-' + sid + '" title="This SQL in the Top SQL pool">&#8599; Top SQL</a></td>'
@@ -307,8 +312,10 @@ def emit(w) -> str:
         put("<details><summary>Per-window detail &amp; drill</summary>")
         put('<table data-notools><thead><tr><th>Window</th><th class="num">n</th>'
             '<th class="num">Max elapsed (s)</th><th class="num">Median elapsed (s)</th>'
-            '<th class="num">Max IO</th><th class="num">DOP req/alloc</th>'
-            '<th class="num">Plans</th><th class="num">Err</th></tr></thead><tbody>')
+            '<th class="num" title="largest read + write bytes of one execution">Max I/O (bytes)</th>'
+            '<th class="num" title="parallel servers requested / allocated (max per execution)">DOP req/alloc</th>'
+            '<th class="num" title="distinct plan_hash_values">Plans</th>'
+            '<th class="num" title="executions that ended DONE (ERROR)">Errors</th></tr></thead><tbody>')
         for k in range(weeks_back + 1):
             c = cells[k]
             label = "Current" if k == 0 else "&minus;" + w.offset_labels[k - 1]
@@ -343,10 +350,11 @@ def emit(w) -> str:
 
     if ranked:
         put("</tbody></table>")
-        if sqlid_count > top_n:
-            more = sqlid_count - top_n
-            put('<span class="expander" data-for="sqlmon-pool" data-n="' + str(more)
-                + '" data-noun="more statements">&#9656; Show ' + str(more) + " more statements</span>")
+        if tail_cnt > 0:
+            noun = "more statements" + (" (" + str(nocur_cnt) + " without a Current-window execution)"
+                                        if nocur_cnt > 0 else "")
+            put('<span class="expander" data-for="sqlmon-pool" data-n="' + str(tail_cnt)
+                + '" data-noun="' + noun + '">&#9656; Show ' + str(tail_cnt) + " " + noun + "</span>")
         put('<p style="font-size:11px;color:var(--muted);margin:6px 0 0">'
             + fmt_int(raw_total) + " execution" + ("" if raw_total == 1 else "s")
             + " captured in the compared span; " + fmt_int(shown_total)
@@ -417,7 +425,7 @@ def emit(w) -> str:
                     + fmt_num(r["base_rows"]) + " &rarr; " + fmt_num(r["cur_rows"]) + "</p>")
 
             put('<table class="sqlmon-drift-tbl" data-notools><thead><tr>'
-                '<th>Id</th><th>Operation</th><th>Object</th><th class="num">Est rows</th>'
+                '<th title="plan line id">Line</th><th>Operation</th><th>Object</th><th class="num">Est rows</th>'
                 '<th class="num">Starts (base&rarr;cur)</th>'
                 '<th class="num">Actual rows (base&rarr;cur)</th>'
                 '<th class="num">Duration s (base&rarr;cur, % share)</th>'

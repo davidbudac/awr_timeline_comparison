@@ -186,6 +186,9 @@ BEGIN
 
     IF v_last_grp <> -1 THEN
         DBMS_OUTPUT.PUT_LINE('</tbody></table>');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('<p style="color:var(--muted)">No utilization metrics in '
+            || 'DBA_HIST_SYSMETRIC_SUMMARY for the compared windows. Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p>');
     END IF;
     DBMS_OUTPUT.PUT_LINE('</section>');
 END;

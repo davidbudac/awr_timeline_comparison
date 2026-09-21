@@ -18,7 +18,7 @@ from .. import helpers as h
 # (pos, label, unit, src, key) -- the `cards` CTE, left-to-right
 CARDS = [
     (1, "DB time", "cs/s", "LOAD", "DB time"),
-    (2, "Redo generated", "B/s", "LOAD", "redo size"),
+    (2, "Redo generated", "bytes/s", "LOAD", "redo size"),
     (3, "Logical reads", "/s", "LOAD", "session logical reads"),
     (4, "Average Active Sessions", "AAS", "METRIC", "Average Active Sessions"),
     (5, "Wait Time Ratio", "%", "METRIC", "Database Wait Time Ratio"),
@@ -118,7 +118,10 @@ def emit(w) -> str:
                    + '" data-spark="' + vals_csv
                    + '" data-spark-title="' + label + '"></div>')
         out.append('  <div class="value"' + h.fmt_num_title(cur) + ">"
-                   + h.fmt_num(cur) + " <small>" + unit + "</small></div>")
+                   + h.fmt_num(cur) + " <small"
+                   + (' title="centiseconds of DB time per second (divide by 100 for average active sessions)"'
+                      if unit == "cs/s" else "")
+                   + ">" + unit + "</small></div>")
 
         # B6: bar strip on a lowered baseline + prior min-max range
         present = [v for v in vals if v is not None]

@@ -211,8 +211,8 @@ BEGIN
         dims AS (
             SELECT 'PREADS' code, 1 ord, 'By physical reads'  label, 'blocks' unit FROM dual UNION ALL
             SELECT 'PWRITES', 2,    'By physical writes',            'blocks'      FROM dual UNION ALL
-            SELECT 'RREQ',    3,    'By physical read requests',     'reqs'        FROM dual UNION ALL
-            SELECT 'WREQ',    4,    'By physical write requests',    'reqs'        FROM dual
+            SELECT 'RREQ',    3,    'By physical read requests',     'requests'        FROM dual UNION ALL
+            SELECT 'WREQ',    4,    'By physical write requests',    'requests'        FROM dual
         ),
         all_weeks AS (
             SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
@@ -392,7 +392,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
             || 'No segment-level I/O recorded for any compared window '
             || '(DBA_HIST_SEG_STAT empty for these snapshots, or no valid '
-            || 'windows).</p>');
+            || 'windows). Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p>');
     END IF;
 
     -- Second pass: per-object-type rollup for the chart toggle. Same

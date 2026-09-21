@@ -110,7 +110,7 @@ BEGIN
     );
 
     IF v_cnt = 0 THEN
-        DBMS_OUTPUT.PUT_LINE('<p style="color:var(--muted)">No background wait activity captured in DBA_HIST_BG_EVENT_SUMMARY for any valid window.</p>');
+        DBMS_OUTPUT.PUT_LINE('<p style="color:var(--muted)">No background wait activity captured in DBA_HIST_BG_EVENT_SUMMARY for any valid window. Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p>');
         DBMS_OUTPUT.PUT_LINE('</section>');
         RETURN;
     END IF;

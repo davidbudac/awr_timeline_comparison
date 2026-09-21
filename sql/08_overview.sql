@@ -78,7 +78,7 @@ BEGIN
         cards AS (
             SELECT 1 AS pos, 'DB time'                AS label, 'cs/s' AS unit,
                    'LOAD'   AS src, 'DB time'                 AS key, 'Y' AS is_add FROM dual UNION ALL
-            SELECT 2, 'Redo generated',        'B/s',
+            SELECT 2, 'Redo generated',        'bytes/s',
                    'LOAD',   'redo size'                             , 'Y'           FROM dual UNION ALL
             SELECT 3, 'Logical reads',         '/s',
                    'LOAD',   'session logical reads'                 , 'Y'           FROM dual UNION ALL
@@ -296,7 +296,10 @@ BEGIN
                 || '" data-spark-title="' || c.label || '"></div>');
             DBMS_OUTPUT.PUT_LINE('  <div class="value"' || fmt_num_title(c.cur) || '>'
                 || fmt_num(c.cur)
-                || ' <small>' || c.unit || '</small></div>');
+                || ' <small' || CASE WHEN c.unit = 'cs/s'
+                                     THEN ' title="centiseconds of DB time per second (divide by 100 for average active sessions)"'
+                                     ELSE '' END
+                || '>' || c.unit || '</small></div>');
 
             --
             -- B6: parse the same vals_csv (oldest -> current, positional,

@@ -63,6 +63,7 @@ DECLARE
     v_bk           NUMBER;
     v_wc           VARCHAR2(64);
     v_n            NUMBER;
+    v_total_n      NUMBER := 0;
     v_aas          NUMBER;
     @@sql/lib/put_clob_chunked.plsql
 BEGIN
@@ -235,6 +236,7 @@ BEGIN
                 ELSE
                     v_n := 0;
                 END IF;
+                v_total_n := v_total_n + v_n;
                 -- 360 ASH samples == one busy session-hour;
                 -- divide by the bucket width (in hours) to get AAS.
                 v_aas := v_n / (v_bucket_hours * 360);
@@ -313,6 +315,15 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');
 
+    -- Empty state: no ASH sample in the whole span -> say so and hide the
+    -- (empty) chart box.  Emitted after the script so the demo twin's
+    -- script slice is unaffected.
+    IF v_total_n = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('<p style="color:var(--muted)">No ASH samples in '
+            || 'DBA_HIST_ACTIVE_SESS_HISTORY for the compared span (an idle database, or '
+            || 'ASH not flushed to AWR). Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p>');
+        DBMS_OUTPUT.PUT_LINE('<script>(function(){var e=document.getElementById("ash-timeline-stack");if(e)e.style.display="none";})();</script>');
+    END IF;
     DBMS_OUTPUT.PUT_LINE('</section>');
 
     DBMS_LOB.FREETEMPORARY(v_hours_json);

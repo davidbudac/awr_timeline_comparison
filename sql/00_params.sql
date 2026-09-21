@@ -1623,6 +1623,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){ if(closest(ev.target,"#triage-toggle,#essential-toggle,#app-filter-toggle,.tabs [data-t]")) pushState(); });');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("awr:window",pushState);');
     DBMS_OUTPUT.PUT_LINE('applyState();');
+    DBMS_OUTPUT.PUT_LINE('/* ---- P5: on phones the Top SQL detail tables open by default (the bump chart is unreadable there) ---- */');
+    DBMS_OUTPUT.PUT_LINE('if(doc.documentElement.clientWidth<=700){ doc.querySelectorAll("#topsql .tabpanel > details").forEach(function(d){ d.open=true; }); }');
     DBMS_OUTPUT.PUT_LINE('/* ---- P4: keyboard-operable tabs, sortable headers and window chips; table captions ---- */');
     DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("section table:not([data-nosort]) thead th").forEach(function(th){');
     DBMS_OUTPUT.PUT_LINE('  th.setAttribute("scope","col");');

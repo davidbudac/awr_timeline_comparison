@@ -100,7 +100,7 @@ BEGIN
         || 'DBA_HIST_SQLSTAT <code>*_DELTA</code>. '
         || 'Bump chart per dimension: each line = one SQL across windows, '
         || 'oldest &rarr; current. Use the <b>Break down by</b> toggle to '
-        || 're-aggregate the same metric by <b>SQL_ID</b>, parsing '
+        || 're-aggregate the same metric by <b>SQL ID</b>, parsing '
         || '<b>schema</b>, <b>module</b>, or <b>action</b> instead. '
         || 'Detail tables collapsed; click to expand.</p>');
 
@@ -358,7 +358,7 @@ BEGIN
             DBMS_OUTPUT.PUT_LINE('<h3>' || s.dim_label || '</h3>');
             DBMS_OUTPUT.PUT_LINE('<div class="topsql-toggle" data-topsql-target="' || s.dim || '">'
                 || '<span>Break down by:</span>'
-                || '<button type="button" data-mode="sqls" class="active">SQL_ID</button>'
+                || '<button type="button" data-mode="sqls" class="active">SQL ID</button>'
                 || '<button type="button" data-mode="schemas">Schema</button>'
                 || '<button type="button" data-mode="modules">Module</button>'
                 || '<button type="button" data-mode="actions">Action</button>'
@@ -369,7 +369,7 @@ BEGIN
             DBMS_OUTPUT.PUT_LINE('<details>');
             DBMS_OUTPUT.PUT_LINE('<summary>Detail table</summary>');
 
-            v_header := '<thead><tr><th>SQL_ID</th><th class="num">PHV (cur)</th>'
+            v_header := '<thead><tr><th>SQL ID</th><th class="num" title="plan_hash_value of the Current window&#39;s execution plan">Plan hash (Current)</th>'
                 || '<th class="num" data-w="0">Current (' || s.dim_unit || ')</th>';
             FOR k IN 1 .. v_weeks_back LOOP
                 v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
@@ -866,7 +866,7 @@ BEGIN
                 || v_flip_sqls.COUNT || ' of ' || v_seen_sqls.COUNT
                 || ' top SQL had a plan_hash_value change between current and a prior '
                 || 'compared window. Look for the <span class="badge warn">plan&#8593;</span> '
-                || 'badges in the SQL_ID column and the per-week cells above.</p>');
+                || 'badges in the SQL ID column and the per-window cells above.</p>');
         ELSE
             DBMS_OUTPUT.PUT_LINE('<p style="margin-top:18px">'
                 || '<span class="badge ok">plan stable</span> '
@@ -885,7 +885,7 @@ BEGIN
     -- tagged data-tail="Y" and collapsed behind an expander.
     DBMS_OUTPUT.PUT_LINE('<h3 class="hidetri">Per-SQL detail</h3>');
     DBMS_OUTPUT.PUT_LINE('<p class="hidetri" style="font-size:12px;color:var(--muted)">'
-        || 'Every SQL_ID listed above: click a row for full text, AWR '
+        || 'Every SQL ID listed above: click a row for full text, AWR '
         || 'retention range, plan_hash_value summary, and avg sec/exec '
         || 'colored by PHV across every snapshot the SQL appeared in. '
         || 'PHV color change = plan switch. <b>Ranked in</b> chips: '
@@ -897,9 +897,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<script>AWR_DATA.sqlDetails = AWR_DATA.sqlDetails || {};</script>');
 
     DBMS_OUTPUT.PUT_LINE('<table id="sql-pool"><thead><tr>'
-        || '<th>SQL_ID</th><th>Ranked in</th><th>Schema</th>'
-        || '<th class="num">Plans</th><th class="num">Execs</th>'
-        || '<th class="num">Snaps</th><th>First seen</th><th>Text</th>'
+        || '<th>SQL ID</th><th>Ranked in</th><th>Schema</th>'
+        || '<th class="num" title="distinct plan_hash_values seen across the span">Plans</th><th class="num">Executions</th>'
+        || '<th class="num" title="AWR snapshots in which the SQL appeared">Snapshots</th><th>First seen</th><th>Text</th>'
         || '</tr></thead><tbody>');
 
     DECLARE
@@ -1155,9 +1155,9 @@ BEGIN
             -- table and the chart div would remain an empty box.
             IF NVL(v_phv_count, 0) > 0 THEN
                 DBMS_OUTPUT.PUT_LINE('<table id="phv-summary-' || v_sql_id || '"><thead><tr>'
-                    || '<th class="num">PHV</th>'
+                    || '<th class="num" title="plan_hash_value">Plan hash</th>'
                     || '<th>First seen</th><th>Last seen</th>'
-                    || '<th class="num">Snaps</th>'
+                    || '<th class="num">Snapshots</th>'
                     || '<th class="num">Executions</th>'
                     || '<th class="num">Avg s/exec</th>'
                     || '<th class="num">Avg gets/exec</th>'

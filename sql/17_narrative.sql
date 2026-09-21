@@ -460,7 +460,7 @@ BEGIN
         IF v_file IS NOT NULL THEN
             v_tail := v_tail || ' The reads land on <a href="#file-io">'
                 || esc(v_file) || '</a> ('
-                || CASE WHEN v_file_mu IS NULL THEN 'no prior baseline; '
+                || CASE WHEN v_file_mu IS NULL THEN 'no prior windows; '
                         ELSE fmt3(v_file_mu) || ' &rarr; ' END
                 || fmt3(v_file_cur) || ' MB read this window)';
         END IF;
@@ -624,24 +624,41 @@ BEGIN
             || CASE WHEN v_p_shown = 1 THEN '' ELSE '; ' END
             || '<code>' || esc(p.parameter_name) || '</code> in ';
         -- Map the raw offsets to the report's compact window labels.
+        -- Phase 5: a contiguous run of offsets collapses to "-5w to -12w",
+        -- and every prior window to "every prior window", instead of a
+        -- twelve-item list.
         DECLARE
-            v_k   PLS_INTEGER := 1;
-            v_off VARCHAR2(20);
-            v_acc VARCHAR2(400) := '';
+            v_k      PLS_INTEGER := 1;
+            v_off    VARCHAR2(20);
+            v_acc    VARCHAR2(400) := '';
+            v_first  NUMBER;
+            v_last   NUMBER;
+            v_prev   NUMBER;
+            v_contig BOOLEAN := TRUE;
         BEGIN
             LOOP
                 v_off := REGEXP_SUBSTR(p.offs, '[^,]+', 1, v_k);
                 EXIT WHEN v_off IS NULL;
+                IF v_k = 1 THEN v_first := TO_NUMBER(v_off);
+                ELSIF TO_NUMBER(v_off) <> v_prev + 1 THEN v_contig := FALSE;
+                END IF;
+                v_prev := TO_NUMBER(v_off);
+                v_last := v_prev;
                 v_acc := v_acc || CASE WHEN v_k = 1 THEN '' ELSE ', ' END
                       || off_lbl(TO_NUMBER(v_off));
                 v_k := v_k + 1;
             END LOOP;
+            IF v_k - 1 = ~weeks_back AND v_contig THEN
+                v_acc := 'every prior window';
+            ELSIF v_contig AND v_k - 1 >= 3 THEN
+                v_acc := off_lbl(v_first) || ' to ' || off_lbl(v_last);
+            END IF;
             v_p_names := v_p_names || v_acc;
         END;
     END LOOP;
 
     IF v_p_shown > 0 THEN
-        add_sentence('<b>Configuration differs inside the baseline:</b> '
+        add_sentence('<b>Configuration differs among the prior windows:</b> '
             || v_p_names
             || CASE WHEN v_p_total > v_p_shown
                     THEN ' (and ' || TO_CHAR(v_p_total - v_p_shown)
@@ -681,7 +698,7 @@ BEGIN
                 || ' skipped'
                 || CASE WHEN b.reason IS NULL THEN ''
                         ELSE ' (' || esc(b.reason) || ')' END
-                || ', so the baseline is thin &mdash; see '
+                || ', so the prior-window set is thin &mdash; see '
                 || '<a href="#windows">compared windows</a>.');
         END IF;
     END LOOP;
