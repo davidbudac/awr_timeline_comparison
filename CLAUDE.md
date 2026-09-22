@@ -1075,9 +1075,9 @@ the demo.
   and day-wide rollup, 17's `big()`, 18's tail rule, the visual include
   order in `awr_trend.sql`, and the three inline `data-normal` scripts)
   have **not yet run against dbmint** -- first thing to do next session:
-  the pinned window + `AUTO` run, all three templates, `profile_days=7`,
-  `sqlmon_detail=3`, and re-read every `AWR-SECTION` pair (see
-  `design/UI_UX_IMPROVEMENT_PLAN.md`, "Verification checklist").
+  follow **`design/HANDOFF_v1.5.0.md`** (the exact commands, what "pass"
+  looks like, the files most likely to break in order, and what to update
+  afterwards); the plan's "Verification checklist" has the longer list.
 - **Visual facelift (1.4.0 / fleet 0.6.0) verified on dbmint (2026-09-05):**
   single-DB hourly window (`target_end='2026-09-04 12:00'` win=1h
   weeks_back=4) and a separate `AUTO`-weekly-cadence run — the movers table,
