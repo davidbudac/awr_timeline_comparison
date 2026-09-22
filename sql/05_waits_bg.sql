@@ -67,8 +67,8 @@ DECLARE
     v_sd_pct     NUMBER;
     v_share      NUMBER;
 
-    @@sql/lib/nth_csv.plsql
     @@sql/lib/metric_policy.plsql
+    @@sql/lib/nth_csv.plsql
     @@sql/lib/score_cells.plsql
     @@sql/lib/is_essential.plsql
     @@sql/lib/anchor_id.plsql

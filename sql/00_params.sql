@@ -59,7 +59,7 @@ DECLARE
         family        VARCHAR2(64),
         canonical     VARCHAR2(1),
         prior_sd      NUMBER,
-        share         NUMBER
+        shr         NUMBER
     );
     TYPE mover_t IS TABLE OF mover_rec INDEX BY PLS_INTEGER;
     TYPE seen_t  IS TABLE OF PLS_INTEGER INDEX BY VARCHAR2(64);
@@ -73,8 +73,6 @@ DECLARE
     v_n_impr     PLS_INTEGER := 0;   -- canonical improved
     v_n_usable   PLS_INTEGER := 0;
     v_max_n      NUMBER      := 0;
-    @@sql/lib/metric_policy.plsql
-    v_pol        policy_rec;   -- declared after the include (policy_rec lives there)
 
     v_clean_name VARCHAR2(160);
     v_pct_cls    VARCHAR2(8);
@@ -110,6 +108,9 @@ DECLARE
     v_snap_idx     t_idx_tab;
     TYPE t_num_arr IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
     v_vals         t_num_arr;
+    -- Subprogram includes go LAST: PL/SQL forbids a variable / TYPE
+    -- declaration after a subprogram in the same DECLARE section.
+    @@sql/lib/metric_policy.plsql
     @@sql/lib/put_clob_chunked.plsql
 BEGIN
     DBMS_LOB.CREATETEMPORARY(v_times_json, TRUE);
@@ -257,7 +258,7 @@ BEGIN
                END AS pct_delta,
                CASE
                    WHEN p.metric_domain = 'WAIT' AND t.tot > 0 THEN p.cur_val / t.tot
-               END AS share
+               END AS shr
         FROM   pivoted p
         CROSS JOIN wait_total t
     ),
@@ -267,7 +268,7 @@ BEGIN
         SELECT metric_domain, metric_name, z_score, pct_delta,
                n AS n_prior,
                CAST(NULL AS VARCHAR2(40)) AS change_bucket,
-               cur_val, mu AS prior_mean, sd AS prior_sd, share
+               cur_val, mu AS prior_mean, sd AS prior_sd, shr
         FROM   measured
         WHERE  cur_val IS NOT NULL OR mu IS NOT NULL
     )
@@ -275,7 +276,7 @@ BEGIN
            change_bucket, cur_val, prior_mean,
            CAST(NULL AS VARCHAR2(64)) AS family,
            CAST(NULL AS VARCHAR2(1))  AS canonical,
-           prior_sd, share
+           prior_sd, shr
     BULK COLLECT INTO v_scored
     FROM   scored
     ORDER  BY ABS(NVL(z_score, 0)) DESC, metric_name;
@@ -288,13 +289,19 @@ BEGIN
     -- distinct-family canonical findings into v_top in the same |z| DESC
     -- order produced by the SQL.
     FOR i IN 1 .. v_scored.COUNT LOOP
+      DECLARE
+        -- policy_rec lives in the include, which also declares functions,
+        -- so a variable of that type can only be declared in a nested block.
+        v_pol policy_rec;
+      BEGIN
         v_pol := metric_policy(v_scored(i).metric_domain, v_scored(i).metric_name);
         v_scored(i).family    := finding_family(v_scored(i).metric_domain, v_scored(i).metric_name);
         v_scored(i).canonical := v_pol.canonical;
+      END;
         v_scored(i).change_bucket :=
             policy_bucket(v_scored(i).metric_domain, v_scored(i).metric_name, NULL,
                           v_scored(i).cur_val, v_scored(i).prior_mean,
-                          v_scored(i).prior_sd, v_scored(i).n_prior, v_scored(i).share);
+                          v_scored(i).prior_sd, v_scored(i).n_prior, v_scored(i).shr);
         IF NVL(v_scored(i).n_prior, 0) > v_max_n THEN
             v_max_n := v_scored(i).n_prior;
         END IF;

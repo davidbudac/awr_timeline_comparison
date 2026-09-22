@@ -325,6 +325,23 @@ degrade to "just show everything" with JS off:
   stay raw numbers under the driver's pinned NLS setting.
 
 New gotchas from this pass:
+- **PL/SQL declaration order (lint check 14):** nothing that looks like a
+  variable / TYPE declaration may follow a FUNCTION/PROCEDURE or any
+  `@@sql/lib/*.plsql` include in the same DECLARE section (PLS-00103
+  "expecting begin function pragma procedure"). Every include declares
+  subprograms, so put all plain variables first, includes last -- and
+  `metric_policy.plsql` FIRST among the includes/subprograms because it
+  opens with `TYPE policy_rec` (lint check 16). A `policy_rec` variable
+  in a consumer therefore goes in a nested `DECLARE ... BEGIN ... END`
+  inside the executable part (00/07 do this), never in the outer DECLARE.
+- **`SHARE` is an Oracle reserved word** (`LOCK TABLE ... IN SHARE MODE`);
+  as a record field / column alias it raises PLS-00103. Use `shr` (lint
+  check 15).
+- **Never self-join `dba_hist_reports` with an XMLTABLE aggregate on the
+  inner side:** WRP$_REPORTS stats say 1 row, so the optimizer pushes the
+  join predicate into a nested loop and re-parses every report's XML per
+  outer row. Compute per-sql_id rollups (mode plan etc.) as analytics
+  over the one scan instead (18's scatter query, 2026-09-22).
 - PL/SQL `v <> ''` is never TRUE — an empty string `IS NULL` in Oracle, so
   a guard must be `v IS NOT NULL`, not `v <> ''''` (bit `17_narrative.sql`'s
   `v_tail` guard live).
@@ -1062,22 +1079,31 @@ the demo.
   dbmint); a series name containing `\`; the no-AWR-history-at-all branch of
   the `target_end` snap; the fleet "Compared windows" `part` and
   snap-mismatch states (all dbmint aliases hit one instance).
-- **v1.5.0 UI/UX pass (2026-09-21) was built and verified WITHOUT a
-  database:** every phase was exercised on the synthetic demo
-  (`python3 demo/gen_demo_report.py` + `node demo/verify_report.js`, 0
-  console errors, 45 charts, all toggles) plus Playwright checks for
-  horizontal overflow at 1440/390 px, cross-link targets, hash view-state
-  restore, keyboard tabs/sort and the tap-to-pin tooltip; the server
-  suite (137 tests) passes. The PL/SQL edits (new includes
-  `metric_policy.plsql` with its `policy_rec` / `policy_bucket`,
-  `anchor_id.plsql`, the new `score_cells` signature, the 04/05
-  Current-total scalar query, 07's PL/SQL pass, 16's per-cell re-bucket
-  and day-wide rollup, 17's `big()`, 18's tail rule, the visual include
-  order in `awr_trend.sql`, and the three inline `data-normal` scripts)
-  have **not yet run against dbmint** -- first thing to do next session:
-  follow **`design/HANDOFF_v1.5.0.md`** (the exact commands, what "pass"
-  looks like, the files most likely to break in order, and what to update
-  afterwards); the plan's "Verification checklist" has the longer list.
+- **v1.5.0 / fleet 0.7.0 verified on dbmint (2026-09-22):** built without
+  a database on 2026-09-21 (synthetic demo + Playwright + the 137-test
+  server suite), then run against dbmint: pinned hourly window
+  (`target_end='2026-09-18 12:00'` win=1h weeks_back=4 step=1h, all three
+  templates, `profile_days=7 sqlmon_detail=3`), a daily-cadence run
+  (win=2h weeks_back=7 step=1d) and an `AUTO`-weekly run; a fleet run
+  with `FLEET_DETAIL=all FLEET_PROFILE_DAYS=7`. All: 0 ORA-/SP2-, every
+  `AWR-SECTION` BEGIN/END pair present, no `__FLEET_` placeholder;
+  browser pass (Chrome) on the Normal/Full switch, rail "+ N more in
+  Full", chip click inside the folded `<details>`, zero-width-chart
+  resize on Full, fleet row expand / bands / detail link, 0 console
+  errors. Five compile/runtime bugs surfaced and were fixed in that pass
+  (all now lint-guarded, checks 14-16): `share` is an Oracle reserved
+  word (record field renamed `shr`); variables declared after a
+  subprogram include (00/02/03/07/17; `metric_policy.plsql` opens with a
+  TYPE so it must be the first subprogram-declaring item and after every
+  plain variable, and a `policy_rec` variable can only live in a nested
+  block); 18's phase-2 `v_row_cls` VARCHAR2(10) too small for
+  ` class="crit"` (ORA-06502); and 18's execution-scatter query, whose
+  mode-plan `LEFT JOIN` the optimizer pushed into a nested loop that
+  re-parsed every report's XML per outer row (hung >10 min on the
+  4-week AUTO span; now one scan + analytics, ~60 s there). dbmint is
+  idle, so `improved` / `noted` / a firing "What changed" block and the
+  04/05 table-wide-shift note were NOT seen live (17 emits nothing on a
+  quiet DB by design); the demo remains the only place those render.
 - **Visual facelift (1.4.0 / fleet 0.6.0) verified on dbmint (2026-09-05):**
   single-DB hourly window (`target_end='2026-09-04 12:00'` win=1h
   weeks_back=4) and a separate `AUTO`-weekly-cadence run — the movers table,

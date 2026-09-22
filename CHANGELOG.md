@@ -5,14 +5,25 @@ The report footer stamps the version that produced it
 top of `awr_trend.sql`. Bump it there when cutting a release and add an
 entry here. Dates are release dates.
 
-## Unreleased
+## 1.5.0 and Fleet report 0.7.0 — 2026-09-22
 
 Findings rollup + UI/UX pass (v1.5.0; plan and audit in
 `design/UI_UX_IMPROVEMENT_PLAN.md`). No new substitution vars, no new
 grants, no query-shape change beyond one scalar Current-total query in
 04/05; byte-identity is **not** preserved (scoring presentation, markup
-and CSS changed by design).
+and CSS changed by design). Verified on dbmint 2026-09-22 (single-DB
+hourly / daily / AUTO-weekly, three templates, fleet with detail reports).
 
+- **dbmint pass fixes.** `share` record field renamed `shr` (Oracle
+  reserved word); variables declared after subprogram includes reordered
+  in 00/02/03/07/17 and `metric_policy.plsql` moved to the head of the
+  include list in 04/05/07/08/16/18 (its `TYPE policy_rec` cannot follow a
+  subprogram); 18's plan-line-drift `v_row_cls` widened (ORA-06502 on the
+  first flagged line); 18's execution-scatter query rewritten as one
+  `dba_hist_reports` scan with analytic mode-plan (the old self-join was
+  nested-looped by the optimizer and hung for 10+ minutes over a 4-week
+  span). `lint.sh` checks 14 (declaration after subprogram), 15 (`share`)
+  and 16 (`metric_policy.plsql` first) guard the compile errors.
 - **Masthead: structured "What changed", folded window chips, no
   Application-only filter (phase 8).** The narrative block is a compact
   list (`.narr-list`: label | ratio or percent | from -> to | one why

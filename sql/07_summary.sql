@@ -70,7 +70,7 @@ DECLARE
         family         VARCHAR2(64),
         canonical      VARCHAR2(1),
         dir            VARCHAR2(4),
-        share          NUMBER
+        shr          NUMBER
     );
     TYPE findings_t  IS TABLE OF finding_rec INDEX BY PLS_INTEGER;
     TYPE idx_t       IS TABLE OF PLS_INTEGER INDEX BY PLS_INTEGER;
@@ -106,9 +106,8 @@ DECLARE
     v_members    PLS_INTEGER := 0;
     j            PLS_INTEGER;
 
-    @@sql/lib/is_essential.plsql
     @@sql/lib/metric_policy.plsql
-    v_pol        policy_rec;      -- declared after the include (policy_rec lives there)
+    @@sql/lib/is_essential.plsql
     @@sql/lib/fmt_num.plsql
     @@sql/lib/anchor_id.plsql
 
@@ -499,7 +498,7 @@ BEGIN
                END AS pct_delta,
                CASE
                    WHEN p.metric_domain = 'WAIT' AND t.tot > 0 THEN p.cur_val / t.tot
-               END AS share
+               END AS shr
         FROM   pivoted p
         CROSS JOIN wait_total t
     ),
@@ -514,14 +513,14 @@ BEGIN
                -- pass below (per-metric direction and floors); the share
                -- rides along for the WAIT rows' materiality test.
                CAST(NULL AS VARCHAR2(40)) AS change_bucket,
-               share
+               shr
         FROM   measured
         WHERE  cur_val IS NOT NULL OR mu IS NOT NULL
     ),
     ranked AS (
         SELECT metric_domain, metric_name,
                cur_val, prior_mean, prior_sd, n_prior,
-               z_score, pct_delta, change_bucket, share,
+               z_score, pct_delta, change_bucket, shr,
                ROW_NUMBER() OVER (
                    ORDER BY metric_domain,
                             ABS(NVL(z_score, 0)) DESC,
@@ -536,7 +535,7 @@ BEGIN
            CAST(NULL AS VARCHAR2(64)) AS family,
            CAST(NULL AS VARCHAR2(1))  AS canonical,
            CAST(NULL AS VARCHAR2(4))  AS dir,
-           share
+           shr
     BULK COLLECT INTO v_findings
     FROM   ranked
     ORDER  BY heat_pos;
@@ -553,16 +552,22 @@ BEGIN
     -- tbl_before).  'improved' / 'noted' rows are counted separately and
     -- never highlighted.
     FOR i IN 1 .. v_findings.COUNT LOOP
+      DECLARE
+        -- policy_rec lives in the include, which also declares functions,
+        -- so a variable of that type can only be declared in a nested block.
+        v_pol policy_rec;
+      BEGIN
         v_pol := metric_policy(v_findings(i).metric_domain, v_findings(i).metric_name);
         v_findings(i).family    := finding_family(v_findings(i).metric_domain,
                                                   v_findings(i).metric_name);
         v_findings(i).canonical := v_pol.canonical;
         v_findings(i).dir       := v_pol.dir;
+      END;
         v_findings(i).change_bucket :=
             policy_bucket(v_findings(i).metric_domain, v_findings(i).metric_name, NULL,
                           v_findings(i).cur_val, v_findings(i).prior_mean,
                           v_findings(i).prior_sd, v_findings(i).n_prior,
-                          v_findings(i).share);
+                          v_findings(i).shr);
         f := v_findings(i);
         v_total := v_total + 1;
         IF f.change_bucket IN ('large', 'moderate', 'improved', 'noted') THEN

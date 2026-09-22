@@ -1,5 +1,13 @@
 # Handoff: v1.5.0 UI/UX + scoring-policy branch
 
+> **2026-09-22: section 2 is DONE.** The dbmint run surfaced five bugs
+> (reserved word `share`, declaration order after subprogram includes in
+> 00/02/03/07/17 and the `policy_rec` TYPE placement in 04/05/07/08/16/18,
+> 18's `v_row_cls` overflow, 18's nested-looped scatter self-join); all are
+> fixed, lint-guarded (checks 14-16) and recorded in CLAUDE.md
+> ("v1.5.0 / fleet 0.7.0 verified on dbmint") and CHANGELOG 1.5.0. Section
+> 4 items 1-3 are done; section 5 (human decisions) is still open.
+
 Branch: `claude/ui-ux-improvements-buwjzo` (11 commits on top of `main`,
 67 files, +6079/-2529). Status on 2026-09-22: **every change is written,
 lint-clean, exercised on the synthetic demo and the server test suite, and

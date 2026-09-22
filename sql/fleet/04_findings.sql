@@ -46,7 +46,7 @@ DECLARE
         n_prior       NUMBER,
         z_score       NUMBER,
         pct_delta     NUMBER,
-        share         NUMBER,
+        shr         NUMBER,
         change_bucket VARCHAR2(40)
     );
     TYPE findings_t IS TABLE OF finding_rec INDEX BY PLS_INTEGER;
@@ -236,7 +236,7 @@ BEGIN
                    END AS pct_delta,
                    CASE
                        WHEN p.metric_domain = 'WAIT' AND t.tot > 0 THEN p.cur_val / t.tot
-                   END AS share,
+                   END AS shr,
                    CAST(NULL AS VARCHAR2(40)) AS change_bucket
             FROM   pivoted p
             CROSS JOIN wait_total t
@@ -244,7 +244,7 @@ BEGIN
         )
         SELECT metric_domain, metric_name,
                cur_val, prior_mean, prior_sd, n_prior,
-               z_score, pct_delta, share, change_bucket
+               z_score, pct_delta, shr, change_bucket
         BULK COLLECT INTO v_findings
         FROM   scored
         ORDER BY ABS(NVL(z_score, 0)) DESC,
@@ -257,7 +257,7 @@ BEGIN
             policy_bucket(v_findings(i).metric_domain, v_findings(i).metric_name, NULL,
                           v_findings(i).cur_val, v_findings(i).prior_mean,
                           v_findings(i).prior_sd, v_findings(i).n_prior,
-                          v_findings(i).share);
+                          v_findings(i).shr);
         IF v_findings(i).change_bucket = 'large' THEN
             v_crit := v_crit + 1;
         ELSIF v_findings(i).change_bucket = 'moderate' THEN

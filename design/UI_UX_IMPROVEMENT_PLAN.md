@@ -594,7 +594,9 @@ piece of documentation for the per-metric policy.
 
 ## Verification checklist (every phase)
 
-0. **dbmint run (NOT DONE YET -- required before tagging):** pinned
+0. **dbmint run -- DONE 2026-09-22** (see CLAUDE.md "v1.5.0 / fleet 0.7.0
+   verified on dbmint" for the runs, the five bugs it surfaced and the
+   lint checks 14-16 that now guard them). Was: pinned
    window (`target_end='2026-09-04 12:00'` win=1h weeks_back=4) and
    `AUTO`; `template=comprehensive|simple|dev`; `profile_days=7`;
    `sqlmon_detail=3`; `markers=` inline; 0 ORA-; every `AWR-SECTION`

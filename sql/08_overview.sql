@@ -35,9 +35,9 @@ DECLARE
     v_cards_json  CLOB;
     v_weeks_back  NUMBER := ~weeks_back;
 
+    @@sql/lib/metric_policy.plsql
     @@sql/lib/nth_csv.plsql
     @@sql/lib/fmt_num.plsql
-    @@sql/lib/metric_policy.plsql
     @@sql/lib/anchor_id.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="overview" data-normal="Y"><h2>Headline metrics</h2>');

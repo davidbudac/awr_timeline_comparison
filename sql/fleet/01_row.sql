@@ -314,17 +314,17 @@ BEGIN
                             WHEN GREATEST(p.sd, 0.02 * ABS(p.mu)) = 0 THEN NULL
                             ELSE (p.cur_val - p.mu) / GREATEST(p.sd, 0.02 * ABS(p.mu)) END AS z_score,
                        CASE WHEN p.metric_domain = 'WAIT' AND t.tot > 0
-                            THEN p.cur_val / t.tot END AS share
+                            THEN p.cur_val / t.tot END AS shr
                 FROM   pivoted p
                 CROSS JOIN wait_total t
             )
-            SELECT metric_domain, metric_name, cur_val, mu, sd, n, z_score, share
+            SELECT metric_domain, metric_name, cur_val, mu, sd, n, z_score, shr
             FROM   scored
             WHERE  z_score IS NOT NULL AND ABS(z_score) > 2
             ORDER BY ABS(z_score) DESC, metric_name
     ) LOOP
         v_wf_bucket := policy_bucket(r.metric_domain, r.metric_name, NULL,
-                                     r.cur_val, r.mu, r.sd, r.n, r.share);
+                                     r.cur_val, r.mu, r.sd, r.n, r.shr);
         IF v_wf_bucket IN ('large', 'moderate') THEN
             v_wf_dom  := r.metric_domain;
             v_wf_name := r.metric_name;

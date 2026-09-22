@@ -219,6 +219,63 @@ for f in $(grep -l '@@sql/lib/score_cells.plsql' sql/*.sql sql/fleet/*.sql awr_f
     fi
 done
 
+# ----------------------------------------------------------------------
+# 14. PL/SQL forbids a variable / TYPE declaration AFTER a subprogram in
+#     the same DECLARE section (PLS-00103 "expecting begin function pragma
+#     procedure").  Every sql/lib/*.plsql include declares subprograms, so
+#     inside a top-level DECLARE ... BEGIN block nothing that looks like a
+#     declaration may follow the first such include or FUNCTION/PROCEDURE.
+#     Bit 00/02/03/07/17 live on dbmint (v1.5.0).
+# ----------------------------------------------------------------------
+for f in $(sql_files); do
+    awk -v file="$f" '
+        /^DECLARE[[:space:]]*$/ { inblk=1; seen=0; next }
+        /^BEGIN[[:space:]]*$/   { inblk=0; next }
+        inblk {
+            ind = match($0, /[^ ]/) - 1
+            if (ind > 4 || $0 ~ /^[[:space:]]*--/) next
+            if ($0 ~ /^[[:space:]]*(FUNCTION|PROCEDURE)[[:space:]]/ || $0 ~ /^[[:space:]]*@@sql\/lib\/[^ ]*\.plsql/) {
+                if (!seen) seen = NR; next
+            }
+            if (seen && $0 ~ /^[[:space:]]+(TYPE[[:space:]]|[A-Za-z_][A-Za-z0-9_]*[[:space:]]+(CONSTANT[[:space:]]+)?(NUMBER|VARCHAR2|PLS_INTEGER|BINARY_INTEGER|BOOLEAN|DATE|TIMESTAMP|CLOB|[A-Za-z_]+_t|[A-Za-z_]+_rec|[A-Za-z_]+_tab)[[:space:](;])/) {
+                printf "%s:%d: declaration after a subprogram (first subprogram/include at line %d)\n", file, NR, seen
+            }
+        }' "$f" | while IFS= read -r line; do
+        finding plsql-decl-order "${line%%: *}" "${line#*: }"
+    done
+done
+
+# ----------------------------------------------------------------------
+# 15. Oracle reserved words used as PL/SQL identifiers / SQL aliases.
+#     SHARE (LOCK TABLE ... IN SHARE MODE) bit the findings record on dbmint.
+# ----------------------------------------------------------------------
+for f in $(sql_files); do
+    grep -n -i -E '(^[[:space:]]+share[[:space:]]+(NUMBER|VARCHAR2|PLS_INTEGER)|[[:space:]]AS[[:space:]]+share[[:space:]]*(,|$)|\.share\)|,[[:space:]]*share[[:space:]]*(,|$))' "$f" \
+      | grep -v -- '--' | while IFS= read -r line; do
+        finding reserved-word "$f:${line%%:*}" "'share' is an Oracle reserved word; use 'shr' (${line#*:})"
+    done
+done
+
+# ----------------------------------------------------------------------
+# 16. sql/lib/metric_policy.plsql opens with a TYPE (policy_rec), which
+#     PL/SQL forbids after any subprogram -- so in every DECLARE block it
+#     must be the FIRST subprogram-declaring item (before any inline
+#     FUNCTION/PROCEDURE and before every other sql/lib/*.plsql include),
+#     and after every plain variable (check 14).
+# ----------------------------------------------------------------------
+for f in $(grep -l '@@sql/lib/metric_policy.plsql' $(sql_files) 2>/dev/null); do
+    awk -v file="$f" '
+        /^DECLARE[[:space:]]*$/ { inblk=1; first=0; next }
+        /^BEGIN[[:space:]]*$/   { inblk=0; next }
+        inblk && (match($0, /[^ ]/) - 1) <= 4 && ($0 ~ /^[[:space:]]*(FUNCTION|PROCEDURE)[[:space:]]/ || $0 ~ /^[[:space:]]*@@sql\/lib\/[^ ]*\.plsql/) {
+            if (!first) first = NR
+            if ($0 ~ /metric_policy\.plsql/ && first != NR)
+                printf "%s:%d: sql/lib/metric_policy.plsql must precede the first FUNCTION/PROCEDURE/.plsql include of its DECLARE block (line %d)\n", file, NR, first
+        }' "$f" | while IFS= read -r line; do
+        finding policy-include-first "${line%%: *}" "${line#*: }"
+    done
+done
+
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"
 fi

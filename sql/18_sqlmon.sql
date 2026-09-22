@@ -104,11 +104,11 @@ DECLARE
     v_points_shown  NUMBER := 0;
     v_capped        VARCHAR2(1) := 'N';
 
+    @@sql/lib/metric_policy.plsql
     @@sql/lib/nth_csv.plsql
     @@sql/lib/json_escape.plsql
     @@sql/lib/fmt_num.plsql
     @@sql/lib/dev_bucket.plsql
-    @@sql/lib/metric_policy.plsql
     @@sql/lib/score_cells.plsql
     @@sql/lib/is_oracle_schema.plsql
     @@sql/lib/put_clob_chunked.plsql
@@ -661,7 +661,7 @@ BEGIN
                     v_rows        t_rows;
                     v_best_idx    PLS_INTEGER;
                     v_best_delta  NUMBER := 0;
-                    v_row_cls     VARCHAR2(10);
+                    v_row_cls     VARCHAR2(20);   -- holds ' class="crit"' (13 chars); was 10 and raised ORA-06502 on dbmint
                     v_indent      VARCHAR2(4000);
                 BEGIN
                     BEGIN
@@ -961,60 +961,58 @@ BEGIN
     -- Points: every captured execution, capped to the most recent 3000.
     DBMS_LOB.CREATETEMPORARY(v_points_clob, TRUE);
     FOR p IN (
+        -- ONE scan of dba_hist_reports: the per-sql_id mode plan (the
+        -- plan_hash with the most captured executions, ties to the lowest
+        -- hash, NULL when every capture has plan_hash 0) is an analytic
+        -- over the same row set, not a second XML-parsing self-join.  The
+        -- LEFT JOIN this replaced was pushed into a nested loop on dbmint
+        -- (WRP$_REPORTS stats say 1 row), re-parsing every report's XML
+        -- once per outer row -- 10+ minutes over a 4-week span.
         SELECT * FROM (
             SELECT be.sql_id, be.exec_start, be.elapsed_us, be.status,
                    be.plan_hash, be.px_req,
-                   CASE WHEN pm.mode_plan IS NOT NULL AND be.plan_hash <> 0
-                             AND be.plan_hash <> pm.mode_plan
+                   CASE WHEN be.mode_plan IS NOT NULL AND be.plan_hash <> 0
+                             AND be.plan_hash <> be.mode_plan
                         THEN 'Y' ELSE 'N' END AS plan_mismatch,
                    ROW_NUMBER() OVER (ORDER BY be.exec_start DESC) AS rn_recent,
                    COUNT(*) OVER () AS n_total
             FROM (
-                SELECT r.key1 AS sql_id, r.instance_number,
-                       TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') AS exec_start,
-                       x.status, x.plan_hash, x.px_req,
-                       NVL(x.elapsed_us, 0) AS elapsed_us
-                FROM   dba_hist_reports r,
-                       XMLTABLE('/report_repository_summary/sql'
-                           PASSING XMLTYPE(r.report_summary)
-                           COLUMNS
-                               status     VARCHAR2(30) PATH 'status',
-                               plan_hash  NUMBER       PATH 'plan_hash',
-                               px_req     NUMBER       PATH 'px_servers_requested',
-                               elapsed_us NUMBER       PATH 'stats[@type="monitor"]/stat[@name="elapsed_time"]'
-                       ) x
-                WHERE  r.component_name = 'sqlmonitor'
-                  AND  r.dbid IN (~dbid_list)
-                  AND  (~inst_num = 0 OR r.instance_number = ~inst_num)
-                  AND  r.report_summary IS NOT NULL
-                  AND  r.key1 IS NOT NULL
-                  AND  r.period_start_time >= CAST(v_span_start AS TIMESTAMP) - INTERVAL '1' DAY
-                  AND  r.period_start_time <= CAST(v_span_end   AS TIMESTAMP) + INTERVAL '1' DAY
-                  AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') >= v_span_start
-                  AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') <  v_span_end
+                SELECT b.sql_id, b.exec_start, b.elapsed_us, b.status,
+                       b.plan_hash, b.px_req,
+                       MAX(CASE WHEN b.plan_hash <> 0 THEN b.plan_hash END)
+                           KEEP (DENSE_RANK FIRST
+                                 ORDER BY CASE WHEN b.plan_hash <> 0 THEN b.plan_cnt END DESC NULLS LAST,
+                                          CASE WHEN b.plan_hash <> 0 THEN b.plan_hash END)
+                           OVER (PARTITION BY b.sql_id) AS mode_plan
+                FROM (
+                    SELECT be0.*,
+                           COUNT(*) OVER (PARTITION BY be0.sql_id, be0.plan_hash) AS plan_cnt
+                    FROM (
+                        SELECT r.key1 AS sql_id, r.instance_number,
+                               TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') AS exec_start,
+                               x.status, x.plan_hash, x.px_req,
+                               NVL(x.elapsed_us, 0) AS elapsed_us
+                        FROM   dba_hist_reports r,
+                               XMLTABLE('/report_repository_summary/sql'
+                                   PASSING XMLTYPE(r.report_summary)
+                                   COLUMNS
+                                       status     VARCHAR2(30) PATH 'status',
+                                       plan_hash  NUMBER       PATH 'plan_hash',
+                                       px_req     NUMBER       PATH 'px_servers_requested',
+                                       elapsed_us NUMBER       PATH 'stats[@type="monitor"]/stat[@name="elapsed_time"]'
+                               ) x
+                        WHERE  r.component_name = 'sqlmonitor'
+                          AND  r.dbid IN (~dbid_list)
+                          AND  (~inst_num = 0 OR r.instance_number = ~inst_num)
+                          AND  r.report_summary IS NOT NULL
+                          AND  r.key1 IS NOT NULL
+                          AND  r.period_start_time >= CAST(v_span_start AS TIMESTAMP) - INTERVAL '1' DAY
+                          AND  r.period_start_time <= CAST(v_span_end   AS TIMESTAMP) + INTERVAL '1' DAY
+                          AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') >= v_span_start
+                          AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') <  v_span_end
+                    ) be0
+                ) b
             ) be
-            LEFT JOIN (
-                SELECT sql_id, plan_hash AS mode_plan FROM (
-                    SELECT r.key1 AS sql_id, x.plan_hash,
-                           ROW_NUMBER() OVER (PARTITION BY r.key1
-                               ORDER BY COUNT(*) DESC, x.plan_hash) AS rn
-                    FROM   dba_hist_reports r,
-                           XMLTABLE('/report_repository_summary/sql'
-                               PASSING XMLTYPE(r.report_summary)
-                               COLUMNS plan_hash NUMBER PATH 'plan_hash') x
-                    WHERE  r.component_name = 'sqlmonitor'
-                      AND  r.dbid IN (~dbid_list)
-                      AND  (~inst_num = 0 OR r.instance_number = ~inst_num)
-                      AND  r.report_summary IS NOT NULL
-                      AND  r.key1 IS NOT NULL
-                      AND  x.plan_hash <> 0
-                      AND  r.period_start_time >= CAST(v_span_start AS TIMESTAMP) - INTERVAL '1' DAY
-                      AND  r.period_start_time <= CAST(v_span_end   AS TIMESTAMP) + INTERVAL '1' DAY
-                      AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') >= v_span_start
-                      AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') <  v_span_end
-                    GROUP BY r.key1, x.plan_hash
-                ) WHERE rn = 1
-            ) pm ON pm.sql_id = be.sql_id
         )
         WHERE  rn_recent <= 3000
         ORDER  BY exec_start ASC

@@ -20,12 +20,12 @@ DECLARE
     v_val_s       VARCHAR2(64);
     v_row_max     NUMBER;
     v_pct         NUMBER;
+    v_rows        PLS_INTEGER := 0;
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/is_essential.plsql
     @@sql/lib/anchor_id.plsql
     @@sql/lib/dev_bucket.plsql
-    v_rows       PLS_INTEGER := 0;
     @@sql/lib/fmt_num.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="metrics"><h2>System metrics (DBA_HIST_SYSMETRIC_SUMMARY)</h2>');

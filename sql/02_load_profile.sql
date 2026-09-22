@@ -24,8 +24,8 @@ DECLARE
     v_row_max    NUMBER;
     v_pct        NUMBER;
 
-    @@sql/lib/nth_csv.plsql
     v_unit       VARCHAR2(16);
+    @@sql/lib/nth_csv.plsql
     @@sql/lib/is_essential.plsql
     @@sql/lib/anchor_id.plsql
     @@sql/lib/dev_bucket.plsql

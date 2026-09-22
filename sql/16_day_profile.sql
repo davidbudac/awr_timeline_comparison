@@ -91,9 +91,9 @@ DECLARE
     c           cell_rec;
     c_null      cell_rec;     -- never assigned: used to blank c
 
+    @@sql/lib/metric_policy.plsql
     @@sql/lib/nth_csv.plsql
     @@sql/lib/put_clob_chunked.plsql
-    @@sql/lib/metric_policy.plsql
 
     -- JSON number token: null-safe, NLS-pinned.
     FUNCTION jn(p NUMBER) RETURN VARCHAR2 IS

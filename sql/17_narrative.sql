@@ -89,8 +89,6 @@ DECLARE
     v_txt    VARCHAR2(32767);
     v_tail   VARCHAR2(32767);
     v_r      stat_rec;
-    @@sql/lib/metric_policy.plsql
-
     -- R1 detail carriers
     v_file      VARCHAR2(600);
     v_file_cur  NUMBER;
@@ -102,6 +100,10 @@ DECLARE
     v_p_names   VARCHAR2(4000);
     v_p_shown   PLS_INTEGER := 0;
     v_p_total   PLS_INTEGER := 0;
+
+    -- Every plain variable must sit ABOVE this include: it declares
+    -- functions, and PL/SQL forbids a variable after a subprogram.
+    @@sql/lib/metric_policy.plsql
 
     ------------------------------------------------------------------
     -- Formatting helpers
