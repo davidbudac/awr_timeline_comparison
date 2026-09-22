@@ -43,6 +43,13 @@ DECLARE
     v_crit     NUMBER := 0;
     v_warn     NUMBER := 0;
     v_has_cur  BOOLEAN := FALSE;   -- any current-day cell populated?
+    v_bucket   VARCHAR2(40);
+
+    -- Shared per-metric policy + scoring rule (read-only lib reuse): each
+    -- cell is re-bucketed through policy_bucket() so a drop in a cost-type
+    -- stat is 'improved', not a flagged hour -- same as the single-DB
+    -- section 16 and the rest of this fleet extract (01 / 03 / 04).
+    @@sql/lib/metric_policy.plsql
 
     FUNCTION jn(p NUMBER) RETURN VARCHAR2 IS
     BEGIN
@@ -70,8 +77,8 @@ BEGIN
     FOR c IN (
         WITH
         @@sql/lib/day_profile_cte.sql
-        SELECT ord, label, hour_slot, hour_label, cur_val, mu, n, z_score,
-               pct_delta, change_bucket
+        SELECT stat_name, ord, label, hour_slot, hour_label, cur_val, mu, sd, n, z_score,
+               pct_delta
         FROM   dp_scored
         ORDER BY ord, hour_slot DESC
     ) LOOP
@@ -91,9 +98,10 @@ BEGIN
         v_mu(v_nstat)  := v_mu(v_nstat)  || ',' || jn(c.mu);
         v_n(v_nstat)   := v_n(v_nstat)   || ',' || NVL(c.n, 0);
         v_pct(v_nstat) := v_pct(v_nstat) || ',' || jn(ROUND(c.pct_delta, 1));
-        v_sev(v_nstat) := v_sev(v_nstat) || ',' || js(c.change_bucket);
-        IF c.change_bucket = 'large' THEN v_crit := v_crit + 1;
-        ELSIF c.change_bucket = 'moderate' THEN v_warn := v_warn + 1;
+        v_bucket := policy_bucket('LOAD', c.stat_name, NULL, c.cur_val, c.mu, c.sd, c.n);
+        v_sev(v_nstat) := v_sev(v_nstat) || ',' || js(v_bucket);
+        IF v_bucket = 'large' THEN v_crit := v_crit + 1;
+        ELSIF v_bucket = 'moderate' THEN v_warn := v_warn + 1;
         END IF;
     END LOOP;
 

@@ -657,10 +657,10 @@ share, domain, name, class, demote)` for 04/05/18. **Include order:**
 `metric_policy.plsql` must precede `score_cells.plsql` (lint check 13),
 and a `policy_rec` variable must be declared AFTER the include. lint check
 12 verifies every template LOAD/METRIC name has a policy line.
-`day_profile_cte.sql`'s own CASE (used by the fleet day-profile band)
-still carries the plain 07-style rule without direction; the fleet
-findings band, row and headline cards (`sql/fleet/04`, `01`, `03`) call
-`policy_bucket()` too. `improved` / `noted` are
+`day_profile_cte.sql`'s own CASE still carries the plain 07-style rule
+without direction but no consumer reads it any more (16 and fleet 06 both
+re-bucket per cell); the fleet findings band, row, headline cards and
+day-profile band (`sql/fleet/04`, `01`, `03`, `06`) call `policy_bucket()`. `improved` / `noted` are
 never highlighted: class `imp` / `note` (outlined badges, no row tint),
 never a movers lead or member, not in the verdict count / all-movers
 list / rail pills / J-K jumps; the verdict and 07's heading say "N
@@ -915,8 +915,10 @@ cramped).
   BULK COLLECTs the recompute once and prints large then moderate by
   |z|; 01's worst finding is the first large / moderate row of the
   |z|-ordered cursor after bucketing (no `SELECT INTO` / NO_DATA_FOUND
-  any more). The day-profile band (`06_day_profile.sql`) still renders
-  `day_profile_cte.sql`'s plain CASE -- informational only.
+  any more). The day-profile band (`06_day_profile.sql`) re-buckets every
+  cell through `policy_bucket()` too (it ignores `dp_scored.change_bucket`),
+  so `day_profile_cte.sql`'s own CASE is now consumed by nobody but kept as
+  the CTE's documented contract.
 - **v0.7.0 accessibility** — fleet-owned copies of the single-DB phase-4
   rules: `:focus-visible` ring and `prefers-reduced-motion` in
   `00_fleet_chrome.sql`; `tr.dbrow` carries `tabindex="0" role="button"

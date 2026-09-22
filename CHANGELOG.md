@@ -169,6 +169,8 @@ and CSS changed by design).
   improvement can no longer be a DB's worst finding or count toward its
   score; the band prints large rows first, then moderate, and its
   summary line reports the improved count among the suppressed. The
+  day-profile band (`sql/fleet/06_day_profile.sql`) re-buckets every
+  cell through the policy as well. The
   `FLEET-COUNTS findings crit= warn= suppressed=` token format is
   unchanged (improved / noted rows count as suppressed). Both hero-card
   queries (08 and fleet 03) now project `src, key` out of the grouped
