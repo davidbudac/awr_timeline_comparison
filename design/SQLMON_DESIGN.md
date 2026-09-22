@@ -1,3 +1,8 @@
+> **Note (2026-09-22):** Phase 2 (plan-line drift, `sqlmon_detail`) was
+> implemented in 1.5.0 and removed on 2026-09-22 at the user's request; the
+> section now only reads report summaries. The per-line XPath notes below
+> are kept for reference.
+
 # SQL Monitor section — design notes (2026-09-05)
 
 Status: phase 1 implemented 2026-09-05 (`sql/18_sqlmon.sql`, narrative R6-R9);

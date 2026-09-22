@@ -1,13 +1,12 @@
 --
 -- sql/fleet/06b_sqlmon.sql
 -- "SQL Monitor" band in this database's detail row: cheap, always-on
--- summaries (never a DBA_HIST_REPORTS_DETAILS CLOB read -- that's the
--- single-DB report's sqlmon_detail=N phase 2, gated by FLEET_SQLMON_DETAIL
--- only for the per-DB detailed report, never this band) covering executions
--- captured in the Current window vs. the full compared span, errors in
--- Current, plan changes and DOP downgrades. Fleet-owned copy of the "new" /
--- floor logic in sql/18_sqlmon.sql (single-DB file, never edited to add a
--- fleet feature -- see CLAUDE.md's cardinal rule).
+-- summaries (never a DBA_HIST_REPORTS_DETAILS CLOB read -- the single-DB
+-- section only reads DBA_HIST_REPORTS.report_summary too) covering
+-- executions captured in the Current window vs. the full compared span,
+-- errors in Current, plan changes and DOP downgrades. Fleet-owned copy of
+-- the "new" / floor logic in sql/18_sqlmon.sql (single-DB file, never
+-- edited to add a fleet feature -- see CLAUDE.md's cardinal rule).
 --
 -- Always on: unlike sql/fleet/06_day_profile.sql (gated by profile_days),
 -- this band has no opt-in var -- it's a plain aggregate scan of

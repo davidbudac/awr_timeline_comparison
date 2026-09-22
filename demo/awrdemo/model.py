@@ -69,7 +69,6 @@ TOP_N = 10
 INST_NUM = 0
 TEMPLATE = "comprehensive"
 PROFILE_DAYS = 7
-SQLMON_DETAIL = 3
 RUN_ID = "20260910101512483"
 GENERATED_AT = "2026-09-10 10:15:12 +02:00"
 REPORT_TS = "202609101015"
@@ -1102,103 +1101,6 @@ class MonExec:
     buffer_gets: float
 
 
-@dataclass
-class PlanLine:
-    id: int
-    parent_id: int | None
-    depth: int
-    name: str
-    options: str
-    owner: str
-    obj: str
-    est_rows: float
-    starts: float
-    act_rows: float
-    duration_s: float
-    max_mem: float
-
-
-def _plan(sql_id: str, plan_hash: int, x: SqlHour | None, execs_scale: float = 1.0) -> list[PlanLine]:
-    """Plan lines with per-execution statistics for the SQL Monitor drift
-    block (only the monitored statements need one)."""
-    if sql_id == ORDER_LOOKUP_SQL:
-        if plan_hash == ORDER_LOOKUP_BAD_PLAN:
-            return [
-                PlanLine(0, None, 0, "SELECT STATEMENT", "", "", "", 6, 1, 6, 0.17, 0),
-                PlanLine(1, 0, 1, "SORT", "ORDER BY", "", "", 6, 1, 6, 0.001, 24576),
-                PlanLine(2, 1, 2, "HASH JOIN", "", "", "", 6, 1, 6, 0.004, 1_540_096),
-                PlanLine(3, 2, 3, "TABLE ACCESS", "BY INDEX ROWID BATCHED", "ORDERS_APP", "ORDERS", 2, 1, 2, 0.001, 0),
-                PlanLine(4, 3, 4, "INDEX", "RANGE SCAN", "ORDERS_APP", "ORDERS_CUST_CREATED_IX", 2, 1, 2, 0.0004, 0),
-                PlanLine(5, 2, 3, "TABLE ACCESS", "FULL", "ORDERS_APP", "ORDER_LINES", 3_260_000, 1, 3_284_117, 0.163, 0),
-            ]
-        return [
-            PlanLine(0, None, 0, "SELECT STATEMENT", "", "", "", 6, 1, 6, 0.002, 0),
-            PlanLine(1, 0, 1, "SORT", "ORDER BY", "", "", 6, 1, 6, 0.0001, 24576),
-            PlanLine(2, 1, 2, "NESTED LOOPS", "", "", "", 6, 1, 6, 0.0002, 0),
-            PlanLine(3, 2, 3, "NESTED LOOPS", "", "", "", 6, 1, 6, 0.0001, 0),
-            PlanLine(4, 3, 4, "TABLE ACCESS", "BY INDEX ROWID BATCHED", "ORDERS_APP", "ORDERS", 2, 1, 2, 0.0005, 0),
-            PlanLine(5, 4, 5, "INDEX", "RANGE SCAN", "ORDERS_APP", "ORDERS_CUST_CREATED_IX", 2, 1, 2, 0.0003, 0),
-            PlanLine(6, 3, 4, "INDEX", "RANGE SCAN", "ORDERS_APP", "ORDER_LINES_ORD_IX", 3, 2, 6, 0.0004, 0),
-            PlanLine(7, 2, 3, "TABLE ACCESS", "BY INDEX ROWID", "ORDERS_APP", "ORDER_LINES", 3, 6, 6, 0.0006, 0),
-        ]
-    if sql_id == "9wz2ke6yq4tn1":
-        return [
-            PlanLine(0, None, 0, "SELECT STATEMENT", "", "", "", 1840, 1, 1832, 214, 0),
-            PlanLine(1, 0, 1, "PX COORDINATOR", "", "", "", 1840, 1, 1832, 0.9, 0),
-            PlanLine(2, 1, 2, "PX SEND QC (RANDOM)", "", "", ":TQ10001", 1840, 8, 1832, 0.3, 0),
-            PlanLine(3, 2, 3, "HASH", "GROUP BY", "", "", 1840, 8, 1832, 11.2, 48_234_496),
-            PlanLine(4, 3, 4, "PX RECEIVE", "", "", "", 1840, 8, 14656, 2.1, 0),
-            PlanLine(5, 4, 5, "PX SEND HASH", "", "", ":TQ10000", 1840, 8, 14656, 4.6, 0),
-            PlanLine(6, 5, 6, "HASH", "GROUP BY", "", "", 1840, 8, 14656, 38.4, 61_997_056),
-            PlanLine(7, 6, 7, "PX BLOCK ITERATOR", "", "", "", 41_200_000, 8, 41_388_204, 4.0, 0),
-            PlanLine(8, 7, 8, "TABLE ACCESS", "FULL", "REPORTING", "SALES_FACT", 41_200_000, 1024, 41_388_204, 152.6, 0),
-        ]
-    if sql_id == "h5x1c9pa7rd3s":
-        return [
-            PlanLine(0, None, 0, "SELECT STATEMENT", "", "", "", 412, 1, 408, 96, 0),
-            PlanLine(1, 0, 1, "HASH", "GROUP BY", "", "", 412, 1, 408, 3.1, 2_301_952),
-            PlanLine(2, 1, 2, "HASH JOIN", "", "", "", 8_900_000, 1, 8_912_540, 22.4, 118_489_088),
-            PlanLine(3, 2, 3, "TABLE ACCESS", "FULL", "REPORTING", "WAREHOUSES", 42, 1, 42, 0.002, 0),
-            PlanLine(4, 2, 3, "HASH JOIN", "", "", "", 8_900_000, 1, 8_912_540, 18.7, 96_468_992),
-            PlanLine(5, 4, 4, "TABLE ACCESS", "FULL", "ORDERS_APP", "PRODUCTS", 218_000, 1, 218_442, 1.4, 0),
-            PlanLine(6, 4, 4, "PARTITION RANGE", "SINGLE", "", "", 8_900_000, 1, 8_912_540, 0.2, 0),
-            PlanLine(7, 6, 5, "TABLE ACCESS", "FULL", "REPORTING", "INVENTORY_HIST", 8_900_000, 1, 8_912_540, 50.2, 0),
-        ]
-    if sql_id == "a4g6j2ct5nq1w":
-        return [
-            PlanLine(0, None, 0, "MERGE STATEMENT", "", "", "", 3_900_000, 1, 3_912_006, 512, 0),
-            PlanLine(1, 0, 1, "MERGE", "", "LOYALTY", "CUSTOMERS", 3_900_000, 1, 3_912_006, 201, 0),
-            PlanLine(2, 1, 2, "VIEW", "", "", "", 3_900_000, 1, 3_912_006, 1.2, 0),
-            PlanLine(3, 2, 3, "HASH JOIN", "", "", "", 3_900_000, 1, 3_912_006, 60.4, 618_262_528),
-            PlanLine(4, 3, 4, "VIEW", "", "", "", 3_900_000, 1, 3_912_006, 0.8, 0),
-            PlanLine(5, 4, 5, "HASH", "GROUP BY", "", "", 3_900_000, 1, 3_912_006, 88.2, 402_653_184),
-            PlanLine(6, 5, 6, "TABLE ACCESS", "FULL", "LOYALTY", "LOYALTY_LEDGER", 61_000_000, 1, 61_884_120, 108.6, 0),
-            PlanLine(7, 3, 4, "TABLE ACCESS", "FULL", "ORDERS_APP", "CUSTOMERS", 4_100_000, 1, 4_118_207, 51.8, 0),
-        ]
-    if sql_id == "d8s3n5tw2xk7f":
-        return [
-            PlanLine(0, None, 0, "MERGE STATEMENT", "", "", "", 210_000, 1, 209_884, 38, 0),
-            PlanLine(1, 0, 1, "MERGE", "", "INVENTORY", "INVENTORY", 210_000, 1, 209_884, 14.9, 0),
-            PlanLine(2, 1, 2, "VIEW", "", "", "", 210_000, 1, 209_884, 0.3, 0),
-            PlanLine(3, 2, 3, "HASH JOIN", "OUTER", "", "", 210_000, 1, 209_884, 6.1, 34_603_008),
-            PlanLine(4, 3, 4, "TABLE ACCESS", "FULL", "INVENTORY", "INV_FEED_STAGE", 210_000, 1, 209_884, 2.2, 0),
-            PlanLine(5, 3, 4, "TABLE ACCESS", "FULL", "INVENTORY", "INVENTORY", 2_400_000, 1, 2_418_331, 14.5, 0),
-        ]
-    if sql_id == "v8c2l5qs3wd7m":
-        return [
-            PlanLine(0, None, 0, "SELECT STATEMENT", "", "", "", 18300, 1, 18412, 41, 0),
-            PlanLine(1, 0, 1, "TABLE ACCESS", "FULL", "INVENTORY", "INVENTORY", 18300, 1, 18412, 40.6, 0),
-        ]
-    if sql_id == "e1k8s4yn7pw2j":
-        return [
-            PlanLine(0, None, 0, "UPDATE STATEMENT", "", "", "", 110_000, 1, 109_412, 74, 0),
-            PlanLine(1, 0, 1, "UPDATE", "", "ORDERS_APP", "PAYMENTS", 110_000, 1, 109_412, 41.2, 0),
-            PlanLine(2, 1, 2, "TABLE ACCESS", "BY INDEX ROWID BATCHED", "ORDERS_APP", "PAYMENTS", 110_000, 1, 109_412, 30.1, 0),
-            PlanLine(3, 2, 3, "INDEX", "RANGE SCAN", "ORDERS_APP", "PAYMENTS_STATUS_IX", 110_000, 1, 109_412, 2.7, 0),
-        ]
-    return []
-
-
 def _monexecs() -> list[MonExec]:
     """Every persisted SQL Monitor report in the span.  Only long / parallel
     statements are captured (SQL Monitor's own policy): the reporting
@@ -1284,24 +1186,6 @@ def _monexecs() -> list[MonExec]:
     return out
 
 
-def plan_lines(sql_id: str, plan_hash: int, m: MonExec | None = None) -> list[PlanLine]:
-    """Plan lines for one execution; durations scaled to the execution's
-    elapsed so two executions of the same plan differ realistically."""
-    base = _plan(sql_id, plan_hash, None)
-    if not base or m is None:
-        return base
-    ref = base[0].duration_s or 1.0
-    k = (m.elapsed_us / 1e6) / ref
-    r = rng("plan", m.report_id)
-    out = []
-    for l in base:
-        j = 1.0 if l.id == 0 else min(1.0 + r.gauss(0, 0.06), 0.995 * ref / max(l.duration_s, 1e-9))
-        out.append(PlanLine(l.id, l.parent_id, l.depth, l.name, l.options, l.owner, l.obj,
-                            l.est_rows, l.starts, l.act_rows * (1.0 + r.gauss(0, 0.01) if l.act_rows > 100 else 1.0),
-                            l.duration_s * k * j, l.max_mem))
-    return out
-
-
 # ---------------------------------------------------------------------
 # World
 # ---------------------------------------------------------------------
@@ -1329,7 +1213,6 @@ class World:
         self.template = TEMPLATE
         self.template_dir = f"sql/lib/templates/{TEMPLATE}"
         self.profile_days = PROFILE_DAYS
-        self.sqlmon_detail = SQLMON_DETAIL
         self.markers = list(MARKERS)
         self.markers_define = ";;".join(f"{t:%Y-%m-%d %H:%M}|{l}" for t, l in MARKERS)
         self.echarts = "vendor/echarts.min.js"
@@ -1455,9 +1338,6 @@ class World:
         if self._monexecs is None:
             self._monexecs = _monexecs()
         return self._monexecs
-
-    def plan_lines(self, sql_id: str, plan_hash: int, m: MonExec | None = None) -> list[PlanLine]:
-        return plan_lines(sql_id, plan_hash, m)
 
     def rng(self, *key) -> random.Random:
         return rng(*key)

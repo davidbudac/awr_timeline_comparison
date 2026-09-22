@@ -64,8 +64,8 @@ masthead/day-profile), `w.hour(ts)` -> the interval ending at `ts`,
 `w.snaps` / `w.snap_at(ts)` -> `dba_hist_snapshot` rows.  Catalogs:
 `w.sqls` / `w.sql_by_id` (text, schema, module, action), `w.fg_events`,
 `w.bg_events`, `w.segments`, `w.files`, `w.filetypes`, `w.param_changes`
-+ `w.param_value(name, ts)`, `w.monexecs()` (SQL Monitor reports),
-`w.plan_lines(sql_id, plan_hash, exec)`.  Run params: `w.weeks_back`,
++ `w.param_value(name, ts)`, `w.monexecs()` (SQL Monitor reports).
+Run params: `w.weeks_back`,
 `w.win_hours`, `w.step_hours`, `w.top_n`, `w.target_end`,
 `w.offset_labels` (list, index k-1 = `REGEXP_SUBSTR('~offset_labels',
 '[^,]+', 1, k)`), `w.period_axis_fmt` = `'Mon DD'` (-> `helpers.mon_dd`),

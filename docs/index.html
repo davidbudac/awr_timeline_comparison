@@ -70,7 +70,7 @@
         <li><b>Aligned windows.</b> Same hour of the same weekday, N periods back; weekly, daily or hourly cadence, any window width.</li>
         <li><b>Statistical grading.</b> z = (current &minus; &mu;) &divide; &sigma; over the prior valid windows for load statistics, system metrics, wait classes, Top SQL, segment and file I/O.</li>
         <li><b>Verdict and narrative.</b> One-line verdict, biggest movers, rule-based &ldquo;what changed&rdquo; prose linking into the evidence.</li>
-        <li><b>SQL to plan line.</b> Top SQL ranked five ways with plan-hash flips, per-SQL ASH, SQL Monitor summaries and plan-line drift.</li>
+        <li><b>SQL to plan hash.</b> Top SQL ranked five ways with plan-hash flips, per-SQL ASH, SQL Monitor summaries with a Current-vs-prior plan hash column.</li>
         <li><b>Fleet console.</b> Every database in parallel, one dense worst-first table, unreachable databases surfaced as error rows.</li>
         <li><b>Offline-complete output.</b> One HTML file; chart library inlinable for air-gapped hosts; every number also in a table.</li>
       </ul>
@@ -163,7 +163,7 @@
         <tr><td>Window width</td><td class="val">0.25 h &hellip; 24 h+</td><td>Snapshots resolved with a 5-minute tolerance; a window &gt;15 min off the snapshot grid is skipped, not guessed.</td></tr>
         <tr><td>Prior windows</td><td class="val">1 &hellip; 16</td><td>z-scores need &ge; 3 valid priors; fewer renders <span class="badge skip">insufficient history</span>.</td></tr>
         <tr><td>Grading</td><td class="val">|z| &gt; 2, |z| &gt; 3</td><td><span class="badge ok">typical</span> <span class="badge warn">moderate</span> <span class="badge crit">large</span>; flat baselines flagged <code>&sigma;&asymp;0</code>.</td></tr>
-        <tr><td>Report sections</td><td class="val">19</td><td>Verdict and narrative, headline cards, ASH timeline, DB time span, findings, windows, day profile, utilization, load profile, metrics, waits (fg/bg), Top SQL, per-SQL ASH, SQL Monitor with plan-line drift, segment I/O, file I/O, parameters.</td></tr>
+        <tr><td>Report sections</td><td class="val">19</td><td>Verdict and narrative, headline cards, ASH timeline, DB time span, findings, windows, day profile, utilization, load profile, metrics, waits (fg/bg), Top SQL, per-SQL ASH, SQL Monitor, segment I/O, file I/O, parameters.</td></tr>
         <tr><td>Templates</td><td class="val">comprehensive &middot; simple &middot; dev</td><td>Curated metric and wait lists per audience; user templates are a three-file directory.</td></tr>
         <tr><td>Client-side modes</td><td class="val">4</td><td>Dark mode, Triage mode, Essential rows, Application only; plus row filter, sortable headers, CSV/Markdown export.</td></tr>
         <tr><td>RAC / multitenant</td><td class="val">supported</td><td>Per-instance window validity, additive vs. ratio metric roll-up; PDB and migrated-PDB DBID handling.</td></tr>
@@ -300,7 +300,6 @@ MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22'</span> ./run_awr_
         <tr><td class="num">10</td><td class="mono">debug</td><td class="mono">Y</td><td>Per-section progress markers on stdout; HTML unaffected</td></tr>
         <tr><td class="num">11</td><td class="mono">marker_file</td><td class="mono">''</td><td>Timeline-marker config file; or the <code>MARKERS</code> env var inline</td></tr>
         <tr><td class="num">12</td><td class="mono">profile_days</td><td class="mono">0</td><td>Day profile: each hour of the last 24 h vs the same hour on N prior days</td></tr>
-        <tr><td class="num">13</td><td class="mono">sqlmon_detail</td><td class="mono">0</td><td>Plan-line drift for the N most regressed SQL Monitor statements</td></tr>
       </tbody>
     </table>
     </div>
@@ -314,9 +313,9 @@ MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22'</span> ./run_awr_
         <li><p>The last four hours, hour by hour; then a lean triage report.</p>
           <div class="codewrap"><button type="button" class="copy-btn" data-copy="#c-s-2">Copy</button><pre id="c-s-2">./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple</pre></div></li>
-        <li><p>Milestones on every dated chart, plus day profile and plan-line drift for the top three regressed statements.</p>
+        <li><p>Milestones on every dated chart, plus day profile: each hour of the last 24 h vs the seven prior days.</p>
           <div class="codewrap"><button type="button" class="copy-btn" data-copy="#c-s-3">Copy</button><pre id="c-s-3">MARKERS=<span class="s">'2026-04-20 14:00|Applied patch 19.22'</span> ./run_awr_trend.sh user/pw@svc
-./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y <span class="s">''</span> 7 3</pre></div></li>
+./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w comprehensive Y <span class="s">''</span> 7</pre></div></li>
         <li><p>Fully offline, self-contained file (ECharts inlined from <code>vendor/</code>).</p>
           <div class="codewrap"><button type="button" class="copy-btn" data-copy="#c-s-4">Copy</button><pre id="c-s-4">ECHARTS=vendor/echarts.min.js ./run_awr_trend.sh user/pw@svc</pre></div></li>
         <li><p>Pure SQL*Plus, no shell: load the defaults, then the driver, as two separate commands.</p>
@@ -334,7 +333,7 @@ SQL&gt; <span class="k">@awr_trend.sql</span></pre></div></li>
       <tbody>
         <tr><td><b>Triage</b></td><td>DB time over the full span, headline cards, ASH timeline by wait class, findings with biggest movers, aligned windows</td><td class="mono">SYS_TIME_MODEL, SYSSTAT, ACTIVE_SESS_HISTORY, SNAPSHOT</td></tr>
         <tr><td><b>Workload</b></td><td>Day profile, utilization, load profile, system metrics, foreground and background waits</td><td class="mono">SYSSTAT, SYSMETRIC_SUMMARY, SYSTEM_EVENT, BG_EVENT_SUMMARY</td></tr>
-        <tr><td><b>SQL</b></td><td>Top SQL ranked five ways with plan-hash flips, per-SQL ASH, SQL Monitor with plan-line drift</td><td class="mono">SQLSTAT, SQLTEXT, ACTIVE_SESS_HISTORY, REPORTS, REPORTS_DETAILS</td></tr>
+        <tr><td><b>SQL</b></td><td>Top SQL ranked five ways with plan-hash flips, per-SQL ASH, SQL Monitor summaries</td><td class="mono">SQLSTAT, SQLTEXT, ACTIVE_SESS_HISTORY, REPORTS</td></tr>
         <tr><td><b>Storage &amp; config</b></td><td>Top segments and files by I/O, I/O by file type, parameters differing across windows</td><td class="mono">SEG_STAT, FILESTATXS, IOSTAT_FILETYPE, PARAMETER</td></tr>
       </tbody>
     </table>
@@ -379,7 +378,7 @@ SQL&gt; <span class="k">@awr_trend.sql</span></pre></div></li>
     <div class="ex-rows">
       <a class="ex" href="examples/demo_busy_db.html">
         <span class="k"><span class="tag acc">demo</span><span class="tag">synthetic</span></span>
-        <span><h4>Busy production database, twelve weeks, four releases and a patch</h4><p>Weekly cadence, 12 prior windows, day profile and plan-line drift on. The latest release flipped an execution plan: physical reads &times;5, User I/O &times;4, a <span class="badge crit">large</span> verdict, the SQL_ID named in the narrative.</p></span>
+        <span><h4>Busy production database, twelve weeks, four releases and a patch</h4><p>Weekly cadence, 12 prior windows, day profile on. The latest release flipped an execution plan: physical reads &times;5, User I/O &times;4, a <span class="badge crit">large</span> verdict, the SQL_ID named in the narrative and flagged "plan changed" in SQL Monitor.</p></span>
         <span class="go">open &rarr;</span>
       </a>
       <a class="ex" href="examples/hourly_comprehensive.html">

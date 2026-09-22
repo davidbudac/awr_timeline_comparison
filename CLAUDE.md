@@ -26,7 +26,7 @@ SVG sparklines and the marker JS are shipped inline and work offline. The
 
 ## Entry points
 
-- `run_awr_trend.sh user/pw@svc [target_end] [win_hours] [weeks_back] [top_n] [inst_num] [step] [step_unit] [template] [debug] [marker_file] [profile_days] [sqlmon_detail]`
+- `run_awr_trend.sh user/pw@svc [target_end] [win_hours] [weeks_back] [top_n] [inst_num] [step] [step_unit] [template] [debug] [marker_file] [profile_days]`
   — wrapper; sets DEFINEs via heredoc then `@@awr_trend.sql`. `MARKERS=` and
   `ECHARTS=` ride as **env vars** (not positional, to keep arg order symmetric).
 - `run_awr_trend.sh --configure` (also `-c`/`-i`, or no args at a TTY) —
@@ -71,7 +71,7 @@ sql/
 ├── 14_segment_io.sql    -- top segments by I/O (DBA_HIST_SEG_STAT; template-INDEP)
 ├── 15_file_io.sql       -- top files by I/O + IOStat-by-filetype (template-INDEP)
 ├── 16_day_profile.sql   -- Day profile: hour-of-day × N prior days (profile_days>0; template-INDEP)
-├── 18_sqlmon.sql        -- SQL Monitor summaries + plan-line drift (sqlmon_detail>0; template-INDEP, always on)
+├── 18_sqlmon.sql        -- SQL Monitor summaries (template-INDEP, always on)
 ├── 17_narrative.sql     -- "What changed": rule-based prose, relocated into the masthead by JS
 └── lib/                 -- @@-included fragments (see conventions)
     ├── windows_cte.sql       -- run_params → … → valid_windows CTE chain
@@ -106,14 +106,12 @@ reports/                            -- generated HTML
 
 ## Substitution variables
 
-Fourteen user-facing vars, all DEFINEs (defaults in `sql/defaults.sql`):
+Thirteen user-facing vars, all DEFINEs (defaults in `sql/defaults.sql`):
 `target_end` (`'AUTO'`=prior full hour), `win_hours`, `weeks_back`, `top_n`,
 `inst_num` (`0`=aggregate across RAC, else filter to that instance), `step` +
 `step_unit` (`'h'`/`'d'`/`'w'`; default `1`+`'w'` = same hour-of-week N weeks
 back), `template`, `debug`, `marker_file`, `profile_days` (`0`=off; the 12th
-wrapper positional), `sqlmon_detail` (`0`=off; the 13th wrapper positional;
-SQL Monitor plan-line drift, `sql/18_sqlmon.sql` phase 2), `markers`,
-`echarts`.
+and last wrapper positional), `markers`, `echarts`.
 
 The driver resolves many derived vars **once** up front via `COLUMN … NEW_VALUE`
 and every section references them as `~name` (never re-resolves): `step_hours`
@@ -353,6 +351,12 @@ New gotchas from this pass:
   (lowest wins — the instance-level value a DBA means by "the parameter").
   `17_narrative.sql`'s R3 does this; `12_param_changes.sql` was fixed the
   same way concurrently.
+- **Splitting a delimiter-joined string with `REGEXP_SUBSTR(s, '[^X]*',
+  1, k)` is wrong** when a field can be empty: the `*` yields a
+  zero-length match at each delimiter, so every later occurrence shifts by
+  one. Use a pattern that consumes the delimiter — `RTRIM(REGEXP_SUBSTR(s
+  || 'X', '[^X]*X', 1, k), 'X')` — or `nth_csv` (bit 18's per-window
+  sub-table live, 2026-09-22).
 - A `.copy-btn` is inline by default and absolutely positioned only inside
   `pre`/`.codewrap` — placing one elsewhere without that ancestor needs an
   explicit position context or it flows inline unexpectedly.
@@ -401,7 +405,7 @@ fleet band and the drill command's 12-slot tail are likewise guarded. The
 fleet band is **informational**: no `FLEET-COUNTS`, no score/sort impact.
 Table rows carry `class="crit|warn"` (rail dot grading) but no `data-imp`.
 
-### SQL Monitor (`sql/18_sqlmon.sql`, phase 1 + phase 2)
+### SQL Monitor (`sql/18_sqlmon.sql`)
 Template-independent, always on (like 13-16, but unlike 16 it still renders
 a one-line note when empty rather than staying silent). Source:
 `DBA_HIST_REPORTS` where `component_name = 'sqlmonitor'` — one row per
@@ -410,10 +414,9 @@ sql_exec_start as the **string** `'MM:DD:YYYY HH24:MI:SS'` (numeric-only, so
 NLS-safe, but parse it with an explicit `TO_DATE(key3,'MM:DD:YYYY
 HH24:MI:SS')` mask — never trust it as a DATE). `report_summary` is a
 VARCHAR2 XML parsed via `XMLTABLE('/report_repository_summary/sql' ...)`;
-`dbid` is the CDB dbid, so `dbid IN (dbid_list)` applies unchanged. Phase 1
-is summaries only — `DBA_HIST_REPORTS_DETAILS` (the multi-KB per-execution
-plan CLOB) is never touched, so there is no plan-line drift / diff feature
-yet (see `design/SQLMON_DESIGN.md`'s "Phase 2", not implemented).
+`dbid` is the CDB dbid, so `dbid IN (dbid_list)` applies unchanged. The
+section reads only `DBA_HIST_REPORTS.report_summary` — `DBA_HIST_REPORTS_DETAILS`
+(the multi-KB per-execution plan CLOB) is never touched.
 
 **Noise floor** is at the sql_id level, not per-execution: a sql_id is
 included in the comparison table only if ANY of its captured executions in
@@ -459,52 +462,23 @@ section plus R6-R9 scan `dba_hist_reports` (with `XMLTYPE` parsing) six
 times over the span — fine at thousands of rows, worth a single BULK COLLECT
 if a busy DB ever makes it slow.
 
-**Phase 2 (`sqlmon_detail`, default 0): plan-line drift.** Opt-in var, same
-byte-identity-at-default contract as `profile_days`: at `sqlmon_detail=0` the
-whole block (and R10 below) is skipped, so the report is byte-identical to
-phase-1-only output. A positive N renders a `<h3>Plan-line drift</h3>` block
-inside `#sqlmon`, one `<div class="sqlmon-drift">` per candidate. Candidates:
-sql_ids from the same noise-floor `included` set, with `plan_hash <> 0`, a
-Current-window execution AND at least one prior-*valid*-window execution;
-ranked by change bucket (large > moderate > rest, via section 07's `scored`
-CASE on max elapsed) then Current max elapsed DESC, `FETCH FIRST N ROWS
-ONLY`. Per candidate: **current** = the Current window's slowest execution
-(`plan_hash <> 0`), **baseline** = the prior-window execution whose elapsed is
-closest to the prior median (tie → most recent). Exactly two
-`DBA_HIST_REPORTS_DETAILS` CLOBs are read per candidate (joined on
-`report_id`+`dbid`, **no `component_name` column there**) and `XMLTABLE`'d
-against `/report/sql_monitor_report/plan_monitor/operation` (verified shape,
-pinned in `design/SQLMON_DESIGN.md`: `@id`/`@parent_id`/`@name`/`@options`/
-`@depth`, `object/owner`/`object/name`, `optimizer/cardinality` for estimated
-rows, and `stats[@type="plan_monitor"]/stat[@name=...]` for `starts` /
-`cardinality` (actual rows) / `duration` (s) / `max_memory` — **no
-activity-%/ASH block exists in the stored XML**, so the diff is limited to
-those four measures). Lines are `FULL OUTER JOIN`ed on
-`(line id, operation name+options, owner.object)`; a plan-hash difference
-between the two executions is called out in the block's caption and
-unmatched lines render one-sided, flagged `class="crit"` (`class="warn"` when
-duration share moved ≥10 points or actual rows changed ≥10x on a matched
-line). A one-sentence "what moved" lede — the line with the single largest
-duration-share increase, skipped below a 5-point move — is the entire point
-of phase 2. Each candidate's two CLOB reads, and its XML parse, are each
-wrapped in their own `BEGIN/EXCEPTION WHEN OTHERS` so a corrupt/oversized
-report can never abort the run — it renders a muted one-line note instead.
-Cost is hard-bounded to `sqlmon_detail` candidate pairs (2×N CLOBs). Wired
-through `run_awr_trend.sh` exactly like `profile_days` (13th positional,
-configurator prompt, `v_nonneg`); `run_awr_fleet.sh`'s `FLEET_SQLMON_DETAIL`
-env knob rides it into the optional **per-DB detailed report only** — the
-lean extract heredoc never sets it (defaults to 0 via `sql/defaults.sql`).
-`sql/17_narrative.sql` gained **R10**, recomputing (not sharing) the single
-top candidate and stating its lede when `sqlmon_detail>0`; at 0 it runs no
-query at all.
+**Plan-hash column.** The per-statement table's "Plan hash" column (right
+after "User / module") compares `cur` = the plan_hash of the Current
+window's slowest execution (falling back to the most-frequent non-zero
+plan_hash in the Current window when that execution's own plan_hash is 0)
+against `prior` = the most-frequent non-zero plan_hash across the prior
+*valid* windows (tie → most recent `exec_start`); a mismatch renders a
+`badge warn "plan changed"` with `<s>prior</s> &rarr; <b>cur</b>`, matching
+the existing "plan change" chip which now reads "plan changed" and carries
+the differing-plan title when this column fires. The per-window sub-table's
+"Plans" column became "Plan hash(es)": the distinct non-zero hashes seen in
+that window, most frequent first, capped at 5 with a trailing ellipsis.
 
 **Fleet band (`sql/fleet/06b_sqlmon.sql`, always on).** Fleet-owned copy of
-the phase-1 "new"/floor logic (never edits the single-DB file), called from
+the "new"/floor logic (never edits the single-DB file), called from
 `awr_fleet_extract.sql` right after `06_day_profile` and before `07_close`,
 its own `AWR-SECTION: fleet_06b` markers. Cheap summaries only — it never
-reads a `DBA_HIST_REPORTS_DETAILS` CLOB, so it does not depend on
-`sqlmon_detail` at all (that var only reaches the optional per-DB detailed
-report). Renders a `.detail-block` "SQL Monitor" band: executions in
+reads a `DBA_HIST_REPORTS_DETAILS` CLOB. Renders a `.detail-block` "SQL Monitor" band: executions in
 Current / full span, errors in Current, plan changes, DOP downgrades, and a
 top-5-by-Current-max-elapsed `table.dt` with per-row `.chip` flags (a
 fleet-owned CSS rule in `00_fleet_chrome.sql`, unrelated to the single-DB
@@ -1083,7 +1057,7 @@ the demo.
   a database on 2026-09-21 (synthetic demo + Playwright + the 137-test
   server suite), then run against dbmint: pinned hourly window
   (`target_end='2026-09-18 12:00'` win=1h weeks_back=4 step=1h, all three
-  templates, `profile_days=7 sqlmon_detail=3`), a daily-cadence run
+  templates, `profile_days=7` and the since-removed `sqlmon_detail=3`), a daily-cadence run
   (win=2h weeks_back=7 step=1d) and an `AUTO`-weekly run; a fleet run
   with `FLEET_DETAIL=all FLEET_PROFILE_DAYS=7`. All: 0 ORA-/SP2-, every
   `AWR-SECTION` BEGIN/END pair present, no `__FLEET_` placeholder;
@@ -1096,8 +1070,7 @@ the demo.
   subprogram include (00/02/03/07/17; `metric_policy.plsql` opens with a
   TYPE so it must be the first subprogram-declaring item and after every
   plain variable, and a `policy_rec` variable can only live in a nested
-  block); 18's phase-2 `v_row_cls` VARCHAR2(10) too small for
-  ` class="crit"` (ORA-06502); and 18's execution-scatter query, whose
+  block); and 18's execution-scatter query, whose
   mode-plan `LEFT JOIN` the optimizer pushed into a nested loop that
   re-parsed every report's XML per outer row (hung >10 min on the
   4-week AUTO span; now one scan + analytics, ~60 s there). dbmint is

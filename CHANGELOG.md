@@ -5,6 +5,29 @@ The report footer stamps the version that produced it
 top of `awr_trend.sql`. Bump it there when cutting a release and add an
 entry here. Dates are release dates.
 
+## Unreleased
+
+- **Removed SQL Monitor "Plan-line drift" (phase 2, `sqlmon_detail`).**
+  Taken out entirely at the user's request: the `sqlmon_detail` substitution
+  var, the wrapper's 13th positional arg, `FLEET_SQLMON_DETAIL`, the
+  `<h3>Plan-line drift</h3>` block and its `.sqlmon-drift` CSS, narrative
+  rule R10, and the demo twins. `sql/18_sqlmon.sql` now reads only
+  `DBA_HIST_REPORTS.report_summary`, never `DBA_HIST_REPORTS_DETAILS`; the
+  wrapper drops to 12 positionals (`profile_days` is now the last one). See
+  `design/SQLMON_DESIGN.md` for a note on what was removed.
+- **SQL Monitor: added a "Plan hash" column.** The per-statement table now
+  shows, at a glance, the Current window's slowest execution's plan_hash
+  against the prior windows' dominant plan_hash, with a "plan changed"
+  badge on a mismatch; the per-window detail table's "Plans" count became
+  "Plan hash(es)" (the distinct hashes seen, most frequent first, capped at
+  5). No new substitution var; purely additive to the existing table.
+- **Fix: SQL Monitor per-window sub-table columns were shifted.** The
+  `^`-joined per-window slot was split with `REGEXP_SUBSTR(slot, '[^^]*',
+  1, k)`, whose zero-length match at every delimiter shifted each later
+  token by one (median blank, I/O showing the median, errors and plans
+  blank) whenever any earlier field was empty. The splitter now always
+  consumes the delimiter (`'[^^]*\^'` over `slot || '^'`).
+
 ## 1.5.0 and Fleet report 0.7.0 — 2026-09-22
 
 Findings rollup + UI/UX pass (v1.5.0; plan and audit in

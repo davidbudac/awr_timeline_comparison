@@ -47,7 +47,7 @@ SQL, segment and file I/O and the narrative at the same instant.
 | Database | `ORCLPRD`, 19c, single instance, 16 CPUs, hourly AWR snapshots |
 | Comparison | Thursday 09:00–10:00, weekly cadence, 12 prior weeks (`target_end='2026-09-10 10:00'`, `weeks_back=12`) |
 | Baseline | OLTP order-entry (checkout, lookups, inventory) + hourly reporting; ~10–13 AAS at 55–70 % host CPU on weekdays, nightly batch 01:00–03:00, quiet weekends, +9 % growth over the quarter |
-| Extras on | `profile_days=7` (Day profile), `sqlmon_detail=3` (SQL Monitor plan-line drift), inline `markers` |
+| Extras on | `profile_days=7` (Day profile), inline `markers` |
 
 Marked milestones, each with its own signature:
 

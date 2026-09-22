@@ -9,15 +9,13 @@ from DBA_HIST_* ("findings are recomputed, not shared"):
       window's END snapshot, prior windows whose value differs from Current)
   R4  skipped prior windows
   R6-R9 SQL Monitor (plan change / DOP downgrade / DONE (ERROR) / new)
-  R10 SQL Monitor plan-line drift lede (sqlmon_detail > 0 only)
-Emitted in the order R1, R5, R2, R3, R4, R6, R7, R8, R9, R10; nothing to
+Emitted in the order R1, R5, R2, R3, R4, R6, R7, R8, R9; nothing to
 say => only the two AWR-SECTION markers.
 """
 from __future__ import annotations
 
 import math
 import re
-import statistics
 
 from awrdemo.helpers import esc, mean_sd, ora_round, to_char_trim, policy_bucket
 
@@ -227,7 +225,7 @@ def _r3(w):
 
 
 # ---------------------------------------------------------------------
-# SQL Monitor helpers (R6-R10)
+# SQL Monitor helpers (R6-R9)
 # ---------------------------------------------------------------------
 
 def _span(w):
@@ -244,13 +242,6 @@ def _cur_win(w):
     for win in w.windows:
         if win.week_offset == 0 and win.valid:
             return win
-    return None
-
-
-def _offset_of(w, ts):
-    for win in w.windows:
-        if win.valid and win.win_start_ts <= ts < win.win_end_ts:
-            return win.week_offset
     return None
 
 
@@ -281,70 +272,6 @@ def _r6_r9(w):
         new_n = len(new_ids)
         new_txt = ', '.join(new_ids[:3])
     return plan_n, plan_txt, dop_n, err_n, new_n, new_txt
-
-
-def _r10(w):
-    """The single top plan-line-drift candidate (18_sqlmon phase 2's
-    ranking) and its largest duration-share mover."""
-    base = _base_execs(w)
-    rows = [(m, _offset_of(w, m.exec_start)) for m in base]
-    per_sql = {}
-    for m, off in rows:
-        d = per_sql.setdefault(m.sql_id, {'long': False, 'err': False, 'plans': set()})
-        d['long'] |= m.elapsed_us >= 1_000_000
-        d['err'] |= m.status == 'DONE (ERROR)'
-        if m.plan_hash != 0:
-            d['plans'].add(m.plan_hash)
-    included = {sid for sid, d in per_sql.items()
-                if d['long'] or d['err'] or len(d['plans']) > 1}
-    cands = []
-    for sid in included:
-        cur = [m for m, off in rows if m.sql_id == sid and off == 0 and m.plan_hash != 0]
-        prior = [m for m, off in rows if m.sql_id == sid and off is not None and off > 0
-                 and m.plan_hash != 0]
-        if not cur or not prior:
-            continue
-        cb = sorted(cur, key=lambda m: (-m.elapsed_us, m.report_id))[0]
-        med = statistics.median(m.elapsed_us for m in prior)
-        pb = sorted(prior, key=lambda m: (abs(m.elapsed_us - med),
-                                          -m.exec_start.timestamp(), m.report_id))[0]
-        per_win = {}
-        for m, off in rows:
-            if m.sql_id == sid and off is not None:
-                per_win[off] = max(per_win.get(off, 0.0), m.elapsed_us / 1e6)
-        cur_val = per_win.get(0)
-        mu, sd, n = mean_sd([v for k, v in per_win.items() if k > 0])
-        rank = 3
-        if n >= 3 and sd is not None and max(sd, 0.02 * abs(mu)) > 0 and cur_val is not None:
-            z = abs((cur_val - mu) / max(sd, 0.02 * abs(mu)))
-            rank = 1 if z > 3 else (2 if z > 2 else 3)
-        cands.append((rank, -cb.elapsed_us, sid, cb, pb))
-    if not cands:
-        return None
-    cands.sort(key=lambda t: (t[0], t[1], t[2]))
-    _, _, sid, cb, pb = cands[0]
-    cur_total = cb.elapsed_us / 1e6
-    base_total = pb.elapsed_us / 1e6
-    cl = {(l.id, l.name or '-'): l for l in w.plan_lines(sid, cb.plan_hash, cb)}
-    bl = {(l.id, l.name or '-'): l for l in w.plan_lines(sid, pb.plan_hash, pb)}
-    best = None
-    best_delta = 0.0
-    for key in sorted(set(cl) | set(bl)):
-        c, b = cl.get(key), bl.get(key)
-        if c is None or b is None:
-            continue
-        cur_share = c.duration_s / cur_total * 100 if cur_total > 0 else None
-        base_share = b.duration_s / base_total * 100 if base_total > 0 else None
-        if cur_share is None or base_share is None:
-            continue
-        if cur_share - base_share > best_delta:
-            best_delta = cur_share - base_share
-            opts = c.options or b.options
-            op_txt = (c.name or b.name) + (' (' + opts + ')' if opts else '')
-            best = (sid, c.id, op_txt, base_share, cur_share)
-    if best is None or best_delta < 5:
-        return None
-    return best
 
 
 # ---------------------------------------------------------------------
@@ -453,16 +380,6 @@ def emit(w) -> str:
                          + (' (+' + _tc(new_n - 3) + ' more)' if new_n > 3 else '')
                          + ' first seen in SQL Monitor this window',
                          '#sqlmon', 'SQL Monitor'))
-
-    # R10
-    if w.sqlmon_detail > 0:
-        r10 = _r10(w)
-        if r10 is not None:
-            sid, line_id, op_txt, base_share, cur_share = r10
-            sent.append(item('Plan drift', '<code>' + esc(sid) + '</code>',
-                             _tc(ora_round(base_share)) + '% &rarr; ' + _tc(ora_round(cur_share)) + '% of its time',
-                             'line ' + _tc(line_id) + ' ' + esc(op_txt),
-                             '#sqlmon', 'SQL Monitor'))
 
     out = ['<!-- AWR-SECTION: 17_narrative BEGIN -->']
     if sent:

@@ -173,7 +173,7 @@ def emit(w) -> str:
     if not sql_totals:
         out.append(L[3])
         out.append("</section>")
-        out.append(L[75])
+        out.append("<!-- AWR-SECTION: 11_top_sql_ash_breakdown END -->")
         return "\n".join(out)
 
     order = sorted(sql_totals.items(), key=lambda kv: (-kv[1], kv[0]))
@@ -252,5 +252,5 @@ def emit(w) -> str:
     out.append("]};")
     out.extend(L[26:L.index("</script>", 26) + 1])     # verbatim bootstrap .. </script>
     out.append("</section>")
-    out.append(L[75])
+    out.append("<!-- AWR-SECTION: 11_top_sql_ash_breakdown END -->")
     return "\n".join(out)

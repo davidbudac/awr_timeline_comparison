@@ -2,14 +2,15 @@
 -- 18_sqlmon.sql
 -- SQL Monitor summaries: per-sql_id comparison across the compared windows,
 -- an execution scatter over the full span, and narrative-feeding flags --
--- all from DBA_HIST_REPORTS' persisted "sqlmonitor" report_summary XML.
--- Phase 1 (always on) uses only DBA_HIST_REPORTS.report_summary (a VARCHAR2
--- XML), never DBA_HIST_REPORTS_DETAILS (the multi-KB per-execution CLOB).
--- Phase 2 (see design/SQLMON_DESIGN.md), opt-in via sqlmon_detail>0 (default
--- 0 -- byte-identical to phase-1-only output at the default), renders a
--- "Plan-line drift" block per regressed sql_id by reading exactly two
--- DBA_HIST_REPORTS_DETAILS CLOBs per candidate (a Current-window execution
--- vs. a prior-window baseline), bounded to sqlmon_detail pairs.
+-- all from DBA_HIST_REPORTS' persisted "sqlmonitor" report_summary XML. This
+-- section reads only DBA_HIST_REPORTS.report_summary (a VARCHAR2 XML) --
+-- never DBA_HIST_REPORTS_DETAILS (the multi-KB per-execution plan CLOB).
+--
+-- Plan-hash awareness: the per-statement table's "Plan hash" column compares
+-- the plan_hash of the Current window's slowest execution against the most
+-- frequent (dominant) plan_hash across the prior valid windows, and flags a
+-- mismatch with a "plan changed" badge -- see the cur_plan/prior_plan CTEs
+-- below and metric_policy-independent score_cells() call for the row.
 --
 -- Template-INDEPENDENT (like 13-16): SQL Monitor coverage doesn't depend on
 -- which triage template the caller picked. Always on, no DEFINE -- unlike
@@ -89,6 +90,7 @@ DECLARE
     v_header      VARCHAR2(4000);
     v_row         VARCHAR2(32767);
     v_flags       VARCHAR2(400);
+    v_plancell    VARCHAR2(400);
 
     v_windows_json    VARCHAR2(4000);
     v_weeks_iso_json  VARCHAR2(4000);
@@ -117,13 +119,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'Executions persisted by Oracle SQL Monitor '
         || '(<code>DBA_HIST_REPORTS</code>, <code>component_name=''sqlmonitor''</code>), '
-        || CASE WHEN ~sqlmon_detail > 0 THEN
-               'summaries, plus plan-line drift detail below for the top '
-               || ~sqlmon_detail || ' regressed statement'
-               || CASE WHEN ~sqlmon_detail = 1 THEN '' ELSE 's' END || '. '
-           ELSE
-               'summaries only &mdash; no plan-line detail (phase 2, not implemented). '
-           END
+        || 'summaries only. '
         || '<b>Sampling caveats:</b> only completed, expensive-enough or parallel '
         || 'executions are ever persisted, so a statement''s absence here does not '
         || 'mean it ran fast, and row counts are not execution-rate counts. An '
@@ -248,20 +244,48 @@ BEGIN
             FROM   with_offset w CROSS JOIN cur_start c
             GROUP BY w.sql_id
         ),
-        per_window AS (
-            SELECT sql_id, week_offset,
-                   COUNT(*) AS n,
-                   MAX(elapsed_us) / 1e6    AS max_elapsed_s,
-                   MEDIAN(elapsed_us) / 1e6 AS median_elapsed_s,
-                   MAX(io_bytes)   AS max_io_bytes,
-                   MAX(px_req)     AS max_px_req,
-                   MAX(px_alloc)   AS max_px_alloc,
-                   COUNT(DISTINCT CASE WHEN plan_hash <> 0 THEN plan_hash END) AS plans,
-                   SUM(CASE WHEN status = 'DONE (ERROR)' THEN 1 ELSE 0 END) AS err_cnt
+        -- Per-window plan_hash list: distinct non-zero hashes seen in that
+        -- window, most frequent first, capped at 5 with a trailing ellipsis
+        -- when more were seen. Feeds per_window.plan_list below (replaces
+        -- the plain distinct-count "Plans" column).
+        window_plan_counts AS (
+            SELECT sql_id, week_offset, plan_hash, COUNT(*) AS cnt
             FROM   with_offset
-            WHERE  week_offset IS NOT NULL
+            WHERE  week_offset IS NOT NULL AND plan_hash <> 0
               AND  sql_id IN (SELECT sql_id FROM included)
+            GROUP BY sql_id, week_offset, plan_hash
+        ),
+        window_plan_ranked AS (
+            SELECT sql_id, week_offset, plan_hash,
+                   ROW_NUMBER() OVER (PARTITION BY sql_id, week_offset
+                       ORDER BY cnt DESC, plan_hash) AS rn,
+                   COUNT(*) OVER (PARTITION BY sql_id, week_offset) AS total_plans
+            FROM   window_plan_counts
+        ),
+        window_plan_agg AS (
+            SELECT sql_id, week_offset,
+                   LISTAGG(TO_CHAR(plan_hash), ' ') WITHIN GROUP (ORDER BY rn)
+                       || CASE WHEN MAX(total_plans) > 5 THEN '&hellip;' ELSE '' END AS plan_list
+            FROM   window_plan_ranked
+            WHERE  rn <= 5
             GROUP BY sql_id, week_offset
+        ),
+        per_window AS (
+            SELECT wo.sql_id, wo.week_offset,
+                   COUNT(*) AS n,
+                   MAX(wo.elapsed_us) / 1e6    AS max_elapsed_s,
+                   MEDIAN(wo.elapsed_us) / 1e6 AS median_elapsed_s,
+                   MAX(wo.io_bytes)   AS max_io_bytes,
+                   MAX(wo.px_req)     AS max_px_req,
+                   MAX(wo.px_alloc)   AS max_px_alloc,
+                   MAX(wpa.plan_list) AS plan_list,
+                   SUM(CASE WHEN wo.status = 'DONE (ERROR)' THEN 1 ELSE 0 END) AS err_cnt
+            FROM   with_offset wo
+            LEFT JOIN window_plan_agg wpa
+                   ON wpa.sql_id = wo.sql_id AND wpa.week_offset = wo.week_offset
+            WHERE  wo.week_offset IS NOT NULL
+              AND  wo.sql_id IN (SELECT sql_id FROM included)
+            GROUP BY wo.sql_id, wo.week_offset
         ),
         pivoted AS (
             SELECT sql_id,
@@ -278,7 +302,7 @@ BEGIN
         ),
         grid AS (
             SELECT i.sql_id, w.week_offset, pw.n, pw.max_elapsed_s, pw.median_elapsed_s,
-                   pw.max_io_bytes, pw.max_px_req, pw.max_px_alloc, pw.plans, pw.err_cnt
+                   pw.max_io_bytes, pw.max_px_req, pw.max_px_alloc, pw.plan_list, pw.err_cnt
             FROM   included i CROSS JOIN all_weeks w
             LEFT JOIN per_window pw
                    ON pw.sql_id = i.sql_id AND pw.week_offset = w.week_offset
@@ -305,7 +329,7 @@ BEGIN
                        NVL(TO_CHAR(max_io_bytes), '') || '^' ||
                        NVL(TO_CHAR(max_px_req), '') || '^' ||
                        NVL(TO_CHAR(max_px_alloc), '') || '^' ||
-                       NVL(TO_CHAR(plans), '') || '^' ||
+                       NVL(plan_list, '') || '^' ||
                        NVL(TO_CHAR(err_cnt), ''),
                        ',')
                        WITHIN GROUP (ORDER BY week_offset ASC) AS detail_csv
@@ -331,6 +355,39 @@ BEGIN
                        (SELECT sa.report_id FROM slowest_any sa
                         WHERE sa.sql_id = i.sql_id AND sa.rn = 1)) AS drill_report_id
             FROM   included i
+        ),
+        -- Plan-hash column: cur_plan is the plan_hash of the Current
+        -- window's slowest execution (falling back to the most-frequent
+        -- non-zero plan_hash in the Current window when that execution's
+        -- own plan_hash is 0); prior_plan is the most-frequent non-zero
+        -- plan_hash across the prior VALID windows (tie -> most recent).
+        cur_plan AS (
+            SELECT sql_id, plan_hash AS cur_plan_hash
+            FROM (
+                SELECT sql_id, plan_hash,
+                       ROW_NUMBER() OVER (PARTITION BY sql_id
+                           ORDER BY CASE WHEN plan_hash <> 0 THEN 0 ELSE 1 END,
+                                    elapsed_us DESC NULLS LAST, report_id) AS rn
+                FROM   with_offset
+                WHERE  week_offset = 0
+            )
+            WHERE  rn = 1 AND plan_hash <> 0
+        ),
+        prior_plan_counts AS (
+            SELECT sql_id, plan_hash, COUNT(*) AS cnt, MAX(exec_start) AS last_ts
+            FROM   with_offset
+            WHERE  week_offset > 0 AND plan_hash <> 0
+            GROUP BY sql_id, plan_hash
+        ),
+        prior_plan AS (
+            SELECT sql_id, plan_hash AS prior_plan_hash
+            FROM (
+                SELECT sql_id, plan_hash,
+                       ROW_NUMBER() OVER (PARTITION BY sql_id
+                           ORDER BY cnt DESC, last_ts DESC) AS rn
+                FROM   prior_plan_counts
+            )
+            WHERE  rn = 1
         )
         SELECT s.sql_id, st.last_username, st.last_module,
                st.distinct_plans, st.has_downgrade, st.has_error, st.total_execs,
@@ -338,6 +395,9 @@ BEGIN
                p.cur_val, p.mu, p.sd, p.n_prior, p.span_max,
                c.elapsed_asc_csv, c.elapsed_spark_csv, c.detail_csv,
                d.drill_report_id,
+               cp.cur_plan_hash, pp.prior_plan_hash,
+               CASE WHEN cp.cur_plan_hash IS NOT NULL AND pp.prior_plan_hash IS NOT NULL
+                         AND cp.cur_plan_hash <> pp.prior_plan_hash THEN 'Y' ELSE 'N' END AS plan_changed,
                ROW_NUMBER() OVER (ORDER BY p.cur_val DESC NULLS LAST,
                                   st.span_max_all DESC NULLS LAST, s.sql_id) AS rnk,
                COUNT(*) OVER () AS total_sqlids
@@ -351,6 +411,8 @@ BEGIN
         JOIN   per_sql_csv c       ON c.sql_id  = s.sql_id
         JOIN   drill d             ON d.sql_id  = s.sql_id
         LEFT JOIN new_flag nf      ON nf.sql_id = s.sql_id
+        LEFT JOIN cur_plan   cp    ON cp.sql_id = s.sql_id
+        LEFT JOIN prior_plan pp    ON pp.sql_id = s.sql_id
         ORDER BY rnk
     ) LOOP
         IF NOT v_any_row THEN
@@ -359,6 +421,8 @@ BEGIN
 
             DBMS_OUTPUT.PUT_LINE('<h3>Per-statement comparison (top ' || v_top_n || ')</h3>');
             v_header := '<thead><tr><th>SQL ID</th><th>User / module</th>'
+                || '<th title="plan_hash_value of the slowest Current-window execution; '
+                || 'prior = the most frequent plan in the prior compared windows">Plan hash</th>'
                 || '<th class="trend">Trend</th>'
                 || '<th class="num" data-w="0">Current max elapsed (s)</th>'
                 || '<th class="num">Prior mean (s)</th>'
@@ -373,7 +437,9 @@ BEGIN
         v_shown_total := v_shown_total + NVL(s.total_execs, 0);
 
         v_flags := '';
-        IF s.distinct_plans > 1 THEN
+        IF s.plan_changed = 'Y' THEN
+            v_flags := v_flags || '<span class="chip" title="Current plan differs from the prior windows'' dominant plan">plan changed</span> ';
+        ELSIF s.distinct_plans > 1 THEN
             v_flags := v_flags || '<span class="chip" title="more than one execution plan seen in the compared span">plan change</span> ';
         END IF;
         IF s.has_downgrade = 1 THEN
@@ -389,7 +455,7 @@ BEGIN
         -- a statement that ran in the Current window is worth the short
         -- report; plain slow-vs-baseline rows stay Full-only.
         IF s.cur_val IS NOT NULL AND s.rnk <= v_top_n
-           AND (s.has_error = 1 OR s.distinct_plans > 1 OR s.has_downgrade = 1)
+           AND (s.has_error = 1 OR s.distinct_plans > 1 OR s.has_downgrade = 1 OR s.plan_changed = 'Y')
            AND NOT v_normal THEN
             v_normal := TRUE;
             DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("sqlmon").setAttribute("data-normal","Y");</script>');
@@ -401,6 +467,20 @@ BEGIN
             v_tail_cnt := v_tail_cnt + 1;
             IF s.cur_val IS NULL THEN v_nocur_cnt := v_nocur_cnt + 1; END IF;
         END IF;
+        v_plancell := CASE
+            WHEN s.plan_changed = 'Y' THEN
+                '<span class="badge warn" title="plan changed vs. the prior windows'' dominant plan">plan changed</span> <s>'
+                || TO_CHAR(s.prior_plan_hash) || '</s> &rarr; <b>' || TO_CHAR(s.cur_plan_hash) || '</b>'
+            WHEN s.cur_plan_hash IS NOT NULL THEN
+                TO_CHAR(s.cur_plan_hash)
+                || CASE WHEN s.distinct_plans > 1 AND s.cur_plan_hash = s.prior_plan_hash
+                        THEN ' <span class="badge note" title="another plan was also seen in the span">+other</span>'
+                        ELSE '' END
+            WHEN s.prior_plan_hash IS NOT NULL THEN
+                '<span style="color:var(--muted)">' || TO_CHAR(s.prior_plan_hash) || '</span>'
+            ELSE '&mdash;'
+        END;
+
         v_row := '<tr id="sqlmon-' || s.sql_id || '" data-sys="' || is_oracle_schema(s.last_username) || '"'
             || CASE WHEN s.rnk > v_top_n OR s.cur_val IS NULL THEN ' data-tail="Y" hidden' ELSE '' END
             || '>'
@@ -409,6 +489,7 @@ BEGIN
             || '" title="This SQL in the Top SQL pool">&#8599; Top SQL</a></td>'
             || '<td>' || DBMS_XMLGEN.CONVERT(NVL(s.last_username, '?'))
                 || ' / ' || DBMS_XMLGEN.CONVERT(NVL(s.last_module, '?')) || '</td>'
+            || '<td class="mono">' || v_plancell || '</td>'
             || '<td class="trend" data-spark="' || NVL(s.elapsed_spark_csv, '')
                 || '" data-spark-title="max elapsed (s), ' || s.sql_id || '"></td>'
             || '<td class="num" data-w="0"' || fmt_num_title(s.cur_val) || '><b>'
@@ -424,25 +505,29 @@ BEGIN
         -- markup, same pattern as sql/01_windows.sql's AWR-report listing).
         DBMS_OUTPUT.PUT_LINE('<tr class="sqlmon-detail" data-sys="' || is_oracle_schema(s.last_username) || '"'
             || CASE WHEN s.rnk > v_top_n OR s.cur_val IS NULL THEN ' data-tail="Y" hidden' ELSE '' END
-            || '><td colspan="9">');
+            || '><td colspan="10">');
         DBMS_OUTPUT.PUT_LINE('<details><summary>Per-window detail &amp; drill</summary>');
         v_header := '<table data-notools><thead><tr><th>Window</th><th class="num">n</th>'
             || '<th class="num">Max elapsed (s)</th><th class="num">Median elapsed (s)</th>'
             || '<th class="num" title="largest read + write bytes of one execution">Max I/O (bytes)</th>'
             || '<th class="num" title="parallel servers requested / allocated (max per execution)">DOP req/alloc</th>'
-            || '<th class="num" title="distinct plan_hash_values">Plans</th>'
+            || '<th title="distinct plan_hash_values in the window, most frequent first">Plan hash(es)</th>'
             || '<th class="num" title="executions that ended DONE (ERROR)">Errors</th></tr></thead><tbody>';
         DBMS_OUTPUT.PUT_LINE(v_header);
         FOR k IN 0 .. v_weeks_back LOOP
             DECLARE
-                v_slot  VARCHAR2(200) := nth_csv(s.detail_csv, k + 1);
-                v_n_s   VARCHAR2(40)  := REGEXP_SUBSTR(v_slot, '[^^]*', 1, 1);
-                v_med_s VARCHAR2(40)  := REGEXP_SUBSTR(v_slot, '[^^]*', 1, 2);
-                v_io_s  VARCHAR2(40)  := REGEXP_SUBSTR(v_slot, '[^^]*', 1, 3);
-                v_dr_s  VARCHAR2(40)  := REGEXP_SUBSTR(v_slot, '[^^]*', 1, 4);
-                v_da_s  VARCHAR2(40)  := REGEXP_SUBSTR(v_slot, '[^^]*', 1, 5);
-                v_pl_s  VARCHAR2(40)  := REGEXP_SUBSTR(v_slot, '[^^]*', 1, 6);
-                v_er_s  VARCHAR2(40)  := REGEXP_SUBSTR(v_slot, '[^^]*', 1, 7);
+                -- Token k of the '^'-joined slot: the pattern always consumes
+                -- the delimiter, so an empty field never yields a zero-length
+                -- match that would shift every later occurrence by one
+                -- (a bare '[^^]*' does exactly that).
+                v_slot  VARCHAR2(400) := nth_csv(s.detail_csv, k + 1);
+                v_n_s   VARCHAR2(40)  := RTRIM(REGEXP_SUBSTR(v_slot || '^', '[^^]*\^', 1, 1), '^');
+                v_med_s VARCHAR2(40)  := RTRIM(REGEXP_SUBSTR(v_slot || '^', '[^^]*\^', 1, 2), '^');
+                v_io_s  VARCHAR2(40)  := RTRIM(REGEXP_SUBSTR(v_slot || '^', '[^^]*\^', 1, 3), '^');
+                v_dr_s  VARCHAR2(40)  := RTRIM(REGEXP_SUBSTR(v_slot || '^', '[^^]*\^', 1, 4), '^');
+                v_da_s  VARCHAR2(40)  := RTRIM(REGEXP_SUBSTR(v_slot || '^', '[^^]*\^', 1, 5), '^');
+                v_pl_s  VARCHAR2(80)  := RTRIM(REGEXP_SUBSTR(v_slot || '^', '[^^]*\^', 1, 6), '^');
+                v_er_s  VARCHAR2(40)  := RTRIM(REGEXP_SUBSTR(v_slot || '^', '[^^]*\^', 1, 7), '^');
                 v_me_s  VARCHAR2(40)  := nth_csv(s.elapsed_asc_csv, k + 1);
                 v_label VARCHAR2(20)  := CASE WHEN k = 0 THEN 'Current'
                     ELSE '&minus;' || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) END;
@@ -464,7 +549,8 @@ BEGIN
                                              THEN ' <span class="badge warn">downgrade</span>' ELSE '' END
                            END
                         || '</td>'
-                    || '<td class="num">' || fmt_int(TO_NUMBER(NULLIF(v_pl_s, ''))) || '</td>'
+                    || '<td class="mono">' || CASE WHEN v_pl_s IS NULL OR v_pl_s = ''
+                            THEN '&mdash;' ELSE v_pl_s END || '</td>'
                     || '<td class="num">'
                         || CASE WHEN TO_NUMBER(NULLIF(v_er_s, '')) > 0
                                 THEN '<span class="badge crit">' || v_er_s || '</span>'
@@ -511,355 +597,6 @@ BEGIN
             END || ' captured in the compared span, but none met the inclusion floor '
             || '(elapsed &ge; 1&nbsp;s, an error, or more than one execution plan). '
             || 'The scatter below still plots every captured execution.</p>');
-    END IF;
-
-    ------------------------------------------------------------------
-    -- Phase 2 (opt-in, sqlmon_detail > 0): plan-line drift.
-    -- See design/SQLMON_DESIGN.md. At sqlmon_detail=0 this whole block is
-    -- skipped, so the report is byte-identical to phase-1-only output.
-    ------------------------------------------------------------------
-    IF ~sqlmon_detail > 0 THEN
-        DECLARE
-            v_n          NUMBER := ~sqlmon_detail;
-            v_cand_count NUMBER := 0;
-        BEGIN
-            DBMS_OUTPUT.PUT_LINE('<h3>Plan-line drift (top ' || v_n || ' regressed)</h3>');
-            DBMS_OUTPUT.PUT_LINE('<p style="font-size:11px;color:var(--muted);margin:-4px 0 8px 0">'
-                || 'For each candidate below: the Current window''s slowest execution '
-                || '(plan_hash &lt;&gt; 0) vs. the prior-window execution closest to the '
-                || 'prior median elapsed, diffed line-by-line from '
-                || '<code>DBA_HIST_REPORTS_DETAILS</code> (no activity-% in the stored '
-                || 'XML -- starts / actual rows / duration / memory only).</p>');
-
-            FOR d IN (
-                WITH
-                @@sql/lib/windows_cte.sql
-                ,
-                base_execs AS (
-                    SELECT r.report_id, r.dbid, r.key1 AS sql_id, r.instance_number,
-                           TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') AS exec_start,
-                           x.status, x.plan_hash, NVL(x.elapsed_us, 0) AS elapsed_us
-                    FROM   dba_hist_reports r,
-                           XMLTABLE('/report_repository_summary/sql'
-                               PASSING XMLTYPE(r.report_summary)
-                               COLUMNS
-                                   status     VARCHAR2(30) PATH 'status',
-                                   plan_hash  NUMBER       PATH 'plan_hash',
-                                   elapsed_us NUMBER       PATH 'stats[@type="monitor"]/stat[@name="elapsed_time"]'
-                           ) x
-                    WHERE  r.component_name = 'sqlmonitor'
-                      AND  r.dbid IN (~dbid_list)
-                      AND  (~inst_num = 0 OR r.instance_number = ~inst_num)
-                      AND  r.report_summary IS NOT NULL
-                      AND  r.key1 IS NOT NULL
-                      AND  r.period_start_time >= CAST(v_span_start AS TIMESTAMP) - INTERVAL '1' DAY
-                      AND  r.period_start_time <= CAST(v_span_end   AS TIMESTAMP) + INTERVAL '1' DAY
-                      AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') >= v_span_start
-                      AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') <  v_span_end
-                ),
-                with_offset AS (
-                    SELECT e.*, wr.week_offset
-                    FROM   base_execs e
-                    LEFT JOIN windows_rollup wr
-                        ON  wr.valid_flag = 'Y'
-                       AND  e.exec_start >= wr.win_start_ts
-                       AND  e.exec_start <  wr.win_end_ts
-                ),
-                sqlid_span_stats AS (
-                    SELECT sql_id,
-                           MAX(CASE WHEN elapsed_us >= 1000000 THEN 1 ELSE 0 END) AS has_long,
-                           MAX(CASE WHEN status = 'DONE (ERROR)' THEN 1 ELSE 0 END) AS has_error,
-                           COUNT(DISTINCT CASE WHEN plan_hash <> 0 THEN plan_hash END) AS distinct_plans
-                    FROM   with_offset
-                    GROUP BY sql_id
-                ),
-                included AS (
-                    SELECT sql_id FROM sqlid_span_stats
-                    WHERE  has_long = 1 OR has_error = 1 OR distinct_plans > 1
-                ),
-                cur_best AS (
-                    SELECT sql_id, report_id, dbid, elapsed_us, exec_start, plan_hash,
-                           ROW_NUMBER() OVER (PARTITION BY sql_id
-                               ORDER BY elapsed_us DESC NULLS LAST, report_id) AS rn
-                    FROM   with_offset
-                    WHERE  week_offset = 0 AND plan_hash <> 0
-                ),
-                prior_stats AS (
-                    SELECT sql_id, MEDIAN(elapsed_us) AS med_elapsed
-                    FROM   with_offset
-                    WHERE  week_offset > 0 AND plan_hash <> 0
-                    GROUP BY sql_id
-                ),
-                prior_best AS (
-                    SELECT w.sql_id, w.report_id, w.dbid, w.elapsed_us, w.exec_start, w.plan_hash,
-                           ROW_NUMBER() OVER (PARTITION BY w.sql_id
-                               ORDER BY ABS(w.elapsed_us - ps.med_elapsed) ASC, w.exec_start DESC) AS rn
-                    FROM   with_offset w
-                    JOIN   prior_stats ps ON ps.sql_id = w.sql_id
-                    WHERE  w.week_offset > 0 AND w.plan_hash <> 0
-                ),
-                per_window AS (
-                    SELECT sql_id, week_offset, MAX(elapsed_us) / 1e6 AS max_elapsed_s
-                    FROM   with_offset
-                    WHERE  week_offset IS NOT NULL
-                      AND  sql_id IN (SELECT sql_id FROM included)
-                    GROUP BY sql_id, week_offset
-                ),
-                pivoted AS (
-                    SELECT sql_id,
-                           MAX(CASE WHEN week_offset = 0 THEN max_elapsed_s END) AS cur_val,
-                           AVG(CASE WHEN week_offset > 0 THEN max_elapsed_s END) AS mu,
-                           STDDEV(CASE WHEN week_offset > 0 THEN max_elapsed_s END) AS sd,
-                           COUNT(CASE WHEN week_offset > 0 THEN max_elapsed_s END) AS n_prior
-                    FROM   per_window
-                    GROUP BY sql_id
-                )
-                SELECT i.sql_id,
-                       cb.report_id AS cur_report_id, cb.dbid AS cur_dbid,
-                       cb.elapsed_us AS cur_elapsed_us, cb.exec_start AS cur_exec_start,
-                       cb.plan_hash AS cur_plan_hash,
-                       pb.report_id AS base_report_id, pb.dbid AS base_dbid,
-                       pb.elapsed_us AS base_elapsed_us, pb.exec_start AS base_exec_start,
-                       pb.plan_hash AS base_plan_hash
-                FROM   included i
-                JOIN   cur_best   cb ON cb.sql_id = i.sql_id AND cb.rn = 1
-                JOIN   prior_best pb ON pb.sql_id = i.sql_id AND pb.rn = 1
-                LEFT JOIN pivoted p  ON p.sql_id  = i.sql_id
-                ORDER BY
-                    CASE WHEN p.n_prior >= 3 AND p.sd IS NOT NULL AND p.sd <> 0
-                              AND ABS((p.cur_val - p.mu) / p.sd) > 3 THEN 1
-                         WHEN p.n_prior >= 3 AND p.sd IS NOT NULL AND p.sd <> 0
-                              AND ABS((p.cur_val - p.mu) / p.sd) > 2 THEN 2
-                         ELSE 3 END,
-                    cb.elapsed_us DESC NULLS LAST
-                FETCH FIRST v_n ROWS ONLY
-            ) LOOP
-                v_cand_count := v_cand_count + 1;
-
-                DECLARE
-                    v_cur_clob      CLOB;
-                    v_base_clob     CLOB;
-                    v_cur_total_s   NUMBER := d.cur_elapsed_us / 1e6;
-                    v_base_total_s  NUMBER := d.base_elapsed_us / 1e6;
-                    v_plan_note     VARCHAR2(200) := '';
-
-                    TYPE t_row IS RECORD (
-                        line_id     NUMBER,
-                        op_txt      VARCHAR2(200),
-                        depth       NUMBER,
-                        obj_owner   VARCHAR2(128),
-                        obj_name    VARCHAR2(128),
-                        est_rows    NUMBER,
-                        base_starts NUMBER, cur_starts NUMBER,
-                        base_rows   NUMBER, cur_rows   NUMBER,
-                        base_dur    NUMBER, cur_dur    NUMBER,
-                        base_mem    NUMBER, cur_mem    NUMBER,
-                        base_share  NUMBER, cur_share  NUMBER,
-                        only_side   VARCHAR2(4)
-                    );
-                    TYPE t_rows IS TABLE OF t_row;
-                    v_rows        t_rows;
-                    v_best_idx    PLS_INTEGER;
-                    v_best_delta  NUMBER := 0;
-                    v_row_cls     VARCHAR2(20);   -- holds ' class="crit"' (13 chars); was 10 and raised ORA-06502 on dbmint
-                    v_indent      VARCHAR2(4000);
-                BEGIN
-                    BEGIN
-                        SELECT report INTO v_cur_clob FROM dba_hist_reports_details
-                        WHERE  report_id = d.cur_report_id AND dbid = d.cur_dbid;
-                        SELECT report INTO v_base_clob FROM dba_hist_reports_details
-                        WHERE  report_id = d.base_report_id AND dbid = d.base_dbid;
-                    EXCEPTION WHEN OTHERS THEN
-                        DBMS_OUTPUT.PUT_LINE('<p style="font-size:11px;color:var(--muted)">'
-                            || 'could not read SQL Monitor detail for ' || d.sql_id || ': '
-                            || DBMS_XMLGEN.CONVERT(SQLERRM) || '</p>');
-                        CONTINUE;
-                    END;
-
-                    IF d.cur_plan_hash <> d.base_plan_hash THEN
-                        v_plan_note := ' &mdash; <b>plan changed: ' || d.base_plan_hash
-                            || ' &rarr; ' || d.cur_plan_hash
-                            || '</b>; lines matched by id/operation/object, unmatched lines shown one-sided';
-                    END IF;
-
-                    DBMS_OUTPUT.PUT_LINE('<div class="sqlmon-drift">');
-                    DBMS_OUTPUT.PUT_LINE('<h4 class="mono">' || d.sql_id || '</h4>');
-                    DBMS_OUTPUT.PUT_LINE('<p style="font-size:11px;color:var(--muted);margin:-4px 0 8px 0">'
-                        || 'Current: report ' || d.cur_report_id || ', started '
-                        || TO_CHAR(d.cur_exec_start, 'YYYY-MM-DD HH24:MI:SS')
-                        || ', elapsed ' || fmt_num(v_cur_total_s) || ' s &nbsp;|&nbsp; Baseline: report '
-                        || d.base_report_id || ', started ' || TO_CHAR(d.base_exec_start, 'YYYY-MM-DD HH24:MI:SS')
-                        || ', elapsed ' || fmt_num(v_base_total_s) || ' s' || v_plan_note || '</p>');
-
-                    BEGIN
-                        SELECT line_id, op_txt, depth, obj_owner, obj_name, est_rows,
-                               base_starts, cur_starts, base_rows, cur_rows,
-                               base_dur, cur_dur, base_mem, cur_mem, base_share, cur_share, only_side
-                        BULK COLLECT INTO v_rows
-                        FROM (
-                            SELECT COALESCE(cl.line_id, bl.line_id) AS line_id,
-                                   NVL(cl.op, bl.op)
-                                       || CASE WHEN NVL(cl.options, bl.options) IS NOT NULL
-                                               THEN ' (' || NVL(cl.options, bl.options) || ')' END AS op_txt,
-                                   NVL(cl.depth, bl.depth) AS depth,
-                                   NVL(cl.obj_owner, bl.obj_owner) AS obj_owner,
-                                   NVL(cl.obj_name, bl.obj_name) AS obj_name,
-                                   NVL(cl.est_rows, bl.est_rows) AS est_rows,
-                                   bl.starts AS base_starts, cl.starts AS cur_starts,
-                                   bl.act_rows AS base_rows, cl.act_rows AS cur_rows,
-                                   bl.dur_s AS base_dur, cl.dur_s AS cur_dur,
-                                   bl.max_mem AS base_mem, cl.max_mem AS cur_mem,
-                                   CASE WHEN bl.line_id IS NOT NULL AND v_base_total_s > 0
-                                        THEN bl.dur_s / v_base_total_s * 100 END AS base_share,
-                                   CASE WHEN cl.line_id IS NOT NULL AND v_cur_total_s > 0
-                                        THEN cl.dur_s / v_cur_total_s * 100 END AS cur_share,
-                                   CASE WHEN cl.line_id IS NULL THEN 'BASE'
-                                        WHEN bl.line_id IS NULL THEN 'CUR' END AS only_side
-                            FROM (
-                                SELECT x.* FROM
-                                    XMLTABLE('/report/sql_monitor_report/plan_monitor/operation'
-                                        PASSING XMLTYPE(v_cur_clob)
-                                        COLUMNS
-                                            line_id   NUMBER       PATH '@id',
-                                            op        VARCHAR2(64) PATH '@name',
-                                            options   VARCHAR2(64) PATH '@options',
-                                            depth     NUMBER       PATH '@depth',
-                                            obj_owner VARCHAR2(128) PATH 'object/owner',
-                                            obj_name  VARCHAR2(128) PATH 'object/name',
-                                            est_rows  NUMBER       PATH 'optimizer/cardinality',
-                                            starts    NUMBER       PATH 'stats[@type="plan_monitor"]/stat[@name="starts"]',
-                                            act_rows  NUMBER       PATH 'stats[@type="plan_monitor"]/stat[@name="cardinality"]',
-                                            dur_s     NUMBER       PATH 'stats[@type="plan_monitor"]/stat[@name="duration"]',
-                                            max_mem   NUMBER       PATH 'stats[@type="plan_monitor"]/stat[@name="max_memory"]'
-                                    ) x
-                            ) cl
-                            FULL OUTER JOIN (
-                                SELECT x.* FROM
-                                    XMLTABLE('/report/sql_monitor_report/plan_monitor/operation'
-                                        PASSING XMLTYPE(v_base_clob)
-                                        COLUMNS
-                                            line_id   NUMBER       PATH '@id',
-                                            op        VARCHAR2(64) PATH '@name',
-                                            options   VARCHAR2(64) PATH '@options',
-                                            depth     NUMBER       PATH '@depth',
-                                            obj_owner VARCHAR2(128) PATH 'object/owner',
-                                            obj_name  VARCHAR2(128) PATH 'object/name',
-                                            est_rows  NUMBER       PATH 'optimizer/cardinality',
-                                            starts    NUMBER       PATH 'stats[@type="plan_monitor"]/stat[@name="starts"]',
-                                            act_rows  NUMBER       PATH 'stats[@type="plan_monitor"]/stat[@name="cardinality"]',
-                                            dur_s     NUMBER       PATH 'stats[@type="plan_monitor"]/stat[@name="duration"]',
-                                            max_mem   NUMBER       PATH 'stats[@type="plan_monitor"]/stat[@name="max_memory"]'
-                                    ) x
-                            ) bl
-                            ON  cl.line_id = bl.line_id
-                            AND NVL(cl.op, '-') = NVL(bl.op, '-')
-                            AND NVL(cl.obj_owner, '') || '.' || NVL(cl.obj_name, '')
-                                = NVL(bl.obj_owner, '') || '.' || NVL(bl.obj_name, '')
-                        )
-                        ORDER BY line_id;
-                    EXCEPTION WHEN OTHERS THEN
-                        DBMS_OUTPUT.PUT_LINE('<p style="font-size:11px;color:var(--muted)">'
-                            || 'could not parse plan lines for ' || d.sql_id || ' (report '
-                            || d.cur_report_id || '/' || d.base_report_id || '): '
-                            || DBMS_XMLGEN.CONVERT(SQLERRM) || '</p></div>');
-                        CONTINUE;
-                    END;
-
-                    -- "What moved": the line whose duration share increased the most
-                    -- (Current vs baseline), skipped when nothing moved >= 5 points.
-                    IF v_rows IS NOT NULL THEN
-                        FOR i IN 1 .. v_rows.COUNT LOOP
-                            IF v_rows(i).cur_share IS NOT NULL AND v_rows(i).base_share IS NOT NULL
-                               AND v_rows(i).cur_share - v_rows(i).base_share > v_best_delta THEN
-                                v_best_delta := v_rows(i).cur_share - v_rows(i).base_share;
-                                v_best_idx   := i;
-                            END IF;
-                        END LOOP;
-                    END IF;
-                    IF v_best_idx IS NOT NULL AND v_best_delta >= 5 THEN
-                        DBMS_OUTPUT.PUT_LINE('<p style="font-weight:600;margin:0 0 8px">line ' || v_rows(v_best_idx).line_id
-                            || ' ' || DBMS_XMLGEN.CONVERT(v_rows(v_best_idx).op_txt) || ': '
-                            || fmt_num(v_rows(v_best_idx).base_share) || '% &rarr; '
-                            || fmt_num(v_rows(v_best_idx).cur_share)
-                            || '% of execution time; actual rows '
-                            || fmt_num(v_rows(v_best_idx).base_rows) || ' &rarr; '
-                            || fmt_num(v_rows(v_best_idx).cur_rows) || '</p>');
-                    END IF;
-
-                    DBMS_OUTPUT.PUT_LINE('<table class="sqlmon-drift-tbl" data-notools><thead><tr>'
-                        || '<th title="plan line id">Line</th><th>Operation</th><th>Object</th><th class="num">Est rows</th>'
-                        || '<th class="num">Starts (base&rarr;cur)</th>'
-                        || '<th class="num">Actual rows (base&rarr;cur)</th>'
-                        || '<th class="num">Duration s (base&rarr;cur, % share)</th>'
-                        || '<th class="num">Max mem</th></tr></thead><tbody>');
-
-                    IF v_rows IS NOT NULL THEN
-                        FOR i IN 1 .. v_rows.COUNT LOOP
-                            v_row_cls := '';
-                            IF v_rows(i).only_side IS NOT NULL THEN
-                                v_row_cls := ' class="crit"';
-                            ELSIF (ABS(NVL(v_rows(i).cur_share, 0) - NVL(v_rows(i).base_share, 0)) >= 10)
-                               OR (NVL(v_rows(i).base_rows, 0) > 0 AND NVL(v_rows(i).cur_rows, 0) > 0
-                                   AND (v_rows(i).cur_rows / v_rows(i).base_rows >= 10
-                                        OR v_rows(i).base_rows / v_rows(i).cur_rows >= 10))
-                               OR (NVL(v_rows(i).base_rows, 0) = 0 AND NVL(v_rows(i).cur_rows, 0) > 0)
-                               OR (NVL(v_rows(i).cur_rows, 0) = 0 AND NVL(v_rows(i).base_rows, 0) > 0) THEN
-                                v_row_cls := ' class="warn"';
-                            END IF;
-
-                            v_indent := '';
-                            FOR k IN 1 .. LEAST(NVL(v_rows(i).depth, 0), 100) LOOP
-                                v_indent := v_indent || '&nbsp;&nbsp;';
-                            END LOOP;
-
-                            DBMS_OUTPUT.PUT_LINE('<tr' || v_row_cls || '>'
-                                || '<td class="num">' || v_rows(i).line_id
-                                || CASE WHEN v_rows(i).only_side IS NOT NULL
-                                        THEN ' <span class="badge crit" title="line present only in the '
-                                             || CASE WHEN v_rows(i).only_side = 'CUR' THEN 'Current'
-                                                     ELSE 'baseline' END || ' plan">'
-                                             || v_rows(i).only_side || ' only</span>' END
-                                || '</td>'
-                                || '<td>' || v_indent || DBMS_XMLGEN.CONVERT(NVL(v_rows(i).op_txt, '?')) || '</td>'
-                                || '<td>' || CASE WHEN v_rows(i).obj_name IS NOT NULL
-                                       THEN DBMS_XMLGEN.CONVERT(
-                                            NVL(v_rows(i).obj_owner, '') || '.' || v_rows(i).obj_name)
-                                       ELSE '&mdash;' END || '</td>'
-                                || '<td class="num">' || fmt_int(v_rows(i).est_rows) || '</td>'
-                                || '<td class="num">' || fmt_int(v_rows(i).base_starts) || ' &rarr; '
-                                    || fmt_int(v_rows(i).cur_starts) || '</td>'
-                                || '<td class="num">' || fmt_int(v_rows(i).base_rows) || ' &rarr; '
-                                    || fmt_int(v_rows(i).cur_rows) || '</td>'
-                                || '<td class="num">' || fmt_num(v_rows(i).base_dur) || ' &rarr; '
-                                    || fmt_num(v_rows(i).cur_dur)
-                                    || ' (' || fmt_num(v_rows(i).base_share) || '%&rarr;'
-                                    || fmt_num(v_rows(i).cur_share) || '%)</td>'
-                                || '<td class="num">' || fmt_num(v_rows(i).base_mem) || ' &rarr; '
-                                    || fmt_num(v_rows(i).cur_mem) || '</td>'
-                                || '</tr>');
-                        END LOOP;
-                    END IF;
-                    DBMS_OUTPUT.PUT_LINE('</tbody></table>');
-
-                    DBMS_OUTPUT.PUT_LINE('<div class="codewrap" style="position:relative">');
-                    DBMS_OUTPUT.PUT_LINE('<button type="button" class="copy-btn" '
-                        || 'data-copy="#sqlmon-drift-drill-' || d.sql_id || '">Copy</button>');
-                    DBMS_OUTPUT.PUT_LINE('<pre id="sqlmon-drift-drill-' || d.sql_id || '" class="sql">'
-                        || DBMS_XMLGEN.CONVERT('SELECT DBMS_AUTO_REPORT.REPORT_REPOSITORY_DETAIL(rid=>'
-                           || TO_CHAR(d.base_report_id) || ', type=>''ACTIVE'') FROM dual;'
-                           || CHR(10) || 'SELECT DBMS_AUTO_REPORT.REPORT_REPOSITORY_DETAIL(rid=>'
-                           || TO_CHAR(d.cur_report_id) || ', type=>''ACTIVE'') FROM dual;')
-                        || '</pre></div>');
-
-                    DBMS_OUTPUT.PUT_LINE('</div>');
-                END;
-            END LOOP;
-
-            IF v_cand_count = 0 THEN
-                DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-                    || 'no statement with a Current and a baseline monitored execution qualifies.</p>');
-            END IF;
-        END;
     END IF;
 
     ------------------------------------------------------------------

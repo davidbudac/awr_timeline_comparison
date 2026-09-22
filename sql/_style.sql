@@ -462,7 +462,7 @@ BEGIN
         || ' background:var(--panel); border:1px solid var(--hairline);'
         || ' border-radius:10px; padding:6px 24px 20px;'
         || ' margin:18px 0 0; scroll-margin-top:calc(var(--navh, 0px) + 18px); }');
-    DBMS_OUTPUT.PUT_LINE('section tr[id], section [id].ash-sql-card, section h3[id], section div[id].sqlmon-drift {'
+    DBMS_OUTPUT.PUT_LINE('section tr[id], section [id].ash-sql-card, section h3[id] {'
         || ' scroll-margin-top:calc(var(--navh, 0px) + var(--h2h, 48px) + 44px); }');
     DBMS_OUTPUT.PUT_LINE('h1 { font-size:24px; margin:0; }');
 
@@ -1008,11 +1008,6 @@ BEGIN
     -- every section table with a thead; .permalink is the hover-only "#"
     -- anchor appended to each section heading.
     DBMS_OUTPUT.PUT_LINE('pre.sql, pre.copyable, .codewrap { position:relative; }');
-    -- sql/18_sqlmon.sql phase 2 (sqlmon_detail>0): one block per plan-line
-    -- drift candidate, visually separated from the next.
-    DBMS_OUTPUT.PUT_LINE('.sqlmon-drift {'
-        || ' margin:0 0 20px; padding-top:14px; border-top:1px solid var(--hairline); }');
-    DBMS_OUTPUT.PUT_LINE('.sqlmon-drift h4 { margin:0 0 4px; font-size:13px; }');
     -- Inline by default (table cells, headings); absolutely positioned and
     -- hover-revealed only inside a positioned pre / .codewrap block.
     DBMS_OUTPUT.PUT_LINE('.copy-btn {'
