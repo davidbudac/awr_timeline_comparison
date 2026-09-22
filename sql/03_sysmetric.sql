@@ -20,9 +20,11 @@ DECLARE
     v_val_s       VARCHAR2(64);
     v_row_max     NUMBER;
     v_pct         NUMBER;
+    v_rows        PLS_INTEGER := 0;
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/is_essential.plsql
+    @@sql/lib/anchor_id.plsql
     @@sql/lib/dev_bucket.plsql
     @@sql/lib/fmt_num.plsql
 BEGIN
@@ -34,6 +36,7 @@ BEGIN
         || '<b>Trend</b>: per-window values, oldest &rarr; current. '
         || 'Units per metric name (<code>*_Per_Sec</code> etc.).</p>');
 
+    v_rows := 0;
     v_header := '<thead><tr><th>Metric</th><th>Unit</th><th class="trend">Trend</th><th class="num" data-w="0">Current</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
@@ -126,6 +129,7 @@ BEGIN
             ELSE 99 END,
             metric_name
     ) LOOP
+        v_rows := v_rows + 1;
         v_row_max := NVL(m.row_max, 0);
 
         IF v_row_max > 0 AND m.cur_val IS NOT NULL THEN
@@ -134,7 +138,8 @@ BEGIN
             v_pct := 0;
         END IF;
 
-        v_row := '<tr data-imp="' || is_essential('METRIC', m.metric_name)
+        v_row := '<tr id="' || anchor_id('metric', m.metric_name)
+              || '" data-imp="' || is_essential('METRIC', m.metric_name)
               || '"><td>' || DBMS_XMLGEN.CONVERT(m.metric_name) || '</td>'
               || '<td>' || DBMS_XMLGEN.CONVERT(NVL(m.metric_unit, '')) || '</td>'
               || '<td class="trend" data-spark="' || NVL(m.spark_vals, '')
@@ -159,6 +164,11 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE(v_row);
     END LOOP;
 
+    IF v_rows = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('<tr class="skip"><td colspan="' || (v_weeks_back + 4) || '">'
+            || 'No system metrics in DBA_HIST_SYSMETRIC_SUMMARY for the compared windows.'
+            || ' Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</td></tr>');
+    END IF;
     DBMS_OUTPUT.PUT_LINE('</tbody></table></section>');
 END;
 /

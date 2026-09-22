@@ -43,7 +43,7 @@ DECLARE
     -- Oracle-maintained ("system") flag per sql_id, populated in the detail
     -- loop from each SQL's parsing schema and reused when emitting the
     -- per-SQL detail <details> blocks below. Drives the data-sys="Y|N"
-    -- markers the report's "Application only" toggle hides on.
+    -- markers (informational since v1.5.0; the "Application only" filter is gone).
     v_sys_sqls  t_sqlid_tab;
     v_is_sys    VARCHAR2(1);
 
@@ -93,14 +93,14 @@ DECLARE
     @@sql/lib/is_oracle_schema.plsql
     @@sql/lib/fmt_num.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="topsql" data-triage="Y"><h2>Top SQL (top ' || v_top_n
+    DBMS_OUTPUT.PUT_LINE('<section id="topsql" data-normal="Y"><h2>Top SQL (top ' || v_top_n
         || ' per dimension, per window)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'Top-' || v_top_n || ' SQLs per dimension per window from '
         || 'DBA_HIST_SQLSTAT <code>*_DELTA</code>. '
         || 'Bump chart per dimension: each line = one SQL across windows, '
         || 'oldest &rarr; current. Use the <b>Break down by</b> toggle to '
-        || 're-aggregate the same metric by <b>SQL_ID</b>, parsing '
+        || 're-aggregate the same metric by <b>SQL ID</b>, parsing '
         || '<b>schema</b>, <b>module</b>, or <b>action</b> instead. '
         || 'Detail tables collapsed; click to expand.</p>');
 
@@ -108,13 +108,13 @@ BEGIN
     -- wrapped in a matching .tabpanel as its <h3> is emitted). Dim codes
     -- and order are hardcoded here to match the `dims` CTE inside the
     -- cursor below -- they are static, not derived per-DB.
-    DBMS_OUTPUT.PUT_LINE('<div class="tabs hidetri" data-tabs="topsql">'
-        || '<span class="on" data-t="ELAPSED">Elapsed time</span>'
-        || '<span data-t="CPU">CPU time</span>'
-        || '<span data-t="GETS">Buffer gets</span>'
-        || '<span data-t="PREADS">Physical reads</span>'
-        || '<span data-t="EXEC">Executions</span>'
-        || '<span data-t="PEREXEC">Per-exec regression</span>'
+    DBMS_OUTPUT.PUT_LINE('<div class="tabs" data-tabs="topsql" role="tablist" aria-label="Top SQL ranking dimension">'
+        || '<button type="button" role="tab" aria-selected="true" class="on" data-t="ELAPSED" id="tab-topsql-ELAPSED">Elapsed time</button>'
+        || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="CPU" id="tab-topsql-CPU">CPU time</button>'
+        || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="GETS" id="tab-topsql-GETS">Buffer gets</button>'
+        || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="PREADS" id="tab-topsql-PREADS">Physical reads</button>'
+        || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="EXEC" id="tab-topsql-EXEC">Executions</button>'
+        || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="PEREXEC" id="tab-topsql-PEREXEC">Per-exec regression</button>'
         || '</div>');
 
     SELECT '['
@@ -351,13 +351,14 @@ BEGIN
             v_dim_sqls_total(s.dim)    := 0;
 
             -- C1: open this dim's tabpanel (first one starts visible).
-            DBMS_OUTPUT.PUT_LINE('<div class="tabpanel hidetri'
+            DBMS_OUTPUT.PUT_LINE('<div class="tabpanel'
                 || CASE WHEN s.dim = 'ELAPSED' THEN ' on' ELSE '' END
-                || '" data-tabs="topsql" data-t="' || s.dim || '">');
+                || '" data-tabs="topsql" data-t="' || s.dim || '" role="tabpanel"'
+                || ' aria-labelledby="tab-topsql-' || s.dim || '">');
             DBMS_OUTPUT.PUT_LINE('<h3>' || s.dim_label || '</h3>');
             DBMS_OUTPUT.PUT_LINE('<div class="topsql-toggle" data-topsql-target="' || s.dim || '">'
                 || '<span>Break down by:</span>'
-                || '<button type="button" data-mode="sqls" class="active">SQL_ID</button>'
+                || '<button type="button" data-mode="sqls" class="active">SQL ID</button>'
                 || '<button type="button" data-mode="schemas">Schema</button>'
                 || '<button type="button" data-mode="modules">Module</button>'
                 || '<button type="button" data-mode="actions">Action</button>'
@@ -368,7 +369,7 @@ BEGIN
             DBMS_OUTPUT.PUT_LINE('<details>');
             DBMS_OUTPUT.PUT_LINE('<summary>Detail table</summary>');
 
-            v_header := '<thead><tr><th>SQL_ID</th><th class="num">PHV (cur)</th>'
+            v_header := '<thead><tr><th>SQL ID</th><th class="num" title="plan_hash_value of the Current window&#39;s execution plan">Plan hash (Current)</th>'
                 || '<th class="num" data-w="0">Current (' || s.dim_unit || ')</th>';
             FOR k IN 1 .. v_weeks_back LOOP
                 v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
@@ -668,8 +669,8 @@ BEGIN
                    '\', '\\'), '"', '\"'), CHR(13), ' '), CHR(10), ' ')
             || '","cur":' || NVL(TO_CHAR(sc.cur_rnk), 'null')
             -- Tag system-ness only for the schema breakdown (module/action are
-            -- app-set free text, not schema-derived). Lets the app-only filter
-            -- drop Oracle-maintained schemas from the chart's "Schema" view too.
+            -- app-set free text, not schema-derived). Informational since
+            -- v1.5.0 (the "Application only" filter is gone).
             || ',"sys":' || CASE WHEN sc.grp_type = 'schema'
                                   AND is_oracle_schema(sc.grp_value) = 'Y'
                                  THEN 'true' ELSE 'false' END
@@ -794,16 +795,13 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('  var mark=window.AWR_markLine&&window.AWR_markLine(weeks,AWR_DATA.topSql.weeksIso);');
         DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el);');
         DBMS_OUTPUT.PUT_LINE('  function rowName(s){ return s.name || s.sql_id || "?"; }');
-        -- currentMode persists across renders so the awr:appfilter listener
-        -- can re-render the same breakdown with the Oracle-internal (sys)
-        -- series dropped when "Application only" is toggled on.
+        -- currentMode persists across renders (window highlight re-renders).
         DBMS_OUTPUT.PUT_LINE('  var currentMode="sqls";');
         -- X2: window-axis highlight state. hiSlot: 0=current, 1=first prior...
         DBMS_OUTPUT.PUT_LINE('  var hiSlot=null;');
         DBMS_OUTPUT.PUT_LINE('  function render(mode){');
         DBMS_OUTPUT.PUT_LINE('    if(mode) currentMode=mode;');
         DBMS_OUTPUT.PUT_LINE('    var rows=(d[currentMode]||d.sqls)||[];');
-        DBMS_OUTPUT.PUT_LINE('    if(document.body.classList.contains("app-only")) rows=rows.filter(function(s){return !s.sys;});');
         -- B2: only end-label the 3 series with the largest current-window
         -- value; the rest get a dimmed line and no label so the labelled
         -- ones read first. labelLayout shifts any remaining collisions.
@@ -813,14 +811,13 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('      labelLayout:{moveOverlap:"shiftY"},');
         DBMS_OUTPUT.PUT_LINE('      tooltip:{trigger:"axis",axisPointer:{type:"line"},formatter:function(ps){var hdr="<b>"+ps[0].axisValue+"</b>";var rs=ps.filter(function(p){return p.value!=null;}).sort(function(a,b){return (b.value||0)-(a.value||0);}).map(function(p){return p.marker+" "+p.seriesName+": <b>"+fmt(p.value)+" "+d.unit+"</b>";}).join("<br/>");return hdr+"<br/>"+rs;}},');
         DBMS_OUTPUT.PUT_LINE('      legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},');
-        DBMS_OUTPUT.PUT_LINE('      grid:{left:50,right:90,top:10,bottom:44,containLabel:true},');
+        DBMS_OUTPUT.PUT_LINE('      grid:{left:50,right:128,top:10,bottom:44,containLabel:true},');
         DBMS_OUTPUT.PUT_LINE('      xAxis:{type:"category",data:weeks,axisLabel:{color:fg,fontWeight:600},splitLine:{show:true,lineStyle:{color:gr}}},');
         DBMS_OUTPUT.PUT_LINE('      yAxis:{type:"value",name:d.unit,nameTextStyle:{color:mu,fontSize:10},axisLabel:{color:mu,formatter:function(v){return (+v).toLocaleString(undefined,{maximumFractionDigits:2});}},splitLine:{lineStyle:{color:gr}}},');
-        DBMS_OUTPUT.PUT_LINE('      series:rows.map(function(s,i){var isTop=top3.indexOf(i)>=0;var o={name:rowName(s),type:"line",connectNulls:false,showSymbol:true,symbolSize:6,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:isTop?2:1.25,opacity:isTop?1:.45},emphasis:{focus:"series",lineStyle:{width:3,opacity:1}},endLabel:isTop?{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6,labelLine:{show:true,length2:4}}:{show:false},data:s.vals};if(i===0&&mark)o.markLine=mark;if(i===0&&hiSlot!=null){var idx=weeks.length-1-hiSlot;if(idx>=0&&idx<weeks.length)o.markArea={silent:true,itemStyle:{color:"rgba(37,99,235,0.14)"},data:[[{xAxis:idx},{xAxis:idx}]]};}return o;})');
+        DBMS_OUTPUT.PUT_LINE('      series:rows.map(function(s,i){var isTop=top3.indexOf(i)>=0;var o={name:rowName(s),type:"line",connectNulls:false,showSymbol:true,symbolSize:6,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:isTop?2:1.25,opacity:isTop?1:.45},emphasis:{focus:"series",lineStyle:{width:3,opacity:1}},endLabel:isTop?{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6,width:112,overflow:"truncate",labelLine:{show:true,length2:4}}:{show:false},data:s.vals};if(i===0&&mark)o.markLine=mark;if(i===0&&hiSlot!=null){var idx=weeks.length-1-hiSlot;if(idx>=0&&idx<weeks.length)o.markArea={silent:true,itemStyle:{color:"rgba(37,99,235,0.14)"},data:[[{xAxis:idx},{xAxis:idx}]]};}return o;})');
         DBMS_OUTPUT.PUT_LINE('    }, true);');
         DBMS_OUTPUT.PUT_LINE('  }');
         DBMS_OUTPUT.PUT_LINE('  render("sqls");');
-        DBMS_OUTPUT.PUT_LINE('  document.addEventListener("awr:appfilter",function(){render();});');
         -- X2: highlight the compared-window column for slot w; null clears.
         DBMS_OUTPUT.PUT_LINE('  document.addEventListener("awr:window",function(e){hiSlot=e.detail?e.detail.w:null;render();});');
         DBMS_OUTPUT.PUT_LINE('  var toggle=document.querySelector(''[data-topsql-target="''+dim+''"]'');');
@@ -865,7 +862,7 @@ BEGIN
                 || v_flip_sqls.COUNT || ' of ' || v_seen_sqls.COUNT
                 || ' top SQL had a plan_hash_value change between current and a prior '
                 || 'compared window. Look for the <span class="badge warn">plan&#8593;</span> '
-                || 'badges in the SQL_ID column and the per-week cells above.</p>');
+                || 'badges in the SQL ID column and the per-window cells above.</p>');
         ELSE
             DBMS_OUTPUT.PUT_LINE('<p style="margin-top:18px">'
                 || '<span class="badge ok">plan stable</span> '
@@ -882,9 +879,10 @@ BEGIN
     -- text -- previously one <details> block per SQL. Ordered by
     -- current-window elapsed time desc; rows beyond the first 8 are
     -- tagged data-tail="Y" and collapsed behind an expander.
-    DBMS_OUTPUT.PUT_LINE('<h3 class="hidetri">Per-SQL detail</h3>');
-    DBMS_OUTPUT.PUT_LINE('<p class="hidetri" style="font-size:12px;color:var(--muted)">'
-        || 'Every SQL_ID listed above: click a row for full text, AWR '
+    -- full-only: the per-SQL pool shows in the Full view only.
+    DBMS_OUTPUT.PUT_LINE('<h3 class="full-only">Per-SQL detail</h3>');
+    DBMS_OUTPUT.PUT_LINE('<p class="full-only" style="font-size:12px;color:var(--muted)">'
+        || 'Every SQL ID listed above: click a row for full text, AWR '
         || 'retention range, plan_hash_value summary, and avg sec/exec '
         || 'colored by PHV across every snapshot the SQL appeared in. '
         || 'PHV color change = plan switch. <b>Ranked in</b> chips: '
@@ -895,10 +893,10 @@ BEGIN
     -- single ECharts init pass at the end of the section.
     DBMS_OUTPUT.PUT_LINE('<script>AWR_DATA.sqlDetails = AWR_DATA.sqlDetails || {};</script>');
 
-    DBMS_OUTPUT.PUT_LINE('<table id="sql-pool"><thead><tr>'
-        || '<th>SQL_ID</th><th>Ranked in</th><th>Schema</th>'
-        || '<th class="num">Plans</th><th class="num">Execs</th>'
-        || '<th class="num">Snaps</th><th>First seen</th><th>Text</th>'
+    DBMS_OUTPUT.PUT_LINE('<table id="sql-pool" class="full-only"><thead><tr>'
+        || '<th>SQL ID</th><th>Ranked in</th><th>Schema</th>'
+        || '<th class="num" title="distinct plan_hash_values seen across the span">Plans</th><th class="num">Executions</th>'
+        || '<th class="num" title="AWR snapshots in which the SQL appeared">Snapshots</th><th>First seen</th><th>Text</th>'
         || '</tr></thead><tbody>');
 
     DECLARE
@@ -1041,10 +1039,18 @@ BEGIN
                         THEN 'Y' ELSE 'N' END || '"'
                 || CASE WHEN v_idx > 8 THEN ' data-tail="Y" hidden' ELSE '' END
                 || '>');
+            -- Phase 3 cross-links: the chrome JS hides an .xlink whose
+            -- target id does not exist (no ASH card / no SQL Monitor row).
             DBMS_OUTPUT.PUT_LINE('<td class="mono sqlid-cell">'
                 || '<span id="sqlid-' || v_sql_id || '">' || v_sql_id || '</span> '
                 || '<button type="button" class="copy-btn" '
                 || 'data-copy="#sqlid-' || v_sql_id || '">&#10687;</button>'
+                || '<span class="xlinks">'
+                || '<a class="xlink" href="#ash-card-' || v_sql_id
+                || '" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a>'
+                || '<a class="xlink" href="#sqlmon-' || v_sql_id
+                || '" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a>'
+                || '</span>'
                 || '</td>');
             -- Ranked-in chips: E/C/G/R/X, solid ("on") when the SQL is in
             -- that dimension's current-window top-3, plain when it merely
@@ -1146,9 +1152,9 @@ BEGIN
             -- table and the chart div would remain an empty box.
             IF NVL(v_phv_count, 0) > 0 THEN
                 DBMS_OUTPUT.PUT_LINE('<table id="phv-summary-' || v_sql_id || '"><thead><tr>'
-                    || '<th class="num">PHV</th>'
+                    || '<th class="num" title="plan_hash_value">Plan hash</th>'
                     || '<th>First seen</th><th>Last seen</th>'
-                    || '<th class="num">Snaps</th>'
+                    || '<th class="num">Snapshots</th>'
                     || '<th class="num">Executions</th>'
                     || '<th class="num">Avg s/exec</th>'
                     || '<th class="num">Avg gets/exec</th>'
@@ -1253,7 +1259,7 @@ BEGIN
     -- desc); a generic .expander[data-for] handler (chrome-owned) reveals
     -- every [data-tail="Y"] row in the target table's <tbody>.
     IF v_seen_sqls.COUNT > 8 THEN
-        DBMS_OUTPUT.PUT_LINE('<span class="expander" data-for="sql-pool" data-n="'
+        DBMS_OUTPUT.PUT_LINE('<span class="expander full-only" data-for="sql-pool" data-n="'
             || (v_seen_sqls.COUNT - 8) || '" data-noun="more statements">'
             || '&#9656; Show ' || (v_seen_sqls.COUNT - 8) || ' more statements</span>');
     END IF;
@@ -1346,7 +1352,7 @@ BEGIN
     -- every hashchange (i.e. every click of an in-page SQL_ID link).
     DBMS_OUTPUT.PUT_LINE('<script>(function(){');
     DBMS_OUTPUT.PUT_LINE('function openHash(){');
-    DBMS_OUTPUT.PUT_LINE('  var h=window.location.hash;');
+    DBMS_OUTPUT.PUT_LINE('  var h=(window.location.hash||"").split("!")[0];');
     DBMS_OUTPUT.PUT_LINE('  if(!h || h.length<2) return;');
     DBMS_OUTPUT.PUT_LINE('  var el; try{ el=document.querySelector(h); } catch(e){ return; }');
     DBMS_OUTPUT.PUT_LINE('  if(!el) return;');

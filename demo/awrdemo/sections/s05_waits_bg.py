@@ -48,8 +48,11 @@ def emit(w) -> str:
     L.extend(C.chart_script("waitsBg", "waits-bg-stack", C.weeks_json(w), cj))
 
     rows = C.event_rows(w, deltas)
-    L.extend(C.table_time(w, rows, "waits-bg-time", "Events &mdash; time waited (s)"))
-    avg = C.table_avg(w, rows, "waits-bg-avg", "Events &mdash; avg time per wait (ms)")
+    tot = C.current_total_us(deltas)
+    shift, n_flag, mean_pct, sd_pct = C.shift_pass(rows, tot)
+    L.extend(C.table_time(w, rows, "waits-bg-time", "Events &mdash; time waited (s)",
+                          tot, shift, C.shift_note(rows, shift, n_flag, mean_pct, sd_pct), "bg"))
+    avg = C.table_avg(w, rows, "waits-bg-avg", "Events &mdash; avg time per wait (ms)", "bgms")
     avg[-1] = "</tbody></table></section>"
     L.extend(avg)
     L.append("<!-- AWR-SECTION: " + TAG + " END -->")

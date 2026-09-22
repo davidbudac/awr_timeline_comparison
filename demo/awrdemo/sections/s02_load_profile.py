@@ -2,7 +2,7 @@
 over the comprehensive template's sysstat_load_targets.sql."""
 from __future__ import annotations
 
-from awrdemo.helpers import esc, is_essential
+from awrdemo.helpers import esc, is_essential, anchor_id
 from awrdemo.sections._pivot import header, spark_vals, value_cells
 
 # sql/lib/templates/comprehensive/sysstat_load_targets.sql (27 stats)
@@ -41,18 +41,17 @@ def emit(w) -> str:
                'DBA_HIST_SYSSTAT (end &minus; begin) &divide; window seconds. '
                '<b>Trend</b>: per-window values, oldest &rarr; current. '
                '<b>Current</b> cell bar = value &divide; row max.</p>')
-    out.append('<table id="load-profile">' + header(w, False) + '<tbody>')
+    out.append('<table id="load-profile">' + header(w, True) + '<tbody>')
 
     for stat in sorted(TARGETS, key=lambda s: (_ORDER.get(s, 99), s)):
         vals = w.window_series(lambda m, s=stat: (m.load.get(s, 0.0) / m.dur_sec)
                                if m.dur_sec > 0 else None)
-        if stat in _BYTES:
-            label = stat + ' (bytes/s)'
-        elif stat in _CS:
-            label = stat + ' (cs/s, 1/100s)'
-        else:
-            label = stat + ' (/s)'
-        row = ('<tr data-imp="' + is_essential('LOAD', stat) + '"><td>' + esc(label) + '</td>'
+        label = stat
+        unit = 'bytes/s' if stat in _BYTES else ('cs/s' if stat in _CS else '/s')
+        row = ('<tr id="' + anchor_id('load', stat) + '" data-imp="' + is_essential('LOAD', stat)
+               + '"><td>' + esc(label) + '</td>'
+               + '<td' + (' title="centiseconds per second (1/100 s of DB time per elapsed second)"'
+                          if unit == 'cs/s' else '') + '>' + unit + '</td>'
                + '<td class="trend" data-spark="' + spark_vals(vals)
                + '" data-spark-title="' + esc(label) + '"></td>'
                + value_cells(vals) + '</tr>')

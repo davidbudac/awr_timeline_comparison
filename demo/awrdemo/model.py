@@ -57,7 +57,7 @@ HOST_NAME = "prd-ora-01.corp.example"
 DB_VERSION = "19.0.0.0.0"
 DBID = 1483726519
 CALLER_USER = "AWR_READER"
-AWR_VERSION = "1.4.0"
+AWR_VERSION = "1.5.0"
 
 TARGET_END = datetime(2026, 9, 10, 10, 0)      # Thursday
 WIN_HOURS = 1

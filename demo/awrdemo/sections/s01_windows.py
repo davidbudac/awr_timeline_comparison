@@ -35,7 +35,7 @@ def emit(w) -> str:
             status = 'skipped'
             if win.skip_reason:
                 status += ' &middot; ' + esc(win.skip_reason[:40])
-        out.append('<g>')
+        out.append('<g><title>' + ts_min(win.win_end_ts) + ' &middot; ' + status + '</title>')
         if win.valid_flag == 'Y':
             out.append('<rect x="' + to_char_fixed(x, 1) + '" y="' + str(box_y)
                        + '" width="' + to_char_fixed(box_w, 1) + '" height="' + str(box_h)
@@ -51,14 +51,15 @@ def emit(w) -> str:
         if is_cur:
             out.append('<text x="' + cx + '" y="35" text-anchor="middle" font-size="11" '
                        'font-weight="600" fill="#ffffff">current</text>')
-        out.append('<text x="' + cx + '" y="68" text-anchor="middle" font-size="10" '
-                   'fill="var(--muted)">' + status + '</text>')
+        if win.valid_flag != 'Y':
+            out.append('<text x="' + cx + '" y="68" text-anchor="middle" font-size="10" '
+                       'fill="var(--muted)">skipped</text>')
         out.append('</g>')
 
     out.append('</svg></div>')
 
     out.append('<table id="windows-table">')
-    out.append('<thead><tr><th>' + w.period_unit_title + '</th>'
+    out.append('<thead><tr><th>Window</th>'
                '<th>Window start</th><th>Window end</th>'
                '<th class="num">Begin snap</th><th class="num">End snap</th>'
                '<th>Status</th><th>Detail</th></tr></thead><tbody>')

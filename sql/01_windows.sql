@@ -76,6 +76,11 @@ BEGIN
         v_box_y      := CASE WHEN v_is_current THEN 14 ELSE 20 END;
         v_box_h      := CASE WHEN v_is_current THEN 34  ELSE 26 END;
 
+        -- The full status (snap ids / skip reason) rides in the bar's
+        -- <title> tooltip; the caption under the bar only says "skipped",
+        -- since a per-bar "valid . snaps A->B" caption is wider than the
+        -- bar at 12+ windows and overprints its neighbours (the snap ids
+        -- are in the table below anyway).
         IF w.valid_flag = 'Y' THEN
             v_status := 'valid &middot; snaps '
                      || w.begin_snap_id || '&rarr;' || w.end_snap_id;
@@ -87,7 +92,9 @@ BEGIN
             END IF;
         END IF;
 
-        DBMS_OUTPUT.PUT_LINE('<g>');
+        DBMS_OUTPUT.PUT_LINE('<g><title>'
+            || TO_CHAR(w.win_end_ts, 'YYYY-MM-DD HH24:MI') || ' &middot; '
+            || v_status || '</title>');
         IF w.valid_flag = 'Y' THEN
             DBMS_OUTPUT.PUT_LINE('<rect x="' || TO_CHAR(v_x, 'FM999990D0')
                 || '" y="' || v_box_y || '" width="' || TO_CHAR(v_box_w, 'FM999990D0')
@@ -110,9 +117,11 @@ BEGIN
                 || '" y="35" text-anchor="middle" font-size="11" font-weight="600" fill="#ffffff">current</text>');
         END IF;
 
-        DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
-            || '" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">'
-            || v_status || '</text>');
+        IF w.valid_flag <> 'Y' THEN
+            DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
+                || '" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">'
+                || 'skipped</text>');
+        END IF;
         DBMS_OUTPUT.PUT_LINE('</g>');
     END LOOP;
 
@@ -120,7 +129,7 @@ BEGIN
 
     DBMS_OUTPUT.PUT_LINE('<table id="windows-table">');
     DBMS_OUTPUT.PUT_LINE('<thead><tr>'
-        || '<th>~period_unit_title</th>'
+        || '<th>Window</th>'
         || '<th>Window start</th>'
         || '<th>Window end</th>'
         || '<th class="num">Begin snap</th>'

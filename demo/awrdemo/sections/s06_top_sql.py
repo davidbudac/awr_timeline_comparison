@@ -233,23 +233,23 @@ def emit(w) -> str:
     nweeks = weeks_back + 1
 
     put("<!-- AWR-SECTION: 06_top_sql BEGIN -->")
-    put(f'<section id="topsql" data-triage="Y"><h2>Top SQL (top {top_n}'
+    put(f'<section id="topsql" data-normal="Y"><h2>Top SQL (top {top_n}'
         " per dimension, per window)</h2>")
     put('<p style="font-size:12px;color:var(--muted)">'
         f"Top-{top_n} SQLs per dimension per window from "
         "DBA_HIST_SQLSTAT <code>*_DELTA</code>. "
         "Bump chart per dimension: each line = one SQL across windows, "
         "oldest &rarr; current. Use the <b>Break down by</b> toggle to "
-        "re-aggregate the same metric by <b>SQL_ID</b>, parsing "
+        "re-aggregate the same metric by <b>SQL ID</b>, parsing "
         "<b>schema</b>, <b>module</b>, or <b>action</b> instead. "
         "Detail tables collapsed; click to expand.</p>")
-    put('<div class="tabs hidetri" data-tabs="topsql">'
-        '<span class="on" data-t="ELAPSED">Elapsed time</span>'
-        '<span data-t="CPU">CPU time</span>'
-        '<span data-t="GETS">Buffer gets</span>'
-        '<span data-t="PREADS">Physical reads</span>'
-        '<span data-t="EXEC">Executions</span>'
-        '<span data-t="PEREXEC">Per-exec regression</span>'
+    put('<div class="tabs" data-tabs="topsql" role="tablist" aria-label="Top SQL ranking dimension">'
+        '<button type="button" role="tab" aria-selected="true" class="on" data-t="ELAPSED" id="tab-topsql-ELAPSED">Elapsed time</button>'
+        '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="CPU" id="tab-topsql-CPU">CPU time</button>'
+        '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="GETS" id="tab-topsql-GETS">Buffer gets</button>'
+        '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="PREADS" id="tab-topsql-PREADS">Physical reads</button>'
+        '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="EXEC" id="tab-topsql-EXEC">Executions</button>'
+        '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="PEREXEC" id="tab-topsql-PEREXEC">Per-exec regression</button>'
         "</div>")
 
     # weeks / weeksIso JSON (week_offset DESC = oldest first)
@@ -283,12 +283,13 @@ def emit(w) -> str:
             dim_sqls_json[dim] = None
             dim_sqls_kept[dim] = 0
             dim_sqls_total[dim] = 0
-            put('<div class="tabpanel hidetri' + (" on" if dim == "ELAPSED" else "")
-                + '" data-tabs="topsql" data-t="' + dim + '">')
+            put('<div class="tabpanel' + (" on" if dim == "ELAPSED" else "")
+                + '" data-tabs="topsql" data-t="' + dim + '" role="tabpanel"'
+                + ' aria-labelledby="tab-topsql-' + dim + '">')
             put("<h3>" + dim_label[dim] + "</h3>")
             put('<div class="topsql-toggle" data-topsql-target="' + dim + '">'
                 "<span>Break down by:</span>"
-                '<button type="button" data-mode="sqls" class="active">SQL_ID</button>'
+                '<button type="button" data-mode="sqls" class="active">SQL ID</button>'
                 '<button type="button" data-mode="schemas">Schema</button>'
                 '<button type="button" data-mode="modules">Module</button>'
                 '<button type="button" data-mode="actions">Action</button>'
@@ -296,7 +297,7 @@ def emit(w) -> str:
             put('<div class="chart-wrap chart-medium" id="topsql-chart-' + dim + '"></div>')
             put("<details>")
             put("<summary>Detail table</summary>")
-            header = ('<thead><tr><th>SQL_ID</th><th class="num">PHV (cur)</th>'
+            header = ('<thead><tr><th>SQL ID</th><th class="num" title="plan_hash_value of the Current window&#39;s execution plan">Plan hash (Current)</th>'
                       '<th class="num" data-w="0">Current (' + dim_unit[dim] + ")</th>")
             for k in range(1, weeks_back + 1):
                 header += ('<th class="num" data-w="' + str(k) + '">&minus;'
@@ -433,7 +434,7 @@ def emit(w) -> str:
                 + str(len(flip_sqls)) + " of " + str(len(seen_sqls))
                 + " top SQL had a plan_hash_value change between current and a prior "
                 'compared window. Look for the <span class="badge warn">plan&#8593;</span> '
-                "badges in the SQL_ID column and the per-week cells above.</p>")
+                "badges in the SQL ID column and the per-window cells above.</p>")
         else:
             put('<p style="margin-top:18px">'
                 '<span class="badge ok">plan stable</span> '
@@ -441,10 +442,10 @@ def emit(w) -> str:
                 + str(len(seen_sqls)) + " top SQL across the compared windows.</p>")
 
     # per-SQL detail: pool table ----------------------------------------
-    block, pos = _slice(L, '<h3 class="hidetri">Per-SQL detail</h3>',
-                        '<table id="sql-pool"><thead><tr><th>SQL_ID</th><th>Ranked in</th>'
-                        '<th>Schema</th><th class="num">Plans</th><th class="num">Execs</th>'
-                        '<th class="num">Snaps</th><th>First seen</th><th>Text</th>'
+    block, pos = _slice(L, '<h3 class="full-only">Per-SQL detail</h3>',
+                        '<table id="sql-pool" class="full-only"><thead><tr><th>SQL ID</th><th>Ranked in</th>'
+                        '<th>Schema</th><th class="num" title="distinct plan_hash_values seen across the span">Plans</th><th class="num">Executions</th>'
+                        '<th class="num" title="AWR snapshots in which the SQL appeared">Snapshots</th><th>First seen</th><th>Text</th>'
                         "</tr></thead><tbody>")
     o.extend(block)
 
@@ -485,6 +486,12 @@ def emit(w) -> str:
             '<span id="sqlid-' + sid + '">' + sid + "</span> "
             '<button type="button" class="copy-btn" '
             'data-copy="#sqlid-' + sid + '">&#10687;</button>'
+            '<span class="xlinks">'
+            '<a class="xlink" href="#ash-card-' + sid
+            + '" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a>'
+            '<a class="xlink" href="#sqlmon-' + sid
+            + '" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a>'
+            "</span>"
             "</td>")
         chips = ""
         for letter, dim in (("E", "ELAPSED"), ("C", "CPU"), ("G", "GETS"),
@@ -529,9 +536,9 @@ def emit(w) -> str:
 
         if (phv_count or 0) > 0:
             put('<table id="phv-summary-' + sid + '"><thead><tr>'
-                '<th class="num">PHV</th>'
+                '<th class="num" title="plan_hash_value">Plan hash</th>'
                 "<th>First seen</th><th>Last seen</th>"
-                '<th class="num">Snaps</th>'
+                '<th class="num">Snapshots</th>'
                 '<th class="num">Executions</th>'
                 '<th class="num">Avg s/exec</th>'
                 '<th class="num">Avg gets/exec</th>'

@@ -154,18 +154,25 @@ dp_scored AS (
            TO_CHAR(p.t_end - (pv.hour_slot + 1) / 24, 'HH24:MI')       AS hour_label,
            TO_CHAR(p.t_end - (pv.hour_slot + 1) / 24, 'YYYY-MM-DD HH24:MI') AS hour_start,
            pv.cur_val, pv.mu, pv.sd, pv.n, pv.day_vals,
-           CASE WHEN pv.cur_val IS NULL OR pv.mu IS NULL
-                     OR pv.sd IS NULL OR pv.sd = 0 THEN NULL
-                ELSE (pv.cur_val - pv.mu) / pv.sd END                AS z_score,
+           -- Section 07's rule: sigma floor (2% of |mu|) and a 10% materiality
+           -- floor on the % delta; no share gate (these are load stats).
+           CASE WHEN pv.cur_val IS NULL OR pv.mu IS NULL OR pv.sd IS NULL THEN NULL
+                WHEN GREATEST(pv.sd, 0.02 * ABS(pv.mu)) = 0 THEN NULL
+                ELSE (pv.cur_val - pv.mu) / GREATEST(pv.sd, 0.02 * ABS(pv.mu)) END AS z_score,
            CASE WHEN pv.cur_val IS NULL OR pv.mu IS NULL OR pv.mu = 0 THEN NULL
                 ELSE (pv.cur_val - pv.mu) / ABS(pv.mu) * 100 END     AS pct_delta,
            CASE
                WHEN pv.cur_val IS NULL          THEN 'n/a'
                WHEN pv.n < 3                    THEN 'insufficient history'
-               WHEN pv.sd IS NULL OR pv.sd = 0  THEN 'flat baseline'
-               WHEN ABS((pv.cur_val - pv.mu) / pv.sd) > 3 THEN 'large'
-               WHEN ABS((pv.cur_val - pv.mu) / pv.sd) > 2 THEN 'moderate'
-               ELSE 'typical'
+               WHEN pv.sd IS NULL
+                 OR GREATEST(pv.sd, 0.02 * ABS(pv.mu)) = 0 THEN 'flat baseline'
+               WHEN ABS((pv.cur_val - pv.mu) / GREATEST(pv.sd, 0.02 * ABS(pv.mu))) <= 2
+                                                THEN 'typical'
+               WHEN pv.mu <> 0 AND ABS((pv.cur_val - pv.mu) / ABS(pv.mu) * 100) < 10
+                                                THEN 'typical'
+               WHEN ABS((pv.cur_val - pv.mu) / GREATEST(pv.sd, 0.02 * ABS(pv.mu))) > 3
+                                                THEN 'large'
+               ELSE 'moderate'
            END                                                       AS change_bucket
     FROM   dp_pivot pv
     CROSS JOIN dp_params p

@@ -69,7 +69,7 @@ DECLARE
     v_sql_text      t_str_by_str;
     -- Oracle-maintained ("system") flag per rendered sql_id ('Y'/'N'),
     -- derived from its parsing schema; drives the per-card data-sys marker
-    -- the report's "Application only" toggle hides on.
+    -- (informational since v1.5.0; the "Application only" filter is gone).
     v_sql_sys       t_str_by_str;
     v_sch           VARCHAR2(128);
 
@@ -443,10 +443,12 @@ BEGIN
                 || DBMS_XMLGEN.CONVERT(v_sid) || ' (' || v_sql_totals(v_sid) || ')';
         ELSE
             v_rendered := v_rendered + 1;
-            DBMS_OUTPUT.PUT_LINE('<div class="ash-sql-card" data-sys="'
-                || v_sql_sys(v_sid) || '">');
+            DBMS_OUTPUT.PUT_LINE('<div class="ash-sql-card" id="ash-card-' || v_sid
+                || '" data-sys="' || v_sql_sys(v_sid) || '">');
             DBMS_OUTPUT.PUT_LINE('  <div class="ash-sql-head">'
                 || '<code>' || DBMS_XMLGEN.CONVERT(v_sid) || '</code>'
+                || ' <a class="xlink" href="#sql-' || v_sid
+                || '" title="This SQL in the Top SQL pool">&#8599; Top SQL</a>'
                 || ' &middot; '
                 || '<span class="ash-sql-meta">'
                 || v_sql_totals(v_sid) || ' ASH samples'
@@ -599,6 +601,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el);');
     DBMS_OUTPUT.PUT_LINE('  var markAreaData=buildMarkAreas(null);');
     DBMS_OUTPUT.PUT_LINE('  chart.setOption({');
+    DBMS_OUTPUT.PUT_LINE('    aria:{enabled:true,decal:{show:true}},');
     DBMS_OUTPUT.PUT_LINE('    tooltip:{trigger:"axis",axisPointer:{type:"line"},');
     DBMS_OUTPUT.PUT_LINE('      valueFormatter:function(v){return v==null?"—":(+v).toFixed(2);}},');
     DBMS_OUTPUT.PUT_LINE('    legend:{top:0,left:"center",textStyle:{color:fg,fontSize:10},itemWidth:10,itemHeight:7,type:"scroll"},');

@@ -104,42 +104,25 @@ BEGIN
         || ' margin:0;'
         || ' padding:0 32px 96px calc(var(--rail-w) + 32px);'
         || ' display:flex; flex-direction:column; gap:0; align-items:stretch; }');
-    DBMS_OUTPUT.PUT_LINE('body > section, body > header.report, body > footer.report {'
+    DBMS_OUTPUT.PUT_LINE('main > section, body > section, body > header.report, body > footer.report {'
         || ' width:100%; }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px) {'
         || ' body { padding:0 20px 64px; } }');
 
     -- =========================================================
-    -- Visual section ordering.  Grouped to match the sidebar rail:
-    -- Triage, Workload, SQL, Storage and config.  (The DOM order is
-    -- emission order; flex order: repaints it.)
+    -- Body-level ordering (narrow layout only) and the main landmark.
     -- =========================================================
+    -- v1.5.0 (phase 4): sections are EMITTED in visual order (see the
+    -- include list in awr_trend.sql), so no per-section order: remains.
+    -- The masthead / rail / main / footer ranks below only exist for the
+    -- narrow layout, where the rail (order:0 there) must precede the
+    -- masthead; <main> is display:contents so its sections take part in
+    -- the body flex column directly.
     DBMS_OUTPUT.PUT_LINE('header.report      { order:1; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc            { order:2; }');
-    -- Triage
-    DBMS_OUTPUT.PUT_LINE('#db-time-summary   { order:3; }');
-    DBMS_OUTPUT.PUT_LINE('#overview          { order:4; }');
-    DBMS_OUTPUT.PUT_LINE('#ash-timeline      { order:5; }');
-    DBMS_OUTPUT.PUT_LINE('#findings          { order:6; }');
-    DBMS_OUTPUT.PUT_LINE('#windows           { order:7; }');
-    -- Workload
-    DBMS_OUTPUT.PUT_LINE('#day-profile       { order:8; }');
-    DBMS_OUTPUT.PUT_LINE('#utilization       { order:9; }');
-    DBMS_OUTPUT.PUT_LINE('#load              { order:10; }');
-    DBMS_OUTPUT.PUT_LINE('#metrics           { order:11; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-fg          { order:12; }');
-    DBMS_OUTPUT.PUT_LINE('#waits-bg          { order:13; }');
-    -- SQL
-    DBMS_OUTPUT.PUT_LINE('#topsql            { order:14; }');
-    DBMS_OUTPUT.PUT_LINE('#topsql-ash        { order:15; }');
-    -- Without an explicit order the SQL Monitor section defaulted to 0 and
-    -- sorted ABOVE the masthead; keep it where the nav places it.
-    DBMS_OUTPUT.PUT_LINE('#sqlmon            { order:16; }');
-    -- Storage and config
-    DBMS_OUTPUT.PUT_LINE('#segment-io        { order:17; }');
-    DBMS_OUTPUT.PUT_LINE('#file-io           { order:18; }');
-    DBMS_OUTPUT.PUT_LINE('#param-changes     { order:19; }');
-    DBMS_OUTPUT.PUT_LINE('footer.report      { order:20; }');
+    DBMS_OUTPUT.PUT_LINE('main               { display:contents; }');
+    DBMS_OUTPUT.PUT_LINE('main > section, body > section { order:3; }');
+    DBMS_OUTPUT.PUT_LINE('footer.report      { order:4; }');
 
     -- =========================================================
     -- Masthead (header.report) -- compact identity panel at the top
@@ -362,33 +345,41 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('nav.toc a .st.warn { background:var(--dot-warn); }');
     DBMS_OUTPUT.PUT_LINE('nav.toc a .st.crit { background:var(--dot-crit); }');
 
-    -- Rail foot wrapper: holds the app-filter and essential-rows buttons
-    -- together, pinned to the bottom of the rail. (Dark mode lives as an
+    -- Rail foot wrapper: holds the Normal / Full mode switch and the
+    -- next-finding button, pinned to the bottom of the rail. (Dark mode lives as an
     -- icon button beside the rail-brand title at the top of the rail.)
     DBMS_OUTPUT.PUT_LINE('nav.toc .rail-foot {'
-        || ' margin-top:auto; display:flex; flex-direction:column; gap:6px; }');
+        || ' margin-top:auto; display:flex; flex-direction:column; gap:6px;'
+        || ' position:sticky; bottom:0; background:var(--panel-2);'
+        || ' padding-top:8px; }');
+    -- Narrow-screen "View" popover: display:contents on desktop keeps the
+    -- toggle buttons as direct flex children of .rail-foot.
+    DBMS_OUTPUT.PUT_LINE('nav.toc .view-btn { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .view-panel { display:contents; }');
 
-    -- "Essential rows" / "Application only" toggle buttons in the rail foot.
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter, nav.toc .essential-filter,'
-        || ' nav.toc .triage-filter {'
-        || ' font:inherit; font-size:11px; font-weight:700;'
+    -- Normal / Full mode switch: a two-button segmented control
+    -- (aria-pressed marks the active half), first thing in the rail foot.
+    DBMS_OUTPUT.PUT_LINE('nav.toc .mode-switch {'
+        || ' display:flex; border:1px solid var(--rule); border-radius:8px;'
+        || ' overflow:hidden; background:var(--panel); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .mode-btn {'
+        || ' flex:1 1 0; font:inherit; font-size:11px; font-weight:700;'
         || ' letter-spacing:0.04em; text-transform:uppercase;'
-        || ' padding:7px 12px; border-radius:8px; cursor:pointer;'
-        || ' border:1px solid var(--rule); background:var(--panel);'
-        || ' color:var(--ink); transition:color .12s,background .12s,border-color .12s; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter:hover, nav.toc .essential-filter:hover,'
-        || ' nav.toc .triage-filter:hover {'
-        || ' border-color:var(--accent); color:var(--accent); }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter.active, nav.toc .essential-filter.active,'
-        || ' nav.toc .triage-filter.active {'
-        || ' background:var(--accent); border-color:var(--accent); color:#fff; }');
+        || ' padding:7px 6px; border:0; cursor:pointer; background:transparent;'
+        || ' color:var(--muted); transition:color .12s,background .12s; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .mode-btn + .mode-btn { border-left:1px solid var(--rule); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .mode-btn:hover { color:var(--accent); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc .mode-btn[aria-pressed="true"] {'
+        || ' background:var(--accent); color:#fff; }');
+    -- "+ N more sections" line the rail JS appends in the Normal view.
+    DBMS_OUTPUT.PUT_LINE('nav.toc a.more-sections { display:none; color:var(--muted); font-style:italic; }');
+    DBMS_OUTPUT.PUT_LINE('body.normal nav.toc a.more-sections { display:flex; }');
 
     -- =========================================================
     -- "What changed" narrative (section 17), relocated into the masthead
     -- slot by its own inline script.  A quiet accent-tinted note, not a
     -- banner: the verdict above it already carries the severity color.
-    -- Kept visible in triage mode (no .hidetri) -- it IS the triage view --
-    -- but hidden by body.app-only with the rest of the system-wide masthead.
+    -- Kept in the Normal view (it IS the short report) --
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('.narr {'
         || ' border-left:3px solid var(--accent);'
@@ -396,8 +387,28 @@ BEGIN
         || ' font-size:13px; line-height:1.6;'
         || ' padding:10px 14px; border-radius:0 6px 6px 0;'
         || ' margin-top:10px; color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('.narr p { margin:0 0 4px; }');
-    DBMS_OUTPUT.PUT_LINE('.narr p:last-child { margin-bottom:0; }');
+    -- v1.5.0: the block is a structured list, one row per finding --
+    -- label | headline number | from -> to | why | section link.
+    DBMS_OUTPUT.PUT_LINE('.narr .narr-head {'
+        || ' font-size:10.5px; font-weight:700; letter-spacing:0.08em;'
+        || ' text-transform:uppercase; color:var(--accent-deep); margin:0 0 6px; }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list { list-style:none; margin:0; padding:0; }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list li {'
+        || ' display:grid; grid-template-columns:130px auto auto 1fr auto;'
+        || ' column-gap:14px; align-items:baseline; padding:5px 0;'
+        || ' border-top:1px solid color-mix(in srgb, var(--accent) 18%, transparent); }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list li:first-child { border-top:0; }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list .n-lbl { font-weight:700; color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list .n-num {'
+        || ' font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list .n-sub {'
+        || ' color:var(--ink-soft); font-variant-numeric:tabular-nums; white-space:nowrap; }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list .n-why { color:var(--muted); min-width:0; }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list .n-go { white-space:nowrap; font-size:12px; }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list li > :empty { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width:700px) { .narr-list li {'
+        || ' grid-template-columns:1fr auto; }'
+        || ' .narr-list .n-why { grid-column:1 / -1; } }');
     DBMS_OUTPUT.PUT_LINE('.narr b { font-weight:600; }');
     DBMS_OUTPUT.PUT_LINE('.narr code {'
         || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
@@ -408,67 +419,35 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.narr a:hover { border-bottom-color:var(--accent); }');
 
     -- =========================================================
-    -- "Application only" view (body.app-only).
-    -- Same offline-style body-class hook as body.no-charts: a single class
-    -- on <body> drives every hide rule, toggled by the rail button. When on,
-    -- the report shows only application SQL and its directly related data
-    -- (Top SQL, Top SQL ASH, Segment I/O, File I/O, Utilization) and hides
-    -- all system-wide events/metrics sections plus the masthead's system
-    -- verdict and DB-time strip.
+    -- Normal / Full views (body.normal / body.full, set by the
+    -- early mode script in 00_params.sql from localStorage "awr-mode";
+    -- Normal is the default).  Same body-class hook as body.no-charts.
+    -- Sections opt INTO the Normal view with
+    -- data-normal="Y" (06 Top SQL, 07 Findings, 08 Headline metrics, 09
+    -- ASH timeline always; 12 / 16 / 18 only when they have something
+    -- worth the short report, via a one-line inline script); anything
+    -- tagged .full-only (07's per-domain tables, 06's per-SQL pool)
+    -- drops out of Normal even inside a kept section.  Rail links to
+    -- hidden sections carry .norm-dim (computed by the rail JS from the
+    -- same data-normal test) and hide too; the JS appends a "+ N more
+    -- sections" line and a .mode-note at the end of <main> instead.
+    -- With JS off neither body class exists and everything shows.
     -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('body.app-only #db-time-summary,'
-        || ' body.app-only #day-profile,'
-        || ' body.app-only #overview,'
-        || ' body.app-only #ash-timeline,'
-        || ' body.app-only #waits-fg,'
-        || ' body.app-only #waits-bg,'
-        || ' body.app-only #findings,'
-        || ' body.app-only #windows,'
-        || ' body.app-only #load,'
-        || ' body.app-only #metrics,'
-        || ' body.app-only #param-changes,'
-        || ' body.app-only header.report .verdict,'
-        || ' body.app-only header.report .movers-all,'
-        || ' body.app-only header.report .narr,'
-        || ' body.app-only header.report .windows-strip { display:none; }');
-    -- Remove the rail links that point at now-hidden sections, leaving
-    -- only the ones still on screen (kept in sync with the hide rule
-    -- above).  Group labels hide too: the survivors read as a flat list.
-    DBMS_OUTPUT.PUT_LINE('body.app-only nav.toc a'
-        || ':not([href="#topsql"])'
-        || ':not([href="#topsql-ash"])'
-        || ':not([href="#sqlmon"])'
-        || ':not([href="#segment-io"])'
-        || ':not([href="#file-io"])'
-        || ':not([href="#utilization"]) { display:none; }');
-    DBMS_OUTPUT.PUT_LINE('body.app-only nav.toc b { display:none; }');
-    -- Row / card / disclosure level: hide SQL parsed by an Oracle-maintained
-    -- schema (tagged data-sys="Y" by sections 06 and 11) so only application
-    -- SQL remains in the tables, the per-SQL detail blocks, and the ASH cards.
-    DBMS_OUTPUT.PUT_LINE('body.app-only tr[data-sys="Y"],'
-        || ' body.app-only details[data-sys="Y"],'
-        || ' body.app-only .ash-sql-card[data-sys="Y"] { display:none; }');
-
-    -- =========================================================
-    -- "Essential rows" preset (body.essential).
-    -- Same body-class hook: sections 02/03/04/05 tag their per-name data
-    -- rows data-imp="Y|N" (via sql/lib/is_essential.plsql); when on, the
-    -- non-curated rows hide.  Escape hatch: a row whose Change cell holds
-    -- a crit/warn severity badge stays visible even when data-imp="N",
-    -- so the preset can never hide a flagged anomaly (:has degrades to
-    -- hiding flagged rows only on pre-:has browsers -- acceptable).
-    -- Charts and the wait-class rollup are untouched by design.
-    -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('body.essential tr[data-imp="N"]'
-        || ':not(:has(.badge.crit)):not(:has(.badge.warn)) { display:none; }');
-    -- Count pill appended to each affected section h2 by the toggle JS
-    -- (00_params.sql); only visible while the preset is on.
-    DBMS_OUTPUT.PUT_LINE('.preset-note {'
-        || ' display:none; margin-left:auto; align-self:center;'
-        || ' font-size:11.5px; font-weight:700; letter-spacing:0.02em;'
-        || ' padding:2px 10px; border-radius:999px; white-space:nowrap;'
-        || ' background:var(--accent-bg); color:var(--accent-deep); }');
-    DBMS_OUTPUT.PUT_LINE('body.essential .preset-note { display:inline-block; }');
+    DBMS_OUTPUT.PUT_LINE('body.normal main > section:not([data-normal]) { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('body.normal .full-only { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('body.normal nav.toc a.norm-dim, body.normal nav.toc b.norm-dim { display:none; }');
+    -- order:3 = the same flex rank as main > section, so the note (appended
+    -- last inside <main>) sits after the last visible section, not first.
+    DBMS_OUTPUT.PUT_LINE('.mode-note {'
+        || ' display:none; order:3; margin:18px 0 0 0; padding:12px 16px; border-radius:10px;'
+        || ' border:1px dashed var(--rule); background:var(--panel-2);'
+        || ' color:var(--muted); font-size:12.5px; line-height:1.5; }');
+    DBMS_OUTPUT.PUT_LINE('body.normal .mode-note { display:block; }');
+    DBMS_OUTPUT.PUT_LINE('.mode-note button {'
+        || ' font:inherit; font-size:11px; font-weight:700; letter-spacing:0.04em;'
+        || ' text-transform:uppercase; padding:4px 10px; border-radius:6px;'
+        || ' border:1px solid var(--accent); background:transparent; color:var(--accent);'
+        || ' cursor:pointer; margin-left:6px; }');
 
     -- =========================================================
     -- Sections: white panels
@@ -476,10 +455,15 @@ BEGIN
     -- T2: the section's own top padding moved into the sticky h2 (6 + 14 =
     -- the old 20px of headroom) so the heading can sit flush against the
     -- viewport top when it sticks, with no transparent gap above it.
+    -- scroll-margin clears the narrow-screen top bar (--navh, 0 on
+    -- desktop); anchors INSIDE a section (rows, cards -- phase 3 links)
+    -- also clear the sticky h2 + thead stack.
     DBMS_OUTPUT.PUT_LINE('section {'
         || ' background:var(--panel); border:1px solid var(--hairline);'
         || ' border-radius:10px; padding:6px 24px 20px;'
-        || ' margin:18px 0 0; scroll-margin-top:18px; }');
+        || ' margin:18px 0 0; scroll-margin-top:calc(var(--navh, 0px) + 18px); }');
+    DBMS_OUTPUT.PUT_LINE('section tr[id], section [id].ash-sql-card, section h3[id], section div[id].sqlmon-drift {'
+        || ' scroll-margin-top:calc(var(--navh, 0px) + var(--h2h, 48px) + 44px); }');
     DBMS_OUTPUT.PUT_LINE('h1 { font-size:24px; margin:0; }');
 
     -- Section <h2>: compact panel heading (the rail does the wayfinding,
@@ -538,6 +522,28 @@ BEGIN
     -- =========================================================
     -- Tables
     -- =========================================================
+    -- v1.5.0 (phase 2): the chrome JS wraps every section table in
+    -- div.tblwrap and adds .scroll when the table is wider than its
+    -- panel, so wide per-window tables scroll sideways inside the panel
+    -- instead of pushing the whole page wide.  A scrolling table keeps its
+    -- first column pinned (sticky-left) and loses the sticky thead (a
+    -- scroll container ends the viewport-relative stickiness).
+    DBMS_OUTPUT.PUT_LINE('.tblwrap { max-width:100%; }');
+    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll { overflow-x:auto; overscroll-behavior-x:contain;'
+        || ' -webkit-overflow-scrolling:touch; margin:12px 0 16px;'
+        || ' box-shadow:inset -14px 0 12px -14px rgba(0,0,0,.18); }');
+    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll table { margin:0; }');
+    -- Inside a scroll container the viewport-relative top-stickiness of
+    -- thead th would stick to the WRAPPER instead (the header row floats
+    -- down through the rows as the page scrolls), so it is switched off
+    -- there and only the first column stays sticky-left.
+    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll thead th { position:static; }');
+    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll tr > :first-child {'
+        || ' position:sticky; left:0; top:auto; z-index:2; background:var(--panel); }');
+    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll thead th:first-child { background:var(--panel-2); z-index:5; }');
+    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll tr.crit > td:first-child { background:var(--crit-bg); }'
+        || ' .tblwrap.scroll tr.warn > td:first-child { background:var(--warn-bg); }'
+        || ' .tblwrap.scroll tr.info > td:first-child { background:var(--info-bg); }');
     DBMS_OUTPUT.PUT_LINE('table {'
         || ' width:100%; border-collapse:collapse;'
         || ' font-size:12.5px; background:transparent;'
@@ -596,8 +602,39 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('tr.warn { background:var(--warn-bg); }'
         || ' tr.warn td:first-child { box-shadow:inset 3px 0 0 var(--warn); }');
     DBMS_OUTPUT.PUT_LINE('tr.ok   { background:transparent; }');
-    DBMS_OUTPUT.PUT_LINE('tr.info { background:var(--info-bg); }');
+    DBMS_OUTPUT.PUT_LINE('tr.info { background:var(--info-bg); }'
+        || ' tr.info td:first-child { box-shadow:inset 3px 0 0 var(--info); }');
     DBMS_OUTPUT.PUT_LINE('tr.skip { color:var(--muted); font-style:italic; }');
+    DBMS_OUTPUT.PUT_LINE('tr.imp, tr.note { background:transparent; }'
+        || ' tr.imp td, tr.note td { color:var(--muted); }');
+    -- v1.5.0 findings rollup: non-canonical twins are muted, family
+    -- members under a movers lead row are indented, and the table-wide
+    -- shift note (04/05) reads as a callout.
+    DBMS_OUTPUT.PUT_LINE('tr.twin td { color:var(--muted); }'
+        || ' tr.twin td:first-child { box-shadow:none; }'
+        || ' tr.twin { background:transparent; }');
+    DBMS_OUTPUT.PUT_LINE('tr.member td:first-child { padding-left:26px; }');
+    DBMS_OUTPUT.PUT_LINE('.movers-list li.twin { color:var(--muted); }');
+    -- Phase 3 cross-links between sections (07 -> 02/03/04, 08 -> 07,
+    -- 06 <-> 11 / 18).  Hidden by the chrome JS when the target id is
+    -- absent; a jumped-to card gets the same transient outline as a row.
+    DBMS_OUTPUT.PUT_LINE('.xlink { font-size:10px; font-weight:700; letter-spacing:0.04em;'
+        || ' color:var(--accent); text-decoration:none; margin-left:6px;'
+        || ' white-space:nowrap; opacity:.85; }');
+    DBMS_OUTPUT.PUT_LINE('.xlink:hover { text-decoration:underline; opacity:1; }');
+    DBMS_OUTPUT.PUT_LINE('.xlink[hidden] { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('.xlinks { display:inline-flex; gap:2px; margin-left:4px; }');
+    DBMS_OUTPUT.PUT_LINE('.ash-sql-card.jump-hi, .hero-card.jump-hi, div.jump-hi {'
+        || ' outline:2px solid var(--crit); outline-offset:2px; }');
+    DBMS_OUTPUT.PUT_LINE('.wchip em { font-style:normal; color:var(--ink-soft); font-weight:600; }');
+    -- Phase 5: the SQL Monitor pool's detail row reads as part of its
+    -- statement row (no rule between them, tighter padding).
+    DBMS_OUTPUT.PUT_LINE('#sqlmon-pool tbody tr:not(.sqlmon-detail) > td { border-bottom:0; padding-bottom:4px; }'
+        || ' #sqlmon-pool tr.sqlmon-detail > td { padding-top:0; }'
+        || ' #sqlmon-pool tr.sqlmon-detail > td > details > summary { font-size:11px; }');
+    DBMS_OUTPUT.PUT_LINE('.shift-note { font-size:12px; color:var(--ink-soft);'
+        || ' background:var(--warn-bg); border-left:3px solid var(--warn);'
+        || ' padding:6px 10px; border-radius:6px; margin:6px 0 8px; }');
 
     -- =========================================================
     -- Badges: soft tinted chips (workbench style)
@@ -611,6 +648,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.badge.warn { background:var(--warn-bg); color:var(--warn); }');
     DBMS_OUTPUT.PUT_LINE('.badge.ok   { background:var(--ok-bg);   color:var(--ok); }');
     DBMS_OUTPUT.PUT_LINE('.badge.info { background:var(--info-bg); color:var(--info); }');
+    -- "improved": moved in the good direction. Deliberately quiet -- an
+    -- outlined green badge, no row tint, so it never reads as a finding.
+    DBMS_OUTPUT.PUT_LINE('.badge.imp { background:transparent; color:var(--ok);'
+        || ' box-shadow:inset 0 0 0 1px var(--ok-bg); }');
     DBMS_OUTPUT.PUT_LINE('.badge.skip { background:var(--skip-bg); color:var(--skip); }');
 
     -- Soft accent bar (legacy hook used by hero card foot deltas)
@@ -683,8 +724,9 @@ BEGIN
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('#param-changes td.pname code { font-weight:600; color:var(--ink); }');
     DBMS_OUTPUT.PUT_LINE('#param-changes td.pval {'
-        || ' white-space:normal; word-break:break-word;'
+        || ' white-space:normal; overflow-wrap:break-word;'
         || ' max-width:320px; vertical-align:top; }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile td:first-child, #windows-table td { white-space:nowrap; }');
     DBMS_OUTPUT.PUT_LINE('#param-changes td.pval code {'
         || ' font-size:11.5px; color:var(--ink-soft); }');
     DBMS_OUTPUT.PUT_LINE('#param-changes td.cur code { font-weight:700; color:var(--ink); }');
@@ -886,6 +928,18 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('header.report .windows-hint {'
         || ' font-size:10.5px; color:var(--muted); margin:2px 0 4px;'
         || ' letter-spacing:0.02em; }');
+    -- v1.5.0: the dated chip list is folded behind a one-line summary
+    -- (<details>), so the strip reads as caption + chart by default.
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-more { margin:4px 0 2px; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-more > summary {'
+        || ' cursor:pointer; list-style:none; font-size:11.5px; color:var(--ink-soft);'
+        || ' text-transform:none; letter-spacing:0; font-weight:400;'
+        || ' display:flex; flex-wrap:wrap; gap:6px 12px; align-items:baseline; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-more > summary::-webkit-details-marker { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-more > summary .w-toggle {'
+        || ' color:var(--accent-deep); font-weight:600; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-more[open] > summary .w-toggle .closed,'
+        || ' header.report .windows-more:not([open]) > summary .w-toggle .opened { display:none; }');
 
     -- B5: "sigma is approximately zero" pill -- a flat-baseline marker.
     -- Grey like .badge.skip but neither italic nor upper-cased, because it
@@ -895,14 +949,11 @@ BEGIN
         || ' font-style:normal; text-transform:none; letter-spacing:0;'
         || ' font-weight:600; }');
 
-    -- X3: triage mode (body.triage).  Same body-class hook as
-    -- body.no-charts / body.app-only / body.essential: sections opt IN by
-    -- carrying data-triage, everything else (and anything tagged .hidetri)
-    -- drops out.  Rail links pointing at dropped sections are dimmed by the
-    -- .tri-dim class the rail JS computes from the same data-triage test.
-    DBMS_OUTPUT.PUT_LINE('body.triage section:not([data-triage]) { display:none; }');
-    DBMS_OUTPUT.PUT_LINE('body.triage .hidetri { display:none; }');
-    DBMS_OUTPUT.PUT_LINE('body.triage nav.toc a.tri-dim { opacity:.35; }');
+    -- Badge for an informational counter that moved ("noted"): grey,
+    -- outlined, never a highlight.
+    DBMS_OUTPUT.PUT_LINE('.badge.note {'
+        || ' background:transparent; color:var(--skip);'
+        || ' box-shadow:inset 0 0 0 1px var(--skip-bg); }');
 
     -- C1: tab bars.  A .tabs[data-tabs=G] bar of [data-t] spans switches
     -- the sibling .tabpanel[data-tabs=G][data-t=...] panels.
@@ -914,6 +965,38 @@ BEGIN
         || ' font-size:12px; font-weight:600; color:var(--muted);'
         || ' border-bottom:2px solid transparent; margin-bottom:-1px; }');
     DBMS_OUTPUT.PUT_LINE('.tabs [data-t]:hover { color:var(--ink); }');
+    -- Phase 4: the tabs are real <button role="tab"> elements now.
+    DBMS_OUTPUT.PUT_LINE('.tabs button[data-t] { font:inherit; font-size:12px; font-weight:600;'
+        || ' background:none; border:0; border-bottom:2px solid transparent;'
+        || ' color:var(--muted); border-radius:0; }');
+    DBMS_OUTPUT.PUT_LINE('button.wchip { font:inherit; cursor:pointer; }');
+    -- Phase 4: keyboard focus ring for every interactive element, the
+    -- skip link, the tap-to-pin tooltip, reduced motion, dark-mode chip
+    -- contrast, and always-visible copy / permalink affordances on touch.
+    DBMS_OUTPUT.PUT_LINE(':focus-visible { outline:2px solid var(--accent); outline-offset:2px; }');
+    DBMS_OUTPUT.PUT_LINE('th[tabindex]:focus-visible { outline-offset:-2px; }');
+    DBMS_OUTPUT.PUT_LINE('a.skip { position:absolute; left:8px; top:-40px; z-index:100;'
+        || ' padding:6px 10px; border-radius:6px; background:var(--accent);'
+        || ' color:#fff; font-weight:700; text-decoration:none; }');
+    DBMS_OUTPUT.PUT_LINE('a.skip:focus { top:8px; }');
+    DBMS_OUTPUT.PUT_LINE('.sr-only { position:absolute; width:1px; height:1px; padding:0;'
+        || ' margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }');
+    DBMS_OUTPUT.PUT_LINE('.tip { position:absolute; z-index:60; max-width:320px;'
+        || ' font-size:12px; line-height:1.4; color:var(--ink);'
+        || ' background:var(--panel); border:1px solid var(--rule); border-radius:8px;'
+        || ' padding:6px 10px; box-shadow:0 6px 18px rgba(0,0,0,.14); }');
+    DBMS_OUTPUT.PUT_LINE('[title]:not(a):not(button):not(th):not(summary) { cursor:help; }');
+    DBMS_OUTPUT.PUT_LINE('@media (prefers-reduced-motion: reduce) {'
+        || ' *, *::before, *::after { transition:none !important; animation:none !important;'
+        || ' scroll-behavior:auto !important; } }');
+    DBMS_OUTPUT.PUT_LINE('@media screen { body.dark .chip.on {'
+        || ' background:var(--accent-bg); color:var(--accent-deep); border-color:var(--accent); }'
+        || ' body.dark thead th { color:var(--ink-soft); } }');
+    DBMS_OUTPUT.PUT_LINE('.copy-btn:focus-visible, h2 .permalink:focus-visible {'
+        || ' opacity:1; pointer-events:auto; }');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px) {'
+        || ' pre > .copy-btn, .codewrap > .copy-btn { opacity:1; pointer-events:auto; }'
+        || ' h2 .permalink { opacity:1; } }');
     DBMS_OUTPUT.PUT_LINE('.tabs [data-t].on {'
         || ' color:var(--accent); border-bottom-color:var(--accent); }');
     DBMS_OUTPUT.PUT_LINE('.tabpanel { display:none; }');
@@ -995,7 +1078,7 @@ BEGIN
     -- =========================================================
     -- The section links now live in a .rail-list wrapper so the narrow
     -- layout can drop them into a dropdown panel.  Every existing selector
-    -- (nav.toc a / nav.toc b, the app-only link rule, the rail JS) is a
+    -- (nav.toc a / nav.toc b, the rail JS) is a
     -- descendant match, so wrapping them changes nothing on desktop.
     DBMS_OUTPUT.PUT_LINE('nav.toc .rail-list {'
         || ' display:flex; flex-direction:column; gap:2px; }');
@@ -1075,23 +1158,46 @@ BEGIN
         || '   width:28px; height:26px; padding:0; border-radius:7px;'
         || '   border:1px solid var(--rule); background:var(--panel);'
         || '   color:var(--ink); font:inherit; font-size:14px; cursor:pointer; }'
+        -- The row filter rides inside the open hamburger panel (absolute,
+        -- above the list, which reserves its height with padding-top).
         || ' nav.toc .rail-filter { display:none; }'
+        || ' nav.toc.menu-open .rail-filter { display:block; position:absolute;'
+        || '   top:calc(100% + 8px); left:20px; right:20px; z-index:32; margin:0; }'
         || ' nav.toc .rail-list { display:none; position:absolute;'
         || '   top:100%; left:0; right:0; z-index:31;'
         || '   background:var(--panel-2);'
         || '   border-bottom:1px solid var(--hairline);'
         || '   box-shadow:0 8px 18px rgba(0,0,0,.10);'
-        || '   padding:8px 20px 12px; max-height:70vh; overflow:auto; }'
+        || '   padding:48px 20px 12px; max-height:70vh; overflow:auto; }'
         || ' nav.toc.menu-open .rail-list { display:flex; }'
-        || ' nav.toc .rail-foot { margin-top:0; flex:none;'
-        || '   flex-direction:row; gap:4px; }'
-        || ' nav.toc .rail-foot .next-finding { display:none; }'
-        || ' nav.toc .app-filter, nav.toc .essential-filter,'
-        || ' nav.toc .triage-filter { font-size:9.5px; padding:5px 7px;'
-        || '   letter-spacing:0; }'
+        -- The three view toggles collapse into one "View" button whose
+        -- popover holds them (plus the next-finding control) stacked.
+        || ' nav.toc .rail-foot { margin-top:0; flex:none; position:static;'
+        || '   padding:0; flex-direction:row; gap:4px; }'
+        || ' nav.toc .view-btn { display:flex; align-items:center; gap:4px;'
+        || '   font:inherit; font-size:11px; font-weight:700; min-height:32px;'
+        || '   padding:0 10px; border-radius:7px; border:1px solid var(--rule);'
+        || '   background:var(--panel); color:var(--ink); cursor:pointer; }'
+        || ' nav.toc .view-btn[aria-expanded="true"] { border-color:var(--accent); color:var(--accent); }'
+        || ' nav.toc .view-panel { display:none; position:absolute; right:12px;'
+        || '   top:calc(100% + 6px); z-index:33; flex-direction:column; gap:6px;'
+        || '   min-width:220px; padding:10px; border-radius:10px;'
+        || '   background:var(--panel); border:1px solid var(--hairline);'
+        || '   box-shadow:0 8px 18px rgba(0,0,0,.14); }'
+        || ' nav.toc .rail-foot.open .view-panel { display:flex; }'
+        || ' nav.toc .mode-btn { min-height:34px; }'
+        -- Tap targets: 32px minimum for the small controls below 980px.
+        || ' .tabs [data-t], .tbl-tools .tool-btn, .copy-btn, .expander,'
+        || ' details > summary, .chipbar button, nav.toc .theme-icon-btn,'
+        || ' nav.toc .rail-menu-btn { min-height:32px; }'
+        || ' nav.toc .theme-icon-btn, nav.toc .rail-menu-btn { width:32px; height:32px; }'
         || ' }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 700px) {'
         || ' h2 .h2sub { display:none; }'
+        -- headings wrap on phones (badges + permalink no longer push the
+        -- page wider than the viewport); the sticky offset (--h2h) is
+        -- measured after layout, so a two-line heading still stacks right.
+        || ' section > h2 { white-space:normal; flex-wrap:wrap; row-gap:4px; }'
         || ' nav.toc .rail-brand > span { display:none; } }');
 
     -- =========================================================
@@ -1106,18 +1212,20 @@ BEGIN
         || ' nav.toc { display:none; position:static; }'
         || ' body { max-width:none; padding:0 0 24px; background:#fff; }'
         || ' section { border:0; padding:12px 0; break-before:page; }'
-        || ' body > section:first-of-type { break-before:auto; }'
+        || ' main > section:first-of-type, body > section:first-of-type { break-before:auto; }'
         || ' header.report { border:0; padding-top:0; }'
         || ' .chart-wrap { break-inside:avoid; }'
         || ' h2 { break-after:avoid; position:static; padding-top:0;'
         || '   background:transparent; }'
         || ' section table thead th { position:static; }'
         || ' .tbl-tools, .copy-btn, .permalink, .expander, .tag,'
-        || ' .preset-note, .next-finding, .windows-hint,'
+        || ' .mode-note, .next-finding, .windows-hint,'
         || ' .theme-icon-btn { display:none !important; }'
         || ' details.method > summary { display:none; }'
         || ' details.method > * { display:block; }'
         || ' tr[data-tail="Y"] { display:table-row !important; }'
+        || ' .tblwrap.scroll { overflow:visible; box-shadow:none; }'
+        || ' .tblwrap.scroll tr > :first-child { position:static; }'
         || ' }');
 
     DBMS_OUTPUT.PUT_LINE('</style>');

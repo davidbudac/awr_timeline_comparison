@@ -26,16 +26,29 @@ _STYLE = """
   --crit:#b01c1c; --warn:#8a5a00; --ok:#1f7a4d;
   --crit-bg:#f7e2e2; --warn-bg:#f6ecd6; --ok-bg:#dff0e6;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper:#0f1319; --panel:#161b23; --panel-2:#1d232d;
-    --ink:#e7ecf2; --ink-soft:#bcc5d1; --muted:#8591a0;
-    --border:#2a323d; --rule:#333c48; --line-soft:#242c36;
-    --accent:#5b9bd8; --accent-bg:#1a2634;
-    --crit:#e5675c; --warn:#e0a53a; --ok:#43bb82;
-    --crit-bg:#2e1b1b; --warn-bg:#2c2413; --ok-bg:#13271d;
-  }
+/* Dark palette: body.dark (in-page toggle, persisted under the report's
+   own "awr-theme" localStorage key, so the console, the reports and this
+   server agree) -- the early script in _PAGE applies it before paint and
+   falls back to prefers-color-scheme when nothing is stored. */
+body.dark {
+  --paper:#0f1319; --panel:#161b23; --panel-2:#1d232d;
+  --ink:#e7ecf2; --ink-soft:#bcc5d1; --muted:#8591a0;
+  --border:#2a323d; --rule:#333c48; --line-soft:#242c36;
+  --accent:#5b9bd8; --accent-bg:#1a2634;
+  --crit:#e5675c; --warn:#e0a53a; --ok:#43bb82;
+  --crit-bg:#2e1b1b; --warn-bg:#2c2413; --ok-bg:#13271d;
 }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition:none !important; animation:none !important; } }
+header.top .theme-btn {
+  margin-left:auto; font:inherit; font-size:12px; padding:4px 10px; border-radius:6px;
+  border:1px solid var(--rule); background:var(--panel-2); color:var(--ink-soft); cursor:pointer;
+}
+table th { cursor:pointer; user-select:none; }
+table th.asc::after { content:" \2191"; color:var(--accent); }
+table th.desc::after { content:" \2193"; color:var(--accent); }
+.tbl-filter { font:inherit; font-size:13px; padding:5px 9px; border-radius:6px; margin:0 0 10px;
+  border:1px solid var(--rule); background:var(--panel-2); color:var(--ink); width:260px; max-width:100%; }
 * { box-sizing:border-box; }
 body {
   margin:0; background:var(--paper); color:var(--ink);
@@ -126,12 +139,15 @@ code { font-size:12px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mo
 _PAGE = Template(
     """<title>$title</title>
 <style>$style</style>
+<script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.documentElement.classList.add("dark-early");}catch(e){}})();</script>
 <header class="top">
   <h1>AWR Fleet Server</h1>
   <nav>
     <a href="/">Home</a>
     <a href="/runs">Run history</a>
   </nav>
+  <button type="button" class="theme-btn" id="themeToggle" aria-pressed="false"
+    title="Switch between light and dark color theme">Dark mode</button>
 </header>
 <main>
 $body
@@ -139,6 +155,35 @@ $body
 hostnames and usernames -- keep this bound to localhost or front it with a
 reverse proxy / SSH tunnel.</p>
 </main>
+<script>
+(function(){
+  /* theme: same "awr-theme" key as the fleet console and the single-DB report */
+  var b=document.getElementById('themeToggle');
+  if(document.documentElement.classList.contains('dark-early')) document.body.classList.add('dark');
+  function sync(){ var on=document.body.classList.contains('dark'); if(b){ b.setAttribute('aria-pressed',on?'true':'false'); b.textContent=on?'Light mode':'Dark mode'; } }
+  if(b) b.addEventListener('click',function(){ var on=document.body.classList.toggle('dark'); try{localStorage.setItem('awr-theme',on?'dark':'light');}catch(e){} sync(); });
+  sync();
+  /* click-to-sort on every table header (numeric-aware, blanks last) */
+  function num(s){ var t=s.replace(/[,%\s]/g,''); return /^-?\d+(\.\d+)?$$/.test(t)?parseFloat(t):null; }
+  document.addEventListener('click',function(ev){
+    var th=ev.target.closest&&ev.target.closest('table th'); if(!th) return;
+    var tb=th.closest('table'), rows=[].slice.call(tb.querySelectorAll('tr')).filter(function(r){return r.querySelector('td');});
+    var idx=[].indexOf.call(th.parentNode.children,th), desc=!th.classList.contains('desc');
+    [].forEach.call(th.parentNode.children,function(x){x.classList.remove('asc','desc');x.removeAttribute('aria-sort');});
+    th.classList.add(desc?'desc':'asc'); th.setAttribute('aria-sort',desc?'descending':'ascending');
+    rows.map(function(r,i){var c=r.children[idx], s=c?c.textContent.trim():''; return {r:r,i:i,s:s,n:num(s)};})
+      .sort(function(a,b){ if(a.n!==null&&b.n!==null&&a.n!==b.n) return desc?b.n-a.n:a.n-b.n; if(a.n!==null&&b.n===null) return -1; if(a.n===null&&b.n!==null) return 1; var c=a.s.localeCompare(b.s); return c?(desc?-c:c):a.i-b.i; })
+      .forEach(function(d){ d.r.parentNode.appendChild(d.r); });
+  });
+  /* row filter (.tbl-filter[data-for=<table id>]) */
+  document.addEventListener('input',function(ev){
+    var f=ev.target; if(!f.classList||!f.classList.contains('tbl-filter')) return;
+    var tb=document.getElementById(f.getAttribute('data-for')); if(!tb) return;
+    var q=f.value.trim().toLowerCase();
+    [].forEach.call(tb.querySelectorAll('tr'),function(r){ if(!r.querySelector('td')) return; r.hidden=q!==''&&r.textContent.toLowerCase().indexOf(q)<0; });
+  });
+})();
+</script>
 """
 )
 
@@ -411,7 +456,11 @@ def render_runs(ctx):
     parts = ['<div class="card"><h2>Run history (%d)</h2>' % len(recs)]
     if recs:
         parts.append(
-            "<table><tr><th>Run</th><th>Kind</th><th>Trigger</th><th>State</th>"
+            '<input type="search" class="tbl-filter" data-for="runs-table" '
+            'placeholder="Filter runs&#8230;" aria-label="Filter run history rows">'
+        )
+        parts.append(
+            '<table id="runs-table"><tr><th>Run</th><th>Kind</th><th>Trigger</th><th>State</th>'
             "<th>Queued</th><th>Duration</th><th>Report</th></tr>"
         )
         parts.extend(_run_row(r) for r in recs)

@@ -81,6 +81,9 @@ DECLARE
     v_raw_total   NUMBER := 0;
     v_shown_total NUMBER := 0;
     v_sqlid_count NUMBER := 0;
+    v_tail_cnt    NUMBER := 0;
+    v_nocur_cnt   NUMBER := 0;
+    v_normal      BOOLEAN := FALSE;   -- section opted into the Normal view
     v_any_row     BOOLEAN := FALSE;
 
     v_header      VARCHAR2(4000);
@@ -101,6 +104,7 @@ DECLARE
     v_points_shown  NUMBER := 0;
     v_capped        VARCHAR2(1) := 'N';
 
+    @@sql/lib/metric_policy.plsql
     @@sql/lib/nth_csv.plsql
     @@sql/lib/json_escape.plsql
     @@sql/lib/fmt_num.plsql
@@ -158,7 +162,8 @@ BEGIN
             || 'No SQL Monitor reports persisted in the compared windows '
             || '(' || TO_CHAR(CAST(v_span_start AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
             || ' &rarr; ' || TO_CHAR(CAST(v_span_end AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
-            || ').</p></section>');
+            || '). SQL Monitor only persists completed executions that ran long enough '
+            || 'or in parallel. Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p></section>');
         -- The closing AWR-SECTION marker is emitted by this file's own
         -- trailing block, so nothing else to do here.
         RETURN;
@@ -380,11 +385,28 @@ BEGIN
         IF s.is_new = 'Y' THEN
             v_flags := v_flags || '<span class="chip" title="no captured execution anywhere in the span before the Current window">new</span> ';
         END IF;
+        -- Normal view opt-in: an error, a plan change or a DOP downgrade on
+        -- a statement that ran in the Current window is worth the short
+        -- report; plain slow-vs-baseline rows stay Full-only.
+        IF s.cur_val IS NOT NULL AND s.rnk <= v_top_n
+           AND (s.has_error = 1 OR s.distinct_plans > 1 OR s.has_downgrade = 1)
+           AND NOT v_normal THEN
+            v_normal := TRUE;
+            DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("sqlmon").setAttribute("data-normal","Y");</script>');
+        END IF;
 
-        v_row := '<tr data-sys="' || is_oracle_schema(s.last_username) || '"'
-            || CASE WHEN s.rnk > v_top_n THEN ' data-tail="Y" hidden' ELSE '' END
+        -- Phase 5: a statement with no Current-window execution folds under
+        -- the expander too (its flags / drill still survive there).
+        IF s.rnk > v_top_n OR s.cur_val IS NULL THEN
+            v_tail_cnt := v_tail_cnt + 1;
+            IF s.cur_val IS NULL THEN v_nocur_cnt := v_nocur_cnt + 1; END IF;
+        END IF;
+        v_row := '<tr id="sqlmon-' || s.sql_id || '" data-sys="' || is_oracle_schema(s.last_username) || '"'
+            || CASE WHEN s.rnk > v_top_n OR s.cur_val IS NULL THEN ' data-tail="Y" hidden' ELSE '' END
             || '>'
-            || '<td class="mono">' || s.sql_id || '</td>'
+            || '<td class="mono">' || s.sql_id
+            || ' <a class="xlink" href="#sql-' || s.sql_id
+            || '" title="This SQL in the Top SQL pool">&#8599; Top SQL</a></td>'
             || '<td>' || DBMS_XMLGEN.CONVERT(NVL(s.last_username, '?'))
                 || ' / ' || DBMS_XMLGEN.CONVERT(NVL(s.last_module, '?')) || '</td>'
             || '<td class="trend" data-spark="' || NVL(s.elapsed_spark_csv, '')
@@ -401,13 +423,15 @@ BEGIN
         -- copyable SQL Monitor Active Report drill line (C4 codewrap/copy-btn
         -- markup, same pattern as sql/01_windows.sql's AWR-report listing).
         DBMS_OUTPUT.PUT_LINE('<tr class="sqlmon-detail" data-sys="' || is_oracle_schema(s.last_username) || '"'
-            || CASE WHEN s.rnk > v_top_n THEN ' data-tail="Y" hidden' ELSE '' END
+            || CASE WHEN s.rnk > v_top_n OR s.cur_val IS NULL THEN ' data-tail="Y" hidden' ELSE '' END
             || '><td colspan="9">');
         DBMS_OUTPUT.PUT_LINE('<details><summary>Per-window detail &amp; drill</summary>');
         v_header := '<table data-notools><thead><tr><th>Window</th><th class="num">n</th>'
             || '<th class="num">Max elapsed (s)</th><th class="num">Median elapsed (s)</th>'
-            || '<th class="num">Max IO</th><th class="num">DOP req/alloc</th>'
-            || '<th class="num">Plans</th><th class="num">Err</th></tr></thead><tbody>';
+            || '<th class="num" title="largest read + write bytes of one execution">Max I/O (bytes)</th>'
+            || '<th class="num" title="parallel servers requested / allocated (max per execution)">DOP req/alloc</th>'
+            || '<th class="num" title="distinct plan_hash_values">Plans</th>'
+            || '<th class="num" title="executions that ended DONE (ERROR)">Errors</th></tr></thead><tbody>';
         DBMS_OUTPUT.PUT_LINE(v_header);
         FOR k IN 0 .. v_weeks_back LOOP
             DECLARE
@@ -463,10 +487,16 @@ BEGIN
 
     IF v_any_row THEN
         DBMS_OUTPUT.PUT_LINE('</tbody></table>');
-        IF v_sqlid_count > v_top_n THEN
+        IF v_tail_cnt > 0 THEN
             DBMS_OUTPUT.PUT_LINE('<span class="expander" data-for="sqlmon-pool" data-n="'
-                || (v_sqlid_count - v_top_n) || '" data-noun="more statements">'
-                || '&#9656; Show ' || (v_sqlid_count - v_top_n) || ' more statements</span>');
+                || v_tail_cnt || '" data-noun="more statements'
+                || CASE WHEN v_nocur_cnt > 0
+                        THEN ' (' || v_nocur_cnt || ' without a Current-window execution)'
+                        ELSE '' END || '">'
+                || '&#9656; Show ' || v_tail_cnt || ' more statements'
+                || CASE WHEN v_nocur_cnt > 0
+                        THEN ' (' || v_nocur_cnt || ' without a Current-window execution)'
+                        ELSE '' END || '</span>');
         END IF;
         DBMS_OUTPUT.PUT_LINE('<p style="font-size:11px;color:var(--muted);margin:6px 0 0">'
             || fmt_int(v_raw_total) || ' execution' || CASE WHEN v_raw_total = 1 THEN '' ELSE 's' END
@@ -631,7 +661,7 @@ BEGIN
                     v_rows        t_rows;
                     v_best_idx    PLS_INTEGER;
                     v_best_delta  NUMBER := 0;
-                    v_row_cls     VARCHAR2(10);
+                    v_row_cls     VARCHAR2(20);   -- holds ' class="crit"' (13 chars); was 10 and raised ORA-06502 on dbmint
                     v_indent      VARCHAR2(4000);
                 BEGIN
                     BEGIN
@@ -757,7 +787,7 @@ BEGIN
                     END IF;
 
                     DBMS_OUTPUT.PUT_LINE('<table class="sqlmon-drift-tbl" data-notools><thead><tr>'
-                        || '<th>Id</th><th>Operation</th><th>Object</th><th class="num">Est rows</th>'
+                        || '<th title="plan line id">Line</th><th>Operation</th><th>Object</th><th class="num">Est rows</th>'
                         || '<th class="num">Starts (base&rarr;cur)</th>'
                         || '<th class="num">Actual rows (base&rarr;cur)</th>'
                         || '<th class="num">Duration s (base&rarr;cur, % share)</th>'
@@ -931,60 +961,58 @@ BEGIN
     -- Points: every captured execution, capped to the most recent 3000.
     DBMS_LOB.CREATETEMPORARY(v_points_clob, TRUE);
     FOR p IN (
+        -- ONE scan of dba_hist_reports: the per-sql_id mode plan (the
+        -- plan_hash with the most captured executions, ties to the lowest
+        -- hash, NULL when every capture has plan_hash 0) is an analytic
+        -- over the same row set, not a second XML-parsing self-join.  The
+        -- LEFT JOIN this replaced was pushed into a nested loop on dbmint
+        -- (WRP$_REPORTS stats say 1 row), re-parsing every report's XML
+        -- once per outer row -- 10+ minutes over a 4-week span.
         SELECT * FROM (
             SELECT be.sql_id, be.exec_start, be.elapsed_us, be.status,
                    be.plan_hash, be.px_req,
-                   CASE WHEN pm.mode_plan IS NOT NULL AND be.plan_hash <> 0
-                             AND be.plan_hash <> pm.mode_plan
+                   CASE WHEN be.mode_plan IS NOT NULL AND be.plan_hash <> 0
+                             AND be.plan_hash <> be.mode_plan
                         THEN 'Y' ELSE 'N' END AS plan_mismatch,
                    ROW_NUMBER() OVER (ORDER BY be.exec_start DESC) AS rn_recent,
                    COUNT(*) OVER () AS n_total
             FROM (
-                SELECT r.key1 AS sql_id, r.instance_number,
-                       TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') AS exec_start,
-                       x.status, x.plan_hash, x.px_req,
-                       NVL(x.elapsed_us, 0) AS elapsed_us
-                FROM   dba_hist_reports r,
-                       XMLTABLE('/report_repository_summary/sql'
-                           PASSING XMLTYPE(r.report_summary)
-                           COLUMNS
-                               status     VARCHAR2(30) PATH 'status',
-                               plan_hash  NUMBER       PATH 'plan_hash',
-                               px_req     NUMBER       PATH 'px_servers_requested',
-                               elapsed_us NUMBER       PATH 'stats[@type="monitor"]/stat[@name="elapsed_time"]'
-                       ) x
-                WHERE  r.component_name = 'sqlmonitor'
-                  AND  r.dbid IN (~dbid_list)
-                  AND  (~inst_num = 0 OR r.instance_number = ~inst_num)
-                  AND  r.report_summary IS NOT NULL
-                  AND  r.key1 IS NOT NULL
-                  AND  r.period_start_time >= CAST(v_span_start AS TIMESTAMP) - INTERVAL '1' DAY
-                  AND  r.period_start_time <= CAST(v_span_end   AS TIMESTAMP) + INTERVAL '1' DAY
-                  AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') >= v_span_start
-                  AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') <  v_span_end
+                SELECT b.sql_id, b.exec_start, b.elapsed_us, b.status,
+                       b.plan_hash, b.px_req,
+                       MAX(CASE WHEN b.plan_hash <> 0 THEN b.plan_hash END)
+                           KEEP (DENSE_RANK FIRST
+                                 ORDER BY CASE WHEN b.plan_hash <> 0 THEN b.plan_cnt END DESC NULLS LAST,
+                                          CASE WHEN b.plan_hash <> 0 THEN b.plan_hash END)
+                           OVER (PARTITION BY b.sql_id) AS mode_plan
+                FROM (
+                    SELECT be0.*,
+                           COUNT(*) OVER (PARTITION BY be0.sql_id, be0.plan_hash) AS plan_cnt
+                    FROM (
+                        SELECT r.key1 AS sql_id, r.instance_number,
+                               TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') AS exec_start,
+                               x.status, x.plan_hash, x.px_req,
+                               NVL(x.elapsed_us, 0) AS elapsed_us
+                        FROM   dba_hist_reports r,
+                               XMLTABLE('/report_repository_summary/sql'
+                                   PASSING XMLTYPE(r.report_summary)
+                                   COLUMNS
+                                       status     VARCHAR2(30) PATH 'status',
+                                       plan_hash  NUMBER       PATH 'plan_hash',
+                                       px_req     NUMBER       PATH 'px_servers_requested',
+                                       elapsed_us NUMBER       PATH 'stats[@type="monitor"]/stat[@name="elapsed_time"]'
+                               ) x
+                        WHERE  r.component_name = 'sqlmonitor'
+                          AND  r.dbid IN (~dbid_list)
+                          AND  (~inst_num = 0 OR r.instance_number = ~inst_num)
+                          AND  r.report_summary IS NOT NULL
+                          AND  r.key1 IS NOT NULL
+                          AND  r.period_start_time >= CAST(v_span_start AS TIMESTAMP) - INTERVAL '1' DAY
+                          AND  r.period_start_time <= CAST(v_span_end   AS TIMESTAMP) + INTERVAL '1' DAY
+                          AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') >= v_span_start
+                          AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') <  v_span_end
+                    ) be0
+                ) b
             ) be
-            LEFT JOIN (
-                SELECT sql_id, plan_hash AS mode_plan FROM (
-                    SELECT r.key1 AS sql_id, x.plan_hash,
-                           ROW_NUMBER() OVER (PARTITION BY r.key1
-                               ORDER BY COUNT(*) DESC, x.plan_hash) AS rn
-                    FROM   dba_hist_reports r,
-                           XMLTABLE('/report_repository_summary/sql'
-                               PASSING XMLTYPE(r.report_summary)
-                               COLUMNS plan_hash NUMBER PATH 'plan_hash') x
-                    WHERE  r.component_name = 'sqlmonitor'
-                      AND  r.dbid IN (~dbid_list)
-                      AND  (~inst_num = 0 OR r.instance_number = ~inst_num)
-                      AND  r.report_summary IS NOT NULL
-                      AND  r.key1 IS NOT NULL
-                      AND  x.plan_hash <> 0
-                      AND  r.period_start_time >= CAST(v_span_start AS TIMESTAMP) - INTERVAL '1' DAY
-                      AND  r.period_start_time <= CAST(v_span_end   AS TIMESTAMP) + INTERVAL '1' DAY
-                      AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') >= v_span_start
-                      AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') <  v_span_end
-                    GROUP BY r.key1, x.plan_hash
-                ) WHERE rn = 1
-            ) pm ON pm.sql_id = be.sql_id
         )
         WHERE  rn_recent <= 3000
         ORDER  BY exec_start ASC

@@ -42,14 +42,21 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var ink = cs.getPropertyValue("--ink").trim() || "#333";');
     DBMS_OUTPUT.PUT_LINE('  var paper = cs.getPropertyValue("--paper").trim() || "#fff";');
     DBMS_OUTPUT.PUT_LINE('  var data = [];');
+    -- Labels are drawn INSIDE the plot, hanging down from the top edge
+    -- (insideEndTop), so they never overprint the legend row above the
+    -- grid; markers that land on neighbouring ticks alternate their
+    -- vertical offset so two close labels stagger instead of overlapping.
+    DBMS_OUTPUT.PUT_LINE('  var lastBest = -99, stagger = 0;');
     DBMS_OUTPUT.PUT_LINE('  ms.forEach(function(m){');
     DBMS_OUTPUT.PUT_LINE('    var t = ts(m.t); if(isNaN(t) || t < lo || t > hi) return;');
     DBMS_OUTPUT.PUT_LINE('    var best = 0, bd = Infinity;');
     DBMS_OUTPUT.PUT_LINE('    for(var i=0;i<cats.length;i++){var dd=Math.abs(ts(tc[i])-t); if(dd<bd){bd=dd;best=i;}}');
+    DBMS_OUTPUT.PUT_LINE('    stagger = (Math.abs(best - lastBest) * 1000 / Math.max(1, cats.length) < 25) ? (stagger ? 0 : 1) : 0;');
+    DBMS_OUTPUT.PUT_LINE('    lastBest = best;');
     DBMS_OUTPUT.PUT_LINE('    data.push({xAxis:cats[best],');
     DBMS_OUTPUT.PUT_LINE('      label:{show:true,formatter:(function(lbl){return function(){return lbl;};})(m.label),');
-    DBMS_OUTPUT.PUT_LINE('        rotate:90,position:"end",color:ink,fontSize:9,');
-    DBMS_OUTPUT.PUT_LINE('        backgroundColor:paper,padding:[1,2,1,2],borderRadius:2,distance:3}});');
+    DBMS_OUTPUT.PUT_LINE('        rotate:90,position:"insideEndTop",color:ink,fontSize:9,align:"right",');
+    DBMS_OUTPUT.PUT_LINE('        backgroundColor:paper,padding:[1,2,1,2],borderRadius:2,distance:4+stagger*72}});');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  if(!data.length) return null;');
     DBMS_OUTPUT.PUT_LINE('  return {symbol:["none","none"],silent:true,emphasis:{disabled:true},');

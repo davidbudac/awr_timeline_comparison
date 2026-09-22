@@ -73,7 +73,7 @@ def emit(w) -> str:
     hourly = "hourly" if bh == 1 else blabel
 
     out.append(L[0])
-    out.append('<section id="ash-timeline"><h2>ASH timeline (' + hourly
+    out.append('<section id="ash-timeline" data-normal="Y"><h2>ASH timeline (' + hourly
                + ', stacked by wait class)</h2>')
     out.append('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
                '<code>dba_hist_active_sess_history</code>, ' + ts_min(range_start)
@@ -123,7 +123,7 @@ def emit(w) -> str:
     out.append(L[15])
     out.append(L[16])
     out.append("var d=AWR_DATA.ashTimeline, palette=" + PALETTE + ";")
-    out.extend(L[18:54])      # verbatim ECharts init .. </script>
+    out.extend(L[18:L.index("</script>", 18) + 1])      # verbatim ECharts init .. </script>
     out.append("</section>")
-    out.append(L[55])
+    out.append(L[-1])
     return "\n".join(out)

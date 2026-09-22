@@ -122,7 +122,7 @@ def emit(w) -> str:
     out.append(L[17])
     out.append(L[18])
     out.append("var d=AWR_DATA.dbTimeSummary, palette=" + PALETTE + ";")
-    out.extend(L[20:58])     # verbatim ECharts init .. </script>
+    out.extend(L[20:L.index("</script>", 20) + 1])     # verbatim ECharts init .. </script>
     out.append("</section>")
-    out.append(L[59])
+    out.append(L[-1])
     return "\n".join(out)

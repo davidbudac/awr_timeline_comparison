@@ -193,12 +193,53 @@ def header(w, first_th, unit, with_trend=True):
     return s
 
 
-def table_time(w, rows, table_id, heading):
-    L = ["<h3>" + heading + "</h3>",
-         '<table id="' + table_id + '">' + header(w, "<th>Event</th>", "s") + "<tbody>"]
+def current_total_us(deltas):
+    """v_tot_cur_us: the Current window's total non-idle wait time."""
+    d = deltas[0]
+    return sum(t[2] for t in d.values()) if d else None
+
+
+def shift_pass(rows, tot):
+    """The table-wide-shift pre-pass: (shift, n_flag, mean_pct, sd_pct)."""
+    n = 0
+    s = ss = 0.0
+    for r in rows:
+        share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
+        z, pct = h.z_and_pct(r["cur_us"], r["mu_us"], r["sd_us"])
+        b = h.policy_bucket("WAIT", r["event_name"], r["wait_class"], r["cur_us"], r["mu_us"],
+                            r["sd_us"], r["n_us"], share)
+        if b in ("large", "moderate") and r["mu_us"] != 0:
+            n += 1
+            s += pct
+            ss += pct * pct
+    if n >= 5:
+        mean = s / n
+        sd = (max(ss / n - mean * mean, 0.0)) ** 0.5
+        if mean != 0 and sd / abs(mean) < 0.15:
+            return True, n, mean, sd
+        return False, n, mean, sd
+    return False, n, None, None
+
+
+def shift_note(rows, shift, n_flag, mean_pct, sd_pct):
+    if not shift:
+        return []
+    return ['<p class="shift-note"><b>Table-wide shift:</b> '
+            + str(n_flag) + " of " + str(len(rows)) + " events moved together ("
+            + ("&#9650; " if mean_pct >= 0 else "&#9660; ")
+            + h.to_char_fixed(abs(mean_pct), 0) + "% &plusmn; "
+            + h.to_char_fixed(sd_pct, 0) + " points) &mdash; one throughput-style change, "
+            "not " + str(n_flag) + " separate findings. Per-row badges are demoted to moderate.</p>"]
+
+
+def table_time(w, rows, table_id, heading, tot=None, shift=False, note=(), prefix="fg"):
+    L = ["<h3>" + heading + "</h3>"]
+    L.extend(note)
+    L.append('<table id="' + table_id + '">' + header(w, "<th>Event</th>", "s") + "<tbody>")
     for r in rows:
         cur_s = None if r["cur_us"] is None else r["cur_us"] / 1e6
-        row = ('<tr data-imp="' + h.is_essential("WAIT", r["event_name"]) + '">'
+        row = ('<tr id="' + h.anchor_id(prefix, r["event_name"]) + '" data-imp="'
+               + h.is_essential("WAIT", r["event_name"]) + '">'
                + "<td>" + h.esc(r["event_name"]) + "</td>"
                + '<td class="trend" data-spark="' + r["spark_vals"]
                + '" data-spark-title="' + h.esc(r["event_name"]) + '"></td>'
@@ -218,18 +259,21 @@ def table_time(w, rows, table_id, heading):
             if rank_s != "":
                 row += ' <span class="badge skip">#' + rank_s + "</span>"
             row += "</td>"
-        row += h.score_cells(r["cur_us"], r["mu_us"], r["sd_us"], r["n_us"])
+        share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
+        row += h.score_cells(r["cur_us"], r["mu_us"], r["sd_us"], r["n_us"], share,
+                             "WAIT", r["event_name"], r["wait_class"], shift)
         row += "</tr>"
         L.append(row)
     L.append("</tbody></table>")
     return L
 
 
-def table_avg(w, rows, table_id, heading):
+def table_avg(w, rows, table_id, heading, prefix="fgms"):
     L = ["<h3>" + heading + "</h3>",
          '<table id="' + table_id + '">' + header(w, "<th>Event</th>", "ms") + "<tbody>"]
     for r in rows:
-        row = ('<tr data-imp="' + h.is_essential("WAIT", r["event_name"]) + '">'
+        row = ('<tr id="' + h.anchor_id(prefix, r["event_name"]) + '" data-imp="'
+               + h.is_essential("WAIT", r["event_name"]) + '">'
                + "<td>" + h.esc(r["event_name"]) + "</td>"
                + '<td class="trend" data-spark="' + r["spark_ms_vals"]
                + '" data-spark-title="' + h.esc(r["event_name"]) + '"></td>'
@@ -243,7 +287,8 @@ def table_avg(w, rows, table_id, heading):
                 ms = float(ms_s)
                 row += ('<td class="num" data-w="' + str(k) + '"' + h.dev_attr(r["cur_ms"], ms) + ">"
                         + h.fmt_num(ms) + "</td>")
-        row += h.score_cells(r["cur_ms"], r["mu_ms"], r["sd_ms"], r["n_ms"])
+        row += h.score_cells(r["cur_ms"], r["mu_ms"], r["sd_ms"], r["n_ms"], None,
+                             "WAIT", r["event_name"], r["wait_class"])
         row += "</tr>"
         L.append(row)
     L.append("</tbody></table>")

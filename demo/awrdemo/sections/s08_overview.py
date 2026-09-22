@@ -18,7 +18,7 @@ from .. import helpers as h
 # (pos, label, unit, src, key) -- the `cards` CTE, left-to-right
 CARDS = [
     (1, "DB time", "cs/s", "LOAD", "DB time"),
-    (2, "Redo generated", "B/s", "LOAD", "redo size"),
+    (2, "Redo generated", "bytes/s", "LOAD", "redo size"),
     (3, "Logical reads", "/s", "LOAD", "session logical reads"),
     (4, "Average Active Sessions", "AAS", "METRIC", "Average Active Sessions"),
     (5, "Wait Time Ratio", "%", "METRIC", "Database Wait Time Ratio"),
@@ -66,10 +66,13 @@ def _script(overview_line: str) -> list[str]:
 
 def emit(w) -> str:
     out = ["<!-- AWR-SECTION: 08_overview BEGIN -->"]
-    out.append('<section id="overview" data-triage="Y"><h2>Headline metrics</h2>')
+    out.append('<section id="overview" data-normal="Y"><h2>Headline metrics</h2>')
     out.append('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
                "Six headline metrics across the compared windows, oldest &rarr; current. "
-               "Badge = z bucket: |z|&gt;3 large, |z|&gt;2 moderate, else typical.</p>")
+               "Badge = z bucket: |z|&gt;3 large, |z|&gt;2 moderate, else typical "
+               "(z over max(&sigma;, 2% of &mu;); each metric has its own materiality floors and "
+               "direction, see sql/lib/metric_policy.plsql; "
+               "a move in the good direction is <b>improved</b> and never highlighted).</p>")
     out.append('<div class="hero-grid">')
 
     n_win = w.weeks_back + 1
@@ -87,7 +90,7 @@ def emit(w) -> str:
         vals_csv = ",".join("null" if v is None else h.num6(v) for v in vals)
 
         z, pct = h.z_and_pct(cur, mu, sd)
-        sev = None if cur is None else h.bucket_of(cur, n, sd, z)
+        sev = None if cur is None else h.policy_bucket(src, key, None, cur, mu, sd, n)
         sev_cls = h.bucket_cls(sev) if sev is not None else "skip"
         sig = h.sigma_flag(mu, sd)
         z_txt = None if z is None else h.z_txt(z, 1)
@@ -115,7 +118,10 @@ def emit(w) -> str:
                    + '" data-spark="' + vals_csv
                    + '" data-spark-title="' + label + '"></div>')
         out.append('  <div class="value"' + h.fmt_num_title(cur) + ">"
-                   + h.fmt_num(cur) + " <small>" + unit + "</small></div>")
+                   + h.fmt_num(cur) + " <small"
+                   + (' title="centiseconds of DB time per second (divide by 100 for average active sessions)"'
+                      if unit == "cs/s" else "")
+                   + ">" + unit + "</small></div>")
 
         # B6: bar strip on a lowered baseline + prior min-max range
         present = [v for v in vals if v is not None]
@@ -150,6 +156,8 @@ def emit(w) -> str:
         out.append('  <div class="foot">'
                    + '<span class="badge ' + sev_cls + '">' + sev_badge + "</span>"
                    + (h.SIG_BADGE if sig else "")
+                   + ' <a class="xlink" href="#' + h.anchor_id("find-" + src.lower(), key)
+                   + '" title="Go to this metric in the Findings summary">&#8599; finding</a>'
                    + "</div>")
         out.append("</div>")
 

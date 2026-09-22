@@ -3,7 +3,7 @@ AVG pivot over the comprehensive template's sysmetric_targets.sql.
 Single instance, so is_additive (SUM vs AVG across instances) is a no-op."""
 from __future__ import annotations
 
-from awrdemo.helpers import esc, is_essential
+from awrdemo.helpers import esc, is_essential, anchor_id
 from awrdemo.sections._pivot import header, spark_vals, value_cells
 
 # sql/lib/templates/comprehensive/sysmetric_targets.sql (23 metrics)
@@ -86,7 +86,8 @@ def emit(w) -> str:
     for name in sorted(TARGETS, key=lambda s: (_ORDER.get(s, 99), s)):
         vals = metric_series(w, name)
         unit = METRIC_UNIT.get(name, '') if any(v is not None for v in vals) else ''
-        out.append('<tr data-imp="' + is_essential('METRIC', name) + '"><td>' + esc(name) + '</td>'
+        out.append('<tr id="' + anchor_id('metric', name) + '" data-imp="' + is_essential('METRIC', name)
+                   + '"><td>' + esc(name) + '</td>'
                    + '<td>' + esc(unit) + '</td>'
                    + '<td class="trend" data-spark="' + spark_vals(vals)
                    + '" data-spark-title="' + esc(name) + '"></td>'

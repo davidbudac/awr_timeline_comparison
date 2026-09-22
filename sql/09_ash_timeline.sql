@@ -63,6 +63,7 @@ DECLARE
     v_bk           NUMBER;
     v_wc           VARCHAR2(64);
     v_n            NUMBER;
+    v_total_n      NUMBER := 0;
     v_aas          NUMBER;
     @@sql/lib/put_clob_chunked.plsql
 BEGIN
@@ -90,7 +91,7 @@ BEGIN
                           'NLS_NUMERIC_CHARACTERS=''.,''') || '-hour'
         END;
 
-    DBMS_OUTPUT.PUT_LINE('<section id="ash-timeline"><h2>ASH timeline '
+    DBMS_OUTPUT.PUT_LINE('<section id="ash-timeline" data-normal="Y"><h2>ASH timeline '
         || '(' || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
         || ', stacked by wait class)</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
@@ -235,6 +236,7 @@ BEGIN
                 ELSE
                     v_n := 0;
                 END IF;
+                v_total_n := v_total_n + v_n;
                 -- 360 ASH samples == one busy session-hour;
                 -- divide by the bucket width (in hours) to get AAS.
                 v_aas := v_n / (v_bucket_hours * 360);
@@ -283,6 +285,7 @@ BEGIN
     -- space the slider would have used.
     DBMS_OUTPUT.PUT_LINE('var showSlider=(d.hours||[]).length>24;');
     DBMS_OUTPUT.PUT_LINE('chart.setOption({');
+    DBMS_OUTPUT.PUT_LINE('  aria:{enabled:true,decal:{show:true}},');
     DBMS_OUTPUT.PUT_LINE('  tooltip:{trigger:"axis",axisPointer:{type:"line"},');
     DBMS_OUTPUT.PUT_LINE('    valueFormatter:function(v){return v==null?"\u2014":(+v).toFixed(2);}},');
     DBMS_OUTPUT.PUT_LINE('  legend:{top:0,left:"center",textStyle:{color:fg,fontSize:11},itemWidth:12,itemHeight:8,type:"scroll"},');
@@ -312,6 +315,15 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');
 
+    -- Empty state: no ASH sample in the whole span -> say so and hide the
+    -- (empty) chart box.  Emitted after the script so the demo twin's
+    -- script slice is unaffected.
+    IF v_total_n = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('<p style="color:var(--muted)">No ASH samples in '
+            || 'DBA_HIST_ACTIVE_SESS_HISTORY for the compared span (an idle database, or '
+            || 'ASH not flushed to AWR). Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p>');
+        DBMS_OUTPUT.PUT_LINE('<script>(function(){var e=document.getElementById("ash-timeline-stack");if(e)e.style.display="none";})();</script>');
+    END IF;
     DBMS_OUTPUT.PUT_LINE('</section>');
 
     DBMS_LOB.FREETEMPORARY(v_hours_json);

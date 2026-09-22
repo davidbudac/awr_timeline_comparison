@@ -35,13 +35,18 @@ DECLARE
     v_cards_json  CLOB;
     v_weeks_back  NUMBER := ~weeks_back;
 
+    @@sql/lib/metric_policy.plsql
     @@sql/lib/nth_csv.plsql
     @@sql/lib/fmt_num.plsql
+    @@sql/lib/anchor_id.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="overview" data-triage="Y"><h2>Headline metrics</h2>');
+    DBMS_OUTPUT.PUT_LINE('<section id="overview" data-normal="Y"><h2>Headline metrics</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
         || 'Six headline metrics across the compared windows, oldest &rarr; current. '
-        || 'Badge = z bucket: |z|&gt;3 large, |z|&gt;2 moderate, else typical.</p>');
+        || 'Badge = z bucket: |z|&gt;3 large, |z|&gt;2 moderate, else typical '
+        || '(z over max(&sigma;, 2% of &mu;); each metric has its own materiality floors and '
+        || 'direction, see sql/lib/metric_policy.plsql; a move in the good direction is '
+        || '<b>improved</b> and never highlighted).</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="hero-grid">');
 
@@ -74,7 +79,7 @@ BEGIN
         cards AS (
             SELECT 1 AS pos, 'DB time'                AS label, 'cs/s' AS unit,
                    'LOAD'   AS src, 'DB time'                 AS key, 'Y' AS is_add FROM dual UNION ALL
-            SELECT 2, 'Redo generated',        'B/s',
+            SELECT 2, 'Redo generated',        'bytes/s',
                    'LOAD',   'redo size'                             , 'Y'           FROM dual UNION ALL
             SELECT 3, 'Logical reads',         '/s',
                    'LOAD',   'session logical reads'                 , 'Y'           FROM dual UNION ALL
@@ -168,7 +173,7 @@ BEGIN
                    END AS delta_pct
             FROM   with_lag
         )
-        SELECT pos, label, unit,
+        SELECT pos, label, unit, src, key,
                MAX(CASE WHEN week_offset = 0 THEN val END) AS cur,
                AVG(CASE WHEN week_offset > 0 THEN val END) AS mu,
                STDDEV(CASE WHEN week_offset > 0 THEN val END) AS sd,
@@ -187,7 +192,7 @@ BEGIN
                 WHERE  d.pos = grid.pos
                   AND  d.week_offset < ~weeks_back) AS deltas_csv
         FROM   grid
-        GROUP BY pos, label, unit
+        GROUP BY pos, label, unit, src, key
         ORDER BY pos
     ) LOOP
         DECLARE
@@ -219,10 +224,11 @@ BEGIN
             v_bw        CONSTANT NUMBER := 34;
             v_gap       CONSTANT NUMBER := 6;
         BEGIN
+            -- Same sigma floor + materiality + direction rule as 07.
             v_z := CASE
-                WHEN c.cur IS NULL OR c.mu IS NULL THEN NULL
-                WHEN c.sd IS NULL OR c.sd = 0       THEN NULL
-                ELSE (c.cur - c.mu) / c.sd
+                WHEN c.cur IS NULL OR c.mu IS NULL OR c.sd IS NULL THEN NULL
+                WHEN GREATEST(c.sd, 0.02 * ABS(c.mu)) = 0 THEN NULL
+                ELSE (c.cur - c.mu) / GREATEST(c.sd, 0.02 * ABS(c.mu))
             END;
             v_pct := CASE
                 WHEN c.cur IS NULL OR c.mu IS NULL OR c.mu = 0 THEN NULL
@@ -230,16 +236,14 @@ BEGIN
             END;
             v_sev := CASE
                 WHEN c.cur IS NULL THEN NULL
-                WHEN c.n < 3 THEN 'insufficient history'
-                WHEN c.sd IS NULL OR c.sd = 0 THEN 'flat baseline'
-                WHEN ABS(v_z) > 3 THEN 'large'
-                WHEN ABS(v_z) > 2 THEN 'moderate'
-                ELSE 'typical'
+                ELSE policy_bucket(c.src, c.key, NULL, c.cur, c.mu, c.sd, c.n)
             END;
             v_sev_cls := CASE v_sev
                 WHEN 'large'    THEN 'crit'
                 WHEN 'moderate' THEN 'warn'
                 WHEN 'typical'  THEN 'ok'
+                WHEN 'improved' THEN 'imp'
+                WHEN 'noted'    THEN 'note'
                 ELSE 'skip' END;
 
             -- B5: display-only clamp + baseline-barely-moved flag (no
@@ -288,7 +292,10 @@ BEGIN
                 || '" data-spark-title="' || c.label || '"></div>');
             DBMS_OUTPUT.PUT_LINE('  <div class="value"' || fmt_num_title(c.cur) || '>'
                 || fmt_num(c.cur)
-                || ' <small>' || c.unit || '</small></div>');
+                || ' <small' || CASE WHEN c.unit = 'cs/s'
+                                     THEN ' title="centiseconds of DB time per second (divide by 100 for average active sessions)"'
+                                     ELSE '' END
+                || '>' || c.unit || '</small></div>');
 
             --
             -- B6: parse the same vals_csv (oldest -> current, positional,
@@ -360,6 +367,8 @@ BEGIN
                        || '&sigma; below 1% of mean; read the % delta instead">'
                        || '&sigma;&approx;0</span>'
                    END
+                || ' <a class="xlink" href="#' || anchor_id('find-' || LOWER(c.src), c.key)
+                || '" title="Go to this metric in the Findings summary">&#8599; finding</a>'
                 || '</div>');
             DBMS_OUTPUT.PUT_LINE('</div>');
         END;

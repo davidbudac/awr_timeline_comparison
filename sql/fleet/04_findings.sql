@@ -1,13 +1,19 @@
 --
 -- sql/fleet/04_findings.sql
 -- "Findings" detail-block for the detail panel's right column: the unified
--- LOAD/METRIC/WAIT z-score compute is UNCHANGED from the old 03_findings.sql
--- (same CTE chain as sql/07_summary.sql: windows_cte -> load/metric/wait
--- pairs -> bounds -> deltas -> unified -> pivoted -> scored, using the FLEET
--- template's curated target lists via ~template_dir).  Emission differs only
--- in wrapping: the table is now class="dt" inside a .detail-block/.panel-h,
--- and only rows the recompute buckets 'large'/'moderate' are printed; the
--- rest are counted and summarized in one muted line.
+-- LOAD/METRIC/WAIT z-score compute is the same CTE chain as
+-- sql/07_summary.sql (windows_cte -> load/metric/wait pairs -> bounds ->
+-- deltas -> unified -> pivoted -> scored, using the FLEET template's curated
+-- target lists via ~template_dir).  The SQL yields z (over the floored
+-- sigma), %-delta and, for wait rows, the share of the Current total; the
+-- change bucket is assigned in PL/SQL by policy_bucket() from the SHARED
+-- sql/lib/metric_policy.plsql (a read-only @@ include -- the fleet reuses
+-- lib fragments, it never edits them), so the fleet band applies exactly
+-- the single-DB report's per-metric direction and materiality floors: a
+-- drop in a cost-type name is 'improved', a bookkeeping counter that moved
+-- is 'noted', and neither is printed or counted.  Only 'large' / 'moderate'
+-- rows are printed (large first, then by |z|); everything else is counted
+-- as suppressed and summarized in one muted line.
 --
 -- Ends with the machine-readable HTML comment (<!-- FLEET-COUNTS ... -->)
 -- that is the PL/SQL -> bash handoff -- the wrapper's assembler regex-matches
@@ -27,42 +33,46 @@ BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: fleet_04 BEGIN -->'); END;
 DECLARE
     v_crit       PLS_INTEGER := 0;
     v_warn       PLS_INTEGER := 0;
+    v_improved   PLS_INTEGER := 0;
     v_suppressed PLS_INTEGER := 0;
     v_open_table BOOLEAN := FALSE;
 
-    -- F5: a fleet-local twin of sql/lib/score_cells.plsql (a SHARED lib file
-    -- also used by the single-DB report's sql/07_summary.sql -- off limits
-    -- to a fleet-only visual change per CLAUDE.md's cardinal no-touch rule).
-    -- Same badge/z/pct scoring math, but the z-score and %-delta cells render
-    -- an up/down direction glyph + absolute value instead of a signed number;
-    -- color still comes only from the badge's crit/warn/ok class below, never
-    -- from the glyph or the sign.
-    FUNCTION score_cells_dir(p_cur NUMBER,
-                              p_mu  NUMBER,
-                              p_sd  NUMBER,
-                              p_n   NUMBER) RETURN VARCHAR2 IS
-        v_z      NUMBER;
-        v_pct    NUMBER;
-        v_bucket VARCHAR2(40);
+    TYPE finding_rec IS RECORD (
+        metric_domain VARCHAR2(16),
+        metric_name   VARCHAR2(120),
+        cur_val       NUMBER,
+        prior_mean    NUMBER,
+        prior_sd      NUMBER,
+        n_prior       NUMBER,
+        z_score       NUMBER,
+        pct_delta     NUMBER,
+        shr         NUMBER,
+        change_bucket VARCHAR2(40)
+    );
+    TYPE findings_t IS TABLE OF finding_rec INDEX BY PLS_INTEGER;
+    v_findings   findings_t;
+
+    -- The per-metric policy + the scoring rule (policy_bucket), shared with
+    -- the single-DB report.  Read-only reuse of a lib fragment.
+    @@sql/lib/metric_policy.plsql
+
+    -- F5: a fleet-local twin of sql/lib/score_cells.plsql's cell renderer
+    -- (a SHARED lib file -- off limits to a fleet-only visual change per
+    -- CLAUDE.md's cardinal no-touch rule).  The bucket comes in from the
+    -- caller (policy_bucket); the z-score and %-delta cells render an
+    -- up/down direction glyph + absolute value instead of a signed number;
+    -- color still comes only from the badge's crit/warn/ok class below,
+    -- never from the glyph or the sign.
+    FUNCTION score_cells_dir(p_bucket VARCHAR2,
+                              p_z      NUMBER,
+                              p_pct    NUMBER) RETURN VARCHAR2 IS
+        v_z      NUMBER := p_z;
+        v_pct    NUMBER := p_pct;
+        v_bucket VARCHAR2(40) := p_bucket;
         v_cls    VARCHAR2(10);
         v_zt     VARCHAR2(40);
         v_pt     VARCHAR2(40);
     BEGIN
-        v_z := CASE WHEN p_cur IS NULL OR p_mu IS NULL
-                      OR p_sd IS NULL OR p_sd = 0
-                    THEN NULL
-                    ELSE (p_cur - p_mu) / p_sd END;
-        v_pct := CASE WHEN p_cur IS NULL OR p_mu IS NULL OR p_mu = 0
-                      THEN NULL
-                      ELSE (p_cur - p_mu) / ABS(p_mu) * 100 END;
-        v_bucket := CASE
-            WHEN p_cur IS NULL                 THEN 'n/a'
-            WHEN NVL(p_n, 0) < 3               THEN 'insufficient history'
-            WHEN p_sd IS NULL OR p_sd = 0       THEN 'flat baseline'
-            WHEN ABS(v_z) > 3                  THEN 'large'
-            WHEN ABS(v_z) > 2                  THEN 'moderate'
-            ELSE                                    'typical'
-        END;
         v_cls := CASE v_bucket
                      WHEN 'large'    THEN 'crit'
                      WHEN 'moderate' THEN 'warn'
@@ -85,10 +95,11 @@ DECLARE
     END score_cells_dir;
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<div class="detail-block">');
-    DBMS_OUTPUT.PUT_LINE('<div class="panel-h">Findings (z &ge; 2&sigma;)</div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="panel-h">Findings (material, in the bad direction)</div>');
 
-    FOR f IN (
-        WITH
+    -- One bulk fetch of the unified recompute; the bucket is assigned in the
+    -- PL/SQL pass below.
+    WITH
         @@sql/lib/windows_cte.sql
         ,
         load_targets AS (
@@ -200,56 +211,74 @@ BEGIN
             FROM   unified
             GROUP BY metric_domain, metric_name
         ),
+        -- Materiality denominator for wait rows: the Current window's total
+        -- non-idle wait time across every class (s/s), as in 07.
+        wait_total AS (
+            SELECT SUM(metric_value) AS tot
+            FROM   wait_rows
+            WHERE  week_offset = 0
+        ),
         scored AS (
-            SELECT metric_domain, metric_name,
-                   cur_val,
-                   mu       AS prior_mean,
-                   sd       AS prior_sd,
-                   n        AS n_prior,
+            SELECT p.metric_domain, p.metric_name,
+                   p.cur_val,
+                   p.mu       AS prior_mean,
+                   p.sd       AS prior_sd,
+                   p.n        AS n_prior,
+                   -- z over the floored sigma, GREATEST(sd, 2% of |mu|)
                    CASE
-                       WHEN cur_val IS NULL OR mu IS NULL THEN NULL
-                       WHEN sd IS NULL OR sd = 0 THEN NULL
-                       ELSE (cur_val - mu) / sd
+                       WHEN p.cur_val IS NULL OR p.mu IS NULL OR p.sd IS NULL THEN NULL
+                       WHEN GREATEST(p.sd, 0.02 * ABS(p.mu)) = 0 THEN NULL
+                       ELSE (p.cur_val - p.mu) / GREATEST(p.sd, 0.02 * ABS(p.mu))
                    END AS z_score,
                    CASE
-                       WHEN cur_val IS NULL OR mu IS NULL OR mu = 0 THEN NULL
-                       ELSE (cur_val - mu) / ABS(mu) * 100
+                       WHEN p.cur_val IS NULL OR p.mu IS NULL OR p.mu = 0 THEN NULL
+                       ELSE (p.cur_val - p.mu) / ABS(p.mu) * 100
                    END AS pct_delta,
                    CASE
-                       WHEN cur_val IS NULL THEN 'n/a'
-                       WHEN n < 3           THEN 'insufficient history'
-                       WHEN sd IS NULL OR sd = 0 THEN 'flat baseline'
-                       WHEN ABS((cur_val - mu) / sd) > 3 THEN 'large'
-                       WHEN ABS((cur_val - mu) / sd) > 2 THEN 'moderate'
-                       ELSE 'typical'
-                   END AS change_bucket
-            FROM   pivoted
-            WHERE  cur_val IS NOT NULL OR mu IS NOT NULL
+                       WHEN p.metric_domain = 'WAIT' AND t.tot > 0 THEN p.cur_val / t.tot
+                   END AS shr,
+                   CAST(NULL AS VARCHAR2(40)) AS change_bucket
+            FROM   pivoted p
+            CROSS JOIN wait_total t
+            WHERE  p.cur_val IS NOT NULL OR p.mu IS NOT NULL
         )
         SELECT metric_domain, metric_name,
                cur_val, prior_mean, prior_sd, n_prior,
-               z_score, pct_delta, change_bucket
+               z_score, pct_delta, shr, change_bucket
+        BULK COLLECT INTO v_findings
         FROM   scored
-        ORDER BY CASE change_bucket
-                     WHEN 'large'                THEN 1
-                     WHEN 'moderate'             THEN 2
-                     WHEN 'insufficient history' THEN 3
-                     WHEN 'n/a'                  THEN 3
-                     WHEN 'flat baseline'        THEN 4
-                     ELSE 5
-                 END,
-                 ABS(NVL(z_score, 0)) DESC,
+        ORDER BY ABS(NVL(z_score, 0)) DESC,
                  ABS(NVL(pct_delta, 0)) DESC,
-                 metric_name
-    ) LOOP
-        IF f.change_bucket NOT IN ('large', 'moderate') THEN
-            v_suppressed := v_suppressed + 1;
-            CONTINUE;
-        END IF;
-        IF f.change_bucket = 'large' THEN
+                 metric_name;
+
+    -- Pass 1: bucket every row through the shared policy and tally.
+    FOR i IN 1 .. v_findings.COUNT LOOP
+        v_findings(i).change_bucket :=
+            policy_bucket(v_findings(i).metric_domain, v_findings(i).metric_name, NULL,
+                          v_findings(i).cur_val, v_findings(i).prior_mean,
+                          v_findings(i).prior_sd, v_findings(i).n_prior,
+                          v_findings(i).shr);
+        IF v_findings(i).change_bucket = 'large' THEN
             v_crit := v_crit + 1;
-        ELSE
+        ELSIF v_findings(i).change_bucket = 'moderate' THEN
             v_warn := v_warn + 1;
+        ELSE
+            v_suppressed := v_suppressed + 1;
+            IF v_findings(i).change_bucket = 'improved' THEN
+                v_improved := v_improved + 1;
+            END IF;
+        END IF;
+    END LOOP;
+
+    -- Pass 2: print large rows first, then moderate, each by |z| DESC (the
+    -- collection's order).  Twice over the same collection, no second query.
+    FOR pass IN 1 .. 2 LOOP
+    FOR i IN 1 .. v_findings.COUNT LOOP
+        DECLARE
+            f finding_rec := v_findings(i);
+        BEGIN
+        IF f.change_bucket <> CASE pass WHEN 1 THEN 'large' ELSE 'moderate' END THEN
+            CONTINUE;
         END IF;
 
         IF NOT v_open_table THEN
@@ -258,7 +287,10 @@ BEGIN
                 || 'comparison windows</b> (the same hour across the previous periods) '
                 || '&mdash; not the single preceding window. '
                 || '% &Delta; = (Current &minus; Prior mean) / |Prior mean| &times; 100; '
-                || 'z-score divides that same gap by the baseline&rsquo;s standard deviation.'
+                || 'z-score divides that same gap by the baseline&rsquo;s standard deviation '
+                || '(floored at 2% of the mean). A row is listed only when the move clears '
+                || 'the metric&#39;s own floors in its bad direction (sql/lib/metric_policy.plsql); '
+                || 'a drop in a cost-type metric is an improvement and is not listed.'
                 || '</p>');
             DBMS_OUTPUT.PUT_LINE('<table class="dt"><thead><tr>'
                 || '<th>Domain</th><th>Metric</th>'
@@ -281,8 +313,10 @@ BEGIN
             || '<td class="num">' ||
                 CASE WHEN f.prior_mean IS NULL THEN '&mdash;'
                      ELSE TO_CHAR(f.prior_mean, 'FM999G999G999G990D0000') END || '</td>'
-            || score_cells_dir(f.cur_val, f.prior_mean, f.prior_sd, f.n_prior)
+            || score_cells_dir(f.change_bucket, f.z_score, f.pct_delta)
             || '</tr>');
+        END;
+    END LOOP;
     END LOOP;
 
     IF v_open_table THEN
@@ -290,11 +324,18 @@ BEGIN
     END IF;
 
     IF v_crit = 0 AND v_warn = 0 THEN
-        DBMS_OUTPUT.PUT_LINE('<p>No metric moved beyond 2&sigma; of its prior baseline.</p>');
+        DBMS_OUTPUT.PUT_LINE('<p>No material regression: nothing moved beyond its own floors '
+            || 'in the bad direction'
+            || CASE WHEN v_improved > 0
+                    THEN ' (' || v_improved || ' improved)' ELSE '' END
+            || '.</p>');
     ELSIF v_suppressed > 0 THEN
         DBMS_OUTPUT.PUT_LINE('<p class="muted">' || v_suppressed
             || ' further metric' || CASE WHEN v_suppressed = 1 THEN '' ELSE 's' END
-            || ' within normal range (suppressed).</p>');
+            || ' within normal range'
+            || CASE WHEN v_improved > 0
+                    THEN ' or improved (' || v_improved || ')' ELSE '' END
+            || ' (suppressed).</p>');
     END IF;
 
     DBMS_OUTPUT.PUT_LINE('</div>');  -- .detail-block

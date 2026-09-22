@@ -23,7 +23,9 @@ def _cell_html(has: bool, val, is_cur: bool, chg: bool, k: int) -> str:
         body = '<span class="muted">(unset)</span>'
     else:
         body = "<code>" + h.esc(val) + "</code>"
-    return '<td class="' + cls + '" data-w="' + str(k) + '">' + body + "</td>"
+    return ('<td class="' + cls + '" data-w="' + str(k) + '">'
+            + ('<span class="g" title="differs from the Current value">&ne;</span> ' if chg else "")
+            + body + "</td>")
 
 
 def emit(w) -> str:
@@ -61,6 +63,8 @@ def emit(w) -> str:
                  "changed across the compared windows.</p></section>")
         L.append("<!-- AWR-SECTION: " + TAG + " END -->")
         return "\n".join(L)
+
+    L.append('<script>document.getElementById("param-changes").setAttribute("data-normal","Y");</script>')
 
     hdr = '<thead><tr><th>Parameter</th><th data-w="0">Current</th>'
     for k in range(1, w.weeks_back + 1):

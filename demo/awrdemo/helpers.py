@@ -9,6 +9,8 @@ with the PL/SQL originals named in each docstring.
 from __future__ import annotations
 
 import math
+import os
+import re
 from decimal import Decimal, ROUND_HALF_UP
 
 # ---------------------------------------------------------------------
@@ -170,27 +172,25 @@ def mean_sd(vals):
 
 
 def z_and_pct(cur, mu, sd):
-    z = None if (cur is None or mu is None or sd is None or sd == 0) else (cur - mu) / sd
+    """z over the floored sigma max(sd, 2% of |mu|) (v1.5.0), % delta."""
+    if cur is None or mu is None or sd is None:
+        z = None
+    else:
+        den = max(sd, 0.02 * abs(mu))
+        z = None if den == 0 else (cur - mu) / den
     pct = None if (cur is None or mu is None or mu == 0) else (cur - mu) / abs(mu) * 100
     return z, pct
 
 
-def bucket_of(cur, n, sd, z):
-    """The report's change bucket (07/08/score_cells 'scored' CASE)."""
-    if cur is None:
-        return "n/a"
-    if (n or 0) < 3:
-        return "insufficient history"
-    if sd is None or sd == 0:
-        return "flat baseline"
-    if abs(z) > 3:
-        return "large"
-    if abs(z) > 2:
-        return "moderate"
-    return "typical"
+def bucket_of(cur, n, sd, z, pct=None, share=None, dir="-", demote=False, mu=None,
+              domain="SQL", name=None, cls=None):
+    """Compatibility shim over policy_bucket() (sql/lib/metric_policy.plsql);
+    `dir` is ignored -- the policy decides the direction."""
+    return policy_bucket(domain, name, cls, cur, mu, sd, n, share, demote)
 
 
-BUCKET_CLS = {"large": "crit", "moderate": "warn", "typical": "ok"}
+BUCKET_CLS = {"large": "crit", "moderate": "warn", "typical": "ok", "improved": "imp",
+              "noted": "note"}
 
 
 def bucket_cls(bucket: str) -> str:
@@ -224,20 +224,168 @@ def pct_txt(pct) -> str:
 
 
 SIG_BADGE = (' <span class="badge sig" title="baseline barely moved: '
-             '&sigma; below 1% of mean; read the % delta instead">'
+             '&sigma; below 1% of mean (floored to 2% for z); read the % delta instead">'
              '&sigma;&approx;0</span>')
 
+IMM_BADGE = (' <span class="badge sig" title="|z| above 2 but the move is below this '
+             'metric&#39;s materiality floor (sql/lib/metric_policy.plsql)">'
+             'immaterial</span>')
 
-def score_cells(cur, mu, sd, n) -> str:
+# 07's variant of the immaterial badge (different wording of the title)
+IMM_BADGE_07 = (' <span class="badge sig" title="|z| above 2 but the move is below '
+                'this metric&#39;s materiality floor (sql/lib/metric_policy.plsql)">'
+                'immaterial</span>')
+
+
+def score_cells(cur, mu, sd, n, share=None, domain="SQL", name=None, cls=None,
+                demote=False) -> str:
+    """sql/lib/score_cells.plsql score_cells(cur, mu, sd, n, share, domain, name, class, demote)."""
     z, pct = z_and_pct(cur, mu, sd)
-    bucket = bucket_of(cur, n, sd, z)
+    bucket = policy_bucket(domain, name, cls, cur, mu, sd, n, share, demote)
     cls = bucket_cls(bucket)
     sig = sigma_flag(mu, sd)
+    imm = bucket == "typical" and z is not None and abs(z) > 2
     zt = z_txt(z, 2)
     pt = pct_txt(pct)
-    return ('<td><span class="badge ' + cls + '">' + bucket + '</span></td>'
-            '<td class="num">' + zt + (SIG_BADGE if sig else "") + '</td>'
+    title = (' title="part of a table-wide shift; see the note above the table"'
+             if demote and bucket == "moderate" else "")
+    return ('<td><span class="badge ' + cls + '"' + title + '>' + bucket + '</span></td>'
+            '<td class="num">' + zt + (SIG_BADGE if sig else "") + (IMM_BADGE if imm else "") + '</td>'
             '<td class="num">' + ("<b>" + pt + "</b>" if sig else pt) + '</td>')
+
+
+# ---------------------------------------------------------------------
+# sql/lib/metric_policy.plsql -- parsed from the SQL include itself, so the
+# demo can never drift from the report's per-metric policy table.
+# ---------------------------------------------------------------------
+
+_POLICY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                            "sql", "lib", "metric_policy.plsql")
+_POL_RE = re.compile(r"WHEN\s+'([^']*)'\s+THEN\s+RETURN\s+pol\('([^']*)',\s*'([YN])',\s*'(\w+)',"
+                     r"\s*([\d.]+|NULL),\s*([\d.]+|NULL)\)")
+_WPOL_RE = re.compile(r"(?:WHEN\s+'([^']*)'\s+THEN|ELSE)\s+RETURN\s+wpol\(v_class,\s*'(\w+)',"
+                      r"\s*([\d.]+),\s*([\d.]+)\)")
+_DEF_RE = re.compile(r"RETURN\s+pol\((?:'([^']*)'|p_domain),\s*'([YN])',\s*'(\w+)',\s*([\d.]+|NULL),\s*([\d.]+|NULL)\)")
+
+
+def _num(t):
+    return None if t == "NULL" else float(t)
+
+
+def _load_policy():
+    """{('LOAD', name): (family, canonical, dir, min_pct, min_abs), ...} plus
+    ('WAIT:event', name), ('WAIT:class', cls), ('WAIT:default', None),
+    ('DEFAULT', domain) and ('DEFAULT', None)."""
+    pol = {}
+    domain = None
+    wait_block = None          # 'event' / 'class'
+    with open(_POLICY_PATH, encoding="utf-8") as fh:
+        for line in fh:
+            if line.strip() == "END IF;":
+                domain, wait_block = None, None
+                continue
+            m = re.search(r"p_domain\s*(?:=\s*'(\w+)'|IN\s*\(([^)]*)\))", line)
+            if m and "IF" in line:
+                domain = m.group(1) or [x.strip(" '") for x in m.group(2).split(",")]
+                wait_block = None
+                continue
+            if domain == "WAIT":
+                if re.search(r"CASE\s+p_name", line):
+                    wait_block = "event"
+                    continue
+                if re.search(r"CASE\s+v_class", line):
+                    wait_block = "class"
+                    continue
+                m = _WPOL_RE.search(line)
+                if m:
+                    name, d, mp, ms = m.groups()
+                    val = (None, "Y", d, float(mp), float(ms))
+                    if name is None:
+                        pol[("WAIT:default", None)] = val
+                    else:
+                        pol[("WAIT:" + wait_block, name)] = val
+                continue
+            m = _POL_RE.search(line)
+            if m and domain in ("LOAD", "METRIC"):
+                name, fam, can, d, mp, ma = m.groups()
+                pol[(domain, name)] = (fam, can, d, _num(mp), _num(ma))
+                continue
+            m = _DEF_RE.search(line)
+            if m and "WHEN" not in line:
+                fam, can, d, mp, ma = m.groups()
+                val = (fam, can, d, _num(mp), _num(ma))
+                if isinstance(domain, list):
+                    for dom in domain:
+                        pol[("DEFAULT", dom)] = (dom, can, d, _num(mp), _num(ma))
+                elif domain is not None and domain not in ("LOAD", "METRIC", "WAIT"):
+                    pol[("DEFAULT", domain)] = val
+                else:
+                    pol[("DEFAULT", None)] = val
+    return pol
+
+
+_POLICY = _load_policy()
+
+
+def metric_policy(domain, name, cls=None):
+    """(family, canonical, dir, min_pct, min_abs) -- metric_policy()."""
+    if domain == "WAIT":
+        c = cls or (name[len("Wait class: "):] if name and name.startswith("Wait class: ") else None) or "Other"
+        v = _POLICY.get(("WAIT:event", name)) or _POLICY.get(("WAIT:class", c)) \
+            or _POLICY[("WAIT:default", None)]
+        return ("WAIT:" + c,) + v[1:]
+    v = _POLICY.get((domain, name)) or _POLICY.get(("DEFAULT", domain)) or _POLICY[("DEFAULT", None)]
+    return v
+
+
+def policy_bucket(domain, name, cls, cur, mu, sd, n, share=None, demote=False):
+    """policy_bucket() of sql/lib/metric_policy.plsql."""
+    if cur is None:
+        return "n/a"
+    if (n or 0) < 3:
+        return "insufficient history"
+    if mu is None or sd is None:
+        return "flat baseline"
+    den = max(sd, 0.02 * abs(mu))
+    if den == 0:
+        return "flat baseline"
+    z = (cur - mu) / den
+    if abs(z) <= 2:
+        return "typical"
+    fam, canon, d, min_pct, min_abs = metric_policy(domain, name, cls)
+    pct = None if mu == 0 else (cur - mu) / abs(mu) * 100
+    if pct is not None and abs(pct) < (10 if min_pct is None else min_pct):
+        return "typical"
+    if min_abs is not None:
+        if domain == "WAIT":
+            if share is not None and share < min_abs:
+                return "typical"
+        elif max(abs(cur), abs(mu)) < min_abs:
+            return "typical"
+    elif domain == "WAIT" and share is not None and share < 0.02:
+        return "typical"
+    if d == "INFO":
+        return "noted"
+    if (d == "UP" and cur < mu) or (d == "DOWN" and cur > mu):
+        return "improved"
+    raw = "large" if abs(z) > 3 else "moderate"
+    if demote and raw == "large":
+        return "moderate"
+    return raw
+
+
+def finding_family(domain, name, cls=None) -> str:
+    fam = metric_policy(domain, name, cls)[0]
+    return ("OTHER:" + name)[:64] if fam == "OTHER" else fam
+
+
+def is_canonical(domain, name) -> str:
+    return metric_policy(domain, name)[1]
+
+
+def higher_is_worse(domain, name) -> str:
+    """Legacy view of the policy direction: 'Y' for UP, '-' otherwise."""
+    return "Y" if metric_policy(domain, name)[2] == "UP" else "-"
 
 
 # ---------------------------------------------------------------------
@@ -306,6 +454,13 @@ _ESS = {
              "gc buffer busy acquire", "gc buffer busy release",
              "gc cr block busy", "gc current block busy"},
 }
+
+
+def anchor_id(prefix: str, name) -> str:
+    """sql/lib/anchor_id.plsql: lower-case, non [a-z0-9] runs -> '-', trimmed, 64 max."""
+    v = re.sub(r"[^a-z0-9]+", "-", (name or "").lower())
+    v = re.sub(r"^-+|-+$", "", v)
+    return prefix + "-" + v[:64]
 
 
 def is_essential(domain: str, name: str) -> str:

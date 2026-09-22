@@ -14,8 +14,8 @@ from __future__ import annotations
 from datetime import timedelta
 
 from .. import chrome
-from ..helpers import (esc, mean_sd, z_and_pct, ts_min, ts_sec, hh24,
-                       to_char_fixed)
+from ..helpers import (esc, mean_sd, z_and_pct, ts_min, ts_sec, hh24, dy, mon_dd,
+                       to_char_fixed, finding_family, is_canonical, policy_bucket)
 
 SQL_PATH = chrome.sql_path("sql/00_params.sql")
 H = timedelta(hours=1)
@@ -88,9 +88,13 @@ def _window_values(w):
 
 
 def scored_rows(w):
-    """[(domain, name, z, pct, n_prior)] ORDER BY ABS(NVL(z,0)) DESC, name."""
+    """[(domain, name, z, pct, n_prior, bucket, family, canonical)]
+    ORDER BY ABS(NVL(z,0)) DESC, name -- bucket already carries the
+    'improved' override of the PL/SQL pass."""
     rows = []
-    for (dom, name), vals in _window_values(w).items():
+    allv = _window_values(w)
+    wait_tot = sum(v.get(0, 0.0) for (d, _n), v in allv.items() if d == "WAIT")
+    for (dom, name), vals in allv.items():
         cur = vals.get(0)
         priors = [v for k, v in vals.items() if k > 0]
         mu, sd, n = mean_sd(priors)
@@ -106,7 +110,11 @@ def scored_rows(w):
         z, pct = z_and_pct(cur, mu, sd)
         if n < 3:
             z = None
-        rows.append((dom, name, z, pct, n))
+        share = (cur / wait_tot) if (dom == "WAIT" and wait_tot > 0 and cur is not None) else None
+        # the PL/SQL pass: per-metric policy (sql/lib/metric_policy.plsql)
+        bucket = None if z is None else policy_bucket(dom, name, None, cur, mu, sd, n, share)
+        fam, canon = finding_family(dom, name), is_canonical(dom, name)
+        rows.append((dom, name, z, pct, n, bucket, fam, canon))
     rows.sort(key=lambda r: (-abs(r[2] or 0.0), r[1]))
     return rows
 
@@ -216,25 +224,35 @@ def emit(w) -> str:
     put("<!-- AWR-SECTION: 00_params BEGIN -->")
 
     scored = scored_rows(w)
-    n_movers = n_usable = 0
+    n_movers = n_moved = n_impr = n_usable = 0
     max_n = 0
     top = []
+    seen = set()
+    fams = set()
     for r in scored:
         if (r[4] or 0) > max_n:
             max_n = r[4]
         if r[2] is not None:
             n_usable += 1
-            if abs(r[2]) > 2:
-                n_movers += 1
-                if len(top) < 3:
-                    top.append(r)
+            if r[5] == "improved" and r[7] == "Y":
+                n_impr += 1
+            elif r[5] in ("large", "moderate"):
+                n_moved += 1
+                if r[7] == "Y":
+                    fams.add(r[6])
+                    n_movers = len(fams)
+                    if len(top) < 3 and r[6] not in seen:
+                        top.append(r)
+                        seen.add(r[6])
 
     times_json, vals_json, windows_json = _timeline(w)
     target_end_s = ts_sec(w.target_end)
 
     # ---- editorial masthead ------------------------------------------
     put('<script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.body.classList.add("dark");}catch(e){}})();</script>')
-    put('<header class="report" data-triage="Y">')
+    put('<script>(function(){var m="normal";try{if(localStorage.getItem("awr-mode")==="full")m="full";}catch(e){}var h=location.hash||"",i=h.indexOf("!v=");if(i>=0&&h.slice(i+3).split("&")[0].split(",").indexOf("f")>=0)m="full";document.body.classList.add(m);})();</script>')
+    put('<a class="skip" href="#main-start">Skip to report</a>')
+    put('<header class="report">')
     put('  <div class="brandline"><span class="dot">&#9679;</span> AWR <span class="slash">/</span> TIMELINE COMPARISON</div>')
     put('  <div class="topgrid">')
     put('    <h1>' + esc(w.dow_name)
@@ -270,15 +288,21 @@ def emit(w) -> str:
         put('  <div class="verdict v-ok">')
         put('    <span class="label">Verdict</span>')
         put('    <span class="lede ok">Quiet</span> <span class="sep">/</span> '
-            '<span class="body">no metric moved beyond |z| &gt; 2 vs the prior '
-            + str(max_n) + ' window' + plural(max_n) + '.</span>')
+            '<span class="body">no material regression vs the prior '
+            + str(max_n) + ' window' + plural(max_n)
+            + ('; ' + str(n_impr) + ' metric' + plural(n_impr)
+               + ' <a href="#findings">improved</a>' if n_impr > 0 else '')
+            + '.</span>')
     else:
         put('  <div class="verdict v-crit">')
         put('    <span class="label">Verdict</span>')
-        put('    <a href="#findings" class="lede crit">' + str(n_movers) + ' mover'
+        put('    <a href="#findings" class="lede crit">' + str(n_movers) + ' finding'
             + plural(n_movers) + '</a> <span class="sep">/</span> '
-            '<span class="body">vs prior ' + str(max_n) + ' window' + plural(max_n) + '</span>')
-        for dom, name, z, pct, n in top:
+            '<span class="body">' + str(n_moved) + ' metric' + plural(n_moved)
+            + ' moved vs prior ' + str(max_n) + ' window' + plural(max_n)
+            + (' &middot; ' + str(n_impr) + ' improved' if n_impr > 0 else '')
+            + '</span>')
+        for dom, name, z, pct, n, _b, _f, _c in top:
             clean = name[len("Wait class: "):] if name.startswith("Wait class: ") else name
             if len(clean) > 36:
                 clean = clean[:34] + "&hellip;"
@@ -289,13 +313,15 @@ def emit(w) -> str:
     put('  </div>')
 
     # ---- all movers list --------------------------------------------
-    if n_movers > 0:
+    if n_moved > 0:
         put('  <details class="movers-all">')
-        put('    <summary>All ' + str(n_movers) + ' mover' + plural(n_movers)
-            + ' &middot; |z| &gt; 2</summary>')
+        put('    <summary>All ' + str(n_moved) + ' moved metric' + plural(n_moved)
+            + ' &middot; material, in the bad direction; twins muted'
+            + ('; ' + str(n_impr) + ' improved not listed' if n_impr > 0 else '')
+            + '</summary>')
         put('    <ul class="movers-list">')
-        for dom, name, z, pct, n in scored:
-            if z is None or abs(z) <= 2:
+        for dom, name, z, pct, n, bucket, fam, canon in scored:
+            if bucket not in ("large", "moderate"):
                 continue
             clean = name[len("Wait class: "):] if name.startswith("Wait class: ") else name
             if len(clean) > 48:
@@ -304,7 +330,8 @@ def emit(w) -> str:
                 clean = esc(clean)
             z_txt = to_char_fixed(z, 1, plus=True)
             cls, txt = _pct_markup(pct)
-            put('      <li><span class="m-dom">' + dom + '</span>'
+            li_cls = ' class="twin"' if canon == "N" else ''
+            put('      <li' + li_cls + '><span class="m-dom">' + dom + '</span>'
                 '<span class="m-name">' + clean + '</span>'
                 '<span class="m-z">z ' + z_txt + '</span>'
                 '<span class="m-pct ' + cls + '">' + txt + '</span></li>')
@@ -314,7 +341,7 @@ def emit(w) -> str:
     put('  <div id="narrative-slot"></div>')
 
     # ---- compared windows strip -------------------------------------
-    put('  <div class="windows-strip hidetri">')
+    put('  <div class="windows-strip">')
     put('    <div class="strip-head"><b>Compared windows</b> <span class="strip-meta">'
         + esc(w.dow_name)
         + ' &middot; ' + w.win_label + ' each &middot; every ' + w.step_label
@@ -324,18 +351,38 @@ def emit(w) -> str:
         + (' &middot; day profile: ' + str(w.profile_days) + ' prior days'
            if w.profile_days > 0 else '')
         + '</span></div>')
-    put('    <div class="windows-chips">')
     step = timedelta(hours=w.step_hours)
     width = timedelta(hours=w.win_hours)
+    cur_day = (w.target_end - width).date()
+    cur_start = w.target_end - width
+    oldest = w.target_end - w.weeks_back * step - width
+    put('    <details class="windows-more">')
+    put('      <summary>'
+        '<span class="wchip cur" data-w="0" title="click to highlight the Current window everywhere">'
+        '<b>current</b> <span>' + dy(cur_start) + ' ' + cur_start.strftime("%d") + ' '
+        + mon_dd(cur_start)[:3] + ' ' + hh24(cur_start) + ' &rarr; ' + hh24(w.target_end)
+        + '</span></span>'
+        '<span>vs ' + str(w.weeks_back) + ' prior window' + ('' if w.weeks_back == 1 else 's')
+        + ', every ' + w.step_label + ', back to '
+        + dy(oldest) + ' ' + oldest.strftime("%d") + ' ' + mon_dd(oldest)[:3] + '</span>'
+        '<span class="w-toggle"><span class="closed">show all windows &#9662;</span>'
+        '<span class="opened">hide windows &#9652;</span></span>'
+        '</summary>')
+    put('    <div class="windows-chips">')
     for wk in range(w.weeks_back + 1):
         w_end = w.target_end - wk * step
         w_start = w_end - width
-        put('      <span class="wchip' + (' cur' if wk == 0 else '')
-            + '" data-w="' + str(wk) + '" title="Highlight this window everywhere">'
+        same_day = w_start.date() == cur_day
+        w_day = dy(w_start) + " " + w_start.strftime("%d") + " " + mon_dd(w_start)[:3]
+        put('      <button type="button" class="wchip' + (' cur' if wk == 0 else '')
+            + '" data-w="' + str(wk) + '" title="' + ts_min(w_start) + ' &rarr; ' + ts_min(w_end)
+            + ' &middot; click to highlight this window everywhere">'
             + ('<b>current</b>' if wk == 0 else '<b>&minus;' + w.offset_labels[wk - 1] + '</b>')
-            + ' <span>' + hh24(w_start) + ' &rarr; ' + hh24(w_end) + '</span></span>')
+            + ' <span>' + ('' if same_day else '<em>' + w_day + '</em> ')
+            + hh24(w_start) + ' &rarr; ' + hh24(w_end) + '</span></button>')
     put('    </div>')
     put('    <div class="windows-hint">click a window to highlight it everywhere &middot; Esc clears</div>')
+    put('    </details>')
     put('    <div class="windows-chart" id="masthead-timeline"></div>')
     put('    <div class="windows-fallback">')
     for wk in range(w.weeks_back + 1):
@@ -393,6 +440,7 @@ def emit(w) -> str:
         '</div>'
         '<div class="rail-list">'
         '<b>Triage</b>'
+        '<a href="#narrative-slot" class="narr-link" hidden>What changed</a>'
         '<a href="#db-time-summary">DB time</a>'
         '<a href="#overview">Overview</a>'
         '<a href="#ash-timeline">ASH timeline</a>'
@@ -415,26 +463,24 @@ def emit(w) -> str:
         '<a href="#param-changes">Parameters</a>'
         '</div>'
         '<div class="rail-foot">'
-        '<button type="button" id="triage-toggle" class="triage-filter"'
-        ' aria-pressed="false"'
-        ' title="Collapse the report to the triage-critical sections'
-        ' and the verdict">'
-        'Triage mode</button>'
-        '<button type="button" id="essential-toggle" class="essential-filter"'
-        ' aria-pressed="false"'
-        ' title="Show only the curated essential rows in the load,'
-        ' metric and wait tables; severity-flagged rows stay visible">'
-        'Essential rows</button>'
-        '<button type="button" id="app-filter-toggle" class="app-filter"'
-        ' aria-pressed="false"'
-        ' title="Hide system-wide sections and Oracle-internal SQL;'
-        ' show only application SQL and its related data">'
-        'Application only</button>'
+        '<button type="button" class="view-btn" id="view-btn"'
+        ' aria-expanded="false" aria-controls="view-panel"'
+        ' title="Report view options">View &#9662;</button>'
+        '<div class="view-panel" id="view-panel">'
+        '<div class="mode-switch" role="group" aria-label="Report detail level">'
+        '<button type="button" id="mode-normal" class="mode-btn" aria-pressed="true"'
+        ' title="Normal view: verdict, headline metrics, findings, ASH timeline, Top SQL">'
+        'Normal</button>'
+        '<button type="button" id="mode-full" class="mode-btn" aria-pressed="false"'
+        ' title="Full view: every section and every scored row">'
+        'Full</button>'
+        '</div>'
         '<button type="button" id="next-finding" class="next-finding"'
         ' title="Jump to the next large (critical) finding">'
         '<span>&darr; next large finding</span>'
         '<span class="keys">J K</span>'
         '</button>'
+        '</div>'
         '</div>'
         '</nav>')
 

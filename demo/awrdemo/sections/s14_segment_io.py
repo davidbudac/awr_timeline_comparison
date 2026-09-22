@@ -18,8 +18,8 @@ from awrdemo.sections import _iodims as D
 DIMS = [  # code, ord, label, unit  (dims CTE)
     ("PREADS", 1, "By physical reads", "blocks"),
     ("PWRITES", 2, "By physical writes", "blocks"),
-    ("RREQ", 3, "By physical read requests", "reqs"),
-    ("WREQ", 4, "By physical write requests", "reqs"),
+    ("RREQ", 3, "By physical read requests", "requests"),
+    ("WREQ", 4, "By physical write requests", "requests"),
 ]
 _IDX = {"PREADS": 0, "PWRITES": 1, "RREQ": 2, "WREQ": 3}
 

@@ -186,6 +186,96 @@ while IFS= read -r hit; do
         "detail-report href carries a 'reports/' prefix -- it must be a bare relative name so the per-run folder stays relocatable"
 done < <(grep -n 'href="reports/' run_awr_fleet.sh 2>/dev/null)
 
+# ----------------------------------------------------------------------
+# 12. Every LOAD / METRIC name in every template's target list must have
+#     a policy line in sql/lib/metric_policy.plsql (family / direction /
+#     floors); an unmapped name falls through to the generic default and
+#     never folds or gets a direction.
+# ----------------------------------------------------------------------
+for d in sql/lib/templates/*/; do
+    for t in sysstat_load_targets sysmetric_targets; do
+        f="$d$t.sql"
+        [ -f "$f" ] || continue
+        while IFS= read -r name; do
+            [ -n "$name" ] || continue
+            if ! grep -qF "WHEN '$name'" sql/lib/metric_policy.plsql; then
+                finding metric-policy "$f" \
+                    "target name '$name' has no line in sql/lib/metric_policy.plsql (add a WHEN 'name' THEN RETURN pol(...) line)"
+            fi
+        done < <(sed -n "s/^[[:space:]]*SELECT '\([^']*\)'.*/\1/p" "$f")
+    done
+done
+
+# ----------------------------------------------------------------------
+# 13. sql/lib/score_cells.plsql calls policy_bucket(), so every file that
+#     includes it must include sql/lib/metric_policy.plsql first.
+# ----------------------------------------------------------------------
+for f in $(grep -l '@@sql/lib/score_cells.plsql' sql/*.sql sql/fleet/*.sql awr_fleet_extract.sql 2>/dev/null); do
+    a=$(grep -n '@@sql/lib/metric_policy.plsql' "$f" | head -1 | cut -d: -f1)
+    b=$(grep -n '@@sql/lib/score_cells.plsql' "$f" | head -1 | cut -d: -f1)
+    if [ -z "$a" ] || [ "$a" -gt "$b" ]; then
+        finding policy-include-order "$f:${b:-0}" \
+            "sql/lib/score_cells.plsql is included without sql/lib/metric_policy.plsql before it (policy_bucket would be undefined)"
+    fi
+done
+
+# ----------------------------------------------------------------------
+# 14. PL/SQL forbids a variable / TYPE declaration AFTER a subprogram in
+#     the same DECLARE section (PLS-00103 "expecting begin function pragma
+#     procedure").  Every sql/lib/*.plsql include declares subprograms, so
+#     inside a top-level DECLARE ... BEGIN block nothing that looks like a
+#     declaration may follow the first such include or FUNCTION/PROCEDURE.
+#     Bit 00/02/03/07/17 live on dbmint (v1.5.0).
+# ----------------------------------------------------------------------
+for f in $(sql_files); do
+    awk -v file="$f" '
+        /^DECLARE[[:space:]]*$/ { inblk=1; seen=0; next }
+        /^BEGIN[[:space:]]*$/   { inblk=0; next }
+        inblk {
+            ind = match($0, /[^ ]/) - 1
+            if (ind > 4 || $0 ~ /^[[:space:]]*--/) next
+            if ($0 ~ /^[[:space:]]*(FUNCTION|PROCEDURE)[[:space:]]/ || $0 ~ /^[[:space:]]*@@sql\/lib\/[^ ]*\.plsql/) {
+                if (!seen) seen = NR; next
+            }
+            if (seen && $0 ~ /^[[:space:]]+(TYPE[[:space:]]|[A-Za-z_][A-Za-z0-9_]*[[:space:]]+(CONSTANT[[:space:]]+)?(NUMBER|VARCHAR2|PLS_INTEGER|BINARY_INTEGER|BOOLEAN|DATE|TIMESTAMP|CLOB|[A-Za-z_]+_t|[A-Za-z_]+_rec|[A-Za-z_]+_tab)[[:space:](;])/) {
+                printf "%s:%d: declaration after a subprogram (first subprogram/include at line %d)\n", file, NR, seen
+            }
+        }' "$f" | while IFS= read -r line; do
+        finding plsql-decl-order "${line%%: *}" "${line#*: }"
+    done
+done
+
+# ----------------------------------------------------------------------
+# 15. Oracle reserved words used as PL/SQL identifiers / SQL aliases.
+#     SHARE (LOCK TABLE ... IN SHARE MODE) bit the findings record on dbmint.
+# ----------------------------------------------------------------------
+for f in $(sql_files); do
+    grep -n -i -E '(^[[:space:]]+share[[:space:]]+(NUMBER|VARCHAR2|PLS_INTEGER)|[[:space:]]AS[[:space:]]+share[[:space:]]*(,|$)|\.share\)|,[[:space:]]*share[[:space:]]*(,|$))' "$f" \
+      | grep -v -- '--' | while IFS= read -r line; do
+        finding reserved-word "$f:${line%%:*}" "'share' is an Oracle reserved word; use 'shr' (${line#*:})"
+    done
+done
+
+# ----------------------------------------------------------------------
+# 16. sql/lib/metric_policy.plsql opens with a TYPE (policy_rec), which
+#     PL/SQL forbids after any subprogram -- so in every DECLARE block it
+#     must be the FIRST subprogram-declaring item (before any inline
+#     FUNCTION/PROCEDURE and before every other sql/lib/*.plsql include),
+#     and after every plain variable (check 14).
+# ----------------------------------------------------------------------
+for f in $(grep -l '@@sql/lib/metric_policy.plsql' $(sql_files) 2>/dev/null); do
+    awk -v file="$f" '
+        /^DECLARE[[:space:]]*$/ { inblk=1; first=0; next }
+        /^BEGIN[[:space:]]*$/   { inblk=0; next }
+        inblk && (match($0, /[^ ]/) - 1) <= 4 && ($0 ~ /^[[:space:]]*(FUNCTION|PROCEDURE)[[:space:]]/ || $0 ~ /^[[:space:]]*@@sql\/lib\/[^ ]*\.plsql/) {
+            if (!first) first = NR
+            if ($0 ~ /metric_policy\.plsql/ && first != NR)
+                printf "%s:%d: sql/lib/metric_policy.plsql must precede the first FUNCTION/PROCEDURE/.plsql include of its DECLARE block (line %d)\n", file, NR, first
+        }' "$f" | while IFS= read -r line; do
+        finding policy-include-first "${line%%: *}" "${line#*: }"
+    done
+done
+
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"
 fi

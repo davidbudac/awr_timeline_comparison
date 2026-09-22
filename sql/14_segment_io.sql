@@ -211,8 +211,8 @@ BEGIN
         dims AS (
             SELECT 'PREADS' code, 1 ord, 'By physical reads'  label, 'blocks' unit FROM dual UNION ALL
             SELECT 'PWRITES', 2,    'By physical writes',            'blocks'      FROM dual UNION ALL
-            SELECT 'RREQ',    3,    'By physical read requests',     'reqs'        FROM dual UNION ALL
-            SELECT 'WREQ',    4,    'By physical write requests',    'reqs'        FROM dual
+            SELECT 'RREQ',    3,    'By physical read requests',     'requests'        FROM dual UNION ALL
+            SELECT 'WREQ',    4,    'By physical write requests',    'requests'        FROM dual
         ),
         all_weeks AS (
             SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
@@ -392,7 +392,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
             || 'No segment-level I/O recorded for any compared window '
             || '(DBA_HIST_SEG_STAT empty for these snapshots, or no valid '
-            || 'windows).</p>');
+            || 'windows). Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p>');
     END IF;
 
     -- Second pass: per-object-type rollup for the chart toggle. Same
@@ -635,10 +635,10 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('      labelLayout:{moveOverlap:"shiftY"},');
         DBMS_OUTPUT.PUT_LINE('      tooltip:{trigger:"axis",axisPointer:{type:"line"},formatter:function(ps){var hdr="<b>"+ps[0].axisValue+"</b>";var rs=ps.filter(function(p){return p.value!=null;}).sort(function(a,b){return (b.value||0)-(a.value||0);}).map(function(p){return p.marker+" "+p.seriesName+": <b>"+fmt(p.value)+" "+d.unit+"</b>";}).join("<br/>");return hdr+"<br/>"+rs;}},');
         DBMS_OUTPUT.PUT_LINE('      legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},');
-        DBMS_OUTPUT.PUT_LINE('      grid:{left:50,right:110,top:10,bottom:44,containLabel:true},');
+        DBMS_OUTPUT.PUT_LINE('      grid:{left:50,right:128,top:10,bottom:44,containLabel:true},');
         DBMS_OUTPUT.PUT_LINE('      xAxis:{type:"category",data:weeks,axisLabel:{color:fg,fontWeight:600},splitLine:{show:true,lineStyle:{color:gr}}},');
         DBMS_OUTPUT.PUT_LINE('      yAxis:{type:"value",name:d.unit,nameTextStyle:{color:mu,fontSize:10},axisLabel:{color:mu,formatter:function(v){return (+v).toLocaleString(undefined,{maximumFractionDigits:0});}},splitLine:{lineStyle:{color:gr}}},');
-        DBMS_OUTPUT.PUT_LINE('      series:rows.map(function(s,i){var isTop=top3.indexOf(i)>=0;var o={name:s.name,type:"line",connectNulls:false,showSymbol:true,symbolSize:6,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:isTop?2:1.25,opacity:isTop?1:.45},emphasis:{focus:"series",lineStyle:{width:3,opacity:1}},endLabel:isTop?{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6,labelLine:{show:true,length2:4}}:{show:false},data:s.vals};if(i===0&&mark)o.markLine=mark;if(i===0&&hiSlot!=null){var idx=weeks.length-1-hiSlot;if(idx>=0&&idx<weeks.length)o.markArea={silent:true,itemStyle:{color:"rgba(37,99,235,0.14)"},data:[[{xAxis:idx},{xAxis:idx}]]};}return o;})');
+        DBMS_OUTPUT.PUT_LINE('      series:rows.map(function(s,i){var isTop=top3.indexOf(i)>=0;var o={name:s.name,type:"line",connectNulls:false,showSymbol:true,symbolSize:6,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:isTop?2:1.25,opacity:isTop?1:.45},emphasis:{focus:"series",lineStyle:{width:3,opacity:1}},endLabel:isTop?{show:true,formatter:"{a}",color:fg,fontSize:10,distance:6,width:112,overflow:"truncate",labelLine:{show:true,length2:4}}:{show:false},data:s.vals};if(i===0&&mark)o.markLine=mark;if(i===0&&hiSlot!=null){var idx=weeks.length-1-hiSlot;if(idx>=0&&idx<weeks.length)o.markArea={silent:true,itemStyle:{color:"rgba(37,99,235,0.14)"},data:[[{xAxis:idx},{xAxis:idx}]]};}return o;})');
         DBMS_OUTPUT.PUT_LINE('    }, true);');
         DBMS_OUTPUT.PUT_LINE('  }');
         DBMS_OUTPUT.PUT_LINE('  render("segs");');

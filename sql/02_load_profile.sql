@@ -24,8 +24,10 @@ DECLARE
     v_row_max    NUMBER;
     v_pct        NUMBER;
 
+    v_unit       VARCHAR2(16);
     @@sql/lib/nth_csv.plsql
     @@sql/lib/is_essential.plsql
+    @@sql/lib/anchor_id.plsql
     @@sql/lib/dev_bucket.plsql
     @@sql/lib/fmt_num.plsql
 BEGIN
@@ -35,7 +37,7 @@ BEGIN
         || '<b>Trend</b>: per-window values, oldest &rarr; current. '
         || '<b>Current</b> cell bar = value &divide; row max.</p>');
 
-    v_header := '<thead><tr><th>Metric</th><th class="trend">Trend</th><th class="num" data-w="0">Current</th>';
+    v_header := '<thead><tr><th>Metric</th><th>Unit</th><th class="trend">Trend</th><th class="num" data-w="0">Current</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
             || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
@@ -144,15 +146,20 @@ BEGIN
         v_label := m.stat_name;
         IF m.stat_name IN ('redo size', 'physical read total bytes', 'physical write total bytes',
                            'bytes sent via SQL*Net to client', 'bytes received via SQL*Net from client') THEN
-            v_label := v_label || ' (bytes/s)';
+            v_unit := 'bytes/s';
         ELSIF m.stat_name IN ('DB time', 'DB CPU', 'CPU used by this session') THEN
-            v_label := v_label || ' (cs/s, 1/100s)';
+            v_unit := 'cs/s';
         ELSE
-            v_label := v_label || ' (/s)';
+            v_unit := '/s';
         END IF;
 
-        v_row := '<tr data-imp="' || is_essential('LOAD', m.stat_name)
-              || '"><td>' || DBMS_XMLGEN.CONVERT(v_label) || '</td>';
+        v_row := '<tr id="' || anchor_id('load', m.stat_name)
+              || '" data-imp="' || is_essential('LOAD', m.stat_name)
+              || '"><td>' || DBMS_XMLGEN.CONVERT(v_label) || '</td>'
+              || '<td' || CASE WHEN v_unit = 'cs/s'
+                               THEN ' title="centiseconds per second (1/100 s of DB time per elapsed second)"'
+                               ELSE '' END
+              || '>' || v_unit || '</td>';
 
         v_row := v_row || '<td class="trend" data-spark="'
               || NVL(m.spark_vals, '') || '" data-spark-title="'
