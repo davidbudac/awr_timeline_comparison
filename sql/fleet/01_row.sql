@@ -107,6 +107,9 @@ DECLARE
     v_zbadge    VARCHAR2(40);
     v_zcls      VARCHAR2(4);
     v_wtxt      VARCHAR2(400);
+    -- Shared per-metric policy + scoring rule (read-only lib reuse), so the
+    -- row's worst finding agrees with the findings band (04) below it.
+    @@sql/lib/metric_policy.plsql
 
     FUNCTION fmt(p NUMBER) RETURN VARCHAR2 IS
     BEGIN
@@ -194,11 +197,11 @@ BEGIN
     INTO v_aas_cur, v_dbt_csv, v_dbt_cur, v_dbt_min, v_dbt_max, v_dbt_tip
     FROM dual;
 
-    -- --- worst finding: top crit/warn row of the unified z-score compute --
-    BEGIN
-        SELECT metric_domain, metric_name, z_score, change_bucket
-        INTO   v_wf_dom, v_wf_name, v_wf_z, v_wf_bucket
-        FROM (
+    -- --- worst finding: the first LARGE / MODERATE row of the unified
+    -- z-score compute by |z|, bucketed through sql/lib/metric_policy.plsql
+    -- (sigma floor, per-metric floors and direction -- same as 04 and the
+    -- single-DB report), so an improvement can never be the worst finding.
+    FOR r IN (
             WITH
             @@sql/lib/windows_cte.sql
             ,
@@ -300,31 +303,35 @@ BEGIN
                 FROM   unified
                 GROUP BY metric_domain, metric_name
             ),
+            wait_total AS (
+                SELECT SUM(metric_value) AS tot
+                FROM   wait_rows
+                WHERE  week_offset = 0
+            ),
             scored AS (
-                SELECT metric_domain, metric_name,
-                       CASE WHEN cur_val IS NULL OR mu IS NULL THEN NULL
-                            WHEN sd IS NULL OR sd = 0 THEN NULL
-                            ELSE (cur_val - mu) / sd END AS z_score,
-                       CASE
-                           WHEN cur_val IS NULL THEN 'n/a'
-                           WHEN n < 3           THEN 'insufficient history'
-                           WHEN sd IS NULL OR sd = 0 THEN 'flat baseline'
-                           WHEN ABS((cur_val - mu) / sd) > 3 THEN 'large'
-                           WHEN ABS((cur_val - mu) / sd) > 2 THEN 'moderate'
-                           ELSE 'typical'
-                       END AS change_bucket
-                FROM   pivoted
+                SELECT p.metric_domain, p.metric_name, p.cur_val, p.mu, p.sd, p.n,
+                       CASE WHEN p.cur_val IS NULL OR p.mu IS NULL OR p.sd IS NULL THEN NULL
+                            WHEN GREATEST(p.sd, 0.02 * ABS(p.mu)) = 0 THEN NULL
+                            ELSE (p.cur_val - p.mu) / GREATEST(p.sd, 0.02 * ABS(p.mu)) END AS z_score,
+                       CASE WHEN p.metric_domain = 'WAIT' AND t.tot > 0
+                            THEN p.cur_val / t.tot END AS share
+                FROM   pivoted p
+                CROSS JOIN wait_total t
             )
-            SELECT metric_domain, metric_name, z_score, change_bucket
+            SELECT metric_domain, metric_name, cur_val, mu, sd, n, z_score, share
             FROM   scored
-            WHERE  change_bucket IN ('large', 'moderate')
-            ORDER BY ABS(NVL(z_score, 0)) DESC, metric_name
-        )
-        WHERE ROWNUM = 1;
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-            v_wf_dom := NULL; v_wf_name := NULL; v_wf_z := NULL; v_wf_bucket := NULL;
-    END;
+            WHERE  z_score IS NOT NULL AND ABS(z_score) > 2
+            ORDER BY ABS(z_score) DESC, metric_name
+    ) LOOP
+        v_wf_bucket := policy_bucket(r.metric_domain, r.metric_name, NULL,
+                                     r.cur_val, r.mu, r.sd, r.n, r.share);
+        IF v_wf_bucket IN ('large', 'moderate') THEN
+            v_wf_dom  := r.metric_domain;
+            v_wf_name := r.metric_name;
+            v_wf_z    := r.z_score;
+            EXIT;
+        END IF;
+    END LOOP;
 
     -- --- worst-finding cell content -------------------------------------
     -- F5: direction is shown as a glyph (up = increase, down = decrease)
@@ -334,7 +341,7 @@ BEGIN
     IF v_wf_name IS NULL THEN
         v_zbadge := '&mdash;';
         v_zcls   := 'o';
-        v_wtxt   := 'No metric beyond 2&sigma;';
+        v_wtxt   := 'No material regression';
     ELSE
         v_zcls   := CASE WHEN v_wf_bucket = 'large' THEN 'c' ELSE 'w' END;
         v_zbadge := CASE WHEN v_wf_z >= 0 THEN '&#9650; ' ELSE '&#9660; ' END

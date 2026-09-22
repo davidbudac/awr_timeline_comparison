@@ -549,11 +549,18 @@ tint, never a mover, not counted). `demo/awrdemo/helpers.py` parses the
 policy file, lint check 12 verifies template coverage, check 13 the
 include order.
 
+**7.3 Fleet.** On request, the fleet's three scorers
+(`sql/fleet/04_findings.sql`, `01_row.sql`, `03_headline.sql`) include the
+shared policy and call `policy_bucket()`; the `FLEET-COUNTS` token format
+is unchanged, improved / noted rows fold into `suppressed=`. While wiring
+it, the grouped hero-card query in 08 (and its fleet twin 03) turned out
+not to project `src` / `key`, which 08's loop had referenced since phase
+1 -- fixed in both.
+
 **Still open:** the dbmint run (below) -- the new include declares a
 record type and a function with a `CASE ... WHEN ... THEN RETURN` body,
-both plain 19c PL/SQL but unexecuted here; the fleet findings band
-(`sql/fleet/04_findings.sql`) still uses the pre-policy rule (fleet files
-were left alone on purpose, see the cardinal rule).
+both plain 19c PL/SQL but unexecuted here; likewise the fleet band's
+BULK COLLECT rewrite and 01's cursor-loop worst finding.
 
 ## Verification checklist (every phase)
 

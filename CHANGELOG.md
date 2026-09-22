@@ -145,6 +145,21 @@ and CSS changed by design).
   contiguous window lists. SQL Monitor statements without a Current-window
   execution fold under the expander and the detail row joins its statement
   row; Top SQL detail tables open by default on phones.
+- **Fleet scoring follows the per-metric policy (phase 7, fleet 0.7.0).**
+  `sql/fleet/04_findings.sql` (the findings band and its `FLEET-COUNTS
+  findings` line), `sql/fleet/01_row.sql` (the row's worst finding) and
+  `sql/fleet/03_headline.sql` (the metric mini-cards) now `@@`-include
+  the shared `sql/lib/metric_policy.plsql` (read-only lib reuse; no
+  single-DB file touched) and bucket through `policy_bucket()`: sigma
+  floor, per-metric floors and direction, wait-class share. An
+  improvement can no longer be a DB's worst finding or count toward its
+  score; the band prints large rows first, then moderate, and its
+  summary line reports the improved count among the suppressed. The
+  `FLEET-COUNTS findings crit= warn= suppressed=` token format is
+  unchanged (improved / noted rows count as suppressed). Both hero-card
+  queries (08 and fleet 03) now project `src, key` out of the grouped
+  cards query -- 08 referenced them in its loop since phase 1 without
+  selecting them, which would have failed on the first real run.
 - **Fleet console 0.7.0 and server parity (phase 6).** Fleet chrome
   (fleet-owned copies): a `:focus-visible` ring, `prefers-reduced-motion`,
   and the summary rows are focusable `role="button"` rows that toggle on

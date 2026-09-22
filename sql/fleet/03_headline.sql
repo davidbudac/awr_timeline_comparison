@@ -24,6 +24,11 @@ SET SERVEROUTPUT ON SIZE UNLIMITED FORMAT WRAPPED
 BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: fleet_03 BEGIN -->'); END;
 /
 
+DECLARE
+    -- Shared per-metric policy + scoring rule (read-only lib reuse): the
+    -- card badge follows the single-DB report's direction and floors, so a
+    -- drop in hard parses reads as 'improved' (muted), not as a hit.
+    @@sql/lib/metric_policy.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<div class="metrics-band">');
     DBMS_OUTPUT.PUT_LINE('<div class="panel-h">Headline metrics vs '
@@ -108,7 +113,7 @@ BEGIN
             LEFT JOIN all_rows r
                    ON r.src = c.src AND r.key = c.key AND r.week_offset = w.week_offset
         )
-        SELECT pos, label, unit,
+        SELECT pos, label, unit, src, key,
                MAX(CASE WHEN week_offset = 0 THEN val END) AS cur,
                AVG(CASE WHEN week_offset > 0 THEN val END) AS mu,
                STDDEV(CASE WHEN week_offset > 0 THEN val END) AS sd,
@@ -117,7 +122,7 @@ BEGIN
                                              'NLS_NUMERIC_CHARACTERS=''.,'''))
                    WITHIN GROUP (ORDER BY week_offset DESC), 2) AS vals_csv
         FROM   grid
-        GROUP BY pos, label, unit
+        GROUP BY pos, label, unit, src, key
         ORDER BY pos
     ) LOOP
         DECLARE
@@ -127,22 +132,21 @@ BEGIN
             v_mz_txt VARCHAR2(40);
         BEGIN
             v_z := CASE
-                WHEN c.cur IS NULL OR c.mu IS NULL THEN NULL
-                WHEN c.sd IS NULL OR c.sd = 0       THEN NULL
-                ELSE (c.cur - c.mu) / c.sd
+                WHEN c.cur IS NULL OR c.mu IS NULL OR c.sd IS NULL THEN NULL
+                WHEN GREATEST(c.sd, 0.02 * ABS(c.mu)) = 0 THEN NULL
+                ELSE (c.cur - c.mu) / GREATEST(c.sd, 0.02 * ABS(c.mu))
             END;
             v_sev := CASE
                 WHEN c.cur IS NULL THEN NULL
-                WHEN c.n < 3 THEN 'insufficient history'
-                WHEN c.sd IS NULL OR c.sd = 0 THEN 'flat baseline'
-                WHEN ABS(v_z) > 3 THEN 'large'
-                WHEN ABS(v_z) > 2 THEN 'moderate'
-                ELSE 'typical'
+                ELSE policy_bucket(c.src, c.key, NULL, c.cur, c.mu, c.sd, c.n)
             END;
+            -- improved / noted are deliberately 'o' (quiet), never a hit.
             v_mz_cls := CASE v_sev
                 WHEN 'large'    THEN 'c'
                 WHEN 'moderate' THEN 'w'
                 WHEN 'typical'  THEN 'o'
+                WHEN 'improved' THEN 'o'
+                WHEN 'noted'    THEN 'o'
                 ELSE 'n' END;
             -- F5: direction as an up/down glyph + absolute magnitude; the
             -- badge's crit/warn/ok class (v_mz_cls, unchanged) is still the

@@ -662,8 +662,10 @@ share, domain, name, class, demote)` for 04/05/18. **Include order:**
 `metric_policy.plsql` must precede `score_cells.plsql` (lint check 13),
 and a `policy_rec` variable must be declared AFTER the include. lint check
 12 verifies every template LOAD/METRIC name has a policy line.
-`day_profile_cte.sql`'s own CASE (used by the fleet band) still carries
-the plain 07-style rule without direction. `improved` / `noted` are
+`day_profile_cte.sql`'s own CASE (used by the fleet day-profile band)
+still carries the plain 07-style rule without direction; the fleet
+findings band, row and headline cards (`sql/fleet/04`, `01`, `03`) call
+`policy_bucket()` too. `improved` / `noted` are
 never highlighted: class `imp` / `note` (outlined badges, no row tint),
 never a movers lead or member, not in the verdict count / all-movers
 list / rail pills / J-K jumps; the verdict and 07's heading say "N
@@ -908,6 +910,18 @@ cramped).
 - **Unexercised:** a real multi-DB fleet where detail runs take minutes
   (dbmint's full report is fast; the 3600-s default timeout is untested
   against a genuinely slow DB).
+- **v0.7.0 scoring = the shared policy** — `04_findings.sql` (band +
+  `FLEET-COUNTS findings`), `01_row.sql` (worst finding) and
+  `03_headline.sql` (mini-cards) `@@`-include `sql/lib/metric_policy.plsql`
+  (a read-only lib reuse, allowed by the cardinal rule) and call
+  `policy_bucket()`, so the fleet applies the single-DB direction and
+  materiality floors: `improved` / `noted` rows never count, never lead
+  a row, and are folded into `suppressed=` (token format unchanged). 04
+  BULK COLLECTs the recompute once and prints large then moderate by
+  |z|; 01's worst finding is the first large / moderate row of the
+  |z|-ordered cursor after bucketing (no `SELECT INTO` / NO_DATA_FOUND
+  any more). The day-profile band (`06_day_profile.sql`) still renders
+  `day_profile_cte.sql`'s plain CASE -- informational only.
 - **v0.7.0 accessibility** — fleet-owned copies of the single-DB phase-4
   rules: `:focus-visible` ring and `prefers-reduced-motion` in
   `00_fleet_chrome.sql`; `tr.dbrow` carries `tabindex="0" role="button"

@@ -173,7 +173,7 @@ BEGIN
                    END AS delta_pct
             FROM   with_lag
         )
-        SELECT pos, label, unit,
+        SELECT pos, label, unit, src, key,
                MAX(CASE WHEN week_offset = 0 THEN val END) AS cur,
                AVG(CASE WHEN week_offset > 0 THEN val END) AS mu,
                STDDEV(CASE WHEN week_offset > 0 THEN val END) AS sd,
@@ -192,7 +192,7 @@ BEGIN
                 WHERE  d.pos = grid.pos
                   AND  d.week_offset < ~weeks_back) AS deltas_csv
         FROM   grid
-        GROUP BY pos, label, unit
+        GROUP BY pos, label, unit, src, key
         ORDER BY pos
     ) LOOP
         DECLARE
