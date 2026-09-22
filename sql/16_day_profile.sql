@@ -293,9 +293,9 @@ BEGIN
         || '<div id="day-profile-line" style="height:240px"></div></div>');
 
     -- Table: one row per hour (chronological), one column per stat.
-    -- detail-only: the hour-by-hour table is Detailed-view material; the
+    -- full-only: the hour-by-hour table is Full-view material; the
     -- shifts table and the heatmap above carry the Normal view.
-    v_row := '<table class="detail-only"><thead><tr><th>Hour</th>';
+    v_row := '<table class="full-only"><thead><tr><th>Hour</th>';
     FOR o IN 1 .. v_nstat LOOP
         v_row := v_row || '<th class="num">' || DBMS_XMLGEN.CONVERT(v_labels(o)) || '</th>';
     END LOOP;

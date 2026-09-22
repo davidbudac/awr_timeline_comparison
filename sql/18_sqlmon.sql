@@ -387,7 +387,7 @@ BEGIN
         END IF;
         -- Normal view opt-in: an error, a plan change or a DOP downgrade on
         -- a statement that ran in the Current window is worth the short
-        -- report; plain slow-vs-baseline rows stay Detailed-only.
+        -- report; plain slow-vs-baseline rows stay Full-only.
         IF s.cur_val IS NOT NULL AND s.rnk <= v_top_n
            AND (s.has_error = 1 OR s.distinct_plans > 1 OR s.has_downgrade = 1)
            AND NOT v_normal THEN

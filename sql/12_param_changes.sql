@@ -184,7 +184,7 @@ BEGIN
     END IF;
 
     -- A parameter that differs across the compared windows is worth the
-    -- Normal view (the section is otherwise Detailed-only).
+    -- Normal view (the section is otherwise Full-only).
     DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("param-changes").setAttribute("data-normal","Y");</script>');
 
     -- Header: Parameter | Current | -1w | -2w | ...

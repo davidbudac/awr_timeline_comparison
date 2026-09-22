@@ -519,12 +519,12 @@ BEGIN
     -- up the correct palette at first paint. Applies the saved/preferred
     -- theme by toggling body.dark before any chart initializes.
     DBMS_OUTPUT.PUT_LINE('<script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.body.classList.add("dark");}catch(e){}})();</script>');
-    -- Normal / Detailed view: body.normal is the default, body.detailed
+    -- Normal / Full view: body.normal is the default, body.full
     -- the full report.  Decided before first paint from localStorage
-    -- "awr-mode" (a shared link's hash "!v=d" wins), so the short view
+    -- "awr-mode" (a shared link's hash "!v=f" wins), so the short view
     -- never flashes the long one.  With JS off neither class exists and
     -- the CSS shows everything.
-    DBMS_OUTPUT.PUT_LINE('<script>(function(){var m="normal";try{if(localStorage.getItem("awr-mode")==="detailed")m="detailed";}catch(e){}var h=location.hash||"",i=h.indexOf("!v=");if(i>=0&&h.slice(i+3).split("&")[0].split(",").indexOf("d")>=0)m="detailed";document.body.classList.add(m);})();</script>');
+    DBMS_OUTPUT.PUT_LINE('<script>(function(){var m="normal";try{if(localStorage.getItem("awr-mode")==="full")m="full";}catch(e){}var h=location.hash||"",i=h.indexOf("!v=");if(i>=0&&h.slice(i+3).split("&")[0].split(",").indexOf("f")>=0)m="full";document.body.classList.add(m);})();</script>');
     -- Phase 4: skip link (visible on keyboard focus only) to the <main>
     -- landmark that opens right after this section's scripts and closes
     -- in the driver's epilogue, just before the footer.
@@ -756,6 +756,27 @@ BEGIN
     -- everywhere at once and broadcasts awr:window for the chart sections.
     -- Built from the same CONNECT BY grid as the offline fallback list
     -- below, so chips and fallback can never disagree.
+    -- v1.5.0: the chip list sits behind a one-line summary (<details>):
+    -- the current window's range, the oldest window's date, the count.
+    -- Chips (and their highlight behaviour) are one click away.
+    DBMS_OUTPUT.PUT_LINE('    <details class="windows-more">');
+    DBMS_OUTPUT.PUT_LINE('      <summary>'
+        || '<span class="wchip cur" data-w="0" title="click to highlight the Current window everywhere">'
+        || '<b>current</b> <span>'
+        || TO_CHAR(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') - ~win_hours/24,
+                   'Dy DD Mon HH24:MI')
+        || ' &rarr; '
+        || TO_CHAR(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS'), 'HH24:MI')
+        || '</span></span>'
+        || '<span>vs ' || TO_CHAR(~weeks_back) || ' prior window'
+        || CASE WHEN ~weeks_back = 1 THEN '' ELSE 's' END
+        || ', every ~step_label, back to '
+        || TO_CHAR(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
+                   - ~weeks_back*(~step_hours/24) - ~win_hours/24, 'Dy DD Mon')
+        || '</span>'
+        || '<span class="w-toggle"><span class="closed">show all windows &#9662;</span>'
+        || '<span class="opened">hide windows &#9652;</span></span>'
+        || '</summary>');
     DBMS_OUTPUT.PUT_LINE('    <div class="windows-chips">');
     -- Phase 3: each chip carries its DATE when the window starts on a
     -- different day than the Current window (weekly / daily cadence --
@@ -810,6 +831,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    </div>');
     DBMS_OUTPUT.PUT_LINE('    <div class="windows-hint">click a window to '
         || 'highlight it everywhere &middot; Esc clears</div>');
+    DBMS_OUTPUT.PUT_LINE('    </details>');
     DBMS_OUTPUT.PUT_LINE('    <div class="windows-chart" id="masthead-timeline"></div>');
 
     -- Plain-text fallback (visible only when body.no-charts hides the chart).
@@ -918,7 +940,7 @@ BEGIN
     -- Grouped to match the visual section order set in _style.sql
     -- (Triage / Workload / SQL / Storage and config), so the scrollspy
     -- walks the rail top-to-bottom.  The hrefs are load-bearing: the
-    -- app-only link-dim rule in _style.sql keys on them.
+    -- Normal-view rail rule (norm-dim) keys on them.
     DBMS_OUTPUT.PUT_LINE('<nav class="toc">'
         || '<div class="rail-brand"><span>AWR &middot; Timeline comparison</span>'
         -- Dark mode toggle: flips body.dark, which (via _style.sql) swaps
@@ -957,7 +979,7 @@ BEGIN
         || '</div>'
         -- The section links live in .rail-list so the narrow layout can
         -- turn them into a dropdown.  Every existing selector that targets
-        -- them (nav.toc a / nav.toc b, the app-only link rule, the rail JS)
+        -- them (nav.toc a / nav.toc b, the rail JS)
         -- is a descendant match, so desktop rendering is unchanged.
         || '<div class="rail-list">'
         || '<b>Triage</b>'
@@ -989,36 +1011,27 @@ BEGIN
         || '<a href="#param-changes">Parameters</a>'
         || '</div>'
         || '<div class="rail-foot">'
-        -- Narrow-screen "View" button: opens .view-panel (the mode switch,
-        -- the app filter + next-finding) as a popover; display:none on
+        -- Narrow-screen "View" button: opens .view-panel (the mode switch
+        -- + next-finding) as a popover; display:none on
         -- desktop, where .view-panel is display:contents and the buttons
         -- sit in the rail.
         || '<button type="button" class="view-btn" id="view-btn"'
         || ' aria-expanded="false" aria-controls="view-panel"'
         || ' title="Report view options">View &#9662;</button>'
         || '<div class="view-panel" id="view-panel">'
-        -- Normal / Detailed mode switch (body.normal / body.detailed, see
+        -- Normal / Full mode switch (body.normal / body.full, see
         -- _style.sql): Normal keeps the verdict, headline metrics,
         -- findings, ASH timeline and Top SQL (plus parameter changes, SQL
         -- Monitor and the day profile when they have something to say);
-        -- Detailed is the whole report.  Persisted in localStorage.
+        -- Full is the whole report.  Persisted in localStorage.
         || '<div class="mode-switch" role="group" aria-label="Report detail level">'
         || '<button type="button" id="mode-normal" class="mode-btn" aria-pressed="true"'
         || ' title="Normal view: verdict, headline metrics, findings, ASH timeline, Top SQL">'
         || 'Normal</button>'
-        || '<button type="button" id="mode-detailed" class="mode-btn" aria-pressed="false"'
-        || ' title="Detailed view: every section and every scored row">'
-        || 'Detailed</button>'
+        || '<button type="button" id="mode-full" class="mode-btn" aria-pressed="false"'
+        || ' title="Full view: every section and every scored row">'
+        || 'Full</button>'
         || '</div>'
-        -- "Application only" toggle: flips body.app-only, which (via
-        -- _style.sql) hides every system-wide section plus the masthead
-        -- verdict / DB-time strip and the Oracle-internal SQL rows, leaving
-        -- just application SQL and its related data on screen.
-        || '<button type="button" id="app-filter-toggle" class="app-filter"'
-        || ' aria-pressed="false"'
-        || ' title="Hide system-wide sections and Oracle-internal SQL;'
-        || ' show only application SQL and its related data">'
-        || 'Application only</button>'
         -- C2: jump to the next crit finding (J / K also work from anywhere
         -- outside a text field).
         || '<button type="button" id="next-finding" class="next-finding"'
@@ -1029,22 +1042,6 @@ BEGIN
         || '</div>'
         || '</div>'
         || '</nav>');
-
-    -- Wire the toggle. Toggling body.app-only does all the section/row
-    -- hiding in CSS; the custom awr:appfilter event lets charts that
-    -- aggregate many SQLs into one canvas (section 06's bump chart) re-render
-    -- with the Oracle-internal series dropped. Per-SQL charts need no JS:
-    -- their container card/details is hidden wholesale by CSS.
-    DBMS_OUTPUT.PUT_LINE('<script>(function(){');
-    DBMS_OUTPUT.PUT_LINE('var btn=document.getElementById("app-filter-toggle"); if(!btn) return;');
-    DBMS_OUTPUT.PUT_LINE('btn.addEventListener("click",function(){');
-    DBMS_OUTPUT.PUT_LINE('  var on=document.body.classList.toggle("app-only");');
-    DBMS_OUTPUT.PUT_LINE('  btn.classList.toggle("active",on);');
-    DBMS_OUTPUT.PUT_LINE('  btn.setAttribute("aria-pressed",on?"true":"false");');
-    DBMS_OUTPUT.PUT_LINE('  btn.textContent=on?"Show all":"Application only";');
-    DBMS_OUTPUT.PUT_LINE('  document.dispatchEvent(new CustomEvent("awr:appfilter",{detail:{appOnly:on}}));');
-    DBMS_OUTPUT.PUT_LINE('});');
-    DBMS_OUTPUT.PUT_LINE('})();</script>');
 
     -- Wire the dark-mode toggle. The early theme script (before
     -- header.report) already applied body.dark from localStorage/OS
@@ -1061,7 +1058,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  sync(on);');
     -- ECharts read their axis/label colors from the CSS vars once at init, so
     -- a theme flip leaves every chart on the old palette.  Broadcast awr:theme
-    -- (mirroring awr:appfilter); each chart-init listens and re-applies its
+    -- (a document-level CustomEvent); each chart-init listens and re-applies its
     -- var-derived colors via setOption (F14).
     DBMS_OUTPUT.PUT_LINE('  document.dispatchEvent(new CustomEvent("awr:theme",{detail:{dark:on}}));');
     DBMS_OUTPUT.PUT_LINE('});');
@@ -1081,9 +1078,7 @@ BEGIN
     --      requestAnimationFrame: embedded webviews (and the Claude
     --      preview browser) throttle both to a standstill, and at 16
     --      sections the scan is trivially cheap.  Sections hidden by the
-    --      app-only filter (offsetParent null) are skipped, and the
-    --      awr:appfilter event re-runs the spy so the highlight stays
-    --      valid when the section set changes.
+    --      Normal view (offsetParent null) are skipped.
     DBMS_OUTPUT.PUT_LINE('<script>');
     DBMS_OUTPUT.PUT_LINE('document.addEventListener("DOMContentLoaded",function(){');
     DBMS_OUTPUT.PUT_LINE('var nav=document.querySelector("nav.toc"); if(!nav) return;');
@@ -1124,7 +1119,6 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('function onScroll(){ if(!pending){ pending=true; setTimeout(spy,80); } }');
     DBMS_OUTPUT.PUT_LINE('window.addEventListener("scroll",onScroll,{passive:true});');
     DBMS_OUTPUT.PUT_LINE('window.addEventListener("resize",onScroll);');
-    DBMS_OUTPUT.PUT_LINE('document.addEventListener("awr:appfilter",onScroll);');
     -- Fallback for embedded webviews that suppress scroll events
     -- entirely (observed in in-app preview browsers): poll scrollY and
     -- re-run the spy only when it actually changed.  One number
@@ -1159,7 +1153,7 @@ BEGIN
     --   X2  window highlight: click a th[data-w] or a masthead
     --       .wchip to toggle .hl on every [data-w] element and
     --       broadcast the awr:window CustomEvent for chart sections
-    --   the Normal / Detailed mode switch (body.normal / body.detailed)
+    --   the Normal / Full mode switch (body.normal / body.full)
     --   B8  the narrow-screen hamburger dropdown
     -- No literal tilde anywhere below: this file runs under
     -- SET DEFINE tilde (see the CLAUDE.md tilde gotcha).
@@ -1272,7 +1266,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  if(tb.closest("tr.sql-detail")||tb.closest("details")) return;');
     DBMS_OUTPUT.PUT_LINE('  if(tb.querySelectorAll("tbody tr").length<4) return;');
     DBMS_OUTPUT.PUT_LINE('  var bar=doc.createElement("div");');
-    DBMS_OUTPUT.PUT_LINE('  bar.className="tbl-tools"+(tb.classList.contains("detail-only")?" detail-only":"");');
+    DBMS_OUTPUT.PUT_LINE('  bar.className="tbl-tools"+(tb.classList.contains("full-only")?" full-only":"");');
     DBMS_OUTPUT.PUT_LINE('  var mk=function(label,fn){');
     DBMS_OUTPUT.PUT_LINE('    var b=doc.createElement("button");');
     DBMS_OUTPUT.PUT_LINE('    b.type="button"; b.className="tool-btn"; b.textContent=label;');
@@ -1338,7 +1332,6 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('fitTables(); setTimeout(fitTables,400);');
     DBMS_OUTPUT.PUT_LINE('var ft=null;');
     DBMS_OUTPUT.PUT_LINE('window.addEventListener("resize",function(){ if(ft) clearTimeout(ft); ft=setTimeout(fitTables,150); });');
-    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("awr:appfilter",function(){ setTimeout(fitTables,50); });');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){ if(closest(ev.target,".expander,.tabs [data-t],details > summary")) setTimeout(fitTables,50); });');
     DBMS_OUTPUT.PUT_LINE('/* ---- P2: narrow-screen "View" popover ---- */');
     DBMS_OUTPUT.PUT_LINE('var vb=doc.getElementById("view-btn"), vf=vb?closest(vb,".rail-foot"):null;');
@@ -1360,6 +1353,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('function clearW(){ if(curW!==null){ curW=null; applyW(); } }');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){');
     DBMS_OUTPUT.PUT_LINE('  var el=closest(ev.target,"th[data-w],.wchip[data-w]"); if(!el) return;');
+    DBMS_OUTPUT.PUT_LINE('  if(closest(el,"summary")) ev.preventDefault();');
     DBMS_OUTPUT.PUT_LINE('  setW(el.getAttribute("data-w"));');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('/* ---- T3: click-to-sort ---- */');
@@ -1470,7 +1464,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('var nf=doc.getElementById("next-finding");');
     DBMS_OUTPUT.PUT_LINE('if(nf) nf.addEventListener("click",function(){jump(1);});');
-    DBMS_OUTPUT.PUT_LINE('/* ---- Normal / Detailed view ---- */');
+    DBMS_OUTPUT.PUT_LINE('/* ---- Normal / Full view ---- */');
     -- Rail links whose target section is not part of the Normal view get
     -- .norm-dim (hidden in Normal); a group header whose every link is
     -- dimmed hides with them; one "+ N more sections" line replaces them.
@@ -1485,7 +1479,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    else gAll=false;');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  if(grp&&gAll) grp.classList.add("norm-dim");');
-    DBMS_OUTPUT.PUT_LINE('  if(hiddenSecs.length){ var more=doc.createElement("a"); more.className="more-sections"; more.href="#"; more.textContent="+ "+hiddenSecs.length+" more in Detailed"; more.title=hiddenSecs.join(", "); more.addEventListener("click",function(ev){ ev.preventDefault(); setMode(true); }); list.appendChild(more); }');
+    DBMS_OUTPUT.PUT_LINE('  if(hiddenSecs.length){ var more=doc.createElement("a"); more.className="more-sections"; more.href="#"; more.textContent="+ "+hiddenSecs.length+" more in Full"; more.title=hiddenSecs.join(", "); more.addEventListener("click",function(ev){ ev.preventDefault(); setMode(true); }); list.appendChild(more); }');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function modeNote(){');
     DBMS_OUTPUT.PUT_LINE('  var mn=doc.getElementById("main-start"); if(!mn) return;');
@@ -1493,33 +1487,33 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  if(!n){ n=doc.createElement("p"); n.id="mode-note"; n.className="mode-note"; mn.appendChild(n); }');
     DBMS_OUTPUT.PUT_LINE('  n.innerHTML="";');
     DBMS_OUTPUT.PUT_LINE('  n.appendChild(doc.createTextNode(hiddenSecs.length?("Normal view: "+hiddenSecs.length+" section"+(hiddenSecs.length===1?"":"s")+" and the per-metric detail tables are hidden ("+hiddenSecs.join(", ")+")."):"Normal view: the per-metric detail tables are hidden."));');
-    DBMS_OUTPUT.PUT_LINE('  var b=doc.createElement("button"); b.type="button"; b.textContent="Show Detailed"; b.addEventListener("click",function(){ setMode(true); }); n.appendChild(b);');
+    DBMS_OUTPUT.PUT_LINE('  var b=doc.createElement("button"); b.type="button"; b.textContent="Show Full"; b.addEventListener("click",function(){ setMode(true); }); n.appendChild(b);');
     DBMS_OUTPUT.PUT_LINE('}');
     -- setMode(): flip the body classes, sync the switch, persist, and
     -- re-measure everything that was display:none (sticky offsets, table
     -- scroll wrappers, and every ECharts instance, which measured a zero
     -- width while hidden).
     DBMS_OUTPUT.PUT_LINE('function setMode(det,silent){');
-    DBMS_OUTPUT.PUT_LINE('  bd.classList.toggle("detailed",!!det); bd.classList.toggle("normal",!det);');
-    DBMS_OUTPUT.PUT_LINE('  var bn=doc.getElementById("mode-normal"), bdt=doc.getElementById("mode-detailed");');
+    DBMS_OUTPUT.PUT_LINE('  bd.classList.toggle("full",!!det); bd.classList.toggle("normal",!det);');
+    DBMS_OUTPUT.PUT_LINE('  var bn=doc.getElementById("mode-normal"), bdt=doc.getElementById("mode-full");');
     DBMS_OUTPUT.PUT_LINE('  if(bn) bn.setAttribute("aria-pressed",det?"false":"true");');
     DBMS_OUTPUT.PUT_LINE('  if(bdt) bdt.setAttribute("aria-pressed",det?"true":"false");');
-    DBMS_OUTPUT.PUT_LINE('  if(!silent){ try{localStorage.setItem("awr-mode",det?"detailed":"normal");}catch(e){} }');
+    DBMS_OUTPUT.PUT_LINE('  if(!silent){ try{localStorage.setItem("awr-mode",det?"full":"normal");}catch(e){} }');
     DBMS_OUTPUT.PUT_LINE('  measure(); window.dispatchEvent(new Event("resize"));');
     DBMS_OUTPUT.PUT_LINE('  if(window.echarts&&echarts.getInstanceByDom){ doc.querySelectorAll("[_echarts_instance_]").forEach(function(el){ var c=echarts.getInstanceByDom(el); if(c) c.resize(); }); }');
     DBMS_OUTPUT.PUT_LINE('  setTimeout(fitTables,60); closeView();');
-    DBMS_OUTPUT.PUT_LINE('  doc.dispatchEvent(new CustomEvent("awr:mode",{detail:{detailed:!!det}}));');
+    DBMS_OUTPUT.PUT_LINE('  doc.dispatchEvent(new CustomEvent("awr:mode",{detail:{full:!!det}}));');
     DBMS_OUTPUT.PUT_LINE('  if(!silent) pushState();');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('window.AWR_setMode=setMode;');
     DBMS_OUTPUT.PUT_LINE('modeNote();');
-    DBMS_OUTPUT.PUT_LINE('setMode(bd.classList.contains("detailed"),true);');
-    DBMS_OUTPUT.PUT_LINE('var mbn=doc.getElementById("mode-normal"), mbd=doc.getElementById("mode-detailed");');
+    DBMS_OUTPUT.PUT_LINE('setMode(bd.classList.contains("full"),true);');
+    DBMS_OUTPUT.PUT_LINE('var mbn=doc.getElementById("mode-normal"), mbd=doc.getElementById("mode-full");');
     DBMS_OUTPUT.PUT_LINE('if(mbn) mbn.addEventListener("click",function(){ setMode(false); });');
     DBMS_OUTPUT.PUT_LINE('if(mbd) mbd.addEventListener("click",function(){ setMode(true); });');
     -- inNormal(el): is this element visible in the Normal view?  Used by
-    -- revealHash so a cross-link into hidden content flips to Detailed.
-    DBMS_OUTPUT.PUT_LINE('function inNormal(el){ var sec=closest(el,"section"); if(sec&&sec.parentNode===doc.getElementById("main-start")&&!sec.hasAttribute("data-normal")) return false; return !closest(el,".detail-only"); }');
+    -- revealHash so a cross-link into hidden content flips to Full.
+    DBMS_OUTPUT.PUT_LINE('function inNormal(el){ var sec=closest(el,"section"); if(sec&&sec.parentNode===doc.getElementById("main-start")&&!sec.hasAttribute("data-normal")) return false; return !closest(el,".full-only"); }');
     DBMS_OUTPUT.PUT_LINE('/* ---- B8: narrow-screen section dropdown ---- */');
     DBMS_OUTPUT.PUT_LINE('var mb=doc.getElementById("rail-menu-btn");');
     DBMS_OUTPUT.PUT_LINE('if(mb&&nav){');
@@ -1549,7 +1543,6 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  if(mt) clearTimeout(mt);');
     DBMS_OUTPUT.PUT_LINE('  mt=setTimeout(measure,120);');
     DBMS_OUTPUT.PUT_LINE('});');
-    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("awr:appfilter",measure);');
     DBMS_OUTPUT.PUT_LINE('measure();');
     DBMS_OUTPUT.PUT_LINE('setTimeout(measure,300);');
     DBMS_OUTPUT.PUT_LINE('/* ---- P3: cross-links -- hide a link whose target does not exist, reveal a linked row ---- */');
@@ -1584,10 +1577,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('window.addEventListener("hashchange",revealHash);');
     DBMS_OUTPUT.PUT_LINE('if(location.hash) setTimeout(revealHash,0);');
-    DBMS_OUTPUT.PUT_LINE('/* ---- P3: shareable view state in the hash (#anchor!v=d,a&tab=CPU&w=3) ---- */');
+    DBMS_OUTPUT.PUT_LINE('/* ---- P3: shareable view state in the hash (#anchor!v=f&tab=CPU&w=3) ---- */');
     DBMS_OUTPUT.PUT_LINE('function stateStr(){');
-    DBMS_OUTPUT.PUT_LINE('  var v=[]; if(bd.classList.contains("detailed")) v.push("d");');
-    DBMS_OUTPUT.PUT_LINE('  if(bd.classList.contains("app-only")) v.push("a");');
+    DBMS_OUTPUT.PUT_LINE('  var v=[]; if(bd.classList.contains("full")) v.push("f");');
     DBMS_OUTPUT.PUT_LINE('  var parts=[]; if(v.length) parts.push("v="+v.join(","));');
     DBMS_OUTPUT.PUT_LINE('  var tab=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t].on");');
     DBMS_OUTPUT.PUT_LINE('  if(tab&&tab.getAttribute("data-t")!=="ELAPSED") parts.push("tab="+tab.getAttribute("data-t"));');
@@ -1607,12 +1599,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var h=location.hash||"", i=h.indexOf("!"); if(i<0) return;');
     DBMS_OUTPUT.PUT_LINE('  var q={}; h.slice(i+1).split("&").forEach(function(kv){var p=kv.split("="); if(p[0]) q[p[0]]=decodeURIComponent(p[1]||"");});');
     DBMS_OUTPUT.PUT_LINE('  var v=(q.v||"").split(",");');
-    DBMS_OUTPUT.PUT_LINE('  if(v.indexOf("d")>=0&&!bd.classList.contains("detailed")) setMode(true,true);');
-    DBMS_OUTPUT.PUT_LINE('  if(v.indexOf("a")>=0&&!bd.classList.contains("app-only")){ var ab=doc.getElementById("app-filter-toggle"); if(ab) ab.click(); }');
+    DBMS_OUTPUT.PUT_LINE('  if(v.indexOf("f")>=0&&!bd.classList.contains("full")) setMode(true,true);');
     DBMS_OUTPUT.PUT_LINE('  if(q.tab){ var t=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t=\""+q.tab+"\"]"); if(t&&!t.classList.contains("on")) t.click(); }');
     DBMS_OUTPUT.PUT_LINE('  if(q.w!==undefined&&q.w!==""){ curW=String(q.w); applyW(); }');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){ if(closest(ev.target,"#app-filter-toggle,.tabs [data-t]")) pushState(); });');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){ if(closest(ev.target,".tabs [data-t]")) pushState(); });');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("awr:window",pushState);');
     DBMS_OUTPUT.PUT_LINE('applyState();');
     DBMS_OUTPUT.PUT_LINE('/* ---- P5: on phones the Top SQL detail tables open by default (the bump chart is unreadable there) ---- */');

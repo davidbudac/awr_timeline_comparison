@@ -69,7 +69,7 @@ DECLARE
     v_sql_text      t_str_by_str;
     -- Oracle-maintained ("system") flag per rendered sql_id ('Y'/'N'),
     -- derived from its parsing schema; drives the per-card data-sys marker
-    -- the report's "Application only" toggle hides on.
+    -- (informational since v1.5.0; the "Application only" filter is gone).
     v_sql_sys       t_str_by_str;
     v_sch           VARCHAR2(128);
 

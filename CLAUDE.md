@@ -196,60 +196,56 @@ text, event/metric names) in `DBMS_XMLGEN.CONVERT(...)`.
   `windows_cte.sql`. Masthead emits the primary `~dbid` exactly as before and
   only appends "all DBIDs …" when the list has a comma — don't "simplify" that.
 
-### "Application only" filter (`body.app-only`)
-A client-side toggle in the sidebar rail (`#app-filter-toggle`, emitted by
-`00_params.sql`) that flips `body.app-only` — same body-class hook pattern as
-`body.no-charts`, so it's purely CSS-driven and ships in every report (no DEFINE,
-no wrapper change). When on it shows only application SQL and its directly
-related data — **`#topsql`, `#topsql-ash`, `#sqlmon`, `#segment-io`,
-`#file-io`, `#utilization`** — and hides every system-wide section plus the masthead
-`.verdict` and `.windows-strip`. All the hide rules live in `_style.sql`; the
-**kept-sections list is single-sourced three times that must stay in lockstep**:
-the section-hide rule, the `nav.toc a:not([href=…])` link-dim rule, and (by
-omission) the data sections you choose to keep. Change one, change all three.
-(`#day-profile` is system-wide, so it sits in the hide list, not the kept set.)
+### `data-sys="Y|N"` tags (informational)
+Sections 06, 11 and 18 tag each top SQL / ASH card / SQL Monitor row with
+`data-sys="Y|N"` from its parsing schema (06/11) or executing user (18)
+via `@@sql/lib/is_oracle_schema.plsql` (a curated Oracle-maintained-schema
+name test — **no DBA_USERS grant**, deliberately conservative: unknown ⇒
+`'N'`). Since v1.5.0 no CSS reads the tag: the "Application only" filter
+(`body.app-only`, `#app-filter-toggle`, the `awr:appfilter` event and the
+bump chart's `sys` series filter) was removed at the user's request. The
+attribute and the `sys` bool in 06's series JSON stay as neutral metadata.
 
-Oracle-internal SQL is filtered at the row/card level: sections 06 and 11 tag
-each top SQL `data-sys="Y|N"` from its parsing schema via
-`@@sql/lib/is_oracle_schema.plsql` (a curated Oracle-maintained-schema name test
-— **no DBA_USERS grant**, deliberately conservative: unknown ⇒ `'N'` so a real
-app schema is never hidden). CSS hides `tr/details/.ash-sql-card[data-sys="Y"]`.
-Per-SQL charts need no JS (their container is hidden wholesale); the **one**
-multi-SQL canvas — section 06's bump chart — listens for the `awr:appfilter`
-CustomEvent the toggle dispatches and re-renders with `sys` series dropped
-(its series JSON carries a `sys` bool; schema-breakdown entries are tagged too,
-module/action are not). Adding the attrs/`sys` field changes the HTML, so this
-is a feature, not a byte-identity-preserving refactor — verify by eye, not md5.
-
-### Normal / Detailed views (`body.normal` / `body.detailed`, v1.5.0)
-The report opens in the **Normal** view. An early inline script in
-`00_params.sql` (right after the theme script) adds `body.normal` or
-`body.detailed` before first paint from localStorage `awr-mode` (a hash
-`!v=d` wins); with JS off neither class exists and the CSS shows
+### Normal / Full views (`body.normal` / `body.full`, v1.5.0)
+The report opens in the **Normal** view; **Full** is the whole report
+(the switch was called "Detailed" for one commit). An early inline script
+in `00_params.sql` (right after the theme script) adds `body.normal` or
+`body.full` before first paint from localStorage `awr-mode` (a hash
+`!v=f` wins); with JS off neither class exists and the CSS shows
 everything. Sections opt INTO Normal with `data-normal="Y"`: 06 Top SQL,
 07 Findings, 08 Headline metrics, 09 ASH timeline always; 12 Parameter
 changes, 16 Day profile and 18 SQL Monitor only when they have something
 to say (a differing parameter / a day-wide shift / an error, plan change
 or DOP downgrade on a Current-window statement), which they signal with a
 one-line inline `<script>` that sets the attribute after the fact.
-`.detail-only` hides Detailed-only content inside a kept section (07's
+`.full-only` hides Full-only content inside a kept section (07's
 per-domain tables + expanders, 06's per-SQL pool, 16's hour table). The
-chrome JS (`00_params.sql`, "Normal / Detailed view") dims rail links to
+chrome JS (`00_params.sql`, "Normal / Full view") dims rail links to
 hidden sections (`.norm-dim`, group `<b>` headers too when every link
-under them is dimmed), appends a "+ N more in Detailed" rail line and a
+under them is dimmed), appends a "+ N more in Full" rail line and a
 `.mode-note` at the end of `<main>` (flex `order:3`, same rank as the
 sections, so it lands last), and `setMode(det, silent)` flips the
 classes, persists (only on an explicit click -- a shared link never
 overwrites the reader's choice), re-measures sticky offsets and table
 wrappers, and calls `resize()` on every ECharts instance (a chart built
 inside `display:none` measured zero width). `revealHash()` switches to
-Detailed by itself when a cross-link targets hidden content. The old
-**Triage mode** and **Essential rows** toggles are gone (v1.5.0); the
-`data-imp` row tags from `is_essential.plsql` are still emitted but no
-CSS reads them. "Application only" is orthogonal and combines with either
-view. The demo smoke test (`demo/verify_report.js`) switches to Detailed
-before it clicks tabs / sort headers / expanders, since those are hidden
-in Normal. Section 07's "Biggest movers" table (`#findings-movers`)
+Full by itself when a cross-link targets hidden content. The old
+**Triage mode**, **Essential rows** and **Application only** toggles are
+gone (v1.5.0); the `data-imp` row tags from `is_essential.plsql` are still
+emitted but no CSS reads them. The demo smoke test
+(`demo/verify_report.js`) switches to Full before it clicks tabs / sort
+headers / expanders, since those are hidden in Normal.
+
+**Masthead pieces (v1.5.0):** the "What changed" block (`17_narrative.sql`)
+is a `<ul class="narr-list">`, one `<li>` per rule via `add_item(label,
+num, sub, why, href, link)` — spans `.n-lbl` / `.n-num` / `.n-sub` /
+`.n-why` and an `a.n-go` — laid out as a 5-column grid (2 columns under
+700 px); no prose sentences any more. The compared-windows strip folds its
+dated chips into `<details class="windows-more">` whose `<summary>` holds
+the Current chip (a `.wchip[data-w="0"]` — the chip click handler calls
+`preventDefault` inside a summary so highlighting does not toggle the
+fold), a "vs N prior windows, every step, back to <date>" clause and a
+show / hide toggle. Section 07's "Biggest movers" table (`#findings-movers`)
 carries `data-nocount` so the rail count pills don't double-count its
 rows against the detail tables below it.
 
@@ -284,14 +280,14 @@ degrade to "just show everything" with JS off:
   `<th>`/`<td>` and the masthead's `.wchip` chips carry `data-w`; clicking a
   chip (or a `th[data-w]`) toggles `.hl` on every element sharing that
   offset and dispatches a `document`-level `awr:window` CustomEvent (sibling
-  of `awr:theme`/`awr:appfilter`) that chart sections turn into a markArea/
+  of `awr:theme`/`awr:mode`) that chart sections turn into a markArea/
   highlight on the matching series.
 - **`.badge.sig`** — the "σ≈0" pill `score_cells.plsql` appends after a
   z-value when the baseline sigma is degenerate (< 1% of |mean|), pairing
   with a bolded %-delta cell so the reader isn't misled by a blown-out z.
-- **`section[data-normal]` + `.detail-only`** — the Normal / Detailed
-  views (see that section above); replaced the v1.4.0 `data-triage` /
-  `.hidetri` triage mode.
+- **`section[data-normal]` + `.full-only`** — the Normal / Full views
+  (see that section above); replaced the v1.4.0 `data-triage` / `.hidetri`
+  triage mode.
 - **`.tabs[data-tabs]` / `.tabpanel[data-tabs][data-t]`** — a delegated
   click on `.tabs [data-t]` shows the matching `.tabpanel` in the same
   group and hides its siblings; used by Top SQL's five ranking dimensions.
@@ -429,8 +425,7 @@ Scoring reuses section 07's `scored` CASE verbatim via
 `sql/lib/score_cells.plsql`, on max elapsed time (Current vs. prior valid
 windows). `data-sys="Y|N"` comes from `is_oracle_schema()` on the
 executing user (not a parsing-schema lookup — SQL Monitor's XML reports the
-session's `user`, not the parsing schema), so `#sqlmon` stays in the
-"Application only" kept-sections list. `sql/17_narrative.sql` gained rules
+session's `user`, not the parsing schema). `sql/17_narrative.sql` gained rules
 R6-R9 (plan change / DOP downgrade / errors / new sql_ids in the Current
 window), each its own bounded `dba_hist_reports` scan per the "findings are
 recomputed, not shared" convention. "New" means *no capture anywhere in the
@@ -572,7 +567,7 @@ Every ECharts chart reads its axis/label/gridline colors from the CSS vars
 (`--fg`/`--muted`/`--border`, via `getComputedStyle`) **once at init**, so a
 dark-mode toggle would otherwise leave charts on the old palette. The theme
 toggle in `00_params.sql` dispatches `document`-level `CustomEvent('awr:theme')`
-(the sibling of `awr:appfilter`); every chart-init registers a listener that
+(siblings: `awr:window`, `awr:mode`); every chart-init registers a listener that
 re-reads those vars and `setOption`-merges the color-bearing options. The
 masthead chart wraps its whole build in a `paint()` re-run (it also theme-picks
 hardcoded rgba band/area fills); the other sections (04/05/06×2/07/09/10/11/
@@ -999,6 +994,11 @@ its twin and regenerate**; `node demo/verify_report.js <html> [shots/]` is the
 headless smoke test (0 console errors, chart count, toggles, screenshots).
 The "No Python" rule applies to the toolkit, not to this docs tooling --
 nothing under `sql/`, `awr_trend.sql` or the wrappers may depend on `demo/`.
+`docs/gen_policy_doc.py` (same rule) renders `docs/metric_policy.html`, the
+human-readable reference of every metric's direction / floors / "fires
+when" from `sql/lib/metric_policy.plsql` (it imports the demo's policy
+parser); **regenerate it whenever the policy file changes**, together with
+the demo.
 
 ## Verification & testing
 
@@ -1036,7 +1036,7 @@ nothing under `sql/`, `awr_trend.sql` or the wrappers may depend on `demo/`.
 - **Coverage so far (dbmint = single-DBID, 19.27, idle):** single-DBID
   byte-identity of the window-validity / SYSMETRIC / cross-DBID / snap-to-grid
   refactors; sections 13/14/15 and every 06 dimension run clean; the
-  "Application only" and Essential toggles, the workbench rail/scrollspy,
+  the (since removed) "Application only" and Essential toggles, the workbench rail/scrollspy,
   `awr:theme` re-styling of every ECharts instance, the LISTAGG positional-CSV
   fix, the F1–F16 review batch (CHANGELOG 1.2.0), the restart-skip path
   (windows straddling a restart are skipped, verdict falls to "baseline too

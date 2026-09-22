@@ -166,8 +166,8 @@ def _emit_domain_table(out: list[str], ordered: list[Finding], dom: str, title: 
         return
     tail_cnt = sum(1 for f in rows if f.bucket in _TAIL)
     tbl_id = "findings-" + dom.lower()
-    out.append('<h3 class="detail-only">' + title + "</h3>")
-    out.append('<table id="' + tbl_id + '" class="detail-only">'
+    out.append('<h3 class="full-only">' + title + "</h3>")
+    out.append('<table id="' + tbl_id + '" class="full-only">'
                "<thead><tr>"
                "<th>Change</th>"
                "<th>Metric</th>"
@@ -198,7 +198,7 @@ def _emit_domain_table(out: list[str], ordered: list[Finding], dom: str, title: 
                    + "</tr>")
     out.append("</tbody></table>")
     if tail_cnt > 0:
-        out.append('<span class="expander detail-only" data-for="' + tbl_id
+        out.append('<span class="expander full-only" data-for="' + tbl_id
                    + '" data-n="' + str(tail_cnt) + '" data-noun="typical / improved / flat rows">'
                    + "&#9656; Show " + str(tail_cnt) + " typical / improved / flat rows</span>")
 

@@ -250,7 +250,7 @@ def emit(w) -> str:
 
     # ---- editorial masthead ------------------------------------------
     put('<script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.body.classList.add("dark");}catch(e){}})();</script>')
-    put('<script>(function(){var m="normal";try{if(localStorage.getItem("awr-mode")==="detailed")m="detailed";}catch(e){}var h=location.hash||"",i=h.indexOf("!v=");if(i>=0&&h.slice(i+3).split("&")[0].split(",").indexOf("d")>=0)m="detailed";document.body.classList.add(m);})();</script>')
+    put('<script>(function(){var m="normal";try{if(localStorage.getItem("awr-mode")==="full")m="full";}catch(e){}var h=location.hash||"",i=h.indexOf("!v=");if(i>=0&&h.slice(i+3).split("&")[0].split(",").indexOf("f")>=0)m="full";document.body.classList.add(m);})();</script>')
     put('<a class="skip" href="#main-start">Skip to report</a>')
     put('<header class="report">')
     put('  <div class="brandline"><span class="dot">&#9679;</span> AWR <span class="slash">/</span> TIMELINE COMPARISON</div>')
@@ -351,10 +351,24 @@ def emit(w) -> str:
         + (' &middot; day profile: ' + str(w.profile_days) + ' prior days'
            if w.profile_days > 0 else '')
         + '</span></div>')
-    put('    <div class="windows-chips">')
     step = timedelta(hours=w.step_hours)
     width = timedelta(hours=w.win_hours)
     cur_day = (w.target_end - width).date()
+    cur_start = w.target_end - width
+    oldest = w.target_end - w.weeks_back * step - width
+    put('    <details class="windows-more">')
+    put('      <summary>'
+        '<span class="wchip cur" data-w="0" title="click to highlight the Current window everywhere">'
+        '<b>current</b> <span>' + dy(cur_start) + ' ' + cur_start.strftime("%d") + ' '
+        + mon_dd(cur_start)[:3] + ' ' + hh24(cur_start) + ' &rarr; ' + hh24(w.target_end)
+        + '</span></span>'
+        '<span>vs ' + str(w.weeks_back) + ' prior window' + ('' if w.weeks_back == 1 else 's')
+        + ', every ' + w.step_label + ', back to '
+        + dy(oldest) + ' ' + oldest.strftime("%d") + ' ' + mon_dd(oldest)[:3] + '</span>'
+        '<span class="w-toggle"><span class="closed">show all windows &#9662;</span>'
+        '<span class="opened">hide windows &#9652;</span></span>'
+        '</summary>')
+    put('    <div class="windows-chips">')
     for wk in range(w.weeks_back + 1):
         w_end = w.target_end - wk * step
         w_start = w_end - width
@@ -368,6 +382,7 @@ def emit(w) -> str:
             + hh24(w_start) + ' &rarr; ' + hh24(w_end) + '</span></button>')
     put('    </div>')
     put('    <div class="windows-hint">click a window to highlight it everywhere &middot; Esc clears</div>')
+    put('    </details>')
     put('    <div class="windows-chart" id="masthead-timeline"></div>')
     put('    <div class="windows-fallback">')
     for wk in range(w.weeks_back + 1):
@@ -456,15 +471,10 @@ def emit(w) -> str:
         '<button type="button" id="mode-normal" class="mode-btn" aria-pressed="true"'
         ' title="Normal view: verdict, headline metrics, findings, ASH timeline, Top SQL">'
         'Normal</button>'
-        '<button type="button" id="mode-detailed" class="mode-btn" aria-pressed="false"'
-        ' title="Detailed view: every section and every scored row">'
-        'Detailed</button>'
+        '<button type="button" id="mode-full" class="mode-btn" aria-pressed="false"'
+        ' title="Full view: every section and every scored row">'
+        'Full</button>'
         '</div>'
-        '<button type="button" id="app-filter-toggle" class="app-filter"'
-        ' aria-pressed="false"'
-        ' title="Hide system-wide sections and Oracle-internal SQL;'
-        ' show only application SQL and its related data">'
-        'Application only</button>'
         '<button type="button" id="next-finding" class="next-finding"'
         ' title="Jump to the next large (critical) finding">'
         '<span>&darr; next large finding</span>'

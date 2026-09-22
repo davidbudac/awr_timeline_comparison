@@ -92,14 +92,27 @@ class _Stats:
     def went_up(self, p):
         return self.has(p) and self.d[p][0] >= self.d[p][1]
 
-    def lede(self, label, stat, unit, scale=1.0):
+    def numtxt(self, stat):
         r = self.ratio(stat)
-        up = self.went_up(stat)
+        return dirg(self.went_up(stat)) + ('' if r is None else ' &times;' + fmt3(r))
+
+    def rng(self, stat, unit, scale=1.0):
         cur, mu = self.d[stat][0], self.d[stat][1]
-        return ('<b>' + label + '</b> ' + dirg(up)
-                + ('' if r is None else ' &times;' + fmt3(r))
-                + ' (' + fmt3(mu * scale) + ' &rarr; ' + fmt3(cur * scale)
-                + ' ' + unit + ').')
+        return fmt3(mu * scale) + ' &rarr; ' + fmt3(cur * scale) + ' ' + unit
+
+
+def pcttxt(p) -> str:
+    return dirg(p >= 0) + ' ' + fmt3(abs(p)) + '%'
+
+
+def item(label, num, sub, why, href, link) -> str:
+    """add_item(): one structured <li> row."""
+    return ('<li><span class="n-lbl">' + label + '</span>'
+            + ('<span class="n-num">' + num + '</span>' if num else '')
+            + ('<span class="n-sub">' + sub + '</span>' if sub else '')
+            + ('<span class="n-why">' + why + '</span>' if why else '')
+            + ('<a class="n-go" href="' + href + '">' + link + ' &#8599;</a>' if href else '')
+            + '</li>')
 
 
 def _collect_stats(w) -> _Stats:
@@ -344,57 +357,44 @@ def emit(w) -> str:
 
     # R1
     if st.big('physical reads'):
-        txt = st.lede('Physical reads', 'physical reads', '/s')
         v_file, v_file_cur, v_file_mu = _r1_file(w)
         v_seg = _r1_segment(w)
         v_sqlid = _r1_newcomer(w)
         tail = ''
         if v_file is not None:
-            tail += (' The reads land on <a href="#file-io">' + esc(v_file) + '</a> ('
-                     + ('no prior windows; ' if v_file_mu is None else fmt3(v_file_mu) + ' &rarr; ')
-                     + fmt3(v_file_cur) + ' MB read this window)')
+            tail = ('file <a href="#file-io">' + esc(v_file) + '</a> '
+                    + ('' if v_file_mu is None else fmt3(v_file_mu) + ' &rarr; ')
+                    + fmt3(v_file_cur) + ' MB')
         if v_seg is not None:
-            tail += ((' T' if tail == '' else '; t')
-                     + 'op read segment is <a href="#segment-io">' + esc(v_seg) + '</a>')
+            tail += ('' if tail == '' else ' &middot; ') + 'segment <a href="#segment-io">' + esc(v_seg) + '</a>'
         if v_sqlid is not None:
-            tail += ((' S' if tail == '' else '; S')
-                     + 'QL <a href="#sql-' + v_sqlid + '"><code>' + v_sqlid
-                     + '</code></a> is in the top-' + _tc(w.top_n)
-                     + ' by reads only in the current window')
-        if tail != '':
-            txt += tail + '.'
-        sent.append(txt)
+            tail += (('' if tail == '' else ' &middot; ') + 'new in top-' + _tc(w.top_n)
+                     + ': <a href="#sql-' + v_sqlid + '"><code>' + v_sqlid + '</code></a>')
+        sent.append(item('Physical reads', st.numtxt('physical reads'), st.rng('physical reads', '/s'),
+                         tail, '#file-io', 'File I/O'))
 
     # R5
     if st.big('TM:DB time') and st.went_up('TM:DB time') and st.has('TM:DB CPU'):
-        txt = st.lede('DB time', 'TM:DB time', 'avg active sessions', 1 / 1000000)
         pc = st.pctd('TM:DB CPU')
+        txt = ''
         if pc is not None and abs(pc) < 20:
-            txt += (' DB CPU barely moved (' + dirg(pc >= 0) + ' ' + fmt3(abs(pc))
-                    + '%), so the extra DB time is wait, not CPU &mdash; see '
-                    '<a href="#waits-fg">foreground waits</a>.')
+            txt = 'DB CPU only ' + pcttxt(pc) + ': the extra time is wait, not CPU'
         elif pc is not None:
-            txt += (' DB CPU moved with it (' + dirg(pc >= 0) + ' ' + fmt3(abs(pc))
-                    + '%): CPU-bound growth.')
-        sent.append(txt)
+            txt = 'DB CPU ' + pcttxt(pc) + ' with it: CPU-bound'
+        sent.append(item('DB time', st.numtxt('TM:DB time'), st.rng('TM:DB time', 'AAS', 1 / 1000000),
+                         txt, '#waits-fg', 'Foreground waits'))
 
     # R2
-    txt = ''
     pb_, pu = st.pctd('bytes sent via SQL*Net to client'), st.pctd('user calls')
     if pb_ is not None and abs(pb_) >= 10 and pu is not None and abs(pu) <= 3:
-        txt = ('<b>Network bytes to client</b> ' + dirg(pb_ >= 0) + ' ' + fmt3(abs(pb_))
-               + '% with user calls flat (' + dirg(pu >= 0) + ' ' + fmt3(abs(pu))
-               + '%), so payload per call ' + ('grew' if pb_ >= 0 else 'shrank')
-               + ', not call volume.')
+        sent.append(item('Bytes to client', pcttxt(pb_), 'user calls ' + pcttxt(pu),
+                         'payload per call ' + ('grew' if pb_ >= 0 else 'shrank') + ', not call volume',
+                         '#load', 'Load profile'))
     pr, pcm = st.pctd('redo size'), st.pctd('user commits')
     if pr is not None and abs(pr) >= 20 and pcm is not None and abs(pcm) <= 5:
-        txt += (('' if txt == '' else ' ')
-                + '<b>Redo</b> ' + dirg(pr >= 0) + ' ' + fmt3(abs(pr))
-                + '% with commits flat (' + dirg(pcm >= 0) + ' ' + fmt3(abs(pcm))
-                + '%), so redo per commit ' + ('grew' if pr >= 0 else 'shrank')
-                + ' &mdash; transaction size changed, not transaction count.')
-    if txt != '':
-        sent.append(txt)
+        sent.append(item('Redo', pcttxt(pr), 'commits ' + pcttxt(pcm),
+                         'redo per commit ' + ('grew' if pr >= 0 else 'shrank') + ': transaction size, not count',
+                         '#load', 'Load profile'))
 
     # R3
     diff = _r3(w)
@@ -411,10 +411,11 @@ def emit(w) -> str:
             else:
                 acc = ', '.join(_off_lbl(w, k) for k in offs)
             names += ('' if i == 0 else '; ') + '<code>' + esc(name) + '</code> in ' + acc
-        sent.append('<b>Configuration differs among the prior windows:</b> ' + names
-                    + (' (and ' + _tc(total - len(shown)) + ' more)' if total > len(shown) else '')
-                    + '. Treat those windows as a different configuration &mdash; see '
-                    '<a href="#param-changes">parameter changes</a>.')
+        sent.append(item('Configuration',
+                         _tc(total) + ' parameter' + ('' if total == 1 else 's') + ' differ' + ('s' if total == 1 else ''),
+                         None,
+                         names + (' (+' + _tc(total - len(shown)) + ' more)' if total > len(shown) else ''),
+                         '#param-changes', 'Parameters'))
 
     # R4
     prior = [win for win in w.windows if win.week_offset > 0]
@@ -425,53 +426,51 @@ def emit(w) -> str:
             cnt[win.skip_reason] = cnt.get(win.skip_reason, 0) + 1
         reason = sorted(cnt.items(), key=lambda t: (-t[1], t[0] or ''))[0][0]
         n_all = len(prior)
-        sent.append('<b>' + _tc(len(bad)) + ' of ' + _tc(n_all) + ' prior window'
-                    + ('' if n_all == 1 else 's') + '</b>'
-                    + (' was' if len(bad) == 1 else ' were') + ' skipped'
-                    + ('' if reason is None else ' (' + esc(reason) + ')')
-                    + ', so the prior-window set is thin &mdash; see '
-                    '<a href="#windows">compared windows</a>.')
+        sent.append(item('Baseline',
+                         _tc(len(bad)) + ' of ' + _tc(n_all) + ' prior window' + ('' if n_all == 1 else 's') + ' skipped',
+                         None, 'thin prior-window set' if reason is None else esc(reason),
+                         '#windows', 'Windows'))
 
     # R6-R9
     plan_n, plan_ids, dop_n, err_n, new_n, new_ids = _r6_r9(w)
     if plan_n > 0:
-        sent.append('<b>' + _tc(plan_n) + ' monitored statement' + ('' if plan_n == 1 else 's')
-                    + '</b> ran with more than one execution plan in the compared span, '
-                    'including the Current window: ' + esc(plan_ids)
-                    + (' (and ' + _tc(plan_n - 3) + ' more)' if plan_n > 3 else '')
-                    + ' &mdash; see <a href="#sqlmon">SQL Monitor</a>.')
+        sent.append(item('Plan change', _tc(plan_n) + ' statement' + ('' if plan_n == 1 else 's'), None,
+                         '<code>' + esc(plan_ids) + '</code>'
+                         + (' (+' + _tc(plan_n - 3) + ' more)' if plan_n > 3 else '')
+                         + ' ran with more than one plan, including now',
+                         '#sqlmon', 'SQL Monitor'))
     if dop_n > 0:
-        sent.append('<b>' + _tc(dop_n) + ' statement' + ('' if dop_n == 1 else 's')
-                    + '</b> got fewer parallel servers than requested in the Current window '
-                    '(DOP downgrade) &mdash; see <a href="#sqlmon">SQL Monitor</a>.')
+        sent.append(item('DOP downgrade', _tc(dop_n) + ' statement' + ('' if dop_n == 1 else 's'), None,
+                         'fewer parallel servers than requested in the Current window',
+                         '#sqlmon', 'SQL Monitor'))
     if err_n > 0:
-        sent.append('<b>' + _tc(err_n) + ' SQL Monitor execution' + ('' if err_n == 1 else 's')
-                    + '</b> ended <code>DONE (ERROR)</code> in the Current window &mdash; see '
-                    '<a href="#sqlmon">SQL Monitor</a>.')
+        sent.append(item('Errors', _tc(err_n) + ' execution' + ('' if err_n == 1 else 's'), None,
+                         'ended <code>DONE (ERROR)</code> in the Current window',
+                         '#sqlmon', 'SQL Monitor'))
     if new_n > 0:
-        sent.append('<b>' + _tc(new_n) + ' sql_id' + ('' if new_n == 1 else 's')
-                    + '</b> appeared in SQL Monitor for the first time in the Current window: '
-                    + esc(new_ids)
-                    + (' (and ' + _tc(new_n - 3) + ' more)' if new_n > 3 else '')
-                    + ' &mdash; see <a href="#sqlmon">SQL Monitor</a>.')
+        sent.append(item('New SQL', _tc(new_n) + ' SQL ID' + ('' if new_n == 1 else 's'), None,
+                         '<code>' + esc(new_ids) + '</code>'
+                         + (' (+' + _tc(new_n - 3) + ' more)' if new_n > 3 else '')
+                         + ' first seen in SQL Monitor this window',
+                         '#sqlmon', 'SQL Monitor'))
 
     # R10
     if w.sqlmon_detail > 0:
         r10 = _r10(w)
         if r10 is not None:
             sid, line_id, op_txt, base_share, cur_share = r10
-            sent.append('SQL Monitor plan-line drift: <b>' + esc(sid) + '</b> spends '
-                        + _tc(ora_round(cur_share)) + '% of its time on line '
-                        + _tc(line_id) + ' ' + esc(op_txt) + ', up from '
-                        + _tc(ora_round(base_share)) + '% in the baseline &mdash; see '
-                        '<a href="#sqlmon">SQL Monitor</a>.')
+            sent.append(item('Plan drift', '<code>' + esc(sid) + '</code>',
+                             _tc(ora_round(base_share)) + '% &rarr; ' + _tc(ora_round(cur_share)) + '% of its time',
+                             'line ' + _tc(line_id) + ' ' + esc(op_txt),
+                             '#sqlmon', 'SQL Monitor'))
 
     out = ['<!-- AWR-SECTION: 17_narrative BEGIN -->']
     if sent:
-        out.append('<div id="narrative-src" class="narr" hidden>')
+        out.append('<div id="narrative-src" class="narr" hidden>'
+                   '<div class="narr-head">What changed</div><ul class="narr-list">')
         for s in sent:
-            out.append('<p>' + s + '</p>')
-        out.append('</div>')
+            out.append(s)
+        out.append('</ul></div>')
         out.append('<script>(function(){'
                    'var s=document.getElementById("narrative-slot"),'
                    'n=document.getElementById("narrative-src");'

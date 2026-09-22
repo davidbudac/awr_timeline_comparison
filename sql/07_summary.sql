@@ -247,11 +247,11 @@ DECLARE
 
         v_tbl_id := 'findings-' || LOWER(p_dom);
 
-        -- detail-only: the per-domain detail tables (and their
+        -- full-only: the per-domain detail tables (and their
         -- headings/expanders) when the triage view is on; only the
         -- "Biggest movers" table stays visible there.
-        DBMS_OUTPUT.PUT_LINE('<h3 class="detail-only">' || p_title || '</h3>');
-        DBMS_OUTPUT.PUT_LINE('<table id="' || v_tbl_id || '" class="detail-only">'
+        DBMS_OUTPUT.PUT_LINE('<h3 class="full-only">' || p_title || '</h3>');
+        DBMS_OUTPUT.PUT_LINE('<table id="' || v_tbl_id || '" class="full-only">'
             || '<thead><tr>'
             || '<th>Change</th>'
             || '<th>Metric</th>'
@@ -322,7 +322,7 @@ DECLARE
         DBMS_OUTPUT.PUT_LINE('</tbody></table>');
 
         IF v_tail_cnt > 0 THEN
-            DBMS_OUTPUT.PUT_LINE('<span class="expander detail-only" data-for="' || v_tbl_id
+            DBMS_OUTPUT.PUT_LINE('<span class="expander full-only" data-for="' || v_tbl_id
                 || '" data-n="' || v_tail_cnt || '" data-noun="typical / improved / flat rows">'
                 || '&#9656; Show ' || v_tail_cnt || ' typical / improved / flat rows</span>');
         END IF;
@@ -330,7 +330,7 @@ DECLARE
 BEGIN
     -- data-normal="Y" keeps this section in the Normal view; the
     -- per-domain detail tables/headings/expanders carry class
-    -- "detail-only" and show only in the Detailed view.
+    -- "full-only" and show only in the Full view.
     DBMS_OUTPUT.PUT_LINE('<section id="findings" data-normal="Y"><h2 id="findings-heading">Findings summary</h2>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
         || 'z = (current &minus; &mu;) &divide; max(&sigma;, 2% of &mu;) over prior valid windows. '
@@ -757,7 +757,7 @@ BEGIN
     --
     -- Detail tables: one per domain, ordered by sev / |z| / |pct| / name.
     -- v_table_idx[p] -> index in v_findings, populated above.  Hidden under
-    -- the Normal view (class "detail-only") -- only "Biggest movers" shows.
+    -- the Normal view (class "full-only") -- only "Biggest movers" shows.
     --
     emit_domain_table('LOAD',   'Load profile');
     emit_domain_table('METRIC', 'System metrics');

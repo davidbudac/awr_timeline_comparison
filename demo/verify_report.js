@@ -6,7 +6,7 @@
  *
  * Loads the file in Chromium, then reports: page/console errors, the
  * number of ECharts instances that rendered, sections present, the
- * rail toggles (theme / essential / app-only / triage) actually flipping
+ * rail controls (theme / Normal-Full switch) actually flipping
  * the body classes, click-to-sort + tab switching working, and writes
  * full-page screenshots (light + dark) when shots_dir is given.
  * Exit code 1 on any page error or console error.
@@ -51,25 +51,14 @@ const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 
   // toggles
   const toggles = {};
-  for (const [id, cls] of [['#app-filter-toggle', 'app-only']]) {
-    const el = await page.$(id);
-    if (!el) { toggles[id] = 'MISSING'; continue; }
-    await el.click();
-    await page.waitForTimeout(200);
-    const on = await page.evaluate(c => document.body.classList.contains(c), cls);
-    await el.click();
-    await page.waitForTimeout(200);
-    const off = await page.evaluate(c => document.body.classList.contains(c), cls);
-    toggles[id] = on && !off ? 'ok' : `FAIL on=${on} off=${off}`;
-  }
-  // Normal / Detailed mode switch: Normal is the default; Detailed reveals every section
+  // Normal / Full mode switch: Normal is the default; Full reveals every section
   {
     const normal0 = await page.evaluate(() => document.body.classList.contains('normal'));
     const vis0 = await page.evaluate(() => [...document.querySelectorAll('main > section')].filter(s => s.offsetParent !== null).length);
-    const bd = await page.$('#mode-detailed');
+    const bd = await page.$('#mode-full');
     if (!bd) { toggles.mode = 'MISSING'; } else {
       await bd.click(); await page.waitForTimeout(300);
-      const det = await page.evaluate(() => document.body.classList.contains('detailed'));
+      const det = await page.evaluate(() => document.body.classList.contains('full'));
       const vis1 = await page.evaluate(() => [...document.querySelectorAll('main > section')].filter(s => s.offsetParent !== null).length);
       const bn = await page.$('#mode-normal'); await bn.click(); await page.waitForTimeout(300);
       const back = await page.evaluate(() => document.body.classList.contains('normal'));
@@ -85,7 +74,7 @@ const { chromium } = require('/opt/node22/lib/node_modules/playwright');
     if (shots) await page.screenshot({ path: path.join(shots, 'dark.png'), fullPage: true });
     await theme.click(); await page.waitForTimeout(300);
   } else toggles.theme = 'MISSING';
-  // the interactions below hit elements that only exist on screen in the Detailed view
+  // the interactions below hit elements that only exist on screen in the Full view
   await page.evaluate(() => window.AWR_setMode && window.AWR_setMode(true));
   await page.waitForTimeout(300);
   // tabs

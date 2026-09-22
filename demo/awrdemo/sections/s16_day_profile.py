@@ -226,7 +226,7 @@ def emit(w) -> str:
         '<div id="day-profile-line" style="height:240px"></div></div>')
 
     # Table: one row per hour (chronological), one column per stat.
-    row = "<table class=\"detail-only\"><thead><tr><th>Hour</th>"
+    row = "<table class=\"full-only\"><thead><tr><th>Hour</th>"
     for o in range(1, nstat + 1):
         row += '<th class="num">' + H.esc(labels[o]) + "</th>"
     put(row + "</tr></thead><tbody>")

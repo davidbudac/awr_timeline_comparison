@@ -442,8 +442,8 @@ def emit(w) -> str:
                 + str(len(seen_sqls)) + " top SQL across the compared windows.</p>")
 
     # per-SQL detail: pool table ----------------------------------------
-    block, pos = _slice(L, '<h3 class="detail-only">Per-SQL detail</h3>',
-                        '<table id="sql-pool" class="detail-only"><thead><tr><th>SQL ID</th><th>Ranked in</th>'
+    block, pos = _slice(L, '<h3 class="full-only">Per-SQL detail</h3>',
+                        '<table id="sql-pool" class="full-only"><thead><tr><th>SQL ID</th><th>Ranked in</th>'
                         '<th>Schema</th><th class="num" title="distinct plan_hash_values seen across the span">Plans</th><th class="num">Executions</th>'
                         '<th class="num" title="AWR snapshots in which the SQL appeared">Snapshots</th><th>First seen</th><th>Text</th>'
                         "</tr></thead><tbody>")

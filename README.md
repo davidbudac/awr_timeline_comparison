@@ -397,10 +397,9 @@ A sun/moon button in the rail's brand row toggles **dark mode** (the
 "Slate Instrument" theme). The first load follows your OS
 `prefers-color-scheme`; after that your choice is remembered in
 `localStorage`, and the theme is applied before the charts initialize so
-there's no flash. The foot of the rail carries the **Normal / Detailed**
-mode switch and the **Application only** toggle, described next. All of
-this is purely client-side CSS/JS: no re-run, no DEFINE, and it all works
-offline.
+there's no flash. The foot of the rail carries the **Normal / Full**
+view switch, described next. All of this is purely client-side CSS/JS: no
+re-run, no DEFINE, and it all works offline.
 
 Every table in the report also supports **click-to-sort** on its column
 headers, and any table with 4+ rows gets a small toolbar above it for
@@ -408,7 +407,7 @@ headers, and any table with 4+ rows gets a small toolbar above it for
 permalink. Long detail tables collapse their tail behind a "Show N more
 rows" link. None of this needs the network or a re-run.
 
-### Normal and Detailed views
+### Normal and Full views
 
 The report opens in the **Normal** view: the masthead (verdict, "what
 changed" narrative, compared windows, DB-time strip), **Headline
@@ -419,13 +418,20 @@ windows), **SQL Monitor** (an error, plan change or DOP downgrade on a
 statement that ran in the Current window) and the **Day profile** (a
 day-wide shift). Everything else -- load profile, system metrics, the wait
 tables, per-SQL ASH cards, segment / file I/O, the per-domain findings
-tables, the per-SQL pool -- is one click away in the **Detailed** view
-(the full report). The rail lists only the sections on screen plus a
-"+ N more in Detailed" line, a note at the end of the page names the
-hidden sections, and any cross-link into hidden content switches to
-Detailed by itself. Your choice is remembered in `localStorage`; a shared
-link carries it in the hash (`#findings!v=d`). With JavaScript off the
-whole report shows.
+tables, the per-SQL pool -- is one click away in the **Full** view. The
+rail lists only the sections on screen plus a "+ N more in Full" line, a
+note at the end of the page names the hidden sections, and any cross-link
+into hidden content switches to Full by itself. Your choice is remembered
+in `localStorage`; a shared link carries it in the hash (`#findings!v=f`).
+With JavaScript off the whole report shows.
+
+The masthead's **What changed** block is a short structured list, one
+row per finding: what moved, by how much (ratio or percent), from what to
+what, one clause of why, and a link to the section that has the detail.
+The **Compared windows** strip shows the Current window, the number and
+cadence of the prior windows and the date it reaches back to, above the
+DB-time timeline; the full list of dated window chips (click one to
+highlight that window everywhere) folds out on demand.
 
 ### Per-metric policy: direction and floors
 
@@ -440,24 +446,10 @@ never highlighted, never a mover and never counted in the verdict; a
 purely informational counter that moved is **noted**. The file is a plain
 one-line-per-metric table meant to be edited: change a floor or a
 direction there and every section (verdict, findings, hero cards, wait
-tables, day profile, narrative) follows.
-
-### "Application only" view
-
-The rail foot carries an **Application only** toggle.
-Click it to strip the report down to *application* behaviour on the database:
-it hides every system-wide section (load profile, system metrics, FG/BG waits,
-ASH timeline, DB time, findings, windows, parameters) plus the masthead verdict
-and DB-time strip, leaving only **Top SQL**, **Top SQL ASH breakdown**,
-**Segment I/O**, **File I/O**, and **Utilization**. Within those, SQL parsed by
-an Oracle-maintained schema (`SYS`, `SYSTEM`, `XDB`, `DBSNMP`, …) — i.e.
-recursive/background SQL from Oracle itself — is filtered out of the tables,
-charts, and per-SQL detail cards, so you see only your own application's SQL.
-Click again (now labelled **Show all**) to restore the full report. It's a
-purely client-side toggle — no re-run needed, and it works offline — and it
-combines with either view (in Normal it keeps just Top SQL and, when
-flagged, SQL Monitor).
-
+tables, day profile, narrative) follows. The generated reference
+[docs/metric_policy.html](docs/metric_policy.html) lists every metric,
+class and event with its direction, floors, when it fires and when it
+does not (`python3 docs/gen_policy_doc.py` regenerates it).
 
 ## Fleet report (many databases)
 

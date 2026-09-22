@@ -4,9 +4,9 @@
 -- Local PL/SQL helper that classifies a parsing-schema name as
 -- Oracle-maintained ("system") or not.  Used by the SQL-centric sections
 -- (06 Top SQL, 11 Top SQL ASH breakdown) to tag each top SQL with a
--- data-sys="Y|N" marker so the report's "Application only" toggle can hide
--- Oracle-internal / recursive SQL (parsed as SYS, SYSTEM, XDB, ...) and
--- leave only genuine application SQL on screen.  No DB access: it is a pure
+-- data-sys="Y|N" marker that tells Oracle-internal / recursive SQL (parsed
+-- as SYS, SYSTEM, XDB, ...) from genuine application SQL (informational
+-- since v1.5.0; the "Application only" filter is gone).  No DB access: a pure
 -- name test against a curated list, so it adds NO grant requirement (a
 -- DBA_USERS.ORACLE_MAINTAINED lookup would have).
 --

@@ -90,9 +90,6 @@ nav.toc a .st.crit { background:var(--dot-crit); }
 nav.toc .rail-foot { margin-top:auto; display:flex; flex-direction:column; gap:6px; position:sticky; bottom:0; background:var(--panel-2); padding-top:8px; }
 nav.toc .view-btn { display:none; }
 nav.toc .view-panel { display:contents; }
-nav.toc .app-filter { font:inherit; font-size:11px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; padding:7px 12px; border-radius:8px; cursor:pointer; border:1px solid var(--rule); background:var(--panel); color:var(--ink); transition:color .12s,background .12s,border-color .12s; }
-nav.toc .app-filter:hover { border-color:var(--accent); color:var(--accent); }
-nav.toc .app-filter.active { background:var(--accent); border-color:var(--accent); color:#fff; }
 nav.toc .mode-switch { display:flex; border:1px solid var(--rule); border-radius:8px; overflow:hidden; background:var(--panel); }
 nav.toc .mode-btn { flex:1 1 0; font:inherit; font-size:11px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; padding:7px 6px; border:0; cursor:pointer; background:transparent; color:var(--muted); transition:color .12s,background .12s; }
 nav.toc .mode-btn + .mode-btn { border-left:1px solid var(--rule); }
@@ -101,18 +98,23 @@ nav.toc .mode-btn[aria-pressed="true"] { background:var(--accent); color:#fff; }
 nav.toc a.more-sections { display:none; color:var(--muted); font-style:italic; }
 body.normal nav.toc a.more-sections { display:flex; }
 .narr { border-left:3px solid var(--accent); background:var(--accent-bg); font-size:13px; line-height:1.6; padding:10px 14px; border-radius:0 6px 6px 0; margin-top:10px; color:var(--ink); }
-.narr p { margin:0 0 4px; }
-.narr p:last-child { margin-bottom:0; }
+.narr .narr-head { font-size:10.5px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent-deep); margin:0 0 6px; }
+.narr-list { list-style:none; margin:0; padding:0; }
+.narr-list li { display:grid; grid-template-columns:130px auto auto 1fr auto; column-gap:14px; align-items:baseline; padding:5px 0; border-top:1px solid color-mix(in srgb, var(--accent) 18%, transparent); }
+.narr-list li:first-child { border-top:0; }
+.narr-list .n-lbl { font-weight:700; color:var(--ink); }
+.narr-list .n-num { font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.narr-list .n-sub { color:var(--ink-soft); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.narr-list .n-why { color:var(--muted); min-width:0; }
+.narr-list .n-go { white-space:nowrap; font-size:12px; }
+.narr-list li > :empty { display:none; }
+@media (max-width:700px) { .narr-list li { grid-template-columns:1fr auto; } .narr-list .n-why { grid-column:1 / -1; } }
 .narr b { font-weight:600; }
 .narr code { font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; font-size:11.5px; }
 .narr a { color:var(--accent-deep); text-decoration:none; font-weight:600; border-bottom:1px solid var(--border); }
 .narr a:hover { border-bottom-color:var(--accent); }
-body.app-only #db-time-summary, body.app-only #day-profile, body.app-only #overview, body.app-only #ash-timeline, body.app-only #waits-fg, body.app-only #waits-bg, body.app-only #findings, body.app-only #windows, body.app-only #load, body.app-only #metrics, body.app-only #param-changes, body.app-only header.report .verdict, body.app-only header.report .movers-all, body.app-only header.report .narr, body.app-only header.report .windows-strip { display:none; }
-body.app-only nav.toc a:not([href="#topsql"]):not([href="#topsql-ash"]):not([href="#sqlmon"]):not([href="#segment-io"]):not([href="#file-io"]):not([href="#utilization"]) { display:none; }
-body.app-only nav.toc b { display:none; }
-body.app-only tr[data-sys="Y"], body.app-only details[data-sys="Y"], body.app-only .ash-sql-card[data-sys="Y"] { display:none; }
 body.normal main > section:not([data-normal]) { display:none; }
-body.normal .detail-only { display:none; }
+body.normal .full-only { display:none; }
 body.normal nav.toc a.norm-dim, body.normal nav.toc b.norm-dim { display:none; }
 .mode-note { display:none; order:3; margin:18px 0 0 0; padding:12px 16px; border-radius:10px; border:1px dashed var(--rule); background:var(--panel-2); color:var(--muted); font-size:12.5px; line-height:1.5; }
 body.normal .mode-note { display:block; }
@@ -258,6 +260,11 @@ header.report .windows-chips { display:flex; flex-wrap:wrap; gap:6px; margin:6px
 .wchip.cur b { color:var(--accent-deep); }
 .wchip.hl { background:color-mix(in srgb, var(--accent) 22%, transparent); }
 header.report .windows-hint { font-size:10.5px; color:var(--muted); margin:2px 0 4px; letter-spacing:0.02em; }
+header.report .windows-more { margin:4px 0 2px; }
+header.report .windows-more > summary { cursor:pointer; list-style:none; font-size:11.5px; color:var(--ink-soft); text-transform:none; letter-spacing:0; font-weight:400; display:flex; flex-wrap:wrap; gap:6px 12px; align-items:baseline; }
+header.report .windows-more > summary::-webkit-details-marker { display:none; }
+header.report .windows-more > summary .w-toggle { color:var(--accent-deep); font-weight:600; }
+header.report .windows-more[open] > summary .w-toggle .closed, header.report .windows-more:not([open]) > summary .w-toggle .opened { display:none; }
 .badge.sig { background:var(--skip-bg); color:var(--skip); font-style:normal; text-transform:none; letter-spacing:0; font-weight:600; }
 .badge.note { background:transparent; color:var(--skip); box-shadow:inset 0 0 0 1px var(--skip-bg); }
 .tabs { display:flex; flex-wrap:wrap; gap:2px; margin:14px 0 0; border-bottom:1px solid var(--rule); }
@@ -318,7 +325,7 @@ tr.jump-hi td { box-shadow:inset 0 2px 0 var(--crit), inset 0 -2px 0 var(--crit)
 tr.jump-hi td:first-child { box-shadow:inset 0 2px 0 var(--crit), inset 0 -2px 0 var(--crit), inset 2px 0 0 var(--crit); }
 tr.jump-hi td:last-child { box-shadow:inset 0 2px 0 var(--crit), inset 0 -2px 0 var(--crit), inset -2px 0 0 var(--crit); }
 nav.toc .rail-cur, nav.toc .rail-menu-btn { display:none; }
-@media (max-width: 980px) { nav.toc { order:0; position:sticky; top:0; left:auto; bottom:auto;   width:auto; overflow:visible; z-index:30;   flex-direction:row; flex-wrap:nowrap; align-items:center;   gap:8px; border-right:0;   border-bottom:1px solid var(--hairline);   border-radius:0; margin:0 -20px; padding:8px 20px; } nav.toc .rail-brand { border-bottom:0; padding:0; margin:0;   flex:0 0 auto; gap:6px; } nav.toc .rail-brand > span { font-size:10px; } nav.toc .rail-cur { display:block; flex:1 1 auto; min-width:0;   font-size:12px; font-weight:600; color:var(--ink);   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;   text-transform:none; letter-spacing:0; } nav.toc .rail-menu-btn { display:flex; flex:none;   align-items:center; justify-content:center;   width:28px; height:26px; padding:0; border-radius:7px;   border:1px solid var(--rule); background:var(--panel);   color:var(--ink); font:inherit; font-size:14px; cursor:pointer; } nav.toc .rail-filter { display:none; } nav.toc.menu-open .rail-filter { display:block; position:absolute;   top:calc(100% + 8px); left:20px; right:20px; z-index:32; margin:0; } nav.toc .rail-list { display:none; position:absolute;   top:100%; left:0; right:0; z-index:31;   background:var(--panel-2);   border-bottom:1px solid var(--hairline);   box-shadow:0 8px 18px rgba(0,0,0,.10);   padding:48px 20px 12px; max-height:70vh; overflow:auto; } nav.toc.menu-open .rail-list { display:flex; } nav.toc .rail-foot { margin-top:0; flex:none; position:static;   padding:0; flex-direction:row; gap:4px; } nav.toc .view-btn { display:flex; align-items:center; gap:4px;   font:inherit; font-size:11px; font-weight:700; min-height:32px;   padding:0 10px; border-radius:7px; border:1px solid var(--rule);   background:var(--panel); color:var(--ink); cursor:pointer; } nav.toc .view-btn[aria-expanded="true"] { border-color:var(--accent); color:var(--accent); } nav.toc .view-panel { display:none; position:absolute; right:12px;   top:calc(100% + 6px); z-index:33; flex-direction:column; gap:6px;   min-width:220px; padding:10px; border-radius:10px;   background:var(--panel); border:1px solid var(--hairline);   box-shadow:0 8px 18px rgba(0,0,0,.14); } nav.toc .rail-foot.open .view-panel { display:flex; } nav.toc .app-filter, nav.toc .mode-btn { min-height:34px; } .tabs [data-t], .tbl-tools .tool-btn, .copy-btn, .expander, details > summary, .chipbar button, nav.toc .theme-icon-btn, nav.toc .rail-menu-btn { min-height:32px; } nav.toc .theme-icon-btn, nav.toc .rail-menu-btn { width:32px; height:32px; } }
+@media (max-width: 980px) { nav.toc { order:0; position:sticky; top:0; left:auto; bottom:auto;   width:auto; overflow:visible; z-index:30;   flex-direction:row; flex-wrap:nowrap; align-items:center;   gap:8px; border-right:0;   border-bottom:1px solid var(--hairline);   border-radius:0; margin:0 -20px; padding:8px 20px; } nav.toc .rail-brand { border-bottom:0; padding:0; margin:0;   flex:0 0 auto; gap:6px; } nav.toc .rail-brand > span { font-size:10px; } nav.toc .rail-cur { display:block; flex:1 1 auto; min-width:0;   font-size:12px; font-weight:600; color:var(--ink);   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;   text-transform:none; letter-spacing:0; } nav.toc .rail-menu-btn { display:flex; flex:none;   align-items:center; justify-content:center;   width:28px; height:26px; padding:0; border-radius:7px;   border:1px solid var(--rule); background:var(--panel);   color:var(--ink); font:inherit; font-size:14px; cursor:pointer; } nav.toc .rail-filter { display:none; } nav.toc.menu-open .rail-filter { display:block; position:absolute;   top:calc(100% + 8px); left:20px; right:20px; z-index:32; margin:0; } nav.toc .rail-list { display:none; position:absolute;   top:100%; left:0; right:0; z-index:31;   background:var(--panel-2);   border-bottom:1px solid var(--hairline);   box-shadow:0 8px 18px rgba(0,0,0,.10);   padding:48px 20px 12px; max-height:70vh; overflow:auto; } nav.toc.menu-open .rail-list { display:flex; } nav.toc .rail-foot { margin-top:0; flex:none; position:static;   padding:0; flex-direction:row; gap:4px; } nav.toc .view-btn { display:flex; align-items:center; gap:4px;   font:inherit; font-size:11px; font-weight:700; min-height:32px;   padding:0 10px; border-radius:7px; border:1px solid var(--rule);   background:var(--panel); color:var(--ink); cursor:pointer; } nav.toc .view-btn[aria-expanded="true"] { border-color:var(--accent); color:var(--accent); } nav.toc .view-panel { display:none; position:absolute; right:12px;   top:calc(100% + 6px); z-index:33; flex-direction:column; gap:6px;   min-width:220px; padding:10px; border-radius:10px;   background:var(--panel); border:1px solid var(--hairline);   box-shadow:0 8px 18px rgba(0,0,0,.14); } nav.toc .rail-foot.open .view-panel { display:flex; } nav.toc .mode-btn { min-height:34px; } .tabs [data-t], .tbl-tools .tool-btn, .copy-btn, .expander, details > summary, .chipbar button, nav.toc .theme-icon-btn, nav.toc .rail-menu-btn { min-height:32px; } nav.toc .theme-icon-btn, nav.toc .rail-menu-btn { width:32px; height:32px; } }
 @media (max-width: 700px) { h2 .h2sub { display:none; } section > h2 { white-space:normal; flex-wrap:wrap; row-gap:4px; } nav.toc .rail-brand > span { display:none; } }
 @media print { nav.toc { display:none; position:static; } body { max-width:none; padding:0 0 24px; background:#fff; } section { border:0; padding:12px 0; break-before:page; } main > section:first-of-type, body > section:first-of-type { break-before:auto; } header.report { border:0; padding-top:0; } .chart-wrap { break-inside:avoid; } h2 { break-after:avoid; position:static; padding-top:0;   background:transparent; } section table thead th { position:static; } .tbl-tools, .copy-btn, .permalink, .expander, .tag, .mode-note, .next-finding, .windows-hint, .theme-icon-btn { display:none !important; } details.method > summary { display:none; } details.method > * { display:block; } tr[data-tail="Y"] { display:table-row !important; } .tblwrap.scroll { overflow:visible; box-shadow:none; } .tblwrap.scroll tr > :first-child { position:static; } }
 </style>
@@ -457,7 +464,7 @@ window.AWR_markLine = function(cats, isoCats){
 <script>window.AWR_MARKERS.push({t:"2026-09-08 22:00",label:"Release 4.2"});</script>
 <!-- AWR-SECTION: 00_params BEGIN -->
 <script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.body.classList.add("dark");}catch(e){}})();</script>
-<script>(function(){var m="normal";try{if(localStorage.getItem("awr-mode")==="detailed")m="detailed";}catch(e){}var h=location.hash||"",i=h.indexOf("!v=");if(i>=0&&h.slice(i+3).split("&")[0].split(",").indexOf("d")>=0)m="detailed";document.body.classList.add(m);})();</script>
+<script>(function(){var m="normal";try{if(localStorage.getItem("awr-mode")==="full")m="full";}catch(e){}var h=location.hash||"",i=h.indexOf("!v=");if(i>=0&&h.slice(i+3).split("&")[0].split(",").indexOf("f")>=0)m="full";document.body.classList.add(m);})();</script>
 <a class="skip" href="#main-start">Skip to report</a>
 <header class="report">
   <div class="brandline"><span class="dot">&#9679;</span> AWR <span class="slash">/</span> TIMELINE COMPARISON</div>
@@ -501,6 +508,8 @@ window.AWR_markLine = function(cats, isoCats){
   <div id="narrative-slot"></div>
   <div class="windows-strip">
     <div class="strip-head"><b>Compared windows</b> <span class="strip-meta">Thursday &middot; 1h each &middot; every 1w &middot; DB time (s) over full span &middot; day profile: 7 prior days</span></div>
+    <details class="windows-more">
+      <summary><span class="wchip cur" data-w="0" title="click to highlight the Current window everywhere"><b>current</b> <span>Thu 10 Sep 09:00 &rarr; 10:00</span></span><span>vs 12 prior windows, every 1w, back to Thu 18 Jun</span><span class="w-toggle"><span class="closed">show all windows &#9662;</span><span class="opened">hide windows &#9652;</span></span></summary>
     <div class="windows-chips">
       <button type="button" class="wchip cur" data-w="0" title="2026-09-10 09:00 &rarr; 2026-09-10 10:00 &middot; click to highlight this window everywhere"><b>current</b> <span>09:00 &rarr; 10:00</span></button>
       <button type="button" class="wchip" data-w="1" title="2026-09-03 09:00 &rarr; 2026-09-03 10:00 &middot; click to highlight this window everywhere"><b>&minus;1w</b> <span><em>Thu 03 Sep</em> 09:00 &rarr; 10:00</span></button>
@@ -517,6 +526,7 @@ window.AWR_markLine = function(cats, isoCats){
       <button type="button" class="wchip" data-w="12" title="2026-06-18 09:00 &rarr; 2026-06-18 10:00 &middot; click to highlight this window everywhere"><b>&minus;12w</b> <span><em>Thu 18 Jun</em> 09:00 &rarr; 10:00</span></button>
     </div>
     <div class="windows-hint">click a window to highlight it everywhere &middot; Esc clears</div>
+    </details>
     <div class="windows-chart" id="masthead-timeline"></div>
     <div class="windows-fallback">
       <span class="win"><b>current</b> 2026-09-10 09:00 &rarr; 2026-09-10 10:00</span>
@@ -590,17 +600,7 @@ document.addEventListener("awr:theme",paint);
 new ResizeObserver(function(){chart.resize();}).observe(el);
 })();
 </script>
-<nav class="toc"><div class="rail-brand"><span>AWR &middot; Timeline comparison</span><button type="button" id="theme-toggle" class="theme-icon-btn" aria-pressed="false" aria-label="Toggle dark mode" title="Switch between light and dark color theme"><svg class="icon-sun" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="icon-moon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5a8.5 8.5 0 1 0 11.2 11.2z" fill="currentColor"/></svg></button></div><span class="rail-cur"></span><button type="button" class="rail-menu-btn" id="rail-menu-btn" aria-expanded="false" aria-label="Show section list">&#9776;</button><div class="rail-filter"><input type="text" id="row-filter" autocomplete="off" placeholder="Filter rows&#8230;" aria-label="Filter table rows across the report"><span class="kbd">&#8984;K</span></div><div class="rail-list"><b>Triage</b><a href="#narrative-slot" class="narr-link" hidden>What changed</a><a href="#db-time-summary">DB time</a><a href="#overview">Overview</a><a href="#ash-timeline">ASH timeline</a><a href="#findings">Findings</a><a href="#windows">Windows</a><b>Workload</b><a href="#day-profile">Day profile</a><a href="#utilization">Utilization</a><a href="#load">Load profile</a><a href="#metrics">Metrics</a><a href="#waits-fg">Waits &mdash; foreground</a><a href="#waits-bg">Waits &mdash; background</a><b>SQL</b><a href="#topsql">Top SQL</a><a href="#topsql-ash">Top SQL &mdash; ASH</a><a href="#sqlmon">SQL Monitor</a><b>Storage &amp; config</b><a href="#segment-io">Segment I/O</a><a href="#file-io">File I/O</a><a href="#param-changes">Parameters</a></div><div class="rail-foot"><button type="button" class="view-btn" id="view-btn" aria-expanded="false" aria-controls="view-panel" title="Report view options">View &#9662;</button><div class="view-panel" id="view-panel"><div class="mode-switch" role="group" aria-label="Report detail level"><button type="button" id="mode-normal" class="mode-btn" aria-pressed="true" title="Normal view: verdict, headline metrics, findings, ASH timeline, Top SQL">Normal</button><button type="button" id="mode-detailed" class="mode-btn" aria-pressed="false" title="Detailed view: every section and every scored row">Detailed</button></div><button type="button" id="app-filter-toggle" class="app-filter" aria-pressed="false" title="Hide system-wide sections and Oracle-internal SQL; show only application SQL and its related data">Application only</button><button type="button" id="next-finding" class="next-finding" title="Jump to the next large (critical) finding"><span>&darr; next large finding</span><span class="keys">J K</span></button></div></div></nav>
-<script>(function(){
-var btn=document.getElementById("app-filter-toggle"); if(!btn) return;
-btn.addEventListener("click",function(){
-  var on=document.body.classList.toggle("app-only");
-  btn.classList.toggle("active",on);
-  btn.setAttribute("aria-pressed",on?"true":"false");
-  btn.textContent=on?"Show all":"Application only";
-  document.dispatchEvent(new CustomEvent("awr:appfilter",{detail:{appOnly:on}}));
-});
-})();</script>
+<nav class="toc"><div class="rail-brand"><span>AWR &middot; Timeline comparison</span><button type="button" id="theme-toggle" class="theme-icon-btn" aria-pressed="false" aria-label="Toggle dark mode" title="Switch between light and dark color theme"><svg class="icon-sun" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="icon-moon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5a8.5 8.5 0 1 0 11.2 11.2z" fill="currentColor"/></svg></button></div><span class="rail-cur"></span><button type="button" class="rail-menu-btn" id="rail-menu-btn" aria-expanded="false" aria-label="Show section list">&#9776;</button><div class="rail-filter"><input type="text" id="row-filter" autocomplete="off" placeholder="Filter rows&#8230;" aria-label="Filter table rows across the report"><span class="kbd">&#8984;K</span></div><div class="rail-list"><b>Triage</b><a href="#narrative-slot" class="narr-link" hidden>What changed</a><a href="#db-time-summary">DB time</a><a href="#overview">Overview</a><a href="#ash-timeline">ASH timeline</a><a href="#findings">Findings</a><a href="#windows">Windows</a><b>Workload</b><a href="#day-profile">Day profile</a><a href="#utilization">Utilization</a><a href="#load">Load profile</a><a href="#metrics">Metrics</a><a href="#waits-fg">Waits &mdash; foreground</a><a href="#waits-bg">Waits &mdash; background</a><b>SQL</b><a href="#topsql">Top SQL</a><a href="#topsql-ash">Top SQL &mdash; ASH</a><a href="#sqlmon">SQL Monitor</a><b>Storage &amp; config</b><a href="#segment-io">Segment I/O</a><a href="#file-io">File I/O</a><a href="#param-changes">Parameters</a></div><div class="rail-foot"><button type="button" class="view-btn" id="view-btn" aria-expanded="false" aria-controls="view-panel" title="Report view options">View &#9662;</button><div class="view-panel" id="view-panel"><div class="mode-switch" role="group" aria-label="Report detail level"><button type="button" id="mode-normal" class="mode-btn" aria-pressed="true" title="Normal view: verdict, headline metrics, findings, ASH timeline, Top SQL">Normal</button><button type="button" id="mode-full" class="mode-btn" aria-pressed="false" title="Full view: every section and every scored row">Full</button></div><button type="button" id="next-finding" class="next-finding" title="Jump to the next large (critical) finding"><span>&darr; next large finding</span><span class="keys">J K</span></button></div></div></nav>
 <script>(function(){
 var btn=document.getElementById("theme-toggle"); if(!btn) return;
 function sync(on){btn.setAttribute("aria-pressed",on?"true":"false");}
@@ -646,7 +646,6 @@ function spy(){
 function onScroll(){ if(!pending){ pending=true; setTimeout(spy,80); } }
 window.addEventListener("scroll",onScroll,{passive:true});
 window.addEventListener("resize",onScroll);
-document.addEventListener("awr:appfilter",onScroll);
 var lastY=-1;
 setInterval(function(){
   if(window.scrollY!==lastY){ lastY=window.scrollY; spy(); }
@@ -762,7 +761,7 @@ doc.querySelectorAll("section table").forEach(function(tb){
   if(tb.closest("tr.sql-detail")||tb.closest("details")) return;
   if(tb.querySelectorAll("tbody tr").length<4) return;
   var bar=doc.createElement("div");
-  bar.className="tbl-tools"+(tb.classList.contains("detail-only")?" detail-only":"");
+  bar.className="tbl-tools"+(tb.classList.contains("full-only")?" full-only":"");
   var mk=function(label,fn){
     var b=doc.createElement("button");
     b.type="button"; b.className="tool-btn"; b.textContent=label;
@@ -828,7 +827,6 @@ window.AWR_fitTables=fitTables;
 fitTables(); setTimeout(fitTables,400);
 var ft=null;
 window.addEventListener("resize",function(){ if(ft) clearTimeout(ft); ft=setTimeout(fitTables,150); });
-doc.addEventListener("awr:appfilter",function(){ setTimeout(fitTables,50); });
 doc.addEventListener("click",function(ev){ if(closest(ev.target,".expander,.tabs [data-t],details > summary")) setTimeout(fitTables,50); });
 /* ---- P2: narrow-screen "View" popover ---- */
 var vb=doc.getElementById("view-btn"), vf=vb?closest(vb,".rail-foot"):null;
@@ -850,6 +848,7 @@ function setW(w){ curW=(w===curW)?null:w; applyW(); }
 function clearW(){ if(curW!==null){ curW=null; applyW(); } }
 doc.addEventListener("click",function(ev){
   var el=closest(ev.target,"th[data-w],.wchip[data-w]"); if(!el) return;
+  if(closest(el,"summary")) ev.preventDefault();
   setW(el.getAttribute("data-w"));
 });
 /* ---- T3: click-to-sort ---- */
@@ -960,7 +959,7 @@ function jump(d){
 }
 var nf=doc.getElementById("next-finding");
 if(nf) nf.addEventListener("click",function(){jump(1);});
-/* ---- Normal / Detailed view ---- */
+/* ---- Normal / Full view ---- */
 var hiddenSecs=[];
 if(nav){
   var list=nav.querySelector(".rail-list")||nav, grp=null, gAll=true;
@@ -972,7 +971,7 @@ if(nav){
     else gAll=false;
   });
   if(grp&&gAll) grp.classList.add("norm-dim");
-  if(hiddenSecs.length){ var more=doc.createElement("a"); more.className="more-sections"; more.href="#"; more.textContent="+ "+hiddenSecs.length+" more in Detailed"; more.title=hiddenSecs.join(", "); more.addEventListener("click",function(ev){ ev.preventDefault(); setMode(true); }); list.appendChild(more); }
+  if(hiddenSecs.length){ var more=doc.createElement("a"); more.className="more-sections"; more.href="#"; more.textContent="+ "+hiddenSecs.length+" more in Full"; more.title=hiddenSecs.join(", "); more.addEventListener("click",function(ev){ ev.preventDefault(); setMode(true); }); list.appendChild(more); }
 }
 function modeNote(){
   var mn=doc.getElementById("main-start"); if(!mn) return;
@@ -980,27 +979,27 @@ function modeNote(){
   if(!n){ n=doc.createElement("p"); n.id="mode-note"; n.className="mode-note"; mn.appendChild(n); }
   n.innerHTML="";
   n.appendChild(doc.createTextNode(hiddenSecs.length?("Normal view: "+hiddenSecs.length+" section"+(hiddenSecs.length===1?"":"s")+" and the per-metric detail tables are hidden ("+hiddenSecs.join(", ")+")."):"Normal view: the per-metric detail tables are hidden."));
-  var b=doc.createElement("button"); b.type="button"; b.textContent="Show Detailed"; b.addEventListener("click",function(){ setMode(true); }); n.appendChild(b);
+  var b=doc.createElement("button"); b.type="button"; b.textContent="Show Full"; b.addEventListener("click",function(){ setMode(true); }); n.appendChild(b);
 }
 function setMode(det,silent){
-  bd.classList.toggle("detailed",!!det); bd.classList.toggle("normal",!det);
-  var bn=doc.getElementById("mode-normal"), bdt=doc.getElementById("mode-detailed");
+  bd.classList.toggle("full",!!det); bd.classList.toggle("normal",!det);
+  var bn=doc.getElementById("mode-normal"), bdt=doc.getElementById("mode-full");
   if(bn) bn.setAttribute("aria-pressed",det?"false":"true");
   if(bdt) bdt.setAttribute("aria-pressed",det?"true":"false");
-  if(!silent){ try{localStorage.setItem("awr-mode",det?"detailed":"normal");}catch(e){} }
+  if(!silent){ try{localStorage.setItem("awr-mode",det?"full":"normal");}catch(e){} }
   measure(); window.dispatchEvent(new Event("resize"));
   if(window.echarts&&echarts.getInstanceByDom){ doc.querySelectorAll("[_echarts_instance_]").forEach(function(el){ var c=echarts.getInstanceByDom(el); if(c) c.resize(); }); }
   setTimeout(fitTables,60); closeView();
-  doc.dispatchEvent(new CustomEvent("awr:mode",{detail:{detailed:!!det}}));
+  doc.dispatchEvent(new CustomEvent("awr:mode",{detail:{full:!!det}}));
   if(!silent) pushState();
 }
 window.AWR_setMode=setMode;
 modeNote();
-setMode(bd.classList.contains("detailed"),true);
-var mbn=doc.getElementById("mode-normal"), mbd=doc.getElementById("mode-detailed");
+setMode(bd.classList.contains("full"),true);
+var mbn=doc.getElementById("mode-normal"), mbd=doc.getElementById("mode-full");
 if(mbn) mbn.addEventListener("click",function(){ setMode(false); });
 if(mbd) mbd.addEventListener("click",function(){ setMode(true); });
-function inNormal(el){ var sec=closest(el,"section"); if(sec&&sec.parentNode===doc.getElementById("main-start")&&!sec.hasAttribute("data-normal")) return false; return !closest(el,".detail-only"); }
+function inNormal(el){ var sec=closest(el,"section"); if(sec&&sec.parentNode===doc.getElementById("main-start")&&!sec.hasAttribute("data-normal")) return false; return !closest(el,".full-only"); }
 /* ---- B8: narrow-screen section dropdown ---- */
 var mb=doc.getElementById("rail-menu-btn");
 if(mb&&nav){
@@ -1030,7 +1029,6 @@ window.addEventListener("resize",function(){
   if(mt) clearTimeout(mt);
   mt=setTimeout(measure,120);
 });
-doc.addEventListener("awr:appfilter",measure);
 measure();
 setTimeout(measure,300);
 /* ---- P3: cross-links -- hide a link whose target does not exist, reveal a linked row ---- */
@@ -1065,10 +1063,9 @@ function revealHash(){
 }
 window.addEventListener("hashchange",revealHash);
 if(location.hash) setTimeout(revealHash,0);
-/* ---- P3: shareable view state in the hash (#anchor!v=d,a&tab=CPU&w=3) ---- */
+/* ---- P3: shareable view state in the hash (#anchor!v=f&tab=CPU&w=3) ---- */
 function stateStr(){
-  var v=[]; if(bd.classList.contains("detailed")) v.push("d");
-  if(bd.classList.contains("app-only")) v.push("a");
+  var v=[]; if(bd.classList.contains("full")) v.push("f");
   var parts=[]; if(v.length) parts.push("v="+v.join(","));
   var tab=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t].on");
   if(tab&&tab.getAttribute("data-t")!=="ELAPSED") parts.push("tab="+tab.getAttribute("data-t"));
@@ -1088,12 +1085,11 @@ function applyState(){
   var h=location.hash||"", i=h.indexOf("!"); if(i<0) return;
   var q={}; h.slice(i+1).split("&").forEach(function(kv){var p=kv.split("="); if(p[0]) q[p[0]]=decodeURIComponent(p[1]||"");});
   var v=(q.v||"").split(",");
-  if(v.indexOf("d")>=0&&!bd.classList.contains("detailed")) setMode(true,true);
-  if(v.indexOf("a")>=0&&!bd.classList.contains("app-only")){ var ab=doc.getElementById("app-filter-toggle"); if(ab) ab.click(); }
+  if(v.indexOf("f")>=0&&!bd.classList.contains("full")) setMode(true,true);
   if(q.tab){ var t=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t=\""+q.tab+"\"]"); if(t&&!t.classList.contains("on")) t.click(); }
   if(q.w!==undefined&&q.w!==""){ curW=String(q.w); applyW(); }
 }
-doc.addEventListener("click",function(ev){ if(closest(ev.target,"#app-filter-toggle,.tabs [data-t]")) pushState(); });
+doc.addEventListener("click",function(ev){ if(closest(ev.target,".tabs [data-t]")) pushState(); });
 doc.addEventListener("awr:window",pushState);
 applyState();
 /* ---- P5: on phones the Top SQL detail tables open by default (the bump chart is unreadable there) ---- */
@@ -1470,8 +1466,8 @@ document.addEventListener("awr:window",function(e){var w=e.detail?e.detail.w:nul
 <tr class="crit member twin" data-family="DB_TIME" data-tail="Y"><td>Average Active Sessions <span class="chip" title="same quantity as the lead; not counted again">twin</span> <a class="xlink" href="#find-metric-average-active-sessions" title="Go to this finding's detail row">&#8599; detail</a></td><td><span class="chip">METRIC</span></td><td class="num">+6.13</td><td class="num" title="20.3546">20.35</td><td class="num">11.33</td><td class="num"><span class="zbar" style="width:58px;background-color:var(--crit)"></span>&#9650; 79.7%</td></tr>
 </tbody></table>
 <span class="expander" data-for="findings-movers" data-n="7" data-noun="related metrics">&#9656; Show 7 related metrics</span>
-<h3 class="detail-only">Load profile</h3>
-<table id="findings-load" class="detail-only"><thead><tr><th>Change</th><th>Metric</th><th class="num">Current</th><th class="num">Prior mean</th><th class="num">Prior sd</th><th class="num">n</th><th class="num">z-score</th><th class="num">% &Delta;</th></tr></thead><tbody>
+<h3 class="full-only">Load profile</h3>
+<table id="findings-load" class="full-only"><thead><tr><th>Change</th><th>Metric</th><th class="num">Current</th><th class="num">Prior mean</th><th class="num">Prior sd</th><th class="num">n</th><th class="num">z-score</th><th class="num">% &Delta;</th></tr></thead><tbody>
 <tr id="find-load-table-scans-long-tables" data-metric="table scans (long tables)" data-family="SCANS" data-imp="N" class="crit"><td><span class="badge crit">large</span></td><td>table scans (long tables) <a class="xlink" href="#load-table-scans-long-tables" title="Go to this metric's row in Load profile">&#8599; row</a></td><td class="num" title="61.6897">61.69</td><td class="num">2.078</td><td class="num">0.1159</td><td class="num">12</td><td class="num">&gt;+99</td><td class="num">&#9650; 2869.2%</td></tr>
 <tr id="find-load-physical-read-total-bytes" data-metric="physical read total bytes" data-family="READ_IO" data-imp="N" class="crit"><td><span class="badge crit">large</span></td><td>physical read total bytes <a class="xlink" href="#load-physical-read-total-bytes" title="Go to this metric's row in Load profile">&#8599; row</a></td><td class="num" title="193,126,035.9019">193.1 M</td><td class="num">35.98 M</td><td class="num">4.951 M</td><td class="num">12</td><td class="num">+31.74</td><td class="num">&#9650; 436.8%</td></tr>
 <tr id="find-load-physical-reads" data-metric="physical reads" data-family="READ_IO" data-imp="Y" class="crit"><td><span class="badge crit">large</span></td><td>physical reads <a class="xlink" href="#load-physical-reads" title="Go to this metric's row in Load profile">&#8599; row</a></td><td class="num" title="22,240.5241">22.24 k</td><td class="num">4,143</td><td class="num">570.1</td><td class="num">12</td><td class="num">+31.74</td><td class="num">&#9650; 436.8%</td></tr>
@@ -1500,9 +1496,9 @@ document.addEventListener("awr:window",function(e){var w=e.detail?e.detail.w:nul
 <tr id="find-load-sorts-memory" data-metric="sorts (memory)" data-family="SORTS" data-imp="N" data-tail="Y" class="ok"><td><span class="badge ok">typical</span></td><td>sorts (memory) <a class="xlink" href="#load-sorts-memory" title="Go to this metric's row in Load profile">&#8599; row</a></td><td class="num" title="2,090.0413">2,090</td><td class="num">2,123</td><td class="num">123.0</td><td class="num">12</td><td class="num">-0.27</td><td class="num">&#9660; 1.5%</td></tr>
 <tr id="find-load-redo-size-for-lost-write-detection" data-metric="redo size for lost write detection" data-family="REDO" data-imp="N" data-tail="Y" class="skip twin"><td><span class="badge skip">flat baseline</span></td><td>redo size for lost write detection <span class="chip" title="same quantity as a counted row; not counted again">twin</span> <a class="xlink" href="#load-redo-size-for-lost-write-detection" title="Go to this metric's row in Load profile">&#8599; row</a></td><td class="num" title="0.0">0</td><td class="num">0</td><td class="num">0</td><td class="num">12</td><td class="num">&mdash; <span class="badge sig" title="baseline barely moved: &sigma; below 1% of mean (floored to 2% for z); read the % delta instead">&sigma;&approx;0</span></td><td class="num"><b>&mdash;</b></td></tr>
 </tbody></table>
-<span class="expander detail-only" data-for="findings-load" data-n="22" data-noun="typical / improved / flat rows">&#9656; Show 22 typical / improved / flat rows</span>
-<h3 class="detail-only">System metrics</h3>
-<table id="findings-metric" class="detail-only"><thead><tr><th>Change</th><th>Metric</th><th class="num">Current</th><th class="num">Prior mean</th><th class="num">Prior sd</th><th class="num">n</th><th class="num">z-score</th><th class="num">% &Delta;</th></tr></thead><tbody>
+<span class="expander full-only" data-for="findings-load" data-n="22" data-noun="typical / improved / flat rows">&#9656; Show 22 typical / improved / flat rows</span>
+<h3 class="full-only">System metrics</h3>
+<table id="findings-metric" class="full-only"><thead><tr><th>Change</th><th>Metric</th><th class="num">Current</th><th class="num">Prior mean</th><th class="num">Prior sd</th><th class="num">n</th><th class="num">z-score</th><th class="num">% &Delta;</th></tr></thead><tbody>
 <tr id="find-metric-physical-read-total-bytes-per-sec" data-metric="Physical Read Total Bytes Per Sec" data-family="READ_IO" data-imp="N" class="crit twin"><td><span class="badge crit">large</span></td><td>Physical Read Total Bytes Per Sec <span class="chip" title="same quantity as a counted row; not counted again">twin</span> <a class="xlink" href="#metric-physical-read-total-bytes-per-sec" title="Go to this metric's row in System metrics">&#8599; row</a></td><td class="num" title="193,126,035.9019">193.1 M</td><td class="num">35.98 M</td><td class="num">4.951 M</td><td class="num">12</td><td class="num">+31.74</td><td class="num">&#9650; 436.8%</td></tr>
 <tr id="find-metric-physical-reads-per-sec" data-metric="Physical Reads Per Sec" data-family="READ_IO" data-imp="N" class="crit twin"><td><span class="badge crit">large</span></td><td>Physical Reads Per Sec <span class="chip" title="same quantity as a counted row; not counted again">twin</span> <a class="xlink" href="#metric-physical-reads-per-sec" title="Go to this metric's row in System metrics">&#8599; row</a></td><td class="num" title="22,240.5241">22.24 k</td><td class="num">4,143</td><td class="num">570.1</td><td class="num">12</td><td class="num">+31.74</td><td class="num">&#9650; 436.8%</td></tr>
 <tr id="find-metric-physical-read-total-io-requests-per-sec" data-metric="Physical Read Total IO Requests Per Sec" data-family="READ_IO" data-imp="N" class="crit"><td><span class="badge crit">large</span></td><td>Physical Read Total IO Requests Per Sec <a class="xlink" href="#metric-physical-read-total-io-requests-per-sec" title="Go to this metric's row in System metrics">&#8599; row</a></td><td class="num" title="16,013.1774">16.01 k</td><td class="num">2,983</td><td class="num">410.5</td><td class="num">12</td><td class="num">+31.74</td><td class="num">&#9650; 436.8%</td></tr>
@@ -1527,9 +1523,9 @@ document.addEventListener("awr:window",function(e){var w=e.detail?e.detail.w:nul
 <tr id="find-metric-hard-parse-count-per-sec" data-metric="Hard Parse Count Per Sec" data-family="HARD_PARSE" data-imp="Y" data-tail="Y" class="ok twin"><td><span class="badge ok">typical</span></td><td>Hard Parse Count Per Sec <span class="chip" title="same quantity as a counted row; not counted again">twin</span> <a class="xlink" href="#metric-hard-parse-count-per-sec" title="Go to this metric's row in System metrics">&#8599; row</a></td><td class="num" title="2.7136">2.714</td><td class="num">5.512</td><td class="num">8.593</td><td class="num">12</td><td class="num">-0.33</td><td class="num">&#9660; 50.8%</td></tr>
 <tr id="find-metric-network-traffic-volume-per-sec" data-metric="Network Traffic Volume Per Sec" data-family="NETWORK" data-imp="N" data-tail="Y" class="ok twin"><td><span class="badge ok">typical</span></td><td>Network Traffic Volume Per Sec <span class="chip" title="same quantity as a counted row; not counted again">twin</span> <a class="xlink" href="#metric-network-traffic-volume-per-sec" title="Go to this metric's row in System metrics">&#8599; row</a></td><td class="num" title="11,767,392.1395">11.77 M</td><td class="num">11.67 M</td><td class="num">604.0 k</td><td class="num">12</td><td class="num">+0.17</td><td class="num">&#9650; 0.9%</td></tr>
 </tbody></table>
-<span class="expander detail-only" data-for="findings-metric" data-n="15" data-noun="typical / improved / flat rows">&#9656; Show 15 typical / improved / flat rows</span>
-<h3 class="detail-only">Wait classes</h3>
-<table id="findings-wait" class="detail-only"><thead><tr><th>Change</th><th>Metric</th><th class="num">Current</th><th class="num">Prior mean</th><th class="num">Prior sd</th><th class="num">n</th><th class="num">z-score</th><th class="num">% &Delta;</th></tr></thead><tbody>
+<span class="expander full-only" data-for="findings-metric" data-n="15" data-noun="typical / improved / flat rows">&#9656; Show 15 typical / improved / flat rows</span>
+<h3 class="full-only">Wait classes</h3>
+<table id="findings-wait" class="full-only"><thead><tr><th>Change</th><th>Metric</th><th class="num">Current</th><th class="num">Prior mean</th><th class="num">Prior sd</th><th class="num">n</th><th class="num">z-score</th><th class="num">% &Delta;</th></tr></thead><tbody>
 <tr id="find-wait-wait-class-network" data-metric="Wait class: Network" data-family="WAIT:Network" class="crit"><td><span class="badge crit">large</span></td><td>Wait class: Network <a class="xlink" href="#fgc-network" title="Go to this metric's row in Foreground waits">&#8599; row</a></td><td class="num" title="1.1751">1.175</td><td class="num">0.2274</td><td class="num">0.01637</td><td class="num">12</td><td class="num">+57.89</td><td class="num">&#9650; 416.6%</td></tr>
 <tr id="find-wait-wait-class-user-i-o" data-metric="Wait class: User I/O" data-family="WAIT:User I/O" class="crit"><td><span class="badge crit">large</span></td><td>Wait class: User I/O <a class="xlink" href="#fgc-user-i-o" title="Go to this metric's row in Foreground waits">&#8599; row</a></td><td class="num" title="8.2853">8.285</td><td class="num">1.973</td><td class="num">0.2695</td><td class="num">12</td><td class="num">+23.42</td><td class="num">&#9650; 320.0%</td></tr>
 <tr id="find-wait-wait-class-commit" data-metric="Wait class: Commit" data-family="WAIT:Commit" class="warn"><td><span class="badge warn">moderate</span></td><td>Wait class: Commit <a class="xlink" href="#fgc-commit" title="Go to this metric's row in Foreground waits">&#8599; row</a></td><td class="num" title="0.8687">0.8687</td><td class="num">0.709</td><td class="num">0.06971</td><td class="num">12</td><td class="num">+2.29</td><td class="num">&#9650; 22.5%</td></tr>
@@ -1540,7 +1536,7 @@ document.addEventListener("awr:window",function(e){var w=e.detail?e.detail.w:nul
 <tr id="find-wait-wait-class-application" data-metric="Wait class: Application" data-family="WAIT:Application" data-tail="Y" class="ok"><td><span class="badge ok">typical</span></td><td>Wait class: Application <a class="xlink" href="#fgc-application" title="Go to this metric's row in Foreground waits">&#8599; row</a></td><td class="num" title="0.7118">0.7118</td><td class="num">0.6579</td><td class="num">0.09949</td><td class="num">12</td><td class="num">+0.54</td><td class="num">&#9650; 8.2%</td></tr>
 <tr id="find-wait-wait-class-concurrency" data-metric="Wait class: Concurrency" data-family="WAIT:Concurrency" data-tail="Y" class="ok"><td><span class="badge ok">typical</span></td><td>Wait class: Concurrency <a class="xlink" href="#fgc-concurrency" title="Go to this metric's row in Foreground waits">&#8599; row</a></td><td class="num" title="0.401">0.401</td><td class="num">0.3297</td><td class="num">0.1538</td><td class="num">12</td><td class="num">+0.46</td><td class="num">&#9650; 21.6%</td></tr>
 </tbody></table>
-<span class="expander detail-only" data-for="findings-wait" data-n="6" data-noun="typical / improved / flat rows">&#9656; Show 6 typical / improved / flat rows</span>
+<span class="expander full-only" data-for="findings-wait" data-n="6" data-noun="typical / improved / flat rows">&#9656; Show 6 typical / improved / flat rows</span>
 </section>
 <!-- AWR-SECTION: 07_summary END -->
 <!-- AWR-SECTION: 01_windows BEGIN -->
@@ -1716,7 +1712,7 @@ SPOOL OFF
 <option value="7">redo bytes/s</option>
 <option value="8">commits/s</option>
 </select> &mdash; current day (teal) vs prior-day mean (dashed) with the &mu;&nbsp;&plusmn;&nbsp;2&sigma; band; faint lines are the individual prior days.</div><div id="day-profile-line" style="height:240px"></div></div>
-<table class="detail-only"><thead><tr><th>Hour</th><th class="num">DB time (avg active sessions)</th><th class="num">DB CPU (avg CPUs busy)</th><th class="num">user calls/s</th><th class="num">executions/s</th><th class="num">logical reads/s</th><th class="num">physical reads/s</th><th class="num">physical writes/s</th><th class="num">redo bytes/s</th><th class="num">commits/s</th></tr></thead><tbody>
+<table class="full-only"><thead><tr><th>Hour</th><th class="num">DB time (avg active sessions)</th><th class="num">DB CPU (avg CPUs busy)</th><th class="num">user calls/s</th><th class="num">executions/s</th><th class="num">logical reads/s</th><th class="num">physical reads/s</th><th class="num">physical writes/s</th><th class="num">redo bytes/s</th><th class="num">commits/s</th></tr></thead><tbody>
 <tr data-hour="23" class="crit"><td>2026-09-09 10:00</td><td class="num" title="prior mean 12.20 / sd 2.54 / n 7 / z +4.62 / +96.1% / large">23.93 <span class="badge crit">+4.6&sigma;</span></td><td class="num" title="prior mean 7.98 / sd 1.64 / n 7 / z +1.06 / +21.9% / typical">9.72</td><td class="num" title="prior mean 5,882 / sd 1,250 / n 7 / z +1.02 / +21.7% / typical">7,156</td><td class="num" title="prior mean 9,180 / sd 1,921 / n 7 / z +1.04 / +21.8% / typical">11,180</td><td class="num" title="prior mean 263,497 / sd 48,975 / n 7 / z +19.25 / +357.8% / large">1,206,410 <span class="badge crit">+19.3&sigma;</span></td><td class="num" title="prior mean 4,660 / sd 634 / n 7 / z +36.88 / +502.2% / large">28,062 <span class="badge crit">+36.9&sigma;</span></td><td class="num" title="prior mean 1,760 / sd 391 / n 7 / z +1.04 / +23.1% / typical">2,167</td><td class="num" title="prior mean 3,810,387 / sd 831,804 / n 7 / z +0.91 / +19.8% / typical">4,565,339</td><td class="num" title="prior mean 606.07 / sd 129.90 / n 7 / z +0.95 / +20.4% / typical">729.71</td></tr>
 <tr data-hour="22" class="crit"><td>2026-09-09 11:00</td><td class="num" title="prior mean 12.27 / sd 2.71 / n 7 / z +3.78 / +83.5% / large">22.51 <span class="badge crit">+3.8&sigma;</span></td><td class="num" title="prior mean 8.04 / sd 1.76 / n 7 / z +0.70 / +15.2% / typical">9.27</td><td class="num" title="prior mean 5,978 / sd 1,359 / n 7 / z +0.66 / +15.0% / typical">6,873</td><td class="num" title="prior mean 9,178 / sd 2,169 / n 7 / z +0.59 / +13.9% / typical">10,457</td><td class="num" title="prior mean 260,140 / sd 51,512 / n 7 / z +16.71 / +331.0% / large">1,121,081 <span class="badge crit">+16.7&sigma;</span></td><td class="num" title="prior mean 4,767 / sd 580 / n 7 / z +34.53 / +420.3% / large">24,804 <span class="badge crit">+34.5&sigma;</span></td><td class="num" title="prior mean 1,838 / sd 393 / n 7 / z +0.31 / +6.6% / typical">1,958</td><td class="num" title="prior mean 3,792,738 / sd 813,565 / n 7 / z +0.53 / +11.4% / typical">4,226,495</td><td class="num" title="prior mean 611.88 / sd 145.58 / n 7 / z +0.58 / +13.8% / typical">696.15</td></tr>
 <tr data-hour="21" class="crit"><td>2026-09-09 12:00</td><td class="num" title="prior mean 11.80 / sd 2.50 / n 7 / z +4.27 / +90.5% / large">22.48 <span class="badge crit">+4.3&sigma;</span></td><td class="num" title="prior mean 7.71 / sd 1.61 / n 7 / z +0.94 / +19.6% / typical">9.22</td><td class="num" title="prior mean 5,621 / sd 1,215 / n 7 / z +0.90 / +19.5% / typical">6,718</td><td class="num" title="prior mean 8,794 / sd 2,039 / n 7 / z +0.78 / +18.1% / typical">10,385</td><td class="num" title="prior mean 254,173 / sd 50,694 / n 7 / z +18.16 / +362.2% / large">1,174,889 <span class="badge crit">+18.2&sigma;</span></td><td class="num" title="prior mean 5,099 / sd 707 / n 7 / z +31.12 / +431.8% / large">27,114 <span class="badge crit">+31.1&sigma;</span></td><td class="num" title="prior mean 1,720 / sd 363 / n 7 / z +1.03 / +21.8% / typical">2,095</td><td class="num" title="prior mean 3,584,479 / sd 854,516 / n 7 / z +0.94 / +22.4% / typical">4,388,216</td><td class="num" title="prior mean 591.12 / sd 132.16 / n 7 / z +0.73 / +16.3% / typical">687.20</td></tr>
@@ -2216,7 +2212,6 @@ Object.keys(AWR_DATA.topSql.dims).forEach(function(dim){
   function render(mode){
     if(mode) currentMode=mode;
     var rows=(d[currentMode]||d.sqls)||[];
-    if(document.body.classList.contains("app-only")) rows=rows.filter(function(s){return !s.sys;});
     var lastVal=function(a){for(var k=a.length-1;k>=0;k--){if(a[k]!=null)return a[k];}return null;};
     var top3=rows.map(function(s,i){return i;}).sort(function(a,b){return (lastVal(rows[b].vals)==null?-Infinity:lastVal(rows[b].vals))-(lastVal(rows[a].vals)==null?-Infinity:lastVal(rows[a].vals));}).slice(0,3);
     chart.setOption({
@@ -2230,7 +2225,6 @@ Object.keys(AWR_DATA.topSql.dims).forEach(function(dim){
     }, true);
   }
   render("sqls");
-  document.addEventListener("awr:appfilter",function(){render();});
   document.addEventListener("awr:window",function(e){hiSlot=e.detail?e.detail.w:null;render();});
   var toggle=document.querySelector('[data-topsql-target="'+dim+'"]');
   if(toggle){
@@ -2255,10 +2249,10 @@ Object.keys(AWR_DATA.topSql.dims).forEach(function(dim){
 });
 })();</script>
 <p style="margin-top:18px"><span class="badge warn">plan&#8593;</span> 1 of 20 top SQL had a plan_hash_value change between current and a prior compared window. Look for the <span class="badge warn">plan&#8593;</span> badges in the SQL ID column and the per-window cells above.</p>
-<h3 class="detail-only">Per-SQL detail</h3>
-<p class="detail-only" style="font-size:12px;color:var(--muted)">Every SQL ID listed above: click a row for full text, AWR retention range, plan_hash_value summary, and avg sec/exec colored by PHV across every snapshot the SQL appeared in. PHV color change = plan switch. <b>Ranked in</b> chips: <b>E</b>lapsed, <b>C</b>PU, <b>G</b>ets, <b>R</b>eads, e<b>X</b>ecutions &mdash; solid when the SQL is in that dimension's current top-3.</p>
+<h3 class="full-only">Per-SQL detail</h3>
+<p class="full-only" style="font-size:12px;color:var(--muted)">Every SQL ID listed above: click a row for full text, AWR retention range, plan_hash_value summary, and avg sec/exec colored by PHV across every snapshot the SQL appeared in. PHV color change = plan switch. <b>Ranked in</b> chips: <b>E</b>lapsed, <b>C</b>PU, <b>G</b>ets, <b>R</b>eads, e<b>X</b>ecutions &mdash; solid when the SQL is in that dimension's current top-3.</p>
 <script>AWR_DATA.sqlDetails = AWR_DATA.sqlDetails || {};</script>
-<table id="sql-pool" class="detail-only"><thead><tr><th>SQL ID</th><th>Ranked in</th><th>Schema</th><th class="num" title="distinct plan_hash_values seen across the span">Plans</th><th class="num">Executions</th><th class="num" title="AWR snapshots in which the SQL appeared">Snapshots</th><th>First seen</th><th>Text</th></tr></thead><tbody>
+<table id="sql-pool" class="full-only"><thead><tr><th>SQL ID</th><th>Ranked in</th><th>Schema</th><th class="num" title="distinct plan_hash_values seen across the span">Plans</th><th class="num">Executions</th><th class="num" title="AWR snapshots in which the SQL appeared">Snapshots</th><th>First seen</th><th>Text</th></tr></thead><tbody>
 <tr class="sql-row" id="sql-7k2m9dx4qp1zb" data-sys="N">
 <td class="mono sqlid-cell"><span id="sqlid-7k2m9dx4qp1zb">7k2m9dx4qp1zb</span> <button type="button" class="copy-btn" data-copy="#sqlid-7k2m9dx4qp1zb">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-7k2m9dx4qp1zb" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sqlmon-7k2m9dx4qp1zb" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip on" title="ELAPSED">E</span><span class="chip on" title="CPU">C</span><span class="chip on" title="GETS">G</span><span class="chip on" title="PREADS">R</span><span class="chip" title="EXEC">X</span></td>
@@ -48975,12 +48969,12 @@ Object.keys(AWR_DATA.fileIo.dims).forEach(function(dim){
 </section>
 <!-- AWR-SECTION: 12_param_changes END -->
 <!-- AWR-SECTION: 17_narrative BEGIN -->
-<div id="narrative-src" class="narr" hidden>
-<p><b>Physical reads</b> &#9650; &times;5.37 (4,140 &rarr; 22,200 /s). The reads land on <a href="#file-io">ts_orders_data.301.1131588213</a> (74,000 &rarr; 345,000 MB read this window); top read segment is <a href="#segment-io">ORDERS_APP.ORDER_LINES</a>.</p>
-<p><b>DB time</b> &#9650; &times;1.8 (11.3 &rarr; 20.4 avg active sessions). DB CPU barely moved (&#9650; 18.8%), so the extra DB time is wait, not CPU &mdash; see <a href="#waits-fg">foreground waits</a>.</p>
-<p><b>Configuration differs among the prior windows:</b> <code>optimizer_adaptive_plans</code> in every prior window; <code>pga_aggregate_target</code> in &minus;5w to &minus;12w; <code>sga_target</code> in &minus;8w to &minus;12w (and 1 more). Treat those windows as a different configuration &mdash; see <a href="#param-changes">parameter changes</a>.</p>
-<p><b>1 monitored statement</b> ran with more than one execution plan in the compared span, including the Current window: 7k2m9dx4qp1zb &mdash; see <a href="#sqlmon">SQL Monitor</a>.</p>
-</div>
+<div id="narrative-src" class="narr" hidden><div class="narr-head">What changed</div><ul class="narr-list">
+<li><span class="n-lbl">Physical reads</span><span class="n-num">&#9650; &times;5.37</span><span class="n-sub">4,140 &rarr; 22,200 /s</span><span class="n-why">file <a href="#file-io">ts_orders_data.301.1131588213</a> 74,000 &rarr; 345,000 MB &middot; segment <a href="#segment-io">ORDERS_APP.ORDER_LINES</a></span><a class="n-go" href="#file-io">File I/O &#8599;</a></li>
+<li><span class="n-lbl">DB time</span><span class="n-num">&#9650; &times;1.8</span><span class="n-sub">11.3 &rarr; 20.4 AAS</span><span class="n-why">DB CPU only &#9650; 18.8%: the extra time is wait, not CPU</span><a class="n-go" href="#waits-fg">Foreground waits &#8599;</a></li>
+<li><span class="n-lbl">Configuration</span><span class="n-num">4 parameters differ</span><span class="n-why"><code>optimizer_adaptive_plans</code> in every prior window; <code>pga_aggregate_target</code> in &minus;5w to &minus;12w; <code>sga_target</code> in &minus;8w to &minus;12w (+1 more)</span><a class="n-go" href="#param-changes">Parameters &#8599;</a></li>
+<li><span class="n-lbl">Plan change</span><span class="n-num">1 statement</span><span class="n-why"><code>7k2m9dx4qp1zb</code> ran with more than one plan, including now</span><a class="n-go" href="#sqlmon">SQL Monitor &#8599;</a></li>
+</ul></div>
 <script>(function(){var s=document.getElementById("narrative-slot"),n=document.getElementById("narrative-src");if(s&&n){s.appendChild(n);n.hidden=false;}})();</script>
 <!-- AWR-SECTION: 17_narrative END -->
 </main>

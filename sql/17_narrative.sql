@@ -19,7 +19,8 @@
 -- sections it links to, so nothing is lost.  (A <noscript> fallback would
 -- have to duplicate the markup in a place the layout does not want it.)
 --
--- Rules (each is a separate cheap SELECT; each emits 0 or 1 <p>):
+-- Rules (each is a separate cheap SELECT; each emits 0 or 1 <li> row --
+-- label | headline number | from -> to | one short why | section link):
 --   R1  physical reads moved LARGE  -> ratio + the file / segment / SQL it
 --                                      landed on
 --   R5  DB time moved LARGE up      -> wait-bound vs CPU-bound
@@ -134,11 +135,23 @@ DECLARE
         RETURN DBMS_XMLGEN.CONVERT(p);
     END esc;
 
-    PROCEDURE add_sentence(p VARCHAR2) IS
+    -- One structured row per finding (v1.5.0: the block is a compact
+    -- list, not prose): label | headline number | from -> to | one short
+    -- "why" clause | a link to the section that has the detail.  Empty
+    -- parts are omitted.
+    PROCEDURE add_item(p_label VARCHAR2, p_num VARCHAR2, p_sub VARCHAR2,
+                       p_why VARCHAR2, p_href VARCHAR2, p_link VARCHAR2) IS
     BEGIN
         v_n := v_n + 1;
-        v_sent(v_n) := p;
-    END add_sentence;
+        v_sent(v_n) := '<li>'
+            || '<span class="n-lbl">' || p_label || '</span>'
+            || CASE WHEN p_num IS NOT NULL THEN '<span class="n-num">' || p_num || '</span>' END
+            || CASE WHEN p_sub IS NOT NULL THEN '<span class="n-sub">' || p_sub || '</span>' END
+            || CASE WHEN p_why IS NOT NULL THEN '<span class="n-why">' || p_why || '</span>' END
+            || CASE WHEN p_href IS NOT NULL
+                    THEN '<a class="n-go" href="' || p_href || '">' || p_link || ' &#8599;</a>' END
+            || '</li>';
+    END add_item;
 
     ------------------------------------------------------------------
     -- Scoring helpers over v_stats (section 07's rules, recomputed)
@@ -184,21 +197,27 @@ DECLARE
         RETURN has(p) AND v_stats(p).cur >= v_stats(p).mu;
     END went_up;
 
-    -- "<b>Name</b> [glyph] xN.NN (mu -> cur unit)" -- the shared lede shape
-    -- for a stat that moved, degrading to a plain arrow when the baseline
-    -- mean is zero (no meaningful ratio).
-    FUNCTION lede(p_label VARCHAR2, p_stat VARCHAR2, p_unit VARCHAR2,
-                  p_scale NUMBER DEFAULT 1) RETURN VARCHAR2 IS
+    -- "[glyph] xN.NN" -- the headline number for a stat that moved,
+    -- degrading to a plain arrow when the baseline mean is zero.
+    FUNCTION numtxt(p_stat VARCHAR2) RETURN VARCHAR2 IS
         v_ratio NUMBER := ratio(p_stat);
-        v_up    BOOLEAN := went_up(p_stat);
     BEGIN
-        RETURN '<b>' || p_label || '</b> ' || dirg(v_up)
-            || CASE WHEN v_ratio IS NULL THEN ''
-                    ELSE ' &times;' || fmt3(v_ratio) END
-            || ' (' || fmt3(v_stats(p_stat).mu * p_scale)
-            || ' &rarr; ' || fmt3(v_stats(p_stat).cur * p_scale)
-            || ' ' || p_unit || ').';
-    END lede;
+        RETURN dirg(went_up(p_stat))
+            || CASE WHEN v_ratio IS NULL THEN '' ELSE ' &times;' || fmt3(v_ratio) END;
+    END numtxt;
+
+    -- "mu -> cur unit" -- the from / to range for a stat.
+    FUNCTION rng(p_stat VARCHAR2, p_unit VARCHAR2, p_scale NUMBER DEFAULT 1) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN fmt3(v_stats(p_stat).mu * p_scale) || ' &rarr; '
+            || fmt3(v_stats(p_stat).cur * p_scale) || ' ' || p_unit;
+    END rng;
+
+    -- "[glyph] N%" for a %-delta.
+    FUNCTION pcttxt(p NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN dirg(p >= 0) || ' ' || fmt3(ABS(p)) || '%';
+    END pcttxt;
 BEGIN
     ------------------------------------------------------------------
     -- One scan for every SYSSTAT counter the rules below need.  Same
@@ -297,7 +316,7 @@ BEGIN
     -- the segment and (if any) the SQL that is new in the current top-N.
     ------------------------------------------------------------------
     IF big('physical reads') THEN
-        v_txt := lede('Physical reads', 'physical reads', '/s');
+        v_txt := '';
 
         -- Top data/temp file by MB read in the CURRENT window, with the
         -- prior-window mean for the same file (same delta shape as 15).
@@ -451,32 +470,26 @@ BEGIN
             END LOOP;
         END;
 
+        -- The "why" clause: file (MB read), top segment, a newcomer SQL.
+        -- NB: an empty VARCHAR2 IS NULL in Oracle, so every guard is a
+        -- plain IS NOT NULL -- `v <> ''''` evaluates to NULL.
         v_tail := '';
         IF v_file IS NOT NULL THEN
-            v_tail := v_tail || ' The reads land on <a href="#file-io">'
-                || esc(v_file) || '</a> ('
-                || CASE WHEN v_file_mu IS NULL THEN 'no prior windows; '
-                        ELSE fmt3(v_file_mu) || ' &rarr; ' END
-                || fmt3(v_file_cur) || ' MB read this window)';
+            v_tail := 'file <a href="#file-io">' || esc(v_file) || '</a> '
+                || CASE WHEN v_file_mu IS NULL THEN '' ELSE fmt3(v_file_mu) || ' &rarr; ' END
+                || fmt3(v_file_cur) || ' MB';
         END IF;
         IF v_seg IS NOT NULL THEN
-            v_tail := v_tail || CASE WHEN v_tail IS NULL THEN ' T' ELSE '; t' END
-                || 'op read segment is <a href="#segment-io">' || esc(v_seg) || '</a>';
+            v_tail := v_tail || CASE WHEN v_tail IS NULL THEN '' ELSE ' &middot; ' END
+                || 'segment <a href="#segment-io">' || esc(v_seg) || '</a>';
         END IF;
         IF v_sqlid IS NOT NULL THEN
-            v_tail := v_tail || CASE WHEN v_tail IS NULL THEN ' S' ELSE '; S' END
-                || 'QL <a href="#sql-' || v_sqlid || '"><code>' || v_sqlid
-                || '</code></a> is in the top-' || TO_CHAR(v_top_n)
-                || ' by reads only in the current window';
+            v_tail := v_tail || CASE WHEN v_tail IS NULL THEN '' ELSE ' &middot; ' END
+                || 'new in top-' || TO_CHAR(v_top_n) || ': <a href="#sql-' || v_sqlid
+                || '"><code>' || v_sqlid || '</code></a>';
         END IF;
-        -- NB: an empty VARCHAR2 IS NULL in Oracle, so the guard must be a
-        -- plain IS NOT NULL -- `v_tail <> ''''` evaluates to NULL and the
-        -- branch would never be taken.
-        IF v_tail IS NOT NULL THEN
-            v_txt := v_txt || v_tail || '.';
-        END IF;
-
-        add_sentence(v_txt);
+        add_item('Physical reads', numtxt('physical reads'), rng('physical reads', '/s'),
+                 v_tail, '#file-io', 'File I/O');
     END IF;
 
     ------------------------------------------------------------------
@@ -485,19 +498,15 @@ BEGIN
     IF big('TM:DB time') AND went_up('TM:DB time') AND has('TM:DB CPU') THEN
         -- Time model values are microseconds/second; dividing by 1e6 renders
         -- them as average active sessions, which is what a DBA reads.
-        v_txt := lede('DB time', 'TM:DB time', 'avg active sessions', 1/1000000);
+        v_txt := '';
         IF pctd('TM:DB CPU') IS NOT NULL AND ABS(pctd('TM:DB CPU')) < 20 THEN
-            v_txt := v_txt || ' DB CPU barely moved ('
-                || dirg(pctd('TM:DB CPU') >= 0) || ' '
-                || fmt3(ABS(pctd('TM:DB CPU'))) || '%), so the extra DB time is '
-                || 'wait, not CPU &mdash; see <a href="#waits-fg">foreground '
-                || 'waits</a>.';
+            v_txt := 'DB CPU only ' || pcttxt(pctd('TM:DB CPU'))
+                || ': the extra time is wait, not CPU';
         ELSIF pctd('TM:DB CPU') IS NOT NULL THEN
-            v_txt := v_txt || ' DB CPU moved with it ('
-                || dirg(pctd('TM:DB CPU') >= 0) || ' '
-                || fmt3(ABS(pctd('TM:DB CPU'))) || '%): CPU-bound growth.';
+            v_txt := 'DB CPU ' || pcttxt(pctd('TM:DB CPU')) || ' with it: CPU-bound';
         END IF;
-        add_sentence(v_txt);
+        add_item('DB time', numtxt('TM:DB time'), rng('TM:DB time', 'AAS', 1/1000000),
+                 v_txt, '#waits-fg', 'Foreground waits');
     END IF;
 
     ------------------------------------------------------------------
@@ -505,35 +514,27 @@ BEGIN
     -- counter stays flat means the size per call/commit changed, not the
     -- volume of calls.  At most one paragraph; both clauses may appear.
     ------------------------------------------------------------------
-    v_txt := '';
     IF pctd('bytes sent via SQL*Net to client') IS NOT NULL
        AND ABS(pctd('bytes sent via SQL*Net to client')) >= 10
        AND pctd('user calls') IS NOT NULL
        AND ABS(pctd('user calls')) <= 3 THEN
-        v_txt := '<b>Network bytes to client</b> '
-            || dirg(pctd('bytes sent via SQL*Net to client') >= 0) || ' '
-            || fmt3(ABS(pctd('bytes sent via SQL*Net to client')))
-            || '% with user calls flat ('
-            || dirg(pctd('user calls') >= 0) || ' '
-            || fmt3(ABS(pctd('user calls'))) || '%), so payload per call '
-            || CASE WHEN pctd('bytes sent via SQL*Net to client') >= 0
-                    THEN 'grew' ELSE 'shrank' END
-            || ', not call volume.';
+        add_item('Bytes to client', pcttxt(pctd('bytes sent via SQL*Net to client')),
+                 'user calls ' || pcttxt(pctd('user calls')),
+                 'payload per call '
+                 || CASE WHEN pctd('bytes sent via SQL*Net to client') >= 0
+                         THEN 'grew' ELSE 'shrank' END || ', not call volume',
+                 '#load', 'Load profile');
     END IF;
     IF pctd('redo size') IS NOT NULL
        AND ABS(pctd('redo size')) >= 20
        AND pctd('user commits') IS NOT NULL
        AND ABS(pctd('user commits')) <= 5 THEN
-        v_txt := v_txt || CASE WHEN v_txt IS NULL THEN '' ELSE ' ' END
-            || '<b>Redo</b> ' || dirg(pctd('redo size') >= 0) || ' '
-            || fmt3(ABS(pctd('redo size'))) || '% with commits flat ('
-            || dirg(pctd('user commits') >= 0) || ' '
-            || fmt3(ABS(pctd('user commits'))) || '%), so redo per commit '
-            || CASE WHEN pctd('redo size') >= 0 THEN 'grew' ELSE 'shrank' END
-            || ' &mdash; transaction size changed, not transaction count.';
-    END IF;
-    IF v_txt IS NOT NULL THEN
-        add_sentence(v_txt);
+        add_item('Redo', pcttxt(pctd('redo size')),
+                 'commits ' || pcttxt(pctd('user commits')),
+                 'redo per commit '
+                 || CASE WHEN pctd('redo size') >= 0 THEN 'grew' ELSE 'shrank' END
+                 || ': transaction size, not count',
+                 '#load', 'Load profile');
     END IF;
 
     ------------------------------------------------------------------
@@ -653,13 +654,14 @@ BEGIN
     END LOOP;
 
     IF v_p_shown > 0 THEN
-        add_sentence('<b>Configuration differs among the prior windows:</b> '
-            || v_p_names
-            || CASE WHEN v_p_total > v_p_shown
-                    THEN ' (and ' || TO_CHAR(v_p_total - v_p_shown)
-                         || ' more)' ELSE '' END
-            || '. Treat those windows as a different configuration &mdash; see '
-            || '<a href="#param-changes">parameter changes</a>.');
+        add_item('Configuration',
+                 TO_CHAR(v_p_total) || ' parameter' || CASE WHEN v_p_total = 1 THEN '' ELSE 's' END
+                 || ' differ' || CASE WHEN v_p_total = 1 THEN 's' ELSE '' END,
+                 NULL,
+                 v_p_names
+                 || CASE WHEN v_p_total > v_p_shown
+                         THEN ' (+' || TO_CHAR(v_p_total - v_p_shown) || ' more)' ELSE '' END,
+                 '#param-changes', 'Parameters');
     END IF;
 
     ------------------------------------------------------------------
@@ -686,15 +688,13 @@ BEGIN
         FROM dual
     ) LOOP
         IF b.n_bad > 0 THEN
-            add_sentence('<b>' || TO_CHAR(b.n_bad) || ' of ' || TO_CHAR(b.n_all)
-                || ' prior window' || CASE WHEN b.n_all = 1 THEN '' ELSE 's' END
-                || '</b>'
-                || CASE WHEN b.n_bad = 1 THEN ' was' ELSE ' were' END
-                || ' skipped'
-                || CASE WHEN b.reason IS NULL THEN ''
-                        ELSE ' (' || esc(b.reason) || ')' END
-                || ', so the prior-window set is thin &mdash; see '
-                || '<a href="#windows">compared windows</a>.');
+            add_item('Baseline',
+                     TO_CHAR(b.n_bad) || ' of ' || TO_CHAR(b.n_all) || ' prior window'
+                     || CASE WHEN b.n_all = 1 THEN '' ELSE 's' END || ' skipped',
+                     NULL,
+                     CASE WHEN b.reason IS NULL THEN 'thin prior-window set'
+                          ELSE esc(b.reason) END,
+                     '#windows', 'Windows');
         END IF;
     END LOOP;
 
@@ -837,37 +837,39 @@ BEGIN
         END LOOP;
 
         IF v_sm_plan_n > 0 THEN
-            add_sentence('<b>' || TO_CHAR(v_sm_plan_n) || ' monitored statement'
-                || CASE WHEN v_sm_plan_n = 1 THEN '' ELSE 's' END
-                || '</b> ran with more than one execution plan in the compared span, '
-                || 'including the Current window: ' || esc(v_sm_plan_ids)
-                || CASE WHEN v_sm_plan_n > 3
-                        THEN ' (and ' || TO_CHAR(v_sm_plan_n - 3) || ' more)' ELSE '' END
-                || ' &mdash; see <a href="#sqlmon">SQL Monitor</a>.');
+            add_item('Plan change',
+                     TO_CHAR(v_sm_plan_n) || ' statement' || CASE WHEN v_sm_plan_n = 1 THEN '' ELSE 's' END,
+                     NULL,
+                     '<code>' || esc(v_sm_plan_ids) || '</code>'
+                     || CASE WHEN v_sm_plan_n > 3
+                             THEN ' (+' || TO_CHAR(v_sm_plan_n - 3) || ' more)' ELSE '' END
+                     || ' ran with more than one plan, including now',
+                     '#sqlmon', 'SQL Monitor');
         END IF;
 
         IF v_sm_dop_n > 0 THEN
-            add_sentence('<b>' || TO_CHAR(v_sm_dop_n) || ' statement'
-                || CASE WHEN v_sm_dop_n = 1 THEN '' ELSE 's' END
-                || '</b> got fewer parallel servers than requested in the Current window '
-                || '(DOP downgrade) &mdash; see <a href="#sqlmon">SQL Monitor</a>.');
+            add_item('DOP downgrade',
+                     TO_CHAR(v_sm_dop_n) || ' statement' || CASE WHEN v_sm_dop_n = 1 THEN '' ELSE 's' END,
+                     NULL, 'fewer parallel servers than requested in the Current window',
+                     '#sqlmon', 'SQL Monitor');
         END IF;
 
         IF v_sm_err_n > 0 THEN
-            add_sentence('<b>' || TO_CHAR(v_sm_err_n) || ' SQL Monitor execution'
-                || CASE WHEN v_sm_err_n = 1 THEN '' ELSE 's' END
-                || '</b> ended <code>DONE (ERROR)</code> in the Current window &mdash; see '
-                || '<a href="#sqlmon">SQL Monitor</a>.');
+            add_item('Errors',
+                     TO_CHAR(v_sm_err_n) || ' execution' || CASE WHEN v_sm_err_n = 1 THEN '' ELSE 's' END,
+                     NULL, 'ended <code>DONE (ERROR)</code> in the Current window',
+                     '#sqlmon', 'SQL Monitor');
         END IF;
 
         IF v_sm_new_n > 0 THEN
-            add_sentence('<b>' || TO_CHAR(v_sm_new_n) || ' sql_id'
-                || CASE WHEN v_sm_new_n = 1 THEN '' ELSE 's' END
-                || '</b> appeared in SQL Monitor for the first time in the Current window: '
-                || esc(v_sm_new_ids)
-                || CASE WHEN v_sm_new_n > 3
-                        THEN ' (and ' || TO_CHAR(v_sm_new_n - 3) || ' more)' ELSE '' END
-                || ' &mdash; see <a href="#sqlmon">SQL Monitor</a>.');
+            add_item('New SQL',
+                     TO_CHAR(v_sm_new_n) || ' SQL ID' || CASE WHEN v_sm_new_n = 1 THEN '' ELSE 's' END,
+                     NULL,
+                     '<code>' || esc(v_sm_new_ids) || '</code>'
+                     || CASE WHEN v_sm_new_n > 3
+                             THEN ' (+' || TO_CHAR(v_sm_new_n - 3) || ' more)' ELSE '' END
+                     || ' first seen in SQL Monitor this window',
+                     '#sqlmon', 'SQL Monitor');
         END IF;
     END;
 
@@ -1077,11 +1079,12 @@ BEGIN
             END IF;
 
             IF v_r10_found AND v_r10_best_delta >= 5 THEN
-                add_sentence('SQL Monitor plan-line drift: <b>' || esc(v_r10_sql_id) || '</b> spends '
-                    || TO_CHAR(ROUND(v_r10_best_cur)) || '% of its time on line '
-                    || v_r10_best_line || ' ' || esc(v_r10_best_op) || ', up from '
-                    || TO_CHAR(ROUND(v_r10_best_base)) || '% in the baseline &mdash; see '
-                    || '<a href="#sqlmon">SQL Monitor</a>.');
+                add_item('Plan drift',
+                         '<code>' || esc(v_r10_sql_id) || '</code>',
+                         TO_CHAR(ROUND(v_r10_best_base)) || '% &rarr; '
+                         || TO_CHAR(ROUND(v_r10_best_cur)) || '% of its time',
+                         'line ' || v_r10_best_line || ' ' || esc(v_r10_best_op),
+                         '#sqlmon', 'SQL Monitor');
             END IF;
         END;
     END IF;
@@ -1090,11 +1093,12 @@ BEGIN
     -- Emit.  Nothing to say => nothing at all (not even an empty div).
     ------------------------------------------------------------------
     IF v_n > 0 THEN
-        DBMS_OUTPUT.PUT_LINE('<div id="narrative-src" class="narr" hidden>');
+        DBMS_OUTPUT.PUT_LINE('<div id="narrative-src" class="narr" hidden>'
+            || '<div class="narr-head">What changed</div><ul class="narr-list">');
         FOR i IN 1 .. v_n LOOP
-            DBMS_OUTPUT.PUT_LINE('<p>' || v_sent(i) || '</p>');
+            DBMS_OUTPUT.PUT_LINE(v_sent(i));
         END LOOP;
-        DBMS_OUTPUT.PUT_LINE('</div>');
+        DBMS_OUTPUT.PUT_LINE('</ul></div>');
         -- Relocate into the masthead slot 00_params.sql reserved.  If
         -- JavaScript is off the block just stays hidden (see the header
         -- comment); every number it quotes is also in the linked sections.

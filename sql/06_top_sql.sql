@@ -43,7 +43,7 @@ DECLARE
     -- Oracle-maintained ("system") flag per sql_id, populated in the detail
     -- loop from each SQL's parsing schema and reused when emitting the
     -- per-SQL detail <details> blocks below. Drives the data-sys="Y|N"
-    -- markers the report's "Application only" toggle hides on.
+    -- markers (informational since v1.5.0; the "Application only" filter is gone).
     v_sys_sqls  t_sqlid_tab;
     v_is_sys    VARCHAR2(1);
 
@@ -669,8 +669,8 @@ BEGIN
                    '\', '\\'), '"', '\"'), CHR(13), ' '), CHR(10), ' ')
             || '","cur":' || NVL(TO_CHAR(sc.cur_rnk), 'null')
             -- Tag system-ness only for the schema breakdown (module/action are
-            -- app-set free text, not schema-derived). Lets the app-only filter
-            -- drop Oracle-maintained schemas from the chart's "Schema" view too.
+            -- app-set free text, not schema-derived). Informational since
+            -- v1.5.0 (the "Application only" filter is gone).
             || ',"sys":' || CASE WHEN sc.grp_type = 'schema'
                                   AND is_oracle_schema(sc.grp_value) = 'Y'
                                  THEN 'true' ELSE 'false' END
@@ -795,16 +795,13 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('  var mark=window.AWR_markLine&&window.AWR_markLine(weeks,AWR_DATA.topSql.weeksIso);');
         DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el);');
         DBMS_OUTPUT.PUT_LINE('  function rowName(s){ return s.name || s.sql_id || "?"; }');
-        -- currentMode persists across renders so the awr:appfilter listener
-        -- can re-render the same breakdown with the Oracle-internal (sys)
-        -- series dropped when "Application only" is toggled on.
+        -- currentMode persists across renders (window highlight re-renders).
         DBMS_OUTPUT.PUT_LINE('  var currentMode="sqls";');
         -- X2: window-axis highlight state. hiSlot: 0=current, 1=first prior...
         DBMS_OUTPUT.PUT_LINE('  var hiSlot=null;');
         DBMS_OUTPUT.PUT_LINE('  function render(mode){');
         DBMS_OUTPUT.PUT_LINE('    if(mode) currentMode=mode;');
         DBMS_OUTPUT.PUT_LINE('    var rows=(d[currentMode]||d.sqls)||[];');
-        DBMS_OUTPUT.PUT_LINE('    if(document.body.classList.contains("app-only")) rows=rows.filter(function(s){return !s.sys;});');
         -- B2: only end-label the 3 series with the largest current-window
         -- value; the rest get a dimmed line and no label so the labelled
         -- ones read first. labelLayout shifts any remaining collisions.
@@ -821,7 +818,6 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('    }, true);');
         DBMS_OUTPUT.PUT_LINE('  }');
         DBMS_OUTPUT.PUT_LINE('  render("sqls");');
-        DBMS_OUTPUT.PUT_LINE('  document.addEventListener("awr:appfilter",function(){render();});');
         -- X2: highlight the compared-window column for slot w; null clears.
         DBMS_OUTPUT.PUT_LINE('  document.addEventListener("awr:window",function(e){hiSlot=e.detail?e.detail.w:null;render();});');
         DBMS_OUTPUT.PUT_LINE('  var toggle=document.querySelector(''[data-topsql-target="''+dim+''"]'');');
@@ -883,9 +879,9 @@ BEGIN
     -- text -- previously one <details> block per SQL. Ordered by
     -- current-window elapsed time desc; rows beyond the first 8 are
     -- tagged data-tail="Y" and collapsed behind an expander.
-    -- detail-only: the per-SQL pool shows in the Detailed view only.
-    DBMS_OUTPUT.PUT_LINE('<h3 class="detail-only">Per-SQL detail</h3>');
-    DBMS_OUTPUT.PUT_LINE('<p class="detail-only" style="font-size:12px;color:var(--muted)">'
+    -- full-only: the per-SQL pool shows in the Full view only.
+    DBMS_OUTPUT.PUT_LINE('<h3 class="full-only">Per-SQL detail</h3>');
+    DBMS_OUTPUT.PUT_LINE('<p class="full-only" style="font-size:12px;color:var(--muted)">'
         || 'Every SQL ID listed above: click a row for full text, AWR '
         || 'retention range, plan_hash_value summary, and avg sec/exec '
         || 'colored by PHV across every snapshot the SQL appeared in. '
@@ -897,7 +893,7 @@ BEGIN
     -- single ECharts init pass at the end of the section.
     DBMS_OUTPUT.PUT_LINE('<script>AWR_DATA.sqlDetails = AWR_DATA.sqlDetails || {};</script>');
 
-    DBMS_OUTPUT.PUT_LINE('<table id="sql-pool" class="detail-only"><thead><tr>'
+    DBMS_OUTPUT.PUT_LINE('<table id="sql-pool" class="full-only"><thead><tr>'
         || '<th>SQL ID</th><th>Ranked in</th><th>Schema</th>'
         || '<th class="num" title="distinct plan_hash_values seen across the span">Plans</th><th class="num">Executions</th>'
         || '<th class="num" title="AWR snapshots in which the SQL appeared">Snapshots</th><th>First seen</th><th>Text</th>'
@@ -1263,7 +1259,7 @@ BEGIN
     -- desc); a generic .expander[data-for] handler (chrome-owned) reveals
     -- every [data-tail="Y"] row in the target table's <tbody>.
     IF v_seen_sqls.COUNT > 8 THEN
-        DBMS_OUTPUT.PUT_LINE('<span class="expander detail-only" data-for="sql-pool" data-n="'
+        DBMS_OUTPUT.PUT_LINE('<span class="expander full-only" data-for="sql-pool" data-n="'
             || (v_seen_sqls.COUNT - 8) || '" data-noun="more statements">'
             || '&#9656; Show ' || (v_seen_sqls.COUNT - 8) || ' more statements</span>');
     END IF;

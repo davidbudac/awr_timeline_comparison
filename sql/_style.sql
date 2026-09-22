@@ -345,8 +345,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('nav.toc a .st.warn { background:var(--dot-warn); }');
     DBMS_OUTPUT.PUT_LINE('nav.toc a .st.crit { background:var(--dot-crit); }');
 
-    -- Rail foot wrapper: holds the Normal / Detailed mode switch and the
-    -- app-filter button together, pinned to the bottom of the rail. (Dark mode lives as an
+    -- Rail foot wrapper: holds the Normal / Full mode switch and the
+    -- next-finding button, pinned to the bottom of the rail. (Dark mode lives as an
     -- icon button beside the rail-brand title at the top of the rail.)
     DBMS_OUTPUT.PUT_LINE('nav.toc .rail-foot {'
         || ' margin-top:auto; display:flex; flex-direction:column; gap:6px;'
@@ -357,18 +357,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('nav.toc .view-btn { display:none; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc .view-panel { display:contents; }');
 
-    -- "Application only" toggle button in the rail foot.
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter {'
-        || ' font:inherit; font-size:11px; font-weight:700;'
-        || ' letter-spacing:0.04em; text-transform:uppercase;'
-        || ' padding:7px 12px; border-radius:8px; cursor:pointer;'
-        || ' border:1px solid var(--rule); background:var(--panel);'
-        || ' color:var(--ink); transition:color .12s,background .12s,border-color .12s; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter:hover {'
-        || ' border-color:var(--accent); color:var(--accent); }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc .app-filter.active {'
-        || ' background:var(--accent); border-color:var(--accent); color:#fff; }');
-    -- Normal / Detailed mode switch: a two-button segmented control
+    -- Normal / Full mode switch: a two-button segmented control
     -- (aria-pressed marks the active half), first thing in the rail foot.
     DBMS_OUTPUT.PUT_LINE('nav.toc .mode-switch {'
         || ' display:flex; border:1px solid var(--rule); border-radius:8px;'
@@ -391,7 +380,6 @@ BEGIN
     -- slot by its own inline script.  A quiet accent-tinted note, not a
     -- banner: the verdict above it already carries the severity color.
     -- Kept in the Normal view (it IS the short report) --
-    -- but hidden by body.app-only with the rest of the system-wide masthead.
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('.narr {'
         || ' border-left:3px solid var(--accent);'
@@ -399,8 +387,28 @@ BEGIN
         || ' font-size:13px; line-height:1.6;'
         || ' padding:10px 14px; border-radius:0 6px 6px 0;'
         || ' margin-top:10px; color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('.narr p { margin:0 0 4px; }');
-    DBMS_OUTPUT.PUT_LINE('.narr p:last-child { margin-bottom:0; }');
+    -- v1.5.0: the block is a structured list, one row per finding --
+    -- label | headline number | from -> to | why | section link.
+    DBMS_OUTPUT.PUT_LINE('.narr .narr-head {'
+        || ' font-size:10.5px; font-weight:700; letter-spacing:0.08em;'
+        || ' text-transform:uppercase; color:var(--accent-deep); margin:0 0 6px; }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list { list-style:none; margin:0; padding:0; }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list li {'
+        || ' display:grid; grid-template-columns:130px auto auto 1fr auto;'
+        || ' column-gap:14px; align-items:baseline; padding:5px 0;'
+        || ' border-top:1px solid color-mix(in srgb, var(--accent) 18%, transparent); }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list li:first-child { border-top:0; }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list .n-lbl { font-weight:700; color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list .n-num {'
+        || ' font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list .n-sub {'
+        || ' color:var(--ink-soft); font-variant-numeric:tabular-nums; white-space:nowrap; }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list .n-why { color:var(--muted); min-width:0; }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list .n-go { white-space:nowrap; font-size:12px; }');
+    DBMS_OUTPUT.PUT_LINE('.narr-list li > :empty { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width:700px) { .narr-list li {'
+        || ' grid-template-columns:1fr auto; }'
+        || ' .narr-list .n-why { grid-column:1 / -1; } }');
     DBMS_OUTPUT.PUT_LINE('.narr b { font-weight:600; }');
     DBMS_OUTPUT.PUT_LINE('.narr code {'
         || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
@@ -411,56 +419,14 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.narr a:hover { border-bottom-color:var(--accent); }');
 
     -- =========================================================
-    -- "Application only" view (body.app-only).
-    -- Same offline-style body-class hook as body.no-charts: a single class
-    -- on <body> drives every hide rule, toggled by the rail button. When on,
-    -- the report shows only application SQL and its directly related data
-    -- (Top SQL, Top SQL ASH, Segment I/O, File I/O, Utilization) and hides
-    -- all system-wide events/metrics sections plus the masthead's system
-    -- verdict and DB-time strip.
-    -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('body.app-only #db-time-summary,'
-        || ' body.app-only #day-profile,'
-        || ' body.app-only #overview,'
-        || ' body.app-only #ash-timeline,'
-        || ' body.app-only #waits-fg,'
-        || ' body.app-only #waits-bg,'
-        || ' body.app-only #findings,'
-        || ' body.app-only #windows,'
-        || ' body.app-only #load,'
-        || ' body.app-only #metrics,'
-        || ' body.app-only #param-changes,'
-        || ' body.app-only header.report .verdict,'
-        || ' body.app-only header.report .movers-all,'
-        || ' body.app-only header.report .narr,'
-        || ' body.app-only header.report .windows-strip { display:none; }');
-    -- Remove the rail links that point at now-hidden sections, leaving
-    -- only the ones still on screen (kept in sync with the hide rule
-    -- above).  Group labels hide too: the survivors read as a flat list.
-    DBMS_OUTPUT.PUT_LINE('body.app-only nav.toc a'
-        || ':not([href="#topsql"])'
-        || ':not([href="#topsql-ash"])'
-        || ':not([href="#sqlmon"])'
-        || ':not([href="#segment-io"])'
-        || ':not([href="#file-io"])'
-        || ':not([href="#utilization"]) { display:none; }');
-    DBMS_OUTPUT.PUT_LINE('body.app-only nav.toc b { display:none; }');
-    -- Row / card / disclosure level: hide SQL parsed by an Oracle-maintained
-    -- schema (tagged data-sys="Y" by sections 06 and 11) so only application
-    -- SQL remains in the tables, the per-SQL detail blocks, and the ASH cards.
-    DBMS_OUTPUT.PUT_LINE('body.app-only tr[data-sys="Y"],'
-        || ' body.app-only details[data-sys="Y"],'
-        || ' body.app-only .ash-sql-card[data-sys="Y"] { display:none; }');
-
-    -- =========================================================
-    -- Normal / Detailed views (body.normal / body.detailed, set by the
+    -- Normal / Full views (body.normal / body.full, set by the
     -- early mode script in 00_params.sql from localStorage "awr-mode";
-    -- Normal is the default).  Same body-class hook as body.no-charts /
-    -- body.app-only.  Sections opt INTO the Normal view with
+    -- Normal is the default).  Same body-class hook as body.no-charts.
+    -- Sections opt INTO the Normal view with
     -- data-normal="Y" (06 Top SQL, 07 Findings, 08 Headline metrics, 09
     -- ASH timeline always; 12 / 16 / 18 only when they have something
     -- worth the short report, via a one-line inline script); anything
-    -- tagged .detail-only (07's per-domain tables, 06's per-SQL pool)
+    -- tagged .full-only (07's per-domain tables, 06's per-SQL pool)
     -- drops out of Normal even inside a kept section.  Rail links to
     -- hidden sections carry .norm-dim (computed by the rail JS from the
     -- same data-normal test) and hide too; the JS appends a "+ N more
@@ -468,7 +434,7 @@ BEGIN
     -- With JS off neither body class exists and everything shows.
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('body.normal main > section:not([data-normal]) { display:none; }');
-    DBMS_OUTPUT.PUT_LINE('body.normal .detail-only { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('body.normal .full-only { display:none; }');
     DBMS_OUTPUT.PUT_LINE('body.normal nav.toc a.norm-dim, body.normal nav.toc b.norm-dim { display:none; }');
     -- order:3 = the same flex rank as main > section, so the note (appended
     -- last inside <main>) sits after the last visible section, not first.
@@ -962,6 +928,18 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('header.report .windows-hint {'
         || ' font-size:10.5px; color:var(--muted); margin:2px 0 4px;'
         || ' letter-spacing:0.02em; }');
+    -- v1.5.0: the dated chip list is folded behind a one-line summary
+    -- (<details>), so the strip reads as caption + chart by default.
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-more { margin:4px 0 2px; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-more > summary {'
+        || ' cursor:pointer; list-style:none; font-size:11.5px; color:var(--ink-soft);'
+        || ' text-transform:none; letter-spacing:0; font-weight:400;'
+        || ' display:flex; flex-wrap:wrap; gap:6px 12px; align-items:baseline; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-more > summary::-webkit-details-marker { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-more > summary .w-toggle {'
+        || ' color:var(--accent-deep); font-weight:600; }');
+    DBMS_OUTPUT.PUT_LINE('header.report .windows-more[open] > summary .w-toggle .closed,'
+        || ' header.report .windows-more:not([open]) > summary .w-toggle .opened { display:none; }');
 
     -- B5: "sigma is approximately zero" pill -- a flat-baseline marker.
     -- Grey like .badge.skip but neither italic nor upper-cased, because it
@@ -1100,7 +1078,7 @@ BEGIN
     -- =========================================================
     -- The section links now live in a .rail-list wrapper so the narrow
     -- layout can drop them into a dropdown panel.  Every existing selector
-    -- (nav.toc a / nav.toc b, the app-only link rule, the rail JS) is a
+    -- (nav.toc a / nav.toc b, the rail JS) is a
     -- descendant match, so wrapping them changes nothing on desktop.
     DBMS_OUTPUT.PUT_LINE('nav.toc .rail-list {'
         || ' display:flex; flex-direction:column; gap:2px; }');
@@ -1207,7 +1185,7 @@ BEGIN
         || '   background:var(--panel); border:1px solid var(--hairline);'
         || '   box-shadow:0 8px 18px rgba(0,0,0,.14); }'
         || ' nav.toc .rail-foot.open .view-panel { display:flex; }'
-        || ' nav.toc .app-filter, nav.toc .mode-btn { min-height:34px; }'
+        || ' nav.toc .mode-btn { min-height:34px; }'
         -- Tap targets: 32px minimum for the small controls below 980px.
         || ' .tabs [data-t], .tbl-tools .tool-btn, .copy-btn, .expander,'
         || ' details > summary, .chipbar button, nav.toc .theme-icon-btn,'
