@@ -1,61 +1,89 @@
 /*
- * Project website behaviour: theme toggle (same localStorage key as the
- * generated report, "awr-theme"), top-bar scrollspy, the narrow-layout
- * menu, and copy buttons on code blocks.
+ * Project website behaviour, shared by every page: theme toggle (same
+ * localStorage key as the generated report, "awr-theme"), copy buttons on
+ * code blocks, the narrow-layout menu, and the contents highlight.
+ *
+ * The early theme bootstrap lives inline in each page's <head> (so the
+ * saved theme applies before first paint); this file only handles clicks.
  */
 (function () {
-  var doc = document, body = doc.body;
+  var root = document.documentElement;
 
-  // ---- theme (shared key with the generated report) ----
-  var KEY = "awr-theme";
-  function applyTheme(t) { body.classList.toggle("dark", t === "dark"); }
-  try {
-    var saved = localStorage.getItem(KEY);
-    if (saved) applyTheme(saved);
-    else if (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches) applyTheme("dark");
-  } catch (e) {}
-  doc.querySelectorAll(".theme-icon-btn").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      var dark = !body.classList.contains("dark");
-      applyTheme(dark ? "dark" : "light");
-      try { localStorage.setItem(KEY, dark ? "dark" : "light"); } catch (e) {}
+  /* ---- theme toggle: data-theme on <html> overrides prefers-color-scheme ---- */
+  function current() {
+    var t = root.getAttribute('data-theme');
+    if (t) return t;
+    return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  [].forEach.call(document.querySelectorAll('[data-theme-toggle]'), function (b) {
+    b.addEventListener('click', function () {
+      var next = current() === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem('awr-theme', next); } catch (e) {}
     });
   });
 
-  // ---- top bar: narrow-layout menu + scrollspy ----
-  var bar = doc.querySelector(".topbar");
-  if (bar) {
-    var mb = bar.querySelector(".menu-btn"), links = bar.querySelector(".links");
-    if (mb && links) {
-      mb.addEventListener("click", function () {
-        var open = links.classList.toggle("open");
-        mb.setAttribute("aria-expanded", open ? "true" : "false");
-      });
-      links.addEventListener("click", function (e) {
-        if (e.target.tagName === "A") { links.classList.remove("open"); mb.setAttribute("aria-expanded", "false"); }
-      });
+  /* ---- copy buttons: <button class="copy" data-copy="ID"> copies element #ID,
+         minus any prompt spans (.p) ---- */
+  function copyText(txt, btn) {
+    var l = btn.querySelector('.lbl');
+    var orig = l ? l.textContent : '';
+    function ok() {
+      btn.classList.add('done');
+      if (l) l.textContent = 'Copied';
+      btn.setAttribute('aria-label', 'Copied');
+      setTimeout(function () {
+        btn.classList.remove('done');
+        if (l) l.textContent = orig;
+        btn.setAttribute('aria-label', 'Copy');
+      }, 1400);
     }
-    var spyLinks = [].slice.call(doc.querySelectorAll('.topbar .links a[href^="#"], .topbar .quick a[href^="#"], .subnav a[href^="#"]'));
-    var targets = spyLinks.map(function (a) { return doc.getElementById(a.getAttribute("href").slice(1)); });
-    function spy() {
-      var y = window.scrollY + 100;
-      var bestId = null, bestTop = -Infinity;
-      targets.forEach(function (t) { if (t && t.offsetTop <= y && t.offsetTop > bestTop) { bestTop = t.offsetTop; bestId = t.id; } });
-      spyLinks.forEach(function (a) { a.classList.toggle("on", bestId !== null && a.getAttribute("href") === "#" + bestId); });
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = txt; ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); ok(); } catch (e) {}
+      document.body.removeChild(ta);
     }
-    if (spyLinks.length) { spy(); window.addEventListener("scroll", spy, { passive: true }); window.addEventListener("resize", spy); }
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(ok, fallback);
+    else fallback();
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('.copy[data-copy]') : null;
+    if (!b) return;
+    var src = document.getElementById(b.getAttribute('data-copy'));
+    if (!src) return;
+    var clone = src.cloneNode(true);
+    [].forEach.call(clone.querySelectorAll('.p'), function (n) { n.parentNode.removeChild(n); });
+    copyText(clone.textContent.replace(/\s+$/, ''), b);
+  });
+  [].forEach.call(document.querySelectorAll('.copy[data-copy]'), function (b) {
+    if (!b.hasAttribute('aria-label')) b.setAttribute('aria-label', 'Copy');
+  });
+
+  /* ---- narrow-layout menu: close after picking a link, or on Escape ---- */
+  var menu = document.querySelector('.menu');
+  if (menu) {
+    menu.addEventListener('click', function (e) { if (e.target.closest('a')) menu.removeAttribute('open'); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') menu.removeAttribute('open'); });
   }
 
-  // ---- copy buttons (data-copy = selector of the element whose text to copy) ----
-  doc.addEventListener("click", function (e) {
-    var b = e.target.closest && e.target.closest(".copy-btn[data-copy]");
-    if (!b) return;
-    var el = doc.querySelector(b.getAttribute("data-copy"));
-    if (!el) return;
-    var txt = el.textContent.replace(/\n$/, "");
-    function done() { var old = b.textContent; b.textContent = "Copied"; b.classList.add("done"); setTimeout(function () { b.textContent = old; b.classList.remove("done"); }, 1400); }
-    function fallback(t) { var ta = doc.createElement("textarea"); ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0"; doc.body.appendChild(ta); ta.select(); try { doc.execCommand("copy"); } catch (x) {} doc.body.removeChild(ta); }
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, function () { fallback(txt); done(); });
-    else { fallback(txt); done(); }
-  });
+  /* ---- contents highlight: the .toc link of the last section whose top has
+         scrolled above 35% of the viewport (none while above the first) ---- */
+  var links = [].slice.call(document.querySelectorAll('.toc a[href^="#"]'));
+  var targets = links.map(function (a) { return document.getElementById(a.getAttribute('href').slice(1)); });
+  if (links.length) {
+    var queued = false;
+    var spy = function () {
+      queued = false;
+      var line = window.innerHeight * 0.35, best = -1;
+      targets.forEach(function (t, i) { if (t && t.getBoundingClientRect().top <= line) best = i; });
+      links.forEach(function (a, i) { a.classList.toggle('act', i === best); });
+    };
+    var queue = function () { if (!queued) { queued = true; requestAnimationFrame(spy); } };
+    window.addEventListener('scroll', queue, { passive: true });
+    window.addEventListener('resize', queue);
+    spy();
+  }
 })();

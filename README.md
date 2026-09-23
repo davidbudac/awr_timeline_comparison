@@ -3,24 +3,43 @@
 **Project website (screenshots, live example reports, cheat sheet):**
 <https://davidbudac.github.io/awr_timeline_comparison/>
 
-Pure-SQL Oracle 19c toolkit that compares AWR snapshots across a series
-of **aligned windows** — by default the same hour of the week across the
-last four weeks (e.g. Mon 09:00–10:00 today vs the four prior Mondays
-09:00–10:00) — flags drastic changes via z-score, and renders a readable
-single-file HTML report. The cadence between windows is configurable
-(weekly, daily, hourly, or any multiple) so the same toolkit can do
-"last four hours, hour by hour", "every other day for the past two
-weeks", "every fourth Monday for a quarter", etc. **Read-only:** the
-script does not create, modify or delete any database objects — it only
-issues `SELECT` against `DBA_HIST_*`.
+## Quick start
 
-Requirements: Oracle Database 19c with the **Diagnostic + Tuning Pack**
-licensed (needed for `DBA_HIST_*` and `DBA_HIST_SQLSTAT`).
+Needs Oracle Database 19c with the Diagnostic + Tuning Pack licence,
+SQL\*Plus, and a user that can read the AWR views (any DBA account works;
+see [Install / grants](#install--grants)). Nothing is installed in the
+database: the tool only runs `SELECT`s.
 
-## Install
+```bash
+# 1. Get it
+git clone https://github.com/davidbudac/awr_timeline_comparison.git
+cd awr_timeline_comparison
+
+# 2. Run it (on the DB host with OS auth: ./run_awr_trend.sh '/ as sysdba')
+./run_awr_trend.sh user/pw@svc
+
+# 3. Open the HTML file it wrote to reports/
+```
+
+That compares the last full hour with the same hour on each of the 4
+prior weeks. **The defaults are the recommended settings; everything
+below is optional.** Not sure about options? `./run_awr_trend.sh
+--configure` asks a few questions and prints the command. What the output
+looks like: [demo report](https://davidbudac.github.io/awr_timeline_comparison/examples/demo_busy_db.html).
+
+## What it does
+
+A pure-SQL Oracle 19c toolkit that compares AWR snapshots across a series
+of **aligned windows** (by default the same hour of the week over the last
+four weeks), flags drastic changes via z-score, and renders one
+self-contained HTML report. The cadence is configurable (weekly, daily,
+hourly or any multiple), and a separate fleet wrapper runs the same
+comparison across many databases on one page.
+
+## Install / grants
 
 Nothing to install in the database. Connect as a user (typically DBA)
-that can read the AWR views listed below, and run the driver directly.
+that can read the AWR views listed below.
 
 Required grants (already covered by the `DBA` role, or for a dedicated
 analyst user):
@@ -48,7 +67,10 @@ GRANT EXECUTE ON DBMS_WORKLOAD_REPOSITORY    TO <user>;
 
 ## Run
 
-**New to it, or don't want to memorize the argument order?** Run the
+The [Quick start](#quick-start) command (`./run_awr_trend.sh user/pw@svc`)
+covers the usual case. This section is the reference for everything else.
+
+**Don't want to memorize the argument order?** Run the
 interactive configurator. It walks you through every option (with a short
 explanation, a sensible default and input validation for each), then prints
 *both* a ready-to-paste `./run_awr_trend.sh` command and the equivalent
@@ -59,10 +81,9 @@ pure-SQL\*Plus block, and offers to run the report right away:
                                    # or just run with no arguments
 ```
 
-Easiest non-interactive — the shell wrapper (sets all substitution vars for you):
+Or pass positional arguments to the shell wrapper (it sets all substitution vars for you):
 
 ```bash
-./run_awr_trend.sh user/pw@svc                                  # defaults
 ./run_awr_trend.sh user/pw@svc '2026-04-15 09:00' 1 4 10 0      # explicit weekly
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 h                # last 4 hours straight back
 ./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple         # lean triage report

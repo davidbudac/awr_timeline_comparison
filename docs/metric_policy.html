@@ -1,24 +1,33 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Scoring policy</title><style>
-:root{--paper:#eceef1;--panel:#fff;--panel-2:#f4f6f8;--ink:#12161d;--ink-soft:#333a45;--muted:#5d6672;
---rule:#c4ccd6;--hairline:#d9dfe6;--accent:#1f5fa8;--accent-deep:#123a68;--accent-bg:#e0eaf4;
---crit:#b01c1c;--warn:#8a5a00;--ok:#1f7a4d;--skip:#7a828e;--crit-bg:#fbeceb;--warn-bg:#faf2df;--ok-bg:#e8f3ed;--skip-bg:#eef1f4;}
-@media (prefers-color-scheme:dark){:root{--paper:#0f1319;--panel:#161b23;--panel-2:#1d232d;--ink:#e6e9ee;--ink-soft:#c9cfd8;
---muted:#8591a0;--rule:#2c3440;--hairline:#252c37;--accent:#6fa8dc;--accent-deep:#a9cdf0;--accent-bg:#172431;
---crit:#ff7b72;--warn:#e3b341;--ok:#5fd39b;--skip:#8591a0;--crit-bg:#3a1d1d;--warn-bg:#3a2f14;--ok-bg:#16301f;--skip-bg:#1d232d;}}
+<title>Scoring policy</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap"><script>try{var t=localStorage.getItem('awr-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script><style>
+:root{--paper:#FFFFFF;--panel:#FFFFFF;--panel-2:#F7F9FB;--ink:#10213A;--ink-soft:#34465E;--muted:#5E6E82;
+--rule:#CBD3DD;--hairline:#E2E7ED;--accent:#1D5BB8;--accent-deep:#15478F;--accent-bg:#EBF2FC;
+--crit:#B42318;--warn:#A15C07;--ok:#1A7F4B;--skip:#5E6E82;--crit-bg:#FDECEA;--warn-bg:#FDF3E3;--ok-bg:#E8F5EE;--skip-bg:#EEF1F5;
+--sans:"IBM Plex Sans",-apple-system,"Segoe UI",Roboto,sans-serif;--mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;color-scheme:light;}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--paper:#0E1621;--panel:#131E2C;--panel-2:#111B28;--ink:#E4EAF2;--ink-soft:#C3CEDB;
+--muted:#95A3B5;--rule:#30415A;--hairline:#223044;--accent:#7DB0F5;--accent-deep:#A6C9F8;--accent-bg:#16263C;
+--crit:#F28B82;--warn:#F2B25C;--ok:#6BCB94;--skip:#95A3B5;--crit-bg:#3A1C1E;--warn-bg:#3A2A14;--ok-bg:#14301F;--skip-bg:#1C2737;color-scheme:dark;}}
+:root[data-theme="dark"]{--paper:#0E1621;--panel:#131E2C;--panel-2:#111B28;--ink:#E4EAF2;--ink-soft:#C3CEDB;
+--muted:#95A3B5;--rule:#30415A;--hairline:#223044;--accent:#7DB0F5;--accent-deep:#A6C9F8;--accent-bg:#16263C;
+--crit:#F28B82;--warn:#F2B25C;--ok:#6BCB94;--skip:#95A3B5;--crit-bg:#3A1C1E;--warn-bg:#3A2A14;--ok-bg:#14301F;--skip-bg:#1C2737;color-scheme:dark;}
 *{box-sizing:border-box}
-body{margin:0;background:var(--paper);color:var(--ink);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}
+body{margin:0;background:var(--paper);color:var(--ink);font:14.5px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+.top{position:sticky;top:0;z-index:5;background:var(--paper);border-bottom:1px solid var(--hairline)}
+.top div{max-width:1180px;margin:0 auto;padding:0 16px;height:52px;display:flex;align-items:center;gap:18px;font-size:14px}
+.top a{color:var(--ink-soft);text-decoration:none;font-weight:500}.top a:hover{color:var(--accent)}
+.top a.home{color:var(--ink);font-weight:600;margin-right:auto}
 main{max-width:1180px;margin:0 auto;padding:24px 16px 64px}
-h1{font-size:26px;margin:0 0 4px}h2{font-size:19px;margin:36px 0 10px;padding-top:12px;border-top:1px solid var(--hairline)}
+h1{font-size:28px;font-weight:600;letter-spacing:-.015em;margin:0 0 4px}h2{font-size:20px;font-weight:600;margin:36px 0 10px;padding-top:12px;border-top:1px solid var(--hairline)}
 h3{font-size:15px;margin:22px 0 6px}
 .sub{color:var(--muted);margin:0 0 18px}
 .card{background:var(--panel);border:1px solid var(--hairline);border-radius:10px;padding:14px 18px;margin:10px 0}
-code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:12.5px}
+code,.mono{font-family:var(--mono);font-size:12.5px}
 code{background:var(--panel-2);padding:1px 5px;border-radius:4px}
 table{border-collapse:collapse;width:100%;background:var(--panel);border:1px solid var(--hairline);border-radius:8px;font-size:12.5px}
 th,td{padding:7px 9px;vertical-align:top;border-top:1px solid var(--hairline);text-align:left}
-thead th{background:var(--panel-2);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-top:0;position:sticky;top:0}
+thead th{background:var(--panel-2);font-size:12px;font-weight:600;color:var(--ink-soft);border-top:0;border-bottom:1px solid var(--rule);position:sticky;top:0}
 td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .badge{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:999px;white-space:nowrap}
 .b-up{background:var(--crit-bg);color:var(--crit)}.b-down{background:var(--warn-bg);color:var(--warn)}
@@ -30,15 +39,15 @@ td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .why{color:var(--muted);font-size:12px}
 .tblwrap{overflow-x:auto;margin:8px 0 14px}
 ol.steps li{margin:6px 0}
-.toc a{margin-right:14px;color:var(--accent-deep);font-weight:600;text-decoration:none}
+.toc a{margin-right:14px;color:var(--accent);font-weight:500;text-decoration:none}
 .legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
 .kv{display:grid;grid-template-columns:150px 1fr;gap:4px 12px;font-size:13px}
 .kv b{color:var(--ink-soft)}
 footer{margin-top:40px;color:var(--muted);font-size:12px}
 @media (max-width:700px){.kv{grid-template-columns:1fr}}
-</style></head><body><main>
+</style></head><body><header class="top"><div><a class="home" href="index.html">AWR Timeline Comparison</a><a href="index.html#s-install">Quick start</a><a href="index.html#docs">Docs</a><a href="cheatsheet.html">Cheat sheet</a><a href="configurator.html">Configurator</a></div></header><main>
 <h1>Scoring policy: what fires, and when</h1>
-<p class="sub">Generated 2026-09-22 from <code>sql/lib/metric_policy.plsql</code> by <code>docs/gen_policy_doc.py</code>.
+<p class="sub">Generated 2026-09-23 from <code>sql/lib/metric_policy.plsql</code> by <code>docs/gen_policy_doc.py</code>.
 The policy file is the single source of truth; edit a line there and re-run the generator (and <code>python3 demo/gen_demo_report.py</code>) to keep this page and the demo in step.</p>
 <p class="toc"><a href="#rule">The rule</a><a href="#legend">Directions and buckets</a><a href="#load">Load statistics</a><a href="#metric">System metrics</a><a href="#waits">Wait classes and events</a><a href="#other">SQL, segments, files</a><a href="#families">Families and twins</a><a href="#edit">How to change it</a></p>
 

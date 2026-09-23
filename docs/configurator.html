@@ -3,12 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Configurator — AWR Timeline Comparison</title>
+<title>Configurator: AWR Timeline Comparison</title>
 <meta name="description" content="Point-and-click builder for run_awr_trend.sh and the SQL*Plus invocation. Pick your windows, cadence, template and markers; copy a ready-to-run command. 100% in your browser, no data leaves the page.">
+<meta name="theme-color" content="#0E1621" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&amp;display=swap">
 <link rel="stylesheet" href="assets/site.css">
+<script>try{var t=localStorage.getItem('awr-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <style>
-  /* ---- page-local: configurator components on the shared workbench chrome.
-     Only shared tokens from assets/site.css are used, so body.dark just works. */
+  /* ---- page-local: configurator components. Only shared tokens from
+     assets/site.css are used, so both themes just work. */
 
   /* two-column build layout */
   .config { display:grid; grid-template-columns:minmax(0,1fr) 400px; gap:22px; align-items:start; margin-top:14px; }
@@ -17,129 +23,122 @@
   @media (max-width:900px)  { .config { grid-template-columns:minmax(0,1fr); } }
 
   /* inner cards (steps) */
-  .panel { background:var(--panel-2); border:1px solid var(--hairline); border-radius:8px; padding:16px 18px 18px; margin-bottom:14px; }
-  .ph { font-size:13px; letter-spacing:.03em; text-transform:uppercase; color:var(--ink); font-weight:800;
-    margin:0 0 6px; display:flex; align-items:center; gap:8px; }
-  .ph::before { content:""; width:3px; height:12px; flex:none; background:var(--accent); border-radius:1px; }
-  .ph .n { color:var(--muted); font-weight:700; }
-  .ph .opt { font-size:10px; font-weight:700; letter-spacing:.08em; color:var(--muted); border:1px solid var(--hairline);
-    border-radius:999px; padding:1px 8px; background:var(--panel); margin-left:2px; }
+  .cpanel { background:var(--bg-sub); border:1px solid var(--rule); border-radius:8px; padding:16px 18px 18px; margin-bottom:14px; }
+  .ph { font-size:16.5px; color:var(--fg); font-weight:600; margin:0 0 6px; display:flex; align-items:center; gap:8px; letter-spacing:-.01em; }
+  .ph .n { color:var(--accent); font:500 13px/1 var(--mono); width:24px; height:24px; border-radius:50%; border:1px solid var(--accent-line); background:var(--accent-soft); display:inline-grid; place-items:center; flex:none; }
+  .ph .opt { font-size:10px; font-weight:600; letter-spacing:.08em; color:var(--muted); border:1px solid var(--rule);
+    border-radius:999px; padding:1px 8px; background:var(--surface); margin-left:2px; }
   .psub { font-size:12.5px; color:var(--muted); margin:0 0 14px; line-height:1.5; }
-  .psub a { font-weight:700; }
+  .psub a { font-weight:600; }
 
   /* collapsible folds (fine-tune / markers) */
-  details.fold { background:var(--panel-2); border:1px solid var(--hairline); border-radius:8px; margin-bottom:14px; overflow:hidden; }
+  details.fold { background:var(--bg-sub); border:1px solid var(--rule); border-radius:8px; margin-bottom:14px; overflow:hidden; }
   details.fold > summary { list-style:none; cursor:pointer; padding:14px 18px; display:flex; align-items:center; gap:10px; user-select:none; }
   details.fold > summary::-webkit-details-marker { display:none; }
   details.fold > summary .ph { margin:0; }
   details.fold > summary:hover .ph { color:var(--accent); }
   details.fold > summary .chev { margin-left:auto; color:var(--muted); font-size:12px; transition:transform .15s ease; }
   details.fold[open] > summary .chev { transform:rotate(90deg); }
-  details.fold[open] > summary { border-bottom:1px solid var(--hairline); }
+  details.fold[open] > summary { border-bottom:1px solid var(--rule); }
   .fold-body { padding:16px 18px 18px; }
-  .subhead { font-size:10.5px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); margin:0 0 3px; }
+  .subhead { font-size:10.5px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); margin:0 0 3px; }
   .subhead-sub { font-size:12.5px; color:var(--muted); margin:0 0 14px; line-height:1.5; }
-  .subgroup { margin-top:24px; padding-top:16px; border-top:1px solid var(--hairline); }
+  .subgroup { margin-top:24px; padding-top:16px; border-top:1px solid var(--rule); }
 
   /* fields */
   .field { margin-bottom:14px; }
   .field:last-child { margin-bottom:0; }
-  label.lbl, .field > label { display:block; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-bottom:5px; }
-  .field > label code { text-transform:none; letter-spacing:0; }
-  .help { font-size:12px; color:var(--muted); margin-top:6px; line-height:1.5; }
-  .help strong, .help b { color:var(--ink-soft); }
-  .echo { font-weight:700; color:var(--accent); text-transform:none; letter-spacing:0; margin-left:8px; font-family:var(--mono); }
+  label.lbl, .field > label { display:block; font-size:13.5px; font-weight:500; color:var(--fg-2); margin-bottom:6px; }
+  .field > label code { font-size:.85em; }
+  .help { font-size:13px; color:var(--muted); margin-top:6px; line-height:1.5; }
+  .help strong, .help b { color:var(--fg-2); }
+  .echo { font-weight:600; color:var(--accent); text-transform:none; letter-spacing:0; margin-left:8px; font-family:var(--mono); }
 
   input[type=text], input[type=number], input[type=datetime-local], select {
-    width:100%; font-family:inherit; font-size:13.5px; color:var(--ink); background:var(--panel);
-    border:1px solid var(--rule); border-radius:7px; padding:8px 10px; line-height:1.3; color-scheme:light; }
-  body.dark input[type=text], body.dark input[type=number], body.dark input[type=datetime-local], body.dark select { color-scheme:dark; }
+    width:100%; font-family:inherit; font-size:13.5px; color:var(--fg); background:var(--surface);
+    border:1px solid var(--rule-strong); border-radius:7px; padding:8px 10px; line-height:1.3; }
   input[type=text].mono { font-family:var(--mono); font-size:12.5px; }
-  input:focus, select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-bg); }
-  input.invalid, select.invalid { border-color:var(--crit) !important; box-shadow:0 0 0 3px var(--crit-bg) !important; }
+  input:focus, select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  input.invalid, select.invalid { border-color:var(--crit) !important; box-shadow:0 0 0 3px var(--crit-soft) !important; }
   .row2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
   .row-step { display:grid; grid-template-columns:1fr 150px; gap:12px; align-items:start; }
   @media (max-width:520px) { .row2, .row-step { grid-template-columns:1fr; } }
 
   /* segmented radio control */
-  .seg { display:inline-flex; border:1px solid var(--rule); border-radius:7px; overflow:hidden; background:var(--panel); flex-wrap:wrap; }
-  .seg label { position:relative; padding:7px 14px; font-size:12.5px; font-weight:600; cursor:pointer; color:var(--ink-soft); border-right:1px solid var(--rule); }
+  .seg { display:inline-flex; border:1px solid var(--rule-strong); border-radius:7px; overflow:hidden; background:var(--surface); flex-wrap:wrap; }
+  .seg label { position:relative; padding:7px 14px; font-size:12.5px; font-weight:600; cursor:pointer; color:var(--fg-2); border-right:1px solid var(--rule-strong); }
   .seg label:last-child { border-right:none; }
   .seg label input { position:absolute; opacity:0; width:0; height:0; pointer-events:none; }
-  .seg label.on { background:var(--accent); color:#fff; }
+  .seg label.on { background:var(--btn); color:#fff; }
 
   /* connect-string example chips (page-local .chip, overrides the shared mono pill) */
   .chiprow { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-  .chiprow .chip { font-size:11px; font-weight:600; color:var(--ink-soft); background:var(--panel); border:1px solid var(--hairline);
+  .chiprow .chip { font-size:11px; font-weight:600; color:var(--fg-2); background:var(--surface); border:1px solid var(--rule);
     border-radius:999px; padding:3px 10px; cursor:pointer; font-family:var(--mono); line-height:1.5; }
   .chiprow .chip:hover { border-color:var(--accent); color:var(--accent); }
 
   .toggle { display:flex; align-items:center; gap:10px; }
   .toggle input { width:16px; height:16px; accent-color:var(--accent); cursor:pointer; margin:0; }
-  .toggle label { font-size:13.5px; color:var(--ink); cursor:pointer; }
+  .toggle label { font-size:13.5px; color:var(--fg); cursor:pointer; }
 
   .hidden { display:none !important; }
 
   /* scenario cards */
   .scenarios { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   @media (max-width:560px) { .scenarios { grid-template-columns:1fr; } }
-  .scenario { text-align:left; background:var(--panel); border:1px solid var(--hairline); border-radius:8px; padding:11px 13px; cursor:pointer;
+  .scenario { text-align:left; background:var(--surface); border:1px solid var(--rule); border-radius:8px; padding:11px 13px; cursor:pointer;
     display:flex; flex-direction:column; gap:3px; font:inherit; color:inherit; transition:border-color .12s, background .12s; }
   .scenario:hover { border-color:var(--accent); }
-  .scenario.sel { border-color:var(--accent); background:var(--accent-bg); box-shadow:inset 3px 0 0 var(--accent); }
-  .scenario .sn { font-size:13.5px; font-weight:700; color:var(--ink); }
-  .scenario.sel .sn { color:var(--accent-deep); }
-  .scenario .sd { font-size:12px; color:var(--ink-soft); line-height:1.4; }
+  .scenario.sel { border-color:var(--accent); background:var(--accent-soft); box-shadow:inset 3px 0 0 var(--accent); }
+  .scenario .sn { font-size:13.5px; font-weight:600; color:var(--fg); }
+  .scenario.sel .sn { color:var(--accent-hover); }
+  .scenario .sd { font-size:12px; color:var(--fg-2); line-height:1.4; }
   .scenario .sm { font-size:10.5px; color:var(--muted); font-family:var(--mono); margin-top:2px; }
   .scenario-custom { font-size:12.5px; color:var(--muted); font-style:italic; margin-top:10px; }
-  .reset-link { font-size:12px; font-weight:700; color:var(--muted); text-decoration:none; border-bottom:1px dashed var(--muted); white-space:nowrap; }
+  .reset-link { font-size:12px; font-weight:600; color:var(--muted); text-decoration:none; border-bottom:1px dashed var(--muted); white-space:nowrap; }
   .reset-link:hover { color:var(--accent); border-bottom-color:var(--accent); text-decoration:none; }
 
   /* window preview (.win = the report's .wchip look) */
-  .preview .cap { font-size:12.5px; color:var(--ink-soft); margin-bottom:10px; line-height:1.5; }
-  .preview .cap b { color:var(--ink); }
+  .preview .cap { font-size:12.5px; color:var(--fg-2); margin-bottom:10px; line-height:1.5; }
+  .preview .cap b { color:var(--fg); }
   .wins { display:flex; flex-wrap:wrap; gap:6px; align-items:flex-end; }
-  .win { flex:0 0 auto; background:var(--panel); border:1px solid var(--hairline); border-radius:999px; padding:3px 10px;
+  .win { flex:0 0 auto; background:var(--surface); border:1px solid var(--rule); border-radius:999px; padding:3px 10px;
     display:inline-flex; align-items:baseline; gap:6px; white-space:nowrap; }
-  .win .o { font-size:11px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
-  .win .t { font-size:11px; color:var(--ink-soft); font-family:var(--mono); }
-  .win.target { background:var(--accent-bg); border-color:var(--accent); }
-  .win.target .o, .win.target .t { color:var(--accent-deep); }
+  .win .o { font-size:11px; font-weight:600; color:var(--fg); font-variant-numeric:tabular-nums; }
+  .win .t { font-size:11px; color:var(--fg-2); font-family:var(--mono); }
+  .win.target { background:var(--accent-soft); border-color:var(--accent); }
+  .win.target .o, .win.target .t { color:var(--accent-hover); }
   .win-more { align-self:center; font-size:12px; color:var(--muted); font-style:italic; }
 
   /* markers editor */
   .mk-row { display:grid; grid-template-columns:200px 1fr 36px; gap:8px; margin-bottom:8px; align-items:stretch; }
   @media (max-width:560px) { .mk-row { grid-template-columns:1fr; } }
-  .mk-x { border:1px solid var(--rule); background:var(--panel); border-radius:7px; color:var(--muted); cursor:pointer; font-size:17px; line-height:1; padding:0; }
+  .mk-x { border:1px solid var(--rule-strong); background:var(--surface); border-radius:7px; color:var(--muted); cursor:pointer; font-size:17px; line-height:1; padding:0; }
   .mk-x:hover { border-color:var(--crit); color:var(--crit); }
-  .mk-add { font:inherit; font-size:12.5px; font-weight:700; color:var(--ink-soft); background:var(--panel); border:1px dashed var(--rule);
+  .mk-add { font:inherit; font-size:12.5px; font-weight:600; color:var(--fg-2); background:var(--surface); border:1px dashed var(--rule-strong);
     border-radius:7px; padding:8px 14px; cursor:pointer; width:100%; }
   .mk-add:hover { border-color:var(--accent); color:var(--accent); }
 
   /* output column (sticky on desktop) */
-  .output { position:sticky; top:calc(var(--topbar-h) + 16px); }
-  .output .panel { margin-bottom:0; }
-  .summary { background:var(--info-bg); color:var(--info); border-radius:8px; padding:8px 12px; font-size:12.5px; margin:0 0 14px; line-height:1.5; }
+  .output { position:sticky; top:calc(var(--top-h) + 16px); }
+  .output .cpanel { margin-bottom:0; }
+  .summary { background:var(--accent-soft); color:var(--accent); border-radius:8px; padding:8px 12px; font-size:12.5px; margin:0 0 14px; line-height:1.5; }
   .summary b { color:inherit; }
   .tabs { display:flex; gap:6px; margin-bottom:12px; }
-  .tab { font:inherit; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:6px 12px; border-radius:8px; cursor:pointer;
-    border:1px solid var(--rule); background:var(--panel); color:var(--ink); transition:color .12s, background .12s, border-color .12s; }
+  .tab { font:inherit; font-size:13.5px; font-weight:500; padding:6px 12px; border-radius:8px; cursor:pointer;
+    border:1px solid var(--rule-strong); background:var(--surface); color:var(--fg); transition:color .12s, background .12s, border-color .12s; }
   .tab:hover { border-color:var(--accent); color:var(--accent); }
-  .tab.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .tab.on { background:var(--btn); color:#fff; border-color:var(--btn); }
   .codeblock { margin:0 0 12px; }
   .codeblock .cbhead { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:6px; }
-  .codeblock .cbhead .t { font-size:10.5px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); }
-  .copy { font:inherit; font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:3px 8px; border-radius:6px;
-    border:1px solid var(--hairline); background:var(--panel); color:var(--muted); cursor:pointer; white-space:nowrap;
-    transition:color .12s, border-color .12s; }
-  .copy:hover { color:var(--accent); border-color:var(--accent); }
-  .copy.done { color:var(--ok); border-color:var(--ok); }
-  .output pre { background:var(--panel); margin:0; }
+  .codeblock .cbhead .t { font:500 12.5px/1 var(--mono); color:var(--muted); }
+  .cbhead .copy { position:static; box-shadow:none; }
+  .output pre { margin:0; background:var(--code-bg); border:1px solid var(--rule); border-radius:var(--r-sm); padding:12px 14px; font:400 13px/1.65 var(--mono); color:var(--fg); overflow-x:auto; white-space:pre; }
   .notes { margin-top:4px; }
   .note-item { border-radius:8px; padding:8px 12px; font-size:12.5px; margin-bottom:8px; line-height:1.5; border:1px solid transparent; }
   .note-item code { background:rgba(0,0,0,.06); border-color:transparent; color:inherit; }
-  .note-err  { background:var(--crit-bg); color:var(--crit); }
-  .note-info { background:var(--warn-bg); color:var(--warn); border-color:var(--warn-border); }
+  .note-err  { background:var(--crit-soft); color:var(--crit); }
+  .note-info { background:var(--warn-soft); color:var(--warn); border-color:var(--warn-line); }
   .out-foot { font-size:12px; color:var(--muted); margin-top:12px; line-height:1.55; }
   .out-foot code, .help code { white-space:normal; overflow-wrap:anywhere; }
 
@@ -148,56 +147,70 @@
   @media (max-width:900px) {
     .output { position:static; scroll-margin-top:64px; }
     .jump-cmd { display:inline-flex; align-items:center; gap:7px; position:fixed; right:16px; bottom:16px; z-index:60;
-      background:var(--accent); color:#fff; border:1px solid var(--accent); border-radius:999px; font:inherit;
-      font-size:12px; font-weight:700; letter-spacing:.03em; padding:10px 16px; cursor:pointer; box-shadow:0 8px 20px -8px rgba(0,0,0,.45); }
-    .jump-cmd:hover { background:var(--accent-deep); border-color:var(--accent-deep); }
+      background:var(--btn); color:#fff; border:1px solid var(--btn); border-radius:999px; font:inherit;
+      font-size:12px; font-weight:600; letter-spacing:.03em; padding:10px 16px; cursor:pointer; box-shadow:0 8px 20px -8px rgba(0,0,0,.45); }
+    .jump-cmd:hover { background:var(--btn-hover); border-color:var(--btn-hover); }
     .jump-cmd:active { transform:translateY(1px); }
   }
+
+  .intro { color:var(--fg-2); max-width:46em; margin-bottom:6px; }
+  #build .doc-head { margin-bottom:10px; }
+  .output .cpanel { box-shadow:var(--shadow); border-top:3px solid var(--accent); }
+  .scenario, .cpanel, details.fold { box-shadow:none; }
 </style>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
 
-<div class="topbar">
+<header class="top">
   <div class="wrap">
-    <a class="brand" href="index.html"><span class="dot"></span><span class="long">AWR Timeline Comparison</span><span class="short">AWR TC</span></a>
-    <span class="rev">Configurator &middot; Rev 1.4.0</span>
-    <div class="quick" aria-label="Quick access">
-      <a class="ql demo" href="examples/demo_busy_db.html"><span class="g">&#9654;</span><span class="t">Demo report</span><span class="ts">Demo</span></a>
-      <a class="ql" href="index.html#s-install"><span class="g">&#8595;</span>Install</a>
-    </div>
-    <button type="button" class="menu-btn" aria-expanded="false" aria-controls="site-links">Contents</button>
-    <nav class="links" id="site-links" aria-label="Site">
-      <a href="index.html">Home</a>
-      <a href="index.html#fleet">Fleet</a>
-      <a href="index.html#single">Single DB</a>
-      <a href="index.html#examples">Examples</a>
-      <a href="configurator.html" class="on">Configurator</a>
+    <a class="brand" href="index.html" aria-label="AWR Timeline Comparison, home">
+      <svg width="26" height="20" viewBox="0 0 26 20" aria-hidden="true">
+        <rect x="0" y="10" width="3.5" height="10" rx="1" fill="currentColor" opacity=".55"/>
+        <rect x="5.5" y="7" width="3.5" height="13" rx="1" fill="currentColor" opacity=".55"/>
+        <rect x="11" y="11" width="3.5" height="9" rx="1" fill="currentColor" opacity=".55"/>
+        <rect x="16.5" y="8" width="3.5" height="12" rx="1" fill="currentColor" opacity=".55"/>
+        <rect x="22" y="0" width="4" height="20" rx="1" fill="var(--accent)"/>
+      </svg>
+      <span>AWR Timeline Comparison</span><span class="rev">v1.5.0</span>
+    </a>
+    <nav class="nav" aria-label="Site">
+      <a href="index.html#s-install">Quick start</a>
+      <a href="examples/demo_busy_db.html">Demo</a>
+      <a href="index.html#docs">Docs</a>
       <a href="cheatsheet.html">Cheat sheet</a>
-      <a class="mobile-only" href="https://github.com/davidbudac/awr_timeline_comparison">GitHub &#8599;</a>
+      <a href="configurator.html" aria-current="page">Configurator</a>
+      <a href="https://github.com/davidbudac/awr_timeline_comparison">GitHub</a>
     </nav>
-    <div class="tools">
-      <button type="button" class="theme-icon-btn" aria-label="Toggle dark mode" title="Toggle dark mode">
-        <svg class="icon-moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-        <svg class="icon-sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-      </button>
-      <a class="btn sm" href="https://github.com/davidbudac/awr_timeline_comparison">GitHub &#8599;</a>
-    </div>
+    <details class="menu">
+      <summary class="iconbtn" aria-label="Menu"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14"/></svg></summary>
+      <div class="sheet">
+        <a href="index.html#s-install">Quick start</a>
+        <a href="examples/demo_busy_db.html">Demo report</a>
+        <a href="index.html#docs">Docs</a>
+        <a href="cheatsheet.html">Cheat sheet</a>
+        <a href="configurator.html" aria-current="page">Configurator</a>
+        <a href="https://github.com/davidbudac/awr_timeline_comparison">GitHub</a>
+      </div>
+    </details>
+    <button class="iconbtn" type="button" data-theme-toggle aria-label="Switch light or dark theme">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 3a7 7 0 0 0 0 14z" fill="currentColor"/></svg>
+    </button>
   </div>
-</div>
+</header>
 
-<header class="page-hero" id="top">
+<main id="main" tabindex="-1">
+<header class="page-head">
   <div class="wrap">
-    <div class="meta-row"><span>AWR Timeline Comparison &middot; Configurator</span><span>Rev 1.4.0 &middot; September 2026 &middot; Oracle Database 19c</span></div>
-    <span class="eyebrow"><span class="dot"></span>Configurator &middot; runs in your browser</span>
-    <h1>Build your <em>run command</em></h1>
+    <span class="kicker">Configurator &middot; runs in your browser &middot; v1.5.0</span>
+    <h1>Build your run command</h1>
     <p class="lede">Connect, pick what to compare, and copy a ready-to-run
-        <code>run_awr_trend.sh</code> or SQL*Plus invocation &mdash; fine-tune any parameter if you want to.
-        Everything runs in your browser &mdash; nothing is sent anywhere. Prefer the terminal?
-        The shell wrapper has the same thing built in &mdash; run
+        <code>run_awr_trend.sh</code> or SQL*Plus invocation; fine-tune any parameter if you want to.
+        Everything runs in your browser; nothing is sent anywhere. Prefer the terminal?
+        The shell wrapper has the same thing built in: run
         <code>./run_awr_trend.sh --configure</code>.</p>
-    <div class="ctas"><a class="btn primary" href="#output">Your command</a><a class="btn" href="#step-compare">Pick a scenario</a><a class="btn ghost" href="cheatsheet.html">Cheat sheet</a></div>
-    <nav class="subnav" aria-label="On this page"><span class="muted mono" style="font-size:12px">Contents:</span>
+    <div class="cta"><a class="btn primary" href="#output">Your command</a><a class="btn" href="#step-compare">Pick a scenario</a><a class="btn" href="cheatsheet.html">Cheat sheet</a></div>
+    <nav class="chips" aria-label="On this page">
       <a href="#step-connect">1 &middot; Connect</a>
       <a href="#step-compare">2 &middot; What to compare</a>
       <a href="#step-tune">3 &middot; Fine-tune</a>
@@ -207,12 +220,12 @@
   </div>
 </header>
 
-<main id="main" tabindex="-1" class="wrap">
-
-<section class="ds" id="build">
-  <h2>Build the command <span class="h2sub">three steps; the command on the right updates live as you go</span></h2>
-<div class="body">
-  <p class="lede">
+<div class="page-body">
+<div class="wrap">
+<section id="build">
+  <div class="doc-head"><h2>Build the command</h2><p class="doc-sub">The command on the right updates live as you go.</p></div>
+<div>
+  <p class="intro">
     Three steps: <b>connect</b>, choose <b>what to compare</b>, and copy your command. Everything
     else has a sensible default &mdash; open <b>Fine-tune</b> if you want to adjust it.
   </p>
@@ -221,8 +234,8 @@
    <div class="leftcol">
 
     <!-- ============ 1 · CONNECT ============ -->
-    <div class="panel" id="step-connect">
-      <div class="ph"><span class="n">1 &middot;</span>Connect</div>
+    <div class="cpanel" id="step-connect">
+      <div class="ph"><span class="n">1</span>Connect</div>
       <div class="field">
         <label class="lbl" for="connect">Connect string</label>
         <input type="text" id="connect" class="mono" value="user/pw@svc" autocomplete="off" spellcheck="false">
@@ -233,8 +246,8 @@
     </div>
 
     <!-- ============ 2 · WHAT TO COMPARE ============ -->
-    <div class="panel" id="step-compare">
-      <div class="ph"><span class="n">2 &middot;</span>What do you want to compare?</div>
+    <div class="cpanel" id="step-compare">
+      <div class="ph"><span class="n">2</span>What do you want to compare?</div>
       <div class="psub">Pick the scenario closest to what you need &mdash; it fills in the windows, cadence and
         template in Fine-tune below. <a href="#" class="reset-link" id="reset_link">&#8634; Reset to defaults</a></div>
 
@@ -259,7 +272,7 @@
     <!-- ============ 3 · FINE-TUNE (collapsed) ============ -->
     <details class="fold" id="fold_tune">
       <summary id="step-tune">
-        <span class="ph"><span class="n">3 &middot;</span>Fine-tune<span class="opt">optional</span></span>
+        <span class="ph"><span class="n">3</span>Fine-tune<span class="opt">optional</span></span>
         <span class="chev">&#9656;</span>
       </summary>
       <div class="fold-body">
@@ -333,8 +346,8 @@
 
         <div class="field">
           <div class="toggle">
-            <input type="checkbox" id="debug">
-            <label for="debug">Print per-section progress markers to stdout (debug=Y)</label>
+            <input type="checkbox" id="debug" checked>
+            <label for="debug">Print per-section progress markers to stdout (debug=Y, the default)</label>
           </div>
           <div class="help">Timestamped one-liner per section while it runs &mdash; handy on a busy DB.
             The HTML report is byte-identical whether this is on or off.</div>
@@ -389,7 +402,7 @@
 
     <!-- ============ OUTPUT (right, sticky) ============ -->
     <aside class="output" id="output">
-      <div class="panel">
+      <div class="cpanel">
         <div class="ph">Your command</div>
         <div class="summary" id="out_summary"></div>
 
@@ -403,7 +416,7 @@
           <div class="codeblock">
             <div class="cbhead">
               <span class="t">run_awr_trend.sh</span>
-              <button type="button" class="copy" data-copy="out_shell">Copy</button>
+              <button class="copy" type="button" data-copy="out_shell"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg><span class="lbl">Copy</span></button>
             </div>
             <pre id="out_shell"></pre>
           </div>
@@ -416,7 +429,7 @@
           <div class="codeblock">
             <div class="cbhead">
               <span class="t">SQL*Plus session</span>
-              <button type="button" class="copy" data-copy="out_sql_interactive">Copy</button>
+              <button class="copy" type="button" data-copy="out_sql_interactive"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg><span class="lbl">Copy</span></button>
             </div>
             <pre id="out_sql_interactive"></pre>
           </div>
@@ -427,8 +440,8 @@
         <div class="notes" id="notes"></div>
 
         <div class="out-foot">
-          Output lands in <code>reports/awr_trend_&lt;DBID&gt;_&lt;timestamp&gt;_run&lt;id&gt;.html</code>.
-          New here? See <a href="index.html#install">Get started</a> or the
+          Output lands in <code>reports/awr_trend_&lt;db_name&gt;_&lt;dbid&gt;_&lt;YYYYMMDDHH24MI&gt;_run&lt;id&gt;.html</code>.
+          New here? See the <a href="index.html#s-install">Quick start</a> or the
           <a href="cheatsheet.html">cheat sheet</a>.
         </div>
       </div>
@@ -437,14 +450,25 @@
   </div>
 </div>
 </section>
-
+</div>
+</div>
 </main>
 
 <button type="button" class="jump-cmd" id="jump_cmd" aria-label="Jump to your command">&darr; Your command</button>
 
-<footer class="site"><div class="wrap"><div>AWR Timeline Comparison &mdash; <a href="index.html">&larr; Back to the project page</a>
-  &mdash; <a href="https://github.com/davidbudac/awr_timeline_comparison">github.com/davidbudac/awr_timeline_comparison</a>
-  &mdash; <a href="cheatsheet.html">Cheat sheet</a> &middot; <a href="index.html#install">Get started</a> &middot; <a href="index.html#examples">Examples</a></div></div></footer>
+<footer class="site">
+  <div class="wrap">
+    <span>AWR Timeline Comparison v1.5.0, fleet 0.7.0</span>
+    <nav aria-label="Footer">
+      <a href="index.html#s-install">Quick start</a>
+      <a href="examples/demo_busy_db.html">Demo report</a>
+      <a href="cheatsheet.html">Cheat sheet</a>
+      <a href="configurator.html">Configurator</a>
+      <a href="metric_policy.html">Scoring policy</a>
+      <a href="https://github.com/davidbudac/awr_timeline_comparison">GitHub</a>
+    </nav>
+  </div>
+</footer>
 
 <script src="assets/site.js"></script>
 <script>
@@ -458,7 +482,7 @@
    ===================================================================== */
 const DEFAULTS = {
   target_end:'AUTO', win_hours:'1', weeks_back:'4', top_n:'10', inst_num:'0',
-  step:'1', step_unit:'w', template:'comprehensive', debug:'N', marker_file:'', profile_days:'0',
+  step:'1', step_unit:'w', template:'comprehensive', debug:'Y', marker_file:'', profile_days:'0',
   // File-free inline markers (not a positional arg): the configurator builds
   // this "WHEN|LABEL;;..." string from the milestone rows and threads it
   // through the MARKERS env var (shell) / DEFINE markers (SQL*Plus).
@@ -896,7 +920,7 @@ function applyPreset(p){
   const s = Object.assign({
     temode:'auto', win_hours:DEFAULTS.win_hours, weeks_back:DEFAULTS.weeks_back,
     top_n:DEFAULTS.top_n, inst_num:DEFAULTS.inst_num, step:DEFAULTS.step,
-    step_unit:DEFAULTS.step_unit, template:DEFAULTS.template, debug:false, echarts:'',
+    step_unit:DEFAULTS.step_unit, template:DEFAULTS.template, debug:true, echarts:'',
     profile_days:DEFAULTS.profile_days
   }, p.set);
   document.querySelector('input[name="temode"][value="'+s.temode+'"]').checked = true;
@@ -926,18 +950,7 @@ function applyPreset(p){
 }
 
 /* ---------------------------------------------------------------- copy */
-function copyText(text, btn){
-  const done = () => { const o = btn.textContent; btn.textContent='Copied!'; btn.classList.add('done');
-    setTimeout(()=>{ btn.textContent=o; btn.classList.remove('done'); }, 1300); };
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(text).then(done, ()=>fallbackCopy(text,done));
-  } else fallbackCopy(text, done);
-}
-function fallbackCopy(text, done){
-  const ta = document.createElement('textarea'); ta.value=text;
-  ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta);
-  ta.select(); try{ document.execCommand('copy'); done(); }catch(e){} document.body.removeChild(ta);
-}
+/* Copy buttons (.copy[data-copy]) are handled by the shared assets/site.js. */
 
 /* ------------------------------------------------------- te segmented */
 function syncTeSeg(){
@@ -1002,12 +1015,6 @@ function init(){
     $('panel_shell').classList.toggle('hidden', tab!=='shell');
     $('panel_sql').classList.toggle('hidden', tab!=='sql');
   }));
-
-  // copy buttons (delegated by data-copy = element id)
-  document.addEventListener('click', e=>{
-    const btn = e.target.closest('.copy[data-copy]'); if(!btn) return;
-    copyText($(btn.getAttribute('data-copy')).textContent, btn);
-  });
 
   // mobile-only: jump to the generated command
   $('jump_cmd').addEventListener('click', ()=>{
