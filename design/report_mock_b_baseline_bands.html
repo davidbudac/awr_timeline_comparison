@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ORCLPRD week-over-week</title>
+<style>
+/* ---------------------------------------------------------------- tokens */
+:root{
+  --sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --bg:#F2F4F7; --surface:#FFFFFF; --surface-2:#F7F8FA; --hover:#F4F6F9;
+  --ink:#17202C; --ink-2:#465264; --ink-3:#657083; --ink-4:#A3ACB9;
+  --line:#E4E7EC; --line-2:#D0D6DE;
+  --zone1:#BEC7D2; --zone2:#DCE1E7; --track:#EEF0F3; --tick:#AAB3BF; --mean:#4F5B6C;
+  --bar:#C5CCD6; --bar-hi:#9AA4B2;
+  --crit:#BF2F29; --crit-dot:#D83A2F; --warn:#935700; --warn-dot:#E09B1C; --imp:#08777D;
+  --focus:#2F6FEB; --other:#BFC6CF; --flag:#5A6678;
+}
+@media (prefers-color-scheme: dark){
+  body:not(.light){
+    --bg:#0E1217; --surface:#151A21; --surface-2:#1A2029; --hover:#1B222C;
+    --ink:#E4E9F0; --ink-2:#AEB7C4; --ink-3:#8D98A8; --ink-4:#566070;
+    --line:#242B36; --line-2:#323B48;
+    --zone1:#4A5565; --zone2:#313A47; --track:#1F2630; --tick:#5C6778; --mean:#C3CBD6;
+    --bar:#3E4757; --bar-hi:#5A6475;
+    --crit:#FF8277; --crit-dot:#FF6255; --warn:#F2B552; --warn-dot:#F0A63A; --imp:#4CC7C4;
+    --focus:#7AA7FF; --other:#4A5462; --flag:#98A3B3;
+  }
+}
+body.dark{
+  --bg:#0E1217; --surface:#151A21; --surface-2:#1A2029; --hover:#1B222C;
+  --ink:#E4E9F0; --ink-2:#AEB7C4; --ink-3:#8D98A8; --ink-4:#566070;
+  --line:#242B36; --line-2:#323B48;
+  --zone1:#4A5565; --zone2:#313A47; --track:#1F2630; --tick:#5C6778; --mean:#C3CBD6;
+  --bar:#3E4757; --bar-hi:#5A6475;
+  --crit:#FF8277; --crit-dot:#FF6255; --warn:#F2B552; --warn-dot:#F0A63A; --imp:#4CC7C4;
+  --focus:#7AA7FF; --other:#4A5462; --flag:#98A3B3;
+}
+
+/* ---------------------------------------------------------------- base */
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{--row-bg:var(--surface);margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:underline;text-decoration-color:var(--line-2);text-underline-offset:3px}
+a:hover{text-decoration-color:var(--ink-3)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+button{font:inherit;color:inherit}
+.num,.tn{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono);font-size:12.5px}
+.muted{color:var(--ink-3)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+/* ---------------------------------------------------------------- mock note (outside the design) */
+.mock{background:#1F242C;color:#DDE2E8;font:12.5px/1.5 var(--sans);border-bottom:1px solid #000}
+.mock summary{cursor:pointer;padding:6px 16px;list-style:none;display:flex;gap:12px;align-items:baseline}
+.mock summary::-webkit-details-marker{display:none}
+.mock summary::before{content:"\25B8";color:#8B95A3;transition:transform .15s}
+.mock[open] summary::before{transform:rotate(90deg)}
+.mock summary b{color:#fff;font-weight:600}
+.mock summary span{color:#9AA4B1}
+.mock ul{margin:0;padding:0 16px 8px 40px;columns:2 520px;column-gap:48px}
+.mock li{margin:0 0 3px;break-inside:avoid}
+
+/* ---------------------------------------------------------------- shell */
+.shell{display:grid;grid-template-columns:208px minmax(0,1fr);min-height:100vh}
+.rail{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;padding:24px 12px 24px 16px;border-right:1px solid var(--line)}
+.rail .db{font-weight:600;font-size:14px;padding:0 8px}
+.rail .db small{display:block;font-weight:400;color:var(--ink-3);font-size:12px}
+.rail h3{font-size:12px;font-weight:500;color:var(--ink-3);margin:24px 8px 4px}
+.rail ol{list-style:none;margin:0;padding:0}
+.rail a{display:flex;justify-content:space-between;gap:8px;padding:4px 8px;border-radius:6px;text-decoration:none;color:var(--ink-2);font-size:13px;line-height:20px;position:relative}
+.rail a:hover{background:var(--hover);color:var(--ink)}
+.rail a.on{color:var(--ink);font-weight:500;background:var(--surface)}
+.rail a.on::before{content:"";position:absolute;left:-8px;top:6px;bottom:6px;width:2px;border-radius:1px;background:var(--ink)}
+.rail a span.n{color:var(--ink-3);font-variant-numeric:tabular-nums;font-weight:400}
+.rail .ref a{color:var(--ink-3)}
+main{padding:32px 40px 80px;max-width:1240px;min-width:0}
+
+/* ---------------------------------------------------------------- masthead */
+.mast{padding:0 0 8px}
+.idline{display:flex;flex-wrap:wrap;align-items:center;gap:4px 20px;color:var(--ink-3);font-size:13px}
+.idline b{color:var(--ink);font-weight:600;font-size:14px}
+.idline .sp{flex:1}
+.ctl{display:flex;gap:8px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:7px;padding:2px;background:var(--surface)}
+.seg button{border:0;background:none;padding:3px 12px;border-radius:5px;font-size:13px;color:var(--ink-2);cursor:pointer;line-height:20px}
+.seg button[aria-pressed="true"],.seg button[aria-selected="true"]{background:var(--ink);color:var(--surface)}
+.ibtn{width:30px;height:30px;border:1px solid var(--line-2);border-radius:7px;background:var(--surface);display:inline-grid;place-items:center;cursor:pointer;color:var(--ink-2)}
+.ibtn svg{width:16px;height:16px}
+h1{font-size:28px;line-height:36px;font-weight:600;letter-spacing:-.015em;margin:16px 0 0}
+.sub{color:var(--ink-2);margin:0}
+.verdict{margin-top:24px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px 24px 0;overflow:hidden}
+.v-top{display:grid;grid-template-columns:auto 1fr;gap:4px 24px;align-items:start}
+.v-n{font-size:28px;line-height:32px;font-weight:600;letter-spacing:-.02em;white-space:nowrap}
+.v-n small{display:block;font-size:13px;font-weight:400;color:var(--ink-3);letter-spacing:0;line-height:20px}
+.v-t{font-size:15px;line-height:24px;margin:2px 0 0;max-width:78ch}
+.counts{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:8px;font-size:13px;color:var(--ink-2)}
+.counts span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.dotk{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none}
+.dotk.large{background:var(--crit-dot)} .dotk.moderate{background:var(--warn-dot)}
+.dotk.typical{border:1.5px solid var(--ink-3)} .dotk.improved{border:2px solid var(--imp)}
+.wc{margin:16px -24px 0;border-top:1px solid var(--line)}
+.tl13{position:relative;display:block;height:18px}
+.tl13::before{content:"";position:absolute;left:10px;right:18px;top:8.5px;height:1px;background:var(--line-2)}
+.tl13 b{position:absolute;top:6px;width:1px;height:6px;background:var(--ink-4);left:calc(10px + (100% - 28px) * var(--x))}
+.tl13 i{position:absolute;top:9px;left:calc(10px + (100% - 28px) * var(--x));width:8px;height:8px;margin:-4px 0 0 -4px;transform:rotate(45deg);background:var(--ink-3);box-shadow:0 0 0 2px var(--surface)}
+.tl13 i.now{background:var(--ink);width:10px;height:10px;margin:-5px 0 0 -5px}
+.wc-row{display:grid;grid-template-columns:140px 208px minmax(240px,280px) minmax(0,1fr) auto;gap:0 20px;align-items:center;padding:10px 24px;border-bottom:1px solid var(--line);min-height:52px}
+.wc-row:last-child{border-bottom:0}
+.wc-k{font-weight:600}
+.wc-v{font-size:13px;line-height:18px}
+.wc-v b{font-weight:600;font-size:14px}
+.wc-n{font-size:13px;line-height:18px;color:var(--ink-2)}
+.wc-a{font-size:13px;color:var(--ink-2);white-space:nowrap}
+.stack2{display:grid;gap:3px}
+.stack2 .bl{display:grid;grid-template-columns:48px 1fr;align-items:center;gap:4px;font-size:11px;color:var(--ink-3);line-height:14px}
+.legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 20px;margin:0 -24px;padding:10px 24px 12px;font-size:12.5px;color:var(--ink-2);border-top:1px solid var(--line);background:var(--surface-2);--row-bg:var(--surface-2)}
+.legend .lg-b{width:220px;flex:none}
+.legend .lg-k{display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.legend .lg-t{flex:1 1 320px;color:var(--ink-3);min-width:0}
+
+/* ---------------------------------------------------------------- sections */
+.pn{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-top:24px;padding:20px 24px 16px;scroll-margin-top:16px}
+.sh{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 24px;align-items:baseline}
+.sh-t{display:flex;align-items:center;gap:8px;min-width:0}
+.sh h2{font-size:17px;line-height:24px;font-weight:600;margin:0;letter-spacing:-.01em}
+.sh .sum{grid-column:1/2;margin:0;color:var(--ink-2);max-width:86ch}
+.sh .meta{grid-column:2;grid-row:1;display:flex;gap:16px;align-items:center;font-size:13px;color:var(--ink-2);white-space:nowrap}
+.sh .meta span{display:inline-flex;align-items:center;gap:6px}
+.info{width:20px;height:20px;border-radius:50%;border:1px solid var(--line-2);background:none;color:var(--ink-3);font:600 11px/1 Georgia,serif;cursor:pointer;display:inline-grid;place-items:center;padding:0}
+.info[aria-expanded="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.about{margin:12px 0 0;padding:12px 16px;background:var(--surface-2);border-radius:8px;font-size:13px;color:var(--ink-2);max-width:100ch}
+.about p{margin:0 0 6px}.about p:last-child{margin:0}
+.about code{font-family:var(--mono);font-size:12px}
+.body{margin-top:16px}
+.ref-div{margin:48px 0 0;display:flex;align-items:baseline;gap:16px;padding-bottom:8px;border-bottom:1px solid var(--line-2)}
+.ref-div h2{font-size:15px;font-weight:600;margin:0}
+.ref-div p{margin:0;color:var(--ink-3);font-size:13px}
+.pn.ref{background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:20px 0 16px;margin:0}
+.pn.ref .tw{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:0 12px}
+.subnote{font-size:12.5px;color:var(--ink-3);margin:10px 0 0}
+
+/* ---------------------------------------------------------------- the band glyph (CSS only, one custom property) */
+.bd{--x:.3333;position:relative;display:block;height:18px;min-width:120px}
+.bd::before{content:"";position:absolute;left:10px;right:18px;top:5px;height:8px;border-radius:4px;
+  background:linear-gradient(90deg,var(--track) 16.667%,var(--zone2) 16.667% 25%,var(--zone1) 25% 41.667%,var(--zone2) 41.667% 50%,var(--track) 50%)}
+.bd::after{content:"";position:absolute;left:10px;right:18px;top:2px;height:14px;pointer-events:none;opacity:.9;
+  background:linear-gradient(90deg,
+   transparent calc(8.333% - .5px),var(--tick) 0 calc(8.333% + .5px),
+   transparent 0 calc(16.667% - .5px),var(--tick) 0 calc(16.667% + .5px),
+   transparent 0 calc(33.333% - .5px),var(--mean) 0 calc(33.333% + .5px),
+   transparent 0 calc(50% - .5px),var(--tick) 0 calc(50% + .5px),
+   transparent 0 calc(58.333% - .5px),var(--tick) 0 calc(58.333% + .5px),
+   transparent 0)}
+.bd>i{position:absolute;top:9px;left:calc(10px + (100% - 28px) * var(--x));width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;z-index:1;
+  --dc:var(--ink-3);background:var(--row-bg);border:1.5px solid var(--dc);box-shadow:0 0 0 2px var(--row-bg)}
+.bd.s-large>i{--dc:var(--crit-dot);background:var(--dc);border:0;width:11px;height:11px;margin:-5.5px 0 0 -5.5px}
+.bd.s-moderate>i{--dc:var(--warn-dot);background:var(--dc);border:0}
+.bd.s-improved>i{--dc:var(--imp);border-width:2px}
+.bd.twn>i{opacity:.5}
+.bd.po>i::after,.bd.pu>i::after{content:"";position:absolute;top:50%;margin-top:-4px;border:4px solid transparent}
+.bd.po>i::after{left:calc(100% + 3px);border-left:5px solid var(--dc);border-right:0}
+.bd.pu>i::after{right:calc(100% + 3px);border-right:5px solid var(--dc);border-left:0}
+.bd .ov{position:absolute;top:1px;font:500 11px/16px var(--sans);font-variant-numeric:tabular-nums;color:var(--ink-2);background:var(--row-bg);padding:0 3px;border-radius:3px;white-space:nowrap;z-index:1}
+.bd.po .ov{right:32px}.bd.pu .ov{left:32px}
+.bd.s-flat::before{background:repeating-linear-gradient(135deg,var(--zone1) 0 1.5px,transparent 1.5px 5px),var(--track)}
+.bd.s-flat .ov{left:50%;transform:translateX(-50%);color:var(--ink-3)}
+.bd.fl::before{background:repeating-linear-gradient(135deg,var(--zone1) 0 1.5px,transparent 1.5px 4px) 16.667% 0/33.333% 100% no-repeat,var(--track)}
+.bd.na::before,.bd.na::after{opacity:.35}
+.bd.na .ov{left:50%;transform:translateX(-50%);color:var(--ink-3);font-weight:400}
+.bd-ax{position:relative;display:block;height:14px;margin-top:2px}
+.bd-ax em{position:absolute;left:calc(10px + (100% - 28px) * var(--x));transform:translateX(-50%);font-style:normal;font-size:11px;line-height:14px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.bd-ax em.end{transform:translateX(-100%)}
+
+/* ---------------------------------------------------------------- band tables */
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;position:relative}
+.bt{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;font-variant-numeric:tabular-nums}
+.bt>thead>tr>th{font-weight:500;color:var(--ink-3);text-align:left;font-size:12px;line-height:16px;padding:0 10px 6px;border-bottom:1px solid var(--line-2);white-space:nowrap;vertical-align:bottom}
+.bt>thead>tr>th.num{text-align:right}
+.bt>thead>tr>th[data-sort]{cursor:pointer;user-select:none}
+.bt>thead>tr>th[data-sort]:hover{color:var(--ink)}
+.bt th[aria-sort="descending"] .thl::after{content:" \2193"}
+.bt th[aria-sort="ascending"] .thl::after{content:" \2191"}
+.bt>tbody>tr>td{height:36px;padding:0 10px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--row-bg)}
+.bt tr{--row-bg:var(--surface)}
+.pn.ref .bt tr{--row-bg:var(--surface)}
+.bt>tbody>tr:hover{--row-bg:var(--hover)}
+.bt>tbody>tr>td.num{text-align:right}
+.bt .c-band{width:236px;min-width:236px;padding:0 4px}
+.bt .c-cur{width:1%}
+.bt .c-rng{width:1%;color:var(--ink-2)}
+.bt .c-d{width:1%}
+.bt .c-tr{width:96px}
+.bt .c-x{width:36px;padding:0 4px;text-align:center}
+.bt .u{color:var(--ink-3);margin-left:3px;font-size:12px}
+.c-name{position:relative;padding-left:16px!important}
+tr.lead .c-name{font-weight:600}
+tr.mem .c-name{padding-left:32px!important}
+tr.twin .c-name{padding-left:32px!important;color:var(--ink-3)}
+tr.twin td,tr.twin0 td{color:var(--ink-3)}
+tr.mem .c-name::after,tr.twin .c-name::after{content:"";position:absolute;left:18px;top:0;height:50%;width:8px;border-left:1px solid var(--line-2);border-bottom:1px solid var(--line-2);border-bottom-left-radius:3px}
+tr.f-large .c-name::before,tr.f-moderate .c-name::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:2px;border-radius:1px;background:var(--crit-dot)}
+tr.f-moderate .c-name::before{background:var(--warn-dot)}
+.tag{display:inline-block;font-size:11px;line-height:16px;padding:0 6px;border:1px solid var(--line-2);border-radius:4px;color:var(--ink-3);font-weight:400;margin-left:8px;vertical-align:1px}
+.sw{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:8px;vertical-align:0}
+.d{white-space:nowrap}
+.d.s-large{color:var(--crit);font-weight:600}
+.d.s-moderate{color:var(--warn);font-weight:600}
+.d.s-improved{color:var(--imp);font-weight:600}
+.d.s-typical,.d.s-flat,.d.s-na{color:var(--ink-3)}
+.imm{display:block;font-size:11px;line-height:12px;color:var(--ink-3);font-weight:400}
+.xb{width:28px;height:28px;border:0;background:none;border-radius:6px;cursor:pointer;color:var(--ink-3);display:inline-grid;place-items:center}
+.xb:hover{background:var(--line);color:var(--ink)}
+.xb svg{width:14px;height:14px;transition:transform .15s}
+.xb[aria-expanded="true"] svg{transform:rotate(90deg)}
+.bt>tbody>tr.xr>td{height:auto;padding:0;background:var(--surface-2)}
+tr.xr:hover{--row-bg:var(--surface)}
+.xp{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;padding:16px 16px 16px 32px;white-space:normal}
+.xp dl{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;margin:0;font-size:13px;align-content:start}
+.xp dt{color:var(--ink-3)} .xp dd{margin:0}
+.xp .cc{overflow-x:auto}
+.xp .sqltext{grid-column:1/-1;font-family:var(--mono);font-size:12px;line-height:18px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 12px;white-space:pre-wrap}
+.mini{border-collapse:collapse;font-size:12.5px;margin-top:8px;font-variant-numeric:tabular-nums}
+.mini th,.mini td{padding:4px 12px 4px 0;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+.mini th{font-weight:500;color:var(--ink-3)}
+tbody.nrm{display:none}
+tbody.nrm.open{display:table-row-group}
+.more{margin:8px 0 0;border:0;background:none;color:var(--ink-2);font-size:13px;cursor:pointer;padding:6px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:8px}
+.more:hover{background:var(--hover);color:var(--ink)}
+.more .dotk{width:8px;height:8px}
+.sql{display:flex;align-items:baseline;gap:10px;max-width:320px;min-width:0}
+.sql .sid{font-family:var(--mono);font-size:12.5px;color:var(--ink);font-weight:500}
+.sql .mod{color:var(--ink-2);flex:none}
+.sql .txt{color:var(--ink-3);font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.rk{color:var(--ink-3);width:1%}
+.pl{color:var(--ink-2);font-size:12.5px}
+.pl b{font-weight:500;color:var(--ink)}
+.flags{display:flex;gap:6px}
+.flags .tag{margin:0}
+
+/* sparkline / charts */
+svg.sp{display:block;overflow:visible}
+.sp-z{fill:var(--zone2);opacity:.55}
+.sp-l{fill:none;stroke:var(--ink-4);stroke-width:1.25;stroke-linejoin:round;stroke-linecap:round}
+.sp-c{stroke:var(--row-bg);stroke-width:1.5;fill:var(--ink-3)}
+.sp-c.s-large{fill:var(--crit-dot)} .sp-c.s-moderate{fill:var(--warn-dot)} .sp-c.s-improved{fill:var(--imp)}
+.cb{fill:var(--bar)} .cb.cur{fill:var(--ink-2)}
+.cdot{fill:var(--ink-3);stroke:var(--surface-2);stroke-width:2} .cdot.s-large{fill:var(--crit-dot)} .cdot.s-moderate{fill:var(--warn-dot)} .cdot.s-improved{fill:var(--imp)}
+.cz1{fill:var(--zone1);opacity:.6} .cz2{fill:var(--zone2)}
+.cm{stroke:var(--mean);stroke-width:1;stroke-dasharray:none}
+.ct{font:11px var(--sans);fill:var(--ink-3);font-variant-numeric:tabular-nums}
+.ct.v{fill:var(--ink-2);paint-order:stroke;stroke:var(--surface-2);stroke-width:3px;stroke-linejoin:round} .ct.cur{fill:var(--ink);font-weight:600}
+.cf{stroke:var(--flag);stroke-width:1}
+.cft{font:11px var(--sans);fill:var(--flag)}
+.cfh{fill:var(--flag)}
+
+/* ---------------------------------------------------------------- headline tiles */
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.tile{background:var(--surface);padding:16px 20px 14px;--row-bg:var(--surface);display:grid;grid-template-columns:1fr auto;gap:0 12px}
+.tile .tl{font-size:13px;color:var(--ink-2)}
+.tile .td{text-align:right;font-size:13px}
+.tile .tv{font-size:26px;line-height:36px;font-weight:600;letter-spacing:-.02em;align-self:end}
+.tile .tv .u{font-size:13px;font-weight:400;color:var(--ink-3);letter-spacing:0;margin-left:4px}
+.tile .ts{align-self:end;padding-bottom:6px}
+.tile .bd{grid-column:1/-1;margin:8px 0 4px}
+.tile .tn1{font-size:12.5px;color:var(--ink-3)}
+.tile .tz{font-size:12.5px;color:var(--ink-3);text-align:right}
+
+/* ---------------------------------------------------------------- ASH chart */
+.lgd{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;color:var(--ink-2);margin:12px 0 4px}
+.lgd span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.lgd .sw{margin:0}
+.ashw{position:relative}
+#ash-svg{display:block;width:100%}
+.wc-CPU{fill:#3FB344}.wc-UIO{fill:#4A90D9}.wc-NET{fill:#967259}.wc-COM{fill:#E89B40}.wc-OTH{fill:var(--other)}
+.ar{stroke:var(--surface);stroke-width:1;stroke-linejoin:round}
+.gl{stroke:var(--line);stroke-width:1}
+.ax{stroke:var(--line-2);stroke-width:1}
+.at{font:11px var(--sans);fill:var(--ink-3);font-variant-numeric:tabular-nums}
+.at.b{fill:var(--ink);font-weight:600}
+.wt{stroke:var(--ink-3);stroke-width:1}
+.wt.cur{stroke:var(--ink);stroke-width:2}
+.curband{fill:var(--ink);opacity:.06}
+.wd{fill:var(--surface);stroke:var(--ink-2);stroke-width:1.5}
+.wd.cur{fill:var(--crit-dot);stroke:var(--surface);stroke-width:2}
+.xh{stroke:var(--ink-3);stroke-width:1;opacity:.7}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line-2);border-radius:8px;padding:8px 10px;font-size:12px;line-height:18px;box-shadow:0 4px 16px rgba(15,20,30,.12);min-width:170px;display:none;z-index:5;font-variant-numeric:tabular-nums}
+.tip b{font-weight:600}
+.tip .r{display:flex;justify-content:space-between;gap:16px}
+.tip .r span{display:inline-flex;align-items:center;gap:6px}
+
+/* ---------------------------------------------------------------- parameters */
+.strip{display:inline-flex;gap:3px;vertical-align:middle}
+.strip i{width:10px;height:14px;border-radius:2px;background:var(--zone1);display:block}
+.strip i.df{background:none;box-shadow:inset 0 0 0 1.5px var(--ink-4)}
+.strip i.cur{outline:1.5px solid var(--ink);outline-offset:1px}
+.pv{font-variant-numeric:tabular-nums}
+.chg::before{content:"\25C6";color:var(--ink);font-size:9px;margin-right:6px;vertical-align:1px}
+
+/* ---------------------------------------------------------------- reference stubs */
+.stubs{margin-top:8px}
+.stub{border-bottom:1px solid var(--line)}
+.stub summary{display:grid;grid-template-columns:16px 200px minmax(0,1fr) 200px;gap:0 16px;align-items:center;padding:10px 0;cursor:pointer;list-style:none;--row-bg:var(--bg)}
+.stub summary::-webkit-details-marker{display:none}
+.stub summary::before{content:"\25B8";color:var(--ink-3);font-size:11px;transition:transform .15s}
+.stub[open] summary::before{transform:rotate(90deg)}
+.stub .st-t{font-weight:500}
+.stub .st-s{color:var(--ink-2);font-size:13px;min-width:0}
+.stub .st-b{padding:0 0 12px 32px;font-size:13px;color:var(--ink-3)}
+.pn.ref .sh h2{font-size:15px}
+footer{margin-top:40px;font-size:12.5px;color:var(--ink-3)}
+
+/* ---------------------------------------------------------------- tabs */
+.tabs{margin:14px 0 10px}
+.tabpanel[hidden]{display:none}
+
+/* ---------------------------------------------------------------- responsive */
+@media (max-width:1180px){
+  .wc-row{grid-template-columns:140px 200px minmax(0,1fr) auto}
+  .wc-n{grid-column:3/4}
+  .wc-v{grid-column:3/4;grid-row:1}
+  .wc-n{grid-row:2}
+  .wc-a{grid-row:1/3;grid-column:4}
+  .wc-k,.wc-g{grid-row:1/3}
+}
+@media (max-width:980px){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .rail{position:sticky;top:0;z-index:10;height:auto;display:flex;align-items:center;gap:12px;padding:8px 16px;border-right:0;border-bottom:1px solid var(--line);background:var(--bg);overflow-x:auto}
+  .rail .db small,.rail h3{display:none}
+  .rail ol{display:flex;gap:2px}
+  .rail a{white-space:nowrap}
+  .rail a.on::before{left:8px;right:8px;top:auto;bottom:0;width:auto;height:2px}
+  main{padding:24px 16px 64px}
+  .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .xp{grid-template-columns:minmax(0,1fr);padding-left:16px}
+}
+@media (max-width:700px){
+  h1{font-size:22px;line-height:28px}
+  .v-top{grid-template-columns:1fr}
+  .verdict{padding:16px 16px 4px}
+  .wc{margin:12px -16px 0}
+  .wc-row{grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:12px 16px}
+  .wc-k{grid-row:1;grid-column:1}
+  .wc-a{grid-row:1;grid-column:2}
+  .wc-g{grid-row:2;grid-column:1/-1}
+  .wc-v{grid-row:3;grid-column:1/-1}
+  .wc-n{grid-row:4;grid-column:1/-1}
+  .tiles{grid-template-columns:minmax(0,1fr)}
+  .pn{padding:16px}
+  .sh{grid-template-columns:minmax(0,1fr)}
+  .sh .meta{grid-column:1;grid-row:auto;flex-wrap:wrap;gap:4px 12px;margin-top:4px}
+  .legend .lg-b{width:100%}
+  /* band tables collapse into two-line grid rows (child selectors: nested detail tables stay tables) */
+  .bt.rsp,.bt.rsp>tbody{display:block}
+  .bt.rsp>tbody.nrm{display:none}
+  .bt.rsp>tbody.nrm.open{display:block}
+  .bt.rsp>thead{display:none}
+  .bt.rsp>tbody>tr{display:grid;grid-template-columns:minmax(0,1fr) 76px 36px;align-items:center;border-bottom:1px solid var(--line);background:var(--row-bg);padding:6px 0}
+  .bt.rsp>tbody>tr>td{display:block;height:auto;border:0;padding:2px 8px;background:none;width:auto}
+  .bt.rsp>tbody>tr>td.c-name,.bt.rsp>tbody>tr>td.c-sql{grid-column:1;grid-row:1;white-space:normal}
+  .bt.rsp>tbody>tr>td.c-d{grid-column:2;grid-row:1;text-align:right;padding-right:0}
+  .bt.rsp>tbody>tr>td.c-x{grid-column:3;grid-row:1}
+  .bt.rsp>tbody>tr>td.c-band{grid-column:1/-1;grid-row:2;width:auto;min-width:0}
+  .bt.rsp>tbody>tr>td.c-cur{grid-column:1/-1;grid-row:3;text-align:left;padding-left:16px;justify-self:start}
+  .bt.rsp>tbody>tr>td.c-rng{grid-column:1/-1;grid-row:3;text-align:right;justify-self:end}
+  .bt.rsp>tbody>tr>td.c-rng::before{content:"normal ";color:var(--ink-3)}
+  .bt.rsp>tbody>tr>td.c-rng.muted::before{content:none}
+  .bt.rsp>tbody>tr>td.c-tr,.bt.rsp>tbody>tr>td.rk,.bt.rsp>tbody>tr>td.c-pl,.bt.rsp>tbody>tr>td.c-fl:empty{display:none}
+  .bt.rsp>tbody>tr>td.c-fl{grid-column:1/-1;grid-row:4;padding-left:16px}
+  .bt.rsp>tbody>tr.mem>td.c-cur,.bt.rsp>tbody>tr.twin>td.c-cur{padding-left:32px}
+  .bt.rsp>tbody>tr.xr{display:block;padding:0}
+  .bt.rsp>tbody>tr.xr>td{display:block}
+  .sql .mod{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sql{flex-wrap:wrap;gap:0 8px;max-width:none}
+  .sql .txt{flex-basis:100%;white-space:nowrap}
+  .stub summary{grid-template-columns:16px minmax(0,1fr);gap:2px 8px}
+  .stub .st-s{grid-column:2}
+  .stub summary .bd{grid-column:2}
+  .mock ul{columns:1}
+}
+</style>
+<script>
+(function(){try{var t=localStorage.getItem('awr-theme');if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme-pref',t);}}catch(e){}})();
+</script>
+</head>
+<body class="normal">
+<details class="mock" open>
+  <summary><b>Mock B · one visual grammar: the baseline band</b><span>design mockup on the real demo data, not the generated report</span></summary>
+  <ul>
+    <li>One glyph for every current-vs-prior comparison: a dot on a fixed σ scale over the shaded prior normal.</li>
+    <li>Gone: hero bar strips, heat-tinted window columns, %Δ bars, heatmaps. Per-window values open per row.</li>
+    <li>Colour only on the dot, the Δ text and a 2 px row marker; wait-class colour only on swatches and ASH.</li>
+    <li>Each fact said once: verdict + 4 “what changed” rows, one findings table by family, 43 normal rows folded.</li>
+    <li>ASH: one smoothed chart, 4 classes in colour, the 13 compared hours as dots, flags that never collide.</li>
+    <li>One section header (title, plain summary, counts, ⓘ for source and method); reference below a divider.</li>
+  </ul>
+</details>
+
+<div class="shell">
+<nav class="rail" aria-label="Report sections">
+  <div class="db">ORCLPRD<small>Week-over-week, Thu 09:00</small></div>
+  <h3>Answer</h3>
+  <ol>
+    <li><a href="#top">Summary</a></li>
+    <li><a href="#headline">Headline metrics</a></li>
+    <li><a href="#findings">Findings <span class="n">9</span></a></li>
+    <li><a href="#ash">Active sessions</a></li>
+    <li><a href="#topsql">Top SQL <span class="n">2</span></a></li>
+    <li><a href="#sqlmon">SQL Monitor <span class="n">1</span></a></li>
+    <li><a href="#params">Parameters <span class="n">4</span></a></li>
+  </ol>
+  <h3>Reference</h3>
+  <ol class="ref">
+    <li><a href="#waits-fg">Foreground waits <span class="n">4</span></a></li>
+    <li><a href="#load">Load profile</a></li>
+    <li><a href="#metrics">System metrics</a></li>
+    <li><a href="#waits-bg">Background waits</a></li>
+    <li><a href="#seg">Segment I/O</a></li>
+    <li><a href="#file">File I/O</a></li>
+    <li><a href="#day">Day profile</a></li>
+    <li><a href="#util">Utilization</a></li>
+    <li><a href="#dbtime">DB time, full span</a></li>
+    <li><a href="#sqlash">Top SQL activity</a></li>
+    <li><a href="#windows">Compared windows</a></li>
+  </ol>
+</nav>
+
+<main id="main">
+<header class="mast" id="top">
+  <div class="idline">
+    <b>ORCLPRD</b>
+    <span>DBID 1483726519</span>
+    <span>prd-ora-01.corp.example</span>
+    <span>Oracle 19.0.0.0</span>
+    <span class="sp"></span>
+    <span>Generated 10 Sep 2026, 10:15 +02:00 by AWR_READER (read-only)</span>
+    <span class="ctl">
+      <button class="ibtn" id="theme" type="button" aria-label="Switch colour theme" title="Switch colour theme"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor"/></svg></button>
+      <span class="seg" role="group" aria-label="View">
+        <button type="button" id="mode-normal" aria-pressed="true">Normal</button>
+        <button type="button" id="mode-full" aria-pressed="false">Full</button>
+      </span>
+    </span>
+  </div>
+  <h1>Thu 10 Sep, 09:00–10:00 vs 12 prior Thursdays</h1>
+  <p class="sub">Same hour every week back to Thu 18 Jun. All 13 one-hour windows valid, snapshots 41417 to 43434.</p>
+
+  <div class="verdict" aria-labelledby="v-h">
+    <div class="v-top">
+      <div class="v-n" id="v-h">9 findings<small>of 59 metrics scored</small></div>
+      <div>
+        <p class="v-t">Physical reads are 5× normal and DB time is up 80%, almost all of it wait (User I/O, Network) rather than CPU. The jump coincides with a new plan for <span class="mono">7k2m9dx4qp1zb</span>, first seen an hour after Release 4.2 on 8 Sep.</p>
+        <div class="counts">
+          <span><i class="dotk large"></i>10 large</span>
+          <span><i class="dotk moderate"></i>1 moderate</span>
+          <span><i class="dotk typical"></i>43 normal</span>
+          <span class="muted">5 duplicate twins folded into their family</span>
+        </div>
+      </div>
+    </div>
+    <div class="wc" role="list" aria-label="What changed" id="wc"></div>
+    <div class="legend" id="legend"></div>
+  </div>
+</header>
+
+<section class="pn" id="headline" aria-labelledby="h-headline">
+  <div class="sh">
+    <div class="sh-t"><h2 id="h-headline">Headline metrics</h2><button class="info" aria-expanded="false" aria-controls="a-headline" aria-label="About headline metrics">i</button></div>
+    <p class="sum">Four of the six headline numbers are far outside their normal range; redo and hard parses are normal.</p>
+    <div class="meta"><span><i class="dotk large"></i>4 large</span><span><i class="dotk typical"></i>2 normal</span></div>
+  </div>
+  <div class="about" id="a-headline" hidden><p>Six fixed metrics from <code>DBA_HIST_SYSSTAT</code> and <code>DBA_HIST_SYSMETRIC_SUMMARY</code>, each scored exactly like the findings table: z = (current − mean) ÷ max(σ, 2% of mean) over the 12 prior windows.</p><p>The trend line shows the 13 windows oldest to newest; the shaded strip behind it is the same normal range (mean ± 2σ) that the band shades.</p></div>
+  <div class="body tiles" id="tiles"></div>
+</section>
+
+<section class="pn" id="findings" aria-labelledby="h-findings">
+  <div class="sh">
+    <div class="sh-t"><h2 id="h-findings">Findings</h2><button class="info" aria-expanded="false" aria-controls="a-findings" aria-label="About findings">i</button></div>
+    <p class="sum">Reads dominate: long-table scans ×30, physical reads ×5.4, logical reads ×4.7. DB time, wait ratio and response time follow; CPU does not.</p>
+    <div class="meta"><span><i class="dotk large"></i>10 large</span><span><i class="dotk moderate"></i>1 moderate</span><span><i class="dotk typical"></i>43 normal</span></div>
+  </div>
+  <div class="about" id="a-findings" hidden><p>Load profile (<code>DBA_HIST_SYSSTAT</code>, end − begin ÷ seconds), system metrics (<code>DBA_HIST_SYSMETRIC_SUMMARY</code>) and foreground wait classes (AAS), each compared with the same hour in the 12 prior valid windows.</p><p>z = (current − mean) ÷ max(σ, 2% of mean). A move is large beyond 3σ and moderate beyond 2σ, but only when it is material (clears the metric's % and absolute floors in <code>metric_policy.plsql</code>) and in the bad direction; otherwise it is normal. Rows are grouped by family: the lead row carries the family, its relatives are indented, and twins (the same counter seen through another view) are muted.</p></div>
+  <div class="body">
+    <div class="tw"><table class="bt rsp" id="t-find" aria-describedby="h-findings"></table></div>
+    <button class="more" type="button" data-for="t-find" aria-expanded="false"></button>
+  </div>
+</section>
+
+<section class="pn" id="ash" aria-labelledby="h-ash">
+  <div class="sh">
+    <div class="sh-t"><h2 id="h-ash">Active sessions over the whole span</h2><button class="info" aria-expanded="false" aria-controls="a-ash" aria-label="About the active sessions chart">i</button></div>
+    <p class="sum">User I/O jumps from the evening of Release 4.2 (8 Sep) on. The Current hour ran 21.4 active sessions; the 12 prior Thursdays at 09:00 ran 10.5 to 14.0.</p>
+    <div class="meta"><span>18 Jun to 10 Sep</span></div>
+  </div>
+  <div class="about" id="a-ash" hidden><p><code>DBA_HIST_ACTIVE_SESS_HISTORY</code>, samples ÷ 360 per hour, averaged into 6-hour buckets and then smoothed with a 24-hour rolling mean so the daily cycle does not hide the trend. Idle waits excluded; on-CPU samples shown as CPU.</p><p>The dots are the unsmoothed 09:00–10:00 hour in each compared window, the same hour the rest of the report scores. Application, System I/O, Concurrency, Other, Configuration and Scheduler are merged into grey.</p></div>
+  <div class="lgd" id="ash-lgd"></div>
+  <div class="ashw" id="ashw"><svg id="ash-svg" role="img" aria-label="Stacked active sessions by wait class, 18 June to 10 September, with the 13 compared hours as dots"></svg><div class="tip" id="ash-tip"></div></div>
+</section>
+
+<section class="pn" id="topsql" aria-labelledby="h-topsql">
+  <div class="sh">
+    <div class="sh-t"><h2 id="h-topsql">Top SQL by elapsed time</h2><button class="info" aria-expanded="false" aria-controls="a-topsql" aria-label="About top SQL">i</button></div>
+    <p class="sum"><span class="mono">7k2m9dx4qp1zb</span> took 27.9k s this hour, 4.2× its normal, on a new plan. <span class="mono">n7t3q5xc1yj4g</span> only exists since Release 4.1 and is now second.</p>
+    <div class="meta"><span><i class="dotk large"></i>1 large</span><span><i class="dotk moderate"></i>1 moderate</span><span><i class="dotk typical"></i>8 normal</span></div>
+  </div>
+  <div class="about" id="a-topsql" hidden><p>Top 10 statements by elapsed time in the Current window, from <code>DBA_HIST_SQLSTAT</code> <code>ELAPSED_TIME_DELTA</code>. The band compares this hour's elapsed time with the same statement in the prior windows where it made the top 10 (n shown in the details). Mock note: this per-statement z is derived for the mock; today's report ranks statements without scoring them.</p><p>Also ranked by CPU, buffer gets, physical reads and executions in the Full view.</p></div>
+  <div class="body">
+    <div class="tw"><table class="bt rsp" id="t-sql"></table></div>
+  </div>
+</section>
+
+<section class="pn" id="sqlmon" aria-labelledby="h-sqlmon">
+  <div class="sh">
+    <div class="sh-t"><h2 id="h-sqlmon">SQL Monitor</h2><button class="info" aria-expanded="false" aria-controls="a-sqlmon" aria-label="About SQL Monitor">i</button></div>
+    <p class="sum">One statement ran slower than normal: <span class="mono">7k2m9dx4qp1zb</span> peaked at 8.02 s on its new plan. 13,205 captured executions across 9 statements.</p>
+    <div class="meta"><span><i class="dotk large"></i>1 large</span><span><i class="dotk typical"></i>3 normal</span><span class="muted">5 not in compared windows</span></div>
+  </div>
+  <div class="about" id="a-sqlmon" hidden><p><code>DBA_HIST_REPORTS</code> where <code>component_name = 'sqlmonitor'</code>, summaries only, scored on each statement's maximum elapsed time per window.</p><p>Only completed, expensive-enough or parallel executions are persisted, so a missing statement did not necessarily run fast, and counts are not execution rates. An execution still running at 10:00 has no report yet. Flags cover the full span.</p></div>
+  <div class="body">
+    <div class="tw"><table class="bt rsp" id="t-smon"></table></div>
+  </div>
+</section>
+
+<section class="pn" id="params" aria-labelledby="h-params">
+  <div class="sh">
+    <div class="sh-t"><h2 id="h-params">Parameters</h2><button class="info" aria-expanded="false" aria-controls="a-params" aria-label="About parameters">i</button></div>
+    <p class="sum">Four parameters differ across the compared windows, and each change landed within two days of a release or patch.</p>
+    <div class="meta"><span>4 differ</span><span class="muted">1 changed this week</span></div>
+  </div>
+  <div class="about" id="a-params" hidden><p><code>DBA_HIST_PARAMETER</code>, value as of each window's end snapshot, lowest container wins. Only parameters whose value differs somewhere in the span are listed.</p></div>
+  <div class="body">
+    <div class="tw"><table class="bt" id="t-par"></table></div>
+    <p class="subnote"><span class="strip" aria-hidden="true"><i></i></span> same value as Current &nbsp; <span class="strip" aria-hidden="true"><i class="df"></i></span> different value, one mark per window from 18 Jun to 10 Sep (outlined = Current)</p>
+  </div>
+</section>
+
+<div class="ref-div"><h2>Reference</h2><p>The tables every finding above is derived from. Same band, same scale.</p></div>
+
+<section class="pn ref" id="waits-fg" aria-labelledby="h-wfg">
+  <div class="sh">
+    <div class="sh-t"><h2 id="h-wfg">Foreground waits</h2><button class="info" aria-expanded="false" aria-controls="a-wfg" aria-label="About foreground waits">i</button></div>
+    <p class="sum">Two multiblock reads carry the jump: db file scattered read ×21 and direct path read ×12. SQL*Net more data to client ×5.5 matches the Network class.</p>
+    <div class="meta"><span><i class="dotk large"></i>3 large</span><span><i class="dotk moderate"></i>1 moderate</span><span><i class="dotk typical"></i>10 normal</span></div>
+  </div>
+  <div class="about" id="a-wfg" hidden><p><code>DBA_HIST_SYSTEM_EVENT</code>, foreground waits, idle excluded, end − begin per window. Top 10 events by time waited in any window. Scoring uses the wait-event policy (share of Current wait time as the floor).</p></div>
+  <div class="tabs"><span class="seg" role="tablist" aria-label="Foreground wait views">
+    <button type="button" role="tab" aria-selected="true" aria-controls="p-wt" id="tb-wt">Time waited</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="p-wa" id="tb-wa">Average wait</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="p-wc" id="tb-wc">By wait class</button>
+  </span></div>
+  <div class="tabpanel" id="p-wt" role="tabpanel" aria-labelledby="tb-wt"><div class="tw"><table class="bt rsp" id="t-wt"></table></div></div>
+  <div class="tabpanel" id="p-wa" role="tabpanel" aria-labelledby="tb-wa" hidden><div class="tw"><table class="bt rsp" id="t-wa"></table></div></div>
+  <div class="tabpanel" id="p-wc" role="tabpanel" aria-labelledby="tb-wc" hidden><div class="tw"><table class="bt rsp" id="t-wc"></table></div></div>
+</section>
+
+<div class="stubs" id="stubs"></div>
+
+<footer>awr_trend.sql v1.5.0, read-only: every number above is recomputed from <span class="mono">DBA_HIST_*</span> on each run. Mockup B, built from docs/examples/demo_busy_db.html.</footer>
+</main>
+</div>
+
+<script>
+const DATA={"weeks":["Jun 18","Jun 25","Jul 02","Jul 09","Jul 16","Jul 23","Jul 30","Aug 06","Aug 13","Aug 20","Aug 27","Sep 03","Sep 10"],"markers":[{"t":"2026-06-30 22:00","label":"Release 4.0"},{"t":"2026-07-03 09:00","label":"Hotfix 4.0.1"},{"t":"2026-07-21 01:00","label":"RU 19.28 patch"},{"t":"2026-08-11 22:00","label":"Release 4.1"},{"t":"2026-09-08 22:00","label":"Release 4.2"}],"findings":[{"name":"table scans (long tables)","dom":"load","unit":"/s","twin":false,"sev":"large","imm":false,"z":514.2,"cur":61.6897,"mu":2.07768,"sd":0.115935,"n":12,"vals":[2.14269,2.10404,1.99412,1.98237,2.02856,1.92964,1.971,2.20099,2.09964,1.98588,2.31715,2.17611,61.6897],"zcap":">+99","fam":"SCANS","lead":1,"label":"Table scans (long tables)"},{"name":"physical read total bytes","dom":"load","unit":"B/s","twin":false,"sev":"large","imm":false,"z":31.74,"cur":193126036.0,"mu":35978046.0,"sd":4950717.0,"n":12,"vals":[33322133.0,32711744.0,33784940.0,32770939.0,33575260.0,30623306.0,32019777.0,32716017.0,42122868.0,44045013.0,41765258.0,42279299.0,193126036.0],"fam":"READ_IO"},{"name":"physical reads","dom":"load","unit":"/s","twin":false,"sev":"large","imm":false,"z":31.74,"cur":22240.5,"mu":4143.26,"sd":570.128,"n":12,"vals":[3837.4,3767.11,3890.7,3773.92,3866.55,3526.6,3687.42,3767.6,4850.9,5072.25,4809.72,4868.91,22240.5],"fam":"READ_IO","lead":1,"label":"Physical reads"},{"name":"session logical reads","dom":"load","unit":"/s","twin":false,"sev":"large","imm":false,"z":18.78,"cur":987894.0,"mu":209858.0,"sd":41419.3,"n":12,"vals":[189361.0,181249.0,168950.0,178899.0,180719.0,186149.0,186305.0,186287.0,259582.0,254912.0,275963.0,269916.0,987894.0],"fam":"LOGICAL_IO","lead":1,"label":"Logical reads"},{"name":"DB time","dom":"load","unit":"cs/s","twin":false,"sev":"large","imm":false,"z":6.128,"cur":2035.46,"mu":1132.51,"sd":147.34,"n":12,"vals":[1011.08,992.358,1274.44,1002.48,1024.65,1033.01,1012.15,1022.81,1306.63,1326.18,1276.24,1308.07,2035.46],"fam":"DB_TIME","lead":1,"label":"DB time"},{"name":"CPU used by this session","dom":"load","unit":"cs/s","twin":true,"sev":"typical","imm":false,"z":1.388,"cur":845.489,"mu":711.761,"sd":96.3366,"n":12,"vals":[636.678,624.098,761.784,623.739,640.856,649.227,632.963,643.273,817.746,848.693,820.031,842.038,845.489]},{"name":"DB CPU","dom":"load","unit":"cs/s","twin":false,"sev":"typical","imm":false,"z":1.388,"cur":858.365,"mu":722.599,"sd":97.8036,"n":12,"vals":[646.374,633.602,773.385,633.238,650.615,659.114,642.602,653.069,830.199,861.617,832.519,854.861,858.365]},{"name":"table fetch by rowid","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":-1.176,"cur":204526.0,"mu":217061.0,"sd":10660.7,"n":12,"vals":[204727.0,214680.0,201805.0,218718.0,209635.0,210255.0,211386.0,213716.0,235043.0,230449.0,228820.0,225496.0,204526.0]},{"name":"redo writes","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":1.093,"cur":406.728,"mu":388.298,"sd":16.8565,"n":12,"vals":[386.446,380.395,346.356,399.491,379.6,395.166,379.406,388.775,413.052,391.078,406.357,393.449,406.728]},{"name":"user commits","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":1.025,"cur":648.727,"mu":550.984,"sd":95.3157,"n":12,"vals":[485.865,484.171,451.817,479.916,487.287,501.4,488.872,520.981,657.624,676.597,685.058,692.214,648.727]},{"name":"parse count (failures)","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":0.9981,"cur":0.162298,"mu":0.129721,"sd":0.0326387,"n":12,"vals":[0.103698,0.106831,0.126383,0.139952,0.06849,0.133184,0.137178,0.121806,0.11361,0.148506,0.202479,0.154531,0.162298]},{"name":"redo size","dom":"load","unit":"B/s","twin":false,"sev":"typical","imm":false,"z":0.9145,"cur":3992353.0,"mu":3605634.0,"sd":422856.0,"n":12,"vals":[3328630.0,3474045.0,3194956.0,3371488.0,3263240.0,3463107.0,3117388.0,3419463.0,4142253.0,4144626.0,4257097.0,4091311.0,3992353.0]},{"name":"user rollbacks","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":0.5907,"cur":3.72956,"mu":3.29842,"sd":0.729918,"n":12,"vals":[2.92538,3.26348,2.61138,2.9477,2.45262,3.00959,2.8042,2.68483,4.55642,4.35378,4.16502,3.80664,3.72956]},{"name":"user calls","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":0.5285,"cur":6207.97,"mu":6059.75,"sd":280.468,"n":12,"vals":[5787.92,5889.8,5637.23,5946.87,6019.19,5878.22,5902.16,6069.05,6603.8,6343.52,6329.02,6310.16,6207.97]},{"name":"bytes received via SQL*Net from client","dom":"load","unit":"B/s","twin":false,"sev":"typical","imm":false,"z":-0.5226,"cur":2056141.0,"mu":2120996.0,"sd":124096.0,"n":12,"vals":[1979746.0,2029379.0,1951742.0,2070261.0,2061920.0,2150388.0,2036462.0,2112200.0,2350371.0,2247152.0,2178952.0,2283374.0,2056141.0]},{"name":"physical writes","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":-0.5163,"cur":1771.99,"mu":1840.62,"sd":132.938,"n":12,"vals":[1628.99,1853.14,1688.69,1958.6,1663.48,1821.95,1799.72,1971.95,2058.81,1959.38,1848.31,1834.43,1771.99]},{"name":"physical write total bytes","dom":"load","unit":"B/s","twin":false,"sev":"typical","imm":false,"z":-0.5163,"cur":27580674.0,"mu":28648881.0,"sd":2069158.0,"n":12,"vals":[25354949.0,28843691.0,26284093.0,30485222.0,25891720.0,28358340.0,28012285.0,30692952.0,32044937.0,30497299.0,28768499.0,28552582.0,27580674.0]},{"name":"execute count","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":0.4831,"cur":9273.94,"mu":8800.0,"sd":980.938,"n":12,"vals":[7986.94,8183.38,7768.04,8283.27,8058.74,8434.25,8045.97,8480.01,10053.8,9864.76,10461.7,9979.03,9273.94]},{"name":"opened cursors cumulative","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":0.4831,"cur":5749.84,"mu":5456.0,"sd":608.182,"n":12,"vals":[4951.9,5073.7,4816.19,5135.63,4996.42,5229.24,4988.5,5257.61,6233.36,6116.15,6486.28,6187.0,5749.84]},{"name":"sorts (rows)","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":0.4615,"cur":1452538.0,"mu":1422736.0,"sd":64574.6,"n":12,"vals":[1398906.0,1416386.0,1371787.0,1418619.0,1406225.0,1319791.0,1388637.0,1405838.0,1573311.0,1495525.0,1469195.0,1408611.0,1452538.0]},{"name":"parse count (total)","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":0.404,"cur":661.072,"mu":632.905,"sd":69.7252,"n":12,"vals":[568.149,584.829,575.903,600.114,614.654,596.419,583.885,570.702,716.412,708.859,744.652,730.281,661.072]},{"name":"logons cumulative","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":0.3789,"cur":3.92532,"mu":3.82692,"sd":0.25968,"n":12,"vals":[3.77541,3.53784,3.38225,3.80118,3.78011,3.95649,3.50939,3.8101,4.13002,4.26326,4.02442,3.95261,3.92532]},{"name":"sorts (disk)","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":-0.3396,"cur":0.392612,"mu":0.411019,"sd":0.0542029,"n":12,"vals":[0.351551,0.468219,0.342766,0.406235,0.355918,0.452435,0.448621,0.47813,0.473394,0.33232,0.417417,0.405227,0.392612]},{"name":"parse count (hard)","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":-0.3256,"cur":2.71362,"mu":5.51207,"sd":8.59343,"n":12,"vals":[2.87496,3.25778,32.7896,3.45786,3.01116,2.98188,2.60212,3.29927,3.04615,3.08012,3.0155,2.72838,2.71362]},{"name":"bytes sent via SQL*Net to client","dom":"load","unit":"B/s","twin":false,"sev":"typical","imm":false,"z":0.317,"cur":9711251.0,"mu":9544074.0,"sd":527354.0,"n":12,"vals":[9765136.0,9856112.0,8686140.0,9194772.0,9219083.0,9422139.0,8710945.0,9667874.0,9504668.0,9970736.0,10264898.0,10266383.0,9711251.0]},{"name":"sorts (memory)","dom":"load","unit":"/s","twin":false,"sev":"typical","imm":false,"z":-0.266,"cur":2090.04,"mu":2122.76,"sd":122.994,"n":12,"vals":[2043.7,2153.77,1841.97,2008.74,2111.36,2067.54,2150.5,2163.39,2313.41,2163.01,2256.81,2198.97,2090.04]},{"name":"redo size for lost write detection","dom":"load","unit":"/s","twin":true,"sev":"flat","imm":false,"z":null,"cur":0,"mu":0,"sd":0,"n":12,"vals":[0,0,0,0,0,0,0,0,0,0,0,0,0]},{"name":"Physical Read Total Bytes Per Sec","dom":"metric","unit":"B/s","twin":true,"sev":"large","imm":false,"z":31.74,"cur":193126036.0,"mu":35978046.0,"sd":4950717.0,"n":12,"vals":[33322133.0,32711744.0,33784940.0,32770939.0,33575260.0,30623306.0,32019777.0,32716017.0,42122868.0,44045013.0,41765258.0,42279299.0,193126036.0],"fam":"READ_IO"},{"name":"Physical Reads Per Sec","dom":"metric","unit":"/s","twin":true,"sev":"large","imm":false,"z":31.74,"cur":22240.5,"mu":4143.26,"sd":570.128,"n":12,"vals":[3837.4,3767.11,3890.7,3773.92,3866.55,3526.6,3687.42,3767.6,4850.9,5072.25,4809.72,4868.91,22240.5],"fam":"READ_IO"},{"name":"Physical Read Total IO Requests Per Sec","dom":"metric","unit":"/s","twin":false,"sev":"large","imm":false,"z":31.74,"cur":16013.2,"mu":2983.14,"sd":410.492,"n":12,"vals":[2762.93,2712.32,2801.3,2717.22,2783.92,2539.15,2654.94,2712.67,3492.65,3652.02,3462.99,3505.62,16013.2],"fam":"READ_IO"},{"name":"Logical Reads Per Sec","dom":"metric","unit":"/s","twin":true,"sev":"large","imm":false,"z":18.78,"cur":987894.0,"mu":209858.0,"sd":41419.3,"n":12,"vals":[189361.0,181249.0,168950.0,178899.0,180719.0,186149.0,186305.0,186287.0,259582.0,254912.0,275963.0,269916.0,987894.0],"fam":"LOGICAL_IO"},{"name":"Database Wait Time Ratio","dom":"metric","unit":"%","twin":false,"sev":"large","imm":false,"z":17.8,"cur":57.8295,"mu":36.2198,"sd":1.21404,"n":12,"vals":[36.0711,36.1519,39.3157,36.8327,36.5035,36.1951,36.511,36.1494,36.4624,35.0299,34.7681,34.6473,57.8295],"fam":"CPU_WAIT_RATIO","lead":1,"label":"Wait time ratio"},{"name":"Database CPU Time Ratio","dom":"metric","unit":"%","twin":true,"sev":"large","imm":false,"z":-16.94,"cur":42.1705,"mu":63.7802,"sd":1.21404,"n":12,"vals":[63.9289,63.8481,60.6843,63.1673,63.4965,63.8049,63.489,63.8506,63.5376,64.9701,65.2319,65.3527,42.1705],"fam":"CPU_WAIT_RATIO"},{"name":"SQL Service Response Time","dom":"metric","unit":"cs/call","twin":false,"sev":"large","imm":false,"z":6.922,"cur":0.327879,"mu":0.186639,"sd":0.0204056,"n":12,"vals":[0.174688,0.168488,0.226075,0.168572,0.17023,0.175736,0.171487,0.168528,0.19786,0.20906,0.20165,0.207296,0.327879],"fam":"RESPONSE","lead":1,"label":"SQL service response time"},{"name":"Average Active Sessions","dom":"metric","unit":"sessions","twin":true,"sev":"large","imm":false,"z":6.128,"cur":20.3546,"mu":11.3251,"sd":1.4734,"n":12,"vals":[10.1108,9.92358,12.7444,10.0248,10.2465,10.3301,10.1215,10.2281,13.0663,13.2618,12.7624,13.0807,20.3546],"fam":"DB_TIME"},{"name":"Average Synchronous Single-Block Read Latency","dom":"metric","unit":"ms","twin":false,"sev":"typical","imm":true,"z":7.921,"cur":0.603031,"mu":0.481566,"sd":0.0153342,"n":12,"vals":[0.486006,0.487064,0.479158,0.483743,0.455245,0.504567,0.47341,0.472025,0.482895,0.497665,0.457687,0.499328,0.603031]},{"name":"Host CPU Utilization (%)","dom":"metric","unit":"%","twin":false,"sev":"typical","imm":false,"z":1.388,"cur":71.4503,"mu":61.0982,"sd":7.45753,"n":12,"vals":[55.286,54.3121,64.9706,54.2844,55.6094,56.2574,54.9984,55.7965,69.3027,71.6983,69.4796,71.1832,71.4503]},{"name":"User Commits Per Sec","dom":"metric","unit":"/s","twin":true,"sev":"typical","imm":false,"z":1.025,"cur":648.727,"mu":550.984,"sd":95.3157,"n":12,"vals":[485.865,484.171,451.817,479.916,487.287,501.4,488.872,520.981,657.624,676.597,685.058,692.214,648.727]},{"name":"Redo Generated Per Sec","dom":"metric","unit":"B/s","twin":true,"sev":"typical","imm":false,"z":0.9145,"cur":3992353.0,"mu":3605634.0,"sd":422856.0,"n":12,"vals":[3328630.0,3474045.0,3194956.0,3371488.0,3263240.0,3463107.0,3117388.0,3419463.0,4142253.0,4144626.0,4257097.0,4091311.0,3992353.0]},{"name":"Session Count","dom":"metric","unit":"sessions","twin":false,"sev":"typical","imm":false,"z":0.8233,"cur":2094.92,"mu":2024.93,"sd":85.0142,"n":12,"vals":[1964.28,1976.66,1951.13,1964.94,1966.78,1984.23,1952.99,1985.01,2156.19,2110.52,2150.64,2135.76,2094.92]},{"name":"User Rollbacks Per Sec","dom":"metric","unit":"/s","twin":true,"sev":"typical","imm":false,"z":0.5907,"cur":3.72956,"mu":3.29842,"sd":0.729918,"n":12,"vals":[2.92538,3.26348,2.61138,2.9477,2.45262,3.00959,2.8042,2.68483,4.55642,4.35378,4.16502,3.80664,3.72956]},{"name":"User Calls Per Sec","dom":"metric","unit":"/s","twin":true,"sev":"typical","imm":false,"z":0.5285,"cur":6207.97,"mu":6059.75,"sd":280.468,"n":12,"vals":[5787.92,5889.8,5637.23,5946.87,6019.19,5878.22,5902.16,6069.05,6603.8,6343.52,6329.02,6310.16,6207.97]},{"name":"Physical Writes Per Sec","dom":"metric","unit":"/s","twin":true,"sev":"typical","imm":false,"z":-0.5163,"cur":1771.99,"mu":1840.62,"sd":132.938,"n":12,"vals":[1628.99,1853.14,1688.69,1958.6,1663.48,1821.95,1799.72,1971.95,2058.81,1959.38,1848.31,1834.43,1771.99]},{"name":"Physical Write Total Bytes Per Sec","dom":"metric","unit":"B/s","twin":true,"sev":"typical","imm":false,"z":-0.5163,"cur":27580674.0,"mu":28648881.0,"sd":2069158.0,"n":12,"vals":[25354949.0,28843691.0,26284093.0,30485222.0,25891720.0,28358340.0,28012285.0,30692952.0,32044937.0,30497299.0,28768499.0,28552582.0,27580674.0]},{"name":"Physical Write Total IO Requests Per Sec","dom":"metric","unit":"/s","twin":false,"sev":"typical","imm":false,"z":-0.5163,"cur":974.595,"mu":1012.34,"sd":73.1161,"n":12,"vals":[895.946,1019.22,928.778,1077.23,914.914,1002.07,989.846,1084.57,1132.34,1077.66,1016.57,1008.94,974.595]},{"name":"Executions Per Sec","dom":"metric","unit":"/s","twin":true,"sev":"typical","imm":false,"z":0.4831,"cur":9273.94,"mu":8800.0,"sd":980.938,"n":12,"vals":[7986.94,8183.38,7768.04,8283.27,8058.74,8434.25,8045.97,8480.01,10053.8,9864.76,10461.7,9979.03,9273.94]},{"name":"Total Parse Count Per Sec","dom":"metric","unit":"/s","twin":true,"sev":"typical","imm":false,"z":0.404,"cur":661.072,"mu":632.905,"sd":69.7252,"n":12,"vals":[568.149,584.829,575.903,600.114,614.654,596.419,583.885,570.702,716.412,708.859,744.652,730.281,661.072]},{"name":"Logons Per Sec","dom":"metric","unit":"/s","twin":true,"sev":"typical","imm":false,"z":0.3789,"cur":3.92532,"mu":3.82692,"sd":0.25968,"n":12,"vals":[3.77541,3.53784,3.38225,3.80118,3.78011,3.95649,3.50939,3.8101,4.13002,4.26326,4.02442,3.95261,3.92532]},{"name":"Hard Parse Count Per Sec","dom":"metric","unit":"/s","twin":true,"sev":"typical","imm":false,"z":-0.3256,"cur":2.71362,"mu":5.51207,"sd":8.59343,"n":12,"vals":[2.87496,3.25778,32.7896,3.45786,3.01116,2.98188,2.60212,3.29927,3.04615,3.08012,3.0155,2.72838,2.71362]},{"name":"Network Traffic Volume Per Sec","dom":"metric","unit":"B/s","twin":true,"sev":"typical","imm":false,"z":0.1694,"cur":11767392.0,"mu":11665069.0,"sd":603954.0,"n":12,"vals":[11744882.0,11885492.0,10637882.0,11265033.0,11281004.0,11572527.0,10747406.0,11780074.0,11855038.0,12217888.0,12443849.0,12549757.0,11767392.0]},{"name":"Wait class: Network","dom":"wait","unit":"AAS","twin":false,"sev":"large","imm":false,"z":57.89,"cur":1.17507,"mu":0.227447,"sd":0.0163701,"n":12,"vals":[0.21425,0.2106,0.239293,0.214143,0.21947,0.22613,0.211841,0.208339,0.244208,0.251815,0.240616,0.248667,1.17507],"fam":"W_NET","lead":1,"label":"Network waits","cls":"Network"},{"name":"Wait class: User I/O","dom":"wait","unit":"AAS","twin":false,"sev":"large","imm":false,"z":23.42,"cur":8.28534,"mu":1.97272,"sd":0.269538,"n":12,"vals":[1.76076,1.72241,2.27714,1.74739,1.72629,1.77952,1.75761,1.82276,2.19408,2.41131,2.21926,2.25409,8.28534],"fam":"W_UIO","lead":1,"label":"User I/O waits","cls":"User I/O"},{"name":"Wait class: Commit","dom":"wait","unit":"AAS","twin":false,"sev":"moderate","imm":false,"z":2.291,"cur":0.868664,"mu":0.70897,"sd":0.0697084,"n":12,"vals":[0.688907,0.620385,0.758739,0.665967,0.679786,0.627102,0.696938,0.627331,0.829866,0.755005,0.775495,0.782123,0.868664],"fam":"W_COMMIT","lead":1,"label":"Commit waits","cls":"Commit"},{"name":"Wait class: Scheduler","dom":"wait","unit":"AAS","twin":false,"sev":"typical","imm":true,"z":4.093,"cur":0.0661514,"mu":0.0369275,"sd":0.0071393,"n":12,"vals":[0.0303639,0.0273872,0.0500472,0.0323881,0.0354578,0.0368364,0.0305486,0.0299031,0.04092,0.0454744,0.0406464,0.0431575,0.0661514],"cls":"Scheduler"},{"name":"Wait class: System I/O","dom":"wait","unit":"AAS","twin":false,"sev":"typical","imm":true,"z":3.549,"cur":0.0980058,"mu":0.0554478,"sd":0.0119919,"n":12,"vals":[0.0508306,0.0436114,0.0879025,0.0528864,0.0495736,0.0607931,0.0469625,0.0442928,0.0613725,0.0615908,0.0554214,0.0501361,0.0980058],"cls":"System I/O"},{"name":"Wait class: Other","dom":"wait","unit":"AAS","twin":false,"sev":"typical","imm":true,"z":3.125,"cur":0.0989925,"mu":0.0671689,"sd":0.0101841,"n":12,"vals":[0.0613122,0.0528817,0.0885658,0.0554231,0.0640383,0.0648958,0.0607089,0.0628033,0.0725286,0.0799111,0.07263,0.0703278,0.0989925],"cls":"Other"},{"name":"Wait class: Configuration","dom":"wait","unit":"AAS","twin":false,"sev":"typical","imm":true,"z":2.742,"cur":0.0659817,"mu":0.0427874,"sd":0.00845739,"n":12,"vals":[0.0384894,0.0352944,0.0673328,0.0361628,0.0408539,0.0375961,0.0379378,0.0423461,0.0433603,0.0449297,0.0443164,0.0448286,0.0659817],"cls":"Configuration"},{"name":"Wait class: Application","dom":"wait","unit":"AAS","twin":false,"sev":"typical","imm":false,"z":0.5416,"cur":0.711769,"mu":0.657883,"sd":0.0994918,"n":12,"vals":[0.530289,0.627526,0.639714,0.64439,0.669689,0.642396,0.589232,0.600401,0.942622,0.648764,0.661674,0.697894,0.711769],"cls":"Application"},{"name":"Wait class: Concurrency","dom":"wait","unit":"AAS","twin":false,"sev":"typical","imm":false,"z":0.4635,"cur":0.401002,"mu":0.329731,"sd":0.15377,"n":12,"vals":[0.271882,0.247464,0.801817,0.243649,0.255161,0.263735,0.263669,0.259204,0.335318,0.346773,0.3272,0.340898,0.401002],"cls":"Concurrency"}],"headline":[{"label":"DB time","unit":"cs/s","cur":2035.46,"z":6.13,"sev":"large","pct":79.7,"mu":1132.51,"sd":147.34,"vals":[1011.08,992.358,1274.44,1002.48,1024.65,1033.01,1012.15,1022.81,1306.63,1326.18,1276.24,1308.07,2035.46]},{"label":"Redo generated","unit":"B/s","cur":3992353.0,"z":0.91,"sev":"typical","pct":10.7,"mu":3605634.0,"sd":422856.0,"vals":[3328630.0,3474045.0,3194956.0,3371488.0,3263240.0,3463107.0,3117388.0,3419463.0,4142253.0,4144626.0,4257097.0,4091311.0,3992353.0]},{"label":"Logical reads","unit":"/s","cur":987894.0,"z":18.78,"sev":"large","pct":370.7,"mu":209858.0,"sd":41419.3,"vals":[189361.0,181249.0,168950.0,178899.0,180719.0,186149.0,186305.0,186287.0,259582.0,254912.0,275963.0,269916.0,987894.0]},{"label":"Average Active Sessions","unit":"AAS","cur":20.3546,"z":6.13,"sev":"large","pct":79.7,"mu":11.3251,"sd":1.4734,"vals":[10.1108,9.92358,12.7444,10.0248,10.2465,10.3301,10.1215,10.2281,13.0663,13.2618,12.7624,13.0807,20.3546]},{"label":"Wait Time Ratio","unit":"%","cur":57.8295,"z":17.8,"sev":"large","pct":59.7,"mu":36.2198,"sd":1.21404,"vals":[36.0711,36.1519,39.3157,36.8327,36.5035,36.1951,36.511,36.1494,36.4624,35.0299,34.7681,34.6473,57.8295]},{"label":"Hard parses","unit":"/s","cur":2.71362,"z":-0.33,"sev":"typical","pct":-50.8,"mu":5.51207,"sd":8.59343,"vals":[2.87496,3.25778,32.7896,3.45786,3.01116,2.98188,2.60212,3.29927,3.04615,3.08012,3.0155,2.72838,2.71362]}],"waits":{"time":[{"name":"db file scattered read","cls":"User I/O","unit":"s","sev":"large","imm":false,"z":156.4,"cur":13873.0,"mu":674.793,"sd":84.3755,"n":12,"vals":[665.143,580.93,905.314,680.802,606.187,660.398,634.095,591.15,673.246,691.868,722.125,686.258,13873.0],"rank":1,"zcap":">+99"},{"name":"direct path read","cls":"User I/O","unit":"s","sev":"large","imm":false,"z":57.45,"cur":8482.06,"mu":707.947,"sd":135.326,"n":12,"vals":[643.588,612.997,1024.2,556.221,565.57,626.012,707.217,616.497,797.324,824.693,723.4,797.642,8482.06],"rank":2},{"name":"db file sequential read","cls":"User I/O","unit":"s","sev":"typical","imm":false,"z":1.662,"cur":6362.74,"mu":5146.59,"sd":731.567,"n":12,"vals":[4517.91,4535.88,5412.72,4574.1,4563.42,4620.45,4484.83,4834.58,5795.0,6487.59,5913.37,6019.2,6362.74],"rank":3},{"name":"SQL*Net more data to client","cls":"Network","unit":"s","sev":"large","imm":false,"z":68.47,"cur":4126.03,"mu":751.317,"sd":49.2852,"n":12,"vals":[713.424,705.012,768.611,709.629,724.513,748.471,705.38,694.135,810.785,820.665,794.993,820.185,4126.03],"rank":4},{"name":"log file sync","cls":"Commit","unit":"s","sev":"moderate","imm":false,"z":2.291,"cur":3127.19,"mu":2552.29,"sd":250.95,"n":12,"vals":[2480.07,2233.39,2731.46,2397.48,2447.23,2257.57,2508.98,2258.39,2987.52,2718.02,2791.78,2815.64,3127.19],"rank":5},{"name":"enq: TX - row lock contention","cls":"Application","unit":"s","sev":"typical","imm":false,"z":0.4919,"cur":2503.18,"mu":2327.91,"sd":356.318,"n":12,"vals":[1874.93,2233.58,2235.79,2281.87,2375.86,2278.44,2084.45,2125.24,3350.56,2289.84,2336.93,2467.43,2503.18],"rank":6},{"name":"buffer busy waits","cls":"Concurrency","unit":"s","sev":"typical","imm":true,"z":2.242,"cur":605.441,"mu":493.041,"sd":50.1317,"n":12,"vals":[472.942,430.955,508.957,431.003,452.082,471.919,482.939,454.289,532.844,579.687,542.23,556.646,605.441],"rank":7},{"name":"db file parallel read","cls":"User I/O","unit":"s","sev":"typical","imm":true,"z":5.114,"cur":476.995,"mu":227.55,"sd":48.7772,"n":12,"vals":[209.668,180.664,338.277,192.972,180.642,213.63,186.787,197.564,278.143,254.756,271.592,225.906,476.995],"rank":8},{"name":"control file sequential read","cls":"System I/O","unit":"s","sev":"typical","imm":true,"z":3.549,"cur":352.821,"mu":199.612,"sd":43.1706,"n":12,"vals":[182.99,157.001,316.449,190.391,178.465,218.855,169.065,159.454,220.941,221.727,199.517,180.49,352.821],"rank":9},{"name":"latch: cache buffers chains","cls":"Concurrency","unit":"s","sev":"typical","imm":true,"z":2.728,"cur":322.428,"mu":198.777,"sd":45.3213,"n":12,"vals":[183.233,159.593,220.396,145.999,158.173,173.759,156.125,170.183,254.444,259.812,241.667,261.938,322.428],"rank":10},{"name":"library cache: mutex X","cls":"Concurrency","unit":"s","sev":"typical","imm":false,"z":-0.1057,"cur":122.254,"mu":149.299,"sd":255.92,"n":12,"vals":[72.2029,64.4781,961.242,67.2757,74.3745,62.2929,69.1406,66.8001,95.1299,90.2445,81.2252,87.1817,122.254]},{"name":"cursor: pin S wait on X","cls":"Concurrency","unit":"s","sev":"typical","imm":false,"z":-0.09803,"cur":81.3744,"mu":98.5032,"sd":174.723,"n":12,"vals":[47.5158,41.5773,652.727,44.6784,38.0847,40.1386,42.5934,46.4782,49.8357,61.073,52.5013,64.8346,81.3744]},{"name":"direct path read temp","cls":"User I/O","unit":"s","sev":"typical","imm":true,"z":3.609,"cur":304.273,"mu":182.834,"sd":33.646,"n":12,"vals":[153.18,149.715,242.804,146.966,165.459,153.092,172.159,167.84,195.146,236.453,203.979,207.219,304.273]},{"name":"enq: TX - index contention","cls":"Concurrency","unit":"s","sev":"typical","imm":true,"z":2.381,"cur":266.367,"mu":196.479,"sd":29.3479,"n":12,"vals":[181.629,175.353,209.168,166.286,170.877,176.513,171.68,172.992,241.261,231.486,231.32,229.18,266.367]}],"avg":[{"name":"db file scattered read","cls":"User I/O","unit":"ms","sev":"large","imm":false,"z":5.625,"cur":1.64209,"mu":1.38245,"sd":0.0461583,"n":12,"vals":[1.43389,1.38015,1.37858,1.42318,1.39289,1.39047,1.34444,1.40154,1.28213,1.35321,1.45566,1.35328,1.64209]},{"name":"direct path read","cls":"User I/O","unit":"ms","sev":"typical","imm":false,"z":0.8436,"cur":0.97648,"mu":0.938492,"sd":0.0450324,"n":12,"vals":[1.00808,0.960851,0.962358,0.925543,0.948943,0.91392,0.955334,0.938169,0.890886,0.971635,0.955321,0.830868,0.97648]},{"name":"db file sequential read","cls":"User I/O","unit":"ms","sev":"large","imm":false,"z":7.921,"cur":0.603031,"mu":0.481566,"sd":0.0153342,"n":12,"vals":[0.486006,0.487064,0.479158,0.483743,0.455245,0.504567,0.47341,0.472025,0.482895,0.497665,0.457687,0.499328,0.603031]},{"name":"SQL*Net more data to client","cls":"Network","unit":"ms","sev":"typical","imm":false,"z":0.3342,"cur":0.04512,"mu":0.0447094,"sd":0.0012287,"n":12,"vals":[0.045114,0.045912,0.045034,0.045089,0.042653,0.043721,0.04317,0.044944,0.046853,0.043381,0.045254,0.045388,0.04512]},{"name":"log file sync","cls":"Commit","unit":"ms","sev":"typical","imm":false,"z":0.1643,"cur":1.91836,"mu":1.90198,"sd":0.0996958,"n":12,"vals":[1.92806,2.03387,1.97121,1.80451,1.85388,1.96856,1.71243,1.80411,1.97625,1.83063,1.92109,2.01918,1.91836]},{"name":"enq: TX - row lock contention","cls":"Application","unit":"ms","sev":"typical","imm":false,"z":-1.891,"cur":43.8507,"mu":48.6227,"sd":2.52361,"n":12,"vals":[48.6989,48.5548,47.3566,47.1368,47.9921,47.0481,48.2333,50.5889,55.7626,46.4936,46.6887,48.918,43.8507]},{"name":"buffer busy waits","cls":"Concurrency","unit":"ms","sev":"typical","imm":false,"z":-0.9948,"cur":1.07273,"mu":1.11359,"sd":0.0410763,"n":12,"vals":[1.09674,1.107,1.10181,1.17926,1.14939,1.13771,1.16363,1.09458,1.02387,1.1033,1.08463,1.12122,1.07273]},{"name":"db file parallel read","cls":"User I/O","unit":"ms","sev":"typical","imm":false,"z":0.9555,"cur":2.67143,"mu":2.59021,"sd":0.0850001,"n":12,"vals":[2.50215,2.57881,2.46551,2.53473,2.60671,2.48693,2.64565,2.55254,2.74433,2.64313,2.68276,2.63933,2.67143]},{"name":"control file sequential read","cls":"System I/O","unit":"ms","sev":"typical","imm":true,"z":-2.785,"cur":0.195718,"mu":0.211933,"sd":0.0058229,"n":12,"vals":[0.216657,0.207217,0.206001,0.219911,0.207022,0.201419,0.215476,0.211937,0.215326,0.207909,0.21715,0.217171,0.195718]},{"name":"latch: cache buffers chains","cls":"Concurrency","unit":"ms","sev":"typical","imm":false,"z":1.871,"cur":0.064708,"mu":0.0612229,"sd":0.00186264,"n":12,"vals":[0.062389,0.061649,0.059535,0.058581,0.060835,0.062903,0.065506,0.062342,0.060607,0.060041,0.060385,0.059902,0.064708]},{"name":"library cache: mutex X","cls":"Concurrency","unit":"ms","sev":"typical","imm":false,"z":-0.09822,"cur":0.247003,"mu":0.24754,"sd":0.00546299,"n":12,"vals":[0.246097,0.23814,0.244837,0.256582,0.245078,0.247017,0.250459,0.257305,0.24832,0.241522,0.246625,0.248493,0.247003]},{"name":"cursor: pin S wait on X","cls":"Concurrency","unit":"ms","sev":"typical","imm":false,"z":0.5349,"cur":3.22609,"mu":3.17699,"sd":0.0918026,"n":12,"vals":[3.23981,2.96778,3.04545,3.29109,3.22063,3.12702,3.21025,3.21688,3.14494,3.20049,3.21532,3.24423,3.22609]},{"name":"direct path read temp","cls":"User I/O","unit":"ms","sev":"typical","imm":false,"z":0.65,"cur":0.724028,"mu":0.705419,"sd":0.0286311,"n":12,"vals":[0.710861,0.740334,0.674425,0.722135,0.70699,0.697259,0.688253,0.662272,0.753392,0.671524,0.734525,0.70306,0.724028]},{"name":"enq: TX - index contention","cls":"Concurrency","unit":"ms","sev":"typical","imm":false,"z":0.488,"cur":6.08736,"mu":5.99344,"sd":0.192477,"n":12,"vals":[5.63852,6.09906,5.78129,6.08675,6.20481,5.82207,6.24286,6.20873,5.92896,6.10578,5.91316,5.88924,6.08736]}],"cls":[{"name":"User I/O","cls":"User I/O","unit":"s","sev":"large","imm":false,"z":23.42,"cur":29827.2,"mu":7101.79,"sd":970.336,"n":12,"vals":[6338.74,6200.69,8197.71,6290.6,6214.64,6406.27,6327.4,6561.95,7898.67,8680.73,7989.34,8114.73,29827.2]},{"name":"Network","cls":"Network","unit":"s","sev":"large","imm":false,"z":57.89,"cur":4230.26,"mu":818.811,"sd":58.9324,"n":12,"vals":[771.299,758.16,861.454,770.913,790.091,814.068,762.626,750.021,879.148,906.533,866.217,895.202,4230.26]},{"name":"Commit","cls":"Commit","unit":"s","sev":"moderate","imm":false,"z":2.291,"cur":3127.19,"mu":2552.29,"sd":250.95,"n":12,"vals":[2480.07,2233.39,2731.46,2397.48,2447.23,2257.57,2508.98,2258.39,2987.52,2718.02,2791.78,2815.64,3127.19]},{"name":"Application","cls":"Application","unit":"s","sev":"typical","imm":false,"z":0.5416,"cur":2562.37,"mu":2368.38,"sd":358.17,"n":12,"vals":[1909.04,2259.09,2302.97,2319.8,2410.88,2312.62,2121.23,2161.44,3393.44,2335.55,2382.03,2512.42,2562.37]},{"name":"Concurrency","cls":"Concurrency","unit":"s","sev":"typical","imm":false,"z":0.4635,"cur":1443.61,"mu":1187.03,"sd":553.571,"n":12,"vals":[978.776,890.872,2886.54,877.135,918.579,949.447,949.21,933.136,1207.15,1248.38,1177.92,1227.23,1443.61]},{"name":"Other","cls":"Other","unit":"s","sev":"typical","imm":true,"z":3.125,"cur":356.373,"mu":241.808,"sd":36.6627,"n":12,"vals":[220.724,190.374,318.837,199.523,230.538,233.625,218.552,226.092,261.103,287.68,261.468,253.18,356.373]},{"name":"System I/O","cls":"System I/O","unit":"s","sev":"typical","imm":true,"z":3.549,"cur":352.821,"mu":199.612,"sd":43.1707,"n":12,"vals":[182.99,157.001,316.449,190.391,178.465,218.855,169.065,159.454,220.941,221.727,199.517,180.49,352.821]},{"name":"Scheduler","cls":"Scheduler","unit":"s","sev":"typical","imm":true,"z":4.093,"cur":238.145,"mu":132.939,"sd":25.7015,"n":12,"vals":[109.31,98.594,180.17,116.597,127.648,132.611,109.975,107.651,147.312,163.708,146.327,155.367,238.145]},{"name":"Configuration","cls":"Configuration","unit":"s","sev":"typical","imm":true,"z":2.742,"cur":237.534,"mu":154.035,"sd":30.4466,"n":12,"vals":[138.562,127.06,242.398,130.186,147.074,135.346,136.576,152.446,156.097,161.747,159.539,161.383,237.534]}]},"sql":[{"id":"7k2m9dx4qp1zb","schema":"ORDERS_APP","module":"OrderService","action":"order-lookup","plan":"2088341150","text":"SELECT o.order_id, o.status, o.total_amount, l.line_no, l.sku, l.qty, l.unit_price FROM orders o JOIN order_lines l ON l.order_id = o.order_id WHERE o.customer_id = :1 AND o.created_at > :2 ORDER BY o.created_at DESC","cur":27920.0,"mu":6668.58,"sd":441.449,"n":12,"z":48.14,"sev":"large","imm":false,"vals":[6873.0,6392.0,6356.0,6080.0,6523.0,6669.0,6243.0,6397.0,6896.0,7637.0,7227.0,6730.0,27920.0],"ranks":[1,1,1,1,1,1,1,1,1,1,1,1,1],"unit":"s","planchg":{"from":"3197245811","to":"2088341150","since":"2026-09-08 23:00","phv":[["3197245811","2026-05-31 23:00","2026-09-08 23:00","2,400","4,975,426,129","0.002098","38.12"],["2088341150","2026-09-08 23:00","2026-09-10 10:00","35","75,949,092","0.009","700.0"]]}},{"id":"n7t3q5xc1yj4g","schema":"LOYALTY","module":"LoyaltyService","action":"points-balance","plan":"1288463905","text":"SELECT NVL(SUM(points), 0) AS balance, MAX(created_at) AS last_activity FROM loyalty_ledger WHERE customer_id = :1","cur":6296.0,"mu":4539.75,"sd":677.246,"n":4,"z":2.593,"sev":"moderate","imm":false,"vals":[null,null,null,null,null,null,null,null,3608.0,4510.0,4871.0,5170.0,6296.0],"ranks":[null,null,null,null,null,null,null,null,4,2,2,2,2],"unit":"s","new":{"first":"2026-08-11 22:00","windows":5}},{"id":"2yq9jv7c5hm3d","schema":"ORDERS_APP","module":"OrderService","action":"checkout","plan":"902817346","text":"UPDATE inventory SET qty_on_hand = qty_on_hand - :1, last_modified = SYSTIMESTAMP WHERE sku = :2 AND warehouse_id = :3","cur":3791.0,"mu":3834.92,"sd":521.362,"n":12,"z":-0.08423,"sev":"typical","imm":false,"vals":[3114.0,3732.0,3461.0,3854.0,3979.0,3781.0,3521.0,3613.0,5284.0,3787.0,3844.0,4049.0,3791.0],"ranks":[2,2,2,2,2,2,2,2,2,3,3,3,3],"unit":"s"},{"id":"u9d5p3fw2hs8x","schema":"ORDERS_APP","module":"OrderService","action":"search","plan":"1367128900","text":"SELECT p.sku, p.name, p.list_price, SCORE(1) FROM products p WHERE CONTAINS(p.description, :1, 1) > 0 AND p.active = 'Y' ORDER BY SCORE(1) DESC FETCH FIRST 24 ROWS ONLY","cur":3762.0,"mu":3319.92,"sd":350.015,"n":12,"z":1.263,"sev":"typical","imm":false,"vals":[2921.0,3132.0,2912.0,2924.0,3249.0,3380.0,3130.0,3397.0,4003.0,3386.0,3614.0,3791.0,3762.0],"ranks":[3,3,3,3,3,3,3,3,3,4,4,4,4],"unit":"s"},{"id":"f1p7r4mz8vb2c","schema":"ORDERS_APP","module":"OrderService","action":"customer-profile","plan":"4172308451","text":"SELECT c.customer_id, c.email, c.tier, a.line1, a.city, a.postcode, a.country FROM customers c JOIN addresses a ON a.customer_id = c.customer_id AND a.is_default = 'Y' WHERE c.customer_id = :1","cur":2232.0,"mu":2073.83,"sd":157.876,"n":12,"z":1.002,"sev":"typical","imm":false,"vals":[1998.0,2043.0,1953.0,1916.0,2032.0,2093.0,1948.0,2093.0,2313.0,2378.0,1887.0,2232.0,2232.0],"ranks":[5,5,4,5,5,5,5,5,5,5,6,6,5],"unit":"s"},{"id":"t3h6u1zr9nb8w","schema":"ORDERS_APP","module":"OrderService","action":"cart","plan":"3527641099","text":"SELECT ci.sku, ci.qty, p.name, p.list_price, p.image_url FROM cart_items ci JOIN products p ON p.sku = ci.sku WHERE ci.session_id = :1","cur":2119.0,"mu":2212.0,"sd":158.72,"n":12,"z":-0.5859,"sev":"typical","imm":false,"vals":[2240.0,2456.0,1790.0,2155.0,2344.0,2228.0,2185.0,2238.0,2262.0,2175.0,2160.0,2311.0,2119.0],"ranks":[4,4,5,4,4,4,4,4,6,6,5,5,6],"unit":"s"},{"id":"b6f4h0kq3ztr8","schema":"ORDERS_APP","module":"OrderService","action":"checkout","plan":"2611947330","text":"INSERT INTO order_lines (order_id, line_no, sku, qty, unit_price) VALUES (:1, :2, :3, :4, :5)","cur":1040.0,"mu":1084.3,"sd":51.2632,"n":12,"z":-0.8642,"sev":"typical","imm":false,"vals":[1104.0,1042.0,998.6,1105.0,1061.0,1106.0,1108.0,1076.0,1153.0,1174.0,1020.0,1064.0,1040.0],"ranks":[6,6,6,6,6,6,6,6,7,7,7,7,7],"unit":"s"},{"id":"j6b1v4nr8xt2p","schema":"ORDERS_APP","module":"OrderService","action":"order-lookup","plan":"4034711296","text":"SELECT s.shipment_id, s.carrier, s.tracking_no, s.status, s.eta FROM shipments s WHERE s.order_id = :1","cur":655.9,"mu":726.708,"sd":75.316,"n":12,"z":-0.9401,"sev":"typical","imm":false,"vals":[661.4,737.9,627.7,692.3,675.1,790.0,634.3,701.5,845.2,852.2,742.4,760.5,655.9],"ranks":[8,7,9,7,7,7,9,7,8,8,9,8,8],"unit":"s"},{"id":"g3c8w1a2nfy5r","schema":"ORDERS_APP","module":"OrderService","action":"checkout","plan":"1466803562","text":"INSERT INTO orders (order_id, customer_id, status, total_amount, created_at, channel) VALUES (orders_seq.NEXTVAL, :1, :2, :3, SYSTIMESTAMP, :4)","cur":644.4,"mu":704.025,"sd":74.1269,"n":12,"z":-0.8044,"sev":"typical","imm":false,"vals":[680.1,717.8,569.6,618.7,635.5,740.1,677.1,686.2,827.7,759.6,787.1,748.8,644.4],"ranks":[7,8,10,9,8,8,7,8,9,9,8,9,9],"unit":"s"},{"id":"c7v3m6hq1kf9e","schema":"ORDERS_APP","module":"PaymentGateway","action":"authorize","plan":"1090277735","text":"INSERT INTO payments (payment_id, order_id, provider, auth_code, amount, status, created_at) VALUES (payments_seq.NEXTVAL, :1, :2, :3, :4, 'AUTH', SYSTIMESTAMP)","cur":603.9,"mu":624.92,"sd":60.2052,"n":10,"z":-0.3491,"sev":"typical","imm":false,"vals":[624.6,605.4,634.5,574.3,575.7,567.3,659.7,565.8,null,702.3,739.6,null,603.9],"ranks":[9,10,8,10,10,10,8,10,null,10,10,null,10],"unit":"s"}],"sqlmon":[{"id":"7k2m9dx4qp1zb","user":"ORDERS_APP","module":"OrderService","plan":"3197245811 → 2088341150","sev":"large","flags":["plan changed"],"unit":"s","cur":8.01603,"mu":1.50253,"sd":0.278241,"n":12,"z":23.41,"vals":[1.74964,1.45432,1.18831,1.34207,1.80573,1.26489,1.32748,1.9048,1.25103,1.65998,1.88154,1.20059,8.01603]},{"id":"9wz2ke6yq4tn1","user":"REPORTING","module":"ReportEngine","plan":"2789504216","sev":"typical","flags":["DOP downgrade"],"unit":"s","cur":213.282,"mu":211.907,"sd":18.5182,"n":12,"z":0.07,"vals":[214.439,213.369,193.832,198.375,206.668,247.528,229.722,237.534,218.013,199.176,191.742,192.482,213.282]},{"id":"v8c2l5qs3wd7m","user":"INVENTORY","module":"DBMS_SCHEDULER","plan":"2098345671","sev":"typical","flags":[],"unit":"s","cur":40.1514,"mu":40.0764,"sd":5.47845,"n":12,"z":0.01,"vals":[45.9703,36.3251,39.0005,44.0028,45.1343,31.7827,31.1805,41.5044,45.465,35.8117,38.4029,46.337,40.1514]},{"id":"d8s3n5tw2xk7f","user":"INVENTORY","module":"InventorySync","plan":"3350188817","sev":"typical","flags":[],"unit":"s","cur":40.0246,"mu":42.7163,"sd":5.1306,"n":12,"z":-0.52,"vals":[40.828,41.3624,52.8263,44.2166,39.4318,41.0721,51.1737,41.6147,45.3687,34.1313,39.614,40.9561,40.0246]},{"id":"w1n9k3pf6tx4a","user":"REPORTING","module":"SQL*Plus","plan":null,"sev":"n/a","flags":["error"],"unit":"s"},{"id":"a4g6j2ct5nq1w","user":"LOYALTY","module":"DBMS_SCHEDULER","plan":null,"sev":"n/a","flags":["error"],"unit":"s"},{"id":"h5x1c9pa7rd3s","user":"REPORTING","module":"ReportEngine","plan":null,"sev":"n/a","flags":["DOP downgrade"],"unit":"s"},{"id":"x6j2d8rq5vm1b","user":"SYS","module":"DBMS_SCHEDULER","plan":null,"sev":"n/a","flags":[],"unit":"s"},{"id":"e1k8s4yn7pw2j","user":"ORDERS_APP","module":"PaymentGateway","plan":null,"sev":"n/a","flags":[],"unit":"s"}],"params":[{"name":"cursor_sharing","vals":["EXACT","EXACT","EXACT","FORCE","FORCE","FORCE","FORCE","FORCE","FORCE","FORCE","FORCE","FORCE","FORCE"]},{"name":"optimizer_adaptive_plans","vals":["FALSE","FALSE","FALSE","FALSE","FALSE","FALSE","FALSE","FALSE","FALSE","FALSE","FALSE","FALSE","TRUE"]},{"name":"pga_aggregate_target","vals":["8589934592","8589934592","8589934592","8589934592","8589934592","8589934592","8589934592","8589934592","12884901888","12884901888","12884901888","12884901888","12884901888"]},{"name":"sga_target","vals":["51539607552","51539607552","51539607552","51539607552","51539607552","68719476736","68719476736","68719476736","68719476736","68719476736","68719476736","68719476736","68719476736"]}],"ash":{"t":["2026-06-18 09:00","2026-06-18 15:00","2026-06-18 21:00","2026-06-19 03:00","2026-06-19 09:00","2026-06-19 15:00","2026-06-19 21:00","2026-06-20 03:00","2026-06-20 09:00","2026-06-20 15:00","2026-06-20 21:00","2026-06-21 03:00","2026-06-21 09:00","2026-06-21 15:00","2026-06-21 21:00","2026-06-22 03:00","2026-06-22 09:00","2026-06-22 15:00","2026-06-22 21:00","2026-06-23 03:00","2026-06-23 09:00","2026-06-23 15:00","2026-06-23 21:00","2026-06-24 03:00","2026-06-24 09:00","2026-06-24 15:00","2026-06-24 21:00","2026-06-25 03:00","2026-06-25 09:00","2026-06-25 15:00","2026-06-25 21:00","2026-06-26 03:00","2026-06-26 09:00","2026-06-26 15:00","2026-06-26 21:00","2026-06-27 03:00","2026-06-27 09:00","2026-06-27 15:00","2026-06-27 21:00","2026-06-28 03:00","2026-06-28 09:00","2026-06-28 15:00","2026-06-28 21:00","2026-06-29 03:00","2026-06-29 09:00","2026-06-29 15:00","2026-06-29 21:00","2026-06-30 03:00","2026-06-30 09:00","2026-06-30 15:00","2026-06-30 21:00","2026-07-01 03:00","2026-07-01 09:00","2026-07-01 15:00","2026-07-01 21:00","2026-07-02 03:00","2026-07-02 09:00","2026-07-02 15:00","2026-07-02 21:00","2026-07-03 03:00","2026-07-03 09:00","2026-07-03 15:00","2026-07-03 21:00","2026-07-04 03:00","2026-07-04 09:00","2026-07-04 15:00","2026-07-04 21:00","2026-07-05 03:00","2026-07-05 09:00","2026-07-05 15:00","2026-07-05 21:00","2026-07-06 03:00","2026-07-06 09:00","2026-07-06 15:00","2026-07-06 21:00","2026-07-07 03:00","2026-07-07 09:00","2026-07-07 15:00","2026-07-07 21:00","2026-07-08 03:00","2026-07-08 09:00","2026-07-08 15:00","2026-07-08 21:00","2026-07-09 03:00","2026-07-09 09:00","2026-07-09 15:00","2026-07-09 21:00","2026-07-10 03:00","2026-07-10 09:00","2026-07-10 15:00","2026-07-10 21:00","2026-07-11 03:00","2026-07-11 09:00","2026-07-11 15:00","2026-07-11 21:00","2026-07-12 03:00","2026-07-12 09:00","2026-07-12 15:00","2026-07-12 21:00","2026-07-13 03:00","2026-07-13 09:00","2026-07-13 15:00","2026-07-13 21:00","2026-07-14 03:00","2026-07-14 09:00","2026-07-14 15:00","2026-07-14 21:00","2026-07-15 03:00","2026-07-15 09:00","2026-07-15 15:00","2026-07-15 21:00","2026-07-16 03:00","2026-07-16 09:00","2026-07-16 15:00","2026-07-16 21:00","2026-07-17 03:00","2026-07-17 09:00","2026-07-17 15:00","2026-07-17 21:00","2026-07-18 03:00","2026-07-18 09:00","2026-07-18 15:00","2026-07-18 21:00","2026-07-19 03:00","2026-07-19 09:00","2026-07-19 15:00","2026-07-19 21:00","2026-07-20 03:00","2026-07-20 09:00","2026-07-20 15:00","2026-07-20 21:00","2026-07-21 03:00","2026-07-21 09:00","2026-07-21 15:00","2026-07-21 21:00","2026-07-22 03:00","2026-07-22 09:00","2026-07-22 15:00","2026-07-22 21:00","2026-07-23 03:00","2026-07-23 09:00","2026-07-23 15:00","2026-07-23 21:00","2026-07-24 03:00","2026-07-24 09:00","2026-07-24 15:00","2026-07-24 21:00","2026-07-25 03:00","2026-07-25 09:00","2026-07-25 15:00","2026-07-25 21:00","2026-07-26 03:00","2026-07-26 09:00","2026-07-26 15:00","2026-07-26 21:00","2026-07-27 03:00","2026-07-27 09:00","2026-07-27 15:00","2026-07-27 21:00","2026-07-28 03:00","2026-07-28 09:00","2026-07-28 15:00","2026-07-28 21:00","2026-07-29 03:00","2026-07-29 09:00","2026-07-29 15:00","2026-07-29 21:00","2026-07-30 03:00","2026-07-30 09:00","2026-07-30 15:00","2026-07-30 21:00","2026-07-31 03:00","2026-07-31 09:00","2026-07-31 15:00","2026-07-31 21:00","2026-08-01 03:00","2026-08-01 09:00","2026-08-01 15:00","2026-08-01 21:00","2026-08-02 03:00","2026-08-02 09:00","2026-08-02 15:00","2026-08-02 21:00","2026-08-03 03:00","2026-08-03 09:00","2026-08-03 15:00","2026-08-03 21:00","2026-08-04 03:00","2026-08-04 09:00","2026-08-04 15:00","2026-08-04 21:00","2026-08-05 03:00","2026-08-05 09:00","2026-08-05 15:00","2026-08-05 21:00","2026-08-06 03:00","2026-08-06 09:00","2026-08-06 15:00","2026-08-06 21:00","2026-08-07 03:00","2026-08-07 09:00","2026-08-07 15:00","2026-08-07 21:00","2026-08-08 03:00","2026-08-08 09:00","2026-08-08 15:00","2026-08-08 21:00","2026-08-09 03:00","2026-08-09 09:00","2026-08-09 15:00","2026-08-09 21:00","2026-08-10 03:00","2026-08-10 09:00","2026-08-10 15:00","2026-08-10 21:00","2026-08-11 03:00","2026-08-11 09:00","2026-08-11 15:00","2026-08-11 21:00","2026-08-12 03:00","2026-08-12 09:00","2026-08-12 15:00","2026-08-12 21:00","2026-08-13 03:00","2026-08-13 09:00","2026-08-13 15:00","2026-08-13 21:00","2026-08-14 03:00","2026-08-14 09:00","2026-08-14 15:00","2026-08-14 21:00","2026-08-15 03:00","2026-08-15 09:00","2026-08-15 15:00","2026-08-15 21:00","2026-08-16 03:00","2026-08-16 09:00","2026-08-16 15:00","2026-08-16 21:00","2026-08-17 03:00","2026-08-17 09:00","2026-08-17 15:00","2026-08-17 21:00","2026-08-18 03:00","2026-08-18 09:00","2026-08-18 15:00","2026-08-18 21:00","2026-08-19 03:00","2026-08-19 09:00","2026-08-19 15:00","2026-08-19 21:00","2026-08-20 03:00","2026-08-20 09:00","2026-08-20 15:00","2026-08-20 21:00","2026-08-21 03:00","2026-08-21 09:00","2026-08-21 15:00","2026-08-21 21:00","2026-08-22 03:00","2026-08-22 09:00","2026-08-22 15:00","2026-08-22 21:00","2026-08-23 03:00","2026-08-23 09:00","2026-08-23 15:00","2026-08-23 21:00","2026-08-24 03:00","2026-08-24 09:00","2026-08-24 15:00","2026-08-24 21:00","2026-08-25 03:00","2026-08-25 09:00","2026-08-25 15:00","2026-08-25 21:00","2026-08-26 03:00","2026-08-26 09:00","2026-08-26 15:00","2026-08-26 21:00","2026-08-27 03:00","2026-08-27 09:00","2026-08-27 15:00","2026-08-27 21:00","2026-08-28 03:00","2026-08-28 09:00","2026-08-28 15:00","2026-08-28 21:00","2026-08-29 03:00","2026-08-29 09:00","2026-08-29 15:00","2026-08-29 21:00","2026-08-30 03:00","2026-08-30 09:00","2026-08-30 15:00","2026-08-30 21:00","2026-08-31 03:00","2026-08-31 09:00","2026-08-31 15:00","2026-08-31 21:00","2026-09-01 03:00","2026-09-01 09:00","2026-09-01 15:00","2026-09-01 21:00","2026-09-02 03:00","2026-09-02 09:00","2026-09-02 15:00","2026-09-02 21:00","2026-09-03 03:00","2026-09-03 09:00","2026-09-03 15:00","2026-09-03 21:00","2026-09-04 03:00","2026-09-04 09:00","2026-09-04 15:00","2026-09-04 21:00","2026-09-05 03:00","2026-09-05 09:00","2026-09-05 15:00","2026-09-05 21:00","2026-09-06 03:00","2026-09-06 09:00","2026-09-06 15:00","2026-09-06 21:00","2026-09-07 03:00","2026-09-07 09:00","2026-09-07 15:00","2026-09-07 21:00","2026-09-08 03:00","2026-09-08 09:00","2026-09-08 15:00","2026-09-08 21:00","2026-09-09 03:00","2026-09-09 09:00","2026-09-09 15:00","2026-09-09 21:00","2026-09-10 03:00","2026-09-10 09:00"],"series":[{"name":"CPU","vals":[6.74,5.5,3.2,3.46,6.63,5.45,3.19,3.02,4.51,3.79,2.77,2.92,3.95,3.49,2.76,3.5,6.73,5.42,3.16,3.6,6.55,5.35,3.18,3.48,6.66,5.48,3.21,3.56,6.77,5.56,3.25,3.51,6.63,5.4,3.2,3.07,4.5,3.82,2.87,2.86,3.98,3.48,2.78,3.59,6.63,5.62,3.27,3.71,6.64,6.08,4.59,4.57,8.26,6.95,4.06,4.54,8.34,6.65,3.94,4.26,7.01,5.54,3.13,3.04,4.58,3.87,2.9,2.89,3.97,3.49,2.85,3.65,6.78,5.42,3.14,3.62,6.8,5.57,3.22,3.69,6.91,5.54,3.24,3.65,6.86,5.45,3.21,3.6,6.8,5.57,3.18,3.12,4.5,3.95,2.83,2.92,3.93,3.61,2.82,3.59,6.71,5.66,3.24,3.65,6.7,5.59,3.17,3.59,6.87,5.51,3.18,3.68,6.98,5.51,3.19,3.71,6.74,5.38,3.15,3.07,4.56,3.94,2.88,2.87,4.02,3.53,2.75,3.58,6.85,5.5,3.24,3.71,6.84,5.63,3.29,3.61,6.84,5.48,3.29,3.66,7.06,5.65,3.25,3.71,7.07,5.59,3.24,3.05,4.57,3.94,2.9,2.93,3.97,3.54,2.86,3.63,6.73,5.66,3.26,3.67,7.16,5.51,3.23,3.64,6.73,5.63,3.24,3.64,7.0,5.7,3.26,3.67,6.92,6.35,3.77,3.1,4.58,4.06,2.85,2.86,4.04,3.48,2.83,3.66,7.0,5.68,3.28,3.73,6.98,5.48,3.34,3.74,6.86,5.53,3.24,3.72,6.86,5.58,3.29,3.71,7.14,5.69,3.3,3.01,4.65,3.95,2.87,2.96,4.12,3.66,2.91,3.77,7.07,5.62,3.27,3.65,7.14,5.73,3.65,4.88,9.5,7.19,3.9,4.18,8.05,6.76,3.76,4.25,8.35,6.71,3.8,3.58,5.31,4.71,3.33,3.39,4.83,4.15,3.36,4.34,8.1,6.5,3.73,4.34,8.27,6.68,3.83,4.28,8.36,6.68,3.86,4.39,8.43,6.71,3.99,4.25,8.37,6.86,3.83,3.66,5.41,4.71,3.51,3.45,4.95,4.21,3.39,4.16,8.52,6.87,3.95,4.54,8.37,6.97,3.93,4.37,8.3,6.89,4.07,4.47,8.62,6.95,3.95,4.47,8.57,6.97,4.03,3.73,5.73,4.85,3.5,3.52,5.05,4.39,3.49,4.42,8.63,7.64,4.47,4.49,8.54,6.99,4.05,4.46,8.8,6.96,4.13,4.72,8.89,7.02,4.03,4.64,8.71,7.24,4.02,3.89,5.94,5.08,3.67,3.6,5.12,4.48,3.58,4.51,8.85,7.33,4.03,4.51,8.98,7.09,4.17,4.79,9.18,7.16,4.08,4.79,8.58]},{"name":"User I/O","vals":[1.9,1.54,0.98,1.02,1.86,1.53,0.98,0.94,1.28,1.06,0.84,0.9,1.11,1.0,0.84,1.04,1.89,1.55,0.97,1.06,1.85,1.5,0.98,1.03,1.85,1.54,0.99,1.06,1.92,1.57,1.0,1.04,1.84,1.52,0.98,0.95,1.26,1.08,0.87,0.89,1.12,0.99,0.84,1.07,1.86,1.58,0.99,1.09,1.86,1.77,1.53,1.4,2.43,2.06,1.33,1.39,2.49,1.95,1.27,1.31,1.99,1.55,0.97,0.93,1.29,1.09,0.89,0.89,1.13,0.99,0.85,1.09,1.93,1.52,0.95,1.06,1.94,1.57,0.98,1.08,1.94,1.56,0.98,1.08,1.91,1.52,0.99,1.07,1.91,1.57,0.97,0.96,1.27,1.12,0.86,0.9,1.1,1.02,0.85,1.05,1.89,1.61,1.0,1.07,1.86,1.56,0.97,1.07,1.92,1.55,0.98,1.09,1.95,1.54,0.98,1.08,1.88,1.52,0.96,0.96,1.3,1.1,0.87,0.88,1.14,0.99,0.83,1.05,1.93,1.54,1.16,1.14,1.92,1.57,1.0,1.06,1.9,1.54,1.01,1.09,1.97,1.6,1.0,1.1,1.99,1.56,0.98,0.95,1.28,1.11,0.87,0.9,1.13,1.01,0.88,1.08,1.89,1.58,1.0,1.09,2,1.53,0.99,1.08,1.9,1.57,0.99,1.07,1.97,1.61,1.0,1.1,1.94,1.86,1.19,0.95,1.3,1.15,0.86,0.88,1.15,0.98,0.85,1.09,1.95,1.59,1.01,1.12,1.96,1.53,1.02,1.11,1.93,1.55,0.99,1.1,1.93,1.54,1.01,1.1,2.0,1.6,1.01,0.92,1.3,1.11,0.87,0.91,1.17,1.05,0.89,1.12,2.0,1.58,1.0,1.09,1.99,1.62,1.12,1.49,2.82,2.09,1.22,1.24,2.21,1.86,1.14,1.23,2.29,1.87,1.15,1.07,1.46,1.31,0.99,1.02,1.33,1.15,1.0,1.24,2.2,1.81,1.12,1.26,2.28,1.82,1.16,1.23,2.3,1.85,1.16,1.27,2.34,1.86,1.21,1.23,2.3,1.92,1.16,1.07,1.49,1.29,1.02,1.02,1.37,1.16,1.01,1.19,2.31,1.86,1.18,1.29,2.25,1.88,1.19,1.24,2.24,1.86,1.24,1.28,2.35,1.9,1.2,1.26,2.31,1.91,1.21,1.09,1.58,1.32,1.03,1.02,1.37,1.19,1.03,1.26,2.34,2.16,1.39,1.26,2.29,1.88,1.19,1.25,2.37,1.85,1.24,1.33,2.39,1.9,1.19,1.31,2.36,1.96,1.19,1.13,1.6,1.38,1.08,1.06,1.4,1.22,1.06,1.26,2.38,1.96,1.18,1.27,2.43,1.91,3.06,4.77,9.48,7.23,3.96,4.85,8.35]},{"name":"Network","vals":[0.22,0.18,0.09,0.11,0.21,0.18,0.1,0.09,0.14,0.12,0.09,0.09,0.13,0.11,0.08,0.11,0.22,0.18,0.1,0.12,0.22,0.17,0.1,0.11,0.22,0.18,0.1,0.11,0.22,0.18,0.1,0.11,0.22,0.18,0.1,0.09,0.15,0.12,0.09,0.08,0.13,0.11,0.08,0.11,0.21,0.18,0.1,0.12,0.21,0.19,0.13,0.14,0.25,0.22,0.12,0.14,0.26,0.21,0.12,0.13,0.23,0.18,0.09,0.09,0.15,0.12,0.09,0.09,0.13,0.11,0.09,0.12,0.22,0.17,0.1,0.12,0.22,0.18,0.1,0.12,0.23,0.18,0.1,0.12,0.23,0.18,0.1,0.11,0.22,0.18,0.09,0.09,0.15,0.13,0.09,0.09,0.13,0.12,0.09,0.11,0.22,0.18,0.1,0.12,0.22,0.18,0.1,0.11,0.23,0.18,0.1,0.12,0.24,0.18,0.1,0.12,0.22,0.17,0.1,0.09,0.15,0.13,0.09,0.09,0.13,0.11,0.09,0.11,0.22,0.18,0.1,0.12,0.23,0.19,0.1,0.11,0.23,0.18,0.1,0.12,0.23,0.19,0.1,0.12,0.23,0.19,0.1,0.09,0.15,0.13,0.09,0.09,0.13,0.12,0.09,0.12,0.22,0.18,0.1,0.12,0.24,0.18,0.1,0.12,0.22,0.18,0.1,0.11,0.23,0.18,0.1,0.12,0.22,0.21,0.12,0.09,0.15,0.13,0.09,0.09,0.13,0.11,0.09,0.11,0.23,0.19,0.1,0.12,0.23,0.18,0.1,0.12,0.23,0.18,0.1,0.12,0.23,0.18,0.1,0.12,0.24,0.19,0.1,0.09,0.15,0.13,0.09,0.09,0.13,0.12,0.09,0.12,0.23,0.18,0.1,0.11,0.23,0.18,0.1,0.13,0.26,0.2,0.11,0.12,0.24,0.2,0.1,0.12,0.25,0.2,0.1,0.1,0.15,0.13,0.1,0.09,0.14,0.12,0.09,0.12,0.24,0.19,0.1,0.12,0.24,0.19,0.11,0.12,0.24,0.2,0.11,0.12,0.24,0.19,0.11,0.12,0.24,0.2,0.1,0.1,0.15,0.13,0.1,0.09,0.14,0.12,0.09,0.11,0.24,0.2,0.11,0.13,0.24,0.2,0.11,0.12,0.24,0.19,0.11,0.12,0.24,0.2,0.1,0.12,0.24,0.2,0.11,0.1,0.16,0.14,0.1,0.09,0.14,0.12,0.09,0.12,0.25,0.22,0.12,0.12,0.24,0.2,0.11,0.13,0.25,0.2,0.11,0.13,0.26,0.2,0.11,0.13,0.24,0.2,0.11,0.1,0.16,0.14,0.1,0.09,0.14,0.12,0.1,0.12,0.24,0.2,0.11,0.12,0.25,0.19,0.39,0.66,1.36,1.02,0.52,0.68,1.18]},{"name":"Commit","vals":[0.67,0.54,0.32,0.33,0.66,0.54,0.3,0.28,0.45,0.38,0.27,0.27,0.38,0.34,0.27,0.34,0.69,0.52,0.31,0.34,0.64,0.53,0.31,0.33,0.65,0.55,0.31,0.34,0.67,0.53,0.3,0.34,0.66,0.54,0.31,0.29,0.44,0.38,0.28,0.27,0.4,0.34,0.27,0.35,0.66,0.56,0.32,0.36,0.67,0.64,0.47,0.45,0.84,0.69,0.39,0.44,0.84,0.66,0.39,0.44,0.7,0.55,0.3,0.28,0.44,0.39,0.27,0.27,0.38,0.34,0.28,0.35,0.66,0.54,0.31,0.35,0.66,0.55,0.32,0.36,0.7,0.56,0.32,0.34,0.7,0.54,0.3,0.34,0.69,0.54,0.31,0.29,0.44,0.38,0.28,0.28,0.38,0.34,0.27,0.35,0.66,0.56,0.31,0.35,0.69,0.57,0.31,0.34,0.7,0.55,0.31,0.35,0.68,0.55,0.31,0.37,0.69,0.53,0.31,0.28,0.45,0.38,0.28,0.27,0.39,0.35,0.27,0.35,0.68,0.55,0.34,0.37,0.67,0.57,0.33,0.34,0.7,0.54,0.32,0.36,0.7,0.56,0.31,0.36,0.7,0.56,0.32,0.28,0.43,0.38,0.28,0.27,0.39,0.34,0.27,0.35,0.68,0.58,0.31,0.34,0.72,0.56,0.32,0.35,0.67,0.57,0.31,0.36,0.7,0.57,0.32,0.34,0.7,0.65,0.38,0.29,0.46,0.41,0.27,0.26,0.39,0.33,0.28,0.35,0.7,0.57,0.32,0.35,0.68,0.56,0.33,0.37,0.69,0.55,0.31,0.35,0.68,0.59,0.32,0.35,0.7,0.57,0.31,0.29,0.46,0.39,0.28,0.28,0.4,0.35,0.28,0.36,0.7,0.57,0.32,0.35,0.72,0.57,0.34,0.61,1.34,0.87,0.42,0.41,0.8,0.64,0.36,0.39,0.79,0.64,0.35,0.33,0.51,0.44,0.32,0.29,0.44,0.39,0.32,0.4,0.78,0.6,0.35,0.39,0.77,0.62,0.34,0.39,0.77,0.64,0.36,0.41,0.77,0.63,0.35,0.39,0.78,0.62,0.36,0.33,0.5,0.43,0.34,0.31,0.45,0.39,0.31,0.37,0.78,0.64,0.37,0.41,1.52,1.01,0.36,0.4,0.76,0.64,0.36,0.41,0.81,0.65,0.36,0.4,0.8,0.64,0.36,0.32,0.51,0.43,0.32,0.3,0.43,0.39,0.32,0.4,0.81,0.72,0.41,0.4,0.76,0.62,0.37,0.39,0.81,0.66,0.37,0.41,0.81,0.63,0.36,0.42,0.79,0.64,0.35,0.33,0.53,0.43,0.33,0.3,0.45,0.39,0.32,0.4,0.8,0.66,0.38,0.41,0.8,0.63,0.42,0.5,0.96,0.74,0.44,0.5,0.87]},{"name":"Other classes","members":["Application","System I/O","Concurrency","Other","Configuration","Scheduler"],"vals":[1.68,1.33,0.79,0.84,1.62,1.34,0.77,0.7,1.09,0.93,0.68,0.69,0.96,0.83,0.67,0.84,1.68,1.32,0.78,0.86,1.62,1.28,0.76,0.83,1.64,1.32,0.78,0.85,1.66,1.34,0.78,0.85,1.67,1.32,0.77,0.73,1.08,0.93,0.7,0.66,0.95,0.83,0.69,0.88,1.61,1.41,0.78,0.9,1.64,1.49,1.49,1.4,2.56,2.14,1.27,1.36,2.53,1.99,1.2,1.22,1.77,1.34,0.78,0.7,1.1,0.94,0.72,0.67,0.94,0.82,0.7,0.86,1.63,1.32,0.78,0.88,1.67,1.36,0.77,0.87,1.7,1.34,0.79,0.86,1.71,1.31,0.78,0.85,1.67,1.33,0.77,0.72,1.08,0.96,0.69,0.69,0.96,0.85,0.7,0.86,1.62,1.39,0.79,0.87,1.64,1.35,0.77,0.85,1.69,1.31,0.76,0.88,1.74,1.32,0.78,0.9,1.63,1.28,0.76,0.72,1.13,0.92,0.7,0.67,0.96,0.85,0.67,0.88,1.67,1.33,0.84,0.89,1.64,1.39,0.79,0.85,1.67,1.34,0.8,0.86,1.71,1.38,0.77,0.89,1.71,1.38,0.79,0.72,1.08,0.96,0.72,0.69,0.97,0.85,0.71,0.87,1.64,1.41,0.78,0.87,1.79,1.34,0.79,0.88,1.69,1.38,0.79,0.88,1.73,1.4,0.81,0.88,1.67,1.55,0.93,0.73,1.12,0.99,0.7,0.67,0.97,0.83,0.7,0.88,1.69,1.4,0.8,0.9,1.72,1.35,0.81,0.9,1.68,1.36,0.78,0.9,1.67,1.36,0.79,0.9,1.73,1.4,0.8,0.7,1.16,0.97,0.7,0.7,1.0,0.88,0.71,0.91,1.72,1.38,0.79,0.88,1.75,1.42,0.86,2.43,5.46,3.07,1.29,1.14,1.99,1.56,0.88,0.97,1.95,1.59,0.89,0.81,1.22,1.07,0.8,0.74,1.11,0.94,0.79,0.99,1.84,1.49,0.86,0.99,1.91,1.53,0.86,0.98,1.95,1.57,0.9,0.99,1.93,1.53,0.93,0.97,1.9,1.59,0.89,0.81,1.24,1.08,0.83,0.77,1.12,0.95,0.79,0.91,1.94,1.57,0.9,1.02,2.46,1.81,0.9,0.99,1.9,1.55,0.96,1.02,1.95,1.57,0.91,0.99,1.91,1.6,0.93,0.8,1.28,1.09,0.83,0.76,1.13,0.98,0.81,1.0,1.93,1.77,1.03,1.0,1.93,1.57,0.91,1.01,1.98,1.55,0.94,1.03,2.02,1.57,0.93,1.04,1.94,1.6,0.91,0.84,1.3,1.12,0.85,0.77,1.13,0.98,0.82,1.0,1.99,1.61,0.92,1.0,2.0,1.59,1.16,1.38,2.73,2.09,1.2,1.41,2.41]}],"win":["2026-06-18 09:00","2026-06-25 09:00","2026-07-02 09:00","2026-07-09 09:00","2026-07-16 09:00","2026-07-23 09:00","2026-07-30 09:00","2026-08-06 09:00","2026-08-13 09:00","2026-08-20 09:00","2026-08-27 09:00","2026-09-03 09:00","2026-09-10 09:00"],"wtot":[10.68,10.5,13.49,10.6,10.83,10.9,10.74,10.77,13.73,14.0,13.48,13.79,21.38],"wcur":{"CPU":8.583,"User I/O":8.347,"Network":1.175,"Commit":0.869}}};
+(function(){
+'use strict';
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const MINUS='−';
+const W=DATA.weeks; // oldest -> current
+
+/* ------------------------------------------------ number formatting */
+function sig(v,d){ if(v===0) return '0'; const a=Math.abs(v); const dec=Math.max(0,d-1-Math.floor(Math.log10(a)));
+  if(dec===0) return Math.round(v).toLocaleString('en-US'); return v.toFixed(dec); }
+function neg(s){return s.replace('-',MINUS)}
+function fv(v,u){ // -> [number, unit]
+  if(v==null) return ['—',''];
+  const a=Math.abs(v);
+  if(u==='B/s'){ if(a>=1e9) return [sig(v/1e9,4),'GB/s']; if(a>=1e6) return [sig(v/1e6,4),'MB/s']; if(a>=1e3) return [sig(v/1e3,4),'kB/s']; return [sig(v,4),'B/s']; }
+  if(a>=1e9) return [sig(v/1e9,4)+'G',u]; if(a>=1e6) return [sig(v/1e6,4)+'M',u]; if(a>=1e4) return [sig(v/1e3,4)+'k',u];
+  return [neg(sig(v,4)),u];
+}
+function fvs(v,u){const x=fv(v,u);return x[0]+(x[1]?(x[1].startsWith('/')?'':' ')+x[1]:'')}
+function den(r){return Math.max(r.sd||0,0.02*Math.abs(r.mu||0))}
+function range(r){ // mean ± 2 sigma, in the metric's own unit
+  const d=den(r); let lo=Math.max(0,r.mu-2*d), hi=r.mu+2*d;
+  let sc=1,suf='',u=r.unit;
+  if(u==='B/s'){ if(hi>=1e9){sc=1e9;u='GB/s'} else if(hi>=1e6){sc=1e6;u='MB/s'} else if(hi>=1e3){sc=1e3;u='kB/s'} }
+  else if(hi>=1e9){sc=1e9;suf='G'} else if(hi>=1e6){sc=1e6;suf='M'} else if(hi>=1e4||(hi>=1e3&&lo>=1e3)){sc=1e3;suf='k'}
+  const f=x=>{ if(x===0) return '0'; const s=x/sc; if(sc>1) return (s<100?s.toFixed(1):Math.round(s).toLocaleString('en-US'))+suf;
+    return s>=1000?Math.round(s).toLocaleString('en-US'):sig(s,3); };
+  return [f(lo)+'–'+f(hi), sc>1&&!suf?u:(u==='B/s'?'B/s':r.unit)];
+}
+function delta(cur,mu){ if(cur==null||mu==null||mu===0) return '—'; const r=cur/mu;
+  if(r>=2) return '▲ ×'+(r<100?r.toFixed(1):Math.round(r)); const p=(cur-mu)/Math.abs(mu)*100;
+  return (p>=0?'▲ ':'▼ ')+Math.abs(p).toFixed(1)+'%'; }
+function zt(r){ if(r.zcap) return '>+99σ'; if(r.z==null) return '—'; return (r.z>=0?'+':MINUS)+Math.abs(r.z).toFixed(1)+'σ'; }
+const SEVW={large:'large finding',moderate:'moderate finding',typical:'normal',improved:'improved',flat:'flat baseline','n/a':'not scored',insufficient:'too little history'};
+
+/* ------------------------------------------------ the band (fixed domain, z -4 .. +8) */
+const ZMIN=-4,ZMAX=8;
+function band(r,opt){ opt=opt||{};
+  const sev=r.sev, cls=['bd','s-'+sev]; let ov='';
+  if(sev==='flat'){ return `<span class="bd s-flat" role="img" aria-label="flat baseline, prior sigma is zero"><b class="ov">flat, σ = 0</b></span>`; }
+  if(r.z==null){ return `<span class="bd na" role="img" aria-label="not scored"><b class="ov">${esc(opt.na||'no data')}</b></span>`; }
+  let x=(r.z-ZMIN)/(ZMAX-ZMIN);
+  if(x>1){x=1;cls.push('po');ov=`<b class="ov">${zt(r)}</b>`}
+  else if(x<0){x=0;cls.push('pu');ov=`<b class="ov">${zt(r)}</b>`}
+  if(r.twin) cls.push('twn'); if(opt.floor) cls.push('fl');
+  const lab=`${SEVW[sev]||sev}${r.imm?' (immaterial)':''}, z ${zt(r)} against the prior normal`;
+  return `<span class="${cls.join(' ')}" style="--x:${x.toFixed(4)}" role="img" aria-label="${lab}"><i></i>${ov}</span>`;
+}
+const bx=z=>((z-ZMIN)/(ZMAX-ZMIN)).toFixed(4);
+function axis(){ return `<span class="bd-ax" aria-hidden="true"><em style="--x:${bx(-2)}">${MINUS}2</em><em style="--x:${bx(0)}">0</em><em style="--x:${bx(2)}">+2</em><em style="--x:${bx(3)}">+3</em><em class="end" style="--x:1">+8σ</em></span>`; }
+
+/* ------------------------------------------------ sparkline */
+function spark(r,w,h){ w=w||80;h=h||22; const vals=r.vals; if(!vals) return '';
+  const v=vals.filter(x=>x!=null); if(!v.length) return '';
+  let lo=null,hi=null; if(r.mu!=null){const d=den(r);lo=Math.max(0,r.mu-2*d);hi=r.mu+2*d;}
+  let mn=Math.min(...v,lo??Infinity), mx=Math.max(...v,hi??-Infinity); if(mx===mn){mx+=1;mn-=1}
+  const X=i=>2+(w-6)*i/(vals.length-1), Y=x=>(h-3-(h-6)*(x-mn)/(mx-mn));
+  let d='',pen=false; vals.forEach((x,i)=>{ if(x==null){pen=false;return} d+=(pen?'L':'M')+X(i).toFixed(1)+' '+Y(x).toFixed(1); pen=true; });
+  const last=vals[vals.length-1];
+  const zone=lo!=null?`<rect class="sp-z" x="0" y="${Y(hi).toFixed(1)}" width="${w}" height="${Math.max(1,Y(lo)-Y(hi)).toFixed(1)}" rx="1"/>`:'';
+  const dot=last!=null?`<circle class="sp-c s-${r.sev}" cx="${X(vals.length-1).toFixed(1)}" cy="${Y(last).toFixed(1)}" r="3"/>`:'';
+  return `<svg class="sp" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${zone}<path class="sp-l" d="${d}"/>${dot}</svg>`;
+}
+
+/* ------------------------------------------------ marker lanes (collision-free flags) */
+const cvs=document.createElement('canvas').getContext('2d');
+function tw(t,px){cvs.font=`${px||11}px ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, system-ui, sans-serif`;return cvs.measureText(t).width}
+function lanes(items,width,gap){ // items: {x,label} -> adds lane, anchor, x0,x1
+  const ends=[]; items.sort((a,b)=>a.x-b.x);
+  for(const it of items){ const w=tw(it.label)+10; let x0=it.x-1, anchor='start';
+    if(x0+w>width){x0=it.x-w+1;anchor='end'}
+    let L=0; while(ends[L]!=null && ends[L]+gap>x0) L++;
+    ends[L]=x0+w; Object.assign(it,{lane:L,anchor,x0,x1:x0+w}); }
+  return items;
+}
+const MK=DATA.markers.map(m=>({t:Date.parse(m.t.replace(' ','T')+':00Z'),label:m.label}));
+const SHORT={'Release 4.0':'R 4.0','Hotfix 4.0.1':'HF 4.0.1','RU 19.28 patch':'RU 19.28','Release 4.1':'R 4.1','Release 4.2':'R 4.2'};
+const WIN=DATA.ash.win.map(s=>Date.parse(s.replace(' ','T')+':00Z'));
+
+/* ------------------------------------------------ 13-window column chart (row expander) */
+function cols(r,opt){ opt=opt||{};
+  const n=r.vals.length, cw=48, padL=8, w=padL+n*cw+8, top=34, ph=108, h=top+ph+36;
+  const d=den(r); const lo=Math.max(0,r.mu-2*d), hi=r.mu+2*d, lo1=Math.max(0,r.mu-d), hi1=r.mu+d;
+  const mx=Math.max(...r.vals.filter(v=>v!=null),hi)*1.08;
+  const Y=v=>top+ph-ph*v/mx, X=i=>padL+i*cw+cw/2;
+  let s=`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(opt.title||'')} per window, oldest to Current">`;
+  s+=`<rect class="cz2" x="${padL}" y="${Y(hi)}" width="${n*cw}" height="${Y(lo)-Y(hi)}"/>`;
+  s+=`<rect class="cz1" x="${padL}" y="${Y(hi1)}" width="${n*cw}" height="${Y(lo1)-Y(hi1)}"/>`;
+  s+=`<line class="cm" x1="${padL}" x2="${padL+n*cw}" y1="${Y(r.mu)}" y2="${Y(r.mu)}"/>`;
+  s+=`<line class="ax" x1="${padL}" x2="${padL+n*cw}" y1="${top+ph}" y2="${top+ph}"/>`;
+  r.vals.forEach((v,i)=>{ const cur=i===n-1, x=X(i);
+    if(v!=null){ const y=Y(v), bw=22, bh=top+ph-y, rr=Math.min(3,bh);
+      s+=`<path class="cb${cur?' cur s-'+r.sev:''}" d="M${x-bw/2} ${top+ph}V${y+rr}q0 -${rr} ${rr} -${rr}H${x+bw/2-rr}q${rr} 0 ${rr} ${rr}V${top+ph}Z"/>`;
+      if(cur) s+=`<circle class="cdot s-${r.sev}" cx="${x}" cy="${y}" r="5"/>`;
+      s+=`<text class="ct v${cur?' cur':''}" x="${x}" y="${y-(cur?9:4)}" text-anchor="middle">${fv(v,r.unit)[0]}</text>`;
+    } else s+=`<text class="ct" x="${x}" y="${top+ph-4}" text-anchor="middle">—</text>`;
+    s+=`<text class="ct${cur?' cur':''}" x="${x}" y="${top+ph+14}" text-anchor="middle">${cur?'Current':W[i]}</text>`;
+  });
+  // release flags between windows
+  const fl=[]; MK.forEach(m=>{ for(let i=0;i<n-1;i++){ if(m.t>WIN[i]&&m.t<WIN[i+1]){ const f=(m.t-WIN[i])/(WIN[i+1]-WIN[i]); fl.push({x:X(i)+f*cw,label:SHORT[m.label]||m.label,full:m.label}); } } });
+  lanes(fl,w,6).forEach(f=>{ const y=4+f.lane*13;
+    s+=`<line class="cf" x1="${f.x}" x2="${f.x}" y1="${y+2}" y2="${top+ph}" stroke-dasharray="2 3"/><rect class="cfh" x="${f.x-1}" y="${y+1}" width="3" height="9" rx="1"/><text class="cft" x="${f.anchor==='start'?f.x+5:f.x-5}" y="${y+9}" text-anchor="${f.anchor}"><title>${esc(f.full)}</title>${esc(f.label)}</text>`; });
+  s+=`<text class="ct" x="${padL}" y="${h-4}">shaded: normal range (mean ± 1σ darker, ± 2σ lighter); line: prior mean</text>`;
+  return s+'</svg>';
+}
+
+/* ------------------------------------------------ table machinery */
+const CHEV='<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const WC={'CPU':'#3FB344','User I/O':'#4A90D9','System I/O':'#1F4E89','Commit':'#E89B40','Application':'#D62728','Concurrency':'#8B0000','Network':'#967259','Configuration':'#793C32','Other':'#C77CB0','Scheduler':'#88C070','Cluster':'#E5C228','Administrative':'#7B6FA8','Queueing':'#E89BB7'};
+const sw=c=>c?`<i class="sw" style="background:${WC[c]||'#999'}" title="${esc(c)} wait class"></i>`:'';
+let RID=0; const ROWS={};
+function flagCls(r){ return (r.sev==='large'||r.sev==='moderate')&&!r.twin?' f-'+r.sev:''; }
+function cells(r,nameHTML,opt){ opt=opt||{};
+  const id='r'+(++RID); ROWS[id]=Object.assign({},r,{_opt:opt});
+  const c=fv(r.cur,r.unit); const rg=r.mu!=null?range(r):['—',''];
+  const dcls=r.twin?'s-typical':('s-'+r.sev);
+  const imm=r.imm?'<span class="imm">immaterial</span>':'';
+  let h=`<td class="${opt.sqlcell?'c-sql':'c-name'}">${nameHTML}</td>`;
+  if(opt.pre) h=opt.pre+h;
+  h+=`<td class="c-cur num">${c[0]}<span class="u">${esc(c[1])}</span></td>`;
+  h+=`<td class="c-rng num">${rg[0]}<span class="u">${esc(rg[1])}</span></td>`;
+  h+=`<td class="c-band">${band(r,opt)}</td>`;
+  h+=`<td class="c-d num"><span class="d ${dcls}">${r.sev==='flat'?'—':delta(r.cur,r.mu)}</span>${imm}</td>`;
+  h+=`<td class="c-tr">${spark(r)}</td>`;
+  if(opt.post) h+=opt.post;
+  h+=`<td class="c-x">${r.vals?`<button class="xb" type="button" aria-expanded="false" aria-label="Per-window values for ${esc(r.label||r.name||r.id)}" data-rid="${id}">${CHEV}</button>`:''}</td>`;
+  return {id,h};
+}
+function head(nameTh,opt){ opt=opt||{};
+  return `<thead><tr>${opt.pre||''}<th ${opt.sort?'data-sort="name"':''}><span class="thl">${nameTh}</span></th><th class="num">${opt.curTh||'Current'}</th><th class="num">Normal range</th><th class="c-band" ${opt.sort?'data-sort="z" aria-sort="descending"':''}><span class="thl">vs normal, in σ</span>${axis()}</th><th class="num" ${opt.sort?'data-sort="d"':''}><span class="thl">Δ vs mean</span></th><th title="13 windows, oldest to Current; shaded = normal range">Trend</th>${opt.post||''}<th><span class="sr">Details</span></th></tr></thead>`;
+}
+function detail(r){
+  const o=r._opt||{}; const d=den(r);
+  let facts=`<dl><dt>Current</dt><dd>${fvs(r.cur,r.unit)}</dd><dt>Prior mean</dt><dd>${fvs(r.mu,r.unit)}</dd><dt>Prior σ</dt><dd>${fvs(r.sd,r.unit)}${d>(r.sd||0)?' (floored at 2% of mean)':''}</dd><dt>Windows</dt><dd>${r.n} prior</dd><dt>z</dt><dd>${zt(r)} (${SEVW[r.sev]}${r.imm?', immaterial':''})</dd>`;
+  if(o.facts) facts+=o.facts;
+  facts+='</dl>';
+  let extra=o.extra||'';
+  return `<div class="xp"><div class="cc">${cols(r,{title:r.label||r.name||r.id})}${o.left||''}</div>${facts}${extra}</div>`;
+}
+function toggleRow(btn){
+  const tr=btn.closest('tr'); const open=btn.getAttribute('aria-expanded')==='true';
+  if(open){ const nx=tr.nextElementSibling; if(nx&&nx.classList.contains('xr')) nx.remove(); btn.setAttribute('aria-expanded','false'); return; }
+  const r=ROWS[btn.dataset.rid]; const ncol=tr.children.length;
+  const x=document.createElement('tr'); x.className='xr'; x.innerHTML=`<td colspan="${ncol}">${detail(r)}</td>`;
+  tr.after(x); btn.setAttribute('aria-expanded','true');
+}
+document.addEventListener('click',e=>{ const b=e.target.closest('.xb'); if(b) toggleRow(b); });
+
+/* ------------------------------------------------ findings table */
+function nameCell(r){
+  const nm=r.lead?(r.label||r.name):r.name;
+  const tag=r.twin?'<span class="tag" title="Same counter as the family lead, seen through another view; scored but not counted">twin</span>':'';
+  const src=r.lead&&r.label&&r.label!==r.name?` title="${esc(r.name)}"`:'';
+  return `${r.cls?sw(r.cls):''}<span${src}>${esc(nm)}</span>${tag}`;
+}
+function renderFindings(){
+  const F=DATA.findings, t=$('#t-find');
+  const fams={}; F.forEach(r=>{ if(r.fam&&(r.sev==='large'||r.sev==='moderate')) (fams[r.fam]=fams[r.fam]||[]).push(r); });
+  const groups=Object.values(fams).map(g=>{ const lead=g.find(r=>r.lead)||g[0];
+    const rest=g.filter(r=>r!==lead).sort((a,b)=>(a.twin-b.twin)||Math.abs(b.z)-Math.abs(a.z)); return {lead,rows:[lead,...rest]}; });
+  groups.sort((a,b)=>Math.abs(b.lead.z)-Math.abs(a.lead.z));
+  let h=head('Metric',{sort:1});
+  groups.forEach(g=>{
+    h+=`<tbody class="grp" data-z="${Math.abs(g.lead.z)}" data-name="${esc(g.lead.label||g.lead.name)}" data-d="${Math.abs(g.lead.cur/g.lead.mu)}">`;
+    g.rows.forEach(r=>{ const c=cells(r,nameCell(r),{}); const k=r===g.lead?'lead':(r.twin?'twin':'mem');
+      h+=`<tr class="${k}${r.twin?'':flagCls(r)}" data-rid="${c.id}">${c.h}</tr>`; });
+    h+='</tbody>';
+  });
+  const nrm=F.filter(r=>!(r.sev==='large'||r.sev==='moderate')).sort((a,b)=>(a.sev==='flat')-(b.sev==='flat')||Math.abs(b.z)-Math.abs(a.z));
+  h+=`<tbody class="nrm" id="nrm-find">`;
+  nrm.forEach(r=>{ const c=cells(r,nameCell(r),{}); h+=`<tr class="${r.twin?'twin0':''}">${c.h}</tr>`; });
+  h+='</tbody>';
+  t.innerHTML=h;
+  const btn=$('.more[data-for="t-find"]'); btn.dataset.n=nrm.length; setMore(btn,false);
+  // open the physical reads row by default
+  const pr=$$('#t-find tr.lead').find(tr=>tr.textContent.startsWith('Physical reads'));
+  if(pr){ const b=$('.xb',pr); const r=ROWS[b.dataset.rid];
+    r._opt.facts=`<dt>Family</dt><dd>physical reads, physical read total bytes, read IO requests (+2 twins)</dd><dt>Where</dt><dd>ts_orders_data.301 read 345k MB (normal ~74k); ORDERS_APP.ORDER_LINES 95.1M blocks (~8.5M)</dd><dt>Steps</dt><dd>+30% from 13 Aug (after Release 4.1), then ×4.5 in the Current window (after Release 4.2)</dd>`;
+    toggleRow(b); }
+}
+function setMore(btn,open){ const n=btn.dataset.n; btn.setAttribute('aria-expanded',open?'true':'false');
+  btn.innerHTML=`<i class="dotk typical"></i>${open?'Hide the '+n+' normal rows':'Show '+n+' normal rows'}`;
+  const tb=$('#'+btn.dataset.for+' tbody.nrm'); if(tb) tb.classList.toggle('open',open); }
+document.addEventListener('click',e=>{ const b=e.target.closest('.more'); if(b) setMore(b,b.getAttribute('aria-expanded')!=='true'); });
+// sortable headers: reorder family groups
+document.addEventListener('click',e=>{ const th=e.target.closest('th[data-sort]'); if(!th) return;
+  const t=th.closest('table'); const k=th.dataset.sort; const cur=th.getAttribute('aria-sort');
+  const dir=cur==='descending'?'ascending':'descending';
+  $$('th[data-sort]',t).forEach(x=>x.removeAttribute('aria-sort')); th.setAttribute('aria-sort',dir);
+  const gs=$$('tbody.grp',t); const m=dir==='ascending'?1:-1;
+  gs.sort((a,b)=> k==='name'? m*a.dataset.name.localeCompare(b.dataset.name) : m*(parseFloat(a.dataset[k])-parseFloat(b.dataset[k])));
+  const nrm=$('tbody.nrm',t); gs.forEach(g=>t.insertBefore(g,nrm)); });
+
+/* ------------------------------------------------ what changed (masthead) */
+function renderWC(){
+  const F=DATA.findings, by=n=>F.find(r=>r.name===n);
+  const pr=by('physical reads'), dbt=by('DB time'), cpu=by('DB CPU');
+  const aas=x=>(x/100).toFixed(1);
+  const sm=DATA.sqlmon.find(s=>s.id==='7k2m9dx4qp1zb');
+  const dd=den(dbt), cd=den(cpu);
+  const P=DATA.params; const chg=new Array(13).fill(0), cur=new Array(13).fill(0);
+  P.forEach(p=>p.vals.forEach((v,i)=>{ if(i>0&&v!==p.vals[i-1]) chg[i]=1; }));
+  const strip=`<span class="tl13" role="img" aria-label="Parameter changes landed in 4 of the 13 windows: 9 Jul, 23 Jul, 13 Aug and the Current window">${chg.map((c,i)=>`<b style="--x:${(i/12).toFixed(4)}"></b>`+(c?`<i class="${i===12?'now':''}" style="--x:${(i/12).toFixed(4)}" title="${W[i]}: a parameter changed"></i>`:'')).join('')}</span>`;
+  const rows=[
+    {k:'Physical reads', g:band(pr), v:`<b>${fvs(pr.cur,pr.unit)}</b> <span class="muted">normal ${range(pr)[0]}</span> <span class="d s-large">${delta(pr.cur,pr.mu)}</span>`,
+     n:`File ts_orders_data.301 read 345k MB (normal ~74k); segment ORDERS_APP.ORDER_LINES 95.1M blocks (~8.5M).`, a:['#findings','Findings']},
+    {k:'DB time', g:`<div class="stack2"><span class="bl">DB time${band(dbt)}</span><span class="bl">DB CPU${band(cpu)}</span></div>`,
+     v:`<b>${aas(dbt.cur)} AAS</b> <span class="muted">normal ${aas(Math.max(0,dbt.mu-2*dd))}–${aas(dbt.mu+2*dd)}</span> <span class="d s-large">${delta(dbt.cur,dbt.mu)}</span>`,
+     n:`DB CPU is ${aas(cpu.cur)} AAS, inside its normal ${aas(cpu.mu-2*cd)}–${aas(cpu.mu+2*cd)} (+18.8%): the extra time is wait, not CPU.`, a:['#waits-fg','Foreground waits']},
+    {k:'Configuration', g:strip, v:`<b>4 parameters differ</b>`,
+     n:`<span class="mono">optimizer_adaptive_plans</span> FALSE to TRUE in the Current window only; the other three changed earlier, each within two days of a release.`, a:['#params','Parameters']},
+    {k:'Plan change', g:band(sm), v:`<b>${fvs(sm.cur,'s')} max</b> <span class="muted">normal ${range(sm)[0]} s</span> <span class="d s-large">${delta(sm.cur,sm.mu)}</span>`,
+     n:`<span class="mono">7k2m9dx4qp1zb</span> runs plan 2088341150 since 8 Sep 23:00 (was 3197245811).`, a:['#sqlmon','SQL Monitor']},
+  ];
+  $('#wc').innerHTML=rows.map(r=>`<div class="wc-row" role="listitem"><div class="wc-k">${r.k}</div><div class="wc-g">${r.g}</div><div class="wc-v">${r.v}</div><div class="wc-n">${r.n}</div><a class="wc-a" href="${r.a[0]}">${r.a[1]}</a></div>`).join('');
+}
+function renderLegend(){
+  const ex={z:.4,sev:'typical'};
+  $('#legend').innerHTML=`<span class="lg-k"><b style="font-weight:600;color:var(--ink)">Reading the band</b></span>
+   <span class="lg-b">${band({z:5.2,sev:'large'})}${axis()}</span>
+   <span class="lg-k"><i class="dotk large"></i>large</span><span class="lg-k"><i class="dotk moderate"></i>moderate</span><span class="lg-k"><i class="dotk typical"></i>normal</span><span class="lg-k"><i class="dotk improved"></i>improved</span>
+   <span class="lg-t">Shaded: the prior normal, mean ± 1σ dark and ± 2σ light. Ticks at ±2σ and ±3σ are the moderate and large thresholds. One scale for the whole page; past +8σ the dot pins to the edge and prints its z. A hollow dot past a tick moved, but not enough to matter.</span>`;
+}
+
+/* ------------------------------------------------ headline tiles */
+function renderTiles(){
+  $('#tiles').innerHTML=DATA.headline.map(c=>{ const r=Object.assign({},c,{unit:c.unit}); const v=fv(c.cur,r.unit);
+    const lab={'Average Active Sessions':'Average active sessions','Wait Time Ratio':'Wait time ratio'}[c.label]||c.label;
+    return `<div class="tile"><div class="tl">${esc(lab)}</div><div class="td"><span class="d s-${c.sev}">${delta(c.cur,r.mu)}</span></div>
+      <div class="tv">${v[0]}<span class="u">${esc(v[1])}</span></div><div class="ts">${spark(r,96,28)}</div>
+      ${band(r)}<div class="tn1">normal ${range(r)[0]} ${esc(range(r)[1])}</div><div class="tz">z ${zt(r)}</div></div>`; }).join('');
+}
+
+/* ------------------------------------------------ waits */
+function renderWaits(){
+  const mk=(id,rows,unit,label)=>{ let h=head(label,{curTh:'Current'});
+    h+='<tbody>'+rows.map(r=>{ r.unit=unit; const c=cells(r,`${sw(r.cls)}${esc(r.name)}`,{}); return `<tr class="${flagCls(r).trim()}">${c.h}</tr>`; }).join('')+'</tbody>';
+    $('#'+id).innerHTML=h; };
+  mk('t-wt',DATA.waits.time,'s','Event');
+  mk('t-wa',DATA.waits.avg,'ms','Event');
+  mk('t-wc',DATA.waits.cls,'s','Wait class');
+}
+
+/* ------------------------------------------------ top SQL */
+function renderSQL(){
+  let h=head('Statement',{pre:'<th class="num">#</th>',post:'<th>Plan</th>',curTh:'Elapsed'});
+  h+='<tbody>'+DATA.sql.map((s,i)=>{
+    const tag=s.new?`<span class="tag" title="First seen ${s.new.first}; in the top 10 in the last ${s.new.windows} windows only">new since 11 Aug</span>`:'';
+    const nm=`<div class="sql"><span class="sid">${s.id}</span><span class="mod">${esc(s.module)}</span>${tag}<span class="txt" title="${esc(s.text)}">${esc(s.text)}</span></div>`;
+    const pl=s.planchg?`<span class="pl" title="plan ${s.planchg.from} until 8 Sep 23:00, ${s.planchg.to} since"><b>⇄ new plan</b></span>`:'';
+    const ranks=s.ranks.map((k,j)=>k?`#${k}`:'—');
+    const rk=s.ranks.every(k=>k===s.ranks[12])?`#${s.ranks[12]} in all 13 windows`:ranks.join(' ');
+    let facts=`<dt>Module</dt><dd>${s.schema}, ${esc(s.module)}, ${esc(s.action)}</dd><dt>Rank</dt><dd>${rk}</dd>`;
+    let extra=`<div class="sqltext">${esc(s.text)}</div>`, left='';
+    if(s.planchg){ facts+=`<dt>Plan</dt><dd>new plan since 8 Sep 23:00, an hour after Release 4.2</dd>`;
+      left=`<div><table class="mini"><thead><tr><th>Plan hash</th><th>First seen</th><th>Last seen</th><th>Snapshots</th><th>Executions</th><th>Avg s/exec</th><th>Avg gets/exec</th></tr></thead><tbody>${s.planchg.phv.map(p=>`<tr>${p.map(x=>`<td>${x}</td>`).join('')}</tr>`).join('')}</tbody></table><p class="subnote">Per execution the new plan is 4.3× slower and does 18× the buffer gets, consistent with the jump in long-table scans.</p></div>`; }
+    if(s.new) facts+=`<dt>History</dt><dd>first seen ${s.new.first} (Release 4.1), so n is only ${s.n}</dd>`;
+    const c=cells(s,nm,{pre:`<td class="num rk">${i+1}</td>`,post:`<td class="c-pl">${pl}</td>`,sqlcell:1,facts,extra,left});
+    return `<tr class="${flagCls(s).trim()}">${c.h}</tr>`; }).join('')+'</tbody>';
+  $('#t-sql').innerHTML=h;
+  toggleRow($('#t-sql .xb'));
+}
+
+/* ------------------------------------------------ SQL Monitor */
+function renderSmon(){
+  let h=head('Statement',{post:'<th>Flags</th>',curTh:'Max elapsed'});
+  h+='<tbody>'+DATA.sqlmon.map(s=>{
+    const nm=`<div class="sql"><span class="sid">${s.id}</span><span class="mod">${esc(s.user)} / ${esc(s.module)}</span></div>`;
+    const fl=`<td class="c-fl"><span class="flags">${s.flags.map(f=>`<span class="tag">${esc(f)}</span>`).join('')}</span></td>`;
+    if(!s.vals){ const r=Object.assign({},s,{z:null});
+      return `<tr><td class="c-sql">${nm}</td><td class="c-cur num muted">—</td><td class="c-rng num muted">—</td><td class="c-band">${band(r,{na:'no capture in a compared window'})}</td><td class="c-d num"><span class="d s-na">—</span></td><td class="c-tr"></td>${fl}<td class="c-x"></td></tr>`; }
+    const c=cells(s,nm,{sqlcell:1,post:fl,facts:`<dt>Plan hash</dt><dd>${esc(s.plan)}</dd>`});
+    return `<tr class="${flagCls(s).trim()}">${c.h}</tr>`; }).join('')+'</tbody>';
+  $('#t-smon').innerHTML=h;
+}
+
+/* ------------------------------------------------ parameters */
+const dm=l=>{const [m,d]=l.split(' ');return (+d)+' '+m};
+function gb(v){ const n=+v; if(!isNaN(n)&&n>=1073741824) return (n/1073741824)+' GB'; return v; }
+function renderParams(){
+  const near={cursor_sharing:['Hotfix 4.0.1','3 Jul'],optimizer_adaptive_plans:['Release 4.2','8 Sep'],pga_aggregate_target:['Release 4.1','11 Aug'],sga_target:['RU 19.28 patch','21 Jul']};
+  let h=`<thead><tr><th>Parameter</th><th>Current</th><th>Before</th><th>Changed between</th><th>Nearest marker</th><th>Value per window, 18 Jun to 10 Sep</th></tr></thead><tbody>`;
+  const rows=DATA.params.map(p=>{ const v=p.vals, cur=v[12]; let k=12; while(k>0&&v[k-1]===cur) k--; return {p,cur,prev:v[k-1],k}; }).sort((a,b)=>b.k-a.k);
+  rows.forEach(({p,cur,prev,k})=>{
+    const st=p.vals.map((x,i)=>`<i class="${x===cur?'':'df'}${i===12?' cur':''}" title="${W[i]}: ${esc(gb(x))}"></i>`).join('');
+    h+=`<tr><td class="mono">${p.name}</td><td class="pv"><span class="chg" title="changed within the span">${esc(gb(cur))}</span></td><td class="pv muted">${esc(gb(prev))}</td><td class="tn">${k===12?'3 Sep and 10 Sep (Current)':dm(W[k-1])+' and '+dm(W[k])}</td><td>${near[p.name][0]}, ${near[p.name][1]}</td><td><span class="strip" role="img" aria-label="${p.name}: value differs from Current in ${p.vals.filter(x=>x!==cur).length} of 12 prior windows">${st}</span></td></tr>`; });
+  $('#t-par').innerHTML=h+'</tbody>';
+}
+
+/* ------------------------------------------------ reference stubs */
+function stat(vals){ const p=vals.slice(0,-1); const mu=p.reduce((a,b)=>a+b,0)/p.length; const sd=Math.sqrt(p.reduce((a,b)=>a+(b-mu)**2,0)/(p.length-1)); return {mu,sd,cur:vals[vals.length-1]}; }
+function zOf(vals){ const s=stat(vals); return (s.cur-s.mu)/Math.max(s.sd,0.02*Math.abs(s.mu)); }
+function renderStubs(){
+  const seg=[8.527,8.101,7.620,8.353,7.396,9.654,7.857,8.651,8.715,9.026,8.897,9.065,95.07];
+  const fil=[73.96,73.44,68.06,71.27,67.22,76.85,71.00,72.99,80.56,76.92,77.55,78.28,345.0];
+  const S=[
+    ['load','Load profile','27 statistics per second; 5 large: long-table scans, physical reads, read bytes, logical reads, DB time.',null],
+    ['metrics','System metrics','23 metrics; 8 large, 5 of them twins of load-profile counters. Host CPU 71% is normal for this hour.',null],
+    ['waits-bg','Background waits','All 11 events up 62.8% together: a table-wide shift, so large is demoted to moderate.',{z:5.23,sev:'moderate'}],
+    ['seg','Segment I/O','ORDERS_APP.ORDER_LINES: 95.1M physical block reads this hour against ~8.5M normal; its primary key 5.8M against ~4.0M.',{z:zOf(seg),sev:'large'}],
+    ['file','File I/O','ts_orders_data.301 read 345k MB against ~74k; its two sibling data files moved the same way.',{z:zOf(fil),sev:'large'}],
+    ['day','Day profile','Not only 09:00: logical reads are above the prior 7 days in 24 of 24 hours, physical reads in 23 of 24.',{z:26.2,sev:'large'}],
+    ['util','Utilization','Transactions 652 /s, user calls 6,208 /s, 2,095 sessions: the workload volume is normal, its shape is not.',{z:0.53,sev:'typical'}],
+    ['dbtime','DB time, full span','DB time per snapshot across the whole 12-week span, stacked by wait class.',null],
+    ['sqlash','Top SQL activity','ASH samples per statement in the Top SQL pool, stacked by wait event.',null],
+    ['windows','Compared windows','13 of 13 windows valid, one DBID, snapshots 41417 to 43434.',null],
+  ];
+  $('#stubs').innerHTML=S.map(([id,t,s,b])=>`<details class="stub" id="${id}"><summary><span class="st-t">${t}</span><span class="st-s">${s}</span>${b?band(b):'<span></span>'}</summary><div class="st-b">Collapsed reference section. In the report it holds the same band table as Foreground waits; not reproduced in this mock.</div></details>`).join('');
+}
+
+/* ------------------------------------------------ ASH chart */
+const SER=[['CPU','wc-CPU','#3FB344'],['User I/O','wc-UIO','#4A90D9'],['Network','wc-NET','#967259'],['Commit','wc-COM','#E89B40'],['Other classes','wc-OTH','']];
+function renderAshLegend(){
+  $('#ash-lgd').innerHTML=SER.map(([n,c,col])=>`<span><i class="sw" style="background:${col||'var(--other)'}"></i>${n}${n==='Other classes'?' (6 merged)':''}</span>`).join('')+
+   `<span><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4" fill="var(--surface)" stroke="var(--ink-2)" stroke-width="1.5"/></svg>09:00 hour, prior Thursdays</span><span><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="var(--crit-dot)"/></svg>Current hour</span>`;
+}
+function drawAsh(){
+  const A=DATA.ash, svg=$('#ash-svg'), wrap=$('#ashw'); const Wd=Math.max(300,wrap.clientWidth);
+  const narrow=Wd<600;
+  const padL=narrow?28:36, padR=narrow?8:12, flagH=narrow?34:30, top=flagH+10, ph=narrow?160:210, axH=40, H=top+ph+axH;
+  svg.setAttribute('viewBox',`0 0 ${Wd} ${H}`); svg.setAttribute('height',H);
+  const T=A.t.map(s=>Date.parse(s.replace(' ','T')+':00Z'));
+  const tc=T.map((t,i)=>t+(i===T.length-1?0.5:3)*3600e3); // bucket centres; last bucket is 1 h
+  const t0=Date.parse('2026-06-18T09:00:00Z'), t1=Date.parse('2026-09-10T10:00:00Z');
+  const X=t=>padL+(Wd-padL-padR)*(t-t0)/(t1-t0);
+  // 24-h centred rolling mean (4 buckets)
+  const sm=A.series.map(s=>s.vals.map((v,i,a)=>{ let lo=Math.max(0,i-2),hi=Math.min(a.length-1,i+1),sum=0; for(let k=lo;k<=hi;k++) sum+=a[k]; return sum/(hi-lo+1); }));
+  const n=T.length, stackTop=[]; let acc=new Array(n).fill(0);
+  const layers=sm.map(vals=>{ const lo=acc.slice(); acc=acc.map((a,i)=>a+vals[i]); return {lo,hi:acc.slice()}; });
+  const ymax=Math.ceil(Math.max(...acc,...A.wtot)/5)*5;
+  const Y=v=>top+ph-ph*v/ymax;
+  let s='';
+  for(let v=0;v<=ymax;v+=5){ s+=`<line class="gl" x1="${padL}" x2="${Wd-padR}" y1="${Y(v)}" y2="${Y(v)}"/><text class="at" x="${padL-6}" y="${Y(v)+4}" text-anchor="end">${v}</text>`; }
+  s+=`<text class="at" x="${padL+6}" y="${Y(ymax)+14}">active sessions</text>`;
+  // current window emphasis
+  const cx=X(WIN[12]+1800e3), cwid=Math.max(6,X(WIN[12]+3600e3)-X(WIN[12]));
+  layers.forEach((L,k)=>{ let d='M'+X(tc[0]).toFixed(1)+' '+Y(L.hi[0]).toFixed(1);
+    for(let i=1;i<n;i++) d+='L'+X(tc[i]).toFixed(1)+' '+Y(L.hi[i]).toFixed(1);
+    for(let i=n-1;i>=0;i--) d+='L'+X(tc[i]).toFixed(1)+' '+Y(L.lo[i]).toFixed(1);
+    s+=`<path class="ar ${SER[k][1]}" d="${d}Z"/>`; });
+  s+=`<rect class="curband" x="${cx-cwid/2}" y="${top}" width="${cwid}" height="${ph}"/>`;
+  s+=`<line class="ax" x1="${padL}" x2="${Wd-padR}" y1="${top+ph}" y2="${top+ph}"/>`;
+  // release flags, lane-assigned so labels never collide
+  const fl=lanes(MK.map(m=>({x:X(m.t),label:narrow?(SHORT[m.label]||m.label):m.label,full:m.label})),Wd-padR,8);
+  fl.forEach(f=>{ const y=2+f.lane*15;
+    s+=`<line class="cf" x1="${f.x}" x2="${f.x}" y1="${y+3}" y2="${top+4}"/><line class="cf" x1="${f.x}" x2="${f.x}" y1="${top+4}" y2="${top+ph}" opacity=".28"/><rect class="cfh" x="${f.x-1}" y="${y+2}" width="3" height="10" rx="1"/><text class="cft" x="${f.anchor==='start'?f.x+6:f.x-6}" y="${y+11}" text-anchor="${f.anchor}"><title>${esc(f.full)}</title>${esc(f.label)}</text>`; });
+  // compared windows: ticks on the axis + hourly dots
+  WIN.forEach((w,i)=>{ const x=X(w+1800e3), cur=i===12;
+    s+=`<line class="wt${cur?' cur':''}" x1="${x}" x2="${x}" y1="${top+ph+1}" y2="${top+ph+(cur?9:6)}"/>`; });
+  WIN.forEach((w,i)=>{ const x=X(w+1800e3), cur=i===12; s+=`<circle class="wd${cur?' cur':''}" cx="${x}" cy="${Y(A.wtot[i])}" r="${cur?5.5:4}"><title>${cur?'Current':W[i]} 09:00–10:00: ${A.wtot[i].toFixed(1)} AAS</title></circle>`; });
+  // current callout
+  s+=`<text class="at b" x="${cx-10}" y="${Y(A.wtot[12])+4}" text-anchor="end">${A.wtot[12].toFixed(1)}</text>`;
+  // month labels + current label
+  const months=[['2026-07-01','Jul'],['2026-08-01','Aug'],['2026-09-01','Sep']];
+  s+=`<text class="at" x="${padL}" y="${top+ph+24}">18 Jun</text>`;
+  const curLabel=narrow?'Current':'Current, 10 Sep 09:00', clw=tw(curLabel)+4;
+  months.forEach(([d,l])=>{ const x=X(Date.parse(d+'T00:00:00Z')); if(x+tw(l)>cx-clw-4) return; s+=`<line class="ax" x1="${x}" x2="${x}" y1="${top+ph}" y2="${top+ph+4}"/><text class="at" x="${x+3}" y="${top+ph+24}">${l}</text>`; });
+  s+=`<text class="at b" x="${Wd-padR}" y="${top+ph+24}" text-anchor="end">${curLabel}</text>`;
+  s+=`<text class="at" x="${padL}" y="${top+ph+38}">ticks: the 13 compared windows, Thursdays 09:00</text>`;
+  s+=`<line class="xh" id="ash-xh" x1="0" x2="0" y1="${top}" y2="${top+ph}" style="display:none"/>`;
+  s+=`<rect id="ash-hit" x="${padL}" y="${top}" width="${Wd-padL-padR}" height="${ph}" fill="transparent"/>`;
+  svg.innerHTML=s;
+  // hover: crosshair + tooltip
+  const tip=$('#ash-tip'), xh=$('#ash-xh'), hit=$('#ash-hit');
+  const DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmtT=t=>{const d=new Date(t);return DN[d.getUTCDay()]+' '+d.getUTCDate()+' '+MN[d.getUTCMonth()]+', '+String(d.getUTCHours()).padStart(2,'0')+':00'};
+  hit.onmousemove=e=>{ const r=svg.getBoundingClientRect(); const mx=(e.clientX-r.left)*Wd/r.width;
+    const t=t0+(mx-padL)/(Wd-padL-padR)*(t1-t0); let i=0,b=Infinity; tc.forEach((c,k)=>{const dd=Math.abs(c-t); if(dd<b){b=dd;i=k}});
+    const x=X(tc[i]); xh.setAttribute('x1',x); xh.setAttribute('x2',x); xh.style.display='';
+    const tot=sm.reduce((a,v)=>a+v[i],0);
+    tip.innerHTML=`<b>Around ${fmtT(tc[i])}</b><div class="muted" style="margin-bottom:4px">24-h mean, active sessions</div>`+SER.map(([nm,c,col],k)=>`<div class="r"><span><i class="sw" style="margin:0;background:${col||'var(--other)'}"></i>${nm}</span><span>${sm[k][i].toFixed(2)}</span></div>`).reverse().join('')+`<div class="r" style="border-top:1px solid var(--line);margin-top:4px;padding-top:4px"><span>Total</span><b>${tot.toFixed(1)}</b></div>`;
+    tip.style.display='block'; const tx=(x*r.width/Wd); const left=tx+16+180>r.width?tx-16-tip.offsetWidth:tx+16; tip.style.left=left+'px'; tip.style.top=(top*r.height/H)+'px'; };
+  hit.onmouseleave=()=>{tip.style.display='none';xh.style.display='none'};
+}
+
+/* ------------------------------------------------ chrome: theme, mode, info, tabs, rail */
+function setTheme(t){ document.body.classList.toggle('dark',t==='dark'); document.body.classList.toggle('light',t==='light'); try{localStorage.setItem('awr-theme',t)}catch(e){} }
+(function(){ const p=document.documentElement.getAttribute('data-theme-pref'); if(p) setTheme(p); })();
+$('#theme').onclick=()=>{ const dark=document.body.classList.contains('dark')||(!document.body.classList.contains('light')&&matchMedia('(prefers-color-scheme: dark)').matches); setTheme(dark?'light':'dark'); };
+function setMode(full){ document.body.classList.toggle('full',full); document.body.classList.toggle('normal',!full);
+  $('#mode-full').setAttribute('aria-pressed',full); $('#mode-normal').setAttribute('aria-pressed',!full);
+  $$('.more').forEach(b=>setMore(b,full)); $$('.stub').forEach(d=>d.open=full); }
+$('#mode-full').onclick=()=>setMode(true); $('#mode-normal').onclick=()=>setMode(false);
+document.addEventListener('click',e=>{ const b=e.target.closest('.info'); if(!b) return; const p=document.getElementById(b.getAttribute('aria-controls')); const o=b.getAttribute('aria-expanded')==='true'; b.setAttribute('aria-expanded',!o); p.hidden=o; });
+document.addEventListener('click',e=>{ const b=e.target.closest('[role="tab"]'); if(!b) return; const list=b.closest('[role="tablist"]');
+  $$('[role="tab"]',list).forEach(t=>{ const on=t===b; t.setAttribute('aria-selected',on); document.getElementById(t.getAttribute('aria-controls')).hidden=!on; }); });
+const links=$$('.rail a'); const secs=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+const io=new IntersectionObserver(es=>{ es.forEach(e=>{ if(e.isIntersecting){ links.forEach(a=>a.classList.toggle('on',a.getAttribute('href')==='#'+e.target.id)); } }); },{rootMargin:'-20% 0px -70% 0px'});
+secs.forEach(s=>io.observe(s));
+
+renderWC(); renderLegend(); renderTiles(); renderFindings(); renderAshLegend(); drawAsh(); renderSQL(); renderSmon(); renderParams(); renderWaits(); renderStubs();
+let rt; addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(drawAsh,120)});
+})();
+</script>
+</body>
+</html>

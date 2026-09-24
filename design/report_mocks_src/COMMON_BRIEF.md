@@ -1,0 +1,114 @@
+# Report redesign mockups — shared brief (read fully before starting)
+
+## Context
+Repo: /Users/davidbudac/claude_projects/awr_timeline_comparison — a pure-SQL Oracle
+toolkit that renders ONE self-contained HTML report per database comparing the
+same hour across periods (here: Thu 10 Sep 2026 09:00–10:00 = "Current" vs the 12
+prior Thursdays at 09:00, weekly, back to Thu 18 Jun). The owner wants three
+redesign MOCKUPS that make the single-DB report more cohesive, more modern, and
+easier to glance over. You build ONE of them (your prompt says which).
+
+Current report (look at it for content, NOT for style):
+- screenshots: this scratchpad, `cur_n_00.png` … `cur_n_05.png` (Normal view, top→bottom)
+  and `cur_f_*.png` (Full view, 32 segments; 03 = findings tables, 04 = windows,
+  10 = load profile, 14 = foreground waits, 21 = per-SQL ASH).
+- live file: /Users/davidbudac/claude_projects/awr_timeline_comparison/docs/examples/demo_busy_db.html
+  (6.7 MB — do NOT read it whole; use the dumps below).
+
+## Data you must use (real demo numbers — do not invent findings)
+- `demo_data_dump.txt` — text of every section and table (Full view), incl. per-window values.
+- `demo_series.json` — chart payloads: `windowsWeekLabels` (13, oldest→current),
+  `markers` (release/patch markers), `headlineCards` (6 cards with 13-value series,
+  z, pct, sev), `ashPerWindow` (AAS per wait class in each compared 1-h window,
+  oldest→current), `ashSpan6h` (full 3-month ASH by class, 6-h averages),
+  `dbTimeSpan6h`, `waitsFgClassPerWindow`, `dayProfile` (9 stats × 24 h with mu/sd/z/sev).
+Small derivations (ratios, "×5.4", ranges, sums) are fine; label anything synthetic.
+
+Key story in the data (so every mock tells it correctly):
+- Physical reads 22.2k/s vs prior mean 4.1k (×5.4, z +31.7); physical read bytes 193 MB/s
+  vs 36 MB/s; table scans (long tables) 61.7/s vs 2.08 (×29.7); logical reads 988k/s vs 210k (×4.7).
+- Where: file ts_orders_data.301.1131588213 345k MB vs ~74k MB; segment ORDERS_APP.ORDER_LINES
+  95.1 M blocks vs ~8.5 M; waits db file scattered read 13.9k s vs ~0.68k s, direct path read
+  8.5k s vs ~0.7k s. Wait class User I/O 8.29 vs 1.97 AAS (+320%).
+- DB time 2,035 cs/s vs 1,133 (+79.7%, z +6.1) = AAS 20.4 vs 11.3; DB CPU only +18.8% (typical)
+  → the extra time is wait, not CPU. Wait time ratio 57.8% vs 36.2%.
+- Network wait class 1.175 vs 0.227 (+417%); SQL*Net more data to client 4,126 s vs ~750 s.
+- Commit wait class +22.5% (moderate); log file sync 3,127 s vs ~2,500 s (moderate).
+- SQL 7k2m9dx4qp1zb (ORDERS_APP / OrderService; SELECT … FROM orders o JOIN order_lines l …):
+  #1 by elapsed, 27.9k s vs ~6.7k s; plan changed 3197245811 → 2088341150; SQL Monitor max
+  elapsed 8.02 s vs 1.50 s (z +23.4). Also 9wz2ke6yq4tn1 (REPORTING) DOP downgrade flag.
+  n7t3q5xc1yj4g appears only in the last 5 windows (new-ish statement).
+- Parameters (4 differ): optimizer_adaptive_plans FALSE→TRUE in Current only;
+  pga_aggregate_target 8 GB→12 GB from −4w on (changed between Aug 6 and Aug 13);
+  sga_target 48 GB→64 GB from −7w on (between Jul 16 and Jul 23);
+  cursor_sharing EXACT→FORCE from −9w on (between Jul 2 and Jul 9).
+- Markers: Release 4.0 (Jun 30), Hotfix 4.0.1 (Jul 3), RU 19.28 patch (Jul 21), Release 4.1
+  (Aug 11), Release 4.2 (Sep 8). Note how config changes line up with them.
+- Verdict today: 9 findings (10 large + 1 moderate rows, twins folded), 43 typical.
+- Day profile: 2 day-wide shifts (logical reads/s 24 of 24 h, physical reads/s 23 of 24 h).
+- All 13 windows valid. DB: ORCLPRD · DBID 1483726519 · host prd-ora-01.corp.example · 19c ·
+  generated 2026-09-10 10:15 +02:00 · run by AWR_READER (read-only).
+
+## What is wrong with the current look (the problems to solve)
+1. The same fact is shown 4–5 times with a different treatment each time (red verdict
+   strip, blue "What changed" box, hero cards, "Biggest movers" table, per-domain tables,
+   day-profile heatmap). The reader assembles the story themselves.
+2. No single visual grammar for "current vs prior": hero cards use sparkline + 13 bars,
+   tables use 13 heat-tinted columns, findings use z + %Δ bars, SQL Monitor sparklines,
+   day profile heatmap + line chart. You re-learn every section.
+3. Colour overload: pink row fills, tan deviation tints, red heatmaps, coloured rail dots,
+   UPPERCASE coloured chips. Severity is everywhere, so nothing stands out; wide tables turn
+   into pink/tan quilts.
+4. Charts: 3-month hourly ASH spike-fields take a screen but answer little; the Current hour
+   is a 1-px sliver at the right edge; rotated marker labels collide; legends crowd axes.
+5. Typographic noise: many letter-spaced UPPERCASE labels, jargon section titles with source
+   captions ("DBA_HIST_SYSTEM_EVENT, foreground waits…"), "How this is computed" in every
+   section, row labels wrapping to three lines.
+6. Every section is the same white card at the same weight: the answer and the reference
+   appendix look identical.
+
+## Hard constraints (the real report is generated by SQL*Plus → DBMS_OUTPUT)
+- ONE self-contained .html file. No external JS/CSS/fonts/images, no CDN, no frameworks.
+  Use a system font stack (e.g. `ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto,
+  system-ui, sans-serif` and `ui-monospace, "SF Mono", Menlo, Consolas, monospace`).
+- Charts = inline SVG (hand-written or drawn by small inline vanilla JS from embedded JSON).
+  Must be implementable later as static markup + data-attributes/JSON emitted by PL/SQL.
+- Colours as CSS custom properties on :root; dark theme via `body.dark` (toggle button) and
+  `@media (prefers-color-scheme: dark)`; `body` has an explicit background. Both themes must look good.
+- Keep the Oracle wait-class palette for wait-class series (recognizability):
+  CPU #3FB344, User I/O #4A90D9, System I/O #1F4E89, Commit #E89B40, Application #D62728,
+  Concurrency #8B0000, Network #967259, Configuration #793C32, Other #C77CB0,
+  Scheduler #88C070, Cluster #E5C228, Administrative #7B6FA8, Queueing #E89BB7.
+  (You may mute / regroup minor classes into "Other" in a chart if it helps.)
+- Designed for 1440 px desktop; must still work at 390 px (no horizontal PAGE scroll; wide
+  tables/grids may scroll inside their own wrapper).
+- Tabular numerals (`font-variant-numeric: tabular-nums`) for all numbers.
+- Keep some navigation affordance (the July design round chose a "workbench": left rail
+  + panels; you may restyle or slim it, and your prompt may say otherwise).
+- It's a mockup: cover the Normal view top-to-bottom (verdict/findings, headline metrics,
+  ASH, Top SQL, SQL Monitor, parameters) plus ONE representative dense reference section
+  (e.g. Foreground waits or Load profile) to prove the system scales to 10–27-row tables.
+  Other sections can appear as collapsed stubs.
+- Put a slim, clearly-separated "MOCK NOTE" bar at the very top (collapsible, visually
+  outside the design, e.g. a thin dark strip) naming the mock and listing 4–6 bullets:
+  "what's different from today's report". Keep it short.
+- Keep file size < 400 KB. Accessible: sufficient contrast, focus-visible, aria labels on
+  icon buttons, don't encode meaning by colour alone (pair colour with a glyph/text).
+
+## Process
+1. Read this brief, your mock's prompt, glance at 3–4 current screenshots, skim the data files.
+2. If available, load the `dataviz` skill and `frontend-design:frontend-design` skill (Skill
+   tool) for chart/colour and aesthetic guidance.
+3. Build the file at the path your prompt gives. Do NOT touch any other repo file. Do not commit.
+4. Verify with Playwright (already installed in this scratchpad):
+   `cd <scratchpad> && node shot.js <html> <out.png> 1440 1000 x 1` (last arg 1 = full page;
+   script uses system Chrome via channel 'chrome'; it prints console-error count). Take:
+   1440 light full-page, 1440 dark (arg `dark` adds body.dark), 390-wide full page.
+   Save under `<scratchpad>/shots/<mock-letter>/`. LOOK at the screenshots (Read tool) and
+   iterate at least twice on polish: alignment, spacing rhythm, label collisions, dark mode,
+   mobile. 0 console errors required.
+5. Never spawn sub-agents or delegate; do all the work yourself.
+
+## Report back (≤ 25 lines)
+File path, screenshot paths, the 4–6 key design moves, what you'd flag as risky to implement
+in PL/SQL-emitted HTML, and anything in the data you had to fudge.

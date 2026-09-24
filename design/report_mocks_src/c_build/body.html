@@ -1,0 +1,105 @@
+<body class="normal">
+<details class="mocknote" open>
+  <summary><b>Mock C</b> Aligned window grid <span>what's different from today's report</span></summary>
+  <ul>
+    <li>One shared column grid for the whole page: 13 windows, Current as a violet band that runs through every lane. Read down a column to see one window, across a row to see when something started.</li>
+    <li>Release and patch flags sit on the column boundary they fall between, and their lines run through every lane, so the config steps, the new SQL and the metric jumps line up under them.</li>
+    <li>One cell grammar everywhere: a grey mini column per window, the value printed only in Current (hover a column to print them all), the verdict in a right gutter. No heat tints, no pink rows.</li>
+    <li>The 3-month ASH spike field becomes 13 stacked one-hour columns. The full span moves to Full as a "week before each window" strip in the same columns.</li>
+    <li>"What changed" is five lines that jump to their rows; the finding isn't re-drawn as cards, a movers table and per-domain tables.</li>
+    <li>The day profile keeps its own 24-hour ruler, below the grid.</li>
+  </ul>
+</details>
+
+<div class="page">
+<header class="mast">
+  <div class="id">
+    <h1>ORCLPRD <span>Thursday 10 September 2026, 09:00–10:00</span></h1>
+    <p class="lede">Compared with the same hour on the 12 previous Thursdays, 18 June to 3 September.</p>
+  </div>
+  <div class="meta">
+    <dl>
+      <div><dt>DBID</dt><dd>1483726519</dd></div>
+      <div><dt>Host</dt><dd>prd-ora-01.corp.example</dd></div>
+      <div><dt>Oracle</dt><dd>19.0.0.0.0</dd></div>
+      <div><dt>Generated</dt><dd>2026-09-10 10:15 +02:00</dd></div>
+      <div><dt>Run by</dt><dd>AWR_READER, read-only</dd></div>
+    </dl>
+    <div class="ctl">
+      <div class="seg" role="group" aria-label="Report view">
+        <button id="mode-normal" aria-pressed="true">Normal</button><button id="mode-full" aria-pressed="false">Full</button>
+      </div>
+      <button class="icon" id="theme" aria-label="Switch between light and dark theme" title="Light / dark">
+        <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><circle cx="10" cy="10" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 3.8a6.2 6.2 0 0 1 0 12.4z" fill="currentColor"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<section class="summary" aria-labelledby="wc-h">
+  <div class="wc">
+    <h2 id="wc-h">What changed</h2>
+    <ul class="wcl">
+      <li><button data-go="row-physreads"><i class="sv large" aria-label="large">●</i><span class="t"><b>Physical reads ×5.4</b>, 4,143 → 22.24k per second. Long-table scans ×30, and the reads land on ORDERS_APP.ORDER_LINES (95.1M blocks against about 8.5M).</span><span class="where">Metrics</span></button></li>
+      <li><button data-go="row-ash"><i class="sv large" aria-label="large">●</i><span class="t"><b>DB time +79.7%</b>, 11.3 → 20.4 active sessions, while DB CPU is up only 18.8%. The extra time is User I/O wait (×4.2) and Network wait (×5.2).</span><span class="where">Activity</span></button></li>
+      <li><button data-go="row-sql-7k2m"><i class="gk" aria-label="plan change">◆</i><span class="t"><b>7k2m9dx4qp1zb changed plan</b>, 3197245811 → 2088341150. Elapsed ×4.2 (about 6.7k → 27.9k s); slowest SQL Monitor run 1.5 → 8.0 s.</span><span class="where">SQL</span></button></li>
+      <li><button data-go="row-p-adaptive"><i class="gk fl" aria-label="marker"></i><span class="t"><b>optimizer_adaptive_plans FALSE → TRUE</b>, first seen in Current, in the same interval as Release 4.2 (Tue 8 Sep 22:00). The other three parameter changes each sit under an earlier flag.</span><span class="where">Configuration</span></button></li>
+      <li><button data-go="row-w-sqlnet"><i class="sv large" aria-label="large">●</i><span class="t"><b>SQL*Net more data to client ×5.5</b>, about 750 → 4,126 s. Also <i class="sv moderate" aria-label="moderate">◐</i> log file sync +22.5%, the one moderate finding.</span><span class="where">Waits</span></button></li>
+    </ul>
+  </div>
+  <aside class="verdict" aria-label="Verdict">
+    <p class="vn"><b>9</b> findings</p>
+    <p class="vc"><span><i class="sv large" aria-hidden="true">●</i>10 large</span><span><i class="sv moderate" aria-hidden="true">◐</i>1 moderate</span><span><i class="sv typical" aria-hidden="true">○</i>43 typical</span></p>
+    <p>Rows, with twins folded. All 13 windows valid; the day profile adds 2 day-wide shifts.</p>
+  </aside>
+</section>
+
+<div class="legend" aria-label="How to read the grid">
+  <span class="lg"><i class="lb"></i>prior window</span>
+  <span class="lg"><i class="lb cur"></i>Current, typical</span>
+  <span class="lg"><i class="lb large"></i><i class="sv large">●</i> large</span>
+  <span class="lg"><i class="lb moderate"></i><i class="sv moderate">◐</i> moderate</span>
+  <span class="lg"><i class="sv typical">○</i> typical</span>
+  <span class="lg"><i class="lr"></i>prior range</span>
+  <span class="lg"><i class="gk">◆</i> plan changed</span>
+  <span class="lg"><i class="gk">✚</i> first seen</span>
+  <span class="lg"><i class="gk fl"></i> release or patch</span>
+  <span class="lg"><i class="lh"></i> skipped window (none in this run)</span>
+  <span class="lg hint">Hover a column to read every value in it; click a date to pin it.</span>
+</div>
+
+<div class="gridwrap" id="grid" role="table" aria-label="Current vs 12 prior windows, one column per window">
+  {{RULER}}
+  <div class="gbody" id="gbody">
+    <div class="gin" id="gin">
+      {{LANE_ACTIVITY}}
+      {{LANE_METRICS}}
+      {{LANE_WAITS}}
+      {{LANE_OBJECTS}}
+      {{LANE_SQL}}
+      {{LANE_CONFIG}}
+      {{LANE_LOAD}}
+      {{STUBS}}
+      {{LANE_WINDOWS}}
+    </div>
+  </div>
+</div>
+<p class="moreful"><button class="linkbtn" id="to-full">Full view adds 8 lanes</button>: the week before each window, all 27 load counters, system metrics, background waits, other Top SQL rankings, segment and file I/O, utilization and snapshots.</p>
+
+<section class="dp" id="dayprofile" aria-labelledby="dp-h">
+  <div class="dphead">
+    <h2 id="dp-h">Day profile</h2>
+    <p>A different axis: the last 24 hours, each hour against the same hour on the 7 prior days (2–9 Sep), at a fixed daily cadence. Bar = this day, tick = prior-day mean. The last column is the Current window’s hour.</p>
+  </div>
+  <div class="dpscroll" id="dpscroll">
+    {{DAYPROFILE}}
+  </div>
+</section>
+
+<footer class="foot">
+  <p>Read-only: every number is recomputed from DBA_HIST views on each run. z = (current − μ) ÷ max(σ, 2% of μ) over the prior valid windows; a finding also has to clear the metric's materiality floor.</p>
+</footer>
+</div>
+<div id="tip" role="tooltip" hidden></div>
+<script>window.AWR_MK={{MK}};</script>
+</body>
