@@ -31,7 +31,7 @@
         <rect x="16.5" y="8" width="3.5" height="12" rx="1" fill="currentColor" opacity=".55"/>
         <rect x="22" y="0" width="4" height="20" rx="1" fill="var(--accent)"/>
       </svg>
-      <span>AWR Timeline Comparison</span><span class="rev">v1.5.0</span>
+      <span>AWR Timeline Comparison</span><span class="rev">v1.6.0</span>
     </a>
     <nav class="nav" aria-label="Site">
       <a href="#s-install">Quick start</a>
@@ -140,8 +140,8 @@
     <div class="grid4">
       <article class="panel c-shot">
         <h3>The answer comes first</h3>
-        <p>The report opens with a verdict and the biggest changes.</p>
-        <div class="screen"><img class="on-light" src="assets/shot_demo_masthead.jpg" width="1806" height="1350" alt="Top of the demo report, light theme: a red verdict reading 9 findings, a structured What changed list (physical reads, DB time, configuration, plan change), the Current window chip with a show all windows toggle, and DB time over three months with release markers."><img class="on-dark" src="assets/shot_demo_masthead_dark.jpg" width="1806" height="1350" alt="Top of the demo report, dark theme: a red verdict reading 9 findings, a structured What changed list (physical reads, DB time, configuration, plan change), the Current window chip with a show all windows toggle, and DB time over three months with release markers." loading="lazy"></div>
+        <p>A one-line verdict, then one card per problem with the evidence behind it.</p>
+        <div class="screen"><img class="on-light" src="assets/shot_demo_masthead.jpg" width="1806" height="1350" alt="Summary view of the demo report, light theme: the verdict reads Physical reads 5.4 times normal, most of it on ORDERS_APP.ORDER_LINES; DB time up 79.7%, mostly wait. Below it the likely source (a new plan after Release 4.2), count pills, DB time per window with release flags and the Current window in indigo, and the first finding card."><img class="on-dark" src="assets/shot_demo_masthead_dark.jpg" width="1806" height="1350" alt="Summary view of the demo report, dark theme: the verdict reads Physical reads 5.4 times normal, most of it on ORDERS_APP.ORDER_LINES; DB time up 79.7%, mostly wait. Below it the likely source (a new plan after Release 4.2), count pills, DB time per window with release flags and the Current window in indigo, and the first finding card." loading="lazy"></div>
       </article>
       <article class="panel c-zero">
         <div class="big" aria-hidden="true">0<small>database<br>writes</small></div>
@@ -205,8 +205,8 @@
                 </ul>
               </div>
               <figure>
-                <div class="screen"><img class="dim" src="assets/shot_demo_ash.jpg" width="1710" height="826" alt="ASH timeline stacked by wait class over twelve weeks, with release, hotfix and patch markers and a spike in the current window." loading="lazy"></div>
-                <figcaption>Active sessions by wait class across the compared span, with release markers.</figcaption>
+                <div class="screen"><img class="dim" src="assets/shot_demo_ash.jpg" width="1710" height="826" alt="Timeline view: active sessions by wait class over twelve weeks in 6-hour averages, compared windows striped, release, hotfix and patch markers, a spike in the Current window; below it the window grid ruler, one column per compared week." loading="lazy"></div>
+                <figcaption>The Timeline view: active sessions across the compared span, with release markers, above one column per compared window.</figcaption>
               </figure>
             </div>
           </div>
@@ -226,10 +226,10 @@
                 <tr><td class="k" data-l="Item">Cadence</td><td class="m" data-l="Value">h, d, w &times; step</td><td class="n" data-l="Notes">Weekly by default; daily, hourly or any multiple.</td></tr>
                 <tr><td class="k" data-l="Item">Window</td><td class="m" data-l="Value">0.25 h to 24 h+</td><td class="n" data-l="Notes">A window more than 15 min off the snapshot grid is skipped, not guessed.</td></tr>
                 <tr><td class="k" data-l="Item">Prior windows</td><td class="m" data-l="Value">1 to 16</td><td class="n" data-l="Notes">Scores need at least 3 valid ones.</td></tr>
-                <tr><td class="k" data-l="Item">Report sections</td><td class="m" data-l="Value">19</td><td class="n" data-l="Notes">Verdict, headline cards, ASH, findings, load, metrics, waits, Top SQL, SQL Monitor, I/O, parameters and more.</td></tr>
-                <tr><td class="k" data-l="Item">In the browser</td><td class="m" data-l="Value">Normal, Full</td><td class="n" data-l="Notes">Two views, dark mode, row filter, sortable columns, CSV/Markdown export.</td></tr>
+                <tr><td class="k" data-l="Item">Report sections</td><td class="m" data-l="Value">20</td><td class="n" data-l="Notes">Verdict, finding cards, timeline, ASH, load, metrics, waits, Top SQL, SQL Monitor, I/O, parameters, a chart guide and more.</td></tr>
+                <tr><td class="k" data-l="Item">In the browser</td><td class="m" data-l="Value">Summary, Timeline, All</td><td class="n" data-l="Notes">Three views, links from every finding to its evidence, dark mode, row filter, sortable columns, CSV/Markdown export.</td></tr>
                 <tr><td class="k" data-l="Item">RAC, multitenant</td><td class="m" data-l="Value">supported</td><td class="n" data-l="Notes">Per-instance window checks; PDB and migrated-PDB handling.</td></tr>
-                <tr><td class="k" data-l="Item">Markers</td><td class="m" data-l="Value">inline or file</td><td class="n" data-l="Notes">Releases, patches and incidents drawn on every dated chart.</td></tr>
+                <tr><td class="k" data-l="Item">Markers</td><td class="m" data-l="Value">inline or file</td><td class="n" data-l="Notes">Releases, patches and incidents drawn on the timeline, the window bars and every dated chart.</td></tr>
                 <tr><td class="k" data-l="Item">Licence</td><td class="m" data-l="Value">see repository</td><td class="n" data-l="Notes">Bundled ECharts is Apache-2.0.</td></tr>
               </tbody>
             </table></div>
@@ -246,7 +246,7 @@
                 <h3>Scoring</h3>
                 <p>Counters are differenced per window and divided by its length. The current value is compared with the mean and standard deviation of the valid prior windows: z = (current &minus; mean) &divide; sd.</p>
                 <h3>Charts</h3>
-                <p>Each chart is drawn from the same query as its table, so the plotted numbers are the printed numbers.</p>
+                <p>Each chart is drawn from the same query as its table, so the plotted numbers are the printed numbers. Every scored row shows its normal range (mean &plusmn; 2&sigma;), a dot on a &sigma; axis, z and the change vs the mean.</p>
               </div>
               <div style="display:grid;gap:12px;align-content:start;margin-top:6px">
                 <div class="tw"><table class="dt">
@@ -263,8 +263,8 @@
               </div>
             </div>
             <figure>
-              <div class="screen"><img class="dim" src="assets/shot_demo_findings.jpg" width="1425" height="2136" alt="Findings summary: 9 findings, then the biggest movers by z-score and the load profile, system metric and wait class tables with each row graded large, moderate or typical." loading="lazy" style="max-height:440px;object-fit:cover;object-position:top"></div>
-              <figcaption>Findings: the finding count, the biggest movers first, then every metric with prior mean, sd, n and grade.</figcaption>
+              <div class="screen"><img class="dim" src="assets/shot_demo_findings.jpg" width="1425" height="2136" alt="Findings in the Summary view: 4 findings from 11 moved metrics; the Physical I/O card with its value, normal range, per-window bars and the segment, file and wait events behind it; the DB time card split into CPU and wait by class; the Network card." loading="lazy" style="max-height:440px;object-fit:cover;object-position:top"></div>
+              <figcaption>Finding cards: one per family of metrics that moved, each with its evidence. Every metric's table row, with prior mean, sd, n and grade, is one click away.</figcaption>
             </figure>
           </div>
         </section>
@@ -345,7 +345,7 @@ reporting | reporting_ro/@RPT</pre><button class="copy" type="button" data-copy=
             <div class="tw"><table class="dt stack">
               <thead><tr><th>Group</th><th>Sections</th><th>Source views</th></tr></thead>
               <tbody>
-                <tr><td class="k" data-l="Group">Triage</td><td class="n" data-l="Sections">DB time over the span, headline cards, ASH timeline, findings, compared windows</td><td class="m vw" data-l="Views">SYS_TIME_MODEL, SYSSTAT, ACTIVE_SESS_HISTORY, SNAPSHOT</td></tr>
+                <tr><td class="k" data-l="Group">Summary, Timeline</td><td class="n" data-l="Sections">Verdict, DB time per window, finding cards, plan and parameter changes, window grid, full-span ASH, DB time over the span, compared windows</td><td class="m vw" data-l="Views">SYS_TIME_MODEL, SYSSTAT, ACTIVE_SESS_HISTORY, SNAPSHOT</td></tr>
                 <tr><td class="k" data-l="Group">Workload</td><td class="n" data-l="Sections">Day profile, utilization, load profile, system metrics, waits</td><td class="m vw" data-l="Views">SYSSTAT, SYSMETRIC_SUMMARY, SYSTEM_EVENT, BG_EVENT_SUMMARY</td></tr>
                 <tr><td class="k" data-l="Group">SQL</td><td class="n" data-l="Sections">Top SQL five ways with plan changes, per-SQL ASH, SQL Monitor</td><td class="m vw" data-l="Views">SQLSTAT, SQLTEXT, ACTIVE_SESS_HISTORY, REPORTS</td></tr>
                 <tr><td class="k" data-l="Group">Storage, config</td><td class="n" data-l="Sections">Top segments and files by I/O, I/O by file type, changed parameters</td><td class="m vw" data-l="Views">SEG_STAT, FILESTATXS, IOSTAT_FILETYPE, PARAMETER</td></tr>
@@ -396,7 +396,7 @@ reporting | reporting_ro/@RPT</pre><button class="copy" type="button" data-copy=
               <dt>Cheat sheet</dt><dd><a href="cheatsheet.html">Ready-to-paste recipes</a> for cadences, RAC, templates, markers, offline, fleet.</dd>
               <dt>Configurator</dt><dd><a href="configurator.html">Builds the command in your browser</a>. Nothing leaves the page.</dd>
               <dt>Scoring policy</dt><dd><a href="metric_policy.html">Each metric's direction and thresholds</a>.</dd>
-              <dt>Version</dt><dd><code>awr_trend.sql</code> v1.5.0, fleet 0.7.0, September 2026.</dd>
+              <dt>Version</dt><dd><code>awr_trend.sql</code> v1.6.0, fleet 0.7.0, September 2026.</dd>
             </dl>
           </div>
         </section>
@@ -408,7 +408,7 @@ reporting | reporting_ro/@RPT</pre><button class="copy" type="button" data-copy=
 
 <footer class="site">
   <div class="wrap">
-    <span>AWR Timeline Comparison v1.5.0, fleet 0.7.0</span>
+    <span>AWR Timeline Comparison v1.6.0, fleet 0.7.0</span>
     <nav aria-label="Footer">
       <a href="#s-install">Quick start</a>
       <a href="examples/demo_busy_db.html">Demo report</a>

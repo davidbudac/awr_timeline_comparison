@@ -104,9 +104,10 @@ Reading the table:
 - A marker outside a chart's time span is dropped for that chart; otherwise it
   snaps to the nearest point on the axis. A malformed datetime is skipped, not
   fatal.
-- Markers only draw on the **dated** charts (masthead strip, ASH timeline,
-  DB-time summary, per-SQL ASH cards). Sparklines and value-axis charts are
-  undated and show none.
+- Markers only draw on the **dated** charts (the Timeline view's activity
+  chart and window ruler, the finding cards' window bars, ASH timeline,
+  DB-time summary, per-SQL ASH cards). Table micro strips and value-axis
+  charts are undated and show none.
 - AWR retention must cover ~29 days for the 4-weeks-back lookback:
   `SELECT retention FROM dba_hist_wr_control;`
 ```

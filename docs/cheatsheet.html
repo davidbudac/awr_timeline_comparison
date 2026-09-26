@@ -34,7 +34,7 @@
         <rect x="16.5" y="8" width="3.5" height="12" rx="1" fill="currentColor" opacity=".55"/>
         <rect x="22" y="0" width="4" height="20" rx="1" fill="var(--accent)"/>
       </svg>
-      <span>AWR Timeline Comparison</span><span class="rev">v1.5.0</span>
+      <span>AWR Timeline Comparison</span><span class="rev">v1.6.0</span>
     </a>
     <nav class="nav" aria-label="Site">
       <a href="index.html#s-install">Quick start</a>
@@ -64,7 +64,7 @@
 <main id="main" tabindex="-1">
 <header class="page-head">
   <div class="wrap">
-    <span class="kicker">Cheat sheet &middot; run_awr_trend.sh &middot; v1.5.0, fleet 0.7.0</span>
+    <span class="kicker">Cheat sheet &middot; run_awr_trend.sh &middot; v1.6.0, fleet 0.7.0</span>
     <h1>Ready-to-paste recipes</h1>
     <p class="lede">Every recipe below is a complete <code>run_awr_trend.sh</code> invocation:
       copy, swap in your connect string, run. All commands assume your working
@@ -275,8 +275,8 @@
   <h3><code>simple</code> — triage-friendly subset for a quick glance</h3>
 <div class="lcode"><pre id="cs-templates-2">./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w simple</pre><button class="copy" type="button" data-copy="cs-templates-2"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg><span class="lbl">Copy</span></button></div>
   <p class="aside">9 load stats, 8 SYSMETRIC metrics, ~10 commonly-watched wait events. The
-  masthead renders a <code>template: simple</code> pill so you can tell reports apart
-  at a glance.</p>
+  top bar names the template (<code>template simple</code>) so you can tell reports
+  apart at a glance.</p>
 
   <h3><code>dev</code> — application-developer view</h3>
 <div class="lcode"><pre id="cs-templates-3">./run_awr_trend.sh user/pw@svc AUTO 1 4 10 0 1 w dev</pre><button class="copy" type="button" data-copy="cs-templates-3"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg><span class="lbl">Copy</span></button></div>
@@ -337,8 +337,9 @@
 <div class="doc-head"><h2>Timeline markers</h2><p class="doc-sub">marker_file / MARKERS &mdash; annotate the dated charts with patches, rebuilds, incidents</p></div>
 <div class="doc-body">
   <p>
-    Annotate the dated charts (masthead strip, ASH timeline, DB-time summary,
-    per-SQL ASH cards) with your own milestones — a patch, an index rebuild, a stats
+    Annotate the dated charts (the Timeline view's activity chart and window
+    ruler, the finding cards' window bars, ASH timeline, DB-time summary, per-SQL
+    ASH cards) with your own milestones — a patch, an index rebuild, a stats
     gather, an incident — so a spike lines up with a known change. Optional: no
     <code>marker_file</code> means no markers and no change to the report.
   </p>
@@ -440,10 +441,12 @@ SQL</pre><button class="copy" type="button" data-copy="cs-nowrapper-2"><svg view
 <div class="doc-head"><h2>Self-contained / offline report</h2><p class="doc-sub">echarts &mdash; CDN, internal mirror, or one fully self-contained file</p></div>
 <div class="doc-body">
   <p>
-    The report is almost entirely self-contained already — inline CSS, inline
-    SVG sparklines, inline marker JS. Its one network dependency is the Apache
-    ECharts library that draws the larger charts (hero strip, wait-class bars,
-    findings heatmap, top-SQL bump chart, ASH timeline). When it can't load, the
+    The report is almost entirely self-contained already — inline CSS and JS,
+    and the Summary and Timeline views (finding cards, window bars, band glyphs,
+    micro strips, the full-span activity chart) are inline SVG. Its one network
+    dependency is the Apache ECharts library that draws the larger All-sections
+    charts (wait-class bars, top-SQL bump chart, hourly ASH timeline, DB time,
+    I/O trends). When it can't load, the
     tables still render every number and an amber “Charts hidden” banner explains
     why. The <code>echarts</code> var (env var <code>ECHARTS</code> in the wrapper)
     controls where it loads from:
@@ -505,9 +508,9 @@ line=<span class="s">"$(grep -nF "src=\"$lib\"" "$html" | head -1 | cut -d: -f1)
 
   <h3>“Walk me through the last 12 hours hour by hour”</h3>
 <div class="lcode"><pre id="cs-playbooks-2">./run_awr_trend.sh user/pw@svc AUTO 1 12 10 0 1 h</pre><button class="copy" type="button" data-copy="cs-playbooks-2"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg><span class="lbl">Copy</span></button></div>
-  <p class="aside">Open the report and focus on the <strong>ASH timeline</strong> and
-  <strong>DB time</strong> stacked areas — those cover the full span at native snap
-  resolution.</p>
+  <p class="aside">Open the report's <strong>Timeline</strong> view: the full-span activity chart and
+  the window grid put the twelve hours side by side; <strong>All sections</strong>
+  adds the hourly ASH timeline and the DB time stacked areas.</p>
 
   <h3>“Did yesterday's batch differ from the previous five Tuesdays?”</h3>
 <div class="lcode"><pre id="cs-playbooks-3"><span class="c"># Set target_end to the end of the batch window.</span>
@@ -593,7 +596,7 @@ DEFINE echarts = <span class="s">''</span></pre><button class="copy" type="butto
 
 <footer class="site">
   <div class="wrap">
-    <span>AWR Timeline Comparison v1.5.0, fleet 0.7.0</span>
+    <span>AWR Timeline Comparison v1.6.0, fleet 0.7.0</span>
     <nav aria-label="Footer">
       <a href="index.html#s-install">Quick start</a>
       <a href="examples/demo_busy_db.html">Demo report</a>

@@ -281,7 +281,8 @@ SQL
 
 ## Timeline markers (`marker_file`)
 
-Annotate the dated charts (masthead strip, ASH timeline, DB-time summary,
+Annotate the dated charts (the Timeline view's activity chart and window
+ruler, the finding cards' window bars, the ASH timeline, DB-time summary,
 per-SQL ASH cards) with your own milestones — a patch, an index rebuild, a
 stats gather, an incident — so a spike lines up with a known change.
 Optional: no `marker_file` means no markers and no change to the report.
@@ -392,12 +393,13 @@ value would stop for an "Enter value" prompt.)
 
 ## Self-contained / offline report (`echarts`)
 
-The report is almost entirely self-contained already — inline CSS, inline
-SVG sparklines, inline marker JS. Its one network dependency is the Apache
-ECharts library that draws the larger charts (hero strip, wait-class bars,
-findings heatmap, top-SQL bump chart, ASH timeline). When it can't load,
-the tables still render every number and an amber "Charts hidden" banner
-explains why. The `echarts` var (env var `ECHARTS` in the wrapper) picks
+The report is almost entirely self-contained already — inline CSS and JS,
+and the Summary / Timeline views (finding cards, window bars, band glyphs,
+micro strips, the full-span activity chart) are inline SVG. Its one network
+dependency is the Apache ECharts library that draws the larger All-sections
+charts (wait-class bars, top-SQL bump chart, hourly ASH timeline, DB time,
+I/O trends). When it can't load, the tables still render every number and
+an amber "Charts hidden" banner explains why. The `echarts` var (env var `ECHARTS` in the wrapper) picks
 where it loads from:
 
 | `echarts` value | Result | Offline? | Single file? |

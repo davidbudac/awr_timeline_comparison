@@ -22,11 +22,15 @@ Open the original `sql/NN_*.sql` and walk its `DBMS_OUTPUT.PUT_LINE`
 calls top to bottom.  Reproduce every element, attribute, class, id,
 `data-*` hook, inline `<script>`, `<p>` caption, and `AWR_DATA.<x>` JSON
 payload with the same names and the same shape.  The page chrome
-(`sql/_style.sql` CSS, `sql/00_params.sql` JS) selects on those hooks
-(`data-w`, `data-imp`, `data-sys`, `data-spark`, `data-tail`,
-`data-nosort`, `.tabs[data-tabs]`, `id="..."` anchors the nav links to,
-etc.), so a missing hook silently breaks a toggle, a sort, a chart, or a
-count pill.
+(`sql/_style.sql` CSS, `sql/00_params.sql` JS, `js_wingrid` /
+`js_timeline` / `js_microstrip`) selects on those hooks (`class="vw in-s
+in-t in-a"` view membership, `section.lib` + `--os` + `lopen`, `data-w`,
+`data-v` / `data-mu` / `data-sd` / `data-sev` on window-grid rows,
+`data-tl`, `data-mk-at`, `data-spark`, `data-tail`, `data-sys`,
+`data-imp`, `data-nosort`, `.tabs[data-tabs]`, `<template class="tl-src">`,
+the entity-link ids from `anchor_id`, `id="..."` anchors the rail links
+to, etc.), so a missing hook silently breaks a view, a link, a toggle, a
+sort, a chart, or a count pill.
 
 * Copy JavaScript verbatim.  `awrdemo.chrome.put_lines(path)` returns
   every PUT_LINE's literal text (with `''` unescaped) in order, flagged
@@ -36,10 +40,16 @@ count pill.
   `~target_end_resolved`, ...) map to `World` attributes.
 * Number strings must be Oracle-faithful: use `awrdemo.helpers`
   (`fmt_num`, `fmt_int`, `fmt_num_title`, `score_cells`, `band_cells`,
-  `num6`, `to_char_fixed/trim`, `z_txt`, `pct_txt`, `esc` =
-  `DBMS_XMLGEN.CONVERT`, `json_escape`, `is_essential`,
+  `band_span`, `delta_span`, `range_txt`, `lib_ls`, `anchor_id`,
+  `finding_anchor`, `ent`, the `card_*` / `metric_*` / `fv*` vocabulary,
+  `wg_*`, `tl_*`, `num6`, `to_char_fixed/trim`, `z_txt`, `pct_txt`, `esc`
+  = `DBMS_XMLGEN.CONVERT`, `json_escape`, `is_essential`,
   `is_oracle_schema`, date masks `ts_min/ts_sec/ts_dy_min/mon_dd/...`).
-  Add a helper there only if it is a twin of something in `sql/lib/`.
+  Add a helper there only if it is a twin of something in `sql/lib/`, and
+  change a helper in the same commit as its PL/SQL original.
+* Slice lifted PUT_LINEs by anchor (`_slice`, `.index(marker)`,
+  `startswith`), not by list index: an index-sliced twin silently shifts
+  when a PUT_LINE is added, merged or removed in the SQL.
 * Scoring: `helpers.mean_sd` (Oracle STDDEV = sample sd, NULL for n<2)
   + `z_and_pct` + `bucket_of` reproduce every section's z/bucket CASE.
   Priors are the VALID prior windows only (`w.valid_windows`, offset > 0).
@@ -60,7 +70,7 @@ count pill.
 `w.windows` (13 windows, `week_offset` 0..12, all valid on this demo),
 `w.window_metrics(win)` -> `HourMetrics` for one window (1 h),
 `w.hours(start, end)` -> `[HourMetrics]` for a time-range scan (09/10/
-masthead/day-profile), `w.hour(ts)` -> the interval ending at `ts`,
+16, the verdict), `w.hour(ts)` -> the interval ending at `ts`,
 `w.snaps` / `w.snap_at(ts)` -> `dba_hist_snapshot` rows.  Catalogs:
 `w.sqls` / `w.sql_by_id` (text, schema, module, action), `w.fg_events`,
 `w.bg_events`, `w.segments`, `w.files`, `w.filetypes`, `w.param_changes`
@@ -77,11 +87,12 @@ gives the per-second rate the sections print.  `DB time` / `DB CPU` in
 microseconds (like `DBA_HIST_SYS_TIME_MODEL`); wait `time_waited_us` is
 microseconds (`DBA_HIST_SYSTEM_EVENT.time_waited_micro` delta).
 
-Do NOT edit `model.py` / `helpers.py` / `chrome.py` / `gen_demo_report.py`
-(other agents are working against them concurrently).  If the model
-genuinely lacks something your section needs, derive it locally in your
-section module from what is there (use `w.rng(<stable key>)` for any
-randomness so output is deterministic), and say so in your final report.
+Keep `model.py` stable: the website's screenshots and the demo story
+depend on it.  If the model genuinely lacks something your section needs,
+derive it locally in your section module from what is there (use
+`w.rng(<stable key>)` for any randomness so output is deterministic).
+A new section also needs its slot in `gen_demo_report.py`'s `SECTIONS`
+(the driver's `@@` order).
 
 ## Checking your work
 
@@ -97,5 +108,6 @@ EOF
 Then compare the tag/attribute vocabulary of your output against the
 original SQL (`grep -o 'class="[^"]*"' ... | sort -u`, ids, data-*),
 and validate the HTML nests (no unclosed `<tr>`/`<table>`/`<section>`).
+Then regenerate the whole demo and run `demo/verify_report.js` on it.
 JSON payloads must parse (`json.loads` on the emitted literal).  Long
 sections: keep the number of rows realistic (top_n = 10, 13 windows).
