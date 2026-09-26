@@ -700,7 +700,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
         DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
         DBMS_OUTPUT.PUT_LINE('var palette=["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1","#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"];');
-        DBMS_OUTPUT.PUT_LINE('var fmt=function(v){return v==null?"—":(+v).toLocaleString(undefined,{maximumFractionDigits:1});};');
+        DBMS_OUTPUT.PUT_LINE('var fmt=function(v){return v==null?"\u2014":(+v).toLocaleString(undefined,{maximumFractionDigits:1});};');
         DBMS_OUTPUT.PUT_LINE('Object.keys(AWR_DATA.fileIo.dims).forEach(function(dim){');
         DBMS_OUTPUT.PUT_LINE('  var el=document.getElementById("fileio-chart-"+dim); if(!el) return;');
         DBMS_OUTPUT.PUT_LINE('  var d=AWR_DATA.fileIo.dims[dim];');

@@ -11,7 +11,7 @@ var MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"
 function dayTxt(t){var d=new Date(String(t).replace(" ","T"));if(isNaN(d.getTime()))return String(t);return DOW[d.getDay()]+" "+d.getDate()+" "+MON[d.getMonth()];}
 /* a short flag label: "Release 4.2" -> "R 4.2", "RU 19.28 patch" -> "RU 19.28" */
 function shortLbl(l){var w=String(l).split(/\s+/),d=w.filter(function(x){return /\d/.test(x);});
-  if(!d.length)return l.length>10?l.slice(0,9)+"…":l;
+  if(!d.length)return l.length>10?l.slice(0,9)+"\u2026":l;
   if(/\d/.test(w[0]))return d.join(" ");
   return (w[0].length<=3&&w[0]===w[0].toUpperCase()?w[0]:w[0].charAt(0).toUpperCase())+" "+d.join(" ");}
 /* markers on window boundaries: a marker that falls after the start of one

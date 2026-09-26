@@ -594,7 +594,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  chart.setOption({');
     DBMS_OUTPUT.PUT_LINE('    aria:{enabled:true,decal:{show:true}},');
     DBMS_OUTPUT.PUT_LINE('    tooltip:{trigger:"axis",axisPointer:{type:"line"},');
-    DBMS_OUTPUT.PUT_LINE('      valueFormatter:function(v){return v==null?"—":(+v).toFixed(2);}},');
+    DBMS_OUTPUT.PUT_LINE('      valueFormatter:function(v){return v==null?"\u2014":(+v).toFixed(2);}},');
     DBMS_OUTPUT.PUT_LINE('    legend:{top:0,left:"center",textStyle:{color:fg,fontSize:10},itemWidth:10,itemHeight:7,type:"scroll"},');
     DBMS_OUTPUT.PUT_LINE('    grid:{left:42,right:14,top:30,bottom:showSlider?46:26,containLabel:true},');
     DBMS_OUTPUT.PUT_LINE('    xAxis:{type:"category",data:d.hours,boundaryGap:false,axisLabel:{color:mu,fontSize:9,hideOverlap:true}},');

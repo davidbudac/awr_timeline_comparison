@@ -45,7 +45,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('function dayTxt(t){var d=new Date(String(t).replace(" ","T"));if(isNaN(d.getTime()))return String(t);return DOW[d.getDay()]+" "+d.getDate()+" "+MON[d.getMonth()];}');
     DBMS_OUTPUT.PUT_LINE('/* a short flag label: "Release 4.2" -> "R 4.2", "RU 19.28 patch" -> "RU 19.28" */');
     DBMS_OUTPUT.PUT_LINE('function shortLbl(l){var w=String(l).split(/\s+/),d=w.filter(function(x){return /\d/.test(x);});');
-    DBMS_OUTPUT.PUT_LINE('  if(!d.length)return l.length>10?l.slice(0,9)+"…":l;');
+    DBMS_OUTPUT.PUT_LINE('  if(!d.length)return l.length>10?l.slice(0,9)+"\u2026":l;');
     DBMS_OUTPUT.PUT_LINE('  if(/\d/.test(w[0]))return d.join(" ");');
     DBMS_OUTPUT.PUT_LINE('  return (w[0].length<=3&&w[0]===w[0].toUpperCase()?w[0]:w[0].charAt(0).toUpperCase())+" "+d.join(" ");}');
     DBMS_OUTPUT.PUT_LINE('/* markers on window boundaries: a marker that falls after the start of one');

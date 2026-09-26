@@ -397,6 +397,23 @@ if ! sh tools/js2plsql.sh --check >/dev/null 2>"${TMPDIR:-/tmp}/lint_js2plsql.$$
 fi
 rm -f "${TMPDIR:-/tmp}/lint_js2plsql.$$"
 
+# ----------------------------------------------------------------------
+# 25. No non-ASCII byte in anything the single-DB report emits.  SQL*Plus
+#     converts PUT_LINE text to the client character set, and on a client
+#     that is not UTF-8 (dbmint's) every multi-byte character arrives as
+#     "?" -- phase 3/4 shipped literal dashes / triangles in js_timeline
+#     and the Timeline's skipped-window cells read "???".  Use an HTML
+#     entity (&ndash; &sigma;) in markup and a \uXXXX escape in JS.
+#     Comment lines (--) are exempt; the fleet files are out of scope.
+# ----------------------------------------------------------------------
+for f in awr_trend.sql sql/[0-9]*.sql sql/_style.sql sql/lib/*.plsql sql/lib/src/*.js; do
+    [ -f "$f" ] || continue
+    LC_ALL=C grep -n "$(printf '[\200-\377]')" "$f" | grep -v -E '^[0-9]+:[[:space:]]*(--|//)' \
+      | while IFS= read -r line; do
+        finding non-ascii "$f:${line%%:*}" "non-ASCII character in emitted text -- use an HTML entity (markup) or a \\uXXXX escape (JS); non-UTF-8 SQL*Plus clients print ?"
+    done
+done
+
 [ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"

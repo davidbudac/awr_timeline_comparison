@@ -41,7 +41,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<script>');
     DBMS_OUTPUT.PUT_LINE('(function(){');
     DBMS_OUTPUT.PUT_LINE('var doc=document, W=window.AWR_WG=window.AWR_WG||{}, TL=window.AWR_TL={};');
-    DBMS_OUTPUT.PUT_LINE('var H1=36e5, MINUS=''−'';');
+    DBMS_OUTPUT.PUT_LINE('var H1=36e5, MINUS=''\u2212'';');
     DBMS_OUTPUT.PUT_LINE('function $(s,r){return (r||doc).querySelector(s);}');
     DBMS_OUTPUT.PUT_LINE('function $$(s,r){return Array.prototype.slice.call((r||doc).querySelectorAll(s));}');
     DBMS_OUTPUT.PUT_LINE('function shown(el){return !!el&&el.getClientRects().length>0;}');
@@ -54,7 +54,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('/* sql/lib/fmt_num.plsql, client side: about 4 significant digits, k / M / G */');
     DBMS_OUTPUT.PUT_LINE('function grp(n){return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'','');}');
     DBMS_OUTPUT.PUT_LINE('function fmtNum(p){');
-    DBMS_OUTPUT.PUT_LINE('  if(p==null)return ''—'';if(p===0)return ''0'';');
+    DBMS_OUTPUT.PUT_LINE('  if(p==null)return ''\u2014'';if(p===0)return ''0'';');
     DBMS_OUTPUT.PUT_LINE('  var a=Math.abs(p),s=p<0?''-'':'''',u='''',v=a,t;');
     DBMS_OUTPUT.PUT_LINE('  if(a>=1e9){v=a/1e9;u='' G'';}else if(a>=1e6){v=a/1e6;u='' M'';}else if(a>=1e4){v=a/1e3;u='' k'';}');
     DBMS_OUTPUT.PUT_LINE('  if(v>=1000)t=grp(Math.round(v));else if(v>=100)t=grp(v.toFixed(1));else if(v>=10)t=v.toFixed(2);else if(v>=1)t=v.toFixed(3);');
@@ -63,11 +63,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* the page''s one Delta rule (sql/lib/band_glyph.plsql delta_span) */');
     DBMS_OUTPUT.PUT_LINE('function delta(cur,mu){');
-    DBMS_OUTPUT.PUT_LINE('  if(cur==null||mu==null||mu===0)return ''—'';');
+    DBMS_OUTPUT.PUT_LINE('  if(cur==null||mu==null||mu===0)return ''\u2014'';');
     DBMS_OUTPUT.PUT_LINE('  var q=cur/mu;');
-    DBMS_OUTPUT.PUT_LINE('  if(mu>0&&q>=2)return ''▲ ×''+(q<100?q.toFixed(1):Math.round(q));');
+    DBMS_OUTPUT.PUT_LINE('  if(mu>0&&q>=2)return ''\u25b2 \u00d7''+(q<100?q.toFixed(1):Math.round(q));');
     DBMS_OUTPUT.PUT_LINE('  var p=(cur-mu)/Math.abs(mu)*100;');
-    DBMS_OUTPUT.PUT_LINE('  return (p>=0?''▲ '':''▼ '')+Math.abs(p).toFixed(1)+''%'';');
+    DBMS_OUTPUT.PUT_LINE('  return (p>=0?''\u25b2 '':''\u25bc '')+Math.abs(p).toFixed(1)+''%'';');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function aasTxt(v){return v>=10?v.toFixed(0):v>=1?v.toFixed(1):v>=0.01?v.toFixed(2):v.toPrecision(1);}');
     DBMS_OUTPUT.PUT_LINE('function niceStep(max,n){var raw=max/n,p=Math.pow(10,Math.floor(Math.log10(raw))),m=raw/p;return (m<=1?1:m<=2?2:m<=5?5:10)*p;}');
@@ -119,9 +119,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    if(nr)h+=''<span><i class="dotk typical"></i>''+nr+'' normal</span>'';');
     DBMS_OUTPUT.PUT_LINE('  }else if(kind===''sql''){');
     DBMS_OUTPUT.PUT_LINE('    var pc=$$(''.r:not(.sub) .glf.gp'',lane).length,nw=$$(''.glf.gn'',lane).length,dp=$$(''.glf.gd'',lane).length;');
-    DBMS_OUTPUT.PUT_LINE('    if(pc)h+=''<span><b>◆</b> ''+pc+'' plan change''+(pc>1?''s'':'''')+''</span>'';');
-    DBMS_OUTPUT.PUT_LINE('    if(nw)h+=''<span><b>✚</b> ''+nw+'' new</span>'';');
-    DBMS_OUTPUT.PUT_LINE('    if(dp)h+=''<span><b>▽</b> ''+dp+'' DOP</span>'';');
+    DBMS_OUTPUT.PUT_LINE('    if(pc)h+=''<span><b>\u25c6</b> ''+pc+'' plan change''+(pc>1?''s'':'''')+''</span>'';');
+    DBMS_OUTPUT.PUT_LINE('    if(nw)h+=''<span><b>\u271a</b> ''+nw+'' new</span>'';');
+    DBMS_OUTPUT.PUT_LINE('    if(dp)h+=''<span><b>\u25bd</b> ''+dp+'' DOP</span>'';');
     DBMS_OUTPUT.PUT_LINE('    if(!h)h=''<span class="muted">ranked, not scored</span>'';');
     DBMS_OUTPUT.PUT_LINE('  }else if(kind===''config''){');
     DBMS_OUTPUT.PUT_LINE('    var n=0,f=0;');
@@ -161,7 +161,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    var v=nums(row.getAttribute(''data-v''));');
     DBMS_OUTPUT.PUT_LINE('    $$('':scope > .c[data-w]'',row).forEach(function(c){');
     DBMS_OUTPUT.PUT_LINE('      if($(''.v'',c))return;var x=v[idxOf(c.getAttribute(''data-w''))];');
-    DBMS_OUTPUT.PUT_LINE('      c.insertAdjacentHTML(''afterbegin'',x==null?''<span class="v nil" aria-label="no value">–</span>'':''<span class="v">''+fmtNum(x)+''</span>'');');
+    DBMS_OUTPUT.PUT_LINE('      c.insertAdjacentHTML(''afterbegin'',x==null?''<span class="v nil" aria-label="no value">\u2013</span>'':''<span class="v">''+fmtNum(x)+''</span>'');');
     DBMS_OUTPUT.PUT_LINE('    });');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('}');
@@ -424,7 +424,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  hb.setAttribute(''x'',xa.toFixed(1));hb.setAttribute(''width'',Math.max(1,xb-xa).toFixed(1));hb.setAttribute(''visibility'',''visible'');');
     DBMS_OUTPUT.PUT_LINE('  ch.setAttribute(''x1'',x.toFixed(1));ch.setAttribute(''x2'',x.toFixed(1));ch.setAttribute(''visibility'',''visible'');');
     DBMS_OUTPUT.PUT_LINE('  var hrs=Math.round((ax.T1[k]-ax.T[k])/H1*100)/100;');
-    DBMS_OUTPUT.PUT_LINE('  tipOn(''<b>''+fAt(ax.T[k])+''–''+fHM(ax.T1[k])+''</b><br><span class="tm">''+(hrs===1?''1-hour'':hrs+''-hour'')+'' average</span>''+ashRows(function(c){return AX.vals[c][k];},ax.vis),e);');
+    DBMS_OUTPUT.PUT_LINE('  tipOn(''<b>''+fAt(ax.T[k])+''\u2013''+fHM(ax.T1[k])+''</b><br><span class="tm">''+(hrs===1?''1-hour'':hrs+''-hour'')+'' average</span>''+ashRows(function(c){return AX.vals[c][k];},ax.vis),e);');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function axSelect(i){');
     DBMS_OUTPUT.PUT_LINE('  var w=wins()[i];if(!w)return;');
