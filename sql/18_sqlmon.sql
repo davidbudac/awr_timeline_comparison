@@ -90,12 +90,12 @@ DECLARE
     v_n_dop       PLS_INTEGER := 0;   -- DOP downgrade / an error (library row text)
     v_n_err       PLS_INTEGER := 0;
 
-    v_header      VARCHAR2(4000);
+    v_header      VARCHAR2(32767);   -- one th (about 45 bytes) per window
     v_row         VARCHAR2(32767);
     v_flags       VARCHAR2(400);
     v_plancell    VARCHAR2(400);
 
-    v_windows_json    VARCHAR2(4000);
+    v_windows_json    VARCHAR2(32767);
     v_weeks_iso_json  VARCHAR2(4000);
     v_top_ids_json    VARCHAR2(4000);
 
@@ -144,6 +144,7 @@ DECLARE
     @@sql/lib/put_clob_chunked.plsql
     @@sql/lib/anchor_id.plsql
     @@sql/lib/finding_cards.plsql
+    @@sql/lib/off_label.plsql
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
 BEGIN
@@ -345,6 +346,13 @@ BEGIN
                    -- so the joined string itself is never NULL and plain
                    -- LISTAGG (no fold trick needed) never drops a slot; split
                    -- back out with REGEXP_SUBSTR('[^^]*', ...) at render time.
+                   -- About 40 bytes a captured window (more with several
+                   -- plans), so a statement SQL Monitor caught in most of
+                   -- 100+ windows passes SQL's 4000-byte LISTAGG limit: ON
+                   -- OVERFLOW TRUNCATE drops whole slots from the END -- the
+                   -- OLDEST windows, the order is Current first -- and ends
+                   -- on an empty slot, so those windows render as "not
+                   -- captured" instead of ORA-01489 aborting the run.
                    LISTAGG(
                        NVL(TO_CHAR(n), '') || '^' ||
                        NVL(TO_CHAR(median_elapsed_s, 'FM99999999990D000000',
@@ -354,7 +362,7 @@ BEGIN
                        NVL(TO_CHAR(max_px_alloc), '') || '^' ||
                        NVL(plan_list, '') || '^' ||
                        NVL(TO_CHAR(err_cnt), ''),
-                       ',')
+                       ',' ON OVERFLOW TRUNCATE '^^^^^^' WITHOUT COUNT)
                        WITHIN GROUP (ORDER BY week_offset ASC) AS detail_csv
             FROM   grid
             GROUP BY sql_id
@@ -561,7 +569,7 @@ BEGIN
                 v_er_s  VARCHAR2(40)  := RTRIM(REGEXP_SUBSTR(v_slot || '^', '[^^]*\^', 1, 7), '^');
                 v_me_s  VARCHAR2(40)  := nth_csv(s.elapsed_asc_csv, k + 1);
                 v_label VARCHAR2(20)  := CASE WHEN k = 0 THEN 'Current'
-                    ELSE '&minus;' || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) END;
+                    ELSE '&minus;' || off_label(k) END;
             BEGIN
                 DBMS_OUTPUT.PUT_LINE('<tr' || CASE WHEN k = 0 THEN ' class="cur"' ELSE '' END || '>'
                     || '<td data-w="' || k || '">' || v_label || '</td>'
@@ -916,21 +924,21 @@ BEGIN
     -- Compared-window shading + marker-snap categories, same JSON shape as
     -- section 09's ASH timeline (calendar charts), sourced from
     -- windows_rollup so skipped windows render as grey "skipped" bands.
-    SELECT '['
-           || LISTAGG(
-                  '["' || TO_CHAR(win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
-                  || TO_CHAR(win_end_ts, 'YYYY-MM-DD HH24:MI') || '","'
-                  || CASE WHEN week_offset = 0 THEN 'current' ELSE 'w-' || week_offset END || '",'
-                  || CASE WHEN valid_flag = 'Y' THEN '"1"' ELSE '"0"' END || ']',
-                  ',')
-                  WITHIN GROUP (ORDER BY week_offset DESC)
-           || ']'
-    INTO   v_windows_json
-    FROM (
+    -- Built in PL/SQL, not LISTAGG (about 50 bytes a window: SQL's
+    -- 4000-byte LISTAGG limit would abort the run past about 78 windows).
+    FOR r IN (
         WITH
         @@sql/lib/windows_cte.sql
         SELECT week_offset, win_start_ts, win_end_ts, valid_flag FROM windows_rollup
-    );
+        ORDER BY week_offset DESC
+    ) LOOP
+        v_windows_json := v_windows_json || CASE WHEN v_windows_json IS NOT NULL THEN ',' END
+            || '["' || TO_CHAR(r.win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
+            || TO_CHAR(r.win_end_ts, 'YYYY-MM-DD HH24:MI') || '","'
+            || CASE WHEN r.week_offset = 0 THEN 'current' ELSE 'w-' || r.week_offset END || '",'
+            || CASE WHEN r.valid_flag = 'Y' THEN '"1"' ELSE '"0"' END || ']';
+    END LOOP;
+    v_windows_json := '[' || v_windows_json || ']';
 
     SELECT '[' || LISTAGG('"' || TO_CHAR(win_start_ts, 'YYYY-MM-DD HH24:MI') || '"', ',')
                WITHIN GROUP (ORDER BY week_offset ASC) || ']'

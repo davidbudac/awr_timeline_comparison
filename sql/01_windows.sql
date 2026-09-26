@@ -41,6 +41,7 @@ DECLARE
     v_label      VARCHAR2(40);
     v_call       VARCHAR2(400);
     v_fname      VARCHAR2(200);
+    @@sql/lib/off_label.plsql
 BEGIN
     v_slots  := v_weeks_back + 1;
     v_slot_w := (1000 - 2 * v_margin) / v_slots;
@@ -149,7 +150,7 @@ BEGIN
             || '" data-w="' || w.week_offset || '">'
             || '<td>' || CASE WHEN w.week_offset = 0 THEN '<b>Current</b>'
                               ELSE '&minus;'
-                                   || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, w.week_offset)
+                                   || off_label(w.week_offset)
                               END || '</td>'
             || '<td>' || TO_CHAR(w.win_start_ts, 'YYYY-MM-DD Dy HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH') || '</td>'
             || '<td>' || TO_CHAR(w.win_end_ts,   'YYYY-MM-DD Dy HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH') || '</td>'
@@ -200,7 +201,7 @@ BEGIN
         ORDER BY week_offset
     ) LOOP
         v_label := CASE WHEN w.week_offset = 0 THEN 'current'
-                        ELSE '-' || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, w.week_offset)
+                        ELSE '-' || off_label(w.week_offset)
                    END;
 
         DBMS_OUTPUT.PUT_LINE('');   -- blank separator line inside the <pre>

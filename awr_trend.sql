@@ -222,14 +222,12 @@ COLUMN dbg_ts              NEW_VALUE dbg_ts              NOPRINT
 -- step_hours is resolved so every section can reference identical text:
 --   win_label       compact width of one comparison window     ("15m" / "1h")
 --   step_label      compact cadence between adjacent windows   ("15m" / "1w")
---   offset_labels   CSV of compact offsets k*step_hours, k=1..weeks_back
---                   (e.g. "15m,30m,45m" or "1w,2w,3w") - parsed via REGEXP_SUBSTR
+--   (the per-window offset labels are off_label(k), sql/lib/off_label.plsql)
 --   bucket_hours    LEAST(step_hours, 1) - bucket width (in hours) for the
 --                   ASH stacked-area timeline; 0.25 for 15-min cadences,
 --                   1 for hourly+; allows fractional buckets when step<1h.
 COLUMN win_label           NEW_VALUE win_label           NOPRINT
 COLUMN step_label          NEW_VALUE step_label          NOPRINT
-COLUMN offset_labels       NEW_VALUE offset_labels       NOPRINT
 COLUMN bucket_hours        NEW_VALUE bucket_hours        NOPRINT
 
 SELECT
@@ -444,7 +442,7 @@ CROSS JOIN (
 ) mk;
 
 -- -------------------------------------------------------------------
--- Derived labels (win_label, step_label, offset_labels, bucket_hours)
+-- Derived labels (win_label, step_label, bucket_hours)
 --
 -- A compact, unit-aware label for any value of "hours":
 --   < 1h with whole-minute value  -> "Nm"   (e.g. 15m, 30m)
@@ -453,11 +451,10 @@ CROSS JOIN (
 --   multiple of 1                 -> "Nh"   (e.g. 1h, 4h)
 --   anything else                 -> "X.YYh"  (decimal hours, dot decimal)
 --
--- offset_labels is a CSV of 16 entries (1..16 * step_hours). Sections only
--- consume the first weeks_back of them via REGEXP_SUBSTR(... ,k).
--- 16 is well above any realistic weeks_back; if a caller exceeds it, the
--- per-section header REGEXP_SUBSTR returns NULL and the column header
--- renders as just "&minus;" (silent visual bug, not an ORA).
+-- The per-window offset labels ("-1w", "-36h", ...) are NOT a DEFINE: a
+-- substitution variable holds at most 240 characters, so a CSV could not
+-- grow with weeks_back.  Sections call off_label(k) from
+-- sql/lib/off_label.plsql, which applies these same rules to k * step_hours.
 -- -------------------------------------------------------------------
 WITH FUNCTION fmt_one(h IN NUMBER) RETURN VARCHAR2 IS
 BEGIN
@@ -478,22 +475,6 @@ END;
 SELECT
     fmt_one(TO_NUMBER('~win_hours'))                                  AS win_label,
     fmt_one(TO_NUMBER('~step_hours'))                                 AS step_label,
-       fmt_one(1  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(2  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(3  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(4  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(5  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(6  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(7  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(8  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(9  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(10 * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(11 * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(12 * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(13 * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(14 * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(15 * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(16 * TO_NUMBER('~step_hours'))                  AS offset_labels,
     TO_CHAR(LEAST(TO_NUMBER('~step_hours'), 1),
             'FM99999999990.999999')                                   AS bucket_hours
 FROM dual

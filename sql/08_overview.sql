@@ -41,6 +41,7 @@ DECLARE
     @@sql/lib/metric_policy.plsql
     @@sql/lib/fmt_num.plsql
     @@sql/lib/band_glyph.plsql
+    @@sql/lib/off_label.plsql
     @@sql/lib/wingrid.plsql
 BEGIN
     --
@@ -118,9 +119,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="overview" class="vw in-s strip-sec" aria-label="DB time per compared window">');
     DBMS_OUTPUT.PUT_LINE('<div class="panel strip" id="s-strip"><div class="wg fit hov"' || wg_attr
         || ' role="table" aria-label="DB time per compared window">');
-    DBMS_OUTPUT.PUT_LINE(wg_ruler('<span class="ct">DB time per window</span>'
+    wg_ruler_put(NULL, '<span class="ct">DB time per window</span>'
         || '<span class="cs">average active sessions</span>',
-        '<span class="gt">vs prior mean</span>'));
+        '<span class="gt">vs prior mean</span>');
     DBMS_OUTPUT.PUT_LINE(wg_bars(v_pairs, 0.01, v_mu, v_sd, v_bucket, v_lab, v_gut, 'hero-dbt'));
     DBMS_OUTPUT.PUT_LINE('</div></div></section>');
 END;

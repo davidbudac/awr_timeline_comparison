@@ -88,13 +88,14 @@ DECLARE
     v_dbt        PLS_INTEGER;   -- index of the LOAD 'DB time' row
     v_cpu        PLS_INTEGER;   -- index of the LOAD 'DB CPU' row
     v_verdict    VARCHAR2(32767);
-    v_win_json   VARCHAR2(32767);
+    v_win_json   VARCHAR2(32767);   -- window validity flags, |k=Y|k=N|...
     -- Subprogram includes go LAST: PL/SQL forbids a variable / TYPE
     -- declaration after a subprogram in the same DECLARE section.
     @@sql/lib/metric_policy.plsql
     @@sql/lib/fmt_num.plsql
     @@sql/lib/anchor_id.plsql
     @@sql/lib/finding_cards.plsql
+    @@sql/lib/off_label.plsql
     @@sql/lib/wingrid.plsql
 BEGIN
     --
@@ -342,9 +343,8 @@ BEGIN
         END IF;
     END LOOP;
 
-    -- The compared windows for the window component (sql/lib/wingrid.plsql,
-    -- js_wingrid.plsql) and the phase-3 Timeline: window.AWR_WIN, oldest
-    -- first, one entry per window whether or not it is valid.
+    -- The compared windows' validity ('|k=Y|k=N|...') for window.AWR_WIN
+    -- (emitted after <main> opens, below) and the valid-prior count.
     FOR r IN (
         WITH
         @@sql/lib/windows_cte.sql
@@ -355,24 +355,6 @@ BEGIN
             v_n_valid := v_n_valid + 1;
         END IF;
     END LOOP;
-    DECLARE
-        v_flags VARCHAR2(32767) := v_win_json || '|';
-        v_out   VARCHAR2(32767);
-    BEGIN
-        FOR k IN REVERSE 0 .. ~weeks_back LOOP
-            v_out := v_out || CASE WHEN k < ~weeks_back THEN ',' END
-                || '{"o":' || k
-                || ',"d":"' || wg_date(k) || '"'
-                || ',"l":"' || CASE WHEN k = 0 THEN 'current'
-                                    ELSE '-' || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) END || '"'
-                || ',"s":"' || TO_CHAR(wg_start(k), 'YYYY-MM-DD HH24:MI') || '"'
-                || ',"e":"' || TO_CHAR(wg_end(k), 'YYYY-MM-DD HH24:MI') || '"'
-                || ',"t":"' || TO_CHAR(wg_start(k), 'Dy DD Mon, HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH') || '-'
-                            || TO_CHAR(wg_end(k), 'HH24:MI') || '"'
-                || ',"v":"' || CASE WHEN INSTR(v_flags, '|' || k || '=Y|') > 0 THEN 'Y' ELSE 'N' END || '"}';
-        END LOOP;
-        v_win_json := '{"np":' || ~weeks_back || ',"w":[' || v_out || ']}';
-    END;
 
     -- =========================================================
     -- Page chrome before <main>: theme, view, top bar, rail
@@ -1251,7 +1233,25 @@ BEGIN
     -- oldest first; o = week_offset, d = column label, l = offset label,
     -- s / e = window start / end 'YYYY-MM-DD HH24:MI', t = full title,
     -- v = valid (Y / N).  Read by sql/lib/js_wingrid.plsql.
-    DBMS_OUTPUT.PUT_LINE('<script>window.AWR_WIN=' || v_win_json || ';</script>');
+    -- Streamed through wg_buf (about 115 bytes a window): any window count.
+    DECLARE
+        v_flags VARCHAR2(32767) := v_win_json || '|';
+        v_buf   VARCHAR2(32767) := '<script>window.AWR_WIN={"np":' || ~weeks_back || ',"w":[';
+    BEGIN
+        FOR k IN REVERSE 0 .. ~weeks_back LOOP
+            wg_buf(v_buf, CASE WHEN k < ~weeks_back THEN ',' END
+                || '{"o":' || k
+                || ',"d":"' || wg_date(k) || '"'
+                || ',"l":"' || CASE WHEN k = 0 THEN 'current' ELSE '-' || off_label(k) END || '"'
+                || ',"s":"' || TO_CHAR(wg_start(k), 'YYYY-MM-DD HH24:MI') || '"'
+                || ',"e":"' || TO_CHAR(wg_end(k), 'YYYY-MM-DD HH24:MI') || '"'
+                || ',"t":"' || TO_CHAR(wg_start(k), 'Dy DD Mon, HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH') || '-'
+                            || TO_CHAR(wg_end(k), 'HH24:MI') || '"'
+                || ',"v":"' || CASE WHEN INSTR(v_flags, '|' || k || '=Y|') > 0 THEN 'Y' ELSE 'N' END || '"}');
+        END LOOP;
+        wg_buf(v_buf, ']};</script>');
+        DBMS_OUTPUT.PUT_LINE(v_buf);
+    END;
 
     -- =========================================================
     -- v1.6.0 Summary view: the verdict hero.  One rule-based sentence
@@ -1384,9 +1384,9 @@ BEGIN
             || '<div class="axbr" id="ax-brush" hidden></div></div>'
             || '<p class="axn2">Drag across the chart to zoom, double-click to reset. '
             || 'Click a shaded window to pin its column in the grid below.</p></div>');
-        DBMS_OUTPUT.PUT_LINE('<div class="panel gridwrap wg hov" id="tl"' || wg_attr
-            || ' role="table" aria-label="Current vs ' || ~weeks_back || ' prior windows, one column per window">'
-            || wg_ruler('<span class="ct">'
+        wg_ruler_put('<div class="panel gridwrap wg hov" id="tl"' || wg_attr
+            || ' role="table" aria-label="Current vs ' || ~weeks_back || ' prior windows, one column per window">',
+            '<span class="ct">'
                 || CASE WHEN ~step_hours = 168 THEN TO_CHAR(v_st, 'FMDay', 'NLS_DATE_LANGUAGE=ENGLISH') || ' '
                         WHEN ~step_hours = 24 THEN 'Daily ' END
                 || CASE WHEN ~step_hours IN (24, 168)
@@ -1397,8 +1397,8 @@ BEGIN
                 || '<a href="#lane-waits">Waits</a><a href="#lane-sql">SQL</a><a href="#lane-config">Config</a>'
                 || CASE WHEN ~profile_days > 0 THEN '<a href="#day-profile">Day</a>' END || '</nav>',
                 '<span class="gt" id="tl-gt">vs prior mean</span><span class="gs" id="tl-gs">click a date to pin</span>',
-                'Y')
-            || '<div class="gbody" id="tl-body"><div class="gin" id="tl-in">');
+                'Y',
+                '<div class="gbody" id="tl-body"><div class="gin" id="tl-in">');
         DBMS_OUTPUT.PUT_LINE(lane_h('activity', 'Activity', 'ash', NULL, 'ASH, not scored'));
         DBMS_OUTPUT.PUT_LINE(lane_h('metrics', 'Headline and load', 'scored'));
         DBMS_OUTPUT.PUT_LINE(lane_h('waits', 'Waits', 'scored', 'wait classes in AAS, events in seconds waited', NULL, 'events'));

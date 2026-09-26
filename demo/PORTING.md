@@ -77,8 +77,8 @@ sort, a chart, or a count pill.
 + `w.param_value(name, ts)`, `w.monexecs()` (SQL Monitor reports).
 Run params: `w.weeks_back`,
 `w.win_hours`, `w.step_hours`, `w.top_n`, `w.target_end`,
-`w.offset_labels` (list, index k-1 = `REGEXP_SUBSTR('~offset_labels',
-'[^,]+', 1, k)`), `w.period_axis_fmt` = `'Mon DD'` (-> `helpers.mon_dd`),
+`w.offset_labels` (list, one per window, index k-1 = `off_label(k)` of
+`sql/lib/off_label.plsql`), `w.period_axis_fmt` = `'Mon DD'` (-> `helpers.mon_dd`),
 `w.period_unit_title` = `'Week'`, `w.bucket_hours` = 1, `w.markers`.
 
 Per-hour quantities are TOTALS for the hour (deltas); `/ m.dur_sec`

@@ -66,7 +66,7 @@ DECLARE
     -- per compared window, bounded by weeks_back+1).
     v_hours_json   CLOB;
     v_class_vals   CLOB;
-    v_windows_json VARCHAR2(4000);
+    v_windows_json VARCHAR2(32767);
     v_buf          VARCHAR2(64);
     v_palette      VARCHAR2(400) :=
         '["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1",' ||
@@ -105,6 +105,7 @@ DECLARE
     @@sql/lib/band_glyph.plsql
     @@sql/lib/anchor_id.plsql
     @@sql/lib/finding_cards.plsql
+    @@sql/lib/off_label.plsql
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
 
@@ -255,31 +256,27 @@ BEGIN
     END LOOP;
     DBMS_LOB.WRITEAPPEND(v_hours_json, 1, ']');
 
-    -- Window-band markers: small (one per compared window), LISTAGG is safe.
-    -- Read from the shared windows_rollup CTE (per-week_offset roll-up
-    -- of per-instance windows) so the band gets a single Y/N flag per
-    -- offset regardless of RAC instance count.
-    SELECT '['
-           || LISTAGG(
-                  '["'
-                  || TO_CHAR(win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
-                  || TO_CHAR(win_end_ts,   'YYYY-MM-DD HH24:MI') || '","'
-                  || CASE WHEN week_offset = 0 THEN 'current'
-                          ELSE 'w-' || week_offset END || '",'
-                  || CASE WHEN valid_flag = 'Y' THEN '"1"' ELSE '"0"' END
-                  || ']',
-                  ',')
-                  WITHIN GROUP (ORDER BY week_offset DESC)
-           || ']',
-           '|' || LISTAGG(week_offset || '=' || valid_flag, '|')
-                      WITHIN GROUP (ORDER BY week_offset) || '|'
-    INTO   v_windows_json, v_valid
-    FROM (
+    -- Window-band markers, one per compared window, read from the shared
+    -- windows_rollup CTE (per-week_offset roll-up of per-instance windows)
+    -- so the band gets a single Y/N flag per offset regardless of RAC
+    -- instance count.  Built in PL/SQL, not with LISTAGG: at about 50
+    -- bytes a window, SQL's 4000-byte LISTAGG limit (ORA-01489) would
+    -- abort the run past about 78 windows.
+    FOR r IN (
         WITH
         @@sql/lib/windows_cte.sql
         SELECT week_offset, win_start_ts, win_end_ts, valid_flag
         FROM   windows_rollup
-    );
+        ORDER BY week_offset DESC
+    ) LOOP
+        v_windows_json := v_windows_json || CASE WHEN v_windows_json IS NOT NULL THEN ',' END
+            || '["' || TO_CHAR(r.win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
+            || TO_CHAR(r.win_end_ts, 'YYYY-MM-DD HH24:MI') || '","'
+            || CASE WHEN r.week_offset = 0 THEN 'current' ELSE 'w-' || r.week_offset END || '",'
+            || CASE WHEN r.valid_flag = 'Y' THEN '"1"' ELSE '"0"' END || ']';
+        v_valid := NVL(v_valid, '|') || r.week_offset || '=' || r.valid_flag || '|';
+    END LOOP;
+    v_windows_json := '[' || v_windows_json || ']';
 
     -- Emit JS in chunks so no single PUT_LINE exceeds 32767 bytes.
     DBMS_OUTPUT.PUT_LINE('<script>');

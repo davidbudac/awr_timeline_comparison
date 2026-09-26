@@ -25,7 +25,7 @@ BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 13_utilization BEGIN -->'); END;
 
 DECLARE
     v_weeks_back  NUMBER := ~weeks_back;
-    v_header      VARCHAR2(4000);
+    v_header      VARCHAR2(32767);   -- one th (about 45 bytes) per window
     v_row         VARCHAR2(32767);
     v_val         NUMBER;
     v_val_s       VARCHAR2(64);
@@ -36,6 +36,7 @@ DECLARE
     @@sql/lib/nth_csv.plsql
     @@sql/lib/fmt_num.plsql
     @@sql/lib/band_glyph.plsql
+    @@sql/lib/off_label.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="utilization" class="vw in-a"><h2>Utilization'
         || '<small class="h2sub">How the applications use this database; a usage overview, not scored</small></h2>');
@@ -46,7 +47,7 @@ BEGIN
         || band_head || '<th class="trend">Trend</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
-            || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
+            || off_label(k) || '</th>';
     END LOOP;
     v_header := v_header || '</tr></thead>';
 

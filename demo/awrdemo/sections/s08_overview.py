@@ -36,7 +36,7 @@ def emit(w) -> str:
     out.append('<section id="overview" class="vw in-s strip-sec" aria-label="DB time per compared window">')
     out.append('<div class="panel strip" id="s-strip"><div class="wg fit hov"' + h.wg_attr(w)
                + ' role="table" aria-label="DB time per compared window">')
-    out.append(h.wg_ruler(w, '<span class="ct">DB time per window</span>'
+    out.append(h.wg_ruler_put(w, None, '<span class="ct">DB time per window</span>'
                              '<span class="cs">average active sessions</span>',
                           '<span class="gt">vs prior mean</span>'))
     out.append(h.wg_bars(w, vals, 0.01, mu, sd, bucket, lab, gut, "hero-dbt"))

@@ -40,7 +40,7 @@ BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 15_file_io BEGIN -->'); END;
 DECLARE
     v_weeks_back NUMBER := ~weeks_back;
     v_top_n      NUMBER := ~top_n;
-    v_header     VARCHAR2(4000);
+    v_header     VARCHAR2(32767);   -- one th (about 45 bytes) per window
     v_row        VARCHAR2(32767);
     v_weeks_json VARCHAR2(4000);
     v_weeks_iso_json VARCHAR2(4000);
@@ -98,6 +98,7 @@ DECLARE
     @@sql/lib/anchor_id.plsql
     @@sql/lib/band_glyph.plsql
     @@sql/lib/finding_cards.plsql
+    @@sql/lib/off_label.plsql
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
 BEGIN
@@ -304,7 +305,7 @@ BEGIN
                 || '<th class="num" data-w="0">Current (' || s.dim_unit || ')</th>';
             FOR k IN 1 .. v_weeks_back LOOP
                 v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
-                    || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
+                    || off_label(k) || '</th>';
             END LOOP;
             v_header := v_header || '</tr></thead>';
             DBMS_OUTPUT.PUT_LINE('<table id="fileio-detail-' || v_cur_dim || '">' || v_header || '<tbody>');
@@ -599,7 +600,7 @@ BEGIN
                 || '<th class="num" data-w="0">Current</th>';
             FOR k IN 1 .. v_weeks_back LOOP
                 v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
-                    || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
+                    || off_label(k) || '</th>';
             END LOOP;
             v_header := v_header || '</tr></thead>';
             DBMS_OUTPUT.PUT_LINE('<table id="fileio-detail-ftype">' || v_header || '<tbody>');

@@ -17,7 +17,7 @@ from .. import chrome
 from .. import helpers as h
 from ..helpers import (esc, mean_sd, z_and_pct, ts_min, ts_sec, hh24, dy, mon_dd,
                        to_char_fixed, finding_family, is_canonical, policy_bucket,
-                       day_name, wg_attr, wg_ruler)
+                       day_name, wg_attr, wg_ruler_put)
 
 SQL_PATH = chrome.sql_path("sql/00_params.sql")
 H = timedelta(hours=1)
@@ -304,16 +304,15 @@ def _timeline(w) -> list[str]:
              '<div class="axbr" id="ax-brush" hidden></div></div>'
              '<p class="axn2">Drag across the chart to zoom, double-click to reset. '
              'Click a shaded window to pin its column in the grid below.</p></div>')
-    o.append('<div class="panel gridwrap wg hov" id="tl"' + wg_attr(w)
-             + ' role="table" aria-label="Current vs ' + str(w.weeks_back) + ' prior windows, one column per window">'
-             + wg_ruler(w, '<span class="ct">' + ct + '</span><span class="cs">' + str(w.weeks_back + 1)
+    o.append(wg_ruler_put(w, '<div class="panel gridwrap wg hov" id="tl"' + wg_attr(w)
+             + ' role="table" aria-label="Current vs ' + str(w.weeks_back) + ' prior windows, one column per window">',
+                        '<span class="ct">' + ct + '</span><span class="cs">' + str(w.weeks_back + 1)
                         + ' windows</span>'
                         '<nav class="jumpnav" aria-label="Jump to lane"><a href="#lane-metrics">Load</a>'
                         '<a href="#lane-waits">Waits</a><a href="#lane-sql">SQL</a><a href="#lane-config">Config</a>'
                         + ('<a href="#day-profile">Day</a>' if w.profile_days > 0 else '') + '</nav>',
                         '<span class="gt" id="tl-gt">vs prior mean</span><span class="gs" id="tl-gs">click a date to pin</span>',
-                        'Y')
-             + '<div class="gbody" id="tl-body"><div class="gin" id="tl-in">')
+                        'Y', '<div class="gbody" id="tl-body"><div class="gin" id="tl-in">'))
     o.append(lane_h('activity', 'Activity', 'ash', None, 'ASH, not scored'))
     o.append(lane_h('metrics', 'Headline and load', 'scored'))
     o.append(lane_h('waits', 'Waits', 'scored', 'wait classes in AAS, events in seconds waited', None, 'events'))

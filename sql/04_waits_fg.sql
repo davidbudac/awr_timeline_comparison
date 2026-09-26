@@ -18,7 +18,7 @@ BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 04_waits_fg BEGIN -->'); END;
 DECLARE
     v_weeks_back NUMBER := ~weeks_back;
     v_top_n      NUMBER := ~top_n;
-    v_header     VARCHAR2(4000);
+    v_header     VARCHAR2(32767);   -- one th (about 45 bytes) per window
     v_row        VARCHAR2(32767);
     v_us         NUMBER;
     v_us_s       VARCHAR2(64);
@@ -90,6 +90,7 @@ DECLARE
     @@sql/lib/is_essential.plsql
     @@sql/lib/anchor_id.plsql
     @@sql/lib/finding_cards.plsql
+    @@sql/lib/off_label.plsql
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
 BEGIN
@@ -408,7 +409,7 @@ BEGIN
         || band_head || '<th class="trend">Trend</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
-            || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || ' (s)</th>';
+            || off_label(k) || ' (s)</th>';
     END LOOP;
     v_header := v_header || '</tr></thead>';
     DBMS_OUTPUT.PUT_LINE('<table id="waits-fg-time">' || v_header || '<tbody>');
@@ -491,7 +492,7 @@ BEGIN
         || band_head || '<th class="trend">Trend</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
-            || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || ' (ms)</th>';
+            || off_label(k) || ' (ms)</th>';
     END LOOP;
     v_header := v_header || '</tr></thead>';
     DBMS_OUTPUT.PUT_LINE('<table id="waits-fg-avg">' || v_header || '<tbody>');
@@ -606,7 +607,7 @@ BEGIN
         || band_head;
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
-            || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || ' (s)</th>';
+            || off_label(k) || ' (s)</th>';
     END LOOP;
     v_header := v_header || '</tr></thead>';
     DBMS_OUTPUT.PUT_LINE('<table id="waits-fg-class">' || v_header || '<tbody>');

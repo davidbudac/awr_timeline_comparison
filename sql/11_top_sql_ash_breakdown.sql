@@ -54,7 +54,7 @@ DECLARE
     -- VARCHAR2 since it is bounded by weeks_back+1.
     v_hours_json    CLOB;
     v_event_vals    CLOB;
-    v_windows_json  VARCHAR2(4000);
+    v_windows_json  VARCHAR2(32767);
     v_buf           VARCHAR2(512);
 
     -- Cell store: key sql_id|bucket|event -> sample count.
@@ -157,25 +157,22 @@ BEGIN
     DBMS_LOB.WRITEAPPEND(v_hours_json, 1, ']');
 
     -- Window-band markers. Same shape and source as section 09 lines 161-179.
-    SELECT '['
-           || LISTAGG(
-                  '["'
-                  || TO_CHAR(win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
-                  || TO_CHAR(win_end_ts,   'YYYY-MM-DD HH24:MI') || '","'
-                  || CASE WHEN week_offset = 0 THEN 'current'
-                          ELSE 'w-' || week_offset END || '",'
-                  || CASE WHEN valid_flag = 'Y' THEN '"1"' ELSE '"0"' END
-                  || ']',
-                  ',')
-                  WITHIN GROUP (ORDER BY week_offset DESC)
-           || ']'
-    INTO   v_windows_json
-    FROM (
+    -- Built in PL/SQL, not LISTAGG (about 50 bytes a window: SQL's
+    -- 4000-byte LISTAGG limit would abort the run past about 78 windows).
+    FOR r IN (
         WITH
         @@sql/lib/windows_cte.sql
         SELECT week_offset, win_start_ts, win_end_ts, valid_flag
         FROM   windows_rollup
-    );
+        ORDER BY week_offset DESC
+    ) LOOP
+        v_windows_json := v_windows_json || CASE WHEN v_windows_json IS NOT NULL THEN ',' END
+            || '["' || TO_CHAR(r.win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
+            || TO_CHAR(r.win_end_ts, 'YYYY-MM-DD HH24:MI') || '","'
+            || CASE WHEN r.week_offset = 0 THEN 'current' ELSE 'w-' || r.week_offset END || '",'
+            || CASE WHEN r.valid_flag = 'Y' THEN '"1"' ELSE '"0"' END || ']';
+    END LOOP;
+    v_windows_json := '[' || v_windows_json || ']';
 
     -- Single big ASH cursor:
     --   * re-derive section 06's "picked" pool inline (no shared state),

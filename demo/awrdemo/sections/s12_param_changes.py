@@ -75,19 +75,19 @@ def _config_card(w, L, changed, cells):
                 else str(len(cur)) + ' of them changed into the Current window.' if len(cur) > 1
                 else 'None changed into the Current window: every change is older.')
              + '</p>')
-    L.append('<div class="cfg-wg"><div class="wg fit"' + h.wg_attr(w)
-             + ' role="table" aria-label="Parameter values per compared window">'
-             + h.wg_ruler(w, '<span class="ct">Parameter</span>', '<span class="gt">Changed</span>'))
+    L.append(h.wg_ruler_put(w, '<div class="cfg-wg"><div class="wg fit"' + h.wg_attr(w)
+             + ' role="table" aria-label="Parameter values per compared window">',
+             '<span class="ct">Parameter</span>', '<span class="gt">Changed</span>'))
     for name in changed[:8]:
         base = _pv_at(cells, name, wb)
-        prev, last, ch = None, None, ""
+        prev, last, ch = None, None, []          # wg_buf pieces (h.wg_lines)
         for k in range(wb, -1, -1):
             v = _pv_at(cells, name, k)
             start = (k == wb) or (v != prev)
             if start and k < wb:
                 last = k
             lvl = "lo" if v == base else "hi"
-            ch += ('<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k) + '"><i class="st ' + lvl
+            ch.append('<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k) + '"><i class="st ' + lvl
                    + (" rise" if start and k < wb else "") + '" aria-hidden="true"></i>'
                    + ('<i class="nd" aria-hidden="true"></i>' if start and k < wb else "")
                    + (('<span class="pv ' + lvl + '" title="'
@@ -107,7 +107,7 @@ def _config_card(w, L, changed, cells):
                  + h.ent('<code>' + h.esc(name) + '</code>', h.anchor_id("pa", name), "parameter")
                  + '</span><span class="sub">' + _pv_html(base) + ' &rarr; ' + _pv_html(_pv_at(cells, name, 0))
                  + '</span></div>')
-        L.append(ch)
+        L.append(h.wg_lines(ch))
         L.append(gut + '</div>')
     L.append('</div></div>'
              + ('<p class="cfg-more">and ' + str(nch - 8) + ' more in <a href="#param-changes">Parameters</a></p>'
@@ -122,34 +122,35 @@ def _config_card(w, L, changed, cells):
     nt = min(20, len(changed))
     for i, name in enumerate(changed[:20], start=1):
         base = _pv_at(cells, name, wb)
-        prev, last, ch = None, None, ""
+        prev, last, ch = None, None, []          # wg_buf pieces (h.wg_lines)
         for k in range(wb, -1, -1):
             v = _pv_at(cells, name, k)
             start = (k == wb) or (v != prev)
             if start and k < wb:
                 last = k
             lvl = "lo" if v == base else "hi"
-            ch += ('<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k)
+            ch.append('<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k)
                    + '" data-pv="' + _pv_html(v) + '"><i class="st ' + lvl
                    + (" rise" if start and k < wb else "") + '" aria-hidden="true"></i>'
                    + ('<i class="nd" aria-hidden="true"></i>' if start and k < wb else "")
                    + (('<span class="pv ' + lvl + '">' + _pv_html(v) + '</span>') if start or k == 0 else "")
                    + '</div>')
             prev = v
-        L.append((h.tl_open("config") if i == 1 else "")
-                 + '<div class="r p" id="tl-' + h.anchor_id("pa", name) + '" data-name="'
-                 + h.esc(name) + '" role="row">'
-                 + h.tl_lab(h.ent(h.esc(name), h.anchor_id("pa", name), "parameter"),
-                            _pv_html(base) + ' &rarr; ' + _pv_html(_pv_at(cells, name, 0)))
+        L.append(h.wg_lines(
+                 [(h.tl_open("config") if i == 1 else "")
+                  + '<div class="r p" id="tl-' + h.anchor_id("pa", name) + '" data-name="'
+                  + h.esc(name) + '" role="row">'
+                  + h.tl_lab(h.ent(h.esc(name), h.anchor_id("pa", name), "parameter"),
+                             _pv_html(base) + ' &rarr; ' + _pv_html(_pv_at(cells, name, 0)))]
                  + ch
-                 + '<div class="g" role="cell"><div class="gl1"><span class="d1">'
+                 + ['<div class="g" role="cell"><div class="gl1"><span class="d1">'
                  + ('varies' if last is None else 'changed in Current' if last == 0
                     else 'changed ' + h.wg_date(w, last))
                  + '</span></div>'
                  + ('<div class="gx"><span data-mk-at="' + str(last) + '" data-mk-icon hidden></span></div>'
                     if last is not None else '')
                  + '</div></div>'
-                 + (h.tl_close() if i == nt else ""))
+                 + (h.tl_close() if i == nt else "")]))
 
 
 def emit(w) -> str:

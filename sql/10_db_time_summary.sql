@@ -37,7 +37,7 @@ DECLARE
     -- stays VARCHAR2 (bounded by weeks_back+1).
     v_times_json   CLOB;
     v_class_vals   CLOB;
-    v_windows_json VARCHAR2(4000);
+    v_windows_json VARCHAR2(32767);
     v_buf          VARCHAR2(64);
     v_palette    VARCHAR2(400) :=
         '["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1",' ||
@@ -104,18 +104,9 @@ BEGIN
     -- xAxis values are the same YYYY-MM-DD HH24:MI format the chart uses
     -- for its category labels, so ECharts matches them by string.
     --
-    SELECT '['
-           || LISTAGG(
-                  '["'
-                  || TO_CHAR(win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
-                  || TO_CHAR(win_end_ts,   'YYYY-MM-DD HH24:MI') || '","'
-                  || CASE WHEN week_offset = 0 THEN 'current'
-                          ELSE 'w-' || week_offset END || '"]',
-                  ',')
-                  WITHIN GROUP (ORDER BY week_offset DESC)
-           || ']'
-    INTO   v_windows_json
-    FROM (
+    -- Built in PL/SQL, not LISTAGG (about 45 bytes a window: SQL's
+    -- 4000-byte LISTAGG limit would abort the run past about 88 windows).
+    FOR r IN (
         WITH
         @@sql/lib/windows_cte.sql
         SELECT w.week_offset,
@@ -128,7 +119,14 @@ BEGIN
           AND  es.snap_id IS NOT NULL
           AND  bs.snap_id <> es.snap_id
           AND  bs.startup_time = es.startup_time
-    );
+        ORDER BY w.week_offset DESC
+    ) LOOP
+        v_windows_json := v_windows_json || CASE WHEN v_windows_json IS NOT NULL THEN ',' END
+            || '["' || TO_CHAR(r.win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
+            || TO_CHAR(r.win_end_ts, 'YYYY-MM-DD HH24:MI') || '","'
+            || CASE WHEN r.week_offset = 0 THEN 'current' ELSE 'w-' || r.week_offset END || '"]';
+    END LOOP;
+    v_windows_json := '[' || v_windows_json || ']';
 
     --
     -- Build the x-axis: distinct snap_id (with a same-startup prior snap)

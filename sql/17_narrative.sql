@@ -120,6 +120,7 @@ DECLARE
     @@sql/lib/band_glyph.plsql
     @@sql/lib/anchor_id.plsql
     @@sql/lib/finding_cards.plsql
+    @@sql/lib/off_label.plsql
 
     ------------------------------------------------------------------
     -- Formatting helpers
@@ -145,7 +146,7 @@ DECLARE
     -- Compact offset label for prior window k, e.g. "-1h" / "-2w".
     FUNCTION off_lbl(p_k NUMBER) RETURN VARCHAR2 IS
     BEGIN
-        RETURN '&minus;' || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, p_k);
+        RETURN '&minus;' || off_label(p_k);
     END off_lbl;
 
     FUNCTION esc(p VARCHAR2) RETURN VARCHAR2 IS

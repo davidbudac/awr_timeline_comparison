@@ -1225,7 +1225,8 @@ class World:
         self.period_axis_fmt = "Mon DD"
         self.win_label = fmt_one(WIN_HOURS)
         self.step_label = fmt_one(STEP_HOURS)
-        self.offset_labels = [fmt_one(k * STEP_HOURS) for k in range(1, 17)]
+        # off_label(k) twin (sql/lib/off_label.plsql): one label per window
+        self.offset_labels = [fmt_one(k * STEP_HOURS) for k in range(1, WEEKS_BACK + 1)]
         self.bucket_hours = 1.0
         self.report_path = (f"reports/awr_trend_{DB_NAME}_{DBID}_{REPORT_TS}_run{RUN_ID}.html")
         self.dow_name = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][TARGET_END.weekday()]

@@ -46,7 +46,7 @@ BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 12_param_changes BEGIN -->'); END;
 
 DECLARE
     v_weeks_back NUMBER := ~weeks_back;
-    v_header     VARCHAR2(4000);
+    v_header     VARCHAR2(32767);   -- one th (about 45 bytes) per window
     v_row        VARCHAR2(32767);
     v_cell       VARCHAR2(32767);
     v_n_changed  PLS_INTEGER := 0;
@@ -99,6 +99,7 @@ DECLARE
     @@sql/lib/fmt_num.plsql
     @@sql/lib/band_glyph.plsql
     @@sql/lib/finding_cards.plsql
+    @@sql/lib/off_label.plsql
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
 
@@ -225,7 +226,7 @@ BEGIN
     v_header := '<thead><tr><th>Parameter</th><th data-w="0">Current</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th data-w="' || k || '">&minus;'
-            || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
+            || off_label(k) || '</th>';
     END LOOP;
     v_header := v_header || '</tr></thead>';
     DBMS_OUTPUT.PUT_LINE('<table id="param-changes-table">' || v_header || '<tbody>');
@@ -334,21 +335,29 @@ BEGIN
                     THEN v_cur_n || ' of them changed into the Current window.'
                     ELSE 'None changed into the Current window: every change is older.' END
             || '</p>');
-        DBMS_OUTPUT.PUT_LINE('<div class="cfg-wg"><div class="wg fit"' || wg_attr
-            || ' role="table" aria-label="Parameter values per compared window">'
-            || wg_ruler('<span class="ct">Parameter</span>', '<span class="gt">Changed</span>'));
+        wg_ruler_put('<div class="cfg-wg"><div class="wg fit"' || wg_attr
+            || ' role="table" aria-label="Parameter values per compared window">',
+            '<span class="ct">Parameter</span>', '<span class="gt">Changed</span>');
         FOR i IN 1 .. LEAST(8, v_names.COUNT) LOOP
             IF v_first IS NULL THEN v_first := v_names(i); END IF;
             v_base := pv_at(v_names(i), v_weeks_back);
             v_prev := NULL;
             v_last := NULL;
             v_cells_h := NULL;
+            -- the row head first: the cells below go through wg_buf, which
+            -- may flush part of them to the output before the loop ends
+            DBMS_OUTPUT.PUT_LINE('<div class="r p" data-name="' || DBMS_XMLGEN.CONVERT(v_names(i)) || '" role="row">'
+                || '<div class="l" role="rowheader"><span class="nm">'
+                || ent('<code>' || DBMS_XMLGEN.CONVERT(v_names(i)) || '</code>', anchor_id('pa', v_names(i)), 'parameter')
+                || '</span><span class="sub">'
+                || pv_html(v_base) || ' &rarr; ' || pv_html(pv_at(v_names(i), 0))
+                || '</span></div>');
             FOR k IN REVERSE 0 .. v_weeks_back LOOP
                 v_v := pv_at(v_names(i), k);
                 v_start := (k = v_weeks_back) OR (v_v <> v_prev);
                 IF v_start AND k < v_weeks_back THEN v_last := k; END IF;
                 v_lvl := CASE WHEN v_v = v_base THEN 'lo' ELSE 'hi' END;
-                v_cells_h := v_cells_h || '<div class="c' || CASE WHEN k = 0 THEN ' cur' END
+                wg_buf(v_cells_h, '<div class="c' || CASE WHEN k = 0 THEN ' cur' END
                     || '" data-w="' || k || '"><i class="st ' || v_lvl
                     || CASE WHEN v_start AND k < v_weeks_back THEN ' rise' END || '" aria-hidden="true"></i>'
                     || CASE WHEN v_start AND k < v_weeks_back THEN '<i class="nd" aria-hidden="true"></i>' END
@@ -357,7 +366,7 @@ BEGIN
                                  || DBMS_XMLGEN.CONVERT(CASE v_v WHEN '__NONE__' THEN 'not recorded'
                                                                  WHEN '__NULL__' THEN '(unset)' ELSE v_v END)
                                  || '">' || pv_html(v_v) || '</span>' END
-                    || '</div>';
+                    || '</div>');
                 v_prev := v_v;
             END LOOP;
             v_gut := '<div class="g" role="cell"><div class="gl1"><span class="d1">'
@@ -368,12 +377,6 @@ BEGIN
                 || CASE WHEN v_last IS NOT NULL
                         THEN '<div class="gx"><span data-mk-at="' || v_last || '" data-mk-icon hidden></span></div>' END
                 || '</div>';
-            DBMS_OUTPUT.PUT_LINE('<div class="r p" data-name="' || DBMS_XMLGEN.CONVERT(v_names(i)) || '" role="row">'
-                || '<div class="l" role="rowheader"><span class="nm">'
-                || ent('<code>' || DBMS_XMLGEN.CONVERT(v_names(i)) || '</code>', anchor_id('pa', v_names(i)), 'parameter')
-                || '</span><span class="sub">'
-                || pv_html(v_base) || ' &rarr; ' || pv_html(pv_at(v_names(i), 0))
-                || '</span></div>');
             DBMS_OUTPUT.PUT_LINE(v_cells_h);
             DBMS_OUTPUT.PUT_LINE(v_gut || '</div>');
         END LOOP;
@@ -392,32 +395,33 @@ BEGIN
         -- for every changed parameter (at most 20), id tl-pa-<parameter>
         -- (the config card's "Timeline ->" target); each cell carries its
         -- value for the hover tooltip (sql/lib/timeline.plsql).
+        -- Every cell carries its full value (data-pv), so a row of long
+        -- values over many windows goes out through wg_buf (several lines
+        -- when needed) instead of one VARCHAR2 / PUT_LINE.
         FOR i IN 1 .. LEAST(20, v_names.COUNT) LOOP
             v_base := pv_at(v_names(i), v_weeks_back);
             v_prev := NULL;
             v_last := NULL;
-            v_cells_h := NULL;
+            v_cells_h := CASE WHEN i = 1 THEN tl_open('config') END
+                || '<div class="r p" id="tl-' || anchor_id('pa', v_names(i)) || '" data-name="'
+                || DBMS_XMLGEN.CONVERT(v_names(i)) || '" role="row">'
+                || tl_lab(ent(DBMS_XMLGEN.CONVERT(v_names(i)), anchor_id('pa', v_names(i)), 'parameter'),
+                          pv_html(v_base) || ' &rarr; ' || pv_html(pv_at(v_names(i), 0)));
             FOR k IN REVERSE 0 .. v_weeks_back LOOP
                 v_v := pv_at(v_names(i), k);
                 v_start := (k = v_weeks_back) OR (v_v <> v_prev);
                 IF v_start AND k < v_weeks_back THEN v_last := k; END IF;
                 v_lvl := CASE WHEN v_v = v_base THEN 'lo' ELSE 'hi' END;
-                v_cells_h := v_cells_h || '<div class="c' || CASE WHEN k = 0 THEN ' cur' END
+                wg_buf(v_cells_h, '<div class="c' || CASE WHEN k = 0 THEN ' cur' END
                     || '" data-w="' || k || '" data-pv="' || pv_html(v_v) || '"><i class="st ' || v_lvl
                     || CASE WHEN v_start AND k < v_weeks_back THEN ' rise' END || '" aria-hidden="true"></i>'
                     || CASE WHEN v_start AND k < v_weeks_back THEN '<i class="nd" aria-hidden="true"></i>' END
                     || CASE WHEN v_start OR k = 0
                             THEN '<span class="pv ' || v_lvl || '">' || pv_html(v_v) || '</span>' END
-                    || '</div>';
+                    || '</div>');
                 v_prev := v_v;
             END LOOP;
-            DBMS_OUTPUT.PUT_LINE(CASE WHEN i = 1 THEN tl_open('config') END
-                || '<div class="r p" id="tl-' || anchor_id('pa', v_names(i)) || '" data-name="'
-                || DBMS_XMLGEN.CONVERT(v_names(i)) || '" role="row">'
-                || tl_lab(ent(DBMS_XMLGEN.CONVERT(v_names(i)), anchor_id('pa', v_names(i)), 'parameter'),
-                          pv_html(v_base) || ' &rarr; ' || pv_html(pv_at(v_names(i), 0)))
-                || v_cells_h
-                || '<div class="g" role="cell"><div class="gl1"><span class="d1">'
+            wg_buf(v_cells_h, '<div class="g" role="cell"><div class="gl1"><span class="d1">'
                 || CASE WHEN v_last IS NULL THEN 'varies'
                         WHEN v_last = 0 THEN 'changed in Current'
                         ELSE 'changed ' || wg_date(v_last) END
@@ -426,6 +430,7 @@ BEGIN
                         THEN '<div class="gx"><span data-mk-at="' || v_last || '" data-mk-icon hidden></span></div>' END
                 || '</div></div>'
                 || CASE WHEN i = LEAST(20, v_names.COUNT) THEN tl_close END);
+            DBMS_OUTPUT.PUT_LINE(v_cells_h);
         END LOOP;
     END;
 END;

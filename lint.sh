@@ -480,6 +480,27 @@ for f in sql/[0-9]*.sql sql/lib/*.plsql sql/lib/*.sql; do
     done
 done
 
+# ----------------------------------------------------------------------
+# 29. Offset labels ("-1w", "-36h") come from off_label() in
+#     sql/lib/off_label.plsql, for any window count.  The old 16-entry
+#     offset_labels DEFINE left every header past window 16 a bare minus
+#     (v1.6.0 review #5).  (a) sql/lib/wingrid.plsql calls off_label, so
+#     every file that includes wingrid must include off_label.plsql BEFORE
+#     it (PLS-00313 otherwise); (b) a file calling off_label( must include
+#     the lib.  The stray-tilde check (3) already rejects the retired
+#     DEFINE if it comes back.
+# ----------------------------------------------------------------------
+for f in sql/[0-9]*.sql; do
+    ol=$(grep -n '^[[:space:]]*@@sql/lib/off_label.plsql' "$f" | head -1 | cut -d: -f1)
+    wl=$(grep -n '^[[:space:]]*@@sql/lib/wingrid.plsql' "$f" | head -1 | cut -d: -f1)
+    if [ -n "$wl" ] && { [ -z "$ol" ] || [ "$ol" -gt "$wl" ]; }; then
+        finding off-label "$f:$wl" "sql/lib/wingrid.plsql needs sql/lib/off_label.plsql included before it"
+    fi
+    if [ -z "$ol" ] && awk '/^[[:space:]]*--/ { next } /off_label\(/ { hit = 1 } END { exit !hit }' "$f"; then
+        finding off-label "$f" "calls off_label() without @@sql/lib/off_label.plsql"
+    fi
+done
+
 [ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"

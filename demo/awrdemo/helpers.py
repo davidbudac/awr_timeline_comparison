@@ -958,20 +958,38 @@ def wg_dates(w, bare=True) -> str:
     return out + '</div>'
 
 
-def wg_ruler(w, corner: str, gh: str, btn: str = "N") -> str:
+def wg_lines(parts) -> str:
+    """Twin of a run of sql/lib/wingrid.plsql wg_buf() calls plus the final
+    PUT_LINE: the pieces in order, a new output line whenever the buffer
+    plus the next piece would pass 32000 bytes."""
+    lines, buf = [], ""
+    for p in parts:
+        p = p or ""
+        if len(buf.encode()) + len(p.encode()) > 32000:
+            lines.append(buf)
+            buf = p
+        else:
+            buf += p
+    lines.append(buf)
+    return "\n".join(lines)
+
+
+def wg_ruler_put(w, pre, corner: str, gh: str, btn: str = "N", post=None) -> str:
     tag = "button" if btn == "Y" else "div"
-    out = ('<div class="ruler"><div class="rin" role="row">'
-           '<div class="corner" role="columnheader">' + corner + '</div>'
-           '<div class="flags" aria-label="Release and patch markers"></div>')
+    parts = [pre, '<div class="ruler"><div class="rin" role="row">'
+             '<div class="corner" role="columnheader">' + corner + '</div>'
+             '<div class="flags" aria-label="Release and patch markers"></div>']
     for k in range(w.weeks_back, -1, -1):
-        out += ('<' + tag + ' class="h' + (" cur" if k == 0 else "") + wg_keep(w, k) + '"'
-                + (' type="button" aria-pressed="false"' if btn == "Y" else "")
-                + ' data-w="' + str(k) + '" role="columnheader" title="' + wg_title(w, k)
-                + (('. Click to pin as the comparison target' if k > 0 else '. The Current window')
-                   if btn == "Y" else "") + '">'
-                + '<span class="hd">' + wg_date(w, k) + '</span>'
-                + '<span class="ho">' + wg_off(w, k) + '</span></' + tag + '>')
-    return out + '<div class="gh" role="columnheader">' + gh + '</div></div></div>'
+        parts.append('<' + tag + ' class="h' + (" cur" if k == 0 else "") + wg_keep(w, k) + '"'
+                     + (' type="button" aria-pressed="false"' if btn == "Y" else "")
+                     + ' data-w="' + str(k) + '" role="columnheader" title="' + wg_title(w, k)
+                     + (('. Click to pin as the comparison target' if k > 0 else '. The Current window')
+                        if btn == "Y" else "") + '">'
+                     + '<span class="hd">' + wg_date(w, k) + '</span>'
+                     + '<span class="ho">' + wg_off(w, k) + '</span></' + tag + '>')
+    parts.append('<div class="gh" role="columnheader">' + gh + '</div></div></div>')
+    parts.append(post)
+    return wg_lines(parts)
 
 
 def wg_bars(w, vals, scale, mu, sd, sev, lab="", gut="", rid=None, cls=None) -> str:

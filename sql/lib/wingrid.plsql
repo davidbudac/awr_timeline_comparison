@@ -11,7 +11,7 @@
 -- is the ".wg" block in sql/_style.sql):
 --   <div class="wg [bare] [fit] [allv] [hov]" data-wg style="--np:N">
 --     [ruler]  <div class="ruler"><div class="rin"> corner | .flags | .h x
---              (N+1) | .gh </div></div>                        (wg_ruler)
+--              (N+1) | .gh </div></div>                    (wg_ruler_put)
 --     [flags]  <div class="r fr ..."><div class="flags"></div></div>  (wg_flags)
 --     [rows]   <div class="r bars" data-v="csv" data-mu data-sd data-sev>
 --              [.l label] .c x (N+1) [.g gutter]</div>            (wg_bars)
@@ -28,9 +28,10 @@
 -- builds, see wg_tok), so a skipped window can never shift a slot.
 --
 -- Include inside a DECLARE block AFTER sql/lib/fmt_num.plsql (uses
--- fmt_num).  Declares only functions (no TYPE), reads the run DEFINEs
--- target_end_resolved / step_hours / win_hours / weeks_back /
--- offset_labels.  No tilde-words in comments below.
+-- fmt_num) and sql/lib/off_label.plsql (uses off_label; lint check 29).
+-- Declares only functions (no TYPE), reads the run DEFINEs
+-- target_end_resolved / step_hours / win_hours / weeks_back.
+-- No tilde-words in comments below.
 -- Twin: demo/awrdemo/helpers.py (wg_* functions).
 --
 
@@ -85,7 +86,7 @@
     FUNCTION wg_off(p_off NUMBER) RETURN VARCHAR2 IS
     BEGIN
         IF p_off = 0 THEN RETURN 'current'; END IF;
-        RETURN '&minus;' || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, p_off);
+        RETURN '&minus;' || off_label(p_off);
     END wg_off;
 
     FUNCTION wg_title(p_off NUMBER) RETURN VARCHAR2 IS
@@ -141,26 +142,53 @@
         RETURN v_out || '</div>';
     END wg_dates;
 
-    -- the window ruler: corner | flags over the dates | gutter head.
-    -- p_btn 'Y' (the Timeline grid): each date is a button that pins its
-    -- window as the comparison target (sql/lib/js_timeline.plsql).
-    FUNCTION wg_ruler(p_corner VARCHAR2, p_gh VARCHAR2, p_btn VARCHAR2 DEFAULT 'N') RETURN VARCHAR2 IS
-        v_out VARCHAR2(32767) := '<div class="ruler"><div class="rin" role="row">'
-            || '<div class="corner" role="columnheader">' || p_corner || '</div>'
-            || '<div class="flags" aria-label="Release and patch markers"></div>';
+    -- Output line buffer (any window count): append p_s to p_buf, first
+    -- flushing p_buf as its own DBMS_OUTPUT line when the two together
+    -- would pass 32000 bytes (a PUT_LINE holds at most 32767 bytes and a
+    -- VARCHAR2 32767).  Markup may break between any two elements, so a
+    -- long ruler or lane row simply spans several lines; the usual 13
+    -- windows stay on one line.  The caller PUT_LINEs what is left.
+    PROCEDURE wg_buf(p_buf IN OUT NOCOPY VARCHAR2, p_s VARCHAR2) IS
+    BEGIN
+        IF NVL(LENGTHB(p_buf), 0) + NVL(LENGTHB(p_s), 0) > 32000 THEN
+            DBMS_OUTPUT.PUT_LINE(p_buf);
+            p_buf := p_s;
+        ELSE
+            p_buf := p_buf || p_s;
+        END IF;
+    END wg_buf;
+
+    -- the window ruler: corner | flags over the dates | gutter head,
+    -- EMITTED (not returned: about 240 bytes a window, so 138 or more
+    -- windows would overflow one VARCHAR2) between p_pre and p_post
+    -- through wg_buf.  p_btn 'Y' (the Timeline grid): each date is a
+    -- button that pins its window as the comparison target
+    -- (sql/lib/js_timeline.plsql).
+    PROCEDURE wg_ruler_put(p_pre    VARCHAR2,
+                           p_corner VARCHAR2,
+                           p_gh     VARCHAR2,
+                           p_btn    VARCHAR2 DEFAULT 'N',
+                           p_post   VARCHAR2 DEFAULT NULL) IS
+        v_buf VARCHAR2(32767);
         v_tag VARCHAR2(8) := CASE WHEN p_btn = 'Y' THEN 'button' ELSE 'div' END;
     BEGIN
+        wg_buf(v_buf, p_pre);
+        wg_buf(v_buf, '<div class="ruler"><div class="rin" role="row">'
+            || '<div class="corner" role="columnheader">' || p_corner || '</div>'
+            || '<div class="flags" aria-label="Release and patch markers"></div>');
         FOR k IN REVERSE 0 .. ~weeks_back LOOP
-            v_out := v_out || '<' || v_tag || ' class="h' || CASE WHEN k = 0 THEN ' cur' END || wg_keep(k)
+            wg_buf(v_buf, '<' || v_tag || ' class="h' || CASE WHEN k = 0 THEN ' cur' END || wg_keep(k)
                 || '"' || CASE WHEN p_btn = 'Y' THEN ' type="button" aria-pressed="false"' END
                 || ' data-w="' || k || '" role="columnheader" title="' || wg_title(k)
                 || CASE WHEN p_btn = 'Y' AND k > 0 THEN '. Click to pin as the comparison target'
                         WHEN p_btn = 'Y' THEN '. The Current window' END || '">'
                 || '<span class="hd">' || wg_date(k) || '</span>'
-                || '<span class="ho">' || wg_off(k) || '</span></' || v_tag || '>';
+                || '<span class="ho">' || wg_off(k) || '</span></' || v_tag || '>');
         END LOOP;
-        RETURN v_out || '<div class="gh" role="columnheader">' || p_gh || '</div></div></div>';
-    END wg_ruler;
+        wg_buf(v_buf, '<div class="gh" role="columnheader">' || p_gh || '</div></div></div>');
+        wg_buf(v_buf, p_post);
+        DBMS_OUTPUT.PUT_LINE(v_buf);
+    END wg_ruler_put;
 
     -- one bars row: every window's value as a grey column (Current in the
     -- accent), the prior normal zone behind them and a severity dot on the
