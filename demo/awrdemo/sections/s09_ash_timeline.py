@@ -73,14 +73,11 @@ def emit(w) -> str:
     hourly = "hourly" if bh == 1 else blabel
 
     out.append(L[0])
-    out.append('<section id="ash-timeline" data-normal="Y"><h2>ASH timeline (' + hourly
-               + ', stacked by wait class)</h2>')
-    out.append('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-               '<code>dba_hist_active_sess_history</code>, ' + ts_min(range_start)
-               + ' &rarr; ' + ts_min(range_end) + ', ' + hourly
-               + ' buckets. ON-CPU &rarr; <b>CPU</b>; Idle excluded. '
-               'Compared windows shaded.</p>')
-    out.append(L[3])   # chart div
+    out.append('<section id="ash-timeline" class="vw in-s in-a"><h2>Active sessions'
+               '<small class="h2sub">ASH by wait class, ' + hourly + ', '
+               + ts_min(range_start) + ' &rarr; ' + ts_min(range_end)
+               + '; compared windows shaded</small></h2>')
+    out.append(L[2])   # chart div
 
     # ---- aggregate: (bucket, wait_class) -> samples ; class totals
     cells: dict[tuple[int, str], int] = {}
@@ -97,9 +94,9 @@ def emit(w) -> str:
     hours_json = "[" + ",".join('"' + ts_min(range_start + timedelta(hours=b * bh)) + '"'
                                 for b in range(total_buckets)) + "]"
 
-    out.append(L[4])   # <script>
-    out.append(L[5])   # (function(){
-    out.append(L[6])   # AWR_DATA.ashTimeline = {
+    out.append(L[3])   # <script>
+    out.append(L[4])   # (function(){
+    out.append(L[5])   # AWR_DATA.ashTimeline = {
     out.append("hours:")
     out.extend(put_clob_chunked(hours_json))
     out.append(",")
@@ -120,10 +117,10 @@ def emit(w) -> str:
         out.extend(put_clob_chunked(",".join(vals)))
         out.append("]}")
     out.append("]};")
+    out.append(L[14])
     out.append(L[15])
-    out.append(L[16])
     out.append("var d=AWR_DATA.ashTimeline, palette=" + PALETTE + ";")
-    out.extend(L[18:L.index("</script>", 18) + 1])      # verbatim ECharts init .. </script>
+    out.extend(L[17:L.index("</script>", 17) + 1])      # verbatim ECharts init .. </script>
     out.append("</section>")
     out.append(L[-1])
     return "\n".join(out)

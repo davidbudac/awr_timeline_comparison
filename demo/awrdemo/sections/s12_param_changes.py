@@ -30,14 +30,8 @@ def _cell_html(has: bool, val, is_cur: bool, chg: bool, k: int) -> str:
 
 def emit(w) -> str:
     L = ["<!-- AWR-SECTION: " + TAG + " BEGIN -->"]
-    L.append('<section id="param-changes"><h2>Parameter changes</h2>')
-    L.append('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-             "Initialization parameters from <code>dba_hist_parameter</code> whose "
-             "value differs across the compared windows (value as of each "
-             "window&rsquo;s end snapshot). Only changed parameters are listed; "
-             "highlighted cells differ from the <b>Current</b> value. "
-             "&mdash; = not present at that snapshot; (unset) = present but "
-             "empty.</p>")
+    L.append('<section id="param-changes" class="vw in-a"><h2>Parameters'
+             '<small class="h2sub">Initialization parameters whose value differs across the windows</small></h2>')
 
     # win: every window with an end snap (windows_rollup, validity ignored)
     wins = [win for win in w.windows if win.end_snap_id is not None]
@@ -64,7 +58,7 @@ def emit(w) -> str:
         L.append("<!-- AWR-SECTION: " + TAG + " END -->")
         return "\n".join(L)
 
-    L.append('<script>document.getElementById("param-changes").setAttribute("data-normal","Y");</script>')
+    L.append('<script>document.getElementById("param-changes").classList.add("in-s");</script>')
 
     hdr = '<thead><tr><th>Parameter</th><th data-w="0">Current</th>'
     for k in range(1, w.weeks_back + 1):
@@ -75,7 +69,7 @@ def emit(w) -> str:
     for name in changed:
         cur_has = (name, 0) in cells
         cur_val = cells.get((name, 0))
-        row = '<tr><td class="pname"><code>' + h.esc(name) + "</code></td>"
+        row = '<tr id="' + h.anchor_id("pa", name) + '"><td class="pname"><code>' + h.esc(name) + "</code></td>"
         row += _cell_html(cur_has, cur_val, True, False, 0)
         for k in range(1, w.weeks_back + 1):
             has = (name, k) in cells

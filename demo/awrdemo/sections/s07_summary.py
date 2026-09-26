@@ -9,8 +9,6 @@ tallies / movers shortlist, the same emit_domain_table shape.
 """
 from __future__ import annotations
 
-import math
-
 from .. import helpers as h
 
 # sql/lib/templates/comprehensive/sysstat_load_targets.sql (27 stats)
@@ -126,20 +124,12 @@ def _table_order(findings: list[Finding]) -> list[Finding]:
                                            -abs(f.pct or 0), f.name))
 
 
-def _z_cell_tail(f: Finding, sig: bool, imm: bool = False) -> str:
-    return h.z_txt(f.z, 2) + (h.SIG_BADGE if sig else "") + (h.IMM_BADGE_07 if imm else "")
-
-
-def _imm(f: Finding) -> bool:
-    return f.bucket == "typical" and f.z is not None and abs(f.z) > 2
-
-
 _TWIN_CHIP = (' <span class="chip" title="same quantity as a counted row; '
               'not counted again">twin</span>')
 
 
 def _find_id(f) -> str:
-    return h.anchor_id("find-" + f.domain.lower(), f.name)
+    return h.finding_anchor(f.domain, f.name)
 
 
 def _src_link(f) -> str:
@@ -149,15 +139,11 @@ def _src_link(f) -> str:
         tid, sec = h.anchor_id("metric", f.name), "System metrics"
     else:
         cls = f.name[len("Wait class: "):] if f.name.startswith("Wait class: ") else f.name
-        tid, sec = h.anchor_id("fgc", cls), "Foreground waits"
+        tid, sec = h.anchor_id("wc", cls), "Foreground waits"
     return (' <a class="xlink" href="#' + tid + '" title="Go to this metric\'s row in '
             + sec + '">&#8599; row</a>')
 _TWIN_CHIP_MOVERS = (' <span class="chip" title="same quantity as the lead; '
                      'not counted again">twin</span>')
-
-
-def _pct_cell(f: Finding, sig: bool) -> str:
-    return ("<b>" + h.pct_txt(f.pct) + "</b>") if sig else h.pct_txt(f.pct)
 
 
 def _emit_domain_table(out: list[str], ordered: list[Finding], dom: str, title: str):
@@ -166,59 +152,42 @@ def _emit_domain_table(out: list[str], ordered: list[Finding], dom: str, title: 
         return
     tail_cnt = sum(1 for f in rows if f.bucket in _TAIL)
     tbl_id = "findings-" + dom.lower()
-    out.append('<h3 class="full-only">' + title + "</h3>")
-    out.append('<table id="' + tbl_id + '" class="full-only">'
+    out.append('<h3 class="vw in-a">' + title + "</h3>")
+    out.append('<table id="' + tbl_id + '" class="vw in-a">'
                "<thead><tr>"
-               "<th>Change</th>"
                "<th>Metric</th>"
-               '<th class="num">Current</th>'
-               '<th class="num">Prior mean</th>'
+               '<th class="num cur-col">Current</th>'
+               + h.band_head()
+               + '<th class="num">Prior mean</th>'
                '<th class="num">Prior sd</th>'
                '<th class="num">n</th>'
-               '<th class="num">z-score</th>'
-               '<th class="num">% &Delta;</th>'
                "</tr></thead><tbody>")
     for f in rows:
         cls = f.cls
         imp = None if dom == "WAIT" else h.is_essential(dom, f.name)
-        sig = h.sigma_flag(f.mu, f.sd)
         out.append('<tr id="' + _find_id(f) + '" data-metric="' + h.esc(f.name).replace('"', "&quot;") + '"'
                    + ' data-family="' + f.family + '"'
                    + ((' data-imp="' + imp + '"') if imp is not None else "")
                    + (' data-tail="Y"' if f.bucket in _TAIL else "")
                    + ' class="' + cls + (" twin" if f.canonical == "N" else "") + '">'
-                   + '<td><span class="badge ' + cls + '">' + f.bucket + "</span></td>"
                    + "<td>" + h.esc(f.name) + (_TWIN_CHIP if f.canonical == "N" else "") + _src_link(f) + "</td>"
-                   + '<td class="num"' + h.fmt_num_title(f.cur) + ">" + h.fmt_num(f.cur) + "</td>"
+                   + '<td class="num" data-w="0"' + h.fmt_num_title(f.cur) + ">" + h.fmt_num(f.cur) + "</td>"
+                   + h.band_cells(f.cur, f.mu, f.sd, f.n, f.bucket, "Y" if f.canonical == "N" else "N")
                    + '<td class="num">' + h.fmt_num(f.mu) + "</td>"
                    + '<td class="num">' + h.fmt_num(f.sd) + "</td>"
                    + '<td class="num">' + (str(f.n) if f.n is not None else "0") + "</td>"
-                   + '<td class="num">' + _z_cell_tail(f, sig, _imm(f)) + "</td>"
-                   + '<td class="num">' + _pct_cell(f, sig) + "</td>"
                    + "</tr>")
     out.append("</tbody></table>")
     if tail_cnt > 0:
-        out.append('<span class="expander full-only" data-for="' + tbl_id
-                   + '" data-n="' + str(tail_cnt) + '" data-noun="typical / improved / flat rows">'
-                   + "&#9656; Show " + str(tail_cnt) + " typical / improved / flat rows</span>")
+        out.append('<span class="expander vw in-a" data-for="' + tbl_id
+                   + '" data-n="' + str(tail_cnt) + '" data-noun="normal / improved / flat rows">'
+                   + "&#9656; Show " + str(tail_cnt) + " normal / improved / flat rows</span>")
 
 
 def emit(w) -> str:
     out = ["<!-- AWR-SECTION: 07_summary BEGIN -->"]
-    out.append('<section id="findings" data-normal="Y"><h2 id="findings-heading">Findings summary</h2>')
-    out.append('<p style="font-size:12px;color:var(--muted)">'
-               "z = (current &minus; &mu;) &divide; max(&sigma;, 2% of &mu;) over prior valid windows. "
-               "|z|&gt;3 large, |z|&gt;2 moderate, else typical &mdash; but only when the move is material: "
-               "|%-delta| &ge; 10 and, for wait classes, &ge; 2% of the Current window's wait time "
-               "(otherwise typical, tagged immaterial). "
-               "Each metric has its own direction and floors (sql/lib/metric_policy.plsql): "
-               "a move in the good direction is <b>improved</b>, an informational counter is <b>noted</b> "
-               "&mdash; neither is highlighted or counted. "
-               "Twins &mdash; the SYSMETRIC rate of a SYSSTAT counter, the CPU half of the CPU/wait ratio "
-               "&mdash; are shown muted and never counted. "
-               "n&lt;3 &rarr; %-delta only. "
-               "|z| beyond &plusmn;99 is capped for display; "
-               "&sigma;&approx;0 flags a baseline that barely moved &mdash; read the %-delta there instead.</p>")
+    out.append('<section id="findings" class="vw in-s in-a"><h2 id="findings-heading">Findings'
+               '<small class="h2sub">Every scored metric against its prior windows; one lead row per family</small></h2>')
 
     findings = compute_findings(w)
     total = len(findings)
@@ -243,20 +212,21 @@ def emit(w) -> str:
     ordered = _table_order(findings)
 
     out.append('<script>(function(){var h=document.getElementById("findings-heading");'
-               "if(h)h.innerHTML='Findings summary "
-               '<span class="badge crit" title="families with a large or moderate lead; the '
+               'if(!h)return;var m=document.createElement("span");m.className="meta";m.innerHTML=\''
+               '<span class="badge ' + ("crit" if n_fam > 0 else "skip")
+               + '" title="families with a large or moderate lead; the '
                'verdict counts the same">' + str(n_fam) + " finding" + ("" if n_fam == 1 else "s") + "</span> "
-               '<span class="badge crit">' + str(crit) + " large</span> "
-               '<span class="badge warn">' + str(warn) + " moderate</span> "
+               '<span class="badge ' + ("crit" if crit > 0 else "skip") + '">' + str(crit) + " large</span> "
+               '<span class="badge ' + ("warn" if warn > 0 else "skip") + '">' + str(warn) + " moderate</span> "
                + ('<span class="badge info" title="moved in the good direction; not counted">'
                   + str(impr) + " improved</span> " if impr > 0 else "")
                + ('<span class="badge note" title="informational counters that moved; not counted">'
                   + str(noted) + " noted</span> " if noted > 0 else "")
-               + '<span class="badge skip">' + str(typical) + " typical</span>"
+               + '<span class="badge skip">' + str(typical) + " normal</span>"
                + (' <span class="badge skip" title="flagged twins of a counted row '
                   '(SYSMETRIC rate of a SYSSTAT counter, CPU half of the CPU/wait ratio)">'
                   + str(folded) + " folded</span>" if folded > 0 else "")
-               + "';})();</script>")
+               + "';h.insertBefore(m,h.querySelector(\".h2sub\"));})();</script>")
 
     if not top:
         out.append('<p style="font-size:12px;color:var(--muted)">No material regression: nothing moved beyond its '
@@ -265,17 +235,14 @@ def emit(w) -> str:
                    + ". The per-domain tables below list every scored metric.</p>")
     if top:
         out.append("<h3>Biggest movers</h3>")
-        out.append('<p style="font-size:11px;color:var(--muted);margin:-4px 0 8px 0">'
-                   "one lead row per family (top " + str(len(top)) + " by |z|); "
-                   "flagged relatives and twins fold under the expander; "
-                   "bar = |%-delta|, log-scaled</p>")
+        out.append('<p style="font-size:12.5px;color:var(--muted);margin:-4px 0 8px 0">'
+                   "Top " + str(len(top)) + " families by |z|; related metrics fold under the expander.</p>")
         out.append('<table id="findings-movers" data-nocount data-nosort><thead><tr>'
                    "<th>Metric</th>"
                    "<th>Domain</th>"
-                   '<th class="num">z</th>'
-                   '<th class="num">Current</th>'
-                   '<th class="num">Prior mean</th>'
-                   '<th class="num">% &Delta;</th>'
+                   '<th class="num cur-col">Current</th>'
+                   + h.band_head()
+                   + '<th class="num">Prior mean</th>'
                    "</tr></thead><tbody>")
         members = 0
         for lead_f in top:
@@ -285,10 +252,6 @@ def emit(w) -> str:
             members += len(rows) - 1
             for m, f in rows:
                 cls = f.cls
-                sig = h.sigma_flag(f.mu, f.sd)
-                apct = None if f.pct is None else abs(f.pct)
-                bar_w = 0 if apct is None else min(150, int(h.ora_round(20 + 40 * math.log(1 + apct / 50), 0)))
-                bar_col = {"crit": "var(--crit)", "warn": "var(--warn)"}.get(cls, "var(--skip)")
                 out.append('<tr class="' + cls + (" member" if m else "")
                            + (" twin" if f.canonical == "N" else "")
                            + '" data-family="' + f.family + '"'
@@ -297,13 +260,9 @@ def emit(w) -> str:
                            + ' <a class="xlink" href="#' + _find_id(f)
                            + '" title="Go to this finding\'s detail row">&#8599; detail</a></td>'
                            + '<td><span class="chip">' + f.domain + "</span></td>"
-                           + '<td class="num">' + _z_cell_tail(f, sig) + "</td>"
-                           + '<td class="num"' + h.fmt_num_title(f.cur) + ">" + h.fmt_num(f.cur) + "</td>"
+                           + '<td class="num" data-w="0"' + h.fmt_num_title(f.cur) + ">" + h.fmt_num(f.cur) + "</td>"
+                           + h.band_cells(f.cur, f.mu, f.sd, f.n, f.bucket, "Y" if f.canonical == "N" else "N")
                            + '<td class="num">' + h.fmt_num(f.mu) + "</td>"
-                           + '<td class="num">'
-                           + ('<span class="zbar" style="width:' + str(bar_w) + "px;"
-                              + "background-color:" + bar_col + '"></span>' if bar_w > 0 else "")
-                           + _pct_cell(f, sig) + "</td>"
                            + "</tr>")
         out.append("</tbody></table>")
         if members > 0:

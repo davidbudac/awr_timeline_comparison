@@ -239,19 +239,124 @@ IMM_BADGE_07 = (' <span class="badge sig" title="|z| above 2 but the move is bel
 
 def score_cells(cur, mu, sd, n, share=None, domain="SQL", name=None, cls=None,
                 demote=False) -> str:
-    """sql/lib/score_cells.plsql score_cells(cur, mu, sd, n, share, domain, name, class, demote)."""
-    z, pct = z_and_pct(cur, mu, sd)
+    """sql/lib/score_cells.plsql score_cells(): the four band cells (v1.6.0)."""
     bucket = policy_bucket(domain, name, cls, cur, mu, sd, n, share, demote)
-    cls = bucket_cls(bucket)
-    sig = sigma_flag(mu, sd)
-    imm = bucket == "typical" and z is not None and abs(z) > 2
-    zt = z_txt(z, 2)
-    pt = pct_txt(pct)
-    title = (' title="part of a table-wide shift; see the note above the table"'
-             if demote and bucket == "moderate" else "")
-    return ('<td><span class="badge ' + cls + '"' + title + '>' + bucket + '</span></td>'
-            '<td class="num">' + zt + (SIG_BADGE if sig else "") + (IMM_BADGE if imm else "") + '</td>'
-            '<td class="num">' + ("<b>" + pt + "</b>" if sig else pt) + '</td>')
+    note = ('<span class="imm" title="part of a table-wide shift; '
+            'see the note above the table">table-wide shift</span>'
+            if demote and bucket == "moderate" else "")
+    return band_cells(cur, mu, sd, n, bucket, "N", note)
+
+
+# ---------------------------------------------------------------------
+# sql/lib/band_glyph.plsql  (the baseline band, the Delta rule)
+# ---------------------------------------------------------------------
+
+def band_z(cur, mu, sd):
+    if cur is None or mu is None or sd is None:
+        return None
+    den = max(sd, 0.02 * abs(mu))
+    return None if den == 0 else (cur - mu) / den
+
+
+def band_ztxt(z) -> str:
+    if z is None:
+        return "&mdash;"
+    if z > 99:
+        return "&gt;+99&sigma;"
+    if z < -99:
+        return "&lt;&minus;99&sigma;"
+    if ora_round(z, 1) < 0:
+        return "&minus;" + to_char_fixed(abs(z), 1) + "&sigma;"
+    return "+" + to_char_fixed(abs(z), 1) + "&sigma;"
+
+
+def band_sev(bucket) -> str:
+    return {"large": "s-large", "moderate": "s-moderate",
+            "improved": "s-improved"}.get(bucket, "s-typical")
+
+
+_BAND_LAB = {"large": "large finding", "moderate": "moderate finding", "improved": "improved",
+             "noted": "noted", "typical": "normal"}
+
+
+def band_span(z, bucket, size=None, twin="N") -> str:
+    sz = (" " + size) if size else ""
+    if bucket == "flat baseline":
+        return ('<span class="bd s-flat' + sz + '" role="img"'
+                ' aria-label="flat baseline, prior sigma is zero">'
+                '<b class="ov">flat, &sigma; = 0</b></span>')
+    if z is None or bucket in ("insufficient history", "n/a"):
+        lab = {"insufficient history": "too little history",
+               "n/a": "no current value"}.get(bucket, "not scored")
+        return ('<span class="bd na' + sz + '" role="img" aria-label="' + lab
+                + '"><b class="ov">' + lab + '</b></span>')
+    x = (z + 4) / 12
+    pin, ov = "", ""
+    if x > 1:
+        x, pin, ov = 1, " po", '<b class="ov">' + band_ztxt(z) + '</b>'
+    elif x < 0:
+        x, pin, ov = 0, " pu", '<b class="ov">' + band_ztxt(z) + '</b>'
+    lab = _BAND_LAB.get(bucket, "not scored")
+    return ('<span class="bd ' + band_sev(bucket) + sz + pin + (" twn" if twin == "Y" else "")
+            + '" style="--x:' + to_char_fixed(x, 3) + '" role="img" aria-label="' + lab
+            + ', z ' + band_ztxt(z) + '"><i></i>' + ov + '</span>')
+
+
+def delta_span(cur, mu, bucket, plain="N") -> str:
+    if bucket == "flat baseline":
+        return '<span class="d s-flat">&mdash;</span>'
+    if cur is None or mu is None or mu == 0:
+        return '<span class="d s-na">&mdash;</span>'
+    q = cur / mu
+    if mu > 0 and q >= 2:
+        txt = "&#9650; &times;" + (to_char_fixed(q, 1) if q < 100
+                                    else to_char_fixed(ora_round(q, 0), 0))
+    else:
+        pct = (cur - mu) / abs(mu) * 100
+        txt = ("&#9650; " if pct >= 0 else "&#9660; ") + to_char_fixed(abs(pct), 1) + "%"
+    return ('<span class="d ' + ("s-plain" if plain == "Y" else band_sev(bucket)) + '">'
+            + txt + '</span>')
+
+
+def range_txt(mu, sd) -> str:
+    if mu is None or sd is None:
+        return "&mdash;"
+    den = max(sd, 0.02 * abs(mu))
+    return fmt_num(max(0, mu - 2 * den)) + "&ndash;" + fmt_num(mu + 2 * den)
+
+
+BAND_HEAD = (
+    '<th class="num c-rng" title="prior mean &plusmn; 2&sigma;, in the row&#39;s own unit">Normal range</th>'
+    '<th class="c-band" title="Current, in &sigma; from the prior mean. Shaded = normal (&plusmn;1&sigma;, &plusmn;2&sigma;); ticks at &plusmn;2&sigma; and &plusmn;3&sigma;.">'
+    'vs normal, in &sigma;<span class="bd-ax" aria-hidden="true">'
+    '<em style="--x:.167">&minus;2</em><em style="--x:.333">0</em>'
+    '<em style="--x:.500">+2</em><em style="--x:.583">+3</em>'
+    '<em class="end" style="--x:1">+8&sigma;</em></span></th>'
+    '<th class="num c-z">z</th>'
+    '<th class="num c-d">&Delta; vs mean</th>')
+
+
+def band_head() -> str:
+    return BAND_HEAD
+
+
+def band_cells(cur, mu, sd, n, bucket, twin="N", note="", plain="N") -> str:
+    z = band_z(cur, mu, sd)
+    nt = ""
+    if bucket == "typical" and z is not None and abs(z) > 2:
+        nt += ('<span class="imm" title="|z| above 2 but the move is below this '
+               'metric&#39;s materiality floor (sql/lib/metric_policy.plsql)">immaterial</span>')
+    elif bucket in ("improved", "noted"):
+        nt += '<span class="imm">' + bucket + '</span>'
+    elif bucket == "insufficient history":
+        nt += '<span class="imm" title="fewer than 3 prior valid windows">n &lt; 3</span>'
+    if sigma_flag(mu, sd):
+        nt += ('<span class="imm" title="baseline barely moved: &sigma; below 1% '
+               'of mean (floored to 2% for z); read the &Delta; instead">&sigma;&approx;0</span>')
+    return ('<td class="num c-rng">' + range_txt(mu, sd) + '</td>'
+            '<td class="c-band">' + band_span(z, bucket, None, twin) + '</td>'
+            '<td class="num c-z">' + band_ztxt(z) + '</td>'
+            '<td class="num c-d">' + delta_span(cur, mu, bucket, plain) + nt + (note or "") + '</td>')
 
 
 # ---------------------------------------------------------------------
@@ -461,6 +566,11 @@ def anchor_id(prefix: str, name) -> str:
     v = re.sub(r"[^a-z0-9]+", "-", (name or "").lower())
     v = re.sub(r"^-+|-+$", "", v)
     return prefix + "-" + v[:64]
+
+
+def finding_anchor(domain: str, name) -> str:
+    """sql/lib/anchor_id.plsql finding_anchor(): the 07 findings row id."""
+    return anchor_id("fr-" + domain[:1].lower(), name)
 
 
 def is_essential(domain: str, name: str) -> str:

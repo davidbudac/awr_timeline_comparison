@@ -17,6 +17,8 @@ python3 demo/gen_demo_report.py                      # -> docs/examples/demo_bus
 python3 demo/gen_demo_report.py --cdn out.html       # link ECharts from the public CDN instead
 python3 demo/gen_demo_report.py --only=06_top_sql x.html   # one section (debugging a port)
 node demo/verify_report.js docs/examples/demo_busy_db.html shots/   # headless smoke test + screenshots
+# no node_modules in the repo: point NODE_PATH at any playwright install, e.g.
+#   T=$(mktemp -d); (cd $T && npm i playwright@1.55); NODE_PATH=$T/node_modules node demo/verify_report.js ...
 ```
 
 ## How it stays faithful to the real report
@@ -27,7 +29,7 @@ node demo/verify_report.js docs/examples/demo_busy_db.html shots/   # headless s
   CSS / shared-JS bytes of the current sources. The section ports lift
   their `<script>` blocks the same way.
 * **Number strings are Oracle-faithful.** `awrdemo/helpers.py` twins
-  `fmt_num` / `fmt_int` / `score_cells` / `dev_attr` / `is_essential` /
+  `fmt_num` / `fmt_int` / `score_cells` / `band_cells` / `is_essential` /
   `is_oracle_schema` / `DBMS_XMLGEN.CONVERT` and the `TO_CHAR` masks
   (half-away-from-zero rounding, `FM` trimming, `D0` mandatory decimals).
 * **One section, one port.** Each `awrdemo/sections/sNN_*.py` is a
@@ -66,6 +68,8 @@ Unmarked blips: month-end close batches (Jul 31, Aug 31 evenings) and a
 
 The output is deterministic; re-run the generator after changing the
 model or a port and commit the resulting HTML. `verify_report.js` loads
-it in headless Chromium and fails on any page/console error; it also
-exercises the rail toggles, tabs, sort and expanders and writes light +
-dark full-page screenshots.
+it in headless Chromium (or system Chrome) and fails on any page/console
+error in any of the three views (Summary / Timeline / All sections) in
+light and dark, on an in-page href that does not resolve to exactly one id,
+or on a duplicate id; it also exercises the view switch, a cross-view jump,
+tabs, sort and expanders and writes a screenshot per view x theme.

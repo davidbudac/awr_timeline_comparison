@@ -35,7 +35,7 @@ count pill.
   only the dynamic calls by hand.  Substitution vars (`~weeks_back`,
   `~target_end_resolved`, ...) map to `World` attributes.
 * Number strings must be Oracle-faithful: use `awrdemo.helpers`
-  (`fmt_num`, `fmt_int`, `fmt_num_title`, `score_cells`, `dev_attr`,
+  (`fmt_num`, `fmt_int`, `fmt_num_title`, `score_cells`, `band_cells`,
   `num6`, `to_char_fixed/trim`, `z_txt`, `pct_txt`, `esc` =
   `DBMS_XMLGEN.CONVERT`, `json_escape`, `is_essential`,
   `is_oracle_schema`, date masks `ts_min/ts_sec/ts_dy_min/mon_dd/...`).

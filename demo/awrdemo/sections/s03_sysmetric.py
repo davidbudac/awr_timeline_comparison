@@ -3,8 +3,8 @@ AVG pivot over the comprehensive template's sysmetric_targets.sql.
 Single instance, so is_additive (SUM vs AVG across instances) is a no-op."""
 from __future__ import annotations
 
-from awrdemo.helpers import esc, is_essential, anchor_id
-from awrdemo.sections._pivot import header, spark_vals, value_cells
+from awrdemo.helpers import esc, is_essential, anchor_id, policy_bucket
+from awrdemo.sections._pivot import header, row_cells
 
 # sql/lib/templates/comprehensive/sysmetric_targets.sql (23 metrics)
 TARGETS = [
@@ -74,13 +74,8 @@ def metric_series(w, name):
 
 def emit(w) -> str:
     out = ['<!-- AWR-SECTION: 03_sysmetric BEGIN -->']
-    out.append('<section id="metrics"><h2>System metrics (DBA_HIST_SYSMETRIC_SUMMARY)</h2>')
-    out.append('<p style="font-size:12px;color:var(--muted)">'
-               'AVG(sm.average) over each window. '
-               'Additive metrics (rates, counters): SUM across instances per snap, then AVG; '
-               'ratios &amp; latencies: AVG across instances per snap, then AVG. '
-               '<b>Trend</b>: per-window values, oldest &rarr; current. '
-               'Units per metric name (<code>*_Per_Sec</code> etc.).</p>')
+    out.append('<section id="metrics" class="vw in-a"><h2>System metrics'
+               '<small class="h2sub">SYSMETRIC averages per window, Current against its normal range</small></h2>')
     out.append('<table id="sysmetric">' + header(w, True) + '<tbody>')
 
     for name in sorted(TARGETS, key=lambda s: (_ORDER.get(s, 99), s)):
@@ -89,9 +84,9 @@ def emit(w) -> str:
         out.append('<tr id="' + anchor_id('metric', name) + '" data-imp="' + is_essential('METRIC', name)
                    + '"><td>' + esc(name) + '</td>'
                    + '<td>' + esc(unit) + '</td>'
-                   + '<td class="trend" data-spark="' + spark_vals(vals)
-                   + '" data-spark-title="' + esc(name) + '"></td>'
-                   + value_cells(vals) + '</tr>')
+                   + row_cells(vals, name,
+                               lambda c, mu, sd, n, s=name: policy_bucket('METRIC', s, None, c, mu, sd, n))
+                   + '</tr>')
 
     out.append('</tbody></table></section>')
     out.append('<!-- AWR-SECTION: 03_sysmetric END -->')

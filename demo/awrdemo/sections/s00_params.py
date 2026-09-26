@@ -250,9 +250,46 @@ def emit(w) -> str:
 
     # ---- editorial masthead ------------------------------------------
     put('<script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.body.classList.add("dark");}catch(e){}})();</script>')
-    put('<script>(function(){var m="normal";try{if(localStorage.getItem("awr-mode")==="full")m="full";}catch(e){}var h=location.hash||"",i=h.indexOf("!v=");if(i>=0&&h.slice(i+3).split("&")[0].split(",").indexOf("f")>=0)m="full";document.body.classList.add(m);})();</script>')
+    L = _lines()
+    # the early view script is literal in the SQL: lift it verbatim
+    put(next(t for t, ok in L if ok and t.startswith('<script>(function(){var v="summary"')))
     put('<a class="skip" href="#main-start">Skip to report</a>')
-    put('<header class="report">')
+    # ---- v1.6.0 top bar (hand-ported: DEFINEs + the Current window) --
+    cur_start = w.target_end - timedelta(hours=w.win_hours)
+    put('<div class="topbar" id="topbar">'
+        '<div class="db"><b>' + esc(w.db_name) + '</b>'
+        '<span>' + esc(w.host_name) + ' &middot; ' + esc(w.db_version) + ' &middot; DBID '
+        + str(w.dbid) + '</span></div>'
+        '<div class="win"><span class="cchip">Current</span><b>'
+        + dy(cur_start) + ' ' + cur_start.strftime("%d") + ' ' + mon_dd(cur_start)[:3] + ', '
+        + hh24(cur_start) + '&ndash;' + hh24(w.target_end)
+        + '</b><span>vs ' + str(w.weeks_back) + ' prior window' + ('' if w.weeks_back == 1 else 's')
+        + ', every ' + w.step_label + '</span></div>'
+        '<span class="sp"></span>'
+        '<div class="seg" role="group" aria-label="View">'
+        '<button type="button" data-v="summary" aria-pressed="true"'
+        ' title="The answer: verdict, findings, headline metrics, Top SQL">Summary</button>'
+        '<button type="button" data-v="timeline" aria-pressed="false"'
+        ' title="The compared windows side by side">Timeline</button>'
+        '<button type="button" data-v="all" aria-pressed="false"'
+        ' title="Every section and every scored row">All sections</button>'
+        '</div>'
+        '<button type="button" id="theme-toggle" class="theme-icon-btn"'
+        ' aria-pressed="false"'
+        ' aria-label="Toggle dark mode"'
+        ' title="Switch between light and dark color theme">'
+        '<svg class="icon-sun" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">'
+        '<circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/>'
+        '<path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1'
+        'M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"'
+        ' stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+        '</svg>'
+        '<svg class="icon-moon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">'
+        '<path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5a8.5 8.5 0 1 0 11.2 11.2z" fill="currentColor"/>'
+        '</svg>'
+        '</button>'
+        '</div>')
+    put('<header class="report vw in-s in-a">')
     put('  <div class="brandline"><span class="dot">&#9679;</span> AWR <span class="slash">/</span> TIMELINE COMPARISON</div>')
     put('  <div class="topgrid">')
     put('    <h1>' + esc(w.dow_name)
@@ -396,7 +433,6 @@ def emit(w) -> str:
     put('</header>')
 
     # ---- masthead chart script (payload by hand, IIFE verbatim) ------
-    L = _lines()
     put('<script>')
     put('(function(){')
     put('AWR_DATA.mastheadTimeline={')
@@ -414,20 +450,6 @@ def emit(w) -> str:
     # ---- nav rail (hand-ported: profile_days CASE) --------------------
     put('<nav class="toc">'
         '<div class="rail-brand"><span>AWR &middot; Timeline comparison</span>'
-        '<button type="button" id="theme-toggle" class="theme-icon-btn"'
-        ' aria-pressed="false"'
-        ' aria-label="Toggle dark mode"'
-        ' title="Switch between light and dark color theme">'
-        '<svg class="icon-sun" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">'
-        '<circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/>'
-        '<path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1'
-        'M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"'
-        ' stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
-        '</svg>'
-        '<svg class="icon-moon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">'
-        '<path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5a8.5 8.5 0 1 0 11.2 11.2z" fill="currentColor"/>'
-        '</svg>'
-        '</button>'
         '</div>'
         '<span class="rail-cur"></span>'
         '<button type="button" class="rail-menu-btn" id="rail-menu-btn"'
@@ -446,6 +468,8 @@ def emit(w) -> str:
         '<a href="#ash-timeline">ASH timeline</a>'
         '<a href="#findings">Findings</a>'
         '<a href="#windows">Windows</a>'
+        '<b>Timeline</b>'
+        '<a href="#timeline" data-nodot>Window grid</a>'
         '<b>Workload</b>'
         + ('<a href="#day-profile">Day profile</a>' if w.profile_days > 0 else '')
         + '<a href="#utilization">Utilization</a>'
@@ -461,20 +485,15 @@ def emit(w) -> str:
         '<a href="#segment-io">Segment I/O</a>'
         '<a href="#file-io">File I/O</a>'
         '<a href="#param-changes">Parameters</a>'
+        '<b id="rail-ref">Reference</b>'
+        '<a href="#guide" data-nodot>Reading the charts</a>'
+        '<a href="#about" data-nodot>About this report</a>'
         '</div>'
         '<div class="rail-foot">'
         '<button type="button" class="view-btn" id="view-btn"'
         ' aria-expanded="false" aria-controls="view-panel"'
         ' title="Report view options">View &#9662;</button>'
         '<div class="view-panel" id="view-panel">'
-        '<div class="mode-switch" role="group" aria-label="Report detail level">'
-        '<button type="button" id="mode-normal" class="mode-btn" aria-pressed="true"'
-        ' title="Normal view: verdict, headline metrics, findings, ASH timeline, Top SQL">'
-        'Normal</button>'
-        '<button type="button" id="mode-full" class="mode-btn" aria-pressed="false"'
-        ' title="Full view: every section and every scored row">'
-        'Full</button>'
-        '</div>'
         '<button type="button" id="next-finding" class="next-finding"'
         ' title="Jump to the next large (critical) finding">'
         '<span>&darr; next large finding</span>'

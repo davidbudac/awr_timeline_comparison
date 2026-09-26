@@ -121,10 +121,11 @@ def emit(w) -> str:
     cells = _cells(w)
     nstat = len(TARGETS)
     labels = {o: lbl for _, o, lbl, _ in TARGETS}
-    put('<section id="day-profile">')
+    put('<section id="day-profile" class="vw in-a">')
 
     if not any(c["cur_val"] is not None for c in cells.values()):
-        put("<h2>Day profile &mdash; hour-of-day vs the " + str(days) + " prior days</h2>")
+        put('<h2>Day profile<small class="h2sub">Each hour of the last day vs the same hour on the '
+            + str(days) + " prior days</small></h2>")
         put('<p style="color:var(--muted)">No usable snapshot pairs in the '
             "24 h ending " + H.ts_min(t_end) + " &mdash; cannot build the profile.</p></section>")
         put("<!-- AWR-SECTION: 16_day_profile END -->")
@@ -158,33 +159,21 @@ def emit(w) -> str:
     isolated = sum(up[o] + down[o] for o in labels if shift[o] == 0)
 
     if nshift > 0:
-        put('<script>document.getElementById("day-profile").setAttribute("data-normal","Y");</script>')
+        put('<script>document.getElementById("day-profile").classList.add("in-s");</script>')
 
     plural = "" if days == 1 else "s"
-    put("<h2>Day profile &mdash; hour-of-day vs the " + str(days)
-        + " prior day" + plural + " "
+    put('<h2>Day profile<span class="meta">'
         + ('<span class="badge crit">' + str(nshift) + " day-wide shift"
            + ("" if nshift == 1 else "s") + "</span> " if nshift > 0 else "")
         + '<span class="badge warn">' + str(isolated) + " isolated hour"
         + ("" if isolated == 1 else "s") + "</span> "
         + '<span class="badge skip" title="' + str(crit) + " large / " + str(warn)
-        + ' moderate cells">' + str(hours_hit) + " of 24 hours flagged</span></h2>")
-    put('<p style="font-size:12px;color:var(--muted)">'
-        "Each hour of the 24 h ending <b>" + H.dy(t_end) + " " + H.ts_min(t_end) + "</b> "
-        "is compared with the <b>same hour-of-day</b> on the " + str(days) + " prior day"
-        + plural
+        + ' moderate cells">' + str(hours_hit) + " of 24 hours flagged</span></span>"
+        + '<small class="h2sub">Each hour of the 24 h ending '
+        + H.dy(t_end) + " " + H.ts_min(t_end) + " vs the same hour on the "
+        + str(days) + " prior day" + plural
         + " (" + (t_end - timedelta(days=days + 1)).strftime("%Y-%m-%d") + " &rarr; "
-        + (t_end - timedelta(days=1)).strftime("%Y-%m-%d") + "), independent of the report cadence above. "
-        "Per-second rates from DBA_HIST_SYSSTAT snapshot deltas (restart-guarded); "
-        "an hour covered by less than 30 min of snapshots is left blank rather than shown as 0. "
-        "Cells are scored like the Findings summary: <b>large</b> = |z| &gt; 3, "
-        "<b>moderate</b> = |z| &gt; 2, against the mean and standard deviation of the prior days "
-        "(needs at least 3 prior values; z over max(&sigma;, 2% of &mu;), moves under 10% are typical). "
-        "A stat flagged in 12 or more hours in the same direction is one <b>day-wide shift</b>; "
-        "its cells stay tinted in the table but are not counted as isolated hours. "
-        "The heatmap shows <b>signed</b> z "
-        "(red = above the prior days, blue = below); pick a metric to see the hour-by-hour "
-        "line against its prior-day band.</p>")
+        + (t_end - timedelta(days=1)).strftime("%Y-%m-%d") + ")</small></h2>")
 
     if nshift > 0:
         put('<table id="day-profile-shifts" data-nocount data-notools><thead><tr>'
@@ -226,7 +215,7 @@ def emit(w) -> str:
         '<div id="day-profile-line" style="height:240px"></div></div>')
 
     # Table: one row per hour (chronological), one column per stat.
-    row = "<table class=\"full-only\"><thead><tr><th>Hour</th>"
+    row = "<table class=\"vw in-a\"><thead><tr><th>Hour</th>"
     for o in range(1, nstat + 1):
         row += '<th class="num">' + H.esc(labels[o]) + "</th>"
     put(row + "</tr></thead><tbody>")

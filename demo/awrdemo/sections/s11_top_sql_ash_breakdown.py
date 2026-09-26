@@ -113,18 +113,10 @@ def emit(w) -> str:
     hourly = "hourly" if bh == 1 else bucket_label(bh)
 
     out.append(L[0])
-    out.append('<section id="topsql-ash"><h2>Top SQL ASH breakdown (' + hourly
-               + ', per SQL, stacked by wait event)</h2>')
-    out.append('<p style="font-size:12px;color:var(--muted);margin:0 0 10px 0">'
-               'For each SQL in the Top-N pool (union across all ranking dimensions), '
-               'per-bucket ASH samples split by individual wait event '
-               '(top ' + str(TOP_EVENTS) + ' per SQL by sample count; '
-               'remainder grouped as <b>Other</b>; <b>CPU</b> = ON-CPU). '
-               '<code>dba_hist_active_sess_history</code>, ' + ts_min(range_start)
-               + ' &rarr; ' + ts_min(range_end) + ', ' + hourly
-               + ' buckets. Compared windows shaded. '
-               'SQLs with fewer than ' + str(MIN_SAMPLES)
-               + ' samples appear as placeholders.</p>')
+    out.append('<section id="topsql-ash" class="vw in-a"><h2>Top SQL activity'
+               '<small class="h2sub">ASH samples of each Top SQL statement by wait event, '
+               + hourly + ', ' + ts_min(range_start) + ' &rarr; ' + ts_min(range_end)
+               + '</small></h2>')
 
     hours_json = "[" + ",".join('"' + ts_min(range_start + timedelta(hours=b * bh)) + '"'
                                 for b in range(total_buckets)) + "]"
@@ -171,7 +163,7 @@ def emit(w) -> str:
             sql_totals[sid] = sql_totals.get(sid, 0) + n
 
     if not sql_totals:
-        out.append(L[3])
+        out.append(L[2])
         out.append("</section>")
         out.append("<!-- AWR-SECTION: 11_top_sql_ash_breakdown END -->")
         return "\n".join(out)
@@ -219,9 +211,9 @@ def emit(w) -> str:
                    + ' ASH samples and are listed as placeholders.</p>')
 
     # ---- JS payload + per-chart init
-    out.append(L[12])   # <script>
-    out.append(L[13])   # (function(){
-    out.append(L[14])   # AWR_DATA.topSqlAsh = {
+    out.append(L[11])   # <script>
+    out.append(L[12])   # (function(){
+    out.append(L[13])   # AWR_DATA.topSqlAsh = {
     out.append("hours:")
     out.extend(put_clob_chunked(hours_json))
     out.append(",")
@@ -250,7 +242,7 @@ def emit(w) -> str:
             out.append("]}")
         out.append("]}")
     out.append("]};")
-    out.extend(L[26:L.index("</script>", 26) + 1])     # verbatim bootstrap .. </script>
+    out.extend(L[25:L.index("</script>", 25) + 1])     # verbatim bootstrap .. </script>
     out.append("</section>")
     out.append("<!-- AWR-SECTION: 11_top_sql_ash_breakdown END -->")
     return "\n".join(out)

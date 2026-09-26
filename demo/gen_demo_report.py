@@ -32,7 +32,8 @@ DEFAULT_OUT = os.path.join(ROOT, "docs", "examples", "demo_busy_db.html")
 
 # (module name, AWR-SECTION tag) in driver order -- sql/awr_trend.sql's
 # @@-include order, which is the VISUAL order since v1.5.0 (phase 4):
-# Triage, Workload, SQL, Storage & config; 18 before 17 like the driver.
+# Triage, Workload, SQL, Storage & config; 18 before 17 like the driver;
+# 19 (guide + About, every view) right before 17, which stays last.
 SECTIONS = [
     ("s00_params", "00_params"),
     ("s10_db_time_summary", "10_db_time_summary"),
@@ -52,6 +53,7 @@ SECTIONS = [
     ("s14_segment_io", "14_segment_io"),
     ("s15_file_io", "15_file_io"),
     ("s12_param_changes", "12_param_changes"),
+    ("s19_reference", "19_reference"),
     ("s17_narrative", "17_narrative"),
 ]
 

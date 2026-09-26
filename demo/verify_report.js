@@ -4,105 +4,225 @@
  *
  *   node demo/verify_report.js docs/examples/demo_busy_db.html [shots_dir]
  *
- * Loads the file in Chromium, then reports: page/console errors, the
- * number of ECharts instances that rendered, sections present, the
- * rail controls (theme / Normal-Full switch) actually flipping
- * the body classes, click-to-sort + tab switching working, and writes
- * full-page screenshots (light + dark) when shots_dir is given.
- * Exit code 1 on any page error or console error.
+ * Playwright is resolved portably: require('playwright') (set NODE_PATH to
+ * a node_modules that has it, e.g. `T=$(mktemp -d); (cd $T && npm i
+ * playwright@1.55); NODE_PATH=$T/node_modules node demo/verify_report.js`),
+ * falling back to the old /opt/node22 global install.  The browser is the
+ * bundled Chromium when installed, else system Chrome (channel 'chrome').
+ *
+ * Checks (exit code 1 on any failure):
+ *   - 0 page / console errors on load, in every view x theme below;
+ *   - the three views (Summary / Timeline / All sections, v1.6.0): the
+ *     top-bar switch flips body.vs / .vt / .va, All sections shows the
+ *     most sections, Timeline shows #timeline, the guide (#guide) and the
+ *     About fold (#about) show in every view, #view= hash wins on load;
+ *   - light and dark (the theme toggle) in each view;
+ *   - every href="#..." resolves to exactly one id (a target-less .xlink
+ *     the chrome hid is skipped), and no id is duplicated;
+ *   - an entity-style jump: clicking an in-page link whose target is out
+ *     of the current view switches view and shows the target;
+ *   - tabs / click-to-sort / an expander still work (in All sections);
+ * and writes screenshots per view x theme when shots_dir is given.
  */
 const path = require('path');
 const fs = require('fs');
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+
+function loadPlaywright() {
+  const tries = ['playwright', 'playwright-core', '/opt/node22/lib/node_modules/playwright'];
+  for (const t of tries) { try { return require(t); } catch (e) { /* next */ } }
+  console.error('playwright not found: set NODE_PATH to a node_modules containing it');
+  process.exit(2);
+}
+const { chromium } = loadPlaywright();
+
+async function launch() {
+  const opts = [
+    { executablePath: '/opt/pw-browsers/chromium' },
+    {},
+    { channel: 'chrome' },
+  ];
+  for (const o of opts) {
+    if (o.executablePath && !fs.existsSync(o.executablePath)) continue;
+    try { return await chromium.launch(o); } catch (e) { /* next */ }
+  }
+  throw new Error('no Chromium / Chrome available for Playwright');
+}
+
+const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
 
 (async () => {
   const file = path.resolve(process.argv[2] || 'docs/examples/demo_busy_db.html');
   const shots = process.argv[3] ? path.resolve(process.argv[3]) : null;
   if (shots) fs.mkdirSync(shots, { recursive: true });
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' }).catch(() => chromium.launch());
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-  const errors = [];
-  const warnings = [];
-  page.on('pageerror', e => errors.push('pageerror: ' + e.message));
-  page.on('console', m => {
-    if (m.type() === 'error') errors.push('console.error: ' + m.text());
-    else if (m.type() === 'warning') warnings.push(m.text());
-  });
-  await page.goto('file://' + file, { waitUntil: 'load' });
-  await page.waitForTimeout(1500);
+  const browser = await launch();
+  const failures = [];
+  const fail = (m) => { failures.push(m); };
 
-  const info = await page.evaluate(() => {
-    const sections = [...document.querySelectorAll('main > section, body > section')].map(s => s.id);
-    let charts = 0;
-    if (window.echarts) {
-      document.querySelectorAll('div, .mini, .windows-chart').forEach(el => { if (echarts.getInstanceByDom(el)) charts++; });
-    }
-    const sparks = document.querySelectorAll('svg.spark, [data-spark] svg').length;
-    const tables = document.querySelectorAll('table').length;
-    const rows = document.querySelectorAll('tbody tr').length;
-    const narrative = !!document.querySelector('#narrative-slot .narr');
-    const verdict = (document.querySelector('header.report .verdict') || {}).textContent || '';
-    const nav = [...document.querySelectorAll('nav.toc a')].map(a => a.getAttribute('href'));
-    const markers = (window.AWR_MARKERS || []).length;
-    const noCharts = document.body.classList.contains('no-charts');
-    return { sections, charts, sparks, tables, rows, narrative, verdict: verdict.replace(/\s+/g, ' ').trim().slice(0, 300), nav, markers, noCharts };
-  });
-  console.log(JSON.stringify(info, null, 1));
+  async function openPage(hash, scheme) {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: scheme || 'light' });
+    const errors = [];
+    page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+    page.on('console', m => { if (m.type() === 'error') errors.push('console.error: ' + m.text()); });
+    await page.goto('file://' + file + (hash || ''), { waitUntil: 'load' });
+    await page.waitForTimeout(1200);
+    return { page, errors };
+  }
 
-  // toggles
-  const toggles = {};
-  // Normal / Full mode switch: Normal is the default; Full reveals every section
+  // ---- 1. load in the default view: inventory + link integrity --------
   {
-    const normal0 = await page.evaluate(() => document.body.classList.contains('normal'));
-    const vis0 = await page.evaluate(() => [...document.querySelectorAll('main > section')].filter(s => s.offsetParent !== null).length);
-    const bd = await page.$('#mode-full');
-    if (!bd) { toggles.mode = 'MISSING'; } else {
-      await bd.click(); await page.waitForTimeout(300);
-      const det = await page.evaluate(() => document.body.classList.contains('full'));
-      const vis1 = await page.evaluate(() => [...document.querySelectorAll('main > section')].filter(s => s.offsetParent !== null).length);
-      const bn = await page.$('#mode-normal'); await bn.click(); await page.waitForTimeout(300);
-      const back = await page.evaluate(() => document.body.classList.contains('normal'));
-      toggles.mode = (normal0 && det && back && vis1 > vis0) ? `ok (${vis0} of ${vis1} sections in Normal)` : `FAIL normal0=${normal0} det=${det} back=${back} vis=${vis0}/${vis1}`;
+    const { page, errors } = await openPage('', 'light');
+    await page.evaluate(() => { try { localStorage.removeItem('awr-view'); localStorage.removeItem('awr-theme'); } catch (e) {} });
+    await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(1200);
+    const info = await page.evaluate(() => {
+      const sections = [...document.querySelectorAll('main > section, body > section')].map(s => s.id);
+      let charts = 0;
+      if (window.echarts) document.querySelectorAll('div').forEach(el => { if (echarts.getInstanceByDom(el)) charts++; });
+      return {
+        view: document.body.getAttribute('data-view'),
+        bodyClass: document.body.className,
+        sections, charts,
+        bands: document.querySelectorAll('.bd').length,
+        tables: document.querySelectorAll('table').length,
+        rows: document.querySelectorAll('tbody tr').length,
+        narrative: !!document.querySelector('#narrative-slot .narr'),
+        markers: (window.AWR_MARKERS || []).length,
+        noCharts: document.body.classList.contains('no-charts'),
+      };
+    });
+    console.log(JSON.stringify(info, null, 1));
+    if (info.view !== 'summary') fail('default view is ' + info.view + ', expected summary');
+    // every href="#x" resolves to exactly one id; no duplicate ids
+    const links = await page.evaluate(() => {
+      const ids = {};
+      document.querySelectorAll('[id]').forEach(el => { ids[el.id] = (ids[el.id] || 0) + 1; });
+      const dup = Object.keys(ids).filter(k => ids[k] > 1);
+      const bad = [];
+      let n = 0, pruned = 0;
+      document.querySelectorAll('a[href^="#"]').forEach(a => {
+        const h = a.getAttribute('href').slice(1);
+        if (!h || /^view=/.test(h)) return;
+        // a cross-link the chrome JS hid because its target was never
+        // emitted (06 -> 11 / 18 xlinks; "P3: cross-links") is not a link
+        if (a.hidden && a.classList.contains('xlink')) { pruned++; return; }
+        n++;
+        const id = h.split('!')[0];
+        if (ids[id] !== 1) bad.push(h + ' (' + (ids[id] || 0) + ')');
+      });
+      return { n, dup, bad, pruned };
+    });
+    console.log('links: ' + links.n + ' in-page hrefs, ' + links.bad.length + ' unresolved, ' + links.dup.length + ' duplicate ids (' + links.pruned + ' target-less xlinks hidden by the chrome)');
+    if (links.dup.length) fail('duplicate ids: ' + links.dup.slice(0, 10).join(', '));
+    if (links.bad.length) fail('unresolved hrefs: ' + links.bad.slice(0, 10).join(', '));
+    if (errors.length) fail('load: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 2. every view x theme: 0 errors, the view contract --------------
+  const counts = {};
+  for (const v of Object.keys(VIEWS)) {
+    for (const scheme of ['light', 'dark']) {
+      const { page, errors } = await openPage('#view=' + v, scheme);
+      // the theme toggle drives body.dark; make the page match the scheme under test
+      const isDark = await page.evaluate(() => document.body.classList.contains('dark'));
+      if ((scheme === 'dark') !== isDark) {
+        await page.click('#theme-toggle'); await page.waitForTimeout(400);
+      }
+      const st = await page.evaluate((cls) => {
+        const vis = el => !!el && el.getClientRects().length > 0;
+        return {
+          cls: document.body.classList.contains(cls),
+          dark: document.body.classList.contains('dark'),
+          sections: [...document.querySelectorAll('main > section')].filter(vis).length,
+          guide: vis(document.getElementById('guide')),
+          about: vis(document.getElementById('about')),
+          timeline: vis(document.getElementById('timeline')),
+          pressed: (document.querySelector('.topbar .seg [aria-pressed="true"]') || {}).textContent || '',
+          hOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      }, VIEWS[v]);
+      counts[v] = st.sections;
+      const tag = v + '/' + scheme;
+      if (!st.cls) fail(tag + ': body class ' + VIEWS[v] + ' missing (hash #view= must win)');
+      if (st.dark !== (scheme === 'dark')) fail(tag + ': theme toggle did not reach ' + scheme);
+      if (!st.guide) fail(tag + ': #guide not visible');
+      if (!st.about) fail(tag + ': #about not visible');
+      if ((v === 'timeline') !== st.timeline) fail(tag + ': #timeline visible=' + st.timeline);
+      if (st.hOverflow > 1) fail(tag + ': horizontal page overflow ' + st.hOverflow + 'px');
+      if (errors.length) fail(tag + ': ' + errors.slice(0, 5).join(' | '));
+      console.log('view ' + tag + ': ' + st.sections + ' sections visible, switch=' + st.pressed.trim() + (errors.length ? ', ERRORS' : ', 0 errors'));
+      if (shots) await page.screenshot({ path: path.join(shots, v + '-' + scheme + '.png'), fullPage: v !== 'all' });
+      await page.close();
     }
   }
-  // theme toggle: any button whose id/class mentions theme
-  const theme = await page.$('#theme-toggle, .theme-icon-btn, [data-theme-toggle], #themeToggle');
-  if (theme) {
-    await theme.click(); await page.waitForTimeout(400);
-    const dark = await page.evaluate(() => document.body.classList.contains('dark'));
-    toggles.theme = dark ? 'ok' : 'FAIL';
-    if (shots) await page.screenshot({ path: path.join(shots, 'dark.png'), fullPage: true });
-    await theme.click(); await page.waitForTimeout(300);
-  } else toggles.theme = 'MISSING';
-  // the interactions below hit elements that only exist on screen in the Full view
-  await page.evaluate(() => window.AWR_setMode && window.AWR_setMode(true));
-  await page.waitForTimeout(300);
-  // tabs
-  const tab = await page.$('.tabs [data-t]:nth-child(2)');
-  if (tab) {
-    await tab.click(); await page.waitForTimeout(200);
-    toggles.tabs = await page.evaluate(() => {
-      const t = document.querySelector('.tabs [data-t]:nth-child(2)');
-      const g = t.closest('.tabs').getAttribute('data-tabs');
-      const p = document.querySelector(`.tabpanel[data-tabs="${g}"][data-t="${t.getAttribute('data-t')}"]`);
-      return p && getComputedStyle(p).display !== 'none' ? 'ok' : 'FAIL';
-    });
-  } else toggles.tabs = 'none';
-  // sort a header
-  const th = await page.$('table:not([data-nosort]) thead th.num');
-  if (th) { await th.click(); await page.waitForTimeout(200); toggles.sort = 'clicked'; }
-  // expander
-  const exp = await page.$('.expander');
-  if (exp) { await exp.click(); await page.waitForTimeout(200); toggles.expander = 'clicked'; }
-  console.log('toggles', JSON.stringify(toggles));
-
-  if (shots) {
-    await page.screenshot({ path: path.join(shots, 'light.png'), fullPage: true });
-    // masthead + overview crop
-    await page.screenshot({ path: path.join(shots, 'top.png'), clip: { x: 0, y: 0, width: 1440, height: 1000 } });
+  if (!(counts.all > counts.summary && counts.summary > counts.timeline)) {
+    fail('view sizes: expected all > summary > timeline, got ' + JSON.stringify(counts));
   }
-  if (warnings.length) console.log('warnings:', warnings.slice(0, 10));
-  if (errors.length) { console.log('ERRORS:'); errors.slice(0, 30).forEach(e => console.log('  ' + e)); }
+
+  // ---- 3. interactions: the switch, a cross-view jump, tabs / sort / expander
+  {
+    const { page, errors } = await openPage('', 'light');
+    const toggles = {};
+    for (const v of ['all', 'timeline', 'summary']) {
+      await page.click('.topbar .seg [data-v="' + v + '"]'); await page.waitForTimeout(250);
+      const ok = await page.evaluate((c) => document.body.classList.contains(c), VIEWS[v]);
+      toggles['switch-' + v] = ok ? 'ok' : 'FAIL';
+      if (!ok) fail('switch to ' + v + ' failed');
+    }
+    const saved = await page.evaluate(() => { try { return localStorage.getItem('awr-view'); } catch (e) { return 'n/a'; } });
+    toggles.persist = saved === 'summary' ? 'ok' : 'FAIL (' + saved + ')';
+    if (saved !== 'summary') fail('awr-view not persisted on click: ' + saved);
+    // cross-view jump: a link whose target is hidden in Summary
+    const jumped = await page.evaluate(async () => {
+      const vis = el => !!el && el.getClientRects().length > 0;
+      const a = [...document.querySelectorAll('main a[href^="#"], header.report a[href^="#"]')].find(x => {
+        const t = document.getElementById(x.getAttribute('href').slice(1).split('!')[0]);
+        return vis(x) && t && !vis(t);
+      });
+      if (!a) return 'none';
+      const id = a.getAttribute('href').slice(1).split('!')[0];
+      a.click();
+      await new Promise(r => setTimeout(r, 400));
+      return vis(document.getElementById(id)) ? 'ok (' + id + ' -> ' + document.body.getAttribute('data-view') + ')' : 'FAIL (' + id + ')';
+    });
+    toggles.jump = jumped;
+    if (/^FAIL/.test(jumped)) fail('cross-view jump: ' + jumped);
+    // rail: a dimmed link switches view on click
+    const rail = await page.evaluate(async () => {
+      const a = document.querySelector('nav.toc a.vdim[href^="#"]');
+      if (!a) return 'none';
+      const id = a.getAttribute('href').slice(1);
+      a.click();
+      await new Promise(r => setTimeout(r, 400));
+      const t = document.getElementById(id);
+      return t && t.getClientRects().length ? 'ok (' + id + ')' : 'FAIL (' + id + ')';
+    });
+    toggles.rail = rail;
+    if (/^FAIL/.test(rail)) fail('rail dimmed link: ' + rail);
+    await page.evaluate(() => window.AWR_setView && window.AWR_setView('all', false));
+    await page.waitForTimeout(300);
+    const tab = await page.$('.tabs [data-t]:nth-child(2)');
+    if (tab) {
+      await tab.click(); await page.waitForTimeout(200);
+      toggles.tabs = await page.evaluate(() => {
+        const t = document.querySelector('.tabs [data-t]:nth-child(2)');
+        const g = t.closest('.tabs').getAttribute('data-tabs');
+        const p = document.querySelector(`.tabpanel[data-tabs="${g}"][data-t="${t.getAttribute('data-t')}"]`);
+        return p && getComputedStyle(p).display !== 'none' ? 'ok' : 'FAIL';
+      });
+      if (toggles.tabs !== 'ok') fail('tabs');
+    } else toggles.tabs = 'none';
+    const th = await page.$('table:not([data-nosort]) thead th.num:not(.c-band)');
+    if (th) { await th.click(); await page.waitForTimeout(200); toggles.sort = 'clicked'; }
+    const exp = await page.$('.expander');
+    if (exp) { await exp.click(); await page.waitForTimeout(200); toggles.expander = 'clicked'; }
+    console.log('toggles', JSON.stringify(toggles));
+    if (errors.length) fail('interactions: ' + errors.slice(0, 5).join(' | '));
+    if (shots) await page.screenshot({ path: path.join(shots, 'top.png'), clip: { x: 0, y: 0, width: 1440, height: 1000 } });
+    await page.close();
+  }
+
   await browser.close();
-  process.exit(errors.length ? 1 : 0);
+  if (failures.length) { console.log('FAILURES:'); failures.forEach(f => console.log('  ' + f)); }
+  else console.log('verify: OK');
+  process.exit(failures.length ? 1 : 0);
 })();

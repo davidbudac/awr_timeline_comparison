@@ -14,13 +14,9 @@ TAG = "04_waits_fg"
 def emit(w) -> str:
     L = ["<!-- AWR-SECTION: " + TAG + " BEGIN -->"]
     top_n = w.top_n
-    L.append('<section id="waits-fg"><h2>Foreground wait events (top '
-             + str(top_n) + " by time waited)</h2>")
-    L.append('<p style="font-size:12px;color:var(--muted)">'
-             "DBA_HIST_SYSTEM_EVENT, foreground waits, Idle excluded. "
-             "Chart stacks wait_class time per window. "
-             "Tables: top-" + str(top_n) + " by time_waited (s) and by avg latency "
-             "(ms = time_waited &divide; total_waits).</p>")
+    L.append('<section id="waits-fg" class="vw in-a"><h2>Foreground waits'
+             '<small class="h2sub">Where foreground sessions waited: top ' + str(top_n)
+             + ' events by time and by average wait, and the wait classes</small></h2>')
     L.append('<div class="chart-wrap chart-small" id="waits-fg-stack"></div>')
 
     deltas = C.window_deltas(w, lambda m: m.fg_waits)
@@ -67,20 +63,20 @@ def emit(w) -> str:
              + C.header(w, "<th>Wait class</th>", "s", with_trend=False) + "<tbody>")
     for r in crows:
         cur_s = None if r["cur_us"] is None else r["cur_us"] / 1e6
-        row = ('<tr id="' + h.anchor_id("fgc", r["wait_class"]) + '"><td>' + h.esc(r["wait_class"]) + "</td>"
+        share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
+        row = ('<tr id="' + h.anchor_id("wc", r["wait_class"]) + '"><td>' + h.esc(r["wait_class"]) + "</td>"
                + '<td class="num" data-w="0"' + h.fmt_num_title(cur_s) + "><b>"
-               + h.fmt_num(cur_s) + "</b></td>")
+               + h.fmt_num(cur_s) + "</b></td>"
+               + h.score_cells(cur_s, C._s(r["mu_us"]), C._s(r["sd_us"]), r["n_us"], share,
+                               "WAIT", "Wait class: " + r["wait_class"], r["wait_class"]))
         for k in range(1, w.weeks_back + 1):
             us_s = C.nth_csv(r["week_vals"], k + 1)
             if us_s == "":
                 row += '<td class="num" data-w="' + str(k) + '">&mdash;</td>'
             else:
                 us = float(us_s)
-                row += ('<td class="num" data-w="' + str(k) + '"' + h.dev_attr(cur_s, us) + ">"
+                row += ('<td class="num" data-w="' + str(k) + '">'
                         + h.fmt_num(us) + "</td>")
-        share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
-        row += h.score_cells(r["cur_us"], r["mu_us"], r["sd_us"], r["n_us"], share,
-                             "WAIT", "Wait class: " + r["wait_class"], r["wait_class"])
         row += "</tr>"
         L.append(row)
     L.append("</tbody></table></section>")

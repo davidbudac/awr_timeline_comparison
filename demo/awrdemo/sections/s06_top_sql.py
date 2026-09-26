@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from awrdemo import chrome
-from awrdemo.helpers import (esc, fmt_int, fmt_num, fmt_num_title, is_oracle_schema,
+from awrdemo.helpers import (anchor_id, esc, fmt_int, fmt_num, fmt_num_title, is_oracle_schema,
                              json_escape, mon_dd, num6, ora_round, to_char_fixed, ts_min)
 
 _SQL = chrome.sql_path("sql/06_top_sql.sql")
@@ -233,16 +233,9 @@ def emit(w) -> str:
     nweeks = weeks_back + 1
 
     put("<!-- AWR-SECTION: 06_top_sql BEGIN -->")
-    put(f'<section id="topsql" data-normal="Y"><h2>Top SQL (top {top_n}'
-        " per dimension, per window)</h2>")
-    put('<p style="font-size:12px;color:var(--muted)">'
-        f"Top-{top_n} SQLs per dimension per window from "
-        "DBA_HIST_SQLSTAT <code>*_DELTA</code>. "
-        "Bump chart per dimension: each line = one SQL across windows, "
-        "oldest &rarr; current. Use the <b>Break down by</b> toggle to "
-        "re-aggregate the same metric by <b>SQL ID</b>, parsing "
-        "<b>schema</b>, <b>module</b>, or <b>action</b> instead. "
-        "Detail tables collapsed; click to expand.</p>")
+    put('<section id="topsql" class="vw in-s in-a"><h2>Top SQL'
+        '<small class="h2sub">Top ' + str(top_n)
+        + ' statements per ranking and window; ranked, not scored</small></h2>')
     put('<div class="tabs" data-tabs="topsql" role="tablist" aria-label="Top SQL ranking dimension">'
         '<button type="button" role="tab" aria-selected="true" class="on" data-t="ELAPSED" id="tab-topsql-ELAPSED">Elapsed time</button>'
         '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="CPU" id="tab-topsql-CPU">CPU time</button>'
@@ -344,7 +337,7 @@ def emit(w) -> str:
 
         cur_val = s["cur_val"]
         cur_scaled = None if cur_val is None else cur_val / div
-        row = ('<tr data-sys="' + is_sys + '">'
+        row = ('<tr id="' + anchor_id('sq-' + dim.lower(), sid) + '" data-sys="' + is_sys + '">'
                '<td class="mono"><a href="#sql-' + sid + '">' + sid + "</a>"
                + (' <span class="badge warn" title="Plan changed between current and a prior '
                   'compared window">plan&#8593;</span>' if plan_flip else "")
@@ -442,8 +435,8 @@ def emit(w) -> str:
                 + str(len(seen_sqls)) + " top SQL across the compared windows.</p>")
 
     # per-SQL detail: pool table ----------------------------------------
-    block, pos = _slice(L, '<h3 class="full-only">Per-SQL detail</h3>',
-                        '<table id="sql-pool" class="full-only"><thead><tr><th>SQL ID</th><th>Ranked in</th>'
+    block, pos = _slice(L, '<h3 class="vw in-a">Per-SQL detail</h3>',
+                        '<table id="sql-pool" class="vw in-a"><thead><tr><th>SQL ID</th><th>Ranked in</th>'
                         '<th>Schema</th><th class="num" title="distinct plan_hash_values seen across the span">Plans</th><th class="num">Executions</th>'
                         '<th class="num" title="AWR snapshots in which the SQL appeared">Snapshots</th><th>First seen</th><th>Text</th>'
                         "</tr></thead><tbody>")
@@ -489,7 +482,7 @@ def emit(w) -> str:
             '<span class="xlinks">'
             '<a class="xlink" href="#ash-card-' + sid
             + '" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a>'
-            '<a class="xlink" href="#sqlmon-' + sid
+            '<a class="xlink" href="#sm-' + sid
             + '" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a>'
             "</span>"
             "</td>")

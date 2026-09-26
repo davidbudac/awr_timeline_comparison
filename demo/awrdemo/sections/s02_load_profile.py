@@ -2,8 +2,8 @@
 over the comprehensive template's sysstat_load_targets.sql."""
 from __future__ import annotations
 
-from awrdemo.helpers import esc, is_essential, anchor_id
-from awrdemo.sections._pivot import header, spark_vals, value_cells
+from awrdemo.helpers import esc, is_essential, anchor_id, policy_bucket
+from awrdemo.sections._pivot import header, row_cells
 
 # sql/lib/templates/comprehensive/sysstat_load_targets.sql (27 stats)
 TARGETS = [
@@ -36,11 +36,8 @@ _CS = {'DB time', 'DB CPU', 'CPU used by this session'}
 
 def emit(w) -> str:
     out = ['<!-- AWR-SECTION: 02_load_profile BEGIN -->']
-    out.append('<section id="load"><h2>Load profile &mdash; per-second rates</h2>')
-    out.append('<p style="font-size:12px;color:var(--muted)">'
-               'DBA_HIST_SYSSTAT (end &minus; begin) &divide; window seconds. '
-               '<b>Trend</b>: per-window values, oldest &rarr; current. '
-               '<b>Current</b> cell bar = value &divide; row max.</p>')
+    out.append('<section id="load" class="vw in-a"><h2>Load profile'
+               '<small class="h2sub">System statistics per second, Current against its normal range</small></h2>')
     out.append('<table id="load-profile">' + header(w, True) + '<tbody>')
 
     for stat in sorted(TARGETS, key=lambda s: (_ORDER.get(s, 99), s)):
@@ -52,9 +49,9 @@ def emit(w) -> str:
                + '"><td>' + esc(label) + '</td>'
                + '<td' + (' title="centiseconds per second (1/100 s of DB time per elapsed second)"'
                           if unit == 'cs/s' else '') + '>' + unit + '</td>'
-               + '<td class="trend" data-spark="' + spark_vals(vals)
-               + '" data-spark-title="' + esc(label) + '"></td>'
-               + value_cells(vals) + '</tr>')
+               + row_cells(vals, label,
+                           lambda c, mu, sd, n, s=stat: policy_bucket('LOAD', s, None, c, mu, sd, n))
+               + '</tr>')
         out.append(row)
 
     out.append('</tbody></table></section>')

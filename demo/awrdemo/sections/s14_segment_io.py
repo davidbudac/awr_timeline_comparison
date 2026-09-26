@@ -62,17 +62,10 @@ def emit(w) -> str:
     put = out.append
     top_n = w.top_n
     put("<!-- AWR-SECTION: 14_segment_io BEGIN -->")
-    put('<section id="segment-io"><h2>Segment I/O (top ' + str(top_n)
-        + " per dimension, per window)</h2>")
-    put('<p style="font-size:12px;color:var(--muted)">'
-        "Segments with the most I/O activity per window, from "
-        "DBA_HIST_SEG_STAT <code>*_DELTA</code> joined to "
-        "DBA_HIST_SEG_STAT_OBJ for names. Reads/writes are blocks; "
-        "requests are I/O calls. Chart per dimension: each line = one "
-        "segment across windows, oldest &rarr; current; toggle to roll "
-        "the same totals up by object type (the rollup covers <b>all</b> "
-        "segments, not just the charted top-" + str(top_n) + "). "
-        "Detail tables collapsed; click to expand.</p>")
+    put('<section id="segment-io" class="vw in-a"><h2>Segment I/O'
+        '<small class="h2sub">Top ' + str(top_n)
+        + ' segments by I/O per window; ranked, not scored</small></h2>')
+    aid_by_name, aid_used = {}, {}
 
     weeks_j, weeks_iso_j = D.weeks_json(w)
     by_win, types_by_win, meta = _segment_values(w)
@@ -118,7 +111,14 @@ def emit(w) -> str:
             D.json_accumulate(segs_acc, code, entry)
 
             new = D.new_in_cur(e["cur_val"], tokens, _parse)
-            row = ("<tr>"
+            aid = None
+            if e["name"] not in aid_by_name:
+                aid = H.anchor_id("sg", e["name"])
+                if aid in aid_used:
+                    aid = aid + "-" + str(len(aid_by_name) + 1)
+                aid_by_name[e["name"]] = aid
+                aid_used[aid] = e["name"]
+            row = ("<tr" + (' id="' + aid + '"' if aid else "") + ">"
                    '<td class="mono"><span title="tablespace ' + H.esc(tablespace) + '">'
                    + H.esc(e["name"]) + "</span>"
                    + (' <span class="badge info" title="in the top-N '

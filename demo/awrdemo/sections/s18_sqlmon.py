@@ -15,7 +15,7 @@ from __future__ import annotations
 from statistics import median
 
 from .. import chrome
-from ..helpers import (esc, fmt_int, fmt_num, fmt_num_title, is_oracle_schema,
+from ..helpers import (band_head, esc, fmt_int, fmt_num, fmt_num_title, is_oracle_schema,
                        json_escape, mean_sd, num6, score_cells, to_char_fixed,
                        to_char_int, ts_min, ts_sec, z_and_pct)
 
@@ -115,18 +115,8 @@ def emit(w) -> str:
     weeks_back = w.weeks_back
 
     put("<!-- AWR-SECTION: 18_sqlmon BEGIN -->")
-    put('<section id="sqlmon"><h2>SQL Monitor</h2>')
-    put('<p style="font-size:12px;color:var(--muted)">'
-        "Executions persisted by Oracle SQL Monitor "
-        "(<code>DBA_HIST_REPORTS</code>, <code>component_name='sqlmonitor'</code>), "
-        "summaries only. "
-        "<b>Sampling caveats:</b> only completed, expensive-enough or parallel "
-        "executions are ever persisted, so a statement's absence here does not "
-        "mean it ran fast, and row counts are not execution-rate counts. An "
-        "execution still running at the report end has no final row yet, so the "
-        "Current window can under-report its slowest statement. Rows are "
-        "attributed to a window by execution <i>start</i> time, so a long "
-        "execution can straddle a window boundary.</p>")
+    put('<section id="sqlmon" class="vw in-a"><h2>SQL Monitor'
+        '<small class="h2sub">Captured executions per statement; a sample, not every execution</small></h2>')
 
     # -- span (windows_rollup MIN/MAX) --------------------------------
     span_start = min(x.win_start_ts for x in w.windows)
@@ -240,11 +230,11 @@ def emit(w) -> str:
         header = ('<thead><tr><th>SQL ID</th><th>User / module</th>'
                   '<th title="plan_hash_value of the slowest Current-window execution; '
                   'prior = the most frequent plan in the prior compared windows">Plan hash</th>'
-                  '<th class="trend">Trend</th>'
                   '<th class="num" data-w="0">Current max elapsed (s)</th>'
+                  + band_head()
+                  + '<th class="trend">Trend</th>'
                   '<th class="num">Prior mean (s)</th>'
-                  '<th>Change</th><th class="num">z-score</th>'
-                  '<th class="num">% &Delta;</th><th>Flags</th></tr></thead>')
+                  '<th>Flags</th></tr></thead>')
         put('<table id="sqlmon-pool" data-nosort data-notools>' + header + "<tbody>")
 
     normal = False
@@ -287,7 +277,7 @@ def emit(w) -> str:
                      or plan_changed == "Y")
                 and not normal):
             normal = True
-            put('<script>document.getElementById("sqlmon").setAttribute("data-normal","Y");</script>')
+            put('<script>document.getElementById("sqlmon").classList.add("in-s");</script>')
 
         sysflag = is_oracle_schema(st["last_username"])
         tail = ' data-tail="Y" hidden' if (rnk > top_n or p["cur_val"] is None) else ""
@@ -295,22 +285,22 @@ def emit(w) -> str:
             tail_cnt += 1
             if p["cur_val"] is None:
                 nocur_cnt += 1
-        put('<tr id="sqlmon-' + sid + '" data-sys="' + sysflag + '"' + tail + ">"
+        put('<tr id="sm-' + sid + '" data-sys="' + sysflag + '"' + tail + ">"
             + '<td class="mono">' + sid
             + ' <a class="xlink" href="#sql-' + sid + '" title="This SQL in the Top SQL pool">&#8599; Top SQL</a></td>'
             + "<td>" + esc(st["last_username"] if st["last_username"] is not None else "?")
             + " / " + esc(st["last_module"] if st["last_module"] is not None else "?") + "</td>"
             + '<td class="mono">' + plancell + "</td>"
-            + '<td class="trend" data-spark="' + spark
-            + '" data-spark-title="max elapsed (s), ' + sid + '"></td>'
             + '<td class="num" data-w="0"' + fmt_num_title(p["cur_val"]) + "><b>"
             + fmt_num(p["cur_val"]) + "</b></td>"
-            + '<td class="num">' + fmt_num(p["mu"]) + "</td>"
             + score_cells(p["cur_val"], p["mu"], p["sd"], p["n_prior"])
+            + '<td class="trend" data-spark="' + spark
+            + '" data-spark-title="max elapsed (s), ' + sid + '"></td>'
+            + '<td class="num">' + fmt_num(p["mu"]) + "</td>"
             + "<td>" + flags + "</td>"
             + "</tr>")
 
-        put('<tr class="sqlmon-detail" data-sys="' + sysflag + '"' + tail + '><td colspan="10">')
+        put('<tr class="sqlmon-detail" data-sys="' + sysflag + '"' + tail + '><td colspan="11">')
         put("<details><summary>Per-window detail &amp; drill</summary>")
         put('<table data-notools><thead><tr><th>Window</th><th class="num">n</th>'
             '<th class="num">Max elapsed (s)</th><th class="num">Median elapsed (s)</th>'

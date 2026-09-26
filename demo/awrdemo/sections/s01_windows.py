@@ -13,10 +13,8 @@ def emit(w) -> str:
     slot_w = (1000 - 2 * margin) / slots
     box_w = slot_w - gap
 
-    out.append('<section id="windows"><h2>Aligned windows</h2>')
-    out.append('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-               'One bar per window. Dimmed = skipped (missing snap, zero-length, '
-               'or instance restart) and dropped from the z-score baseline.</p>')
+    out.append('<section id="windows" class="vw in-a"><h2>Aligned windows'
+               '<small class="h2sub">One bar per window; dimmed = skipped and left out of every baseline</small></h2>')
     out.append('<div class="ribbon">'
                '<svg viewBox="0 0 1000 72" preserveAspectRatio="none" role="img" '
                'aria-label="Baseline windows timeline">')
@@ -79,11 +77,9 @@ def emit(w) -> str:
     out.append('</tbody></table>')
 
     out.append('<h3>Generate full AWR reports for these windows</h3>')
-    out.append('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-               'Copy into SQL*Plus to spool a standard Oracle AWR report for each '
-               'window above (Diagnostic Pack required). Skipped windows are '
-               'commented out; swap <code>_HTML</code> for <code>_TEXT</code> in the '
-               'call for a plain-text report.</p>')
+    out.append('<p style="font-size:12.5px;color:var(--muted);margin:0 0 6px 0">'
+               'Paste into SQL*Plus for one standard AWR report per window '
+               '(Diagnostic Pack). Skipped windows are commented out.</p>')
     out.append('<div class="codewrap" style="position:relative">')
     out.append('<button type="button" class="copy-btn" data-copy="#awr-report-sql">Copy</button>')
     out.append('<pre id="awr-report-sql" class="sql">'

@@ -51,13 +51,12 @@ def emit(w) -> str:
     pw = _paired_windows(w)
     if not pw:
         out.append(L[2])
-        out.append(L[59])
+        out.append(L[58])
         return "\n".join(out)
     range_start = min(x.win_start_ts for x in pw)     # begin snap end_ts
     range_end = max(x.win_end_ts for x in pw)         # end snap end_ts
 
-    out.append(L[3])   # caption
-    out.append(L[4])   # chart div
+    out.append(L[3])   # chart div
 
     windows_json = "[" + ",".join(
         '["' + ts_min(x.win_start_ts) + '","' + ts_min(x.win_end_ts) + '","'
@@ -76,8 +75,8 @@ def emit(w) -> str:
         prev = s
     times_json = "[" + ",".join('"' + ts_min(s.end_ts) + '"' for s in buckets) + "]"
     if not buckets:
-        out.append(L[5])
-        out.append(L[59])
+        out.append(L[4])
+        out.append(L[58])
         return "\n".join(out)
 
     # ---- per-snap delta seconds: CPU + each non-Idle wait_class
@@ -98,9 +97,9 @@ def emit(w) -> str:
                 cells[(idx, cat)] = sec
                 class_totals[cat] = class_totals.get(cat, 0.0) + sec
 
-    out.append(L[6])    # <script>
-    out.append(L[7])    # (function(){
-    out.append(L[8])    # AWR_DATA.dbTimeSummary = {
+    out.append(L[5])    # <script>
+    out.append(L[6])    # (function(){
+    out.append(L[7])    # AWR_DATA.dbTimeSummary = {
     out.append("times:")
     out.extend(put_clob_chunked(times_json))
     out.append(",")
@@ -119,10 +118,10 @@ def emit(w) -> str:
         out.extend(put_clob_chunked(",".join(vals)))
         out.append("]}")
     out.append("]};")
+    out.append(L[16])
     out.append(L[17])
-    out.append(L[18])
     out.append("var d=AWR_DATA.dbTimeSummary, palette=" + PALETTE + ";")
-    out.extend(L[20:L.index("</script>", 20) + 1])     # verbatim ECharts init .. </script>
+    out.extend(L[19:L.index("</script>", 19) + 1])     # verbatim ECharts init .. </script>
     out.append("</section>")
     out.append(L[-1])
     return "\n".join(out)
