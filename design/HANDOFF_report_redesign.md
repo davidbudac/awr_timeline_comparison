@@ -1,7 +1,8 @@
 # Handoff: single-DB report redesign mockups (2026-09-24)
 
-**Status:** three design mockups built and reviewed. Nothing implemented in
-`sql/`, nothing committed, **no direction chosen by the owner yet.** The next
+**Status:** three design mockups (A, B, C) plus the recommended hybrid (D)
+are built and reviewed. Nothing is implemented in `sql/`, and **the owner has
+not yet approved a direction.** The next
 agent's first job is to get that decision, then plan the implementation.
 
 The owner asked for a redesign of the single-DB report (`awr_trend.sql`
@@ -15,6 +16,7 @@ as three mockups showing the biggest changes that would actually help.
 | `design/report_mock_a_finding_cards.html` | Mock A: finding cards (answer first) |
 | `design/report_mock_b_baseline_bands.html` | Mock B: one visual grammar, the baseline band |
 | `design/report_mock_c_window_grid.html` | Mock C: aligned window grid |
+| `design/report_mock_d_hybrid.html` | Mock D: the recommended hybrid of A + B + C (see "Mock D" below) |
 | `design/report_mocks_src/` | builder sources and data for all three (see "Rebuilding") |
 | `design/report_mocks_src/COMMON_BRIEF.md` | the shared design brief the mocks were built from: problems, data story, hard constraints |
 
@@ -236,6 +238,55 @@ A sensible phased plan once the owner picks:
 - Phase 1: B's glyph plus colour diet.
 - Phase 2: A's Normal-view restructure.
 - Phase 3: C's grid as an opt-in view.
+
+## Mock D · the hybrid (built on request, same day)
+
+`design/report_mock_d_hybrid.html` (396 KB) is built by
+`python3 design/report_mocks_src/hybrid/build.py`, which is deterministic.
+It loads with 0 console errors in all three views, in light and dark, at 1440
+and 390 px. With JS off, every view shows stacked.
+
+**View model:** one DOM, three views chosen by a body class from a switch in
+the top bar:
+- **Summary** (default): A's structure.
+- **Timeline:** C's grid.
+- **All sections:** every evidence-library row opened, with B's tables.
+
+The choice is saved to localStorage `awr-view` only on an explicit click, and
+a `#view=` hash wins. Rail links dim when their target is outside the current
+view; clicking one switches view. Cards have a "Show in timeline →" link that
+jumps to and flashes the row in Timeline.
+
+**How the three were unified:**
+- **One 13-column component** with a wider indigo Current column and flags on
+  the column boundaries. It is shared by the hero strip, card charts, config
+  card, table expanders and the Timeline, and the hero header *is* the
+  Timeline ruler.
+- **One band glyph** in card headers, scored evidence rows, table rows, the
+  Timeline gutter and the "checked and normal" rows.
+- **One accent:** indigo means Current. Severity colour appears only on dots,
+  Δ text and the 2 px marker.
+- **One table:** "N related metrics" is a clone of the family's rows from the
+  single Findings table.
+- **One Δ rule:** ×n at 2× or more, else %. Unscored evidence (segment, file)
+  shows a neutral ratio labelled "not scored".
+- **One section header:** title · plain sentence · counts · ⓘ.
+
+**Dropped from the originals:**
+- A: the chip list, the min–max "normal" (now μ±2σ everywhere) and the
+  per-day ASH mode.
+- B: the six headline tiles (they repeated the cards and the strip) and the
+  line sparklines (now 13-bar micro strips).
+- C: the ●/◐/○ glyphs, red Current bars (now a dot) and the "week before"
+  span row.
+
+**New PL/SQL risks beyond the ones above:**
+- The shared evidence library needs JS to move rows between views and to
+  open or restore them.
+- The related tables and prior-window values are built client-side to keep
+  the file under 400 KB, so without JS the Timeline shows only Current values.
+- Every chart instance needs its own column-hover CSS.
+- The 4-family grouping and Top SQL z-scores are new policy work (mock-only).
 
 ## Where it lands in the code (for planning)
 

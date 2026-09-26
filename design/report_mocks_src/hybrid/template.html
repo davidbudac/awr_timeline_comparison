@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ORCLPRD weekly comparison</title>
+<meta name="description" content="Mock D: the hybrid AWR comparison report. Summary, Timeline and All sections views over one band grammar and one 13-window geometry.">
+<style>
+{{CSS}}
+</style>
+<script>
+(function(){try{var t=localStorage.getItem('awr-theme');if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme-pref',t);}}catch(e){}})();
+</script>
+</head>
+<body>
+<details class="mock">
+  <summary><b>Mock D · hybrid</b><span>A’s structure, B’s glyph everywhere, C as the timeline view. Design mockup on the real demo data, not the generated report.</span></summary>
+  <ul>
+    <li><b>View model:</b> one page, three views in the top bar. Summary (default) answers, Timeline correlates, All sections is the reference. <code>awr-view</code> in localStorage; <code>#view=timeline</code> wins; with JS off all three stack.</li>
+    <li><b>From A, the structure:</b> a verdict sentence and a likely source, one card per metric family with its evidence and relatives, what changed around it, checked and normal, and an evidence library of one-line rows.</li>
+    <li><b>From B, the grammar:</b> one band on one σ scale in every card header, evidence row, table row, Timeline gutter and normal row, and one table component with expanders. Colour only on dots, Δ text and a 2 px marker.</li>
+    <li><b>From C, the geometry:</b> 13 columns with a wider, accented Current and flags on the column boundaries. The hero strip, card charts, config card, expanders and the Timeline grid all share it.</li>
+    <li><b>From C, the correlation:</b> config steps, the plan change, the new SQL and the DB-time step line up under release flags. Summary shows it in the config card, Timeline across every lane (hover, pin, jump).</li>
+    <li><b>Mock-only:</b> the 4-family grouping and the Top SQL z-scores are derived here. Segment and file rows stay ranked, not scored (plain ratio). Everything else is the demo report’s own numbers.</li>
+  </ul>
+</details>
+
+<div class="app">
+<nav class="rail" id="rail" aria-label="Report sections">
+  <div class="brand"><b>ORCLPRD</b><span>Same hour weekly, Thu 09:00</span></div>
+  <div class="rg" data-view="summary"><h3>Summary</h3><ol>
+    <li><a href="#s-verdict" data-view="summary">Verdict</a></li>
+    <li><a href="#s-findings" data-view="summary">Findings <span class="n">4</span></a></li>
+    <li><a class="sub" href="#f-phys" data-view="summary">Physical I/O</a></li>
+    <li><a class="sub" href="#f-dbt" data-view="summary">DB time</a></li>
+    <li><a class="sub" href="#f-net" data-view="summary">Network wait</a></li>
+    <li><a class="sub" href="#f-commit" data-view="summary">Commit wait</a></li>
+    <li><a href="#s-changes" data-view="summary">What changed around it <span class="n">2</span></a></li>
+    <li><a href="#s-normal" data-view="summary">Checked and normal <span class="n">43</span></a></li>
+    <li><a href="#s-lib" data-view="summary">Evidence library</a></li>
+  </ol></div>
+  <div class="rg" data-view="timeline"><h3>Timeline</h3><ol>
+    <li><a href="#lane-activity" data-view="timeline">Activity</a></li>
+    <li><a href="#lane-metrics" data-view="timeline">Headline and load <span class="n">7</span></a></li>
+    <li><a href="#lane-waits" data-view="timeline">Waits <span class="n">4</span></a></li>
+    <li><a href="#lane-objects" data-view="timeline">Where the reads land</a></li>
+    <li><a href="#lane-sql" data-view="timeline">SQL <span class="n">2</span></a></li>
+    <li><a href="#lane-config" data-view="timeline">Configuration <span class="n">4</span></a></li>
+    <li><a href="#tl-day" data-view="timeline">Day profile <span class="n">2</span></a></li>
+  </ol></div>
+  <div class="rg" data-view="all"><h3>All sections</h3><ol>
+    <li><a href="#lib-find" data-view="all">Findings <span class="n">11</span></a></li>
+    <li><a href="#lib-load" data-view="all">Load profile <span class="n">5</span></a></li>
+    <li><a href="#lib-fg" data-view="all">Foreground waits <span class="n">4</span></a></li>
+    <li><a href="#lib-topsql" data-view="all">Top SQL <span class="n">2</span></a></li>
+    <li><a href="#lib-sqlmon" data-view="all">SQL Monitor <span class="n">1</span></a></li>
+    <li><a href="#lib-params" data-view="all">Parameters <span class="n">4</span></a></li>
+    <li><a href="#lib-ash" data-view="all">Active sessions, whole span</a></li>
+    <li><a class="sub" href="#v-all" data-view="all">+ 7 more, one line each</a></li>
+  </ol></div>
+</nav>
+
+<div class="col">
+<header class="topbar" id="topbar">
+  <button class="ibtn menubtn" id="menuBtn" type="button" aria-label="Show sections" aria-controls="rail" aria-expanded="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+  <div class="db"><b>ORCLPRD</b><span>prd-ora-01.corp.example · 19c · DBID 1483726519</span></div>
+  <div class="win"><span class="cchip">Current</span><b>Thu 10 Sep, 09:00–10:00</b><span>vs 12 prior Thursdays</span></div>
+  <span class="sp"></span>
+  <div class="seg" role="group" aria-label="View">
+    <button type="button" data-v="summary" aria-pressed="true">Summary</button>
+    <button type="button" data-v="timeline" aria-pressed="false">Timeline</button>
+    <button type="button" data-v="all" aria-pressed="false">All sections</button>
+  </div>
+  <button class="ibtn" id="theme" type="button" aria-label="Switch colour theme" title="Switch colour theme"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor"/></svg></button>
+</header>
+
+<main id="main">
+<section class="vw in-s hero" id="s-verdict" aria-label="Verdict">
+  <h1 class="verdict">Physical reads <span class="d s-large">5.4×</span> normal, full scans of <code>ORDERS_APP.ORDER_LINES</code>; DB time up <b>80%</b>, all wait.</h1>
+  <p class="because">Likely source: <code>7k2m9dx4qp1zb</code>, new plan since Release 4.2 (Tue 8 Sep), 15× the blocks read.</p>
+  <ul class="pills" aria-label="Counts">
+    <li><a href="#s-findings"><b>4</b> findings</a></li>
+    <li><a href="#s-findings"><b>11</b> metrics moved</a></li>
+    <li><a href="#f-plan"><b>1</b> plan change</a></li>
+    <li><a href="#f-config"><b>4</b> parameters differ</a></li>
+    <li><a href="#s-normal"><b>43</b> metrics normal</a></li>
+  </ul>
+  {{STRIP}}
+</section>
+<section class="vw in-s" id="s-findings" aria-labelledby="s-findings-h">{{FINDINGS}}</section>
+<section class="vw in-s" id="s-changes" aria-labelledby="s-changes-h">{{CHANGES}}</section>
+<section class="vw in-s" id="s-normal" aria-labelledby="s-normal-h">{{NORMAL}}</section>
+<section class="vw in-t" id="v-timeline" aria-labelledby="v-tl-h">{{TIMELINE}}</section>
+<div class="vw in-s" id="s-lib">{{LIBHEAD_S}}</div>
+<div class="vw in-a" id="v-all">{{LIBHEAD_A}}</div>
+<div class="vw in-s in-a panel lib" id="lib">{{LIB}}</div>
+{{ABOUT}}
+<footer class="foot">
+  <span>Generated 2026-09-10 10:15 +02:00</span>
+  <span>Snapshots 41417–43434, 13 of 13 windows valid</span>
+</footer>
+</main>
+</div>
+</div>
+<div id="tip" role="tooltip" hidden></div>
+<script id="awr-data" type="application/json">{{DATA}}</script>
+<script>
+{{JS}}
+</script>
+</body>
+</html>
