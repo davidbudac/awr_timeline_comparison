@@ -91,10 +91,15 @@ sql/
     │                         --   band_cells(... score_bucket ...) -- include metric_policy first)
     ├── band_glyph.plsql      -- v1.6.0 band glyph: band_z/band_span/delta_span/range_txt/
     │                         --   band_head/band_cells + lib_ls (evidence-library row text)
-    ├── anchor_id.plsql       -- v1.6.0 anchor_id(kind, name) / finding_anchor(domain, name)
+    ├── anchor_id.plsql       -- v1.6.0 anchor_id(kind, name) / finding_anchor(domain, name) /
+    │                         --   file_anchor(path) / param_anchor(name) / anchor_uniq (dedupe)
+    ├── load_pairs_cte.sql    -- the template-driven LOAD read (00/02/07): SYSSTAT + time-model
+    │                         --   DB time / DB CPU (SYSSTAT has no DB CPU row)
+    ├── off_label.plsql       -- off_label(k): "-1w" / "-36h" offset label for any window count
     ├── finding_cards.plsql   -- v1.6.0 Summary vocabulary: card_group/label/id, metric_label/
     │                         --   unit/scale, fv*, time_split, move_txt, ent(), lead/card order
     ├── wingrid.plsql         -- v1.6.0 window component markup (wg_*): ruler, flags, bars, dates
+    │                         --   + wg_buf line buffer (many windows); include off_label first
     ├── timeline.plsql        -- v1.6.0 Timeline lane rows (tl_*): tl_open/tl_close, tl_bars, tl_gut
     ├── json_escape.plsql     -- escapes a string for a JSON literal on one PUT_LINE
     ├── put_clob_chunked.plsql-- emits a CLOB payload in PUT_LINE-sized chunks
@@ -323,8 +328,13 @@ rows. Units (`metric_unit/scale`): DB time / DB CPU / CPU used → AAS
 B/s auto-scaled; scoring always runs on the stored value. DB time card
 evidence starts with DB CPU and the top 2 events of every flagged wait
 class (one bounded `DBA_HIST_SYSTEM_EVENT` scan in 07, only when a class
-is flagged); `js_timeline` turns the DB time card's bars into stacked ASH
-per window (`.r.ash` + `ul.fcleg`) when `AWR_DATA.ashx` has data.
+is flagged); `js_timeline` turns the DB time card's bars into stacked
+FOREGROUND ASH per window (`ashx.winfg`, `.r.ash` + `ul.fcleg`) when
+`AWR_DATA.ashx` has data. The verdict and the card name where extra DB time
+went (`time_split`) from the LOAD `DB time` / `DB CPU` rows (time model, see
+the gotcha). The "Likely source" plan change (17) is 18's own test --
+Current plan vs the prior modal plan -- picked by largest Current max
+elapsed, not "more than one plan in the span" (review #6).
 
 **Relocation pattern** (generalises v1.5's narrative pattern): a section
 that fills a slot owned by an earlier section emits its block hidden and a
@@ -419,14 +429,18 @@ Separate from the X2 `th[data-w]` highlight (`.hl` + `awr:window`).
 
 **Full-span ASH payload `AWR_DATA.ashx`** (09, the SAME
 `DBA_HIST_ACTIVE_SESS_HISTORY` scan as 09's ECharts chart, which also groups
-by `wk` = the week_offset whose window the sample falls in — overlapping
-windows credit the later one): `{t0, end, bh, wh, classes, vals, win}`; `bh`
+by `j_lo..j_hi` = every compared window the sample falls in — overlapping
+windows each count it): `{t0, end, bh, wh, classes, vals, win, winfg}`; `bh`
 = `v_m × bucket_hours`, `v_m = CEIL(GREATEST(1, span_h/400) / bucket_hours)`
 (≥ 1 h, ≤ ~400 buckets; the last bucket divided by its covered hours);
 classes in a fixed stacking order (CPU, User I/O, System I/O, Commit,
 Application, Concurrency, Network, Configuration, Scheduler, Cluster,
 Administrative, Queueing, unknown, Other); `vals` zeros, never gaps; `win`
-per class per window (oldest first) = samples ÷ 360 ÷ win_hours. Numbers via
+per class per window (oldest first) = samples ÷ 360 ÷ win_hours, all
+sessions (Activity lane, stripe tooltips); `winfg` the same for
+`session_type = 'FOREGROUND'` only (the DB time card's bars: DB time is
+foreground time; the card keeps its DB time value as the Current label,
+review #8). Numbers via
 `RTRIM(TO_CHAR(ROUND(v,3),'FM9999999990D999'),'.')`. The chart: step areas,
 legend toggles restack/rescale, brush zoom (≥ 5 px), `#ax-reset` +
 double-click reset (mousedown `e.detail >= 2`, a stripe click re-renders the
@@ -439,7 +453,9 @@ from `AWR_WIN` (`.cur` / `.on` pinned / `.sk` skipped), hit rects
 
 The ONE per-window bar grid — hero strip (08), finding / plan / config
 cards, the Timeline. Markup (`wg_*`, twin `helpers.wg_*`): `div.wg[data-wg]
-style="--np:N"` (`wg_attr`) › `wg_ruler(corner, gh, btn)` › `wg_flags` ›
+style="--np:N"` (`wg_attr`; `data-many` past 30 windows shrinks fitted
+grids' column minimum, `#tl` scrolls) › `wg_ruler_put(pre, corner, gh, btn,
+post)` (emitted through the `wg_buf` line buffer) › `wg_flags` ›
 `wg_bars(pairs, scale, mu, sd, sev, lab, gut, id, cls)` (`.r.bars[data-v
 data-mu data-sd data-sev]`, `.c[data-w]` ×(N+1)) › `wg_dates`. Columns are
 **oldest first**, `data-w` = week_offset (0 = Current, the report-wide window
@@ -486,14 +502,24 @@ first (lint 16). Placement: 02/03/13 (13 unscored: bucket NULL + plain Δ),
   `helpers.ent`); lint check 21 flags any other literal `class="ent"`. Ids
   come ONLY from `anchor_id(kind, name)` (lower-case, non-`[a-z0-9]` runs →
   `-`, trimmed, 64 chars after `kind-`) or `finding_anchor(domain, name)` =
-  `anchor_id('fr-' || lower(substr(domain,1,1)), name)`.
+  `anchor_id('fr-' || lower(substr(domain,1,1)), name)`, `file_anchor(full
+  path)` (parent dir + file name) and `param_anchor(name)` (one extra `-`
+  per leading `_`). **An id is a pure function of (kind, FULL name)**, so a
+  link computed anywhere equals its target's id without knowing the other
+  rows (review #7: 17 linked `fl-<short>` while 15 had suffixed the second
+  PDB's `users01.dbf`; `_x_y` / `x_y` / `__x_y` shared `pa-x-y`). Targets add
+  a DOM-uniqueness guard (`anchor_uniq(id, name, memo CLOB)` in 04 / 05 /
+  12, 14 / 15's own map): only two DIFFERENT names that slug alike get
+  `-<n>`, and a link then reaches the first. lint check 30 bans
+  `anchor_id('fl'|'pa', ...)` outside `anchor_id.plsql`.
 - Row ids: 07 `fr-<l|m|w>-<name>` (detail tables); 04 `we-<event>` /
   `wa-<event>` / `wc-<class>`; 05 `be-` / `ba-`; 06 `sq-<dim>-<sql_id>` per
   ranking table (`sq-elapsed-`, `sq-cpu-`, `sq-gets-`, `sq-preads-`,
   `sq-exec-`; in a tab + `<details>`, reveal handles both) and pool
   `sql-<sql_id>`; 18 `sm-<sql_id>`; 14 `sg-<owner.object[.partition]>` / 15
-  `fl-<file short>` on the FIRST row that segment / file gets (a slug
-  collision gets `-<n>`); 12 `pa-<parameter>`; 02 `load-`, 03 `metric-`, 11
+  `fl-<parent dir>-<file name>` on the FIRST row that segment / file gets (a
+  slug collision gets `-<n>`); 12 `pa-<parameter>` (`pa--<_hidden>`); 02
+  `load-`, 03 `metric-`, 11
   `ash-card-<sql_id>`; cards `f-<group>` / `f-config` / `f-plan-<sql_id>`;
   Timeline `tl-<detail id>`.
 - **Only link to emitted rows:** top-N-dependent targets may be missing, so
@@ -680,8 +706,44 @@ exists only to keep the fleet findings band's pre-1.6 severity bar.
 - PL/SQL `v <> ''` is never TRUE — an empty string `IS NULL` in Oracle, so
   a guard must be `v IS NOT NULL`, not `v <> ''''` (bit `17_narrative.sql`'s
   `v_tail` guard live).
-- `DB time`/`DB CPU` live in `DBA_HIST_SYS_TIME_MODEL` (microseconds), not
-  `DBA_HIST_SYSSTAT` — `v$sysstat`/`dba_hist_sysstat` has no such row at all.
+- `DB CPU` lives ONLY in `DBA_HIST_SYS_TIME_MODEL` (microseconds);
+  `DBA_HIST_SYSSTAT` has no `DB CPU` row at all (it does carry `DB time`,
+  in centiseconds). v1.6.0 shipped reading `'DB CPU'` from SYSSTAT, so the
+  verdict's / DB time card's "mostly wait / mostly CPU" never fired on a
+  real DB while the demo (which invented the row) showed it (review #1).
+  Every template-driven LOAD read now goes through
+  `sql/lib/load_pairs_cte.sql` (00 / 02 / 07), which takes `DB time` and
+  `DB CPU` from the time model / 1e4 (centiseconds, the unit the templates,
+  policy floors and AAS scale assume); 08's strip and `day_profile_cte.sql`
+  (16 + fleet 06) route them the same way. lint check 26. The fleet's own
+  `templates/fleet/sysstat_load_targets.sql` (fleet-owned, untouched) still
+  lists `'DB CPU'` for its SYSSTAT findings read -- a dead row there.
+- **A skipped window is unknown, never "absent":** a NULL in a per-window
+  top-N CSV means "not in the top N" OR "window skipped". `tl_first(csv,
+  valid)` only calls a row "new" when an older VALID window lacked it
+  (review #2; weekly cadence past AWR retention made every Top SQL row new).
+- **Per-window strings must not assume 13 windows.** At weeks_back 168 the
+  ruler (~240 B a window) passed 32767 and the windows-JSON `LISTAGG`s
+  (~50 B) passed SQL's 4000 → ORA-06502 / ORA-01489 aborted the run under
+  `WHENEVER SQLERROR EXIT`. Rules: stream long per-window markup through
+  `wg_buf` (`wingrid.plsql`; the ruler is `wg_ruler_put`), build per-window
+  JSON in a PL/SQL loop not `LISTAGG`, give header / row accumulators
+  32767, and an unavoidable per-window `LISTAGG` of wide tokens uses `ON
+  OVERFLOW TRUNCATE` with a harmless indicator (18's detail slots). Offset
+  labels come from `off_label(k)` (`sql/lib/off_label.plsql`, lint 29) --
+  the old 16-entry `offset_labels` DEFINE is gone (a DEFINE caps at 240
+  chars). Check with the demo: `demo/awrdemo/model.py`'s WEEKS_BACK /
+  STEP_HOURS / WIN_HOURS can be patched from a scratch script and no output
+  line may pass 32767 bytes (tested: 168 hourly, 52 weekly, 2 h every 1 h).
+- **Overlapping windows (win_hours > step_hours)** share samples: 09 counts
+  an ASH sample toward EVERY window containing it (`j_lo..j_hi`), else each
+  window held only `step` hours but was divided by `win_hours` (review #4).
+- Under `set -o pipefail`, `grep ... | grep -q` in lint.sh reads as "no
+  match" when the first grep dies of SIGPIPE; use one `awk` instead.
+- Day / month names: every `TO_CHAR` naming a day or month passes
+  `'NLS_DATE_LANGUAGE=ENGLISH'` (lint 28) and the driver pins the session
+  next to the numeric pin -- a localized name is non-ASCII on a Czech /
+  German client ("?", lint 25) and disagrees with the JS's English arrays.
 - `DBA_HIST_PARAMETER` is per-container in a CDB: a bare join fans out one
   row per container per (dbid, snap_id, instance_number), so any consumer
   comparing values across windows must collapse by `con_id`/`con_dbid`
@@ -797,7 +859,7 @@ ERROR`: `DBA_HIST_REPORTS` holds other components (`perf`, ...) whose key3 is
 not a date, and Oracle may evaluate the `TO_DATE` before the
 `component_name` filter. The pool table is `data-nosort data-notools`
 (each statement row is paired with a detail row right below it). Cost: the
-section plus R6-R9 scan `dba_hist_reports` (with `XMLTYPE` parsing) six
+section plus R6-R9 scan `dba_hist_reports` (with `XMLTYPE` parsing) seven
 times over the span — fine at thousands of rows, worth a single BULK COLLECT
 if a busy DB ever makes it slow.
 
@@ -1369,7 +1431,12 @@ the demo.
   a `<section id=` without `class="vw ` (19), a hand-written `class="ent"`
   (21), `tl_open` without `tl_close` (23), a stale generated client script
   (24: `tools/js2plsql.sh --check`) and any non-ASCII byte in emitted
-  single-DB text (25). No DB needed; add a check when a new
+  single-DB text (25); from the v1.6.0 review: a SYSSTAT `'DB CPU'` read or
+  a template LOAD read bypassing `load_pairs_cte.sql` (26), a scoring
+  section reading wait events without the template's wait list (27), a
+  day / month name `TO_CHAR` without `NLS_DATE_LANGUAGE` (28), `off_label`
+  missing / after `wingrid` (29), `anchor_id('fl'|'pa', ...)` outside
+  `anchor_id.plsql` (30). No DB needed; add a check when a new
   gotcha bites. A `finding` inside a `| while read` loop must go through
   `finding` (it records to a flag file; a subshell `fail=1` is lost).
 - **Test DB: dbmint** (Oracle 19c CDB1, `connect / as sysdba`). The host name
@@ -1435,8 +1502,20 @@ the demo.
   markers + profile_days runs plus `ECHARTS=vendor/echarts.min.js` (then open with all http(s) blocked), the
   pure-SQL\*Plus heredoc, and a `debug=Y` vs `debug=N` md5 after the
   byte-identity `sed`. Never exercised: a plan-change statement with no
-  Current SQLSTAT row (SQL Monitor fallback), > 3 plan cards, > 30 windows
-  (grid scroll), RAC, step < win (overlapping windows), multi-DBID top bar.
+  Current SQLSTAT row (SQL Monitor fallback), > 3 plan cards, RAC,
+  multi-DBID top bar.
+- **v1.6.0 review fixes (2026-09-27, `scratchpad` review_findings #1-#9):**
+  time-model DB CPU, validity-aware "new", template wait filter in 00,
+  overlapping-window ASH, many-window streaming / labels / layout,
+  likely-source by 18's plan test, pure-function anchors, foreground ASH on
+  the DB time card, English date names. Verified on the demo only (lint,
+  md5 stable, verify_report OK; stress renders at 168 hourly / 52 weekly /
+  2 h every 1 h: 0 console errors, no output line > 32767 B; the micro
+  strips intentionally draw nothing past about 91 windows) -- **dbmint was
+  offline: every SQL change here is unexercised on Oracle** (first run:
+  pinned hourly + `template=simple`, plan-change, then weeks_back 52 / 168
+  and an overlapping grid; watch 18's `LISTAGG ... ON OVERFLOW TRUNCATE`
+  and the time-model joins).
 - **v1.5.0 / fleet 0.7.0 verified on dbmint (2026-09-22):** built without
   a database on 2026-09-21 (synthetic demo + Playwright + the 137-test
   server suite), then run against dbmint: pinned hourly window

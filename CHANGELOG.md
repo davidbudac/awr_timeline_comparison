@@ -94,6 +94,36 @@ OK); the pre-release full-matrix re-run on the final code is still to do
   non-UTF-8 SQL*Plus client prints as "?" (skipped-window cells read
   "???" on dbmint); they are `\u` escapes now and `lint.sh` check 25 keeps
   every emitted line ASCII.
+- **Fixes from the pre-release code review** (nine findings; SQL
+  unexercised on Oracle so far -- dbmint was offline).
+  - *Wait vs CPU never fired:* `DBA_HIST_SYSSTAT` has no `DB CPU` row, so
+    the verdict's / DB time card's "mostly wait / mostly CPU" and the
+    card's CPU evidence row never appeared on a real DB (the demo invented
+    the row). New `sql/lib/load_pairs_cte.sql` reads DB time / DB CPU from
+    `DBA_HIST_SYS_TIME_MODEL` for 00 / 02 / 07; 08 and the day profile
+    (16, and the fleet's day-profile band, whose DB CPU row was empty too)
+    do the same. The demo model no longer has a SYSSTAT DB CPU.
+  - *"New" Top SQL after skipped windows:* a skipped oldest window no
+    longer makes every Timeline SQL row "new".
+  - *Curated templates:* the verdict now sums the template's wait-event
+    list, like the finding cards it names.
+  - *Overlapping windows* (win_hours > step_hours): per-window ASH counts
+    a sample in every window it falls in (values were scaled by step/win).
+  - *Large weeks_back:* 168 hourly or 52 weekly windows no longer abort the
+    run (ruler, configuration lane and window JSON streamed or built in
+    PL/SQL, wider header buffers, 18's per-window detail truncates the
+    oldest slots instead of ORA-01489); offset labels work past 16
+    windows; 01's ribbon and the Summary grids stay inside the page.
+  - *Likely source:* the plan change it names is 18's own test (Current
+    plan vs the usual prior plan), the most expensive one, not the
+    alphabetically first sql_id with two plans somewhere in the span.
+  - *Entity links:* file links use the parent directory too (every PDB
+    has a `users01.dbf`), hidden `_x` / `__x` parameters get their own ids,
+    and 04 / 05 / 12 guard against duplicate ids.
+  - *DB time card chart:* foreground ASH (DB time is foreground time),
+    the card's DB time kept as its Current value.
+  - *Day / month names* are English whatever the client's language.
+  lint checks 26-30 cover the grep-able ones.
 - **Demo** (`docs/examples/demo_busy_db.html`) and the website
   screenshots regenerated in the new design; `demo/verify_report.js`
   resolves Playwright portably and checks views, links, the Timeline,
