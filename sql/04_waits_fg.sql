@@ -78,6 +78,7 @@ DECLARE
     v_sd_pct     NUMBER;
     v_share      NUMBER;
     v_cell       VARCHAR2(40);
+    v_moved      PLS_INTEGER := 0;    -- Table A rows scored large / moderate (library row text)
 
     -- include order: metric_policy first (lint 14 / 16), then fmt_num ->
     -- band_glyph -> score_cells (lint 13 / 17).
@@ -92,7 +93,7 @@ DECLARE
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="waits-fg" class="vw in-a"><h2>Foreground waits'
+    DBMS_OUTPUT.PUT_LINE('<section id="waits-fg" class="vw in-s in-a lib lopen" style="--os:3"><h2>Foreground waits'
         || '<small class="h2sub">Where foreground sessions waited: top ' || v_top_n
         || ' events by time and by average wait, and the wait classes</small></h2>');
 
@@ -474,6 +475,16 @@ BEGIN
             || CASE WHEN i = LEAST(v_evts.COUNT, 16) THEN tl_close END);
     END LOOP;
 
+    -- the evidence library's count: Table A rows that moved
+    FOR i IN 1 .. NVL(v_evts.COUNT, 0) LOOP
+        v_share := CASE WHEN v_tot_cur_us > 0 THEN v_evts(i).cur_us / v_tot_cur_us END;
+        IF score_bucket(v_evts(i).cur_us / 1e6, v_evts(i).mu_us / 1e6, v_evts(i).sd_us / 1e6, v_evts(i).n_us,
+                        v_share, 'WAIT', v_evts(i).event_name, v_evts(i).wait_class, v_shift)
+           IN ('large', 'moderate') THEN
+            v_moved := v_moved + 1;
+        END IF;
+    END LOOP;
+
     -- Table B: avg time per wait (ms)
     DBMS_OUTPUT.PUT_LINE('<h3>Top ' || v_top_n || ' events &mdash; avg time per wait (ms)</h3>');
     v_header := '<thead><tr><th>Event</th><th class="num" data-w="0">Current (ms)</th>'
@@ -628,7 +639,12 @@ BEGIN
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
     END LOOP;
-    DBMS_OUTPUT.PUT_LINE('</tbody></table></section>');
+    DBMS_OUTPUT.PUT_LINE('</tbody></table>');
+    -- the evidence library's row text (Summary view)
+    DBMS_OUTPUT.PUT_LINE(lib_ls('waits-fg', CASE WHEN NVL(v_evts.COUNT, 0) = 0 THEN 'no foreground wait events'
+        ELSE CASE WHEN v_moved = 0 THEN 'none' ELSE '<b>' || v_moved || '</b>' END
+             || ' of ' || v_evts.COUNT || ' event' || CASE WHEN v_evts.COUNT = 1 THEN '' ELSE 's' END
+             || ' moved' END) || '</section>');
 END;
 /
 

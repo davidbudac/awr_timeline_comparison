@@ -553,7 +553,7 @@ END;
 -- BEGIN/END/ block that emits one <script>; loaded in order so later
 -- sections can rely on globals defined here.
 @@sql/lib/js_wait_colors.plsql
-@@sql/lib/js_sparkline.plsql
+@@sql/lib/js_microstrip.plsql
 
 -- Optional user-defined timeline markers (milestones).  js_markers.plsql
 -- inits window.AWR_MARKERS=[] and defines window.AWR_markLine(); the

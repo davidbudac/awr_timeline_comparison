@@ -22,6 +22,7 @@ DECLARE
     v_pct         NUMBER;
     v_rows        PLS_INTEGER := 0;
     v_bucket      VARCHAR2(40);
+    v_host        NUMBER;
 
     -- Subprogram includes go LAST, metric_policy first (lint 14 / 16),
     -- fmt_num before band_glyph (lint 17).
@@ -32,7 +33,7 @@ DECLARE
     @@sql/lib/fmt_num.plsql
     @@sql/lib/band_glyph.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="metrics" class="vw in-a"><h2>System metrics'
+    DBMS_OUTPUT.PUT_LINE('<section id="metrics" class="vw in-s in-a lib" style="--os:8"><h2>System metrics'
         || '<small class="h2sub">SYSMETRIC averages per window, Current against its normal range</small></h2>');
 
     v_rows := 0;
@@ -135,6 +136,7 @@ BEGIN
             metric_name
     ) LOOP
         v_rows := v_rows + 1;
+        IF m.metric_name = 'Host CPU Utilization (%)' THEN v_host := m.cur_val; END IF;
         v_row_max := NVL(m.row_max, 0);
 
         IF v_row_max > 0 AND m.cur_val IS NOT NULL THEN
@@ -175,7 +177,11 @@ BEGIN
             || 'No system metrics in DBA_HIST_SYSMETRIC_SUMMARY for the compared windows.'
             || ' Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</td></tr>');
     END IF;
-    DBMS_OUTPUT.PUT_LINE('</tbody></table></section>');
+    DBMS_OUTPUT.PUT_LINE('</tbody></table>');
+    -- the evidence library's row text (Summary view)
+    DBMS_OUTPUT.PUT_LINE(lib_ls('metrics', v_rows || ' metric' || CASE WHEN v_rows = 1 THEN '' ELSE 's' END
+        || CASE WHEN v_host IS NOT NULL THEN '; host CPU <b>' || fmt_num(v_host) || '%</b>' END)
+        || '</section>');
 END;
 /
 

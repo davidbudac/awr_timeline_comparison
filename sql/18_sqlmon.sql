@@ -86,6 +86,9 @@ DECLARE
     v_nocur_cnt   NUMBER := 0;
     v_normal      BOOLEAN := FALSE;   -- section opted into the Summary view
     v_any_row     BOOLEAN := FALSE;
+    v_n_pchg      PLS_INTEGER := 0;   -- Current-window statements: plan changed /
+    v_n_dop       PLS_INTEGER := 0;   -- DOP downgrade / an error (library row text)
+    v_n_err       PLS_INTEGER := 0;
 
     v_header      VARCHAR2(4000);
     v_row         VARCHAR2(32767);
@@ -112,6 +115,24 @@ DECLARE
     v_tl            t_tl_rows;
     v_tl_csv        VARCHAR2(4000);
     v_tl_b          VARCHAR2(40);
+    -- v1.6.0 Summary: the plan-change cards ("What changed around it"),
+    -- one per plan-changed statement with a Current-window execution in
+    -- the top N (at most three), buffered during the table loop
+    TYPE t_pc_rec IS RECORD (
+        sql_id     VARCHAR2(13),
+        usr        VARCHAR2(128),
+        modl       VARCHAR2(64),
+        prior_ph   NUMBER,
+        cur_ph     NUMBER,
+        cur_val    NUMBER,
+        mu         NUMBER,
+        sd         NUMBER,
+        n_prior    NUMBER,
+        rnk        NUMBER,
+        detail_csv VARCHAR2(32767),
+        ela_csv    VARCHAR2(4000));
+    TYPE t_pc_tab IS TABLE OF t_pc_rec INDEX BY PLS_INTEGER;
+    v_pc            t_pc_tab;
 
     @@sql/lib/metric_policy.plsql
     @@sql/lib/nth_csv.plsql
@@ -126,7 +147,7 @@ DECLARE
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="sqlmon" class="vw in-a"><h2>SQL Monitor'
+    DBMS_OUTPUT.PUT_LINE('<section id="sqlmon" class="vw in-s in-a lib" style="--os:2"><h2>SQL Monitor'
         || '<small class="h2sub">Captured executions per statement; a sample, not every execution</small></h2>');
 
     ------------------------------------------------------------------
@@ -160,7 +181,8 @@ BEGIN
             || '(' || TO_CHAR(CAST(v_span_start AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
             || ' &rarr; ' || TO_CHAR(CAST(v_span_end AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
             || '). SQL Monitor only persists completed executions that ran long enough '
-            || 'or in parallel. Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p></section>');
+            || 'or in parallel. Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p>'
+            || lib_ls('sqlmon', 'nothing persisted in the compared windows') || '</section>');
         -- The closing AWR-SECTION marker is emitted by this file's own
         -- trailing block, so nothing else to do here.
         RETURN;
@@ -452,14 +474,20 @@ BEGIN
         IF s.is_new = 'Y' THEN
             v_flags := v_flags || '<span class="chip" title="no captured execution anywhere in the span before the Current window">new</span> ';
         END IF;
-        -- Summary view opt-in: an error, a plan change or a DOP downgrade on
-        -- a statement that ran in the Current window is worth the short
-        -- report; plain slow-vs-baseline rows stay Full-only.
+        -- Summary view: an error or a DOP downgrade on a statement that ran
+        -- in the Current window opens the section's row of the evidence
+        -- library (a plan change has its own card in "What changed around
+        -- it"); plain slow-vs-baseline rows leave it shut.
         IF s.cur_val IS NOT NULL AND s.rnk <= v_top_n
-           AND (s.has_error = 1 OR s.distinct_plans > 1 OR s.has_downgrade = 1 OR s.plan_changed = 'Y')
+           AND (s.has_error = 1 OR s.has_downgrade = 1)
            AND NOT v_normal THEN
             v_normal := TRUE;
-            DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("sqlmon").classList.add("in-s");</script>');
+            DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("sqlmon").classList.add("lopen");</script>');
+        END IF;
+        IF s.cur_val IS NOT NULL THEN
+            IF s.plan_changed = 'Y' THEN v_n_pchg := v_n_pchg + 1; END IF;
+            IF s.has_downgrade = 1 THEN v_n_dop := v_n_dop + 1; END IF;
+            IF s.has_error = 1 THEN v_n_err := v_n_err + 1; END IF;
         END IF;
 
         -- Phase 5: a statement with no Current-window execution folds under
@@ -573,6 +601,23 @@ BEGIN
             || '</pre></div>');
         DBMS_OUTPUT.PUT_LINE('</details></td></tr>');
 
+        -- v1.6.0 Summary: buffer a plan-change card (emitted after the table)
+        IF s.plan_changed = 'Y' AND s.cur_val IS NOT NULL AND s.rnk <= v_top_n
+           AND v_pc.COUNT < 3 THEN
+            v_pc(v_pc.COUNT + 1).sql_id := s.sql_id;
+            v_pc(v_pc.COUNT).usr        := s.last_username;
+            v_pc(v_pc.COUNT).modl       := s.last_module;
+            v_pc(v_pc.COUNT).prior_ph   := s.prior_plan_hash;
+            v_pc(v_pc.COUNT).cur_ph     := s.cur_plan_hash;
+            v_pc(v_pc.COUNT).cur_val    := s.cur_val;
+            v_pc(v_pc.COUNT).mu         := s.mu;
+            v_pc(v_pc.COUNT).sd         := s.sd;
+            v_pc(v_pc.COUNT).n_prior    := s.n_prior;
+            v_pc(v_pc.COUNT).rnk        := s.rnk;
+            v_pc(v_pc.COUNT).detail_csv := s.detail_csv;
+            v_pc(v_pc.COUNT).ela_csv    := s.elapsed_asc_csv;
+        END IF;
+
         -- v1.6.0 Timeline: max elapsed per window, scored like the table
         IF s.cur_val IS NOT NULL AND v_tl.COUNT < 3
            AND (s.plan_changed = 'Y' OR s.has_downgrade = 1) THEN
@@ -624,6 +669,237 @@ BEGIN
     FOR i IN 1 .. v_tl.COUNT LOOP
         DBMS_OUTPUT.PUT_LINE(CASE WHEN i = 1 THEN tl_open('sql') END || v_tl(i)
             || CASE WHEN i = v_tl.COUNT THEN tl_close END);
+    END LOOP;
+
+    ------------------------------------------------------------------
+    -- v1.6.0 Summary: one plan-change card per buffered statement (a
+    -- Current-window execution in the top N whose plan differs from the
+    -- prior windows' dominant plan).  Findings are recomputed, not
+    -- shared: the plan per window is this section's own per-window plan
+    -- list (the most frequent non-zero plan_hash captured in the window,
+    -- carried forward over windows with no capture), the bars are the
+    -- statement's elapsed seconds per VALID window from one bounded
+    -- DBA_HIST_SQLSTAT read (06's window join, this sql_id only; SQL
+    -- Monitor's max elapsed when AWR kept no SQLSTAT row for Current),
+    -- and the header band is this table's own scored max elapsed.  Top SQL
+    -- stays ranked, not scored: the SQLSTAT evidence rows carry a plain
+    -- Delta and a hollow (unscored) dot.  Emitted hidden and moved into
+    -- 07's #changes-slot (like 12's configuration card, which follows).
+    ------------------------------------------------------------------
+    FOR c IN 1 .. v_pc.COUNT LOOP
+        DECLARE
+            TYPE t_num IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
+            v_id     VARCHAR2(13) := v_pc(c).sql_id;
+            v_cid    VARCHAR2(40) := 'f-plan-' || v_pc(c).sql_id;
+            v_pairs  VARCHAR2(4000);
+            v_ea     t_num;
+            v_ca     t_num;
+            v_ga     t_num;
+            v_ta     t_num;
+            v_e_cur  NUMBER;
+            v_c_cur  NUMBER;
+            v_g_cur  NUMBER;
+            v_t_cur  NUMBER;
+            v_e_mu   NUMBER;
+            v_e_sd   NUMBER;
+            v_c_mu   NUMBER;
+            v_c_sd   NUMBER;
+            v_g_mu   NUMBER;
+            v_t_mu   NUMBER;
+            v_src    VARCHAR2(8) := 'sqlstat';
+            v_z      NUMBER;
+            v_b      VARCHAR2(40);
+            v_first  PLS_INTEGER;
+            v_ph     VARCHAR2(40);
+            v_prev   VARCHAR2(40);
+            v_lvl    VARCHAR2(2);
+            v_start  BOOLEAN;
+            v_cells  VARCHAR2(32767);
+            v_ev     VARCHAR2(32767);
+            v_tok    VARCHAR2(200);
+
+            FUNCTION a_mean(a t_num) RETURN NUMBER IS
+                v_s NUMBER := 0;
+            BEGIN
+                IF a.COUNT = 0 THEN RETURN NULL; END IF;
+                FOR i IN 1 .. a.COUNT LOOP v_s := v_s + a(i); END LOOP;
+                RETURN v_s / a.COUNT;
+            END a_mean;
+
+            -- sample standard deviation (n - 1), NULL below two values
+            FUNCTION a_sd(a t_num, p_mu NUMBER) RETURN NUMBER IS
+                v_s NUMBER := 0;
+            BEGIN
+                IF a.COUNT < 2 THEN RETURN NULL; END IF;
+                FOR i IN 1 .. a.COUNT LOOP v_s := v_s + (a(i) - p_mu) * (a(i) - p_mu); END LOOP;
+                RETURN SQRT(v_s / (a.COUNT - 1));
+            END a_sd;
+
+            -- one evidence row (07's ev_row shape); p_plain 'Y' = ranked,
+            -- not scored: plain Delta, hollow dot
+            FUNCTION pc_ev(p_dt VARCHAR2, p_idt VARCHAR2, p_de VARCHAR2,
+                           p_cur NUMBER, p_mu NUMBER, p_sd NUMBER,
+                           p_bucket VARCHAR2, p_plain VARCHAR2,
+                           p_band VARCHAR2 DEFAULT 'Y') RETURN VARCHAR2 IS
+            BEGIN
+                RETURN '<div class="evr"><dt>' || p_dt || '</dt><dd><span class="id">' || p_idt
+                    || '</span><span class="de">' || p_de || '</span></dd>'
+                    || '<div class="m"' || CASE WHEN p_plain = 'Y' THEN ' title="Ranked, not scored"' END || '>'
+                    || delta_span(p_cur, p_mu, p_bucket, p_plain)
+                    || CASE WHEN p_band = 'Y' THEN band_span(band_z(p_cur, p_mu, p_sd), p_bucket, 'sm') END
+                    || '</div></div>';
+            END pc_ev;
+        BEGIN
+            FOR r IN (
+                WITH
+                @@sql/lib/windows_cte.sql
+                SELECT w.week_offset,
+                       SUM(NVL(s.elapsed_time_delta, 0)) / 1e6 AS ela_s,
+                       SUM(NVL(s.cpu_time_delta, 0)) / 1e6     AS cpu_s,
+                       SUM(NVL(s.executions_delta, 0))         AS execs,
+                       SUM(NVL(s.buffer_gets_delta, 0))        AS gets
+                FROM   valid_windows w
+                JOIN   dba_hist_sqlstat s
+                    ON s.dbid = w.dbid
+                   AND s.snap_id BETWEEN w.begin_snap_id + 1 AND w.end_snap_id
+                   AND s.instance_number = w.instance_number
+                WHERE  s.sql_id = v_id
+                GROUP BY w.week_offset
+                ORDER BY w.week_offset
+            ) LOOP
+                v_pairs := v_pairs || CASE WHEN v_pairs IS NOT NULL THEN ';' END
+                    || r.week_offset || ':' || wg_tok(r.ela_s);
+                IF r.week_offset = 0 THEN
+                    v_e_cur := r.ela_s;
+                    v_c_cur := r.cpu_s;
+                    IF r.execs > 0 THEN
+                        v_g_cur := r.gets / r.execs;
+                        v_t_cur := r.ela_s * 1000 / r.execs;
+                    END IF;
+                ELSE
+                    v_ea(v_ea.COUNT + 1) := r.ela_s;
+                    v_ca(v_ca.COUNT + 1) := r.cpu_s;
+                    IF r.execs > 0 THEN
+                        v_ga(v_ga.COUNT + 1) := r.gets / r.execs;
+                        v_ta(v_ta.COUNT + 1) := r.ela_s * 1000 / r.execs;
+                    END IF;
+                END IF;
+            END LOOP;
+            v_e_mu := a_mean(v_ea);  v_e_sd := a_sd(v_ea, v_e_mu);
+            v_c_mu := a_mean(v_ca);  v_c_sd := a_sd(v_ca, v_c_mu);
+            v_g_mu := a_mean(v_ga);  v_t_mu := a_mean(v_ta);
+            IF v_e_cur IS NULL THEN
+                -- AWR kept no SQLSTAT row for the Current window: draw SQL
+                -- Monitor's max elapsed per window instead (ASC CSV, token
+                -- k + 1 = window k)
+                v_src := 'sqlmon';
+                v_pairs := NULL;
+                FOR k IN 0 .. v_weeks_back LOOP
+                    v_tok := nth_csv(v_pc(c).ela_csv, k + 1);
+                    IF v_tok IS NOT NULL THEN
+                        v_pairs := v_pairs || CASE WHEN v_pairs IS NOT NULL THEN ';' END
+                            || k || ':' || wg_tok(TO_NUMBER(v_tok));
+                    END IF;
+                END LOOP;
+                v_e_cur := v_pc(c).cur_val;
+                v_e_mu  := v_pc(c).mu;
+                v_e_sd  := v_pc(c).sd;
+            END IF;
+            v_z := band_z(v_pc(c).cur_val, v_pc(c).mu, v_pc(c).sd);
+            v_b := score_bucket(v_pc(c).cur_val, v_pc(c).mu, v_pc(c).sd, v_pc(c).n_prior);
+
+            -- the plan step line, oldest first; v_first = the window the
+            -- Current plan took over (its release flag, if any, is named)
+            FOR k IN REVERSE 0 .. v_weeks_back LOOP
+                v_tok := nth_csv(v_pc(c).detail_csv, k + 1);
+                v_ph := REGEXP_SUBSTR(RTRIM(REGEXP_SUBSTR(v_tok || '^', '[^^]*\^', 1, 6), '^'), '[0-9]+');
+                IF v_ph IS NULL THEN v_ph := v_prev; END IF;
+                -- the Current cell is the Plan hash column's plan (the
+                -- slowest Current execution's), not the window's most
+                -- frequent one
+                IF k = 0 THEN v_ph := TO_CHAR(v_pc(c).cur_ph); END IF;
+                v_start := v_ph IS NOT NULL AND (v_prev IS NULL OR v_ph <> v_prev);
+                IF v_ph = TO_CHAR(v_pc(c).cur_ph) AND (v_prev IS NULL OR v_prev <> v_ph) THEN
+                    v_first := k;
+                END IF;
+                IF v_ph IS NULL THEN
+                    v_cells := v_cells || '<div class="c' || CASE WHEN k = 0 THEN ' cur' END
+                        || '" data-w="' || k || '"></div>';
+                ELSE
+                    v_lvl := CASE WHEN v_ph = TO_CHAR(v_pc(c).prior_ph) THEN 'lo' ELSE 'hi' END;
+                    v_cells := v_cells || '<div class="c' || CASE WHEN k = 0 THEN ' cur' END
+                        || '" data-w="' || k || '"><i class="st ' || v_lvl
+                        || CASE WHEN v_start AND v_prev IS NOT NULL THEN ' rise' END || '" aria-hidden="true"></i>'
+                        || CASE WHEN v_start AND v_prev IS NOT NULL THEN '<i class="nd" aria-hidden="true"></i>' END
+                        || CASE WHEN v_start OR k = 0
+                                THEN '<span class="pv ' || v_lvl || '" title="plan hash ' || v_ph || '">'
+                                     || v_ph || '</span>' END
+                        || '</div>';
+                END IF;
+                v_prev := v_ph;
+            END LOOP;
+
+            IF v_src = 'sqlstat' AND v_g_cur IS NOT NULL AND v_g_mu IS NOT NULL THEN
+                v_ev := v_ev || pc_ev('Per exec',
+                    fmt_num(v_g_cur) || ' gets, was ' || fmt_num(v_g_mu),
+                    -- elapsed per execution in ms, or in s once either side reaches 1 s
+                    CASE WHEN GREATEST(NVL(v_t_cur, 0), NVL(v_t_mu, 0)) >= 1000
+                         THEN fmt_num(v_t_cur / 1000) || ' s, was ' || fmt_num(v_t_mu / 1000) || ' s'
+                         ELSE fmt_num(v_t_cur) || ' ms, was ' || fmt_num(v_t_mu) || ' ms' END,
+                    v_g_cur, v_g_mu, NULL, NULL, 'Y', 'N');
+            END IF;
+            v_ev := v_ev || pc_ev(ent('SQL Monitor', anchor_id('sm', v_id), 'sql'),
+                'max ' || fmt_num(v_pc(c).cur_val) || ' s',
+                'normal ' || fmt_num(v_pc(c).mu) || ' s',
+                v_pc(c).cur_val, v_pc(c).mu, v_pc(c).sd, v_b, 'N');
+            IF v_src = 'sqlstat' AND v_c_mu IS NOT NULL THEN
+                v_ev := v_ev || pc_ev('CPU', fmt_num(v_c_cur) || ' s',
+                    'normal ' || fmt_num(v_c_mu) || ' s'
+                    || CASE WHEN v_e_mu IS NOT NULL AND v_e_cur > v_e_mu
+                                 AND NVL(v_c_cur, 0) - v_c_mu <= 0.1 * (v_e_cur - v_e_mu)
+                            THEN '; the rise is wait' END,
+                    v_c_cur, v_c_mu, v_c_sd, NULL, 'Y');
+            END IF;
+
+            DBMS_OUTPUT.PUT_LINE('<article class="panel fc chg" id="' || v_cid
+                || '" aria-labelledby="' || v_cid || '-h" hidden>'
+                || '<header class="fc-h"><div class="fc-k"><span class="sv" title="SQL Monitor, #'
+                || v_pc(c).rnk || ' by Current-window max elapsed"><b class="gk">&#9670;</b>Plan change</span></div>'
+                || '<div class="fc-band" title="SQL Monitor max elapsed, z ' || band_ztxt(v_z)
+                || ' against the prior normal">' || band_span(v_z, v_b, 'lg')
+                || '<span class="bd-ax" aria-hidden="true"><em style="--x:.167">&minus;2</em>'
+                || '<em style="--x:.333">0</em><em style="--x:.500">+2</em>'
+                || '<em style="--x:.583">+3</em><em class="end" style="--x:1">+8&sigma;</em></span>'
+                || '</div></header>');
+            DBMS_OUTPUT.PUT_LINE('<h3 id="' || v_cid || '-h">'
+                || ent('<code>' || v_id || '</code>', anchor_id('sq-elapsed', v_id), 'sql')
+                || ' new plan' || CASE WHEN v_first > 0 THEN ' since ' || wg_date(v_first) END
+                || CASE WHEN v_first < v_weeks_back
+                        THEN '<span data-mk-at="' || v_first || '" data-mk-pre=" after " hidden></span>' END
+                || '</h3>');
+            DBMS_OUTPUT.PUT_LINE('<div class="fc-b"><div class="fc-main">'
+                || '<p class="whereln" title="plan ' || TO_CHAR(v_pc(c).prior_ph) || ' &rarr; '
+                || TO_CHAR(v_pc(c).cur_ph) || '">'
+                || DBMS_XMLGEN.CONVERT(NVL(v_pc(c).usr, '?')) || ' &middot; '
+                || DBMS_XMLGEN.CONVERT(NVL(v_pc(c).modl, '?')) || '</p>'
+                || '<div class="big"><span class="v">' || fmt_num(v_e_cur) || '</span>'
+                || '<span class="u">' || CASE WHEN v_src = 'sqlstat' THEN 's elapsed'
+                                              ELSE 's max elapsed (SQL Monitor)' END || '</span>'
+                || '<span class="nrm" title="prior mean ' || fmt_num(v_e_mu) || ' s">normal '
+                || fv_range(v_e_mu, v_e_sd, 's') || '</span></div>');
+            DBMS_OUTPUT.PUT_LINE('<div class="wg bare allv"' || wg_attr || '>' || wg_flags(TRUE)
+                || wg_bars(v_pairs, 1, v_e_mu, v_e_sd, NULL));
+            DBMS_OUTPUT.PUT_LINE('<div class="r p" data-name="Plan hash" role="row">' || v_cells || '</div>'
+                || wg_dates(TRUE) || '</div></div>');
+            DBMS_OUTPUT.PUT_LINE('<dl class="ev">' || v_ev || '</dl></div>'
+                || '<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
+                || anchor_id('sm', v_id) || '">Timeline &rarr;</a>'
+                || '<span class="evl"><a href="#topsql">Top SQL</a><a href="#sqlmon">SQL Monitor</a></span>'
+                || '</footer></article>');
+            DBMS_OUTPUT.PUT_LINE('<script>(function(){var s=document.getElementById("changes-slot"),'
+                || 'c=document.getElementById("' || v_cid || '");if(!s||!c)return;s.appendChild(c);c.hidden=false;'
+                || 'var x=document.getElementById("s-changes");if(x)x.hidden=false;})();</script>');
+        END;
     END LOOP;
 
     ------------------------------------------------------------------
@@ -874,7 +1150,17 @@ BEGIN
 
     DBMS_LOB.FREETEMPORARY(v_points_clob);
 
-    DBMS_OUTPUT.PUT_LINE('</section>');
+    -- the evidence library's row text (Summary view)
+    DBMS_OUTPUT.PUT_LINE(lib_ls('sqlmon', fmt_int(v_raw_total) || ' captured execution'
+        || CASE WHEN v_raw_total = 1 THEN '' ELSE 's' END
+        || CASE WHEN v_n_pchg + v_n_dop + v_n_err = 0 THEN '; nothing unusual in Current'
+                ELSE ';' || CASE WHEN v_n_pchg > 0 THEN ' <b>' || v_n_pchg || '</b> plan change'
+                                                     || CASE WHEN v_n_pchg = 1 THEN '' ELSE 's' END END
+                     || CASE WHEN v_n_dop > 0 THEN CASE WHEN v_n_pchg > 0 THEN ',' END || ' <b>' || v_n_dop
+                                                     || '</b> DOP downgrade' || CASE WHEN v_n_dop = 1 THEN '' ELSE 's' END END
+                     || CASE WHEN v_n_err > 0 THEN CASE WHEN v_n_pchg + v_n_dop > 0 THEN ',' END || ' <b>' || v_n_err
+                                                     || '</b> with errors' END END)
+        || '</section>');
 END;
 /
 

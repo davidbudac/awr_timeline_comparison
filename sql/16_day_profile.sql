@@ -127,7 +127,9 @@ BEGIN
 
     -- v1.6.0: shown in the Timeline view too, below the window grid (Mock D
     -- keeps the day profile there, on its own 24-hour axis).
-    DBMS_OUTPUT.PUT_LINE('<section id="day-profile" class="vw in-t in-a">');
+    -- v1.6.0: also a row of the Summary view's evidence library (class
+    -- "lib", opened there when the day holds a day-wide shift).
+    DBMS_OUTPUT.PUT_LINE('<section id="day-profile" class="vw in-s in-t in-a lib" style="--os:4">');
 
     -- The grid is dense (every stat x hour always has a row), so "no data"
     -- means no current-day cell carries a value at all.
@@ -181,10 +183,8 @@ BEGIN
         ELSE v_isolated := v_isolated + v_up(o) + v_down(o);
         END IF;
     END LOOP;
-    -- A day-wide shift is worth the Summary view; isolated hours are not.
-    IF v_nshift > 0 THEN
-        DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("day-profile").classList.add("in-s");</script>');
-    END IF;
+    -- (v1.6.0: no Summary opt-in any more -- the evidence library row
+    -- names the day-wide shifts and counts them; a click opens it.)
     FOR o IN 1 .. v_nstat LOOP
         v_max := v_colmax(o);
         v_fmt(o) := CASE
@@ -449,6 +449,13 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');
 
+    -- the evidence library's row text (Summary view; sql/lib/band_glyph.plsql
+    -- lib_ls, inlined: this section does not include that file)
+    DBMS_OUTPUT.PUT_LINE('<script>if(window.AWR_ls)AWR_ls("day-profile","'
+        || CASE WHEN v_nshift = 0 THEN 'no day-wide shift'
+                ELSE '<b>' || v_nshift || '</b> day-wide shift' || CASE WHEN v_nshift = 1 THEN '' ELSE 's' END END
+        || CASE WHEN v_isolated > 0 THEN ', ' || v_isolated || ' isolated hour' || CASE WHEN v_isolated = 1 THEN '' ELSE 's' END END
+        || '");</script>');
     DBMS_OUTPUT.PUT_LINE('</section>');
 END;
 /

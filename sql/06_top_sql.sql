@@ -99,6 +99,7 @@ DECLARE
     v_tl_note          VARCHAR2(400);
     v_tl_gw            NUMBER;
     v_tl_gl            VARCHAR2(400);
+    v_ls               VARCHAR2(2000);    -- the evidence library's row text
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/is_oracle_schema.plsql
@@ -109,7 +110,7 @@ DECLARE
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="topsql" class="vw in-s in-a"><h2>Top SQL'
+    DBMS_OUTPUT.PUT_LINE('<section id="topsql" class="vw in-s in-a lib lopen" style="--os:1"><h2>Top SQL'
         || '<small class="h2sub">Top ' || v_top_n
         || ' statements per ranking and window; ranked, not scored</small></h2>');
 
@@ -543,6 +544,18 @@ BEGIN
                     || wg_title(v_tl_first) || '">&#10010;</b>';
                 v_tl_note := '<b>&#10010;</b> new ' || CASE WHEN v_tl_first = 0 THEN 'in Current'
                                                            ELSE wg_date(v_tl_first) END;
+            END IF;
+            -- the library row text: the Current top statement by elapsed
+            IF v_tl_n = 1 THEN
+                v_ls := CASE WHEN s.cur_rnk IS NULL
+                             THEN 'no statement in the Current top ' || v_top_n
+                             ELSE '<code>' || s.sql_id || '</code> #' || s.cur_rnk || ' by elapsed'
+                                  || CASE WHEN v_tl_mu IS NOT NULL
+                                          THEN ', ' || delta_span(tl_val(v_tl_csv, 0), v_tl_mu, NULL, 'Y') END
+                                  || CASE WHEN v_plan_flip THEN ', new plan'
+                                          WHEN v_tl_first IS NOT NULL
+                                          THEN ', new ' || CASE WHEN v_tl_first = 0 THEN 'in Current'
+                                                                ELSE wg_date(v_tl_first) END END END;
             END IF;
             v_tl(v_tl_n) := tl_bars(v_tl_csv, v_tl_mu, NULL, NULL,
                 tl_lab(ent(s.sql_id, anchor_id('sq-elapsed', s.sql_id), 'sql'),
@@ -1413,7 +1426,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('if(window.location.hash) setTimeout(openHash, 0);');
     DBMS_OUTPUT.PUT_LINE('})();</script>');
 
-    DBMS_OUTPUT.PUT_LINE('</section>');
+    -- the evidence library's row text (Summary view)
+    DBMS_OUTPUT.PUT_LINE(lib_ls('topsql', NVL(v_ls, 'no SQL captured in the compared windows')) || '</section>');
 END;
 /
 

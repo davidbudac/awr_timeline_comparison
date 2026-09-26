@@ -905,12 +905,13 @@ BEGIN
         -- v1.6.0: counts as quiet pills in the verdict hero; the details
         -- are one click away in SQL Monitor (18).  A plan change links to
         -- its first statement's row (18 always lists a sql_id that ran with
-        -- more than one plan).
+        -- more than one plan).  The plan-change pill goes first, right
+        -- after the finding counts (Mock D's order).
         IF v_sm_plan_n > 0 THEN
-            v_pills := v_pills || pill('#sm-' || REGEXP_SUBSTR(v_sm_plan_ids, '[^, ]+', 1, 1), v_sm_plan_n,
+            v_pills := pill('#sm-' || REGEXP_SUBSTR(v_sm_plan_ids, '[^, ]+', 1, 1), v_sm_plan_n,
                 'plan change' || CASE WHEN v_sm_plan_n = 1 THEN '' ELSE 's' END,
                 'ran with more than one plan, including in the Current window: ' || esc(v_sm_plan_ids)
-                || CASE WHEN v_sm_plan_n > 3 THEN ' (+' || TO_CHAR(v_sm_plan_n - 3) || ' more)' END);
+                || CASE WHEN v_sm_plan_n > 3 THEN ' (+' || TO_CHAR(v_sm_plan_n - 3) || ' more)' END) || v_pills;
         END IF;
         IF v_sm_new_n > 0 THEN
             v_pills := v_pills || pill('#sqlmon', v_sm_new_n, 'new SQL',

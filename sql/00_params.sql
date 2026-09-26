@@ -390,6 +390,11 @@ BEGIN
     -- Phase 4: skip link (visible on keyboard focus only) to the <main>
     -- landmark that opens right after this section's scripts and closes
     -- in the driver's epilogue, just before the footer.
+    -- v1.6.0 evidence library: window.AWR_ls(id, html) puts a section's
+    -- one-line status (span.ls, "27 counters per second") into its h2,
+    -- the row text of the Summary view's library.  Each library section
+    -- calls it from an inline script once it knows its numbers.
+    DBMS_OUTPUT.PUT_LINE('<script>window.AWR_ls=function(id,h){var s=document.getElementById(id),t=s&&s.querySelector("h2");if(!t)return;var e=t.querySelector(".ls");if(!e){e=document.createElement("span");e.className="ls";t.insertBefore(e,t.querySelector(".h2sub,.meta"));}e.innerHTML=h;};</script>');
     DBMS_OUTPUT.PUT_LINE('<a class="skip" href="#main-start">Skip to report</a>');
     -- v1.6.0 top bar (sticky): who / which window / the view switch / the
     -- theme toggle.  The Current chip is the page's one indigo accent.
@@ -479,6 +484,9 @@ BEGIN
         || '<a href="#findings">Findings</a>'
         || '<a href="#s-changes" data-nodot hidden>What changed around it</a>'
         || '<a href="#s-normal" data-nodot>Checked and normal</a>'
+        -- the evidence library (every other section, one row each); 07
+        -- adds one sub-link per finding card under Findings
+        || '<a href="#s-lib" data-nodot>Evidence library</a>'
         -- v1.6.0: the Timeline view -- the full-span ASH chart and the
         -- grid's lanes (a lane with no rows hides its link, js_timeline);
         -- dimmed in the other views like every out-of-view link.
@@ -490,15 +498,9 @@ BEGIN
         || '<a href="#lane-objects" data-nodot>Where the reads land</a>'
         || '<a href="#lane-sql">SQL</a>'
         || '<a href="#lane-config" data-nodot>Configuration</a>'
+        -- The All sections view's order (_style.sql "All sections order"):
+        -- load and waits, SQL, storage and config, then the whole span.
         || '<b>Workload</b>'
-        || '<a href="#db-time-summary">DB time</a>'
-        || '<a href="#ash-timeline">ASH timeline</a>'
-        || '<a href="#windows">Windows</a>'
-        -- Day profile link only when the section exists (profile_days > 0);
-        -- '' otherwise keeps the nav byte-identical.
-        || CASE WHEN ~profile_days > 0
-                THEN '<a href="#day-profile">Day profile</a>' ELSE '' END
-        || '<a href="#utilization">Utilization</a>'
         || '<a href="#load">Load profile</a>'
         || '<a href="#metrics">Metrics</a>'
         || '<a href="#waits-fg">Waits &mdash; foreground</a>'
@@ -511,6 +513,15 @@ BEGIN
         || '<a href="#segment-io">Segment I/O</a>'
         || '<a href="#file-io">File I/O</a>'
         || '<a href="#param-changes">Parameters</a>'
+        || '<b>Whole span</b>'
+        || '<a href="#ash-timeline">ASH timeline</a>'
+        || '<a href="#db-time-summary">DB time</a>'
+        || '<a href="#utilization">Utilization</a>'
+        || '<a href="#windows">Windows</a>'
+        -- Day profile link only when the section exists (profile_days > 0);
+        -- '' otherwise keeps the nav byte-identical.
+        || CASE WHEN ~profile_days > 0
+                THEN '<a href="#day-profile">Day profile</a>' ELSE '' END
         -- Shown in every view (sql/19_reference.sql).
         || '<b id="rail-ref">Reference</b>'
         || '<a href="#guide" data-nodot>Reading the charts</a>'
@@ -999,12 +1010,37 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  n.appendChild(doc.createTextNode(hiddenSecs.length?("Summary view: "+hiddenSecs.length+" more section"+(hiddenSecs.length===1?"":"s")+" and the per-metric detail tables are in All sections ("+hiddenSecs.join(", ")+")."):"Summary view: the per-metric detail tables are in All sections."));');
     DBMS_OUTPUT.PUT_LINE('  var b=doc.createElement("button"); b.type="button"; b.textContent="Show all sections"; b.addEventListener("click",function(){ setView("all",true); }); n.appendChild(b);');
     DBMS_OUTPUT.PUT_LINE('}');
+    -- V2: the evidence library.  Every section with class "lib" is, in the
+    -- Summary view only, one collapsible row: its h2 (title, the one-line
+    -- status span.ls, the counts) toggles .lopen, which shows the rest of
+    -- the section in place (CSS in _style.sql "evidence library"; the
+    -- row order comes from the section's --os).  Charts built while the
+    -- row was closed measure zero width, so opening re-sizes them.  All
+    -- sections ignores .lopen and shows every section in full.
+    DBMS_OUTPUT.PUT_LINE('/* ---- V2: the evidence library (Summary): one collapsible row per section.lib ---- */');
+    DBMS_OUTPUT.PUT_LINE('function libSecs(){ return Array.prototype.slice.call(doc.querySelectorAll("main > section.lib")); }');
+    DBMS_OUTPUT.PUT_LINE('function libResize(sec){ if(window.echarts&&echarts.getInstanceByDom){ sec.querySelectorAll("[_echarts_instance_]").forEach(function(el){ var c=echarts.getInstanceByDom(el); if(c) c.resize(); }); } if(window.AWR_WG&&AWR_WG.refit) AWR_WG.refit(); fitTables(); }');
+    DBMS_OUTPUT.PUT_LINE('function libOpen(sec,on){ sec.classList.toggle("lopen",on); var h=sec.querySelector("h2"); if(h&&curView()==="summary") h.setAttribute("aria-expanded",on?"true":"false"); if(on) setTimeout(function(){ libResize(sec); },30); }');
+    DBMS_OUTPUT.PUT_LINE('function libViews(){');
+    DBMS_OUTPUT.PUT_LINE('  var sm=curView()==="summary", vis=[];');
+    DBMS_OUTPUT.PUT_LINE('  libSecs().forEach(function(sec){ var h=sec.querySelector("h2"); sec.classList.remove("lib-first","lib-last"); if(sm&&sec.offsetParent!==null) vis.push(sec); if(!h) return;');
+    DBMS_OUTPUT.PUT_LINE('    if(sm){ h.setAttribute("tabindex","0"); h.setAttribute("role","button"); h.setAttribute("aria-expanded",sec.classList.contains("lopen")?"true":"false"); }');
+    DBMS_OUTPUT.PUT_LINE('    else { h.removeAttribute("tabindex"); h.removeAttribute("role"); h.removeAttribute("aria-expanded"); } });');
+    DBMS_OUTPUT.PUT_LINE('  vis.sort(function(a,b){ return a.offsetTop-b.offsetTop; });');
+    DBMS_OUTPUT.PUT_LINE('  if(vis.length){ vis[0].classList.add("lib-first"); vis[vis.length-1].classList.add("lib-last"); }');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('libSecs().forEach(function(sec){');
+    DBMS_OUTPUT.PUT_LINE('  var h=sec.querySelector("h2"); if(!h) return;');
+    DBMS_OUTPUT.PUT_LINE('  var lt=doc.createElement("span"); lt.className="lt"; while(h.firstChild&&h.firstChild.nodeType===3) lt.appendChild(h.firstChild); h.insertBefore(lt,h.firstChild);');
+    DBMS_OUTPUT.PUT_LINE('  h.addEventListener("click",function(ev){ if(curView()!=="summary"||closest(ev.target,"a,button")) return; libOpen(sec,!sec.classList.contains("lopen")); });');
+    DBMS_OUTPUT.PUT_LINE('  h.addEventListener("keydown",function(ev){ if(curView()!=="summary"||(ev.key!=="Enter"&&ev.key!==" ")) return; ev.preventDefault(); libOpen(sec,!sec.classList.contains("lopen")); });');
+    DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('function setView(v,persist){');
     DBMS_OUTPUT.PUT_LINE('  if(!VIEWS[v]) v="summary";');
     DBMS_OUTPUT.PUT_LINE('  bd.classList.remove("vs","vt","va"); bd.classList.add(VIEWS[v]); bd.setAttribute("data-view",v);');
     DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll(".topbar .seg [data-v]").forEach(function(b){ b.setAttribute("aria-pressed",b.getAttribute("data-v")===v?"true":"false"); });');
     DBMS_OUTPUT.PUT_LINE('  if(persist){ try{localStorage.setItem("awr-view",v);}catch(e){} if(/view=/.test(location.hash||"")){ try{history.replaceState(null,"",location.pathname+location.search);}catch(e){} } }');
-    DBMS_OUTPUT.PUT_LINE('  railViews(); viewNote();');
+    DBMS_OUTPUT.PUT_LINE('  railViews(); viewNote(); libViews();');
     DBMS_OUTPUT.PUT_LINE('  measure(); window.dispatchEvent(new Event("resize"));');
     DBMS_OUTPUT.PUT_LINE('  if(window.echarts&&echarts.getInstanceByDom){ doc.querySelectorAll("[_echarts_instance_]").forEach(function(el){ var c=echarts.getInstanceByDom(el); if(c) c.resize(); }); }');
     DBMS_OUTPUT.PUT_LINE('  setTimeout(fitTables,60); closeView();');
@@ -1016,6 +1052,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('/* reveal(el): open what hides el inside its view -- a tab, folded tail rows, <details>, a folded Timeline lane */');
     DBMS_OUTPUT.PUT_LINE('function reveal(el){');
     DBMS_OUTPUT.PUT_LINE('  if(window.AWR_TL&&AWR_TL.reveal) AWR_TL.reveal(el);');
+    DBMS_OUTPUT.PUT_LINE('  var ls=closest(el,"main > section.lib"); if(ls&&curView()==="summary"&&!ls.classList.contains("lopen")) libOpen(ls,true);');
     DBMS_OUTPUT.PUT_LINE('  var tp=closest(el,".tabpanel");');
     DBMS_OUTPUT.PUT_LINE('  if(tp&&!tp.classList.contains("on")){ var t=doc.querySelector(".tabs[data-tabs=\""+tp.getAttribute("data-tabs")+"\"] [data-t=\""+tp.getAttribute("data-t")+"\"]"); if(t) t.click(); }');
     DBMS_OUTPUT.PUT_LINE('  var tl=closest(el,"[data-tail=\"Y\"]");');
@@ -1357,6 +1394,10 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE(lane_h('sql', 'SQL', 'sql', 'elapsed s; a dash = not in the top ' || ~top_n));
         DBMS_OUTPUT.PUT_LINE(lane_h('config', 'Configuration', 'config'));
         DBMS_OUTPUT.PUT_LINE('</div></div></div></section>');
+        -- the All sections view's heading (Mock D); the sections follow it
+        -- in the order _style.sql gives them there ("All sections order")
+        DBMS_OUTPUT.PUT_LINE('<section id="s-all" class="vw in-a vhead"><h2>All sections'
+            || '<small class="h2sub">Every table of the report</small></h2></section>');
     END;
 END;
 /

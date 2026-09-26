@@ -104,12 +104,10 @@ BEGIN
         || ' class="gd-dp" cx="95.6" cy="19.6" r="2.2"/><circle class="gd-dp" cx="106.8" cy="23.2" r="2.2"/><circle class="gd-dp" cx="118.0" cy="22.3" r="2.2"/><circle class="gd-dp" cx="129.2" cy="14.3"'
         || ' r="2.2"/><circle class="gd-dc" cx="140.4" cy="-1.5" r="3"/></svg></div><div class="gx2"><h3>Span chart</h3><p>All sections: active sessions by wait class across the whole span. <span'
         || ' class="g2">Compared windows shaded, Current in indigo.</span></p></div></div>');
-    -- the Trend cell of the per-window tables (sql/lib/js_sparkline.plsql)
-    DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="spark" width="110" height="24" viewBox="0 0 110 24" role="img" aria-label="Trend line of the compared windows">'
-        || '<path class="fill" d="M 2.0,22 L 2.0,15.0 L 10.8,16.2 L 19.7,14.1 L 28.5,15.4 L 37.3,16.8 L 46.2,14.9 L 55.0,15.6 L 63.8,13.8 L 72.7,15.1 L 81.5,14.4 L 90.3,13.2 L 99.2,12.6 L 108.0,3.0'
-        || ' L 108.0,22 Z"/><path class="line" d="M 2.0,15.0 L 10.8,16.2 L 19.7,14.1 L 28.5,15.4 L 37.3,16.8 L 46.2,14.9 L 55.0,15.6 L 63.8,13.8 L 72.7,15.1 L 81.5,14.4 L 90.3,13.2 L 99.2,12.6'
-        || ' L 108.0,3.0"/><circle class="dot" cx="108.0" cy="3.0" r="2.5"/></svg></div><div class="gx2"><h3>Trend</h3><p>A table row&rsquo;s windows as a line, oldest left; the dot is Current.'
-        || ' <span class="g2">Scaled to the row&rsquo;s own range; a flat midline = less than 2% of variation.</span></p></div></div>');
+    -- the Trend cell of the per-window tables (sql/lib/js_microstrip.plsql)
+    DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="mw" width="92" height="22" viewBox="0 0 92 22" role="img" aria-label="Thirteen-bar micro strip"><rect class="z2" x="0" y="11" width="92" height="6" rx="1"/><rect class="b" x="0.0" y="13" width="5.2" height="8" rx="1"/><rect class="b" x="6.8" y="14" width="5.2" height="7" rx="1"/><rect class="b" x="13.6" y="12" width="5.2" height="9" rx="1"/><rect class="b" x="20.4" y="13" width="5.2" height="8" rx="1"/><rect class="b" x="27.2" y="14" width="5.2" height="7" rx="1"/><rect class="b" x="34.0" y="13" width="5.2" height="8" rx="1"/>'
+        || '<rect class="b" x="40.8" y="13" width="5.2" height="8" rx="1"/><rect class="b" x="47.6" y="14" width="5.2" height="7" rx="1"/><rect class="b" x="54.4" y="12" width="5.2" height="9" rx="1"/><rect class="b" x="61.2" y="13" width="5.2" height="8" rx="1"/><rect class="b" x="68.0" y="13" width="5.2" height="8" rx="1"/><rect class="b" x="74.8" y="12" width="5.2" height="9" rx="1"/><rect class="b cur" x="81.6" y="2" width="8.3" height="19" rx="1"/></svg></div><div class="gx2"><h3>Trend</h3><p>A table row&rsquo;s windows as bars from zero, oldest left: shaded = normal range, indigo = Current.'
+        || ' <span class="g2">Hover a strip for the last four values and the normal range.</span></p></div></div>');
     DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="A release flag on the boundary between two windows"><rect class="gd-cell" x="0"'
         || ' y="18" width="150" height="24"/><line class="gd-cl" x1="30" x2="30" y1="18" y2="42"/><line class="gd-cl" x1="60" x2="60" y1="18" y2="42"/><line class="gd-cl" x1="90" x2="90" y1="18" y2="42"/><line'
         || ' class="gd-cl" x1="120" x2="120" y1="18" y2="42"/><line class="gd-mk" x1="60" x2="60" y1="2" y2="42"/><rect class="gd-flg" x="60" y="2" width="44" height="12" rx="2"/><text class="gd-t" x="64"'
@@ -117,7 +115,7 @@ BEGIN
         || ' chart.</span></p></div></div>');
     DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="Step line: value changes between two windows"><path class="gd-st" d="M0'
         || ' 32H86V14H150"/><line class="gd-str" x1="86" x2="86" y1="32" y2="14"/><circle class="gd-nd" cx="86" cy="14" r="3.5"/><text class="gd-t m" x="4" y="28">FALSE</text><text class="gd-t m b" x="92"'
-        || ' y="10">TRUE</text></svg></div><div class="gx2"><h3>Step line</h3><p>A parameter steps where its value changed. <span class="g2">Dot = the change; labels = old and new'
+        || ' y="10">TRUE</text></svg></div><div class="gx2"><h3>Step line</h3><p>Parameters and plan hashes step where the value changed. <span class="g2">Dot = the change; labels = old and new'
         || ' value.</span></p></div></div>');
     DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><span class="gd-gl"><span><b>&#9670;</b> plan changed</span><span><b>&#10010;</b> first seen</span><span><b>&#9661;</b> DOP downgrade</span></span></div><div'
         || ' class="gx2"><h3>Glyphs</h3><p>Drawn in the window where it happened.</p></div></div>');
@@ -165,6 +163,11 @@ BEGIN
         || ' on the boundary between the two windows they fall between.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Checked and normal</dt><dd>Every other scored metric: the normal ones, loudest first; <b>moved, too small to matter</b> = past |z| 2 but under the metric&rsquo;s'
         || ' materiality floor, or an informational counter; <b>improved</b> = a material move in the good direction. None of them is counted.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>What changed around it</dt><dd><b>Plan change</b>: a statement that ran in the Current window with a plan other than the prior windows&rsquo; most frequent one'
+        || ' (SQL Monitor). Its bars are its elapsed seconds per window from <code>DBA_HIST_SQLSTAT</code>; the step line is the most frequent captured plan per window, carried over windows'
+        || ' with no capture; only the SQL Monitor max elapsed is scored. <b>Configuration</b>: every changed parameter as a step line.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Evidence library</dt><dd>Summary view: every other section as one row with a one-line status and its counts; open a row to read the section in place.'
+        || ' All sections shows every section in full.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>ASH timeline</dt><dd><code>dba_hist_active_sess_history</code> over the full span, one scan: hourly (or the cadence) in All sections; in the Timeline in'
         || ' buckets of at least 1 h, at most about 400 of them, plus each compared window&rsquo;s own values (samples &divide; 360 &divide; window hours). ON CPU is <b>CPU</b>; Idle'
         || ' excluded. Compared windows shaded. ASH is not scored.</dd>');
@@ -179,7 +182,7 @@ BEGIN
     END IF;
     DBMS_OUTPUT.PUT_LINE('<dt>Utilization</dt><dd>Workload volume and shape (transaction, call and logon rates, session counts, data and network volume) from <code>DBA_HIST_SYSMETRIC_SUMMARY</code>, averaged over each window.'
         || ' A usage overview, not a health check: the band is drawn but never scored.</dd>');
-    DBMS_OUTPUT.PUT_LINE('<dt>Load profile</dt><dd><code>DBA_HIST_SYSSTAT</code> (end &minus; begin snapshot) &divide; window seconds, summed across instances. <b>Trend</b>: per-window values, oldest to Current.'
+    DBMS_OUTPUT.PUT_LINE('<dt>Load profile</dt><dd><code>DBA_HIST_SYSSTAT</code> (end &minus; begin snapshot) &divide; window seconds, summed across instances. <b>Trend</b>: per-window values as bars, oldest to Current, over the shaded normal range.'
         || ' <b>Current</b> cell bar = value &divide; row maximum.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>System metrics</dt><dd><code>DBA_HIST_SYSMETRIC_SUMMARY</code> averaged over each window. Rates and counters: SUM across instances per snapshot, then AVG; ratios and latencies: AVG across'
         || ' instances per snapshot, then AVG. Units per metric name.</dd>');

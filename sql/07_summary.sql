@@ -949,6 +949,20 @@ BEGIN
             emit_card(v_order(k), k);
         END LOOP;
         DBMS_OUTPUT.PUT_LINE('</div>');
+        -- the rail's sub-links, one per card, right under "Findings"
+        -- (inserted while the page parses, before the rail JS counts links)
+        DECLARE
+            v_js VARCHAR2(4000);
+        BEGIN
+            FOR k IN 1 .. v_order.COUNT LOOP
+                v_js := v_js || CASE WHEN k > 1 THEN ',' END || '["' || card_id(v_order(k)) || '","'
+                    || REPLACE(REPLACE(card_label(v_order(k)), '"', ''), '<', '') || '"]';
+            END LOOP;
+            DBMS_OUTPUT.PUT_LINE('<script>(function(){var n=document.querySelector(''nav.toc a[href="#findings"]'');'
+                || 'if(!n)return;[' || v_js || '].forEach(function(c){var a=document.createElement("a");'
+                || 'a.className="sub";a.href="#"+c[0];a.setAttribute("data-nodot","");a.textContent=c[1];'
+                || 'n.parentNode.insertBefore(a,n.nextSibling);n=a;});})();</script>');
+        END;
     ELSE
         DBMS_OUTPUT.PUT_LINE('<div class="panel calm vw in-s"><p class="calm-empty">'
             || CASE WHEN v_normal = 0
@@ -973,8 +987,8 @@ BEGIN
     -- parameter differs across the compared windows.
     --
     DBMS_OUTPUT.PUT_LINE('<section id="s-changes" class="vw in-s sumsec" hidden>'
-        || '<h2>What changed around it<small class="h2sub">Configuration that differs across the '
-        || 'compared windows, under the release flags</small></h2>'
+        || '<h2>What changed around it<small class="h2sub">Plan and configuration changes '
+        || 'under the release flags</small></h2>'
         || '<div class="cards" id="changes-slot"></div></section>');
 
     --
@@ -1055,6 +1069,12 @@ BEGIN
         END IF;
         DBMS_OUTPUT.PUT_LINE('</section>');
     END;
+    --
+    -- The evidence library's heading (Summary): every section with class
+    -- "lib" follows it as one collapsible row (00's chrome JS, _style.sql).
+    --
+    DBMS_OUTPUT.PUT_LINE('<section id="s-lib" class="vw in-s vhead"><h2>Evidence library'
+        || '<small class="h2sub">Every other section, one line each; open a row to read it here</small></h2></section>');
     emit_timeline;
 END;
 /

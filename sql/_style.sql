@@ -254,6 +254,63 @@ BEGIN
         || ' padding:3px 10px; border-radius:6px;'
         || ' border:1px solid var(--rule); background:var(--panel); color:var(--ink);'
         || ' cursor:pointer; margin-left:6px; }');
+    -- v1.6.0 evidence library (Summary view only).  Every section with
+    -- class "lib" is one row of a single panel: chevron, title (span.lt,
+    -- wrapped by the chrome JS), its one-line status (span.ls, set by the
+    -- section through window.AWR_ls) and the counts; a click on the row
+    -- toggles .lopen and shows the section in place.  Rows sort by the
+    -- section's --os after the "Evidence library" heading (#s-lib, 07);
+    -- the reference sections and the footer follow.  All sections (and JS
+    -- off) show every section in full, unchanged.
+    DBMS_OUTPUT.PUT_LINE('body.vs main > #s-lib { order:10; }'
+        || ' body.vs main > section.lib { order:calc(10 + var(--os, 9)); }'
+        || ' body.vs main > .view-note, body.vs main > #guide, body.vs main > #about { order:30; }'
+        || ' body.vs footer.report { order:40; }');
+    DBMS_OUTPUT.PUT_LINE('body.vs main > section.lib { margin:0; border-radius:0; border-top-width:0; padding:0 var(--s5); }'
+        || ' body.vs main > section.lib.lib-first { margin-top:var(--s2); border-top-width:1px; border-radius:10px 10px 0 0; }'
+        || ' body.vs main > section.lib.lib-last { border-radius:0 0 10px 10px; }'
+        || ' body.vs main > section.lib.lib-first.lib-last { border-radius:10px; }');
+    DBMS_OUTPUT.PUT_LINE('body.vs main > section.lib:not(.lopen) > :not(h2) { display:none !important; }');
+    DBMS_OUTPUT.PUT_LINE('body.vs main > section.lib > h2 { cursor:pointer; flex-wrap:nowrap; align-items:center;'
+        || ' margin:0; padding:var(--s4) 0; border-bottom:0; font-size:15px; line-height:22px; }'
+        || ' body.vs main > section.lib.lopen > h2 { border-bottom:1px solid var(--line-soft); margin-bottom:var(--s3); }'
+        || ' body.vs main > section.lib > h2:hover > .lt { color:var(--ink); text-decoration:underline;'
+        || ' text-decoration-color:var(--hairline); text-underline-offset:3px; }'
+        || ' body.vs main > section.lib > h2 .permalink { display:none; }'
+        || ' body.vs main > section.lib > h2 > .h2sub { order:1; flex:1 1 auto; }'
+        || ' body.vs main > section.lib > h2:has(> .ls) > .h2sub { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('body.vs main > section.lib > h2 > .lt { flex:0 0 200px; display:inline-flex; align-items:center; gap:10px; }'
+        || ' body.vs main > section.lib > h2 > .lt::before { content:""; flex:none; width:7px; height:7px;'
+        || ' border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted);'
+        || ' transform:rotate(-45deg); transition:transform .15s; margin:0 4px 0 3px; }'
+        || ' body.vs main > section.lib.lopen > h2 > .lt::before { transform:rotate(45deg); }');
+    DBMS_OUTPUT.PUT_LINE('h2 > .ls { order:1; flex:1 1 auto; min-width:0; font-size:13.5px; font-weight:400;'
+        || ' letter-spacing:0; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }'
+        || ' h2 > .ls code { font-size:12.5px; } h2 > .ls b { font-weight:600; color:var(--ink-soft); }');
+    -- A view heading (the evidence library's #s-lib, All sections' #s-all):
+    -- a section holding only its h2, drawn as a plain heading, no panel.
+    DBMS_OUTPUT.PUT_LINE('section.vhead { background:none; border:0; border-radius:0; padding:0; box-shadow:none; }'
+        || ' section.vhead > h2 { margin:var(--s7) 0 var(--s2); padding:var(--s5) 0 0; border-bottom:0;'
+        || ' border-top:1px solid var(--hairline); }'
+        || ' body.va main > #s-all > h2 { margin-top:var(--s4); border-top:0; padding-top:var(--s4); }');
+    -- All sections order (Mock D): the heading, then Findings, the load /
+    -- metric / wait tables, SQL, storage, parameters, and the full-span
+    -- charts, windows and day profile last; the reference sections and the
+    -- footer follow.  Purely visual: the DOM (and JS off) keeps the driver's
+    -- order.
+    DBMS_OUTPUT.PUT_LINE('body.va main > #s-all { order:4; } body.va main > #findings { order:5; }'
+        || ' body.va main > #load { order:6; } body.va main > #metrics { order:7; }'
+        || ' body.va main > #waits-fg { order:8; } body.va main > #waits-bg { order:9; }'
+        || ' body.va main > #topsql { order:10; } body.va main > #topsql-ash { order:11; }'
+        || ' body.va main > #sqlmon { order:12; } body.va main > #segment-io { order:13; }'
+        || ' body.va main > #file-io { order:14; } body.va main > #param-changes { order:15; }'
+        || ' body.va main > #ash-timeline { order:16; } body.va main > #db-time-summary { order:17; }'
+        || ' body.va main > #utilization { order:18; } body.va main > #windows { order:19; }'
+        || ' body.va main > #day-profile { order:20; }'
+        || ' body.va main > .view-note, body.va main > #guide, body.va main > #about { order:30; }'
+        || ' body.va footer.report { order:40; }');
+    -- rail sub-links: one per finding card, under Findings (07)
+    DBMS_OUTPUT.PUT_LINE('nav.toc a.sub { padding-left:28px; font-size:12.5px; color:var(--muted); }');
     -- Timeline view placeholder (phase 3 of the redesign fills it).
 
     -- =========================================================
@@ -408,6 +465,14 @@ BEGIN
         || ' { box-shadow:inset 2px 0 0 var(--crit-dot); }');
     DBMS_OUTPUT.PUT_LINE('tr.warn td:first-child, tr:has(> td.c-band .bd.s-moderate) > td:first-child'
         || ' { box-shadow:inset 2px 0 0 var(--warn-dot); }');
+    -- The fleet report includes this file too (sql/fleet/00_fleet_chrome.sql).
+    -- Its fleet-owned detail tables (table.dt, never used by the single-DB
+    -- sections; their cells carry the detail row's own background) keep
+    -- the 3px severity-coloured bar they had before v1.6.0 instead of the
+    -- 2px dot-coloured marker, which read as a stray hairline on their
+    -- zero-padding first cell.
+    DBMS_OUTPUT.PUT_LINE('table.dt tr.crit td:first-child { box-shadow:inset 3px 0 0 var(--crit); }'
+        || ' table.dt tr.warn td:first-child { box-shadow:inset 3px 0 0 var(--warn); }');
     DBMS_OUTPUT.PUT_LINE('tr.ok   { background:transparent; }');
     DBMS_OUTPUT.PUT_LINE('tr.info { background:transparent; }');
     DBMS_OUTPUT.PUT_LINE('tr.skip { color:var(--muted); font-style:italic; }');
@@ -510,6 +575,9 @@ BEGIN
         || ' stroke-linecap:round; stroke-linejoin:round; }');
     DBMS_OUTPUT.PUT_LINE('svg.spark .dot { fill:var(--accent); }');
     DBMS_OUTPUT.PUT_LINE('th.trend, td.trend { width:110px; padding:6px 8px; text-align:center; }');
+    -- v1.6.0: the single-DB Trend cell is a 13-bar micro strip (svg.mw,
+    -- sql/lib/js_microstrip.plsql); the fleet keeps the svg.spark line.
+    DBMS_OUTPUT.PUT_LINE('td.trend svg.mw { margin:0 auto; }');
 
     -- =========================================================
     -- Cell-bar behind the current-value column in load/sysmetric tables
@@ -1249,6 +1317,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.fc .cfg-wg .wg > .r{border-bottom:1px solid var(--line-soft)}');
     DBMS_OUTPUT.PUT_LINE('.fc .cfg-wg .wg > .r:last-child{border-bottom:0}');
     DBMS_OUTPUT.PUT_LINE('.fc .cfg-wg .l .nm{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}');
+    -- the plan-change card (18): who ran it, and the plan step line under
+    -- the elapsed bars (bare, so the hashes may overflow their narrow cells)
+    DBMS_OUTPUT.PUT_LINE('.fc .whereln{margin:0 0 4px;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:help}');
+    DBMS_OUTPUT.PUT_LINE('.fc .wg.bare .r.p .pv{max-width:none} .fc .wg.bare .r.p .c.cur .pv{left:auto;right:2px}');
     DBMS_OUTPUT.PUT_LINE('.fc .cfg-more{margin:0;padding:var(--s2) 0 0;font-size:12.5px;color:var(--muted)}');
     -- checked and normal
     DBMS_OUTPUT.PUT_LINE('.calm{padding:var(--s2) var(--s6)}');

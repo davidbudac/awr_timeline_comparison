@@ -26,6 +26,7 @@ DECLARE
 
     v_unit       VARCHAR2(16);
     v_bucket     VARCHAR2(40);
+    v_nrows      PLS_INTEGER := 0;
     -- Subprogram includes go LAST, metric_policy first (it opens with a
     -- TYPE; lint checks 14 / 16), fmt_num before band_glyph (check 17).
     @@sql/lib/metric_policy.plsql
@@ -35,7 +36,7 @@ DECLARE
     @@sql/lib/fmt_num.plsql
     @@sql/lib/band_glyph.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="load" class="vw in-a"><h2>Load profile'
+    DBMS_OUTPUT.PUT_LINE('<section id="load" class="vw in-s in-a lib" style="--os:7"><h2>Load profile'
         || '<small class="h2sub">System statistics per second, Current against its normal range</small></h2>');
 
     -- v1.6.0: Current, then the baseline band (normal range | band | z |
@@ -205,9 +206,12 @@ BEGIN
         END LOOP;
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
+        v_nrows := v_nrows + 1;
     END LOOP;
 
-    DBMS_OUTPUT.PUT_LINE('</tbody></table></section>');
+    DBMS_OUTPUT.PUT_LINE('</tbody></table>');
+    -- the evidence library's row text (Summary view)
+    DBMS_OUTPUT.PUT_LINE(lib_ls('load', v_nrows || ' counters per second') || '</section>');
 END;
 /
 

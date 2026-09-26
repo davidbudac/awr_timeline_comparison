@@ -90,6 +90,7 @@ DECLARE
     TYPE t_tl_rows IS TABLE OF VARCHAR2(32767) INDEX BY PLS_INTEGER;
     v_tl          t_tl_rows;
     v_tl_csv      VARCHAR2(4000);
+    v_ls          VARCHAR2(2000);   -- the evidence library's row text
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/json_escape.plsql
@@ -100,7 +101,7 @@ DECLARE
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="file-io" class="vw in-a"><h2>File I/O'
+    DBMS_OUTPUT.PUT_LINE('<section id="file-io" class="vw in-s in-a lib" style="--os:6"><h2>File I/O'
         || '<small class="h2sub">Top ' || v_top_n
         || ' data and temp files by I/O per window, and I/O by file type; ranked, not scored</small></h2>');
 
@@ -407,6 +408,11 @@ BEGIN
         -- the prior windows it made the top list in); id tl-<its anchor>
         IF s.dim = 'READMB' AND v_tl.COUNT < 1 AND s.cur_val IS NOT NULL THEN
             v_tl_csv := tl_csv(s.week_vals, 'Y');
+            IF v_tl.COUNT = 0 THEN
+                v_ls := '<code>' || DBMS_XMLGEN.CONVERT(s.file_short) || '</code> ' || fmt_num(s.cur_val) || ' MB read'
+                    || CASE WHEN tl_mu(v_tl_csv) IS NOT NULL THEN ' vs ' || fmt_num(tl_mu(v_tl_csv))
+                            ELSE ', new in the top ' || v_top_n END;
+            END IF;
             v_tl(v_tl.COUNT + 1) := tl_bars(v_tl_csv, tl_mu(v_tl_csv), NULL, NULL,
                 tl_lab(ent(DBMS_XMLGEN.CONVERT(s.file_short), v_aid_by_name(s.filename), 'file'),
                        'datafile, MB read', DBMS_XMLGEN.CONVERT(s.filename)),
@@ -744,7 +750,8 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('})();</script>');
     END IF;
 
-    DBMS_OUTPUT.PUT_LINE('</section>');
+    -- the evidence library's row text (Summary view)
+    DBMS_OUTPUT.PUT_LINE(lib_ls('file-io', NVL(v_ls, 'no per-file I/O recorded')) || '</section>');
 END;
 /
 

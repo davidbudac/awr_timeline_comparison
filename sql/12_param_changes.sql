@@ -135,7 +135,7 @@ DECLARE
                         ELSE DBMS_XMLGEN.CONVERT(pv_txt(p_v)) END;
     END pv_html;
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="param-changes" class="vw in-a"><h2>Parameters'
+    DBMS_OUTPUT.PUT_LINE('<section id="param-changes" class="vw in-s in-a lib" style="--os:9"><h2>Parameters'
         || '<small class="h2sub">Initialization parameters whose value differs across the windows</small></h2>');
 
     -- Load every (changed parameter, window) value into v_cells and build
@@ -212,7 +212,7 @@ BEGIN
 
     IF v_n_changed = 0 THEN
         DBMS_OUTPUT.PUT_LINE('<p style="color:var(--muted)">No system parameters '
-            || 'changed across the compared windows.</p></section>');
+            || 'changed across the compared windows.</p>' || lib_ls('param-changes', 'none differ') || '</section>');
         RETURN;
     END IF;
 
@@ -315,6 +315,10 @@ BEGIN
                 v_cur_one := v_names(i);
             END IF;
         END LOOP;
+        -- the evidence library's row text (Summary view)
+        DBMS_OUTPUT.PUT_LINE(lib_ls('param-changes', '<b>' || v_n_changed || '</b>'
+            || CASE WHEN v_n_changed = 1 THEN ' differs' ELSE ' differ' END || ', '
+            || CASE WHEN v_cur_n = 0 THEN 'none' ELSE TO_CHAR(v_cur_n) END || ' in Current'));
         DBMS_OUTPUT.PUT_LINE('<article class="panel fc chg" id="f-config" aria-labelledby="f-config-h" hidden>'
             || '<header class="fc-h"><div class="fc-k"><span class="sv"><b class="gk">&ne;</b>'
             || 'Configuration</span></div></header>'

@@ -206,3 +206,14 @@
             || '<td class="num c-d">' || delta_span(p_cur, p_mu, p_bucket, p_plain)
             || v_note || p_note || '</td>';
     END band_cells;
+
+    -- The evidence library's one-line status of a section (the Summary
+    -- view's row text, v1.6.0): an inline script that puts p_html into the
+    -- section's h2 as span.ls through window.AWR_ls (sql/00_params.sql).
+    -- p_html is page HTML (names already through DBMS_XMLGEN.CONVERT);
+    -- only backslash and double quote need escaping for the JS string.
+    FUNCTION lib_ls(p_id VARCHAR2, p_html VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN '<script>if(window.AWR_ls)AWR_ls("' || p_id || '","'
+            || REPLACE(REPLACE(p_html, '\', '\\'), '"', '\"') || '");</script>';
+    END lib_ls;
