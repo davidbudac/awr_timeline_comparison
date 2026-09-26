@@ -26,14 +26,19 @@
 --   vals       per class, one AAS per chart bucket, oldest first (a zero,
 --              never a gap, so nothing left-compacts);
 --   win        per class, one AAS per compared window, oldest first
---              (samples inside that window / 360 / win_hours) -- the
---              stripe tooltip, the Activity lane and the DB time card;
+--              (samples inside that window / 360 / win_hours), every
+--              session -- the stripe tooltip and the Activity lane;
+--   winfg      the same for FOREGROUND sessions only (session_type) -- the
+--              DB time card's chart: DB time is foreground time, and ASH's
+--              foreground samples are its sampled estimate, so the card's
+--              bars and its DB time headline measure the same thing;
 --   wh         win_hours.  Numbers are dot-decimal (NLS pinned).
 -- plus the Activity lane's row (sql/lib/timeline.plsql; Current vs the
--- mean of the valid prior windows, not scored).  A sample belongs to the
--- window whose start it follows by less than win_hours (windows never
--- overlap when step >= win_hours; with overlapping windows a sample
--- counts only toward the later one).
+-- mean of the valid prior windows, not scored).  A sample belongs to
+-- EVERY window whose span [start, start + win_hours) contains it: with
+-- step >= win_hours that is at most one; when win_hours > step_hours the
+-- windows overlap and a sample counts toward each of them, so every
+-- window holds its full win_hours of samples and the divisor is right.
 --
 -- Read-only: pulls ASH rows into a PL/SQL collection in-memory, computes
 -- per-bucket aggregates, and renders directly.  No scratch table.
@@ -92,6 +97,7 @@ DECLARE
     v_nc           PLS_INTEGER;
     v_ccells       t_cell_tab;          -- (chart bucket | class) -> samples
     v_wcells       t_cell_tab;          -- (week_offset | class)  -> samples
+    v_wfcells      t_cell_tab;          -- the same, foreground sessions only
     v_valid        VARCHAR2(4000);      -- '|k=Y|k=N|...' per window
     v_cls_order    VARCHAR2(4000);      -- '|CPU|User I/O|...' stacking order
     @@sql/lib/put_clob_chunked.plsql
@@ -170,21 +176,24 @@ BEGIN
         -- bucket_key = floor((sample - range_start) hours / bucket_hours).
         -- Direct floor on a fractional bucket avoids the TRUNC('HH') trap
         -- that collapsed every sub-hour cadence into one bar.
-        -- wk (v1.6.0) = the week_offset of the compared window the sample
-        -- falls in (it follows that window's start by less than win_hours),
-        -- else -1; the window of offset o starts (weeks_back - o) steps
-        -- after range_start.
-        SELECT bucket_key, wait_class, wk, COUNT(*) AS sample_count
+        -- j_lo .. j_hi (v1.6.0) = the compared windows the sample falls in,
+        -- as window STEPS after range_start: the window of offset o starts
+        -- j = weeks_back - o steps after range_start and holds a sample h
+        -- hours after range_start when j * step <= h < j * step + win, i.e.
+        -- (h - win) / step < j <= h / step.  An empty range (j_lo > j_hi)
+        -- = between windows; overlapping windows (win > step) give a range
+        -- of more than one.  fg = 1 for a FOREGROUND session's sample.
+        SELECT bucket_key, wait_class, j_lo, j_hi, fg, COUNT(*) AS sample_count
         FROM (
             SELECT FLOOR(h / v_bucket_hours) AS bucket_key,
                    CASE WHEN session_state = 'ON CPU' THEN 'CPU'
                         ELSE NVL(wait_class, 'Other') END AS wait_class,
-                   CASE WHEN MOD(ROUND(h, 6), ~step_hours) < ~win_hours
-                        THEN ~weeks_back - FLOOR(ROUND(h, 6) / ~step_hours)
-                        ELSE -1 END AS wk
+                   GREATEST(0, FLOOR((ROUND(h, 6) - ~win_hours) / ~step_hours) + 1) AS j_lo,
+                   LEAST(~weeks_back, FLOOR(ROUND(h, 6) / ~step_hours))           AS j_hi,
+                   CASE WHEN session_type = 'FOREGROUND' THEN 1 ELSE 0 END      AS fg
             FROM (
                 SELECT (CAST(ash.sample_time AS DATE) - v_range_start) * 24 AS h,
-                       ash.session_state, ash.wait_class
+                       ash.session_state, ash.wait_class, ash.session_type
                 FROM   dba_hist_active_sess_history ash
                 WHERE  ash.dbid IN (~dbid_list)
                   AND  (~inst_num = 0 OR ash.instance_number = ~inst_num)
@@ -193,7 +202,7 @@ BEGIN
                   AND  (ash.session_state = 'ON CPU' OR NVL(ash.wait_class, 'x') <> 'Idle')
             )
         )
-        GROUP BY bucket_key, wait_class, wk
+        GROUP BY bucket_key, wait_class, j_lo, j_hi, fg
     ) LOOP
         v_ck := TO_CHAR(r.bucket_key) || '|' || r.wait_class;
         IF v_cells.EXISTS(v_ck) THEN
@@ -207,14 +216,21 @@ BEGIN
         ELSE
             v_ccells(v_ck) := r.sample_count;
         END IF;
-        IF r.wk BETWEEN 0 AND ~weeks_back THEN
-            v_ck := TO_CHAR(r.wk) || '|' || r.wait_class;
+        FOR j IN r.j_lo .. r.j_hi LOOP
+            v_ck := TO_CHAR(~weeks_back - j) || '|' || r.wait_class;
             IF v_wcells.EXISTS(v_ck) THEN
                 v_wcells(v_ck) := v_wcells(v_ck) + r.sample_count;
             ELSE
                 v_wcells(v_ck) := r.sample_count;
             END IF;
-        END IF;
+            IF r.fg = 1 THEN
+                IF v_wfcells.EXISTS(v_ck) THEN
+                    v_wfcells(v_ck) := v_wfcells(v_ck) + r.sample_count;
+                ELSE
+                    v_wfcells(v_ck) := r.sample_count;
+                END IF;
+            END IF;
+        END LOOP;
         IF v_class_totals.EXISTS(r.wait_class) THEN
             v_class_totals(r.wait_class) := v_class_totals(r.wait_class) + r.sample_count;
         ELSE
@@ -487,6 +503,18 @@ BEGIN
                 END IF;
             END LOOP;
             v_cm(c) := CASE WHEN v_cnt > 0 THEN v_sum / v_cnt END;
+            DBMS_OUTPUT.PUT_LINE(CASE WHEN c > 1 THEN ',' END || '[' || v_row || ']');
+        END LOOP;
+        -- foreground sessions only (the DB time card's chart)
+        DBMS_OUTPUT.PUT_LINE('],"winfg":[');
+        FOR c IN 1 .. v_cls.COUNT LOOP
+            v_row := NULL;
+            FOR k IN REVERSE 0 .. ~weeks_back LOOP
+                v_ck := TO_CHAR(k) || '|' || v_cls(c);
+                v_row := v_row || CASE WHEN k < ~weeks_back THEN ',' END
+                    || aas_tok(CASE WHEN v_wfcells.EXISTS(v_ck) THEN v_wfcells(v_ck) ELSE 0 END
+                               / (360 * ~win_hours));
+            END LOOP;
             DBMS_OUTPUT.PUT_LINE(CASE WHEN c > 1 THEN ',' END || '[' || v_row || ']');
         END LOOP;
         DBMS_OUTPUT.PUT_LINE(']};</script>');

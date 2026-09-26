@@ -79,7 +79,7 @@ BEGIN
         || ' height="2.4" fill="#E89B40"/><rect x="110.0" y="29.6" width="8.4" height="12.4" fill="#3FB344"/><rect x="110.0" y="25.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="110.0" y="22.6" width="8.4"'
         || ' height="2.4" fill="#E89B40"/><rect x="120.8" y="28.6" width="8.4" height="13.4" fill="#3FB344"/><rect x="120.8" y="24.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="120.8" y="21.6" width="8.4"'
         || ' height="2.4" fill="#E89B40"/><rect x="131.6" y="30.6" width="13.4" height="11.4" fill="#3FB344"/><rect x="131.6" y="14.6" width="13.4" height="15.4" fill="#4A90D9"/><rect x="131.6" y="11.6"'
-        || ' width="13.4" height="2.4" fill="#E89B40"/></svg></div><div class="gx2"><h3>Activity per window</h3><p>Timeline Activity lane and the DB time card: one stacked column per compared window,'
+        || ' width="13.4" height="2.4" fill="#E89B40"/></svg></div><div class="gx2"><h3>Activity per window</h3><p>Timeline Activity lane (all sessions) and the DB time card (foreground sessions only, ASH&rsquo;s estimate of DB time): one stacked column per compared window,'
         || ' same wait classes. <span class="g2">Current labels its two largest classes.</span></p></div></div>');
     DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="152" height="44" viewBox="0 0 152 44" role="img" aria-label="Stacked area of active sessions by wait class"><path d="M0.0 28.8 L3.2 27.0 L6.5'
         || ' 25.4 L9.7 24.2 L12.9 23.5 L16.2 23.3 L19.4 23.8 L22.6 24.8 L25.9 26.3 L29.1 28.0 L32.3 29.8 L35.6 31.6 L38.8 33.0 L42.0 33.9 L45.3 34.3 L48.5 34.1 L51.7 33.3 L55.0 32.0 L58.2 30.3 L61.4 28.5 L64.7'
@@ -169,7 +169,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<dt>Evidence library</dt><dd>Summary view: every other section as one row with a one-line status and its counts; open a row to read the section in place.'
         || ' All sections shows every section in full.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>ASH timeline</dt><dd><code>dba_hist_active_sess_history</code> over the full span, one scan: hourly (or the cadence) in All sections; in the Timeline in'
-        || ' buckets of at least 1 h, at most about 400 of them, plus each compared window&rsquo;s own values (samples &divide; 360 &divide; window hours). ON CPU is <b>CPU</b>; Idle'
+        || ' buckets of at least 1 h, at most about 400 of them, plus each compared window&rsquo;s own values (samples &divide; 360 &divide; window hours; overlapping windows each count a shared sample). ON CPU is <b>CPU</b>; Idle'
         || ' excluded. Compared windows shaded. ASH is not scored.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Timeline</dt><dd>One column per compared window, one row per metric, from the same values and scoring as the tables: the headline and every flagged load / metric'
         || ' row, flagged wait classes and the top foreground events, the top segments and datafile by reads, the top statements by elapsed (SQL Monitor rows for a plan change or a DOP'

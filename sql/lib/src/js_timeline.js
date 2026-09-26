@@ -235,20 +235,23 @@ function stack(row,vals,opt){
 function activity(){
   if(!AX||!AX.win||!AX.classes.length)return;
   $$('#tl .r.ash').forEach(function(row){stack(row,AX.win,{labels:true});});
-  /* the DB time card: the same per-window ASH, stacked by wait class */
+  /* the DB time card: FOREGROUND ASH per window, stacked by wait class.
+     DB time is foreground time and ASH's foreground samples are its
+     sampled estimate, so the bars measure what the headline measures;
+     the Current value printed stays the card's DB time. */
   var row=$('#f-dbtime .fc-main .wg .r.bars');if(!row)return;
-  var np=wins().length,cur=[];
-  AX.classes.forEach(function(c,k){cur.push([c,AX.win[k][np-1]||0,k]);});
+  var W=AX.winfg||AX.win,np=wins().length,cur=[];
+  AX.classes.forEach(function(c,k){cur.push([c,W[k][np-1]||0,k]);});
   cur.sort(function(a,b){return b[1]-a[1];});
   row.classList.remove('bars');row.classList.add('ash');
-  if(!stack(row,AX.win,{labels:true})){row.classList.remove('ash');row.classList.add('bars');return;}
+  if(!stack(row,W,{labels:true})){row.classList.remove('ash');row.classList.add('bars');return;}
   var tot=0;cur.forEach(function(x){tot+=x[1];});
-  $$(':scope > .c',row).forEach(function(c){var v=$('.v',c);if(!v)return;if(c.classList.contains('cur'))v.textContent=tot.toFixed(2);else v.parentNode.removeChild(v);});
+  $$(':scope > .c',row).forEach(function(c){var v=$('.v',c);if(v&&!c.classList.contains('cur'))v.parentNode.removeChild(v);});
   $$(':scope > .c > i',row).forEach(function(x){x.parentNode.removeChild(x);});
-  var ul=doc.createElement('ul');ul.className='leg fcleg';ul.setAttribute('aria-label','Active sessions by wait class, ASH');
+  var ul=doc.createElement('ul');ul.className='leg fcleg';ul.setAttribute('aria-label','Foreground active sessions by wait class, ASH');
   ul.innerHTML=cur.filter(function(x){return x[1]>0;}).map(function(x){return '<li><i class="sw" style="--sw:'+wcol(x[0])+'"></i>'+esc(x[0])+'</li>';}).join('');
   var wg=row.closest('.wg');wg.parentNode.insertBefore(ul,wg);
-  wg.title='Active sessions (ASH) per compared window, stacked by wait class; Current total '+tot.toFixed(2)+' AAS';
+  wg.title='Foreground active sessions (ASH, a sampled estimate of DB time) per compared window, stacked by wait class; Current '+tot.toFixed(2)+' AAS in ASH. The Current value is the DB time headline.';
 }
 /* ---- 6. the full-span ASH chart: hover, legend, brush zoom, windows, markers */
 var AX=null,ax=null,cvs=null;

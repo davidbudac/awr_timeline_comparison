@@ -84,19 +84,31 @@ def emit(w) -> str:
     # ---- aggregate: (bucket, wait_class) -> samples ; class totals
     cells: dict[tuple[int, str], int] = {}
     class_totals: dict[str, int] = {}
-    cells_by_hour = []      # (bucket, week_offset or -1, class, samples) for the Timeline
+    # (bucket, [week_offsets the samples fall in], class, samples, foreground
+    # samples) for the Timeline.  A sample belongs to EVERY window whose
+    # [start, start + win_hours) holds it (j_lo .. j_hi window steps after
+    # range_start, as the SQL); foreground = ash_class minus the model's
+    # background-wait samples (the SQL's session_type = 'FOREGROUND').
+    cells_by_hour = []
     for m in w.hours(range_start, range_end):
         t = m.ts - timedelta(hours=1)
         b = int((t - range_start).total_seconds() / 3600 / bh)
-        hh = (t - range_start).total_seconds() / 3600
-        wk = (w.weeks_back - math.floor(hh / w.step_hours)) if (hh % w.step_hours) < w.win_hours else -1
+        hh = round((t - range_start).total_seconds() / 3600, 6)
+        j_lo = max(0, math.floor((hh - w.win_hours) / w.step_hours) + 1)
+        j_hi = min(w.weeks_back, math.floor(hh / w.step_hours))
+        wks = [w.weeks_back - j for j in range(j_lo, j_hi + 1)]
+        bgs = {}
+        for _ev, (bwc, _cnt, us) in m.bg_waits.items():
+            if bwc != "Idle":
+                bgs[bwc] = bgs.get(bwc, 0.0) + us / 1e6 / 10
         for wc, smp in m.ash_class.items():
             n = int(ora_round(smp, 0))
             if n <= 0:
                 continue
+            nfg = max(0, int(ora_round(smp - bgs.get(wc, 0.0), 0)))
             cells[(b, wc)] = cells.get((b, wc), 0) + n
             class_totals[wc] = class_totals.get(wc, 0) + n
-            cells_by_hour.append((b, wk, wc, n))
+            cells_by_hour.append((b, wks, wc, n, nfg))
 
     hours_json = "[" + ",".join('"' + ts_min(range_start + timedelta(hours=b * bh)) + '"'
                                 for b in range(total_buckets)) + "]"
@@ -152,11 +164,12 @@ def _timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour):
     m = max(1, math.ceil(max(1, total_hours / 400) / bh))
     cbh = m * bh
     nc = math.ceil(total_buckets / m)
-    ccells, wcells, totals = {}, {}, {}
-    for b, wk, wc, n in cells_by_hour:
+    ccells, wcells, wfcells, totals = {}, {}, {}, {}
+    for b, wks, wc, n, nfg in cells_by_hour:
         ccells[(b // m, wc)] = ccells.get((b // m, wc), 0) + n
-        if 0 <= wk <= w.weeks_back:
+        for wk in wks:
             wcells[(wk, wc)] = wcells.get((wk, wc), 0) + n
+            wfcells[(wk, wc)] = wfcells.get((wk, wc), 0) + nfg
         totals[wc] = totals.get(wc, 0) + n
     classes = sorted(totals, key=lambda c: (_CLS_RANK.get(c, 50), c))
     valid = {win.week_offset: win.valid_flag for win in w.windows}
@@ -190,6 +203,10 @@ def _timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour):
                 ssum += aas
                 cnt += 1
         cm[i] = ssum / cnt if cnt else None
+        out.append(("," if i else "") + "[" + ",".join(row) + "]")
+    out.append('],"winfg":[')
+    for i, c in enumerate(classes):
+        row = [aas_tok(wfcells.get((k, c), 0) / (360 * w.win_hours)) for k in range(w.weeks_back, -1, -1)]
         out.append(("," if i else "") + "[" + ",".join(row) + "]")
     out.append("]};</script>")
     if not totals:
