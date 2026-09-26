@@ -96,6 +96,42 @@ DECLARE
             || v_body || '</td>';
     END cell_html;
     @@sql/lib/anchor_id.plsql
+    @@sql/lib/fmt_num.plsql
+    @@sql/lib/finding_cards.plsql
+    @@sql/lib/wingrid.plsql
+
+    -- a parameter value for the configuration card's step line: a byte
+    -- count (all digits, 1 MB or more) reads as MB / GB, anything else is
+    -- shown as recorded (the cell ellipsizes; the title keeps it whole)
+    FUNCTION pv_txt(p_v VARCHAR2) RETURN VARCHAR2 IS
+        v_n NUMBER;
+    BEGIN
+        IF p_v IS NULL THEN RETURN '(unset)'; END IF;
+        IF REGEXP_LIKE(p_v, '^[0-9]{7,}$') THEN
+            v_n := TO_NUMBER(p_v);
+            IF v_n >= 1073741824 THEN
+                RETURN TO_CHAR(ROUND(v_n / 1073741824, 1), 'FM999999990D9', 'NLS_NUMERIC_CHARACTERS=''.,''')
+                    || ' GB';
+            ELSIF v_n >= 1048576 THEN
+                RETURN TO_CHAR(ROUND(v_n / 1048576, 1), 'FM999999990D9', 'NLS_NUMERIC_CHARACTERS=''.,''')
+                    || ' MB';
+            END IF;
+        END IF;
+        RETURN p_v;
+    END pv_txt;
+
+    -- the value of parameter p_name at window p_k ('__NONE__' = not present)
+    FUNCTION pv_at(p_name VARCHAR2, p_k PLS_INTEGER) RETURN VARCHAR2 IS
+    BEGIN
+        IF NOT v_cells.EXISTS(p_name || '|' || p_k) THEN RETURN '__NONE__'; END IF;
+        RETURN NVL(v_cells(p_name || '|' || p_k), '__NULL__');
+    END pv_at;
+
+    FUNCTION pv_html(p_v VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN CASE p_v WHEN '__NONE__' THEN '&ndash;' WHEN '__NULL__' THEN '(unset)'
+                        ELSE DBMS_XMLGEN.CONVERT(pv_txt(p_v)) END;
+    END pv_html;
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="param-changes" class="vw in-a"><h2>Parameters'
         || '<small class="h2sub">Initialization parameters whose value differs across the windows</small></h2>');
@@ -178,9 +214,10 @@ BEGIN
         RETURN;
     END IF;
 
-    -- A parameter that differs across the compared windows is worth the
-    -- Normal view (the section is otherwise Full-only).
-    DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("param-changes").classList.add("in-s");</script>');
+    -- v1.6.0: a parameter that differs across the compared windows is shown
+    -- in the Summary view by the configuration card (emitted below and moved
+    -- into 07's "What changed around it" slot), so this table stays in All
+    -- sections only.
 
     -- Header: Parameter | Current | -1w | -2w | ...
     v_header := '<thead><tr><th>Parameter</th><th data-w="0">Current</th>';
@@ -246,6 +283,105 @@ BEGIN
         || CASE WHEN v_n_changed = 1 THEN '' ELSE 's' END
         || ' changed across the compared windows.</p>');
     DBMS_OUTPUT.PUT_LINE('</section>');
+
+    --
+    -- v1.6.0 Summary: the configuration card.  One step line per changed
+    -- parameter on the window component (sql/lib/wingrid.plsql), so each
+    -- change lines up under the release flag of the interval it happened
+    -- in; the gutter names the window of the latest change and the marker
+    -- on that boundary (filled client-side, js_wingrid.plsql).  Emitted
+    -- hidden, then moved into 07's #changes-slot, which unhides the
+    -- "What changed around it" section.  At most 8 rows; the table above
+    -- lists every one.
+    --
+    DECLARE
+        v_cur_n   PLS_INTEGER := 0;       -- parameters that changed INTO the Current window
+        v_cur_one VARCHAR2(128);
+        v_first   VARCHAR2(128);
+        v_last    PLS_INTEGER;
+        v_v       VARCHAR2(4000);
+        v_prev    VARCHAR2(4000);
+        v_base    VARCHAR2(4000);
+        v_start   BOOLEAN;
+        v_lvl     VARCHAR2(2);
+        v_cells_h VARCHAR2(32767);
+        v_gut     VARCHAR2(4000);
+    BEGIN
+        FOR i IN 1 .. v_names.COUNT LOOP
+            IF v_weeks_back >= 1 AND pv_at(v_names(i), 0) <> pv_at(v_names(i), 1) THEN
+                v_cur_n := v_cur_n + 1;
+                v_cur_one := v_names(i);
+            END IF;
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('<article class="panel fc chg" id="f-config" aria-labelledby="f-config-h" hidden>'
+            || '<header class="fc-h"><div class="fc-k"><span class="sv"><b class="gk">&ne;</b>'
+            || 'Configuration</span></div></header>'
+            || '<h3 id="f-config-h">' || v_n_changed || ' parameter'
+            || CASE WHEN v_n_changed = 1 THEN ' differs' ELSE 's differ' END
+            || ' across the compared windows</h3>'
+            || '<p class="takeaway">'
+            || CASE WHEN v_cur_n = 1
+                    THEN 'Only ' || ent('<code>' || DBMS_XMLGEN.CONVERT(v_cur_one) || '</code>',
+                                        anchor_id('pa', v_cur_one), 'parameter')
+                         || ' changed into the Current window.'
+                    WHEN v_cur_n > 1
+                    THEN v_cur_n || ' of them changed into the Current window.'
+                    ELSE 'None changed into the Current window: every change is older.' END
+            || '</p>');
+        DBMS_OUTPUT.PUT_LINE('<div class="cfg-wg"><div class="wg fit"' || wg_attr
+            || ' role="table" aria-label="Parameter values per compared window">'
+            || wg_ruler('<span class="ct">Parameter</span>', '<span class="gt">Changed</span>'));
+        FOR i IN 1 .. LEAST(8, v_names.COUNT) LOOP
+            IF v_first IS NULL THEN v_first := v_names(i); END IF;
+            v_base := pv_at(v_names(i), v_weeks_back);
+            v_prev := NULL;
+            v_last := NULL;
+            v_cells_h := NULL;
+            FOR k IN REVERSE 0 .. v_weeks_back LOOP
+                v_v := pv_at(v_names(i), k);
+                v_start := (k = v_weeks_back) OR (v_v <> v_prev);
+                IF v_start AND k < v_weeks_back THEN v_last := k; END IF;
+                v_lvl := CASE WHEN v_v = v_base THEN 'lo' ELSE 'hi' END;
+                v_cells_h := v_cells_h || '<div class="c' || CASE WHEN k = 0 THEN ' cur' END
+                    || '" data-w="' || k || '"><i class="st ' || v_lvl
+                    || CASE WHEN v_start AND k < v_weeks_back THEN ' rise' END || '" aria-hidden="true"></i>'
+                    || CASE WHEN v_start AND k < v_weeks_back THEN '<i class="nd" aria-hidden="true"></i>' END
+                    || CASE WHEN v_start OR k = 0
+                            THEN '<span class="pv ' || v_lvl || '" title="'
+                                 || DBMS_XMLGEN.CONVERT(CASE v_v WHEN '__NONE__' THEN 'not recorded'
+                                                                 WHEN '__NULL__' THEN '(unset)' ELSE v_v END)
+                                 || '">' || pv_html(v_v) || '</span>' END
+                    || '</div>';
+                v_prev := v_v;
+            END LOOP;
+            v_gut := '<div class="g" role="cell"><div class="gl1"><span class="d1">'
+                || CASE WHEN v_last IS NULL THEN 'varies'
+                        WHEN v_last = 0 THEN 'changed in Current'
+                        ELSE 'changed ' || wg_date(v_last) END
+                || '</span></div>'
+                || CASE WHEN v_last IS NOT NULL
+                        THEN '<div class="gx"><span data-mk-at="' || v_last || '" data-mk-icon hidden></span></div>' END
+                || '</div>';
+            DBMS_OUTPUT.PUT_LINE('<div class="r p" data-name="' || DBMS_XMLGEN.CONVERT(v_names(i)) || '" role="row">'
+                || '<div class="l" role="rowheader"><span class="nm">'
+                || ent('<code>' || DBMS_XMLGEN.CONVERT(v_names(i)) || '</code>', anchor_id('pa', v_names(i)), 'parameter')
+                || '</span><span class="sub">'
+                || pv_html(v_base) || ' &rarr; ' || pv_html(pv_at(v_names(i), 0))
+                || '</span></div>');
+            DBMS_OUTPUT.PUT_LINE(v_cells_h);
+            DBMS_OUTPUT.PUT_LINE(v_gut || '</div>');
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('</div></div>'
+            || CASE WHEN v_names.COUNT > 8
+                    THEN '<p class="cfg-more">and ' || (v_names.COUNT - 8) || ' more in '
+                         || '<a href="#param-changes">Parameters</a></p>' END
+            || '<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
+            || anchor_id('pa', v_first) || '">Timeline &rarr;</a>'
+            || '<span class="evl"><a href="#param-changes">Parameters</a></span></footer></article>');
+        DBMS_OUTPUT.PUT_LINE('<script>(function(){var s=document.getElementById("changes-slot"),'
+            || 'c=document.getElementById("f-config");if(!s||!c)return;s.appendChild(c);c.hidden=false;'
+            || 'var x=document.getElementById("s-changes");if(x)x.hidden=false;})();</script>');
+    END;
 END;
 /
 

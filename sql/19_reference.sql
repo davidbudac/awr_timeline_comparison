@@ -166,7 +166,17 @@ BEGIN
         || ' the begin and end snapshot are the same, the instance restarted inside it, it straddles a DBID change, or its nearest snapshot is more than 15 minutes off the window edge.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>DB time</dt><dd>DB CPU (<code>dba_hist_sys_time_model</code>, foreground) plus non-idle wait time (<code>dba_hist_system_event</code>, <b>all sessions incl. background</b>) per snapshot interval,'
         || ' stacked by wait class, from the earliest compared window to Current. Not a strict foreground DB-time profile. A snapshot pair across an instance restart is a gap.</dd>');
-    DBMS_OUTPUT.PUT_LINE('<dt>Headline metrics</dt><dd>Six headline metrics across the compared windows, scored by the rule above.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Verdict</dt><dd>One sentence from the first two finding cards (the loudest card, then DB time when it is flagged): the lead metric and its move, &times;n at twice the mean'
+        || ' or more, else a percentage. For DB time, where the extra time went: CPU vs wait from DB CPU against DB time. <b>Likely source</b>: a statement that ran with a new plan in the'
+        || ' Current window, else a newcomer in the top SQL by physical reads, else a statement first seen this window, else the segment the extra reads land on. Fixed phrases, no free text.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Finding cards</dt><dd>One card per metric family of the scoring policy (<code>sql/lib/metric_policy.plsql</code>); families that tell one story share a card:'
+        || ' Physical I/O (physical and logical reads, long table scans, User I/O waits), DB time (DB time, the CPU / wait ratio, response time), Network (Network waits, SQL*Net bytes), Commit'
+        || ' (Commit waits, commits), Parsing, Writes and redo. A card is led by its loudest large, else moderate, metric of the card&rsquo;s main family. Twins are folded under'
+        || ' <b>related metrics</b> and never counted.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>DB time strip</dt><dd><code>DBA_HIST_SYSSTAT</code> DB time per compared window, divided by 100 (centiseconds per second = average active sessions); release markers sit'
+        || ' on the boundary between the two windows they fall between.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Checked and normal</dt><dd>Every other scored metric: the normal ones, loudest first; <b>moved, too small to matter</b> = past |z| 2 but under the metric&rsquo;s'
+        || ' materiality floor, or an informational counter; <b>improved</b> = a material move in the good direction. None of them is counted.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>ASH timeline</dt><dd><code>dba_hist_active_sess_history</code> over the full span in adaptive buckets. ON CPU is <b>CPU</b>; Idle excluded. Compared windows shaded.</dd>');
     IF ~profile_days > 0 THEN
         DBMS_OUTPUT.PUT_LINE('<dt>Day profile</dt><dd>Each hour of the 24 h ending at the report end against the <b>same hour-of-day</b> on the ~profile_days prior days, independent of the report cadence. Per-second rates from'

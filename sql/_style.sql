@@ -151,165 +151,6 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('footer.report      { order:4; }');
 
     -- =========================================================
-    -- Masthead (header.report) -- compact identity panel at the top
-    -- of the content column: brandline, small headline, run metadata,
-    -- verdict banner, windows strip.
-    -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('header.report {'
-        || ' background:var(--panel); color:var(--ink);'
-        || ' border:1px solid var(--hairline); border-radius:10px;'
-        || ' padding:18px 24px 16px; margin:20px 0 0; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .brandline {'
-        || ' font-weight:700; letter-spacing:0.14em; font-size:10.5px;'
-        || ' text-transform:uppercase; color:var(--muted); margin:0 0 10px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .brandline .dot { color:var(--accent); margin-right:6px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .brandline .slash { color:var(--accent); font-weight:700; }');
-    DBMS_OUTPUT.PUT_LINE('header.report h1 {'
-        || ' font-weight:700; font-size:24px; line-height:1.2;'
-        || ' letter-spacing:-0.01em; margin:0; color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('header.report h1 em {'
-        || ' font-style:normal; color:var(--accent); }');
-    DBMS_OUTPUT.PUT_LINE('header.report h1 .badge { display:none; }');
-    DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
-        || ' header.report { padding:14px 16px; }'
-        || ' header.report h1 { font-size:19px; } }');
-
-    -- Masthead .topgrid: headline left, run metadata right
-    DBMS_OUTPUT.PUT_LINE('header.report .topgrid {'
-        || ' display:flex; justify-content:space-between; align-items:flex-end;'
-        || ' gap:24px; flex-wrap:wrap; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .meta {'
-        || ' text-align:right; font-size:12px; color:var(--muted);'
-        || ' line-height:1.65; min-width:240px;'
-        || ' display:block; margin-top:0; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .meta div {'
-        || ' color:var(--muted); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .meta b {'
-        || ' color:var(--ink); font-weight:600; margin-right:4px; }');
-
-    -- Header windows-strip: narrow full-width DB-time timeline.
-    -- .strip-head holds a single caption line; .windows-chart is the
-    -- ECharts target (very short); .windows-fallback is shown only when
-    -- body.no-charts hides the chart (offline / CDN-less) and lists
-    -- windows as plain text.
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip {'
-        || ' margin-top:16px; font-size:13px; color:var(--ink-soft); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .strip-head {'
-        || ' display:flex; align-items:baseline; gap:10px;'
-        || ' flex-wrap:wrap; margin-bottom:4px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .strip-head b {'
-        || ' color:var(--muted); font-weight:700;'
-        || ' letter-spacing:0.08em; font-size:10.5px;'
-        || ' text-transform:uppercase; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .strip-meta {'
-        || ' color:var(--muted); font-size:11px;'
-        || ' letter-spacing:0.02em; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .windows-chart {'
-        || ' width:100%; height:64px; }');
-    DBMS_OUTPUT.PUT_LINE('body.no-charts header.report .windows-strip .windows-chart {'
-        || ' display:none; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .windows-fallback {'
-        || ' display:none; font-size:12px; color:var(--ink-soft);'
-        || ' flex-wrap:wrap; gap:4px 14px; margin-top:2px; }');
-    DBMS_OUTPUT.PUT_LINE('body.no-charts header.report .windows-strip .windows-fallback {'
-        || ' display:flex; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .windows-fallback .win b {'
-        || ' color:var(--ink); font-weight:700; margin-right:4px; }');
-
-    -- =========================================================
-    -- Masthead verdict: severity-tinted banner emitted by 00_params.sql
-    -- from a recomputed z-score. The container carries a v-ok / v-crit /
-    -- v-skip class so the whole callout is tinted by severity.
-    -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict {'
-        || ' margin-top:16px; padding:12px 16px;'
-        || ' border:1px solid var(--hairline); border-left:5px solid var(--muted);'
-        || ' border-radius:8px;'
-        || ' background:var(--panel-2);'
-        || ' font-size:13.5px; color:var(--ink-soft); line-height:1.5;'
-        || ' display:flex; flex-wrap:wrap; align-items:center;'
-        || ' column-gap:12px; row-gap:8px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict.v-crit {'
-        || ' border-left-color:var(--crit);'
-        || ' background:var(--crit-bg); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict.v-ok {'
-        || ' border-left-color:var(--ok);'
-        || ' background:var(--ok-bg); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict.v-skip {'
-        || ' border-left-color:var(--muted);'
-        || ' background:var(--skip-bg); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .label {'
-        || ' font-size:10.5px; letter-spacing:0.12em; text-transform:uppercase;'
-        || ' color:var(--muted); font-weight:700; align-self:center; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede {'
-        || ' color:var(--ink); font-weight:700;'
-        || ' font-size:19px; letter-spacing:-0.01em; line-height:1.15;'
-        || ' text-decoration:none; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict a.lede:hover { text-decoration:underline; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede.crit { color:var(--crit); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede.ok   { color:var(--ok); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede.skip { color:var(--muted); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .sep {'
-        || ' color:var(--accent); font-weight:700; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .body { color:var(--ink-soft); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .body a {'
-        || ' color:var(--accent); text-decoration:none; font-weight:600; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .body a:hover { text-decoration:underline; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover {'
-        || ' display:inline-flex; align-items:baseline; gap:6px;'
-        || ' white-space:nowrap; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover::before {'
-        || ' content:"\2022"; color:var(--accent); font-weight:700;'
-        || ' margin-right:2px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .name {'
-        || ' color:var(--ink); font-weight:600; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct {'
-        || ' font-variant-numeric:tabular-nums; font-weight:700; }');
-    -- F5: direction is carried by the glyph, not by color.  The percentage
-    -- text stays --ink in BOTH directions (red/green delta coloring is gone
-    -- report-wide: red is reserved for severity).  Only the small triangle
-    -- glyph inside the verdict block keeps a severity color.
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct.up   { color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct.down { color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct .g {'
-        || ' color:var(--crit); font-weight:700; margin-right:1px; }');
-
-    -- Compact "all movers" disclosure under the verdict.
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-all {'
-        || ' margin-top:8px; font-size:12px; color:var(--ink-soft); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-all summary {'
-        || ' cursor:pointer; user-select:none; padding:4px 0;'
-        || ' font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase;'
-        || ' color:var(--muted); font-weight:700; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-all summary:hover { color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list {'
-        || ' list-style:none; margin:6px 0 2px; padding:0;'
-        || ' display:grid;'
-        || ' grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));'
-        || ' gap:1px 20px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list li {'
-        || ' display:flex; align-items:baseline; gap:8px;'
-        || ' padding:2px 0; line-height:1.4;'
-        || ' border-bottom:1px solid var(--line-soft); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-dom {'
-        || ' font-size:9px; letter-spacing:0.08em; font-weight:700;'
-        || ' color:var(--muted); width:46px; flex:none; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-name {'
-        || ' color:var(--ink); flex:1 1 auto;'
-        || ' overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-z {'
-        || ' font-variant-numeric:tabular-nums; color:var(--muted); flex:none; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct {'
-        || ' font-variant-numeric:tabular-nums; font-weight:700;'
-        || ' flex:none; min-width:54px; text-align:right; }');
-    -- F5: neutralized (see the verdict .pct rules above).  The glyph in the
-    -- all-movers list is muted -- only the verdict block gets the crit glyph.
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct.up   { color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct.down { color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct .g {'
-        || ' color:var(--muted); font-weight:700; margin-right:1px; }');
-
-    -- =========================================================
     -- Sidebar rail (nav.toc): fixed left column with grouped section
     -- links.  JS in 00_params.sql prepends a status dot (span.st) to
     -- each link from the section severity classes, and drives the
@@ -386,49 +227,6 @@ BEGIN
     -- "+ N more in All sections" line the rail JS appends (Summary view).
     DBMS_OUTPUT.PUT_LINE('nav.toc a.more-sections { display:none; color:var(--muted); font-style:italic; }');
     DBMS_OUTPUT.PUT_LINE('body.vs nav.toc a.more-sections { display:flex; }');
-
-    -- =========================================================
-    -- "What changed" narrative (section 17), relocated into the masthead
-    -- slot by its own inline script.  A quiet accent-tinted note, not a
-    -- banner: the verdict above it already carries the severity color.
-    -- Kept in the Normal view (it IS the short report) --
-    -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('.narr {'
-        || ' border-left:3px solid var(--accent);'
-        || ' background:var(--accent-bg);'
-        || ' font-size:13px; line-height:1.6;'
-        || ' padding:10px 14px; border-radius:0 6px 6px 0;'
-        || ' margin-top:10px; color:var(--ink); }');
-    -- v1.5.0: the block is a structured list, one row per finding --
-    -- label | headline number | from -> to | why | section link.
-    DBMS_OUTPUT.PUT_LINE('.narr .narr-head {'
-        || ' font-size:10.5px; font-weight:700; letter-spacing:0.08em;'
-        || ' text-transform:uppercase; color:var(--accent-deep); margin:0 0 6px; }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list { list-style:none; margin:0; padding:0; }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list li {'
-        || ' display:grid; grid-template-columns:130px auto auto 1fr auto;'
-        || ' column-gap:14px; align-items:baseline; padding:5px 0;'
-        || ' border-top:1px solid color-mix(in srgb, var(--accent) 18%, transparent); }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list li:first-child { border-top:0; }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list .n-lbl { font-weight:700; color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list .n-num {'
-        || ' font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list .n-sub {'
-        || ' color:var(--ink-soft); font-variant-numeric:tabular-nums; white-space:nowrap; }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list .n-why { color:var(--muted); min-width:0; }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list .n-go { white-space:nowrap; font-size:12px; }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list li > :empty { display:none; }');
-    DBMS_OUTPUT.PUT_LINE('@media (max-width:700px) { .narr-list li {'
-        || ' grid-template-columns:1fr auto; }'
-        || ' .narr-list .n-why { grid-column:1 / -1; } }');
-    DBMS_OUTPUT.PUT_LINE('.narr b { font-weight:600; }');
-    DBMS_OUTPUT.PUT_LINE('.narr code {'
-        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
-        || ' font-size:11.5px; }');
-    DBMS_OUTPUT.PUT_LINE('.narr a { color:var(--accent-deep);'
-        || ' text-decoration:none; font-weight:600;'
-        || ' border-bottom:1px solid var(--border); }');
-    DBMS_OUTPUT.PUT_LINE('.narr a:hover { border-bottom-color:var(--accent); }');
 
     -- =========================================================
     -- Views (v1.6.0): Summary / Timeline / All sections replace Normal /
@@ -633,9 +431,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.xlink:hover { text-decoration:underline; opacity:1; }');
     DBMS_OUTPUT.PUT_LINE('.xlink[hidden] { display:none; }');
     DBMS_OUTPUT.PUT_LINE('.xlinks { display:inline-flex; gap:2px; margin-left:4px; }');
-    DBMS_OUTPUT.PUT_LINE('.ash-sql-card.jump-hi, .hero-card.jump-hi, div.jump-hi {'
+    DBMS_OUTPUT.PUT_LINE('.ash-sql-card.jump-hi, div.jump-hi {'
         || ' outline:2px solid var(--crit); outline-offset:2px; }');
-    DBMS_OUTPUT.PUT_LINE('.wchip em { font-style:normal; color:var(--ink-soft); font-weight:600; }');
     -- Phase 5: the SQL Monitor pool's detail row reads as part of its
     -- statement row (no rule between them, tighter padding).
     DBMS_OUTPUT.PUT_LINE('#sqlmon-pool tbody tr:not(.sqlmon-detail) > td { border-bottom:0; padding-bottom:4px; }'
@@ -781,7 +578,7 @@ BEGIN
         || ' margin:4px 0 8px; padding:0; background:transparent;'
         || ' max-height:48px; overflow:hidden;'
         || ' text-overflow:ellipsis; }');
-    DBMS_OUTPUT.PUT_LINE('body.no-charts .chart-wrap, body.no-charts .hero-card .mini { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('body.no-charts .chart-wrap { display:none; }');
     DBMS_OUTPUT.PUT_LINE('body.no-charts .cdn-warn { display:block !important; }');
     -- Theme-aware: var(--warn-fg) / var(--warn-border) keep the offline-charts
     -- banner legible in dark mode, where --warn-bg is near-black (F13).
@@ -790,56 +587,6 @@ BEGIN
         || ' background:var(--warn-bg); color:var(--warn-fg);'
         || ' padding:8px 12px; border:1px solid var(--warn-border); border-radius:8px;'
         || ' font-size:13px; margin:6px 0; }');
-
-    -- =========================================================
-    -- Overview KPI strip (#overview .hero-grid)
-    -- Panel cards: value on top, mini chart, then deltas at the foot.
-    -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('#overview .hero-grid {'
-        || ' display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px;'
-        || ' background:transparent; border:0; border-radius:0;'
-        || ' margin-top:12px; padding:0; }');
-    DBMS_OUTPUT.PUT_LINE('@media (max-width: 900px) {'
-        || ' #overview .hero-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }');
-    DBMS_OUTPUT.PUT_LINE('@media (max-width: 520px) {'
-        || ' #overview .hero-grid { grid-template-columns:1fr; } }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card {'
-        || ' background:var(--panel-2);'
-        || ' border:1px solid var(--hairline);'
-        || ' padding:13px 15px;'
-        || ' display:flex; flex-direction:column; gap:6px;'
-        || ' position:relative; min-width:0;'
-        || ' border-radius:8px; box-shadow:none; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .label {'
-        || ' font-size:10.5px; text-transform:uppercase; letter-spacing:0.10em;'
-        || ' color:var(--muted); font-weight:700; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .value {'
-        || ' font-size:25px; font-weight:700; letter-spacing:-0.02em;'
-        || ' line-height:1.05; color:var(--ink);'
-        || ' font-variant-numeric:tabular-nums; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .value small {'
-        || ' font-size:12px; font-weight:500; color:var(--muted);'
-        || ' margin-left:4px; letter-spacing:0; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .mini { width:100%; height:48px; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .foot {'
-        || ' display:flex; justify-content:space-between; align-items:center;'
-        || ' gap:6px; font-size:11px; color:var(--muted); }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .deltas {'
-        || ' display:flex; gap:8px; flex-wrap:wrap; min-width:0; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta {'
-        || ' font-variant-numeric:tabular-nums; white-space:nowrap; font-weight:600; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta .dp {'
-        || ' color:var(--muted); margin-right:2px; font-size:10.5px; font-weight:500; }');
-    -- F5: hero deltas read direction from the glyph, not from red/green.
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta.up   { color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta.down { color:var(--ink); }');
-    -- B6: per-card "vs prior mean ... / range ..." caption line (section 08).
-    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-delta, .hc-delta {'
-        || ' font-size:11.5px; color:var(--muted); line-height:1.45;'
-        || ' font-variant-numeric:tabular-nums; }');
-    DBMS_OUTPUT.PUT_LINE('.hc-delta b { color:var(--ink); font-weight:700; }');
-    -- Generic full-width horizontal-bar SVG (section 08 and friends).
-    DBMS_OUTPUT.PUT_LINE('svg.hbars { display:block; width:100%; height:42px; }');
 
     -- =========================================================
     -- Windows ribbon
@@ -1316,6 +1063,217 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.notes code,.ab-meta code{font-size:12px}');
     DBMS_OUTPUT.PUT_LINE('.ab-meta{margin:0;font-size:12.5px;color:var(--muted)}');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 720px){.notes{grid-template-columns:minmax(0,1fr)}.gi{grid-template-columns:minmax(0,1fr)}}');
+
+    -- =========================================================
+    -- v1.6.0 Summary view (Mock D): the verdict hero (00 / 17), the ONE
+    -- window component .wg (sql/lib/wingrid.plsql + js_wingrid.plsql; the
+    -- hero strip 08, the card charts 07, the config card 12 and the
+    -- Timeline grid of phase 3), finding cards and the checked-and-normal
+    -- grid (07).  Lifted from design/report_mocks_src/hybrid/style.css;
+    -- generic class names are scoped under .wg / .fc / .hero because the
+    -- fleet report includes this file too.
+    -- =========================================================
+    -- Summary sections sit on the page background; their cards are the panels
+    DBMS_OUTPUT.PUT_LINE('body.vs section.sumsec{background:none;border:0;border-radius:0;padding:0;box-shadow:none}');
+    DBMS_OUTPUT.PUT_LINE('body.vs section.sumsec > h2{margin:var(--s7) 0 var(--s5);padding:var(--s5) 0 0;border-bottom:0;border-top:1px solid var(--hairline)}');
+    DBMS_OUTPUT.PUT_LINE('section.sumsec[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.panel{background:var(--panel);border:1px solid var(--hairline);border-radius:10px}');
+    -- the verdict hero
+    DBMS_OUTPUT.PUT_LINE('section.hero{background:none;border:0;border-radius:0;padding:var(--s7) 0 0;margin:0}');
+    DBMS_OUTPUT.PUT_LINE('.hero .verdict{font-size:30px;line-height:1.3;font-weight:400;letter-spacing:-.015em;max-width:30em;margin:0;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .verdict b{font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.hero .verdict code{font-family:inherit;font-size:1em;font-weight:500;overflow-wrap:anywhere}');
+    DBMS_OUTPUT.PUT_LINE('.hero .verdict.quiet{font-size:26px}');
+    DBMS_OUTPUT.PUT_LINE('.hero .because{font-size:16px;line-height:1.55;color:var(--ink-soft);max-width:48em;margin:var(--s3) 0 0}');
+    DBMS_OUTPUT.PUT_LINE('.hero .because code{font-size:.9em}');
+    DBMS_OUTPUT.PUT_LINE('.hero .pills{display:flex;flex-wrap:wrap;gap:var(--s2);margin:var(--s5) 0 0;padding:0;list-style:none}');
+    DBMS_OUTPUT.PUT_LINE('.hero .pills a,.hero .pills span.pl{display:inline-flex;align-items:center;gap:8px;padding:4px 12px;border:1px solid var(--hairline);border-radius:999px;background:var(--panel);color:var(--ink-soft);font-size:13px;text-decoration:none;line-height:20px}');
+    DBMS_OUTPUT.PUT_LINE('.hero .pills a:hover{border-color:var(--muted);color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .pills b{color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.hero .hnotes{list-style:none;margin:var(--s4) 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13.5px;color:var(--ink-soft);max-width:80em}');
+    DBMS_OUTPUT.PUT_LINE('.hero .hnotes li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}');
+    DBMS_OUTPUT.PUT_LINE('.hero .hnotes .hl{font-weight:600;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .hnotes .hw{color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .hnotes a.go{color:var(--ink-soft);font-size:12.5px;text-decoration:none;border-bottom:1px solid var(--hairline)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .hnotes a.go:hover{color:var(--ink);border-color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .snapnote{margin:var(--s3) 0 0;font-size:12.5px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('section.strip-sec{background:none;border:0;border-radius:0;padding:0;margin:var(--s5) 0 0}');
+    DBMS_OUTPUT.PUT_LINE('.strip{overflow:hidden}');
+    -- ONE window component (.wg, sql/lib/wingrid.plsql): 13 columns, Current last and wider
+    DBMS_OUTPUT.PUT_LINE('.wg{--lab:224px;--gut:172px;--cmin:48px;--np:12;--tcols:repeat(var(--np),minmax(var(--cmin),1fr)) minmax(calc(var(--cmin) * 1.5),1.6fr);position:relative;font-variant-numeric:tabular-nums}');
+    DBMS_OUTPUT.PUT_LINE('.wg.fit{--cmin:18px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r{display:grid;grid-template-columns:var(--lab) var(--tcols) var(--gut);position:relative}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare{--cmin:14px}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .r{grid-template-columns:var(--tcols)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c{position:relative;min-width:0;border-left:1px solid var(--line-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .c{border-left:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.cur{background-color:var(--acc-band)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.mk{box-shadow:inset 1.5px 0 0 var(--mkline)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r > .l{position:sticky;left:0;z-index:4;background:var(--panel);padding:0 12px 0 16px;display:flex;flex-direction:column;justify-content:center;min-width:0;border-right:1px solid var(--hairline)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .l .nm{font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .l .sub{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r > .g{border-left:1px solid var(--hairline);padding:4px 12px;display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;white-space:nowrap;overflow:hidden;background:var(--panel);--row-bg:var(--panel)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .g .gl1{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:12.5px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .g .gl1 .z{font-size:11px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .g .d1{font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.wg .g .gx{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}');
+    DBMS_OUTPUT.PUT_LINE('.wg .g .bd.sm{margin:0 -6px 0 -10px;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .fr{height:40px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .fr .flags{grid-column:2 / -2;position:relative}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .fr{height:24px}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .fr .flags{grid-column:1 / -1}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .fr.t2{height:40px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .pole{position:absolute;bottom:0;width:0;border-left:1.5px solid var(--mk);pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.wg .flag{position:absolute;height:16px;padding:0 6px 0 5px;font-size:11px;line-height:16px;color:var(--ink);background:var(--flagbg);border-radius:0 3px 3px 0;white-space:nowrap;cursor:default}');
+    DBMS_OUTPUT.PUT_LINE('.wg .flag::before{content:"";position:absolute;left:-1.5px;top:0;height:16px;border-left:1.5px solid var(--mk)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .flag.end{border-radius:3px 0 0 3px;padding:0 5px 0 6px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .flag.end::before{left:auto;right:-1.5px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .dr .h{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.2;padding:4px 0;border-left:1px solid var(--line-soft);min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .dr .h{border-left:0;padding:4px 0 0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .dr .h.cur{background-color:var(--acc-band)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .h.mk{box-shadow:inset 1.5px 0 0 var(--mkline)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .h .hd{font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.wg .h .ho{font-size:10.5px;color:var(--muted);white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.wg .h.cur .hd,.wg .h.cur .ho{color:var(--acc-ink)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .h.cur .ho{font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .h .hd{font-weight:400;font-size:11px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .h.cur .hd{font-weight:600;color:var(--acc-ink)}');
+    DBMS_OUTPUT.PUT_LINE('.wg.tight .h:not(.cur):not(.keep) .hd,.wg.tight .h:not(.cur) .ho{visibility:hidden}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .rin{display:grid;grid-template-columns:var(--lab) var(--tcols) var(--gut);grid-template-rows:40px 40px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler{border-bottom:1px solid var(--line-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .corner{grid-row:1 / 3;grid-column:1;display:flex;flex-direction:column;justify-content:center;gap:2px;background:var(--panel);padding:8px 12px 8px 16px;border-right:1px solid var(--hairline)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .corner .ct{font-weight:600;font-size:13px;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .corner .cs{font-size:11px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .flags{grid-row:1;grid-column:2 / -2;position:relative}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .h{grid-row:2;border-left:1px solid var(--line-soft);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.25;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .h.cur{background-color:var(--acc-band)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .gh{grid-row:1 / 3;grid-column:-2 / -1;border-left:1px solid var(--hairline);padding:8px 12px;display:flex;flex-direction:column;justify-content:flex-end;gap:2px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .gh .gt{font-weight:600;font-size:12px;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .gh .gs{font-size:11px;color:var(--muted);line-height:1.3}');
+    DBMS_OUTPUT.PUT_LINE('.wg .v{position:absolute;left:0;right:0;top:2px;text-align:center;font-size:10.5px;line-height:14px;color:var(--muted);white-space:nowrap;pointer-events:none;z-index:3}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.cur .v{font-weight:600;color:var(--ink);font-size:12px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .v.nil{top:auto;bottom:4px;color:var(--ink-4)}');
+    DBMS_OUTPUT.PUT_LINE('body.js-wg .wg:not(.allv) .c:not(.cur) .v:not(.nil){opacity:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg.allv.tight .c:not(.cur) .v:not(.nil){opacity:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.hc,.wg .h.hc{background-image:linear-gradient(var(--hov),var(--hov))}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.hc .v{opacity:1!important}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.bars{--rh:44px;--bh:24px;--bb:4px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.bars .c{min-height:var(--rh)}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.b{position:absolute;z-index:2;bottom:var(--bb);left:50%;width:14px;margin-left:-7px;border-radius:3px 3px 0 0;background:var(--bar)}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare i.b{width:calc(100% - 8px);max-width:14px;left:50%;transform:translateX(-50%);margin-left:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.cur i.b{width:20px;margin-left:-10px;background:var(--acc)}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .c.cur i.b{width:calc(100% - 8px);max-width:20px;margin-left:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.sd{position:absolute;z-index:3;left:50%;width:9px;height:9px;margin:0 0 -4.5px -4.5px;border-radius:50%;box-shadow:0 0 0 2px var(--panel)}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.sd.s-large{background:var(--crit-dot)}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.sd.s-moderate{background:var(--warn-dot)}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.z2,.wg i.z1{position:absolute;left:0;right:0;z-index:1;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.z2{background:var(--zone2);opacity:.75}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.z1{background:var(--zone1);opacity:.55}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.mn{position:absolute;left:0;right:0;z-index:2;height:0;border-top:1px solid var(--mean);opacity:.55;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.cur i.z2,.wg .c.cur i.z1{opacity:.5}');
+    DBMS_OUTPUT.PUT_LINE('.wg .base{position:absolute;left:0;right:0;bottom:calc(var(--bb) - 1px);border-top:1px solid var(--hairline);z-index:1}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.p{--rh:40px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.p .c{min-height:var(--rh)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .st{position:absolute;left:0;right:0;height:0;border-top:1.5px solid var(--muted);pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.wg .st.lo{bottom:10px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .st.hi{bottom:24px;border-top-color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .st.rise::before{content:"";position:absolute;left:-1.5px;top:-1.5px;height:15.5px;border-left:1.5px solid var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .nd{position:absolute;left:-4px;bottom:20px;width:8px;height:8px;border-radius:50%;background:var(--ink);box-shadow:0 0 0 2px var(--panel);z-index:3}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.p .pv{position:absolute;left:6px;font:10.5px/14px ui-monospace,Menlo,Consolas,monospace;color:var(--muted);white-space:nowrap;z-index:3;pointer-events:none;max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.p .pv.lo{bottom:12px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.p .pv.hi{bottom:26px;color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.p .c.cur .pv.hi{color:var(--acc-ink)}');
+    DBMS_OUTPUT.PUT_LINE('.kf{display:inline-block;position:relative;width:9px;height:12px;vertical-align:-1px;margin-right:2px}');
+    DBMS_OUTPUT.PUT_LINE('.kf::before{content:"";position:absolute;left:0;top:0;bottom:0;border-left:1.5px solid var(--mk)}');
+    DBMS_OUTPUT.PUT_LINE('.kf::after{content:"";position:absolute;left:1.5px;top:0;width:7px;height:6px;background:var(--mk);clip-path:polygon(0 0,100% 50%,0 100%)}');
+    -- the hero strip: DB time per window on the window geometry
+    DBMS_OUTPUT.PUT_LINE('.strip .wg .r > .l{background:var(--panel)}');
+    DBMS_OUTPUT.PUT_LINE('.strip .r.bars{--rh:128px;--bh:96px;--bb:6px}');
+    DBMS_OUTPUT.PUT_LINE('.strip .r.bars > .l .big{font-size:22px;font-weight:600;letter-spacing:-.02em;line-height:1.1;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.strip .r.bars > .l .big .u{font-size:13px;font-weight:400;color:var(--muted);margin-left:4px;letter-spacing:0}');
+    -- finding cards (one per card group of metric_policy families)
+    DBMS_OUTPUT.PUT_LINE('.cards{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s5)}');
+    DBMS_OUTPUT.PUT_LINE('.fc{position:relative;padding:var(--s5) var(--s6) 0;display:flex;flex-direction:column;min-width:0;scroll-margin-top:calc(var(--navh, 0px) + 16px);--row-bg:var(--panel)}');
+    DBMS_OUTPUT.PUT_LINE('.fc.f-large::before,.fc.f-moderate::before{content:"";position:absolute;left:-1px;top:24px;height:32px;width:2px;border-radius:1px;background:var(--crit-dot)}');
+    DBMS_OUTPUT.PUT_LINE('.fc.f-moderate::before{background:var(--warn-dot)}');
+    DBMS_OUTPUT.PUT_LINE('.fc-h{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 24px;align-items:start}');
+    DBMS_OUTPUT.PUT_LINE('.fc-k{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;font-size:13px;color:var(--muted);padding-top:4px}');
+    DBMS_OUTPUT.PUT_LINE('.fc-k .sv{display:inline-flex;align-items:center;gap:8px;color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.fc-k .gk{font-style:normal;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.fc-band{width:280px}');
+    DBMS_OUTPUT.PUT_LINE('.fc-band .bd-ax{min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.fc h3{font-size:19px;line-height:1.3;font-weight:600;letter-spacing:-.01em;margin:8px 0 0;padding:0;border:0;text-transform:none;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.fc h3::before{content:none}');
+    DBMS_OUTPUT.PUT_LINE('.fc h3,.calm-notes .note h3{display:block}');
+    DBMS_OUTPUT.PUT_LINE('.fc.lead h3{font-size:24px}');
+    DBMS_OUTPUT.PUT_LINE('.fc.slim h3{font-size:17px}');
+    DBMS_OUTPUT.PUT_LINE('.fc-b{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:var(--s4) var(--s7);margin-top:var(--s4)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .big{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .big .v{font-size:32px;font-weight:600;letter-spacing:-.02em;line-height:1.15;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.fc.lead .big .v{font-size:40px}');
+    DBMS_OUTPUT.PUT_LINE('.fc.slim .big .v{font-size:24px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .big .u{color:var(--ink-soft);font-size:14px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .big .nrm{color:var(--muted);font-size:13px;flex-basis:100%}');
+    DBMS_OUTPUT.PUT_LINE('.fc .wg{margin-top:8px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .wg .r.bars{--rh:150px;--bh:118px}');
+    DBMS_OUTPUT.PUT_LINE('.fc.lead .wg .r.bars{--rh:176px;--bh:144px}');
+    DBMS_OUTPUT.PUT_LINE('.fc.slim .wg .r.bars{--rh:100px;--bh:70px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .ev{margin:0;display:flex;flex-direction:column;align-self:start;padding-top:4px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr{display:grid;grid-template-columns:88px minmax(0,1fr) 136px;gap:2px var(--s4);padding:var(--s3) 0;border-top:1px solid var(--line-soft);align-items:start}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr:first-child{border-top:0;padding-top:4px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr dt{color:var(--muted);font-size:13px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr dd{margin:0;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr .id{display:block;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;color:var(--ink);overflow-wrap:anywhere;line-height:1.4}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr .id.txt{font-family:inherit;font-size:14px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr .de{display:block;color:var(--muted);font-size:12.5px;line-height:1.45}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr .m{display:flex;flex-direction:column;align-items:flex-end;gap:2px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr .m .d{font-size:13px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr .m .bd{width:128px;min-width:0;margin-right:-8px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr .m .ns{font-size:11px;color:var(--ink-4)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel{margin-top:16px;border-top:1px solid var(--line-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel > summary{list-style:none;cursor:pointer;padding:12px 0;font-size:13.5px;color:var(--ink-soft);display:flex;align-items:center;gap:8px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel > summary::-webkit-details-marker{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel > summary::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .15s;margin:0 4px 0 2px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel[open] > summary::before{transform:rotate(45deg)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel > summary:hover{color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel .tw{margin:0 0 16px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel table{margin:0}');
+    DBMS_OUTPUT.PUT_LINE('.fc-f{margin-top:auto;border-top:1px solid var(--line-soft);padding:var(--s3) 0;font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel + .fc-f{margin-top:0}');
+    DBMS_OUTPUT.PUT_LINE('.fc-f .evl{display:flex;flex-wrap:wrap;gap:4px 16px}');
+    DBMS_OUTPUT.PUT_LINE('.fc-f .evl a{color:var(--ink-soft);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}');
+    DBMS_OUTPUT.PUT_LINE('.fc-f .evl a:hover{color:var(--ink);text-decoration-color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.fc-f .jump{color:var(--ink-soft);text-decoration:none;font-weight:500;margin-right:auto;order:2}');
+    DBMS_OUTPUT.PUT_LINE('.fc-f .jump:hover{color:var(--ink);text-decoration:underline}');
+    DBMS_OUTPUT.PUT_LINE('.fc .takeaway{margin:8px 0 0;font-size:14px;color:var(--ink-soft);max-width:80ch}');
+    DBMS_OUTPUT.PUT_LINE('.fc .cfg-wg{margin:var(--s4) calc(-1 * var(--s6)) 0;border-top:1px solid var(--line-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .cfg-wg .wg > .r{border-bottom:1px solid var(--line-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .cfg-wg .wg > .r:last-child{border-bottom:0}');
+    DBMS_OUTPUT.PUT_LINE('.fc .cfg-wg .l .nm{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .cfg-more{margin:0;padding:var(--s2) 0 0;font-size:12.5px;color:var(--muted)}');
+    -- checked and normal
+    DBMS_OUTPUT.PUT_LINE('.calm{padding:var(--s2) var(--s6)}');
+    DBMS_OUTPUT.PUT_LINE('.ngrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:32px}');
+    DBMS_OUTPUT.PUT_LINE('.nr{display:grid;grid-template-columns:minmax(0,1fr) 112px 88px;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13.5px;--row-bg:var(--panel)}');
+    DBMS_OUTPUT.PUT_LINE('.nr .l{color:var(--ink-soft);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.nr .l small{display:block;color:var(--muted);font-size:12px}');
+    DBMS_OUTPUT.PUT_LINE('.nr .vv{text-align:right;line-height:1.3;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.nr .vv small{display:block;font-size:12px}');
+    DBMS_OUTPUT.PUT_LINE('.nr .bd{min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.calm-notes{display:grid;grid-template-columns:1fr 1fr;gap:var(--s5);margin-top:var(--s5);align-items:start}');
+    DBMS_OUTPUT.PUT_LINE('.calm-notes .note{padding:var(--s4) var(--s6)}');
+    DBMS_OUTPUT.PUT_LINE('.calm-notes .note h3{font-size:14px;margin:0 0 var(--s1);padding:0;border:0;text-transform:none;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.calm-notes .note h3::before{content:none}');
+    DBMS_OUTPUT.PUT_LINE('.calm-notes .note p{margin:0 0 8px;font-size:13.5px;color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.calm-notes .note .nr:last-child{border-bottom:0}');
+    DBMS_OUTPUT.PUT_LINE('.calm-notes .note.improved{background:transparent;border-style:dashed}');
+    DBMS_OUTPUT.PUT_LINE('.calm-more{margin:var(--s3) 0 0;font-size:12.5px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.calm-empty{margin:0;padding:var(--s4) 0;font-size:14px;color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.ent-x{font:inherit}');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.dotk.typical{border:1.5px solid var(--muted)} .dotk.improved{border:2px solid var(--imp)}');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 1180px){.fc-b{grid-template-columns:minmax(0,1fr)}.ngrid{grid-template-columns:repeat(2,minmax(0,1fr))}}');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 900px){.calm-notes{grid-template-columns:1fr}.fc-h{grid-template-columns:minmax(0,1fr)}.fc-band{width:100%}}');
 
     -- =========================================================
     -- Print

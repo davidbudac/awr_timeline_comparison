@@ -15,9 +15,14 @@ set -uo pipefail
 cd "$(dirname "$0")"
 
 fail=0
+# A finding raised inside a `... | while read` loop runs in a subshell, where
+# fail=1 is lost; the flag file carries it back to the final exit code.
+failflag=$(mktemp "${TMPDIR:-/tmp}/awr_lint.XXXXXX") || exit 2
+trap 'rm -f "$failflag"' EXIT
 finding() {                     # finding <check-name> <file:line-ish> <message>
     printf 'LINT [%s] %s\n    %s\n' "$1" "$2" "$3"
     fail=1
+    echo x >> "$failflag"
 }
 
 # All SQL*Plus-parsed sources (the driver + every section/lib/template file).
@@ -320,6 +325,37 @@ for f in sql/[0-9]*.sql; do
     done
 done
 
+# ----------------------------------------------------------------------
+# 20. sql/lib/wingrid.plsql (the window component) and
+#     sql/lib/finding_cards.plsql (Summary vocabulary) call fmt_num(): in
+#     every file that includes either, fmt_num must come first (else
+#     PLS-00313 at compile time on the DB).
+# ----------------------------------------------------------------------
+for f in $(grep -l -E '@@sql/lib/(wingrid|finding_cards)\.plsql' $(sql_files) 2>/dev/null); do
+    fn=$(grep -n '@@sql/lib/fmt_num.plsql' "$f" | head -1 | cut -d: -f1)
+    for lib in wingrid finding_cards; do
+        ln=$(grep -n "@@sql/lib/$lib.plsql" "$f" | head -1 | cut -d: -f1)
+        if [ -n "$ln" ] && { [ -z "$fn" ] || [ "$fn" -gt "$ln" ]; }; then
+            finding summary-include-order "$f:$ln" "sql/lib/$lib.plsql needs sql/lib/fmt_num.plsql included before it"
+        fi
+    done
+done
+
+# ----------------------------------------------------------------------
+# 21. Entity links (a.ent, v1.6.0) have ONE emitter, ent() in
+#     sql/lib/finding_cards.plsql, fed an id from sql/lib/anchor_id.plsql
+#     (anchor_id / finding_anchor), so a link and its target row can never
+#     drift.  A hand-written class="ent" anywhere else is flagged.
+# ----------------------------------------------------------------------
+for f in awr_trend.sql sql/*.sql sql/lib/*.plsql; do
+    [ "$f" = "sql/lib/finding_cards.plsql" ] && continue
+    grep -n 'class="ent"' "$f" | grep -v -E '^[0-9]+:[[:space:]]*--' \
+      | while IFS= read -r line; do
+        finding ent-emitter "$f:${line%%:*}" "hand-written class=\"ent\" -- use ent(html, anchor_id(kind, name), kind) (sql/lib/finding_cards.plsql)"
+    done
+done
+
+[ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"
 fi

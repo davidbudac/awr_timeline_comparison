@@ -564,6 +564,11 @@ END;
 @@sql/lib/js_markers.plsql
 @@~marker_include
 
+-- v1.6.0: the window component's client half (bars, release flags on the
+-- window boundaries, hover) and the entity-link unwrap; reads
+-- window.AWR_WIN, which 00_params.sql emits.
+@@sql/lib/js_wingrid.plsql
+
 -- -------------------------------------------------------------------
 -- Sections.  Each section is compute+render in one anonymous block;
 -- none of them write to the database.  Run order matters: the findings
