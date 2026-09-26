@@ -110,17 +110,9 @@ BEGIN
     load_targets AS (
         @@~template_dir/sysstat_load_targets.sql
     ),
-    load_pairs AS (
-        SELECT w.week_offset, w.dur_sec, ss.stat_name, ss.instance_number,
-               ss.snap_id, ss.value,
-               w.begin_snap_id, w.end_snap_id
-        FROM   valid_windows w
-        JOIN   dba_hist_sysstat ss
-            ON ss.dbid = w.dbid
-           AND ss.snap_id IN (w.begin_snap_id, w.end_snap_id)
-           AND ss.instance_number = w.instance_number
-           AND ss.stat_name IN (SELECT stat_name FROM load_targets)
-    ),
+    -- SYSSTAT counters, with DB time / DB CPU from the time model
+    @@sql/lib/load_pairs_cte.sql
+    ,
     load_bounds AS (
         SELECT week_offset, dur_sec, stat_name, instance_number,
                SUM(CASE WHEN snap_id = begin_snap_id THEN value END) AS beg_val,

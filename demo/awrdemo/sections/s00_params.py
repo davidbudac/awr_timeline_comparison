@@ -71,8 +71,9 @@ def _window_values(w):
         dur = m.dur_sec
         # LOAD: cross-instance delta / span
         for st in LOAD_TARGETS:
-            if st in m.load and dur > 0:
-                put("LOAD", st, win.week_offset, m.load[st] / dur)
+            v = h.load_total(m, st)
+            if v is not None and dur > 0:
+                put("LOAD", st, win.week_offset, v / dur)
         # METRIC: AVG(snap_value) over the window's snaps
         for mt in METRIC_TARGETS:
             if mt in m.sysmetric:

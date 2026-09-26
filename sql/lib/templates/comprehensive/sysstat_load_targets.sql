@@ -14,6 +14,10 @@
 --   @@~template_dir/sysstat_load_targets.sql
 -- and a different template's directory swaps in transparently.
 --
+-- 'DB time' and 'DB CPU' are TIME MODEL names: sql/lib/load_pairs_cte.sql
+-- reads those two from DBA_HIST_SYS_TIME_MODEL (DBA_HIST_SYSSTAT has no
+-- 'DB CPU' row), converted to centiseconds like SYSSTAT's DB time.
+--
             SELECT 'redo size'                              stat_name FROM dual UNION ALL
             SELECT 'redo size for lost write detection'               FROM dual UNION ALL
             SELECT 'DB time'                                          FROM dual UNION ALL

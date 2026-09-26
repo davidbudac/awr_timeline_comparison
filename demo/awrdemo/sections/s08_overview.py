@@ -13,9 +13,10 @@ def emit(w) -> str:
     out = ["<!-- AWR-SECTION: 08_overview BEGIN -->"]
 
     def fn(m):
-        if "DB time" not in m.load or m.dur_sec <= 0:
+        v = h.load_total(m, "DB time")         # time model, like 08's SQL
+        if v is None or m.dur_sec <= 0:
             return None
-        return m.load["DB time"] / m.dur_sec
+        return v / m.dur_sec
 
     series = w.window_series(fn)                      # index = week_offset
     vals = {k: v for k, v in enumerate(series) if v is not None}

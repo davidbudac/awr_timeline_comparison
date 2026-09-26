@@ -87,8 +87,9 @@ def _unified_rows(w):
             continue
         k = win.week_offset
         for stat in LOAD_TARGETS:
-            if stat in m.load and m.dur_sec > 0:
-                put("LOAD", stat, k, m.load[stat] / m.dur_sec)
+            v = h.load_total(m, stat)
+            if v is not None and m.dur_sec > 0:
+                put("LOAD", stat, k, v / m.dur_sec)
         for name in METRIC_TARGETS:
             if name in m.sysmetric:
                 put("METRIC", name, k, m.sysmetric[name])

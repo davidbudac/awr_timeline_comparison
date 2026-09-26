@@ -2,7 +2,7 @@
 over the comprehensive template's sysstat_load_targets.sql."""
 from __future__ import annotations
 
-from awrdemo.helpers import esc, is_essential, anchor_id, lib_ls, policy_bucket
+from awrdemo.helpers import esc, is_essential, anchor_id, lib_ls, policy_bucket, load_total
 from awrdemo.sections._pivot import header, row_cells
 
 # sql/lib/templates/comprehensive/sysstat_load_targets.sql (27 stats)
@@ -41,7 +41,7 @@ def emit(w) -> str:
     out.append('<table id="load-profile">' + header(w, True) + '<tbody>')
 
     for stat in sorted(TARGETS, key=lambda s: (_ORDER.get(s, 99), s)):
-        vals = w.window_series(lambda m, s=stat: (m.load.get(s, 0.0) / m.dur_sec)
+        vals = w.window_series(lambda m, s=stat: ((load_total(m, s) or 0.0) / m.dur_sec)
                                if m.dur_sec > 0 else None)
         label = stat
         unit = 'bytes/s' if stat in _BYTES else ('cs/s' if stat in _CS else '/s')

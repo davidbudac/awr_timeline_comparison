@@ -44,7 +44,7 @@ DECLARE
     @@sql/lib/wingrid.plsql
 BEGIN
     --
-    -- DB time (SYSSTAT, cumulative) per valid window: pairs -> bounds ->
+    -- DB time (time model, cumulative) per valid window: pairs -> bounds ->
     -- deltas, the cross-instance delta over ONE window span (MAX(dur_sec)),
     -- then cur / prior mean / sd / n and the offset-keyed 'k:v' pairs the
     -- window component reads (a skipped window simply has no pair).
@@ -53,15 +53,19 @@ BEGIN
         WITH
         @@sql/lib/windows_cte.sql
         ,
+        -- DB time from the time model (microseconds / 1e4 = centiseconds),
+        -- the same source as the LOAD 'DB time' row of 00 / 02 / 07
+        -- (sql/lib/load_pairs_cte.sql), so this strip and the DB time card
+        -- print the same number.
         load_pairs AS (
-            SELECT w.week_offset, w.dur_sec, ss.instance_number,
-                   ss.snap_id, ss.value, w.begin_snap_id, w.end_snap_id
+            SELECT w.week_offset, w.dur_sec, tm.instance_number,
+                   tm.snap_id, tm.value / 1e4 AS value, w.begin_snap_id, w.end_snap_id
             FROM   valid_windows w
-            JOIN   dba_hist_sysstat ss
-                ON ss.dbid = w.dbid
-               AND ss.snap_id IN (w.begin_snap_id, w.end_snap_id)
-               AND ss.instance_number = w.instance_number
-               AND ss.stat_name = 'DB time'
+            JOIN   dba_hist_sys_time_model tm
+                ON tm.dbid = w.dbid
+               AND tm.snap_id IN (w.begin_snap_id, w.end_snap_id)
+               AND tm.instance_number = w.instance_number
+               AND tm.stat_name = 'DB time'
         ),
         load_bounds AS (
             SELECT week_offset, dur_sec, instance_number,

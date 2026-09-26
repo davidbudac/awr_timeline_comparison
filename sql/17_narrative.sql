@@ -210,15 +210,13 @@ DECLARE
     -- "LARGE": section 07's bucket through the per-metric policy
     -- (sql/lib/metric_policy.plsql): |z| > 3 over the floored sigma AND a
     -- material move past the stat's own floors AND in the bad direction
-    -- (a drop in physical reads is 'improved', not a story).  'TM:' keys
-    -- are the time-model twins of the LOAD names.
+    -- (a drop in physical reads is 'improved', not a story).
     FUNCTION big(p VARCHAR2) RETURN BOOLEAN IS
         r stat_rec;
     BEGIN
         IF NOT has(p) THEN RETURN FALSE; END IF;
         r := v_stats(p);
-        RETURN policy_bucket('LOAD', REGEXP_REPLACE(p, '^TM:', ''), NULL,
-                             r.cur, r.mu, r.sd, r.n) = 'large';
+        RETURN policy_bucket('LOAD', p, NULL, r.cur, r.mu, r.sd, r.n) = 'large';
     END big;
 
     FUNCTION went_up(p VARCHAR2) RETURN BOOLEAN IS
@@ -284,28 +282,6 @@ BEGIN
             FROM   narr_pairs
             GROUP BY week_offset, dur_sec, stat_name, instance_number
         ),
-        -- DB time / DB CPU are TIME MODEL statistics, not SYSSTAT ones:
-        -- v$sysstat has no 'DB CPU' row at all, so R5 has to read
-        -- DBA_HIST_SYS_TIME_MODEL.  Same cumulative pairs -> bounds ->
-        -- deltas shape; values are MICROseconds.  They are keyed with a
-        -- 'TM:' prefix below so the SYSSTAT namespace stays clean.
-        tm_pairs AS (
-            SELECT w.week_offset, w.dur_sec, tm.stat_name, tm.instance_number,
-                   tm.snap_id, tm.value, w.begin_snap_id, w.end_snap_id
-            FROM   valid_windows w
-            JOIN   dba_hist_sys_time_model tm
-                ON tm.dbid = w.dbid
-               AND tm.snap_id IN (w.begin_snap_id, w.end_snap_id)
-               AND tm.instance_number = w.instance_number
-               AND tm.stat_name IN ('DB time', 'DB CPU')
-        ),
-        tm_bounds AS (
-            SELECT week_offset, dur_sec, stat_name, instance_number,
-                   SUM(CASE WHEN snap_id = begin_snap_id THEN value END) AS beg_val,
-                   SUM(CASE WHEN snap_id = end_snap_id   THEN value END) AS end_val
-            FROM   tm_pairs
-            GROUP BY week_offset, dur_sec, stat_name, instance_number
-        ),
         narr_rows AS (
             -- Cross-instance delta over ONE window span (MAX(dur_sec)), with
             -- dur_sec out of the second-level GROUP BY -- the RAC-safe divisor
@@ -315,13 +291,6 @@ BEGIN
                         THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / MAX(dur_sec)
                    END AS metric_value
             FROM   narr_bounds
-            GROUP BY week_offset, stat_name
-            UNION ALL
-            SELECT 'TM:' || stat_name, week_offset,
-                   CASE WHEN MAX(dur_sec) > 0
-                        THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / MAX(dur_sec)
-                   END
-            FROM   tm_bounds
             GROUP BY week_offset, stat_name
         )
         SELECT stat_name,
@@ -568,11 +537,11 @@ BEGIN
     ------------------------------------------------------------------
     -- R5 (DB time moved LARGE up -> wait-bound vs CPU-bound) is carried by
     -- the Summary view itself since v1.6.0: the verdict (00) and the DB
-    -- time card (07) append "all / mostly wait" or "mostly CPU" from the
-    -- SAME SYSSTAT DB time / DB CPU values the hero strip shows
-    -- (sql/lib/finding_cards.plsql time_split).  A note computed here from
-    -- the time model would repeat the card, or contradict the strip when
-    -- the two sources disagree.
+    -- time card (07) append "all / mostly wait" or "mostly CPU"
+    -- (sql/lib/finding_cards.plsql time_split) from the LOAD 'DB time' /
+    -- 'DB CPU' rows, which sql/lib/load_pairs_cte.sql reads from
+    -- DBA_HIST_SYS_TIME_MODEL (SYSSTAT has no 'DB CPU' row).  A note here
+    -- would only repeat the card.
     ------------------------------------------------------------------
 
     ------------------------------------------------------------------

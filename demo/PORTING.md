@@ -82,9 +82,13 @@ Run params: `w.weeks_back`,
 `w.period_unit_title` = `'Week'`, `w.bucket_hours` = 1, `w.markers`.
 
 Per-hour quantities are TOTALS for the hour (deltas); `/ m.dur_sec`
-gives the per-second rate the sections print.  `DB time` / `DB CPU` in
-`m.load` are centiseconds (like `DBA_HIST_SYSSTAT`); `m.time_model` is
-microseconds (like `DBA_HIST_SYS_TIME_MODEL`); wait `time_waited_us` is
+gives the per-second rate the sections print.  `m.load` is
+`DBA_HIST_SYSSTAT` (`DB time` there is centiseconds; there is NO `DB CPU`
+row, as in real Oracle); `m.time_model` is microseconds (like
+`DBA_HIST_SYS_TIME_MODEL`).  A LOAD row read through the template list
+goes through `helpers.load_total(m, stat)`, the twin of
+`sql/lib/load_pairs_cte.sql` (`DB time` / `DB CPU` from the time model
+/ 1e4); wait `time_waited_us` is
 microseconds (`DBA_HIST_SYSTEM_EVENT.time_waited_micro` delta).
 
 Keep `model.py` stable: the website's screenshots and the demo story

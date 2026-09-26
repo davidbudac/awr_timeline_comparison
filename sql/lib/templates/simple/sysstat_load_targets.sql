@@ -10,6 +10,10 @@
 -- 'simple' mode keep rendering (DB time, redo size, session logical
 -- reads, parse count (hard)) instead of falling back to "n/a".
 --
+-- 'DB time' and 'DB CPU' are TIME MODEL names: sql/lib/load_pairs_cte.sql
+-- reads those two from DBA_HIST_SYS_TIME_MODEL (DBA_HIST_SYSSTAT has no
+-- 'DB CPU' row), converted to centiseconds like SYSSTAT's DB time.
+--
             SELECT 'DB time'                       stat_name FROM dual UNION ALL
             SELECT 'DB CPU'                                  FROM dual UNION ALL
             SELECT 'redo size'                               FROM dual UNION ALL

@@ -152,6 +152,20 @@ def fmt_int(p: float | None) -> str:
 # sql/lib/score_cells.plsql  (+ the raw z / bucket math sections reuse)
 # ---------------------------------------------------------------------
 
+# Twin of sql/lib/load_pairs_cte.sql: the LOAD rows 'DB time' / 'DB CPU'
+# are TIME MODEL statistics (DBA_HIST_SYSSTAT has no 'DB CPU' row), read
+# from m.time_model (microseconds) / 1e4 = centiseconds; every other LOAD
+# name is the SYSSTAT total m.load.  None when the stat is absent.
+TIME_MODEL_LOAD = ("DB time", "DB CPU")
+
+
+def load_total(m, stat: str):
+    if stat in TIME_MODEL_LOAD:
+        v = m.time_model.get(stat)
+        return None if v is None else v / 1e4
+    return m.load.get(stat)
+
+
 def mean_sd(vals):
     """AVG / STDDEV (sample, n-1) / COUNT over non-None values -- Oracle
     STDDEV returns NULL for n<2 and 0 for identical values."""

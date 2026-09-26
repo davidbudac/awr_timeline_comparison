@@ -2,7 +2,9 @@
 -- 02_load_profile.sql
 -- Per-window deltas from DBA_HIST_SYSSTAT for a curated set of stats that
 -- make up the classic AWR Load Profile (redo, DB time, CPU, reads, parses,
--- transactions, sorts, etc.).  Renders as a pivot: metric x week.
+-- transactions, sorts, etc.).  Renders as a pivot: metric x week.  DB time
+-- and DB CPU come from DBA_HIST_SYS_TIME_MODEL instead (SYSSTAT has no
+-- 'DB CPU' row), via sql/lib/load_pairs_cte.sql, in centiseconds.
 --
 -- For cumulative counters we compute end - begin.  Rates are derived from
 -- the window duration in seconds.  Read-only: no scratch table.
@@ -56,27 +58,17 @@ BEGIN
         WITH
         @@sql/lib/windows_cte.sql
         ,
-        targets AS (
+        load_targets AS (
             @@~template_dir/sysstat_load_targets.sql
         ),
-        pairs AS (
-            SELECT
-                w.week_offset, w.dur_sec,
-                ss.stat_name, ss.instance_number,
-                ss.snap_id, ss.value,
-                w.begin_snap_id, w.end_snap_id
-            FROM   valid_windows w
-            JOIN   dba_hist_sysstat ss
-                ON ss.dbid = w.dbid
-               AND ss.snap_id IN (w.begin_snap_id, w.end_snap_id)
-               AND ss.instance_number = w.instance_number
-               AND ss.stat_name IN (SELECT stat_name FROM targets)
-        ),
+        -- SYSSTAT counters, with DB time / DB CPU from the time model
+        @@sql/lib/load_pairs_cte.sql
+        ,
         bounds AS (
             SELECT week_offset, dur_sec, stat_name, instance_number,
                    SUM(CASE WHEN snap_id = begin_snap_id THEN value END) AS beg_val,
                    SUM(CASE WHEN snap_id = end_snap_id   THEN value END) AS end_val
-            FROM   pairs
+            FROM   load_pairs
             GROUP BY week_offset, dur_sec, stat_name, instance_number
         ),
         deltas AS (
@@ -103,7 +95,7 @@ BEGIN
         ),
         grid AS (
             SELECT t.stat_name, w.week_offset, f.per_sec
-            FROM   targets t
+            FROM   load_targets t
             CROSS JOIN all_weeks w
             LEFT JOIN facts f
                    ON f.stat_name   = t.stat_name

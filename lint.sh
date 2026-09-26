@@ -414,6 +414,32 @@ for f in awr_trend.sql sql/[0-9]*.sql sql/_style.sql sql/lib/*.plsql sql/lib/src
     done
 done
 
+# ----------------------------------------------------------------------
+# 26. 'DB CPU' is a TIME MODEL statistic: DBA_HIST_SYSSTAT has no such row,
+#     so a SYSSTAT read of it silently returns nothing (v1.6.0 review #1:
+#     the verdict's and the DB time card's "mostly wait / mostly CPU"
+#     never fired on a real DB).  (a) Every single-DB file that includes
+#     the template's sysstat_load_targets.sql must read it through
+#     @@sql/lib/load_pairs_cte.sql (which routes DB time / DB CPU to
+#     DBA_HIST_SYS_TIME_MODEL); (b) no 'DB CPU' filter within 8 lines after
+#     a dba_hist_sysstat reference (the NOT IN exclusion is allowed).
+#     Fleet files are fleet-owned and out of scope.
+# ----------------------------------------------------------------------
+for f in awr_trend.sql sql/[0-9]*.sql sql/lib/*.sql sql/lib/*.plsql; do
+    [ -f "$f" ] || continue
+    if grep -qE '^[[:space:]]*@@~template_dir/sysstat_load_targets\.sql' "$f" \
+       && ! grep -qE '^[[:space:]]*@@sql/lib/load_pairs_cte\.sql' "$f"; then
+        finding sysstat-db-cpu "$f" "includes sysstat_load_targets.sql without @@sql/lib/load_pairs_cte.sql -- 'DB CPU' is not a SYSSTAT row; read LOAD targets through the include"
+    fi
+    awk -v f="$f" '
+        /^[[:space:]]*--/ { next }
+        tolower($0) ~ /dba_hist_sysstat/ { near = 8; next }
+        near > 0 { near--; if ($0 ~ /'"'"'DB CPU'"'"'/ && $0 !~ /NOT IN/) print f ":" NR }
+    ' "$f" | while IFS= read -r hit; do
+        finding sysstat-db-cpu "$hit" "'DB CPU' read from DBA_HIST_SYSSTAT -- it exists only in DBA_HIST_SYS_TIME_MODEL (microseconds); see sql/lib/load_pairs_cte.sql"
+    done
+done
+
 [ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"

@@ -591,7 +591,7 @@ def effects(ts: datetime) -> Effects:
 # ---------------------------------------------------------------------
 
 LOAD_STATS = [
-    "redo size", "redo size for lost write detection", "DB time", "DB CPU",
+    "redo size", "redo size for lost write detection", "DB time",
     "CPU used by this session", "session logical reads", "physical reads",
     "physical read total bytes", "physical writes", "physical write total bytes",
     "user calls", "user commits", "user rollbacks", "execute count",
@@ -917,8 +917,9 @@ def hour(ts: datetime) -> HourMetrics:
     if e.order_lookup_bad > 0.5:
         scans_long += sql[ORDER_LOOKUP_SQL].execs * 0.05
     load = {
-        "DB time": db_time_us / 1e4,                     # centiseconds
-        "DB CPU": db_cpu_us / 1e4,
+        # centiseconds; SYSSTAT has NO 'DB CPU' row (a time-model stat only:
+        # helpers.load_total reads it from time_model, like load_pairs_cte.sql)
+        "DB time": db_time_us / 1e4,
         "CPU used by this session": db_cpu_us / 1e4 * 0.985,
         "redo size": redo,
         "redo size for lost write detection": 0.0,

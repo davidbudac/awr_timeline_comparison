@@ -91,7 +91,7 @@ def _cells(w):
                     rates.append(None)          # restart guard / gap -> NULL cell
                     continue
                 m = w.hour(ts)
-                rates.append(max(m.load.get(stat, 0.0), 0.0) / m.dur_sec * scale)
+                rates.append(max(H.load_total(m, stat) or 0.0, 0.0) / m.dur_sec * scale)
             cur = rates[0]
             mu, sd, n = H.mean_sd(rates[1:])
             z, pct = H.z_and_pct(cur, mu, sd)

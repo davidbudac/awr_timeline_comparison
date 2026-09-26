@@ -23,7 +23,6 @@ from awrdemo.helpers import esc, mean_sd, ora_round, to_char_trim, policy_bucket
 
 _STATS = ['physical reads', 'bytes sent via SQL*Net to client', 'user calls',
           'redo size', 'user commits']
-_TM = ['DB time', 'DB CPU']
 
 
 # ---------------------------------------------------------------------
@@ -86,8 +85,7 @@ class _Stats:
         if not self.has(p):
             return False
         cur, mu, sd, n = self.d[p]
-        name = p[3:] if p.startswith("TM:") else p
-        return policy_bucket("LOAD", name, None, cur, mu, sd, n) == "large"
+        return policy_bucket("LOAD", p, None, cur, mu, sd, n) == "large"
 
     def went_up(self, p):
         return self.has(p) and self.d[p][0] >= self.d[p][1]
@@ -126,9 +124,6 @@ def _collect_stats(w) -> _Stats:
     for s in _STATS:
         series[s] = w.window_series(
             lambda m, s=s: (m.load.get(s, 0.0) / m.dur_sec) if m.dur_sec > 0 else None)
-    for s in _TM:
-        series['TM:' + s] = w.window_series(
-            lambda m, s=s: (m.time_model.get(s, 0.0) / m.dur_sec) if m.dur_sec > 0 else None)
     for name, vals in series.items():
         cur = vals[0]
         mu, sd, n = mean_sd(vals[1:])
