@@ -479,10 +479,17 @@ BEGIN
         || '<a href="#findings">Findings</a>'
         || '<a href="#s-changes" data-nodot hidden>What changed around it</a>'
         || '<a href="#s-normal" data-nodot>Checked and normal</a>'
-        -- v1.6.0: the Timeline view (placeholder until the window grid
-        -- lands; dimmed in the other views like every out-of-view link).
+        -- v1.6.0: the Timeline view -- the full-span ASH chart and the
+        -- grid's lanes (a lane with no rows hides its link, js_timeline);
+        -- dimmed in the other views like every out-of-view link.
         || '<b>Timeline</b>'
-        || '<a href="#timeline" data-nodot>Window grid</a>'
+        || '<a href="#tl-ash" data-nodot>Active sessions, full span</a>'
+        || '<a href="#lane-activity" data-nodot>Activity</a>'
+        || '<a href="#lane-metrics">Headline and load</a>'
+        || '<a href="#lane-waits">Waits</a>'
+        || '<a href="#lane-objects" data-nodot>Where the reads land</a>'
+        || '<a href="#lane-sql">SQL</a>'
+        || '<a href="#lane-config" data-nodot>Configuration</a>'
         || '<b>Workload</b>'
         || '<a href="#db-time-summary">DB time</a>'
         || '<a href="#ash-timeline">ASH timeline</a>'
@@ -1006,8 +1013,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('window.AWR_setView=setView;');
     DBMS_OUTPUT.PUT_LINE('window.AWR_setMode=function(det){ setView(det?"all":"summary",false); };');
     DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll(".topbar .seg [data-v]").forEach(function(b){ b.addEventListener("click",function(){ setView(b.getAttribute("data-v"),true); window.scrollTo(0,0); }); });');
-    DBMS_OUTPUT.PUT_LINE('/* reveal(el): open what hides el inside its view -- a tab, folded tail rows, <details> */');
+    DBMS_OUTPUT.PUT_LINE('/* reveal(el): open what hides el inside its view -- a tab, folded tail rows, <details>, a folded Timeline lane */');
     DBMS_OUTPUT.PUT_LINE('function reveal(el){');
+    DBMS_OUTPUT.PUT_LINE('  if(window.AWR_TL&&AWR_TL.reveal) AWR_TL.reveal(el);');
     DBMS_OUTPUT.PUT_LINE('  var tp=closest(el,".tabpanel");');
     DBMS_OUTPUT.PUT_LINE('  if(tp&&!tp.classList.contains("on")){ var t=doc.querySelector(".tabs[data-tabs=\""+tp.getAttribute("data-tabs")+"\"] [data-t=\""+tp.getAttribute("data-t")+"\"]"); if(t) t.click(); }');
     DBMS_OUTPUT.PUT_LINE('  var tl=closest(el,"[data-tail=\"Y\"]");');
@@ -1273,14 +1281,83 @@ BEGIN
             || '</p>');
     END IF;
     DBMS_OUTPUT.PUT_LINE('</section>');
-    -- v1.6.0: the Timeline view.  An empty but valid placeholder until the
-    -- aligned window grid (phase 3 of the redesign) lands; it is the only
-    -- section of the Timeline view, next to the guide and About fold that
-    -- every view shows.
-    DBMS_OUTPUT.PUT_LINE('<section id="timeline" class="vw in-t">'
-        || '<h2>Timeline<small class="h2sub">The compared windows side by side, one column each</small></h2>'
-        || '<p class="tl-empty">The window grid is not built into this report yet. '
-        || 'Summary and All sections hold every number.</p></section>');
+    -- =========================================================
+    -- v1.6.0 Timeline view (Mock D): the skeleton only.  The full-span
+    -- ASH chart panel (#tl-ash; payload AWR_DATA.ashx from 09, drawn by
+    -- sql/lib/js_timeline.plsql) and the aligned window grid (#tl): the
+    -- shared ruler (sql/lib/wingrid.plsql, dates as pin buttons) over six
+    -- lanes the sections fill from their own cursors while the page parses
+    -- (sql/lib/timeline.plsql tl_open / tl_close): activity (09),
+    -- headline and load (07), waits (07 + 04), where the reads land
+    -- (14 + 15), SQL (06 + 18), configuration (12).  A lane with no rows
+    -- stays hidden.  With JavaScript off the templates stay inert, so the
+    -- section shows its header and the tl-nojs note (every number is in
+    -- All sections).  Section 16 (Day profile) joins the view below it.
+    -- =========================================================
+    DECLARE
+        v_cells VARCHAR2(32767);
+        v_st    DATE := wg_start(0);
+        -- one lane: a head row (fold button, title, caption, counts) and
+        -- the empty row box the sections fill
+        FUNCTION lane_h(p_id VARCHAR2, p_title VARCHAR2, p_kind VARCHAR2,
+                        p_cap VARCHAR2 DEFAULT NULL, p_note VARCHAR2 DEFAULT NULL,
+                        p_noun VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
+        BEGIN
+            RETURN '<div class="lane" id="lane-' || p_id || '" data-kind="' || p_kind || '"'
+                || CASE WHEN p_note IS NOT NULL THEN ' data-note="' || p_note || '"' END
+                || CASE WHEN p_noun IS NOT NULL THEN ' data-noun="' || p_noun || '"' END
+                || ' role="rowgroup" hidden><div class="r gh2" role="row">'
+                || '<div class="l" role="rowheader"><button class="lt2" type="button" aria-expanded="true">'
+                || '<i class="car" aria-hidden="true"></i><span class="lti">' || p_title || '</span></button></div>'
+                || v_cells || '<div class="g" role="cell"><span class="meta"></span></div>'
+                || CASE WHEN p_cap IS NOT NULL THEN '<div class="cap"><span>' || p_cap || '</span></div>' END
+                || '</div><div class="lrows"></div></div>';
+        END lane_h;
+    BEGIN
+        FOR k IN REVERSE 0 .. ~weeks_back LOOP
+            v_cells := v_cells || '<div class="c' || CASE WHEN k = 0 THEN ' cur' END
+                || '" data-w="' || k || '"></div>';
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('<section id="timeline" class="vw in-t">'
+            || '<h2>Timeline<small class="h2sub">Down a column: one window. Across a row: when it started.</small></h2>'
+            || '<p class="tl-nojs">The Timeline is drawn by the page script; with JavaScript off it is not '
+            || 'drawn, and every number it would show is in the sections below.</p>');
+        DBMS_OUTPUT.PUT_LINE('<div class="panel ashx" id="tl-ash" role="group" aria-labelledby="tl-ash-h" hidden>'
+            || '<div class="axh"><div class="axt"><h3 id="tl-ash-h">Active sessions, full span</h3>'
+            || '<span class="axs" id="ax-range"></span></div>'
+            || '<span class="axk" aria-hidden="true"><span><i class="kw"></i>compared window</span>'
+            || '<span><i class="kw cur"></i>Current</span><span><i class="kw pin"></i>pinned</span></span>'
+            || '<button type="button" class="axr" id="ax-reset" hidden>Reset zoom</button></div>'
+            || '<div class="axlg" id="ax-lg" role="group" aria-label="Wait classes: click to show or hide"></div>'
+            || '<p class="axe" id="ax-empty" hidden>No ASH samples in DBA_HIST_ACTIVE_SESS_HISTORY across the compared span.</p>'
+            || '<div class="axp" id="ax-plot"><svg id="ax-svg" role="img" aria-label="Active sessions stacked by wait class '
+            || 'over the whole compared span, the compared windows shaded and release markers drawn. Drag to zoom."></svg>'
+            || '<div class="axbr" id="ax-brush" hidden></div></div>'
+            || '<p class="axn2">Drag across the chart to zoom, double-click to reset. '
+            || 'Click a shaded window to pin its column in the grid below.</p></div>');
+        DBMS_OUTPUT.PUT_LINE('<div class="panel gridwrap wg hov" id="tl"' || wg_attr
+            || ' role="table" aria-label="Current vs ' || ~weeks_back || ' prior windows, one column per window">'
+            || wg_ruler('<span class="ct">'
+                || CASE WHEN ~step_hours = 168 THEN TO_CHAR(v_st, 'FMDay') || ' '
+                        WHEN ~step_hours = 24 THEN 'Daily ' END
+                || CASE WHEN ~step_hours IN (24, 168)
+                        THEN TO_CHAR(v_st, 'HH24:MI') || '&ndash;' || TO_CHAR(wg_end(0), 'HH24:MI')
+                        ELSE 'Every ~step_label, ~win_label windows' END
+                || '</span><span class="cs">' || (~weeks_back + 1) || ' windows</span>'
+                || '<nav class="jumpnav" aria-label="Jump to lane"><a href="#lane-metrics">Load</a>'
+                || '<a href="#lane-waits">Waits</a><a href="#lane-sql">SQL</a><a href="#lane-config">Config</a>'
+                || CASE WHEN ~profile_days > 0 THEN '<a href="#day-profile">Day</a>' END || '</nav>',
+                '<span class="gt" id="tl-gt">vs prior mean</span><span class="gs" id="tl-gs">click a date to pin</span>',
+                'Y')
+            || '<div class="gbody" id="tl-body"><div class="gin" id="tl-in">');
+        DBMS_OUTPUT.PUT_LINE(lane_h('activity', 'Activity', 'ash', NULL, 'ASH, not scored'));
+        DBMS_OUTPUT.PUT_LINE(lane_h('metrics', 'Headline and load', 'scored'));
+        DBMS_OUTPUT.PUT_LINE(lane_h('waits', 'Waits', 'scored', 'wait classes in AAS, events in seconds waited', NULL, 'events'));
+        DBMS_OUTPUT.PUT_LINE(lane_h('objects', 'Where the reads land', 'ranked', NULL, 'ranked, not scored'));
+        DBMS_OUTPUT.PUT_LINE(lane_h('sql', 'SQL', 'sql', 'elapsed s; a dash = not in the top ' || ~top_n));
+        DBMS_OUTPUT.PUT_LINE(lane_h('config', 'Configuration', 'config'));
+        DBMS_OUTPUT.PUT_LINE('</div></div></div></section>');
+    END;
 END;
 /
 

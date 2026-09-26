@@ -105,6 +105,13 @@ DECLARE
     v_points_total  NUMBER := 0;
     v_points_shown  NUMBER := 0;
     v_capped        VARCHAR2(1) := 'N';
+    -- v1.6.0 Timeline: SQL Monitor rows of the SQL lane (a plan change or
+    -- a DOP downgrade on a Current-window statement, at most three), each
+    -- placed under its Top SQL row when 06 emitted one
+    TYPE t_tl_rows IS TABLE OF VARCHAR2(32767) INDEX BY PLS_INTEGER;
+    v_tl            t_tl_rows;
+    v_tl_csv        VARCHAR2(4000);
+    v_tl_b          VARCHAR2(40);
 
     @@sql/lib/metric_policy.plsql
     @@sql/lib/nth_csv.plsql
@@ -114,6 +121,10 @@ DECLARE
     @@sql/lib/score_cells.plsql
     @@sql/lib/is_oracle_schema.plsql
     @@sql/lib/put_clob_chunked.plsql
+    @@sql/lib/anchor_id.plsql
+    @@sql/lib/finding_cards.plsql
+    @@sql/lib/wingrid.plsql
+    @@sql/lib/timeline.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="sqlmon" class="vw in-a"><h2>SQL Monitor'
         || '<small class="h2sub">Captured executions per statement; a sample, not every execution</small></h2>');
@@ -561,6 +572,25 @@ BEGIN
                || TO_CHAR(s.drill_report_id) || ', type=>''ACTIVE'') FROM dual;')
             || '</pre></div>');
         DBMS_OUTPUT.PUT_LINE('</details></td></tr>');
+
+        -- v1.6.0 Timeline: max elapsed per window, scored like the table
+        IF s.cur_val IS NOT NULL AND v_tl.COUNT < 3
+           AND (s.plan_changed = 'Y' OR s.has_downgrade = 1) THEN
+            v_tl_csv := tl_csv(s.elapsed_spark_csv);
+            v_tl_b   := score_bucket(s.cur_val, s.mu, s.sd, s.n_prior);
+            v_tl(v_tl.COUNT + 1) := tl_bars(v_tl_csv, s.mu, s.sd, v_tl_b,
+                tl_lab(ent('SQL Monitor', anchor_id('sm', s.sql_id), 'sql'),
+                       s.sql_id || ', max elapsed'),
+                tl_gut(s.cur_val, s.mu, s.sd, v_tl_b,
+                       CASE WHEN s.plan_changed = 'Y' THEN '<span class="z"><b>&#9670;</b> new plan</span>'
+                            ELSE '<span class="z"><b>&#9661;</b> DOP</span>' END),
+                'tl-' || anchor_id('sm', s.sql_id), 'q sub', s.sql_id || ', SQL Monitor max elapsed', 's',
+                0, CASE WHEN s.plan_changed = 'Y'
+                        THEN '<b class="glf gp" title="Plan changed: ' || TO_CHAR(s.prior_plan_hash)
+                             || ' &rarr; ' || TO_CHAR(s.cur_plan_hash) || '">&#9670;</b>'
+                        ELSE '<b class="glf gd" title="DOP downgrade on a Current-window execution">&#9661;</b>' END,
+                'tl-' || anchor_id('sq-elapsed', s.sql_id));
+        END IF;
     END LOOP;
 
     IF v_any_row THEN
@@ -590,6 +620,11 @@ BEGIN
             || '(elapsed &ge; 1&nbsp;s, an error, or more than one execution plan). '
             || 'The scatter below still plots every captured execution.</p>');
     END IF;
+    -- the Timeline rows ride after the table (never inside a <tbody>)
+    FOR i IN 1 .. v_tl.COUNT LOOP
+        DBMS_OUTPUT.PUT_LINE(CASE WHEN i = 1 THEN tl_open('sql') END || v_tl(i)
+            || CASE WHEN i = v_tl.COUNT THEN tl_close END);
+    END LOOP;
 
     ------------------------------------------------------------------
     -- Execution scatter over the full span.

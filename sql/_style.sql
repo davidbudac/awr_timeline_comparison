@@ -255,7 +255,6 @@ BEGIN
         || ' border:1px solid var(--rule); background:var(--panel); color:var(--ink);'
         || ' cursor:pointer; margin-left:6px; }');
     -- Timeline view placeholder (phase 3 of the redesign fills it).
-    DBMS_OUTPUT.PUT_LINE('.tl-empty { color:var(--muted); font-size:13px; margin:0 0 var(--s2); }');
 
     -- =========================================================
     -- Sections: white panels
@@ -1274,6 +1273,162 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.dotk.typical{border:1.5px solid var(--muted)} .dotk.improved{border:2px solid var(--imp)}');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 1180px){.fc-b{grid-template-columns:minmax(0,1fr)}.ngrid{grid-template-columns:repeat(2,minmax(0,1fr))}}');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 900px){.calm-notes{grid-template-columns:1fr}.fc-h{grid-template-columns:minmax(0,1fr)}.fc-band{width:100%}}');
+
+    -- =========================================================
+    -- v1.6.0 Timeline view (Mock D): the #timeline section, the full-span
+    -- interactive ASH chart (.ashx, #tl-ash) and the aligned window grid
+    -- (#tl: sticky ruler, lanes of .wg rows, pin / hover / flash), the
+    -- stacked activity columns (.r.ash, also the DB time card) and the
+    -- shared tooltip (#tip).  Client half: sql/lib/js_timeline.plsql.
+    -- Lifted from design/report_mocks_src/hybrid/style.css; scoped to
+    -- single-DB ids / classes (the fleet report includes this file).
+    -- No sibling combinator "tilde" here: SET DEFINE makes it a
+    -- substitution character (the gin negative margin hides the first
+    -- visible lanes separator instead).
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('section#timeline{background:none;border:0;border-radius:0;padding:0;box-shadow:none}');
+    DBMS_OUTPUT.PUT_LINE('section#timeline > h2{margin:var(--s7) 0 var(--s5);padding:0;border:0}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-nojs{color:var(--muted);font-size:13px;margin:0 0 var(--s3)}');
+    DBMS_OUTPUT.PUT_LINE('body.js-wg #timeline .tl-nojs{display:none}');
+    DBMS_OUTPUT.PUT_LINE('body:not(.js-wg) #tl{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .sw,#tip .sw,.fcleg .sw{display:inline-block;width:8px;height:8px;border-radius:2px;flex:none;background:var(--sw,#9AA3AD)}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .muted{color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx{margin:0 0 var(--s5);padding:var(--s4) var(--s5) var(--s3)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axh{display:flex;align-items:baseline;gap:var(--s2) var(--s5);flex-wrap:wrap}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axt{display:flex;align-items:baseline;gap:var(--s3);min-width:0;flex:1}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axt h3{display:block;font-size:15px;font-weight:600;white-space:nowrap;margin:0;padding:0;border:0;text-transform:none;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axt h3::before{content:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axs{font-size:13px;color:var(--ink-3);white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axk{display:flex;gap:var(--s4);font-size:12px;color:var(--ink-3)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axk span{display:inline-flex;align-items:center;gap:6px}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .kw{display:inline-block;width:8px;height:12px;border-radius:1px;background:var(--ink-3);opacity:.35}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .kw.cur{background:var(--acc);opacity:.7}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .kw.pin{background:var(--warn-dot);opacity:.6}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axr{font-size:12px;border:1px solid var(--line-2);background:var(--panel);border-radius:6px;padding:2px 10px;cursor:pointer;color:var(--ink-2);line-height:20px}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axr:hover{color:var(--ink);border-color:var(--ink-3)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axr[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axlg{display:flex;flex-wrap:wrap;gap:2px 4px;margin:var(--s2) 0 0 -6px}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axc{display:inline-flex;align-items:center;gap:6px;border:0;background:none;border-radius:6px;padding:2px 6px;font:inherit;font-size:12px;color:var(--ink-2);cursor:pointer;line-height:18px}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axc:hover{background:var(--hov);color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axc[aria-pressed="false"]{color:var(--ink-4);text-decoration:line-through;text-decoration-color:var(--ink-4)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axc[aria-pressed="false"] .sw{background:none;box-shadow:inset 0 0 0 1.5px var(--sw)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axp{position:relative;margin-top:var(--s1);user-select:none;-webkit-user-select:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axp[hidden],.ashx .axe[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axe{margin:var(--s3) 0;font-size:13px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('#ax-svg{display:block;width:100%;cursor:crosshair}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axbr{position:absolute;top:0;pointer-events:none;background:var(--acc-soft);border-left:1px solid var(--acc);border-right:1px solid var(--acc)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axbr[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axn2{margin:var(--s1) 0 0;font-size:12px;color:var(--ink-3)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .gl{stroke:var(--line);stroke-width:1}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .ax{stroke:var(--line-2);stroke-width:1}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .at{font:11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink-3);font-variant-numeric:tabular-nums}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .cf{stroke:var(--mk);stroke-width:1.5}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .cfl{stroke:var(--mkline);stroke-width:1.5}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .cfh{fill:var(--flagbg)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .cft{font:11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xa{stroke:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xw{fill:var(--ink-3);opacity:.16}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xw.cur{fill:var(--acc);opacity:.28}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xw.on{fill:var(--warn-dot);opacity:.35}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xw.sk{fill:var(--ink-4);opacity:.1}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xwc{fill:var(--ink-3)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xwc.cur{fill:var(--acc)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xwc.on{fill:var(--warn-dot)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xwc.sk{fill:var(--ink-4)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xwh{fill:transparent;cursor:pointer}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xwh:focus-visible{outline:none;stroke:var(--acc);stroke-width:2}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xch{stroke:var(--ink);stroke-width:1;opacity:.55;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xbk{fill:var(--ink);opacity:.06;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('#tip{position:fixed;z-index:100;pointer-events:none;background:var(--ink);color:var(--panel);font-size:12px;line-height:1.45;padding:6px 10px;border-radius:6px;max-width:320px;box-shadow:0 4px 14px rgba(0,0,0,.25);font-variant-numeric:tabular-nums}');
+    DBMS_OUTPUT.PUT_LINE('#tip[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tip .tm{opacity:.72}');
+    DBMS_OUTPUT.PUT_LINE('#tip .tr2{display:flex;align-items:center;gap:6px;justify-content:space-between}');
+    DBMS_OUTPUT.PUT_LINE('#tip .tr2 span{display:inline-flex;align-items:center;gap:6px}');
+    DBMS_OUTPUT.PUT_LINE('#tip .tr2 b{font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('#tip .tsum{border-top:1px solid color-mix(in srgb,var(--panel) 30%,transparent);margin-top:3px;padding-top:3px}');
+    DBMS_OUTPUT.PUT_LINE('#tl.gridwrap{position:relative}');
+    DBMS_OUTPUT.PUT_LINE('#tl > .ruler{position:sticky;top:var(--navh,0px);z-index:30;overflow:hidden;background:var(--panel);border-radius:10px 10px 0 0;border-bottom:1px solid var(--line-2);box-shadow:0 6px 12px -10px rgba(20,26,40,.35)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .rin,#tl .gin{min-width:calc(var(--lab) + var(--gut) + (var(--np) + 1.6) * var(--cmin))}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .corner{position:sticky;left:0;z-index:5;justify-content:space-between}');
+    DBMS_OUTPUT.PUT_LINE('#tl .jumpnav{display:flex;flex-wrap:nowrap;gap:8px;font-size:11.5px;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('#tl .jumpnav a{color:var(--ink-2);text-decoration:none;border-bottom:1px solid var(--line-2)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .jumpnav a:hover{color:var(--ink);border-color:var(--ink-3)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .jumpnav a[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .h{cursor:pointer;border:0;border-left:1px solid var(--line-soft);padding:0;margin:0;background-color:transparent;font:inherit;color:inherit}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .h.cur{background-color:var(--acc-band)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .h:hover .hd{color:var(--acc-ink)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .h.skw .hd,#tl .ruler .h.skw .ho{color:var(--ink-4);text-decoration:line-through;text-decoration-color:var(--ink-4)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .h:focus-visible{outline:2px solid var(--acc);outline-offset:-2px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .h[aria-pressed="true"] .ho{font-size:0}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .h[aria-pressed="true"] .ho::after{content:"pinned";font-size:10.5px;color:var(--warn);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gh .unpin{font:inherit;font-size:11px;font-weight:400;border:1px solid var(--line-2);background:none;border-radius:4px;padding:0 6px;margin-left:4px;cursor:pointer;color:var(--ink-2)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gh .unpin:hover{color:var(--ink);border-color:var(--ink-3)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gbody{overflow-x:auto;overflow-y:hidden;border-radius:0 0 10px 10px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r{border-bottom:1px solid var(--line-soft);scroll-margin-top:calc(var(--navh,0px) + 96px)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.bars{--rh:48px;--bh:22px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.bars.w{--rh:44px;--bh:19px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.bars.q.sub{--rh:40px;--bh:15px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.q .l .nm,#tl .gin .r.p .l .nm{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.q.sub .l{padding-left:32px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.q.sub .l .nm{font-family:inherit;font-weight:500;color:var(--ink-2)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.q.sub .l::before{content:"";position:absolute;left:18px;top:0;height:50%;width:8px;border-left:1px solid var(--line-2);border-bottom:1px solid var(--line-2)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.twin .l .nm{color:var(--ink-3);font-weight:400}');
+    DBMS_OUTPUT.PUT_LINE('#tl .l .sq{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--ink-4);margin-left:4px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.more{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lane.showmore .r.more{display:grid}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lane.showmore .r.xpr{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.xpr .l{padding:8px 16px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .xpb{border:0;background:none;padding:0;font:inherit;color:var(--ink-2);font-size:12.5px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--line-2);text-align:left}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lane[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lane{scroll-margin-top:calc(var(--navh,0px) + 96px)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin{margin-top:calc(-1 * var(--s3))}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin > .lane{border-top:var(--s3) solid var(--paper)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.gh2{background:var(--panel-2);border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);margin-top:-1px;min-height:44px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.gh2 > .l,#tl .r.gh2 > .g{background:var(--panel-2)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.gh2 .c{min-height:40px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lt2{display:flex;align-items:center;gap:8px;border:0;background:none;padding:0;cursor:pointer;text-align:left;width:100%;font:inherit;color:inherit}');
+    DBMS_OUTPUT.PUT_LINE('#tl .car{width:0;height:0;border-left:4.5px solid transparent;border-right:4.5px solid transparent;border-top:6px solid var(--ink-3);transition:transform .12s;flex:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lane.closed .car{transform:rotate(-90deg)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lti{font-weight:600;font-size:14.5px;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .cap{position:absolute;left:calc(var(--lab) + 16px + var(--sl, 0px));top:0;bottom:0;width:calc(var(--vw, 100%) - var(--lab) - var(--gut) - 32px);display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3);pointer-events:none;white-space:nowrap;z-index:4;overflow:hidden}');
+    DBMS_OUTPUT.PUT_LINE('#tl .cap > span{overflow:hidden;text-overflow:ellipsis}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.gh2 .g .meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--ink-2)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.gh2 .g .meta span{display:inline-flex;align-items:center;gap:6px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lane.closed .lrows{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.ash .l{justify-content:flex-start;padding-top:12px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.ash .g{justify-content:flex-start;padding-top:12px;gap:4px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .g .d3{font-size:11.5px;color:var(--ink-2);display:flex;align-items:center;gap:6px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .leg{list-style:none;margin:8px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:11.5px;color:var(--ink-2);max-width:176px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .leg li{display:flex;align-items:center;gap:6px;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.ash{--rh:184px;--bh:148px;--bb:6px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.ash .c{min-height:var(--rh)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .stk{position:absolute;bottom:var(--bb);left:50%;width:18px;margin-left:-9px;z-index:2}');
+    DBMS_OUTPUT.PUT_LINE('.wg .stk i{position:absolute;left:0;right:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .stk i:last-child{border-radius:3px 3px 0 0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.cur .stk{width:24px;margin-left:-12px}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .stk{width:calc(100% - 8px);max-width:14px;margin-left:0;transform:translateX(-50%)}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .c.cur .stk{max-width:20px;margin-left:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .gline{position:absolute;left:0;right:0;border-top:1px dashed var(--line);pointer-events:none;z-index:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .dl{position:absolute;left:calc(50% + 16px);display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;line-height:1;color:var(--ink);white-space:nowrap;transform:translateY(50%);z-index:3}');
+    DBMS_OUTPUT.PUT_LINE('.wg .dl .sw{display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--sw)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .axn{position:absolute;right:8px;top:0;bottom:0;width:22px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .axn i{position:absolute;right:0;font:10px/1 ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;color:var(--ink-3);font-style:normal;transform:translateY(50%)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .glf{position:absolute;top:3px;right:4px;font-style:normal;font-size:11px;line-height:1;color:var(--ink);z-index:4;cursor:help}');
+    DBMS_OUTPUT.PUT_LINE('.fc .wg .r.ash{--rh:150px;--bh:118px;--bb:4px}');
+    DBMS_OUTPUT.PUT_LINE('.fc.lead .wg .r.ash{--rh:176px;--bh:144px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fcleg{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink-2)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fcleg li{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.flash{animation:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r::after{content:"";position:absolute;inset:0;background:var(--flash);opacity:0;pointer-events:none;z-index:6}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.flash::after{animation:tl-flash 2s ease-out}');
+    DBMS_OUTPUT.PUT_LINE('@keyframes tl-flash{0%{opacity:1}100%{opacity:0}}');
+    DBMS_OUTPUT.PUT_LINE('#tl .c.colflash,#tl .h.colflash{animation:awr-rowflash 1.8s ease-out}');
+    DBMS_OUTPUT.PUT_LINE('#tl .c.pc,#tl .h.pc{background-image:linear-gradient(var(--pin),var(--pin))}');
+    DBMS_OUTPUT.PUT_LINE('#tl .c.pc .v{opacity:1!important}');
+    DBMS_OUTPUT.PUT_LINE('body[data-pw] #tl .g .d1{color:var(--ink-2)}');
+    DBMS_OUTPUT.PUT_LINE('body[data-pw] #tl .g .z{display:none}');
+    DBMS_OUTPUT.PUT_LINE('@media (prefers-reduced-motion: reduce){#tl .r.flash::after,#tl .c.colflash,#tl .h.colflash{animation:none}}');
 
     -- =========================================================
     -- Print

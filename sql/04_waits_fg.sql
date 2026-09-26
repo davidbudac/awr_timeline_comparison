@@ -77,6 +77,7 @@ DECLARE
     v_mean_pct   NUMBER;
     v_sd_pct     NUMBER;
     v_share      NUMBER;
+    v_cell       VARCHAR2(40);
 
     -- include order: metric_policy first (lint 14 / 16), then fmt_num ->
     -- band_glyph -> score_cells (lint 13 / 17).
@@ -87,6 +88,9 @@ DECLARE
     @@sql/lib/score_cells.plsql
     @@sql/lib/is_essential.plsql
     @@sql/lib/anchor_id.plsql
+    @@sql/lib/finding_cards.plsql
+    @@sql/lib/wingrid.plsql
+    @@sql/lib/timeline.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="waits-fg" class="vw in-a"><h2>Foreground waits'
         || '<small class="h2sub">Where foreground sessions waited: top ' || v_top_n
@@ -449,6 +453,26 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE(v_row);
     END LOOP;
     DBMS_OUTPUT.PUT_LINE('</tbody></table>');
+
+    -- v1.6.0 Timeline: the "Waits" lane's event rows, from the same
+    -- collection as Table A (seconds waited per window, scored exactly like
+    -- the table), in its order; rows past the 10th fold under "+ Show N
+    -- more events" (at most 16).  Id tl-we-<event>, the label links to the
+    -- Table A row (sql/lib/timeline.plsql).
+    FOR i IN 1 .. LEAST(NVL(v_evts.COUNT, 0), 16) LOOP
+        v_share := CASE WHEN v_tot_cur_us > 0 THEN v_evts(i).cur_us / v_tot_cur_us END;
+        v_cell  := score_bucket(v_evts(i).cur_us / 1e6, v_evts(i).mu_us / 1e6, v_evts(i).sd_us / 1e6, v_evts(i).n_us,
+                                v_share, 'WAIT', v_evts(i).event_name, v_evts(i).wait_class, v_shift);
+        DBMS_OUTPUT.PUT_LINE(CASE WHEN i = 1 THEN tl_open('waits') END
+            || tl_bars(tl_csv(v_evts(i).spark_vals), v_evts(i).mu_us / 1e6, v_evts(i).sd_us / 1e6, v_cell,
+                       tl_lab(ent(DBMS_XMLGEN.CONVERT(v_evts(i).event_name), anchor_id('we', v_evts(i).event_name), 'event'),
+                              DBMS_XMLGEN.CONVERT(v_evts(i).wait_class), NULL, v_evts(i).wait_class),
+                       tl_gut(v_evts(i).cur_us / 1e6, v_evts(i).mu_us / 1e6, v_evts(i).sd_us / 1e6, v_cell),
+                       'tl-' || anchor_id('we', v_evts(i).event_name),
+                       'w' || CASE WHEN i > 10 THEN ' more' END,
+                       DBMS_XMLGEN.CONVERT(v_evts(i).event_name), 's waited')
+            || CASE WHEN i = LEAST(v_evts.COUNT, 16) THEN tl_close END);
+    END LOOP;
 
     -- Table B: avg time per wait (ms)
     DBMS_OUTPUT.PUT_LINE('<h3>Top ' || v_top_n || ' events &mdash; avg time per wait (ms)</h3>');

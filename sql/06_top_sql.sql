@@ -88,11 +88,26 @@ DECLARE
     v_gkey       VARCHAR2(20);
     v_dim              VARCHAR2(10);
     v_first_dim        BOOLEAN;
+    -- v1.6.0 Timeline: the SQL lane's rows (the first six statements of
+    -- the elapsed ranking), collected in the ELAPSED pass below
+    TYPE t_tl_rows IS TABLE OF VARCHAR2(32767) INDEX BY PLS_INTEGER;
+    v_tl               t_tl_rows;
+    v_tl_n             PLS_INTEGER := 0;
+    v_tl_csv           VARCHAR2(4000);
+    v_tl_mu            NUMBER;
+    v_tl_first         NUMBER;
+    v_tl_note          VARCHAR2(400);
+    v_tl_gw            NUMBER;
+    v_tl_gl            VARCHAR2(400);
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/is_oracle_schema.plsql
     @@sql/lib/fmt_num.plsql
     @@sql/lib/anchor_id.plsql
+    @@sql/lib/band_glyph.plsql
+    @@sql/lib/finding_cards.plsql
+    @@sql/lib/wingrid.plsql
+    @@sql/lib/timeline.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="topsql" class="vw in-s in-a"><h2>Top SQL'
         || '<small class="h2sub">Top ' || v_top_n
@@ -503,11 +518,50 @@ BEGIN
 
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
+
+        -- v1.6.0 Timeline: this statement's row in the SQL lane (ranked,
+        -- not scored: a plain ratio vs the mean of the prior windows it made
+        -- the top list in; a plan change puts a diamond on Current, a first
+        -- appearance after the oldest window a cross on that window).
+        IF s.dim = 'ELAPSED' AND v_tl_n < 6 THEN
+            v_tl_n     := v_tl_n + 1;
+            v_tl_csv   := tl_csv(v_chart_vals);
+            v_tl_mu    := tl_mu(v_tl_csv);
+            v_tl_first := tl_first(v_tl_csv);
+            v_tl_gw    := NULL;
+            v_tl_gl    := NULL;
+            v_tl_note  := CASE WHEN s.cur_rnk IS NOT NULL THEN '#' || s.cur_rnk || ' by elapsed'
+                              ELSE 'not in the Current top ' || v_top_n END;
+            IF v_plan_flip THEN
+                v_tl_gw   := 0;
+                v_tl_gl   := '<b class="glf gp" title="Plan changed: the Current plan_hash_value '
+                    || s.cur_phv || ' differs from a prior window''s">&#9670;</b>';
+                v_tl_note := '<b>&#9670;</b> new plan';
+            ELSIF v_tl_first IS NOT NULL THEN
+                v_tl_gw   := v_tl_first;
+                v_tl_gl   := '<b class="glf gn" title="First seen in the top ' || v_top_n || ': '
+                    || wg_title(v_tl_first) || '">&#10010;</b>';
+                v_tl_note := '<b>&#10010;</b> new ' || CASE WHEN v_tl_first = 0 THEN 'in Current'
+                                                           ELSE wg_date(v_tl_first) END;
+            END IF;
+            v_tl(v_tl_n) := tl_bars(v_tl_csv, v_tl_mu, NULL, NULL,
+                tl_lab(ent(s.sql_id, anchor_id('sq-elapsed', s.sql_id), 'sql'),
+                       DBMS_XMLGEN.CONVERT(NVL(s.parsing_schema, '?')) || ' <span class="sq">'
+                       || DBMS_XMLGEN.CONVERT(SUBSTR(NVL(s.sql_text_short, ''), 1, 90)) || '</span>',
+                       DBMS_XMLGEN.CONVERT(SUBSTR(NVL(s.sql_text_short, ''), 1, 300))),
+                tl_gutp(tl_val(v_tl_csv, 0), v_tl_mu, v_tl_note),
+                'tl-' || anchor_id('sq-elapsed', s.sql_id), 'q', s.sql_id, 's elapsed',
+                v_tl_gw, v_tl_gl);
+        END IF;
     END LOOP;
 
     IF v_cur_dim IS NOT NULL THEN
         DBMS_OUTPUT.PUT_LINE('</tbody></table></details></div>');
     END IF;
+    FOR i IN 1 .. v_tl_n LOOP
+        DBMS_OUTPUT.PUT_LINE(CASE WHEN i = 1 THEN tl_open('sql') END || v_tl(i)
+            || CASE WHEN i = v_tl_n THEN tl_close END);
+    END LOOP;
 
     -- Second pass: per-group breakdowns for the chart toggle (schema /
     -- module / action). Uses the same valid_windows + DBA_HIST_SQLSTAT scan,

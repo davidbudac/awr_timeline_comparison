@@ -121,6 +121,7 @@ DECLARE
     @@sql/lib/anchor_id.plsql
     @@sql/lib/finding_cards.plsql
     @@sql/lib/wingrid.plsql
+    @@sql/lib/timeline.plsql
 
     -- Entity anchors (v1.6.0): the id of THIS finding's row is
     -- finding_anchor(domain, name) = fr-<l|m|w>-<name> (sql/lib/anchor_id
@@ -454,6 +455,81 @@ DECLARE
             || find_id(r.metric_domain, r.metric_name) || '">Timeline &rarr;</a>'
             || '<span class="evl">' || v_links || '</span></footer></article>');
     END emit_card;
+
+    -- v1.6.0 Timeline: the "Headline and load" lane -- the headline
+    -- metrics in Mock D's order, then every other flagged canonical load /
+    -- metric row (a card lead is always canonical; twins stay in the
+    -- tables) -- and the flagged wait classes at the top of the "Waits" lane.
+    -- One grid row each from the collection the tables walk (never a
+    -- separate slice), id tl-fr-<d>-<name> = the "Timeline ->" target of
+    -- the finding cards (sql/lib/timeline.plsql).
+    FUNCTION hl_rank(p_dom VARCHAR2, p_name VARCHAR2) RETURN PLS_INTEGER IS
+    BEGIN
+        RETURN CASE p_dom || ':' || p_name
+            WHEN 'LOAD:DB time'                      THEN 1
+            WHEN 'LOAD:DB CPU'                       THEN 2
+            WHEN 'METRIC:Database Wait Time Ratio'   THEN 3
+            WHEN 'LOAD:session logical reads'        THEN 4
+            WHEN 'LOAD:physical reads'               THEN 5
+            WHEN 'LOAD:physical read total bytes'    THEN 6
+            WHEN 'LOAD:table scans (long tables)'    THEN 7
+            WHEN 'METRIC:SQL Service Response Time'  THEN 8
+            WHEN 'METRIC:Host CPU Utilization (%)'   THEN 9
+            WHEN 'LOAD:redo size'                    THEN 10
+            WHEN 'LOAD:parse count (hard)'           THEN 11 END;
+    END hl_rank;
+
+    FUNCTION tl_row(r finding_rec, p_cls VARCHAR2) RETURN VARCHAR2 IS
+        v_s  NUMBER       := metric_scale(r.metric_domain, r.metric_name);
+        v_u  VARCHAR2(20) := metric_unit(r.metric_domain, r.metric_name);
+        v_tw VARCHAR2(1)  := CASE WHEN r.canonical = 'N' THEN 'Y' ELSE 'N' END;
+    BEGIN
+        RETURN tl_bars(wg_csv(r.wv, v_s), r.prior_mean * v_s, r.prior_sd * v_s,
+            CASE WHEN v_tw = 'N' THEN r.change_bucket END,
+            tl_lab(f_ent(r),
+                   CASE WHEN r.metric_domain = 'WAIT' THEN 'wait class, ' || v_u ELSE v_u END
+                   || CASE WHEN v_tw = 'Y' THEN ', twin' END,
+                   DBMS_XMLGEN.CONVERT(r.metric_name),
+                   CASE WHEN r.metric_domain = 'WAIT'
+                        THEN REGEXP_REPLACE(r.metric_name, '^Wait class: ', '') END),
+            tl_gut(r.cur_val * v_s, r.prior_mean * v_s, r.prior_sd * v_s, r.change_bucket, NULL, v_tw),
+            'tl-' || find_id(r.metric_domain, r.metric_name),
+            TRIM(p_cls || CASE WHEN v_tw = 'Y' THEN ' twin' END),
+            f_label(r), v_u);
+    END tl_row;
+
+    PROCEDURE emit_timeline IS
+        rec finding_rec;
+        v_n PLS_INTEGER := 0;
+    BEGIN
+        FOR h IN 1 .. 11 LOOP
+            FOR p IN 1 .. v_table_idx.COUNT LOOP
+                rec := v_findings(v_table_idx(p));
+                IF hl_rank(rec.metric_domain, rec.metric_name) = h THEN
+                    DBMS_OUTPUT.PUT_LINE(CASE WHEN v_n = 0 THEN tl_open('metrics') END || tl_row(rec, NULL));
+                    v_n := v_n + 1;
+                END IF;
+            END LOOP;
+        END LOOP;
+        FOR p IN 1 .. v_table_idx.COUNT LOOP
+            rec := v_findings(v_table_idx(p));
+            IF rec.metric_domain IN ('LOAD', 'METRIC') AND hl_rank(rec.metric_domain, rec.metric_name) IS NULL
+               AND rec.change_bucket IN ('large', 'moderate') AND rec.canonical = 'Y' THEN
+                DBMS_OUTPUT.PUT_LINE(CASE WHEN v_n = 0 THEN tl_open('metrics') END || tl_row(rec, NULL));
+                v_n := v_n + 1;
+            END IF;
+        END LOOP;
+        IF v_n > 0 THEN DBMS_OUTPUT.PUT_LINE(tl_close); END IF;
+        v_n := 0;
+        FOR p IN 1 .. v_table_idx.COUNT LOOP
+            rec := v_findings(v_table_idx(p));
+            IF rec.metric_domain = 'WAIT' AND rec.change_bucket IN ('large', 'moderate') THEN
+                DBMS_OUTPUT.PUT_LINE(CASE WHEN v_n = 0 THEN tl_open('waits') END || tl_row(rec, 'w'));
+                v_n := v_n + 1;
+            END IF;
+        END LOOP;
+        IF v_n > 0 THEN DBMS_OUTPUT.PUT_LINE(tl_close); END IF;
+    END emit_timeline;
 BEGIN
     --
     -- Recompute LOAD / METRIC / WAIT values per (week_offset, metric) from
@@ -979,6 +1055,7 @@ BEGIN
         END IF;
         DBMS_OUTPUT.PUT_LINE('</section>');
     END;
+    emit_timeline;
 END;
 /
 

@@ -141,17 +141,23 @@
         RETURN v_out || '</div>';
     END wg_dates;
 
-    -- the window ruler: corner | flags over the dates | gutter head
-    FUNCTION wg_ruler(p_corner VARCHAR2, p_gh VARCHAR2) RETURN VARCHAR2 IS
+    -- the window ruler: corner | flags over the dates | gutter head.
+    -- p_btn 'Y' (the Timeline grid): each date is a button that pins its
+    -- window as the comparison target (sql/lib/js_timeline.plsql).
+    FUNCTION wg_ruler(p_corner VARCHAR2, p_gh VARCHAR2, p_btn VARCHAR2 DEFAULT 'N') RETURN VARCHAR2 IS
         v_out VARCHAR2(32767) := '<div class="ruler"><div class="rin" role="row">'
             || '<div class="corner" role="columnheader">' || p_corner || '</div>'
             || '<div class="flags" aria-label="Release and patch markers"></div>';
+        v_tag VARCHAR2(8) := CASE WHEN p_btn = 'Y' THEN 'button' ELSE 'div' END;
     BEGIN
         FOR k IN REVERSE 0 .. ~weeks_back LOOP
-            v_out := v_out || '<div class="h' || CASE WHEN k = 0 THEN ' cur' END || wg_keep(k)
-                || '" data-w="' || k || '" role="columnheader" title="' || wg_title(k) || '">'
+            v_out := v_out || '<' || v_tag || ' class="h' || CASE WHEN k = 0 THEN ' cur' END || wg_keep(k)
+                || '"' || CASE WHEN p_btn = 'Y' THEN ' type="button" aria-pressed="false"' END
+                || ' data-w="' || k || '" role="columnheader" title="' || wg_title(k)
+                || CASE WHEN p_btn = 'Y' AND k > 0 THEN '. Click to pin as the comparison target'
+                        WHEN p_btn = 'Y' THEN '. The Current window' END || '">'
                 || '<span class="hd">' || wg_date(k) || '</span>'
-                || '<span class="ho">' || wg_off(k) || '</span></div>';
+                || '<span class="ho">' || wg_off(k) || '</span></' || v_tag || '>';
         END LOOP;
         RETURN v_out || '<div class="gh" role="columnheader">' || p_gh || '</div></div></div>';
     END wg_ruler;

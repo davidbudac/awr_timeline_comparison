@@ -355,6 +355,35 @@ for f in awr_trend.sql sql/*.sql sql/lib/*.plsql; do
     done
 done
 
+# ----------------------------------------------------------------------
+# 22. sql/lib/timeline.plsql (the Timeline view's grid rows) calls
+#     fmt_num, band_glyph (band_z / band_span / delta_span), ent() from
+#     finding_cards and wg_tok / wg_date from wingrid: in every file that
+#     includes it, all five must come first (else PLS-00313 at compile
+#     time on the DB), anchor_id too (its callers build the row ids).
+# ----------------------------------------------------------------------
+for f in $(grep -l '@@sql/lib/timeline.plsql' $(sql_files) 2>/dev/null); do
+    tl=$(grep -n '@@sql/lib/timeline.plsql' "$f" | head -1 | cut -d: -f1)
+    for lib in fmt_num band_glyph anchor_id finding_cards wingrid; do
+        ln=$(grep -n "@@sql/lib/$lib.plsql" "$f" | head -1 | cut -d: -f1)
+        if [ -z "$ln" ] || [ "$ln" -gt "$tl" ]; then
+            finding timeline-include-order "$f:$tl" "sql/lib/timeline.plsql needs sql/lib/$lib.plsql included before it"
+        fi
+    done
+done
+
+# ----------------------------------------------------------------------
+# 23. A Timeline lane source (tl_open) must be closed (tl_close) in the
+#     same file, and never be emitted inside a table: the inert
+#     <template> would still parse, but a <script> in a <tbody> is easy to
+#     misplace.  Cheap proxy: every file with tl_open( has tl_close.
+# ----------------------------------------------------------------------
+for f in $(grep -l "tl_open(" sql/[0-9]*.sql 2>/dev/null); do
+    if ! grep -q "tl_close" "$f"; then
+        finding timeline-source "$f" "tl_open(...) without tl_close -- the lane's rows never leave their <template>"
+    fi
+done
+
 [ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"

@@ -125,7 +125,9 @@ BEGIN
     FROM   dp_scored
     ORDER BY ord, hour_slot DESC;
 
-    DBMS_OUTPUT.PUT_LINE('<section id="day-profile" class="vw in-a">');
+    -- v1.6.0: shown in the Timeline view too, below the window grid (Mock D
+    -- keeps the day profile there, on its own 24-hour axis).
+    DBMS_OUTPUT.PUT_LINE('<section id="day-profile" class="vw in-t in-a">');
 
     -- The grid is dense (every stat x hour always has a row), so "no data"
     -- means no current-day cell carries a value at all.

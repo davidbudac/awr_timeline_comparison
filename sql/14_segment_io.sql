@@ -75,11 +75,20 @@ DECLARE
     v_aid_by_name t_aid;
     v_aid_used    t_aid;
     v_aid         VARCHAR2(200);
+    -- v1.6.0 Timeline: the "Where the reads land" lane's rows (the top
+    -- 2 of the physical reads ranking), emitted after the tables
+    TYPE t_tl_rows IS TABLE OF VARCHAR2(32767) INDEX BY PLS_INTEGER;
+    v_tl          t_tl_rows;
+    v_tl_csv      VARCHAR2(4000);
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/json_escape.plsql
     @@sql/lib/fmt_num.plsql
     @@sql/lib/anchor_id.plsql
+    @@sql/lib/band_glyph.plsql
+    @@sql/lib/finding_cards.plsql
+    @@sql/lib/wingrid.plsql
+    @@sql/lib/timeline.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="segment-io" class="vw in-a"><h2>Segment I/O'
         || '<small class="h2sub">Top ' || v_top_n
@@ -393,6 +402,17 @@ BEGIN
 
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
+
+        -- v1.6.0 Timeline: ranked, not scored (a plain ratio vs the mean of
+        -- the prior windows it made the top list in); id tl-<its anchor>
+        IF s.dim = 'PREADS' AND v_tl.COUNT < 2 AND s.cur_val IS NOT NULL THEN
+            v_tl_csv := tl_csv(s.week_vals, 'Y');
+            v_tl(v_tl.COUNT + 1) := tl_bars(v_tl_csv, tl_mu(v_tl_csv), NULL, NULL,
+                tl_lab(ent(DBMS_XMLGEN.CONVERT(s.seg_name), v_aid_by_name(s.seg_name), 'segment'),
+                       LOWER(DBMS_XMLGEN.CONVERT(NVL(s.object_type, 'segment'))) || ', blocks read', DBMS_XMLGEN.CONVERT(s.seg_name)),
+                tl_gutp(s.cur_val, tl_mu(v_tl_csv), '#' || s.cur_rnk || ' by physical reads'),
+                'tl-' || v_aid_by_name(s.seg_name), 'o', DBMS_XMLGEN.CONVERT(s.seg_name), 'blocks read');
+        END IF;
     END LOOP;
 
     IF v_cur_dim IS NOT NULL THEN
@@ -403,6 +423,11 @@ BEGIN
             || '(DBA_HIST_SEG_STAT empty for these snapshots, or no valid '
             || 'windows). Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p>');
     END IF;
+    -- the Timeline rows ride after the tables (never inside a <tbody>)
+    FOR i IN 1 .. v_tl.COUNT LOOP
+        DBMS_OUTPUT.PUT_LINE(CASE WHEN i = 1 THEN tl_open('objects') END || v_tl(i)
+            || CASE WHEN i = v_tl.COUNT THEN tl_close END);
+    END LOOP;
 
     -- Second pass: per-object-type rollup for the chart toggle. Same
     -- valid_windows + DBA_HIST_SEG_STAT scan, aggregated over ALL segments

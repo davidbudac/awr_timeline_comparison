@@ -568,6 +568,10 @@ END;
 -- window boundaries, hover) and the entity-link unwrap; reads
 -- window.AWR_WIN, which 00_params.sql emits.
 @@sql/lib/js_wingrid.plsql
+-- v1.6.0: the Timeline view's client half (lane sources, pin, tooltip,
+-- stacked activity columns, the full-span ASH chart); extends AWR_WG and
+-- must run before any section's inline AWR_TL.take() call.
+@@sql/lib/js_timeline.plsql
 
 -- -------------------------------------------------------------------
 -- Sections.  Each section is compute+render in one anonymous block;

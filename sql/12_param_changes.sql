@@ -97,8 +97,10 @@ DECLARE
     END cell_html;
     @@sql/lib/anchor_id.plsql
     @@sql/lib/fmt_num.plsql
+    @@sql/lib/band_glyph.plsql
     @@sql/lib/finding_cards.plsql
     @@sql/lib/wingrid.plsql
+    @@sql/lib/timeline.plsql
 
     -- a parameter value for the configuration card's step line: a byte
     -- count (all digits, 1 MB or more) reads as MB / GB, anything else is
@@ -381,6 +383,46 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('<script>(function(){var s=document.getElementById("changes-slot"),'
             || 'c=document.getElementById("f-config");if(!s||!c)return;s.appendChild(c);c.hidden=false;'
             || 'var x=document.getElementById("s-changes");if(x)x.hidden=false;})();</script>');
+
+        -- v1.6.0 Timeline: the "Configuration" lane, the same step lines
+        -- for every changed parameter (at most 20), id tl-pa-<parameter>
+        -- (the config card's "Timeline ->" target); each cell carries its
+        -- value for the hover tooltip (sql/lib/timeline.plsql).
+        FOR i IN 1 .. LEAST(20, v_names.COUNT) LOOP
+            v_base := pv_at(v_names(i), v_weeks_back);
+            v_prev := NULL;
+            v_last := NULL;
+            v_cells_h := NULL;
+            FOR k IN REVERSE 0 .. v_weeks_back LOOP
+                v_v := pv_at(v_names(i), k);
+                v_start := (k = v_weeks_back) OR (v_v <> v_prev);
+                IF v_start AND k < v_weeks_back THEN v_last := k; END IF;
+                v_lvl := CASE WHEN v_v = v_base THEN 'lo' ELSE 'hi' END;
+                v_cells_h := v_cells_h || '<div class="c' || CASE WHEN k = 0 THEN ' cur' END
+                    || '" data-w="' || k || '" data-pv="' || pv_html(v_v) || '"><i class="st ' || v_lvl
+                    || CASE WHEN v_start AND k < v_weeks_back THEN ' rise' END || '" aria-hidden="true"></i>'
+                    || CASE WHEN v_start AND k < v_weeks_back THEN '<i class="nd" aria-hidden="true"></i>' END
+                    || CASE WHEN v_start OR k = 0
+                            THEN '<span class="pv ' || v_lvl || '">' || pv_html(v_v) || '</span>' END
+                    || '</div>';
+                v_prev := v_v;
+            END LOOP;
+            DBMS_OUTPUT.PUT_LINE(CASE WHEN i = 1 THEN tl_open('config') END
+                || '<div class="r p" id="tl-' || anchor_id('pa', v_names(i)) || '" data-name="'
+                || DBMS_XMLGEN.CONVERT(v_names(i)) || '" role="row">'
+                || tl_lab(ent(DBMS_XMLGEN.CONVERT(v_names(i)), anchor_id('pa', v_names(i)), 'parameter'),
+                          pv_html(v_base) || ' &rarr; ' || pv_html(pv_at(v_names(i), 0)))
+                || v_cells_h
+                || '<div class="g" role="cell"><div class="gl1"><span class="d1">'
+                || CASE WHEN v_last IS NULL THEN 'varies'
+                        WHEN v_last = 0 THEN 'changed in Current'
+                        ELSE 'changed ' || wg_date(v_last) END
+                || '</span></div>'
+                || CASE WHEN v_last IS NOT NULL
+                        THEN '<div class="gx"><span data-mk-at="' || v_last || '" data-mk-icon hidden></span></div>' END
+                || '</div></div>'
+                || CASE WHEN i = LEAST(20, v_names.COUNT) THEN tl_close END);
+        END LOOP;
     END;
 END;
 /
