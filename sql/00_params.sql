@@ -367,7 +367,7 @@ BEGIN
                                     ELSE '-' || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) END || '"'
                 || ',"s":"' || TO_CHAR(wg_start(k), 'YYYY-MM-DD HH24:MI') || '"'
                 || ',"e":"' || TO_CHAR(wg_end(k), 'YYYY-MM-DD HH24:MI') || '"'
-                || ',"t":"' || TO_CHAR(wg_start(k), 'Dy DD Mon, HH24:MI') || '-'
+                || ',"t":"' || TO_CHAR(wg_start(k), 'Dy DD Mon, HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH') || '-'
                             || TO_CHAR(wg_end(k), 'HH24:MI') || '"'
                 || ',"v":"' || CASE WHEN INSTR(v_flags, '|' || k || '=Y|') > 0 THEN 'Y' ELSE 'N' END || '"}';
         END LOOP;
@@ -411,7 +411,7 @@ BEGIN
         || '</span></div>'
         || '<div class="win"><span class="cchip">Current</span><b>'
         || TO_CHAR(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') - ~win_hours/24,
-                   'Dy DD Mon, HH24:MI')
+                   'Dy DD Mon, HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH')
         || '&ndash;'
         || TO_CHAR(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS'), 'HH24:MI')
         || '</b><span>vs ' || TO_CHAR(~weeks_back) || ' prior window'
@@ -1387,7 +1387,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('<div class="panel gridwrap wg hov" id="tl"' || wg_attr
             || ' role="table" aria-label="Current vs ' || ~weeks_back || ' prior windows, one column per window">'
             || wg_ruler('<span class="ct">'
-                || CASE WHEN ~step_hours = 168 THEN TO_CHAR(v_st, 'FMDay') || ' '
+                || CASE WHEN ~step_hours = 168 THEN TO_CHAR(v_st, 'FMDay', 'NLS_DATE_LANGUAGE=ENGLISH') || ' '
                         WHEN ~step_hours = 24 THEN 'Daily ' END
                 || CASE WHEN ~step_hours IN (24, 168)
                         THEN TO_CHAR(v_st, 'HH24:MI') || '&ndash;' || TO_CHAR(wg_end(0), 'HH24:MI')

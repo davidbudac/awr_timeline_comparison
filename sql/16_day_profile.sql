@@ -217,7 +217,7 @@ BEGIN
         || '<span class="badge skip" title="' || v_crit || ' large / ' || v_warn
         || ' moderate cells">' || v_hours_hit || ' of 24 hours flagged</span></span>'
         || '<small class="h2sub">Each hour of the 24 h ending '
-        || TO_CHAR(v_tend, 'Dy YYYY-MM-DD HH24:MI') || ' vs the same hour on the '
+        || TO_CHAR(v_tend, 'Dy YYYY-MM-DD HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH') || ' vs the same hour on the '
         || v_days || ' prior day' || CASE WHEN v_days = 1 THEN '' ELSE 's' END
         || ' (' || TO_CHAR(v_tend - v_days - 1, 'YYYY-MM-DD') || ' &rarr; '
         || TO_CHAR(v_tend - 1, 'YYYY-MM-DD') || ')</small></h2>');
@@ -345,7 +345,7 @@ BEGIN
     v_buf := v_buf || '],dates:[';
     FOR d IN REVERSE 0 .. v_days LOOP
         v_buf := v_buf || CASE WHEN d < v_days THEN ',' ELSE '' END
-              || js(TO_CHAR(v_tend - d, 'Dy DD Mon'));
+              || js(TO_CHAR(v_tend - d, 'Dy DD Mon', 'NLS_DATE_LANGUAGE=ENGLISH'));
     END LOOP;
     v_buf := v_buf || '],stats:[';
     DBMS_LOB.WRITEAPPEND(v_json, LENGTH(v_buf), v_buf);

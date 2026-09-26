@@ -108,7 +108,7 @@ BEGIN
 
         DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
             || '" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">'
-            || TO_CHAR(w.win_end_ts, '~period_axis_fmt') || '</text>');
+            || TO_CHAR(w.win_end_ts, '~period_axis_fmt', 'NLS_DATE_LANGUAGE=ENGLISH') || '</text>');
 
         IF v_is_current THEN
             DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
@@ -151,8 +151,8 @@ BEGIN
                               ELSE '&minus;'
                                    || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, w.week_offset)
                               END || '</td>'
-            || '<td>' || TO_CHAR(w.win_start_ts, 'YYYY-MM-DD Dy HH24:MI') || '</td>'
-            || '<td>' || TO_CHAR(w.win_end_ts,   'YYYY-MM-DD Dy HH24:MI') || '</td>'
+            || '<td>' || TO_CHAR(w.win_start_ts, 'YYYY-MM-DD Dy HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH') || '</td>'
+            || '<td>' || TO_CHAR(w.win_end_ts,   'YYYY-MM-DD Dy HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH') || '</td>'
             || '<td class="num">' || NVL(TO_CHAR(w.begin_snap_id), '&mdash;') || '</td>'
             || '<td class="num">' || NVL(TO_CHAR(w.end_snap_id),   '&mdash;') || '</td>'
             || '<td>' || CASE WHEN w.valid_flag = 'Y'

@@ -458,6 +458,28 @@ for f in sql/[0-9]*.sql; do
     fi
 done
 
+# ----------------------------------------------------------------------
+# 28. Day / month NAMES follow the session's NLS_DATE_LANGUAGE: on a Czech
+#     / German / French client TO_CHAR(d, 'Dy DD Mon') is localized and can
+#     be non-ASCII ("?" on a non-UTF-8 SQL*Plus client, lint 25) and it
+#     disagrees with the English DOW / MON arrays of the report's JS
+#     (v1.6.0 review #9).  A TO_CHAR mask that names a day or month (Dy /
+#     Day / Mon / Month, or the ~period_axis_fmt DEFINE, which is 'Mon DD')
+#     must pass 'NLS_DATE_LANGUAGE=ENGLISH' on the same line.  The driver
+#     also pins the session (its resolving SELECT stays parallel to the
+#     fleet extract, so it is out of scope here); fleet files likewise.
+# ----------------------------------------------------------------------
+for f in sql/[0-9]*.sql sql/lib/*.plsql sql/lib/*.sql; do
+    [ -f "$f" ] || continue
+    case "$f" in sql/lib/js_*) continue;; esac   # generated client JS, no TO_CHAR
+    grep -nE "'(FM|fm)?[^']*(Dy|DY|Day|DAY|Mon|MON|Month|MONTH)[^']*'|'~period_axis_fmt'" "$f" \
+      | grep -E "'[^']*(DD|HH24|YYYY|FM)[^']*'|'(FM)?(Dy|DY|Day|DAY|Mon|MON|Month|MONTH)'|'~period_axis_fmt'" \
+      | grep -v -E '^[0-9]+:[[:space:]]*--' | grep -v 'NLS_DATE_LANGUAGE' \
+      | while IFS= read -r line; do
+        finding date-language "$f:${line%%:*}" "TO_CHAR with a day / month name mask and no 'NLS_DATE_LANGUAGE=ENGLISH' -- the name follows the client's language (non-ASCII -> ?)"
+    done
+done
+
 [ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"

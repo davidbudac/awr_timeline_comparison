@@ -77,7 +77,7 @@
     FUNCTION wg_date(p_off NUMBER) RETURN VARCHAR2 IS
     BEGIN
         IF ~step_hours >= 24 THEN
-            RETURN TO_CHAR(wg_start(p_off), 'FMDD Mon');
+            RETURN TO_CHAR(wg_start(p_off), 'FMDD Mon', 'NLS_DATE_LANGUAGE=ENGLISH');
         END IF;
         RETURN TO_CHAR(wg_start(p_off), 'HH24:MI');
     END wg_date;
@@ -90,7 +90,7 @@
 
     FUNCTION wg_title(p_off NUMBER) RETURN VARCHAR2 IS
     BEGIN
-        RETURN TO_CHAR(wg_start(p_off), 'Dy DD Mon, HH24:MI') || '&ndash;'
+        RETURN TO_CHAR(wg_start(p_off), 'Dy DD Mon, HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH') || '&ndash;'
             || TO_CHAR(wg_end(p_off), 'HH24:MI');
     END wg_title;
 

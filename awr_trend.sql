@@ -92,6 +92,15 @@ WHENEVER OSERROR  EXIT FAILURE
 -- it matches the rest of the report, which already forces '.,' on every
 -- chart-CSV TO_CHAR.
 ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,';
+-- Day and month NAMES in English, whatever the client's NLS_LANGUAGE: the
+-- window labels, the top bar and the Timeline's JS (which carries English
+-- DOW / MON arrays) must agree, and a localized name can be non-ASCII,
+-- which a non-UTF-8 SQL*Plus client prints as "?" (the v1.6.0 ASCII
+-- rule, lint check 25).  Emitters also pass 'NLS_DATE_LANGUAGE=ENGLISH'
+-- to every TO_CHAR that formats a name (lint check 28); this pin covers
+-- the resolving SELECT below (dow_name), which stays textually parallel
+-- to awr_fleet_extract.sql.
+ALTER SESSION SET NLS_DATE_LANGUAGE = ENGLISH;
 
 -- Tool version.  A constant, not a caller-tunable DEFINE (so it lives here,
 -- not in sql/defaults.sql).  Bump on release and record it in CHANGELOG.md;
