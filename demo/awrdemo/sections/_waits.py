@@ -237,14 +237,15 @@ def shift_note(rows, shift, n_flag, mean_pct, sd_pct):
             "not " + str(n_flag) + " separate findings. Large rows are demoted to moderate.</p>"]
 
 
-def table_time(w, rows, table_id, heading, tot=None, shift=False, note=(), prefix="we"):
+def table_time(w, rows, table_id, heading, tot=None, shift=False, note=(), prefix="we", memo=None):
+    memo = {} if memo is None else memo            # anchor_uniq memo (v_seen_<prefix>)
     L = ["<h3>" + heading + "</h3>"]
     L.extend(note)
     L.append('<table id="' + table_id + '">' + header(w, "<th>Event</th>", "s") + "<tbody>")
     for r in rows:
         cur_s = None if r["cur_us"] is None else r["cur_us"] / 1e6
-        row = ('<tr id="' + h.anchor_id(prefix, r["event_name"]) + '" data-imp="'
-               + h.is_essential("WAIT", r["event_name"]) + '">'
+        row = ('<tr id="' + h.anchor_uniq(h.anchor_id(prefix, r["event_name"]), r["event_name"], memo)
+               + '" data-imp="' + h.is_essential("WAIT", r["event_name"]) + '">'
                + "<td>" + h.esc(r["event_name"]) + "</td>"
                + '<td class="num" data-w="0"' + h.fmt_num_title(cur_s) + "><b>" + h.fmt_num(cur_s)
                + (' <span class="badge info">#' + str(r["cur_rnk"]) + "</span>"
@@ -274,11 +275,12 @@ def table_time(w, rows, table_id, heading, tot=None, shift=False, note=(), prefi
 
 
 def table_avg(w, rows, table_id, heading, prefix="wa"):
+    memo = {}                                      # anchor_uniq memo (v_seen_<prefix>)
     L = ["<h3>" + heading + "</h3>",
          '<table id="' + table_id + '">' + header(w, "<th>Event</th>", "ms") + "<tbody>"]
     for r in rows:
-        row = ('<tr id="' + h.anchor_id(prefix, r["event_name"]) + '" data-imp="'
-               + h.is_essential("WAIT", r["event_name"]) + '">'
+        row = ('<tr id="' + h.anchor_uniq(h.anchor_id(prefix, r["event_name"]), r["event_name"], memo)
+               + '" data-imp="' + h.is_essential("WAIT", r["event_name"]) + '">'
                + "<td>" + h.esc(r["event_name"]) + "</td>"
                + '<td class="num" data-w="0"' + h.fmt_num_title(r["cur_ms"]) + "><b>"
                + h.fmt_num(r["cur_ms"]) + "</b></td>"

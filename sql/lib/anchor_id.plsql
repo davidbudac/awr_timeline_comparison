@@ -19,13 +19,33 @@
 --   06  sq-<dim>-<sql_id>  Top SQL row per ranking tab (sq-elapsed-... is
 --                       the link target); anchor_id('sq-elapsed', sql_id)
 --   18  sm-<sql_id>     SQL Monitor statement row
---   14  sg-<owner.segment[.partition]>   15  fl-<file name>
---   12  pa-<parameter>
+--   14  sg-<owner.segment[.partition]>
+--   15  fl-<parent dir>-<file name>   -- use file_anchor(full path)
+--   12  pa-<parameter>, pa--<_hidden>, pa---<__double> -- param_anchor(name)
 --   02  load-<stat>     03  metric-<name>     11  ash-card-<sql_id>
+--
+-- The contract (v1.6.0 review #7): an id is a PURE FUNCTION of (kind, full
+-- name), so a link emitted anywhere (the verdict, a card, the narrative,
+-- a Timeline label) computes the very id its target row carries without
+-- knowing which other rows exist:
+--   * names unique within their kind (events, classes, statements,
+--     segments, stats) use anchor_id();
+--   * files use file_anchor(): a short name repeats across containers
+--     (every PDB has its users01.dbf), so the id keeps the parent
+--     directory -- never the short name alone;
+--   * parameters use param_anchor(): the slug drops leading underscores,
+--     and _x / __x / x are three different parameters (db_cache_size and
+--     the auto-tuned __db_cache_size change together), so each leading
+--     underscore adds a hyphen after the kind.
+-- A target table additionally guards DOM uniqueness (anchor_uniq below,
+-- or 14 / 15's equivalent map): if two DIFFERENT names still slug alike
+-- (a punctuation-only difference, e.g. SYS.OBJ$ and SYS.OBJ) the later
+-- row gets '-2', '-3' ...; a link then reaches the first of the pair --
+-- the one case the pure function cannot tell apart.
 -- Only link to rows that are actually emitted (a sql_id outside the Top-N
--- has no row); where two names collide after slugging the emitter appends
--- the rank.  demo/verify_report.js checks every href="#..." resolves to
--- exactly one id.  Twin: demo/awrdemo/helpers.py anchor_id / finding_anchor.
+-- has no row).  demo/verify_report.js checks every href="#..." resolves to
+-- exactly one id.  Twin: demo/awrdemo/helpers.py anchor_id / finding_anchor
+-- / file_anchor / param_anchor / anchor_uniq.
 -- Include inside a DECLARE block, after the plain variables (two at-signs
 -- + sql/lib/anchor_id.plsql).  Pure string functions, no DB access.
 --
@@ -42,3 +62,47 @@
     BEGIN
         RETURN anchor_id('fr-' || LOWER(SUBSTR(p_domain, 1, 1)), p_name);
     END finding_anchor;
+
+    -- A data / temp file's row (15) and every link to it: the parent
+    -- directory and the file name, so two containers' users01.dbf get two
+    -- ids ('/u02/oradata/CDB1/pdb1/users01.dbf' -> 'fl-pdb1-users01-dbf',
+    -- '+DATA/CDB1/DATAFILE/users.259.1098' -> 'fl-datafile-users-259-1098').
+    FUNCTION file_anchor(p_path IN VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN anchor_id('fl', NVL(REGEXP_SUBSTR(p_path, '[^/\]*[/\]?[^/\]+$'), p_path));
+    END file_anchor;
+
+    -- An init parameter's row (12) and every link to it: one extra hyphen
+    -- after the kind per leading underscore ('db_cache_size' -> 'pa-db-cache-
+    -- size', '_x_y' -> 'pa--x-y', '__db_cache_size' -> 'pa---db-cache-size');
+    -- a plain slug never starts with a hyphen, so the three cannot meet.
+    FUNCTION param_anchor(p_name IN VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN anchor_id('pa' || RPAD('-', LENGTH(p_name) - NVL(LENGTH(LTRIM(p_name, '_')), 0), '-'),
+                         p_name);
+    END param_anchor;
+
+    -- DOM-unique id for p_name in one id space: p_id (its pure-function id)
+    -- the first time an id is seen, p_id || '-<n>' when a DIFFERENT name
+    -- already took it.  p_seen is the caller's memo (a CLOB, NULL at start,
+    -- one per id space: hundreds of events would outgrow a VARCHAR2);
+    -- asking again for the same name returns the same id, so a table row
+    -- and its Timeline row agree.
+    FUNCTION anchor_uniq(p_id IN VARCHAR2, p_name IN VARCHAR2,
+                         p_seen IN OUT NOCOPY CLOB) RETURN VARCHAR2 IS
+        v_key VARCHAR2(4000) := CHR(1) || p_name || CHR(2);
+        v_i   PLS_INTEGER := INSTR(p_seen, v_key);
+        v_id  VARCHAR2(4000) := p_id;
+        v_n   PLS_INTEGER := 1;
+    BEGIN
+        IF v_i > 0 THEN
+            v_i := v_i + LENGTH(v_key);
+            RETURN SUBSTR(p_seen, v_i, INSTR(p_seen, CHR(1), v_i) - v_i);
+        END IF;
+        WHILE INSTR(p_seen, CHR(2) || v_id || CHR(1)) > 0 LOOP
+            v_n  := v_n + 1;
+            v_id := p_id || '-' || v_n;
+        END LOOP;
+        p_seen := p_seen || v_key || v_id || CHR(1);
+        RETURN v_id;
+    END anchor_uniq;

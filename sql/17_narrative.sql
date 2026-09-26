@@ -93,6 +93,7 @@ DECLARE
     v_r      stat_rec;
     -- R1 detail carriers
     v_file      VARCHAR2(600);
+    v_file_aid  VARCHAR2(200);   -- its row id in 15: file_anchor(full path)
     v_file_cur  NUMBER;
     v_file_mu   NUMBER;
     v_seg       VARCHAR2(600);
@@ -373,13 +374,17 @@ BEGIN
                     GROUP BY filename
                 )
                 SELECT REGEXP_REPLACE(filename, '^.*[/\]', '') AS short_name,
-                       cur_mb, mu_mb
+                       filename, cur_mb, mu_mb
                 FROM   nf_piv
                 WHERE  cur_mb > 0
                 ORDER  BY cur_mb DESC, filename
                 FETCH FIRST 1 ROWS ONLY
             ) LOOP
                 v_file     := f.short_name;
+                -- the link target is 15's row id, a pure function of the
+                -- FULL path (sql/lib/anchor_id.plsql): the short name alone
+                -- repeats across containers (every PDB has a users01.dbf)
+                v_file_aid := file_anchor(f.filename);
                 v_file_cur := f.cur_mb;
                 v_file_mu  := f.mu_mb;
             END LOOP;
@@ -494,7 +499,7 @@ BEGIN
         -- plain IS NOT NULL -- `v <> ''''` evaluates to NULL.
         v_tail := '';
         IF v_file IS NOT NULL THEN
-            v_tail := 'file ' || ent(esc(v_file), anchor_id('fl', v_file), 'file') || ' '
+            v_tail := 'file ' || ent(esc(v_file), v_file_aid, 'file') || ' '
                 || CASE WHEN v_file_mu IS NULL THEN '' ELSE fmt3(v_file_mu) || ' &rarr; ' END
                 || fmt3(v_file_cur) || ' MB';
         END IF;
@@ -524,7 +529,7 @@ BEGIN
         END IF;
         IF v_file IS NOT NULL THEN
             v_ev_io := v_ev_io || '<div class="evr"><dt>File</dt><dd><span class="id">'
-                || ent(esc(v_file), anchor_id('fl', v_file), 'file') || '</span><span class="de">'
+                || ent(esc(v_file), v_file_aid, 'file') || '</span><span class="de">'
                 || fmt_num(v_file_cur) || ' MB read'
                 || CASE WHEN v_file_mu IS NOT NULL THEN ', normal ' || fmt_num(v_file_mu) END
                 || '</span></dd><div class="m" title="Ranked, not scored">'
@@ -1008,7 +1013,7 @@ BEGIN
             v_because := 'the reads land on ' || ent('<code>' || esc(v_seg) || '</code>',
                                                      anchor_id('sg', v_seg), 'segment')
                 || CASE WHEN v_file IS NOT NULL
-                        THEN ' (file ' || ent(esc(v_file), anchor_id('fl', v_file), 'file') || ')' END;
+                        THEN ' (file ' || ent(esc(v_file), v_file_aid, 'file') || ')' END;
         END IF;
     END;
 

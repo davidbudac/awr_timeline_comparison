@@ -569,6 +569,31 @@ def anchor_id(prefix: str, name) -> str:
     return prefix + "-" + v[:64]
 
 
+def file_anchor(path) -> str:
+    """sql/lib/anchor_id.plsql file_anchor(): parent directory + file name."""
+    m = re.search(r"[^/\\]*[/\\]?[^/\\]+$", path or "")
+    return anchor_id("fl", m.group(0) if m else path)
+
+
+def param_anchor(name) -> str:
+    """sql/lib/anchor_id.plsql param_anchor(): one hyphen per leading '_'."""
+    n = len(name or "") - len((name or "").lstrip("_"))
+    return anchor_id("pa" + "-" * n, name)
+
+
+def anchor_uniq(pid: str, name, memo: dict) -> str:
+    """sql/lib/anchor_id.plsql anchor_uniq(): memo = {name: id} (the CLOB)."""
+    if name in memo:
+        return memo[name]
+    used = set(memo.values())
+    v, n = pid, 1
+    while v in used:
+        n += 1
+        v = pid + "-" + str(n)
+    memo[name] = v
+    return v
+
+
 def finding_anchor(domain: str, name) -> str:
     """sql/lib/anchor_id.plsql finding_anchor(): the 07 findings row id."""
     return anchor_id("fr-" + domain[:1].lower(), name)

@@ -158,10 +158,10 @@ def _r1_file(w):
         if cur is not None and cur > 0:
             rows.append((-cur, fn, cur, mu))
     if not rows:
-        return None, None, None
+        return None, None, None, None
     rows.sort()
     _, fn, cur, mu = rows[0]
-    return re.sub(r'^.*[/\\]', '', fn), cur, mu
+    return re.sub(r'^.*[/\\]', '', fn), h.file_anchor(fn), cur, mu
 
 
 def _r1_segment(w):
@@ -332,12 +332,12 @@ def emit(w) -> str:
     big_pr = False
     if st.big('physical reads'):
         big_pr = True
-        v_file, v_file_cur, v_file_mu = _r1_file(w)
+        v_file, v_file_aid, v_file_cur, v_file_mu = _r1_file(w)
         v_seg, v_seg_cur, v_seg_mu = _r1_segment(w)
         v_sqlid, v_sql_rd = _r1_newcomer(w)
         tail = ''
         if v_file is not None:
-            tail = ('file ' + h.ent(esc(v_file), h.anchor_id('fl', v_file), 'file') + ' '
+            tail = ('file ' + h.ent(esc(v_file), v_file_aid, 'file') + ' '
                     + ('' if v_file_mu is None else fmt3(v_file_mu) + ' &rarr; ')
                     + fmt3(v_file_cur) + ' MB')
         if v_seg is not None:
@@ -359,7 +359,7 @@ def emit(w) -> str:
                      + h.ent('<code>' + esc(v_seg) + '</code>', h.anchor_id('sg', v_seg), 'segment'))
         if v_file is not None:
             ev_io += ('<div class="evr"><dt>File</dt><dd><span class="id">'
-                      + h.ent(esc(v_file), h.anchor_id('fl', v_file), 'file') + '</span><span class="de">'
+                      + h.ent(esc(v_file), v_file_aid, 'file') + '</span><span class="de">'
                       + h.fmt_num(v_file_cur) + ' MB read'
                       + (', normal ' + h.fmt_num(v_file_mu) if v_file_mu is not None else '')
                       + '</span></dd><div class="m" title="Ranked, not scored">'
@@ -455,7 +455,7 @@ def emit(w) -> str:
                    + ', first seen in SQL Monitor in the Current window')
     elif big_pr and v_seg is not None:
         because = ('the reads land on ' + h.ent('<code>' + esc(v_seg) + '</code>', h.anchor_id('sg', v_seg), 'segment')
-                   + (' (file ' + h.ent(esc(v_file), h.anchor_id('fl', v_file), 'file') + ')' if v_file else ''))
+                   + (' (file ' + h.ent(esc(v_file), v_file_aid, 'file') + ')' if v_file else ''))
 
     out = ['<!-- AWR-SECTION: 17_narrative BEGIN -->']
     if sent or pills or because or ev_io:

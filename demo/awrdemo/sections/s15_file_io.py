@@ -132,7 +132,7 @@ def emit(w) -> str:
             new = D.new_in_cur(e["cur_val"], tokens, _parse)
             aid = None
             if filename not in aid_by_name:
-                aid = H.anchor_id("fl", short)
+                aid = H.file_anchor(filename)
                 if aid in aid_used:
                     aid = aid + "-" + str(len(aid_by_name) + 1)
                 aid_by_name[filename] = aid

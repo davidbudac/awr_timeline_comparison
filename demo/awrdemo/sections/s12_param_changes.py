@@ -57,7 +57,7 @@ def _pv_html(v):
     return h.esc(_pv_txt(v))
 
 
-def _config_card(w, L, changed, cells):
+def _config_card(w, L, changed, cells, seen_pa):
     """The Summary view's configuration card (hidden, moved into 07's slot)."""
     wb = w.weeks_back
     cur = [n for n in changed if wb >= 1 and _pv_at(cells, n, 0) != _pv_at(cells, n, 1)]
@@ -70,7 +70,7 @@ def _config_card(w, L, changed, cells):
              '<h3 id="f-config-h">' + str(nch) + ' parameter' + (' differs' if nch == 1 else 's differ')
              + ' across the compared windows</h3>'
              '<p class="takeaway">'
-             + ('Only ' + h.ent('<code>' + h.esc(cur[-1]) + '</code>', h.anchor_id("pa", cur[-1]), "parameter")
+             + ('Only ' + h.ent('<code>' + h.esc(cur[-1]) + '</code>', h.anchor_uniq(h.param_anchor(cur[-1]), cur[-1], seen_pa), "parameter")
                 + ' changed into the Current window.' if len(cur) == 1
                 else str(len(cur)) + ' of them changed into the Current window.' if len(cur) > 1
                 else 'None changed into the Current window: every change is older.')
@@ -104,7 +104,7 @@ def _config_card(w, L, changed, cells):
                + '</div>')
         L.append('<div class="r p" data-name="' + h.esc(name) + '" role="row">'
                  '<div class="l" role="rowheader"><span class="nm">'
-                 + h.ent('<code>' + h.esc(name) + '</code>', h.anchor_id("pa", name), "parameter")
+                 + h.ent('<code>' + h.esc(name) + '</code>', h.anchor_uniq(h.param_anchor(name), name, seen_pa), "parameter")
                  + '</span><span class="sub">' + _pv_html(base) + ' &rarr; ' + _pv_html(_pv_at(cells, name, 0))
                  + '</span></div>')
         L.append(h.wg_lines(ch))
@@ -113,7 +113,7 @@ def _config_card(w, L, changed, cells):
              + ('<p class="cfg-more">and ' + str(nch - 8) + ' more in <a href="#param-changes">Parameters</a></p>'
                 if nch > 8 else '')
              + '<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
-             + h.anchor_id("pa", changed[0]) + '">Timeline &rarr;</a>'
+             + h.anchor_uniq(h.param_anchor(changed[0]), changed[0], seen_pa) + '">Timeline &rarr;</a>'
              '<span class="evl"><a href="#param-changes">Parameters</a></span></footer></article>')
     L.append('<script>(function(){var s=document.getElementById("changes-slot"),'
              'c=document.getElementById("f-config");if(!s||!c)return;s.appendChild(c);c.hidden=false;'
@@ -138,9 +138,9 @@ def _config_card(w, L, changed, cells):
             prev = v
         L.append(h.wg_lines(
                  [(h.tl_open("config") if i == 1 else "")
-                  + '<div class="r p" id="tl-' + h.anchor_id("pa", name) + '" data-name="'
+                  + '<div class="r p" id="tl-' + h.anchor_uniq(h.param_anchor(name), name, seen_pa) + '" data-name="'
                   + h.esc(name) + '" role="row">'
-                  + h.tl_lab(h.ent(h.esc(name), h.anchor_id("pa", name), "parameter"),
+                  + h.tl_lab(h.ent(h.esc(name), h.anchor_uniq(h.param_anchor(name), name, seen_pa), "parameter"),
                              _pv_html(base) + ' &rarr; ' + _pv_html(_pv_at(cells, name, 0)))]
                  + ch
                  + ['<div class="g" role="cell"><div class="gl1"><span class="d1">'
@@ -154,6 +154,7 @@ def _config_card(w, L, changed, cells):
 
 
 def emit(w) -> str:
+    seen_pa = {}                                   # v_seen_pa (anchor_uniq memo): pa_id()
     L = ["<!-- AWR-SECTION: " + TAG + " BEGIN -->"]
     L.append('<section id="param-changes" class="vw in-s in-a lib" style="--os:9"><h2>Parameters'
              '<small class="h2sub">Initialization parameters whose value differs across the windows</small></h2>')
@@ -192,7 +193,7 @@ def emit(w) -> str:
     for name in changed:
         cur_has = (name, 0) in cells
         cur_val = cells.get((name, 0))
-        row = '<tr id="' + h.anchor_id("pa", name) + '"><td class="pname"><code>' + h.esc(name) + "</code></td>"
+        row = '<tr id="' + h.anchor_uniq(h.param_anchor(name), name, seen_pa) + '"><td class="pname"><code>' + h.esc(name) + "</code></td>"
         row += _cell_html(cur_has, cur_val, True, False, 0)
         for k in range(1, w.weeks_back + 1):
             has = (name, k) in cells
@@ -215,6 +216,6 @@ def emit(w) -> str:
     L.append('<p style="font-size:12px;color:var(--muted)">' + str(n_changed) + " parameter"
              + ("" if n_changed == 1 else "s") + " changed across the compared windows.</p>")
     L.append("</section>")
-    _config_card(w, L, changed, cells)
+    _config_card(w, L, changed, cells, seen_pa)
     L.append("<!-- AWR-SECTION: " + TAG + " END -->")
     return "\n".join(L)

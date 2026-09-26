@@ -20,6 +20,8 @@ DECLARE
     v_top_n      NUMBER := ~top_n;
     v_header     VARCHAR2(32767);   -- one th (about 45 bytes) per window
     v_row        VARCHAR2(32767);
+    v_seen_we    CLOB;              -- anchor_uniq memos (sql/lib/anchor_id.plsql)
+    v_seen_wa    CLOB;
     v_us         NUMBER;
     v_us_s       VARCHAR2(64);
     v_ms         NUMBER;
@@ -415,7 +417,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table id="waits-fg-time">' || v_header || '<tbody>');
 
     FOR i IN 1 .. NVL(v_evts.COUNT, 0) LOOP
-        v_row := '<tr id="' || anchor_id('we', v_evts(i).event_name)
+        v_row := '<tr id="' || anchor_uniq(anchor_id('we', v_evts(i).event_name), v_evts(i).event_name, v_seen_we)
             || '" data-imp="' || is_essential('WAIT', v_evts(i).event_name) || '">'
             || '<td>' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '</td>'
             || '<td class="num" data-w="0"' || fmt_num_title(v_evts(i).cur_us/1e6) || '><b>' ||
@@ -467,10 +469,10 @@ BEGIN
                                 v_share, 'WAIT', v_evts(i).event_name, v_evts(i).wait_class, v_shift);
         DBMS_OUTPUT.PUT_LINE(CASE WHEN i = 1 THEN tl_open('waits') END
             || tl_bars(tl_csv(v_evts(i).spark_vals), v_evts(i).mu_us / 1e6, v_evts(i).sd_us / 1e6, v_cell,
-                       tl_lab(ent(DBMS_XMLGEN.CONVERT(v_evts(i).event_name), anchor_id('we', v_evts(i).event_name), 'event'),
+                       tl_lab(ent(DBMS_XMLGEN.CONVERT(v_evts(i).event_name), anchor_uniq(anchor_id('we', v_evts(i).event_name), v_evts(i).event_name, v_seen_we), 'event'),
                               DBMS_XMLGEN.CONVERT(v_evts(i).wait_class), NULL, v_evts(i).wait_class),
                        tl_gut(v_evts(i).cur_us / 1e6, v_evts(i).mu_us / 1e6, v_evts(i).sd_us / 1e6, v_cell),
-                       'tl-' || anchor_id('we', v_evts(i).event_name),
+                       'tl-' || anchor_uniq(anchor_id('we', v_evts(i).event_name), v_evts(i).event_name, v_seen_we),
                        'w' || CASE WHEN i > 10 THEN ' more' END,
                        DBMS_XMLGEN.CONVERT(v_evts(i).event_name), 's waited')
             || CASE WHEN i = LEAST(v_evts.COUNT, 16) THEN tl_close END);
@@ -498,7 +500,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table id="waits-fg-avg">' || v_header || '<tbody>');
 
     FOR i IN 1 .. NVL(v_evts.COUNT, 0) LOOP
-        v_row := '<tr id="' || anchor_id('wa', v_evts(i).event_name)
+        v_row := '<tr id="' || anchor_uniq(anchor_id('wa', v_evts(i).event_name), v_evts(i).event_name, v_seen_wa)
             || '" data-imp="' || is_essential('WAIT', v_evts(i).event_name) || '">'
             || '<td>' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '</td>'
             || '<td class="num" data-w="0"' || fmt_num_title(v_evts(i).cur_ms) || '><b>'

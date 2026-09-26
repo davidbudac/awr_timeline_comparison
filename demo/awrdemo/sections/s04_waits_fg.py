@@ -38,11 +38,12 @@ def emit(w) -> str:
 
     # ---- top-N events, two tables
     rows = C.event_rows(w, deltas)
+    seen_we = {}                                   # v_seen_we (anchor_uniq memo)
     tot = C.current_total_us(deltas)
     shift, n_flag, mean_pct, sd_pct = C.shift_pass(rows, tot)
     L.extend(C.table_time(w, rows, "waits-fg-time",
                           "Top " + str(top_n) + " events &mdash; time waited (s)",
-                          tot, shift, C.shift_note(rows, shift, n_flag, mean_pct, sd_pct)))
+                          tot, shift, C.shift_note(rows, shift, n_flag, mean_pct, sd_pct), memo=seen_we))
     # ---- v1.6.0 Timeline: the Waits lane's event rows (Table A's order,
     # rows past the 10th fold, at most 16)
     nt = min(len(rows), 16)
@@ -52,10 +53,10 @@ def emit(w) -> str:
                             C._s(r["mu_us"]), C._s(r["sd_us"]), r["n_us"], share, shift)
         L.append((h.tl_open("waits") if i == 1 else "")
                  + h.tl_bars(w, h.tl_csv(w, r["spark_vals"]), C._s(r["mu_us"]), C._s(r["sd_us"]), b,
-                             h.tl_lab(h.ent(h.esc(r["event_name"]), h.anchor_id("we", r["event_name"]), "event"),
+                             h.tl_lab(h.ent(h.esc(r["event_name"]), h.anchor_uniq(h.anchor_id("we", r["event_name"]), r["event_name"], seen_we), "event"),
                                       h.esc(r["wait_class"]), None, r["wait_class"]),
                              h.tl_gut(C._s(r["cur_us"]), C._s(r["mu_us"]), C._s(r["sd_us"]), b),
-                             "tl-" + h.anchor_id("we", r["event_name"]),
+                             "tl-" + h.anchor_uniq(h.anchor_id("we", r["event_name"]), r["event_name"], seen_we),
                              "w" + (" more" if i > 10 else ""),
                              h.esc(r["event_name"]), "s waited")
                  + (h.tl_close() if i == nt else ""))

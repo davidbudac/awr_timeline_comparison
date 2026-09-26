@@ -19,6 +19,8 @@ DECLARE
     v_top_n      NUMBER := ~top_n;
     v_header     VARCHAR2(32767);   -- one th (about 45 bytes) per window
     v_row        VARCHAR2(32767);
+    v_seen_be    CLOB;              -- anchor_uniq memos (sql/lib/anchor_id.plsql)
+    v_seen_ba    CLOB;
     v_cnt        NUMBER;
     v_us         NUMBER;
     v_us_s       VARCHAR2(64);
@@ -432,7 +434,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table id="waits-bg-time">' || v_header || '<tbody>');
 
     FOR i IN 1 .. NVL(v_evts.COUNT, 0) LOOP
-        v_row := '<tr id="' || anchor_id('be', v_evts(i).event_name)
+        v_row := '<tr id="' || anchor_uniq(anchor_id('be', v_evts(i).event_name), v_evts(i).event_name, v_seen_be)
             || '" data-imp="' || is_essential('WAIT', v_evts(i).event_name) || '">'
             || '<td>' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '</td>'
             || '<td class="num" data-w="0"' || fmt_num_title(v_evts(i).cur_us/1e6) || '><b>' ||
@@ -483,7 +485,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<table id="waits-bg-avg">' || v_header || '<tbody>');
 
     FOR i IN 1 .. NVL(v_evts.COUNT, 0) LOOP
-        v_row := '<tr id="' || anchor_id('ba', v_evts(i).event_name)
+        v_row := '<tr id="' || anchor_uniq(anchor_id('ba', v_evts(i).event_name), v_evts(i).event_name, v_seen_ba)
             || '" data-imp="' || is_essential('WAIT', v_evts(i).event_name) || '">'
             || '<td>' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '</td>'
             || '<td class="num" data-w="0"' || fmt_num_title(v_evts(i).cur_ms) || '><b>'

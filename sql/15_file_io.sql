@@ -361,7 +361,7 @@ BEGIN
 
             v_aid := NULL;
             IF NOT v_aid_by_name.EXISTS(s.filename) THEN
-                v_aid := anchor_id('fl', s.file_short);
+                v_aid := file_anchor(s.filename);
                 IF v_aid_used.EXISTS(v_aid) THEN
                     v_aid := v_aid || '-' || (v_aid_by_name.COUNT + 1);
                 END IF;

@@ -69,6 +69,7 @@ DECLARE
     v_cell_has   BOOLEAN;
     v_cell_val   VARCHAR2(4000);
     v_changed    BOOLEAN;
+    v_seen_pa    CLOB;              -- anchor_uniq memo (sql/lib/anchor_id.plsql)
 
     -- Render one parameter value cell.  p_is_cur marks the reference
     -- (current) column; p_chg adds the change highlight class; p_w is the
@@ -102,6 +103,14 @@ DECLARE
     @@sql/lib/off_label.plsql
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
+
+    -- A parameter's row id (table row, card links, Timeline row): the
+    -- pure-function param_anchor (leading underscores kept apart), unique
+    -- in the page via anchor_uniq -- every emitter here goes through this.
+    FUNCTION pa_id(p_name VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN anchor_uniq(param_anchor(p_name), p_name, v_seen_pa);
+    END pa_id;
 
     -- a parameter value for the configuration card's step line: a byte
     -- count (all digits, 1 MB or more) reads as MB / GB, anything else is
@@ -238,7 +247,7 @@ BEGIN
                      ELSE v_cur_val := NULL; END IF;
 
         -- entity anchor pa-<parameter> (sql/lib/anchor_id.plsql)
-        v_row := '<tr id="' || anchor_id('pa', v_names(i)) || '"><td class="pname"><code>'
+        v_row := '<tr id="' || pa_id(v_names(i)) || '"><td class="pname"><code>'
               || DBMS_XMLGEN.CONVERT(v_names(i)) || '</code></td>';
 
         -- Current column (the reference; never highlighted).
@@ -329,7 +338,7 @@ BEGIN
             || '<p class="takeaway">'
             || CASE WHEN v_cur_n = 1
                     THEN 'Only ' || ent('<code>' || DBMS_XMLGEN.CONVERT(v_cur_one) || '</code>',
-                                        anchor_id('pa', v_cur_one), 'parameter')
+                                        pa_id(v_cur_one), 'parameter')
                          || ' changed into the Current window.'
                     WHEN v_cur_n > 1
                     THEN v_cur_n || ' of them changed into the Current window.'
@@ -348,7 +357,7 @@ BEGIN
             -- may flush part of them to the output before the loop ends
             DBMS_OUTPUT.PUT_LINE('<div class="r p" data-name="' || DBMS_XMLGEN.CONVERT(v_names(i)) || '" role="row">'
                 || '<div class="l" role="rowheader"><span class="nm">'
-                || ent('<code>' || DBMS_XMLGEN.CONVERT(v_names(i)) || '</code>', anchor_id('pa', v_names(i)), 'parameter')
+                || ent('<code>' || DBMS_XMLGEN.CONVERT(v_names(i)) || '</code>', pa_id(v_names(i)), 'parameter')
                 || '</span><span class="sub">'
                 || pv_html(v_base) || ' &rarr; ' || pv_html(pv_at(v_names(i), 0))
                 || '</span></div>');
@@ -385,7 +394,7 @@ BEGIN
                     THEN '<p class="cfg-more">and ' || (v_names.COUNT - 8) || ' more in '
                          || '<a href="#param-changes">Parameters</a></p>' END
             || '<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
-            || anchor_id('pa', v_first) || '">Timeline &rarr;</a>'
+            || pa_id(v_first) || '">Timeline &rarr;</a>'
             || '<span class="evl"><a href="#param-changes">Parameters</a></span></footer></article>');
         DBMS_OUTPUT.PUT_LINE('<script>(function(){var s=document.getElementById("changes-slot"),'
             || 'c=document.getElementById("f-config");if(!s||!c)return;s.appendChild(c);c.hidden=false;'
@@ -403,9 +412,9 @@ BEGIN
             v_prev := NULL;
             v_last := NULL;
             v_cells_h := CASE WHEN i = 1 THEN tl_open('config') END
-                || '<div class="r p" id="tl-' || anchor_id('pa', v_names(i)) || '" data-name="'
+                || '<div class="r p" id="tl-' || pa_id(v_names(i)) || '" data-name="'
                 || DBMS_XMLGEN.CONVERT(v_names(i)) || '" role="row">'
-                || tl_lab(ent(DBMS_XMLGEN.CONVERT(v_names(i)), anchor_id('pa', v_names(i)), 'parameter'),
+                || tl_lab(ent(DBMS_XMLGEN.CONVERT(v_names(i)), pa_id(v_names(i)), 'parameter'),
                           pv_html(v_base) || ' &rarr; ' || pv_html(pv_at(v_names(i), 0)));
             FOR k IN REVERSE 0 .. v_weeks_back LOOP
                 v_v := pv_at(v_names(i), k);

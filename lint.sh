@@ -501,6 +501,22 @@ for f in sql/[0-9]*.sql; do
     fi
 done
 
+# ----------------------------------------------------------------------
+# 30. Entity ids are a pure function of (kind, FULL name), shared by the
+#     target row and every link (sql/lib/anchor_id.plsql, v1.6.0 review
+#     #7).  A file's id is file_anchor(full path) -- the short name repeats
+#     across containers -- and a parameter's is param_anchor(name) -- a
+#     leading underscore is significant.  So anchor_id('fl', ...) and
+#     anchor_id('pa', ...) may appear only inside anchor_id.plsql.
+# ----------------------------------------------------------------------
+for f in awr_trend.sql sql/[0-9]*.sql sql/lib/*.plsql; do
+    [ "$f" = sql/lib/anchor_id.plsql ] && continue
+    grep -n -E "anchor_id\('(fl|pa)'" "$f" | grep -v -E '^[0-9]+:[[:space:]]*--' \
+      | while IFS= read -r line; do
+        finding anchor-rule "$f:${line%%:*}" "use file_anchor(full path) / param_anchor(name), not anchor_id('fl'|'pa', ...) -- a link and its target must share one pure-function id"
+    done
+done
+
 [ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"
