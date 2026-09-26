@@ -20,9 +20,11 @@ as three mockups showing the biggest changes that would actually help.
 | `design/report_mocks_src/` | builder sources and data for all three (see "Rebuilding") |
 | `design/report_mocks_src/COMMON_BRIEF.md` | the shared design brief the mocks were built from: problems, data story, hard constraints |
 
-Each mock is one self-contained HTML file (122–219 KB). It uses no CDN and no
-external fonts. Charts are inline SVG or CSS, and it works in light and dark
-mode and at 390 px. Every mock loads with 0 console errors. A dark
+Each mock is one self-contained HTML file (122–219 KB; D is 479 KB). It uses
+no CDN and no external fonts. Charts are inline SVG or CSS, and it works in
+light and dark mode. A, B and C were also checked at 390 px; since round 2 the
+owner has said mobile no longer matters, so D is only verified at desktop
+width (1440). Every mock loads with 0 console errors. A dark
 "MOCK NOTE" bar at the top of each page lists what differs from today's report;
 it is not part of the design.
 
@@ -241,10 +243,11 @@ A sensible phased plan once the owner picks:
 
 ## Mock D · the hybrid (built on request, same day)
 
-`design/report_mock_d_hybrid.html` (396 KB) is built by
-`python3 design/report_mocks_src/hybrid/build.py`, which is deterministic.
+`design/report_mock_d_hybrid.html` (479 KB after round 2, was 396 KB) is built
+by `python3 design/report_mocks_src/hybrid/build.py`, which is deterministic.
 It loads with 0 console errors in all three views, in light and dark, at 1440
-and 390 px. With JS off, every view shows stacked.
+(390 px was checked in round 1 only; mobile is no longer a target). With JS
+off, every view shows stacked.
 
 **View model:** one DOM, three views chosen by a body class from a switch in
 the top bar:
@@ -284,9 +287,167 @@ jumps to and flashes the row in Timeline.
 - The shared evidence library needs JS to move rows between views and to
   open or restore them.
 - The related tables and prior-window values are built client-side to keep
-  the file under 400 KB, so without JS the Timeline shows only Current values.
+  the file small (under 400 KB in round 1, 479 KB after round 2's full-span
+  ASH payload and guide), so without JS the Timeline shows only Current values.
 - Every chart instance needs its own column-hover CSS.
 - The 4-family grouping and Top SQL z-scores are new policy work (mock-only).
+
+### Mock D · round 2 (owner feedback 2026-09-26)
+
+**Owner feedback, as relayed (paraphrased where no exact wording was passed on):**
+
+- *Declutter pass (first round on D, commit 218637a):* the page felt busy and
+  wordy. Calm it down: less prose, one spacing scale, every section header the
+  same shape, method notes out of the way, and colour only where it means
+  something. Result, kept in round 2: the `--s1..--s8` spacing scale, the
+  uniform `.sh` header (title, one-line subtitle, counts), a single
+  "About this report" fold at the bottom for every method note, and indigo
+  used only for Current.
+- *Round 2, four requests:*
+  1. "Add a completely separate section at the bottom, not the About fold,
+     that explains how to read each kind of graph": the band glyph, the
+     13-column grid, the ASH stacked timeline, sparklines, markers and any other
+     chart. Concise and scannable, small example visuals, one or two short
+     lines each, shown in every view and linked from the rail.
+  2. "Use more of the screen on wide monitors" (raise or drop the max-width,
+     more cards per row, stretch tables and the grid; mobile no longer
+     matters). **Withdrawn by the owner the same day (2026-09-26):** keep the
+     page width and column layout exactly as in 218637a. The mock was reverted
+     and the width is unchanged (`main` keeps `max-width:1232px`). Only the
+     "mobile no longer matters" part stands.
+  3. "Make sql_ids, segments, files, wait events, parameters and other named
+     things in the findings and verdicts clickable": each goes to its row in
+     the detail tables, switching view if needed, scrolling there and briefly
+     highlighting it. Every link must resolve; subtle styling, not loud links.
+  4. "Put the complete ASH timeline, across the whole report span, at the very
+     top of the Timeline view, and make it interactive": hover tooltip with the
+     time and per-wait-class AAS, a legend that toggles classes, drag-to-zoom
+     with reset, the compared windows shaded with Current in indigo, a click on
+     a window highlighting that column in the grid below, release markers, and
+     dark mode.
+
+**1 · "Reading the charts" guide.** A `<section id="guide">` after the
+evidence library and before About, outside the view classes so it shows in
+Summary, Timeline and All sections alike, with a new rail group "Reference"
+(Reading the charts, About this report). Twelve items in a two-column grid,
+each a small visual plus one or two short lines: band, Δ text, 13-window
+chart, full-span activity, activity per window, the smoothed span chart
+(All sections), sparkline (the 13-bar micro strip), release marker, step line,
+glyphs (◆ ✚ ▽), day profile, hover and pin. The band and Δ examples are the
+real components; the rest are tiny static SVGs drawn with the page's CSS
+variables, so they follow the theme. The old two-panel legend inside About
+moved here, and About now holds only method and sources.
+*PL/SQL:* static markup, no data. It fits `sql/00_params.sql`'s chrome (or a
+small new section emitted last, before 17) as a block of `DBMS_OUTPUT.PUT_LINE`
+literals with its CSS in `sql/_style.sql`. No cursor, no DEFINEs, no tilde in
+the text. It would sit in the Normal view as well as Full. Keep the example
+SVGs in lockstep with the real glyph CSS when either changes.
+
+**2 · Wider layout: withdrawn.** Nothing ships. The mock keeps round 1's
+`max-width:1232px`, the 12-column card grid with every card `span 12`, the
+3-column "checked and normal" grid, and fixed table column widths. No
+`_style.sql` width change is implied. (The rail's line height went from 24 to
+22 px so the new Reference group fits at a 1000 px viewport height. That is
+vertical only.)
+
+**3 · Entity links.** Every sql_id, segment, datafile, wait event, wait class,
+parameter and metric name in the verdict, the "likely source" line, the
+finding and change cards' evidence, the "checked and normal" rows, and the
+Timeline row labels is an `a.ent` link: inherited colour, dotted underline,
+solid on hover. The mock has 88 links to 64 distinct targets; 84 are visible by default, and 4 sit in the folded "+ Show 4 more events" Waits rows. A click switches
+to the target's view, opens its `<details>`, activates its tab (Top SQL,
+Foreground waits), unfolds the hidden normal rows if needed, scrolls the row
+to the centre and flashes it (2 s). A plain `#id` hash on load does the same
+without saving the view. The builder asserts that every `href="#…"` on the
+page resolves to exactly one id and that no id is duplicated. The "N related
+metrics" clones strip ids.
+*Anchor ids the sections would emit (slugged lower-case, `[^a-z0-9]` → `-`):*
+- `07_summary.sql`, the findings table: `fr-<domain>-<name>` per metric or
+  wait-class row (e.g. `fr-l-physical-reads`, `fr-f-wait-class-commit`).
+- `04_waits_fg.sql`: `we-<event>` (time waited), `wa-<event>` (average wait),
+  `wc-<class>` (by wait class).
+- `06_top_sql.sql`: `sq-<dim>-<sql_id>` per ranking tab (`sq-elapsed-…`
+  is the link target).
+- `18_sqlmon.sql`: `sm-<sql_id>`.
+- `14_segment_io.sql`: `sg-<owner.segment>`; `15_file_io.sql`: `fl-<file>`.
+  Both were stubs in round 1. The mock now renders their top-10 tables as real
+  ranked rows (band reads "ranked, not scored", plain ratio Δ).
+- `12_param_changes.sql`: `pa-<parameter>`.
+- Emitters: the verdict/"likely source" (`00_params.sql`, `17_narrative.sql`),
+  the finding cards (07) and the Timeline labels need a shared
+  `anchor_id(kind, name)` PL/SQL function (new `sql/lib/` include) so link and
+  target can never drift. Only link to rows that are actually emitted: a
+  sql_id outside the Top-N has no row. Names go through
+  `DBMS_XMLGEN.CONVERT` for the text; the id is the slug. Where a DB has two
+  entities that collide after slugging, append the rank. The link-resolves
+  check belongs in `demo/verify_report.js`, plus a grep-able lint if cheap.
+- Chrome JS (00): `goTo` gains `reveal()` (tab, folded rows, `<details>`) and
+  flashes `tr` targets. The Normal/Full switch replaces the mock's view
+  switch: a link into Full-only content calls `setMode(full)` first, as
+  `revealHash()` does today.
+
+**4 · Interactive full-span ASH chart (top of Timeline).** A new panel above
+the grid: 10 wait classes stacked as a step area over the whole span
+(18 Jun to 10 Sep) in the demo's 6-hour buckets. The demo has no hourly
+full-span series, so the chart shows the 6-hour buckets as steps rather than
+inventing hourly values. The 13 compared hours come from the per-window data
+and appear as shaded stripes (grey, Current indigo, the pinned one amber).
+- *Hover:* a crosshair and bucket highlight, and a tooltip with the time
+  range and per-class AAS plus the total of the shown classes. Over a stripe,
+  the window's own unsmoothed hour.
+- *Legend:* one button per class (`aria-pressed`). Hiding a class restacks
+  and rescales the y axis.
+- *Zoom:* drag to brush, down to a 12 h minimum; the x ticks adapt (weekly
+  Thursdays, then days, then hours); "Reset zoom" or a double-click restores.
+- *Windows:* a click (or Enter on a focused stripe) pins that column in the
+  13-column grid below, the same state as clicking a ruler date, so the gutter
+  compares against it and Esc clears. A click on Current unpins and flashes
+  the Current column.
+- *Markers:* release flags in a two-tier band, with lines through the plot.
+- *Theme:* all colours are CSS variables except the fixed wait-class palette,
+  so a theme toggle needs no JS.
+The rail's Timeline group starts with it. The All sections "Active sessions,
+whole span" chart (smoothed, with dots) is unchanged.
+*PL/SQL:* this is **not** a `windows_cte` consumer. It needs the
+**LAG-delta, time-range scan** that `00`/`10` (and `09`'s hourly timeline) use:
+`DBA_HIST_ACTIVE_SESS_HISTORY` bucketed by `sample_time` from the start of the
+earliest compared window to `target_end` (span = `weeks_back × step_hours +
+win_hours`), `dbid IN (dbid_list)`, ON CPU → 'CPU', idle excluded,
+AAS = samples ÷ (360 × bucket hours). Use adaptive buckets like the fleet's
+`02_ash.sql` (about 168–400 buckets, 1 h floor for short spans), emitted once
+as a `window.AWR_DATA` payload `{t0, bh, classes, vals}` with the NLS-pinned
+number format. Window shading and the per-window tooltip reuse the
+`windows_rollup` rows that 09 already reads. The CSV/JSON must not
+left-compact nulls (the `listagg-null-token` rule). Cost: a single ASH scan
+over the span; 09 already does one, so a combined section can share it.
+*ECharts vs inline SVG: the mock hand-rolls it (about 150 lines of JS).*
+- Why SVG: it keeps the mock CDN-free and works offline with no
+  `body.no-charts` fallback. It styles itself from the same CSS variables as
+  every other chart, so there is no `awr:theme` listener to maintain. It can
+  share the pin state with the grid directly.
+- What it costs: zoom, tooltip, legend and axis-tick logic are ours to
+  maintain and test, with no data zoom slider, no touch pinch and no
+  export/save-as-image.
+- ECharts would give all of that for free and matches today's 09/10/11, but it
+  needs the CDN or `vendor/` inlining, its own dark-mode re-style listener and
+  the no-charts fallback.
+- If the owner keeps ECharts for the big charts (open question 2), this chart
+  maps onto a stacked `line` series with `step:'start'`, `dataZoom` (inside +
+  slider), `legend`, `markArea` for the windows and `markLine` via
+  `AWR_markLine`. The click-to-pin becomes a `markArea` click handler that
+  calls the chrome's pin function.
+
+**Verification (2026-09-26):** built twice with an identical md5. Headless
+Playwright (system Chrome) at 1440 × light/dark × all three views: 0 console
+errors, no horizontal page overflow, guide visible in every view. All 84 visible
+entity links were clicked from each view they appear in, and every target existed,
+was shown, sat inside the viewport under the top bar and flashed. The ASH chart
+passed hover, legend toggle and restore, brush zoom, reset button,
+double-click reset, window click pinning column 8 (ruler `aria-pressed`,
+highlight, gutter "vs 13 Aug"), Current click unpinning and flashing,
+keyboard Enter and a live theme toggle, in both themes. Known and
+pre-existing: at 1280 px the hero strip overflows the page by 18 px. That was
+already true in 218637a and is out of scope with the width unchanged.
 
 ## Where it lands in the code (for planning)
 
@@ -331,13 +492,16 @@ jumps to and flashes the row in Timeline.
 
 Moving any chart from ECharts to inline SVG (all three mocks do this) is a
 real design decision for the owner. Inline SVG gives offline-by-default and
-one visual style. It costs ECharts' zoom, tooltips and legend toggling.
+one visual style. Round 2's full-span ASH chart shows that zoom, tooltips and
+legend toggling can be hand-rolled in inline SVG (about 150 lines of JS), but
+then the report owns that code instead of ECharts. See "Mock D · round 2".
 
 ## Open questions for the owner
 
 1. Which direction, or which combination? Is the recommended hybrid acceptable?
 2. Keep ECharts for the big charts, or go inline-SVG only (like the fleet
-   report)?
+   report)? Round 2's interactive ASH chart is hand-rolled SVG; confirm that
+   or map it onto ECharts (see round 2 for the mapping).
 3. A: is a generated verdict sentence acceptable, or should it stay
    structured lines like today's "What changed"?
 4. B: should Top SQL, segment and file rows get z-scores? That is new scoring,
@@ -355,6 +519,7 @@ by absolute path:
 sh   design/report_mocks_src/mock_a/build.sh      # template.html + data.json
 python3 design/report_mocks_src/mockb/build.py    # template.html + tables.json + ../demo_series.json
 python3 design/report_mocks_src/c_build/gen.py    # style.css + app.js + body.html + tables.json + ../demo_series.json
+python3 design/report_mocks_src/hybrid/build.py   # D: template.html + style.css + app.js; reads ../demo_series.json, ../pool.json, ../mockb/tables.json, ../mock_a/data.json
 ```
 
 **Data inputs:**

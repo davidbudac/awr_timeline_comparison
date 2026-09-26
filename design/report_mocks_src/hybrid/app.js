@@ -154,6 +154,7 @@ function redrawVisible(scope){
   $$('[data-wg]', scope).forEach(fitWG);
   if (scope && scope.matches && scope.matches('[data-wg]')) fitWG(scope);
   drawAsh();
+  drawAshX();
   syncCap();
 }
 
@@ -191,6 +192,7 @@ function placeTip(e){
 }
 document.addEventListener('mouseover', function(e){
   var t = e.target; if (!t.closest) return;
+  if (t.closest('#ax-plot')) return;   /* the full-span ASH chart runs its own tooltip */
   var c = t.closest('.wg .c[data-w]'), h = t.closest('.wg.hov .h[data-w]');
   var hw = (c && c.closest('.wg.hov')) ? c.dataset.w : (h ? h.dataset.w : null);
   setHW(hw);
@@ -211,7 +213,7 @@ function pin(w){
   $$('#tl .ruler .h').forEach(function(h){ h.setAttribute('aria-pressed', 'false'); });
   $$('#tl .r.bars .g .d1').forEach(function(d){ if (d.dataset.orig != null) d.textContent = d.dataset.orig; });
   if (same || w == null || +w === CUR){
-    delete B.dataset.pw; gutTitle.textContent = 'vs prior mean'; gutSub.textContent = 'click a date to pin'; return;
+    delete B.dataset.pw; gutTitle.textContent = 'vs prior mean'; gutSub.textContent = 'click a date to pin'; drawAshX(); return;
   }
   B.dataset.pw = w;
   $('#tl .ruler .h[data-w="' + w + '"]').setAttribute('aria-pressed', 'true');
@@ -224,6 +226,7 @@ function pin(w){
   gutTitle.innerHTML = 'vs ' + D.w[w] + ' <button type="button" id="unpin" aria-label="Clear pinned window">clear</button>';
   gutSub.textContent = 'band stays vs prior mean';
   $('#unpin').addEventListener('click', function(){ pin(null); });
+  drawAshX();
 }
 $$('#tl .ruler .h').forEach(function(h){ h.addEventListener('click', function(){ pin(h.dataset.w); }); });
 document.addEventListener('keydown', function(e){ if (e.key === 'Escape'){ if (B.dataset.pw) pin(null); B.classList.remove('rail-open'); } });
@@ -347,6 +350,156 @@ function drawAsh(){
   svg.innerHTML = s;
 }
 
+/* ------------------------------------------------ 5b. full-span ASH at the top of the Timeline: hover, legend, brush zoom, windows */
+var AX = D.ashx, axSvg = $('#ax-svg'), axPlot = $('#ax-plot'), axBr = $('#ax-brush'), axReset = $('#ax-reset'), axRange = $('#ax-range');
+var PT = function(s){ return Date.parse(s.replace(' ', 'T') + ':00Z'); };
+var H1 = 36e5, H6 = 6 * H1, MINSPAN = 12 * H1;
+var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var axT = D.ash.t.map(PT), axEnd = PT(AX.end), axWin = D.ash.win.map(PT);
+var axT1 = axT.map(function(t, i){ return Math.min(t + H6, i < axT.length - 1 ? axT[i + 1] : axEnd); });
+var axVis = AX.cls.map(function(){ return true; }), axFull = [axT[0], axEnd], axDom = axFull.slice(), axG = null, axDrag = null;
+function p2(n){ return (n < 10 ? '0' : '') + n; }
+function fDay(t){ var d = new Date(t); return d.getUTCDate() + ' ' + MON[d.getUTCMonth()]; }
+function fAt(t){ var d = new Date(t); return DOW[d.getUTCDay()] + ' ' + fDay(t) + ' ' + p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes()); }
+function fHM(t){ var d = new Date(t); return p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes()); }
+function niceStep(max, n){ var raw = max / n, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; }
+function drawAshX(){
+  if (!axSvg || !shown(axPlot)) return;
+  var W = Math.max(480, axPlot.clientWidth), top = 44, ph = 236, bot = 26, padL = 40, padR = 14, H = top + ph + bot, pw = W - padL - padR;
+  axSvg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); axSvg.setAttribute('height', H);
+  var d0 = axDom[0], d1 = axDom[1], X = function(t){ return padL + pw * (t - d0) / (d1 - d0); };
+  var idx = []; for (var i = 0; i < axT.length; i++) if (axT1[i] > d0 && axT[i] < d1) idx.push(i);
+  var tot = idx.map(function(i){ var s = 0; AX.v.forEach(function(v, c){ if (axVis[c]) s += v[i]; }); return s; });
+  var mx = Math.max.apply(null, tot.concat([0.5])), step = niceStep(mx, 4), ymax = Math.ceil(mx / step) * step;
+  var Y = function(v){ return top + ph - ph * v / ymax; };
+  var s = '<defs><clipPath id="ax-clip"><rect x="' + padL + '" y="' + (top - 6) + '" width="' + pw + '" height="' + (ph + 6) + '"/></clipPath></defs>';
+  for (var v = 0; v <= ymax + 1e-9; v += step){
+    s += '<line class="gl" x1="' + padL + '" x2="' + (W - padR) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/>' +
+      '<text class="at" x="' + (padL - 6) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">' + (step < 1 ? v.toFixed(1) : Math.round(v)) + '</text>';
+  }
+  s += '<text class="at" x="' + (padL - 6) + '" y="' + (top - 10) + '" text-anchor="end">AAS</text><g clip-path="url(#ax-clip)">';
+  var lo = idx.map(function(){ return 0; });
+  AX.v.forEach(function(vals, c){
+    if (!axVis[c] || !idx.length) return;
+    var hi = lo.map(function(l, j){ return l + vals[idx[j]]; }), d = '';
+    idx.forEach(function(i, j){ var y = Y(hi[j]).toFixed(1); d += (j ? 'L' : 'M') + X(axT[i]).toFixed(1) + ' ' + y + 'L' + X(axT1[i]).toFixed(1) + ' ' + y; });
+    for (var j = idx.length - 1; j >= 0; j--){ var y0 = Y(lo[j]).toFixed(1); d += 'L' + X(axT1[idx[j]]).toFixed(1) + ' ' + y0 + 'L' + X(axT[idx[j]]).toFixed(1) + ' ' + y0; }
+    s += '<path class="xa" fill="' + AX.col[c] + '" d="' + d + 'Z"/>'; lo = hi;
+  });
+  s += '<rect id="ax-hb" class="xbk" x="0" y="' + top + '" width="0" height="' + ph + '" visibility="hidden"/>';
+  var pinned = B.dataset.pw != null ? +B.dataset.pw : -1, wins = [];
+  axWin.forEach(function(t, k){
+    var xa = X(t), xb = X(t + H1); if (xb < padL - 2 || xa > W - padR + 2) return;
+    var w = Math.max(k === CUR ? 4 : 3, xb - xa), x = (xa + xb) / 2 - w / 2, cls = (k === CUR ? ' cur' : '') + (k === pinned ? ' on' : '');
+    s += '<rect class="xw' + cls + '" x="' + x.toFixed(1) + '" y="' + top + '" width="' + w.toFixed(1) + '" height="' + ph + '"/>' +
+      '<rect class="xwc' + cls + '" x="' + x.toFixed(1) + '" y="' + (top - 5) + '" width="' + w.toFixed(1) + '" height="4" rx="1"/>';
+    wins.push([k, x, w]);
+  });
+  s += '</g><line class="ax" x1="' + padL + '" x2="' + (W - padR) + '" y1="' + (top + ph) + '" y2="' + (top + ph) + '"/>';
+  /* x ticks: the smallest interval that leaves about 88 px per label; 7 days lands on Thursdays (epoch day 0) */
+  var IVS = [3, 6, 12, 24, 48, 168, 336].map(function(h){ return h * H1; }), iv = IVS[IVS.length - 1];
+  for (var q = 0; q < IVS.length; q++){ if (pw * IVS[q] / (d1 - d0) >= 88){ iv = IVS[q]; break; } }
+  for (var tt = Math.ceil(d0 / iv) * iv; tt <= d1; tt += iv){
+    var xt = X(tt); if (xt < padL + 12 || xt > W - padR - 12) continue;
+    var lab = iv >= 24 * H1 || new Date(tt).getUTCHours() === 0 ? fDay(tt) : fHM(tt);
+    s += '<line class="ax" x1="' + xt.toFixed(1) + '" x2="' + xt.toFixed(1) + '" y1="' + (top + ph) + '" y2="' + (top + ph + 4) + '"/>' +
+      '<text class="at" x="' + xt.toFixed(1) + '" y="' + (top + ph + 18) + '" text-anchor="middle">' + lab + '</text>';
+  }
+  /* release markers: a flag in the top band, a line through the plot */
+  var tiers = [[], []];
+  D.mk.forEach(function(m){
+    var t = PT(m.iso), x = X(t); if (x < padL || x > W - padR) return;
+    [m.l, m.s].some(function(lab){
+      var w = tw(lab) + 12, x0 = x + w > W - padR ? x - w : x, end = x0 !== x;
+      for (var L = 0; L < 2; L++){
+        if (tiers[L].some(function(r){ return x0 < r[1] + 6 && x0 + w > r[0] - 6; })) continue;
+        tiers[L].push([x0, x0 + w]); var y = 2 + L * 19;
+        s += '<line class="cfl" x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + (y + 16) + '" y2="' + (top + ph) + '"/><line class="cf" x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + y + '" y2="' + (y + 16) + '"/>' +
+          '<rect class="cfh" x="' + (end ? x0 : x + 1).toFixed(1) + '" y="' + y + '" width="' + (w - 1) + '" height="16" rx="2"/>' +
+          '<text class="cft" x="' + (end ? x - 6 : x + 6).toFixed(1) + '" y="' + (y + 12) + '" text-anchor="' + (end ? 'end' : 'start') + '"><title>' + esc(m.l + ', ' + m.t) + '</title>' + esc(lab) + '</text>';
+        return true;
+      }
+      return false;
+    });
+  });
+  s += '<line id="ax-ch" class="xch" x1="0" x2="0" y1="' + top + '" y2="' + (top + ph) + '" visibility="hidden"/>';
+  /* window hit targets on top: at least 12 px wide, keyboard reachable */
+  wins.forEach(function(q){
+    var k = q[0], hw = Math.max(12, q[2]), hx = q[1] + q[2] / 2 - hw / 2;
+    s += '<rect class="xwh" data-w="' + k + '" x="' + hx.toFixed(1) + '" y="' + (top - 6) + '" width="' + hw.toFixed(1) + '" height="' + (ph + 6) + '" tabindex="0" role="button" aria-label="' +
+      (k === CUR ? 'Current window, ' : D.off[k] + ' window, ') + esc(D.full[k]) + (k === CUR ? '' : '. Pin its column in the grid') + '"/>';
+  });
+  axSvg.innerHTML = s;
+  axG = {X: X, W: W, padL: padL, padR: padR, top: top, ph: ph, pw: pw, d0: d0, d1: d1};
+  var zoomed = d0 > axFull[0] || d1 < axFull[1];
+  axReset.hidden = !zoomed;
+  axRange.textContent = zoomed ? fAt(d0) + ' to ' + fAt(d1) + ', zoomed' : '18 Jun to 10 Sep, 6-hour averages';
+}
+function axTime(clientX){ var r = axSvg.getBoundingClientRect(), x = (clientX - r.left) * axG.W / r.width; return axG.d0 + (x - axG.padL) / axG.pw * (axG.d1 - axG.d0); }
+function axRows(vals){
+  var h = '', tot = 0;
+  for (var c = AX.cls.length - 1; c >= 0; c--){ if (!axVis[c]) continue; var v = vals(c); tot += v;
+    if (v >= 0.005) h += '<div class="tr2"><span><i class="sw" style="--sw:' + AX.col[c] + '"></i>' + esc(AX.cls[c]) + '</span><b>' + v.toFixed(2) + '</b></div>'; }
+  return h + '<div class="tr2 tsum"><span>Total, shown classes</span><b>' + tot.toFixed(1) + ' AAS</b></div>';
+}
+function axHover(e){
+  if (!axG || axDrag && axDrag.moved) return;
+  var hb = $('#ax-hb'), ch = $('#ax-ch'), wh = e.target.closest && e.target.closest('.xwh');
+  if (wh){
+    var k = +wh.dataset.w; hb.setAttribute('visibility', 'hidden'); ch.setAttribute('visibility', 'hidden');
+    tip.innerHTML = '<b>' + esc(D.full[k]) + '</b><br><span class="tm">' + (k === CUR ? 'Current window' : D.off[k] + ' window') + ', the unsmoothed hour</span>' +
+      axRows(function(c){ return AX.wv[c][k]; }) + (k === CUR ? '' : '<span class="tm">Click to pin this column below</span>');
+    tip.hidden = false; placeTip(e); return;
+  }
+  var t = axTime(e.clientX), i = -1;
+  for (var j = 0; j < axT.length; j++) if (axT[j] <= t && t < axT1[j]){ i = j; break; }
+  if (i < 0 || t < axG.d0 || t > axG.d1){ hb.setAttribute('visibility', 'hidden'); ch.setAttribute('visibility', 'hidden'); tip.hidden = true; return; }
+  var xa = Math.max(axG.padL, axG.X(axT[i])), xb = Math.min(axG.W - axG.padR, axG.X(axT1[i])), x = axG.X(t);
+  hb.setAttribute('x', xa.toFixed(1)); hb.setAttribute('width', Math.max(1, xb - xa).toFixed(1)); hb.setAttribute('visibility', 'visible');
+  ch.setAttribute('x1', x.toFixed(1)); ch.setAttribute('x2', x.toFixed(1)); ch.setAttribute('visibility', 'visible');
+  tip.innerHTML = '<b>' + fAt(axT[i]) + '–' + fHM(axT1[i]) + '</b><br><span class="tm">' + ((axT1[i] - axT[i]) / H1) + '-hour average</span>' + axRows(function(c){ return AX.v[c][i]; });
+  tip.hidden = false; placeTip(e);
+}
+function axSelect(k){
+  if (k === CUR){ if (B.dataset.pw) pin(null); } else pin(k);
+  var tl = $('#tl'); if (!tl) return;
+  $$('#tl .c[data-w="' + k + '"], #tl .ruler .h[data-w="' + k + '"]').forEach(function(c){ c.classList.remove('colflash'); void c.offsetWidth; c.classList.add('colflash'); });
+  var r = tl.getBoundingClientRect(); if (r.top > innerHeight - 220) window.scrollBy({top: r.top - innerHeight + 320, behavior: reduced() ? 'auto' : 'smooth'});
+}
+function axZoom(t0, t1){
+  t0 = Math.max(axFull[0], t0); t1 = Math.min(axFull[1], t1);
+  if (t1 - t0 < MINSPAN){ var m = (t0 + t1) / 2; t0 = Math.max(axFull[0], m - MINSPAN / 2); t1 = Math.min(axFull[1], t0 + MINSPAN); t0 = t1 - MINSPAN; }
+  axDom = [t0, t1]; drawAshX();
+}
+if (axSvg){
+  axSvg.addEventListener('mousemove', axHover);
+  axSvg.addEventListener('mouseleave', function(){ tip.hidden = true; var hb = $('#ax-hb'), ch = $('#ax-ch'); if (hb){ hb.setAttribute('visibility', 'hidden'); ch.setAttribute('visibility', 'hidden'); } });
+  axSvg.addEventListener('mousedown', function(e){
+    if (e.button !== 0 || !axG) return; e.preventDefault();
+    var wh = e.target.closest('.xwh'), r = axSvg.getBoundingClientRect();
+    axDrag = {x0: e.clientX, left: r.left, moved: false, w: wh ? +wh.dataset.w : null};
+  });
+  document.addEventListener('mousemove', function(e){
+    if (!axDrag) return;
+    if (!axDrag.moved && Math.abs(e.clientX - axDrag.x0) < 5) return;
+    axDrag.moved = true; tip.hidden = true;
+    var r = axSvg.getBoundingClientRect(), sc = r.width / axG.W, minX = r.left + axG.padL * sc, maxX = r.left + (axG.W - axG.padR) * sc;
+    var a = Math.max(minX, Math.min(axDrag.x0, e.clientX)), b = Math.min(maxX, Math.max(axDrag.x0, e.clientX));
+    axBr.hidden = false; axBr.style.left = (a - r.left) + 'px'; axBr.style.width = Math.max(0, b - a) + 'px';
+    axBr.style.top = (axG.top * sc) + 'px'; axBr.style.height = (axG.ph * sc) + 'px';
+    axDrag.a = a; axDrag.b = b;
+  });
+  document.addEventListener('mouseup', function(){
+    if (!axDrag) return; var dg = axDrag; axDrag = null; axBr.hidden = true;
+    if (dg.moved){ if (dg.b - dg.a > 6) axZoom(axTime(dg.a), axTime(dg.b)); return; }
+    if (dg.w != null) axSelect(dg.w);
+  });
+  axSvg.addEventListener('dblclick', function(){ axDom = axFull.slice(); drawAshX(); });
+  axSvg.addEventListener('keydown', function(e){ var wh = e.target.closest && e.target.closest('.xwh'); if (wh && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); axSelect(+wh.dataset.w); } });
+  axReset.addEventListener('click', function(){ axDom = axFull.slice(); drawAshX(); });
+  $$('.axc').forEach(function(b){ b.addEventListener('click', function(){ var c = +b.dataset.c; axVis[c] = !axVis[c]; b.setAttribute('aria-pressed', String(axVis[c])); drawAshX(); }); });
+}
+
 /* ------------------------------------------------ 6. views: Summary / Timeline / All sections */
 var VIEWS = {summary: 'vs', timeline: 'vt', all: 'va'};
 var libDefault = $$('#lib > details').map(function(d){ return d.open; }), libState = null;
@@ -376,16 +529,24 @@ function viewOf(el){
 }
 $$('.topbar .seg [data-v]').forEach(function(b){ b.addEventListener('click', function(){ setView(b.dataset.v, true); window.scrollTo({top: 0, behavior: 'auto'}); }); });
 
-function goTo(el, flash){
+/* a target inside a hidden tab or the folded normal rows is revealed first */
+function reveal(el){
+  var tp = el.closest('.tabpanel');
+  if (tp && tp.hidden){ var tab = $('[role="tab"][aria-controls="' + tp.id + '"]'); if (tab) tab.click(); }
+  var nb = el.closest('tbody.nrm');
+  if (nb && !nb.classList.contains('open')){ var tb = nb.closest('table'), m2 = tb && tb.id ? $('.more[data-for="' + tb.id + '"]') : null; if (m2) setMore(m2, true); else nb.classList.add('open'); }
+}
+function goTo(el, flash, persist){
   if (!el) return;
-  var v = viewOf(el); if (v && v !== B.dataset.view) setView(v, true);
+  var v = viewOf(el); if (v && v !== B.dataset.view) setView(v, persist !== false);
   var d = el.closest('details'); if (d && !d.open) d.open = true;
   if (el.tagName === 'DETAILS') el.open = true;
+  reveal(el);
   var lane = el.closest('.lane'); if (lane && lane.classList.contains('closed')) $('.lt2', lane).click();
   if (el.classList.contains('more') && lane) lane.classList.add('showmore');
   redrawVisible();
   requestAnimationFrame(function(){
-    el.scrollIntoView({behavior: reduced() ? 'auto' : 'smooth', block: 'start'});
+    el.scrollIntoView({behavior: reduced() ? 'auto' : 'smooth', block: el.tagName === 'TR' ? 'center' : 'start'});
     if (el.closest('#tl') && gbody && gbody.scrollWidth > gbody.clientWidth + 2){ gbody.scrollLeft = gbody.scrollWidth; }
     if (flash){ el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
   });
@@ -396,7 +557,7 @@ document.addEventListener('click', function(e){
   if (j){ e.preventDefault(); setView('timeline', true); goTo(document.getElementById(j), true); B.classList.remove('rail-open'); return; }
   var id = a.getAttribute('href').slice(1); if (!id || id.indexOf('view=') === 0) return;
   var el = document.getElementById(id); if (!el) return;
-  e.preventDefault(); goTo(el, false); B.classList.remove('rail-open');
+  e.preventDefault(); goTo(el, a.classList.contains('ent')); B.classList.remove('rail-open');
   try { history.replaceState(null, '', '#' + id); } catch (err) {}
 });
 
@@ -423,7 +584,7 @@ function fillRelated(d){
   var t = document.createElement('table'); t.className = 'bt compact rsp';
   var th = $('#t-find thead').cloneNode(true); $$('th', th).slice(-2).forEach(function(x){ x.remove(); }); $$('[data-sort]', th).forEach(function(x){ x.removeAttribute('data-sort'); });
   var tb = document.createElement('tbody');
-  $$('tr:not(.fam):not(.xr)', g).forEach(function(tr){ var c = tr.cloneNode(true); $$('td.c-tr,td.c-x', c).forEach(function(x){ x.remove(); }); tb.appendChild(c); });
+  $$('tr:not(.fam):not(.xr)', g).forEach(function(tr){ var c = tr.cloneNode(true); c.removeAttribute('id'); $$('td.c-tr,td.c-x', c).forEach(function(x){ x.remove(); }); tb.appendChild(c); });
   t.appendChild(th); t.appendChild(tb); var w = $('.tw', d); w.innerHTML = ''; w.appendChild(t);
 }
 $$('details.rel[data-fam]').forEach(function(d){ d.addEventListener('toggle', function(){ if (d.open) fillRelated(d); }); });
@@ -460,4 +621,5 @@ setView(hv || (VIEWS[saved] ? saved : 'summary'), false);
 addEventListener('hashchange', function(){ var v = (location.hash.match(/view=(summary|timeline|all)/) || [])[1]; if (v && v !== B.dataset.view) setView(v, false); });
 var hj = (location.hash.match(/row=([\w-]+)/) || [])[1];
 if (hj) goTo(document.getElementById(hj), true);
+else if (/^#[\w-]+$/.test(location.hash)) goTo(document.getElementById(location.hash.slice(1)), true, false);
 })();

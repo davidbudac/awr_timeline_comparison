@@ -21,6 +21,7 @@
     <li><b>From B, the grammar:</b> one band on one σ scale in every card header, evidence row, table row, Timeline gutter and normal row, and one table component with expanders. Colour only on dots, Δ text and a 2 px marker.</li>
     <li><b>From C, the geometry:</b> 13 columns with a wider, accented Current and flags on the column boundaries. The hero strip, card charts, config card, expanders and the Timeline grid all share it.</li>
     <li><b>From C, the correlation:</b> config steps, the plan change, the new SQL and the DB-time step line up under release flags. Summary shows it in the config card, Timeline across every lane (hover, pin, jump).</li>
+    <li><b>Round 2 (owner feedback 26 Sep):</b> a “Reading the charts” guide at the bottom of every view, entity names that link to their detail row, and an interactive full-span ASH chart at the top of the Timeline.</li>
     <li><b>Mock-only:</b> the 4-family grouping and the Top SQL z-scores are derived here. Segment and file rows stay ranked, not scored (plain ratio). Everything else is the demo report’s own numbers.</li>
   </ul>
 </details>
@@ -40,6 +41,7 @@
     <li><a href="#s-lib" data-view="summary">Evidence library</a></li>
   </ol></div>
   <div class="rg" data-view="timeline"><h3>Timeline</h3><ol>
+    <li><a href="#tl-ash" data-view="timeline">Active sessions, full span</a></li>
     <li><a href="#lane-activity" data-view="timeline">Activity</a></li>
     <li><a href="#lane-metrics" data-view="timeline">Headline and load <span class="n">7</span></a></li>
     <li><a href="#lane-waits" data-view="timeline">Waits <span class="n">4</span></a></li>
@@ -57,6 +59,10 @@
     <li><a href="#lib-params" data-view="all">Parameters <span class="n">4</span></a></li>
     <li><a href="#lib-ash" data-view="all">Active sessions, whole span</a></li>
     <li><a class="sub" href="#v-all" data-view="all">+ 7 more, one line each</a></li>
+  </ol></div>
+  <div class="rg rg-ref"><h3>Reference</h3><ol>
+    <li><a href="#guide">Reading the charts</a></li>
+    <li><a href="#about">About this report</a></li>
   </ol></div>
 </nav>
 
@@ -76,8 +82,8 @@
 
 <main id="main">
 <section class="vw in-s hero" id="s-verdict" aria-label="Verdict">
-  <h1 class="verdict">Physical reads <span class="d s-large">5.4×</span> normal, full scans of <code>ORDERS_APP.ORDER_LINES</code>; DB time up <b>80%</b>, all wait.</h1>
-  <p class="because">Likely source: <code>7k2m9dx4qp1zb</code>, new plan since Release 4.2 (Tue 8 Sep), 15× the blocks read.</p>
+  <h1 class="verdict">Physical reads <span class="d s-large">5.4×</span> normal, full scans of <a class="ent" href="#sg-orders-app-order-lines" data-ent="segment"><code>ORDERS_APP.ORDER_LINES</code></a>; DB time up <b>80%</b>, all wait.</h1>
+  <p class="because">Likely source: <a class="ent" href="#sq-elapsed-7k2m9dx4qp1zb" data-ent="sql"><code>7k2m9dx4qp1zb</code></a>, new plan since Release 4.2 (Tue 8 Sep), 15× the blocks read.</p>
   <ul class="pills" aria-label="Counts">
     <li><a href="#s-findings"><b>4</b> findings</a></li>
     <li><a href="#s-findings"><b>11</b> metrics moved</a></li>
@@ -94,6 +100,7 @@
 <div class="vw in-s" id="s-lib">{{LIBHEAD_S}}</div>
 <div class="vw in-a" id="v-all">{{LIBHEAD_A}}</div>
 <div class="vw in-s in-a panel lib" id="lib">{{LIB}}</div>
+{{GUIDE}}
 {{ABOUT}}
 <footer class="foot">
   <span>Generated 2026-09-10 10:15 +02:00</span>

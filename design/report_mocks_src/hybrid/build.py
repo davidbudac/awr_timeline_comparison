@@ -38,7 +38,7 @@ MK = []
 for m in S['markers']:
     tm = dt.datetime.strptime(m['t'], '%Y-%m-%d %H:%M')
     w = next(k for k in range(1, N) if WSTART[k - 1] < tm < WSTART[k])       # boundary between window w-1 and w
-    MK.append({'w': w, 'l': m['label'], 's': SHORT.get(m['label'], m['label']),
+    MK.append({'w': w, 'l': m['label'], 's': SHORT.get(m['label'], m['label']), 'iso': m['t'],
                't': tm.strftime('%a ') + '%d %s %s' % (tm.day, tm.strftime('%b'), tm.strftime('%H:%M'))})
 MK_AT = {m['w']: m for m in MK}
 WC = {'CPU': '#3FB344', 'User I/O': '#4A90D9', 'System I/O': '#1F4E89', 'Commit': '#E89B40',
@@ -392,6 +392,31 @@ def mean(xs):
     return sum(xs) / len(xs) if xs else None
 
 
+# ================================================================== entity links (round 2)
+# Every named entity in a finding, the verdict or a Timeline label links to its detail row in the
+# All sections tables. Anchor ids are deterministic slugs; the build asserts every href resolves.
+def slug(s):
+    return re.sub(r'[^a-z0-9]+', '-', s.lower()).strip('-')
+
+
+FRID = lambda key: 'fr-' + slug(key)                 # findings table row (metrics, wait classes)
+SQID = lambda sid: 'sq-elapsed-' + sid               # Top SQL, Elapsed tab
+SMID = lambda sid: 'sm-' + sid                       # SQL Monitor row
+WEID = lambda ev: 'we-' + slug(ev)                   # Foreground waits, Time waited tab
+WAID = lambda ev: 'wa-' + slug(ev)                   # Foreground waits, Average wait tab
+WCID = lambda cl: 'wc-' + slug(cl)                   # Foreground waits, By wait class tab
+SGID = lambda seg: 'sg-' + slug(seg)                 # Segment I/O row
+FLID = lambda f: 'fl-' + slug(f)                     # File I/O row
+PAID = lambda p: 'pa-' + slug(p)                     # Parameters row
+ENT_HREFS = []
+
+
+def ent(html_text, aid, kind):
+    """a subtle in-page link from a named entity to its detail row"""
+    ENT_HREFS.append(aid)
+    return '<a class="ent" href="#%s" data-ent="%s">%s</a>' % (aid, kind, html_text)
+
+
 # ================================================================== emitters
 ZMIN, ZMAX = -4, 8
 SEVW = {'large': 'large', 'moderate': 'moderate', 'typical': 'normal', 'improved': 'improved',
@@ -484,7 +509,7 @@ def bt_head(name_th, cur_th='Current', pre='', post='', sort=False, compact=Fals
     return h + '</tr></thead>'
 
 
-def bt_cells(r, name_html, pre='', post='', sqlcell=False, compact=False, na='not scored'):
+def bt_cells(r, name_html, pre='', post='', sqlcell=False, compact=False, na='not scored', plain=False):
     c = fv(r['cur'], r['unit'])
     rg = nrange(r) if r.get('mu') is not None else ('—', '')
     imm = '<span class="imm">immaterial</span>' if r.get('imm') else ''
@@ -492,7 +517,7 @@ def bt_cells(r, name_html, pre='', post='', sqlcell=False, compact=False, na='no
     h += '<td class="c-cur">%s<span class="u">%s</span></td>' % (c[0], esc(c[1]))
     h += '<td class="c-rng">%s<span class="u">%s</span></td>' % (rg[0], esc(rg[1]))
     h += '<td class="c-band">%s</td>' % band(r, na=na)
-    h += '<td class="c-d">%s%s</td>' % (dtext(r), imm)
+    h += '<td class="c-d">%s%s</td>' % (dtext(r, plain=plain), imm)
     if not compact:
         h += '<td class="c-tr" data-k="%s"></td>' % esc(r['key'])
         h += post
@@ -520,8 +545,8 @@ def fam_rows(fk, compact=False):
     lead, rest, twins = FB[fam[2][0]], [FB[n] for n in fam[2][1:]], [FB[n] for n in fam[3]]
     h = ''
     for r, kind in [(lead, 'lead')] + [(x, 'mem') for x in rest] + [(x, 'twin') for x in twins]:
-        h += '<tr class="%s%s">%s</tr>' % (kind, '' if r.get('twin') else flagcls(r),
-                                            bt_cells(r, name_cell(r, kind == 'lead'), compact=compact))
+        h += '<tr id="%s" class="%s%s">%s</tr>' % (FRID(r['key']), kind, '' if r.get('twin') else flagcls(r),
+                                                    bt_cells(r, name_cell(r, kind == 'lead'), compact=compact))
     return h
 
 
@@ -562,11 +587,12 @@ def bars_row(r, rid=None, lab=None, gut=None, cls='', glyphs=None, name=None, un
     return h + '</div>'
 
 
-def lab_cell(name, sub='', swatch=None, title=None, extra=''):
+def lab_cell(name, sub='', swatch=None, title=None, extra='', href=None, kind='metric'):
     t = ' title="%s"' % esc(title) if title else ''
     s = '<i class="sw" style="--sw:%s" aria-hidden="true"></i>' % swatch if swatch else ''
+    nm = ent(esc(name), href, kind) if href else esc(name)
     return '<div class="l" role="rowheader"%s><span class="nm">%s%s</span>%s%s</div>' % (
-        t, s, esc(name), ('<span class="sub">%s</span>' % sub) if sub else '', extra)
+        t, s, nm, ('<span class="sub">%s</span>' % sub) if sub else '', extra)
 
 
 def gut_scored(r, note=None):
@@ -680,7 +706,7 @@ def nr_row(r, label, unit_override=None):
     rg = nrange(rr)
     return ('<div class="nr"><div class="l" title="%s">%s<small>normal %s%s</small></div>%s'
             '<div class="vv">%s<small>%s</small></div></div>'
-            % (esc(r['name']), esc(label), rg[0], (' ' + rg[1]) if rg[1] and not rg[1].startswith('/') else rg[1],
+            % (esc(r['name']), ent(esc(label), FRID(r['key']), 'metric'), rg[0], (' ' + rg[1]) if rg[1] and not rg[1].startswith('/') else rg[1],
                band(r, 'sm'), c, dtext(r)))
 
 
@@ -695,24 +721,6 @@ hero_strip = (
     + ruler(HERO_CORNER, '<div class="gh" role="columnheader"><span class="gt">vs prior mean</span></div>', rid=None, buttons=False)
     + bars_row(dbt, rid='hero-dbt', lab=hero_lab, gut=gut_scored(dbt), name='DB time', unit='AAS', prior=False)
     + '</div></div>')
-
-# ---- band legend (drawn once)
-legend = (
-    '<div class="legend" id="s-legend">'
-    '<div class="lg-p"><h3>Reading the band</h3>'
-    '<div class="lg-row"><span class="lg-b" style="--row-bg:var(--surface)">%s%s</span>'
-    '<span class="lg-k">%slarge</span><span class="lg-k">%smoderate</span><span class="lg-k">%snormal</span><span class="lg-k">%simproved</span></div>'
-    '<p class="lg-t">Shaded: the prior normal, mean ± 1σ dark and ± 2σ light. Ticks at ±2σ and ±3σ are the moderate and large thresholds. '
-    'One scale for the whole page; past +8σ the dot pins to the edge and prints its z. A hollow dot past a tick moved, but not enough to matter.</p></div>'
-    '<div class="lg-p"><h3>Reading the 13 windows</h3>'
-    '<div class="lg-row"><span class="lg-k"><i class="kb"></i>prior window</span><span class="lg-k"><i class="kb cur"></i><i class="kc"></i>Current</span>'
-    '<span class="lg-k"><i class="kz"></i>same normal range</span><span class="lg-k">%s%sseverity on the Current bar</span>'
-    '<span class="lg-k"><i class="kf"></i>release or patch</span><span class="lg-k"><b>◆</b> plan changed</span><span class="lg-k"><b>✚</b> first seen</span><span class="lg-k"><b>▽</b> DOP downgrade</span></div>'
-    '<p class="lg-t">Every chart, card and Timeline row uses the same columns: oldest on the left, Current last and wider. '
-    'Flags sit on the boundary between the two windows a release fell between. In the Timeline, hover a column to print its values and click a date to pin it.</p></div></div>'
-    % (band({'z': 5.2, 'sev': 'large'}), axis(), dotk('large'), dotk('moderate'), dotk('typical'), dotk('improved'),
-       dotk('large'), dotk('moderate')))
-
 
 # ---- finding cards
 def ev_row(dt_, ident, desc, r=None, plain=None, txt=True, note=''):
@@ -760,10 +768,11 @@ c_phys = card(
     'Physical reads <span class="d s-large">%.1f×</span> normal' % (pr['cur'] / pr['mu']),
     bigv(pr, 'reads/s'),
     wg_bare(pr),
-    ev_row('Segment', 'ORDERS_APP.ORDER_LINES', '%s blocks, normal %s' % (fp(seg_ol['cur']), fp(seg_ol['mu'])), plain='▲ ×%.1f' % seg_x, txt=False)
-    + ev_row('File', 'ts_orders_data.301.1131588213', '%s MB, normal %s; 302, 303 alike' % (fp(fil_301['cur']), fp(fil_301['mu'])), plain='▲ ×%.1f' % fil_x, txt=False)
-    + ev_row('Wait', 'db file scattered read', '%s s, normal %s s' % (fp(WB['db file scattered read']['cur']), fp(WB['db file scattered read']['mu'])), WB['db file scattered read'])
-    + ev_row('SQL', '7k2m9dx4qp1zb', '%s reads, normal %s; new plan' % (fp(q7p['cur']), fp(q7p['mu'])), q7p, txt=False),
+    ev_row('Segment', ent('ORDERS_APP.ORDER_LINES', SGID('ORDERS_APP.ORDER_LINES'), 'segment'), '%s blocks, normal %s' % (fp(seg_ol['cur']), fp(seg_ol['mu'])), plain='▲ ×%.1f' % seg_x, txt=False)
+    + ev_row('File', ent('ts_orders_data.301.1131588213', FLID('ts_orders_data.301.1131588213'), 'file'), '%s MB, normal %s; %s, %s alike'
+             % (fp(fil_301['cur']), fp(fil_301['mu']), ent('302', FLID('ts_orders_data.302.1131588221'), 'file'), ent('303', FLID('ts_orders_data.303.1136220407'), 'file')), plain='▲ ×%.1f' % fil_x, txt=False)
+    + ev_row('Wait', ent('db file scattered read', WEID('db file scattered read'), 'event'), '%s s, normal %s s' % (fp(WB['db file scattered read']['cur']), fp(WB['db file scattered read']['mu'])), WB['db file scattered read'])
+    + ev_row('SQL', ent('7k2m9dx4qp1zb', SQID('7k2m9dx4qp1zb'), 'sql'), '%s reads, normal %s; new plan' % (fp(q7p['cur']), fp(q7p['mu'])), q7p, txt=False),
     related('phys', '5 related metrics, 3 twins'),
     '<a href="#lib-seg">Segment I/O</a><a href="#lib-topsql">Top SQL</a>',
     jump='row-physreads', cls='lead s12')
@@ -780,10 +789,10 @@ c_dbt = card(
     '<div class="lgd" aria-hidden="true">%s</div><div class="wg bare" data-wg>%s%s%s</div>'
     % (ash_lgd, flags_row(bare=True, tall=True),
        stack_row(None, '', ''), dates_row(bare=True)),
-    ev_row('User I/O', '%s AAS' % fp(uio['cur']), 'normal %s' % fp(uio['mu']), uio)
-    + ev_row('CPU', '%s AAS' % fp(cpu['cur'] / 100), 'normal %s' % fp(cpu['mu'] / 100), cpu)
-    + ev_row('Wait share', '%s%%' % fp(wtr['cur']), 'normal %s%%' % fp(wtr['mu']), wtr)
-    + ev_row('Response', '%s ms / call' % fp(srt['cur'] * 10), 'normal %s ms' % fp(srt['mu'] * 10), srt),
+    ev_row(ent('User I/O', WCID('User I/O'), 'wait class'), '%s AAS' % fp(uio['cur']), 'normal %s' % fp(uio['mu']), uio)
+    + ev_row(ent('CPU', FRID(cpu['key']), 'metric'), '%s AAS' % fp(cpu['cur'] / 100), 'normal %s' % fp(cpu['mu'] / 100), cpu)
+    + ev_row(ent('Wait share', FRID(wtr['key']), 'metric'), '%s%%' % fp(wtr['cur']), 'normal %s%%' % fp(wtr['mu']), wtr)
+    + ev_row(ent('Response', FRID(srt['key']), 'metric'), '%s ms / call' % fp(srt['cur'] * 10), 'normal %s ms' % fp(srt['mu'] * 10), srt),
     related('dbt', '2 related metrics, 2 twins'),
     '<a href="#lib-fg">Foreground waits</a><a href="#tl-day">Day profile</a>',
     jump='row-ash', cls='s12')
@@ -796,9 +805,9 @@ c_net = card(
     'Network wait <span class="d s-large">%.1f×</span> normal' % (net['cur'] / net['mu']),
     bigv(net, 'AAS'),
     wg_bare(net),
-    ev_row('Event', 'SQL*Net more data to client', '%s s, normal %s s' % (fp(wsn['cur']), fp(wsn['mu'])), wsn)
-    + ev_row('Per wait', '%s ms' % fp(wasn['cur']), 'unchanged: more waits, not slower', wasn)
-    + ev_row('Sent', fvs(byts['cur'], 'B/s'), 'normal %s' % fvs(byts['mu'], 'B/s'), byts),
+    ev_row('Event', ent('SQL*Net more data to client', WEID('SQL*Net more data to client'), 'event'), '%s s, normal %s s' % (fp(wsn['cur']), fp(wsn['mu'])), wsn)
+    + ev_row(ent('Per wait', WAID('SQL*Net more data to client'), 'event'), '%s ms' % fp(wasn['cur']), 'unchanged: more waits, not slower', wasn)
+    + ev_row(ent('Sent', FRID(byts['key']), 'metric'), fvs(byts['cur'], 'B/s'), 'normal %s' % fvs(byts['mu'], 'B/s'), byts),
     '', '<a href="#lib-fg">Foreground waits</a>', jump='row-w-sqlnet', cls='s12')
 
 com = FB['Wait class: Commit']
@@ -809,8 +818,8 @@ c_com = card(
     'Commit wait up <span class="d s-moderate">%.1f%%</span>' % ((com['cur'] / com['mu'] - 1) * 100),
     bigv(com, 'AAS'),
     wg_bare(com),
-    ev_row('Event', 'log file sync', '%s s, normal %s s' % (fp(lfs['cur']), fp(lfs['mu'])), lfs)
-    + ev_row('Commits', '%s/s' % fp(ucom['cur']), 'normal %s/s; 1.92 ms each' % fp(ucom['mu']), ucom),
+    ev_row('Event', ent('log file sync', WEID('log file sync'), 'event'), '%s s, normal %s s' % (fp(lfs['cur']), fp(lfs['mu'])), lfs)
+    + ev_row(ent('Commits', FRID(ucom['key']), 'metric'), '%s/s' % fp(ucom['cur']), 'normal %s/s; 1.92 ms each' % fp(ucom['mu']), ucom),
     '', '<a href="#lib-fg">Foreground waits</a>', jump='row-w-lfs', cls='slim s12')
 
 # ---- what changed around it: plan change + configuration
@@ -821,13 +830,13 @@ plan_step = step_row(None, 'Plan hash', plan_vals, '', '', bare=True)
 ev_cpu = ev_row('CPU', '%s s' % fp(q7c['cur']), 'normal %s s; the rise is wait' % fp(q7c['mu']), q7c) if q7c else ''
 c_plan = card(
     'f-plan', 'change', 'Top SQL', sm7,
-    '<code>7k2m9dx4qp1zb</code> new plan after Release 4.2',
+    ent('<code>7k2m9dx4qp1zb</code>', SQID('7k2m9dx4qp1zb'), 'sql') + ' new plan after Release 4.2',
     '<p class="whereln" title="%s">ORDERS_APP · OrderService</p>'
     % esc(q7e['sql']['text']) + bigv(q7e, 's elapsed'),
     '<div class="wg bare allv" data-wg>%s%s%s%s</div>'
     % (flags_row(bare=True, tall=True), bars_row(q7e, rid=None), plan_step, dates_row(bare=True)),
     ev_row('Per exec', '700 gets, was 38', '9.0 ms, was 2.1 ms', plain='▲ ×18.4')
-    + ev_row('SQL Monitor', 'max %s s' % fp(sm7['cur']), 'normal %s s' % fp(sm7['mu']), sm7)
+    + ev_row(ent('SQL Monitor', SMID('7k2m9dx4qp1zb'), 'sql'), 'max %s s' % fp(sm7['cur']), 'normal %s s' % fp(sm7['mu']), sm7)
     + ev_cpu,
     '', '<a href="#lib-topsql">Top SQL</a><a href="#lib-sqlmon">SQL Monitor</a>',
     jump='row-sql-7k2m', cls='s12 chg',
@@ -850,12 +859,13 @@ def cfg_gut(vals, when):
                when, m['l'] if m else 'no marker'))
 
 
-cfg_rows = ''.join(step_row(None, nm, vals, ch, cfg_gut(vals, when)) for _, _, nm, vals, ch, when in CFG)
+cfg_rows = ''.join(step_row(None, nm, vals, ch, cfg_gut(vals, when), lab_html=lab_cell(nm, ch, href=PAID(nm), kind='parameter'))
+                   for _, _, nm, vals, ch, when in CFG)
 c_cfg = (
     '<article class="panel fc s12" id="f-config" aria-labelledby="f-config-h">'
     '<header class="fc-h"><div class="fc-k"><span class="sv" title="Parameters, not scored"><b class="gk">≠</b>Configuration</span></div></header>'
     '<h3 id="f-config-h">4 parameters differ, each under a release flag</h3>'
-    '<p class="takeaway">Only <code>optimizer_adaptive_plans</code> differs in Current (Release 4.2).</p>'
+    '<p class="takeaway">Only ' + ent('<code>optimizer_adaptive_plans</code>', PAID('optimizer_adaptive_plans'), 'parameter') + ' differs in Current (Release 4.2).</p>'
     '<div class="cfg-wg"><div class="wg fit" data-wg role="table" aria-label="Parameter values per compared window">'
     + ruler('<div class="corner" role="columnheader"><span class="ct">Parameter</span></div>',
             '<div class="gh" role="columnheader"><span class="gt">Changed</span></div>', rid=None, buttons=False)
@@ -912,7 +922,7 @@ for fk, fname, mem, tw in FAMS:
            % (fk, abs(lead['z']), esc(fname), lead['cur'] / lead['mu'], fname, len(mem), '' if len(mem) == 1 else 's',
               (' · %d twins' % len(tw)) if tw else '', fk, fam_rows(fk)))
 fh += '<tbody class="nrm" id="nrm-find">' + ''.join(
-    '<tr%s>%s</tr>' % (' class="twin"' if r.get('twin') else '', bt_cells(r, name_cell(r))) for r in NORMAL) + '</tbody>'
+    '<tr id="%s"%s>%s</tr>' % (FRID(r['key']), ' class="twin"' if r.get('twin') else '', bt_cells(r, name_cell(r))) for r in NORMAL) + '</tbody>'
 lib_find = libsec('lib-find', 'Findings',
                   '11 moved in 4 families',
                   counts(N_LARGE, N_MOD, N_NORM),
@@ -940,9 +950,9 @@ lib_metrics = libsec('lib-metrics', 'System metrics',
                      stub(SAME), os_=8, oa_=3)
 
 
-def waits_table(rows, label):
+def waits_table(rows, label, idf):
     h = bt_head(label)
-    h += '<tbody>' + ''.join('<tr class="%s">%s</tr>' % (flagcls(r).strip(), bt_cells(r, name_cell(r))) for r in rows) + '</tbody>'
+    h += '<tbody>' + ''.join('<tr id="%s" class="%s">%s</tr>' % (idf(r['name']), flagcls(r).strip(), bt_cells(r, name_cell(r))) for r in rows) + '</tbody>'
     return h
 
 
@@ -953,7 +963,7 @@ fg_body = ('<div class="tabs"><span class="seg" role="tablist" aria-label="Foreg
            '<div class="tabpanel" id="p-wt" role="tabpanel" aria-labelledby="tb-wt"><div class="tw"><table class="bt rsp">%s</table></div></div>'
            '<div class="tabpanel" id="p-wa" role="tabpanel" aria-labelledby="tb-wa" hidden><div class="tw"><table class="bt rsp">%s</table></div></div>'
            '<div class="tabpanel" id="p-wc" role="tabpanel" aria-labelledby="tb-wc" hidden><div class="tw"><table class="bt rsp">%s</table></div></div>'
-           % (waits_table(WT, 'Event'), waits_table(WA, 'Event'), waits_table(WCR, 'Wait class')))
+           % (waits_table(WT, 'Event', WEID), waits_table(WA, 'Event', WAID), waits_table(WCR, 'Wait class', WCID)))
 lib_fg = libsec('lib-fg', 'Foreground waits',
                 '4 of 14 events moved',
                 counts(3, 1),
@@ -991,7 +1001,7 @@ def sql_rows(dim, unit):
                          '<tbody><tr><td>3197245811</td><td>2026-05-31 23:00</td><td>2026-09-08 23:00</td><td>4,975,426,129</td><td>0.002098</td><td>38.12</td></tr>'
                          '<tr><td>2088341150</td><td>2026-09-08 23:00</td><td>2026-09-10 10:00</td><td>75,949,092</td><td>0.009</td><td>700.0</td></tr></tbody></table>'
                          '<p class="subnote">Per execution the new plan is 4.3× slower and does 18× the buffer gets, consistent with the jump in long-table scans.</p>')
-        out += '<tr class="%s">%s</tr>' % (flagcls(r).strip(), bt_cells(r, nm, pre='<td class="num rk">%d</td>' % (i + 1),
+        out += '<tr id="sq-%s-%s" class="%s">%s</tr>' % (dim.lower(), s['id'], flagcls(r).strip(), bt_cells(r, nm, pre='<td class="num rk">%d</td>' % (i + 1),
                                                                           post='<td class="c-fl"><span class="flags-c">%s</span></td>' % badges, sqlcell=True,
                                                                           na='too little history'))
     return out
@@ -1017,12 +1027,12 @@ for r in SM:
     nm = '<div class="sql"><span class="sid">%s</span><span class="mod">%s / %s</span></div>' % (r['name'], esc(r['user']), esc(r['module']))
     fl = '<td class="c-fl"><span class="flags-c">%s</span></td>' % ''.join('<span class="tag">%s%s</span>' % ('◆ ' if f == 'plan changed' else '▽ ' if f == 'DOP downgrade' else '', esc(f)) for f in r['flags'])
     if r['vals'] is None:
-        smb += ('<tr><td class="c-sql">%s</td><td class="c-cur num muted">—</td><td class="c-rng num muted">—</td><td class="c-band">%s</td>'
+        smb += ('<tr id="' + SMID(r['name']) + '"><td class="c-sql">%s</td><td class="c-cur num muted">—</td><td class="c-rng num muted">—</td><td class="c-band">%s</td>'
                 '<td class="c-d num"><span class="d s-na">—</span></td><td class="c-tr"></td>%s<td class="c-x"></td></tr>'
                 % (nm, band(r, na='no capture in a compared window'), fl))
     else:
         r['facts'] = '<dt>Plan hash</dt><dd>%s</dd>' % esc(r['plan'])
-        smb += '<tr class="%s">%s</tr>' % (flagcls(r).strip(), bt_cells(r, nm, post=fl, sqlcell=True))
+        smb += '<tr id="%s" class="%s">%s</tr>' % (SMID(r['name']), flagcls(r).strip(), bt_cells(r, nm, post=fl, sqlcell=True))
 lib_sqlmon = libsec('lib-sqlmon', 'SQL Monitor',
                     '13,205 runs; 1 plan change, 1 DOP downgrade',
                     counts(1, 0, 3, '5 outside the windows'),
@@ -1030,10 +1040,29 @@ lib_sqlmon = libsec('lib-sqlmon', 'SQL Monitor',
                     '<p>Only completed, expensive-enough or parallel executions are persisted, so a missing statement did not necessarily run fast.</p>',
                     '<div class="tw"><table class="bt rsp" id="t-smon">%s<tbody>%s</tbody></table></div>' % (smh, smb), os_=2, oa_=7)
 
+# segment and file I/O: ranked, not scored (plain ratio, band reads "ranked, not scored")
+def ranked_table(src, reuse, keyp, unit, idf, name_th, cur_th):
+    h = bt_head(name_th, cur_th=cur_th, pre='<th class="num">#</th>')
+    h += '<tbody>'
+    for i, row in enumerate(T[src]['rows']):
+        c = row['cells']
+        r = reuse.get(c[0]) or mkrow(keyp + c[0], c[0], unit, tvals(c, 2), 'n/a')
+        r['z'] = None
+        nm = '<span class="nmw"><span class="mono">%s</span><span class="tag">%s</span></span>' % (esc(c[0]), esc(c[1].lower()))
+        h += '<tr id="%s">%s</tr>' % (idf(c[0]), bt_cells(r, nm, pre='<td class="num rk">%d</td>' % (i + 1), na='ranked, not scored', plain=True))
+    return h + '</tbody>'
+
+
 lib_seg = libsec('lib-seg', 'Segment I/O', '<code>ORDER_LINES</code> 95.1M blocks vs 8.5M',
-                 '<span class="muted">ranked, not scored</span>', '<p><code>DBA_HIST_SEG_STAT</code>, top 10 segments per dimension.</p>', stub(SAME), os_=5, oa_=8)
+                 '<span class="muted">ranked, not scored</span>', '<p><code>DBA_HIST_SEG_STAT</code>, top 10 segments per dimension (physical reads shown).</p>',
+                 '<div class="tw"><table class="bt rsp" id="t-seg">%s</table></div>'
+                 % ranked_table('segio-detail-PREADS', {'ORDERS_APP.ORDER_LINES': seg_ol, 'ORDERS_APP.ORDER_LINES_PK': seg_pk}, 'O:seg:', 'blocks', SGID, 'Segment', 'Blocks read'),
+                 os_=5, oa_=8)
 lib_file = libsec('lib-file', 'File I/O', '<code>ts_orders_data.301</code> 345k MB vs 74k',
-                  '<span class="muted">ranked, not scored</span>', '<p><code>DBA_HIST_FILESTATXS</code> and <code>DBA_HIST_IOSTAT_FILETYPE</code>.</p>', stub(SAME), os_=6, oa_=9)
+                  '<span class="muted">ranked, not scored</span>', '<p><code>DBA_HIST_FILESTATXS</code> and <code>DBA_HIST_IOSTAT_FILETYPE</code> (MB read shown).</p>',
+                  '<div class="tw"><table class="bt rsp" id="t-file">%s</table></div>'
+                  % ranked_table('fileio-detail-READMB', {'ts_orders_data.301.1131588213': fil_301}, 'O:file:', 'MB', FLID, 'File', 'MB read'),
+                  os_=6, oa_=9)
 
 # parameters: the same step line, per row
 ph = ('<thead><tr><th>Parameter</th><th>Current</th><th>Before</th><th>Changed between</th><th>Nearest marker</th>'
@@ -1041,7 +1070,7 @@ ph = ('<thead><tr><th>Parameter</th><th>Current</th><th>Before</th><th>Changed b
 for _, _, nm, vals, ch, when in sorted(CFG, key=lambda c: -next(i for i in range(1, N) if c[3][i] != c[3][i - 1])):
     k = next(i for i in range(1, N) if vals[i] != vals[i - 1])
     m = MK_AT[k]
-    ph += ('<tr><td class="mono">%s</td><td><b>%s</b></td><td class="muted">%s</td><td>%s and %s</td><td><i class="kf"></i> %s, %s</td>'
+    ph += ('<tr id="' + PAID(nm) + '"><td class="mono">%s</td><td><b>%s</b></td><td class="muted">%s</td><td>%s and %s</td><td><i class="kf"></i> %s, %s</td>'
            '<td><div class="wg bare mini" data-wg>%s</div></td></tr>'
            % (nm, vals[-1], vals[0], WL[k - 1], 'Current' if k == CUR else WL[k], m['l'], m['t'].split(' ', 1)[1].rsplit(' ', 1)[0],
               step_row(None, nm, vals, '', '', bare=True)))
@@ -1104,7 +1133,7 @@ L_ACT = lane('lane-activity', 'Activity', '',
 
 def mrow(rid, key, label, sub, unit=None):
     r = ROWS[key]
-    return bars_row(r, rid=rid, lab=lab_cell(label, sub, title=r['name']), gut=gut_scored(r), name=label, unit=unit, prior=False)
+    return bars_row(r, rid=rid, lab=lab_cell(label, sub, title=r['name'], href=FRID(key)), gut=gut_scored(r), name=label, unit=unit, prior=False)
 
 
 aas = [v / 100 for v in FB['DB time']['vals']]
@@ -1129,7 +1158,7 @@ L_MET = lane('lane-metrics', 'Headline and load', '',
 WID = {'db file scattered read': 'row-w-scattered', 'direct path read': 'row-w-dpr', 'SQL*Net more data to client': 'row-w-sqlnet', 'log file sync': 'row-w-lfs'}
 W_ROWS = []
 for i, r in enumerate(WT):
-    W_ROWS.append(bars_row(r, rid=WID.get(r['name']), lab=lab_cell(r['name'], r['cls'], swatch=WC[r['cls']]),
+    W_ROWS.append(bars_row(r, rid=WID.get(r['name']), lab=lab_cell(r['name'], r['cls'], swatch=WC[r['cls']], href=WEID(r['name']), kind='event'),
                            gut=gut_scored(r), cls='w' + (' more' if i >= 10 else ''), prior=False))
 W_ROWS.insert(10, '<div class="r xpr" role="row"><div class="l" role="rowheader"><button class="xpb" type="button" data-for="lane-waits" aria-expanded="false">+ Show 4 more events</button></div>'
               + ''.join(cell(k) for k in range(N)) + '<div class="g" role="cell"></div></div>')
@@ -1137,9 +1166,9 @@ L_WAIT = lane('lane-waits', 'Waits', 'seconds waited',
               counts(3, 1), '<p><code>DBA_HIST_SYSTEM_EVENT</code>, foreground only, end − begin per window.</p>', W_ROWS)
 
 O_ROWS = [
-    bars_row(seg_ol, rid='row-o-ol', lab=lab_cell('ORDERS_APP.ORDER_LINES', 'table, blocks read'), gut=gut_plain(seg_ol, '#1 by physical reads'), cls='o', prior=False),
-    bars_row(seg_pk, lab=lab_cell('ORDERS_APP.ORDER_LINES_PK', 'index, blocks read'), gut=gut_plain(seg_pk, '#2 by physical reads'), cls='o', prior=False),
-    bars_row(fil_301, rid='row-o-file', lab=lab_cell('ts_orders_data.301.1131588213', 'datafile, MB read'), gut=gut_plain(fil_301, '#1 by MB read'), cls='o', prior=False),
+    bars_row(seg_ol, rid='row-o-ol', lab=lab_cell('ORDERS_APP.ORDER_LINES', 'table, blocks read', href=SGID('ORDERS_APP.ORDER_LINES'), kind='segment'), gut=gut_plain(seg_ol, '#1 by physical reads'), cls='o', prior=False),
+    bars_row(seg_pk, lab=lab_cell('ORDERS_APP.ORDER_LINES_PK', 'index, blocks read', href=SGID('ORDERS_APP.ORDER_LINES_PK'), kind='segment'), gut=gut_plain(seg_pk, '#2 by physical reads'), cls='o', prior=False),
+    bars_row(fil_301, rid='row-o-file', lab=lab_cell('ts_orders_data.301.1131588213', 'datafile, MB read', href=FLID('ts_orders_data.301.1131588213'), kind='file'), gut=gut_plain(fil_301, '#1 by MB read'), cls='o', prior=False),
 ]
 L_OBJ = lane('lane-objects', 'Where the reads land', '',
              '<span class="muted">not scored</span>', '<p><code>DBA_HIST_SEG_STAT</code> and <code>DBA_HIST_FILESTATXS</code>, top 10 per window.</p>', O_ROWS)
@@ -1157,20 +1186,20 @@ for sid in ['7k2m9dx4qp1zb', 'n7t3q5xc1yj4g', '2yq9jv7c5hm3d', 'u9d5p3fw2hs8x', 
         glyphs[first] = '<b class="glf" title="First seen in the top 10: %s (first captured 2026-08-11 22:00, Release 4.1)">✚</b>' % WL[first]
         note = '<span class="z"><b>✚</b> new %s</span>' % WL[first]
     short = s['text'] if len(s['text']) < 90 else s['text'][:88] + '…'
-    Q_ROWS.append(bars_row(r, rid='row-sql-' + sid[:4], lab=lab_cell(sid, '%s <span class="sq">%s</span>' % (s['schema'], esc(short)), title=s['text']),
+    Q_ROWS.append(bars_row(r, rid='row-sql-' + sid[:4], lab=lab_cell(sid, '%s <span class="sq">%s</span>' % (s['schema'], esc(short)), title=s['text'], href=SQID(sid), kind='sql'),
                            gut=gut_scored(r, note), cls='q', glyphs=glyphs, name=sid, prior=False))
     if sid == '7k2m9dx4qp1zb':
-        Q_ROWS.append(bars_row(sm7, rid='row-sqlmon-7k2m', lab=lab_cell('SQL Monitor', 'max elapsed, s'),
+        Q_ROWS.append(bars_row(sm7, rid='row-sqlmon-7k2m', lab=lab_cell('SQL Monitor', 'max elapsed, s', href=SMID('7k2m9dx4qp1zb'), kind='sql'),
                                gut=gut_scored(sm7), cls='q sub', name='7k2m9dx4qp1zb, SQL Monitor max elapsed', prior=False))
 sm9 = SMB['9wz2ke6yq4tn1']
-Q_ROWS.append(bars_row(sm9, rid='row-sqlmon-9wz2', lab=lab_cell('9wz2ke6yq4tn1', 'REPORTING <span class="sq">SQL Monitor max</span>'),
+Q_ROWS.append(bars_row(sm9, rid='row-sqlmon-9wz2', lab=lab_cell('9wz2ke6yq4tn1', 'REPORTING <span class="sq">SQL Monitor max</span>', href=SMID('9wz2ke6yq4tn1'), kind='sql'),
                        gut=gut_scored(sm9, '<span class="z"><b>▽</b> DOP</span>'), cls='q',
                        glyphs={12: '<b class="glf" title="DOP downgrade flagged on a Current-window execution">▽</b>'}, name='9wz2ke6yq4tn1, SQL Monitor max elapsed', prior=False))
 L_SQL = lane('lane-sql', 'SQL', 'elapsed s; dash = not in top 10',
              '<span><b>◆</b> 1 plan change</span><span><b>✚</b> 1</span>',
              '<p><code>DBA_HIST_SQLSTAT</code>; SQL Monitor rows from <code>DBA_HIST_REPORTS</code>. Mock-only: the Top SQL band is derived for the mock.</p>', Q_ROWS)
 
-C_ROWS = [step_row(rid, nm, vals, '', cfg_gut(vals, when), lab_html=lab_cell(nm, ch)) for _, rid, nm, vals, ch, when in CFG[::-1]]
+C_ROWS = [step_row(rid, nm, vals, '', cfg_gut(vals, when), lab_html=lab_cell(nm, ch, href=PAID(nm), kind='parameter')) for _, rid, nm, vals, ch, when in CFG[::-1]]
 L_CFG = lane('lane-config', 'Configuration', '',
              '<span class="muted">all 4 under a flag</span>', '<p><code>DBA_HIST_PARAMETER</code>, value at each window’s end snapshot.</p>', C_ROWS)
 
@@ -1206,17 +1235,194 @@ def dp_html():
     return ''.join(h)
 
 
+ASHX_ORDER = ['CPU', 'User I/O', 'System I/O', 'Commit', 'Application', 'Concurrency', 'Network', 'Configuration', 'Scheduler', 'Other']
+ASHX_BTN = ''.join('<button type="button" class="axc" data-c="%d" aria-pressed="true" title="Show or hide %s"><i class="sw" style="--sw:%s" aria-hidden="true"></i>%s</button>'
+                   % (i, esc(c), WC[c], esc(c)) for i, c in enumerate(ASHX_ORDER))
+ASHX = (
+    '<section class="panel ashx" id="tl-ash" aria-labelledby="tl-ash-h">'
+    '<div class="axh"><div class="axt"><h3 id="tl-ash-h">Active sessions, full span</h3>'
+    '<span class="axs" id="ax-range">18 Jun to 10 Sep, 6-hour averages</span></div>'
+    '<span class="axk" aria-hidden="true"><span><i class="kw"></i>compared window</span><span><i class="kw cur"></i>Current</span></span>'
+    '<button type="button" class="axr" id="ax-reset" hidden>Reset zoom</button></div>'
+    '<div class="axlg" role="group" aria-label="Wait classes: click to show or hide">' + ASHX_BTN + '</div>'
+    '<div class="axp" id="ax-plot"><svg id="ax-svg" role="img" aria-label="Stacked active sessions by wait class, 18 June to 10 September, '
+    'with the 13 compared windows shaded and release markers. Drag to zoom."></svg><div class="axbr" id="ax-brush" hidden></div></div>'
+    '<p class="axn2">Drag across the chart to zoom, double-click to reset. Click a shaded window to pin its column in the grid below.</p>'
+    '</section>')
+add_note('Timeline: Active sessions, full span',
+         '<p><code>DBA_HIST_ACTIVE_SESS_HISTORY</code>, samples ÷ 360 per hour, averaged into 6-hour buckets across the whole compared span, idle excluded. '
+         'The shaded stripes are the 13 compared windows; their tooltip gives the unsmoothed hour.</p>')
+
 TIMELINE = (
     sh('v-tl', 'Timeline', 'Down a column: one window. Across a row: when it started.',
        counts(10, 1),
        '<p>Each row is scaled within itself from zero; the Current column is the accented band. Release and patch flags sit on the boundary between the two windows they fell between, '
        'and their lines run through every lane. The right gutter is the same band and Δ as the Summary.</p>')
+    + ASHX
     + '<div class="panel gridwrap wg" id="tl" data-wg role="table" aria-label="Current vs 12 prior windows, one column per window">'
     + ruler() + '<div class="gbody" id="gbody"><div class="gin" id="gin">' + L_ACT + L_MET + L_WAIT + L_OBJ + L_SQL + L_CFG + '</div></div></div>'
     + '<section class="panel dp" id="tl-day" aria-labelledby="tl-day-h"><div class="dphead">'
     + sh('tl-day', 'Day profile', 'Last 24 h vs the same hour on 7 prior days',
          '<span>%s2 day-wide shifts</span>' % dotk('large'), '<p>Bar = this day, tick = prior-day mean, dot = flagged hour. Fixed daily cadence, independent of the weekly comparison. Fewer than 30 min of snapshot coverage in an hour leaves it empty.</p>', tag='h3', cls='flush')
     + '</div><div class="dpscroll" id="dpscroll">' + dp_html() + '</div></section>')
+
+# ================================================================== GUIDE: how to read each chart (static markup, all views)
+def gsvg(w, h, body, label):
+    return '<svg class="gd" width="%d" height="%d" viewBox="0 0 %d %d" role="img" aria-label="%s">%s</svg>' % (w, h, w, h, esc(label), body)
+
+
+def g_grid():
+    """13 bars, wider Current, normal band, mean, a flag on a boundary, a dot on Current"""
+    hs = [13, 12, 15, 13, 12, 14, 13, 12, 15, 14, 13, 14, 34]
+    cw, gap, x, out = 8.4, 2.4, 2.0, []
+    out.append('<rect class="gd-z2" x="0" y="%.1f" width="152" height="9"/>' % (44 - 4 - 18))
+    out.append('<line class="gd-mn" x1="0" x2="152" y1="%.1f" y2="%.1f"/>' % (44 - 4 - 13.5, 44 - 4 - 13.5))
+    for k, h in enumerate(hs):
+        w = cw * 1.6 if k == CUR else cw
+        if k == CUR:
+            out.append('<rect class="gd-cbg" x="%.1f" y="0" width="%.1f" height="44"/>' % (x - 1.2, w + 2.4))
+        out.append('<rect class="%s" x="%.1f" y="%.1f" width="%.1f" height="%d" rx="1"/>' % ('gd-bc' if k == CUR else 'gd-b', x, 40 - h, w, h))
+        if k == 9:
+            fx = x - gap / 2
+            out.append('<line class="gd-mk" x1="%.1f" x2="%.1f" y1="1" y2="40"/><path class="gd-mkf" d="M%.1f 1h7l-2 3 2 3h-7z"/>' % (fx, fx, fx))
+        x += w + gap
+    cx = x - gap - cw * 1.6 / 2
+    out.append('<circle class="gd-dot" cx="%.1f" cy="%.1f" r="3.4"/>' % (cx, 40 - 34))
+    out.append('<line class="gd-ax" x1="0" x2="152" y1="40.5" y2="40.5"/>')
+    return gsvg(152, 44, ''.join(out), 'Thirteen window columns, Current last and wider, with the normal band and a release flag')
+
+
+def g_area(stripes=True, dots=False):
+    import math
+    n, W, Hh = 48, 152, 44
+    layers = [[6 + 2.5 * math.sin(i / 3.0) for i in range(n)], [3 + 1.2 * math.sin(i / 2.2 + 1) + (5 if i > 40 else 0) for i in range(n)],
+              [1.6 + .6 * math.sin(i / 1.7) for i in range(n)]]
+    cols = [WC['CPU'], WC['User I/O'], WC['Commit']]
+    acc = [0.0] * n
+    X = lambda i: i * W / (n - 1)
+    Y = lambda v: Hh - 2 - v * 2.2
+    out = []
+    for L, col in zip(layers, cols):
+        lo = acc[:]
+        acc = [a + v for a, v in zip(acc, L)]
+        d = 'M' + ' L'.join('%.1f %.1f' % (X(i), Y(acc[i])) for i in range(n)) + ' L' + ' L'.join('%.1f %.1f' % (X(i), Y(lo[i])) for i in range(n - 1, -1, -1)) + 'Z'
+        out.append('<path d="%s" fill="%s" class="gd-ar"/>' % (d, col))
+    if stripes:
+        for k in range(13):
+            x = 6 + k * 11.2
+            out.append('<rect class="%s" x="%.1f" y="0" width="%s" height="%d"/>' % ('gd-wc' if k == CUR else 'gd-w', x - 1.5, 3 if k == CUR else 2.2, Hh))
+    if dots:
+        for k in range(13):
+            x = 6 + k * 11.2
+            i = min(n - 1, int(round(x / W * (n - 1))))
+            out.append('<circle class="%s" cx="%.1f" cy="%.1f" r="%s"/>' % ('gd-dc' if k == CUR else 'gd-dp', x, Y(acc[i]) - 1, 3 if k == CUR else 2.2))
+    return gsvg(W, Hh, ''.join(out), 'Stacked area of active sessions by wait class' + (' with compared windows shaded' if stripes else ''))
+
+
+def g_cols():
+    out, x = [], 2.0
+    for k in range(13):
+        w = 8.4 * 1.6 if k == CUR else 8.4
+        segs = [(WC['CPU'], 12 + (k % 3)), (WC['User I/O'], 4 if k < CUR else 16), (WC['Commit'], 3)]
+        y = 42
+        for col, h in segs:
+            y -= h
+            out.append('<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="%s"/>' % (x, y + .6, w, h - .6, col))
+        if k == CUR:
+            out.insert(0, '<rect class="gd-cbg" x="%.1f" y="0" width="%.1f" height="44"/>' % (x - 1.2, w + 2.4))
+        x += w + 2.4
+    return gsvg(152, 44, ''.join(out), 'One stacked column per compared window')
+
+
+def g_micro():
+    hs = [8, 7, 9, 8, 7, 8, 8, 7, 9, 8, 8, 9, 19]
+    out, x = ['<rect class="z2" x="0" y="11" width="92" height="6" rx="1"/>'], 0.0
+    for k, h in enumerate(hs):
+        w = 5.2 * 1.6 if k == CUR else 5.2
+        out.append('<rect class="b%s" x="%.1f" y="%d" width="%.1f" height="%d" rx="1"/>' % (' cur' if k == CUR else '', x, 21 - h, w, h))
+        x += w + 1.6
+    return '<svg class="mw" width="92" height="22" viewBox="0 0 92 22" role="img" aria-label="Thirteen-bar micro strip">%s</svg>' % ''.join(out)
+
+
+def g_marker():
+    out = ['<rect class="gd-cell" x="0" y="18" width="150" height="24"/>']
+    for x in (30, 60, 90, 120):
+        out.append('<line class="gd-cl" x1="%d" x2="%d" y1="18" y2="42"/>' % (x, x))
+    out.append('<line class="gd-mk" x1="60" x2="60" y1="2" y2="42"/><rect class="gd-flg" x="60" y="2" width="44" height="12" rx="2"/>'
+               '<text class="gd-t" x="64" y="11">Release</text>')
+    return gsvg(150, 44, ''.join(out), 'A release flag on the boundary between two windows')
+
+
+def g_step():
+    return gsvg(150, 44, '<path class="gd-st" d="M0 32H86V14H150"/><line class="gd-str" x1="86" x2="86" y1="32" y2="14"/><circle class="gd-nd" cx="86" cy="14" r="3.5"/>'
+                '<text class="gd-t m" x="4" y="28">FALSE</text><text class="gd-t m b" x="92" y="10">TRUE</text>', 'Step line: value changes between two windows')
+
+
+def g_glyph():
+    return ('<span class="gd-gl"><span><b>◆</b> plan changed</span><span><b>✚</b> first seen</span><span><b>▽</b> DOP downgrade</span></span>')
+
+
+def g_day():
+    import math
+    out = []
+    for i in range(24):
+        v = 10 + 7 * math.sin((i - 4) / 24 * 2 * math.pi) + (6 if i >= 20 else 0)
+        mu = 10 + 7 * math.sin((i - 4) / 24 * 2 * math.pi)
+        x = 2 + i * 6.2
+        out.append('<rect class="%s" x="%.1f" y="%.1f" width="3.6" height="%.1f" rx=".6"/>' % ('gd-bc' if i == 23 else 'gd-b', x, 40 - v * 1.3, v * 1.3))
+        out.append('<line class="gd-tk" x1="%.1f" x2="%.1f" y1="%.1f" y2="%.1f"/>' % (x - 1.2, x + 4.8, 40 - mu * 1.3, 40 - mu * 1.3))
+        if i >= 20:
+            out.append('<circle class="gd-dot" cx="%.1f" cy="%.1f" r="2.2"/>' % (x + 1.8, 40 - v * 1.3 - 4))
+    return gsvg(152, 44, ''.join(out), 'Day profile: 24 hourly bars with prior-day mean ticks and flagged-hour dots')
+
+
+def g_pin():
+    out = []
+    for k in range(7):
+        x = k * 21.4
+        if k == 2:
+            out.append('<rect class="gd-pin" x="%.1f" y="0" width="21.4" height="44"/>' % x)
+        if k == 6:
+            out.append('<rect class="gd-cbg" x="%.1f" y="0" width="21.4" height="44"/>' % x)
+        out.append('<line class="gd-cl" x1="%.1f" x2="%.1f" y1="0" y2="44"/>' % (x, x))
+        out.append('<rect class="%s" x="%.1f" y="%d" width="8" height="%d" rx="1"/>' % ('gd-bc' if k == 6 else 'gd-b', x + 6.7, 40 - (26 if k == 6 else 12), 26 if k == 6 else 12))
+    out.append('<text class="gd-t pn" x="%.1f" y="10" text-anchor="middle">pinned</text>' % (2 * 21.4 + 10.7))
+    return gsvg(150, 44, ''.join(out), 'A pinned column highlighted in amber')
+
+
+GUIDE_ITEMS = [
+    ('Band', band({'z': 5.2, 'sev': 'large'}, 'sm') + band({'z': 0.5, 'sev': 'typical'}, 'sm'),
+     'Dot = Current, in σ from the prior mean. Shaded = normal (±1σ, ±2σ); ticks at ±2σ and ±3σ.',
+     'Filled = finding, hollow = normal; past +8σ the dot pins and prints its z.'),
+    ('Δ vs mean', '<span class="gd-dl"><span class="d s-large">▲ ×5.4</span><span class="d s-moderate">▲ 22.5%</span><span class="d s-typical">▼ 4.2%</span></span>',
+     '×n when Current is at least twice the prior mean, else a percentage.', 'Red or amber only on a finding.'),
+    ('13-window chart', g_grid(),
+     'One column per compared window, oldest left; Current last, wider, indigo.', 'Band = normal range, line = mean, dot = finding.'),
+    ('Full-span activity', g_area(),
+     'Timeline, top: active sessions by wait class over the whole span.', 'Stripes = compared windows. Hover, drag to zoom, click a legend item or a stripe.'),
+    ('Activity per window', g_cols(),
+     'One stacked column per compared hour, same wait classes.', 'Current labels its two largest classes.'),
+    ('Smoothed span', g_area(stripes=False, dots=True),
+     'All sections: the same stack as a 24-hour rolling mean.', 'Dots = the compared hours, unsmoothed.'),
+    ('Sparkline', g_micro(),
+     'The 13 windows in a table cell: shaded = normal range, indigo = Current.', 'The chevron at the row end opens it full size.'),
+    ('Release marker', g_marker(),
+     'A release or patch, on the boundary between the two windows it fell between.', 'Its line runs down every chart.'),
+    ('Step line', g_step(),
+     'Parameters and plan hashes step where the value changed.', 'Dot = the change; labels = old and new value.'),
+    ('Glyphs', g_glyph(), 'Drawn in the window where it happened.', ''),
+    ('Day profile', g_day(),
+     'Last 24 h by hour: bar = this day, tick = same hour on 7 prior days, dot = flagged hour.', ''),
+    ('Hover and pin', g_pin(),
+     'Timeline: hover a column for its values; click a date or an ASH stripe to pin it.', 'The gutter then compares against it; Esc clears.'),
+]
+GUIDE = (
+    '<section class="guide" id="guide" aria-labelledby="guide-h">'
+    + sh('guide', 'Reading the charts', 'What each chart on this page encodes', '', '')
+    + '<div class="panel gdg">'
+    + ''.join('<div class="gi"><div class="gv">%s</div><div class="gx2"><h3>%s</h3><p>%s%s</p></div></div>'
+              % (v, esc(t), a, (' <span class="g2">%s</span>' % b) if b else '') for t, v, a, b in GUIDE_ITEMS)
+    + '</div></section>')
 
 # ================================================================== assemble
 FINDINGS = (
@@ -1237,7 +1443,7 @@ add_note('Scoring', '<p>z = (current − mean) ÷ max(σ, 2% of mean) over the 1
      '<p>Mock-only: the 4-family grouping and the Top SQL z-scores are derived here; segment and file rows are ranked, not scored.</p>')
 ABOUT_HTML = (
     '<details class="panel aboutrep" id="about"><summary><span class="chev" aria-hidden="true"></span><span class="lt">About this report</span>'
-    '<span class="ls">legend, method, sources</span></summary><div class="ab-body">' + legend
+    '<span class="ls">method and sources</span></summary><div class="ab-body">'
     + '<dl class="notes">' + ''.join('<dt>%s</dt><dd>%s</dd>' % (esc(t), a) for t, a in ABOUT) + '</dl>'
     '<p class="ab-meta">awr_trend.sql 1.5.0, read-only: every number is recomputed from <code>DBA_HIST_*</code> on each run. '
     'ORCLPRD · DBID 1483726519 · prd-ora-01.corp.example · Oracle 19.0.0.0 · by AWR_READER · Mock D, built from docs/examples/demo_busy_db.html</p>'
@@ -1262,12 +1468,15 @@ D = {
     'sqlt': {x['id']: x['text'] for d in A['topsql'] for x in A['topsql'][d]},
     'ash': {'t': B_ASH['t'], 'series': ash_series, 'win': [w['start'] for w in S['ashPerWindow']['windows']],
             'wtot': [round(sum(c['vals'][i] for c in S['ashPerWindow']['classes']), 2) for i in range(N)]},
+    'ashx': {'cls': ASHX_ORDER, 'col': [WC[c] for c in ASHX_ORDER], 'end': '2026-09-10 10:00',
+             'v': [[round(v, 3) for v in [c for c in B_ASH['classes'] if c['name'] == n][0]['vals']] for n in ASHX_ORDER],
+             'wv': [[round(v, 3) for v in APW[n]] for n in ASHX_ORDER]},
 }
 data = json.dumps(D, separators=(',', ':'), ensure_ascii=False).replace('</', '<\\/')
 
 repl = {
     '{{CSS}}': CSS, '{{JS}}': JS, '{{DATA}}': data,
-    '{{STRIP}}': hero_strip, '{{ABOUT}}': ABOUT_HTML, '{{FINDINGS}}': FINDINGS, '{{CHANGES}}': CHANGES,
+    '{{STRIP}}': hero_strip, '{{ABOUT}}': ABOUT_HTML, '{{GUIDE}}': GUIDE, '{{FINDINGS}}': FINDINGS, '{{CHANGES}}': CHANGES,
     '{{NORMAL}}': s_normal, '{{TIMELINE}}': TIMELINE, '{{LIB}}': LIB,
     '{{LIBHEAD_S}}': LIBHEAD_S, '{{LIBHEAD_A}}': LIBHEAD_A,
 }
@@ -1275,5 +1484,13 @@ out = tpl
 for k, v in repl.items():
     out = out.replace(k, v)
 assert '{{' not in out, re.findall(r'\{\{[A-Z_]+\}\}', out)
+# every in-page link resolves to exactly one id (entity links, rail, pills, card footers)
+IDS = re.findall(r'\sid="([^"]+)"', out)
+dup = sorted({i for i in IDS if IDS.count(i) > 1})
+assert not dup, dup
+hrefs = set(re.findall(r'href="#([^"=]+)"', out))
+missing = sorted(h for h in hrefs if h not in set(IDS))
+assert not missing, missing
+assert ENT_HREFS and all(h in set(IDS) for h in ENT_HREFS)
 open(OUT, 'w', encoding='utf-8').write(out)
 print('wrote', OUT, len(out.encode('utf-8')), 'bytes; data', len(data))
