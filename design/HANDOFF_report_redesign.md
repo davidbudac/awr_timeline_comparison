@@ -449,7 +449,7 @@ keyboard Enter and a live theme toggle, in both themes. Known and
 pre-existing: at 1280 px the hero strip overflows the page by 18 px. That was
 already true in 218637a and is out of scope with the width unchanged.
 
-## Where it lands in the code (for planning)
+## Where it lands in the code (for planning; as built: see "Implemented in v1.6.0")
 
 - **Masthead, verdict, chrome JS:** `sql/00_params.sql`. The "What changed"
   narrative is `sql/17_narrative.sql`, which relocates itself into
@@ -496,7 +496,7 @@ one visual style. Round 2's full-span ASH chart shows that zoom, tooltips and
 legend toggling can be hand-rolled in inline SVG (about 150 lines of JS), but
 then the report owns that code instead of ECharts. See "Mock D · round 2".
 
-## Open questions for the owner
+## Open questions for the owner (resolved: see "Implemented in v1.6.0")
 
 1. Which direction, or which combination? Is the recommended hybrid acceptable?
 2. Keep ECharts for the big charts, or go inline-SVG only (like the fleet
@@ -507,6 +507,90 @@ then the report owns that code instead of ECharts. See "Mock D · round 2".
 4. B: should Top SQL, segment and file rows get z-scores? That is new scoring,
    and it affects the policy, 07 and the demo.
 5. C: Normal view, Full view, or a separate tab?
+
+## Implemented in v1.6.0 (2026-09-26)
+
+Mock D shipped as v1.6.0 on branch `feat/report-redesign-d` (phases 1–5;
+CHANGELOG 1.6.0; the agents' reference is `CLAUDE.md`: "Views", "Summary
+view pieces", "Timeline view", "Window component", "Band glyph", "Entity
+links", "Micro strips", "Reference section").
+
+**Open questions, as resolved by the owner:**
+
+1. Direction: **Mock D hybrid**, as decluttered in round 1 and extended in
+   round 2 (graph guide, entity links, interactive full-span ASH). The wider
+   layout was withdrawn: the page keeps its ~1232 px width. Phones are not a
+   target (nothing ≥ 1280 px may break).
+2. Charts: every **new** component is inline SVG/CSS as mocked (band glyph,
+   13-window micro strips, window grid, full-span ASH, guide examples) and
+   CDN-free. The existing ECharts charts stay in All sections (04/05 waits,
+   06 bump chart, 09 hourly ASH, 10 DB time, 11 per-SQL ASH, 14/15 I/O,
+   16 day profile, 18 scatter) with `body.no-charts` and `awr:theme` intact.
+3. Verdict: **one short rule-based sentence** plus a "Likely source" line,
+   generated from the existing findings and narrative rules; no free prose.
+4. Top SQL / segment / file: **ranked, not scored** — no new z-score policy.
+   18's SQL Monitor elapsed keeps its existing `score_cells` scoring.
+5. Views: **Summary (default) / Timeline / All sections** replace Normal /
+   Full (`body.vs|vt|va`, `class="vw in-s|in-t|in-a"`, localStorage
+   `awr-view` saved on an explicit click only, `#view=` hash wins, entity
+   and rail links switch view like the mock's goTo / reveal, JS off = all
+   stacked). All sections still shows every number the v1.5.0 Full view
+   showed.
+
+Also decided: the band glyph replaces the `dev_bucket` heat tint
+(`dev_bucket.plsql` deleted); finding cards group `metric_policy` families
+(mapping in `sql/lib/finding_cards.plsql`); entity ids come from one PL/SQL
+`anchor_id(kind, name)`; `awr_version` 1.6.0, fleet version unchanged.
+
+**Where each piece landed:**
+
+| Piece | Code |
+|---|---|
+| Top bar, view switch, rail, chrome JS (setView / goTo / reveal), verdict hero, Timeline skeleton, `AWR_WIN` | `sql/00_params.sql` |
+| DB time hero strip | `sql/08_overview.sql` on `sql/lib/wingrid.plsql` + `js_wingrid.plsql` |
+| Finding cards, Checked and normal, `#changes-slot`, Evidence library heading, Timeline metric / wait-class rows | `sql/07_summary.sql`, vocabulary `sql/lib/finding_cards.plsql` |
+| Verdict "Likely source", pills, notes, I/O card evidence | `sql/17_narrative.sql` (relocated by inline scripts) |
+| Plan-change card | `sql/18_sqlmon.sql` → `#changes-slot` |
+| Configuration card + parameter step rows | `sql/12_param_changes.sql` |
+| Band glyph, Δ rule, library row text | `sql/lib/band_glyph.plsql` (+ `score_cells.plsql` delegates to it) |
+| Entity links / anchors | `ent()` in `finding_cards.plsql`, `sql/lib/anchor_id.plsql`; unwrap of missing targets in `js_wingrid` |
+| Timeline grid rows | `sql/lib/timeline.plsql` (tl_*), emitted by 04 / 06 / 07 / 09 / 12 / 14 / 15 / 18; client `sql/lib/js_timeline.plsql` |
+| Full-span interactive ASH | payload `AWR_DATA.ashx` from 09's existing scan, drawn by `js_timeline` |
+| Micro strips | `sql/lib/js_microstrip.plsql` (replaces js_sparkline in the single-DB report; the fleet keeps js_sparkline) |
+| Graph guide + About | `sql/19_reference.sql` |
+| Readable JS sources | `sql/lib/src/*.js` → `tools/js2plsql.sh` (lint check 24) |
+| CSS | `sql/_style.sql` (also reaches the fleet chrome; `table.dt` keeps the fleet's severity bar) |
+| Demo twins | `demo/awrdemo/sections/*`, `demo/awrdemo/helpers.py`; smoke test `demo/verify_report.js` |
+
+**Conscious divergences from the mock** (phase 4's sweep, kept):
+
+- Rail: keeps the row filter, the "AWR · Timeline comparison" brand, status
+  dots, crit / warn count pills and J / K, and extra groups (Workload / SQL
+  / Storage & config / Whole span); the mock has a DB-name brand, plain
+  counts and an "All sections" group.
+- All sections: sections stay full panels (the mock folds them into one
+  panel of `<details>` rows); Findings stays one table per domain (the mock
+  groups by family with lead / member / twin rows); 09 / 10 / 11 keep their
+  ECharts charts where the mock has one smoothed span chart; no per-row
+  expanders or chevrons in the tables.
+- Card evidence follows phase 2's rules (Physical I/O shows segment, file,
+  events; the mock also lists the Top SQL by reads; Network / Commit omit
+  per-wait and commit-count rows).
+- Plan card: the verdict pill links `#sm-<id>`, not the card; per-exec
+  numbers use `fmt_num`; the h3 carries the release date; the bars have no
+  Current severity dot (Top SQL is ranked, not scored).
+- The Summary library order (`--os`) differs from the All sections order,
+  as in the mock; Summary opens Top SQL, Foreground waits and (on an error
+  / DOP downgrade) SQL Monitor by default.
+- Day profile in the Timeline is section 16 as is (heatmap, line, table),
+  not the mock's 24-column bar grid.
+- "Checked and normal" lists canonical rows only (the demo shows 30
+  normal where the mock shows 43).
+- The hero strip stays plain DB-time bars; only the DB time card is
+  stacked by wait class.
+- Restored in phase 5 from v1.5.0 (not in the mock): "all DBIDs …" in the
+  top bar for a multi-DBID report, the template name for a non-default
+  template, and "by <user>" in the About run line.
 
 ## Rebuilding / verifying the mocks
 
