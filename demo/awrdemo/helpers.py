@@ -957,15 +957,19 @@ def wg_dates(w, bare=True) -> str:
     return out + '</div>'
 
 
-def wg_ruler(w, corner: str, gh: str) -> str:
+def wg_ruler(w, corner: str, gh: str, btn: str = "N") -> str:
+    tag = "button" if btn == "Y" else "div"
     out = ('<div class="ruler"><div class="rin" role="row">'
            '<div class="corner" role="columnheader">' + corner + '</div>'
            '<div class="flags" aria-label="Release and patch markers"></div>')
     for k in range(w.weeks_back, -1, -1):
-        out += ('<div class="h' + (" cur" if k == 0 else "") + wg_keep(w, k)
-                + '" data-w="' + str(k) + '" role="columnheader" title="' + wg_title(w, k) + '">'
+        out += ('<' + tag + ' class="h' + (" cur" if k == 0 else "") + wg_keep(w, k) + '"'
+                + (' type="button" aria-pressed="false"' if btn == "Y" else "")
+                + ' data-w="' + str(k) + '" role="columnheader" title="' + wg_title(w, k)
+                + (('. Click to pin as the comparison target' if k > 0 else '. The Current window')
+                   if btn == "Y" else "") + '">'
                 + '<span class="hd">' + wg_date(w, k) + '</span>'
-                + '<span class="ho">' + wg_off(w, k) + '</span></div>')
+                + '<span class="ho">' + wg_off(w, k) + '</span></' + tag + '>')
     return out + '<div class="gh" role="columnheader">' + gh + '</div></div></div>'
 
 
@@ -983,3 +987,104 @@ def wg_bars(w, vals, scale, mu, sd, sev, lab="", gut="", rid=None, cls=None) -> 
                 + ('<span class="v nil" aria-label="no value">&ndash;</span>' if x is None
                    else '<span class="v">' + fmt_num(x) + '</span>') + '</div>')
     return out + (gut or "") + '</div>'
+
+
+# ---------------------------------------------------------------------
+# sql/lib/timeline.plsql  (the Timeline view's grid rows)
+# ---------------------------------------------------------------------
+
+def tl_open(lane: str) -> str:
+    return '<template class="tl-src" data-lane="lane-' + lane + '">'
+
+
+def tl_close() -> str:
+    return '</template><script>if(window.AWR_TL)AWR_TL.take();</script>'
+
+
+def tl_nth(csv, k):
+    """Token k (1-based) of a comma list; '' / 'null' / missing -> None."""
+    if csv is None:
+        return None
+    parts = csv.split(",")
+    if k < 1 or k > len(parts):
+        return None
+    t = parts[k - 1]
+    return None if t in ("", "null") else t
+
+
+def tl_csv(w, csv, asc="N", div=1) -> str:
+    out = []
+    for k in range(w.weeks_back, -1, -1):
+        t = tl_nth(csv, k + 1 if asc == "Y" else w.weeks_back - k + 1)
+        out.append("" if t is None else wg_tok(float(t) / div))
+    return ",".join(out)
+
+
+def tl_val(w, csv, off):
+    t = tl_nth(csv, w.weeks_back - off + 1)
+    return None if t is None else float(t)
+
+
+def tl_mu(w, csv):
+    vals = [tl_val(w, csv, k) for k in range(1, w.weeks_back + 1)]
+    vals = [v for v in vals if v is not None]
+    return sum(vals) / len(vals) if vals else None
+
+
+def tl_first(w, csv):
+    if tl_val(w, csv, w.weeks_back) is not None:
+        return None
+    for k in range(w.weeks_back - 1, -1, -1):
+        if tl_val(w, csv, k) is not None:
+            return k
+    return None
+
+
+def tl_lab(nm, sub=None, ttl=None, wc=None) -> str:
+    return ('<div class="l" role="rowheader"' + ((' title="' + ttl + '"') if ttl else '') + '>'
+            + '<span class="nm">'
+            + (('<i class="sw" data-wc="' + esc(wc) + '" aria-hidden="true"></i>') if wc else '')
+            + nm + '</span>'
+            + (('<span class="sub">' + sub + '</span>') if sub else '')
+            + '</div>')
+
+
+def tl_gut(cur, mu, sd, bucket, note=None, twin="N") -> str:
+    z = band_z(cur, mu, sd)
+    zpart = ""
+    if note:
+        zpart = note
+    elif z is not None and -4 <= z <= 8 and (bucket or "x") not in (
+            "flat baseline", "insufficient history", "n/a"):
+        zpart = '<span class="z">z ' + band_ztxt(z) + '</span>'
+    return ('<div class="g" role="cell"><div class="gl1">'
+            + delta_span(cur, mu, bucket).replace('class="d ', 'class="d d1 ', 1)
+            + zpart + '</div>' + band_span(z, bucket, "sm", twin) + '</div>')
+
+
+def tl_gutp(cur, mu, note) -> str:
+    return ('<div class="g" role="cell" title="Ranked, not scored"><div class="gl1">'
+            + delta_span(cur, mu, None, "Y").replace('class="d ', 'class="d d1 ', 1)
+            + '</div><div class="gx">' + note + '</div></div>')
+
+
+def tl_bars(w, csv, mu, sd, sev, lab, gut, rid, cls=None, name=None, unit=None,
+            gw=None, gl=None, after=None) -> str:
+    cur = tl_val(w, csv, 0)
+    out = ('<div class="r bars' + ((" " + cls) if cls else "") + '"'
+           + ' id="' + rid + '" data-v="' + csv + '"'
+           + ' data-mu="' + wg_tok(mu) + '" data-sd="' + wg_tok(sd) + '"'
+           + ' data-sev="' + (sev or "") + '"'
+           + ((' data-name="' + name + '"') if name else '')
+           + ((' data-unit="' + unit + '"') if unit else '')
+           + ((' data-after="' + after + '"') if after else '')
+           + ' role="row">' + lab)
+    for k in range(w.weeks_back, -1, -1):
+        out += '<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k) + '">'
+        if k == 0:
+            out += ('<span class="v nil" aria-label="no value">&ndash;</span>' if cur is None
+                    else '<span class="v">' + fmt_num(cur) + '</span>')
+        if gw is not None and k == gw:
+            out += gl or ""
+        out += '</div>'
+    return out + gut + '</div>'

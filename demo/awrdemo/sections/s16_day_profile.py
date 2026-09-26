@@ -121,7 +121,7 @@ def emit(w) -> str:
     cells = _cells(w)
     nstat = len(TARGETS)
     labels = {o: lbl for _, o, lbl, _ in TARGETS}
-    put('<section id="day-profile" class="vw in-a">')
+    put('<section id="day-profile" class="vw in-t in-a">')
 
     if not any(c["cur_val"] is not None for c in cells.values()):
         put('<h2>Day profile<small class="h2sub">Each hour of the last day vs the same hour on the '

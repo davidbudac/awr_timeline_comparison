@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from awrdemo import chrome
+from awrdemo import helpers as h
 from awrdemo.helpers import (anchor_id, esc, fmt_int, fmt_num, fmt_num_title, is_oracle_schema,
                              json_escape, mon_dd, num6, ora_round, to_char_fixed, ts_min)
 
@@ -266,6 +267,7 @@ def emit(w) -> str:
     dim_sqls_json, dim_sqls_kept, dim_sqls_total, dim_seen = {}, {}, {}, []
 
     cur_dim = None
+    tl_rows = []
     for s in rows:
         dim = s["dim"]
         if cur_dim != dim:
@@ -365,8 +367,36 @@ def emit(w) -> str:
                 + ("&hellip;" if len(text_short) > 400 else "") + "</td>")
         row += "</tr>"
         put(row)
+        # v1.6.0 Timeline: the SQL lane (first six of the elapsed ranking)
+        if dim == "ELAPSED" and len(tl_rows) < 6:
+            csv = h.tl_csv(w, _chart_vals(s["vals"], div))
+            mu = h.tl_mu(w, csv)
+            first = h.tl_first(w, csv)
+            gw = gl = None
+            note = ("#" + str(s["cur_rnk"]) + " by elapsed" if s["cur_rnk"] is not None
+                    else "not in the Current top " + str(top_n))
+            if plan_flip:
+                gw = 0
+                gl = ('<b class="glf gp" title="Plan changed: the Current plan_hash_value '
+                      + str(cur_phv) + ' differs from a prior window\'s">&#9670;</b>')
+                note = "<b>&#9670;</b> new plan"
+            elif first is not None:
+                gw = first
+                gl = ('<b class="glf gn" title="First seen in the top ' + str(top_n) + ': '
+                      + h.wg_title(w, first) + '">&#10010;</b>')
+                note = "<b>&#10010;</b> new " + ("in Current" if first == 0 else h.wg_date(w, first))
+            txt = w.sql_by_id[sid].text or ""
+            tl_rows.append(h.tl_bars(
+                w, csv, mu, None, None,
+                h.tl_lab(h.ent(sid, anchor_id("sq-elapsed", sid), "sql"),
+                         esc(schema or "?") + ' <span class="sq">' + esc(txt[:90]) + "</span>",
+                         esc(txt[:300])),
+                h.tl_gutp(h.tl_val(w, csv, 0), mu, note),
+                "tl-" + anchor_id("sq-elapsed", sid), "q", sid, "s elapsed", gw, gl))
     if cur_dim is not None:
         put("</tbody></table></details></div>")
+    for i, r in enumerate(tl_rows, start=1):
+        put((h.tl_open("sql") if i == 1 else "") + r + (h.tl_close() if i == len(tl_rows) else ""))
 
     # second pass: group breakdowns -----------------------------------
     grp_json, grp_kept, grp_total = {}, {}, {}

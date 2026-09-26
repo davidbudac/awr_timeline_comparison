@@ -15,6 +15,7 @@ from __future__ import annotations
 from statistics import median
 
 from .. import chrome
+from .. import helpers as H
 from ..helpers import (band_head, esc, fmt_int, fmt_num, fmt_num_title, is_oracle_schema,
                        json_escape, mean_sd, num6, score_cells, to_char_fixed,
                        to_char_int, ts_min, ts_sec, z_and_pct)
@@ -238,6 +239,7 @@ def emit(w) -> str:
         put('<table id="sqlmon-pool" data-nosort data-notools>' + header + "<tbody>")
 
     normal = False
+    tl_rows = []
     for rnk, sid in enumerate(ranked, start=1):
         st = stats[sid]
         p = pivot[sid] or {"cur_val": None, "mu": None, "sd": None, "n_prior": 0}
@@ -340,6 +342,23 @@ def emit(w) -> str:
         put('<pre id="sqlmon-drill-' + sid + '" class="sql">' + esc(_drill_sql(drill_id(sid))) + "</pre></div>")
         put("</details></td></tr>")
 
+        # v1.6.0 Timeline: max elapsed per window, scored like the table
+        if (p["cur_val"] is not None and len(tl_rows) < 3
+                and (plan_changed == "Y" or st["has_downgrade"] == 1)):
+            csv = H.tl_csv(w, spark)
+            b = H.policy_bucket("SQL", None, None, p["cur_val"], p["mu"], p["sd"], p["n_prior"])
+            tl_rows.append(H.tl_bars(
+                w, csv, p["mu"], p["sd"], b,
+                H.tl_lab(H.ent("SQL Monitor", H.anchor_id("sm", sid), "sql"), sid + ", max elapsed"),
+                H.tl_gut(p["cur_val"], p["mu"], p["sd"], b,
+                         '<span class="z"><b>&#9670;</b> new plan</span>' if plan_changed == "Y"
+                         else '<span class="z"><b>&#9661;</b> DOP</span>'),
+                "tl-" + H.anchor_id("sm", sid), "q sub", sid + ", SQL Monitor max elapsed", "s",
+                0, ('<b class="glf gp" title="Plan changed: ' + str(prior_plan) + ' &rarr; '
+                    + str(cur_plan) + '">&#9670;</b>') if plan_changed == "Y"
+                else '<b class="glf gd" title="DOP downgrade on a Current-window execution">&#9661;</b>',
+                "tl-" + H.anchor_id("sq-elapsed", sid)))
+
     if ranked:
         put("</tbody></table>")
         if tail_cnt > 0:
@@ -359,6 +378,8 @@ def emit(w) -> str:
             + " captured in the compared span, but none met the inclusion floor "
             "(elapsed &ge; 1&nbsp;s, an error, or more than one execution plan). "
             "The scatter below still plots every captured execution.</p>")
+    for i, r in enumerate(tl_rows, start=1):
+        put((H.tl_open("sql") if i == 1 else "") + r + (H.tl_close() if i == len(tl_rows) else ""))
 
     # -- execution scatter ------------------------------------------------
     put("<h3>Execution scatter (full compared span)</h3>")

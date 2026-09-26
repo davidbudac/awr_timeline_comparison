@@ -116,6 +116,38 @@ def _config_card(w, L, changed, cells):
     L.append('<script>(function(){var s=document.getElementById("changes-slot"),'
              'c=document.getElementById("f-config");if(!s||!c)return;s.appendChild(c);c.hidden=false;'
              'var x=document.getElementById("s-changes");if(x)x.hidden=false;})();</script>')
+    # v1.6.0 Timeline: the Configuration lane (every changed parameter, at most 20)
+    nt = min(20, len(changed))
+    for i, name in enumerate(changed[:20], start=1):
+        base = _pv_at(cells, name, wb)
+        prev, last, ch = None, None, ""
+        for k in range(wb, -1, -1):
+            v = _pv_at(cells, name, k)
+            start = (k == wb) or (v != prev)
+            if start and k < wb:
+                last = k
+            lvl = "lo" if v == base else "hi"
+            ch += ('<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k)
+                   + '" data-pv="' + _pv_html(v) + '"><i class="st ' + lvl
+                   + (" rise" if start and k < wb else "") + '" aria-hidden="true"></i>'
+                   + ('<i class="nd" aria-hidden="true"></i>' if start and k < wb else "")
+                   + (('<span class="pv ' + lvl + '">' + _pv_html(v) + '</span>') if start or k == 0 else "")
+                   + '</div>')
+            prev = v
+        L.append((h.tl_open("config") if i == 1 else "")
+                 + '<div class="r p" id="tl-' + h.anchor_id("pa", name) + '" data-name="'
+                 + h.esc(name) + '" role="row">'
+                 + h.tl_lab(h.ent(h.esc(name), h.anchor_id("pa", name), "parameter"),
+                            _pv_html(base) + ' &rarr; ' + _pv_html(_pv_at(cells, name, 0)))
+                 + ch
+                 + '<div class="g" role="cell"><div class="gl1"><span class="d1">'
+                 + ('varies' if last is None else 'changed in Current' if last == 0
+                    else 'changed ' + h.wg_date(w, last))
+                 + '</span></div>'
+                 + ('<div class="gx"><span data-mk-at="' + str(last) + '" data-mk-icon hidden></span></div>'
+                    if last is not None else '')
+                 + '</div></div>'
+                 + (h.tl_close() if i == nt else ""))
 
 
 def emit(w) -> str:

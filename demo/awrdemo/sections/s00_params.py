@@ -16,7 +16,8 @@ from datetime import timedelta
 from .. import chrome
 from .. import helpers as h
 from ..helpers import (esc, mean_sd, z_and_pct, ts_min, ts_sec, hh24, dy, mon_dd,
-                       to_char_fixed, finding_family, is_canonical, policy_bucket)
+                       to_char_fixed, finding_family, is_canonical, policy_bucket,
+                       day_name, wg_attr, wg_ruler)
 
 SQL_PATH = chrome.sql_path("sql/00_params.sql")
 H = timedelta(hours=1)
@@ -259,6 +260,67 @@ def _hero(w, st) -> list[str]:
     return o
 
 
+def _timeline(w) -> list[str]:
+    """00_params.sql's v1.6.0 Timeline skeleton: the ASH chart panel, the
+    grid's ruler (dates as pin buttons) and six empty lanes."""
+    cells = "".join('<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k) + '"></div>'
+                    for k in range(w.weeks_back, -1, -1))
+
+    def lane_h(lid, title, kind, cap=None, note=None, noun=None):
+        return ('<div class="lane" id="lane-' + lid + '" data-kind="' + kind + '"'
+                + ((' data-note="' + note + '"') if note else '')
+                + ((' data-noun="' + noun + '"') if noun else '')
+                + ' role="rowgroup" hidden><div class="r gh2" role="row">'
+                '<div class="l" role="rowheader"><button class="lt2" type="button" aria-expanded="true">'
+                '<i class="car" aria-hidden="true"></i><span class="lti">' + title + '</span></button></div>'
+                + cells + '<div class="g" role="cell"><span class="meta"></span></div>'
+                + (('<div class="cap"><span>' + cap + '</span></div>') if cap else '')
+                + '</div><div class="lrows"></div></div>')
+
+    st = w.target_end - timedelta(hours=w.win_hours)
+    if w.step_hours in (24, 168):
+        ct = (({168: day_name(st) + ' ', 24: 'Daily '})[w.step_hours]
+              + hh24(st) + '&ndash;' + hh24(w.target_end))
+    else:
+        ct = 'Every ' + w.step_label + ', ' + w.win_label + ' windows'
+    o = []
+    o.append('<section id="timeline" class="vw in-t">'
+             '<h2>Timeline<small class="h2sub">Down a column: one window. Across a row: when it started.</small></h2>'
+             '<p class="tl-nojs">The Timeline is drawn by the page script; with JavaScript off it is not '
+             'drawn, and every number it would show is in the sections below.</p>')
+    o.append('<div class="panel ashx" id="tl-ash" role="group" aria-labelledby="tl-ash-h" hidden>'
+             '<div class="axh"><div class="axt"><h3 id="tl-ash-h">Active sessions, full span</h3>'
+             '<span class="axs" id="ax-range"></span></div>'
+             '<span class="axk" aria-hidden="true"><span><i class="kw"></i>compared window</span>'
+             '<span><i class="kw cur"></i>Current</span><span><i class="kw pin"></i>pinned</span></span>'
+             '<button type="button" class="axr" id="ax-reset" hidden>Reset zoom</button></div>'
+             '<div class="axlg" id="ax-lg" role="group" aria-label="Wait classes: click to show or hide"></div>'
+             '<p class="axe" id="ax-empty" hidden>No ASH samples in DBA_HIST_ACTIVE_SESS_HISTORY across the compared span.</p>'
+             '<div class="axp" id="ax-plot"><svg id="ax-svg" role="img" aria-label="Active sessions stacked by wait class '
+             'over the whole compared span, the compared windows shaded and release markers drawn. Drag to zoom."></svg>'
+             '<div class="axbr" id="ax-brush" hidden></div></div>'
+             '<p class="axn2">Drag across the chart to zoom, double-click to reset. '
+             'Click a shaded window to pin its column in the grid below.</p></div>')
+    o.append('<div class="panel gridwrap wg hov" id="tl"' + wg_attr(w)
+             + ' role="table" aria-label="Current vs ' + str(w.weeks_back) + ' prior windows, one column per window">'
+             + wg_ruler(w, '<span class="ct">' + ct + '</span><span class="cs">' + str(w.weeks_back + 1)
+                        + ' windows</span>'
+                        '<nav class="jumpnav" aria-label="Jump to lane"><a href="#lane-metrics">Load</a>'
+                        '<a href="#lane-waits">Waits</a><a href="#lane-sql">SQL</a><a href="#lane-config">Config</a>'
+                        + ('<a href="#day-profile">Day</a>' if w.profile_days > 0 else '') + '</nav>',
+                        '<span class="gt" id="tl-gt">vs prior mean</span><span class="gs" id="tl-gs">click a date to pin</span>',
+                        'Y')
+             + '<div class="gbody" id="tl-body"><div class="gin" id="tl-in">')
+    o.append(lane_h('activity', 'Activity', 'ash', None, 'ASH, not scored'))
+    o.append(lane_h('metrics', 'Headline and load', 'scored'))
+    o.append(lane_h('waits', 'Waits', 'scored', 'wait classes in AAS, events in seconds waited', None, 'events'))
+    o.append(lane_h('objects', 'Where the reads land', 'ranked', None, 'ranked, not scored'))
+    o.append(lane_h('sql', 'SQL', 'sql', 'elapsed s; a dash = not in the top ' + str(w.top_n)))
+    o.append(lane_h('config', 'Configuration', 'config'))
+    o.append('</div></div></div></section>')
+    return o
+
+
 def emit(w) -> str:
     o = []
     put = o.append
@@ -328,7 +390,13 @@ def emit(w) -> str:
         '<a href="#s-changes" data-nodot hidden>What changed around it</a>'
         '<a href="#s-normal" data-nodot>Checked and normal</a>'
         '<b>Timeline</b>'
-        '<a href="#timeline" data-nodot>Window grid</a>'
+        '<a href="#tl-ash" data-nodot>Active sessions, full span</a>'
+        '<a href="#lane-activity" data-nodot>Activity</a>'
+        '<a href="#lane-metrics">Headline and load</a>'
+        '<a href="#lane-waits">Waits</a>'
+        '<a href="#lane-objects" data-nodot>Where the reads land</a>'
+        '<a href="#lane-sql">SQL</a>'
+        '<a href="#lane-config" data-nodot>Configuration</a>'
         '<b>Workload</b>'
         '<a href="#db-time-summary">DB time</a>'
         '<a href="#ash-timeline">ASH timeline</a>'
@@ -372,11 +440,8 @@ def emit(w) -> str:
     # ---- AWR_WIN + the verdict hero (hand-ported) ----------------------
     put('<script>window.AWR_WIN=' + _win_json(w) + ';</script>')
     o.extend(_hero(w, st))
-    # ---- the Timeline placeholder (literal) ----------------------------
-    i_last = len(L) - 1
-    assert L[i_last][0] == '<!-- AWR-SECTION: 00_params END -->'
-    i_tl = next(i for i in range(i_main, len(L)) if L[i][0].startswith('<section id="timeline"'))
-    o.extend(_literal_slice(L, i_tl, i_last - 1))
+    # ---- the Timeline skeleton (hand-ported) ---------------------------
+    o.extend(_timeline(w))
 
     put('<!-- AWR-SECTION: 00_params END -->')
     return "\n".join(o)

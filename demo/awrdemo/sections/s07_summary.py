@@ -457,5 +457,58 @@ def emit(w) -> str:
                    + ('<p class="calm-more">and ' + str(ni - 6) + ' more</p>' if ni > 6 else '')
                    + '</div></div>')
     out.append('</section>')
+    out.extend(_timeline(w, _table_order(findings)))
     out.append("<!-- AWR-SECTION: 07_summary END -->")
     return "\n".join(out)
+
+
+# ---- v1.6.0 Timeline: 07's emit_timeline (headline + flagged rows) -------
+_HL = ["LOAD:DB time", "LOAD:DB CPU", "METRIC:Database Wait Time Ratio",
+       "LOAD:session logical reads", "LOAD:physical reads", "LOAD:physical read total bytes",
+       "LOAD:table scans (long tables)", "METRIC:SQL Service Response Time",
+       "METRIC:Host CPU Utilization (%)", "LOAD:redo size", "LOAD:parse count (hard)"]
+
+
+def _hl_rank(f):
+    k = f.domain + ":" + f.name
+    return _HL.index(k) + 1 if k in _HL else None
+
+
+def _tl_row(w, f, cls):
+    s = h.metric_scale(f.domain, f.name)
+    u = h.metric_unit(f.domain, f.name)
+    tw = "Y" if f.canonical == "N" else "N"
+    return h.tl_bars(w, h.wg_csv(w, f.vals, s), h._mul(f.mu, s), h._mul(f.sd, s),
+                     f.bucket if tw == "N" else None,
+                     h.tl_lab(_f_ent(f),
+                              ("wait class, " + u if f.domain == "WAIT" else u) + (", twin" if tw == "Y" else ""),
+                              h.esc(f.name),
+                              f.name[len("Wait class: "):] if f.domain == "WAIT" else None),
+                     h.tl_gut(h._mul(f.cur, s), h._mul(f.mu, s), h._mul(f.sd, s), f.bucket, None, tw),
+                     "tl-" + _find_id(f),
+                     ((cls or "") + (" twin" if tw == "Y" else "")).strip() or None,
+                     h.esc(h.metric_label(f.domain, f.name)), u)
+
+
+def _timeline(w, ordered):
+    out, n = [], 0
+    for hr in range(1, 12):
+        for f in ordered:
+            if _hl_rank(f) == hr:
+                out.append((h.tl_open("metrics") if n == 0 else "") + _tl_row(w, f, None))
+                n += 1
+    for f in ordered:
+        if (f.domain in ("LOAD", "METRIC") and _hl_rank(f) is None and f.bucket in _MOVED
+                and f.canonical == "Y"):
+            out.append((h.tl_open("metrics") if n == 0 else "") + _tl_row(w, f, None))
+            n += 1
+    if n:
+        out.append(h.tl_close())
+    n = 0
+    for f in ordered:
+        if f.domain == "WAIT" and f.bucket in _MOVED:
+            out.append((h.tl_open("waits") if n == 0 else "") + _tl_row(w, f, "w"))
+            n += 1
+    if n:
+        out.append(h.tl_close())
+    return out

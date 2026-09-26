@@ -93,6 +93,7 @@ def emit(w) -> str:
 
     # ---- per-dimension detail tables (top-N files) ----------------------
     any_rows = False
+    tl_rows = []
     for code, _ord, label, unit in DIMS:
         entries = D.per_entity(picked[code], w.weeks_back)
         if not entries:
@@ -146,6 +147,15 @@ def emit(w) -> str:
             row += D.week_cells(w, tokens, e["rnks"], _parse)
             row += "</tr>"
             put(row)
+            # v1.6.0 Timeline: "Where the reads land" (ranked, not scored)
+            if code == "READMB" and len(tl_rows) < 1 and e["cur_val"] is not None:
+                csv = H.tl_csv(w, ",".join("" if t is None else t for t in tokens), "Y")
+                tl_rows.append(H.tl_bars(
+                    w, csv, H.tl_mu(w, csv), None, None,
+                    H.tl_lab(H.ent(H.esc(short), aid_by_name[filename], "file"),
+                             'datafile, MB read', H.esc(filename)),
+                    H.tl_gutp(e["cur_val"], H.tl_mu(w, csv), "#" + str(e["cur_rnk"]) + " by MB read"),
+                    "tl-" + aid_by_name[filename], "o", H.esc(short), "MB read"))
 
     if any_rows:
         put("</tbody></table></details>")
@@ -154,6 +164,8 @@ def emit(w) -> str:
             "No per-file I/O recorded for any compared window "
             "(DBA_HIST_FILESTATXS empty for these snapshots, or no valid "
             "windows).</p>")
+    for i, r in enumerate(tl_rows, start=1):
+        put((H.tl_open("objects") if i == 1 else "") + r + (H.tl_close() if i == len(tl_rows) else ""))
 
     # ---- second pass: per-file-type breakdown (chart + combined table) --
     ft_picked = D.rank_pick(ft_by_win, _CODES, top_n)

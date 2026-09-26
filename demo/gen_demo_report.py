@@ -90,6 +90,7 @@ def prologue(w, echarts_src: str) -> str:
                    + '",label:"' + lbl + '"});</script>')
     # v1.6.0: the window component + entity-link unwrap (after the markers)
     out.append(chrome.lib_script("js_wingrid.plsql"))
+    out.append(chrome.lib_script("js_timeline.plsql"))
     return "\n".join(out) + "\n"
 
 
