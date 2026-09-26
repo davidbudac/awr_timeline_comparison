@@ -283,6 +283,41 @@ def _r6_r9(w):
     return plan_n, plan_txt, dop_n, err_n, new_n, new_txt
 
 
+def _likely_plan(w):
+    """R6's likely-source statement -- twin of 17's ls_* CTEs, which are
+    section 18's cur_plan / prior_plan (reused here from its twin): the
+    Current plan (slowest non-zero-plan execution) differs from the prior
+    modal plan; executions attributed to a VALID window only; the largest
+    Current-window max elapsed wins, then sql_id.  None when no statement
+    changed plan into Current."""
+    from awrdemo.sections.s18_sqlmon import _cur_plan, _prior_plan
+    valid = [x for x in w.windows if x.valid]
+
+    def off(ts):
+        for x in valid:
+            if x.win_start_ts <= ts < x.win_end_ts:
+                return x.week_offset
+        return None
+
+    by_sql = {}
+    for m in _base_execs(w):
+        o = off(m.exec_start)
+        if o is not None:
+            by_sql.setdefault(m.sql_id, []).append((m, o))
+    best = None
+    for sid, rows in by_sql.items():
+        cur = [m for m, o in rows if o == 0]
+        if not any(m.plan_hash != 0 for m in cur):
+            continue
+        cp, pp = _cur_plan(rows), _prior_plan(rows)
+        if cp is None or pp is None or cp == pp:
+            continue
+        key = (-max((m.elapsed_us or 0) for m in cur), sid)
+        if best is None or key < best[0]:
+            best = (key, sid)
+    return best[1] if best else None
+
+
 # ---------------------------------------------------------------------
 # emit
 # ---------------------------------------------------------------------
@@ -402,12 +437,13 @@ def emit(w) -> str:
                       'executions that ended DONE (ERROR) in the Current window')
 
     # the likely-source line
-    if plan_n > 0:
-        because = (h.ent('<code>' + esc(first_plan) + '</code>', 'sm-' + first_plan, 'sql')
+    src = _likely_plan(w)
+    if src is not None:
+        because = (h.ent('<code>' + esc(src) + '</code>', 'sm-' + src, 'sql')
                    + ' ran with a new plan in the Current window'
                    + '<span data-mk-at="0" data-mk-pre=", after " hidden></span>'
                    + (', and is new in the top ' + _tc(w.top_n) + ' by physical reads'
-                      if v_sqlid == first_plan else ''))
+                      if v_sqlid == src else ''))
     elif v_sqlid is not None:
         because = (h.ent('<code>' + v_sqlid + '</code>', h.anchor_id('sq-preads', v_sqlid), 'sql')
                    + ', new in the top ' + _tc(w.top_n) + ' by physical reads (' + h.fmt_num(v_sql_rd)

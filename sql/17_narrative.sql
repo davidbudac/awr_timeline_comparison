@@ -40,8 +40,11 @@
 --   R7  SQL Monitor: DOP downgrade in the Current window -> pill
 --   R8  SQL Monitor: DONE (ERROR) in the Current window  -> pill
 --   R9  SQL Monitor: sql_ids first seen in the Current window -> pill
---   Likely source: R6's first statement, else R1's newcomer SQL, else R9's
---                  first statement, else R1's top segment.
+--   Likely source: a plan change INTO the Current window by section 18's
+--                  test (Current plan vs the prior modal plan; the one
+--                  with the largest Current max elapsed), else R1's
+--                  newcomer SQL, else R9's first statement, else R1's top
+--                  segment.
 -- Entity names link (a.ent) to their rows: fl-<file>, sg-<segment>,
 -- sq-preads-<sql_id>, sm-<sql_id>, #f-config; a target that was never
 -- emitted is unwrapped to plain text by sql/lib/js_wingrid.plsql.
@@ -751,6 +754,7 @@ BEGIN
         v_sm_err_n      PLS_INTEGER := 0;
         v_sm_new_n      PLS_INTEGER := 0;
         v_sm_new_ids    VARCHAR2(4000) := '';
+        v_sm_src        VARCHAR2(64);        -- the likely-source plan change
     BEGIN
         SELECT MIN(win_start_ts), MAX(win_end_ts)
         INTO   v_sm_span_start, v_sm_span_end
@@ -819,6 +823,86 @@ BEGIN
             v_sm_plan_ids := m.plan_ids;
             v_sm_dop_n    := m.dop_n;
             v_sm_err_n    := m.err_n;
+        END LOOP;
+
+        -- R6, the likely-source statement: a plan change by section 18's
+        -- own test (its Plan hash column / plan_changed), not merely "more
+        -- than one plan somewhere in the span" -- a statement alternating
+        -- between two plans for weeks that runs its usual plan now is not
+        -- the cause.  cur = the plan of the Current window's slowest
+        -- non-zero-plan execution; prior = the most frequent non-zero plan
+        -- across the prior VALID windows (tie -> most recent), both over
+        -- executions attributed to a valid window, exactly 18's cur_plan /
+        -- prior_plan CTEs.  Deterministic pick by impact: the largest
+        -- Current-window max elapsed, then sql_id.  The pill above keeps
+        -- its broader count (its title says what it counts).
+        FOR m IN (
+            WITH
+            @@sql/lib/windows_cte.sql
+            ,
+            ls_base AS (
+                SELECT r.report_id, r.key1 AS sql_id,
+                       TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') AS exec_start,
+                       x.plan_hash, NVL(x.elapsed_us, 0) AS elapsed_us
+                FROM   dba_hist_reports r,
+                       XMLTABLE('/report_repository_summary/sql'
+                           PASSING XMLTYPE(r.report_summary)
+                           COLUMNS
+                               plan_hash  NUMBER PATH 'plan_hash',
+                               elapsed_us NUMBER PATH 'stats[@type="monitor"]/stat[@name="elapsed_time"]'
+                       ) x
+                WHERE  r.component_name = 'sqlmonitor'
+                  AND  r.dbid IN (~dbid_list)
+                  AND  (~inst_num = 0 OR r.instance_number = ~inst_num)
+                  AND  r.report_summary IS NOT NULL
+                  AND  r.key1 IS NOT NULL
+                  AND  r.period_start_time >= CAST(v_sm_span_start AS TIMESTAMP) - INTERVAL '1' DAY
+                  AND  r.period_start_time <= CAST(v_sm_span_end   AS TIMESTAMP) + INTERVAL '1' DAY
+                  AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') >= v_sm_span_start
+                  AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') <  v_sm_span_end
+            ),
+            ls_off AS (
+                SELECT b.report_id, b.sql_id, b.exec_start, b.plan_hash, b.elapsed_us,
+                       wr.week_offset
+                FROM   ls_base b
+                JOIN   windows_rollup wr
+                    ON  wr.valid_flag = 'Y'
+                   AND  b.exec_start >= wr.win_start_ts
+                   AND  b.exec_start <  wr.win_end_ts
+            ),
+            ls_cur AS (
+                SELECT sql_id, plan_hash AS cur_ph, max_ela
+                FROM (
+                    SELECT sql_id, plan_hash,
+                           MAX(elapsed_us) OVER (PARTITION BY sql_id) AS max_ela,
+                           ROW_NUMBER() OVER (PARTITION BY sql_id
+                               ORDER BY CASE WHEN plan_hash <> 0 THEN 0 ELSE 1 END,
+                                        elapsed_us DESC NULLS LAST, report_id) AS rn
+                    FROM   ls_off
+                    WHERE  week_offset = 0
+                )
+                WHERE  rn = 1 AND plan_hash <> 0
+            ),
+            ls_prior AS (
+                SELECT sql_id, plan_hash AS prior_ph
+                FROM (
+                    SELECT sql_id, plan_hash,
+                           ROW_NUMBER() OVER (PARTITION BY sql_id
+                               ORDER BY COUNT(*) DESC, MAX(exec_start) DESC) AS rn
+                    FROM   ls_off
+                    WHERE  week_offset > 0 AND plan_hash <> 0
+                    GROUP BY sql_id, plan_hash
+                )
+                WHERE  rn = 1
+            )
+            SELECT c.sql_id
+            FROM   ls_cur c
+            JOIN   ls_prior p ON p.sql_id = c.sql_id
+            WHERE  c.cur_ph <> p.prior_ph
+            ORDER  BY c.max_ela DESC, c.sql_id
+            FETCH FIRST 1 ROWS ONLY
+        ) LOOP
+            v_sm_src := m.sql_id;
         END LOOP;
 
         -- R9: sql_ids with an execution in Current but none in any prior
@@ -900,16 +984,15 @@ BEGIN
         END IF;
 
         -- The likely-source line (rule-based, no free prose): a plan change
-        -- in the Current window first, then a newcomer in the top-N by
+        -- into the Current window first (v_sm_src, 18's test), then a newcomer in the top-N by
         -- physical reads, then a statement first seen this window, then the
         -- segment the extra reads land on.  "Likely source:" reads "Worth a
         -- look:" in a quiet report (the relocation script decides).
-        IF v_sm_plan_n > 0 THEN
-            v_because := ent('<code>' || esc(REGEXP_SUBSTR(v_sm_plan_ids, '[^, ]+', 1, 1)) || '</code>',
-                             'sm-' || REGEXP_SUBSTR(v_sm_plan_ids, '[^, ]+', 1, 1), 'sql')
+        IF v_sm_src IS NOT NULL THEN
+            v_because := ent('<code>' || esc(v_sm_src) || '</code>', 'sm-' || v_sm_src, 'sql')
                 || ' ran with a new plan in the Current window'
                 || '<span data-mk-at="0" data-mk-pre=", after " hidden></span>'
-                || CASE WHEN v_sqlid = REGEXP_SUBSTR(v_sm_plan_ids, '[^, ]+', 1, 1)
+                || CASE WHEN v_sqlid = v_sm_src
                         THEN ', and is new in the top ' || TO_CHAR(v_top_n) || ' by physical reads' END;
         ELSIF v_sqlid IS NOT NULL THEN
             v_because := ent('<code>' || v_sqlid || '</code>', anchor_id('sq-preads', v_sqlid), 'sql')
