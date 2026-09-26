@@ -526,19 +526,61 @@ BEGIN
     -- up the correct palette at first paint. Applies the saved/preferred
     -- theme by toggling body.dark before any chart initializes.
     DBMS_OUTPUT.PUT_LINE('<script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.body.classList.add("dark");}catch(e){}})();</script>');
-    -- Normal / Full view: body.normal is the default, body.full
-    -- the full report.  Decided before first paint from localStorage
-    -- "awr-mode" (a shared link's hash "!v=f" wins), so the short view
-    -- never flashes the long one.  With JS off neither class exists and
-    -- the CSS shows everything.
-    DBMS_OUTPUT.PUT_LINE('<script>(function(){var m="normal";try{if(localStorage.getItem("awr-mode")==="full")m="full";}catch(e){}var h=location.hash||"",i=h.indexOf("!v=");if(i>=0&&h.slice(i+3).split("&")[0].split(",").indexOf("f")>=0)m="full";document.body.classList.add(m);})();</script>');
+    -- Views (v1.6.0): Summary (default) / Timeline / All sections.  One
+    -- of body.vs / body.vt / body.va (+ data-view) is set before first
+    -- paint: a "#view=summary|timeline|all" hash wins, else localStorage
+    -- "awr-view" (written only on an explicit click), else Summary.  A
+    -- v1.5.0 shared link's "!v=f" (Full) opens All sections.  With JS off
+    -- no class exists and the CSS shows everything stacked.
+    DBMS_OUTPUT.PUT_LINE('<script>(function(){var v="summary",h=location.hash||"",m,i;try{var s=localStorage.getItem("awr-view");if(s==="timeline"||s==="all")v=s;}catch(e){}m=/view=(summary|timeline|all)/.exec(h);if(m)v=m[1];else{i=h.indexOf("!v=");if(i>=0&&h.slice(i+3).split("&")[0].split(",").indexOf("f")>=0)v="all";}document.body.classList.add({summary:"vs",timeline:"vt",all:"va"}[v]);document.body.setAttribute("data-view",v);})();</script>');
     -- Phase 4: skip link (visible on keyboard focus only) to the <main>
     -- landmark that opens right after this section's scripts and closes
     -- in the driver's epilogue, just before the footer.
     DBMS_OUTPUT.PUT_LINE('<a class="skip" href="#main-start">Skip to report</a>');
-    -- The masthead is part of both views (the Normal view hide rule only
-    -- targets main > section).
-    DBMS_OUTPUT.PUT_LINE('<header class="report">');
+    -- v1.6.0 top bar (sticky): who / which window / the view switch / the
+    -- theme toggle.  The Current chip is the page's one indigo accent.
+    DBMS_OUTPUT.PUT_LINE('<div class="topbar" id="topbar">'
+        || '<div class="db"><b>' || DBMS_XMLGEN.CONVERT('~db_name') || '</b>'
+        || '<span>' || DBMS_XMLGEN.CONVERT('~host_name') || ' &middot; '
+        || DBMS_XMLGEN.CONVERT('~db_version') || ' &middot; DBID ' || TRIM('~dbid')
+        || '</span></div>'
+        || '<div class="win"><span class="cchip">Current</span><b>'
+        || TO_CHAR(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') - ~win_hours/24,
+                   'Dy DD Mon, HH24:MI')
+        || '&ndash;'
+        || TO_CHAR(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS'), 'HH24:MI')
+        || '</b><span>vs ' || TO_CHAR(~weeks_back) || ' prior window'
+        || CASE WHEN ~weeks_back = 1 THEN '' ELSE 's' END
+        || ', every ~step_label</span></div>'
+        || '<span class="sp"></span>'
+        || '<div class="seg" role="group" aria-label="View">'
+        || '<button type="button" data-v="summary" aria-pressed="true"'
+        || ' title="The answer: verdict, findings, headline metrics, Top SQL">Summary</button>'
+        || '<button type="button" data-v="timeline" aria-pressed="false"'
+        || ' title="The compared windows side by side">Timeline</button>'
+        || '<button type="button" data-v="all" aria-pressed="false"'
+        || ' title="Every section and every scored row">All sections</button>'
+        || '</div>'
+        -- Dark mode toggle: flips body.dark, which (via _style.sql) swaps
+        -- every color token to the dark palette.  Both icons ship inline;
+        -- CSS shows only the one for the mode you would switch TO.
+        || '<button type="button" id="theme-toggle" class="theme-icon-btn"'
+        || ' aria-pressed="false"'
+        || ' aria-label="Toggle dark mode"'
+        || ' title="Switch between light and dark color theme">'
+        || '<svg class="icon-sun" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">'
+        || '<circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/>'
+        || '<path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1'
+        || 'M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"'
+        || ' stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+        || '</svg>'
+        || '<svg class="icon-moon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">'
+        || '<path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5a8.5 8.5 0 1 0 11.2 11.2z" fill="currentColor"/>'
+        || '</svg>'
+        || '</button>'
+        || '</div>');
+    -- The masthead belongs to the Summary and All sections views.
+    DBMS_OUTPUT.PUT_LINE('<header class="report vw in-s in-a">');
 
     -- Brand line above the headline.
     DBMS_OUTPUT.PUT_LINE('  <div class="brandline">'
@@ -947,28 +989,9 @@ BEGIN
     -- Grouped to match the visual section order set in _style.sql
     -- (Triage / Workload / SQL / Storage and config), so the scrollspy
     -- walks the rail top-to-bottom.  The hrefs are load-bearing: the
-    -- Normal-view rail rule (norm-dim) keys on them.
+    -- view dimming (railViews, .vdim) resolves each link's target.
     DBMS_OUTPUT.PUT_LINE('<nav class="toc">'
         || '<div class="rail-brand"><span>AWR &middot; Timeline comparison</span>'
-        -- Dark mode toggle: flips body.dark, which (via _style.sql) swaps
-        -- every color token to the Slate Instrument dark palette. Rendered
-        -- as a sun/moon icon button beside the rail's report-title row.
-        -- Both icons ship inline; CSS shows only the one for the mode
-        -- you'd switch TO (moon while light, sun while dark).
-        || '<button type="button" id="theme-toggle" class="theme-icon-btn"'
-        || ' aria-pressed="false"'
-        || ' aria-label="Toggle dark mode"'
-        || ' title="Switch between light and dark color theme">'
-        || '<svg class="icon-sun" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">'
-        || '<circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/>'
-        || '<path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1'
-        || 'M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"'
-        || ' stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
-        || '</svg>'
-        || '<svg class="icon-moon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">'
-        || '<path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5a8.5 8.5 0 1 0 11.2 11.2z" fill="currentColor"/>'
-        || '</svg>'
-        || '</button>'
         || '</div>'
         -- B8 (narrow layout only, display:none on desktop): the current
         -- section name, kept in sync by the scrollspy, plus the hamburger
@@ -998,6 +1021,10 @@ BEGIN
         || '<a href="#ash-timeline">ASH timeline</a>'
         || '<a href="#findings">Findings</a>'
         || '<a href="#windows">Windows</a>'
+        -- v1.6.0: the Timeline view (placeholder until the window grid
+        -- lands; dimmed in the other views like every out-of-view link).
+        || '<b>Timeline</b>'
+        || '<a href="#timeline" data-nodot>Window grid</a>'
         || '<b>Workload</b>'
         -- Day profile link only when the section exists (profile_days > 0);
         -- '' otherwise keeps the nav byte-identical.
@@ -1016,29 +1043,19 @@ BEGIN
         || '<a href="#segment-io">Segment I/O</a>'
         || '<a href="#file-io">File I/O</a>'
         || '<a href="#param-changes">Parameters</a>'
+        -- Shown in every view (sql/19_reference.sql).
+        || '<b id="rail-ref">Reference</b>'
+        || '<a href="#guide" data-nodot>Reading the charts</a>'
+        || '<a href="#about" data-nodot>About this report</a>'
         || '</div>'
         || '<div class="rail-foot">'
-        -- Narrow-screen "View" button: opens .view-panel (the mode switch
-        -- + next-finding) as a popover; display:none on
-        -- desktop, where .view-panel is display:contents and the buttons
-        -- sit in the rail.
+        -- Narrow-screen "View" button: opens .view-panel (next-finding)
+        -- as a popover; display:none on desktop, where .view-panel is
+        -- display:contents.  (The view switch lives in the top bar.)
         || '<button type="button" class="view-btn" id="view-btn"'
         || ' aria-expanded="false" aria-controls="view-panel"'
         || ' title="Report view options">View &#9662;</button>'
         || '<div class="view-panel" id="view-panel">'
-        -- Normal / Full mode switch (body.normal / body.full, see
-        -- _style.sql): Normal keeps the verdict, headline metrics,
-        -- findings, ASH timeline and Top SQL (plus parameter changes, SQL
-        -- Monitor and the day profile when they have something to say);
-        -- Full is the whole report.  Persisted in localStorage.
-        || '<div class="mode-switch" role="group" aria-label="Report detail level">'
-        || '<button type="button" id="mode-normal" class="mode-btn" aria-pressed="true"'
-        || ' title="Normal view: verdict, headline metrics, findings, ASH timeline, Top SQL">'
-        || 'Normal</button>'
-        || '<button type="button" id="mode-full" class="mode-btn" aria-pressed="false"'
-        || ' title="Full view: every section and every scored row">'
-        || 'Full</button>'
-        || '</div>'
         -- C2: jump to the next crit finding (J / K also work from anywhere
         -- outside a text field).
         || '<button type="button" id="next-finding" class="next-finding"'
@@ -1098,11 +1115,12 @@ BEGIN
     -- the current-section name.
     DBMS_OUTPUT.PUT_LINE('  a.setAttribute("data-label",(a.textContent||"").trim());');
     DBMS_OUTPUT.PUT_LINE('  pairs.push([a,sec]);');
+    DBMS_OUTPUT.PUT_LINE('  if(a.hasAttribute("data-nodot")) return;');
     DBMS_OUTPUT.PUT_LINE('  var dot=document.createElement("span"); dot.className="st";');
     -- skip/insufficient rows don't count as data: a findings table made
     -- entirely of INSUFFICIENT_HISTORY rows keeps the neutral dot.
-    DBMS_OUTPUT.PUT_LINE('  if(sec.querySelector(".crit")) dot.className+=" crit";');
-    DBMS_OUTPUT.PUT_LINE('  else if(sec.querySelector(".warn, td.chg")) dot.className+=" warn";');
+    DBMS_OUTPUT.PUT_LINE('  if(sec.querySelector(".crit, .bd.s-large")) dot.className+=" crit";');
+    DBMS_OUTPUT.PUT_LINE('  else if(sec.querySelector(".warn, td.chg, .bd.s-moderate")) dot.className+=" warn";');
     DBMS_OUTPUT.PUT_LINE('  else if(sec.querySelector("tbody tr:not(.skip) td, .hero-card, .ash-sql-card:not(.insufficient)")) dot.className+=" ok";');
     DBMS_OUTPUT.PUT_LINE('  a.insertBefore(dot,a.firstChild);');
     DBMS_OUTPUT.PUT_LINE('});');
@@ -1147,12 +1165,12 @@ BEGIN
     -- report when it does not run.  What it wires up:
     --   T1  .expander[data-for] toggles .open on its table
     --       (tr[data-tail="Y"] rows are CSS-hidden until then)
-    --   T2  --navh / --h2h so the sticky h2 + thead stack correctly
+    --   T2  --navh so the sticky thead clears the sticky top bar
     --   T3  click-to-sort on section table thead th (data-nosort
     --       opts out; th[data-w] drives the window highlight instead)
     --   T4  #row-filter narrows every table by its first two cells
-    --   T8  folds the section intro <p> into details.method and
-    --       keeps its first sentence on the h2 as small.h2sub
+    --   H1  the uniform section header: crit / warn counts (span.meta)
+    --       appended to every section h2
     --   C1  .tabs[data-tabs] / .tabpanel switching (+ ECharts resize)
     --   C2  crit/warn count pills on the rail links, J / K jumping
     --   C4  copy buttons: .copy-btn, per-table CSV / MD toolbars,
@@ -1160,7 +1178,10 @@ BEGIN
     --   X2  window highlight: click a th[data-w] or a masthead
     --       .wchip to toggle .hl on every [data-w] element and
     --       broadcast the awr:window CustomEvent for chart sections
-    --   the Normal / Full mode switch (body.normal / body.full)
+    --   V1  the Summary / Timeline / All sections views (body.vs / vt /
+    --       va): the top-bar switch, rail dimming, goTo / reveal for
+    --       every in-page link (view switch, details, tabs, folded rows,
+    --       scroll, flash) and the same for a #hash on load
     --   B8  the narrow-screen hamburger dropdown
     -- No literal tilde anywhere below: this file runs under
     -- SET DEFINE tilde (see the CLAUDE.md tilde gotcha).
@@ -1200,23 +1221,6 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  }catch(e){}');
     DBMS_OUTPUT.PUT_LINE('  paste(s); ok();');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('/* ---- T8: fold each section intro into details.method ---- */');
-    DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("section").forEach(function(sec){');
-    DBMS_OUTPUT.PUT_LINE('  var h2=sec.querySelector(":scope > h2"); if(!h2) return;');
-    DBMS_OUTPUT.PUT_LINE('  var p=h2.nextElementSibling;');
-    DBMS_OUTPUT.PUT_LINE('  if(!p||p.tagName!=="P"||p.classList.contains("cdn-warn")) return;');
-    DBMS_OUTPUT.PUT_LINE('  var t=(p.textContent||"").replace(/\s+/g," ").trim(); if(!t) return;');
-    DBMS_OUTPUT.PUT_LINE('  var i=t.indexOf(". ");');
-    DBMS_OUTPUT.PUT_LINE('  var sub=doc.createElement("small");');
-    DBMS_OUTPUT.PUT_LINE('  sub.className="h2sub"; sub.textContent=(i>0?t.slice(0,i+1):t);');
-    DBMS_OUTPUT.PUT_LINE('  h2.appendChild(sub);');
-    DBMS_OUTPUT.PUT_LINE('  var d=doc.createElement("details"); d.className="method";');
-    DBMS_OUTPUT.PUT_LINE('  var s=doc.createElement("summary"); s.textContent="How this is computed";');
-    DBMS_OUTPUT.PUT_LINE('  d.appendChild(s);');
-    DBMS_OUTPUT.PUT_LINE('  p.parentNode.insertBefore(d,p);');
-    DBMS_OUTPUT.PUT_LINE('  p.removeAttribute("style");');
-    DBMS_OUTPUT.PUT_LINE('  d.appendChild(p);');
-    DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('/* ---- C4: permalink anchor on every section heading ---- */');
     DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("section > h2").forEach(function(h2){');
     DBMS_OUTPUT.PUT_LINE('  var sec=h2.parentNode; if(!sec.id) return;');
@@ -1273,7 +1277,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  if(tb.closest("tr.sql-detail")||tb.closest("details")) return;');
     DBMS_OUTPUT.PUT_LINE('  if(tb.querySelectorAll("tbody tr").length<4) return;');
     DBMS_OUTPUT.PUT_LINE('  var bar=doc.createElement("div");');
-    DBMS_OUTPUT.PUT_LINE('  bar.className="tbl-tools"+(tb.classList.contains("full-only")?" full-only":"");');
+    DBMS_OUTPUT.PUT_LINE('  var vc=Array.prototype.filter.call(tb.classList,function(c){return c==="vw"||c.indexOf("in-")===0;}).join(" ");');
+    DBMS_OUTPUT.PUT_LINE('  bar.className="tbl-tools"+(vc?" "+vc:"");');
     DBMS_OUTPUT.PUT_LINE('  var mk=function(label,fn){');
     DBMS_OUTPUT.PUT_LINE('    var b=doc.createElement("button");');
     DBMS_OUTPUT.PUT_LINE('    b.type="button"; b.className="tool-btn"; b.textContent=label;');
@@ -1378,7 +1383,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){');
     DBMS_OUTPUT.PUT_LINE('  if(closest(ev.target,".tool-btn")) return;');
     DBMS_OUTPUT.PUT_LINE('  var th=closest(ev.target,"section table thead th"); if(!th) return;');
-    DBMS_OUTPUT.PUT_LINE('  if(th.hasAttribute("data-w")) return;');
+    DBMS_OUTPUT.PUT_LINE('  if(th.hasAttribute("data-w")||th.classList.contains("c-band")) return;');
     DBMS_OUTPUT.PUT_LINE('  var tb=closest(th,"table");');
     DBMS_OUTPUT.PUT_LINE('  if(!tb||tb.hasAttribute("data-nosort")) return;');
     DBMS_OUTPUT.PUT_LINE('  var body=tb.tBodies[0]; if(!body) return;');
@@ -1432,23 +1437,37 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  dimRail();');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('if(fi) fi.addEventListener("input",applyFilter);');
-    DBMS_OUTPUT.PUT_LINE('/* ---- C2: per-section crit / warn counts on the rail links ---- */');
+    DBMS_OUTPUT.PUT_LINE('/* ---- C2 + H1: per-section large / moderate row counts, on the rail links and in the section header ---- */');
+    DBMS_OUTPUT.PUT_LINE('function isCrit(tr){ return tr.classList.contains("crit")||!!tr.querySelector(".badge.crit, td.c-band .bd.s-large"); }');
+    DBMS_OUTPUT.PUT_LINE('function isWarn(tr){ return tr.classList.contains("warn")||!!tr.querySelector(".badge.warn, td.c-band .bd.s-moderate"); }');
+    DBMS_OUTPUT.PUT_LINE('function secCounts(sec){');
+    DBMS_OUTPUT.PUT_LINE('  var c=0,w=0;');
+    DBMS_OUTPUT.PUT_LINE('  sec.querySelectorAll("tbody tr").forEach(function(tr){');
+    DBMS_OUTPUT.PUT_LINE('    if(tr.closest("table[data-nocount]")) return;');
+    DBMS_OUTPUT.PUT_LINE('    if(tr.classList.contains("twin")||tr.classList.contains("member")) return;');
+    DBMS_OUTPUT.PUT_LINE('    if(isCrit(tr)) c++; else if(isWarn(tr)) w++;');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return [c,w];');
+    DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('if(nav){');
     DBMS_OUTPUT.PUT_LINE('  nav.querySelectorAll("a[href^=\"#\"]").forEach(function(a){');
     DBMS_OUTPUT.PUT_LINE('    var id=a.getAttribute("href").slice(1);');
-    DBMS_OUTPUT.PUT_LINE('    if(id==="overview") return;');
+    DBMS_OUTPUT.PUT_LINE('    if(id==="overview"||a.hasAttribute("data-nodot")) return;');
     DBMS_OUTPUT.PUT_LINE('    var sec=doc.getElementById(id); if(!sec) return;');
-    DBMS_OUTPUT.PUT_LINE('    var c=0,w=0;');
-    DBMS_OUTPUT.PUT_LINE('    sec.querySelectorAll("tbody tr").forEach(function(tr){');
-    DBMS_OUTPUT.PUT_LINE('      if(tr.closest("table[data-nocount]")) return;');
-    DBMS_OUTPUT.PUT_LINE('      if(tr.classList.contains("twin")||tr.classList.contains("member")) return;');
-    DBMS_OUTPUT.PUT_LINE('      if(tr.classList.contains("crit")||tr.querySelector(".badge.crit")) c++;');
-    DBMS_OUTPUT.PUT_LINE('      else if(tr.classList.contains("warn")||tr.querySelector(".badge.warn")) w++;');
-    DBMS_OUTPUT.PUT_LINE('    });');
-    DBMS_OUTPUT.PUT_LINE('    if(c){ var p=doc.createElement("span"); p.className="cnt c"; p.textContent=c; a.appendChild(p); }');
-    DBMS_OUTPUT.PUT_LINE('    if(w){ var q=doc.createElement("span"); q.className="cnt w"; q.textContent=w; a.appendChild(q); }');
+    DBMS_OUTPUT.PUT_LINE('    var n=secCounts(sec);');
+    DBMS_OUTPUT.PUT_LINE('    if(n[0]){ var p=doc.createElement("span"); p.className="cnt c"; p.textContent=n[0]; a.appendChild(p); }');
+    DBMS_OUTPUT.PUT_LINE('    if(n[1]){ var q=doc.createElement("span"); q.className="cnt w"; q.textContent=n[1]; a.appendChild(q); }');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("main > section > h2").forEach(function(h2){');
+    DBMS_OUTPUT.PUT_LINE('  var sec=h2.parentNode; if(sec.id==="overview"||sec.id==="guide"||h2.querySelector(".meta")) return;');
+    DBMS_OUTPUT.PUT_LINE('  var n=secCounts(sec); if(!n[0]&&!n[1]) return;');
+    DBMS_OUTPUT.PUT_LINE('  var m=doc.createElement("span"); m.className="meta";');
+    DBMS_OUTPUT.PUT_LINE('  if(n[0]) m.innerHTML+="<span><i class=\"dotk large\"></i>"+n[0]+" large</span>";');
+    DBMS_OUTPUT.PUT_LINE('  if(n[1]) m.innerHTML+="<span><i class=\"dotk moderate\"></i>"+n[1]+" moderate</span>";');
+    DBMS_OUTPUT.PUT_LINE('  h2.insertBefore(m,h2.querySelector(".permalink"));');
+    DBMS_OUTPUT.PUT_LINE('});');
+
     DBMS_OUTPUT.PUT_LINE('/* ---- C2: next / previous large finding (J / K) ---- */');
     DBMS_OUTPUT.PUT_LINE('var jIdx=-1;');
     DBMS_OUTPUT.PUT_LINE('function findingRows(){');
@@ -1456,7 +1475,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("section tbody tr").forEach(function(tr){');
     DBMS_OUTPUT.PUT_LINE('    if(tr.hidden||tr.offsetParent===null) return;');
     DBMS_OUTPUT.PUT_LINE('    if(tr.classList.contains("twin")||tr.classList.contains("member")) return;');
-    DBMS_OUTPUT.PUT_LINE('    if(tr.classList.contains("crit")||tr.querySelector(".badge.crit")) out.push(tr);');
+    DBMS_OUTPUT.PUT_LINE('    if(isCrit(tr)) out.push(tr);');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  return out;');
     DBMS_OUTPUT.PUT_LINE('}');
@@ -1471,56 +1490,98 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('var nf=doc.getElementById("next-finding");');
     DBMS_OUTPUT.PUT_LINE('if(nf) nf.addEventListener("click",function(){jump(1);});');
-    DBMS_OUTPUT.PUT_LINE('/* ---- Normal / Full view ---- */');
-    -- Rail links whose target section is not part of the Normal view get
-    -- .norm-dim (hidden in Normal); a group header whose every link is
-    -- dimmed hides with them; one "+ N more sections" line replaces them.
-    DBMS_OUTPUT.PUT_LINE('var hiddenSecs=[];');
-    DBMS_OUTPUT.PUT_LINE('if(nav){');
-    DBMS_OUTPUT.PUT_LINE('  var list=nav.querySelector(".rail-list")||nav, grp=null, gAll=true;');
+    -- V1: the views.  inView(el, v) walks every .vw ancestor (a
+    -- section may be in-s in-a while a table inside it is in-a only);
+    -- viewOf(el) keeps the current view when el is visible there, else
+    -- picks the first view that shows it.  railViews() dims every rail
+    -- link whose target is hidden in the current view (a click on one
+    -- switches view via goTo), counts the sections only All sections
+    -- has, and feeds the "+ N more" rail line and the Summary note at
+    -- the end of <main>.  setView() flips the body class, syncs the
+    -- top-bar switch, persists only when asked (an explicit click),
+    -- and re-measures everything that was display:none (sticky offsets,
+    -- table scroll wrappers, every ECharts instance).
+    DBMS_OUTPUT.PUT_LINE('/* ---- V1: Summary / Timeline / All sections ---- */');
+    DBMS_OUTPUT.PUT_LINE('var VIEWS={summary:"vs",timeline:"vt",all:"va"}, VNAME={summary:"Summary",timeline:"Timeline",all:"All sections"};');
+    DBMS_OUTPUT.PUT_LINE('function curView(){ return bd.getAttribute("data-view")||"summary"; }');
+    DBMS_OUTPUT.PUT_LINE('function inView(el,v){ var k="in-"+v.charAt(0), x=el; while(x&&x!==bd&&x.nodeType===1){ if(x.classList.contains("vw")&&!x.classList.contains(k)) return false; x=x.parentNode; } return true; }');
+    DBMS_OUTPUT.PUT_LINE('function viewOf(el){ var c=curView(), o=["summary","timeline","all"]; if(inView(el,c)) return c; for(var i=0;i<o.length;i++){ if(inView(el,o[i])) return o[i]; } return c; }');
+    DBMS_OUTPUT.PUT_LINE('var hiddenSecs=[], moreLink=null;');
+    DBMS_OUTPUT.PUT_LINE('function railViews(){');
+    DBMS_OUTPUT.PUT_LINE('  if(!nav) return;');
+    DBMS_OUTPUT.PUT_LINE('  var list=nav.querySelector(".rail-list")||nav, grp=null, gAll=true, v=curView();');
+    DBMS_OUTPUT.PUT_LINE('  hiddenSecs=[];');
     DBMS_OUTPUT.PUT_LINE('  Array.prototype.slice.call(list.children).forEach(function(el){');
-    DBMS_OUTPUT.PUT_LINE('    if(el.tagName==="B"){ if(grp&&gAll) grp.classList.add("norm-dim"); grp=el; gAll=true; return; }');
-    DBMS_OUTPUT.PUT_LINE('    if(el.tagName!=="A") return;');
-    DBMS_OUTPUT.PUT_LINE('    var id=(el.getAttribute("href")||"").slice(1), sec=id?doc.getElementById(id):null;');
-    DBMS_OUTPUT.PUT_LINE('    if(sec&&sec.tagName==="SECTION"&&!sec.hasAttribute("data-normal")){ el.classList.add("norm-dim"); var cl=el.cloneNode(true); cl.querySelectorAll("span").forEach(function(x){x.parentNode.removeChild(x);}); hiddenSecs.push((cl.textContent||id).trim()); }');
-    DBMS_OUTPUT.PUT_LINE('    else gAll=false;');
+    DBMS_OUTPUT.PUT_LINE('    if(el.tagName==="B"){ if(grp) grp.classList.toggle("vdim",gAll); grp=el; gAll=true; return; }');
+    DBMS_OUTPUT.PUT_LINE('    if(el.tagName!=="A"||el===moreLink||el.hidden) return;');
+    DBMS_OUTPUT.PUT_LINE('    var id=(el.getAttribute("href")||"").slice(1), t=id?doc.getElementById(id):null, off=!!t&&!inView(t,v);');
+    DBMS_OUTPUT.PUT_LINE('    el.classList.toggle("vdim",off);');
+    DBMS_OUTPUT.PUT_LINE('    if(!off){ gAll=false; return; }');
+    DBMS_OUTPUT.PUT_LINE('    if(v==="summary"&&t.tagName==="SECTION"&&inView(t,"all")){ var cl=el.cloneNode(true); cl.querySelectorAll("span").forEach(function(x){x.parentNode.removeChild(x);}); hiddenSecs.push((cl.textContent||id).trim()); }');
     DBMS_OUTPUT.PUT_LINE('  });');
-    DBMS_OUTPUT.PUT_LINE('  if(grp&&gAll) grp.classList.add("norm-dim");');
-    DBMS_OUTPUT.PUT_LINE('  if(hiddenSecs.length){ var more=doc.createElement("a"); more.className="more-sections"; more.href="#"; more.textContent="+ "+hiddenSecs.length+" more in Full"; more.title=hiddenSecs.join(", "); more.addEventListener("click",function(ev){ ev.preventDefault(); setMode(true); }); list.appendChild(more); }');
+    DBMS_OUTPUT.PUT_LINE('  if(grp) grp.classList.toggle("vdim",gAll);');
+    DBMS_OUTPUT.PUT_LINE('  if(!moreLink){ moreLink=doc.createElement("a"); moreLink.className="more-sections"; moreLink.href="#view=all"; moreLink.addEventListener("click",function(ev){ ev.preventDefault(); setView("all",true); window.scrollTo(0,0); }); list.insertBefore(moreLink,doc.getElementById("rail-ref")); }');
+    DBMS_OUTPUT.PUT_LINE('  moreLink.textContent="+ "+hiddenSecs.length+" more in All sections"; moreLink.title=hiddenSecs.join(", "); moreLink.hidden=!hiddenSecs.length;');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('function modeNote(){');
+    DBMS_OUTPUT.PUT_LINE('function viewNote(){');
     DBMS_OUTPUT.PUT_LINE('  var mn=doc.getElementById("main-start"); if(!mn) return;');
-    DBMS_OUTPUT.PUT_LINE('  var n=doc.getElementById("mode-note");');
-    DBMS_OUTPUT.PUT_LINE('  if(!n){ n=doc.createElement("p"); n.id="mode-note"; n.className="mode-note"; mn.appendChild(n); }');
+    DBMS_OUTPUT.PUT_LINE('  var n=doc.getElementById("view-note");');
+    DBMS_OUTPUT.PUT_LINE('  if(!n){ n=doc.createElement("p"); n.id="view-note"; n.className="view-note"; var g=doc.getElementById("guide"); if(g&&g.parentNode===mn) mn.insertBefore(n,g); else mn.appendChild(n); }');
     DBMS_OUTPUT.PUT_LINE('  n.innerHTML="";');
-    DBMS_OUTPUT.PUT_LINE('  n.appendChild(doc.createTextNode(hiddenSecs.length?("Normal view: "+hiddenSecs.length+" section"+(hiddenSecs.length===1?"":"s")+" and the per-metric detail tables are hidden ("+hiddenSecs.join(", ")+")."):"Normal view: the per-metric detail tables are hidden."));');
-    DBMS_OUTPUT.PUT_LINE('  var b=doc.createElement("button"); b.type="button"; b.textContent="Show Full"; b.addEventListener("click",function(){ setMode(true); }); n.appendChild(b);');
+    DBMS_OUTPUT.PUT_LINE('  n.appendChild(doc.createTextNode(hiddenSecs.length?("Summary view: "+hiddenSecs.length+" more section"+(hiddenSecs.length===1?"":"s")+" and the per-metric detail tables are in All sections ("+hiddenSecs.join(", ")+")."):"Summary view: the per-metric detail tables are in All sections."));');
+    DBMS_OUTPUT.PUT_LINE('  var b=doc.createElement("button"); b.type="button"; b.textContent="Show all sections"; b.addEventListener("click",function(){ setView("all",true); }); n.appendChild(b);');
     DBMS_OUTPUT.PUT_LINE('}');
-    -- setMode(): flip the body classes, sync the switch, persist, and
-    -- re-measure everything that was display:none (sticky offsets, table
-    -- scroll wrappers, and every ECharts instance, which measured a zero
-    -- width while hidden).
-    DBMS_OUTPUT.PUT_LINE('function setMode(det,silent){');
-    DBMS_OUTPUT.PUT_LINE('  bd.classList.toggle("full",!!det); bd.classList.toggle("normal",!det);');
-    DBMS_OUTPUT.PUT_LINE('  var bn=doc.getElementById("mode-normal"), bdt=doc.getElementById("mode-full");');
-    DBMS_OUTPUT.PUT_LINE('  if(bn) bn.setAttribute("aria-pressed",det?"false":"true");');
-    DBMS_OUTPUT.PUT_LINE('  if(bdt) bdt.setAttribute("aria-pressed",det?"true":"false");');
-    DBMS_OUTPUT.PUT_LINE('  if(!silent){ try{localStorage.setItem("awr-mode",det?"full":"normal");}catch(e){} }');
+    DBMS_OUTPUT.PUT_LINE('function setView(v,persist){');
+    DBMS_OUTPUT.PUT_LINE('  if(!VIEWS[v]) v="summary";');
+    DBMS_OUTPUT.PUT_LINE('  bd.classList.remove("vs","vt","va"); bd.classList.add(VIEWS[v]); bd.setAttribute("data-view",v);');
+    DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll(".topbar .seg [data-v]").forEach(function(b){ b.setAttribute("aria-pressed",b.getAttribute("data-v")===v?"true":"false"); });');
+    DBMS_OUTPUT.PUT_LINE('  if(persist){ try{localStorage.setItem("awr-view",v);}catch(e){} if(/view=/.test(location.hash||"")){ try{history.replaceState(null,"",location.pathname+location.search);}catch(e){} } }');
+    DBMS_OUTPUT.PUT_LINE('  railViews(); viewNote();');
     DBMS_OUTPUT.PUT_LINE('  measure(); window.dispatchEvent(new Event("resize"));');
     DBMS_OUTPUT.PUT_LINE('  if(window.echarts&&echarts.getInstanceByDom){ doc.querySelectorAll("[_echarts_instance_]").forEach(function(el){ var c=echarts.getInstanceByDom(el); if(c) c.resize(); }); }');
     DBMS_OUTPUT.PUT_LINE('  setTimeout(fitTables,60); closeView();');
-    DBMS_OUTPUT.PUT_LINE('  doc.dispatchEvent(new CustomEvent("awr:mode",{detail:{full:!!det}}));');
-    DBMS_OUTPUT.PUT_LINE('  if(!silent) pushState();');
+    DBMS_OUTPUT.PUT_LINE('  doc.dispatchEvent(new CustomEvent("awr:view",{detail:{view:v}}));');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('window.AWR_setMode=setMode;');
-    DBMS_OUTPUT.PUT_LINE('modeNote();');
-    DBMS_OUTPUT.PUT_LINE('setMode(bd.classList.contains("full"),true);');
-    DBMS_OUTPUT.PUT_LINE('var mbn=doc.getElementById("mode-normal"), mbd=doc.getElementById("mode-full");');
-    DBMS_OUTPUT.PUT_LINE('if(mbn) mbn.addEventListener("click",function(){ setMode(false); });');
-    DBMS_OUTPUT.PUT_LINE('if(mbd) mbd.addEventListener("click",function(){ setMode(true); });');
-    -- inNormal(el): is this element visible in the Normal view?  Used by
-    -- revealHash so a cross-link into hidden content flips to Full.
-    DBMS_OUTPUT.PUT_LINE('function inNormal(el){ var sec=closest(el,"section"); if(sec&&sec.parentNode===doc.getElementById("main-start")&&!sec.hasAttribute("data-normal")) return false; return !closest(el,".full-only"); }');
+    DBMS_OUTPUT.PUT_LINE('window.AWR_setView=setView;');
+    DBMS_OUTPUT.PUT_LINE('window.AWR_setMode=function(det){ setView(det?"all":"summary",false); };');
+    DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll(".topbar .seg [data-v]").forEach(function(b){ b.addEventListener("click",function(){ setView(b.getAttribute("data-v"),true); window.scrollTo(0,0); }); });');
+    DBMS_OUTPUT.PUT_LINE('/* reveal(el): open what hides el inside its view -- a tab, folded tail rows, <details> */');
+    DBMS_OUTPUT.PUT_LINE('function reveal(el){');
+    DBMS_OUTPUT.PUT_LINE('  var tp=closest(el,".tabpanel");');
+    DBMS_OUTPUT.PUT_LINE('  if(tp&&!tp.classList.contains("on")){ var t=doc.querySelector(".tabs[data-tabs=\""+tp.getAttribute("data-tabs")+"\"] [data-t=\""+tp.getAttribute("data-t")+"\"]"); if(t) t.click(); }');
+    DBMS_OUTPUT.PUT_LINE('  var tl=closest(el,"[data-tail=\"Y\"]");');
+    DBMS_OUTPUT.PUT_LINE('  if(tl){ var box=tl.parentNode, ex=null; while(box&&box!==bd){ if(box.id){ ex=doc.querySelector(".expander[data-for=\""+box.id+"\"]"); if(ex) break; } box=box.parentNode; }');
+    DBMS_OUTPUT.PUT_LINE('    if(ex&&!box.classList.contains("open")) ex.click(); }');
+    DBMS_OUTPUT.PUT_LINE('  var dt=closest(el,"details"); while(dt){ dt.open=true; dt=dt.parentNode?closest(dt.parentNode,"details"):null; }');
+    DBMS_OUTPUT.PUT_LINE('  if(el.tagName==="DETAILS") el.open=true;');
+    DBMS_OUTPUT.PUT_LINE('  if(el.id==="about"){ var ab=el.querySelector("details"); if(ab) ab.open=true; }');
+    DBMS_OUTPUT.PUT_LINE('  if(el.hidden&&el.tagName==="TR") el.hidden=false;');
+    DBMS_OUTPUT.PUT_LINE('  if(el.classList.contains("sql-row")&&window.AWR_openSqlRow) window.AWR_openSqlRow(el);');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* goTo(el, flash, persist): switch to el''s view, reveal it, scroll it into view, flash it */');
+    DBMS_OUTPUT.PUT_LINE('function goTo(el,flash,persist){');
+    DBMS_OUTPUT.PUT_LINE('  if(!el) return;');
+    DBMS_OUTPUT.PUT_LINE('  var v=viewOf(el); if(v!==curView()) setView(v,persist!==false);');
+    DBMS_OUTPUT.PUT_LINE('  reveal(el);');
+    DBMS_OUTPUT.PUT_LINE('  setTimeout(function(){');
+    DBMS_OUTPUT.PUT_LINE('    el.scrollIntoView({block:el.tagName==="TR"?"center":"start"});');
+    DBMS_OUTPUT.PUT_LINE('    if(flash){ el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); setTimeout(function(){ el.classList.remove("flash"); },2400); }');
+    DBMS_OUTPUT.PUT_LINE('    setTimeout(fitTables,60);');
+    DBMS_OUTPUT.PUT_LINE('  },30);');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('window.AWR_goTo=goTo;');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('  if(ev.defaultPrevented||ev.button||ev.metaKey||ev.ctrlKey||ev.shiftKey) return;');
+    DBMS_OUTPUT.PUT_LINE('  var a=closest(ev.target,"a[href^=\"#\"]"); if(!a||a.classList.contains("skip")) return;');
+    DBMS_OUTPUT.PUT_LINE('  var h=a.getAttribute("href").slice(1); if(!h) return;');
+    DBMS_OUTPUT.PUT_LINE('  var m=/^view=(summary|timeline|all)$/.exec(h);');
+    DBMS_OUTPUT.PUT_LINE('  if(m){ ev.preventDefault(); setView(m[1],true); window.scrollTo(0,0); return; }');
+    DBMS_OUTPUT.PUT_LINE('  var id=h.split("!")[0], el=id?doc.getElementById(id):null; if(!el) return;');
+    DBMS_OUTPUT.PUT_LINE('  ev.preventDefault();');
+    DBMS_OUTPUT.PUT_LINE('  goTo(el,a.classList.contains("ent")||a.classList.contains("xlink")||el.tagName==="TR",true);');
+    DBMS_OUTPUT.PUT_LINE('  try{ history.replaceState(null,"","#"+id); }catch(e){}');
+    DBMS_OUTPUT.PUT_LINE('  if(nav) nav.classList.remove("menu-open");');
+    DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('/* ---- B8: narrow-screen section dropdown ---- */');
     DBMS_OUTPUT.PUT_LINE('var mb=doc.getElementById("rail-menu-btn");');
     DBMS_OUTPUT.PUT_LINE('if(mb&&nav){');
@@ -1535,15 +1596,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    });');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('/* ---- T2: sticky offsets (--navh page-wide, --h2h per section) ---- */');
+    DBMS_OUTPUT.PUT_LINE('/* ---- T2: sticky offset (--navh): the sticky top bar (desktop) or the rail bar (narrow) ---- */');
     DBMS_OUTPUT.PUT_LINE('function measure(){');
-    DBMS_OUTPUT.PUT_LINE('  var navh=0;');
-    DBMS_OUTPUT.PUT_LINE('  if(nav&&getComputedStyle(nav).position==="sticky") navh=nav.offsetHeight;');
-    DBMS_OUTPUT.PUT_LINE('  bd.style.setProperty("--navh",navh+"px");');
-    DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("section").forEach(function(sec){');
-    DBMS_OUTPUT.PUT_LINE('    var h=sec.querySelector(":scope > h2");');
-    DBMS_OUTPUT.PUT_LINE('    sec.style.setProperty("--h2h",(h?h.offsetHeight:48)+"px");');
-    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  var navh=0, tb=doc.getElementById("topbar");');
+    DBMS_OUTPUT.PUT_LINE('  if(tb&&getComputedStyle(tb).position==="sticky") navh=tb.offsetHeight;');
+    DBMS_OUTPUT.PUT_LINE('  else if(nav&&getComputedStyle(nav).position==="sticky") navh=nav.offsetHeight;');
+    DBMS_OUTPUT.PUT_LINE('  doc.documentElement.style.setProperty("--navh",navh+"px"); bd.style.setProperty("--navh",navh+"px");');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('var mt=null;');
     DBMS_OUTPUT.PUT_LINE('window.addEventListener("resize",function(){');
@@ -1560,34 +1618,17 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var nl=nav?nav.querySelector(".narr-link"):null;');
     DBMS_OUTPUT.PUT_LINE('if(nl&&doc.querySelector("#narrative-slot .narr")) nl.hidden=false;');
     DBMS_OUTPUT.PUT_LINE('function revealHash(){');
-    DBMS_OUTPUT.PUT_LINE('  var id=(location.hash||"").slice(1).split("!")[0]; if(!id) return;');
-    DBMS_OUTPUT.PUT_LINE('  var el=doc.getElementById(id); if(!el) return;');
-    DBMS_OUTPUT.PUT_LINE('  if(bd.classList.contains("normal")&&!inNormal(el)){ setMode(true,true); setTimeout(function(){ el.scrollIntoView({block:"start"}); },30); }');
-    DBMS_OUTPUT.PUT_LINE('  var tr=closest(el,"tr");');
-    DBMS_OUTPUT.PUT_LINE('  if(tr&&tr.hasAttribute("data-tail")){');
-    DBMS_OUTPUT.PUT_LINE('    var tb=closest(tr,"table");');
-    DBMS_OUTPUT.PUT_LINE('    if(tb&&!tb.classList.contains("open")){');
-    DBMS_OUTPUT.PUT_LINE('      tb.classList.add("open");');
-    DBMS_OUTPUT.PUT_LINE('      var ex=tb.id?doc.querySelector(".expander[data-for=\""+tb.id+"\"]"):null;');
-    DBMS_OUTPUT.PUT_LINE('      if(ex) ex.textContent="\u25BE Hide "+(ex.getAttribute("data-n")||"")+" "+(ex.getAttribute("data-noun")||"rows");');
-    DBMS_OUTPUT.PUT_LINE('    }');
-    DBMS_OUTPUT.PUT_LINE('    tr.hidden=false;');
-    DBMS_OUTPUT.PUT_LINE('  }');
-    DBMS_OUTPUT.PUT_LINE('  var tp=closest(el,".tabpanel");');
-    DBMS_OUTPUT.PUT_LINE('  if(tp&&!tp.classList.contains("on")){');
-    DBMS_OUTPUT.PUT_LINE('    var t=doc.querySelector(".tabs[data-tabs=\""+tp.getAttribute("data-tabs")+"\"] [data-t=\""+tp.getAttribute("data-t")+"\"]");');
-    DBMS_OUTPUT.PUT_LINE('    if(t) t.click();');
-    DBMS_OUTPUT.PUT_LINE('  }');
-    DBMS_OUTPUT.PUT_LINE('  var dt=closest(el,"details"); while(dt){ dt.open=true; dt=dt.parentNode?closest(dt.parentNode,"details"):null; }');
-    DBMS_OUTPUT.PUT_LINE('  var hi=tr||el; hi.classList.add("jump-hi"); setTimeout(function(){hi.classList.remove("jump-hi");},1600);');
-    DBMS_OUTPUT.PUT_LINE('  setTimeout(fitTables,60);');
+    DBMS_OUTPUT.PUT_LINE('  var h=(location.hash||"").slice(1); if(!h) return;');
+    DBMS_OUTPUT.PUT_LINE('  var m=/^view=(summary|timeline|all)/.exec(h);');
+    DBMS_OUTPUT.PUT_LINE('  if(m){ if(m[1]!==curView()) setView(m[1],false); return; }');
+    DBMS_OUTPUT.PUT_LINE('  var id=h.split("!")[0], el=id?doc.getElementById(id):null; if(!el) return;');
+    DBMS_OUTPUT.PUT_LINE('  goTo(el,el.tagName!=="SECTION",false);');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('window.addEventListener("hashchange",revealHash);');
     DBMS_OUTPUT.PUT_LINE('if(location.hash) setTimeout(revealHash,0);');
     DBMS_OUTPUT.PUT_LINE('/* ---- P3: shareable view state in the hash (#anchor!v=f&tab=CPU&w=3) ---- */');
     DBMS_OUTPUT.PUT_LINE('function stateStr(){');
-    DBMS_OUTPUT.PUT_LINE('  var v=[]; if(bd.classList.contains("full")) v.push("f");');
-    DBMS_OUTPUT.PUT_LINE('  var parts=[]; if(v.length) parts.push("v="+v.join(","));');
+    DBMS_OUTPUT.PUT_LINE('  var parts=[];');
     DBMS_OUTPUT.PUT_LINE('  var tab=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t].on");');
     DBMS_OUTPUT.PUT_LINE('  if(tab&&tab.getAttribute("data-t")!=="ELAPSED") parts.push("tab="+tab.getAttribute("data-t"));');
     DBMS_OUTPUT.PUT_LINE('  if(curW!==null&&curW!==undefined) parts.push("w="+curW);');
@@ -1606,12 +1647,13 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var h=location.hash||"", i=h.indexOf("!"); if(i<0) return;');
     DBMS_OUTPUT.PUT_LINE('  var q={}; h.slice(i+1).split("&").forEach(function(kv){var p=kv.split("="); if(p[0]) q[p[0]]=decodeURIComponent(p[1]||"");});');
     DBMS_OUTPUT.PUT_LINE('  var v=(q.v||"").split(",");');
-    DBMS_OUTPUT.PUT_LINE('  if(v.indexOf("f")>=0&&!bd.classList.contains("full")) setMode(true,true);');
+    DBMS_OUTPUT.PUT_LINE('  if(v.indexOf("f")>=0&&curView()!=="all") setView("all",false);');
     DBMS_OUTPUT.PUT_LINE('  if(q.tab){ var t=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t=\""+q.tab+"\"]"); if(t&&!t.classList.contains("on")) t.click(); }');
     DBMS_OUTPUT.PUT_LINE('  if(q.w!==undefined&&q.w!==""){ curW=String(q.w); applyW(); }');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){ if(closest(ev.target,".tabs [data-t]")) pushState(); });');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("awr:window",pushState);');
+    DBMS_OUTPUT.PUT_LINE('setView(curView(),false);');
     DBMS_OUTPUT.PUT_LINE('applyState();');
     DBMS_OUTPUT.PUT_LINE('/* ---- P5: on phones the Top SQL detail tables open by default (the bump chart is unreadable there) ---- */');
     DBMS_OUTPUT.PUT_LINE('if(doc.documentElement.clientWidth<=700){ doc.querySelectorAll("#topsql .tabpanel > details").forEach(function(d){ d.open=true; }); }');
@@ -1686,6 +1728,14 @@ BEGIN
     -- Phase 4: the report body is one <main> landmark (display:contents,
     -- so the body flex layout is unchanged); closed in awr_trend.sql.
     DBMS_OUTPUT.PUT_LINE('<main id="main-start">');
+    -- v1.6.0: the Timeline view.  An empty but valid placeholder until the
+    -- aligned window grid (phase 3 of the redesign) lands; it is the only
+    -- section of the Timeline view, next to the guide and About fold that
+    -- every view shows.
+    DBMS_OUTPUT.PUT_LINE('<section id="timeline" class="vw in-t">'
+        || '<h2>Timeline<small class="h2sub">The compared windows side by side, one column each</small></h2>'
+        || '<p class="tl-empty">The window grid is not built into this report yet. '
+        || 'Summary and All sections hold every number.</p></section>');
 
     -- Temporary CLOBs are session-lived and will free at end-of-session,
     -- but free explicitly so the report can be regenerated in a loop

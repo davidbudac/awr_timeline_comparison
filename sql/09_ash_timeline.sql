@@ -91,19 +91,14 @@ BEGIN
                           'NLS_NUMERIC_CHARACTERS=''.,''') || '-hour'
         END;
 
-    DBMS_OUTPUT.PUT_LINE('<section id="ash-timeline" data-normal="Y"><h2>ASH timeline '
-        || '(' || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
-        || ', stacked by wait class)</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || '<code>dba_hist_active_sess_history</code>, '
+    DBMS_OUTPUT.PUT_LINE('<section id="ash-timeline" class="vw in-s in-a"><h2>Active sessions'
+        || '<small class="h2sub">ASH by wait class, '
+        || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
+        || ', '
         || TO_CHAR(CAST(v_range_start AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
         || ' &rarr; '
         || TO_CHAR(CAST(v_range_end   AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
-        || ', '
-        || CASE WHEN v_bucket_hours = 1 THEN 'hourly'
-                ELSE v_bucket_label END
-        || ' buckets. ON-CPU &rarr; <b>CPU</b>; Idle excluded. '
-        || 'Compared windows shaded.</p>');
+        || '; compared windows shaded</small></h2>');
 
     -- Taller container than .chart-big: the stacked area needs room for the
     -- plot, a top-anchored scrolling legend (so it does not collide with the

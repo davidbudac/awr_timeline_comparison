@@ -40,13 +40,8 @@ DECLARE
     @@sql/lib/fmt_num.plsql
     @@sql/lib/anchor_id.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="overview" data-normal="Y"><h2>Headline metrics</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || 'Six headline metrics across the compared windows, oldest &rarr; current. '
-        || 'Badge = z bucket: |z|&gt;3 large, |z|&gt;2 moderate, else typical '
-        || '(z over max(&sigma;, 2% of &mu;); each metric has its own materiality floors and '
-        || 'direction, see sql/lib/metric_policy.plsql; a move in the good direction is '
-        || '<b>improved</b> and never highlighted).</p>');
+    DBMS_OUTPUT.PUT_LINE('<section id="overview" class="vw in-s in-a"><h2>Headline metrics'
+        || '<small class="h2sub">Six headline metrics across the compared windows, oldest to Current</small></h2>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="hero-grid">');
 
@@ -367,7 +362,7 @@ BEGIN
                        || '&sigma; below 1% of mean; read the % delta instead">'
                        || '&sigma;&approx;0</span>'
                    END
-                || ' <a class="xlink" href="#' || anchor_id('find-' || LOWER(c.src), c.key)
+                || ' <a class="xlink" href="#' || finding_anchor(c.src, c.key)
                 || '" title="Go to this metric in the Findings summary">&#8599; finding</a>'
                 || '</div>');
             DBMS_OUTPUT.PUT_LINE('</div>');

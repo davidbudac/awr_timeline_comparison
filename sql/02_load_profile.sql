@@ -25,19 +25,25 @@ DECLARE
     v_pct        NUMBER;
 
     v_unit       VARCHAR2(16);
+    v_bucket     VARCHAR2(40);
+    -- Subprogram includes go LAST, metric_policy first (it opens with a
+    -- TYPE; lint checks 14 / 16), fmt_num before band_glyph (check 17).
+    @@sql/lib/metric_policy.plsql
     @@sql/lib/nth_csv.plsql
     @@sql/lib/is_essential.plsql
     @@sql/lib/anchor_id.plsql
-    @@sql/lib/dev_bucket.plsql
     @@sql/lib/fmt_num.plsql
+    @@sql/lib/band_glyph.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="load"><h2>Load profile &mdash; per-second rates</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'DBA_HIST_SYSSTAT (end &minus; begin) &divide; window seconds. '
-        || '<b>Trend</b>: per-window values, oldest &rarr; current. '
-        || '<b>Current</b> cell bar = value &divide; row max.</p>');
+    DBMS_OUTPUT.PUT_LINE('<section id="load" class="vw in-a"><h2>Load profile'
+        || '<small class="h2sub">System statistics per second, Current against its normal range</small></h2>');
 
-    v_header := '<thead><tr><th>Metric</th><th>Unit</th><th class="trend">Trend</th><th class="num" data-w="0">Current</th>';
+    -- v1.6.0: Current, then the baseline band (normal range | band | z |
+    -- Delta, sql/lib/band_glyph.plsql) scored by the per-metric policy --
+    -- the same bucket 07 gives the row -- then the trend and the prior
+    -- windows (plain values; the heat tints are gone).
+    v_header := '<thead><tr><th>Metric</th><th>Unit</th><th class="num" data-w="0">Current</th>'
+        || band_head || '<th class="trend">Trend</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
             || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
@@ -105,6 +111,11 @@ BEGIN
         SELECT stat_name,
                MAX(CASE WHEN week_offset = 0 THEN per_sec END) AS cur_ps,
                MAX(per_sec) AS row_max,
+               -- prior-window baseline for the band (valid windows only:
+               -- facts come from valid_windows, so a skipped window is NULL)
+               AVG(CASE WHEN week_offset > 0 THEN per_sec END)    AS mu,
+               STDDEV(CASE WHEN week_offset > 0 THEN per_sec END) AS sd,
+               COUNT(CASE WHEN week_offset > 0 THEN per_sec END)  AS n_prior,
                -- ','||token + SUBSTR: LISTAGG drops NULL measures (and their
                -- delimiter), which would left-compact the CSV and misalign
                -- the positional slots; ','||NULL = ',' keeps the empty slot.
@@ -161,10 +172,6 @@ BEGIN
                                ELSE '' END
               || '>' || v_unit || '</td>';
 
-        v_row := v_row || '<td class="trend" data-spark="'
-              || NVL(m.spark_vals, '') || '" data-spark-title="'
-              || DBMS_XMLGEN.CONVERT(v_label) || '"></td>';
-
         v_row_max := NVL(m.row_max, 0);
 
         IF v_row_max > 0 AND m.cur_ps IS NOT NULL THEN
@@ -178,6 +185,13 @@ BEGIN
               || '<span class="v"><b>' || fmt_num(m.cur_ps)
               || '</b></span></td>';
 
+        v_bucket := policy_bucket('LOAD', m.stat_name, NULL, m.cur_ps, m.mu, m.sd, m.n_prior);
+        v_row := v_row || band_cells(m.cur_ps, m.mu, m.sd, m.n_prior, v_bucket);
+
+        v_row := v_row || '<td class="trend" data-spark="'
+              || NVL(m.spark_vals, '') || '" data-spark-title="'
+              || DBMS_XMLGEN.CONVERT(v_label) || '"></td>';
+
         FOR k IN 1 .. v_weeks_back LOOP
             v_per_sec_s := nth_csv(m.week_vals, k + 1);
             IF v_per_sec_s IS NULL OR v_per_sec_s = '' THEN
@@ -185,8 +199,7 @@ BEGIN
             ELSE
                 v_per_sec := TO_NUMBER(v_per_sec_s, 'FM99999999990D000000',
                                        'NLS_NUMERIC_CHARACTERS=''.,''');
-                v_row := v_row || '<td class="num" data-w="' || k || '"'
-                      || dev_attr(m.cur_ps, v_per_sec) || '>'
+                v_row := v_row || '<td class="num" data-w="' || k || '">'
                       || fmt_num(v_per_sec) || '</td>';
             END IF;
         END LOOP;

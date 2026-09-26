@@ -8,7 +8,7 @@
 -- for naturally-integer counts (n, snap ids, ranks, plan counts).
 --
 -- Designed to be @@-included into a DECLARE block, same pattern as
--- score_cells.plsql / dev_bucket.plsql:
+-- score_cells.plsql / band_glyph.plsql:
 --   DECLARE
 --       @@sql/lib/fmt_num.plsql
 --   BEGIN

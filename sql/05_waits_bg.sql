@@ -67,15 +67,18 @@ DECLARE
     v_sd_pct     NUMBER;
     v_share      NUMBER;
 
+    -- include order: metric_policy first (lint 14 / 16), then fmt_num ->
+    -- band_glyph -> score_cells (lint 13 / 17).
     @@sql/lib/metric_policy.plsql
     @@sql/lib/nth_csv.plsql
+    @@sql/lib/fmt_num.plsql
+    @@sql/lib/band_glyph.plsql
     @@sql/lib/score_cells.plsql
     @@sql/lib/is_essential.plsql
     @@sql/lib/anchor_id.plsql
-    @@sql/lib/dev_bucket.plsql
-    @@sql/lib/fmt_num.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="waits-bg"><h2>Background wait events</h2>');
+    DBMS_OUTPUT.PUT_LINE('<section id="waits-bg" class="vw in-a"><h2>Background waits'
+        || '<small class="h2sub">Where background processes waited, by time and by average wait</small></h2>');
 
     SELECT COUNT(*)
     INTO   v_cnt
@@ -116,11 +119,6 @@ BEGIN
         RETURN;
     END IF;
 
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'DBA_HIST_BG_EVENT_SUMMARY, Idle excluded. '
-        || 'Chart stacks wait_class time per window. '
-        || 'Tables: time_waited (s) and avg latency '
-        || '(ms = time_waited &divide; total_waits).</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-small" id="waits-bg-stack"></div>');
 
@@ -419,28 +417,37 @@ BEGIN
             || CASE WHEN v_mean_pct >= 0 THEN '&#9650; ' ELSE '&#9660; ' END
             || TO_CHAR(ABS(v_mean_pct), 'FM99990') || '% &plusmn; '
             || TO_CHAR(v_sd_pct, 'FM99990') || ' points) &mdash; one throughput-style change, '
-            || 'not ' || v_n_flag || ' separate findings. Per-row badges are demoted to moderate.</p>');
+            || 'not ' || v_n_flag || ' separate findings. Large rows are demoted to moderate.</p>');
     END IF;
-    v_header := '<thead><tr><th>Event</th><th class="trend">Trend</th><th class="num" data-w="0">Current (s)</th>';
+    -- v1.6.0 column order: Current, the band cells (score_cells), trend,
+    -- then the prior windows as plain values.
+    v_header := '<thead><tr><th>Event</th><th class="num" data-w="0">Current (s)</th>'
+        || band_head || '<th class="trend">Trend</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
             || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || ' (s)</th>';
     END LOOP;
-    v_header := v_header || '<th>Change</th><th class="num">z-score</th>'
-                         || '<th class="num">% &Delta;</th></tr></thead>';
+    v_header := v_header || '</tr></thead>';
     DBMS_OUTPUT.PUT_LINE('<table id="waits-bg-time">' || v_header || '<tbody>');
 
     FOR i IN 1 .. NVL(v_evts.COUNT, 0) LOOP
-        v_row := '<tr id="' || anchor_id('bg', v_evts(i).event_name)
+        v_row := '<tr id="' || anchor_id('be', v_evts(i).event_name)
             || '" data-imp="' || is_essential('WAIT', v_evts(i).event_name) || '">'
             || '<td>' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '</td>'
-            || '<td class="trend" data-spark="' || NVL(v_evts(i).spark_vals, '')
-            || '" data-spark-title="' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '"></td>'
             || '<td class="num" data-w="0"' || fmt_num_title(v_evts(i).cur_us/1e6) || '><b>' ||
                 fmt_num(v_evts(i).cur_us/1e6)
             || CASE WHEN v_evts(i).cur_rnk IS NOT NULL
                     THEN ' <span class="badge info">#' || v_evts(i).cur_rnk || '</span>' ELSE '' END
             || '</b></td>';
+        v_share := CASE WHEN v_tot_cur_us > 0 THEN v_evts(i).cur_us / v_tot_cur_us END;
+        v_row := v_row || score_cells(v_evts(i).cur_us/1e6,
+                                       v_evts(i).mu_us/1e6,
+                                       v_evts(i).sd_us/1e6,
+                                       v_evts(i).n_us,
+                                       v_share, 'WAIT', v_evts(i).event_name,
+                                       v_evts(i).wait_class, v_shift)
+            || '<td class="trend" data-spark="' || NVL(v_evts(i).spark_vals, '')
+            || '" data-spark-title="' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '"></td>';
 
         FOR k IN 1 .. v_weeks_back LOOP
             v_us_s   := nth_csv(v_evts(i).week_us_vals,  k + 1);
@@ -450,8 +457,7 @@ BEGIN
             ELSE
                 v_us := TO_NUMBER(v_us_s, 'FM99999999990D000000',
                                   'NLS_NUMERIC_CHARACTERS=''.,''');
-                v_row := v_row || '<td class="num" data-w="' || k || '"'
-                      || dev_attr(v_evts(i).cur_us/1e6, v_us) || '>'
+                v_row := v_row || '<td class="num" data-w="' || k || '">'
                       || fmt_num(v_us);
             END IF;
             IF v_rank_s IS NOT NULL AND v_rank_s <> '' THEN
@@ -459,13 +465,6 @@ BEGIN
             END IF;
             v_row := v_row || '</td>';
         END LOOP;
-        v_share := CASE WHEN v_tot_cur_us > 0 THEN v_evts(i).cur_us / v_tot_cur_us END;
-        v_row := v_row || score_cells(v_evts(i).cur_us,
-                                       v_evts(i).mu_us,
-                                       v_evts(i).sd_us,
-                                       v_evts(i).n_us,
-                                       v_share, 'WAIT', v_evts(i).event_name,
-                                       v_evts(i).wait_class, v_shift);
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
     END LOOP;
@@ -473,24 +472,30 @@ BEGIN
 
     -- Table B: avg time per wait (ms)
     DBMS_OUTPUT.PUT_LINE('<h3>Events &mdash; avg time per wait (ms)</h3>');
-    v_header := '<thead><tr><th>Event</th><th class="trend">Trend</th><th class="num" data-w="0">Current (ms)</th>';
+    v_header := '<thead><tr><th>Event</th><th class="num" data-w="0">Current (ms)</th>'
+        || band_head || '<th class="trend">Trend</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
             || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || ' (ms)</th>';
     END LOOP;
-    v_header := v_header || '<th>Change</th><th class="num">z-score</th>'
-                         || '<th class="num">% &Delta;</th></tr></thead>';
+    v_header := v_header || '</tr></thead>';
     DBMS_OUTPUT.PUT_LINE('<table id="waits-bg-avg">' || v_header || '<tbody>');
 
     FOR i IN 1 .. NVL(v_evts.COUNT, 0) LOOP
-        v_row := '<tr id="' || anchor_id('bgms', v_evts(i).event_name)
+        v_row := '<tr id="' || anchor_id('ba', v_evts(i).event_name)
             || '" data-imp="' || is_essential('WAIT', v_evts(i).event_name) || '">'
             || '<td>' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '</td>'
-            || '<td class="trend" data-spark="' || NVL(v_evts(i).spark_ms_vals, '')
-            || '" data-spark-title="' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '"></td>'
             || '<td class="num" data-w="0"' || fmt_num_title(v_evts(i).cur_ms) || '><b>'
             || fmt_num(v_evts(i).cur_ms)
-            || '</b></td>';
+            || '</b></td>'
+            || score_cells(v_evts(i).cur_ms,
+                           v_evts(i).mu_ms,
+                           v_evts(i).sd_ms,
+                           v_evts(i).n_ms,
+                           NULL, 'WAIT', v_evts(i).event_name,
+                           v_evts(i).wait_class)
+            || '<td class="trend" data-spark="' || NVL(v_evts(i).spark_ms_vals, '')
+            || '" data-spark-title="' || DBMS_XMLGEN.CONVERT(v_evts(i).event_name) || '"></td>';
 
         FOR k IN 1 .. v_weeks_back LOOP
             v_ms_s := nth_csv(v_evts(i).week_ms_vals, k + 1);
@@ -499,17 +504,10 @@ BEGIN
             ELSE
                 v_ms := TO_NUMBER(v_ms_s, 'FM99999999990D000000',
                                   'NLS_NUMERIC_CHARACTERS=''.,''');
-                v_row := v_row || '<td class="num" data-w="' || k || '"'
-                      || dev_attr(v_evts(i).cur_ms, v_ms) || '>'
+                v_row := v_row || '<td class="num" data-w="' || k || '">'
                       || fmt_num(v_ms) || '</td>';
             END IF;
         END LOOP;
-        v_row := v_row || score_cells(v_evts(i).cur_ms,
-                                       v_evts(i).mu_ms,
-                                       v_evts(i).sd_ms,
-                                       v_evts(i).n_ms,
-                                       NULL, 'WAIT', v_evts(i).event_name,
-                                       v_evts(i).wait_class);
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
     END LOOP;

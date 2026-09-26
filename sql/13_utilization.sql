@@ -34,20 +34,16 @@ DECLARE
     v_last_grp    NUMBER := -1;
 
     @@sql/lib/nth_csv.plsql
-    @@sql/lib/dev_bucket.plsql
     @@sql/lib/fmt_num.plsql
+    @@sql/lib/band_glyph.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="utilization"><h2>Database utilization '
-        || '&mdash; how the applications use this DB</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'Workload volume and shape only &mdash; transaction, call and logon rates, '
-        || 'session counts, data and network volume (DBA_HIST_SYSMETRIC_SUMMARY, '
-        || 'AVG over each window). This is a <b>usage</b> overview, not a health check: '
-        || 'movement here usually reflects application behaviour (releases, batch '
-        || 'schedules, user load), not database trouble. '
-        || '<b>Trend</b>: per-window values, oldest &rarr; current.</p>');
+    DBMS_OUTPUT.PUT_LINE('<section id="utilization" class="vw in-a"><h2>Utilization'
+        || '<small class="h2sub">How the applications use this database; a usage overview, not scored</small></h2>');
 
-    v_header := '<thead><tr><th>Metric</th><th>Unit</th><th class="trend">Trend</th><th class="num" data-w="0">Current</th>';
+    -- v1.6.0: the band is drawn but never scored here (bucket NULL, plain
+    -- Delta): this is a usage overview, not a health check.
+    v_header := '<thead><tr><th>Metric</th><th>Unit</th><th class="num" data-w="0">Current</th>'
+        || band_head || '<th class="trend">Trend</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
             || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
@@ -122,6 +118,9 @@ BEGIN
                MAX(metric_unit) AS metric_unit,
                MAX(CASE WHEN week_offset = 0 THEN avg_value END) AS cur_val,
                MAX(avg_value) AS row_max,
+               AVG(CASE WHEN week_offset > 0 THEN avg_value END)    AS mu,
+               STDDEV(CASE WHEN week_offset > 0 THEN avg_value END) AS sd,
+               COUNT(CASE WHEN week_offset > 0 THEN avg_value END)  AS n_prior,
                -- ','||token + SUBSTR: LISTAGG drops NULL measures (and their
                -- delimiter), which would left-compact the CSV and misalign
                -- the positional slots; ','||NULL = ',' keeps the empty slot.
@@ -162,11 +161,12 @@ BEGIN
               || DBMS_XMLGEN.CONVERT(m.metric_name) || '">'
               || DBMS_XMLGEN.CONVERT(m.disp_label) || '</span></td>'
               || '<td>' || DBMS_XMLGEN.CONVERT(NVL(m.metric_unit, '')) || '</td>'
-              || '<td class="trend" data-spark="' || NVL(m.spark_vals, '')
-              || '" data-spark-title="' || DBMS_XMLGEN.CONVERT(m.disp_label) || '"></td>'
               || '<td class="num cell-bar" data-w="0"' || fmt_num_title(m.cur_val) || '>'
               || '<span class="bg" style="width:' || TO_CHAR(v_pct, 'FM990D0') || '%"></span>'
-              || '<span class="v"><b>' || fmt_num(m.cur_val) || '</b></span></td>';
+              || '<span class="v"><b>' || fmt_num(m.cur_val) || '</b></span></td>'
+              || band_cells(m.cur_val, m.mu, m.sd, m.n_prior, NULL, 'N', NULL, 'Y')
+              || '<td class="trend" data-spark="' || NVL(m.spark_vals, '')
+              || '" data-spark-title="' || DBMS_XMLGEN.CONVERT(m.disp_label) || '"></td>';
 
         FOR k IN 1 .. v_weeks_back LOOP
             v_val_s := nth_csv(m.week_vals, k + 1);
@@ -175,8 +175,7 @@ BEGIN
             ELSE
                 v_val := TO_NUMBER(v_val_s, 'FM99999999990D000000',
                                    'NLS_NUMERIC_CHARACTERS=''.,''');
-                v_row := v_row || '<td class="num" data-w="' || k || '"'
-                      || dev_attr(m.cur_val, v_val) || '>'
+                v_row := v_row || '<td class="num" data-w="' || k || '">'
                       || fmt_num(v_val) || '</td>';
             END IF;
         END LOOP;

@@ -78,24 +78,22 @@ DECLARE
     v_dim_ftypes_total  t_dim_num;
     v_dim               VARCHAR2(10);
     v_first_dim         BOOLEAN;
+    -- Entity anchors (v1.6.0): the FIRST row a file gets (in any
+    -- ranking table) carries id fl-<file short name> (sql/lib/anchor_id.plsql); a
+    -- different name slugging to an id already taken gets -<n> appended.
+    TYPE t_aid IS TABLE OF VARCHAR2(200) INDEX BY VARCHAR2(4000);
+    v_aid_by_name t_aid;
+    v_aid_used    t_aid;
+    v_aid         VARCHAR2(200);
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/json_escape.plsql
     @@sql/lib/fmt_num.plsql
+    @@sql/lib/anchor_id.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="file-io"><h2>File I/O (top ' || v_top_n
-        || ' per dimension, per window)</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'Data and temp files with the most I/O per window, from '
-        || 'DBA_HIST_FILESTATXS / DBA_HIST_TEMPSTATXS (end snap minus '
-        || 'begin snap; blocks scaled to MB by each file''s block size). '
-        || 'Chart per dimension: each line = one file across windows, '
-        || 'oldest &rarr; current; toggle to the per-file-type view from '
-        || 'DBA_HIST_IOSTAT_FILETYPE &mdash; the AWR report''s '
-        || '&quot;IOStat by Filetype&quot; &mdash; which covers <b>all</b> '
-        || 'database I/O (control file, redo log, archive log, &hellip;), '
-        || 'so the two modes'' totals legitimately differ. '
-        || 'Detail tables collapsed; click to expand.</p>');
+    DBMS_OUTPUT.PUT_LINE('<section id="file-io" class="vw in-a"><h2>File I/O'
+        || '<small class="h2sub">Top ' || v_top_n
+        || ' data and temp files by I/O per window, and I/O by file type; ranked, not scored</small></h2>');
 
     SELECT '['
         || LISTAGG('"' || TO_CHAR(
@@ -350,7 +348,16 @@ BEGIN
                 END LOOP;
             END IF;
 
-            v_row := '<tr>'
+            v_aid := NULL;
+            IF NOT v_aid_by_name.EXISTS(s.filename) THEN
+                v_aid := anchor_id('fl', s.file_short);
+                IF v_aid_used.EXISTS(v_aid) THEN
+                    v_aid := v_aid || '-' || (v_aid_by_name.COUNT + 1);
+                END IF;
+                v_aid_by_name(s.filename) := v_aid;
+                v_aid_used(v_aid) := s.filename;
+            END IF;
+            v_row := '<tr' || CASE WHEN v_aid IS NOT NULL THEN ' id="' || v_aid || '"' END || '>'
                 || '<td class="mono"><span title="'
                 || DBMS_XMLGEN.CONVERT(s.filename) || '">'
                 || DBMS_XMLGEN.CONVERT(s.file_short) || '</span>'

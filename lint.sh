@@ -276,6 +276,50 @@ for f in $(grep -l '@@sql/lib/metric_policy.plsql' $(sql_files) 2>/dev/null); do
     done
 done
 
+# ----------------------------------------------------------------------
+# 17. sql/lib/band_glyph.plsql calls fmt_num() (normal-range text), and
+#     sql/lib/score_cells.plsql delegates to band_cells(): in every file
+#     fmt_num must be included before band_glyph, and band_glyph before
+#     score_cells (else PLS-00313 at compile time on the DB).
+# ----------------------------------------------------------------------
+for f in $(grep -l -E '@@sql/lib/(band_glyph|score_cells)\.plsql' $(sql_files) 2>/dev/null); do
+    fn=$(grep -n '@@sql/lib/fmt_num.plsql' "$f" | head -1 | cut -d: -f1)
+    bg=$(grep -n '@@sql/lib/band_glyph.plsql' "$f" | head -1 | cut -d: -f1)
+    sc=$(grep -n '@@sql/lib/score_cells.plsql' "$f" | head -1 | cut -d: -f1)
+    if [ -n "$sc" ] && { [ -z "$bg" ] || [ "$bg" -gt "$sc" ]; }; then
+        finding band-include-order "$f:$sc" "sql/lib/score_cells.plsql needs sql/lib/band_glyph.plsql included before it"
+    fi
+    if [ -n "$bg" ] && { [ -z "$fn" ] || [ "$fn" -gt "$bg" ]; }; then
+        finding band-include-order "$f:$bg" "sql/lib/band_glyph.plsql needs sql/lib/fmt_num.plsql included before it"
+    fi
+done
+
+# ----------------------------------------------------------------------
+# 18. The v1.5.0 Normal / Full view model is retired (v1.6.0): sections
+#     declare view membership with class="vw in-s|in-t|in-a" and the chrome
+#     keeps the view in localStorage "awr-view".  The old hooks must not
+#     come back (they would silently match nothing), nor the dev_bucket
+#     heat tint the band glyph replaced.
+# ----------------------------------------------------------------------
+for f in awr_trend.sql sql/*.sql sql/lib/*.plsql; do
+    grep -n -E 'data-normal|full-only|"awr-mode"|data-dev=|dev_attr\(' "$f" | grep -v -E '^[0-9]+:[[:space:]]*--' \
+      | while IFS= read -r line; do
+        finding retired-view-hook "$f:${line%%:*}" "v1.5.0 view hook (data-normal / full-only / awr-mode / data-dev) -- use class=\"vw in-s|in-t|in-a\" (CLAUDE.md, views)"
+    done
+done
+
+# ----------------------------------------------------------------------
+# 19. Every report <section> opts into its views explicitly: a numbered
+#     section must carry class="vw ..." (or be one of the view-less
+#     reference sections, guide / about, shown in every view).
+# ----------------------------------------------------------------------
+for f in sql/[0-9]*.sql; do
+    grep -n "<section id=" "$f" | grep -v 'class="vw ' | grep -v -E 'id="(guide|about)"' \
+      | while IFS= read -r line; do
+        finding section-view-class "$f:${line%%:*}" "<section> without class=\"vw in-s|in-t|in-a\" -- declare which views show it"
+    done
+done
+
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"
 fi

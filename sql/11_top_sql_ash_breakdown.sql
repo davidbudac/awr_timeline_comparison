@@ -132,23 +132,14 @@ BEGIN
                           'NLS_NUMERIC_CHARACTERS=''.,''') || '-hour'
         END;
 
-    DBMS_OUTPUT.PUT_LINE('<section id="topsql-ash"><h2>Top SQL ASH breakdown '
-        || '(' || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
-        || ', per SQL, stacked by wait event)</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 10px 0">'
-        || 'For each SQL in the Top-N pool (union across all ranking dimensions), '
-        || 'per-bucket ASH samples split by individual wait event '
-        || '(top ' || v_top_events || ' per SQL by sample count; '
-        || 'remainder grouped as <b>Other</b>; <b>CPU</b> = ON-CPU). '
-        || '<code>dba_hist_active_sess_history</code>, '
+    DBMS_OUTPUT.PUT_LINE('<section id="topsql-ash" class="vw in-a"><h2>Top SQL activity'
+        || '<small class="h2sub">ASH samples of each Top SQL statement by wait event, '
+        || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
+        || ', '
         || TO_CHAR(CAST(v_range_start AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
         || ' &rarr; '
         || TO_CHAR(CAST(v_range_end   AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
-        || ', '
-        || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
-        || ' buckets. Compared windows shaded. '
-        || 'SQLs with fewer than ' || v_min_samples
-        || ' samples appear as placeholders.</p>');
+        || '</small></h2>');
 
     -- Shared bucket-label grid (one entry per chart-X-axis tick).
     -- Same logic as section 09 lines 144-155.

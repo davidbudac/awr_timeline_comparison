@@ -95,15 +95,10 @@ DECLARE
             || CASE WHEN p_chg THEN '<span class="g" title="differs from the Current value">&ne;</span> ' ELSE '' END
             || v_body || '</td>';
     END cell_html;
+    @@sql/lib/anchor_id.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="param-changes"><h2>Parameter changes</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || 'Initialization parameters from <code>dba_hist_parameter</code> whose '
-        || 'value differs across the compared windows (value as of each '
-        || 'window&rsquo;s end snapshot). Only changed parameters are listed; '
-        || 'highlighted cells differ from the <b>Current</b> value. '
-        || '&mdash; = not present at that snapshot; (unset) = present but '
-        || 'empty.</p>');
+    DBMS_OUTPUT.PUT_LINE('<section id="param-changes" class="vw in-a"><h2>Parameters'
+        || '<small class="h2sub">Initialization parameters whose value differs across the windows</small></h2>');
 
     -- Load every (changed parameter, window) value into v_cells and build
     -- the ordered name list.  Single cursor; the changed-parameter filter
@@ -185,7 +180,7 @@ BEGIN
 
     -- A parameter that differs across the compared windows is worth the
     -- Normal view (the section is otherwise Full-only).
-    DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("param-changes").setAttribute("data-normal","Y");</script>');
+    DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("param-changes").classList.add("in-s");</script>');
 
     -- Header: Parameter | Current | -1w | -2w | ...
     v_header := '<thead><tr><th>Parameter</th><th data-w="0">Current</th>';
@@ -202,7 +197,8 @@ BEGIN
         IF v_cur_has THEN v_cur_val := v_cells(v_cur_key);
                      ELSE v_cur_val := NULL; END IF;
 
-        v_row := '<tr><td class="pname"><code>'
+        -- entity anchor pa-<parameter> (sql/lib/anchor_id.plsql)
+        v_row := '<tr id="' || anchor_id('pa', v_names(i)) || '"><td class="pname"><code>'
               || DBMS_XMLGEN.CONVERT(v_names(i)) || '</code></td>';
 
         -- Current column (the reference; never highlighted).

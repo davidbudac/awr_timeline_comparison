@@ -92,17 +92,11 @@ DECLARE
     @@sql/lib/nth_csv.plsql
     @@sql/lib/is_oracle_schema.plsql
     @@sql/lib/fmt_num.plsql
+    @@sql/lib/anchor_id.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="topsql" data-normal="Y"><h2>Top SQL (top ' || v_top_n
-        || ' per dimension, per window)</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'Top-' || v_top_n || ' SQLs per dimension per window from '
-        || 'DBA_HIST_SQLSTAT <code>*_DELTA</code>. '
-        || 'Bump chart per dimension: each line = one SQL across windows, '
-        || 'oldest &rarr; current. Use the <b>Break down by</b> toggle to '
-        || 're-aggregate the same metric by <b>SQL ID</b>, parsing '
-        || '<b>schema</b>, <b>module</b>, or <b>action</b> instead. '
-        || 'Detail tables collapsed; click to expand.</p>');
+    DBMS_OUTPUT.PUT_LINE('<section id="topsql" class="vw in-s in-a"><h2>Top SQL'
+        || '<small class="h2sub">Top ' || v_top_n
+        || ' statements per ranking and window; ranked, not scored</small></h2>');
 
     -- C1: one tab group for the six per-dimension blocks below (each
     -- wrapped in a matching .tabpanel as its <h3> is emitted). Dim codes
@@ -457,9 +451,12 @@ BEGIN
         END IF;
 
         -- SQL_ID links to its detail block in the Per-SQL detail section
-        -- below. The hashchange listener emitted at the end of this section
-        -- auto-opens the target <details> on click.
-        v_row := '<tr data-sys="' || v_is_sys || '">'
+        -- below (the chrome's goTo opens it via AWR_openSqlRow).  v1.6.0:
+        -- the row itself is the entity anchor sq-<dim>-<sql_id>
+        -- (sql/lib/anchor_id.plsql); sq-elapsed-<sql_id> is what a link to
+        -- a statement targets.
+        v_row := '<tr id="' || anchor_id('sq-' || LOWER(s.dim), s.sql_id)
+            || '" data-sys="' || v_is_sys || '">'
             || '<td class="mono"><a href="#sql-' || s.sql_id || '">'
             || s.sql_id || '</a>'
             || CASE WHEN v_plan_flip
@@ -879,21 +876,19 @@ BEGIN
     -- text -- previously one <details> block per SQL. Ordered by
     -- current-window elapsed time desc; rows beyond the first 8 are
     -- tagged data-tail="Y" and collapsed behind an expander.
-    -- full-only: the per-SQL pool shows in the Full view only.
-    DBMS_OUTPUT.PUT_LINE('<h3 class="full-only">Per-SQL detail</h3>');
-    DBMS_OUTPUT.PUT_LINE('<p class="full-only" style="font-size:12px;color:var(--muted)">'
-        || 'Every SQL ID listed above: click a row for full text, AWR '
-        || 'retention range, plan_hash_value summary, and avg sec/exec '
-        || 'colored by PHV across every snapshot the SQL appeared in. '
-        || 'PHV color change = plan switch. <b>Ranked in</b> chips: '
-        || '<b>E</b>lapsed, <b>C</b>PU, <b>G</b>ets, <b>R</b>eads, e<b>X</b>ecutions '
-        || '&mdash; solid when the SQL is in that dimension''s current top-3.</p>');
+    -- All sections only (class "vw in-a"): the per-SQL pool.
+    DBMS_OUTPUT.PUT_LINE('<h3 class="vw in-a">Per-SQL detail</h3>');
+    DBMS_OUTPUT.PUT_LINE('<p class="vw in-a" style="font-size:12.5px;color:var(--muted)">'
+        || 'Click a row for the full text, plan summary and per-snapshot timeline '
+        || '(a colour change = a plan switch). <b>Ranked in</b>: '
+        || '<b>E</b>lapsed, <b>C</b>PU, <b>G</b>ets, <b>R</b>eads, e<b>X</b>ecutions; '
+        || 'solid = in that ranking''s current top 3.</p>');
 
     -- One JS namespace bucket per SQL; populated below, consumed by the
     -- single ECharts init pass at the end of the section.
     DBMS_OUTPUT.PUT_LINE('<script>AWR_DATA.sqlDetails = AWR_DATA.sqlDetails || {};</script>');
 
-    DBMS_OUTPUT.PUT_LINE('<table id="sql-pool" class="full-only"><thead><tr>'
+    DBMS_OUTPUT.PUT_LINE('<table id="sql-pool" class="vw in-a"><thead><tr>'
         || '<th>SQL ID</th><th>Ranked in</th><th>Schema</th>'
         || '<th class="num" title="distinct plan_hash_values seen across the span">Plans</th><th class="num">Executions</th>'
         || '<th class="num" title="AWR snapshots in which the SQL appeared">Snapshots</th><th>First seen</th><th>Text</th>'
@@ -1048,7 +1043,7 @@ BEGIN
                 || '<span class="xlinks">'
                 || '<a class="xlink" href="#ash-card-' || v_sql_id
                 || '" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a>'
-                || '<a class="xlink" href="#sqlmon-' || v_sql_id
+                || '<a class="xlink" href="#sm-' || v_sql_id
                 || '" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a>'
                 || '</span>'
                 || '</td>');
@@ -1259,7 +1254,7 @@ BEGIN
     -- desc); a generic .expander[data-for] handler (chrome-owned) reveals
     -- every [data-tail="Y"] row in the target table's <tbody>.
     IF v_seen_sqls.COUNT > 8 THEN
-        DBMS_OUTPUT.PUT_LINE('<span class="expander full-only" data-for="sql-pool" data-n="'
+        DBMS_OUTPUT.PUT_LINE('<span class="expander vw in-a" data-for="sql-pool" data-n="'
             || (v_seen_sqls.COUNT - 8) || '" data-noun="more statements">'
             || '&#9656; Show ' || (v_seen_sqls.COUNT - 8) || ' more statements</span>');
     END IF;

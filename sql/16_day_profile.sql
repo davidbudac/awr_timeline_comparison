@@ -125,7 +125,7 @@ BEGIN
     FROM   dp_scored
     ORDER BY ord, hour_slot DESC;
 
-    DBMS_OUTPUT.PUT_LINE('<section id="day-profile">');
+    DBMS_OUTPUT.PUT_LINE('<section id="day-profile" class="vw in-a">');
 
     -- The grid is dense (every stat x hour always has a row), so "no data"
     -- means no current-day cell carries a value at all.
@@ -133,8 +133,8 @@ BEGIN
         IF v_cells(i).cur_val IS NOT NULL THEN v_has_cur := TRUE; EXIT; END IF;
     END LOOP;
     IF NOT v_has_cur THEN
-        DBMS_OUTPUT.PUT_LINE('<h2>Day profile &mdash; hour-of-day vs the '
-            || v_days || ' prior days</h2>');
+        DBMS_OUTPUT.PUT_LINE('<h2>Day profile<small class="h2sub">Each hour of the last day vs the same hour on the '
+            || v_days || ' prior days</small></h2>');
         DBMS_OUTPUT.PUT_LINE('<p style="color:var(--muted)">No usable snapshot pairs in the '
             || '24 h ending ' || TO_CHAR(v_tend, 'YYYY-MM-DD HH24:MI')
             || ' &mdash; cannot build the profile. Try a smaller <code>profile_days</code>, '
@@ -179,9 +179,9 @@ BEGIN
         ELSE v_isolated := v_isolated + v_up(o) + v_down(o);
         END IF;
     END LOOP;
-    -- A day-wide shift is worth the Normal view; isolated hours are not.
+    -- A day-wide shift is worth the Summary view; isolated hours are not.
     IF v_nshift > 0 THEN
-        DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("day-profile").setAttribute("data-normal","Y");</script>');
+        DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("day-profile").classList.add("in-s");</script>');
     END IF;
     FOR o IN 1 .. v_nstat LOOP
         v_max := v_colmax(o);
@@ -205,8 +205,7 @@ BEGIN
         IF v_hour_hit THEN v_hours_hit := v_hours_hit + 1; END IF;
     END LOOP;
 
-    DBMS_OUTPUT.PUT_LINE('<h2>Day profile &mdash; hour-of-day vs the ' || v_days
-        || ' prior day' || CASE WHEN v_days = 1 THEN '' ELSE 's' END || ' '
+    DBMS_OUTPUT.PUT_LINE('<h2>Day profile<span class="meta">'
         || CASE WHEN v_nshift > 0
                 THEN '<span class="badge crit">' || v_nshift || ' day-wide shift'
                      || CASE WHEN v_nshift = 1 THEN '' ELSE 's' END || '</span> '
@@ -214,23 +213,12 @@ BEGIN
         || '<span class="badge warn">' || v_isolated || ' isolated hour'
         || CASE WHEN v_isolated = 1 THEN '' ELSE 's' END || '</span> '
         || '<span class="badge skip" title="' || v_crit || ' large / ' || v_warn
-        || ' moderate cells">' || v_hours_hit || ' of 24 hours flagged</span></h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'Each hour of the 24 h ending <b>' || TO_CHAR(v_tend, 'Dy YYYY-MM-DD HH24:MI') || '</b> '
-        || 'is compared with the <b>same hour-of-day</b> on the ' || v_days || ' prior day'
-        || CASE WHEN v_days = 1 THEN '' ELSE 's' END
+        || ' moderate cells">' || v_hours_hit || ' of 24 hours flagged</span></span>'
+        || '<small class="h2sub">Each hour of the 24 h ending '
+        || TO_CHAR(v_tend, 'Dy YYYY-MM-DD HH24:MI') || ' vs the same hour on the '
+        || v_days || ' prior day' || CASE WHEN v_days = 1 THEN '' ELSE 's' END
         || ' (' || TO_CHAR(v_tend - v_days - 1, 'YYYY-MM-DD') || ' &rarr; '
-        || TO_CHAR(v_tend - 1, 'YYYY-MM-DD') || '), independent of the report cadence above. '
-        || 'Per-second rates from DBA_HIST_SYSSTAT snapshot deltas (restart-guarded); '
-        || 'an hour covered by less than 30 min of snapshots is left blank rather than shown as 0. '
-        || 'Cells are scored like the Findings summary: <b>large</b> = |z| &gt; 3, '
-        || '<b>moderate</b> = |z| &gt; 2, against the mean and standard deviation of the prior days '
-        || '(needs at least 3 prior values; z over max(&sigma;, 2% of &mu;), moves under 10% are typical). '
-        || 'A stat flagged in 12 or more hours in the same direction is one <b>day-wide shift</b>; '
-        || 'its cells stay tinted in the table but are not counted as isolated hours. '
-        || 'The heatmap shows <b>signed</b> z '
-        || '(red = above the prior days, blue = below); pick a metric to see the hour-by-hour '
-        || 'line against its prior-day band.</p>');
+        || TO_CHAR(v_tend - 1, 'YYYY-MM-DD') || ')</small></h2>');
 
     -- Day-wide shifts table (only when there is one).
     IF v_nshift > 0 THEN
@@ -293,9 +281,9 @@ BEGIN
         || '<div id="day-profile-line" style="height:240px"></div></div>');
 
     -- Table: one row per hour (chronological), one column per stat.
-    -- full-only: the hour-by-hour table is Full-view material; the
-    -- shifts table and the heatmap above carry the Normal view.
-    v_row := '<table class="full-only"><thead><tr><th>Hour</th>';
+    -- All sections only: the hour-by-hour table; the shifts table and the
+    -- heatmap above carry the Summary view.
+    v_row := '<table class="vw in-a"><thead><tr><th>Hour</th>';
     FOR o IN 1 .. v_nstat LOOP
         v_row := v_row || '<th class="num">' || DBMS_XMLGEN.CONVERT(v_labels(o)) || '</th>';
     END LOOP;

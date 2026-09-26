@@ -636,6 +636,9 @@ DEFINE _dbg_msg = 'section 15 file_io (per-file and file-type I/O deltas)'
 DEFINE _dbg_msg = 'section 12 param_changes (parameters that differ across windows)'
 @@sql/lib/debug_log.sql
 @@sql/12_param_changes.sql
+DEFINE _dbg_msg = 'section 19 reference (Reading the charts guide + About this report; static)'
+@@sql/lib/debug_log.sql
+@@sql/19_reference.sql
 DEFINE _dbg_msg = 'section 17 narrative (cross-section What changed sentences)'
 @@sql/lib/debug_log.sql
 @@sql/17_narrative.sql

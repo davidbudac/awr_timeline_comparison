@@ -84,7 +84,7 @@ DECLARE
     v_sqlid_count NUMBER := 0;
     v_tail_cnt    NUMBER := 0;
     v_nocur_cnt   NUMBER := 0;
-    v_normal      BOOLEAN := FALSE;   -- section opted into the Normal view
+    v_normal      BOOLEAN := FALSE;   -- section opted into the Summary view
     v_any_row     BOOLEAN := FALSE;
 
     v_header      VARCHAR2(4000);
@@ -110,23 +110,13 @@ DECLARE
     @@sql/lib/nth_csv.plsql
     @@sql/lib/json_escape.plsql
     @@sql/lib/fmt_num.plsql
-    @@sql/lib/dev_bucket.plsql
+    @@sql/lib/band_glyph.plsql
     @@sql/lib/score_cells.plsql
     @@sql/lib/is_oracle_schema.plsql
     @@sql/lib/put_clob_chunked.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="sqlmon"><h2>SQL Monitor</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'Executions persisted by Oracle SQL Monitor '
-        || '(<code>DBA_HIST_REPORTS</code>, <code>component_name=''sqlmonitor''</code>), '
-        || 'summaries only. '
-        || '<b>Sampling caveats:</b> only completed, expensive-enough or parallel '
-        || 'executions are ever persisted, so a statement''s absence here does not '
-        || 'mean it ran fast, and row counts are not execution-rate counts. An '
-        || 'execution still running at the report end has no final row yet, so the '
-        || 'Current window can under-report its slowest statement. Rows are '
-        || 'attributed to a window by execution <i>start</i> time, so a long '
-        || 'execution can straddle a window boundary.</p>');
+    DBMS_OUTPUT.PUT_LINE('<section id="sqlmon" class="vw in-a"><h2>SQL Monitor'
+        || '<small class="h2sub">Captured executions per statement; a sample, not every execution</small></h2>');
 
     ------------------------------------------------------------------
     -- Resolve the full compared span (earliest window start .. target_end),
@@ -423,11 +413,11 @@ BEGIN
             v_header := '<thead><tr><th>SQL ID</th><th>User / module</th>'
                 || '<th title="plan_hash_value of the slowest Current-window execution; '
                 || 'prior = the most frequent plan in the prior compared windows">Plan hash</th>'
-                || '<th class="trend">Trend</th>'
                 || '<th class="num" data-w="0">Current max elapsed (s)</th>'
+                || band_head
+                || '<th class="trend">Trend</th>'
                 || '<th class="num">Prior mean (s)</th>'
-                || '<th>Change</th><th class="num">z-score</th>'
-                || '<th class="num">% &Delta;</th><th>Flags</th></tr></thead>';
+                || '<th>Flags</th></tr></thead>';
             -- data-nosort: every statement row is paired with a detail row right
             -- below it, so click-to-sort would tear the pairs apart;
             -- data-notools: a CSV/MD export of that pairing would be junk.
@@ -451,14 +441,14 @@ BEGIN
         IF s.is_new = 'Y' THEN
             v_flags := v_flags || '<span class="chip" title="no captured execution anywhere in the span before the Current window">new</span> ';
         END IF;
-        -- Normal view opt-in: an error, a plan change or a DOP downgrade on
+        -- Summary view opt-in: an error, a plan change or a DOP downgrade on
         -- a statement that ran in the Current window is worth the short
         -- report; plain slow-vs-baseline rows stay Full-only.
         IF s.cur_val IS NOT NULL AND s.rnk <= v_top_n
            AND (s.has_error = 1 OR s.distinct_plans > 1 OR s.has_downgrade = 1 OR s.plan_changed = 'Y')
            AND NOT v_normal THEN
             v_normal := TRUE;
-            DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("sqlmon").setAttribute("data-normal","Y");</script>');
+            DBMS_OUTPUT.PUT_LINE('<script>document.getElementById("sqlmon").classList.add("in-s");</script>');
         END IF;
 
         -- Phase 5: a statement with no Current-window execution folds under
@@ -481,7 +471,9 @@ BEGIN
             ELSE '&mdash;'
         END;
 
-        v_row := '<tr id="sqlmon-' || s.sql_id || '" data-sys="' || is_oracle_schema(s.last_username) || '"'
+        -- entity anchor sm-<sql_id> (sql/lib/anchor_id.plsql's rule; a
+        -- sql_id is already lower-case [0-9a-z], so the slug is the id)
+        v_row := '<tr id="sm-' || s.sql_id || '" data-sys="' || is_oracle_schema(s.last_username) || '"'
             || CASE WHEN s.rnk > v_top_n OR s.cur_val IS NULL THEN ' data-tail="Y" hidden' ELSE '' END
             || '>'
             || '<td class="mono">' || s.sql_id
@@ -490,12 +482,12 @@ BEGIN
             || '<td>' || DBMS_XMLGEN.CONVERT(NVL(s.last_username, '?'))
                 || ' / ' || DBMS_XMLGEN.CONVERT(NVL(s.last_module, '?')) || '</td>'
             || '<td class="mono">' || v_plancell || '</td>'
-            || '<td class="trend" data-spark="' || NVL(s.elapsed_spark_csv, '')
-                || '" data-spark-title="max elapsed (s), ' || s.sql_id || '"></td>'
             || '<td class="num" data-w="0"' || fmt_num_title(s.cur_val) || '><b>'
                 || fmt_num(s.cur_val) || '</b></td>'
-            || '<td class="num">' || fmt_num(s.mu) || '</td>'
             || score_cells(s.cur_val, s.mu, s.sd, s.n_prior)
+            || '<td class="trend" data-spark="' || NVL(s.elapsed_spark_csv, '')
+                || '" data-spark-title="max elapsed (s), ' || s.sql_id || '"></td>'
+            || '<td class="num">' || fmt_num(s.mu) || '</td>'
             || '<td>' || v_flags || '</td>'
             || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
@@ -505,7 +497,7 @@ BEGIN
         -- markup, same pattern as sql/01_windows.sql's AWR-report listing).
         DBMS_OUTPUT.PUT_LINE('<tr class="sqlmon-detail" data-sys="' || is_oracle_schema(s.last_username) || '"'
             || CASE WHEN s.rnk > v_top_n OR s.cur_val IS NULL THEN ' data-tail="Y" hidden' ELSE '' END
-            || '><td colspan="10">');
+            || '><td colspan="11">');
         DBMS_OUTPUT.PUT_LINE('<details><summary>Per-window detail &amp; drill</summary>');
         v_header := '<table data-notools><thead><tr><th>Window</th><th class="num">n</th>'
             || '<th class="num">Max elapsed (s)</th><th class="num">Median elapsed (s)</th>'

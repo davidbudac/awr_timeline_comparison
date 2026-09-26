@@ -38,15 +38,12 @@
 -- "movers" shortlist (all in the same pass, so no second query is ever
 -- run), and again per domain to emit the detail tables in table order.
 --
--- Display-only rules layered on top of the scoring above (do not change
--- change_bucket / severity):
---   - |z| > 99 is clamped to "&gt;+99" / "&lt;&minus;99" for display.
---   - A near-zero baseline sigma (sd < 1% of |mean|, or both exactly 0)
---     gets a "sigma approx 0" badge next to the z value and a bold %-delta
---     cell, nudging the reader toward %-delta instead of an inflated z.
---   - Every displayed %-delta carries a leading up/down triangle instead of
---     a signed number; no per-direction color class is used (severity
---     color stays on .badge only).
+-- Display (v1.6.0): every table row draws its bucket with the shared
+-- baseline band (sql/lib/band_glyph.plsql band_cells: normal range | band |
+-- z | Delta), the page's one current-vs-prior grammar; |z| beyond 99 is
+-- clamped, a near-zero sigma is noted under the Delta, and the Delta reads
+-- x n at twice the mean or more, else a percentage.  Row ids are the entity
+-- anchors fr-<l|m|w>-<name> (finding_anchor).
 --
 
 SET DEFINE '~'
@@ -102,20 +99,22 @@ DECLARE
     v_top_n      PLS_INTEGER := 0;
     v_tmp        finding_rec;
     v_az         NUMBER;
-    v_bar_w      PLS_INTEGER;
     v_members    PLS_INTEGER := 0;
     j            PLS_INTEGER;
 
     @@sql/lib/metric_policy.plsql
     @@sql/lib/is_essential.plsql
     @@sql/lib/fmt_num.plsql
+    @@sql/lib/band_glyph.plsql
     @@sql/lib/anchor_id.plsql
 
-    -- Phase 3 cross-links: the id of THIS finding's row, and a link to the
-    -- source row in 02 / 03 / 04 that produced it (same anchor_id rule).
+    -- Entity anchors (v1.6.0): the id of THIS finding's row is
+    -- finding_anchor(domain, name) = fr-<l|m|w>-<name> (sql/lib/anchor_id
+    -- .plsql), the target of every entity link to a metric; src_link()
+    -- points at the source row in 02 / 03 / 04 that produced it.
     FUNCTION find_id(p_dom VARCHAR2, p_name VARCHAR2) RETURN VARCHAR2 IS
     BEGIN
-        RETURN anchor_id('find-' || LOWER(p_dom), p_name);
+        RETURN finding_anchor(p_dom, p_name);
     END find_id;
 
     FUNCTION src_link(p_dom VARCHAR2, p_name VARCHAR2) RETURN VARCHAR2 IS
@@ -124,7 +123,7 @@ DECLARE
             || CASE p_dom
                    WHEN 'LOAD'   THEN anchor_id('load', p_name)
                    WHEN 'METRIC' THEN anchor_id('metric', p_name)
-                   ELSE anchor_id('fgc', REGEXP_REPLACE(p_name, '^Wait class: ', ''))
+                   ELSE anchor_id('wc', REGEXP_REPLACE(p_name, '^Wait class: ', ''))
                END
             || '" title="Go to this metric''s row in '
             || CASE p_dom WHEN 'LOAD' THEN 'Load profile'
@@ -172,58 +171,11 @@ DECLARE
                              ELSE 'skip' END;
     END bucket_cls;
 
-    -- "immaterial": |z| cleared 2 but the materiality floor held it back.
-    FUNCTION imm_badge(p_bucket VARCHAR2, p_z NUMBER) RETURN VARCHAR2 IS
-    BEGIN
-        IF p_bucket = 'typical' AND p_z IS NOT NULL AND ABS(p_z) > 2 THEN
-            RETURN ' <span class="badge sig" title="|z| above 2 but the move is below '
-                || 'this metric&#39;s materiality floor (sql/lib/metric_policy.plsql)">'
-                || 'immaterial</span>';
-        END IF;
-        RETURN '';
-    END imm_badge;
-
-    -- Shared display-only formatting (B5/F5): clamp |z|>99, flag a
-    -- near-zero baseline sigma, and render %-delta with a direction glyph.
-    -- Duplicated (not shared) with sql/lib/score_cells.plsql on purpose --
-    -- same "findings are recomputed, not shared" convention as the scoring
-    -- above; the two stay in sync by inspection, not by a shared function.
-    FUNCTION fmt_z(p_z NUMBER) RETURN VARCHAR2 IS
-    BEGIN
-        RETURN CASE
-            WHEN p_z IS NULL THEN '&mdash;'
-            WHEN p_z > 99    THEN '&gt;+99'
-            WHEN p_z < -99   THEN '&lt;&minus;99'
-            ELSE TO_CHAR(p_z, 'FMS99990D00')
-        END;
-    END fmt_z;
-
-    FUNCTION fmt_pct(p_pct NUMBER) RETURN VARCHAR2 IS
-    BEGIN
-        RETURN CASE
-            WHEN p_pct IS NULL THEN '&mdash;'
-            WHEN p_pct < 0     THEN '&#9660; ' || TO_CHAR(ABS(p_pct), 'FM99990D0') || '%'
-            ELSE '&#9650; ' || TO_CHAR(p_pct, 'FM99990D0') || '%'
-        END;
-    END fmt_pct;
-
-    FUNCTION is_sig(p_mu NUMBER, p_sd NUMBER) RETURN VARCHAR2 IS
-    BEGIN
-        IF p_mu IS NOT NULL AND p_sd IS NOT NULL THEN
-            IF (p_mu = 0 AND p_sd = 0)
-               OR (p_mu <> 0 AND p_sd < 0.01 * ABS(p_mu)) THEN
-                RETURN 'Y';
-            END IF;
-        END IF;
-        RETURN 'N';
-    END is_sig;
-
     PROCEDURE emit_domain_table(p_dom VARCHAR2, p_title VARCHAR2) IS
         v_row      VARCHAR2(32767);
         v_sev      VARCHAR2(40);
         v_cls      VARCHAR2(10);
         v_imp      VARCHAR2(1);
-        v_sig      VARCHAR2(1);
         v_count    PLS_INTEGER := 0;
         v_tail_cnt PLS_INTEGER := 0;
         v_tbl_id   VARCHAR2(30);
@@ -246,20 +198,19 @@ DECLARE
 
         v_tbl_id := 'findings-' || LOWER(p_dom);
 
-        -- full-only: the per-domain detail tables (and their
-        -- headings/expanders) when the triage view is on; only the
-        -- "Biggest movers" table stays visible there.
-        DBMS_OUTPUT.PUT_LINE('<h3 class="full-only">' || p_title || '</h3>');
-        DBMS_OUTPUT.PUT_LINE('<table id="' || v_tbl_id || '" class="full-only">'
+        -- All sections only (class "vw in-a"): the per-domain detail
+        -- tables, their headings and expanders.  v1.6.0: the bucket is drawn
+        -- by the band glyph (sql/lib/band_glyph.plsql); the row keeps its
+        -- crit / warn / ... class (2px marker, rail counts, J / K).
+        DBMS_OUTPUT.PUT_LINE('<h3 class="vw in-a">' || p_title || '</h3>');
+        DBMS_OUTPUT.PUT_LINE('<table id="' || v_tbl_id || '" class="vw in-a">'
             || '<thead><tr>'
-            || '<th>Change</th>'
             || '<th>Metric</th>'
-            || '<th class="num">Current</th>'
+            || '<th class="num cur-col">Current</th>'
+            || band_head
             || '<th class="num">Prior mean</th>'
             || '<th class="num">Prior sd</th>'
             || '<th class="num">n</th>'
-            || '<th class="num">z-score</th>'
-            || '<th class="num">% &Delta;</th>'
             || '</tr></thead><tbody>');
 
         FOR p IN 1 .. v_table_idx.COUNT LOOP
@@ -269,15 +220,11 @@ DECLARE
                 v_cls := bucket_cls(v_sev);
                 -- WAIT rows here are rolled up to wait_class (e.g. "Wait
                 -- class: User I/O") -- already a compact high-level
-                -- rollup, so they deliberately carry NO data-imp attribute
-                -- and stay visible in Essential mode (untagged rows are
-                -- never hidden by the CSS rule and never counted by the
-                -- pill JS, which both select only rows with data-imp).
+                -- rollup, so they deliberately carry NO data-imp attribute.
                 -- LOAD/METRIC names are raw stat/metric names and match
                 -- is_essential() directly.
                 v_imp := CASE WHEN rec.metric_domain = 'WAIT' THEN NULL
                               ELSE is_essential(rec.metric_domain, rec.metric_name) END;
-                v_sig := is_sig(rec.prior_mean, rec.prior_sd);
                 v_row := '<tr id="' || find_id(rec.metric_domain, rec.metric_name)
                     || '" data-metric="'
                     || REPLACE(DBMS_XMLGEN.CONVERT(rec.metric_name), '"', '&quot;')
@@ -289,7 +236,6 @@ DECLARE
                             THEN ' data-tail="Y"' END
                     || ' class="' || v_cls
                     || CASE WHEN rec.canonical = 'N' THEN ' twin' ELSE '' END || '">'
-                    || '<td><span class="badge ' || v_cls || '">' || v_sev || '</span></td>'
                     || '<td>' || DBMS_XMLGEN.CONVERT(rec.metric_name)
                         || CASE WHEN rec.canonical = 'N'
                                 THEN ' <span class="chip" title="same quantity as a counted '
@@ -297,23 +243,13 @@ DECLARE
                                 ELSE '' END
                         || src_link(rec.metric_domain, rec.metric_name)
                         || '</td>'
-                    || '<td class="num"' || fmt_num_title(rec.cur_val) || '>'
+                    || '<td class="num" data-w="0"' || fmt_num_title(rec.cur_val) || '>'
                         || fmt_num(rec.cur_val) || '</td>'
+                    || band_cells(rec.cur_val, rec.prior_mean, rec.prior_sd, rec.n_prior,
+                                  v_sev, CASE WHEN rec.canonical = 'N' THEN 'Y' ELSE 'N' END)
                     || '<td class="num">' || fmt_num(rec.prior_mean) || '</td>'
                     || '<td class="num">' || fmt_num(rec.prior_sd) || '</td>'
                     || '<td class="num">' || NVL(TO_CHAR(rec.n_prior), '0') || '</td>'
-                    || '<td class="num">' || fmt_z(rec.z_score)
-                        || CASE WHEN v_sig = 'Y' THEN
-                               ' <span class="badge sig" title="baseline barely moved: '
-                               || '&sigma; below 1% of mean (floored to 2% for z); read the % delta instead">'
-                               || '&sigma;&approx;0</span>'
-                           END
-                        || imm_badge(v_sev, rec.z_score)
-                        || '</td>'
-                    || '<td class="num">'
-                        || CASE WHEN v_sig = 'Y' THEN '<b>' || fmt_pct(rec.pct_delta) || '</b>'
-                                ELSE fmt_pct(rec.pct_delta) END
-                        || '</td>'
                     || '</tr>';
                 DBMS_OUTPUT.PUT_LINE(v_row);
             END IF;
@@ -321,29 +257,17 @@ DECLARE
         DBMS_OUTPUT.PUT_LINE('</tbody></table>');
 
         IF v_tail_cnt > 0 THEN
-            DBMS_OUTPUT.PUT_LINE('<span class="expander full-only" data-for="' || v_tbl_id
-                || '" data-n="' || v_tail_cnt || '" data-noun="typical / improved / flat rows">'
-                || '&#9656; Show ' || v_tail_cnt || ' typical / improved / flat rows</span>');
+            DBMS_OUTPUT.PUT_LINE('<span class="expander vw in-a" data-for="' || v_tbl_id
+                || '" data-n="' || v_tail_cnt || '" data-noun="normal / improved / flat rows">'
+                || '&#9656; Show ' || v_tail_cnt || ' normal / improved / flat rows</span>');
         END IF;
     END emit_domain_table;
 BEGIN
-    -- data-normal="Y" keeps this section in the Normal view; the
-    -- per-domain detail tables/headings/expanders carry class
-    -- "full-only" and show only in the Full view.
-    DBMS_OUTPUT.PUT_LINE('<section id="findings" data-normal="Y"><h2 id="findings-heading">Findings summary</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'z = (current &minus; &mu;) &divide; max(&sigma;, 2% of &mu;) over prior valid windows. '
-        || '|z|&gt;3 large, |z|&gt;2 moderate, else typical &mdash; but only when the move is material: '
-        || '|%-delta| &ge; 10 and, for wait classes, &ge; 2% of the Current window''s wait time '
-        || '(otherwise typical, tagged immaterial). '
-        || 'Each metric has its own direction and floors (sql/lib/metric_policy.plsql): '
-        || 'a move in the good direction is <b>improved</b>, an informational counter is <b>noted</b> '
-        || '&mdash; neither is highlighted or counted. '
-        || 'Twins &mdash; the SYSMETRIC rate of a SYSSTAT counter, the CPU half of the CPU/wait ratio '
-        || '&mdash; are shown muted and never counted. '
-        || 'n&lt;3 &rarr; %-delta only. '
-        || '|z| beyond &plusmn;99 is capped for display; '
-        || '&sigma;&approx;0 flags a baseline that barely moved &mdash; read the %-delta there instead.</p>');
+    -- class "vw in-s in-a": in the Summary and All sections views; the
+    -- per-domain detail tables/headings/expanders carry "vw in-a" and show
+    -- only in All sections.  The scoring note lives in the About fold.
+    DBMS_OUTPUT.PUT_LINE('<section id="findings" class="vw in-s in-a"><h2 id="findings-heading">Findings'
+        || '<small class="h2sub">Every scored metric against its prior windows; one lead row per family</small></h2>');
 
     --
     -- Recompute LOAD / METRIC / WAIT values per (week_offset, metric) from
@@ -629,27 +553,31 @@ BEGIN
 
     v_typical := v_total - v_crit - v_warn - v_impr - v_noted - v_folded;
 
-    -- B4: rewrite the heading now that we have the counters.  Counts are
-    -- canonical rows only; folded twins get their own muted badge.
+    -- B4: the header counts, now that we have the counters (the header's
+    -- span.meta, before the subtitle).  Counts are canonical rows only;
+    -- folded twins get their own muted badge.
     DBMS_OUTPUT.PUT_LINE('<script>(function(){var h=document.getElementById("findings-heading");'
-        || 'if(h)h.innerHTML=''Findings summary '
-        || '<span class="badge crit" title="families with a large or moderate lead; the '
+        || 'if(!h)return;var m=document.createElement("span");m.className="meta";m.innerHTML='''
+        || '<span class="badge ' || CASE WHEN v_n_fam > 0 THEN 'crit' ELSE 'skip' END
+        || '" title="families with a large or moderate lead; the '
         || 'verdict counts the same">' || v_n_fam || ' finding'
         || CASE WHEN v_n_fam = 1 THEN '' ELSE 's' END || '</span> '
-        || '<span class="badge crit">' || v_crit || ' large</span> '
-        || '<span class="badge warn">' || v_warn || ' moderate</span> '
+        || '<span class="badge ' || CASE WHEN v_crit > 0 THEN 'crit' ELSE 'skip' END || '">'
+        || v_crit || ' large</span> '
+        || '<span class="badge ' || CASE WHEN v_warn > 0 THEN 'warn' ELSE 'skip' END || '">'
+        || v_warn || ' moderate</span> '
         || CASE WHEN v_impr > 0
                 THEN '<span class="badge info" title="moved in the good direction; not counted">'
                      || v_impr || ' improved</span> ' ELSE '' END
         || CASE WHEN v_noted > 0
                 THEN '<span class="badge note" title="informational counters that moved; not counted">'
                      || v_noted || ' noted</span> ' ELSE '' END
-        || '<span class="badge skip">' || v_typical || ' typical</span>'
+        || '<span class="badge skip">' || v_typical || ' normal</span>'
         || CASE WHEN v_folded > 0
                 THEN ' <span class="badge skip" title="flagged twins of a counted row '
                      || '(SYSMETRIC rate of a SYSSTAT counter, CPU half of the CPU/wait ratio)">'
                      || v_folded || ' folded</span>' ELSE '' END
-        || ''';})();</script>');
+        || ''';h.insertBefore(m,h.querySelector(".h2sub"));})();</script>');
 
     --
     -- T6: "Biggest movers" -- top 8 flagged family leads by |z| across all
@@ -665,17 +593,14 @@ BEGIN
     END IF;
     IF v_top_n > 0 THEN
         DBMS_OUTPUT.PUT_LINE('<h3>Biggest movers</h3>');
-        DBMS_OUTPUT.PUT_LINE('<p style="font-size:11px;color:var(--muted);margin:-4px 0 8px 0">'
-            || 'one lead row per family (top ' || v_top_n || ' by |z|); '
-            || 'flagged relatives and twins fold under the expander; '
-            || 'bar = |%-delta|, log-scaled</p>');
+        DBMS_OUTPUT.PUT_LINE('<p style="font-size:12.5px;color:var(--muted);margin:-4px 0 8px 0">'
+            || 'Top ' || v_top_n || ' families by |z|; related metrics fold under the expander.</p>');
         DBMS_OUTPUT.PUT_LINE('<table id="findings-movers" data-nocount data-nosort><thead><tr>'
             || '<th>Metric</th>'
             || '<th>Domain</th>'
-            || '<th class="num">z</th>'
-            || '<th class="num">Current</th>'
+            || '<th class="num cur-col">Current</th>'
+            || band_head
             || '<th class="num">Prior mean</th>'
-            || '<th class="num">% &Delta;</th>'
             || '</tr></thead><tbody>');
 
         FOR i IN 1 .. v_top_n LOOP
@@ -696,24 +621,8 @@ BEGIN
                 END IF;
                 DECLARE
                     v_cls     VARCHAR2(10);
-                    v_sig     VARCHAR2(1);
-                    v_bar_col VARCHAR2(20);
-                    v_apct    NUMBER;
                 BEGIN
                     v_cls := bucket_cls(f.change_bucket);
-                    v_sig := is_sig(f.prior_mean, f.prior_sd);
-                    v_apct := ABS(f.pct_delta);
-                    -- Log-scaled |%-delta| bar, capped at 150px (a 10% move
-                    -- is a stub, 100% about a third, 500%+ full width).
-                    IF v_apct IS NULL THEN
-                        v_bar_w := 0;
-                    ELSE
-                        v_bar_w := LEAST(150, ROUND(20 + 40 * LN(1 + v_apct / 50)));
-                    END IF;
-                    v_bar_col := CASE v_cls WHEN 'crit' THEN 'var(--crit)'
-                                            WHEN 'warn' THEN 'var(--warn)'
-                                            ELSE             'var(--skip)' END;
-
                     DBMS_OUTPUT.PUT_LINE('<tr class="' || v_cls
                         || CASE WHEN m > 0 THEN ' member' ELSE '' END
                         || CASE WHEN f.canonical = 'N' THEN ' twin' ELSE '' END
@@ -728,25 +637,11 @@ BEGIN
                         || '" title="Go to this finding''s detail row">&#8599; detail</a>'
                         || '</td>'
                         || '<td><span class="chip">' || f.metric_domain || '</span></td>'
-                        || '<td class="num">'
-                        || fmt_z(f.z_score)
-                        || CASE WHEN v_sig = 'Y' THEN
-                               ' <span class="badge sig" title="baseline barely moved: '
-                               || '&sigma; below 1% of mean (floored to 2% for z); read the % delta instead">'
-                               || '&sigma;&approx;0</span>'
-                           END
-                        || '</td>'
-                        || '<td class="num"' || fmt_num_title(f.cur_val) || '>'
+                        || '<td class="num" data-w="0"' || fmt_num_title(f.cur_val) || '>'
                             || fmt_num(f.cur_val) || '</td>'
+                        || band_cells(f.cur_val, f.prior_mean, f.prior_sd, f.n_prior,
+                                      f.change_bucket, CASE WHEN f.canonical = 'N' THEN 'Y' ELSE 'N' END)
                         || '<td class="num">' || fmt_num(f.prior_mean) || '</td>'
-                        || '<td class="num">'
-                            || CASE WHEN v_bar_w > 0 THEN
-                                   '<span class="zbar" style="width:' || v_bar_w || 'px;'
-                                   || 'background-color:' || v_bar_col || '"></span>'
-                               END
-                            || CASE WHEN v_sig = 'Y' THEN '<b>' || fmt_pct(f.pct_delta) || '</b>'
-                                    ELSE fmt_pct(f.pct_delta) END
-                            || '</td>'
                         || '</tr>');
                 END;
             END LOOP;
@@ -761,8 +656,8 @@ BEGIN
 
     --
     -- Detail tables: one per domain, ordered by sev / |z| / |pct| / name.
-    -- v_table_idx[p] -> index in v_findings, populated above.  Hidden under
-    -- the Normal view (class "full-only") -- only "Biggest movers" shows.
+    -- v_table_idx[p] -> index in v_findings, populated above.  Hidden in
+    -- the Summary view (class "vw in-a") -- only "Biggest movers" shows.
     --
     emit_domain_table('LOAD',   'Load profile');
     emit_domain_table('METRIC', 'System metrics');

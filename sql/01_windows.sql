@@ -46,10 +46,8 @@ BEGIN
     v_slot_w := (1000 - 2 * v_margin) / v_slots;
     v_box_w  := v_slot_w - v_gap;
 
-    DBMS_OUTPUT.PUT_LINE('<section id="windows"><h2>Aligned windows</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || 'One bar per window. Dimmed = skipped (missing snap, zero-length, '
-        || 'or instance restart) and dropped from the z-score baseline.</p>');
+    DBMS_OUTPUT.PUT_LINE('<section id="windows" class="vw in-a"><h2>Aligned windows'
+        || '<small class="h2sub">One bar per window; dimmed = skipped and left out of every baseline</small></h2>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="ribbon">'
         || '<svg viewBox="0 0 1000 72" preserveAspectRatio="none" role="img" aria-label="Baseline windows timeline">');
@@ -177,11 +175,9 @@ BEGIN
     -- the far side of a non-CDB->PDB migration points at the right DBID.
     -- ---------------------------------------------------------------
     DBMS_OUTPUT.PUT_LINE('<h3>Generate full AWR reports for these windows</h3>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || 'Copy into SQL*Plus to spool a standard Oracle AWR report for each '
-        || 'window above (Diagnostic Pack required). Skipped windows are '
-        || 'commented out; swap <code>_HTML</code> for <code>_TEXT</code> in the '
-        || 'call for a plain-text report.</p>');
+    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12.5px;color:var(--muted);margin:0 0 6px 0">'
+        || 'Paste into SQL*Plus for one standard AWR report per window '
+        || '(Diagnostic Pack). Skipped windows are commented out.</p>');
 
     -- Open the listing and emit the script header on the same line so the
     -- browser's leading-newline-after-&lt;pre&gt; stripping leaves no blank line.

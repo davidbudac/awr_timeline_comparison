@@ -68,22 +68,22 @@ DECLARE
     v_dim_types_total t_dim_num;
     v_dim             VARCHAR2(10);
     v_first_dim       BOOLEAN;
+    -- Entity anchors (v1.6.0): the FIRST row a segment gets (in any
+    -- ranking table) carries id sg-<name> (sql/lib/anchor_id.plsql); a
+    -- different name slugging to an id already taken gets -<n> appended.
+    TYPE t_aid IS TABLE OF VARCHAR2(200) INDEX BY VARCHAR2(4000);
+    v_aid_by_name t_aid;
+    v_aid_used    t_aid;
+    v_aid         VARCHAR2(200);
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/json_escape.plsql
     @@sql/lib/fmt_num.plsql
+    @@sql/lib/anchor_id.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="segment-io"><h2>Segment I/O (top ' || v_top_n
-        || ' per dimension, per window)</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'Segments with the most I/O activity per window, from '
-        || 'DBA_HIST_SEG_STAT <code>*_DELTA</code> joined to '
-        || 'DBA_HIST_SEG_STAT_OBJ for names. Reads/writes are blocks; '
-        || 'requests are I/O calls. Chart per dimension: each line = one '
-        || 'segment across windows, oldest &rarr; current; toggle to roll '
-        || 'the same totals up by object type (the rollup covers <b>all</b> '
-        || 'segments, not just the charted top-' || v_top_n || '). '
-        || 'Detail tables collapsed; click to expand.</p>');
+    DBMS_OUTPUT.PUT_LINE('<section id="segment-io" class="vw in-a"><h2>Segment I/O'
+        || '<small class="h2sub">Top ' || v_top_n
+        || ' segments by I/O per window; ranked, not scored</small></h2>');
 
     SELECT '['
         || LISTAGG('"' || TO_CHAR(
@@ -348,7 +348,16 @@ BEGIN
                 END LOOP;
             END IF;
 
-            v_row := '<tr>'
+            v_aid := NULL;
+            IF NOT v_aid_by_name.EXISTS(s.seg_name) THEN
+                v_aid := anchor_id('sg', s.seg_name);
+                IF v_aid_used.EXISTS(v_aid) THEN
+                    v_aid := v_aid || '-' || (v_aid_by_name.COUNT + 1);
+                END IF;
+                v_aid_by_name(s.seg_name) := v_aid;
+                v_aid_used(v_aid) := s.seg_name;
+            END IF;
+            v_row := '<tr' || CASE WHEN v_aid IS NOT NULL THEN ' id="' || v_aid || '"' END || '>'
                 || '<td class="mono"><span title="tablespace '
                 || DBMS_XMLGEN.CONVERT(s.tablespace_name) || '">'
                 || DBMS_XMLGEN.CONVERT(s.seg_name) || '</span>'
