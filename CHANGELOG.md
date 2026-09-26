@@ -71,9 +71,9 @@ OK); the pre-release full-matrix re-run on the final code is still to do
   per-section "How this is computed" folds are gone).
 - **Build**: the three client scripts are generated from readable
   `sql/lib/src/*.js` by `tools/js2plsql.sh` (dev-time, POSIX sh + awk).
-  `lint.sh` checks 17-24: include order of the new libs, the retired view
+  `lint.sh` checks 17-25: include order of the new libs, the retired view
   hooks, `class="vw ..."` on every section, one `ent()` emitter, Timeline
-  lane sources closed, generated scripts up to date. Fixed a lint bug:
+  lane sources closed, generated scripts up to date, ASCII-only output. Fixed a lint bug:
   findings raised inside a `| while read` loop were lost (subshell).
 - **Fleet-visible side effects** (fleet files untouched): the fleet chrome
   `@@`-includes `sql/_style.sql`, so the fleet report picks up the new
@@ -89,7 +89,11 @@ OK); the pre-release full-matrix re-run on the final code is still to do
   text wraps instead of being clipped; the "more normal rows" link is
   styled (it was browser blue, unreadable in dark); section 11's window
   labels sit inside the plot instead of under the legend (they overlapped
-  it and had a halo in dark).
+  it and had a halo in dark). The Timeline scripts (and four ECharts
+  tooltip formatters) carried literal non-ASCII characters, which a
+  non-UTF-8 SQL*Plus client prints as "?" (skipped-window cells read
+  "???" on dbmint); they are `\u` escapes now and `lint.sh` check 25 keeps
+  every emitted line ASCII.
 - **Demo** (`docs/examples/demo_busy_db.html`) and the website
   screenshots regenerated in the new design; `demo/verify_report.js`
   resolves Playwright portably and checks views, links, the Timeline,

@@ -539,9 +539,9 @@ are GENERATED from `sql/lib/src/<name>.js`: edit the `.js`, run
 header above the `BEGIN` line and rewrites the body (blank lines dropped,
 `'` doubled; a tilde or a ≥ 2300-char line is rejected). `--check` = lint
 check 24. Dev-time only — the committed `.plsql` files are what runs. All
-other client JS (00's chrome, section scripts) is hand-written PUT_LINEs. Use
-`\uXXXX` escapes for new non-ASCII in the `.js` (older lines carry literal
-UTF-8, which works on dbmint).
+other client JS (00's chrome, section scripts) is hand-written PUT_LINEs.
+**The sources are pure ASCII**: non-ASCII in JS is a `\uXXXX` escape (lint
+check 25; see the gotcha).
 
 ### Section order (v1.6.0)
 
@@ -641,6 +641,15 @@ exists only to keep the fleet findings band's pre-1.6 severity bar.
   false positive; look at the log and the context before calling it an error.
 - `verify_report.js` takes ~3 min per report; run instances ONE AT A TIME —
   parallel runs hang Chrome.
+- **Emitted text must be pure ASCII.** SQL\*Plus converts every PUT_LINE to
+  the client character set; on a non-UTF-8 client (dbmint's) each
+  multi-byte character arrives as `?`. Phases 3/4 shipped literal `–` `—`
+  `−` `▲` `▼` `×` `◆` `✚` `▽` `…` in js_timeline / js_wingrid, so on dbmint the
+  Timeline's skipped-window cells read "???" (the demo, written by Python in
+  UTF-8, never shows it). HTML entities in markup, `\uXXXX` in JS; lint
+  check 25 scans `awr_trend.sql`, `sql/[0-9]*.sql`, `_style.sql`,
+  `sql/lib/*.plsql` and `sql/lib/src/*.js` (comments exempt). The demo
+  report is now pure ASCII too — a non-ASCII byte in it is a hint.
 - The report has **no global link colour**: a plain `<a>` outside `td` or a
   styled class renders in the browser's default blue (unreadable in dark).
   Give it a rule (e.g. `.calm-more a`); verify_report fails on any visible
@@ -1358,8 +1367,9 @@ the demo.
   the `share` reserved word (15), and for v1.6.0: the retired view hooks
   (18: `data-normal`, `full-only`, `"awr-mode"`, `data-dev=`, `dev_attr(`),
   a `<section id=` without `class="vw ` (19), a hand-written `class="ent"`
-  (21), `tl_open` without `tl_close` (23) and a stale generated client script
-  (24: `tools/js2plsql.sh --check`). No DB needed; add a check when a new
+  (21), `tl_open` without `tl_close` (23), a stale generated client script
+  (24: `tools/js2plsql.sh --check`) and any non-ASCII byte in emitted
+  single-DB text (25). No DB needed; add a check when a new
   gotcha bites. A `finding` inside a `| while read` loop must go through
   `finding` (it records to a flag file; a subshell `fail=1` is lost).
 - **Test DB: dbmint** (Oracle 19c CDB1, `connect / as sysdba`). The host name
