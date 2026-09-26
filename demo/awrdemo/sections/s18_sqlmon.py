@@ -17,7 +17,7 @@ from statistics import median
 from .. import chrome
 from .. import helpers as H
 from ..helpers import (band_head, esc, fmt_int, fmt_num, fmt_num_title, is_oracle_schema,
-                       json_escape, mean_sd, num6, score_cells, to_char_fixed,
+                       json_escape, mean_sd, num6, ora_round, score_cells, to_char_fixed,
                        to_char_int, ts_min, ts_sec, z_and_pct)
 
 SQL_FILE = "sql/18_sqlmon.sql"
@@ -105,6 +105,148 @@ def _drill_sql(rid) -> str:
     return "SELECT DBMS_AUTO_REPORT.REPORT_REPOSITORY_DETAIL(rid=>" + str(rid) + ", type=>'ACTIVE') FROM dual;"
 
 
+def _a_mean(a):
+    return sum(a) / len(a) if a else None
+
+
+def _a_sd(a, mu):
+    """sample standard deviation (n - 1), None below two values"""
+    if len(a) < 2:
+        return None
+    return (sum((x - mu) * (x - mu) for x in a) / (len(a) - 1)) ** 0.5
+
+
+def _pc_ev(dt, idt, de, cur, mu, sd, bucket, plain, band="Y"):
+    return ('<div class="evr"><dt>' + dt + '</dt><dd><span class="id">' + idt
+            + '</span><span class="de">' + de + '</span></dd>'
+            + '<div class="m"' + (' title="Ranked, not scored"' if plain == "Y" else "") + '>'
+            + H.delta_span(cur, mu, bucket, plain)
+            + (H.band_span(H.band_z(cur, mu, sd), bucket, "sm") if band == "Y" else "")
+            + '</div></div>')
+
+
+def _plan_card(w, put, c):
+    """Twin of 18's plan-change card block (What changed around it)."""
+    sid, cid = c["sql_id"], "f-plan-" + c["sql_id"]
+    # one bounded DBA_HIST_SQLSTAT read over the VALID windows (06's join)
+    rows = {}
+    for win in w.windows:
+        m = w.window_metrics(win)
+        if m is None:
+            continue
+        x = m.sql.get(sid)
+        if x is None:
+            continue
+        rows[win.week_offset] = (ora_round(x.elapsed_us, 0) / 1e6, ora_round(x.cpu_us, 0) / 1e6,
+                                 ora_round(x.execs, 0), ora_round(x.gets, 0))
+    pairs = {}
+    ea, ca, ga, ta = [], [], [], []
+    e_cur = c_cur = g_cur = t_cur = None
+    for k in sorted(rows):
+        ela, cpu, execs, gets = rows[k]
+        pairs[k] = ela
+        if k == 0:
+            e_cur, c_cur = ela, cpu
+            if execs > 0:
+                g_cur, t_cur = gets / execs, ela * 1000 / execs
+        else:
+            ea.append(ela)
+            ca.append(cpu)
+            if execs > 0:
+                ga.append(gets / execs)
+                ta.append(ela * 1000 / execs)
+    e_mu = _a_mean(ea); e_sd = _a_sd(ea, e_mu) if e_mu is not None else None
+    c_mu = _a_mean(ca); c_sd = _a_sd(ca, c_mu) if c_mu is not None else None
+    g_mu = _a_mean(ga); t_mu = _a_mean(ta)
+    src = "sqlstat"
+    if e_cur is None:
+        src = "sqlmon"
+        pairs = {k: cc["max_elapsed_s"] for k, cc in enumerate(c["cells"]) if cc is not None}
+        e_cur, e_mu, e_sd = c["cur_val"], c["mu"], c["sd"]
+    z = H.band_z(c["cur_val"], c["mu"], c["sd"])
+    b = H.policy_bucket("SQL", None, None, c["cur_val"], c["mu"], c["sd"], c["n_prior"])
+
+    # the plan step line, oldest first
+    first = None
+    prev = None
+    cells = ""
+    for k in range(w.weeks_back, -1, -1):
+        cc = c["cells"][k]
+        ph = cc["plan_list"].split(" ")[0] if (cc and cc["plan_list"]) else None
+        if ph is None:
+            ph = prev
+        if k == 0:
+            ph = str(c["cur_ph"])
+        start = ph is not None and (prev is None or ph != prev)
+        if ph == str(c["cur_ph"]) and (prev is None or prev != ph):
+            first = k
+        if ph is None:
+            cells += '<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k) + '"></div>'
+        else:
+            lvl = "lo" if ph == str(c["prior_ph"]) else "hi"
+            rise = start and prev is not None
+            cells += ('<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k)
+                      + '"><i class="st ' + lvl + (" rise" if rise else "") + '" aria-hidden="true"></i>'
+                      + ('<i class="nd" aria-hidden="true"></i>' if rise else "")
+                      + ('<span class="pv ' + lvl + '" title="plan hash ' + ph + '">' + ph + '</span>'
+                         if (start or k == 0) else "")
+                      + '</div>')
+        prev = ph
+
+    ev = ""
+    if src == "sqlstat" and g_cur is not None and g_mu is not None:
+        ev += _pc_ev("Per exec", fmt_num(g_cur) + " gets, was " + fmt_num(g_mu),
+                     (fmt_num(t_cur / 1000) + " s, was " + fmt_num(t_mu / 1000) + " s")
+                     if max(t_cur or 0, t_mu or 0) >= 1000 else
+                     (fmt_num(t_cur) + " ms, was " + fmt_num(t_mu) + " ms"),
+                     g_cur, g_mu, None, None, "Y", "N")
+    ev += _pc_ev(H.ent("SQL Monitor", H.anchor_id("sm", sid), "sql"),
+                 "max " + fmt_num(c["cur_val"]) + " s", "normal " + fmt_num(c["mu"]) + " s",
+                 c["cur_val"], c["mu"], c["sd"], b, "N")
+    if src == "sqlstat" and c_mu is not None:
+        wait = (e_mu is not None and e_cur > e_mu
+                and (c_cur or 0) - c_mu <= 0.1 * (e_cur - e_mu))
+        ev += _pc_ev("CPU", fmt_num(c_cur) + " s",
+                     "normal " + fmt_num(c_mu) + " s" + ("; the rise is wait" if wait else ""),
+                     c_cur, c_mu, c_sd, None, "Y")
+
+    put('<article class="panel fc chg" id="' + cid + '" aria-labelledby="' + cid + '-h" hidden>'
+        + '<header class="fc-h"><div class="fc-k"><span class="sv" title="SQL Monitor, #'
+        + str(c["rnk"]) + ' by Current-window max elapsed"><b class="gk">&#9670;</b>Plan change</span></div>'
+        + '<div class="fc-band" title="SQL Monitor max elapsed, z ' + H.band_ztxt(z)
+        + ' against the prior normal">' + H.band_span(z, b, "lg")
+        + '<span class="bd-ax" aria-hidden="true"><em style="--x:.167">&minus;2</em>'
+        + '<em style="--x:.333">0</em><em style="--x:.500">+2</em>'
+        + '<em style="--x:.583">+3</em><em class="end" style="--x:1">+8&sigma;</em></span>'
+        + '</div></header>')
+    put('<h3 id="' + cid + '-h">'
+        + H.ent("<code>" + sid + "</code>", H.anchor_id("sq-elapsed", sid), "sql")
+        + " new plan" + ((" since " + H.wg_date(w, first)) if (first is not None and first > 0) else "")
+        + (('<span data-mk-at="' + str(first) + '" data-mk-pre=" after " hidden></span>')
+           if (first is not None and first < w.weeks_back) else "")
+        + "</h3>")
+    put('<div class="fc-b"><div class="fc-main">'
+        + '<p class="whereln" title="plan ' + str(c["prior_ph"]) + ' &rarr; ' + str(c["cur_ph"]) + '">'
+        + esc(c["usr"] if c["usr"] is not None else "?") + " &middot; "
+        + esc(c["modl"] if c["modl"] is not None else "?") + "</p>"
+        + '<div class="big"><span class="v">' + fmt_num(e_cur) + "</span>"
+        + '<span class="u">' + ("s elapsed" if src == "sqlstat" else "s max elapsed (SQL Monitor)") + "</span>"
+        + '<span class="nrm" title="prior mean ' + fmt_num(e_mu) + ' s">normal '
+        + H.fv_range(e_mu, e_sd, "s") + "</span></div>")
+    put('<div class="wg bare allv"' + H.wg_attr(w) + ">" + H.wg_flags(True)
+        + H.wg_bars(w, pairs, 1, e_mu, e_sd, None))
+    put('<div class="r p" data-name="Plan hash" role="row">' + cells + "</div>"
+        + H.wg_dates(w, True) + "</div></div>")
+    put('<dl class="ev">' + ev + "</dl></div>"
+        + '<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
+        + H.anchor_id("sm", sid) + '">Timeline &rarr;</a>'
+        + '<span class="evl"><a href="#topsql">Top SQL</a><a href="#sqlmon">SQL Monitor</a></span>'
+        + "</footer></article>")
+    put('<script>(function(){var s=document.getElementById("changes-slot"),'
+        + 'c=document.getElementById("' + cid + '");if(!s||!c)return;s.appendChild(c);c.hidden=false;'
+        + 'var x=document.getElementById("s-changes");if(x)x.hidden=false;})();</script>')
+
+
 # ---------------------------------------------------------------------
 # emitter
 # ---------------------------------------------------------------------
@@ -116,7 +258,7 @@ def emit(w) -> str:
     weeks_back = w.weeks_back
 
     put("<!-- AWR-SECTION: 18_sqlmon BEGIN -->")
-    put('<section id="sqlmon" class="vw in-a"><h2>SQL Monitor'
+    put('<section id="sqlmon" class="vw in-s in-a lib" style="--os:2"><h2>SQL Monitor'
         '<small class="h2sub">Captured executions per statement; a sample, not every execution</small></h2>')
 
     # -- span (windows_rollup MIN/MAX) --------------------------------
@@ -136,7 +278,8 @@ def emit(w) -> str:
     if raw_total == 0:
         put('<p style="font-size:12px;color:var(--muted)">'
             "No SQL Monitor reports persisted in the compared windows ("
-            + ts_min(span_start) + " &rarr; " + ts_min(span_end) + ").</p></section>")
+            + ts_min(span_start) + " &rarr; " + ts_min(span_end) + ").</p>"
+            + H.lib_ls("sqlmon", "nothing persisted in the compared windows") + "</section>")
         put("<!-- AWR-SECTION: 18_sqlmon END -->")
         return "\n".join(L) + "\n"
 
@@ -240,6 +383,8 @@ def emit(w) -> str:
 
     normal = False
     tl_rows = []
+    pc = []
+    n_pchg = n_dop = n_err = 0
     for rnk, sid in enumerate(ranked, start=1):
         st = stats[sid]
         p = pivot[sid] or {"cur_val": None, "mu": None, "sd": None, "n_prior": 0}
@@ -275,11 +420,14 @@ def emit(w) -> str:
             plancell = "&mdash;"
 
         if (p["cur_val"] is not None and rnk <= top_n
-                and (st["has_error"] == 1 or st["distinct_plans"] > 1 or st["has_downgrade"] == 1
-                     or plan_changed == "Y")
+                and (st["has_error"] == 1 or st["has_downgrade"] == 1)
                 and not normal):
             normal = True
-            put('<script>document.getElementById("sqlmon").classList.add("in-s");</script>')
+            put('<script>document.getElementById("sqlmon").classList.add("lopen");</script>')
+        if p["cur_val"] is not None:
+            n_pchg += plan_changed == "Y"
+            n_dop += st["has_downgrade"] == 1
+            n_err += st["has_error"] == 1
 
         sysflag = is_oracle_schema(st["last_username"])
         tail = ' data-tail="Y" hidden' if (rnk > top_n or p["cur_val"] is None) else ""
@@ -342,6 +490,13 @@ def emit(w) -> str:
         put('<pre id="sqlmon-drill-' + sid + '" class="sql">' + esc(_drill_sql(drill_id(sid))) + "</pre></div>")
         put("</details></td></tr>")
 
+        # v1.6.0 Summary: buffer a plan-change card (emitted after the table)
+        if plan_changed == "Y" and p["cur_val"] is not None and rnk <= top_n and len(pc) < 3:
+            pc.append({"sql_id": sid, "usr": st["last_username"], "modl": st["last_module"],
+                       "prior_ph": prior_plan, "cur_ph": cur_plan, "cur_val": p["cur_val"],
+                       "mu": p["mu"], "sd": p["sd"], "n_prior": p["n_prior"], "rnk": rnk,
+                       "cells": cells})
+
         # v1.6.0 Timeline: max elapsed per window, scored like the table
         if (p["cur_val"] is not None and len(tl_rows) < 3
                 and (plan_changed == "Y" or st["has_downgrade"] == 1)):
@@ -380,6 +535,9 @@ def emit(w) -> str:
             "The scatter below still plots every captured execution.</p>")
     for i, r in enumerate(tl_rows, start=1):
         put((H.tl_open("sql") if i == 1 else "") + r + (H.tl_close() if i == len(tl_rows) else ""))
+
+    for c in pc:
+        _plan_card(w, put, c)
 
     # -- execution scatter ------------------------------------------------
     put("<h3>Execution scatter (full compared span)</h3>")
@@ -459,6 +617,18 @@ def emit(w) -> str:
             continue
         put(t)
 
-    put("</section>")
+    tail = ""
+    if n_pchg + n_dop + n_err == 0:
+        tail = "; nothing unusual in Current"
+    else:
+        tail = ";"
+        if n_pchg > 0:
+            tail += " <b>" + str(n_pchg) + "</b> plan change" + ("" if n_pchg == 1 else "s")
+        if n_dop > 0:
+            tail += ("," if n_pchg > 0 else "") + " <b>" + str(n_dop) + "</b> DOP downgrade" + ("" if n_dop == 1 else "s")
+        if n_err > 0:
+            tail += ("," if n_pchg + n_dop > 0 else "") + " <b>" + str(n_err) + "</b> with errors"
+    put(H.lib_ls("sqlmon", fmt_int(raw_total) + " captured execution" + ("" if raw_total == 1 else "s") + tail)
+        + "</section>")
     put("<!-- AWR-SECTION: 18_sqlmon END -->")
     return "\n".join(L) + "\n"

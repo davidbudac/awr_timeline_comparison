@@ -389,6 +389,12 @@ def emit(w) -> str:
         for k, g in enumerate(order, 1):
             _card(w, out, g, k, lead, ordered, evs, flagcls, dbt, cpu)
         out.append('</div>')
+        js = ",".join('["' + h.card_id(g) + '","' + h.card_label(g).replace('"', '').replace('<', '') + '"]'
+                      for g in order)
+        out.append('<script>(function(){var n=document.querySelector(\'nav.toc a[href="#findings"]\');'
+                   'if(!n)return;[' + js + '].forEach(function(c){var a=document.createElement("a");'
+                   'a.className="sub";a.href="#"+c[0];a.setAttribute("data-nodot","");a.textContent=c[1];'
+                   'n.parentNode.insertBefore(a,n.nextSibling);n=a;});})();</script>')
     else:
         out.append('<div class="panel calm vw in-s"><p class="calm-empty">'
                    + ('Nothing could be scored: a metric needs at least 3 valid prior windows.' if normal == 0
@@ -401,8 +407,8 @@ def emit(w) -> str:
     out.append("</section>")
 
     out.append('<section id="s-changes" class="vw in-s sumsec" hidden>'
-               '<h2>What changed around it<small class="h2sub">Configuration that differs across the '
-               'compared windows, under the release flags</small></h2>'
+               '<h2>What changed around it<small class="h2sub">Plan and configuration changes '
+               'under the release flags</small></h2>'
                '<div class="cards" id="changes-slot"></div></section>')
 
     out.append('<section id="s-normal" class="vw in-s sumsec"><h2>Checked and normal'
@@ -457,6 +463,8 @@ def emit(w) -> str:
                    + ('<p class="calm-more">and ' + str(ni - 6) + ' more</p>' if ni > 6 else '')
                    + '</div></div>')
     out.append('</section>')
+    out.append('<section id="s-lib" class="vw in-s vhead"><h2>Evidence library'
+               '<small class="h2sub">Every other section, one line each; open a row to read it here</small></h2></section>')
     out.extend(_timeline(w, _table_order(findings)))
     out.append("<!-- AWR-SECTION: 07_summary END -->")
     return "\n".join(out)

@@ -318,6 +318,12 @@ def delta_span(cur, mu, bucket, plain="N") -> str:
             + txt + '</span>')
 
 
+def lib_ls(sec_id: str, html: str) -> str:
+    """sql/lib/band_glyph.plsql lib_ls: the evidence library row text."""
+    return ('<script>if(window.AWR_ls)AWR_ls("' + sec_id + '","'
+            + html.replace("\\", "\\\\").replace('"', '\\"') + '");</script>')
+
+
 def range_txt(mu, sd) -> str:
     if mu is None or sd is None:
         return "&mdash;"

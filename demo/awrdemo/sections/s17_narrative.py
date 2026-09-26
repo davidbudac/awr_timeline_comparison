@@ -392,9 +392,9 @@ def emit(w) -> str:
     plan_n, plan_ids, dop_n, err_n, new_n, new_ids = _r6_r9(w)
     first_plan = plan_ids.split(', ')[0] if plan_ids else None
     if plan_n > 0:
-        pills += pill('#sm-' + first_plan, plan_n, 'plan change' + ('' if plan_n == 1 else 's'),
-                      'ran with more than one plan, including in the Current window: ' + esc(plan_ids)
-                      + (' (+' + _tc(plan_n - 3) + ' more)' if plan_n > 3 else ''))
+        pills = pill('#sm-' + first_plan, plan_n, 'plan change' + ('' if plan_n == 1 else 's'),
+                     'ran with more than one plan, including in the Current window: ' + esc(plan_ids)
+                     + (' (+' + _tc(plan_n - 3) + ' more)' if plan_n > 3 else '')) + pills
     if new_n > 0:
         pills += pill('#sqlmon', new_n, 'new SQL',
                       'first seen in SQL Monitor this window: ' + esc(new_ids)

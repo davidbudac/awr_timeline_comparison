@@ -62,6 +62,8 @@ def _config_card(w, L, changed, cells):
     wb = w.weeks_back
     cur = [n for n in changed if wb >= 1 and _pv_at(cells, n, 0) != _pv_at(cells, n, 1)]
     nch = len(changed)
+    L.append(h.lib_ls("param-changes", "<b>" + str(nch) + "</b>" + (" differs" if nch == 1 else " differ") + ", "
+                      + ("none" if not cur else str(len(cur))) + " in Current"))
     L.append('<article class="panel fc chg" id="f-config" aria-labelledby="f-config-h" hidden>'
              '<header class="fc-h"><div class="fc-k"><span class="sv"><b class="gk">&ne;</b>'
              'Configuration</span></div></header>'
@@ -152,7 +154,7 @@ def _config_card(w, L, changed, cells):
 
 def emit(w) -> str:
     L = ["<!-- AWR-SECTION: " + TAG + " BEGIN -->"]
-    L.append('<section id="param-changes" class="vw in-a"><h2>Parameters'
+    L.append('<section id="param-changes" class="vw in-s in-a lib" style="--os:9"><h2>Parameters'
              '<small class="h2sub">Initialization parameters whose value differs across the windows</small></h2>')
 
     # win: every window with an end snap (windows_rollup, validity ignored)
@@ -176,7 +178,7 @@ def emit(w) -> str:
     n_changed = len(changed)
     if n_changed == 0:
         L.append('<p style="color:var(--muted)">No system parameters '
-                 "changed across the compared windows.</p></section>")
+                 "changed across the compared windows.</p>" + h.lib_ls("param-changes", "none differ") + "</section>")
         L.append("<!-- AWR-SECTION: " + TAG + " END -->")
         return "\n".join(L)
 

@@ -32,6 +32,12 @@
  *     reset, a window click pinning its grid column (ruler aria-pressed,
  *     gutter "vs <date>", amber stripe), Current unpinning + flashing,
  *     Enter / Esc, ruler pin + unpin on leaving the view, grid tooltip;
+ *   - phase 4 (v1.6.0): every plan-change card sits in "What changed
+ *     around it" with its bars, plan step line and links; every evidence
+ *     library row (section.lib) shows in Summary with its one-line status,
+ *     opens / shuts on a click and opens for a jump into it; one rail
+ *     sub-link per finding card; All sections shows every library section
+ *     in full; the Trend cells are micro strips (svg.mw), no line left;
  * and writes screenshots per view x theme when shots_dir is given.
  */
 const path = require('path');
@@ -472,6 +478,82 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       await page.screenshot({ path: path.join(shots, 'timeline-top.png') });
     }
     if (errors.length) fail('timeline: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 6. phase 4 (v1.6.0): the plan-change card, the evidence library,
+  // the rail's card sub-links and the table micro strips.
+  {
+    const { page, errors } = await openPage('#view=summary', 'light');
+    const p4 = await page.evaluate(async () => {
+      const vis = el => !!el && el.getClientRects().length > 0;
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const out = {};
+      // plan-change cards: moved into "What changed around it", bars + step line
+      const pcs = [...document.querySelectorAll('article.fc[id^="f-plan-"]')];
+      out.planCards = pcs.length;
+      out.planOk = pcs.every(c => c.closest('#changes-slot') && vis(c)
+        && c.querySelector('.wg .r.bars') && c.querySelector('.wg .r.p .pv')
+        && c.querySelector('a.ent[href^="#sm-"]') && c.querySelector('a.jump[data-tl]'));
+      // the evidence library: every row has its one-line status, one first /
+      // one last edge, a closed row opens and shuts on a click
+      const libs = [...document.querySelectorAll('main > section.lib')];
+      out.lib = libs.length;
+      out.libVisible = libs.filter(vis).length;
+      out.libNoLs = libs.filter(x => !x.querySelector('h2 > .ls')).map(x => x.id);
+      out.libHead = vis(document.getElementById('s-lib'));
+      out.edges = document.querySelectorAll('main > section.lib.lib-first').length === 1
+        && document.querySelectorAll('main > section.lib.lib-last').length === 1;
+      const closed = libs.find(x => !x.classList.contains('lopen'));
+      if (closed) {
+        const h = closed.querySelector('h2');
+        const body = () => [...closed.children].filter(c => c !== h && vis(c)).length;
+        const before = body();
+        h.click(); await wait(150);
+        const opened = closed.classList.contains('lopen') && body() > 0 && h.getAttribute('aria-expanded') === 'true';
+        h.click(); await wait(80);
+        out.toggle = (!before && opened && !body()) ? 'ok (' + closed.id + ')' : 'FAIL ' + closed.id + ' ' + JSON.stringify([before, opened, body()]);
+      } else out.toggle = 'none';
+      // a jump to a row inside a closed row opens it (goTo -> reveal)
+      const shut = libs.find(x => !x.classList.contains('lopen') && x.querySelector('tbody tr[id]'));
+      const row = shut ? shut.querySelector('tbody tr[id]') : null;
+      if (row) {
+        window.AWR_goTo(row, true, false); await wait(250);
+        out.reveal = shut.classList.contains('lopen') && vis(row) && document.body.getAttribute('data-view') === 'summary'
+          ? 'ok (' + row.id + ')' : 'FAIL (' + row.id + ')';
+        shut.querySelector('h2').click(); await wait(60);
+      } else out.reveal = 'none';
+      // the rail: one sub-link per finding card, each to its card
+      const subs = [...document.querySelectorAll('nav.toc a.sub')];
+      const cards = [...document.querySelectorAll('#findings .cards > article.fc')];
+      out.subs = subs.length + '/' + cards.length;
+      out.subsOk = subs.length === cards.length && subs.every((a, i) => a.getAttribute('href') === '#' + cards[i].id);
+      // All sections: every library section shows in full, row state or not
+      window.AWR_setView('all', false); await wait(250);
+      out.allFull = libs.filter(x => { const t = x.querySelector('table, .chart-wrap'); return t && !vis(t); }).map(x => x.id);
+      out.strips = document.querySelectorAll('td.trend svg.mw').length;
+      out.lines = document.querySelectorAll('td.trend svg.spark').length;
+      window.AWR_setView('summary', false);
+      return out;
+    });
+    console.log('phase 4', JSON.stringify(p4));
+    if (!p4.planOk) fail('plan-change card incomplete or not in #changes-slot');
+    if (!p4.lib || p4.libVisible !== p4.lib) fail('evidence library: ' + p4.libVisible + '/' + p4.lib + ' rows visible in Summary');
+    if (p4.libNoLs.length) fail('evidence library rows without a one-line status: ' + p4.libNoLs.join(', '));
+    if (!p4.libHead) fail('evidence library heading #s-lib not visible');
+    if (!p4.edges) fail('evidence library: first / last row edges');
+    if (/^FAIL/.test(p4.toggle)) fail('evidence library row toggle ' + p4.toggle);
+    if (/^FAIL/.test(p4.reveal)) fail('evidence library reveal ' + p4.reveal);
+    if (!p4.subsOk) fail('rail card sub-links ' + p4.subs);
+    if (p4.allFull.length) fail('All sections: library sections not shown in full: ' + p4.allFull.join(', '));
+    if (!p4.strips || p4.lines) fail('micro strips: ' + p4.strips + ' svg.mw, ' + p4.lines + ' line sparklines left');
+    if (errors.length) fail('phase 4: ' + errors.slice(0, 5).join(' | '));
+    if (shots) {
+      const pc = await page.$('#s-changes');
+      if (pc && await pc.isVisible()) await pc.screenshot({ path: path.join(shots, 'changes.png') });
+      const lh = await page.$('#s-lib');
+      if (lh) { await lh.scrollIntoViewIfNeeded(); await page.waitForTimeout(200); await page.screenshot({ path: path.join(shots, 'library.png') }); }
+    }
     await page.close();
   }
 

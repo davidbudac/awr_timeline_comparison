@@ -81,7 +81,7 @@ def prologue(w, echarts_src: str) -> str:
                    'loaded. Tables still show every number.</div>')
     out.append("<script>window.AWR_DATA = window.AWR_DATA || {};</script>")
     out.append(chrome.lib_script("js_wait_colors.plsql"))
-    out.append(chrome.lib_script("js_sparkline.plsql"))
+    out.append(chrome.lib_script("js_microstrip.plsql"))
     out.append(chrome.lib_script("js_markers.plsql"))
     # sql/lib/markers_inline.sql: one push per milestone
     for t, label in w.markers:

@@ -3,7 +3,7 @@ AVG pivot over the comprehensive template's sysmetric_targets.sql.
 Single instance, so is_additive (SUM vs AVG across instances) is a no-op."""
 from __future__ import annotations
 
-from awrdemo.helpers import esc, is_essential, anchor_id, policy_bucket
+from awrdemo.helpers import esc, fmt_num, is_essential, anchor_id, lib_ls, policy_bucket
 from awrdemo.sections._pivot import header, row_cells
 
 # sql/lib/templates/comprehensive/sysmetric_targets.sql (23 metrics)
@@ -74,7 +74,7 @@ def metric_series(w, name):
 
 def emit(w) -> str:
     out = ['<!-- AWR-SECTION: 03_sysmetric BEGIN -->']
-    out.append('<section id="metrics" class="vw in-a"><h2>System metrics'
+    out.append('<section id="metrics" class="vw in-s in-a lib" style="--os:8"><h2>System metrics'
                '<small class="h2sub">SYSMETRIC averages per window, Current against its normal range</small></h2>')
     out.append('<table id="sysmetric">' + header(w, True) + '<tbody>')
 
@@ -88,6 +88,10 @@ def emit(w) -> str:
                                lambda c, mu, sd, n, s=name: policy_bucket('METRIC', s, None, c, mu, sd, n))
                    + '</tr>')
 
-    out.append('</tbody></table></section>')
+    out.append('</tbody></table>')
+    host = metric_series(w, 'Host CPU Utilization (%)')[0] if 'Host CPU Utilization (%)' in TARGETS else None
+    out.append(lib_ls('metrics', str(len(TARGETS)) + ' metric' + ('' if len(TARGETS) == 1 else 's')
+                      + ('; host CPU <b>' + fmt_num(host) + '%</b>' if host is not None else ''))
+               + '</section>')
     out.append('<!-- AWR-SECTION: 03_sysmetric END -->')
     return "\n".join(out)

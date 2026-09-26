@@ -79,7 +79,7 @@ def emit(w) -> str:
     put = out.append
     top_n = w.top_n
     put("<!-- AWR-SECTION: 15_file_io BEGIN -->")
-    put('<section id="file-io" class="vw in-a"><h2>File I/O'
+    put('<section id="file-io" class="vw in-s in-a lib" style="--os:6"><h2>File I/O'
         '<small class="h2sub">Top ' + str(top_n)
         + ' data and temp files by I/O per window, and I/O by file type; ranked, not scored</small></h2>')
     aid_by_name, aid_used = {}, {}
@@ -94,6 +94,7 @@ def emit(w) -> str:
     # ---- per-dimension detail tables (top-N files) ----------------------
     any_rows = False
     tl_rows = []
+    ls = None
     for code, _ord, label, unit in DIMS:
         entries = D.per_entity(picked[code], w.weeks_back)
         if not entries:
@@ -150,6 +151,10 @@ def emit(w) -> str:
             # v1.6.0 Timeline: "Where the reads land" (ranked, not scored)
             if code == "READMB" and len(tl_rows) < 1 and e["cur_val"] is not None:
                 csv = H.tl_csv(w, ",".join("" if t is None else t for t in tokens), "Y")
+                if not tl_rows:
+                    mu0 = H.tl_mu(w, csv)
+                    ls = ("<code>" + H.esc(short) + "</code> " + H.fmt_num(e["cur_val"]) + " MB read"
+                          + (" vs " + H.fmt_num(mu0) if mu0 is not None else ", new in the top " + str(w.top_n)))
                 tl_rows.append(H.tl_bars(
                     w, csv, H.tl_mu(w, csv), None, None,
                     H.tl_lab(H.ent(H.esc(short), aid_by_name[filename], "file"),
@@ -222,6 +227,6 @@ def emit(w) -> str:
         entries_pl = chrome.put_lines(chrome.sql_path("sql/15_file_io.sql"))
         out.extend(D.lift_script(entries_pl, "}};", "})();</script>"))
 
-    put("</section>")
+    put(H.lib_ls("file-io", ls or "no per-file I/O recorded") + "</section>")
     put("<!-- AWR-SECTION: 15_file_io END -->")
     return "\n".join(out)

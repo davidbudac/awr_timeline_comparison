@@ -14,7 +14,7 @@ TAG = "04_waits_fg"
 def emit(w) -> str:
     L = ["<!-- AWR-SECTION: " + TAG + " BEGIN -->"]
     top_n = w.top_n
-    L.append('<section id="waits-fg" class="vw in-a"><h2>Foreground waits'
+    L.append('<section id="waits-fg" class="vw in-s in-a lib lopen" style="--os:3"><h2>Foreground waits'
              '<small class="h2sub">Where foreground sessions waited: top ' + str(top_n)
              + ' events by time and by average wait, and the wait classes</small></h2>')
     L.append('<div class="chart-wrap chart-small" id="waits-fg-stack"></div>')
@@ -59,6 +59,12 @@ def emit(w) -> str:
                              "w" + (" more" if i > 10 else ""),
                              h.esc(r["event_name"]), "s waited")
                  + (h.tl_close() if i == nt else ""))
+    moved = 0
+    for r in rows:
+        share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
+        if h.policy_bucket("WAIT", r["event_name"], r["wait_class"], C._s(r["cur_us"]),
+                           C._s(r["mu_us"]), C._s(r["sd_us"]), r["n_us"], share, shift) in ("large", "moderate"):
+            moved += 1
     L.extend(C.table_avg(w, rows, "waits-fg-avg",
                          "Top " + str(top_n) + " events &mdash; avg time per wait (ms)"))
 
@@ -95,6 +101,9 @@ def emit(w) -> str:
                         + h.fmt_num(us) + "</td>")
         row += "</tr>"
         L.append(row)
-    L.append("</tbody></table></section>")
+    L.append("</tbody></table>")
+    L.append(h.lib_ls("waits-fg", "no foreground wait events" if not rows else
+                      (("none" if moved == 0 else "<b>" + str(moved) + "</b>") + " of " + str(len(rows))
+                       + " event" + ("" if len(rows) == 1 else "s") + " moved")) + "</section>")
     L.append("<!-- AWR-SECTION: " + TAG + " END -->")
     return "\n".join(L)

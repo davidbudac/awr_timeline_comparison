@@ -318,6 +318,8 @@ def _timeline(w) -> list[str]:
     o.append(lane_h('sql', 'SQL', 'sql', 'elapsed s; a dash = not in the top ' + str(w.top_n)))
     o.append(lane_h('config', 'Configuration', 'config'))
     o.append('</div></div></div></section>')
+    o.append('<section id="s-all" class="vw in-a vhead"><h2>All sections'
+             '<small class="h2sub">Every table of the report</small></h2></section>')
     return o
 
 
@@ -333,6 +335,7 @@ def emit(w) -> str:
     L = _lines()
     # the early view script is literal in the SQL: lift it verbatim
     put(next(t for t, ok in L if ok and t.startswith('<script>(function(){var v="summary"')))
+    put(next(t for t, ok in L if ok and t.startswith('<script>window.AWR_ls=')))
     put('<a class="skip" href="#main-start">Skip to report</a>')
     # ---- v1.6.0 top bar (hand-ported: DEFINEs + the Current window) --
     cur_start = w.target_end - timedelta(hours=w.win_hours)
@@ -389,6 +392,7 @@ def emit(w) -> str:
         '<a href="#findings">Findings</a>'
         '<a href="#s-changes" data-nodot hidden>What changed around it</a>'
         '<a href="#s-normal" data-nodot>Checked and normal</a>'
+        '<a href="#s-lib" data-nodot>Evidence library</a>'
         '<b>Timeline</b>'
         '<a href="#tl-ash" data-nodot>Active sessions, full span</a>'
         '<a href="#lane-activity" data-nodot>Activity</a>'
@@ -398,11 +402,6 @@ def emit(w) -> str:
         '<a href="#lane-sql">SQL</a>'
         '<a href="#lane-config" data-nodot>Configuration</a>'
         '<b>Workload</b>'
-        '<a href="#db-time-summary">DB time</a>'
-        '<a href="#ash-timeline">ASH timeline</a>'
-        '<a href="#windows">Windows</a>'
-        + ('<a href="#day-profile">Day profile</a>' if w.profile_days > 0 else '')
-        + '<a href="#utilization">Utilization</a>'
         '<a href="#load">Load profile</a>'
         '<a href="#metrics">Metrics</a>'
         '<a href="#waits-fg">Waits &mdash; foreground</a>'
@@ -415,7 +414,13 @@ def emit(w) -> str:
         '<a href="#segment-io">Segment I/O</a>'
         '<a href="#file-io">File I/O</a>'
         '<a href="#param-changes">Parameters</a>'
-        '<b id="rail-ref">Reference</b>'
+        '<b>Whole span</b>'
+        '<a href="#ash-timeline">ASH timeline</a>'
+        '<a href="#db-time-summary">DB time</a>'
+        '<a href="#utilization">Utilization</a>'
+        '<a href="#windows">Windows</a>'
+        + ('<a href="#day-profile">Day profile</a>' if w.profile_days > 0 else '')
+        + '<b id="rail-ref">Reference</b>'
         '<a href="#guide" data-nodot>Reading the charts</a>'
         '<a href="#about" data-nodot>About this report</a>'
         '</div>'

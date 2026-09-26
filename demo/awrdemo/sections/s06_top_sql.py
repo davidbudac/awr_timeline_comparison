@@ -234,7 +234,7 @@ def emit(w) -> str:
     nweeks = weeks_back + 1
 
     put("<!-- AWR-SECTION: 06_top_sql BEGIN -->")
-    put('<section id="topsql" class="vw in-s in-a"><h2>Top SQL'
+    put('<section id="topsql" class="vw in-s in-a lib lopen" style="--os:1"><h2>Top SQL'
         '<small class="h2sub">Top ' + str(top_n)
         + ' statements per ranking and window; ranked, not scored</small></h2>')
     put('<div class="tabs" data-tabs="topsql" role="tablist" aria-label="Top SQL ranking dimension">'
@@ -268,6 +268,7 @@ def emit(w) -> str:
 
     cur_dim = None
     tl_rows = []
+    ls = None
     for s in rows:
         dim = s["dim"]
         if cur_dim != dim:
@@ -386,6 +387,15 @@ def emit(w) -> str:
                       + h.wg_title(w, first) + '">&#10010;</b>')
                 note = "<b>&#10010;</b> new " + ("in Current" if first == 0 else h.wg_date(w, first))
             txt = w.sql_by_id[sid].text or ""
+            if not tl_rows:
+                if s["cur_rnk"] is None:
+                    ls = "no statement in the Current top " + str(top_n)
+                else:
+                    ls = ("<code>" + sid + "</code> #" + str(s["cur_rnk"]) + " by elapsed"
+                          + ((", " + h.delta_span(h.tl_val(w, csv, 0), mu, None, "Y")) if mu is not None else "")
+                          + (", new plan" if plan_flip else
+                             (", new " + ("in Current" if first == 0 else h.wg_date(w, first)))
+                             if first is not None else ""))
             tl_rows.append(h.tl_bars(
                 w, csv, mu, None, None,
                 h.tl_lab(h.ent(sid, anchor_id("sq-elapsed", sid), "sql"),
@@ -626,6 +636,6 @@ def emit(w) -> str:
     block, pos = _slice(L, "<script>(function(){", "})();</script>", pos)   # hash nav
     o.extend(block)
 
-    put("</section>")
+    put(h.lib_ls("topsql", ls or "no SQL captured in the compared windows") + "</section>")
     put("<!-- AWR-SECTION: 06_top_sql END -->")
     return "\n".join(o)

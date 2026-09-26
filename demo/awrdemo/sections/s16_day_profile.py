@@ -121,7 +121,7 @@ def emit(w) -> str:
     cells = _cells(w)
     nstat = len(TARGETS)
     labels = {o: lbl for _, o, lbl, _ in TARGETS}
-    put('<section id="day-profile" class="vw in-t in-a">')
+    put('<section id="day-profile" class="vw in-s in-t in-a lib" style="--os:4">')
 
     if not any(c["cur_val"] is not None for c in cells.values()):
         put('<h2>Day profile<small class="h2sub">Each hour of the last day vs the same hour on the '
@@ -158,8 +158,6 @@ def emit(w) -> str:
     nshift = sum(1 for o in labels if shift[o] != 0)
     isolated = sum(up[o] + down[o] for o in labels if shift[o] == 0)
 
-    if nshift > 0:
-        put('<script>document.getElementById("day-profile").classList.add("in-s");</script>')
 
     plural = "" if days == 1 else "s"
     put('<h2>Day profile<span class="meta">'
@@ -306,6 +304,11 @@ def emit(w) -> str:
         if t == "AWR_DATA.dayProfile=":
             _put_clob_chunked(buf, put)
 
+    put('<script>if(window.AWR_ls)AWR_ls("day-profile","'
+        + ("no day-wide shift" if nshift == 0 else
+           "<b>" + str(nshift) + "</b> day-wide shift" + ("" if nshift == 1 else "s"))
+        + ((", " + str(isolated) + " isolated hour" + ("" if isolated == 1 else "s")) if isolated > 0 else "")
+        + '");</script>')
     put("</section>")
     put("<!-- AWR-SECTION: 16_day_profile END -->")
     return "\n".join(out)
