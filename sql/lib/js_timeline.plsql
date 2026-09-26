@@ -32,8 +32,10 @@
 -- toggles that restack and rescale, drag-to-zoom with a minimum span,
 -- Reset / double-click, compared windows shaded -- Current indigo, pinned
 -- amber -- click / Enter on one pins its grid column, release markers).
--- No literal tilde below (SET DEFINE tilde).  Generated from readable JS
--- (the phase-3 scratch js_timeline.js); edit the PUT_LINEs directly.
+-- No literal tilde below (SET DEFINE tilde).  GENERATED: the body below
+-- (BEGIN .. END) is written by tools/js2plsql.sh from the readable source
+-- sql/lib/src/js_timeline.js -- edit the .js, then run tools/js2plsql.sh
+-- (lint check 24 fails on a stale body).  This header is kept as is.
 --
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<script>');

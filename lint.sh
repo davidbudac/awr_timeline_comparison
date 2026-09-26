@@ -384,6 +384,19 @@ for f in $(grep -l "tl_open(" sql/[0-9]*.sql 2>/dev/null); do
     fi
 done
 
+# ----------------------------------------------------------------------
+# 24. Generated client scripts must match their readable source.  The
+#     PUT_LINE bodies of sql/lib/js_timeline.plsql and js_wingrid.plsql
+#     are generated from sql/lib/src/<name>.js by tools/js2plsql.sh (also
+#     rejects a tilde or an over-long line); edit the .js and regenerate.
+# ----------------------------------------------------------------------
+if ! sh tools/js2plsql.sh --check >/dev/null 2>"${TMPDIR:-/tmp}/lint_js2plsql.$$"; then
+    while IFS= read -r l; do
+        finding generated-js "tools/js2plsql.sh" "$l"
+    done < "${TMPDIR:-/tmp}/lint_js2plsql.$$"
+fi
+rm -f "${TMPDIR:-/tmp}/lint_js2plsql.$$"
+
 [ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"

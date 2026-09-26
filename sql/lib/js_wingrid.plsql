@@ -25,8 +25,10 @@
 -- [data-mk-at="o"] slot gets the marker on that boundary; a.jump[data-tl]
 -- ("Timeline ->" on the finding cards) goes to the row id in data-tl when
 -- the Timeline emits one, else follows its href.
--- No literal tilde below (SET DEFINE tilde).  Generated from readable JS;
--- edit the PUT_LINEs directly.
+-- No literal tilde below (SET DEFINE tilde).  GENERATED: the body below
+-- (BEGIN .. END) is written by tools/js2plsql.sh from the readable source
+-- sql/lib/src/js_wingrid.js -- edit the .js, then run tools/js2plsql.sh
+-- (lint check 24 fails on a stale body).  This header is kept as is.
 --
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<script>');
