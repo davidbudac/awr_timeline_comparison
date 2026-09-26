@@ -14,6 +14,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from .. import chrome
+from .. import helpers as h
 from ..helpers import (esc, mean_sd, z_and_pct, ts_min, ts_sec, hh24, dy, mon_dd,
                        to_char_fixed, finding_family, is_canonical, policy_bucket)
 
@@ -88,9 +89,9 @@ def _window_values(w):
 
 
 def scored_rows(w):
-    """[(domain, name, z, pct, n_prior, bucket, family, canonical)]
-    ORDER BY ABS(NVL(z,0)) DESC, name -- bucket already carries the
-    'improved' override of the PL/SQL pass."""
+    """The PL/SQL v_scored collection, ORDER BY ABS(NVL(z,0)) DESC, name:
+    dicts with domain / name / z / pct / n / bucket / family / canonical /
+    cur / mu / sd (bucket from the per-metric policy for every row)."""
     rows = []
     allv = _window_values(w)
     wait_tot = sum(v.get(0, 0.0) for (d, _n), v in allv.items() if d == "WAIT")
@@ -112,10 +113,11 @@ def scored_rows(w):
             z = None
         share = (cur / wait_tot) if (dom == "WAIT" and wait_tot > 0 and cur is not None) else None
         # the PL/SQL pass: per-metric policy (sql/lib/metric_policy.plsql)
-        bucket = None if z is None else policy_bucket(dom, name, None, cur, mu, sd, n, share)
-        fam, canon = finding_family(dom, name), is_canonical(dom, name)
-        rows.append((dom, name, z, pct, n, bucket, fam, canon))
-    rows.sort(key=lambda r: (-abs(r[2] or 0.0), r[1]))
+        bucket = policy_bucket(dom, name, None, cur, mu, sd, n, share)
+        rows.append(dict(domain=dom, name=name, z=z, pct=pct, n=n, bucket=bucket,
+                         family=finding_family(dom, name), canonical=is_canonical(dom, name),
+                         cur=cur, mu=mu, sd=sd))
+    rows.sort(key=lambda r: (-abs(r["z"] or 0.0), r["name"]))
     return rows
 
 
@@ -127,69 +129,6 @@ def _pct_markup(pct):
     txt = ('<span class="g">' + ("&#9650;" if pct >= 0 else "&#9660;") + "</span> "
            + to_char_fixed(abs(pct), 0) + "%")
     return cls, txt
-
-
-# ---------------------------------------------------------------------
-# Masthead DB-time strip
-# ---------------------------------------------------------------------
-
-def _put_clob_chunked(s: str) -> list[str]:
-    """sql/lib/put_clob_chunked.plsql: 32500-char chunks backed off to the
-    last comma so a PUT_LINE newline never splits a token."""
-    c = 32500
-    out = []
-    pos, n = 0, len(s)
-    if n == 0:
-        return out
-    while pos < n:
-        take = min(c, n - pos)
-        if pos + take < n:
-            cut = s[pos:pos + take].rfind(",") + 1
-            if cut > 0:
-                take = cut
-        out.append(s[pos:pos + take])
-        pos += take
-    return out
-
-
-def _timeline(w):
-    """(times_json, vals_json, windows_json) for AWR_DATA.mastheadTimeline."""
-    # windows with both snaps, distinct, same startup_time (raw_windows join)
-    wins = []
-    for win in w.windows:
-        bs, es = w.snap_at(win.win_start_ts), w.snap_at(win.win_end_ts)
-        if bs is None or es is None or bs.snap_id == es.snap_id:
-            continue
-        if bs.dbid != es.dbid or bs.startup_time != es.startup_time:
-            continue
-        wins.append((win, bs, es))
-    if not wins:
-        return "[]", "[]", "[]"
-    range_start = min(bs.end_ts for _, bs, _ in wins)
-    range_end = max(es.end_ts for _, _, es in wins)
-    windows_json = "[" + ",".join(
-        '["' + ts_min(win.win_start_ts) + '","' + ts_min(win.win_end_ts) + '","'
-        + ("current" if win.week_offset == 0 else "w-" + str(win.week_offset)) + '"]'
-        for win, _, _ in sorted(wins, key=lambda t: -t[0].week_offset)) + "]"
-
-    # Pass 1 + 2: chronological snaps in (range_start, range_end] whose
-    # startup_time matches the previous snap's; per-snap DB time =
-    # DB CPU + non-Idle wait deltas (seconds).
-    times, vals = [], []
-    for m in w.hours(range_start, range_end):
-        snap = w.snap_at(m.ts)
-        prev = w.snap_at(m.ts - H)
-        if snap is None or prev is None or prev.end_ts < range_start:
-            continue
-        if snap.startup_time != prev.startup_time:
-            continue
-        us = m.time_model.get("DB CPU", 0.0)
-        for ev, (wc, cnt, tw) in m.fg_waits.items():
-            if (wc or "x") != "Idle":
-                us += tw
-        times.append('"' + ts_min(m.ts) + '"')
-        vals.append(to_char_fixed(us / 1e6 if us > 0 else 0.0, 3))
-    return "[" + ",".join(times) + "]", "[" + ",".join(vals) + "]", windows_json
 
 
 # ---------------------------------------------------------------------
@@ -218,37 +157,116 @@ def _literal_slice(L, i, j):
 # emit
 # ---------------------------------------------------------------------
 
+def _verdict_state(w, scored):
+    """The PL/SQL single pass + card order: counts and the card groups."""
+    st = dict(n_moved=0, n_impr=0, n_normal=0, n_usable=0, max_n=0, dbt=None, cpu=None)
+    lead, gsev, gz = {}, {}, {}
+    for i, r in enumerate(scored):
+        if (r["n"] or 0) > st["max_n"]:
+            st["max_n"] = r["n"]
+        if r["domain"] == "LOAD" and r["name"] == "DB time":
+            st["dbt"] = r
+        elif r["domain"] == "LOAD" and r["name"] == "DB CPU":
+            st["cpu"] = r
+        if r["z"] is not None:
+            st["n_usable"] += 1
+        if r["canonical"] != "Y":
+            continue
+        if r["bucket"] in ("large", "moderate"):
+            st["n_moved"] += 1
+            g = h.card_group(r["family"])
+            if g not in lead:
+                lead[g], gsev[g], gz[g] = r, 0, 0
+            elif h.lead_better(g, r["bucket"], r["family"], r["z"],
+                               lead[g]["bucket"], lead[g]["family"], lead[g]["z"],
+                               h.metric_label(r["domain"], r["name"]),
+                               h.metric_label(lead[g]["domain"], lead[g]["name"])):
+                lead[g] = r
+            gsev[g] = max(gsev[g], h.sev_rank(r["bucket"]))
+            gz[g] = max(gz[g], abs(r["z"] or 0))
+        elif r["bucket"] in ("typical", "improved", "noted", "flat baseline"):
+            st["n_normal"] += 1
+            if r["bucket"] == "improved":
+                st["n_impr"] += 1
+    st["order"] = h.card_order({g: (gsev[g], gz[g]) for g in lead})
+    st["lead"] = lead
+    return st
+
+
+def _win_json(w) -> str:
+    """window.AWR_WIN (00_params.sql v_win_json)."""
+    out = []
+    for k in range(w.weeks_back, -1, -1):
+        s0, e0 = h._wg_start(w, k), h._wg_end(w, k)
+        win = w.windows[k]
+        out.append('{"o":' + str(k) + ',"d":"' + h.wg_date(w, k) + '"'
+                   + ',"l":"' + ("current" if k == 0 else "-" + w.offset_labels[k - 1]) + '"'
+                   + ',"s":"' + ts_min(s0) + '","e":"' + ts_min(e0) + '"'
+                   + ',"t":"' + dy(s0) + " " + s0.strftime("%d") + " " + mon_dd(s0)[:3] + ", "
+                   + hh24(s0) + "-" + hh24(e0) + '"'
+                   + ',"v":"' + ("Y" if win.valid else "N") + '"}')
+    return '{"np":' + str(w.weeks_back) + ',"w":[' + ",".join(out) + "]}"
+
+
+def _hero(w, st) -> list[str]:
+    o = []
+    put = o.append
+    order = st["order"]
+    put('<section id="verdict" class="vw in-s hero" aria-label="Verdict">')
+    if st["n_usable"] == 0:
+        n_valid = sum(1 for x in w.windows if x.week_offset > 0 and x.valid)
+        put('<h1 class="verdict quiet">Too little history to score this window.</h1>')
+        put('<p class="because">Scoring needs at least 3 valid prior windows; ' + str(n_valid) + ' of '
+            + str(w.weeks_back) + ' ' + ('is' if n_valid == 1 else 'are')
+            + ' valid here (<a href="#windows">Windows</a>). The values are still listed in '
+            '<a href="#findings">Findings</a>.</p>')
+    elif not order:
+        put('<h1 class="verdict quiet">Nothing moved beyond its normal range.</h1>')
+        put('<p class="because">All ' + str(st["n_normal"]) + ' scored metrics sit within their normal range '
+            'over the prior ' + str(st["max_n"]) + ' window' + ('' if st["max_n"] == 1 else 's')
+            + ('; ' + str(st["n_impr"]) + ' improved' if st["n_impr"] > 0 else '') + '.</p>')
+    else:
+        v = ""
+        for k, g in enumerate(order[:2]):
+            r = st["lead"][g]
+            v += ("; " if k else "") + h.ent(esc(h.metric_label(r["domain"], r["name"])),
+                                          h.finding_anchor(r["domain"], r["name"]), "metric")
+            v += " " + h.move_txt(r["cur"], r["mu"], r["bucket"])
+            if g == "DBTIME" and r["name"] == "DB time" and st["dbt"] and st["cpu"]:
+                sp = h.time_split(st["dbt"]["cur"], st["dbt"]["mu"], st["cpu"]["cur"], st["cpu"]["mu"])
+                v += {"W": ", all wait", "w": ", mostly wait", "c": ", mostly CPU",
+                      "m": ", CPU and wait alike"}.get(sp, "")
+            if g == "IO":
+                v += '<span class="vx" data-vx="io" hidden></span>'
+        put('<h1 class="verdict">' + v + '.</h1>')
+    put('<p class="because" id="because-slot" hidden></p>')
+    nm, nn, ni = st["n_moved"], st["n_normal"], st["n_impr"]
+    put('<ul class="pills" id="pills" aria-label="Counts">'
+        + (('<li><a href="#findings"><b>' + str(len(order)) + '</b> finding' + ('' if len(order) == 1 else 's')
+            + '</a></li><li><a href="#findings"><b>' + str(nm) + '</b> metric' + ('' if nm == 1 else 's')
+            + ' moved</a></li>') if order else '')
+        + '<li class="pl-normal"><a href="#s-normal"><b>' + str(nn) + '</b> metric' + ('' if nn == 1 else 's')
+        + ' normal</a></li>'
+        + ('<li><a href="#s-normal"><b>' + str(ni) + '</b> improved</a></li>' if ni > 0 else '')
+        + '</ul>')
+    put('<ul class="hnotes" id="narrative-slot" hidden></ul>')
+    target_end_s, requested_s = ts_sec(w.target_end), ts_sec(w.target_end_requested)
+    if requested_s != target_end_s:
+        put('<p class="snapnote">Requested end ' + esc(requested_s[:16])
+            + ' had no snapshot within 15 min &mdash; snapped to last snapshot '
+            + esc(target_end_s[:16]) + '</p>')
+    put('</section>')
+    return o
+
+
 def emit(w) -> str:
     o = []
     put = o.append
     put("<!-- AWR-SECTION: 00_params BEGIN -->")
 
     scored = scored_rows(w)
-    n_movers = n_moved = n_impr = n_usable = 0
-    max_n = 0
-    top = []
-    seen = set()
-    fams = set()
-    for r in scored:
-        if (r[4] or 0) > max_n:
-            max_n = r[4]
-        if r[2] is not None:
-            n_usable += 1
-            if r[5] == "improved" and r[7] == "Y":
-                n_impr += 1
-            elif r[5] in ("large", "moderate"):
-                n_moved += 1
-                if r[7] == "Y":
-                    fams.add(r[6])
-                    n_movers = len(fams)
-                    if len(top) < 3 and r[6] not in seen:
-                        top.append(r)
-                        seen.add(r[6])
+    st = _verdict_state(w, scored)
 
-    times_json, vals_json, windows_json = _timeline(w)
-    target_end_s = ts_sec(w.target_end)
-
-    # ---- editorial masthead ------------------------------------------
     put('<script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.body.classList.add("dark");}catch(e){}})();</script>')
     L = _lines()
     # the early view script is literal in the SQL: lift it verbatim
@@ -268,7 +286,7 @@ def emit(w) -> str:
         '<span class="sp"></span>'
         '<div class="seg" role="group" aria-label="View">'
         '<button type="button" data-v="summary" aria-pressed="true"'
-        ' title="The answer: verdict, findings, headline metrics, Top SQL">Summary</button>'
+        ' title="The answer: verdict, finding cards, what changed, checked and normal">Summary</button>'
         '<button type="button" data-v="timeline" aria-pressed="false"'
         ' title="The compared windows side by side">Timeline</button>'
         '<button type="button" data-v="all" aria-pressed="false"'
@@ -289,163 +307,6 @@ def emit(w) -> str:
         '</svg>'
         '</button>'
         '</div>')
-    put('<header class="report vw in-s in-a">')
-    put('  <div class="brandline"><span class="dot">&#9679;</span> AWR <span class="slash">/</span> TIMELINE COMPARISON</div>')
-    put('  <div class="topgrid">')
-    put('    <h1>' + esc(w.dow_name)
-        + ' <em>' + esc(target_end_s[11:16]) + '</em>'
-        + '<br>'
-        + w.period_unit_long.capitalize() + '-over-' + w.period_unit_long + ' trend'
-        + ' <span class="badge info">run ' + w.run_id + '</span>'
-        + '</h1>')
-    put('    <div class="meta">')
-    put('      <div><b>' + esc(w.db_name) + '</b> &middot; DBID ' + str(w.dbid)
-        + (' &middot; all DBIDs ' + w.dbid_list.replace(",", ", ") if "," in w.dbid_list else '')
-        + '</div>')
-    put('      <div>Host <b>' + esc(w.host_name) + '</b> &middot; ' + esc(w.db_version) + '</div>')
-    put('      <div>Generated <b>' + w.generated_at + '</b></div>')
-    put('      <div>Run by ' + esc(w.caller_user) + ' &middot; read-only, no scratch schema</div>')
-    requested_s = ts_sec(w.target_end_requested)
-    if requested_s != target_end_s:
-        put('      <div>Requested end ' + esc(requested_s[:16])
-            + ' had no snapshot within 15 min &mdash; snapped to last snapshot '
-            + esc(target_end_s[:16]) + '</div>')
-    put('    </div>')
-    put('  </div>')
-
-    # ---- verdict -----------------------------------------------------
-    plural = lambda n: '' if n == 1 else 's'
-    if n_usable == 0:
-        put('  <div class="verdict v-skip">')
-        put('    <span class="label">Verdict</span>')
-        put('    <span class="lede skip">Baseline too short</span> <span class="sep">/</span> '
-            '<span class="body">need at least 3 prior valid windows to score; '
-            'only %-delta available in <a href="#findings">findings</a>.</span>')
-    elif n_movers == 0:
-        put('  <div class="verdict v-ok">')
-        put('    <span class="label">Verdict</span>')
-        put('    <span class="lede ok">Quiet</span> <span class="sep">/</span> '
-            '<span class="body">no material regression vs the prior '
-            + str(max_n) + ' window' + plural(max_n)
-            + ('; ' + str(n_impr) + ' metric' + plural(n_impr)
-               + ' <a href="#findings">improved</a>' if n_impr > 0 else '')
-            + '.</span>')
-    else:
-        put('  <div class="verdict v-crit">')
-        put('    <span class="label">Verdict</span>')
-        put('    <a href="#findings" class="lede crit">' + str(n_movers) + ' finding'
-            + plural(n_movers) + '</a> <span class="sep">/</span> '
-            '<span class="body">' + str(n_moved) + ' metric' + plural(n_moved)
-            + ' moved vs prior ' + str(max_n) + ' window' + plural(max_n)
-            + (' &middot; ' + str(n_impr) + ' improved' if n_impr > 0 else '')
-            + '</span>')
-        for dom, name, z, pct, n, _b, _f, _c in top:
-            clean = name[len("Wait class: "):] if name.startswith("Wait class: ") else name
-            if len(clean) > 36:
-                clean = clean[:34] + "&hellip;"
-            cls, txt = _pct_markup(pct)
-            # NB: the SQL CONVERTs the already-appended &hellip; -- mirrored
-            put('    <span class="mover"><span class="name">' + esc(clean) + '</span>'
-                ' <span class="pct ' + cls + '">' + txt + '</span></span>')
-    put('  </div>')
-
-    # ---- all movers list --------------------------------------------
-    if n_moved > 0:
-        put('  <details class="movers-all">')
-        put('    <summary>All ' + str(n_moved) + ' moved metric' + plural(n_moved)
-            + ' &middot; material, in the bad direction; twins muted'
-            + ('; ' + str(n_impr) + ' improved not listed' if n_impr > 0 else '')
-            + '</summary>')
-        put('    <ul class="movers-list">')
-        for dom, name, z, pct, n, bucket, fam, canon in scored:
-            if bucket not in ("large", "moderate"):
-                continue
-            clean = name[len("Wait class: "):] if name.startswith("Wait class: ") else name
-            if len(clean) > 48:
-                clean = esc(clean[:46]) + "&hellip;"
-            else:
-                clean = esc(clean)
-            z_txt = to_char_fixed(z, 1, plus=True)
-            cls, txt = _pct_markup(pct)
-            li_cls = ' class="twin"' if canon == "N" else ''
-            put('      <li' + li_cls + '><span class="m-dom">' + dom + '</span>'
-                '<span class="m-name">' + clean + '</span>'
-                '<span class="m-z">z ' + z_txt + '</span>'
-                '<span class="m-pct ' + cls + '">' + txt + '</span></li>')
-        put('    </ul>')
-        put('  </details>')
-
-    put('  <div id="narrative-slot"></div>')
-
-    # ---- compared windows strip -------------------------------------
-    put('  <div class="windows-strip">')
-    put('    <div class="strip-head"><b>Compared windows</b> <span class="strip-meta">'
-        + esc(w.dow_name)
-        + ' &middot; ' + w.win_label + ' each &middot; every ' + w.step_label
-        + ' &middot; DB time (s) over full span'
-        + ('' if w.template == 'comprehensive'
-           else ' &middot; template: <code>' + w.template + '</code>')
-        + (' &middot; day profile: ' + str(w.profile_days) + ' prior days'
-           if w.profile_days > 0 else '')
-        + '</span></div>')
-    step = timedelta(hours=w.step_hours)
-    width = timedelta(hours=w.win_hours)
-    cur_day = (w.target_end - width).date()
-    cur_start = w.target_end - width
-    oldest = w.target_end - w.weeks_back * step - width
-    put('    <details class="windows-more">')
-    put('      <summary>'
-        '<span class="wchip cur" data-w="0" title="click to highlight the Current window everywhere">'
-        '<b>current</b> <span>' + dy(cur_start) + ' ' + cur_start.strftime("%d") + ' '
-        + mon_dd(cur_start)[:3] + ' ' + hh24(cur_start) + ' &rarr; ' + hh24(w.target_end)
-        + '</span></span>'
-        '<span>vs ' + str(w.weeks_back) + ' prior window' + ('' if w.weeks_back == 1 else 's')
-        + ', every ' + w.step_label + ', back to '
-        + dy(oldest) + ' ' + oldest.strftime("%d") + ' ' + mon_dd(oldest)[:3] + '</span>'
-        '<span class="w-toggle"><span class="closed">show all windows &#9662;</span>'
-        '<span class="opened">hide windows &#9652;</span></span>'
-        '</summary>')
-    put('    <div class="windows-chips">')
-    for wk in range(w.weeks_back + 1):
-        w_end = w.target_end - wk * step
-        w_start = w_end - width
-        same_day = w_start.date() == cur_day
-        w_day = dy(w_start) + " " + w_start.strftime("%d") + " " + mon_dd(w_start)[:3]
-        put('      <button type="button" class="wchip' + (' cur' if wk == 0 else '')
-            + '" data-w="' + str(wk) + '" title="' + ts_min(w_start) + ' &rarr; ' + ts_min(w_end)
-            + ' &middot; click to highlight this window everywhere">'
-            + ('<b>current</b>' if wk == 0 else '<b>&minus;' + w.offset_labels[wk - 1] + '</b>')
-            + ' <span>' + ('' if same_day else '<em>' + w_day + '</em> ')
-            + hh24(w_start) + ' &rarr; ' + hh24(w_end) + '</span></button>')
-    put('    </div>')
-    put('    <div class="windows-hint">click a window to highlight it everywhere &middot; Esc clears</div>')
-    put('    </details>')
-    put('    <div class="windows-chart" id="masthead-timeline"></div>')
-    put('    <div class="windows-fallback">')
-    for wk in range(w.weeks_back + 1):
-        w_end = w.target_end - wk * step
-        w_start = w_end - width
-        put('      <span class="win">'
-            + ('<b>current</b> ' if wk == 0 else '<b>&minus;' + w.offset_labels[wk - 1] + '</b> ')
-            + ts_min(w_start) + ' &rarr; ' + ts_min(w_end) + '</span>')
-    put('    </div>')
-    put('  </div>')
-    put('</header>')
-
-    # ---- masthead chart script (payload by hand, IIFE verbatim) ------
-    put('<script>')
-    put('(function(){')
-    put('AWR_DATA.mastheadTimeline={')
-    put('times:')
-    o.extend(_put_clob_chunked(times_json))
-    put(',')
-    put('vals:')
-    o.extend(_put_clob_chunked(vals_json))
-    put(',')
-    put('windows:' + windows_json)
-    i_win = _index(L, 'windows:')
-    i_end = _index(L, '</script>', i_win)
-    o.extend(_literal_slice(L, i_win + 1, i_end))          # '};' .. '</script>'
 
     # ---- nav rail (hand-ported: profile_days CASE) --------------------
     put('<nav class="toc">'
@@ -461,16 +322,17 @@ def emit(w) -> str:
         '<span class="kbd">&#8984;K</span>'
         '</div>'
         '<div class="rail-list">'
-        '<b>Triage</b>'
-        '<a href="#narrative-slot" class="narr-link" hidden>What changed</a>'
-        '<a href="#db-time-summary">DB time</a>'
-        '<a href="#overview">Overview</a>'
-        '<a href="#ash-timeline">ASH timeline</a>'
+        '<b>Summary</b>'
+        '<a href="#verdict" data-nodot>Verdict</a>'
         '<a href="#findings">Findings</a>'
-        '<a href="#windows">Windows</a>'
+        '<a href="#s-changes" data-nodot hidden>What changed around it</a>'
+        '<a href="#s-normal" data-nodot>Checked and normal</a>'
         '<b>Timeline</b>'
         '<a href="#timeline" data-nodot>Window grid</a>'
         '<b>Workload</b>'
+        '<a href="#db-time-summary">DB time</a>'
+        '<a href="#ash-timeline">ASH timeline</a>'
+        '<a href="#windows">Windows</a>'
         + ('<a href="#day-profile">Day profile</a>' if w.profile_days > 0 else '')
         + '<a href="#utilization">Utilization</a>'
         '<a href="#load">Load profile</a>'
@@ -503,11 +365,18 @@ def emit(w) -> str:
         '</div>'
         '</nav>')
 
-    # ---- every chrome <script> after the nav, verbatim -----------------
+    # ---- every chrome <script> after the nav, verbatim, up to <main> ---
     i_nav = next(i for i in range(len(L)) if L[i][0].startswith('<nav class="toc">'))
+    i_main = _index(L, '<main id="main-start">', i_nav)
+    o.extend(_literal_slice(L, i_nav + 1, i_main))
+    # ---- AWR_WIN + the verdict hero (hand-ported) ----------------------
+    put('<script>window.AWR_WIN=' + _win_json(w) + ';</script>')
+    o.extend(_hero(w, st))
+    # ---- the Timeline placeholder (literal) ----------------------------
     i_last = len(L) - 1
     assert L[i_last][0] == '<!-- AWR-SECTION: 00_params END -->'
-    o.extend(_literal_slice(L, i_nav + 1, i_last - 1))
+    i_tl = next(i for i in range(i_main, len(L)) if L[i][0].startswith('<section id="timeline"'))
+    o.extend(_literal_slice(L, i_tl, i_last - 1))
 
     put('<!-- AWR-SECTION: 00_params END -->')
     return "\n".join(o)

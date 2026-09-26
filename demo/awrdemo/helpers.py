@@ -648,3 +648,338 @@ def hh24(dt) -> str:
 def csv_num6(vals, null_token="") -> str:
     """','-joined num6 values, None -> null_token (positional slots kept)."""
     return ",".join(null_token if v is None else num6(v) for v in vals)
+
+
+# ---------------------------------------------------------------------
+# sql/lib/finding_cards.plsql  (Summary vocabulary: names, units, cards)
+# ---------------------------------------------------------------------
+
+def card_group(family: str) -> str:
+    if family in ("READ_IO", "SCANS", "LOGICAL_IO", "WAIT:User I/O"):
+        return "IO"
+    if family in ("DB_TIME", "CPU_WAIT_RATIO", "RESPONSE"):
+        return "DBTIME"
+    if family in ("WAIT:Network", "NETWORK"):
+        return "NET"
+    if family in ("WAIT:Commit", "COMMIT"):
+        return "COMMIT"
+    if family in ("PARSE", "HARD_PARSE", "CURSORS"):
+        return "PARSE"
+    if family in ("WRITE_IO", "REDO", "WAIT:System I/O"):
+        return "WRITE"
+    return family
+
+
+_CARD_PRIMARY = {"IO": "READ_IO", "DBTIME": "DB_TIME", "NET": "WAIT:Network",
+                 "COMMIT": "WAIT:Commit", "PARSE": "HARD_PARSE", "WRITE": "WRITE_IO"}
+
+
+def card_primary(group: str) -> str:
+    return _CARD_PRIMARY.get(group, group)
+
+
+def card_label(group: str) -> str:
+    fixed = {"IO": "Physical I/O", "DBTIME": "DB time", "NET": "Network", "COMMIT": "Commit",
+             "PARSE": "Parsing", "WRITE": "Writes and redo"}
+    if group in fixed:
+        return fixed[group]
+    if group.startswith("WAIT:"):
+        return group[5:] + " waits"
+    if group.startswith("OTHER:"):
+        return group[6:]
+    return " ".join(w.capitalize() for w in group.replace("_", " ").split(" "))
+
+
+def card_id(group: str) -> str:
+    v = re.sub(r"[^a-z0-9]+", "-", group.lower())
+    return "f-" + re.sub(r"^-+|-+$", "", v)[:48]
+
+
+_METRIC_LABEL = {
+    "physical reads": "Physical reads", "physical read total bytes": "Physical read bytes",
+    "Physical Read Total IO Requests Per Sec": "Read I/O requests",
+    "Physical Write Total IO Requests Per Sec": "Write I/O requests",
+    "session logical reads": "Logical reads", "table scans (long tables)": "Table scans (long tables)",
+    "table fetch by rowid": "Rowid fetches", "DB time": "DB time", "DB CPU": "DB CPU",
+    "CPU used by this session": "CPU used", "Database Wait Time Ratio": "Wait time ratio",
+    "Database CPU Time Ratio": "CPU time ratio", "SQL Service Response Time": "SQL response time",
+    "Average Active Sessions": "Average active sessions", "Host CPU Utilization (%)": "Host CPU",
+    "Average Synchronous Single-Block Read Latency": "Single-block read latency",
+    "execute count": "Executions", "user calls": "User calls", "user commits": "User commits",
+    "user rollbacks": "User rollbacks", "redo size": "Redo generated", "redo writes": "Redo writes",
+    "physical writes": "Physical writes", "physical write total bytes": "Write volume",
+    "parse count (hard)": "Hard parses", "parse count (total)": "Parses (total)",
+    "parse count (failures)": "Parse failures", "Session Count": "Sessions",
+    "logons cumulative": "Logons", "opened cursors cumulative": "Cursors opened",
+    "sorts (disk)": "Sorts (disk)", "sorts (memory)": "Sorts (memory)", "sorts (rows)": "Sorted rows",
+    "bytes sent via SQL*Net to client": "Bytes to clients",
+    "bytes received via SQL*Net from client": "Bytes from clients",
+    "Network Traffic Volume Per Sec": "Network volume",
+    "redo size for lost write detection": "Lost-write redo",
+}
+
+
+def metric_label(domain: str, name: str) -> str:
+    if domain == "WAIT":
+        return re.sub(r"^Wait class: ", "", name) + " waits"
+    if name in _METRIC_LABEL:
+        return _METRIC_LABEL[name]
+    return name[:1].upper() + name[1:]
+
+
+def metric_unit(domain: str, name: str) -> str:
+    if domain == "WAIT":
+        return "AAS"
+    if domain == "LOAD":
+        if name in ("DB time", "DB CPU", "CPU used by this session"):
+            return "AAS"
+        if "bytes" in name or name.startswith("redo size"):
+            return "B/s"
+        return "/s"
+    if name == "SQL Service Response Time":
+        return "ms/call"
+    if name == "Session Count":
+        return "sessions"
+    if name == "Average Active Sessions":
+        return "AAS"
+    if "Latency" in name:
+        return "ms"
+    if "(%)" in name or "Ratio" in name:
+        return "%"
+    if name.endswith("Bytes Per Sec") or name == "Network Traffic Volume Per Sec":
+        return "B/s"
+    return "/s"
+
+
+def metric_scale(domain: str, name: str) -> float:
+    if domain == "LOAD" and name in ("DB time", "DB CPU", "CPU used by this session"):
+        return 0.01
+    if domain == "METRIC" and name == "SQL Service Response Time":
+        return 10
+    return 1
+
+
+def _mul(v, s):
+    return None if v is None else v * s
+
+
+def fv_num(v, unit) -> str:
+    if unit == "B/s" and v is not None:
+        a = abs(v)
+        return fmt_num(v / 1e9 if a >= 1e9 else v / 1e6 if a >= 1e6 else v / 1e3 if a >= 1e3 else v)
+    return fmt_num(v)
+
+
+def fv_unit(v, unit) -> str:
+    if unit == "B/s" and v is not None:
+        a = abs(v)
+        return "GB/s" if a >= 1e9 else "MB/s" if a >= 1e6 else "kB/s" if a >= 1e3 else "B/s"
+    return unit
+
+
+def fv(v, unit) -> str:
+    if v is None:
+        return "&mdash;"
+    u = fv_unit(v, unit)
+    return fv_num(v, unit) + ("" if not u else u if u.startswith("/") else " " + u)
+
+
+def fv_range(mu, sd, unit) -> str:
+    if mu is None or sd is None:
+        return "&mdash;"
+    den = max(sd, 0.02 * abs(mu))
+    hi = mu + 2 * den
+    lo = max(0, mu - 2 * den)
+    if unit == "B/s":
+        a = abs(hi)
+        div = 1e9 if a >= 1e9 else 1e6 if a >= 1e6 else 1e3 if a >= 1e3 else 1
+        return fmt_num(lo / div) + "&ndash;" + fv(hi, "B/s")
+    return fmt_num(lo) + "&ndash;" + fv(hi, unit)
+
+
+def time_split(dbt_cur, dbt_mu, cpu_cur, cpu_mu):
+    if None in (dbt_cur, dbt_mu, cpu_cur, cpu_mu):
+        return None
+    x = dbt_cur - dbt_mu
+    if x <= 0:
+        return None
+    c = (cpu_cur - cpu_mu) / x
+    return "W" if c <= 0.1 else "w" if c <= 0.4 else "c" if c >= 0.6 else "m"
+
+
+def move_txt(cur, mu, bucket) -> str:
+    cls = band_sev(bucket)
+    if cur is None or mu is None or mu == 0:
+        return "moved"
+    q = cur / mu
+    if mu > 0 and q >= 2:
+        return ('<span class="d ' + cls + '">'
+                + (to_char_fixed(q, 1) if q < 100 else to_char_fixed(ora_round(q, 0), 0))
+                + '&times;</span> normal')
+    pct = (cur - mu) / abs(mu) * 100
+    return (("up " if pct >= 0 else "down ") + '<span class="d ' + cls + '">'
+            + to_char_fixed(abs(pct), 1) + '%</span>')
+
+
+def ent(html: str, aid: str, kind: str) -> str:
+    return '<a class="ent" href="#' + aid + '" data-ent="' + kind + '">' + html + '</a>'
+
+
+def sev_rank(bucket) -> int:
+    return {"large": 2, "moderate": 1}.get(bucket, 0)
+
+
+def lead_better(group, bkt_a, fam_a, z_a, bkt_b, fam_b, z_b, lab_a=None, lab_b=None) -> bool:
+    if sev_rank(bkt_a) != sev_rank(bkt_b):
+        return sev_rank(bkt_a) > sev_rank(bkt_b)
+    pa, pb = int(fam_a == card_primary(group)), int(fam_b == card_primary(group))
+    if pa != pb:
+        return pa > pb
+    za, zb = round(abs(z_a or 0), 6), round(abs(z_b or 0), 6)
+    if za != zb:
+        return za > zb
+    return len(lab_a or "x" * 999) < len(lab_b or "x" * 999)
+
+
+def card_before(sev_a, z_a, sev_b, z_b) -> bool:
+    if sev_a != sev_b:
+        return sev_a > sev_b
+    return (z_a or 0) > (z_b or 0)
+
+
+def card_order(groups: dict) -> list:
+    """groups: {group: (sev, maxz)} in PL/SQL associative-array key order
+    (sorted keys) -> the card order (insertion sort on card_before, then a
+    flagged DBTIME card moves up to second place)."""
+    order = []
+    for g in sorted(groups):
+        j = len(order)
+        while j >= 1 and card_before(groups[g][0], groups[g][1], groups[order[j - 1]][0], groups[order[j - 1]][1]):
+            j -= 1
+        order.insert(j, g)
+    if "DBTIME" in order[2:]:
+        order.remove("DBTIME")
+        order.insert(1, "DBTIME")
+    return order
+
+
+# ---------------------------------------------------------------------
+# sql/lib/wingrid.plsql  (the ONE window component, .wg)
+# ---------------------------------------------------------------------
+
+def wg_tok(v) -> str:
+    if v is None:
+        return ""
+    if v == 0:
+        return "0"
+    n = 6 - math.floor(math.log10(abs(v)))
+    s = format(_rnd(v, n), "f")
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    if s.startswith("0."):
+        s = s[1:]
+    elif s.startswith("-0."):
+        s = "-" + s[2:]
+    return s
+
+
+def wg_pairs(vals) -> str:
+    """{offset: value} (or a list indexed by offset) -> the 'k:v;k:v'
+    LISTAGG string (ORDER BY week_offset, non-null values only)."""
+    if isinstance(vals, (list, tuple)):
+        vals = {k: v for k, v in enumerate(vals)}
+    return ";".join(str(k) + ":" + wg_tok(v) for k, v in sorted(vals.items()) if v is not None)
+
+
+def _wg_vals(vals):
+    if isinstance(vals, (list, tuple)):
+        return {k: v for k, v in enumerate(vals)}
+    return vals
+
+
+def _wg_start(w, k):
+    from datetime import timedelta
+    return w.target_end - timedelta(hours=w.step_hours * k) - timedelta(hours=w.win_hours)
+
+
+def _wg_end(w, k):
+    from datetime import timedelta
+    return w.target_end - timedelta(hours=w.step_hours * k)
+
+
+def wg_date(w, k) -> str:
+    s = _wg_start(w, k)
+    if w.step_hours >= 24:
+        return str(s.day) + " " + _MON[s.month - 1]
+    return s.strftime("%H:%M")
+
+
+def wg_off(w, k) -> str:
+    return "current" if k == 0 else "&minus;" + w.offset_labels[k - 1]
+
+
+def wg_title(w, k) -> str:
+    s, e = _wg_start(w, k), _wg_end(w, k)
+    return (_DY[s.weekday()] + " " + s.strftime("%d") + " " + _MON[s.month - 1] + ", "
+            + s.strftime("%H:%M") + "&ndash;" + e.strftime("%H:%M"))
+
+
+def wg_keep(w, k) -> str:
+    return " keep" if k == 0 or (w.weeks_back - k) % 4 == 0 else ""
+
+
+def wg_attr(w) -> str:
+    return ' data-wg style="--np:' + str(w.weeks_back) + '"'
+
+
+def wg_csv(w, vals, scale=1) -> str:
+    v = _wg_vals(vals)
+    return ",".join(wg_tok(_mul(v.get(k), scale)) for k in range(w.weeks_back, -1, -1))
+
+
+def wg_flags(bare=True) -> str:
+    if bare:
+        return '<div class="r fr t2" aria-hidden="true"><div class="flags"></div></div>'
+    return ('<div class="r fr"><div class="l"></div><div class="flags"'
+            ' aria-label="Release and patch markers"></div><div class="g"></div></div>')
+
+
+def wg_dates(w, bare=True) -> str:
+    out = '<div class="r dr" aria-hidden="true">'
+    if not bare:
+        out += '<div class="l"></div>'
+    for k in range(w.weeks_back, -1, -1):
+        out += ('<div class="h' + (" cur" if k == 0 else "") + wg_keep(w, k)
+                + '" data-w="' + str(k) + '"><span class="hd">' + wg_date(w, k) + '</span>'
+                + ('' if bare else '<span class="ho">' + wg_off(w, k) + '</span>') + '</div>')
+    if not bare:
+        out += '<div class="g"></div>'
+    return out + '</div>'
+
+
+def wg_ruler(w, corner: str, gh: str) -> str:
+    out = ('<div class="ruler"><div class="rin" role="row">'
+           '<div class="corner" role="columnheader">' + corner + '</div>'
+           '<div class="flags" aria-label="Release and patch markers"></div>')
+    for k in range(w.weeks_back, -1, -1):
+        out += ('<div class="h' + (" cur" if k == 0 else "") + wg_keep(w, k)
+                + '" data-w="' + str(k) + '" role="columnheader" title="' + wg_title(w, k) + '">'
+                + '<span class="hd">' + wg_date(w, k) + '</span>'
+                + '<span class="ho">' + wg_off(w, k) + '</span></div>')
+    return out + '<div class="gh" role="columnheader">' + gh + '</div></div></div>'
+
+
+def wg_bars(w, vals, scale, mu, sd, sev, lab="", gut="", rid=None, cls=None) -> str:
+    v = _wg_vals(vals)
+    out = ('<div class="r bars' + ((" " + cls) if cls else "") + '"'
+           + ((' id="' + rid + '"') if rid else "")
+           + ' data-v="' + wg_csv(w, v, scale) + '"'
+           + ' data-mu="' + wg_tok(_mul(mu, scale)) + '"'
+           + ' data-sd="' + wg_tok(_mul(sd, scale)) + '"'
+           + ' data-sev="' + (sev or "") + '" role="row">' + (lab or ""))
+    for k in range(w.weeks_back, -1, -1):
+        x = _mul(v.get(k), scale)
+        out += ('<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k) + '">'
+                + ('<span class="v nil" aria-label="no value">&ndash;</span>' if x is None
+                   else '<span class="v">' + fmt_num(x) + '</span>') + '</div>')
+    return out + (gut or "") + '</div>'

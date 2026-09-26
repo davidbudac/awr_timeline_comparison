@@ -28,6 +28,96 @@ def _cell_html(has: bool, val, is_cur: bool, chg: bool, k: int) -> str:
             + body + "</td>")
 
 
+def _pv_txt(v: str) -> str:
+    """12's pv_txt: a byte count (all digits, >= 1 MB) reads as MB / GB."""
+    if v is None:
+        return "(unset)"
+    import re
+    if re.fullmatch(r"[0-9]{7,}", v):
+        n = int(v)
+        if n >= 1073741824:
+            return h.to_char_trim(h.ora_round(n / 1073741824, 1), 1, min_dec=1) + " GB"
+        if n >= 1048576:
+            return h.to_char_trim(h.ora_round(n / 1048576, 1), 1, min_dec=1) + " MB"
+    return v
+
+
+def _pv_at(cells, name, k):
+    if (name, k) not in cells:
+        return "__NONE__"
+    v = cells[(name, k)]
+    return "__NULL__" if v is None else v
+
+
+def _pv_html(v):
+    if v == "__NONE__":
+        return "&ndash;"
+    if v == "__NULL__":
+        return "(unset)"
+    return h.esc(_pv_txt(v))
+
+
+def _config_card(w, L, changed, cells):
+    """The Summary view's configuration card (hidden, moved into 07's slot)."""
+    wb = w.weeks_back
+    cur = [n for n in changed if wb >= 1 and _pv_at(cells, n, 0) != _pv_at(cells, n, 1)]
+    nch = len(changed)
+    L.append('<article class="panel fc chg" id="f-config" aria-labelledby="f-config-h" hidden>'
+             '<header class="fc-h"><div class="fc-k"><span class="sv"><b class="gk">&ne;</b>'
+             'Configuration</span></div></header>'
+             '<h3 id="f-config-h">' + str(nch) + ' parameter' + (' differs' if nch == 1 else 's differ')
+             + ' across the compared windows</h3>'
+             '<p class="takeaway">'
+             + ('Only ' + h.ent('<code>' + h.esc(cur[-1]) + '</code>', h.anchor_id("pa", cur[-1]), "parameter")
+                + ' changed into the Current window.' if len(cur) == 1
+                else str(len(cur)) + ' of them changed into the Current window.' if len(cur) > 1
+                else 'None changed into the Current window: every change is older.')
+             + '</p>')
+    L.append('<div class="cfg-wg"><div class="wg fit"' + h.wg_attr(w)
+             + ' role="table" aria-label="Parameter values per compared window">'
+             + h.wg_ruler(w, '<span class="ct">Parameter</span>', '<span class="gt">Changed</span>'))
+    for name in changed[:8]:
+        base = _pv_at(cells, name, wb)
+        prev, last, ch = None, None, ""
+        for k in range(wb, -1, -1):
+            v = _pv_at(cells, name, k)
+            start = (k == wb) or (v != prev)
+            if start and k < wb:
+                last = k
+            lvl = "lo" if v == base else "hi"
+            ch += ('<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k) + '"><i class="st ' + lvl
+                   + (" rise" if start and k < wb else "") + '" aria-hidden="true"></i>'
+                   + ('<i class="nd" aria-hidden="true"></i>' if start and k < wb else "")
+                   + (('<span class="pv ' + lvl + '" title="'
+                       + h.esc({"__NONE__": "not recorded", "__NULL__": "(unset)"}.get(v, v))
+                       + '">' + _pv_html(v) + '</span>') if start or k == 0 else "")
+                   + '</div>')
+            prev = v
+        gut = ('<div class="g" role="cell"><div class="gl1"><span class="d1">'
+               + ('varies' if last is None else 'changed in Current' if last == 0
+                  else 'changed ' + h.wg_date(w, last))
+               + '</span></div>'
+               + ('<div class="gx"><span data-mk-at="' + str(last) + '" data-mk-icon hidden></span></div>'
+                  if last is not None else '')
+               + '</div>')
+        L.append('<div class="r p" data-name="' + h.esc(name) + '" role="row">'
+                 '<div class="l" role="rowheader"><span class="nm">'
+                 + h.ent('<code>' + h.esc(name) + '</code>', h.anchor_id("pa", name), "parameter")
+                 + '</span><span class="sub">' + _pv_html(base) + ' &rarr; ' + _pv_html(_pv_at(cells, name, 0))
+                 + '</span></div>')
+        L.append(ch)
+        L.append(gut + '</div>')
+    L.append('</div></div>'
+             + ('<p class="cfg-more">and ' + str(nch - 8) + ' more in <a href="#param-changes">Parameters</a></p>'
+                if nch > 8 else '')
+             + '<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
+             + h.anchor_id("pa", changed[0]) + '">Timeline &rarr;</a>'
+             '<span class="evl"><a href="#param-changes">Parameters</a></span></footer></article>')
+    L.append('<script>(function(){var s=document.getElementById("changes-slot"),'
+             'c=document.getElementById("f-config");if(!s||!c)return;s.appendChild(c);c.hidden=false;'
+             'var x=document.getElementById("s-changes");if(x)x.hidden=false;})();</script>')
+
+
 def emit(w) -> str:
     L = ["<!-- AWR-SECTION: " + TAG + " BEGIN -->"]
     L.append('<section id="param-changes" class="vw in-a"><h2>Parameters'
@@ -57,8 +147,6 @@ def emit(w) -> str:
                  "changed across the compared windows.</p></section>")
         L.append("<!-- AWR-SECTION: " + TAG + " END -->")
         return "\n".join(L)
-
-    L.append('<script>document.getElementById("param-changes").classList.add("in-s");</script>')
 
     hdr = '<thead><tr><th>Parameter</th><th data-w="0">Current</th>'
     for k in range(1, w.weeks_back + 1):
@@ -92,5 +180,6 @@ def emit(w) -> str:
     L.append('<p style="font-size:12px;color:var(--muted)">' + str(n_changed) + " parameter"
              + ("" if n_changed == 1 else "s") + " changed across the compared windows.</p>")
     L.append("</section>")
+    _config_card(w, L, changed, cells)
     L.append("<!-- AWR-SECTION: " + TAG + " END -->")
     return "\n".join(L)

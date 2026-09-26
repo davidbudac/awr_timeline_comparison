@@ -22,6 +22,9 @@
  *   - an entity-style jump: clicking an in-page link whose target is out
  *     of the current view switches view and shows the target;
  *   - tabs / click-to-sort / an expander still work (in All sections);
+ *   - every a.ent (entity link, v1.6.0) has a target, and clicking each
+ *     one visible in Summary switches view as needed and brings its
+ *     target (row, card, section) into the viewport;
  * and writes screenshots per view x theme when shots_dir is given.
  */
 const path = require('path');
@@ -84,7 +87,8 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         bands: document.querySelectorAll('.bd').length,
         tables: document.querySelectorAll('table').length,
         rows: document.querySelectorAll('tbody tr').length,
-        narrative: !!document.querySelector('#narrative-slot .narr'),
+        verdict: (document.querySelector('#verdict h1') || {}).textContent || '',
+        cards: document.querySelectorAll('.fc').length,
         markers: (window.AWR_MARKERS || []).length,
         noCharts: document.body.classList.contains('no-charts'),
       };
@@ -218,6 +222,53 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     console.log('toggles', JSON.stringify(toggles));
     if (errors.length) fail('interactions: ' + errors.slice(0, 5).join(' | '));
     if (shots) await page.screenshot({ path: path.join(shots, 'top.png'), clip: { x: 0, y: 0, width: 1440, height: 1000 } });
+    await page.close();
+  }
+
+  // ---- 4. entity links (v1.6.0 Summary): click every visible a.ent ------
+  // Each must resolve to an emitted row / card (the chrome unwraps a link
+  // whose target was never emitted), and the click must switch view if
+  // needed, reveal the target and scroll it into the viewport.
+  {
+    const { page, errors } = await openPage('#view=summary', 'light');
+    const inv = await page.evaluate(() => {
+      const vis = el => !!el && el.getClientRects().length > 0;
+      const all = [...document.querySelectorAll('a.ent')];
+      const shown = all.filter(vis);
+      shown.forEach((a, i) => a.setAttribute('data-vr', String(i)));
+      return {
+        total: all.length, visible: shown.length,
+        dangling: all.filter(a => !document.getElementById(a.getAttribute('href').slice(1).split('!')[0])).map(a => a.getAttribute('href')),
+        unwrapped: document.querySelectorAll('.ent-x').length,
+      };
+    });
+    console.log('entity links: ' + inv.total + ' a.ent (' + inv.visible + ' visible in Summary), '
+      + inv.dangling.length + ' dangling, ' + inv.unwrapped + ' unwrapped to text (target never emitted)');
+    if (inv.dangling.length) fail('a.ent without a target: ' + inv.dangling.slice(0, 8).join(', '));
+    let ok = 0; const bad = [];
+    for (let i = 0; i < inv.visible; i++) {
+      const r = await page.evaluate(async (i) => {
+        if (window.AWR_setView) window.AWR_setView('summary', false);
+        await new Promise(res => setTimeout(res, 60));
+        const a = document.querySelector('a.ent[data-vr="' + i + '"]');
+        if (!a) return { skip: 1 };
+        const id = a.getAttribute('href').slice(1).split('!')[0];
+        a.scrollIntoView({ block: 'center' });
+        a.click();
+        await new Promise(res => setTimeout(res, 420));
+        const t = document.getElementById(id);
+        if (!t) return { id, why: 'no target' };
+        if (!t.getClientRects().length) return { id, why: 'target hidden (view ' + document.body.getAttribute('data-view') + ')' };
+        const rc = t.getBoundingClientRect();
+        if (rc.bottom < 0 || rc.top > window.innerHeight) return { id, why: 'target off screen (top ' + Math.round(rc.top) + ')' };
+        return { id, ok: 1, view: document.body.getAttribute('data-view') };
+      }, i);
+      if (r.skip) continue;
+      if (r.ok) ok++; else bad.push(r.id + ': ' + r.why);
+    }
+    console.log('entity links clicked: ' + ok + ' ok, ' + bad.length + ' failed');
+    if (bad.length) fail('entity links: ' + bad.slice(0, 8).join(' | '));
+    if (errors.length) fail('entity links: ' + errors.slice(0, 5).join(' | '));
     await page.close();
   }
 

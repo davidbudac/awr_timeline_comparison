@@ -73,7 +73,7 @@ def emit(w) -> str:
     hourly = "hourly" if bh == 1 else blabel
 
     out.append(L[0])
-    out.append('<section id="ash-timeline" class="vw in-s in-a"><h2>Active sessions'
+    out.append('<section id="ash-timeline" class="vw in-a"><h2>Active sessions'
                '<small class="h2sub">ASH by wait class, ' + hourly + ', '
                + ts_min(range_start) + ' &rarr; ' + ts_min(range_end)
                + '; compared windows shaded</small></h2>')

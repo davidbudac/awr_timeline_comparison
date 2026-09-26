@@ -88,6 +88,8 @@ def prologue(w, echarts_src: str) -> str:
         lbl = label.replace("\\", "\\\\").replace('"', '\\"').replace("</", "<\\/")
         out.append('<script>window.AWR_MARKERS.push({t:"' + t.strftime("%Y-%m-%d %H:%M")
                    + '",label:"' + lbl + '"});</script>')
+    # v1.6.0: the window component + entity-link unwrap (after the markers)
+    out.append(chrome.lib_script("js_wingrid.plsql"))
     return "\n".join(out) + "\n"
 
 

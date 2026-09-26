@@ -17,6 +17,8 @@ from __future__ import annotations
 import math
 import re
 
+from awrdemo import chrome
+from awrdemo import helpers as h
 from awrdemo.helpers import esc, mean_sd, ora_round, to_char_trim, policy_bucket
 
 _STATS = ['physical reads', 'bytes sent via SQL*Net to client', 'user calls',
@@ -103,14 +105,19 @@ def pcttxt(p) -> str:
     return dirg(p >= 0) + ' ' + fmt3(abs(p)) + '%'
 
 
-def item(label, num, sub, why, href, link) -> str:
-    """add_item(): one structured <li> row."""
-    return ('<li><span class="n-lbl">' + label + '</span>'
-            + ('<span class="n-num">' + num + '</span>' if num else '')
-            + ('<span class="n-sub">' + sub + '</span>' if sub else '')
-            + ('<span class="n-why">' + why + '</span>' if why else '')
-            + ('<a class="n-go" href="' + href + '">' + link + ' &#8599;</a>' if href else '')
+def item(label, num, sub, why, href, link, dup=None) -> str:
+    """add_item(): one calm line for the verdict hero."""
+    return ('<li' + (' data-dup="' + dup + '"' if dup else '') + '><span class="hl">' + label + '</span>'
+            + ('<span class="hn">' + num + '</span>' if num else '')
+            + ('<span class="hs">' + sub + '</span>' if sub else '')
+            + ('<span class="hw">' + why + '</span>' if why else '')
+            + ('<a class="go" href="' + href + '">' + link + ' &rarr;</a>' if href else '')
             + '</li>')
+
+
+def pill(href, n, txt, title=None) -> str:
+    return ('<li><a href="' + href + '"' + (' title="' + title + '"' if title else '')
+            + '><b>' + str(n) + '</b> ' + txt + '</a></li>')
 
 
 def _collect_stats(w) -> _Stats:
@@ -163,19 +170,26 @@ def _r1_file(w):
 
 
 def _r1_segment(w):
-    cur = [win for win in w.valid_windows if win.week_offset == 0]
-    if not cur:
-        return None
-    m = w.window_metrics(cur[0])
-    agg = {}
-    for (owner, name), v in m.seg.items():
-        seg_name = (owner or '(unknown)') + '.' + name
-        agg[seg_name] = agg.get(seg_name, 0.0) + v[0]
-    rows = [(-r, n) for n, r in agg.items() if r > 0]
+    """Top segment by Current physical reads + its mean over the prior
+    windows it appears in -> (name, cur, mu)."""
+    per = {}
+    for win in w.valid_windows:
+        m = w.window_metrics(win)
+        for (owner, name), v in m.seg.items():
+            seg_name = (owner or '(unknown)') + '.' + name
+            d = per.setdefault(seg_name, {})
+            d[win.week_offset] = d.get(win.week_offset, 0.0) + v[0]
+    rows = []
+    for n, d in per.items():
+        cur = d.get(0)
+        prior = {k: v for k, v in d.items() if k > 0}
+        mu = sum(prior.values()) / len(prior) if prior else None
+        if cur is not None and cur > 0:
+            rows.append((-cur, n, cur, mu))
     if not rows:
-        return None
+        return None, None, None
     rows.sort()
-    return rows[0][1]
+    return rows[0][1], rows[0][2], rows[0][3]
 
 
 def _r1_newcomer(w):
@@ -186,15 +200,15 @@ def _r1_newcomer(w):
                         key=lambda t: (-t[0], t[1]))
         top[win.week_offset] = ranked[:w.top_n]
     if 0 not in top:
-        return None
+        return None, None
     prior_ids = set()
     for k, lst in top.items():
         if k > 0:
             prior_ids.update(sid for _, sid in lst)
-    for _, sid in top[0]:
+    for rd, sid in top[0]:
         if sid not in prior_ids:
-            return sid
-    return None
+            return sid, rd
+    return None, None
 
 
 # ---------------------------------------------------------------------
@@ -283,33 +297,50 @@ def emit(w) -> str:
     st = _collect_stats(w)
 
     # R1
+    pills, because, ev_io, vx_io = '', None, '', None
+    v_seg = v_file = v_sqlid = None
+    big_pr = False
     if st.big('physical reads'):
+        big_pr = True
         v_file, v_file_cur, v_file_mu = _r1_file(w)
-        v_seg = _r1_segment(w)
-        v_sqlid = _r1_newcomer(w)
+        v_seg, v_seg_cur, v_seg_mu = _r1_segment(w)
+        v_sqlid, v_sql_rd = _r1_newcomer(w)
         tail = ''
         if v_file is not None:
-            tail = ('file <a href="#file-io">' + esc(v_file) + '</a> '
+            tail = ('file ' + h.ent(esc(v_file), h.anchor_id('fl', v_file), 'file') + ' '
                     + ('' if v_file_mu is None else fmt3(v_file_mu) + ' &rarr; ')
                     + fmt3(v_file_cur) + ' MB')
         if v_seg is not None:
-            tail += ('' if tail == '' else ' &middot; ') + 'segment <a href="#segment-io">' + esc(v_seg) + '</a>'
+            tail += (('' if tail == '' else ' &middot; ') + 'segment '
+                     + h.ent(esc(v_seg), h.anchor_id('sg', v_seg), 'segment'))
         if v_sqlid is not None:
-            tail += (('' if tail == '' else ' &middot; ') + 'new in top-' + _tc(w.top_n)
-                     + ': <a href="#sql-' + v_sqlid + '"><code>' + v_sqlid + '</code></a>')
+            tail += (('' if tail == '' else ' &middot; ') + 'new in top-' + _tc(w.top_n) + ': '
+                     + h.ent('<code>' + v_sqlid + '</code>', h.anchor_id('sq-preads', v_sqlid), 'sql'))
         sent.append(item('Physical reads', st.numtxt('physical reads'), st.rng('physical reads', '/s'),
-                         tail, '#file-io', 'File I/O'))
+                         tail, '#file-io', 'File I/O', 'f-io'))
+        if v_seg is not None:
+            ev_io += ('<div class="evr"><dt>Segment</dt><dd><span class="id">'
+                      + h.ent(esc(v_seg), h.anchor_id('sg', v_seg), 'segment') + '</span><span class="de">'
+                      + h.fmt_num(v_seg_cur) + ' blocks read'
+                      + (', normal ' + h.fmt_num(v_seg_mu) if v_seg_mu is not None else '')
+                      + '</span></dd><div class="m" title="Ranked, not scored">'
+                      + h.delta_span(v_seg_cur, v_seg_mu, None, 'Y') + '<span class="ns">not scored</span></div></div>')
+            vx_io = (', most of it on '
+                     + h.ent('<code>' + esc(v_seg) + '</code>', h.anchor_id('sg', v_seg), 'segment'))
+        if v_file is not None:
+            ev_io += ('<div class="evr"><dt>File</dt><dd><span class="id">'
+                      + h.ent(esc(v_file), h.anchor_id('fl', v_file), 'file') + '</span><span class="de">'
+                      + h.fmt_num(v_file_cur) + ' MB read'
+                      + (', normal ' + h.fmt_num(v_file_mu) if v_file_mu is not None else '')
+                      + '</span></dd><div class="m" title="Ranked, not scored">'
+                      + h.delta_span(v_file_cur, v_file_mu, None, 'Y') + '<span class="ns">not scored</span></div></div>')
+        if v_sqlid is not None:
+            ev_io += ('<div class="evr"><dt>SQL</dt><dd><span class="id">'
+                      + h.ent(v_sqlid, h.anchor_id('sq-preads', v_sqlid), 'sql') + '</span><span class="de">'
+                      + h.fmt_num(v_sql_rd) + ' blocks read; new in the top ' + _tc(w.top_n)
+                      + '</span></dd><div class="m"><span class="d s-plain">&#10010; new</span></div></div>')
 
-    # R5
-    if st.big('TM:DB time') and st.went_up('TM:DB time') and st.has('TM:DB CPU'):
-        pc = st.pctd('TM:DB CPU')
-        txt = ''
-        if pc is not None and abs(pc) < 20:
-            txt = 'DB CPU only ' + pcttxt(pc) + ': the extra time is wait, not CPU'
-        elif pc is not None:
-            txt = 'DB CPU ' + pcttxt(pc) + ' with it: CPU-bound'
-        sent.append(item('DB time', st.numtxt('TM:DB time'), st.rng('TM:DB time', 'AAS', 1 / 1000000),
-                         txt, '#waits-fg', 'Foreground waits'))
+    # R5: retired (the verdict and the DB time card carry it)
 
     # R2
     pb_, pu = st.pctd('bytes sent via SQL*Net to client'), st.pctd('user calls')
@@ -342,7 +373,8 @@ def emit(w) -> str:
                          _tc(total) + ' parameter' + ('' if total == 1 else 's') + ' differ' + ('s' if total == 1 else ''),
                          None,
                          names + (' (+' + _tc(total - len(shown)) + ' more)' if total > len(shown) else ''),
-                         '#param-changes', 'Parameters'))
+                         '#param-changes', 'Parameters', 'f-config'))
+        pills += pill('#f-config', total, 'parameter' + (' differs' if total == 1 else 's differ'))
 
     # R4
     prior = [win for win in w.windows if win.week_offset > 0]
@@ -353,45 +385,68 @@ def emit(w) -> str:
             cnt[win.skip_reason] = cnt.get(win.skip_reason, 0) + 1
         reason = sorted(cnt.items(), key=lambda t: (-t[1], t[0] or ''))[0][0]
         n_all = len(prior)
-        sent.append(item('Baseline',
-                         _tc(len(bad)) + ' of ' + _tc(n_all) + ' prior window' + ('' if n_all == 1 else 's') + ' skipped',
-                         None, 'thin prior-window set' if reason is None else esc(reason),
-                         '#windows', 'Windows'))
+        pills += pill('#windows', len(bad), 'of ' + _tc(n_all) + ' prior window' + ('' if n_all == 1 else 's')
+                      + ' skipped', esc(reason) if reason is not None else None)
 
     # R6-R9
     plan_n, plan_ids, dop_n, err_n, new_n, new_ids = _r6_r9(w)
+    first_plan = plan_ids.split(', ')[0] if plan_ids else None
     if plan_n > 0:
-        sent.append(item('Plan change', _tc(plan_n) + ' statement' + ('' if plan_n == 1 else 's'), None,
-                         '<code>' + esc(plan_ids) + '</code>'
-                         + (' (+' + _tc(plan_n - 3) + ' more)' if plan_n > 3 else '')
-                         + ' ran with more than one plan, including now',
-                         '#sqlmon', 'SQL Monitor'))
-    if dop_n > 0:
-        sent.append(item('DOP downgrade', _tc(dop_n) + ' statement' + ('' if dop_n == 1 else 's'), None,
-                         'fewer parallel servers than requested in the Current window',
-                         '#sqlmon', 'SQL Monitor'))
-    if err_n > 0:
-        sent.append(item('Errors', _tc(err_n) + ' execution' + ('' if err_n == 1 else 's'), None,
-                         'ended <code>DONE (ERROR)</code> in the Current window',
-                         '#sqlmon', 'SQL Monitor'))
+        pills += pill('#sm-' + first_plan, plan_n, 'plan change' + ('' if plan_n == 1 else 's'),
+                      'ran with more than one plan, including in the Current window: ' + esc(plan_ids)
+                      + (' (+' + _tc(plan_n - 3) + ' more)' if plan_n > 3 else ''))
     if new_n > 0:
-        sent.append(item('New SQL', _tc(new_n) + ' SQL ID' + ('' if new_n == 1 else 's'), None,
-                         '<code>' + esc(new_ids) + '</code>'
-                         + (' (+' + _tc(new_n - 3) + ' more)' if new_n > 3 else '')
-                         + ' first seen in SQL Monitor this window',
-                         '#sqlmon', 'SQL Monitor'))
+        pills += pill('#sqlmon', new_n, 'new SQL',
+                      'first seen in SQL Monitor this window: ' + esc(new_ids)
+                      + (' (+' + _tc(new_n - 3) + ' more)' if new_n > 3 else ''))
+    if dop_n > 0:
+        pills += pill('#sqlmon', dop_n, 'DOP downgrade' + ('' if dop_n == 1 else 's'),
+                      'fewer parallel servers than requested in the Current window')
+    if err_n > 0:
+        pills += pill('#sqlmon', err_n, 'SQL error' + ('' if err_n == 1 else 's'),
+                      'executions that ended DONE (ERROR) in the Current window')
+
+    # the likely-source line
+    if plan_n > 0:
+        because = (h.ent('<code>' + esc(first_plan) + '</code>', 'sm-' + first_plan, 'sql')
+                   + ' ran with a new plan in the Current window'
+                   + '<span data-mk-at="0" data-mk-pre=", after " hidden></span>'
+                   + (', and is new in the top ' + _tc(w.top_n) + ' by physical reads'
+                      if v_sqlid == first_plan else ''))
+    elif v_sqlid is not None:
+        because = (h.ent('<code>' + v_sqlid + '</code>', h.anchor_id('sq-preads', v_sqlid), 'sql')
+                   + ', new in the top ' + _tc(w.top_n) + ' by physical reads (' + h.fmt_num(v_sql_rd)
+                   + ' blocks)'
+                   + ('; most reads land on ' + h.ent('<code>' + esc(v_seg) + '</code>',
+                                                     h.anchor_id('sg', v_seg), 'segment') if v_seg else ''))
+    elif new_n > 0:
+        because = ('<code>' + esc(new_ids.split(', ')[0]) + '</code>'
+                   + ', first seen in SQL Monitor in the Current window')
+    elif big_pr and v_seg is not None:
+        because = ('the reads land on ' + h.ent('<code>' + esc(v_seg) + '</code>', h.anchor_id('sg', v_seg), 'segment')
+                   + (' (file ' + h.ent(esc(v_file), h.anchor_id('fl', v_file), 'file') + ')' if v_file else ''))
 
     out = ['<!-- AWR-SECTION: 17_narrative BEGIN -->']
-    if sent:
-        out.append('<div id="narrative-src" class="narr" hidden>'
-                   '<div class="narr-head">What changed</div><ul class="narr-list">')
-        for s in sent:
-            out.append(s)
-        out.append('</ul></div>')
-        out.append('<script>(function(){'
-                   'var s=document.getElementById("narrative-slot"),'
-                   'n=document.getElementById("narrative-src");'
-                   'if(s&&n){s.appendChild(n);n.hidden=false;}'
-                   '})();</script>')
+    if sent or pills or because or ev_io:
+        out.append('<div id="narr-src" hidden>')
+        if because:
+            out.append('<p class="because-src"><span class="bl">Likely source:</span> ' + because + '.</p>')
+        if pills:
+            out.append('<ul class="pills-src">' + pills + '</ul>')
+        if sent:
+            out.append('<ul class="notes-src">')
+            out.extend(sent)
+            out.append('</ul>')
+        if vx_io:
+            out.append('<span data-vx-src="io">' + vx_io + '</span>')
+        if ev_io:
+            out.append('<div data-ev-for="f-io">' + ev_io + '</div>')
+        out.append('</div>')
+        # the relocation script, lifted verbatim from the SQL
+        L = chrome.put_lines(chrome.sql_path("sql/17_narrative.sql"))
+        i = next(k for k, (t, _) in enumerate(L) if t.startswith('<script>(function(){var d=document,src='))
+        j = next(k for k in range(i, len(L)) if L[k][0].endswith('})();</script>'))
+        assert all(ok for _, ok in L[i:j + 1])
+        out.extend(t for t, _ in L[i:j + 1])
     out.append('<!-- AWR-SECTION: 17_narrative END -->')
     return '\n'.join(out)
