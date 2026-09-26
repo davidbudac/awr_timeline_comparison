@@ -1033,11 +1033,15 @@ def tl_mu(w, csv):
 
 
 def tl_first(w, csv):
-    if tl_val(w, csv, w.weeks_back) is not None:
+    # the oldest window with a value, only when an OLDER window was valid
+    # (a skipped window is unknown, never "absent"); twin of the SQL, whose
+    # caller passes the validity string built from windows_rollup
+    first = next((k for k in range(w.weeks_back, -1, -1) if tl_val(w, csv, k) is not None), None)
+    if first is None:
         return None
-    for k in range(w.weeks_back - 1, -1, -1):
-        if tl_val(w, csv, k) is not None:
-            return k
+    valid = {win.week_offset for win in w.windows if win.valid}
+    if any(k in valid for k in range(first + 1, w.weeks_back + 1)):
+        return first
     return None
 
 

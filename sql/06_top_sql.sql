@@ -96,6 +96,9 @@ DECLARE
     v_tl_csv           VARCHAR2(4000);
     v_tl_mu            NUMBER;
     v_tl_first         NUMBER;
+    -- one Y / N per compared window, character k + 1 = week_offset k
+    -- (windows_rollup): tl_first never calls a row "new" after a skipped one
+    v_tl_valid         VARCHAR2(4000) := RPAD('N', ~weeks_back + 1, 'N');
     v_tl_note          VARCHAR2(400);
     v_tl_gw            NUMBER;
     v_tl_gl            VARCHAR2(400);
@@ -149,6 +152,18 @@ BEGIN
     INTO   v_weeks_iso_json
     FROM   (SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1);
 
+
+    -- Window validity for the Timeline's "first seen" glyph (tl_first).
+    FOR r IN (
+        WITH
+        @@sql/lib/windows_cte.sql
+        SELECT week_offset, valid_flag FROM windows_rollup
+    ) LOOP
+        IF r.valid_flag = 'Y' AND r.week_offset BETWEEN 0 AND ~weeks_back THEN
+            v_tl_valid := SUBSTR(v_tl_valid, 1, r.week_offset) || 'Y'
+                       || SUBSTR(v_tl_valid, r.week_offset + 2);
+        END IF;
+    END LOOP;
 
     -- Per-dimension detail tables, packed into one big cursor. ------------
     v_cur_dim := NULL;
@@ -528,7 +543,7 @@ BEGIN
             v_tl_n     := v_tl_n + 1;
             v_tl_csv   := tl_csv(v_chart_vals);
             v_tl_mu    := tl_mu(v_tl_csv);
-            v_tl_first := tl_first(v_tl_csv);
+            v_tl_first := tl_first(v_tl_csv, v_tl_valid);
             v_tl_gw    := NULL;
             v_tl_gl    := NULL;
             v_tl_note  := CASE WHEN s.cur_rnk IS NOT NULL THEN '#' || s.cur_rnk || ' by elapsed'

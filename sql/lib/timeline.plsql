@@ -105,13 +105,23 @@
         RETURN CASE WHEN v_n > 0 THEN v_s / v_n END;
     END tl_mu;
 
-    -- the oldest window offset with a value, when the older ones have none
-    -- (a statement / segment "first seen" there); NULL otherwise
-    FUNCTION tl_first(p_csv VARCHAR2) RETURN NUMBER IS
+    -- The oldest window offset with a value, when the row was ABSENT from
+    -- at least one older VALID window (a statement "first seen" there);
+    -- NULL otherwise.  p_valid holds one Y / N per window, character k + 1
+    -- = week_offset k (built from windows_rollup by the caller).  A skipped
+    -- window (invalid, restart, no snapshots) has no value because nothing
+    -- was measured there, not because the row was absent: it counts as
+    -- unknown, so a row is never "new" merely because the oldest compared
+    -- windows were skipped (e.g. weekly cadence past AWR retention).
+    FUNCTION tl_first(p_csv VARCHAR2, p_valid VARCHAR2) RETURN NUMBER IS
+        v_first NUMBER;
     BEGIN
-        IF tl_val(p_csv, ~weeks_back) IS NOT NULL THEN RETURN NULL; END IF;
-        FOR k IN REVERSE 0 .. ~weeks_back - 1 LOOP
-            IF tl_val(p_csv, k) IS NOT NULL THEN RETURN k; END IF;
+        FOR k IN REVERSE 0 .. ~weeks_back LOOP
+            IF tl_val(p_csv, k) IS NOT NULL THEN v_first := k; EXIT; END IF;
+        END LOOP;
+        IF v_first IS NULL THEN RETURN NULL; END IF;
+        FOR k IN v_first + 1 .. ~weeks_back LOOP
+            IF SUBSTR(p_valid, k + 1, 1) = 'Y' THEN RETURN v_first; END IF;
         END LOOP;
         RETURN NULL;
     END tl_first;
