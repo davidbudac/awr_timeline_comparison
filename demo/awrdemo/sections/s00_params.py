@@ -78,7 +78,9 @@ def _window_values(w):
         for mt in METRIC_TARGETS:
             if mt in m.sysmetric:
                 put("METRIC", mt, win.week_offset, m.sysmetric[mt])
-        # WAIT: per wait_class (non-Idle), seconds waited per second
+        # WAIT: per wait_class (non-Idle), seconds waited per second.  The SQL
+        # applies the template's wait_event_targets filter (like 07); the demo
+        # is the comprehensive template, whose '*' sentinel keeps every event.
         by_cls = {}
         for ev, (wc, cnt, us) in m.fg_waits.items():
             if wc is None or wc == "Idle":

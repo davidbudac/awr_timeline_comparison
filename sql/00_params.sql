@@ -158,6 +158,13 @@ BEGIN
         FROM   metric_per_snap
         GROUP BY week_offset, metric_name
     ),
+    -- The template's wait-event allow-list, with the same idiom as 07's
+    -- wait_pairs: the verdict names the lead of 07's finding cards and its
+    -- pills print 07's counts, so both must sum the SAME events.  The
+    -- comprehensive template's '*' sentinel keeps every non-idle event.
+    wait_targets AS (
+        @@~template_dir/wait_event_targets.sql
+    ),
     wait_pairs AS (
         SELECT w.week_offset, w.dur_sec,
                se.wait_class,
@@ -171,6 +178,8 @@ BEGIN
            AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
            AND se.instance_number = w.instance_number
            AND se.wait_class <> 'Idle'
+           AND ( EXISTS (SELECT 1 FROM wait_targets WHERE event_name = '*')
+                 OR se.event_name IN (SELECT event_name FROM wait_targets) )
     ),
     wait_bounds AS (
         SELECT week_offset, dur_sec, wait_class, instance_number,

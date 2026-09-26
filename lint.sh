@@ -440,6 +440,24 @@ for f in awr_trend.sql sql/[0-9]*.sql sql/lib/*.sql sql/lib/*.plsql; do
     done
 done
 
+# ----------------------------------------------------------------------
+# 27. A scoring section (one that includes metric_policy.plsql) that reads
+#     wait time from DBA_HIST_SYSTEM_EVENT / BG_EVENT_SUMMARY must honor the
+#     template's wait-event allow-list (@@~template_dir/wait_event_targets.sql
+#     + the '*' sentinel idiom): v1.6.0 review #3 -- 00's verdict summed
+#     every event while 07's cards used the curated list, so under
+#     template=simple|dev the hero could name a card 07 never drew.
+# ----------------------------------------------------------------------
+for f in sql/[0-9]*.sql; do
+    grep -q 'metric_policy\.plsql' "$f" || continue
+    # (awk, not grep -v | grep -q: under pipefail the early-exiting grep -q
+    #  SIGPIPEs the first grep and the pipeline reads as "no match")
+    awk '/^[[:space:]]*--/ { next } tolower($0) ~ /(from|join)[[:space:]]+dba_hist_(system_event|bg_event_summary)/ { hit = 1 } END { exit !hit }' "$f" || continue
+    if ! grep -qE '^[[:space:]]*@@~template_dir/wait_event_targets\.sql' "$f"; then
+        finding wait-targets "$f" "scores wait time from DBA_HIST_SYSTEM_EVENT / BG_EVENT_SUMMARY without the template's wait_event_targets.sql filter"
+    fi
+done
+
 [ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"
