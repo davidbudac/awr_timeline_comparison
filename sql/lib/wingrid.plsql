@@ -96,16 +96,23 @@
     END wg_title;
 
     -- the column keeps its date label when the grid is tight: the oldest,
-    -- every 4th after it, and Current
+    -- every 4th after it (every n-th past 48 windows, about 12 labels in
+    -- all), and Current
     FUNCTION wg_keep(p_off NUMBER) RETURN VARCHAR2 IS
     BEGIN
-        RETURN CASE WHEN p_off = 0 OR MOD(~weeks_back - p_off, 4) = 0 THEN ' keep' END;
+        RETURN CASE WHEN p_off = 0
+                      OR MOD(~weeks_back - p_off, GREATEST(4, CEIL((~weeks_back + 1) / 12))) = 0
+                    THEN ' keep' END;
     END wg_keep;
 
     -- the attributes every .wg root carries
     FUNCTION wg_attr RETURN VARCHAR2 IS
     BEGIN
-        RETURN ' data-wg style="--np:' || TO_CHAR(~weeks_back) || '"';
+        -- data-many (more than 30 prior windows): the Summary's fitted
+        -- grids shrink their column minimum so they stay inside the page
+        -- (the Timeline grid, #tl, keeps its minimum and scrolls)
+        RETURN ' data-wg' || CASE WHEN ~weeks_back > 30 THEN ' data-many' END
+            || ' style="--np:' || TO_CHAR(~weeks_back) || '"';
     END wg_attr;
 
     -- positional CSV (oldest first) of pairs x scale

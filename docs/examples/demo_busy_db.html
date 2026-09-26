@@ -376,6 +376,7 @@ section.strip-sec{background:none;border:0;border-radius:0;padding:0;margin:var(
 .strip{overflow:hidden}
 .wg{--lab:224px;--gut:172px;--cmin:48px;--np:12;--tcols:repeat(var(--np),minmax(var(--cmin),1fr)) minmax(calc(var(--cmin) * 1.5),1.6fr);position:relative;font-variant-numeric:tabular-nums}
 .wg.fit{--cmin:18px}
+.wg[data-many]:not(#tl){--cmin:min(10px, calc(480px / var(--np)))}
 .wg .r{display:grid;grid-template-columns:var(--lab) var(--tcols) var(--gut);position:relative}
 .wg.bare{--cmin:14px}
 .wg.bare .r{grid-template-columns:var(--tcols)}

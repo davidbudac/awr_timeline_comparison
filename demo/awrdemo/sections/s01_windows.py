@@ -11,7 +11,9 @@ def emit(w) -> str:
     slots = weeks_back + 1
     margin, gap = 20, 10
     slot_w = (1000 - 2 * margin) / slots
+    gap = min(gap, slot_w * 0.3)            # many windows: never a negative bar
     box_w = slot_w - gap
+    lbl_n = max(1, -(-70 // slot_w))        # CEIL(70 / slot_w): label every n-th slot
 
     out.append('<section id="windows" class="vw in-a"><h2>Aligned windows'
                '<small class="h2sub">One bar per window; dimmed = skipped and left out of every baseline</small></h2>')
@@ -44,12 +46,13 @@ def emit(w) -> str:
                        + '" rx="4" fill="var(--skip)" fill-opacity="0.18" stroke="var(--skip)"'
                        ' stroke-dasharray="4,3"/>')
         cx = to_char_fixed(x + box_w / 2, 1)
-        out.append('<text x="' + cx + '" y="10" text-anchor="middle" font-size="10" '
-                   'fill="var(--muted)">' + mon_dd(win.win_end_ts) + '</text>')
+        if is_cur or slot_idx % lbl_n == 0:
+            out.append('<text x="' + cx + '" y="10" text-anchor="middle" font-size="10" '
+                       'fill="var(--muted)">' + mon_dd(win.win_end_ts) + '</text>')
         if is_cur:
             out.append('<text x="' + cx + '" y="35" text-anchor="middle" font-size="11" '
                        'font-weight="600" fill="#ffffff">current</text>')
-        if win.valid_flag != 'Y':
+        if win.valid_flag != 'Y' and slot_idx % lbl_n == 0:
             out.append('<text x="' + cx + '" y="68" text-anchor="middle" font-size="10" '
                        'fill="var(--muted)">skipped</text>')
         out.append('</g>')

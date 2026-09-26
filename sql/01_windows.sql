@@ -29,6 +29,7 @@ DECLARE
     v_gap        NUMBER := 10;
     v_slot_w     NUMBER;
     v_box_w      NUMBER;
+    v_lbl_n      NUMBER;         -- label every n-th slot (many windows)
     v_slot_idx   NUMBER;
     v_x          NUMBER;
     v_is_current BOOLEAN;
@@ -45,7 +46,14 @@ DECLARE
 BEGIN
     v_slots  := v_weeks_back + 1;
     v_slot_w := (1000 - 2 * v_margin) / v_slots;
+    -- Many windows (weeks_back of 100 or more): the gap shrinks with the
+    -- slot -- a fixed 10-unit gap gave a NEGATIVE bar width past about 96
+    -- windows (an SVG error in the browser) -- and only every n-th date /
+    -- "skipped" caption is written so they do not overprint.  The usual
+    -- 13 windows are unchanged (gap 10, every slot labelled).
+    v_gap    := LEAST(v_gap, v_slot_w * 0.3);
     v_box_w  := v_slot_w - v_gap;
+    v_lbl_n  := GREATEST(1, CEIL(70 / v_slot_w));
 
     DBMS_OUTPUT.PUT_LINE('<section id="windows" class="vw in-a"><h2>Aligned windows'
         || '<small class="h2sub">One bar per window; dimmed = skipped and left out of every baseline</small></h2>');
@@ -107,16 +115,18 @@ BEGIN
                 || ' stroke-dasharray="4,3"/>');
         END IF;
 
-        DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
-            || '" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">'
-            || TO_CHAR(w.win_end_ts, '~period_axis_fmt', 'NLS_DATE_LANGUAGE=ENGLISH') || '</text>');
+        IF v_is_current OR MOD(v_slot_idx, v_lbl_n) = 0 THEN
+            DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
+                || '" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">'
+                || TO_CHAR(w.win_end_ts, '~period_axis_fmt', 'NLS_DATE_LANGUAGE=ENGLISH') || '</text>');
+        END IF;
 
         IF v_is_current THEN
             DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
                 || '" y="35" text-anchor="middle" font-size="11" font-weight="600" fill="#ffffff">current</text>');
         END IF;
 
-        IF w.valid_flag <> 'Y' THEN
+        IF w.valid_flag <> 'Y' AND MOD(v_slot_idx, v_lbl_n) = 0 THEN
             DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
                 || '" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">'
                 || 'skipped</text>');

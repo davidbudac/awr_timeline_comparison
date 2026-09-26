@@ -1169,6 +1169,9 @@ BEGIN
     -- ONE window component (.wg, sql/lib/wingrid.plsql): 13 columns, Current last and wider
     DBMS_OUTPUT.PUT_LINE('.wg{--lab:224px;--gut:172px;--cmin:48px;--np:12;--tcols:repeat(var(--np),minmax(var(--cmin),1fr)) minmax(calc(var(--cmin) * 1.5),1.6fr);position:relative;font-variant-numeric:tabular-nums}');
     DBMS_OUTPUT.PUT_LINE('.wg.fit{--cmin:18px}');
+    -- more than 30 windows (wg_attr data-many): fitted grids shrink the column
+    -- minimum so the Summary never scrolls sideways; the Timeline scrolls
+    DBMS_OUTPUT.PUT_LINE('.wg[data-many]:not(#tl){--cmin:min(10px, calc(480px / var(--np)))}');
     DBMS_OUTPUT.PUT_LINE('.wg .r{display:grid;grid-template-columns:var(--lab) var(--tcols) var(--gut);position:relative}');
     DBMS_OUTPUT.PUT_LINE('.wg.bare{--cmin:14px}');
     DBMS_OUTPUT.PUT_LINE('.wg.bare .r{grid-template-columns:var(--tcols)}');

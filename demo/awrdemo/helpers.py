@@ -951,11 +951,13 @@ def wg_title(w, k) -> str:
 
 
 def wg_keep(w, k) -> str:
-    return " keep" if k == 0 or (w.weeks_back - k) % 4 == 0 else ""
+    n = max(4, -(-(w.weeks_back + 1) // 12))           # GREATEST(4, CEIL((N + 1) / 12))
+    return " keep" if k == 0 or (w.weeks_back - k) % n == 0 else ""
 
 
 def wg_attr(w) -> str:
-    return ' data-wg style="--np:' + str(w.weeks_back) + '"'
+    return (' data-wg' + (' data-many' if w.weeks_back > 30 else '')
+            + ' style="--np:' + str(w.weeks_back) + '"')
 
 
 def wg_csv(w, vals, scale=1) -> str:
