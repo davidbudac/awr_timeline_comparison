@@ -30,7 +30,8 @@ def emit(w) -> str:
             assert text.startswith('<p class="ab-meta">'), text[:60]
             text = ('<p class="ab-meta">Run <code>~run_id</code> &middot; template <code>'
                     + esc(w.template) + '</code> &middot; top_n ~top_n'
-                    + ' &middot; generated ~generated_at_s &middot; read-only against '
+                    + ' &middot; generated ~generated_at_s by ' + esc(w.caller_user)
+                    + ' &middot; read-only against '
                     + '<code>DBA_HIST_*</code>, no scratch schema.</p>')
         if text.startswith("<dt>Day profile</dt>") and w.profile_days <= 0:
             continue

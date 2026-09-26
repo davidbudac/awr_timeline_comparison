@@ -580,13 +580,13 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('td.trend svg.mw { margin:0 auto; }');
 
     -- =========================================================
-    -- Cell-bar behind the current-value column in load/sysmetric tables
+    -- Cell-bar behind the current-value column in load/sysmetric tables.
+    -- v1.6.0: not drawn.  The Current column carries the accent band and
+    -- the band glyph carries the comparison; the bar's 2px edge crossed
+    -- the digits on the tinted cell.  02/03/13 still emit span.bg (inert).
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('td.cell-bar { position:relative; }');
-    DBMS_OUTPUT.PUT_LINE('td.cell-bar .bg {'
-        || ' position:absolute; left:0; top:0; bottom:0;'
-        || ' background:var(--cell-bar-bg);'
-        || ' border-right:2px solid var(--accent); pointer-events:none; }');
+    DBMS_OUTPUT.PUT_LINE('td.cell-bar .bg { display:none; }');
     DBMS_OUTPUT.PUT_LINE('td.cell-bar .v {'
         || ' position:relative; z-index:1; font-weight:600; }');
 
@@ -1327,7 +1327,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ngrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:32px}');
     DBMS_OUTPUT.PUT_LINE('.nr{display:grid;grid-template-columns:minmax(0,1fr) 112px 88px;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13.5px;--row-bg:var(--panel)}');
     DBMS_OUTPUT.PUT_LINE('.nr .l{color:var(--ink-soft);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}');
-    DBMS_OUTPUT.PUT_LINE('.nr .l small{display:block;color:var(--muted);font-size:12px}');
+    DBMS_OUTPUT.PUT_LINE('.nr .l small{display:block;color:var(--muted);font-size:12px;white-space:normal}');
     DBMS_OUTPUT.PUT_LINE('.nr .vv{text-align:right;line-height:1.3;white-space:nowrap}');
     DBMS_OUTPUT.PUT_LINE('.nr .vv small{display:block;font-size:12px}');
     DBMS_OUTPUT.PUT_LINE('.nr .bd{min-width:0}');
@@ -1339,6 +1339,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.calm-notes .note .nr:last-child{border-bottom:0}');
     DBMS_OUTPUT.PUT_LINE('.calm-notes .note.improved{background:transparent;border-style:dashed}');
     DBMS_OUTPUT.PUT_LINE('.calm-more{margin:var(--s3) 0 0;font-size:12.5px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.calm-more a{color:var(--ink-soft);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}');
     DBMS_OUTPUT.PUT_LINE('.calm-empty{margin:0;padding:var(--s4) 0;font-size:14px;color:var(--ink-soft)}');
     DBMS_OUTPUT.PUT_LINE('.ent-x{font:inherit}');
     DBMS_OUTPUT.PUT_LINE('nav.toc a[hidden]{display:none}');

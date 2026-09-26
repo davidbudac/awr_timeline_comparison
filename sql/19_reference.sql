@@ -204,7 +204,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('</dl>');
     DBMS_OUTPUT.PUT_LINE('<p class="ab-meta">Run <code>~run_id</code> &middot; template <code>'
         || DBMS_XMLGEN.CONVERT('~template_name') || '</code> &middot; top_n ~top_n'
-        || ' &middot; generated ~generated_at_s &middot; read-only against '
+        || ' &middot; generated ~generated_at_s by ' || DBMS_XMLGEN.CONVERT('~caller_user')
+        || ' &middot; read-only against '
         || '<code>DBA_HIST_*</code>, no scratch schema.</p>');
     DBMS_OUTPUT.PUT_LINE('</div></details></section>');
 END;

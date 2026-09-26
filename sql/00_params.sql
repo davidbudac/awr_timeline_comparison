@@ -402,6 +402,11 @@ BEGIN
         || '<div class="db"><b>' || DBMS_XMLGEN.CONVERT('~db_name') || '</b>'
         || '<span>' || DBMS_XMLGEN.CONVERT('~host_name') || ' &middot; '
         || DBMS_XMLGEN.CONVERT('~db_version') || ' &middot; DBID ' || TRIM('~dbid')
+        -- A report spanning more than one DBID (non-CDB -> PDB migration: a
+        -- comma in dbid_list) names the full set; single-DBID emits nothing.
+        || CASE WHEN INSTR('~dbid_list', ',') > 0
+                THEN ' &middot; all DBIDs ' || REPLACE('~dbid_list', ',', ', ')
+                ELSE '' END
         || '</span></div>'
         || '<div class="win"><span class="cchip">Current</span><b>'
         || TO_CHAR(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') - ~win_hours/24,
@@ -410,7 +415,13 @@ BEGIN
         || TO_CHAR(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS'), 'HH24:MI')
         || '</b><span>vs ' || TO_CHAR(~weeks_back) || ' prior window'
         || CASE WHEN ~weeks_back = 1 THEN '' ELSE 's' END
-        || ', every ~step_label</span></div>'
+        || ', every ~step_label'
+        -- A curated template names itself, so reports can be told apart
+        -- at a glance (the v1.5.0 windows strip carried the same note).
+        || CASE WHEN '~template_name' = 'comprehensive' THEN ''
+                ELSE ' &middot; template <code>' || DBMS_XMLGEN.CONVERT('~template_name') || '</code>'
+           END
+        || '</span></div>'
         || '<span class="sp"></span>'
         || '<div class="seg" role="group" aria-label="View">'
         || '<button type="button" data-v="summary" aria-pressed="true"'

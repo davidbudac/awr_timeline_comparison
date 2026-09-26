@@ -500,25 +500,6 @@ def higher_is_worse(domain, name) -> str:
 
 
 # ---------------------------------------------------------------------
-# sql/lib/dev_bucket.plsql
-# ---------------------------------------------------------------------
-
-def dev_attr(cur, prior) -> str:
-    if prior is None:
-        return ""
-    if cur is None or cur == 0:
-        return "" if prior == 0 else ' data-dev="3"'
-    r = abs(prior - cur) / abs(cur)
-    if r < 0.10:
-        return ""
-    if r < 0.25:
-        return ' data-dev="1"'
-    if r < 0.50:
-        return ' data-dev="2"'
-    return ' data-dev="3"'
-
-
-# ---------------------------------------------------------------------
 # DBMS_XMLGEN.CONVERT / json_escape.plsql
 # ---------------------------------------------------------------------
 

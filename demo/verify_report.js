@@ -16,7 +16,8 @@
  *     top-bar switch flips body.vs / .vt / .va, All sections shows the
  *     most sections, Timeline shows #timeline, the guide (#guide) and the
  *     About fold (#about) show in every view, #view= hash wins on load;
- *   - light and dark (the theme toggle) in each view;
+ *   - light and dark (the theme toggle) in each view; no visible link left
+ *     in the browser's default blue / purple (unreadable in dark);
  *   - every href="#..." resolves to exactly one id (a target-less .xlink
  *     the chrome hid is skipped), and no id is duplicated;
  *   - an entity-style jump: clicking an in-page link whose target is out
@@ -155,6 +156,11 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
           timeline: vis(document.getElementById('timeline')),
           pressed: (document.querySelector('.topbar .seg [aria-pressed="true"]') || {}).textContent || '',
           hOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          // a visible link left in the browser's default blue / purple has no
+          // report style (unreadable in dark)
+          rawLinks: [...document.querySelectorAll('a')].filter(a => vis(a) &&
+            /^rgb\((0, 0, 238|85, 26, 139)\)$/.test(getComputedStyle(a).color))
+            .map(a => (a.parentElement.tagName + '.' + a.parentElement.className).slice(0, 40)).slice(0, 5),
         };
       }, VIEWS[v]);
       counts[v] = st.sections;
@@ -165,6 +171,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       if (!st.about) fail(tag + ': #about not visible');
       if ((v === 'timeline') !== st.timeline) fail(tag + ': #timeline visible=' + st.timeline);
       if (st.hOverflow > 1) fail(tag + ': horizontal page overflow ' + st.hOverflow + 'px');
+      if (st.rawLinks.length) fail(tag + ': unstyled (browser-default colour) links in ' + st.rawLinks.join(', '));
       if (errors.length) fail(tag + ': ' + errors.slice(0, 5).join(' | '));
       console.log('view ' + tag + ': ' + st.sections + ' sections visible, switch=' + st.pressed.trim() + (errors.length ? ', ERRORS' : ', 0 errors'));
       if (shots) await page.screenshot({ path: path.join(shots, v + '-' + scheme + '.png'), fullPage: v !== 'all' });

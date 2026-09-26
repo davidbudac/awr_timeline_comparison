@@ -342,12 +342,16 @@ def emit(w) -> str:
     put('<div class="topbar" id="topbar">'
         '<div class="db"><b>' + esc(w.db_name) + '</b>'
         '<span>' + esc(w.host_name) + ' &middot; ' + esc(w.db_version) + ' &middot; DBID '
-        + str(w.dbid) + '</span></div>'
+        + str(w.dbid)
+        + ((' &middot; all DBIDs ' + w.dbid_list.replace(',', ', ')) if ',' in w.dbid_list else '')
+        + '</span></div>'
         '<div class="win"><span class="cchip">Current</span><b>'
         + dy(cur_start) + ' ' + cur_start.strftime("%d") + ' ' + mon_dd(cur_start)[:3] + ', '
         + hh24(cur_start) + '&ndash;' + hh24(w.target_end)
         + '</b><span>vs ' + str(w.weeks_back) + ' prior window' + ('' if w.weeks_back == 1 else 's')
-        + ', every ' + w.step_label + '</span></div>'
+        + ', every ' + w.step_label
+        + ('' if w.template == 'comprehensive' else ' &middot; template <code>' + esc(w.template) + '</code>')
+        + '</span></div>'
         '<span class="sp"></span>'
         '<div class="seg" role="group" aria-label="View">'
         '<button type="button" data-v="summary" aria-pressed="true"'

@@ -607,7 +607,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('        lineStyle:{width:0.5,color:color},itemStyle:{color:color},');
     DBMS_OUTPUT.PUT_LINE('        data:e.vals};');
     DBMS_OUTPUT.PUT_LINE('      if(i===0 && markAreaData.length){');
-    DBMS_OUTPUT.PUT_LINE('        s.markArea={silent:true,data:markAreaData,itemStyle:{opacity:1}};}');
+    DBMS_OUTPUT.PUT_LINE('        s.markArea={silent:true,data:markAreaData,itemStyle:{opacity:1},label:{position:"insideTop",color:mu,fontSize:9,textBorderWidth:0,distance:2}};}');
     DBMS_OUTPUT.PUT_LINE('      if(i===0){var __ml=window.AWR_markLine&&window.AWR_markLine(d.hours); if(__ml) s.markLine=__ml;}');
     DBMS_OUTPUT.PUT_LINE('      return s;})');
     DBMS_OUTPUT.PUT_LINE('  });');
