@@ -170,6 +170,11 @@ _CLS_RANK = {"CPU": 1, "User I/O": 2, "System I/O": 3, "Commit": 4, "Application
              "Cluster": 10, "Administrative": 11, "Queueing": 12, "Other": 99}
 
 
+def hr_tok(v) -> str:
+    """RTRIM(TO_CHAR(ROUND(v, 6), 'FM9999999990D999999'), '.') -- bh / wh"""
+    return helpers.to_char_trim(ora_round(v, 6), 6)
+
+
 def aas_tok(v) -> str:
     """RTRIM(TO_CHAR(ROUND(v, 3), 'FM9999999990D999'), '.')"""
     return helpers.to_char_trim(ora_round(v or 0, 3), 3)
@@ -194,8 +199,8 @@ def _events(w, range_start, total_hours, cbh, m, nc, events_by_hour):
         return sum(d.get((key0, e), 0) for e in rest)
 
     out = ['<script>AWR_DATA.ashe={"t0":"' + ts_min(range_start) + '","end":"'
-           + ts_min(w.target_end) + '","bh":' + helpers.wg_tok(cbh)
-           + ',"wh":' + helpers.wg_tok(w.win_hours) + ',"classes":[']
+           + ts_min(w.target_end) + '","bh":' + hr_tok(cbh)
+           + ',"wh":' + hr_tok(w.win_hours) + ',"classes":[']
     for i, e in enumerate(names):
         out.append(("," if i else "") + '"' + helpers.json_escape(e) + '"')
     out.append('],"vals":[')
@@ -217,7 +222,8 @@ def _events(w, range_start, total_hours, cbh, m, nc, events_by_hour):
 
 def _timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour, events_by_hour):
     out = []
-    m = max(1, math.ceil(max(1, total_hours / 400) / bh))
+    # the fine grid; coarsened only past 10000 buckets (SQL v_m)
+    m = max(1, math.ceil(total_buckets / 10000))
     cbh = m * bh
     nc = math.ceil(total_buckets / m)
     ccells, wcells, wfcells, totals = {}, {}, {}, {}
@@ -230,8 +236,8 @@ def _timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour, eve
     classes = sorted(totals, key=lambda c: (_CLS_RANK.get(c, 50), c))
     valid = {win.week_offset: win.valid_flag for win in w.windows}
     out.append('<script>AWR_DATA.ashx={"t0":"' + ts_min(range_start) + '","end":"'
-               + ts_min(w.target_end) + '","bh":' + helpers.wg_tok(cbh)
-               + ',"wh":' + helpers.wg_tok(w.win_hours) + ',"classes":[')
+               + ts_min(w.target_end) + '","bh":' + hr_tok(cbh)
+               + ',"wh":' + hr_tok(w.win_hours) + ',"classes":[')
     for i, c in enumerate(classes):
         out.append(("," if i else "") + '"' + c.replace('"', '\\"') + '"')
     out.append('],"vals":[')

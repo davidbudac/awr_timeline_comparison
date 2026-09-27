@@ -420,6 +420,9 @@ number format. Window shading and the per-window tooltip reuse the
 `windows_rollup` rows that 09 already reads. The CSV/JSON must not
 left-compact nulls (the `listagg-null-token` rule). Cost: a single ASH scan
 over the span; 09 already does one, so a combined section can share it.
+(As built: the Activity charts share 09's scan AND its fine grid -- hourly,
+or the sub-hour cadence, coarser only past 10000 buckets; the owner found
+the adaptive 168-400 buckets too coarse.)
 *ECharts vs inline SVG: the mock hand-rolls it (about 150 lines of JS).*
 - Why SVG: it keeps the mock CDN-free and works offline with no
   `body.no-charts` fallback. It styles itself from the same CSS variables as

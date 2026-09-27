@@ -57,7 +57,10 @@ AUTO weekly, 168-hourly and fleet runs (all rc 0, verify_report OK).
   active sessions by wait class (`AWR_DATA.ashx`) and by wait event
   (`AWR_DATA.ashe`: the 14 events with the most samples, ON CPU as `CPU`,
   the rest summed as "Other events"), both from 09's one existing ASH scan
-  (it now also groups by event; no second scan). Adaptive >= 1 h buckets;
+  (it now also groups by event; no second scan). The fine grid of the
+  v1.5.0 ASH timeline (hourly, or the sub-hour cadence; coarser only past
+  10000 buckets), drawn one step per pixel column when zoomed out (each
+  column's busiest bucket, so spikes stay) and every bucket once zoomed in;
   each chart has its own legend (toggles restack and rescale), hover
   tooltip, brush zoom, Reset / double-click, window stripes (Current
   indigo, pinned amber, skipped grey) and release markers; zoom, the hover

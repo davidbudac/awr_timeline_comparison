@@ -21,9 +21,15 @@
 -- 00_params.sql, drawn by sql/lib/js_timeline.plsql):
 -- window.AWR_DATA.ashx = {t0, end, bh, wh, classes, vals, win, winfg}
 --   t0 / end   span start / end ('YYYY-MM-DD HH24:MI'), bh = chart bucket
---              in hours: a whole multiple of this section's bucket, at
---              least 1 h, sized for at most about 400 buckets (13 weekly
---              windows: 6 h, 4 weeks: 2 h, a week or less: 1 h);
+--              in hours = this section's own fine bucket (bucket_hours:
+--              1 h, or the cadence when it is shorter), the grid of the
+--              All-sections chart above; coarsened to a whole multiple
+--              of it only past 10000 buckets (more than a year of hourly
+--              buckets: 52 weekly or 365 daily windows stay hourly).  The
+--              cap bounds the payload (about 5 bytes a value, 30 series
+--              at most: under 1.5 MB) and the client draws at most one
+--              step per pixel column (js_timeline downsamples, keeping
+--              each column's busiest bucket), so it is not a speed cap;
 --   classes    wait classes in a fixed stacking order (CPU first);
 --   vals       per class, one AAS per chart bucket, oldest first (a zero,
 --              never a gap, so nothing left-compacts);
@@ -113,6 +119,7 @@ DECLARE
     v_etot         t_class_tab;         -- event -> samples over the span
     v_valid        VARCHAR2(4000);      -- '|k=Y|k=N|...' per window
     v_cls_order    VARCHAR2(4000);      -- '|CPU|User I/O|...' stacking order
+    v_lb           VARCHAR2(32767);     -- lob_add's buffer (one WRITEAPPEND per 30 KB or so)
     @@sql/lib/put_clob_chunked.plsql
     @@sql/lib/json_escape.plsql
     @@sql/lib/fmt_num.plsql
@@ -130,6 +137,14 @@ DECLARE
                              'NLS_NUMERIC_CHARACTERS=''.,'''), '.');
     END aas_tok;
 
+    -- bh / wh as a JSON number: a leading zero (wg_tok gives '.25', which
+    -- JS reads but JSON does not), up to 6 decimals
+    FUNCTION hr_tok(p NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN RTRIM(TO_CHAR(ROUND(p, 6), 'FM9999999990D999999',
+                             'NLS_NUMERIC_CHARACTERS=''.,'''), '.');
+    END hr_tok;
+
     -- add n to the (key -> samples) cell k
     PROCEDURE bump(p_tab IN OUT NOCOPY t_cell_tab, p_k VARCHAR2, p_n NUMBER) IS
     BEGIN
@@ -139,6 +154,20 @@ DECLARE
             p_tab(p_k) := p_n;
         END IF;
     END bump;
+
+    -- append p to v_class_vals through the v_lb buffer (thousands of
+    -- values per series: one WRITEAPPEND per 30 KB or so, not per value);
+    -- lob_add(NULL, TRUE) flushes
+    PROCEDURE lob_add(p VARCHAR2, p_flush BOOLEAN DEFAULT FALSE) IS
+    BEGIN
+        IF LENGTH(v_lb) + NVL(LENGTH(p), 0) > 30000 OR p_flush THEN
+            IF v_lb IS NOT NULL THEN
+                DBMS_LOB.WRITEAPPEND(v_class_vals, LENGTH(v_lb), v_lb);
+            END IF;
+            v_lb := NULL;
+        END IF;
+        v_lb := v_lb || p;
+    END lob_add;
 
     -- the Timeline's fixed stacking order: CPU at the bottom, then the
     -- usual suspects, anything unknown before Other
@@ -166,8 +195,10 @@ BEGIN
     -- ROUND drops it and the last partial bucket vanishes.  CEIL always keeps
     -- it; integer cadences give ROUND=CEIL, so aligned runs are unchanged (F4).
     v_total_buckets := GREATEST(CEIL(v_total_hours / v_bucket_hours), 1);
-    -- the Timeline chart's bucket: v_m of these buckets, at least 1 h
-    v_m  := GREATEST(1, CEIL(GREATEST(1, v_total_hours / 400) / v_bucket_hours));
+    -- the Activity charts' bucket: this section's own fine bucket (the
+    -- old ECharts timeline's grid), v_m of them only past 10000 buckets
+    -- (see the header)
+    v_m  := GREATEST(1, CEIL(v_total_buckets / 10000));
     v_bh := v_m * v_bucket_hours;
     v_nc := CEIL(v_total_buckets / v_m);
     v_bucket_label  :=
@@ -495,8 +526,8 @@ BEGIN
 
         DBMS_OUTPUT.PUT_LINE('<script>AWR_DATA.ashx={"t0":"'
             || TO_CHAR(v_range_start, 'YYYY-MM-DD HH24:MI') || '","end":"'
-            || TO_CHAR(v_range_end, 'YYYY-MM-DD HH24:MI') || '","bh":' || wg_tok(v_bh)
-            || ',"wh":' || wg_tok(~win_hours) || ',"classes":[');
+            || TO_CHAR(v_range_end, 'YYYY-MM-DD HH24:MI') || '","bh":' || hr_tok(v_bh)
+            || ',"wh":' || hr_tok(~win_hours) || ',"classes":[');
         FOR c IN 1 .. v_cls.COUNT LOOP
             DBMS_OUTPUT.PUT_LINE(CASE WHEN c > 1 THEN ',' END || '"' || REPLACE(v_cls(c), '"', '\"') || '"');
         END LOOP;
@@ -508,10 +539,10 @@ BEGIN
                 v_n2 := CASE WHEN v_ccells.EXISTS(v_ck) THEN v_ccells(v_ck) ELSE 0 END;
                 -- the last chart bucket may cover less than bh
                 v_cov := LEAST(v_bh, v_total_hours - b * v_bh);
-                v_buf := CASE WHEN b > 0 THEN ',' END
-                    || aas_tok(CASE WHEN v_cov > 0 THEN v_n2 / (360 * v_cov) ELSE 0 END);
-                DBMS_LOB.WRITEAPPEND(v_class_vals, LENGTH(v_buf), v_buf);
+                lob_add(CASE WHEN b > 0 THEN ',' END
+                    || aas_tok(CASE WHEN v_cov > 0 THEN v_n2 / (360 * v_cov) ELSE 0 END));
             END LOOP;
+            lob_add(NULL, TRUE);
             DBMS_OUTPUT.PUT_LINE(CASE WHEN c > 1 THEN ',' END || '[');
             put_clob_chunked(v_class_vals);
             DBMS_OUTPUT.PUT_LINE(']');
@@ -578,8 +609,8 @@ BEGIN
             v_ns := v_top.COUNT + CASE WHEN v_etot.COUNT > v_top.COUNT THEN 1 ELSE 0 END;
             DBMS_OUTPUT.PUT_LINE('<script>AWR_DATA.ashe={"t0":"'
                 || TO_CHAR(v_range_start, 'YYYY-MM-DD HH24:MI') || '","end":"'
-                || TO_CHAR(v_range_end, 'YYYY-MM-DD HH24:MI') || '","bh":' || wg_tok(v_bh)
-                || ',"wh":' || wg_tok(~win_hours) || ',"classes":[');
+                || TO_CHAR(v_range_end, 'YYYY-MM-DD HH24:MI') || '","bh":' || hr_tok(v_bh)
+                || ',"wh":' || hr_tok(~win_hours) || ',"classes":[');
             FOR e IN 1 .. v_ns LOOP
                 DBMS_OUTPUT.PUT_LINE(CASE WHEN e > 1 THEN ',' END || '"'
                     || CASE WHEN e <= v_top.COUNT THEN json_escape(v_top(e)) ELSE 'Other events' END || '"');
@@ -604,10 +635,10 @@ BEGIN
                         END LOOP;
                     END IF;
                     v_cov := LEAST(v_bh, v_total_hours - b * v_bh);
-                    v_buf := CASE WHEN b > 0 THEN ',' END
-                        || aas_tok(CASE WHEN v_cov > 0 THEN v_n2 / (360 * v_cov) ELSE 0 END);
-                    DBMS_LOB.WRITEAPPEND(v_class_vals, LENGTH(v_buf), v_buf);
+                    lob_add(CASE WHEN b > 0 THEN ',' END
+                        || aas_tok(CASE WHEN v_cov > 0 THEN v_n2 / (360 * v_cov) ELSE 0 END));
                 END LOOP;
+                lob_add(NULL, TRUE);
                 DBMS_OUTPUT.PUT_LINE(CASE WHEN e > 1 THEN ',' END || '[');
                 put_clob_chunked(v_class_vals);
                 DBMS_OUTPUT.PUT_LINE(']');

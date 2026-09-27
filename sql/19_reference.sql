@@ -63,7 +63,7 @@ BEGIN
         || ' y="0" width="2.2" height="44"/><rect class="gd-w" x="49.3" y="0" width="2.2" height="44"/><rect class="gd-w" x="60.5" y="0" width="2.2" height="44"/><rect class="gd-w" x="71.7" y="0" width="2.2"'
         || ' height="44"/><rect class="gd-w" x="82.9" y="0" width="2.2" height="44"/><rect class="gd-w" x="94.1" y="0" width="2.2" height="44"/><rect class="gd-w" x="105.3" y="0" width="2.2" height="44"/><rect'
         || ' class="gd-w" x="116.5" y="0" width="2.2" height="44"/><rect class="gd-w" x="127.7" y="0" width="2.2" height="44"/><rect class="gd-wc" x="138.9" y="0" width="3" height="44"/></svg></div><div'
-        || ' class="gx2"><h3>Full-span activity</h3><p>Top of every view: active sessions over the whole span, in 1-hour or longer steps, by wait class and by wait event (the 14 largest, the rest'
+        || ' class="gx2"><h3>Full-span activity</h3><p>Top of every view: active sessions over the whole span, hourly (or the shorter cadence), by wait class and by wait event (the 14 largest, the rest'
         || ' as Other events). <span class="g2">Stripes = compared windows (Current indigo, pinned amber, skipped grey). Hover for each series&rsquo; AAS, drag across either chart to zoom both,'
         || ' double-click to reset; a legend item hides its series, a stripe pins its window.</span></p></div></div>');
     DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="152" height="44" viewBox="0 0 152 44" role="img" aria-label="One stacked column per compared window"><rect class="gd-cbg" x="130.4" y="0"'
@@ -170,7 +170,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<dt>Evidence library</dt><dd>Summary view: every other section as one row with a one-line status and its counts; open a row to read the section in place.'
         || ' All sections shows every section in full.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>ASH timeline</dt><dd><code>dba_hist_active_sess_history</code> over the full span, one scan: hourly (or the cadence) in All sections; at the top of'
-        || ' every view (Activity, whole span) in buckets of at least 1 h, at most about 400 of them, by wait class and by wait event (the 14 events with the most samples, ties by name,'
+        || ' every view (Activity, whole span) on the same grid (coarser only past 10000 buckets), by wait class and by wait event (the 14 events with the most samples, ties by name,'
         || ' the rest summed as Other events), plus each compared window&rsquo;s own values (samples &divide; 360 &divide; window hours; overlapping windows each count a shared sample).'
         || ' ON CPU is <b>CPU</b> in both; Idle excluded. Compared windows shaded. ASH is not scored.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Timeline</dt><dd>One column per compared window, one row per metric, from the same values and scoring as the tables: the headline and every flagged load / metric'

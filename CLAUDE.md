@@ -455,9 +455,13 @@ ECharts chart; it groups by bucket, class, **event**, `j_lo..j_hi` = every
 compared window the sample falls in — overlapping windows each count it —
 and foreground flag; no second ASH scan):
 - `AWR_DATA.ashx = {t0, end, bh, wh, classes, vals, win, winfg}` — by wait
-  class. `bh` = `v_m × bucket_hours`, `v_m = CEIL(GREATEST(1, span_h/400) /
-  bucket_hours)` (≥ 1 h, ≤ ~400 buckets; the last bucket divided by its
-  covered hours); classes in a fixed stacking order (CPU, User I/O, System
+  class. `bh` = `v_m × bucket_hours`, `v_m = GREATEST(1, CEIL(total_buckets
+  / 10000))`: the fine grid of 09's ECharts chart (hourly, or the sub-hour
+  cadence), as in v1.5.0 (owner request: "much more granular"), coarsened
+  only past 10000 buckets (a year of hourly buckets, 52 weekly / 365 daily
+  windows, stays hourly; payload under about 1.5 MB); the last bucket
+  divided by its covered hours; 09 appends the values through `lob_add`
+  (one WRITEAPPEND per 30 KB or so); classes in a fixed stacking order (CPU, User I/O, System
   I/O, Commit, Application, Concurrency, Network, Configuration, Scheduler,
   Cluster, Administrative, Queueing, unknown, Other); `vals` zeros, never
   gaps; `win` per class per window (oldest first) = samples ÷ 360 ÷
@@ -478,7 +482,12 @@ Numbers via `RTRIM(TO_CHAR(ROUND(v,3),'FM9999999990D999'),'.')`.
 **Client** (`js_timeline`, section 6): ONE chart factory — `mkChart(root,
 payload, colours, opt)` + `draw(c)` — two instances in `CH`, sharing `SP`
 (bucket times, the zoom domain, windows, `#ax-range` / `#ax-reset`). Per
-chart: step areas, legend toggles restack / rescale, hover tooltip (time +
+chart: step areas (one `path` per series, painted top of the stack
+first, each from the axis to its cumulative height; `bRange` / `bucketAt`
+are O(1) on the regular grid; zoomed out past one bucket per pixel the
+path takes one step per pixel column at that column's busiest bucket, so
+spikes survive and a brush zoom shows every bucket; the tooltip reads the
+exact bucket; ticks go down to 5 min, `bLab` names 15-min buckets), legend toggles restack / rescale, hover tooltip (time +
 each shown series' AAS; a stripe's tooltip = that window's `win` values),
 window stripes from `AWR_WIN` (`.cur` indigo / `.on` pinned amber / `.sk`
 skipped grey; hit rects `.xwh[data-w][tabindex=0]`, click / Enter / Space
@@ -1602,6 +1611,13 @@ the demo.
   0.28-0.40 s after (noise; the extra event grouping costs nothing
   measurable). Fleet `table.dt` first cells 10 px padded, the 3 px bar
   intact (busy window, both themes).
+- **Fine-grained Activity charts verified on dbmint (2026-09-27):**
+  `reports/ashgran/`: pinned hourly 1/4/1h, 15-min cadence (`0.25 16 ... 0.25
+  h`: `bh` 0.25, 10-min ticks), busy CPU `2026-09-22 13:00` 1/7/1d, `AUTO`
+  weekly 1/4 (673 hourly buckets) and 52 weekly (8738 hourly buckets, 13 MB,
+  section 09 about 1 s): all rc 0, 20/20 pairs, max line < 32767, `ORA-`
+  only in captured SQL text; verify_report OK (its grid-hover check now
+  picks a cell not under the sticky labels).
 - **v1.5.0 / fleet 0.7.0 verified on dbmint (2026-09-22):** built without
   a database on 2026-09-21 (synthetic demo + Playwright + the 137-test
   server suite), then run against dbmint: pinned hourly window

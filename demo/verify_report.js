@@ -543,9 +543,22 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       if (/^FAIL/.test(ruler)) fail('timeline: ruler pin / survives view / Esc ' + ruler);
     } else tl.chart = 'no ASH payload';
     // grid hover tooltip
-    const cell = await page.$('#tl .lrows .r.bars .c:not(.cur)');
+    /* the first prior-window cell that is not under a sticky row label (the
+       grid opens scrolled to Current, so with a few more windows than fit
+       the oldest cells sit under the labels) */
+    const cells = await page.$$('#tl .lrows .r.bars .c:not(.cur)');
+    const ci = await page.evaluate(() => {
+      const cs = [...document.querySelectorAll('#tl .lrows .r.bars .c:not(.cur)')];
+      for (let i = 0; i < cs.length; i++) {
+        const c = cs[i]; c.scrollIntoView({ block: 'center', inline: 'nearest' });
+        const r = c.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        if (e && c.contains(e)) return i;
+      }
+      return 0;
+    });
+    const cell = cells[ci];
     if (cell) {
-      await cell.scrollIntoViewIfNeeded(); await cell.hover(); await page.waitForTimeout(120);
+      await cell.hover(); await page.waitForTimeout(120);
       tl.gridTip = await page.evaluate(() => { const t = document.getElementById('tip'); return t && !t.hidden && t.textContent.length > 5 ? 'ok' : 'FAIL'; });
       if (tl.gridTip !== 'ok') fail('timeline: grid hover tooltip');
     }
