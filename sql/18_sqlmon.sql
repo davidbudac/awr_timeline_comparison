@@ -750,8 +750,12 @@ BEGIN
                            p_bucket VARCHAR2, p_plain VARCHAR2,
                            p_band VARCHAR2 DEFAULT 'Y') RETURN VARCHAR2 IS
             BEGIN
-                RETURN '<div class="evr"><dt>' || p_dt || '</dt><dd><span class="id">' || p_idt
-                    || '</span><span class="de">' || p_de || '</span></dd>'
+                -- plain-text values (class "txt", as the spec's plan card);
+                -- a value and its unit never part at a line break
+                RETURN '<div class="evr"><dt>' || p_dt || '</dt><dd><span class="id txt">'
+                    || REGEXP_REPLACE(p_idt, '([0-9]) ', '\1&nbsp;')
+                    || '</span><span class="de">' || REGEXP_REPLACE(p_de, '([0-9]) ', '\1&nbsp;')
+                    || '</span></dd>'
                     || '<div class="m"' || CASE WHEN p_plain = 'Y' THEN ' title="Ranked, not scored"' END || '>'
                     || delta_span(p_cur, p_mu, p_bucket, p_plain)
                     || CASE WHEN p_band = 'Y' THEN band_span(band_z(p_cur, p_mu, p_sd), p_bucket, 'sm') END

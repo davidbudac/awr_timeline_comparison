@@ -1153,6 +1153,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.hero .verdict.quiet{font-size:26px}');
     DBMS_OUTPUT.PUT_LINE('.hero .because{font-size:16px;line-height:1.55;color:var(--ink-soft);max-width:48em;margin:var(--s3) 0 0}');
     DBMS_OUTPUT.PUT_LINE('.hero .because code{font-size:.9em}');
+    -- plain links in the hero's second line (the too-little-history
+    -- sentence links Windows / Findings): never browser blue
+    DBMS_OUTPUT.PUT_LINE('.hero .because a:not(.ent){color:var(--ink-soft);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}');
     DBMS_OUTPUT.PUT_LINE('.hero .pills{display:flex;flex-wrap:wrap;gap:var(--s2);margin:var(--s5) 0 0;padding:0;list-style:none}');
     DBMS_OUTPUT.PUT_LINE('.hero .pills a,.hero .pills span.pl{display:inline-flex;align-items:center;gap:8px;padding:4px 12px;border:1px solid var(--hairline);border-radius:999px;background:var(--panel);color:var(--ink-soft);font-size:13px;text-decoration:none;line-height:20px}');
     DBMS_OUTPUT.PUT_LINE('.hero .pills a:hover{border-color:var(--muted);color:var(--ink)}');
@@ -1181,6 +1184,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.wg .c.mk{box-shadow:inset 1.5px 0 0 var(--mkline)}');
     DBMS_OUTPUT.PUT_LINE('.wg .r > .l{position:sticky;left:0;z-index:4;background:var(--panel);padding:0 12px 0 16px;display:flex;flex-direction:column;justify-content:center;min-width:0;border-right:1px solid var(--hairline)}');
     DBMS_OUTPUT.PUT_LINE('.wg .l .nm{font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px}');
+    -- .nm is a flex box, so its own text-overflow never reaches the name
+    -- link inside it: the link itself must shrink and ellipsise (a long
+    -- segment name was clipped mid-letter on dbmint)
+    DBMS_OUTPUT.PUT_LINE('.wg .l .nm > a{min-width:0;overflow:hidden;text-overflow:ellipsis}');
     DBMS_OUTPUT.PUT_LINE('.wg .l .sub{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4}');
     DBMS_OUTPUT.PUT_LINE('.wg .r > .g{border-left:1px solid var(--hairline);padding:4px 12px;display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;white-space:nowrap;overflow:hidden;background:var(--panel);--row-bg:var(--panel)}');
     DBMS_OUTPUT.PUT_LINE('.wg .g .gl1{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:12.5px}');

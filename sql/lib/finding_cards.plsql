@@ -207,6 +207,14 @@
         RETURN fmt_num(GREATEST(0, p_mu - 2 * v_den)) || '&ndash;' || fv(v_hi, p_unit);
     END fv_range;
 
+    -- a value and its unit never part at a line break: "0.00843 AAS",
+    -- "221.5 k" (every space right after a digit becomes a no-break space);
+    -- for the plain-text description of an evidence row
+    FUNCTION nbu(p_s VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN REGEXP_REPLACE(p_s, '([0-9]) ', '\1&nbsp;');
+    END nbu;
+
     -- where the extra DB time went: 'W' all of it wait, 'w' mostly wait,
     -- 'm' CPU and wait alike, 'c' mostly CPU; NULL when DB time did not rise
     FUNCTION time_split(p_dbt_cur NUMBER, p_dbt_mu NUMBER,

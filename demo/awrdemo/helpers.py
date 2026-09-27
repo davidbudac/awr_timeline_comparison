@@ -823,6 +823,12 @@ def fv_range(mu, sd, unit) -> str:
     return fmt_num(lo) + "&ndash;" + fv(hi, unit)
 
 
+def nbu(s: str) -> str:
+    """finding_cards.plsql nbu(): a value and its unit never part at a line
+    break (every space right after a digit becomes &nbsp;)."""
+    return re.sub(r'([0-9]) ', r'\1&nbsp;', s)
+
+
 def time_split(dbt_cur, dbt_mu, cpu_cur, cpu_mu):
     if None in (dbt_cur, dbt_mu, cpu_cur, cpu_mu):
         return None

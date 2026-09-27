@@ -117,8 +117,8 @@ def _a_sd(a, mu):
 
 
 def _pc_ev(dt, idt, de, cur, mu, sd, bucket, plain, band="Y"):
-    return ('<div class="evr"><dt>' + dt + '</dt><dd><span class="id">' + idt
-            + '</span><span class="de">' + de + '</span></dd>'
+    return ('<div class="evr"><dt>' + dt + '</dt><dd><span class="id txt">' + H.nbu(idt)
+            + '</span><span class="de">' + H.nbu(de) + '</span></dd>'
             + '<div class="m"' + (' title="Ranked, not scored"' if plain == "Y" else "") + '>'
             + H.delta_span(cur, mu, bucket, plain)
             + (H.band_span(H.band_z(cur, mu, sd), bucket, "sm") if band == "Y" else "")

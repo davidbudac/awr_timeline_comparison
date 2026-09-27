@@ -521,8 +521,8 @@ BEGIN
         IF v_seg IS NOT NULL THEN
             v_ev_io := v_ev_io || '<div class="evr"><dt>Segment</dt><dd><span class="id">'
                 || ent(esc(v_seg), anchor_id('sg', v_seg), 'segment') || '</span><span class="de">'
-                || fmt_num(v_seg_cur) || ' blocks read'
-                || CASE WHEN v_seg_mu IS NOT NULL THEN ', normal ' || fmt_num(v_seg_mu) END
+                || nbu(fmt_num(v_seg_cur) || ' blocks read'
+                       || CASE WHEN v_seg_mu IS NOT NULL THEN ', normal ' || fmt_num(v_seg_mu) END)
                 || '</span></dd><div class="m" title="Ranked, not scored">'
                 || delta_span(v_seg_cur, v_seg_mu, NULL, 'Y') || '<span class="ns">not scored</span></div></div>';
             v_vx_io := ', most of it on ' || ent('<code>' || esc(v_seg) || '</code>', anchor_id('sg', v_seg), 'segment');
@@ -530,15 +530,15 @@ BEGIN
         IF v_file IS NOT NULL THEN
             v_ev_io := v_ev_io || '<div class="evr"><dt>File</dt><dd><span class="id">'
                 || ent(esc(v_file), v_file_aid, 'file') || '</span><span class="de">'
-                || fmt_num(v_file_cur) || ' MB read'
-                || CASE WHEN v_file_mu IS NOT NULL THEN ', normal ' || fmt_num(v_file_mu) END
+                || nbu(fmt_num(v_file_cur) || ' MB read'
+                       || CASE WHEN v_file_mu IS NOT NULL THEN ', normal ' || fmt_num(v_file_mu) END)
                 || '</span></dd><div class="m" title="Ranked, not scored">'
                 || delta_span(v_file_cur, v_file_mu, NULL, 'Y') || '<span class="ns">not scored</span></div></div>';
         END IF;
         IF v_sqlid IS NOT NULL THEN
             v_ev_io := v_ev_io || '<div class="evr"><dt>SQL</dt><dd><span class="id">'
                 || ent(v_sqlid, anchor_id('sq-preads', v_sqlid), 'sql') || '</span><span class="de">'
-                || fmt_num(v_sql_rd) || ' blocks read; new in the top ' || TO_CHAR(v_top_n)
+                || nbu(fmt_num(v_sql_rd) || ' blocks read; new in the top ' || TO_CHAR(v_top_n))
                 || '</span></dd><div class="m"><span class="d s-plain">&#10010; new</span></div></div>';
         END IF;
     END IF;

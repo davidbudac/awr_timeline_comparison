@@ -219,7 +219,7 @@ _AXIS = ('<span class="bd-ax" aria-hidden="true"><em style="--x:.167">&minus;2</
 
 def _ev_row(dt, ident, txt, de, cur, mu, sd, bucket) -> str:
     return ('<div class="evr"><dt>' + dt + '</dt><dd><span class="id' + (" txt" if txt else "") + '">'
-            + ident + '</span><span class="de">' + de + '</span></dd>'
+            + ident + '</span><span class="de">' + h.nbu(de) + '</span></dd>'
             '<div class="m">' + h.delta_span(cur, mu, bucket)
             + h.band_span(h.band_z(cur, mu, sd), bucket, "sm") + '</div></div>')
 

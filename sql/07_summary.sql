@@ -217,7 +217,7 @@ DECLARE
     BEGIN
         RETURN '<div class="evr"><dt>' || p_dt || '</dt><dd><span class="id'
             || CASE WHEN p_txt THEN ' txt' END || '">' || p_id || '</span>'
-            || '<span class="de">' || p_de || '</span></dd>'
+            || '<span class="de">' || nbu(p_de) || '</span></dd>'
             || '<div class="m">' || delta_span(p_cur, p_mu, p_bucket)
             || band_span(band_z(p_cur, p_mu, p_sd), p_bucket, 'sm') || '</div></div>';
     END ev_row;

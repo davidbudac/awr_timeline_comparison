@@ -351,8 +351,8 @@ def emit(w) -> str:
         if v_seg is not None:
             ev_io += ('<div class="evr"><dt>Segment</dt><dd><span class="id">'
                       + h.ent(esc(v_seg), h.anchor_id('sg', v_seg), 'segment') + '</span><span class="de">'
-                      + h.fmt_num(v_seg_cur) + ' blocks read'
-                      + (', normal ' + h.fmt_num(v_seg_mu) if v_seg_mu is not None else '')
+                      + h.nbu(h.fmt_num(v_seg_cur) + ' blocks read'
+                              + (', normal ' + h.fmt_num(v_seg_mu) if v_seg_mu is not None else ''))
                       + '</span></dd><div class="m" title="Ranked, not scored">'
                       + h.delta_span(v_seg_cur, v_seg_mu, None, 'Y') + '<span class="ns">not scored</span></div></div>')
             vx_io = (', most of it on '
@@ -360,14 +360,14 @@ def emit(w) -> str:
         if v_file is not None:
             ev_io += ('<div class="evr"><dt>File</dt><dd><span class="id">'
                       + h.ent(esc(v_file), v_file_aid, 'file') + '</span><span class="de">'
-                      + h.fmt_num(v_file_cur) + ' MB read'
-                      + (', normal ' + h.fmt_num(v_file_mu) if v_file_mu is not None else '')
+                      + h.nbu(h.fmt_num(v_file_cur) + ' MB read'
+                              + (', normal ' + h.fmt_num(v_file_mu) if v_file_mu is not None else ''))
                       + '</span></dd><div class="m" title="Ranked, not scored">'
                       + h.delta_span(v_file_cur, v_file_mu, None, 'Y') + '<span class="ns">not scored</span></div></div>')
         if v_sqlid is not None:
             ev_io += ('<div class="evr"><dt>SQL</dt><dd><span class="id">'
                       + h.ent(v_sqlid, h.anchor_id('sq-preads', v_sqlid), 'sql') + '</span><span class="de">'
-                      + h.fmt_num(v_sql_rd) + ' blocks read; new in the top ' + _tc(w.top_n)
+                      + h.nbu(h.fmt_num(v_sql_rd) + ' blocks read; new in the top ' + _tc(w.top_n))
                       + '</span></dd><div class="m"><span class="d s-plain">&#10010; new</span></div></div>')
 
     # R5: retired (the verdict and the DB time card carry it)
