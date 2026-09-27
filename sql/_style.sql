@@ -201,9 +201,12 @@ BEGIN
         || ' color:var(--ink-soft); text-decoration:none; font-weight:500;'
         || ' transition:color .12s, background .12s; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc a:hover { background:var(--paper); color:var(--ink); }');
+    -- The active link reads through its background and weight only: no
+    -- left bar or inset shadow (on the rounded pill it drew a crescent).
+    -- lint check 32 keeps every rail-link state free of one.
     DBMS_OUTPUT.PUT_LINE('nav.toc a.on {'
         || ' background:var(--panel); color:var(--ink);'
-        || ' font-weight:600; box-shadow:inset 2px 0 0 var(--ink-soft); }');
+        || ' font-weight:600; }');
     -- Status dots (injected by JS; na = no signal found)
     DBMS_OUTPUT.PUT_LINE('nav.toc a .st {'
         || ' width:8px; height:8px; border-radius:50%; flex:none;'
@@ -470,8 +473,11 @@ BEGIN
     -- sections; their cells carry the detail row's own background) keep
     -- the 3px severity-coloured bar they had before v1.6.0 instead of the
     -- 2px dot-coloured marker, which read as a stray hairline on their
-    -- zero-padding first cell.
-    DBMS_OUTPUT.PUT_LINE('table.dt tr.crit td:first-child { box-shadow:inset 3px 0 0 var(--crit); }'
+    -- zero-padding first cell.  Every first cell gets a left padding so
+    -- the text clears the bar and the columns stay aligned (the fleet's
+    -- own "table.dt td" rule has a lower specificity).
+    DBMS_OUTPUT.PUT_LINE('table.dt tr > td:first-child, table.dt tr > th:first-child { padding-left:10px; }'
+        || ' table.dt tr.crit td:first-child { box-shadow:inset 3px 0 0 var(--crit); }'
         || ' table.dt tr.warn td:first-child { box-shadow:inset 3px 0 0 var(--warn); }');
     DBMS_OUTPUT.PUT_LINE('tr.ok   { background:transparent; }');
     DBMS_OUTPUT.PUT_LINE('tr.info { background:transparent; }');

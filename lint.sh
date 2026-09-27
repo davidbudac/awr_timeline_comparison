@@ -532,6 +532,21 @@ for f in $(sql_files); do
     done
 done
 
+# ----------------------------------------------------------------------
+# 32. The rail's links (nav.toc a, every state: hover / .on / focus) show
+#     their state through background and font weight only.  A left border
+#     or an inset box-shadow on the rounded pill drew a dark crescent on
+#     its left edge (owner request, v1.6.0).  Any nav.toc a rule block in
+#     sql/_style.sql carrying border-left or an inset shadow is flagged.
+# ----------------------------------------------------------------------
+awk '
+    /nav\.toc a/ && /\{/ { inr = 1 }
+    inr && /border-left|inset/ { printf "%d\n", NR }
+    inr && /\}/ { inr = 0 }
+' sql/_style.sql | while IFS= read -r ln; do
+    finding rail-marker "sql/_style.sql:$ln" "no border-left / inset box-shadow on a rail link state (it drew a crescent on the rounded pill)"
+done
+
 [ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"
