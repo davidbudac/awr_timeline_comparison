@@ -92,12 +92,21 @@ WHENEVER OSERROR  EXIT FAILURE
 -- it matches the rest of the report, which already forces '.,' on every
 -- chart-CSV TO_CHAR.
 ALTER SESSION SET NLS_NUMERIC_CHARACTERS = '.,';
+-- Day and month NAMES in English, whatever the client's NLS_LANGUAGE: the
+-- window labels, the top bar and the Timeline's JS (which carries English
+-- DOW / MON arrays) must agree, and a localized name can be non-ASCII,
+-- which a non-UTF-8 SQL*Plus client prints as "?" (the v1.6.0 ASCII
+-- rule, lint check 25).  Emitters also pass 'NLS_DATE_LANGUAGE=ENGLISH'
+-- to every TO_CHAR that formats a name (lint check 28); this pin covers
+-- the resolving SELECT below (dow_name), which stays textually parallel
+-- to awr_fleet_extract.sql.
+ALTER SESSION SET NLS_DATE_LANGUAGE = ENGLISH;
 
 -- Tool version.  A constant, not a caller-tunable DEFINE (so it lives here,
 -- not in sql/defaults.sql).  Bump on release and record it in CHANGELOG.md;
 -- it is stamped into the report footer so a circulated HTML file can always
 -- be traced back to the build that produced it.
-DEFINE awr_version = '1.5.0'
+DEFINE awr_version = '1.6.0'
 
 -- The caller MUST have set target_end / win_hours / weeks_back / top_n /
 -- inst_num before invoking this driver.  For the canonical defaults, do:
@@ -213,14 +222,12 @@ COLUMN dbg_ts              NEW_VALUE dbg_ts              NOPRINT
 -- step_hours is resolved so every section can reference identical text:
 --   win_label       compact width of one comparison window     ("15m" / "1h")
 --   step_label      compact cadence between adjacent windows   ("15m" / "1w")
---   offset_labels   CSV of compact offsets k*step_hours, k=1..weeks_back
---                   (e.g. "15m,30m,45m" or "1w,2w,3w") - parsed via REGEXP_SUBSTR
+--   (the per-window offset labels are off_label(k), sql/lib/off_label.plsql)
 --   bucket_hours    LEAST(step_hours, 1) - bucket width (in hours) for the
 --                   ASH stacked-area timeline; 0.25 for 15-min cadences,
 --                   1 for hourly+; allows fractional buckets when step<1h.
 COLUMN win_label           NEW_VALUE win_label           NOPRINT
 COLUMN step_label          NEW_VALUE step_label          NOPRINT
-COLUMN offset_labels       NEW_VALUE offset_labels       NOPRINT
 COLUMN bucket_hours        NEW_VALUE bucket_hours        NOPRINT
 
 SELECT
@@ -435,7 +442,7 @@ CROSS JOIN (
 ) mk;
 
 -- -------------------------------------------------------------------
--- Derived labels (win_label, step_label, offset_labels, bucket_hours)
+-- Derived labels (win_label, step_label, bucket_hours)
 --
 -- A compact, unit-aware label for any value of "hours":
 --   < 1h with whole-minute value  -> "Nm"   (e.g. 15m, 30m)
@@ -444,11 +451,10 @@ CROSS JOIN (
 --   multiple of 1                 -> "Nh"   (e.g. 1h, 4h)
 --   anything else                 -> "X.YYh"  (decimal hours, dot decimal)
 --
--- offset_labels is a CSV of 16 entries (1..16 * step_hours). Sections only
--- consume the first weeks_back of them via REGEXP_SUBSTR(... ,k).
--- 16 is well above any realistic weeks_back; if a caller exceeds it, the
--- per-section header REGEXP_SUBSTR returns NULL and the column header
--- renders as just "&minus;" (silent visual bug, not an ORA).
+-- The per-window offset labels ("-1w", "-36h", ...) are NOT a DEFINE: a
+-- substitution variable holds at most 240 characters, so a CSV could not
+-- grow with weeks_back.  Sections call off_label(k) from
+-- sql/lib/off_label.plsql, which applies these same rules to k * step_hours.
 -- -------------------------------------------------------------------
 WITH FUNCTION fmt_one(h IN NUMBER) RETURN VARCHAR2 IS
 BEGIN
@@ -469,22 +475,6 @@ END;
 SELECT
     fmt_one(TO_NUMBER('~win_hours'))                                  AS win_label,
     fmt_one(TO_NUMBER('~step_hours'))                                 AS step_label,
-       fmt_one(1  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(2  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(3  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(4  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(5  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(6  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(7  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(8  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(9  * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(10 * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(11 * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(12 * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(13 * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(14 * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(15 * TO_NUMBER('~step_hours'))
-    || ',' || fmt_one(16 * TO_NUMBER('~step_hours'))                  AS offset_labels,
     TO_CHAR(LEAST(TO_NUMBER('~step_hours'), 1),
             'FM99999999990.999999')                                   AS bucket_hours
 FROM dual
@@ -553,7 +543,7 @@ END;
 -- BEGIN/END/ block that emits one <script>; loaded in order so later
 -- sections can rely on globals defined here.
 @@sql/lib/js_wait_colors.plsql
-@@sql/lib/js_sparkline.plsql
+@@sql/lib/js_microstrip.plsql
 
 -- Optional user-defined timeline markers (milestones).  js_markers.plsql
 -- inits window.AWR_MARKERS=[] and defines window.AWR_markLine(); the
@@ -563,6 +553,15 @@ END;
 -- charts (sections 00/09/10/11) read these at render time.
 @@sql/lib/js_markers.plsql
 @@~marker_include
+
+-- v1.6.0: the window component's client half (bars, release flags on the
+-- window boundaries, hover) and the entity-link unwrap; reads
+-- window.AWR_WIN, which 00_params.sql emits.
+@@sql/lib/js_wingrid.plsql
+-- v1.6.0: the Timeline view's client half (lane sources, pin, tooltip,
+-- stacked activity columns, the full-span ASH chart); extends AWR_WG and
+-- must run before any section's inline AWR_TL.take() call.
+@@sql/lib/js_timeline.plsql
 
 -- -------------------------------------------------------------------
 -- Sections.  Each section is compute+render in one anonymous block;
@@ -636,6 +635,9 @@ DEFINE _dbg_msg = 'section 15 file_io (per-file and file-type I/O deltas)'
 DEFINE _dbg_msg = 'section 12 param_changes (parameters that differ across windows)'
 @@sql/lib/debug_log.sql
 @@sql/12_param_changes.sql
+DEFINE _dbg_msg = 'section 19 reference (Reading the charts guide + About this report; static)'
+@@sql/lib/debug_log.sql
+@@sql/19_reference.sql
 DEFINE _dbg_msg = 'section 17 narrative (cross-section What changed sentences)'
 @@sql/lib/debug_log.sql
 @@sql/17_narrative.sql

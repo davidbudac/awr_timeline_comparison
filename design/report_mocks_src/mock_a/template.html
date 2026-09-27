@@ -1,0 +1,1194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ORCLPRD weekly comparison</title>
+<style>
+:root{
+  --sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --bg:#F6F5F2; --surface:#FFFFFF; --surface-2:#FAF9F6; --line:#E5E2DB; --line-2:#EFEDE8;
+  --ink:#1C1B18; --ink-2:#4F4C45; --ink-3:#6B675F; --ink-4:#A39F96;
+  --accent:#0A6A77; --accent-soft:#E2F0F1;
+  --crit:#B5332A; --crit-soft:#FBEBE8; --warn:#96590B; --warn-soft:#FAF0DF;
+  --band:#ECE9E3; --prior:#A5A097; --prior-col:#D9D5CC; --cur-col:rgba(28,27,24,.05);
+  --flag:#8C877D; --other:#BEB9AF;
+  --shadow:0 1px 2px rgba(28,27,24,.05);
+  --note-bg:#22211E; --note-ink:#E9E6DF;
+}
+@media (prefers-color-scheme: dark){
+  body:not(.light){
+    --bg:#131312; --surface:#1B1B19; --surface-2:#20201D; --line:#302F2B; --line-2:#282724;
+    --ink:#EDEBE6; --ink-2:#C2BEB5; --ink-3:#9D998F; --ink-4:#67635C;
+    --accent:#5CC1CD; --accent-soft:#15363A;
+    --crit:#F27B6F; --crit-soft:#3B201C; --warn:#E4AB57; --warn-soft:#3A2C17;
+    --band:#2B2A27; --prior:#7A766E; --prior-col:#3B3A36; --cur-col:rgba(237,235,230,.06);
+    --flag:#8F8A80; --other:#5F5C56; --shadow:none;
+    --note-bg:#000; --note-ink:#D9D6CF;
+  }
+}
+body.dark{
+  --bg:#131312; --surface:#1B1B19; --surface-2:#20201D; --line:#302F2B; --line-2:#282724;
+  --ink:#EDEBE6; --ink-2:#C2BEB5; --ink-3:#9D998F; --ink-4:#67635C;
+  --accent:#5CC1CD; --accent-soft:#15363A;
+  --crit:#F27B6F; --crit-soft:#3B201C; --warn:#E4AB57; --warn-soft:#3A2C17;
+  --band:#2B2A27; --prior:#7A766E; --prior-col:#3B3A36; --cur-col:rgba(237,235,230,.06);
+  --flag:#8F8A80; --other:#5F5C56; --shadow:none;
+  --note-bg:#000; --note-ink:#D9D6CF;
+}
+*{box-sizing:border-box}
+html{scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline;text-underline-offset:3px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+code,.mono{font-family:var(--mono);font-size:.9em;letter-spacing:0}
+b,strong{font-weight:600}
+h1,h2,h3,h4{font-weight:600;margin:0}
+button{font:inherit;color:inherit}
+.sr{position:absolute;left:0;top:0;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+
+/* ---------- mock note (outside the design) ---------- */
+.mocknote{background:var(--note-bg);color:var(--note-ink);font-size:13px;line-height:1.45}
+.mocknote summary{list-style:none;cursor:pointer;padding:7px 20px;display:flex;gap:10px;align-items:baseline}
+.mocknote summary::-webkit-details-marker{display:none}
+.mocknote summary b{font-weight:600}
+.mocknote summary .hint{opacity:.6;margin-left:auto}
+.mocknote[open] summary .hint::after{content:"hide"}
+.mocknote:not([open]) summary .hint::after{content:"show"}
+.mocknote ul{margin:0;padding:0 20px 10px 38px;columns:2 460px;column-gap:40px}
+.mocknote li{margin:0 0 3px;break-inside:avoid}
+
+/* ---------- workbench frame ---------- */
+.app{display:grid;grid-template-columns:228px minmax(0,1fr);min-height:100vh}
+.rail{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;border-right:1px solid var(--line);padding:18px 12px 24px;font-size:14px}
+.brand{display:flex;flex-direction:column;padding:2px 10px 16px}
+.brand b{font-size:14px}
+.brand span{color:var(--ink-3);font-size:12.5px}
+.rail nav a{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:6px;color:var(--ink-2);text-decoration:none;line-height:1.35}
+.rail nav a:hover{background:var(--line-2);color:var(--ink)}
+.rail nav a.on{background:var(--accent-soft);color:var(--accent)}
+.rail nav a.sub{padding-left:22px;font-size:13px;color:var(--ink-3)}
+.rail nav a.sub.on{color:var(--accent)}
+.rail .grp{margin:18px 10px 6px;color:var(--ink-3);font-size:12.5px}
+.rail .n{margin-left:auto;font-size:12px;color:var(--ink-2);background:var(--line-2);border-radius:999px;padding:0 7px;min-width:22px;text-align:center;line-height:18px}
+.rail a.on .n{background:transparent;color:var(--accent)}
+.rail .more{display:block;padding:6px 10px;color:var(--ink-3);font-size:13px}
+body.normal .rail a.full-only{display:none}
+body.full .rail .more{display:none}
+
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:20px;min-height:54px;padding:8px 40px;background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:saturate(1.2) blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.topbar .db{display:flex;align-items:baseline;gap:10px;min-width:0}
+.topbar .db b{font-size:15px}
+.topbar .db span{color:var(--ink-3);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar .win{font-size:14px;color:var(--ink-2);white-space:nowrap}
+.topbar .win b{color:var(--ink)}
+.topbar .sp{flex:1}
+.topbar .gen{color:var(--ink-3);font-size:13px;white-space:nowrap}
+.iconbtn{display:inline-grid;place-items:center;width:32px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--surface);cursor:pointer;color:var(--ink-2)}
+.iconbtn:hover{color:var(--ink);border-color:var(--ink-4)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;padding:2px;background:var(--surface)}
+.seg button{border:0;background:transparent;padding:4px 12px;border-radius:6px;font-size:13px;color:var(--ink-3);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.menubtn{display:none}
+
+main{max-width:1120px;margin:0 auto;padding:0 40px 40px}
+section{scroll-margin-top:72px}
+
+/* ---------- hero ---------- */
+.hero{padding:52px 0 8px}
+.verdict{font-size:31px;line-height:1.3;font-weight:400;letter-spacing:-.012em;max-width:30em;margin:0}
+.verdict b{font-weight:600}
+.verdict .x{color:var(--crit)}
+.verdict code{font-family:var(--sans);font-size:1em;overflow-wrap:anywhere}
+.because{font-size:18px;line-height:1.5;color:var(--ink-2);max-width:44em;margin:14px 0 0}
+.because code{font-size:.88em}
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 0;padding:0;list-style:none}
+.pills a{display:inline-flex;align-items:baseline;gap:6px;padding:4px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink-2);font-size:14px;text-decoration:none}
+.pills a:hover{border-color:var(--ink-4);color:var(--ink)}
+.pills a b{color:var(--ink)}
+.strip{margin:30px 0 0;padding:16px 18px 8px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.strip figcaption,.chart-cap{font-size:13px;color:var(--ink-3);display:flex;gap:16px;flex-wrap:wrap;align-items:baseline}
+.strip figcaption b{color:var(--ink-2);font-weight:600}
+.key{display:inline-flex;align-items:center;gap:6px}
+.key i{display:inline-block;width:14px;height:8px;border-radius:2px;background:var(--band)}
+.key i.dot{width:8px;height:8px;border-radius:50%;background:var(--ink)}
+.key i.dot.c{background:var(--crit)}
+.key i.flag{width:1px;height:12px;background:var(--flag);border-radius:0;position:relative}
+.key i.flag::before{content:"";position:absolute;left:0;top:0;border-left:6px solid var(--flag);border-top:3px solid transparent;border-bottom:3px solid transparent}
+
+/* ---------- section heads ---------- */
+.sec-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;margin:44px 0 16px}
+.sec-h h2{font-size:21px;letter-spacing:-.005em}
+.sec-h p{margin:0;color:var(--ink-3);font-size:14px}
+
+/* ---------- finding cards ---------- */
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:20px}
+.s12{grid-column:span 12}.s7{grid-column:span 7}.s5{grid-column:span 5}.s6{grid-column:span 6}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:22px 24px 0;display:flex;flex-direction:column;min-width:0}
+.card.lead{padding:28px 30px 0}
+.card-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--ink-3)}
+.sev{display:inline-flex;align-items:center;gap:5px;padding:1px 9px 1px 7px;border-radius:999px;font-size:12.5px;font-weight:600;line-height:20px}
+.sev.large{color:var(--crit);background:var(--crit-soft)}
+.sev.moderate{color:var(--warn);background:var(--warn-soft)}
+.sev.change{color:var(--ink-2);background:var(--line-2)}
+.card-h .z{margin-left:auto}
+.card h3{font-size:19px;line-height:1.3;margin:12px 0 0;letter-spacing:-.005em}
+.card.lead h3{font-size:24px}
+.card .x{color:var(--crit);font-weight:600}
+.card.mod .x{color:var(--warn)}
+.card-body{display:grid;gap:8px 36px;margin-top:14px}
+.card.wide .card-body{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+.card.slim{padding-top:18px}
+.card.slim h3{font-size:17px;margin-top:10px}
+.card.slim .card-body{margin-top:8px}
+.big{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.big .v{font-size:34px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+.card.lead .big .v{font-size:42px}
+.card.chg .big .v{font-size:28px}
+.card.mod .big .v{font-size:24px}
+.big .u{color:var(--ink-2);font-size:14px}
+.big .nrm{color:var(--ink-3);font-size:14px;flex-basis:100%}
+.chart{position:relative;width:100%;margin-top:10px}
+.chart svg{display:block;width:100%;overflow:visible}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--ink-2);margin-top:10px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+.evidence{margin:0;display:flex;flex-direction:column;align-self:start}
+.card.wide .evidence{padding-top:6px}
+.ev{display:grid;grid-template-columns:96px minmax(0,1fr) auto;gap:2px 14px;padding:11px 0;border-top:1px solid var(--line-2)}
+.ev:first-child{border-top:0}
+.ev dt{color:var(--ink-3);font-size:13px;padding-top:2px}
+.ev dd{margin:0;min-width:0}
+.ev .id{display:block;font-family:var(--mono);font-size:13.5px;color:var(--ink);overflow-wrap:anywhere;line-height:1.4}
+.ev .id.txt{font-family:var(--sans);font-size:14.5px}
+.ev .d{display:block;color:var(--ink-3);font-size:13px;line-height:1.45}
+.ev .d.mono{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px}
+.ev .m{font-size:14px;text-align:right;padding-top:1px;white-space:nowrap;color:var(--ink-3)}
+.ev .m.x{color:var(--crit)}
+.card.mod .ev .m.x{color:var(--warn)}
+.ev-h{font-size:12.5px;color:var(--ink-3);margin:0 0 2px}
+.takeaway{margin:10px 0 0;font-size:14px;color:var(--ink-2)}
+.where{margin:6px 0 0;font-size:13px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.where .mono{font-size:12px;margin-left:8px}
+
+.card details.related{margin-top:14px;border-top:1px solid var(--line-2)}
+.related summary{list-style:none;cursor:pointer;padding:11px 0;font-size:13.5px;color:var(--ink-2);display:flex;align-items:center;gap:8px}
+.related summary::-webkit-details-marker{display:none}
+.related summary::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .15s;margin-right:2px}
+.related[open] summary::before{transform:rotate(45deg)}
+.related summary:hover{color:var(--ink)}
+.chips{list-style:none;margin:0 0 14px;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+.chips li{display:inline-flex;align-items:baseline;gap:8px;border:1px solid var(--line);border-radius:8px;padding:5px 10px;font-size:13px;color:var(--ink-2);background:var(--surface-2)}
+.chips li .x{font-weight:600}
+.chips li .d{color:var(--ink-3)}
+.chips li.twin{border-style:dashed}
+.card-f{margin-top:auto;border-top:1px solid var(--line-2);padding:11px 0 13px;font-size:13px;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:4px 16px}
+.card details.related + .card-f{margin-top:0}
+
+/* plan strip + parameter timelines (HTML grids, 13 slots) */
+.slots{position:relative;display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:2px;height:26px;font-size:12px}
+.run{border-radius:4px;display:flex;align-items:center;padding:0 8px;min-width:0;overflow:hidden;white-space:nowrap;color:var(--ink-3);background:var(--line-2);font-family:var(--mono);font-size:11.5px}
+.run.new{background:var(--prior-col);color:var(--ink);font-weight:600}
+.run.new.hot{background:var(--crit);color:var(--surface)}
+.run.nolabel{padding:0;justify-content:center}
+.slots .flg{position:absolute;top:-5px;bottom:-5px;width:0;border-left:1.5px solid var(--flag)}
+.slots .flg::before{content:"";position:absolute;left:-1.5px;top:0;border-left:7px solid var(--flag);border-top:3.5px solid transparent;border-bottom:3.5px solid transparent}
+.slot-axis{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:2px;font-size:11px;color:var(--ink-3);margin-top:5px}
+.slot-axis span{text-align:center;white-space:nowrap;overflow:visible}
+.slot-axis span.cur{color:var(--ink);font-weight:600}
+.planrow{margin-top:14px}
+.planrow .cap{font-size:13px;color:var(--ink-3);margin:0 0 7px}
+.params{display:flex;flex-direction:column;gap:18px;margin-top:16px}
+.prm-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;margin-bottom:8px}
+.prm-h code{font-size:13.5px;color:var(--ink)}
+.prm-h .ch{font-size:13px;color:var(--ink-2)}
+.prm-h .when{font-size:13px;color:var(--ink-3);flex-basis:100%}
+.prm-h .when b{color:var(--ink-2);font-weight:600}
+.prm .slots{height:22px}
+
+/* ---------- checked and normal ---------- */
+.calm{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px 24px 4px}
+.ngrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:32px}
+.nm{display:grid;grid-template-columns:minmax(0,1fr) 64px 104px;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);font-size:14px}
+.nm .l{color:var(--ink-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nm .l small{display:block;color:var(--ink-3);font-size:12px}
+.nm .v{text-align:right;line-height:1.25}
+.nm .v small{display:block;color:var(--ink-3);font-size:12px}
+.nm svg{display:block;width:64px;height:26px}
+.calm-notes{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.note{border:1px solid var(--line);border-radius:10px;padding:14px 18px;font-size:14px;color:var(--ink-2);background:var(--surface)}
+.note h3{font-size:14.5px;margin:0 0 4px;color:var(--ink)}
+.note.improved{border-style:dashed;background:transparent}
+.note p{margin:0}
+
+/* ---------- evidence library ---------- */
+.lib{border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
+.lib details{border-top:1px solid var(--line)}
+.lib details:first-child{border-top:0}
+.lib summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:18px 190px minmax(0,1fr) auto;align-items:baseline;gap:12px;padding:14px 20px}
+.lib summary::-webkit-details-marker{display:none}
+.lib summary:hover{background:var(--surface-2)}
+.lib summary .chev{width:7px;height:7px;border-right:1.5px solid var(--ink-3);border-bottom:1.5px solid var(--ink-3);transform:rotate(-45deg);transition:transform .15s;align-self:center;margin-left:3px}
+.lib details[open] > summary .chev{transform:rotate(45deg)}
+.lib summary .t{font-weight:600;font-size:15px}
+.lib summary .t small{font-weight:400;color:var(--ink-3);font-size:12px;margin-left:6px}
+.lib summary .s{color:var(--ink-2);font-size:14px;min-width:0}
+.lib summary .s.quiet{color:var(--ink-3)}
+.lib summary .s code{font-size:12.5px}
+.lib summary .n{font-size:12px;color:var(--ink-2);background:var(--line-2);border-radius:999px;padding:0 8px;line-height:20px;min-width:24px;text-align:center}
+.lib .body{padding:4px 20px 22px 50px}
+.lib .stub{color:var(--ink-3);font-size:14px;margin:0}
+body.normal .lib .full-only{display:none}
+.lib .more-full{padding:12px 20px 14px 50px;border-top:1px solid var(--line);color:var(--ink-3);font-size:14px}
+body.full .lib .more-full{display:none}
+.tabs{display:flex;gap:4px;margin:4px 0 14px;flex-wrap:wrap}
+.tabs button{border:1px solid transparent;background:transparent;border-radius:7px;padding:4px 11px;font-size:13.5px;color:var(--ink-3);cursor:pointer}
+.tabs button:hover{color:var(--ink)}
+.tabs button[aria-selected="true"]{border-color:var(--line);background:var(--surface-2);color:var(--ink)}
+.tw{position:relative;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tw table.dt{min-width:760px}
+#fg-t td:first-child{white-space:nowrap}
+table.dt{width:100%;border-collapse:collapse;font-size:14px}
+table.dt th{font-weight:400;color:var(--ink-3);font-size:12.5px;text-align:left;padding:0 10px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.dt td{padding:9px 10px;border-bottom:1px solid var(--line-2);vertical-align:middle}
+table.dt tr:last-child td{border-bottom:0}
+table.dt .r{text-align:right;white-space:nowrap}
+table.dt th.r{text-align:right}
+table.dt th.cur{color:var(--ink);font-weight:600}
+table.dt td.cur{font-weight:600}
+table.dt .mut{color:var(--ink-3)}
+table.dt .x{color:var(--crit);font-weight:600}
+table.dt .x.mod{color:var(--warn)}
+table.dt .sid{font-family:var(--mono);font-size:13px;white-space:nowrap}
+table.dt .sq{display:block;font-family:var(--mono);font-size:11.5px;color:var(--ink-3);max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.dt .rk{color:var(--ink-3);width:24px}
+table.dt svg{display:block}
+.badge{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:999px;padding:0 8px;font-size:12px;line-height:19px;color:var(--ink-2);white-space:nowrap}
+.badge.hot{border-color:color-mix(in srgb,var(--crit) 45%,transparent);color:var(--crit)}
+.wcd{display:inline-flex;align-items:center;gap:6px;color:var(--ink-2);font-size:13px;white-space:nowrap}
+.wcd i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.tblnote{font-size:13px;color:var(--ink-3);margin:12px 0 0}
+.ash-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin:0 0 8px}
+.ash-legend{margin:0}
+.seg.small button{font-size:12.5px;padding:3px 10px}
+
+/* ---------- footer ---------- */
+footer.foot{margin-top:48px;padding:20px 0 0;border-top:1px solid var(--line);font-size:13px;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:6px 22px}
+footer.foot details{flex-basis:100%}
+footer.foot summary{cursor:pointer;color:var(--accent);display:inline}
+footer.foot .how{margin-top:10px;max-width:720px;color:var(--ink-2);font-size:13.5px}
+footer.foot .how p{margin:0 0 6px}
+
+/* ---------- tooltip ---------- */
+#tip{position:fixed;z-index:50;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12.5px;line-height:1.45;padding:6px 9px;border-radius:6px;max-width:260px;opacity:0;transition:opacity .08s;white-space:pre-line}
+#tip.on{opacity:1}
+svg .hit{fill:transparent;cursor:crosshair}
+svg text{font-family:var(--sans);font-size:11px;fill:var(--ink-3)}
+svg .t-cur{fill:var(--ink);font-weight:600}
+svg .t-val{fill:var(--ink);font-weight:600;font-size:12px}
+svg .t-flag{fill:var(--ink-3);font-size:10.5px}
+svg .g-grid{stroke:var(--line-2);stroke-width:1}
+svg .g-base{stroke:var(--line);stroke-width:1}
+svg .g-band{fill:var(--band)}
+svg .g-curcol{fill:var(--cur-col)}
+svg .g-prior{fill:none;stroke:var(--prior);stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round}
+svg .g-pdot{fill:var(--surface);stroke:var(--prior);stroke-width:1.5}
+svg .g-link{fill:none;stroke-width:1.6;stroke-linecap:round}
+svg .g-link.large{stroke:var(--crit)} svg .g-link.moderate{stroke:var(--warn)} svg .g-link.neutral{stroke:var(--ink)}
+svg .g-cur{stroke:var(--surface);stroke-width:2}
+svg .g-cur.large{fill:var(--crit)} svg .g-cur.moderate{fill:var(--warn)} svg .g-cur.neutral{fill:var(--ink)}
+svg .g-col{fill:var(--prior-col)} svg .g-col.cur{fill:var(--ink)}
+svg .g-mean{stroke:var(--ink-4);stroke-width:1}
+svg .g-flag{stroke:var(--flag);stroke-width:1;stroke-opacity:.55}
+svg .g-flagh{fill:var(--flag)}
+svg .g-other{fill:var(--other)}
+svg .g-xhair{stroke:var(--ink-3);stroke-width:1}
+svg .g-cmp{fill:var(--ink-2)}
+
+/* ---------- normal / full ---------- */
+body.normal .full-only{display:none}
+
+/* ---------- responsive ---------- */
+@media (max-width:1180px){ .topbar .gen{display:none} }
+@media (max-width:1060px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .rail{position:fixed;left:0;top:0;z-index:40;width:260px;background:var(--bg);transform:translateX(-100%);transition:transform .2s;box-shadow:0 0 0 100vmax transparent}
+  body.rail-open .rail{transform:none;box-shadow:0 0 0 100vmax rgba(0,0,0,.25)}
+  .menubtn{display:inline-grid}
+  .topbar{padding:8px 24px}
+  main{padding:0 24px 32px}
+  .card.wide .card-body{grid-template-columns:minmax(0,1fr)}
+  .ngrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:820px){
+  .s7,.s5,.s6{grid-column:span 12}
+  .topbar .db span{display:none}
+  .lib summary{grid-template-columns:18px minmax(0,1fr) auto}
+  .lib summary .s{grid-column:2 / 4;grid-row:2}
+}
+@media (max-width:640px){
+  html{scroll-padding-top:100px}
+  .topbar{flex-wrap:wrap;gap:8px 12px;padding:8px 16px}
+  .topbar .win{order:5;flex-basis:100%;font-size:13px;white-space:normal}
+  main{padding:0 16px 28px}
+  .hero{padding:30px 0 24px}
+  .verdict{font-size:23px}
+  .because{font-size:16px}
+  .card,.card.lead{padding:18px 16px 0}
+  .card.lead h3{font-size:20px}
+  .card.lead .big .v{font-size:34px}
+  .ev{grid-template-columns:minmax(0,1fr) auto}
+  .ev dt{grid-column:1 / 3}
+  .ngrid{grid-template-columns:minmax(0,1fr)}
+  .calm{padding:4px 16px}
+  .calm-notes{grid-template-columns:1fr}
+  .lib summary{padding:13px 14px;gap:10px}
+  .lib .body{padding:4px 14px 18px}
+  .lib .more-full{padding:12px 14px}
+  .strip{padding:12px 12px 6px}
+  .mocknote ul{padding:0 16px 10px 32px}
+}
+@media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+</style>
+</head>
+<body class="normal">
+
+<details class="mocknote" open>
+  <summary><b>Mock A — Finding cards (answer-first)</b><span>What's different from today's report</span><span class="hint"></span></summary>
+  <ul>
+    <li>One verdict sentence and one 13-window strip replace the red verdict strip, the blue "What changed" box and the six hero cards.</li>
+    <li>Each finding is a single card, shown once: twins and related metrics fold into it, and its evidence (which file, segment, wait, SQL) is attached.</li>
+    <li>One chart grammar everywhere: 13 slots oldest → current, grey band = range of the prior windows, the dot on the right = Current, release flags between slots, never rotated.</li>
+    <li>Colour means severity and only appears on markers, multipliers and the current point: no row fills, heat tints or coloured rail dots.</li>
+    <li>Symptoms and causes are split: "What changed" lines up the plan change and parameter changes with the release markers.</li>
+    <li>Everything else is a uniform evidence library with a one-line status per section; the 3-month ASH chart moves there (Full view).</li>
+  </ul>
+</details>
+
+<div class="app">
+<aside class="rail" id="rail" aria-label="Sections">
+  <div class="brand"><b>AWR comparison</b><span>ORCLPRD, same hour weekly</span></div>
+  <nav>
+    <a href="#summary">Summary</a>
+    <a href="#findings">Findings <span class="n">4</span></a>
+    <a class="sub" href="#f-phys">Physical reads</a>
+    <a class="sub" href="#f-dbtime">DB time</a>
+    <a class="sub" href="#f-net">Network wait</a>
+    <a class="sub" href="#f-commit">Commit wait</a>
+    <a href="#changes">What changed <span class="n">2</span></a>
+    <a href="#normal">Checked and normal</a>
+    <div class="grp">Evidence library</div>
+    <a href="#lib-topsql">Top SQL <span class="n">1</span></a>
+    <a href="#lib-sqlmon">SQL Monitor <span class="n">2</span></a>
+    <a href="#lib-fg">Foreground waits <span class="n">4</span></a>
+    <a href="#lib-day">Day profile <span class="n">2</span></a>
+    <a href="#lib-seg">Segment I/O <span class="n">1</span></a>
+    <a href="#lib-file">File I/O <span class="n">3</span></a>
+    <a href="#lib-load">Load profile <span class="n">5</span></a>
+    <a href="#lib-metrics">System metrics <span class="n">3</span></a>
+    <a href="#lib-params">Parameters <span class="n">4</span></a>
+    <a class="full-only" href="#lib-ash">ASH timeline</a>
+    <a class="full-only" href="#lib-dbtime">DB time, full span</a>
+    <a class="full-only" href="#lib-sqlash">Top SQL by ASH</a>
+    <a class="full-only" href="#lib-bg">Background waits</a>
+    <a class="full-only" href="#lib-util">Utilization</a>
+    <a class="full-only" href="#lib-windows">Windows</a>
+    <span class="more">+ 6 more in Full view</span>
+  </nav>
+</aside>
+
+<div class="col">
+<header class="topbar">
+  <button class="iconbtn menubtn" id="menuBtn" type="button" aria-label="Show sections" aria-controls="rail" aria-expanded="false">
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+  </button>
+  <div class="db"><b>ORCLPRD</b><span>prd-ora-01.corp.example, 19c, DBID 1483726519</span></div>
+  <div class="win"><b>Thu 10 Sep, 09:00–10:00</b> vs 12 prior Thursdays</div>
+  <div class="sp"></div>
+  <div class="gen">Generated 10 Sep 10:15</div>
+  <button class="iconbtn" id="themeBtn" type="button" aria-label="Switch light or dark theme">
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.8a6.2 6.2 0 0 1 0 12.4z" fill="currentColor"/></svg>
+  </button>
+  <div class="seg" role="group" aria-label="Report view">
+    <button type="button" id="mode-normal" aria-pressed="true">Normal</button>
+    <button type="button" id="mode-full" aria-pressed="false">Full</button>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ================= verdict ================= -->
+<section class="hero" id="summary" aria-label="Summary">
+  <h1 class="verdict">Physical reads are <b class="x">5.4×</b> normal — mostly full scans of <code>ORDERS_APP.ORDER_LINES</code> — and pushed DB time up <b>80%</b>, almost all of it wait.</h1>
+  <p class="because">Likely source: statement <code>7k2m9dx4qp1zb</code> switched to a new plan an hour after Release&nbsp;4.2 (Tue&nbsp;8&nbsp;Sep) and now reads 15× more blocks. The rise has held for 23 of the last 24 hours.</p>
+  <ul class="pills" aria-label="Counts">
+    <li><a href="#findings"><b>4</b> findings</a></li>
+    <li><a href="#f-plan"><b>1</b> plan change</a></li>
+    <li><a href="#f-config"><b>4</b> parameter differences</a></li>
+    <li><a href="#normal"><b>43</b> metrics normal</a></li>
+  </ul>
+  <figure class="strip">
+    <figcaption><b>DB time in each compared window</b><span>average active sessions, Thursdays 09:00–10:00</span><span class="key"><i class="flag"></i>release or patch</span></figcaption>
+    <div class="chart" data-chart="strip" data-h="176" role="img" aria-label="DB time per compared window: 9.9 to 13.3 average active sessions in the 12 prior Thursdays, 20.4 in the current window. A step up from 10 to 13 follows Release 4.1."></div>
+  </figure>
+</section>
+
+<!-- ================= findings ================= -->
+<section id="findings" aria-labelledby="findings-h">
+  <div class="sec-h">
+    <h2 id="findings-h">4 metrics moved</h2>
+    <p>3 large, 1 moderate. In every chart the grey band is the range of the 12 prior Thursdays and the dot on the right is Current.</p>
+  </div>
+  <div class="grid">
+
+    <article class="card lead wide s12" id="f-phys" aria-labelledby="f-phys-h">
+      <div class="card-h"><span class="sev large"><span aria-hidden="true">▲</span> Large</span><span>Physical I/O</span><span class="z">z +31.7</span></div>
+      <h3 id="f-phys-h">Physical reads are <span class="x">5.4×</span> normal</h3>
+      <div class="card-body">
+        <div>
+          <div class="big"><span class="v">22.2k</span><span class="u">reads/s</span><span class="nrm">normal 4.1k, range 3.5k–5.1k</span></div>
+          <div class="chart" data-chart="band" data-key="phys" data-sev="large" data-unit="reads/s" data-h="196" role="img" aria-label="Physical reads per second across 13 windows: 3.5k to 5.1k in the prior windows, 22.2k in Current."></div>
+        </div>
+        <dl class="evidence">
+          <div class="ev"><dt>Segment</dt><dd><span class="id">ORDERS_APP.ORDER_LINES</span><span class="d">95.1M blocks read, normal 8.5M</span></dd><dd class="m x">×11.2</dd></div>
+          <div class="ev"><dt>File</dt><dd><span class="id">ts_orders_data.301.1131588213</span><span class="d">345k MB read, normal 74k. Files 302 and 303 rose the same way.</span></dd><dd class="m x">×4.7</dd></div>
+          <div class="ev"><dt>Waits</dt><dd><span class="id txt">db file scattered read</span><span class="d">13.9k s, normal 675 s. Direct path read ×12 as well.</span></dd><dd class="m x">×20.6</dd></div>
+          <div class="ev"><dt>Likely SQL</dt><dd><span class="id">7k2m9dx4qp1zb</span><span class="d">43.4M physical reads, normal 2.9M. New plan, see below.</span></dd><dd class="m x">×14.9</dd></div>
+        </dl>
+      </div>
+      <details class="related">
+        <summary>5 related metrics moved with it, 3 twins folded</summary>
+        <ul class="chips">
+          <li>table scans (long tables) <span class="d">61.7/s vs 2.1</span><span class="x">×29.7</span></li>
+          <li>physical read bytes <span class="d">193 MB/s vs 36</span><span class="x">×5.4</span></li>
+          <li>read I/O requests <span class="d">16.0k/s vs 3.0k</span><span class="x">×5.4</span></li>
+          <li>logical reads <span class="d">988k/s vs 210k</span><span class="x">×4.7</span></li>
+          <li>User I/O wait class <span class="d">8.3 vs 2.0 AAS</span><span class="x">×4.2</span></li>
+          <li class="twin">Physical Reads Per Sec <span class="d">twin</span></li>
+          <li class="twin">Physical Read Total Bytes Per Sec <span class="d">twin</span></li>
+          <li class="twin">Logical Reads Per Sec <span class="d">twin</span></li>
+        </ul>
+      </details>
+      <div class="card-f">Evidence <a href="#lib-seg">Segment I/O</a><a href="#lib-file">File I/O</a><a href="#lib-fg">Foreground waits</a><a href="#lib-topsql">Top SQL</a><a href="#lib-load">Load profile</a></div>
+    </article>
+
+    <article class="card wide s12" id="f-dbtime" aria-labelledby="f-dbtime-h">
+      <div class="card-h"><span class="sev large"><span aria-hidden="true">▲</span> Large</span><span>DB time</span><span class="z">z +6.1</span></div>
+      <h3 id="f-dbtime-h">DB time is up <span class="x">80%</span> — the extra time is wait, not CPU</h3>
+      <div class="card-body">
+        <div>
+          <div class="big"><span class="v">20.4</span><span class="u">average active sessions</span><span class="nrm">normal 11.3, range 9.9–13.3</span></div>
+          <div class="legend" id="dbt-legend" aria-hidden="true"></div>
+          <div class="chart" data-chart="stack" data-h="206" role="img" aria-label="Active sessions by wait class per window. CPU stays between 6.3 and 8.6; User I/O goes from about 2 to 8.3 in Current."></div>
+        </div>
+        <dl class="evidence">
+          <div class="ev"><dt>User I/O</dt><dd><span class="id txt">8.3 active sessions</span><span class="d">normal 2.0; this is where the extra time went</span></dd><dd class="m x">×4.2</dd></div>
+          <div class="ev"><dt>CPU</dt><dd><span class="id txt">8.6 active sessions</span><span class="d">normal 7.2; within its usual range</span></dd><dd class="m">+19%</dd></div>
+          <div class="ev"><dt>Wait share</dt><dd><span class="id txt">57.8% of DB time is wait</span><span class="d">normal 36.2%</span></dd><dd class="m x">×1.6</dd></div>
+          <div class="ev"><dt>Response</dt><dd><span class="id txt">3.3 ms per user call</span><span class="d">SQL service response time, normal 1.9 ms</span></dd><dd class="m x">×1.8</dd></div>
+        </dl>
+      </div>
+      <details class="related">
+        <summary>2 related metrics moved with it, 2 twins folded</summary>
+        <ul class="chips">
+          <li>Database wait time ratio <span class="d">57.8% vs 36.2%</span><span class="x">×1.6</span></li>
+          <li>SQL service response time <span class="d">0.33 vs 0.19 cs/call</span><span class="x">×1.8</span></li>
+          <li class="twin">Average Active Sessions <span class="d">twin</span></li>
+          <li class="twin">Database CPU Time Ratio <span class="d">twin, −34%</span></li>
+        </ul>
+      </details>
+      <div class="card-f">Evidence <a href="#lib-fg">Foreground waits</a><a href="#lib-ash">ASH timeline</a><a href="#lib-metrics">System metrics</a><a href="#lib-day">Day profile</a></div>
+    </article>
+
+    <article class="card wide s12" id="f-net" aria-labelledby="f-net-h">
+      <div class="card-h"><span class="sev large"><span aria-hidden="true">▲</span> Large</span><span>Network wait</span><span class="z">z +57.9</span></div>
+      <h3 id="f-net-h">Network wait is <span class="x">5.2×</span> normal</h3>
+      <div class="card-body">
+        <div>
+          <div class="big"><span class="v">1.18</span><span class="u">active sessions</span><span class="nrm">normal 0.23, range 0.21–0.25</span></div>
+          <div class="chart" data-chart="band" data-key="net" data-sev="large" data-unit="AAS" data-h="164" role="img" aria-label="Network wait class, active sessions per window: 0.21 to 0.25 prior, 1.18 in Current."></div>
+        </div>
+        <dl class="evidence">
+          <div class="ev"><dt>Event</dt><dd><span class="id txt">SQL*Net more data to client</span><span class="d">4,126 s, normal 751 s</span></dd><dd class="m x">×5.5</dd></div>
+          <div class="ev"><dt>Per wait</dt><dd><span class="id txt">0.045 ms, unchanged</span><span class="d">more waits, not slower ones</span></dd><dd class="m">+1%</dd></div>
+          <div class="ev"><dt>Volume</dt><dd><span class="id txt">9.7 MB/s sent to clients</span><span class="d">normal 9.5 MB/s</span></dd><dd class="m">+2%</dd></div>
+        </dl>
+      </div>
+      <div class="card-f">Evidence <a href="#lib-fg">Foreground waits</a><a href="#lib-util">Utilization</a></div>
+    </article>
+
+    <article class="card mod wide slim s12" id="f-commit" aria-labelledby="f-commit-h">
+      <div class="card-h"><span class="sev moderate"><span aria-hidden="true">▲</span> Moderate</span><span>Commit wait</span><span class="z">z +2.3</span></div>
+      <h3 id="f-commit-h">Commit wait is up <span class="x">23%</span></h3>
+      <div class="card-body">
+        <div>
+          <div class="big"><span class="v">0.87</span><span class="u">active sessions</span><span class="nrm">normal 0.71, range 0.62–0.83</span></div>
+          <div class="chart" data-chart="band" data-key="commit" data-sev="moderate" data-unit="AAS" data-h="104" role="img" aria-label="Commit wait class per window: 0.62 to 0.83 prior, 0.87 in Current."></div>
+        </div>
+        <dl class="evidence">
+          <div class="ev"><dt>Event</dt><dd><span class="id txt">log file sync</span><span class="d">3,127 s, normal 2,552 s</span></dd><dd class="m x">+23%</dd></div>
+          <div class="ev"><dt>Commits</dt><dd><span class="id txt">649/s, normal 551/s</span><span class="d">1.92 ms each, unchanged</span></dd><dd class="m">+18%</dd></div>
+        </dl>
+      </div>
+      <div class="card-f">Evidence <a href="#lib-fg">Foreground waits</a><a href="#lib-load">Load profile</a></div>
+    </article>
+  </div>
+</section>
+
+<!-- ================= what changed ================= -->
+<section id="changes" aria-labelledby="changes-h">
+  <div class="sec-h">
+    <h2 id="changes-h">What changed around it</h2>
+    <p>Changes the report can see, lined up with your release markers.</p>
+  </div>
+  <div class="grid">
+    <article class="card chg s6" id="f-plan" aria-labelledby="f-plan-h">
+      <div class="card-h"><span class="sev change"><span aria-hidden="true">◆</span> Plan change</span><span>Top SQL</span><span class="z">#1 by elapsed time</span></div>
+      <h3 id="f-plan-h"><code>7k2m9dx4qp1zb</code> switched plans an hour after Release&nbsp;4.2</h3>
+      <p class="where">ORDERS_APP, OrderService, order-lookup <span class="mono" title="SELECT o.order_id, o.status, o.total_amount, l.line_no, l.sku, l.qty, l.unit_price FROM orders o JOIN order_lines l ON l.order_id = o.order_id WHERE o.customer_id = :1 AND o.created_at &gt; :2 ORDER BY o.created_at DESC">SELECT … FROM orders o JOIN order_lines l ON l.order_id = o.order_id WHERE o.customer_id = :1 …</span></p>
+      <div class="card-body">
+        <div>
+          <div class="big"><span class="v">27.9k s</span><span class="u">elapsed in the window</span><span class="nrm">normal 6.7k s, range 6.1k–7.6k (<span class="x">×4.2</span>)</span></div>
+          <div class="chart" data-chart="band" data-key="plan" data-sev="large" data-unit="s elapsed" data-h="132" role="img" aria-label="Elapsed seconds of 7k2m9dx4qp1zb per window: 6.1k to 7.6k prior, 27.9k in Current."></div>
+          <div class="planrow">
+            <p class="cap">Plan <code>3197245811</code> in every prior window, <code>2088341150</code> since Tue 8 Sep 23:00</p>
+            <div class="slots" role="img" aria-label="Plan 3197245811 in all 12 prior windows, plan 2088341150 in Current.">
+              <span class="run" style="grid-column:1 / 13">3197245811</span>
+              <span class="run new hot nolabel" style="grid-column:13 / 14" title="2088341150">new</span>
+              <span class="flg" style="left:calc((100% + 2px) * 12 / 13 - 2px)" title="Release 4.2, Tue 8 Sep 22:00"></span>
+            </div>
+          </div>
+        </div>
+        <dl class="evidence">
+          <div class="ev"><dt>Per execution</dt><dd><span class="id txt">700 buffer gets, was 38</span><span class="d">9.0 ms, was 2.1 ms</span></dd><dd class="m x">×18</dd></div>
+          <div class="ev"><dt>SQL Monitor</dt><dd><span class="id txt">Max elapsed 8.0 s</span><span class="d">normal 1.5 s, scored large (z +23.4)</span></dd><dd class="m x">×5.3</dd></div>
+          <div class="ev"><dt>CPU</dt><dd><span class="id txt">4.5k s, normal 4.8k s</span><span class="d">flat: the extra 21k s is wait, not CPU</span></dd><dd class="m">−7%</dd></div>
+        </dl>
+      </div>
+      <div class="card-f">Evidence <a href="#lib-topsql">Top SQL</a><a href="#lib-sqlmon">SQL Monitor</a><a href="#lib-seg">Segment I/O</a></div>
+    </article>
+
+    <article class="card chg s6" id="f-config" aria-labelledby="f-config-h">
+      <div class="card-h"><span class="sev change"><span aria-hidden="true">≠</span> Configuration</span><span>Parameters</span><span class="z">not scored</span></div>
+      <h3 id="f-config-h">4 parameters differ, each change lines up with a release</h3>
+      <p class="takeaway">Only <code>optimizer_adaptive_plans</code> differs in Current. It arrived with Release 4.2, the same release after which <code>7k2m9dx4qp1zb</code> changed plan.</p>
+      <div class="params">
+        <div class="prm">
+          <div class="prm-h"><code>optimizer_adaptive_plans</code><span class="ch">FALSE → TRUE</span><span class="when">Changed with <b>Release 4.2</b> on 8 Sep, so only Current has it</span></div>
+          <div class="slots" role="img" aria-label="FALSE in the 12 prior windows, TRUE in Current">
+            <span class="run" style="grid-column:1 / 13">FALSE</span><span class="run new nolabel" style="grid-column:13 / 14" title="TRUE">T</span>
+            <span class="flg" style="left:calc((100% + 2px) * 12 / 13 - 2px)" title="Release 4.2"></span>
+          </div>
+        </div>
+        <div class="prm">
+          <div class="prm-h"><code>pga_aggregate_target</code><span class="ch">8 GB → 12 GB</span><span class="when">Changed with <b>Release 4.1</b> on 11 Aug</span></div>
+          <div class="slots" role="img" aria-label="8 GB from 18 Jun to 6 Aug, 12 GB from 13 Aug">
+            <span class="run" style="grid-column:1 / 9">8 GB</span><span class="run new" style="grid-column:9 / 14">12 GB</span>
+            <span class="flg" style="left:calc((100% + 2px) * 8 / 13 - 2px)" title="Release 4.1"></span>
+          </div>
+        </div>
+        <div class="prm">
+          <div class="prm-h"><code>sga_target</code><span class="ch">48 GB → 64 GB</span><span class="when">Changed with <b>RU 19.28 patch</b> on 21 Jul</span></div>
+          <div class="slots" role="img" aria-label="48 GB from 18 Jun to 16 Jul, 64 GB from 23 Jul">
+            <span class="run" style="grid-column:1 / 6">48 GB</span><span class="run new" style="grid-column:6 / 14">64 GB</span>
+            <span class="flg" style="left:calc((100% + 2px) * 5 / 13 - 2px)" title="RU 19.28 patch"></span>
+          </div>
+        </div>
+        <div class="prm">
+          <div class="prm-h"><code>cursor_sharing</code><span class="ch">EXACT → FORCE</span><span class="when">Changed with <b>Hotfix 4.0.1</b> on 3 Jul, the day after a hard-parse spike (32.8/s, normal 3)</span></div>
+          <div class="slots" role="img" aria-label="EXACT from 18 Jun to 2 Jul, FORCE from 9 Jul">
+            <span class="run" style="grid-column:1 / 4">EXACT</span><span class="run new" style="grid-column:4 / 14">FORCE</span>
+            <span class="flg" style="left:calc((100% + 2px) * 3 / 13 - 2px)" title="Hotfix 4.0.1"></span>
+          </div>
+          <div class="slot-axis" aria-hidden="true"><span>18 Jun</span><span></span><span></span><span></span><span>16 Jul</span><span></span><span></span><span></span><span>13 Aug</span><span></span><span></span><span></span><span class="cur">10 Sep</span></div>
+        </div>
+      </div>
+      <div class="card-f">Evidence <a href="#lib-params">Parameters</a></div>
+    </article>
+  </div>
+</section>
+
+<!-- ================= checked and normal ================= -->
+<section id="normal" aria-labelledby="normal-h">
+  <div class="sec-h">
+    <h2 id="normal-h">Checked and normal</h2>
+    <p>43 metrics stayed inside their usual range. The ones people ask about first:</p>
+  </div>
+  <div class="calm"><div class="ngrid" id="ngrid"></div></div>
+  <div class="calm-notes">
+    <div class="note">
+      <h3>Moved, but too small to matter</h3>
+      <p>Single-block read latency +25% (0.60 ms). Wait classes Scheduler +79%, System I/O +77%, Configuration +54% and Other +47%, each under 0.5% of DB time.</p>
+    </div>
+    <div class="note improved">
+      <h3>Improved</h3>
+      <p>Nothing improved materially. Hard parses are 51% below their mean only because of the 2 Jul spike; they are at their usual 2.7/s.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= evidence library ================= -->
+<section id="library" aria-labelledby="library-h">
+  <div class="sec-h">
+    <h2 id="library-h">Evidence library</h2>
+    <p>Every section of the full report, one line each. Open a row for its table.</p>
+  </div>
+  <div class="lib">
+    <details id="lib-topsql" open>
+      <summary><span class="chev"></span><span class="t">Top SQL</span><span class="s"><code>7k2m9dx4qp1zb</code> is #1 by elapsed time, ×4.2, with a new plan. <code>n7t3q5xc1yj4g</code> is new since Release 4.1.</span><span class="n">1</span></summary>
+      <div class="body">
+        <div class="tabs" role="tablist" aria-label="Rank Top SQL by">
+          <button role="tab" aria-selected="true" data-dim="ELAPSED">Elapsed time</button>
+          <button role="tab" aria-selected="false" data-dim="CPU">CPU time</button>
+          <button role="tab" aria-selected="false" data-dim="GETS">Buffer gets</button>
+          <button role="tab" aria-selected="false" data-dim="PREADS">Physical reads</button>
+        </div>
+        <div class="tw"><table class="dt" id="topsql-t" data-notools></table></div>
+        <p class="tblnote">Normal = mean of the prior windows in which the statement made the top 10. Showing the Current top 10; 10 more statements ranked in prior windows only.</p>
+      </div>
+    </details>
+
+    <details id="lib-sqlmon">
+      <summary><span class="chev"></span><span class="t">SQL Monitor</span><span class="s">13,205 executions captured. In Current: 1 plan change (<code>7k2m9dx4qp1zb</code>, 8.0 s vs 1.5 s) and 1 DOP downgrade.</span><span class="n">2</span></summary>
+      <div class="body">
+        <div class="tw"><table class="dt">
+          <thead><tr><th>Statement</th><th>User / module</th><th class="r cur">Max elapsed now</th><th class="r">Normal</th><th class="r">Change</th><th>Flags</th></tr></thead>
+          <tbody>
+            <tr><td class="sid">9wz2ke6yq4tn1</td><td class="mut">REPORTING / ReportEngine</td><td class="r cur">213.3 s</td><td class="r mut">211.9 s</td><td class="r mut">+1%</td><td><span class="badge">DOP downgrade</span></td></tr>
+            <tr><td class="sid">v8c2l5qs3wd7m</td><td class="mut">INVENTORY / DBMS_SCHEDULER</td><td class="r cur">40.2 s</td><td class="r mut">40.1 s</td><td class="r mut">0%</td><td></td></tr>
+            <tr><td class="sid">d8s3n5tw2xk7f</td><td class="mut">INVENTORY / InventorySync</td><td class="r cur">40.0 s</td><td class="r mut">42.7 s</td><td class="r mut">−6%</td><td></td></tr>
+            <tr><td class="sid">7k2m9dx4qp1zb</td><td class="mut">ORDERS_APP / OrderService</td><td class="r cur">8.0 s</td><td class="r mut">1.5 s</td><td class="r x">×5.3</td><td><span class="badge hot"><span aria-hidden="true">◆</span> plan changed</span></td></tr>
+          </tbody>
+        </table></div>
+        <p class="tblnote">5 more statements ran only outside Current, 2 of them with errors. Only completed, long or parallel executions are captured, so a missing statement did not necessarily run fast.</p>
+      </div>
+    </details>
+
+    <details id="lib-fg" open>
+      <summary><span class="chev"></span><span class="t">Foreground waits</span><span class="s">4 of 14 events moved: db file scattered read ×20.6, direct path read ×12, SQL*Net more data to client ×5.5, log file sync +23%.</span><span class="n">4</span></summary>
+      <div class="body">
+        <div class="tw"><table class="dt" id="fg-t"></table></div>
+        <p class="tblnote">Events under 5% of Current wait time are not scored even when they move (marked "too small").</p>
+      </div>
+    </details>
+
+    <details id="lib-day">
+      <summary><span class="chev"></span><span class="t">Day profile</span><span class="s">2 day-wide shifts over the last 24 h: logical reads above the prior 7 days in 24 of 24 hours, physical reads in 23 of 24.</span><span class="n">2</span></summary>
+      <div class="body"><p class="stub">Collapsed in this mock. Same grammar: one row per statistic, 24 hourly slots, the band is the same hour on the 7 prior days.</p></div>
+    </details>
+    <details id="lib-seg">
+      <summary><span class="chev"></span><span class="t">Segment I/O</span><span class="s"><code>ORDERS_APP.ORDER_LINES</code> physical reads ×11.2 (95.1M blocks, normal 8.5M). Other segments steady.</span><span class="n">1</span></summary>
+      <div class="body"><p class="stub">Collapsed in this mock. Top 10 segments per dimension with a 13-window sparkline each, like Foreground waits above.</p></div>
+    </details>
+    <details id="lib-file">
+      <summary><span class="chev"></span><span class="t">File I/O</span><span class="s">All 3 TS_ORDERS_DATA files read about 4.7× more (ts_orders_data.301 at 345k MB). Index files up about 20%, temp steady.</span><span class="n">3</span></summary>
+      <div class="body"><p class="stub">Collapsed in this mock. Top 10 files per dimension, plus I/O by file type.</p></div>
+    </details>
+    <details id="lib-load">
+      <summary><span class="chev"></span><span class="t">Load profile</span><span class="s">5 of 27 moved, all in the findings above. Transaction volume steady.</span><span class="n">5</span></summary>
+      <div class="body"><p class="stub">Collapsed in this mock. 27 per-second rates, same table grammar as Foreground waits.</p></div>
+    </details>
+    <details id="lib-metrics">
+      <summary><span class="chev"></span><span class="t">System metrics</span><span class="s">3 of 23 moved, plus 5 twins of load-profile rows. Host CPU 71% (normal 61%).</span><span class="n">3</span></summary>
+      <div class="body"><p class="stub">Collapsed in this mock.</p></div>
+    </details>
+    <details id="lib-params">
+      <summary><span class="chev"></span><span class="t">Parameters</span><span class="s">4 differ across the windows, 1 in Current. Summarised under What changed.</span><span class="n">4</span></summary>
+      <div class="body"><p class="stub">Collapsed in this mock. The full value-per-window table.</p></div>
+    </details>
+
+    <details id="lib-ash" class="full-only" open>
+      <summary><span class="chev"></span><span class="t">ASH timeline<small>Full view</small></span><span class="s">User I/O has been high since Release 4.2 on 8 Sep. Wed 9 Sep 09:00–15:00 was the busiest stretch of the 3 months (23.7 active sessions).</span><span></span></summary>
+      <div class="body">
+        <div class="ash-top"><div class="legend ash-legend" id="ash-legend" aria-hidden="true"></div>
+          <div class="seg small" role="group" aria-label="ASH resolution"><button type="button" data-ashmode="day" aria-pressed="true">Business hours, per day</button><button type="button" data-ashmode="6h" aria-pressed="false">Every 6 hours</button></div></div>
+        <div class="chart" id="ash-chart" data-chart="ash" data-mode="day" data-h="250" role="img" aria-label="Active sessions by wait class from 18 Jun to 10 Sep in 6-hour averages. Daily peaks of 12 to 15 until Release 4.2, then 18 to 24, mostly User I/O."></div>
+        <p class="tblnote" id="ash-cap">Each bar is one day's 09:00–15:00 average; the compared Thursdays are solid, other days faded. Ticks under the axis mark the 13 compared windows.</p>
+      </div>
+    </details>
+    <details id="lib-dbtime" class="full-only">
+      <summary><span class="chev"></span><span class="t">DB time, full span<small>Full view</small></span><span class="s quiet">Stacked DB time across the 3 months; same shape as the ASH timeline.</span><span></span></summary>
+      <div class="body"><p class="stub">Collapsed in this mock.</p></div>
+    </details>
+    <details id="lib-sqlash" class="full-only">
+      <summary><span class="chev"></span><span class="t">Top SQL by ASH<small>Full view</small></span><span class="s quiet">Per-statement wait breakdown for 20 statements.</span><span></span></summary>
+      <div class="body"><p class="stub">Collapsed in this mock.</p></div>
+    </details>
+    <details id="lib-bg" class="full-only">
+      <summary><span class="chev"></span><span class="t">Background waits<small>Full view</small></span><span class="s quiet">Not scored. All 11 events up about 60%, in step with the extra I/O.</span><span></span></summary>
+      <div class="body"><p class="stub">Collapsed in this mock.</p></div>
+    </details>
+    <details id="lib-util" class="full-only">
+      <summary><span class="chev"></span><span class="t">Utilization<small>Full view</small></span><span class="s quiet">Workload shape steady: user calls +2%, executions +5%, sessions +3%.</span><span></span></summary>
+      <div class="body"><p class="stub">Collapsed in this mock.</p></div>
+    </details>
+    <details id="lib-windows" class="full-only">
+      <summary><span class="chev"></span><span class="t">Windows<small>Full view</small></span><span class="s quiet">13 of 13 valid, snapshots 41417 to 43434, no restarts.</span><span></span></summary>
+      <div class="body"><p class="stub">Collapsed in this mock.</p></div>
+    </details>
+    <div class="more-full">6 more sections in the <a href="#" data-go-full>Full view</a>, none with a finding.</div>
+  </div>
+</section>
+
+<footer class="foot">
+  <span>awr_timeline_comparison 1.5.0</span>
+  <span>Generated 2026-09-10 10:15:12 +02:00 by AWR_READER, read-only</span>
+  <span>Windows 41417–43434, all 13 valid</span>
+  <details>
+    <summary>How numbers are computed</summary>
+    <div class="how">
+      <p><b>Normal</b> is the mean of the 12 prior windows; the band is their minimum to maximum.</p>
+      <p><b>z</b> = (current − mean) ÷ max(standard deviation, 2% of the mean). A move is <b>large</b> above |z| 3 and <b>moderate</b> above 2, and only counts when it clears the metric's materiality floor and goes in the bad direction.</p>
+      <p>Metrics of the same family (for example physical reads and Physical Reads Per Sec) are shown once; the twin is folded into the card.</p>
+    </div>
+  </details>
+</footer>
+</main>
+</div>
+</div>
+
+<div id="tip" role="tooltip"></div>
+<script id="awr-data" type="application/json">__DATA__</script>
+<script>
+(function(){
+'use strict';
+var D = JSON.parse(document.getElementById('awr-data').textContent);
+var NS = 'http://www.w3.org/2000/svg';
+var WC = {'CPU':'#3FB344','User I/O':'#4A90D9','System I/O':'#1F4E89','Commit':'#E89B40','Application':'#D62728','Concurrency':'#8B0000','Network':'#967259','Configuration':'#793C32','Other':'#C77CB0','Scheduler':'#88C070','Cluster':'#E5C228','Administrative':'#7B6FA8','Queueing':'#E89BB7'};
+var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var HR = 36e5, DAY = 864e5;
+function parseT(s){ var a=s.split(' '), d=a[0].split('-'), t=a[1].split(':'); return Date.UTC(+d[0], +d[1]-1, +d[2], +t[0], +t[1]); }
+var T0 = parseT('2026-06-18 09:00');
+var WIN = D.weeks.map(function(_, i){ return T0 + i*7*DAY; });
+function dshort(t){ var d=new Date(t); return d.getUTCDate()+' '+MON[d.getUTCMonth()]; }
+function dlong(t){ var d=new Date(t); return DOW[d.getUTCDay()]+' '+d.getUTCDate()+' '+MON[d.getUTCMonth()]; }
+function wlabel(i){ return (i===12?'Current, ':'')+dlong(WIN[i]); }
+var MARKS = D.markers.map(function(m){
+  var t=parseT(m.t), pos=null;
+  for(var i=0;i<12;i++){ if(t>=WIN[i] && t<WIN[i+1]) pos=i+0.5; }
+  var short={'Release 4.0':'4.0','Hotfix 4.0.1':'4.0.1','RU 19.28 patch':'RU 19.28','Release 4.1':'4.1','Release 4.2':'4.2'}[m.label]||m.label;
+  return {t:t, label:m.label, short:short, pos:pos};
+});
+
+/* ---------- helpers ---------- */
+function el(tag, attrs, parent){ var e=document.createElementNS(NS, tag); for(var k in attrs){ if(attrs[k]!=null) e.setAttribute(k, attrs[k]); } if(parent) parent.appendChild(e); return e; }
+function txt(parent, x, y, s, cls, anchor){ var t=el('text',{x:x,y:y,'class':cls||null,'text-anchor':anchor||null},parent); t.textContent=s; return t; }
+function fmt(v, compact){
+  if(v==null || isNaN(v)) return '—';
+  var a=Math.abs(v), s=v, u='';
+  if(a>=1e9){s=v/1e9;u='G';} else if(a>=1e6){s=v/1e6;u='M';} else if(a>=(compact?1e3:1e4)){s=v/1e3;u='k';}
+  var as=Math.abs(s), out;
+  if(u) out = s.toFixed(as>=100?0:as>=10?1:(compact&&as>=1&&Math.abs(s-Math.round(s))<1e-9)?0:1);
+  else if(as>=1000) out = Math.round(s).toLocaleString('en-US');
+  else out = s.toFixed(as>=100?0:as>=10?1:as>=1?2:as>=.1?2:3);
+  return out.replace(/\.0+$/,'')+u;
+}
+function tickFmt(v, step){ if(v>=1000) return fmt(v,true); var dec=Math.max(0,-Math.floor(Math.log10(step)+1e-9)); return v.toFixed(dec); }
+function niceTicks(max, n){
+  var raw=max/n, p=Math.pow(10, Math.floor(Math.log10(raw))), m=raw/p;
+  var step=(m<=1?1:m<=2?2:m<=2.5?2.5:m<=5?5:10)*p, out=[];
+  for(var v=step; v<=max*1.0001; v+=step) out.push(+v.toPrecision(6));
+  return {step:step, ticks:out, top:Math.max(step, Math.ceil(max/step - 1e-9)*step)};
+}
+function priorStats(vals){
+  var p=vals.slice(0,-1).filter(function(v){return v!=null;});
+  if(!p.length) return {lo:null,hi:null,mu:null,sd:0,n:0};
+  var mu=p.reduce(function(a,b){return a+b;},0)/p.length;
+  var sd=p.length>1?Math.sqrt(p.reduce(function(a,b){return a+(b-mu)*(b-mu);},0)/(p.length-1)):0;
+  return {lo:Math.min.apply(null,p), hi:Math.max.apply(null,p), mu:mu, sd:sd, n:p.length};
+}
+/* flag lanes: labels sit right of their tick; a lane is valid if it does not overlap
+   a label in the same lane and no label in a lower lane spans this tick */
+function layoutFlags(marks, xOf, width, fs, useShort){
+  var cw=fs*0.56, placed=[], lanes=0;
+  marks.forEach(function(m){
+    var label=useShort?m.short:m.label, x=xOf(m), w=label.length*cw, x0=x+5, anchor='start';
+    if(x0+w>width-2){ x0=x-5-w; anchor='end'; }
+    var lane=0;
+    for(;;){
+      var ok=placed.every(function(p){
+        if(p.lane===lane && !(x0>p.x1+8 || x0+w<p.x0-8)) return false;
+        if(p.lane>lane && x>=p.x0-3 && x<=p.x1+3) return false;
+        return true;
+      });
+      if(ok) break; lane++;
+    }
+    placed.push({m:m, text:label, x:x, x0:x0, x1:x0+w, lane:lane, anchor:anchor});
+    lanes=Math.max(lanes, lane+1);
+  });
+  return {placed:placed, lanes:lanes};
+}
+function drawFlags(g, lay, top, laneH, bottom, fs){
+  lay.placed.forEach(function(p){
+    var yl=top+p.lane*laneH+fs;
+    el('line',{x1:p.x, x2:p.x, y1:yl-fs+1, y2:bottom, 'class':'g-flag'}, g);
+    el('path',{d:'M'+p.x+' '+(yl-fs+1)+'l6 3.2-6 3.2z', 'class':'g-flagh'}, g);
+    var t=txt(g, p.anchor==='start'?p.x+9:p.x-5, yl, p.text, 't-flag', p.anchor==='start'?'start':'end');
+    t.style.fontSize=fs+'px';
+    var d=new Date(p.m.t);
+    hit(g, Math.min(p.x0,p.x)-3, yl-fs-1, p.x1-p.x0+14, fs+5, p.m.label+'\n'+dlong(p.m.t)+', '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0'));
+  });
+}
+function hit(g, x, y, w, h, tip){ var r=el('rect',{x:x,y:y,width:Math.max(w,1),height:Math.max(h,1),'class':'hit'},g); r.setAttribute('data-tip', tip); return r; }
+
+/* ---------- band chart: 13 slots, prior band, prior line, current dot ---------- */
+function bandChart(box){
+  var key=box.dataset.key, S=D.find[key]||D.rel[key], vals=S.vals, sev=box.dataset.sev||'neutral', unit=box.dataset.unit||'';
+  var W=box.clientWidth; if(W<40) return;
+  var H=+box.dataset.h||160, fs=W<520?10:10.5, ml=W<520?30:38, mr=W<520?44:54, mb=22;
+  var sw=(W-ml-mr)/13, xOf=function(p){ return ml+(p+0.5)*sw; };
+  var lay = box.dataset.noflags ? {placed:[],lanes:0} : layoutFlags(MARKS, function(m){return xOf(m.pos);}, W-mr+40, fs, true);
+  var laneH=fs+4, mt=6+lay.lanes*laneH+(lay.lanes?4:0);
+  var st=priorStats(vals), vmax=Math.max(S.cur, st.hi);
+  var nt=niceTicks(vmax*1.04, H<130?2:3), yTop=nt.top;
+  var y=function(v){ return mt+(H-mt-mb)*(1-v/yTop); };
+  var svg=el('svg',{width:W,height:H,viewBox:'0 0 '+W+' '+H,'aria-hidden':'true'});
+  el('rect',{x:ml+12*sw+1,y:mt,width:sw-2,height:H-mt-mb,'class':'g-curcol'},svg);
+  nt.ticks.forEach(function(t){ el('line',{x1:ml,x2:W-mr+6,y1:y(t),y2:y(t),'class':'g-grid'},svg); txt(svg, ml-7, y(t)+3.5, tickFmt(t,nt.step), null, 'end'); });
+  el('line',{x1:ml,x2:W-mr+6,y1:y(0),y2:y(0),'class':'g-base'},svg);
+  txt(svg, ml-7, y(0)+3.5, '0', null, 'end');
+  el('rect',{x:ml, y:y(st.hi), width:12*sw, height:Math.max(y(st.lo)-y(st.hi),2), rx:2, 'class':'g-band'},svg);
+  drawFlags(svg, lay, 4, laneH, H-mb, fs);
+  var d='', pen=false;
+  for(var i=0;i<12;i++){ if(vals[i]==null){pen=false;continue;} d+=(pen?'L':'M')+xOf(i).toFixed(1)+' '+y(vals[i]).toFixed(1); pen=true; }
+  el('path',{d:d,'class':'g-prior'},svg);
+  if(vals[11]!=null) el('path',{d:'M'+xOf(11)+' '+y(vals[11])+'L'+xOf(12)+' '+y(vals[12]),'class':'g-link '+sev},svg);
+  for(i=0;i<12;i++){ if(vals[i]!=null && sw>=22) el('circle',{cx:xOf(i),cy:y(vals[i]),r:2.4,'class':'g-pdot'},svg); }
+  el('circle',{cx:xOf(12),cy:y(vals[12]),r:5.5,'class':'g-cur '+sev},svg);
+  txt(svg, xOf(12)+10, y(vals[12])+4, fmt(vals[12]), 't-val');
+  var every = sw>=46?1:sw>=30?2:4;
+  for(i=0;i<13;i++){
+    if(i===12 || (i%every===0 && (12-i)>=every*0.75)) txt(svg, xOf(i), H-6, dshort(WIN[i]), i===12?'t-cur':null, 'middle');
+    hit(svg, ml+i*sw, mt, sw, H-mt-mb, wlabel(i)+'\n'+fmt(vals[i])+' '+unit+(i===12?'\nnormal '+fmt(st.mu)+' (range '+fmt(st.lo)+'–'+fmt(st.hi)+')':''));
+  }
+  box.appendChild(svg);
+}
+
+/* ---------- hero strip: DB time columns ---------- */
+function stripChart(box){
+  var vals=D.find.dbTimeStrip, W=box.clientWidth; if(W<40) return;
+  var H=+box.dataset.h||120, fs=W<520?10:11, ml=2, mr=W<520?60:84, mb=22;
+  var sw=(W-ml-mr)/13, xOf=function(p){return ml+(p+0.5)*sw;};
+  var lay=layoutFlags(MARKS, function(m){return xOf(m.pos);}, W-mr+60, fs, W<600);
+  var laneH=fs+4, mt=8+lay.lanes*laneH+16;
+  var st=priorStats(vals), top=Math.max.apply(null, vals)*1.02;
+  var y=function(v){ return mt+(H-mt-mb)*(1-v/top); };
+  var svg=el('svg',{width:W,height:H,viewBox:'0 0 '+W+' '+H,'aria-hidden':'true'});
+  var bw=Math.min(sw*0.62, 46);
+  for(var i=0;i<13;i++){
+    var x=xOf(i)-bw/2;
+    el('rect',{x:x,y:y(vals[i]),width:bw,height:y(0)-y(vals[i]),rx:3,'class':'g-col'+(i===12?' cur':'')},svg);
+  }
+  el('line',{x1:ml,x2:W-mr+8,y1:y(0),y2:y(0),'class':'g-base'},svg);
+  el('line',{x1:ml,x2:W-mr+8,y1:y(st.mu),y2:y(st.mu),'class':'g-mean'},svg);
+  txt(svg, W-mr+12, y(st.mu)+4, 'normal '+fmt(st.mu), null, 'start');
+  txt(svg, xOf(12), y(vals[12])-7, fmt(vals[12]), 't-val', 'middle');
+  drawFlags(svg, lay, 4, laneH, y(0), fs);
+  var every = sw>=46?1:sw>=30?2:4;
+  for(i=0;i<13;i++){
+    if(i===12 || (i%every===0 && (12-i)>=every*0.75)) txt(svg, xOf(i), H-5, dshort(WIN[i]), i===12?'t-cur':null, 'middle');
+    hit(svg, ml+i*sw, mt-14, sw, H-mt+14-mb, wlabel(i)+'\nDB time '+fmt(vals[i])+' active sessions');
+  }
+  box.appendChild(svg);
+}
+
+/* ---------- stacked AAS by wait class per window ---------- */
+var GROUPS=['CPU','User I/O','Network','Commit'];
+function grouped(classes){
+  var out=GROUPS.map(function(g){ var c=classes.filter(function(x){return x.name===g;})[0]; return {name:g, vals:c.vals.slice(), color:WC[g]}; });
+  var rest=classes.filter(function(x){return GROUPS.indexOf(x.name)<0;});
+  var n=out[0].vals.length, ov=[];
+  for(var i=0;i<n;i++) ov.push(rest.reduce(function(a,c){return a+c.vals[i];},0));
+  out.push({name:'All other classes', vals:ov, color:null});
+  return out;
+}
+function legendInto(id, groups){
+  var L=document.getElementById(id); if(!L || L.childNodes.length) return;
+  groups.forEach(function(g){ var s=document.createElement('span'), i=document.createElement('i'); if(g.color) i.style.background=g.color; else i.style.background='var(--other)'; s.appendChild(i); s.appendChild(document.createTextNode(g.name)); L.appendChild(s); });
+}
+function stackChart(box){
+  var G=grouped(D.ashWin.classes); legendInto('dbt-legend', G);
+  var W=box.clientWidth; if(W<40) return;
+  var H=+box.dataset.h||200, fs=W<520?10:10.5, ml=W<520?30:38, mr=W<520?72:96, mb=22;
+  var sw=(W-ml-mr)/13, xOf=function(p){return ml+(p+0.5)*sw;};
+  var lay=layoutFlags(MARKS, function(m){return xOf(m.pos);}, W-mr+60, fs, true);
+  var laneH=fs+4, mt=6+lay.lanes*laneH+4;
+  var tot=[]; for(var i=0;i<13;i++) tot.push(G.reduce(function(a,g){return a+g.vals[i];},0));
+  var st=priorStats(tot), nt=niceTicks(Math.max.apply(null,tot)*1.04,3), top=nt.top;
+  var y=function(v){ return mt+(H-mt-mb)*(1-v/top); };
+  var svg=el('svg',{width:W,height:H,viewBox:'0 0 '+W+' '+H,'aria-hidden':'true'});
+  el('rect',{x:ml+12*sw+1,y:mt,width:sw-2,height:H-mt-mb,'class':'g-curcol'},svg);
+  nt.ticks.forEach(function(t){ el('line',{x1:ml,x2:W-mr+6,y1:y(t),y2:y(t),'class':'g-grid'},svg); txt(svg, ml-7, y(t)+3.5, tickFmt(t,nt.step), null, 'end'); });
+  el('rect',{x:ml, y:y(st.hi), width:12*sw, height:y(st.lo)-y(st.hi), rx:2, 'class':'g-band'},svg);
+  var bw=Math.min(sw*0.56, 40);
+  for(i=0;i<13;i++){
+    var base=0, x=xOf(i)-bw/2, g0=el('g',{opacity:i===12?1:0.5},svg);
+    G.forEach(function(g){
+      var v=g.vals[i], y1=y(base+v), y0=y(base);
+      var h=Math.max(y0-y1-(base>0?1.5:0),0.5);
+      el('rect',{x:x,y:y1,width:bw,height:h,rx:base===0?0:1.5,fill:g.color||null,'class':g.color?null:'g-other'},g0);
+      g._y=(y1+y0)/2; g._h=y0-y1; base+=v;
+    });
+    if(i===12){
+      var lab=G.filter(function(g){return g.name==='CPU'||g.name==='User I/O';}).map(function(g){return {t:g.name+' '+g.vals[12].toFixed(1), y:g._y+4};}).sort(function(a,b){return a.y-b.y;});
+      lab.forEach(function(l,k){ if(k) l.y=Math.max(l.y, lab[k-1].y+14); txt(svg, x+bw+7, l.y, l.t, 't-val'); });
+    }
+    var tip=wlabel(i)+'\nTotal '+fmt(tot[i])+' active sessions';
+    G.forEach(function(g){ tip+='\n'+g.name+' '+fmt(g.vals[i]); });
+    hit(svg, ml+i*sw, mt, sw, H-mt-mb, tip);
+  }
+  el('line',{x1:ml,x2:W-mr+6,y1:y(0),y2:y(0),'class':'g-base'},svg);
+  txt(svg, ml-7, y(0)+3.5, '0', null, 'end');
+  drawFlags(svg, lay, 4, laneH, H-mb, fs);
+  var every = sw>=46?1:sw>=30?2:4;
+  for(i=0;i<13;i++) if(i===12 || (i%every===0 && (12-i)>=every*0.75)) txt(svg, xOf(i), H-6, dshort(WIN[i]), i===12?'t-cur':null, 'middle');
+  // bring hit rects above bars
+  [].slice.call(svg.querySelectorAll('.hit')).forEach(function(r){ svg.appendChild(r); });
+  box.appendChild(svg);
+}
+
+/* ---------- mini sparkline (normal grid, tables) ---------- */
+function spark(vals, w, h, emph){
+  var st=priorStats(vals), all=vals.filter(function(v){return v!=null;});
+  var lo=Math.min.apply(null,all), hi=Math.max.apply(null,all), mid=(lo+hi)/2;
+  if(hi-lo < Math.abs(mid)*0.04){ lo=mid-Math.abs(mid)*0.02; hi=mid+Math.abs(mid)*0.02; }
+  if(hi===lo){ hi=lo+1; }
+  var pad=3, sw=(w-8)/13, xOf=function(i){return 2+(i+0.5)*sw;}, y=function(v){return pad+(h-2*pad)*(1-(v-lo)/(hi-lo));};
+  var svg=el('svg',{width:w,height:h,viewBox:'0 0 '+w+' '+h,'aria-hidden':'true'});
+  var f0=0; while(f0<12 && vals[f0]==null) f0++;
+  if(st.n) el('rect',{x:2+f0*sw,y:y(st.hi),width:(12-f0)*sw,height:Math.max(y(st.lo)-y(st.hi),1.5),rx:1.5,'class':'g-band'},svg);
+  var d='',pen=false;
+  for(var i=0;i<12;i++){ if(vals[i]==null){pen=false;continue;} d+=(pen?'L':'M')+xOf(i).toFixed(1)+' '+y(vals[i]).toFixed(1); pen=true; }
+  el('path',{d:d,'class':'g-prior'},svg).style.strokeWidth='1.3';
+  if(vals[12]!=null){
+    if(vals[11]!=null) el('path',{d:'M'+xOf(11)+' '+y(vals[11])+'L'+xOf(12)+' '+y(vals[12]),'class':'g-link '+(emph||'neutral')},svg).style.strokeWidth='1.3';
+    el('circle',{cx:xOf(12),cy:y(vals[12]),r:emph&&emph!=='neutral'?3.4:2.8,'class':'g-cur '+(emph||'neutral')},svg).style.strokeWidth='1.2';
+  }
+  return svg;
+}
+function unitFmt(v,u){
+  if(u==='B/s') return fmt(v/1e6)+' MB/s';
+  if(u==='%') return fmt(v)+'%';
+  return fmt(v)+(u?(u.charAt(0)==='/'?u:' '+u):'');
+}
+function renderNormal(){
+  var g=document.getElementById('ngrid'); if(!g || g.childNodes.length) return;
+  D.norm.forEach(function(n){
+    var row=document.createElement('div'); row.className='nm';
+    var pct=(n.pct>0?'+':n.pct<0?'−':'')+Math.abs(n.pct).toFixed(Math.abs(n.pct)<10?1:0)+'%';
+    row.innerHTML='<div class="l">'+n.label+'<small>normal '+unitFmt(n.mu,n.unit)+'</small></div>';
+    var sp=spark(n.vals,64,26,'neutral'); sp.setAttribute('data-tip', n.label+': '+n.vals.map(function(v,i){return (i===12?'Current ':dshort(WIN[i])+' ')+fmt(v);}).slice(-4).join(', '));
+    row.appendChild(sp);
+    var v=document.createElement('div'); v.className='v'; v.innerHTML=unitFmt(n.cur,n.unit)+'<small>'+pct+', typical</small>';
+    row.appendChild(v);
+    g.appendChild(row);
+  });
+}
+
+/* ---------- Top SQL table ---------- */
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+var DIMU={ELAPSED:'s',CPU:'s',GETS:'gets',PREADS:'reads'};
+function renderTopSql(dim){
+  var t=document.getElementById('topsql-t'); if(!t) return;
+  var rows=D.topsql[dim].filter(function(r){return r.rank!=null;}).sort(function(a,b){return a.rank-b.rank;});
+  var h='<thead><tr><th class="r">#</th><th>Statement</th><th>Where</th><th class="r cur">Now</th><th class="r">Normal</th><th class="r">Change</th><th>13 windows</th><th>Notes</th></tr></thead><tbody>';
+  rows.forEach(function(r,idx){
+    var st=priorStats(r.vals), cur=r.vals[12], z=(cur-st.mu)/Math.max(st.sd, Math.abs(st.mu)*0.02), ratio=cur/st.mu, pct=(ratio-1)*100;
+    var sev=(z>3 && ratio>=2)?'large':(z>2 && pct>=25)?'moderate':'neutral';
+    var ch = ratio>=1.95 ? '×'+ratio.toFixed(1) : (pct>=0?'+':'−')+Math.abs(pct).toFixed(0)+'%';
+    var notes='';
+    if(r.planChg) notes+='<span class="badge hot"><span aria-hidden="true">◆</span> plan changed</span> ';
+    if(r.first && r.first>'2026-06-18') notes+='<span class="badge">new since '+dshort(parseT(r.first))+'</span>';
+    h+='<tr data-row="'+idx+'"><td class="r rk">'+r.rank+'</td><td><span class="sid">'+esc(r.id)+'</span><span class="sq" title="'+esc(r.text)+'">'+esc(r.text)+'</span></td>'+
+       '<td class="mut" style="white-space:nowrap">'+esc(r.schema)+'<br><span style="font-size:12.5px">'+esc(r.action)+'</span></td>'+
+       '<td class="r cur">'+fmt(cur)+'</td><td class="r mut">'+fmt(st.mu)+(st.n<12?'<br><span style="font-size:12px">'+st.n+' of 12</span>':'')+'</td>'+
+       '<td class="r '+(sev==='large'?'x':sev==='moderate'?'x mod':'mut')+'">'+(sev!=='neutral'?'<span class="sr">'+sev+' </span>':'')+ch+'</td><td class="sp"></td><td>'+notes+'</td></tr>';
+  });
+  t.innerHTML=h+'</tbody>';
+  [].slice.call(t.querySelectorAll('tbody tr')).forEach(function(tr,i){
+    var r=rows[i], st=priorStats(r.vals), cur=r.vals[12], z=(cur-st.mu)/Math.max(st.sd,Math.abs(st.mu)*0.02), ratio=cur/st.mu;
+    var sev=(z>3&&ratio>=2)?'large':(z>2&&ratio>=1.25)?'moderate':'neutral';
+    var sp=spark(r.vals,104,26,sev); sp.setAttribute('data-tip', r.id+'\n'+r.vals.map(function(v,k){return (k===12?'Current':dshort(WIN[k]))+': '+fmt(v);}).join('\n'));
+    tr.querySelector('td.sp').appendChild(sp);
+  });
+}
+
+/* ---------- Foreground waits table ---------- */
+function renderFg(){
+  var t=document.getElementById('fg-t'); if(!t || t.childNodes.length) return;
+  var h='<thead><tr><th>Event</th><th>Class</th><th class="r cur">Now (s)</th><th class="r">Normal (s)</th><th class="r">Change</th><th>13 windows</th><th class="r">Per wait now</th><th class="r">Normal</th></tr></thead><tbody>';
+  D.fg.forEach(function(f){
+    var ratio=f.vals[12]/f.mu, pct=(ratio-1)*100;
+    var ch = ratio>=1.95 ? '×'+ratio.toFixed(1) : (pct>=0?'+':'−')+Math.abs(pct).toFixed(0)+'%';
+    var cls = f.sev==='large'?'x':f.sev==='moderate'?'x mod':'mut';
+    var lab = f.sev==='large'?'<span aria-hidden="true">▲ </span>':f.sev==='moderate'?'<span aria-hidden="true">▲ </span>':'';
+    var tail = f.sev==='floor'?' <span style="font-size:12px">too small</span>':'';
+    h+='<tr><td>'+esc(f.ev)+'</td><td><span class="wcd"><i style="background:'+WC[f.cls]+'"></i>'+esc(f.cls)+'</span></td>'+
+       '<td class="r cur">'+fmt(f.vals[12])+'</td><td class="r mut">'+fmt(f.mu)+'</td>'+
+       '<td class="r '+cls+'">'+(f.sev==='large'||f.sev==='moderate'?'<span class="sr">'+f.sev+' </span>':'')+lab+ch+tail+'</td><td class="sp"></td>'+
+       '<td class="r">'+(f.avg?fmt(f.avg[12])+' ms':'—')+'</td><td class="r mut">'+(f.avgMu!=null?fmt(f.avgMu)+' ms':'—')+'</td></tr>';
+  });
+  t.innerHTML=h+'</tbody>';
+  [].slice.call(t.querySelectorAll('tbody tr')).forEach(function(tr,i){
+    var f=D.fg[i], sev=f.sev==='large'||f.sev==='moderate'?f.sev:'neutral';
+    var sp=spark(f.vals,104,26,sev); sp.setAttribute('data-tip', f.ev+'\n'+f.vals.map(function(v,k){return (k===12?'Current':dshort(WIN[k]))+': '+fmt(v)+' s';}).join('\n'));
+    tr.querySelector('td.sp').appendChild(sp);
+  });
+}
+
+/* ---------- 3-month ASH ---------- */
+function ashChart(box){
+  var A=D.ash, mode=box.dataset.mode||'day';
+  var G=A.classes.map(function(c){return {name:c.name==='Other'?'All other classes':c.name, vals:c.vals, color:c.name==='Other'?null:WC[c.name]};});
+  legendInto('ash-legend', G);
+  var W=box.clientWidth; if(W<40) return;
+  var n=G[0].vals.length, t0=parseT(A.t0), step=A.stepH*HR;
+  var dStart=Date.UTC(2026,5,18), dEnd=Date.UTC(2026,8,11);
+  var H=+box.dataset.h||240, fs=W<520?10:10.5, ml=W<520?28:34, mr=10, mb=40;
+  var xOf=function(t){ return ml+(W-ml-mr)*(t-dStart)/(dEnd-dStart); };
+  var lay=layoutFlags(MARKS, function(m){return xOf(m.t);}, W-mr, fs, W<640);
+  var laneH=fs+4, mt=6+lay.lanes*laneH+6;
+  var tot=[]; for(var i=0;i<n;i++) tot.push(G.reduce(function(a,g){return a+g.vals[i];},0));
+  var days=[]; for(i=0;i<n;i++){ if(new Date(t0+i*step).getUTCHours()===9) days.push(i); }
+  var peak=mode==='day'? Math.max.apply(null, days.map(function(k){return tot[k];})) : Math.max.apply(null,tot);
+  var nt=niceTicks(peak*1.03,3), top=nt.top;
+  var y=function(v){ return mt+(H-mt-mb)*(1-v/top); };
+  var svg=el('svg',{width:W,height:H,viewBox:'0 0 '+W+' '+H,'aria-hidden':'true'});
+  var dayW=(W-ml-mr)/((dEnd-dStart)/DAY);
+  var xc=xOf(Date.UTC(2026,8,10,12));
+  el('rect',{x:xc-Math.max(dayW,8)/2-1,y:mt,width:Math.max(dayW,8)+2,height:H-mt-mb,'class':'g-curcol'},svg);
+  nt.ticks.forEach(function(t){ el('line',{x1:ml,x2:W-mr,y1:y(t),y2:y(t),'class':'g-grid'},svg); txt(svg, ml-6, y(t)+3.5, tickFmt(t,nt.step), null, 'end'); });
+  if(mode==='day'){
+    var bw=Math.max(dayW*0.72,1.5);
+    days.forEach(function(k,j){
+      var t=t0+k*step, dm=Date.UTC(new Date(t).getUTCFullYear(),new Date(t).getUTCMonth(),new Date(t).getUTCDate());
+      var isCmp=WIN.some(function(w){return Math.abs(w-t)<HR;}), isCur=Math.abs(WIN[12]-t)<HR;
+      var x=xOf(dm+DAY/2)-bw/2, base=0, g0=el('g',{opacity:isCmp?1:0.42},svg);
+      G.forEach(function(g){
+        var v=g.vals[k], y1=y(base+v), y0=y(base), h=Math.max(y0-y1-(base>0&&bw>3?1:0),0.3);
+        el('rect',{x:x,y:y1,width:bw,height:h,fill:g.color||null,'class':g.color?null:'g-other'},g0);
+        base+=v;
+      });
+      var tip=dlong(t)+(isCur?', 09:00–10:00 (Current window)':', 09:00–15:00 average')+(isCmp&&!isCur?' (compared window)':'')+'\nTotal '+fmt(tot[k])+' active sessions';
+      G.forEach(function(g){ tip+='\n'+g.name+' '+fmt(g.vals[k]); });
+      hit(svg, xOf(dm), mt, dayW, H-mt-mb, tip);
+    });
+  } else {
+    var ts=[]; for(i=0;i<n;i++) ts.push(t0+i*step+(i===n-1?HR/2:step/2));
+    var base=new Array(n).fill(0);
+    G.forEach(function(g){
+      var up='', dn='';
+      for(var i=0;i<n;i++){ up+=(i?'L':'M')+xOf(ts[i]).toFixed(1)+' '+y(base[i]+g.vals[i]).toFixed(1); }
+      for(i=n-1;i>=0;i--){ dn+='L'+xOf(ts[i]).toFixed(1)+' '+y(base[i]).toFixed(1); }
+      el('path',{d:up+dn+'Z',fill:g.color||null,'class':g.color?null:'g-other','fill-opacity':0.9},svg);
+      for(i=0;i<n;i++) base[i]+=g.vals[i];
+    });
+    var xh=el('line',{x1:0,x2:0,y1:mt,y2:y(0),'class':'g-xhair',visibility:'hidden'},svg);
+    var ov=el('rect',{x:ml,y:mt,width:W-ml-mr,height:y(0)-mt,'class':'hit'},svg);
+    ov.removeAttribute('data-tip');
+    ov.addEventListener('mousemove',function(e){
+      var r=svg.getBoundingClientRect(), px=e.clientX-r.left, best=0, bd=1e9;
+      for(var i=0;i<n;i++){ var dx=Math.abs(xOf(ts[i])-px); if(dx<bd){bd=dx;best=i;} }
+      var xx=xOf(ts[best]); xh.setAttribute('x1',xx); xh.setAttribute('x2',xx); xh.setAttribute('visibility','visible');
+      var tt=t0+best*step, s=dlong(tt)+', '+String(new Date(tt).getUTCHours()).padStart(2,'0')+':00 + 6 h\nTotal '+fmt(tot[best])+' active sessions';
+      G.forEach(function(g){ s+='\n'+g.name+' '+fmt(g.vals[best]); });
+      showTip(s, e.clientX, e.clientY);
+    });
+    ov.addEventListener('mouseleave',function(){ xh.setAttribute('visibility','hidden'); hideTip(); });
+  }
+  el('line',{x1:ml,x2:W-mr,y1:y(0),y2:y(0),'class':'g-base'},svg);
+  txt(svg, ml-6, y(0)+3.5, '0', null, 'end');
+  drawFlags(svg, lay, 4, laneH, y(0), fs);
+  WIN.forEach(function(w,i){ var x=xOf(w+HR/2); el('rect',{x:x-(i===12?2:1),y:y(0)+3,width:i===12?4:2,height:7,rx:1,'class':'g-cmp'},svg); });
+  var marks=[];
+  for(var mth=5; mth<=8; mth++){ [1,15].forEach(function(day){ var t=Date.UTC(2026,mth,day); if(t>dStart+DAY*2 && t<dEnd-DAY*4) marks.push(t); }); }
+  var lastX=-1e9;
+  marks.forEach(function(t){ var x=xOf(t); if(x-lastX<(W<520?64:40)) return; lastX=x; el('line',{x1:x,x2:x,y1:y(0),y2:y(0)+2,'class':'g-base'},svg); txt(svg, x, H-8, dshort(t), null, 'middle'); });
+  txt(svg, xc+6, H-8, 'Current', 't-cur', 'end');
+  if(mode==='day') [].slice.call(svg.querySelectorAll('.hit')).forEach(function(r){ svg.appendChild(r); });
+  box.appendChild(svg);
+}
+
+/* ---------- tooltip ---------- */
+var TIP=document.getElementById('tip');
+function showTip(s,x,y){ TIP.textContent=s; TIP.classList.add('on'); var w=TIP.offsetWidth, h=TIP.offsetHeight; var lx=x+14; if(lx+w>window.innerWidth-8) lx=x-14-w; var ly=y+14; if(ly+h>window.innerHeight-8) ly=y-14-h; TIP.style.left=Math.max(8,lx)+'px'; TIP.style.top=Math.max(8,ly)+'px'; }
+function hideTip(){ TIP.classList.remove('on'); }
+document.addEventListener('mousemove',function(e){
+  var t=e.target.closest && e.target.closest('[data-tip]');
+  if(t && !t.closest('[data-chart="ash"]')) showTip(t.getAttribute('data-tip'), e.clientX, e.clientY);
+  else if(!(e.target.closest && e.target.closest('[data-chart="ash"]'))) hideTip();
+});
+
+/* ---------- render orchestration ---------- */
+var R={band:bandChart, strip:stripChart, stack:stackChart, ash:ashChart};
+function renderCharts(scope){
+  [].slice.call((scope||document).querySelectorAll('[data-chart]')).forEach(function(b){
+    if(!b.offsetParent) return;
+    var w=b.clientWidth; if(b._w===w && b.firstChild) return;
+    while(b.firstChild) b.removeChild(b.firstChild);
+    b._w=w;
+    try{ R[b.dataset.chart](b); }catch(err){ if(window.console) console.warn(err); }
+  });
+}
+function renderAll(){ renderNormal(); renderFg(); renderCharts(); }
+if(window.innerWidth<640){ var mn=document.querySelector('.mocknote'); if(mn) mn.removeAttribute('open'); }
+renderTopSql('ELAPSED');
+renderAll();
+var rt; window.addEventListener('resize',function(){ clearTimeout(rt); rt=setTimeout(renderCharts,120); });
+[].slice.call(document.querySelectorAll('details')).forEach(function(d){ d.addEventListener('toggle',function(){ if(d.open) renderCharts(d); }); });
+
+/* ash resolution */
+[].slice.call(document.querySelectorAll('[data-ashmode]')).forEach(function(b){
+  b.addEventListener('click',function(){
+    [].slice.call(b.parentNode.children).forEach(function(x){ x.setAttribute('aria-pressed', x===b?'true':'false'); });
+    var c=document.getElementById('ash-chart'); c.dataset.mode=b.dataset.ashmode; c._w=null; renderCharts(c.parentNode);
+    document.getElementById('ash-cap').textContent = b.dataset.ashmode==='day' ? "Each bar is one day's 09:00–15:00 average; the compared Thursdays are solid, other days faded. Ticks under the axis mark the 13 compared windows." : 'Every 6-hour average across the 3 months, stacked by wait class. Ticks under the axis mark the 13 compared windows; the last one is Current.';
+  });
+});
+/* tabs */
+[].slice.call(document.querySelectorAll('.tabs button')).forEach(function(b){
+  b.addEventListener('click',function(){
+    [].slice.call(b.parentNode.children).forEach(function(x){ x.setAttribute('aria-selected', x===b?'true':'false'); });
+    renderTopSql(b.dataset.dim);
+  });
+});
+
+/* normal / full */
+function setMode(full){
+  document.body.classList.toggle('full', full); document.body.classList.toggle('normal', !full);
+  document.getElementById('mode-full').setAttribute('aria-pressed', full?'true':'false');
+  document.getElementById('mode-normal').setAttribute('aria-pressed', full?'false':'true');
+  renderCharts();
+}
+document.getElementById('mode-full').addEventListener('click',function(){ setMode(true); });
+document.getElementById('mode-normal').addEventListener('click',function(){ setMode(false); });
+var gf=document.querySelector('[data-go-full]'); if(gf) gf.addEventListener('click',function(e){ e.preventDefault(); setMode(true); document.getElementById('lib-ash').scrollIntoView({behavior:'smooth'}); });
+
+/* theme */
+function isDark(){ var b=document.body.classList; return b.contains('dark') || (!b.contains('light') && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches); }
+try{ var saved=localStorage.getItem('awr-theme'); if(saved==='dark') document.body.classList.add('dark'); else if(saved==='light') document.body.classList.add('light'); }catch(e){}
+document.getElementById('themeBtn').addEventListener('click',function(){
+  var dk=!isDark(); document.body.classList.toggle('dark',dk); document.body.classList.toggle('light',!dk);
+  try{ localStorage.setItem('awr-theme', dk?'dark':'light'); }catch(e){}
+});
+
+/* rail: mobile menu + scrollspy */
+var mb=document.getElementById('menuBtn');
+mb.addEventListener('click',function(){ var o=document.body.classList.toggle('rail-open'); mb.setAttribute('aria-expanded', o?'true':'false'); });
+document.getElementById('rail').addEventListener('click',function(e){ if(e.target.closest('a')){ document.body.classList.remove('rail-open'); mb.setAttribute('aria-expanded','false'); } });
+document.addEventListener('keydown',function(e){ if(e.key==='Escape') document.body.classList.remove('rail-open'); });
+var links=[].slice.call(document.querySelectorAll('.rail nav a'));
+function spy(){
+  var best=null, y=90;
+  links.forEach(function(a){ var id=a.getAttribute('href').slice(1), s=document.getElementById(id); if(!s||!s.offsetParent) return; var top=s.getBoundingClientRect().top; if(top<=y+4) best=a; });
+  links.forEach(function(a){ a.classList.toggle('on', a===best); });
+}
+window.addEventListener('scroll',spy,{passive:true}); spy();
+})();
+</script>
+</body>
+</html>

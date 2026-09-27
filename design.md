@@ -1,5 +1,15 @@
 # Design system — AWR Timeline Comparison report
 
+> **Superseded for the single-DB report by v1.6.0 (Mock D).** The views,
+> finding cards, band glyph, window component and Timeline are specified
+> in `design/report_mock_d_hybrid.html` and
+> `design/HANDOFF_report_redesign.md`, and documented for agents in
+> `CLAUDE.md` ("Views", "Summary view pieces", "Timeline view", "Look &
+> feel tokens"). The workbench tokens and rail described below still
+> underlie `sql/_style.sql` (and the fleet chrome, which includes it);
+> the masthead, headline cards, movers table and narrative block it
+> describes are gone.
+
 This document describes the **workbench** visual style of the generated
 HTML report (the one produced by `awr_trend.sql`). It exists so that a
 future agent — human or AI — can iterate on the look without re-reading

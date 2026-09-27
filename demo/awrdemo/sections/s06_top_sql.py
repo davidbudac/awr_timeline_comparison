@@ -19,7 +19,8 @@ from __future__ import annotations
 from datetime import timedelta
 
 from awrdemo import chrome
-from awrdemo.helpers import (esc, fmt_int, fmt_num, fmt_num_title, is_oracle_schema,
+from awrdemo import helpers as h
+from awrdemo.helpers import (anchor_id, esc, fmt_int, fmt_num, fmt_num_title, is_oracle_schema,
                              json_escape, mon_dd, num6, ora_round, to_char_fixed, ts_min)
 
 _SQL = chrome.sql_path("sql/06_top_sql.sql")
@@ -233,16 +234,9 @@ def emit(w) -> str:
     nweeks = weeks_back + 1
 
     put("<!-- AWR-SECTION: 06_top_sql BEGIN -->")
-    put(f'<section id="topsql" data-normal="Y"><h2>Top SQL (top {top_n}'
-        " per dimension, per window)</h2>")
-    put('<p style="font-size:12px;color:var(--muted)">'
-        f"Top-{top_n} SQLs per dimension per window from "
-        "DBA_HIST_SQLSTAT <code>*_DELTA</code>. "
-        "Bump chart per dimension: each line = one SQL across windows, "
-        "oldest &rarr; current. Use the <b>Break down by</b> toggle to "
-        "re-aggregate the same metric by <b>SQL ID</b>, parsing "
-        "<b>schema</b>, <b>module</b>, or <b>action</b> instead. "
-        "Detail tables collapsed; click to expand.</p>")
+    put('<section id="topsql" class="vw in-s in-a lib lopen" style="--os:1"><h2>Top SQL'
+        '<small class="h2sub">Top ' + str(top_n)
+        + ' statements per ranking and window; ranked, not scored</small></h2>')
     put('<div class="tabs" data-tabs="topsql" role="tablist" aria-label="Top SQL ranking dimension">'
         '<button type="button" role="tab" aria-selected="true" class="on" data-t="ELAPSED" id="tab-topsql-ELAPSED">Elapsed time</button>'
         '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="CPU" id="tab-topsql-CPU">CPU time</button>'
@@ -273,6 +267,8 @@ def emit(w) -> str:
     dim_sqls_json, dim_sqls_kept, dim_sqls_total, dim_seen = {}, {}, {}, []
 
     cur_dim = None
+    tl_rows = []
+    ls = None
     for s in rows:
         dim = s["dim"]
         if cur_dim != dim:
@@ -344,7 +340,7 @@ def emit(w) -> str:
 
         cur_val = s["cur_val"]
         cur_scaled = None if cur_val is None else cur_val / div
-        row = ('<tr data-sys="' + is_sys + '">'
+        row = ('<tr id="' + anchor_id('sq-' + dim.lower(), sid) + '" data-sys="' + is_sys + '">'
                '<td class="mono"><a href="#sql-' + sid + '">' + sid + "</a>"
                + (' <span class="badge warn" title="Plan changed between current and a prior '
                   'compared window">plan&#8593;</span>' if plan_flip else "")
@@ -372,8 +368,45 @@ def emit(w) -> str:
                 + ("&hellip;" if len(text_short) > 400 else "") + "</td>")
         row += "</tr>"
         put(row)
+        # v1.6.0 Timeline: the SQL lane (first six of the elapsed ranking)
+        if dim == "ELAPSED" and len(tl_rows) < 6:
+            csv = h.tl_csv(w, _chart_vals(s["vals"], div))
+            mu = h.tl_mu(w, csv)
+            first = h.tl_first(w, csv)
+            gw = gl = None
+            note = ("#" + str(s["cur_rnk"]) + " by elapsed" if s["cur_rnk"] is not None
+                    else "not in the Current top " + str(top_n))
+            if plan_flip:
+                gw = 0
+                gl = ('<b class="glf gp" title="Plan changed: the Current plan_hash_value '
+                      + str(cur_phv) + ' differs from a prior window\'s">&#9670;</b>')
+                note = "<b>&#9670;</b> new plan"
+            elif first is not None:
+                gw = first
+                gl = ('<b class="glf gn" title="First seen in the top ' + str(top_n) + ': '
+                      + h.wg_title(w, first) + '">&#10010;</b>')
+                note = "<b>&#10010;</b> new " + ("in Current" if first == 0 else h.wg_date(w, first))
+            txt = w.sql_by_id[sid].text or ""
+            if not tl_rows:
+                if s["cur_rnk"] is None:
+                    ls = "no statement in the Current top " + str(top_n)
+                else:
+                    ls = ("<code>" + sid + "</code> #" + str(s["cur_rnk"]) + " by elapsed"
+                          + ((", " + h.delta_span(h.tl_val(w, csv, 0), mu, None, "Y")) if mu is not None else "")
+                          + (", new plan" if plan_flip else
+                             (", new " + ("in Current" if first == 0 else h.wg_date(w, first)))
+                             if first is not None else ""))
+            tl_rows.append(h.tl_bars(
+                w, csv, mu, None, None,
+                h.tl_lab(h.ent(sid, anchor_id("sq-elapsed", sid), "sql"),
+                         esc(schema or "?") + ' <span class="sq">' + esc(txt[:90]) + "</span>",
+                         esc(txt[:300])),
+                h.tl_gutp(h.tl_val(w, csv, 0), mu, note),
+                "tl-" + anchor_id("sq-elapsed", sid), "q", sid, "s elapsed", gw, gl))
     if cur_dim is not None:
         put("</tbody></table></details></div>")
+    for i, r in enumerate(tl_rows, start=1):
+        put((h.tl_open("sql") if i == 1 else "") + r + (h.tl_close() if i == len(tl_rows) else ""))
 
     # second pass: group breakdowns -----------------------------------
     grp_json, grp_kept, grp_total = {}, {}, {}
@@ -442,8 +475,8 @@ def emit(w) -> str:
                 + str(len(seen_sqls)) + " top SQL across the compared windows.</p>")
 
     # per-SQL detail: pool table ----------------------------------------
-    block, pos = _slice(L, '<h3 class="full-only">Per-SQL detail</h3>',
-                        '<table id="sql-pool" class="full-only"><thead><tr><th>SQL ID</th><th>Ranked in</th>'
+    block, pos = _slice(L, '<h3 class="vw in-a">Per-SQL detail</h3>',
+                        '<table id="sql-pool" class="vw in-a"><thead><tr><th>SQL ID</th><th>Ranked in</th>'
                         '<th>Schema</th><th class="num" title="distinct plan_hash_values seen across the span">Plans</th><th class="num">Executions</th>'
                         '<th class="num" title="AWR snapshots in which the SQL appeared">Snapshots</th><th>First seen</th><th>Text</th>'
                         "</tr></thead><tbody>")
@@ -489,7 +522,7 @@ def emit(w) -> str:
             '<span class="xlinks">'
             '<a class="xlink" href="#ash-card-' + sid
             + '" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a>'
-            '<a class="xlink" href="#sqlmon-' + sid
+            '<a class="xlink" href="#sm-' + sid
             + '" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a>'
             "</span>"
             "</td>")
@@ -603,6 +636,6 @@ def emit(w) -> str:
     block, pos = _slice(L, "<script>(function(){", "})();</script>", pos)   # hash nav
     o.extend(block)
 
-    put("</section>")
+    put(h.lib_ls("topsql", ls or "no SQL captured in the compared windows") + "</section>")
     put("<!-- AWR-SECTION: 06_top_sql END -->")
     return "\n".join(o)

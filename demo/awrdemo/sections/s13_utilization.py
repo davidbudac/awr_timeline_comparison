@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from awrdemo.helpers import esc
-from awrdemo.sections._pivot import header, spark_vals, value_cells
+from awrdemo.sections._pivot import header, row_cells
 from awrdemo.sections.s03_sysmetric import METRIC_UNIT, metric_series
 
 # (grp_ord, grp_label, met_ord, metric_name, disp_label) -- inline in the SQL
@@ -33,15 +33,8 @@ _TABLE_ID = {1: 'transactions', 2: 'connections', 3: 'data'}
 
 def emit(w) -> str:
     out = ['<!-- AWR-SECTION: 13_utilization BEGIN -->']
-    out.append('<section id="utilization"><h2>Database utilization '
-               '&mdash; how the applications use this DB</h2>')
-    out.append('<p style="font-size:12px;color:var(--muted)">'
-               'Workload volume and shape only &mdash; transaction, call and logon rates, '
-               'session counts, data and network volume (DBA_HIST_SYSMETRIC_SUMMARY, '
-               'AVG over each window). This is a <b>usage</b> overview, not a health check: '
-               'movement here usually reflects application behaviour (releases, batch '
-               'schedules, user load), not database trouble. '
-               '<b>Trend</b>: per-window values, oldest &rarr; current.</p>')
+    out.append('<section id="utilization" class="vw in-a"><h2>Utilization'
+               '<small class="h2sub">How the applications use this database; a usage overview, not scored</small></h2>')
     hdr = header(w, True)
 
     last_grp = -1
@@ -57,9 +50,7 @@ def emit(w) -> str:
         unit = METRIC_UNIT.get(name, '') if any(v is not None for v in vals) else ''
         out.append('<tr><td><span title="' + esc(name) + '">' + esc(disp) + '</span></td>'
                    + '<td>' + esc(unit) + '</td>'
-                   + '<td class="trend" data-spark="' + spark_vals(vals)
-                   + '" data-spark-title="' + esc(disp) + '"></td>'
-                   + value_cells(vals) + '</tr>')
+                   + row_cells(vals, disp, None, "Y") + '</tr>')
 
     if last_grp != -1:
         out.append('</tbody></table>')

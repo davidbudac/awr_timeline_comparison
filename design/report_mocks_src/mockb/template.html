@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ORCLPRD week-over-week</title>
+<style>
+/* ---------------------------------------------------------------- tokens */
+:root{
+  --sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --bg:#F2F4F7; --surface:#FFFFFF; --surface-2:#F7F8FA; --hover:#F4F6F9;
+  --ink:#17202C; --ink-2:#465264; --ink-3:#657083; --ink-4:#A3ACB9;
+  --line:#E4E7EC; --line-2:#D0D6DE;
+  --zone1:#BEC7D2; --zone2:#DCE1E7; --track:#EEF0F3; --tick:#AAB3BF; --mean:#4F5B6C;
+  --bar:#C5CCD6; --bar-hi:#9AA4B2;
+  --crit:#BF2F29; --crit-dot:#D83A2F; --warn:#935700; --warn-dot:#E09B1C; --imp:#08777D;
+  --focus:#2F6FEB; --other:#BFC6CF; --flag:#5A6678;
+}
+@media (prefers-color-scheme: dark){
+  body:not(.light){
+    --bg:#0E1217; --surface:#151A21; --surface-2:#1A2029; --hover:#1B222C;
+    --ink:#E4E9F0; --ink-2:#AEB7C4; --ink-3:#8D98A8; --ink-4:#566070;
+    --line:#242B36; --line-2:#323B48;
+    --zone1:#4A5565; --zone2:#313A47; --track:#1F2630; --tick:#5C6778; --mean:#C3CBD6;
+    --bar:#3E4757; --bar-hi:#5A6475;
+    --crit:#FF8277; --crit-dot:#FF6255; --warn:#F2B552; --warn-dot:#F0A63A; --imp:#4CC7C4;
+    --focus:#7AA7FF; --other:#4A5462; --flag:#98A3B3;
+  }
+}
+body.dark{
+  --bg:#0E1217; --surface:#151A21; --surface-2:#1A2029; --hover:#1B222C;
+  --ink:#E4E9F0; --ink-2:#AEB7C4; --ink-3:#8D98A8; --ink-4:#566070;
+  --line:#242B36; --line-2:#323B48;
+  --zone1:#4A5565; --zone2:#313A47; --track:#1F2630; --tick:#5C6778; --mean:#C3CBD6;
+  --bar:#3E4757; --bar-hi:#5A6475;
+  --crit:#FF8277; --crit-dot:#FF6255; --warn:#F2B552; --warn-dot:#F0A63A; --imp:#4CC7C4;
+  --focus:#7AA7FF; --other:#4A5462; --flag:#98A3B3;
+}
+
+/* ---------------------------------------------------------------- base */
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{--row-bg:var(--surface);margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:underline;text-decoration-color:var(--line-2);text-underline-offset:3px}
+a:hover{text-decoration-color:var(--ink-3)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+button{font:inherit;color:inherit}
+.num,.tn{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono);font-size:12.5px}
+.muted{color:var(--ink-3)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+/* ---------------------------------------------------------------- mock note (outside the design) */
+.mock{background:#1F242C;color:#DDE2E8;font:12.5px/1.5 var(--sans);border-bottom:1px solid #000}
+.mock summary{cursor:pointer;padding:6px 16px;list-style:none;display:flex;gap:12px;align-items:baseline}
+.mock summary::-webkit-details-marker{display:none}
+.mock summary::before{content:"\25B8";color:#8B95A3;transition:transform .15s}
+.mock[open] summary::before{transform:rotate(90deg)}
+.mock summary b{color:#fff;font-weight:600}
+.mock summary span{color:#9AA4B1}
+.mock ul{margin:0;padding:0 16px 8px 40px;columns:2 520px;column-gap:48px}
+.mock li{margin:0 0 3px;break-inside:avoid}
+
+/* ---------------------------------------------------------------- shell */
+.shell{display:grid;grid-template-columns:208px minmax(0,1fr);min-height:100vh}
+.rail{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;padding:24px 12px 24px 16px;border-right:1px solid var(--line)}
+.rail .db{font-weight:600;font-size:14px;padding:0 8px}
+.rail .db small{display:block;font-weight:400;color:var(--ink-3);font-size:12px}
+.rail h3{font-size:12px;font-weight:500;color:var(--ink-3);margin:24px 8px 4px}
+.rail ol{list-style:none;margin:0;padding:0}
+.rail a{display:flex;justify-content:space-between;gap:8px;padding:4px 8px;border-radius:6px;text-decoration:none;color:var(--ink-2);font-size:13px;line-height:20px;position:relative}
+.rail a:hover{background:var(--hover);color:var(--ink)}
+.rail a.on{color:var(--ink);font-weight:500;background:var(--surface)}
+.rail a.on::before{content:"";position:absolute;left:-8px;top:6px;bottom:6px;width:2px;border-radius:1px;background:var(--ink)}
+.rail a span.n{color:var(--ink-3);font-variant-numeric:tabular-nums;font-weight:400}
+.rail .ref a{color:var(--ink-3)}
+main{padding:32px 40px 80px;max-width:1240px;min-width:0}
+
+/* ---------------------------------------------------------------- masthead */
+.mast{padding:0 0 8px}
+.idline{display:flex;flex-wrap:wrap;align-items:center;gap:4px 20px;color:var(--ink-3);font-size:13px}
+.idline b{color:var(--ink);font-weight:600;font-size:14px}
+.idline .sp{flex:1}
+.ctl{display:flex;gap:8px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:7px;padding:2px;background:var(--surface)}
+.seg button{border:0;background:none;padding:3px 12px;border-radius:5px;font-size:13px;color:var(--ink-2);cursor:pointer;line-height:20px}
+.seg button[aria-pressed="true"],.seg button[aria-selected="true"]{background:var(--ink);color:var(--surface)}
+.ibtn{width:30px;height:30px;border:1px solid var(--line-2);border-radius:7px;background:var(--surface);display:inline-grid;place-items:center;cursor:pointer;color:var(--ink-2)}
+.ibtn svg{width:16px;height:16px}
+h1{font-size:28px;line-height:36px;font-weight:600;letter-spacing:-.015em;margin:16px 0 0}
+.sub{color:var(--ink-2);margin:0}
+.verdict{margin-top:24px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px 24px 0;overflow:hidden}
+.v-top{display:grid;grid-template-columns:auto 1fr;gap:4px 24px;align-items:start}
+.v-n{font-size:28px;line-height:32px;font-weight:600;letter-spacing:-.02em;white-space:nowrap}
+.v-n small{display:block;font-size:13px;font-weight:400;color:var(--ink-3);letter-spacing:0;line-height:20px}
+.v-t{font-size:15px;line-height:24px;margin:2px 0 0;max-width:78ch}
+.counts{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:8px;font-size:13px;color:var(--ink-2)}
+.counts span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.dotk{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none}
+.dotk.large{background:var(--crit-dot)} .dotk.moderate{background:var(--warn-dot)}
+.dotk.typical{border:1.5px solid var(--ink-3)} .dotk.improved{border:2px solid var(--imp)}
+.wc{margin:16px -24px 0;border-top:1px solid var(--line)}
+.tl13{position:relative;display:block;height:18px}
+.tl13::before{content:"";position:absolute;left:10px;right:18px;top:8.5px;height:1px;background:var(--line-2)}
+.tl13 b{position:absolute;top:6px;width:1px;height:6px;background:var(--ink-4);left:calc(10px + (100% - 28px) * var(--x))}
+.tl13 i{position:absolute;top:9px;left:calc(10px + (100% - 28px) * var(--x));width:8px;height:8px;margin:-4px 0 0 -4px;transform:rotate(45deg);background:var(--ink-3);box-shadow:0 0 0 2px var(--surface)}
+.tl13 i.now{background:var(--ink);width:10px;height:10px;margin:-5px 0 0 -5px}
+.wc-row{display:grid;grid-template-columns:140px 208px minmax(240px,280px) minmax(0,1fr) auto;gap:0 20px;align-items:center;padding:10px 24px;border-bottom:1px solid var(--line);min-height:52px}
+.wc-row:last-child{border-bottom:0}
+.wc-k{font-weight:600}
+.wc-v{font-size:13px;line-height:18px}
+.wc-v b{font-weight:600;font-size:14px}
+.wc-n{font-size:13px;line-height:18px;color:var(--ink-2)}
+.wc-a{font-size:13px;color:var(--ink-2);white-space:nowrap}
+.stack2{display:grid;gap:3px}
+.stack2 .bl{display:grid;grid-template-columns:48px 1fr;align-items:center;gap:4px;font-size:11px;color:var(--ink-3);line-height:14px}
+.legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 20px;margin:0 -24px;padding:10px 24px 12px;font-size:12.5px;color:var(--ink-2);border-top:1px solid var(--line);background:var(--surface-2);--row-bg:var(--surface-2)}
+.legend .lg-b{width:220px;flex:none}
+.legend .lg-k{display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+.legend .lg-t{flex:1 1 320px;color:var(--ink-3);min-width:0}
+
+/* ---------------------------------------------------------------- sections */
+.pn{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-top:24px;padding:20px 24px 16px;scroll-margin-top:16px}
+.sh{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 24px;align-items:baseline}
+.sh-t{display:flex;align-items:center;gap:8px;min-width:0}
+.sh h2{font-size:17px;line-height:24px;font-weight:600;margin:0;letter-spacing:-.01em}
+.sh .sum{grid-column:1/2;margin:0;color:var(--ink-2);max-width:86ch}
+.sh .meta{grid-column:2;grid-row:1;display:flex;gap:16px;align-items:center;font-size:13px;color:var(--ink-2);white-space:nowrap}
+.sh .meta span{display:inline-flex;align-items:center;gap:6px}
+.info{width:20px;height:20px;border-radius:50%;border:1px solid var(--line-2);background:none;color:var(--ink-3);font:600 11px/1 Georgia,serif;cursor:pointer;display:inline-grid;place-items:center;padding:0}
+.info[aria-expanded="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.about{margin:12px 0 0;padding:12px 16px;background:var(--surface-2);border-radius:8px;font-size:13px;color:var(--ink-2);max-width:100ch}
+.about p{margin:0 0 6px}.about p:last-child{margin:0}
+.about code{font-family:var(--mono);font-size:12px}
+.body{margin-top:16px}
+.ref-div{margin:48px 0 0;display:flex;align-items:baseline;gap:16px;padding-bottom:8px;border-bottom:1px solid var(--line-2)}
+.ref-div h2{font-size:15px;font-weight:600;margin:0}
+.ref-div p{margin:0;color:var(--ink-3);font-size:13px}
+.pn.ref{background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:20px 0 16px;margin:0}
+.pn.ref .tw{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:0 12px}
+.subnote{font-size:12.5px;color:var(--ink-3);margin:10px 0 0}
+
+/* ---------------------------------------------------------------- the band glyph (CSS only, one custom property) */
+.bd{--x:.3333;position:relative;display:block;height:18px;min-width:120px}
+.bd::before{content:"";position:absolute;left:10px;right:18px;top:5px;height:8px;border-radius:4px;
+  background:linear-gradient(90deg,var(--track) 16.667%,var(--zone2) 16.667% 25%,var(--zone1) 25% 41.667%,var(--zone2) 41.667% 50%,var(--track) 50%)}
+.bd::after{content:"";position:absolute;left:10px;right:18px;top:2px;height:14px;pointer-events:none;opacity:.9;
+  background:linear-gradient(90deg,
+   transparent calc(8.333% - .5px),var(--tick) 0 calc(8.333% + .5px),
+   transparent 0 calc(16.667% - .5px),var(--tick) 0 calc(16.667% + .5px),
+   transparent 0 calc(33.333% - .5px),var(--mean) 0 calc(33.333% + .5px),
+   transparent 0 calc(50% - .5px),var(--tick) 0 calc(50% + .5px),
+   transparent 0 calc(58.333% - .5px),var(--tick) 0 calc(58.333% + .5px),
+   transparent 0)}
+.bd>i{position:absolute;top:9px;left:calc(10px + (100% - 28px) * var(--x));width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;z-index:1;
+  --dc:var(--ink-3);background:var(--row-bg);border:1.5px solid var(--dc);box-shadow:0 0 0 2px var(--row-bg)}
+.bd.s-large>i{--dc:var(--crit-dot);background:var(--dc);border:0;width:11px;height:11px;margin:-5.5px 0 0 -5.5px}
+.bd.s-moderate>i{--dc:var(--warn-dot);background:var(--dc);border:0}
+.bd.s-improved>i{--dc:var(--imp);border-width:2px}
+.bd.twn>i{opacity:.5}
+.bd.po>i::after,.bd.pu>i::after{content:"";position:absolute;top:50%;margin-top:-4px;border:4px solid transparent}
+.bd.po>i::after{left:calc(100% + 3px);border-left:5px solid var(--dc);border-right:0}
+.bd.pu>i::after{right:calc(100% + 3px);border-right:5px solid var(--dc);border-left:0}
+.bd .ov{position:absolute;top:1px;font:500 11px/16px var(--sans);font-variant-numeric:tabular-nums;color:var(--ink-2);background:var(--row-bg);padding:0 3px;border-radius:3px;white-space:nowrap;z-index:1}
+.bd.po .ov{right:32px}.bd.pu .ov{left:32px}
+.bd.s-flat::before{background:repeating-linear-gradient(135deg,var(--zone1) 0 1.5px,transparent 1.5px 5px),var(--track)}
+.bd.s-flat .ov{left:50%;transform:translateX(-50%);color:var(--ink-3)}
+.bd.fl::before{background:repeating-linear-gradient(135deg,var(--zone1) 0 1.5px,transparent 1.5px 4px) 16.667% 0/33.333% 100% no-repeat,var(--track)}
+.bd.na::before,.bd.na::after{opacity:.35}
+.bd.na .ov{left:50%;transform:translateX(-50%);color:var(--ink-3);font-weight:400}
+.bd-ax{position:relative;display:block;height:14px;margin-top:2px}
+.bd-ax em{position:absolute;left:calc(10px + (100% - 28px) * var(--x));transform:translateX(-50%);font-style:normal;font-size:11px;line-height:14px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.bd-ax em.end{transform:translateX(-100%)}
+
+/* ---------------------------------------------------------------- band tables */
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;position:relative}
+.bt{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;font-variant-numeric:tabular-nums}
+.bt>thead>tr>th{font-weight:500;color:var(--ink-3);text-align:left;font-size:12px;line-height:16px;padding:0 10px 6px;border-bottom:1px solid var(--line-2);white-space:nowrap;vertical-align:bottom}
+.bt>thead>tr>th.num{text-align:right}
+.bt>thead>tr>th[data-sort]{cursor:pointer;user-select:none}
+.bt>thead>tr>th[data-sort]:hover{color:var(--ink)}
+.bt th[aria-sort="descending"] .thl::after{content:" \2193"}
+.bt th[aria-sort="ascending"] .thl::after{content:" \2191"}
+.bt>tbody>tr>td{height:36px;padding:0 10px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--row-bg)}
+.bt tr{--row-bg:var(--surface)}
+.pn.ref .bt tr{--row-bg:var(--surface)}
+.bt>tbody>tr:hover{--row-bg:var(--hover)}
+.bt>tbody>tr>td.num{text-align:right}
+.bt .c-band{width:236px;min-width:236px;padding:0 4px}
+.bt .c-cur{width:1%}
+.bt .c-rng{width:1%;color:var(--ink-2)}
+.bt .c-d{width:1%}
+.bt .c-tr{width:96px}
+.bt .c-x{width:36px;padding:0 4px;text-align:center}
+.bt .u{color:var(--ink-3);margin-left:3px;font-size:12px}
+.c-name{position:relative;padding-left:16px!important}
+tr.lead .c-name{font-weight:600}
+tr.mem .c-name{padding-left:32px!important}
+tr.twin .c-name{padding-left:32px!important;color:var(--ink-3)}
+tr.twin td,tr.twin0 td{color:var(--ink-3)}
+tr.mem .c-name::after,tr.twin .c-name::after{content:"";position:absolute;left:18px;top:0;height:50%;width:8px;border-left:1px solid var(--line-2);border-bottom:1px solid var(--line-2);border-bottom-left-radius:3px}
+tr.f-large .c-name::before,tr.f-moderate .c-name::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:2px;border-radius:1px;background:var(--crit-dot)}
+tr.f-moderate .c-name::before{background:var(--warn-dot)}
+.tag{display:inline-block;font-size:11px;line-height:16px;padding:0 6px;border:1px solid var(--line-2);border-radius:4px;color:var(--ink-3);font-weight:400;margin-left:8px;vertical-align:1px}
+.sw{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:8px;vertical-align:0}
+.d{white-space:nowrap}
+.d.s-large{color:var(--crit);font-weight:600}
+.d.s-moderate{color:var(--warn);font-weight:600}
+.d.s-improved{color:var(--imp);font-weight:600}
+.d.s-typical,.d.s-flat,.d.s-na{color:var(--ink-3)}
+.imm{display:block;font-size:11px;line-height:12px;color:var(--ink-3);font-weight:400}
+.xb{width:28px;height:28px;border:0;background:none;border-radius:6px;cursor:pointer;color:var(--ink-3);display:inline-grid;place-items:center}
+.xb:hover{background:var(--line);color:var(--ink)}
+.xb svg{width:14px;height:14px;transition:transform .15s}
+.xb[aria-expanded="true"] svg{transform:rotate(90deg)}
+.bt>tbody>tr.xr>td{height:auto;padding:0;background:var(--surface-2)}
+tr.xr:hover{--row-bg:var(--surface)}
+.xp{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;padding:16px 16px 16px 32px;white-space:normal}
+.xp dl{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;margin:0;font-size:13px;align-content:start}
+.xp dt{color:var(--ink-3)} .xp dd{margin:0}
+.xp .cc{overflow-x:auto}
+.xp .sqltext{grid-column:1/-1;font-family:var(--mono);font-size:12px;line-height:18px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 12px;white-space:pre-wrap}
+.mini{border-collapse:collapse;font-size:12.5px;margin-top:8px;font-variant-numeric:tabular-nums}
+.mini th,.mini td{padding:4px 12px 4px 0;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+.mini th{font-weight:500;color:var(--ink-3)}
+tbody.nrm{display:none}
+tbody.nrm.open{display:table-row-group}
+.more{margin:8px 0 0;border:0;background:none;color:var(--ink-2);font-size:13px;cursor:pointer;padding:6px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:8px}
+.more:hover{background:var(--hover);color:var(--ink)}
+.more .dotk{width:8px;height:8px}
+.sql{display:flex;align-items:baseline;gap:10px;max-width:320px;min-width:0}
+.sql .sid{font-family:var(--mono);font-size:12.5px;color:var(--ink);font-weight:500}
+.sql .mod{color:var(--ink-2);flex:none}
+.sql .txt{color:var(--ink-3);font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.rk{color:var(--ink-3);width:1%}
+.pl{color:var(--ink-2);font-size:12.5px}
+.pl b{font-weight:500;color:var(--ink)}
+.flags{display:flex;gap:6px}
+.flags .tag{margin:0}
+
+/* sparkline / charts */
+svg.sp{display:block;overflow:visible}
+.sp-z{fill:var(--zone2);opacity:.55}
+.sp-l{fill:none;stroke:var(--ink-4);stroke-width:1.25;stroke-linejoin:round;stroke-linecap:round}
+.sp-c{stroke:var(--row-bg);stroke-width:1.5;fill:var(--ink-3)}
+.sp-c.s-large{fill:var(--crit-dot)} .sp-c.s-moderate{fill:var(--warn-dot)} .sp-c.s-improved{fill:var(--imp)}
+.cb{fill:var(--bar)} .cb.cur{fill:var(--ink-2)}
+.cdot{fill:var(--ink-3);stroke:var(--surface-2);stroke-width:2} .cdot.s-large{fill:var(--crit-dot)} .cdot.s-moderate{fill:var(--warn-dot)} .cdot.s-improved{fill:var(--imp)}
+.cz1{fill:var(--zone1);opacity:.6} .cz2{fill:var(--zone2)}
+.cm{stroke:var(--mean);stroke-width:1;stroke-dasharray:none}
+.ct{font:11px var(--sans);fill:var(--ink-3);font-variant-numeric:tabular-nums}
+.ct.v{fill:var(--ink-2);paint-order:stroke;stroke:var(--surface-2);stroke-width:3px;stroke-linejoin:round} .ct.cur{fill:var(--ink);font-weight:600}
+.cf{stroke:var(--flag);stroke-width:1}
+.cft{font:11px var(--sans);fill:var(--flag)}
+.cfh{fill:var(--flag)}
+
+/* ---------------------------------------------------------------- headline tiles */
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.tile{background:var(--surface);padding:16px 20px 14px;--row-bg:var(--surface);display:grid;grid-template-columns:1fr auto;gap:0 12px}
+.tile .tl{font-size:13px;color:var(--ink-2)}
+.tile .td{text-align:right;font-size:13px}
+.tile .tv{font-size:26px;line-height:36px;font-weight:600;letter-spacing:-.02em;align-self:end}
+.tile .tv .u{font-size:13px;font-weight:400;color:var(--ink-3);letter-spacing:0;margin-left:4px}
+.tile .ts{align-self:end;padding-bottom:6px}
+.tile .bd{grid-column:1/-1;margin:8px 0 4px}
+.tile .tn1{font-size:12.5px;color:var(--ink-3)}
+.tile .tz{font-size:12.5px;color:var(--ink-3);text-align:right}
+
+/* ---------------------------------------------------------------- ASH chart */
+.lgd{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;color:var(--ink-2);margin:12px 0 4px}
+.lgd span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.lgd .sw{margin:0}
+.ashw{position:relative}
+#ash-svg{display:block;width:100%}
+.wc-CPU{fill:#3FB344}.wc-UIO{fill:#4A90D9}.wc-NET{fill:#967259}.wc-COM{fill:#E89B40}.wc-OTH{fill:var(--other)}
+.ar{stroke:var(--surface);stroke-width:1;stroke-linejoin:round}
+.gl{stroke:var(--line);stroke-width:1}
+.ax{stroke:var(--line-2);stroke-width:1}
+.at{font:11px var(--sans);fill:var(--ink-3);font-variant-numeric:tabular-nums}
+.at.b{fill:var(--ink);font-weight:600}
+.wt{stroke:var(--ink-3);stroke-width:1}
+.wt.cur{stroke:var(--ink);stroke-width:2}
+.curband{fill:var(--ink);opacity:.06}
+.wd{fill:var(--surface);stroke:var(--ink-2);stroke-width:1.5}
+.wd.cur{fill:var(--crit-dot);stroke:var(--surface);stroke-width:2}
+.xh{stroke:var(--ink-3);stroke-width:1;opacity:.7}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line-2);border-radius:8px;padding:8px 10px;font-size:12px;line-height:18px;box-shadow:0 4px 16px rgba(15,20,30,.12);min-width:170px;display:none;z-index:5;font-variant-numeric:tabular-nums}
+.tip b{font-weight:600}
+.tip .r{display:flex;justify-content:space-between;gap:16px}
+.tip .r span{display:inline-flex;align-items:center;gap:6px}
+
+/* ---------------------------------------------------------------- parameters */
+.strip{display:inline-flex;gap:3px;vertical-align:middle}
+.strip i{width:10px;height:14px;border-radius:2px;background:var(--zone1);display:block}
+.strip i.df{background:none;box-shadow:inset 0 0 0 1.5px var(--ink-4)}
+.strip i.cur{outline:1.5px solid var(--ink);outline-offset:1px}
+.pv{font-variant-numeric:tabular-nums}
+.chg::before{content:"\25C6";color:var(--ink);font-size:9px;margin-right:6px;vertical-align:1px}
+
+/* ---------------------------------------------------------------- reference stubs */
+.stubs{margin-top:8px}
+.stub{border-bottom:1px solid var(--line)}
+.stub summary{display:grid;grid-template-columns:16px 200px minmax(0,1fr) 200px;gap:0 16px;align-items:center;padding:10px 0;cursor:pointer;list-style:none;--row-bg:var(--bg)}
+.stub summary::-webkit-details-marker{display:none}
+.stub summary::before{content:"\25B8";color:var(--ink-3);font-size:11px;transition:transform .15s}
+.stub[open] summary::before{transform:rotate(90deg)}
+.stub .st-t{font-weight:500}
+.stub .st-s{color:var(--ink-2);font-size:13px;min-width:0}
+.stub .st-b{padding:0 0 12px 32px;font-size:13px;color:var(--ink-3)}
+.pn.ref .sh h2{font-size:15px}
+footer{margin-top:40px;font-size:12.5px;color:var(--ink-3)}
+
+/* ---------------------------------------------------------------- tabs */
+.tabs{margin:14px 0 10px}
+.tabpanel[hidden]{display:none}
+
+/* ---------------------------------------------------------------- responsive */
+@media (max-width:1180px){
+  .wc-row{grid-template-columns:140px 200px minmax(0,1fr) auto}
+  .wc-n{grid-column:3/4}
+  .wc-v{grid-column:3/4;grid-row:1}
+  .wc-n{grid-row:2}
+  .wc-a{grid-row:1/3;grid-column:4}
+  .wc-k,.wc-g{grid-row:1/3}
+}
+@media (max-width:980px){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .rail{position:sticky;top:0;z-index:10;height:auto;display:flex;align-items:center;gap:12px;padding:8px 16px;border-right:0;border-bottom:1px solid var(--line);background:var(--bg);overflow-x:auto}
+  .rail .db small,.rail h3{display:none}
+  .rail ol{display:flex;gap:2px}
+  .rail a{white-space:nowrap}
+  .rail a.on::before{left:8px;right:8px;top:auto;bottom:0;width:auto;height:2px}
+  main{padding:24px 16px 64px}
+  .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .xp{grid-template-columns:minmax(0,1fr);padding-left:16px}
+}
+@media (max-width:700px){
+  h1{font-size:22px;line-height:28px}
+  .v-top{grid-template-columns:1fr}
+  .verdict{padding:16px 16px 4px}
+  .wc{margin:12px -16px 0}
+  .wc-row{grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:12px 16px}
+  .wc-k{grid-row:1;grid-column:1}
+  .wc-a{grid-row:1;grid-column:2}
+  .wc-g{grid-row:2;grid-column:1/-1}
+  .wc-v{grid-row:3;grid-column:1/-1}
+  .wc-n{grid-row:4;grid-column:1/-1}
+  .tiles{grid-template-columns:minmax(0,1fr)}
+  .pn{padding:16px}
+  .sh{grid-template-columns:minmax(0,1fr)}
+  .sh .meta{grid-column:1;grid-row:auto;flex-wrap:wrap;gap:4px 12px;margin-top:4px}
+  .legend .lg-b{width:100%}
+  /* band tables collapse into two-line grid rows (child selectors: nested detail tables stay tables) */
+  .bt.rsp,.bt.rsp>tbody{display:block}
+  .bt.rsp>tbody.nrm{display:none}
+  .bt.rsp>tbody.nrm.open{display:block}
+  .bt.rsp>thead{display:none}
+  .bt.rsp>tbody>tr{display:grid;grid-template-columns:minmax(0,1fr) 76px 36px;align-items:center;border-bottom:1px solid var(--line);background:var(--row-bg);padding:6px 0}
+  .bt.rsp>tbody>tr>td{display:block;height:auto;border:0;padding:2px 8px;background:none;width:auto}
+  .bt.rsp>tbody>tr>td.c-name,.bt.rsp>tbody>tr>td.c-sql{grid-column:1;grid-row:1;white-space:normal}
+  .bt.rsp>tbody>tr>td.c-d{grid-column:2;grid-row:1;text-align:right;padding-right:0}
+  .bt.rsp>tbody>tr>td.c-x{grid-column:3;grid-row:1}
+  .bt.rsp>tbody>tr>td.c-band{grid-column:1/-1;grid-row:2;width:auto;min-width:0}
+  .bt.rsp>tbody>tr>td.c-cur{grid-column:1/-1;grid-row:3;text-align:left;padding-left:16px;justify-self:start}
+  .bt.rsp>tbody>tr>td.c-rng{grid-column:1/-1;grid-row:3;text-align:right;justify-self:end}
+  .bt.rsp>tbody>tr>td.c-rng::before{content:"normal ";color:var(--ink-3)}
+  .bt.rsp>tbody>tr>td.c-rng.muted::before{content:none}
+  .bt.rsp>tbody>tr>td.c-tr,.bt.rsp>tbody>tr>td.rk,.bt.rsp>tbody>tr>td.c-pl,.bt.rsp>tbody>tr>td.c-fl:empty{display:none}
+  .bt.rsp>tbody>tr>td.c-fl{grid-column:1/-1;grid-row:4;padding-left:16px}
+  .bt.rsp>tbody>tr.mem>td.c-cur,.bt.rsp>tbody>tr.twin>td.c-cur{padding-left:32px}
+  .bt.rsp>tbody>tr.xr{display:block;padding:0}
+  .bt.rsp>tbody>tr.xr>td{display:block}
+  .sql .mod{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sql{flex-wrap:wrap;gap:0 8px;max-width:none}
+  .sql .txt{flex-basis:100%;white-space:nowrap}
+  .stub summary{grid-template-columns:16px minmax(0,1fr);gap:2px 8px}
+  .stub .st-s{grid-column:2}
+  .stub summary .bd{grid-column:2}
+  .mock ul{columns:1}
+}
+</style>
+<script>
+(function(){try{var t=localStorage.getItem('awr-theme');if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme-pref',t);}}catch(e){}})();
+</script>
+</head>
+<body class="normal">
+<details class="mock" open>
+  <summary><b>Mock B · one visual grammar: the baseline band</b><span>design mockup on the real demo data, not the generated report</span></summary>
+  <ul>
+    <li>One glyph for every current-vs-prior comparison: a dot on a fixed σ scale over the shaded prior normal.</li>
+    <li>Gone: hero bar strips, heat-tinted window columns, %Δ bars, heatmaps. Per-window values open per row.</li>
+    <li>Colour only on the dot, the Δ text and a 2 px row marker; wait-class colour only on swatches and ASH.</li>
+    <li>Each fact said once: verdict + 4 “what changed” rows, one findings table by family, 43 normal rows folded.</li>
+    <li>ASH: one smoothed chart, 4 classes in colour, the 13 compared hours as dots, flags that never collide.</li>
+    <li>One section header (title, plain summary, counts, ⓘ for source and method); reference below a divider.</li>
+  </ul>
+</details>
+
+<div class="shell">
+<nav class="rail" aria-label="Report sections">
+  <div class="db">ORCLPRD<small>Week-over-week, Thu 09:00</small></div>
+  <h3>Answer</h3>
+  <ol>
+    <li><a href="#top">Summary</a></li>
+    <li><a href="#headline">Headline metrics</a></li>
+    <li><a href="#findings">Findings <span class="n">9</span></a></li>
+    <li><a href="#ash">Active sessions</a></li>
+    <li><a href="#topsql">Top SQL <span class="n">2</span></a></li>
+    <li><a href="#sqlmon">SQL Monitor <span class="n">1</span></a></li>
+    <li><a href="#params">Parameters <span class="n">4</span></a></li>
+  </ol>
+  <h3>Reference</h3>
+  <ol class="ref">
+    <li><a href="#waits-fg">Foreground waits <span class="n">4</span></a></li>
+    <li><a href="#load">Load profile</a></li>
+    <li><a href="#metrics">System metrics</a></li>
+    <li><a href="#waits-bg">Background waits</a></li>
+    <li><a href="#seg">Segment I/O</a></li>
+    <li><a href="#file">File I/O</a></li>
+    <li><a href="#day">Day profile</a></li>
+    <li><a href="#util">Utilization</a></li>
+    <li><a href="#dbtime">DB time, full span</a></li>
+    <li><a href="#sqlash">Top SQL activity</a></li>
+    <li><a href="#windows">Compared windows</a></li>
+  </ol>
+</nav>
+
+<main id="main">
+<header class="mast" id="top">
+  <div class="idline">
+    <b>ORCLPRD</b>
+    <span>DBID 1483726519</span>
+    <span>prd-ora-01.corp.example</span>
+    <span>Oracle 19.0.0.0</span>
+    <span class="sp"></span>
+    <span>Generated 10 Sep 2026, 10:15 +02:00 by AWR_READER (read-only)</span>
+    <span class="ctl">
+      <button class="ibtn" id="theme" type="button" aria-label="Switch colour theme" title="Switch colour theme"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor"/></svg></button>
+      <span class="seg" role="group" aria-label="View">
+        <button type="button" id="mode-normal" aria-pressed="true">Normal</button>
+        <button type="button" id="mode-full" aria-pressed="false">Full</button>
+      </span>
+    </span>
+  </div>
+  <h1>Thu 10 Sep, 09:00–10:00 vs 12 prior Thursdays</h1>
+  <p class="sub">Same hour every week back to Thu 18 Jun. All 13 one-hour windows valid, snapshots 41417 to 43434.</p>
+
+  <div class="verdict" aria-labelledby="v-h">
+    <div class="v-top">
+      <div class="v-n" id="v-h">9 findings<small>of 59 metrics scored</small></div>
+      <div>
+        <p class="v-t">Physical reads are 5× normal and DB time is up 80%, almost all of it wait (User I/O, Network) rather than CPU. The jump coincides with a new plan for <span class="mono">7k2m9dx4qp1zb</span>, first seen an hour after Release 4.2 on 8 Sep.</p>
+        <div class="counts">
+          <span><i class="dotk large"></i>10 large</span>
+          <span><i class="dotk moderate"></i>1 moderate</span>
+          <span><i class="dotk typical"></i>43 normal</span>
+          <span class="muted">5 duplicate twins folded into their family</span>
+        </div>
+      </div>
+    </div>
+    <div class="wc" role="list" aria-label="What changed" id="wc"></div>
+    <div class="legend" id="legend"></div>
+  </div>
+</header>
+
+<section class="pn" id="headline" aria-labelledby="h-headline">
+  <div class="sh">
+    <div class="sh-t"><h2 id="h-headline">Headline metrics</h2><button class="info" aria-expanded="false" aria-controls="a-headline" aria-label="About headline metrics">i</button></div>
+    <p class="sum">Four of the six headline numbers are far outside their normal range; redo and hard parses are normal.</p>
+    <div class="meta"><span><i class="dotk large"></i>4 large</span><span><i class="dotk typical"></i>2 normal</span></div>
+  </div>
+  <div class="about" id="a-headline" hidden><p>Six fixed metrics from <code>DBA_HIST_SYSSTAT</code> and <code>DBA_HIST_SYSMETRIC_SUMMARY</code>, each scored exactly like the findings table: z = (current − mean) ÷ max(σ, 2% of mean) over the 12 prior windows.</p><p>The trend line shows the 13 windows oldest to newest; the shaded strip behind it is the same normal range (mean ± 2σ) that the band shades.</p></div>
+  <div class="body tiles" id="tiles"></div>
+</section>
+
+<section class="pn" id="findings" aria-labelledby="h-findings">
+  <div class="sh">
+    <div class="sh-t"><h2 id="h-findings">Findings</h2><button class="info" aria-expanded="false" aria-controls="a-findings" aria-label="About findings">i</button></div>
+    <p class="sum">Reads dominate: long-table scans ×30, physical reads ×5.4, logical reads ×4.7. DB time, wait ratio and response time follow; CPU does not.</p>
+    <div class="meta"><span><i class="dotk large"></i>10 large</span><span><i class="dotk moderate"></i>1 moderate</span><span><i class="dotk typical"></i>43 normal</span></div>
+  </div>
+  <div class="about" id="a-findings" hidden><p>Load profile (<code>DBA_HIST_SYSSTAT</code>, end − begin ÷ seconds), system metrics (<code>DBA_HIST_SYSMETRIC_SUMMARY</code>) and foreground wait classes (AAS), each compared with the same hour in the 12 prior valid windows.</p><p>z = (current − mean) ÷ max(σ, 2% of mean). A move is large beyond 3σ and moderate beyond 2σ, but only when it is material (clears the metric's % and absolute floors in <code>metric_policy.plsql</code>) and in the bad direction; otherwise it is normal. Rows are grouped by family: the lead row carries the family, its relatives are indented, and twins (the same counter seen through another view) are muted.</p></div>
+  <div class="body">
+    <div class="tw"><table class="bt rsp" id="t-find" aria-describedby="h-findings"></table></div>
+    <button class="more" type="button" data-for="t-find" aria-expanded="false"></button>
+  </div>
+</section>
+
+<section class="pn" id="ash" aria-labelledby="h-ash">
+  <div class="sh">
+    <div class="sh-t"><h2 id="h-ash">Active sessions over the whole span</h2><button class="info" aria-expanded="false" aria-controls="a-ash" aria-label="About the active sessions chart">i</button></div>
+    <p class="sum">User I/O jumps from the evening of Release 4.2 (8 Sep) on. The Current hour ran 21.4 active sessions; the 12 prior Thursdays at 09:00 ran 10.5 to 14.0.</p>
+    <div class="meta"><span>18 Jun to 10 Sep</span></div>
+  </div>
+  <div class="about" id="a-ash" hidden><p><code>DBA_HIST_ACTIVE_SESS_HISTORY</code>, samples ÷ 360 per hour, averaged into 6-hour buckets and then smoothed with a 24-hour rolling mean so the daily cycle does not hide the trend. Idle waits excluded; on-CPU samples shown as CPU.</p><p>The dots are the unsmoothed 09:00–10:00 hour in each compared window, the same hour the rest of the report scores. Application, System I/O, Concurrency, Other, Configuration and Scheduler are merged into grey.</p></div>
+  <div class="lgd" id="ash-lgd"></div>
+  <div class="ashw" id="ashw"><svg id="ash-svg" role="img" aria-label="Stacked active sessions by wait class, 18 June to 10 September, with the 13 compared hours as dots"></svg><div class="tip" id="ash-tip"></div></div>
+</section>
+
+<section class="pn" id="topsql" aria-labelledby="h-topsql">
+  <div class="sh">
+    <div class="sh-t"><h2 id="h-topsql">Top SQL by elapsed time</h2><button class="info" aria-expanded="false" aria-controls="a-topsql" aria-label="About top SQL">i</button></div>
+    <p class="sum"><span class="mono">7k2m9dx4qp1zb</span> took 27.9k s this hour, 4.2× its normal, on a new plan. <span class="mono">n7t3q5xc1yj4g</span> only exists since Release 4.1 and is now second.</p>
+    <div class="meta"><span><i class="dotk large"></i>1 large</span><span><i class="dotk moderate"></i>1 moderate</span><span><i class="dotk typical"></i>8 normal</span></div>
+  </div>
+  <div class="about" id="a-topsql" hidden><p>Top 10 statements by elapsed time in the Current window, from <code>DBA_HIST_SQLSTAT</code> <code>ELAPSED_TIME_DELTA</code>. The band compares this hour's elapsed time with the same statement in the prior windows where it made the top 10 (n shown in the details). Mock note: this per-statement z is derived for the mock; today's report ranks statements without scoring them.</p><p>Also ranked by CPU, buffer gets, physical reads and executions in the Full view.</p></div>
+  <div class="body">
+    <div class="tw"><table class="bt rsp" id="t-sql"></table></div>
+  </div>
+</section>
+
+<section class="pn" id="sqlmon" aria-labelledby="h-sqlmon">
+  <div class="sh">
+    <div class="sh-t"><h2 id="h-sqlmon">SQL Monitor</h2><button class="info" aria-expanded="false" aria-controls="a-sqlmon" aria-label="About SQL Monitor">i</button></div>
+    <p class="sum">One statement ran slower than normal: <span class="mono">7k2m9dx4qp1zb</span> peaked at 8.02 s on its new plan. 13,205 captured executions across 9 statements.</p>
+    <div class="meta"><span><i class="dotk large"></i>1 large</span><span><i class="dotk typical"></i>3 normal</span><span class="muted">5 not in compared windows</span></div>
+  </div>
+  <div class="about" id="a-sqlmon" hidden><p><code>DBA_HIST_REPORTS</code> where <code>component_name = 'sqlmonitor'</code>, summaries only, scored on each statement's maximum elapsed time per window.</p><p>Only completed, expensive-enough or parallel executions are persisted, so a missing statement did not necessarily run fast, and counts are not execution rates. An execution still running at 10:00 has no report yet. Flags cover the full span.</p></div>
+  <div class="body">
+    <div class="tw"><table class="bt rsp" id="t-smon"></table></div>
+  </div>
+</section>
+
+<section class="pn" id="params" aria-labelledby="h-params">
+  <div class="sh">
+    <div class="sh-t"><h2 id="h-params">Parameters</h2><button class="info" aria-expanded="false" aria-controls="a-params" aria-label="About parameters">i</button></div>
+    <p class="sum">Four parameters differ across the compared windows, and each change landed within two days of a release or patch.</p>
+    <div class="meta"><span>4 differ</span><span class="muted">1 changed this week</span></div>
+  </div>
+  <div class="about" id="a-params" hidden><p><code>DBA_HIST_PARAMETER</code>, value as of each window's end snapshot, lowest container wins. Only parameters whose value differs somewhere in the span are listed.</p></div>
+  <div class="body">
+    <div class="tw"><table class="bt" id="t-par"></table></div>
+    <p class="subnote"><span class="strip" aria-hidden="true"><i></i></span> same value as Current &nbsp; <span class="strip" aria-hidden="true"><i class="df"></i></span> different value, one mark per window from 18 Jun to 10 Sep (outlined = Current)</p>
+  </div>
+</section>
+
+<div class="ref-div"><h2>Reference</h2><p>The tables every finding above is derived from. Same band, same scale.</p></div>
+
+<section class="pn ref" id="waits-fg" aria-labelledby="h-wfg">
+  <div class="sh">
+    <div class="sh-t"><h2 id="h-wfg">Foreground waits</h2><button class="info" aria-expanded="false" aria-controls="a-wfg" aria-label="About foreground waits">i</button></div>
+    <p class="sum">Two multiblock reads carry the jump: db file scattered read ×21 and direct path read ×12. SQL*Net more data to client ×5.5 matches the Network class.</p>
+    <div class="meta"><span><i class="dotk large"></i>3 large</span><span><i class="dotk moderate"></i>1 moderate</span><span><i class="dotk typical"></i>10 normal</span></div>
+  </div>
+  <div class="about" id="a-wfg" hidden><p><code>DBA_HIST_SYSTEM_EVENT</code>, foreground waits, idle excluded, end − begin per window. Top 10 events by time waited in any window. Scoring uses the wait-event policy (share of Current wait time as the floor).</p></div>
+  <div class="tabs"><span class="seg" role="tablist" aria-label="Foreground wait views">
+    <button type="button" role="tab" aria-selected="true" aria-controls="p-wt" id="tb-wt">Time waited</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="p-wa" id="tb-wa">Average wait</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="p-wc" id="tb-wc">By wait class</button>
+  </span></div>
+  <div class="tabpanel" id="p-wt" role="tabpanel" aria-labelledby="tb-wt"><div class="tw"><table class="bt rsp" id="t-wt"></table></div></div>
+  <div class="tabpanel" id="p-wa" role="tabpanel" aria-labelledby="tb-wa" hidden><div class="tw"><table class="bt rsp" id="t-wa"></table></div></div>
+  <div class="tabpanel" id="p-wc" role="tabpanel" aria-labelledby="tb-wc" hidden><div class="tw"><table class="bt rsp" id="t-wc"></table></div></div>
+</section>
+
+<div class="stubs" id="stubs"></div>
+
+<footer>awr_trend.sql v1.5.0, read-only: every number above is recomputed from <span class="mono">DBA_HIST_*</span> on each run. Mockup B, built from docs/examples/demo_busy_db.html.</footer>
+</main>
+</div>
+
+<script>
+const DATA=/*__DATA__*/null;
+(function(){
+'use strict';
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const MINUS='−';
+const W=DATA.weeks; // oldest -> current
+
+/* ------------------------------------------------ number formatting */
+function sig(v,d){ if(v===0) return '0'; const a=Math.abs(v); const dec=Math.max(0,d-1-Math.floor(Math.log10(a)));
+  if(dec===0) return Math.round(v).toLocaleString('en-US'); return v.toFixed(dec); }
+function neg(s){return s.replace('-',MINUS)}
+function fv(v,u){ // -> [number, unit]
+  if(v==null) return ['—',''];
+  const a=Math.abs(v);
+  if(u==='B/s'){ if(a>=1e9) return [sig(v/1e9,4),'GB/s']; if(a>=1e6) return [sig(v/1e6,4),'MB/s']; if(a>=1e3) return [sig(v/1e3,4),'kB/s']; return [sig(v,4),'B/s']; }
+  if(a>=1e9) return [sig(v/1e9,4)+'G',u]; if(a>=1e6) return [sig(v/1e6,4)+'M',u]; if(a>=1e4) return [sig(v/1e3,4)+'k',u];
+  return [neg(sig(v,4)),u];
+}
+function fvs(v,u){const x=fv(v,u);return x[0]+(x[1]?(x[1].startsWith('/')?'':' ')+x[1]:'')}
+function den(r){return Math.max(r.sd||0,0.02*Math.abs(r.mu||0))}
+function range(r){ // mean ± 2 sigma, in the metric's own unit
+  const d=den(r); let lo=Math.max(0,r.mu-2*d), hi=r.mu+2*d;
+  let sc=1,suf='',u=r.unit;
+  if(u==='B/s'){ if(hi>=1e9){sc=1e9;u='GB/s'} else if(hi>=1e6){sc=1e6;u='MB/s'} else if(hi>=1e3){sc=1e3;u='kB/s'} }
+  else if(hi>=1e9){sc=1e9;suf='G'} else if(hi>=1e6){sc=1e6;suf='M'} else if(hi>=1e4||(hi>=1e3&&lo>=1e3)){sc=1e3;suf='k'}
+  const f=x=>{ if(x===0) return '0'; const s=x/sc; if(sc>1) return (s<100?s.toFixed(1):Math.round(s).toLocaleString('en-US'))+suf;
+    return s>=1000?Math.round(s).toLocaleString('en-US'):sig(s,3); };
+  return [f(lo)+'–'+f(hi), sc>1&&!suf?u:(u==='B/s'?'B/s':r.unit)];
+}
+function delta(cur,mu){ if(cur==null||mu==null||mu===0) return '—'; const r=cur/mu;
+  if(r>=2) return '▲ ×'+(r<100?r.toFixed(1):Math.round(r)); const p=(cur-mu)/Math.abs(mu)*100;
+  return (p>=0?'▲ ':'▼ ')+Math.abs(p).toFixed(1)+'%'; }
+function zt(r){ if(r.zcap) return '>+99σ'; if(r.z==null) return '—'; return (r.z>=0?'+':MINUS)+Math.abs(r.z).toFixed(1)+'σ'; }
+const SEVW={large:'large finding',moderate:'moderate finding',typical:'normal',improved:'improved',flat:'flat baseline','n/a':'not scored',insufficient:'too little history'};
+
+/* ------------------------------------------------ the band (fixed domain, z -4 .. +8) */
+const ZMIN=-4,ZMAX=8;
+function band(r,opt){ opt=opt||{};
+  const sev=r.sev, cls=['bd','s-'+sev]; let ov='';
+  if(sev==='flat'){ return `<span class="bd s-flat" role="img" aria-label="flat baseline, prior sigma is zero"><b class="ov">flat, σ = 0</b></span>`; }
+  if(r.z==null){ return `<span class="bd na" role="img" aria-label="not scored"><b class="ov">${esc(opt.na||'no data')}</b></span>`; }
+  let x=(r.z-ZMIN)/(ZMAX-ZMIN);
+  if(x>1){x=1;cls.push('po');ov=`<b class="ov">${zt(r)}</b>`}
+  else if(x<0){x=0;cls.push('pu');ov=`<b class="ov">${zt(r)}</b>`}
+  if(r.twin) cls.push('twn'); if(opt.floor) cls.push('fl');
+  const lab=`${SEVW[sev]||sev}${r.imm?' (immaterial)':''}, z ${zt(r)} against the prior normal`;
+  return `<span class="${cls.join(' ')}" style="--x:${x.toFixed(4)}" role="img" aria-label="${lab}"><i></i>${ov}</span>`;
+}
+const bx=z=>((z-ZMIN)/(ZMAX-ZMIN)).toFixed(4);
+function axis(){ return `<span class="bd-ax" aria-hidden="true"><em style="--x:${bx(-2)}">${MINUS}2</em><em style="--x:${bx(0)}">0</em><em style="--x:${bx(2)}">+2</em><em style="--x:${bx(3)}">+3</em><em class="end" style="--x:1">+8σ</em></span>`; }
+
+/* ------------------------------------------------ sparkline */
+function spark(r,w,h){ w=w||80;h=h||22; const vals=r.vals; if(!vals) return '';
+  const v=vals.filter(x=>x!=null); if(!v.length) return '';
+  let lo=null,hi=null; if(r.mu!=null){const d=den(r);lo=Math.max(0,r.mu-2*d);hi=r.mu+2*d;}
+  let mn=Math.min(...v,lo??Infinity), mx=Math.max(...v,hi??-Infinity); if(mx===mn){mx+=1;mn-=1}
+  const X=i=>2+(w-6)*i/(vals.length-1), Y=x=>(h-3-(h-6)*(x-mn)/(mx-mn));
+  let d='',pen=false; vals.forEach((x,i)=>{ if(x==null){pen=false;return} d+=(pen?'L':'M')+X(i).toFixed(1)+' '+Y(x).toFixed(1); pen=true; });
+  const last=vals[vals.length-1];
+  const zone=lo!=null?`<rect class="sp-z" x="0" y="${Y(hi).toFixed(1)}" width="${w}" height="${Math.max(1,Y(lo)-Y(hi)).toFixed(1)}" rx="1"/>`:'';
+  const dot=last!=null?`<circle class="sp-c s-${r.sev}" cx="${X(vals.length-1).toFixed(1)}" cy="${Y(last).toFixed(1)}" r="3"/>`:'';
+  return `<svg class="sp" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${zone}<path class="sp-l" d="${d}"/>${dot}</svg>`;
+}
+
+/* ------------------------------------------------ marker lanes (collision-free flags) */
+const cvs=document.createElement('canvas').getContext('2d');
+function tw(t,px){cvs.font=`${px||11}px ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, system-ui, sans-serif`;return cvs.measureText(t).width}
+function lanes(items,width,gap){ // items: {x,label} -> adds lane, anchor, x0,x1
+  const ends=[]; items.sort((a,b)=>a.x-b.x);
+  for(const it of items){ const w=tw(it.label)+10; let x0=it.x-1, anchor='start';
+    if(x0+w>width){x0=it.x-w+1;anchor='end'}
+    let L=0; while(ends[L]!=null && ends[L]+gap>x0) L++;
+    ends[L]=x0+w; Object.assign(it,{lane:L,anchor,x0,x1:x0+w}); }
+  return items;
+}
+const MK=DATA.markers.map(m=>({t:Date.parse(m.t.replace(' ','T')+':00Z'),label:m.label}));
+const SHORT={'Release 4.0':'R 4.0','Hotfix 4.0.1':'HF 4.0.1','RU 19.28 patch':'RU 19.28','Release 4.1':'R 4.1','Release 4.2':'R 4.2'};
+const WIN=DATA.ash.win.map(s=>Date.parse(s.replace(' ','T')+':00Z'));
+
+/* ------------------------------------------------ 13-window column chart (row expander) */
+function cols(r,opt){ opt=opt||{};
+  const n=r.vals.length, cw=48, padL=8, w=padL+n*cw+8, top=34, ph=108, h=top+ph+36;
+  const d=den(r); const lo=Math.max(0,r.mu-2*d), hi=r.mu+2*d, lo1=Math.max(0,r.mu-d), hi1=r.mu+d;
+  const mx=Math.max(...r.vals.filter(v=>v!=null),hi)*1.08;
+  const Y=v=>top+ph-ph*v/mx, X=i=>padL+i*cw+cw/2;
+  let s=`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(opt.title||'')} per window, oldest to Current">`;
+  s+=`<rect class="cz2" x="${padL}" y="${Y(hi)}" width="${n*cw}" height="${Y(lo)-Y(hi)}"/>`;
+  s+=`<rect class="cz1" x="${padL}" y="${Y(hi1)}" width="${n*cw}" height="${Y(lo1)-Y(hi1)}"/>`;
+  s+=`<line class="cm" x1="${padL}" x2="${padL+n*cw}" y1="${Y(r.mu)}" y2="${Y(r.mu)}"/>`;
+  s+=`<line class="ax" x1="${padL}" x2="${padL+n*cw}" y1="${top+ph}" y2="${top+ph}"/>`;
+  r.vals.forEach((v,i)=>{ const cur=i===n-1, x=X(i);
+    if(v!=null){ const y=Y(v), bw=22, bh=top+ph-y, rr=Math.min(3,bh);
+      s+=`<path class="cb${cur?' cur s-'+r.sev:''}" d="M${x-bw/2} ${top+ph}V${y+rr}q0 -${rr} ${rr} -${rr}H${x+bw/2-rr}q${rr} 0 ${rr} ${rr}V${top+ph}Z"/>`;
+      if(cur) s+=`<circle class="cdot s-${r.sev}" cx="${x}" cy="${y}" r="5"/>`;
+      s+=`<text class="ct v${cur?' cur':''}" x="${x}" y="${y-(cur?9:4)}" text-anchor="middle">${fv(v,r.unit)[0]}</text>`;
+    } else s+=`<text class="ct" x="${x}" y="${top+ph-4}" text-anchor="middle">—</text>`;
+    s+=`<text class="ct${cur?' cur':''}" x="${x}" y="${top+ph+14}" text-anchor="middle">${cur?'Current':W[i]}</text>`;
+  });
+  // release flags between windows
+  const fl=[]; MK.forEach(m=>{ for(let i=0;i<n-1;i++){ if(m.t>WIN[i]&&m.t<WIN[i+1]){ const f=(m.t-WIN[i])/(WIN[i+1]-WIN[i]); fl.push({x:X(i)+f*cw,label:SHORT[m.label]||m.label,full:m.label}); } } });
+  lanes(fl,w,6).forEach(f=>{ const y=4+f.lane*13;
+    s+=`<line class="cf" x1="${f.x}" x2="${f.x}" y1="${y+2}" y2="${top+ph}" stroke-dasharray="2 3"/><rect class="cfh" x="${f.x-1}" y="${y+1}" width="3" height="9" rx="1"/><text class="cft" x="${f.anchor==='start'?f.x+5:f.x-5}" y="${y+9}" text-anchor="${f.anchor}"><title>${esc(f.full)}</title>${esc(f.label)}</text>`; });
+  s+=`<text class="ct" x="${padL}" y="${h-4}">shaded: normal range (mean ± 1σ darker, ± 2σ lighter); line: prior mean</text>`;
+  return s+'</svg>';
+}
+
+/* ------------------------------------------------ table machinery */
+const CHEV='<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const WC={'CPU':'#3FB344','User I/O':'#4A90D9','System I/O':'#1F4E89','Commit':'#E89B40','Application':'#D62728','Concurrency':'#8B0000','Network':'#967259','Configuration':'#793C32','Other':'#C77CB0','Scheduler':'#88C070','Cluster':'#E5C228','Administrative':'#7B6FA8','Queueing':'#E89BB7'};
+const sw=c=>c?`<i class="sw" style="background:${WC[c]||'#999'}" title="${esc(c)} wait class"></i>`:'';
+let RID=0; const ROWS={};
+function flagCls(r){ return (r.sev==='large'||r.sev==='moderate')&&!r.twin?' f-'+r.sev:''; }
+function cells(r,nameHTML,opt){ opt=opt||{};
+  const id='r'+(++RID); ROWS[id]=Object.assign({},r,{_opt:opt});
+  const c=fv(r.cur,r.unit); const rg=r.mu!=null?range(r):['—',''];
+  const dcls=r.twin?'s-typical':('s-'+r.sev);
+  const imm=r.imm?'<span class="imm">immaterial</span>':'';
+  let h=`<td class="${opt.sqlcell?'c-sql':'c-name'}">${nameHTML}</td>`;
+  if(opt.pre) h=opt.pre+h;
+  h+=`<td class="c-cur num">${c[0]}<span class="u">${esc(c[1])}</span></td>`;
+  h+=`<td class="c-rng num">${rg[0]}<span class="u">${esc(rg[1])}</span></td>`;
+  h+=`<td class="c-band">${band(r,opt)}</td>`;
+  h+=`<td class="c-d num"><span class="d ${dcls}">${r.sev==='flat'?'—':delta(r.cur,r.mu)}</span>${imm}</td>`;
+  h+=`<td class="c-tr">${spark(r)}</td>`;
+  if(opt.post) h+=opt.post;
+  h+=`<td class="c-x">${r.vals?`<button class="xb" type="button" aria-expanded="false" aria-label="Per-window values for ${esc(r.label||r.name||r.id)}" data-rid="${id}">${CHEV}</button>`:''}</td>`;
+  return {id,h};
+}
+function head(nameTh,opt){ opt=opt||{};
+  return `<thead><tr>${opt.pre||''}<th ${opt.sort?'data-sort="name"':''}><span class="thl">${nameTh}</span></th><th class="num">${opt.curTh||'Current'}</th><th class="num">Normal range</th><th class="c-band" ${opt.sort?'data-sort="z" aria-sort="descending"':''}><span class="thl">vs normal, in σ</span>${axis()}</th><th class="num" ${opt.sort?'data-sort="d"':''}><span class="thl">Δ vs mean</span></th><th title="13 windows, oldest to Current; shaded = normal range">Trend</th>${opt.post||''}<th><span class="sr">Details</span></th></tr></thead>`;
+}
+function detail(r){
+  const o=r._opt||{}; const d=den(r);
+  let facts=`<dl><dt>Current</dt><dd>${fvs(r.cur,r.unit)}</dd><dt>Prior mean</dt><dd>${fvs(r.mu,r.unit)}</dd><dt>Prior σ</dt><dd>${fvs(r.sd,r.unit)}${d>(r.sd||0)?' (floored at 2% of mean)':''}</dd><dt>Windows</dt><dd>${r.n} prior</dd><dt>z</dt><dd>${zt(r)} (${SEVW[r.sev]}${r.imm?', immaterial':''})</dd>`;
+  if(o.facts) facts+=o.facts;
+  facts+='</dl>';
+  let extra=o.extra||'';
+  return `<div class="xp"><div class="cc">${cols(r,{title:r.label||r.name||r.id})}${o.left||''}</div>${facts}${extra}</div>`;
+}
+function toggleRow(btn){
+  const tr=btn.closest('tr'); const open=btn.getAttribute('aria-expanded')==='true';
+  if(open){ const nx=tr.nextElementSibling; if(nx&&nx.classList.contains('xr')) nx.remove(); btn.setAttribute('aria-expanded','false'); return; }
+  const r=ROWS[btn.dataset.rid]; const ncol=tr.children.length;
+  const x=document.createElement('tr'); x.className='xr'; x.innerHTML=`<td colspan="${ncol}">${detail(r)}</td>`;
+  tr.after(x); btn.setAttribute('aria-expanded','true');
+}
+document.addEventListener('click',e=>{ const b=e.target.closest('.xb'); if(b) toggleRow(b); });
+
+/* ------------------------------------------------ findings table */
+function nameCell(r){
+  const nm=r.lead?(r.label||r.name):r.name;
+  const tag=r.twin?'<span class="tag" title="Same counter as the family lead, seen through another view; scored but not counted">twin</span>':'';
+  const src=r.lead&&r.label&&r.label!==r.name?` title="${esc(r.name)}"`:'';
+  return `${r.cls?sw(r.cls):''}<span${src}>${esc(nm)}</span>${tag}`;
+}
+function renderFindings(){
+  const F=DATA.findings, t=$('#t-find');
+  const fams={}; F.forEach(r=>{ if(r.fam&&(r.sev==='large'||r.sev==='moderate')) (fams[r.fam]=fams[r.fam]||[]).push(r); });
+  const groups=Object.values(fams).map(g=>{ const lead=g.find(r=>r.lead)||g[0];
+    const rest=g.filter(r=>r!==lead).sort((a,b)=>(a.twin-b.twin)||Math.abs(b.z)-Math.abs(a.z)); return {lead,rows:[lead,...rest]}; });
+  groups.sort((a,b)=>Math.abs(b.lead.z)-Math.abs(a.lead.z));
+  let h=head('Metric',{sort:1});
+  groups.forEach(g=>{
+    h+=`<tbody class="grp" data-z="${Math.abs(g.lead.z)}" data-name="${esc(g.lead.label||g.lead.name)}" data-d="${Math.abs(g.lead.cur/g.lead.mu)}">`;
+    g.rows.forEach(r=>{ const c=cells(r,nameCell(r),{}); const k=r===g.lead?'lead':(r.twin?'twin':'mem');
+      h+=`<tr class="${k}${r.twin?'':flagCls(r)}" data-rid="${c.id}">${c.h}</tr>`; });
+    h+='</tbody>';
+  });
+  const nrm=F.filter(r=>!(r.sev==='large'||r.sev==='moderate')).sort((a,b)=>(a.sev==='flat')-(b.sev==='flat')||Math.abs(b.z)-Math.abs(a.z));
+  h+=`<tbody class="nrm" id="nrm-find">`;
+  nrm.forEach(r=>{ const c=cells(r,nameCell(r),{}); h+=`<tr class="${r.twin?'twin0':''}">${c.h}</tr>`; });
+  h+='</tbody>';
+  t.innerHTML=h;
+  const btn=$('.more[data-for="t-find"]'); btn.dataset.n=nrm.length; setMore(btn,false);
+  // open the physical reads row by default
+  const pr=$$('#t-find tr.lead').find(tr=>tr.textContent.startsWith('Physical reads'));
+  if(pr){ const b=$('.xb',pr); const r=ROWS[b.dataset.rid];
+    r._opt.facts=`<dt>Family</dt><dd>physical reads, physical read total bytes, read IO requests (+2 twins)</dd><dt>Where</dt><dd>ts_orders_data.301 read 345k MB (normal ~74k); ORDERS_APP.ORDER_LINES 95.1M blocks (~8.5M)</dd><dt>Steps</dt><dd>+30% from 13 Aug (after Release 4.1), then ×4.5 in the Current window (after Release 4.2)</dd>`;
+    toggleRow(b); }
+}
+function setMore(btn,open){ const n=btn.dataset.n; btn.setAttribute('aria-expanded',open?'true':'false');
+  btn.innerHTML=`<i class="dotk typical"></i>${open?'Hide the '+n+' normal rows':'Show '+n+' normal rows'}`;
+  const tb=$('#'+btn.dataset.for+' tbody.nrm'); if(tb) tb.classList.toggle('open',open); }
+document.addEventListener('click',e=>{ const b=e.target.closest('.more'); if(b) setMore(b,b.getAttribute('aria-expanded')!=='true'); });
+// sortable headers: reorder family groups
+document.addEventListener('click',e=>{ const th=e.target.closest('th[data-sort]'); if(!th) return;
+  const t=th.closest('table'); const k=th.dataset.sort; const cur=th.getAttribute('aria-sort');
+  const dir=cur==='descending'?'ascending':'descending';
+  $$('th[data-sort]',t).forEach(x=>x.removeAttribute('aria-sort')); th.setAttribute('aria-sort',dir);
+  const gs=$$('tbody.grp',t); const m=dir==='ascending'?1:-1;
+  gs.sort((a,b)=> k==='name'? m*a.dataset.name.localeCompare(b.dataset.name) : m*(parseFloat(a.dataset[k])-parseFloat(b.dataset[k])));
+  const nrm=$('tbody.nrm',t); gs.forEach(g=>t.insertBefore(g,nrm)); });
+
+/* ------------------------------------------------ what changed (masthead) */
+function renderWC(){
+  const F=DATA.findings, by=n=>F.find(r=>r.name===n);
+  const pr=by('physical reads'), dbt=by('DB time'), cpu=by('DB CPU');
+  const aas=x=>(x/100).toFixed(1);
+  const sm=DATA.sqlmon.find(s=>s.id==='7k2m9dx4qp1zb');
+  const dd=den(dbt), cd=den(cpu);
+  const P=DATA.params; const chg=new Array(13).fill(0), cur=new Array(13).fill(0);
+  P.forEach(p=>p.vals.forEach((v,i)=>{ if(i>0&&v!==p.vals[i-1]) chg[i]=1; }));
+  const strip=`<span class="tl13" role="img" aria-label="Parameter changes landed in 4 of the 13 windows: 9 Jul, 23 Jul, 13 Aug and the Current window">${chg.map((c,i)=>`<b style="--x:${(i/12).toFixed(4)}"></b>`+(c?`<i class="${i===12?'now':''}" style="--x:${(i/12).toFixed(4)}" title="${W[i]}: a parameter changed"></i>`:'')).join('')}</span>`;
+  const rows=[
+    {k:'Physical reads', g:band(pr), v:`<b>${fvs(pr.cur,pr.unit)}</b> <span class="muted">normal ${range(pr)[0]}</span> <span class="d s-large">${delta(pr.cur,pr.mu)}</span>`,
+     n:`File ts_orders_data.301 read 345k MB (normal ~74k); segment ORDERS_APP.ORDER_LINES 95.1M blocks (~8.5M).`, a:['#findings','Findings']},
+    {k:'DB time', g:`<div class="stack2"><span class="bl">DB time${band(dbt)}</span><span class="bl">DB CPU${band(cpu)}</span></div>`,
+     v:`<b>${aas(dbt.cur)} AAS</b> <span class="muted">normal ${aas(Math.max(0,dbt.mu-2*dd))}–${aas(dbt.mu+2*dd)}</span> <span class="d s-large">${delta(dbt.cur,dbt.mu)}</span>`,
+     n:`DB CPU is ${aas(cpu.cur)} AAS, inside its normal ${aas(cpu.mu-2*cd)}–${aas(cpu.mu+2*cd)} (+18.8%): the extra time is wait, not CPU.`, a:['#waits-fg','Foreground waits']},
+    {k:'Configuration', g:strip, v:`<b>4 parameters differ</b>`,
+     n:`<span class="mono">optimizer_adaptive_plans</span> FALSE to TRUE in the Current window only; the other three changed earlier, each within two days of a release.`, a:['#params','Parameters']},
+    {k:'Plan change', g:band(sm), v:`<b>${fvs(sm.cur,'s')} max</b> <span class="muted">normal ${range(sm)[0]} s</span> <span class="d s-large">${delta(sm.cur,sm.mu)}</span>`,
+     n:`<span class="mono">7k2m9dx4qp1zb</span> runs plan 2088341150 since 8 Sep 23:00 (was 3197245811).`, a:['#sqlmon','SQL Monitor']},
+  ];
+  $('#wc').innerHTML=rows.map(r=>`<div class="wc-row" role="listitem"><div class="wc-k">${r.k}</div><div class="wc-g">${r.g}</div><div class="wc-v">${r.v}</div><div class="wc-n">${r.n}</div><a class="wc-a" href="${r.a[0]}">${r.a[1]}</a></div>`).join('');
+}
+function renderLegend(){
+  const ex={z:.4,sev:'typical'};
+  $('#legend').innerHTML=`<span class="lg-k"><b style="font-weight:600;color:var(--ink)">Reading the band</b></span>
+   <span class="lg-b">${band({z:5.2,sev:'large'})}${axis()}</span>
+   <span class="lg-k"><i class="dotk large"></i>large</span><span class="lg-k"><i class="dotk moderate"></i>moderate</span><span class="lg-k"><i class="dotk typical"></i>normal</span><span class="lg-k"><i class="dotk improved"></i>improved</span>
+   <span class="lg-t">Shaded: the prior normal, mean ± 1σ dark and ± 2σ light. Ticks at ±2σ and ±3σ are the moderate and large thresholds. One scale for the whole page; past +8σ the dot pins to the edge and prints its z. A hollow dot past a tick moved, but not enough to matter.</span>`;
+}
+
+/* ------------------------------------------------ headline tiles */
+function renderTiles(){
+  $('#tiles').innerHTML=DATA.headline.map(c=>{ const r=Object.assign({},c,{unit:c.unit}); const v=fv(c.cur,r.unit);
+    const lab={'Average Active Sessions':'Average active sessions','Wait Time Ratio':'Wait time ratio'}[c.label]||c.label;
+    return `<div class="tile"><div class="tl">${esc(lab)}</div><div class="td"><span class="d s-${c.sev}">${delta(c.cur,r.mu)}</span></div>
+      <div class="tv">${v[0]}<span class="u">${esc(v[1])}</span></div><div class="ts">${spark(r,96,28)}</div>
+      ${band(r)}<div class="tn1">normal ${range(r)[0]} ${esc(range(r)[1])}</div><div class="tz">z ${zt(r)}</div></div>`; }).join('');
+}
+
+/* ------------------------------------------------ waits */
+function renderWaits(){
+  const mk=(id,rows,unit,label)=>{ let h=head(label,{curTh:'Current'});
+    h+='<tbody>'+rows.map(r=>{ r.unit=unit; const c=cells(r,`${sw(r.cls)}${esc(r.name)}`,{}); return `<tr class="${flagCls(r).trim()}">${c.h}</tr>`; }).join('')+'</tbody>';
+    $('#'+id).innerHTML=h; };
+  mk('t-wt',DATA.waits.time,'s','Event');
+  mk('t-wa',DATA.waits.avg,'ms','Event');
+  mk('t-wc',DATA.waits.cls,'s','Wait class');
+}
+
+/* ------------------------------------------------ top SQL */
+function renderSQL(){
+  let h=head('Statement',{pre:'<th class="num">#</th>',post:'<th>Plan</th>',curTh:'Elapsed'});
+  h+='<tbody>'+DATA.sql.map((s,i)=>{
+    const tag=s.new?`<span class="tag" title="First seen ${s.new.first}; in the top 10 in the last ${s.new.windows} windows only">new since 11 Aug</span>`:'';
+    const nm=`<div class="sql"><span class="sid">${s.id}</span><span class="mod">${esc(s.module)}</span>${tag}<span class="txt" title="${esc(s.text)}">${esc(s.text)}</span></div>`;
+    const pl=s.planchg?`<span class="pl" title="plan ${s.planchg.from} until 8 Sep 23:00, ${s.planchg.to} since"><b>⇄ new plan</b></span>`:'';
+    const ranks=s.ranks.map((k,j)=>k?`#${k}`:'—');
+    const rk=s.ranks.every(k=>k===s.ranks[12])?`#${s.ranks[12]} in all 13 windows`:ranks.join(' ');
+    let facts=`<dt>Module</dt><dd>${s.schema}, ${esc(s.module)}, ${esc(s.action)}</dd><dt>Rank</dt><dd>${rk}</dd>`;
+    let extra=`<div class="sqltext">${esc(s.text)}</div>`, left='';
+    if(s.planchg){ facts+=`<dt>Plan</dt><dd>new plan since 8 Sep 23:00, an hour after Release 4.2</dd>`;
+      left=`<div><table class="mini"><thead><tr><th>Plan hash</th><th>First seen</th><th>Last seen</th><th>Snapshots</th><th>Executions</th><th>Avg s/exec</th><th>Avg gets/exec</th></tr></thead><tbody>${s.planchg.phv.map(p=>`<tr>${p.map(x=>`<td>${x}</td>`).join('')}</tr>`).join('')}</tbody></table><p class="subnote">Per execution the new plan is 4.3× slower and does 18× the buffer gets, consistent with the jump in long-table scans.</p></div>`; }
+    if(s.new) facts+=`<dt>History</dt><dd>first seen ${s.new.first} (Release 4.1), so n is only ${s.n}</dd>`;
+    const c=cells(s,nm,{pre:`<td class="num rk">${i+1}</td>`,post:`<td class="c-pl">${pl}</td>`,sqlcell:1,facts,extra,left});
+    return `<tr class="${flagCls(s).trim()}">${c.h}</tr>`; }).join('')+'</tbody>';
+  $('#t-sql').innerHTML=h;
+  toggleRow($('#t-sql .xb'));
+}
+
+/* ------------------------------------------------ SQL Monitor */
+function renderSmon(){
+  let h=head('Statement',{post:'<th>Flags</th>',curTh:'Max elapsed'});
+  h+='<tbody>'+DATA.sqlmon.map(s=>{
+    const nm=`<div class="sql"><span class="sid">${s.id}</span><span class="mod">${esc(s.user)} / ${esc(s.module)}</span></div>`;
+    const fl=`<td class="c-fl"><span class="flags">${s.flags.map(f=>`<span class="tag">${esc(f)}</span>`).join('')}</span></td>`;
+    if(!s.vals){ const r=Object.assign({},s,{z:null});
+      return `<tr><td class="c-sql">${nm}</td><td class="c-cur num muted">—</td><td class="c-rng num muted">—</td><td class="c-band">${band(r,{na:'no capture in a compared window'})}</td><td class="c-d num"><span class="d s-na">—</span></td><td class="c-tr"></td>${fl}<td class="c-x"></td></tr>`; }
+    const c=cells(s,nm,{sqlcell:1,post:fl,facts:`<dt>Plan hash</dt><dd>${esc(s.plan)}</dd>`});
+    return `<tr class="${flagCls(s).trim()}">${c.h}</tr>`; }).join('')+'</tbody>';
+  $('#t-smon').innerHTML=h;
+}
+
+/* ------------------------------------------------ parameters */
+const dm=l=>{const [m,d]=l.split(' ');return (+d)+' '+m};
+function gb(v){ const n=+v; if(!isNaN(n)&&n>=1073741824) return (n/1073741824)+' GB'; return v; }
+function renderParams(){
+  const near={cursor_sharing:['Hotfix 4.0.1','3 Jul'],optimizer_adaptive_plans:['Release 4.2','8 Sep'],pga_aggregate_target:['Release 4.1','11 Aug'],sga_target:['RU 19.28 patch','21 Jul']};
+  let h=`<thead><tr><th>Parameter</th><th>Current</th><th>Before</th><th>Changed between</th><th>Nearest marker</th><th>Value per window, 18 Jun to 10 Sep</th></tr></thead><tbody>`;
+  const rows=DATA.params.map(p=>{ const v=p.vals, cur=v[12]; let k=12; while(k>0&&v[k-1]===cur) k--; return {p,cur,prev:v[k-1],k}; }).sort((a,b)=>b.k-a.k);
+  rows.forEach(({p,cur,prev,k})=>{
+    const st=p.vals.map((x,i)=>`<i class="${x===cur?'':'df'}${i===12?' cur':''}" title="${W[i]}: ${esc(gb(x))}"></i>`).join('');
+    h+=`<tr><td class="mono">${p.name}</td><td class="pv"><span class="chg" title="changed within the span">${esc(gb(cur))}</span></td><td class="pv muted">${esc(gb(prev))}</td><td class="tn">${k===12?'3 Sep and 10 Sep (Current)':dm(W[k-1])+' and '+dm(W[k])}</td><td>${near[p.name][0]}, ${near[p.name][1]}</td><td><span class="strip" role="img" aria-label="${p.name}: value differs from Current in ${p.vals.filter(x=>x!==cur).length} of 12 prior windows">${st}</span></td></tr>`; });
+  $('#t-par').innerHTML=h+'</tbody>';
+}
+
+/* ------------------------------------------------ reference stubs */
+function stat(vals){ const p=vals.slice(0,-1); const mu=p.reduce((a,b)=>a+b,0)/p.length; const sd=Math.sqrt(p.reduce((a,b)=>a+(b-mu)**2,0)/(p.length-1)); return {mu,sd,cur:vals[vals.length-1]}; }
+function zOf(vals){ const s=stat(vals); return (s.cur-s.mu)/Math.max(s.sd,0.02*Math.abs(s.mu)); }
+function renderStubs(){
+  const seg=[8.527,8.101,7.620,8.353,7.396,9.654,7.857,8.651,8.715,9.026,8.897,9.065,95.07];
+  const fil=[73.96,73.44,68.06,71.27,67.22,76.85,71.00,72.99,80.56,76.92,77.55,78.28,345.0];
+  const S=[
+    ['load','Load profile','27 statistics per second; 5 large: long-table scans, physical reads, read bytes, logical reads, DB time.',null],
+    ['metrics','System metrics','23 metrics; 8 large, 5 of them twins of load-profile counters. Host CPU 71% is normal for this hour.',null],
+    ['waits-bg','Background waits','All 11 events up 62.8% together: a table-wide shift, so large is demoted to moderate.',{z:5.23,sev:'moderate'}],
+    ['seg','Segment I/O','ORDERS_APP.ORDER_LINES: 95.1M physical block reads this hour against ~8.5M normal; its primary key 5.8M against ~4.0M.',{z:zOf(seg),sev:'large'}],
+    ['file','File I/O','ts_orders_data.301 read 345k MB against ~74k; its two sibling data files moved the same way.',{z:zOf(fil),sev:'large'}],
+    ['day','Day profile','Not only 09:00: logical reads are above the prior 7 days in 24 of 24 hours, physical reads in 23 of 24.',{z:26.2,sev:'large'}],
+    ['util','Utilization','Transactions 652 /s, user calls 6,208 /s, 2,095 sessions: the workload volume is normal, its shape is not.',{z:0.53,sev:'typical'}],
+    ['dbtime','DB time, full span','DB time per snapshot across the whole 12-week span, stacked by wait class.',null],
+    ['sqlash','Top SQL activity','ASH samples per statement in the Top SQL pool, stacked by wait event.',null],
+    ['windows','Compared windows','13 of 13 windows valid, one DBID, snapshots 41417 to 43434.',null],
+  ];
+  $('#stubs').innerHTML=S.map(([id,t,s,b])=>`<details class="stub" id="${id}"><summary><span class="st-t">${t}</span><span class="st-s">${s}</span>${b?band(b):'<span></span>'}</summary><div class="st-b">Collapsed reference section. In the report it holds the same band table as Foreground waits; not reproduced in this mock.</div></details>`).join('');
+}
+
+/* ------------------------------------------------ ASH chart */
+const SER=[['CPU','wc-CPU','#3FB344'],['User I/O','wc-UIO','#4A90D9'],['Network','wc-NET','#967259'],['Commit','wc-COM','#E89B40'],['Other classes','wc-OTH','']];
+function renderAshLegend(){
+  $('#ash-lgd').innerHTML=SER.map(([n,c,col])=>`<span><i class="sw" style="background:${col||'var(--other)'}"></i>${n}${n==='Other classes'?' (6 merged)':''}</span>`).join('')+
+   `<span><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4" fill="var(--surface)" stroke="var(--ink-2)" stroke-width="1.5"/></svg>09:00 hour, prior Thursdays</span><span><svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" fill="var(--crit-dot)"/></svg>Current hour</span>`;
+}
+function drawAsh(){
+  const A=DATA.ash, svg=$('#ash-svg'), wrap=$('#ashw'); const Wd=Math.max(300,wrap.clientWidth);
+  const narrow=Wd<600;
+  const padL=narrow?28:36, padR=narrow?8:12, flagH=narrow?34:30, top=flagH+10, ph=narrow?160:210, axH=40, H=top+ph+axH;
+  svg.setAttribute('viewBox',`0 0 ${Wd} ${H}`); svg.setAttribute('height',H);
+  const T=A.t.map(s=>Date.parse(s.replace(' ','T')+':00Z'));
+  const tc=T.map((t,i)=>t+(i===T.length-1?0.5:3)*3600e3); // bucket centres; last bucket is 1 h
+  const t0=Date.parse('2026-06-18T09:00:00Z'), t1=Date.parse('2026-09-10T10:00:00Z');
+  const X=t=>padL+(Wd-padL-padR)*(t-t0)/(t1-t0);
+  // 24-h centred rolling mean (4 buckets)
+  const sm=A.series.map(s=>s.vals.map((v,i,a)=>{ let lo=Math.max(0,i-2),hi=Math.min(a.length-1,i+1),sum=0; for(let k=lo;k<=hi;k++) sum+=a[k]; return sum/(hi-lo+1); }));
+  const n=T.length, stackTop=[]; let acc=new Array(n).fill(0);
+  const layers=sm.map(vals=>{ const lo=acc.slice(); acc=acc.map((a,i)=>a+vals[i]); return {lo,hi:acc.slice()}; });
+  const ymax=Math.ceil(Math.max(...acc,...A.wtot)/5)*5;
+  const Y=v=>top+ph-ph*v/ymax;
+  let s='';
+  for(let v=0;v<=ymax;v+=5){ s+=`<line class="gl" x1="${padL}" x2="${Wd-padR}" y1="${Y(v)}" y2="${Y(v)}"/><text class="at" x="${padL-6}" y="${Y(v)+4}" text-anchor="end">${v}</text>`; }
+  s+=`<text class="at" x="${padL+6}" y="${Y(ymax)+14}">active sessions</text>`;
+  // current window emphasis
+  const cx=X(WIN[12]+1800e3), cwid=Math.max(6,X(WIN[12]+3600e3)-X(WIN[12]));
+  layers.forEach((L,k)=>{ let d='M'+X(tc[0]).toFixed(1)+' '+Y(L.hi[0]).toFixed(1);
+    for(let i=1;i<n;i++) d+='L'+X(tc[i]).toFixed(1)+' '+Y(L.hi[i]).toFixed(1);
+    for(let i=n-1;i>=0;i--) d+='L'+X(tc[i]).toFixed(1)+' '+Y(L.lo[i]).toFixed(1);
+    s+=`<path class="ar ${SER[k][1]}" d="${d}Z"/>`; });
+  s+=`<rect class="curband" x="${cx-cwid/2}" y="${top}" width="${cwid}" height="${ph}"/>`;
+  s+=`<line class="ax" x1="${padL}" x2="${Wd-padR}" y1="${top+ph}" y2="${top+ph}"/>`;
+  // release flags, lane-assigned so labels never collide
+  const fl=lanes(MK.map(m=>({x:X(m.t),label:narrow?(SHORT[m.label]||m.label):m.label,full:m.label})),Wd-padR,8);
+  fl.forEach(f=>{ const y=2+f.lane*15;
+    s+=`<line class="cf" x1="${f.x}" x2="${f.x}" y1="${y+3}" y2="${top+4}"/><line class="cf" x1="${f.x}" x2="${f.x}" y1="${top+4}" y2="${top+ph}" opacity=".28"/><rect class="cfh" x="${f.x-1}" y="${y+2}" width="3" height="10" rx="1"/><text class="cft" x="${f.anchor==='start'?f.x+6:f.x-6}" y="${y+11}" text-anchor="${f.anchor}"><title>${esc(f.full)}</title>${esc(f.label)}</text>`; });
+  // compared windows: ticks on the axis + hourly dots
+  WIN.forEach((w,i)=>{ const x=X(w+1800e3), cur=i===12;
+    s+=`<line class="wt${cur?' cur':''}" x1="${x}" x2="${x}" y1="${top+ph+1}" y2="${top+ph+(cur?9:6)}"/>`; });
+  WIN.forEach((w,i)=>{ const x=X(w+1800e3), cur=i===12; s+=`<circle class="wd${cur?' cur':''}" cx="${x}" cy="${Y(A.wtot[i])}" r="${cur?5.5:4}"><title>${cur?'Current':W[i]} 09:00–10:00: ${A.wtot[i].toFixed(1)} AAS</title></circle>`; });
+  // current callout
+  s+=`<text class="at b" x="${cx-10}" y="${Y(A.wtot[12])+4}" text-anchor="end">${A.wtot[12].toFixed(1)}</text>`;
+  // month labels + current label
+  const months=[['2026-07-01','Jul'],['2026-08-01','Aug'],['2026-09-01','Sep']];
+  s+=`<text class="at" x="${padL}" y="${top+ph+24}">18 Jun</text>`;
+  const curLabel=narrow?'Current':'Current, 10 Sep 09:00', clw=tw(curLabel)+4;
+  months.forEach(([d,l])=>{ const x=X(Date.parse(d+'T00:00:00Z')); if(x+tw(l)>cx-clw-4) return; s+=`<line class="ax" x1="${x}" x2="${x}" y1="${top+ph}" y2="${top+ph+4}"/><text class="at" x="${x+3}" y="${top+ph+24}">${l}</text>`; });
+  s+=`<text class="at b" x="${Wd-padR}" y="${top+ph+24}" text-anchor="end">${curLabel}</text>`;
+  s+=`<text class="at" x="${padL}" y="${top+ph+38}">ticks: the 13 compared windows, Thursdays 09:00</text>`;
+  s+=`<line class="xh" id="ash-xh" x1="0" x2="0" y1="${top}" y2="${top+ph}" style="display:none"/>`;
+  s+=`<rect id="ash-hit" x="${padL}" y="${top}" width="${Wd-padL-padR}" height="${ph}" fill="transparent"/>`;
+  svg.innerHTML=s;
+  // hover: crosshair + tooltip
+  const tip=$('#ash-tip'), xh=$('#ash-xh'), hit=$('#ash-hit');
+  const DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmtT=t=>{const d=new Date(t);return DN[d.getUTCDay()]+' '+d.getUTCDate()+' '+MN[d.getUTCMonth()]+', '+String(d.getUTCHours()).padStart(2,'0')+':00'};
+  hit.onmousemove=e=>{ const r=svg.getBoundingClientRect(); const mx=(e.clientX-r.left)*Wd/r.width;
+    const t=t0+(mx-padL)/(Wd-padL-padR)*(t1-t0); let i=0,b=Infinity; tc.forEach((c,k)=>{const dd=Math.abs(c-t); if(dd<b){b=dd;i=k}});
+    const x=X(tc[i]); xh.setAttribute('x1',x); xh.setAttribute('x2',x); xh.style.display='';
+    const tot=sm.reduce((a,v)=>a+v[i],0);
+    tip.innerHTML=`<b>Around ${fmtT(tc[i])}</b><div class="muted" style="margin-bottom:4px">24-h mean, active sessions</div>`+SER.map(([nm,c,col],k)=>`<div class="r"><span><i class="sw" style="margin:0;background:${col||'var(--other)'}"></i>${nm}</span><span>${sm[k][i].toFixed(2)}</span></div>`).reverse().join('')+`<div class="r" style="border-top:1px solid var(--line);margin-top:4px;padding-top:4px"><span>Total</span><b>${tot.toFixed(1)}</b></div>`;
+    tip.style.display='block'; const tx=(x*r.width/Wd); const left=tx+16+180>r.width?tx-16-tip.offsetWidth:tx+16; tip.style.left=left+'px'; tip.style.top=(top*r.height/H)+'px'; };
+  hit.onmouseleave=()=>{tip.style.display='none';xh.style.display='none'};
+}
+
+/* ------------------------------------------------ chrome: theme, mode, info, tabs, rail */
+function setTheme(t){ document.body.classList.toggle('dark',t==='dark'); document.body.classList.toggle('light',t==='light'); try{localStorage.setItem('awr-theme',t)}catch(e){} }
+(function(){ const p=document.documentElement.getAttribute('data-theme-pref'); if(p) setTheme(p); })();
+$('#theme').onclick=()=>{ const dark=document.body.classList.contains('dark')||(!document.body.classList.contains('light')&&matchMedia('(prefers-color-scheme: dark)').matches); setTheme(dark?'light':'dark'); };
+function setMode(full){ document.body.classList.toggle('full',full); document.body.classList.toggle('normal',!full);
+  $('#mode-full').setAttribute('aria-pressed',full); $('#mode-normal').setAttribute('aria-pressed',!full);
+  $$('.more').forEach(b=>setMore(b,full)); $$('.stub').forEach(d=>d.open=full); }
+$('#mode-full').onclick=()=>setMode(true); $('#mode-normal').onclick=()=>setMode(false);
+document.addEventListener('click',e=>{ const b=e.target.closest('.info'); if(!b) return; const p=document.getElementById(b.getAttribute('aria-controls')); const o=b.getAttribute('aria-expanded')==='true'; b.setAttribute('aria-expanded',!o); p.hidden=o; });
+document.addEventListener('click',e=>{ const b=e.target.closest('[role="tab"]'); if(!b) return; const list=b.closest('[role="tablist"]');
+  $$('[role="tab"]',list).forEach(t=>{ const on=t===b; t.setAttribute('aria-selected',on); document.getElementById(t.getAttribute('aria-controls')).hidden=!on; }); });
+const links=$$('.rail a'); const secs=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+const io=new IntersectionObserver(es=>{ es.forEach(e=>{ if(e.isIntersecting){ links.forEach(a=>a.classList.toggle('on',a.getAttribute('href')==='#'+e.target.id)); } }); },{rootMargin:'-20% 0px -70% 0px'});
+secs.forEach(s=>io.observe(s));
+
+renderWC(); renderLegend(); renderTiles(); renderFindings(); renderAshLegend(); drawAsh(); renderSQL(); renderSmon(); renderParams(); renderWaits(); renderStubs();
+let rt; addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(drawAsh,120)});
+})();
+</script>
+</body>
+</html>

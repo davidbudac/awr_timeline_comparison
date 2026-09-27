@@ -12,7 +12,8 @@ TAG = "05_waits_bg"
 
 def emit(w) -> str:
     L = ["<!-- AWR-SECTION: " + TAG + " BEGIN -->"]
-    L.append('<section id="waits-bg"><h2>Background wait events</h2>')
+    L.append('<section id="waits-bg" class="vw in-a"><h2>Background waits'
+             '<small class="h2sub">Where background processes waited, by time and by average wait</small></h2>')
 
     # NVL(bg.wait_class, 'Other') <> 'Idle'
     deltas = C.window_deltas(w, lambda m: m.bg_waits, other_for_null_class=True)
@@ -25,11 +26,6 @@ def emit(w) -> str:
         L.append("<!-- AWR-SECTION: " + TAG + " END -->")
         return "\n".join(L)
 
-    L.append('<p style="font-size:12px;color:var(--muted)">'
-             "DBA_HIST_BG_EVENT_SUMMARY, Idle excluded. "
-             "Chart stacks wait_class time per window. "
-             "Tables: time_waited (s) and avg latency "
-             "(ms = time_waited &divide; total_waits).</p>")
     L.append('<div class="chart-wrap chart-small" id="waits-bg-stack"></div>')
 
     # ---- chart: class_deltas sums only the events with a > 0 delta;
@@ -51,8 +47,8 @@ def emit(w) -> str:
     tot = C.current_total_us(deltas)
     shift, n_flag, mean_pct, sd_pct = C.shift_pass(rows, tot)
     L.extend(C.table_time(w, rows, "waits-bg-time", "Events &mdash; time waited (s)",
-                          tot, shift, C.shift_note(rows, shift, n_flag, mean_pct, sd_pct), "bg"))
-    avg = C.table_avg(w, rows, "waits-bg-avg", "Events &mdash; avg time per wait (ms)", "bgms")
+                          tot, shift, C.shift_note(rows, shift, n_flag, mean_pct, sd_pct), "be"))
+    avg = C.table_avg(w, rows, "waits-bg-avg", "Events &mdash; avg time per wait (ms)", "ba")
     avg[-1] = "</tbody></table></section>"
     L.extend(avg)
     L.append("<!-- AWR-SECTION: " + TAG + " END -->")

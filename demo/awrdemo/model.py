@@ -57,7 +57,7 @@ HOST_NAME = "prd-ora-01.corp.example"
 DB_VERSION = "19.0.0.0.0"
 DBID = 1483726519
 CALLER_USER = "AWR_READER"
-AWR_VERSION = "1.5.0"
+AWR_VERSION = "1.6.0"
 
 TARGET_END = datetime(2026, 9, 10, 10, 0)      # Thursday
 WIN_HOURS = 1
@@ -591,7 +591,7 @@ def effects(ts: datetime) -> Effects:
 # ---------------------------------------------------------------------
 
 LOAD_STATS = [
-    "redo size", "redo size for lost write detection", "DB time", "DB CPU",
+    "redo size", "redo size for lost write detection", "DB time",
     "CPU used by this session", "session logical reads", "physical reads",
     "physical read total bytes", "physical writes", "physical write total bytes",
     "user calls", "user commits", "user rollbacks", "execute count",
@@ -917,8 +917,9 @@ def hour(ts: datetime) -> HourMetrics:
     if e.order_lookup_bad > 0.5:
         scans_long += sql[ORDER_LOOKUP_SQL].execs * 0.05
     load = {
-        "DB time": db_time_us / 1e4,                     # centiseconds
-        "DB CPU": db_cpu_us / 1e4,
+        # centiseconds; SYSSTAT has NO 'DB CPU' row (a time-model stat only:
+        # helpers.load_total reads it from time_model, like load_pairs_cte.sql)
+        "DB time": db_time_us / 1e4,
         "CPU used by this session": db_cpu_us / 1e4 * 0.985,
         "redo size": redo,
         "redo size for lost write detection": 0.0,
@@ -1224,7 +1225,8 @@ class World:
         self.period_axis_fmt = "Mon DD"
         self.win_label = fmt_one(WIN_HOURS)
         self.step_label = fmt_one(STEP_HOURS)
-        self.offset_labels = [fmt_one(k * STEP_HOURS) for k in range(1, 17)]
+        # off_label(k) twin (sql/lib/off_label.plsql): one label per window
+        self.offset_labels = [fmt_one(k * STEP_HOURS) for k in range(1, WEEKS_BACK + 1)]
         self.bucket_hours = 1.0
         self.report_path = (f"reports/awr_trend_{DB_NAME}_{DBID}_{REPORT_TS}_run{RUN_ID}.html")
         self.dow_name = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][TARGET_END.weekday()]

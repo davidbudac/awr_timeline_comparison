@@ -29,6 +29,7 @@ DECLARE
     v_gap        NUMBER := 10;
     v_slot_w     NUMBER;
     v_box_w      NUMBER;
+    v_lbl_n      NUMBER;         -- label every n-th slot (many windows)
     v_slot_idx   NUMBER;
     v_x          NUMBER;
     v_is_current BOOLEAN;
@@ -41,15 +42,21 @@ DECLARE
     v_label      VARCHAR2(40);
     v_call       VARCHAR2(400);
     v_fname      VARCHAR2(200);
+    @@sql/lib/off_label.plsql
 BEGIN
     v_slots  := v_weeks_back + 1;
     v_slot_w := (1000 - 2 * v_margin) / v_slots;
+    -- Many windows (weeks_back of 100 or more): the gap shrinks with the
+    -- slot -- a fixed 10-unit gap gave a NEGATIVE bar width past about 96
+    -- windows (an SVG error in the browser) -- and only every n-th date /
+    -- "skipped" caption is written so they do not overprint.  The usual
+    -- 13 windows are unchanged (gap 10, every slot labelled).
+    v_gap    := LEAST(v_gap, v_slot_w * 0.3);
     v_box_w  := v_slot_w - v_gap;
+    v_lbl_n  := GREATEST(1, CEIL(70 / v_slot_w));
 
-    DBMS_OUTPUT.PUT_LINE('<section id="windows"><h2>Aligned windows</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || 'One bar per window. Dimmed = skipped (missing snap, zero-length, '
-        || 'or instance restart) and dropped from the z-score baseline.</p>');
+    DBMS_OUTPUT.PUT_LINE('<section id="windows" class="vw in-a"><h2>Aligned windows'
+        || '<small class="h2sub">One bar per window; dimmed = skipped and left out of every baseline</small></h2>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="ribbon">'
         || '<svg viewBox="0 0 1000 72" preserveAspectRatio="none" role="img" aria-label="Baseline windows timeline">');
@@ -108,16 +115,18 @@ BEGIN
                 || ' stroke-dasharray="4,3"/>');
         END IF;
 
-        DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
-            || '" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">'
-            || TO_CHAR(w.win_end_ts, '~period_axis_fmt') || '</text>');
+        IF v_is_current OR MOD(v_slot_idx, v_lbl_n) = 0 THEN
+            DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
+                || '" y="10" text-anchor="middle" font-size="10" fill="var(--muted)">'
+                || TO_CHAR(w.win_end_ts, '~period_axis_fmt', 'NLS_DATE_LANGUAGE=ENGLISH') || '</text>');
+        END IF;
 
         IF v_is_current THEN
             DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
                 || '" y="35" text-anchor="middle" font-size="11" font-weight="600" fill="#ffffff">current</text>');
         END IF;
 
-        IF w.valid_flag <> 'Y' THEN
+        IF w.valid_flag <> 'Y' AND MOD(v_slot_idx, v_lbl_n) = 0 THEN
             DBMS_OUTPUT.PUT_LINE('<text x="' || TO_CHAR(v_x + v_box_w/2, 'FM999990D0')
                 || '" y="68" text-anchor="middle" font-size="10" fill="var(--muted)">'
                 || 'skipped</text>');
@@ -151,10 +160,10 @@ BEGIN
             || '" data-w="' || w.week_offset || '">'
             || '<td>' || CASE WHEN w.week_offset = 0 THEN '<b>Current</b>'
                               ELSE '&minus;'
-                                   || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, w.week_offset)
+                                   || off_label(w.week_offset)
                               END || '</td>'
-            || '<td>' || TO_CHAR(w.win_start_ts, 'YYYY-MM-DD Dy HH24:MI') || '</td>'
-            || '<td>' || TO_CHAR(w.win_end_ts,   'YYYY-MM-DD Dy HH24:MI') || '</td>'
+            || '<td>' || TO_CHAR(w.win_start_ts, 'YYYY-MM-DD Dy HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH') || '</td>'
+            || '<td>' || TO_CHAR(w.win_end_ts,   'YYYY-MM-DD Dy HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH') || '</td>'
             || '<td class="num">' || NVL(TO_CHAR(w.begin_snap_id), '&mdash;') || '</td>'
             || '<td class="num">' || NVL(TO_CHAR(w.end_snap_id),   '&mdash;') || '</td>'
             || '<td>' || CASE WHEN w.valid_flag = 'Y'
@@ -177,11 +186,9 @@ BEGIN
     -- the far side of a non-CDB->PDB migration points at the right DBID.
     -- ---------------------------------------------------------------
     DBMS_OUTPUT.PUT_LINE('<h3>Generate full AWR reports for these windows</h3>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || 'Copy into SQL*Plus to spool a standard Oracle AWR report for each '
-        || 'window above (Diagnostic Pack required). Skipped windows are '
-        || 'commented out; swap <code>_HTML</code> for <code>_TEXT</code> in the '
-        || 'call for a plain-text report.</p>');
+    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12.5px;color:var(--muted);margin:0 0 6px 0">'
+        || 'Paste into SQL*Plus for one standard AWR report per window '
+        || '(Diagnostic Pack). Skipped windows are commented out.</p>');
 
     -- Open the listing and emit the script header on the same line so the
     -- browser's leading-newline-after-&lt;pre&gt; stripping leaves no blank line.
@@ -204,7 +211,7 @@ BEGIN
         ORDER BY week_offset
     ) LOOP
         v_label := CASE WHEN w.week_offset = 0 THEN 'current'
-                        ELSE '-' || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, w.week_offset)
+                        ELSE '-' || off_label(w.week_offset)
                    END;
 
         DBMS_OUTPUT.PUT_LINE('');   -- blank separator line inside the <pre>

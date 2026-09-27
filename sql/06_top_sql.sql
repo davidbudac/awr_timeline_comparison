@@ -16,7 +16,7 @@ BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 06_top_sql BEGIN -->'); END;
 DECLARE
     v_weeks_back NUMBER := ~weeks_back;
     v_top_n      NUMBER := ~top_n;
-    v_header     VARCHAR2(4000);
+    v_header     VARCHAR2(32767);   -- one th (about 45 bytes) per window
     v_row        VARCHAR2(32767);
     v_weeks_json VARCHAR2(4000);
     v_weeks_iso_json VARCHAR2(4000);
@@ -88,21 +88,35 @@ DECLARE
     v_gkey       VARCHAR2(20);
     v_dim              VARCHAR2(10);
     v_first_dim        BOOLEAN;
+    -- v1.6.0 Timeline: the SQL lane's rows (the first six statements of
+    -- the elapsed ranking), collected in the ELAPSED pass below
+    TYPE t_tl_rows IS TABLE OF VARCHAR2(32767) INDEX BY PLS_INTEGER;
+    v_tl               t_tl_rows;
+    v_tl_n             PLS_INTEGER := 0;
+    v_tl_csv           VARCHAR2(4000);
+    v_tl_mu            NUMBER;
+    v_tl_first         NUMBER;
+    -- one Y / N per compared window, character k + 1 = week_offset k
+    -- (windows_rollup): tl_first never calls a row "new" after a skipped one
+    v_tl_valid         VARCHAR2(4000) := RPAD('N', ~weeks_back + 1, 'N');
+    v_tl_note          VARCHAR2(400);
+    v_tl_gw            NUMBER;
+    v_tl_gl            VARCHAR2(400);
+    v_ls               VARCHAR2(2000);    -- the evidence library's row text
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/is_oracle_schema.plsql
     @@sql/lib/fmt_num.plsql
+    @@sql/lib/anchor_id.plsql
+    @@sql/lib/band_glyph.plsql
+    @@sql/lib/finding_cards.plsql
+    @@sql/lib/off_label.plsql
+    @@sql/lib/wingrid.plsql
+    @@sql/lib/timeline.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="topsql" data-normal="Y"><h2>Top SQL (top ' || v_top_n
-        || ' per dimension, per window)</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'Top-' || v_top_n || ' SQLs per dimension per window from '
-        || 'DBA_HIST_SQLSTAT <code>*_DELTA</code>. '
-        || 'Bump chart per dimension: each line = one SQL across windows, '
-        || 'oldest &rarr; current. Use the <b>Break down by</b> toggle to '
-        || 're-aggregate the same metric by <b>SQL ID</b>, parsing '
-        || '<b>schema</b>, <b>module</b>, or <b>action</b> instead. '
-        || 'Detail tables collapsed; click to expand.</p>');
+    DBMS_OUTPUT.PUT_LINE('<section id="topsql" class="vw in-s in-a lib lopen" style="--os:1"><h2>Top SQL'
+        || '<small class="h2sub">Top ' || v_top_n
+        || ' statements per ranking and window; ranked, not scored</small></h2>');
 
     -- C1: one tab group for the six per-dimension blocks below (each
     -- wrapped in a matching .tabpanel as its <h3> is emitted). Dim codes
@@ -120,7 +134,7 @@ BEGIN
     SELECT '['
         || LISTAGG('"' || TO_CHAR(
                CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
-               - (~step_hours/24)*week_offset, '~period_axis_fmt') || '"', ',')
+               - (~step_hours/24)*week_offset, '~period_axis_fmt', 'NLS_DATE_LANGUAGE=ENGLISH') || '"', ',')
                WITHIN GROUP (ORDER BY week_offset DESC)
         || ']'
     INTO   v_weeks_json
@@ -139,6 +153,18 @@ BEGIN
     INTO   v_weeks_iso_json
     FROM   (SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1);
 
+
+    -- Window validity for the Timeline's "first seen" glyph (tl_first).
+    FOR r IN (
+        WITH
+        @@sql/lib/windows_cte.sql
+        SELECT week_offset, valid_flag FROM windows_rollup
+    ) LOOP
+        IF r.valid_flag = 'Y' AND r.week_offset BETWEEN 0 AND ~weeks_back THEN
+            v_tl_valid := SUBSTR(v_tl_valid, 1, r.week_offset) || 'Y'
+                       || SUBSTR(v_tl_valid, r.week_offset + 2);
+        END IF;
+    END LOOP;
 
     -- Per-dimension detail tables, packed into one big cursor. ------------
     v_cur_dim := NULL;
@@ -373,7 +399,7 @@ BEGIN
                 || '<th class="num" data-w="0">Current (' || s.dim_unit || ')</th>';
             FOR k IN 1 .. v_weeks_back LOOP
                 v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
-                    || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
+                    || off_label(k) || '</th>';
             END LOOP;
             v_header := v_header || '<th>SQL</th></tr></thead>';
             DBMS_OUTPUT.PUT_LINE('<table id="topsql-detail-' || v_cur_dim || '">' || v_header || '<tbody>');
@@ -410,7 +436,7 @@ BEGIN
         IF s.cur_phv IS NOT NULL THEN
             FOR k IN 1 .. v_weeks_back LOOP
                 v_phv_s := nth_csv(s.week_phvs, k + 1);
-                IF v_phv_s IS NOT NULL AND v_phv_s <> ''
+                IF v_phv_s IS NOT NULL
                    AND TO_NUMBER(v_phv_s) <> s.cur_phv THEN
                     v_plan_flip := TRUE;
                     EXIT;
@@ -457,9 +483,12 @@ BEGIN
         END IF;
 
         -- SQL_ID links to its detail block in the Per-SQL detail section
-        -- below. The hashchange listener emitted at the end of this section
-        -- auto-opens the target <details> on click.
-        v_row := '<tr data-sys="' || v_is_sys || '">'
+        -- below (the chrome's goTo opens it via AWR_openSqlRow).  v1.6.0:
+        -- the row itself is the entity anchor sq-<dim>-<sql_id>
+        -- (sql/lib/anchor_id.plsql); sq-elapsed-<sql_id> is what a link to
+        -- a statement targets.
+        v_row := '<tr id="' || anchor_id('sq-' || LOWER(s.dim), s.sql_id)
+            || '" data-sys="' || v_is_sys || '">'
             || '<td class="mono"><a href="#sql-' || s.sql_id || '">'
             || s.sql_id || '</a>'
             || CASE WHEN v_plan_flip
@@ -488,10 +517,10 @@ BEGIN
                 v_row := v_row || '<td class="num" data-w="' || k || '">'
                       || fmt_num(v_val/s.dim_div);
             END IF;
-            IF v_rnk_s IS NOT NULL AND v_rnk_s <> '' THEN
+            IF v_rnk_s IS NOT NULL THEN
                 v_row := v_row || ' <span class="badge skip">#' || v_rnk_s || '</span>';
             END IF;
-            IF v_phv_s IS NOT NULL AND v_phv_s <> '' AND s.cur_phv IS NOT NULL
+            IF v_phv_s IS NOT NULL AND s.cur_phv IS NOT NULL
                AND TO_NUMBER(v_phv_s) <> s.cur_phv THEN
                 v_row := v_row || ' <span class="badge warn" title="Plan changed. Prior PHV '
                       || v_phv_s || '">plan&#8593;</span>';
@@ -506,11 +535,62 @@ BEGIN
 
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
+
+        -- v1.6.0 Timeline: this statement's row in the SQL lane (ranked,
+        -- not scored: a plain ratio vs the mean of the prior windows it made
+        -- the top list in; a plan change puts a diamond on Current, a first
+        -- appearance after the oldest window a cross on that window).
+        IF s.dim = 'ELAPSED' AND v_tl_n < 6 THEN
+            v_tl_n     := v_tl_n + 1;
+            v_tl_csv   := tl_csv(v_chart_vals);
+            v_tl_mu    := tl_mu(v_tl_csv);
+            v_tl_first := tl_first(v_tl_csv, v_tl_valid);
+            v_tl_gw    := NULL;
+            v_tl_gl    := NULL;
+            v_tl_note  := CASE WHEN s.cur_rnk IS NOT NULL THEN '#' || s.cur_rnk || ' by elapsed'
+                              ELSE 'not in the Current top ' || v_top_n END;
+            IF v_plan_flip THEN
+                v_tl_gw   := 0;
+                v_tl_gl   := '<b class="glf gp" title="Plan changed: the Current plan_hash_value '
+                    || s.cur_phv || ' differs from a prior window''s">&#9670;</b>';
+                v_tl_note := '<b>&#9670;</b> new plan';
+            ELSIF v_tl_first IS NOT NULL THEN
+                v_tl_gw   := v_tl_first;
+                v_tl_gl   := '<b class="glf gn" title="First seen in the top ' || v_top_n || ': '
+                    || wg_title(v_tl_first) || '">&#10010;</b>';
+                v_tl_note := '<b>&#10010;</b> new ' || CASE WHEN v_tl_first = 0 THEN 'in Current'
+                                                           ELSE wg_date(v_tl_first) END;
+            END IF;
+            -- the library row text: the Current top statement by elapsed
+            IF v_tl_n = 1 THEN
+                v_ls := CASE WHEN s.cur_rnk IS NULL
+                             THEN 'no statement in the Current top ' || v_top_n
+                             ELSE '<code>' || s.sql_id || '</code> #' || s.cur_rnk || ' by elapsed'
+                                  || CASE WHEN v_tl_mu IS NOT NULL
+                                          THEN ', ' || delta_span(tl_val(v_tl_csv, 0), v_tl_mu, NULL, 'Y') END
+                                  || CASE WHEN v_plan_flip THEN ', new plan'
+                                          WHEN v_tl_first IS NOT NULL
+                                          THEN ', new ' || CASE WHEN v_tl_first = 0 THEN 'in Current'
+                                                                ELSE wg_date(v_tl_first) END END END;
+            END IF;
+            v_tl(v_tl_n) := tl_bars(v_tl_csv, v_tl_mu, NULL, NULL,
+                tl_lab(ent(s.sql_id, anchor_id('sq-elapsed', s.sql_id), 'sql'),
+                       DBMS_XMLGEN.CONVERT(NVL(s.parsing_schema, '?')) || ' <span class="sq">'
+                       || DBMS_XMLGEN.CONVERT(SUBSTR(NVL(s.sql_text_short, ''), 1, 90)) || '</span>',
+                       DBMS_XMLGEN.CONVERT(SUBSTR(NVL(s.sql_text_short, ''), 1, 300))),
+                tl_gutp(tl_val(v_tl_csv, 0), v_tl_mu, v_tl_note),
+                'tl-' || anchor_id('sq-elapsed', s.sql_id), 'q', s.sql_id, 's elapsed',
+                v_tl_gw, v_tl_gl);
+        END IF;
     END LOOP;
 
     IF v_cur_dim IS NOT NULL THEN
         DBMS_OUTPUT.PUT_LINE('</tbody></table></details></div>');
     END IF;
+    FOR i IN 1 .. v_tl_n LOOP
+        DBMS_OUTPUT.PUT_LINE(CASE WHEN i = 1 THEN tl_open('sql') END || v_tl(i)
+            || CASE WHEN i = v_tl_n THEN tl_close END);
+    END LOOP;
 
     -- Second pass: per-group breakdowns for the chart toggle (schema /
     -- module / action). Uses the same valid_windows + DBA_HIST_SQLSTAT scan,
@@ -787,7 +867,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
         DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
         DBMS_OUTPUT.PUT_LINE('var palette=["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1","#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"];');
-        DBMS_OUTPUT.PUT_LINE('var fmt=function(v){return v==null?"—":(+v).toLocaleString(undefined,{maximumFractionDigits:3});};');
+        DBMS_OUTPUT.PUT_LINE('var fmt=function(v){return v==null?"\u2014":(+v).toLocaleString(undefined,{maximumFractionDigits:3});};');
         DBMS_OUTPUT.PUT_LINE('Object.keys(AWR_DATA.topSql.dims).forEach(function(dim){');
         DBMS_OUTPUT.PUT_LINE('  var el=document.getElementById("topsql-chart-"+dim); if(!el) return;');
         DBMS_OUTPUT.PUT_LINE('  var d=AWR_DATA.topSql.dims[dim];');
@@ -879,21 +959,19 @@ BEGIN
     -- text -- previously one <details> block per SQL. Ordered by
     -- current-window elapsed time desc; rows beyond the first 8 are
     -- tagged data-tail="Y" and collapsed behind an expander.
-    -- full-only: the per-SQL pool shows in the Full view only.
-    DBMS_OUTPUT.PUT_LINE('<h3 class="full-only">Per-SQL detail</h3>');
-    DBMS_OUTPUT.PUT_LINE('<p class="full-only" style="font-size:12px;color:var(--muted)">'
-        || 'Every SQL ID listed above: click a row for full text, AWR '
-        || 'retention range, plan_hash_value summary, and avg sec/exec '
-        || 'colored by PHV across every snapshot the SQL appeared in. '
-        || 'PHV color change = plan switch. <b>Ranked in</b> chips: '
-        || '<b>E</b>lapsed, <b>C</b>PU, <b>G</b>ets, <b>R</b>eads, e<b>X</b>ecutions '
-        || '&mdash; solid when the SQL is in that dimension''s current top-3.</p>');
+    -- All sections only (class "vw in-a"): the per-SQL pool.
+    DBMS_OUTPUT.PUT_LINE('<h3 class="vw in-a">Per-SQL detail</h3>');
+    DBMS_OUTPUT.PUT_LINE('<p class="vw in-a" style="font-size:12.5px;color:var(--muted)">'
+        || 'Click a row for the full text, plan summary and per-snapshot timeline '
+        || '(a colour change = a plan switch). <b>Ranked in</b>: '
+        || '<b>E</b>lapsed, <b>C</b>PU, <b>G</b>ets, <b>R</b>eads, e<b>X</b>ecutions; '
+        || 'solid = in that ranking''s current top 3.</p>');
 
     -- One JS namespace bucket per SQL; populated below, consumed by the
     -- single ECharts init pass at the end of the section.
     DBMS_OUTPUT.PUT_LINE('<script>AWR_DATA.sqlDetails = AWR_DATA.sqlDetails || {};</script>');
 
-    DBMS_OUTPUT.PUT_LINE('<table id="sql-pool" class="full-only"><thead><tr>'
+    DBMS_OUTPUT.PUT_LINE('<table id="sql-pool" class="vw in-a"><thead><tr>'
         || '<th>SQL ID</th><th>Ranked in</th><th>Schema</th>'
         || '<th class="num" title="distinct plan_hash_values seen across the span">Plans</th><th class="num">Executions</th>'
         || '<th class="num" title="AWR snapshots in which the SQL appeared">Snapshots</th><th>First seen</th><th>Text</th>'
@@ -1048,7 +1126,7 @@ BEGIN
                 || '<span class="xlinks">'
                 || '<a class="xlink" href="#ash-card-' || v_sql_id
                 || '" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a>'
-                || '<a class="xlink" href="#sqlmon-' || v_sql_id
+                || '<a class="xlink" href="#sm-' || v_sql_id
                 || '" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a>'
                 || '</span>'
                 || '</td>');
@@ -1259,7 +1337,7 @@ BEGIN
     -- desc); a generic .expander[data-for] handler (chrome-owned) reveals
     -- every [data-tail="Y"] row in the target table's <tbody>.
     IF v_seen_sqls.COUNT > 8 THEN
-        DBMS_OUTPUT.PUT_LINE('<span class="expander full-only" data-for="sql-pool" data-n="'
+        DBMS_OUTPUT.PUT_LINE('<span class="expander vw in-a" data-for="sql-pool" data-n="'
             || (v_seen_sqls.COUNT - 8) || '" data-noun="more statements">'
             || '&#9656; Show ' || (v_seen_sqls.COUNT - 8) || ' more statements</span>');
     END IF;
@@ -1364,7 +1442,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('if(window.location.hash) setTimeout(openHash, 0);');
     DBMS_OUTPUT.PUT_LINE('})();</script>');
 
-    DBMS_OUTPUT.PUT_LINE('</section>');
+    -- the evidence library's row text (Summary view)
+    DBMS_OUTPUT.PUT_LINE(lib_ls('topsql', NVL(v_ls, 'no SQL captured in the compared windows')) || '</section>');
 END;
 /
 

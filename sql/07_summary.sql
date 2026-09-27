@@ -3,50 +3,44 @@
 -- For every scalar metric rendered by sections 02-04, compute the z-score
 -- of the current window against the mean/stddev of the prior valid windows,
 -- bucket the change magnitude (large / moderate / improved / typical) and
--- render the "Biggest movers" table + per-domain findings detail tables.
+-- render (v1.6.0, Mock D):
+--   Summary view   one finding CARD per card group of metric_policy
+--                  families (sql/lib/finding_cards.plsql: Physical I/O,
+--                  DB time, Network, Commit, ...), each with its headline,
+--                  Current value and normal range, the band glyph, a
+--                  window chart (sql/lib/wingrid.plsql), up to four
+--                  evidence rows, the "N related metrics" fold and a
+--                  "Timeline ->" link; then "What changed around it" (an
+--                  empty slot sections 12 fills with its configuration card)
+--                  and "Checked and normal" (every scored metric that did
+--                  not move: a calm grid, "moved, too small to matter",
+--                  "improved").
+--   All sections   the per-domain detail tables (every scored row, band
+--                  cells, prior mean / sd / n) -- the anchors every entity
+--                  link to a metric lands on (fr-<l|m|w>-<name>).
+-- v1.5.0's "Biggest movers" table is gone: its rows are the card leads and
+-- their related metrics; every number stays in the detail tables.
+--
 -- Buckets describe how far the current value sits from its baseline of
 -- prior comparison windows; "large" is not a value judgement, just a
--- |z| > 3 outlier that also clears the materiality floor (see below).
+-- |z| > 3 outlier that also clears the materiality floor.  The ONE rule is
+-- policy_bucket() in sql/lib/metric_policy.plsql (sigma floor 2% of |mean|,
+-- per-metric materiality floors and direction); twins (canonical = 'N')
+-- are scored and shown muted but never counted.
 --
--- Fewer findings, same information (v1.5.0):
---   - z uses a sigma floor, GREATEST(sd, 2% of |mean|), so a dead-flat
---     baseline cannot blow a trivial wobble up to |z| > 99;
---   - a row is large / moderate only when the move is MATERIAL: |%-delta|
---     >= 10 and, for wait classes, >= 2% of the Current window's total
---     non-idle wait time (an immaterial |z| > 2 renders as typical with an
---     "immaterial" badge);
---   - names are grouped into families via sql/lib/finding_family.plsql:
---     the SYSMETRIC rate twin of a SYSSTAT counter, and the CPU half of the
---     CPU/wait ratio pair, are non-canonical -- scored and shown (muted,
---     class "twin") but never counted, and "Biggest movers" shows one lead
---     row per family with its flagged relatives folded under an expander;
---   - a material drop in a cost-type name (waits, latency, hard parses) is
---     "improved" (class info), excluded from the crit / warn counts.
--- The same rule lives in sql/lib/score_cells.plsql (04/05/06/14/15/18),
--- sql/00_params.sql (verdict), sql/08_overview.sql (hero cards),
--- sql/lib/day_profile_cte.sql (16) and sql/17_narrative.sql -- kept in
--- sync by inspection, per the "findings are recomputed, not shared" rule.
+-- Card order and lead (shared with the verdict in 00_params.sql through
+-- sql/lib/finding_cards.plsql): a card is led by its loudest large (else
+-- moderate) member of the card's primary family, else of any family;
+-- cards are ordered large before moderate, then by the largest |z| of any
+-- member, and a flagged DB time card moves up to second place.
+--
+-- Implementation note: the unified LOAD/METRIC/WAIT recompute is
+-- BULK COLLECTed exactly once into a PL/SQL collection; every view below
+-- walks it (no second recompute).  The card evidence adds ONE bounded
+-- event-level DBA_HIST_SYSTEM_EVENT scan (the top events of each flagged
+-- wait class), same pairs -> bounds -> deltas shape as 04.
 -- Read-only: recomputes everything in-flight from the AWR views; does NOT
 -- persist anything.
---
--- Implementation note: the same set of findings drives two views (the
--- "Biggest movers" top-8-by-|z| table and the per-domain detail tables),
--- each with a different ordering.  We BULK COLLECT the unified
--- LOAD/METRIC/WAIT recompute exactly once into a PL/SQL collection, attach
--- the detail-table view position via ROW_NUMBER(), and then walk the
--- collection: once to build tallies / the table-order index / the top-8
--- "movers" shortlist (all in the same pass, so no second query is ever
--- run), and again per domain to emit the detail tables in table order.
---
--- Display-only rules layered on top of the scoring above (do not change
--- change_bucket / severity):
---   - |z| > 99 is clamped to "&gt;+99" / "&lt;&minus;99" for display.
---   - A near-zero baseline sigma (sd < 1% of |mean|, or both exactly 0)
---     gets a "sigma approx 0" badge next to the z value and a bold %-delta
---     cell, nudging the reader toward %-delta instead of an inflated z.
---   - Every displayed %-delta carries a leading up/down triangle instead of
---     a signed number; no per-direction color class is used (severity
---     color stays on .badge only).
 --
 
 SET DEFINE '~'
@@ -70,15 +64,32 @@ DECLARE
         family         VARCHAR2(64),
         canonical      VARCHAR2(1),
         dir            VARCHAR2(4),
-        shr          NUMBER
+        shr            NUMBER,
+        wv             VARCHAR2(4000),
+        grp            VARCHAR2(64)
     );
     TYPE findings_t  IS TABLE OF finding_rec INDEX BY PLS_INTEGER;
     TYPE idx_t       IS TABLE OF PLS_INTEGER INDEX BY PLS_INTEGER;
     TYPE fam_idx_t   IS TABLE OF PLS_INTEGER INDEX BY VARCHAR2(64);
+    TYPE gz_t        IS TABLE OF NUMBER INDEX BY VARCHAR2(64);
+    TYPE ord_t       IS TABLE OF VARCHAR2(64) INDEX BY PLS_INTEGER;
+    -- one foreground event of a flagged wait class (card evidence)
+    TYPE ev_rec IS RECORD (
+        wclass  VARCHAR2(64),
+        event   VARCHAR2(128),
+        cur_val NUMBER,
+        mu      NUMBER,
+        sd      NUMBER,
+        n       NUMBER,
+        shr     NUMBER
+    );
+    TYPE ev_t IS TABLE OF ev_rec INDEX BY PLS_INTEGER;
 
     v_findings   findings_t;
     v_table_idx  idx_t;
     f            finding_rec;
+    v_evs        ev_t;
+    v_flagcls    fam_idx_t;     -- wait classes with a flagged class row
 
     v_total      NUMBER := 0;
     v_crit       NUMBER := 0;
@@ -86,36 +97,40 @@ DECLARE
     v_impr       NUMBER := 0;
     v_noted      NUMBER := 0;
     v_folded     NUMBER := 0;
-    v_typical    NUMBER := 0;
+    v_normal     NUMBER := 0;
     v_n_tbl      PLS_INTEGER := 0;
-    v_n_fam      PLS_INTEGER := 0;   -- families whose lead is large / moderate
-    -- family -> index (in v_findings) of the family's lead row: the
-    -- canonical member with the largest |z|.
-    v_lead       fam_idx_t;
-    v_fam        VARCHAR2(64);
     v_weeks_back NUMBER := ~weeks_back;
-
-    -- "Biggest movers" (T6): top 8 FAMILY LEADS by |z| across all domains,
-    -- tracked via a tiny sorted array while the SAME collection above is
-    -- walked -- no second cursor/query.
-    v_top        findings_t;
-    v_top_n      PLS_INTEGER := 0;
-    v_tmp        finding_rec;
-    v_az         NUMBER;
-    v_bar_w      PLS_INTEGER;
-    v_members    PLS_INTEGER := 0;
     j            PLS_INTEGER;
+
+    -- cards: group -> lead index / severity / loudest |z|; v_order = card order
+    v_glead      fam_idx_t;
+    v_gsev       fam_idx_t;
+    v_gz         gz_t;
+    v_order      ord_t;
+    v_g          VARCHAR2(64);
+    v_tmp        VARCHAR2(64);
+    v_wait_flag  BOOLEAN := FALSE;
+    v_dbt        PLS_INTEGER;
+    v_cpu        PLS_INTEGER;
+    v_meta       VARCHAR2(4000);
 
     @@sql/lib/metric_policy.plsql
     @@sql/lib/is_essential.plsql
     @@sql/lib/fmt_num.plsql
+    @@sql/lib/band_glyph.plsql
     @@sql/lib/anchor_id.plsql
+    @@sql/lib/finding_cards.plsql
+    @@sql/lib/off_label.plsql
+    @@sql/lib/wingrid.plsql
+    @@sql/lib/timeline.plsql
 
-    -- Phase 3 cross-links: the id of THIS finding's row, and a link to the
-    -- source row in 02 / 03 / 04 that produced it (same anchor_id rule).
+    -- Entity anchors (v1.6.0): the id of THIS finding's row is
+    -- finding_anchor(domain, name) = fr-<l|m|w>-<name> (sql/lib/anchor_id
+    -- .plsql), the target of every entity link to a metric; src_link()
+    -- points at the source row in 02 / 03 / 04 that produced it.
     FUNCTION find_id(p_dom VARCHAR2, p_name VARCHAR2) RETURN VARCHAR2 IS
     BEGIN
-        RETURN anchor_id('find-' || LOWER(p_dom), p_name);
+        RETURN finding_anchor(p_dom, p_name);
     END find_id;
 
     FUNCTION src_link(p_dom VARCHAR2, p_name VARCHAR2) RETURN VARCHAR2 IS
@@ -124,7 +139,7 @@ DECLARE
             || CASE p_dom
                    WHEN 'LOAD'   THEN anchor_id('load', p_name)
                    WHEN 'METRIC' THEN anchor_id('metric', p_name)
-                   ELSE anchor_id('fgc', REGEXP_REPLACE(p_name, '^Wait class: ', ''))
+                   ELSE anchor_id('wc', REGEXP_REPLACE(p_name, '^Wait class: ', ''))
                END
             || '" title="Go to this metric''s row in '
             || CASE p_dom WHEN 'LOAD' THEN 'Load profile'
@@ -134,8 +149,6 @@ DECLARE
     END src_link;
 
     -- Detail-table order: severity rank, |z| DESC, |pct| DESC, name.
-    -- Computed here (not by ROW_NUMBER in the SQL) because the 'improved'
-    -- bucket needs finding_family()'s direction flag, a PL/SQL function.
     FUNCTION tbl_rank(p_bucket VARCHAR2) RETURN PLS_INTEGER IS
     BEGIN
         RETURN CASE p_bucket WHEN 'large'                THEN 1
@@ -172,58 +185,69 @@ DECLARE
                              ELSE 'skip' END;
     END bucket_cls;
 
-    -- "immaterial": |z| cleared 2 but the materiality floor held it back.
-    FUNCTION imm_badge(p_bucket VARCHAR2, p_z NUMBER) RETURN VARCHAR2 IS
+    -- a metric's value / scale / unit helpers over one finding
+    FUNCTION f_scale(r finding_rec) RETURN NUMBER IS
     BEGIN
-        IF p_bucket = 'typical' AND p_z IS NOT NULL AND ABS(p_z) > 2 THEN
-            RETURN ' <span class="badge sig" title="|z| above 2 but the move is below '
-                || 'this metric&#39;s materiality floor (sql/lib/metric_policy.plsql)">'
-                || 'immaterial</span>';
-        END IF;
-        RETURN '';
-    END imm_badge;
+        RETURN metric_scale(r.metric_domain, r.metric_name);
+    END f_scale;
 
-    -- Shared display-only formatting (B5/F5): clamp |z|>99, flag a
-    -- near-zero baseline sigma, and render %-delta with a direction glyph.
-    -- Duplicated (not shared) with sql/lib/score_cells.plsql on purpose --
-    -- same "findings are recomputed, not shared" convention as the scoring
-    -- above; the two stay in sync by inspection, not by a shared function.
-    FUNCTION fmt_z(p_z NUMBER) RETURN VARCHAR2 IS
+    FUNCTION f_unit(r finding_rec) RETURN VARCHAR2 IS
     BEGIN
-        RETURN CASE
-            WHEN p_z IS NULL THEN '&mdash;'
-            WHEN p_z > 99    THEN '&gt;+99'
-            WHEN p_z < -99   THEN '&lt;&minus;99'
-            ELSE TO_CHAR(p_z, 'FMS99990D00')
-        END;
-    END fmt_z;
+        RETURN metric_unit(r.metric_domain, r.metric_name);
+    END f_unit;
 
-    FUNCTION fmt_pct(p_pct NUMBER) RETURN VARCHAR2 IS
+    FUNCTION f_label(r finding_rec) RETURN VARCHAR2 IS
     BEGIN
-        RETURN CASE
-            WHEN p_pct IS NULL THEN '&mdash;'
-            WHEN p_pct < 0     THEN '&#9660; ' || TO_CHAR(ABS(p_pct), 'FM99990D0') || '%'
-            ELSE '&#9650; ' || TO_CHAR(p_pct, 'FM99990D0') || '%'
-        END;
-    END fmt_pct;
+        RETURN DBMS_XMLGEN.CONVERT(metric_label(r.metric_domain, r.metric_name));
+    END f_label;
 
-    FUNCTION is_sig(p_mu NUMBER, p_sd NUMBER) RETURN VARCHAR2 IS
+    FUNCTION f_ent(r finding_rec) RETURN VARCHAR2 IS
     BEGIN
-        IF p_mu IS NOT NULL AND p_sd IS NOT NULL THEN
-            IF (p_mu = 0 AND p_sd = 0)
-               OR (p_mu <> 0 AND p_sd < 0.01 * ABS(p_mu)) THEN
-                RETURN 'Y';
-            END IF;
-        END IF;
-        RETURN 'N';
-    END is_sig;
+        RETURN ent(f_label(r), find_id(r.metric_domain, r.metric_name), 'metric');
+    END f_ent;
+
+    FUNCTION dom_word(p_dom VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN CASE p_dom WHEN 'LOAD' THEN 'Load' WHEN 'METRIC' THEN 'Metric' ELSE 'Wait' END;
+    END dom_word;
+
+    -- one evidence row of a card: kind | name + description | Delta + band
+    FUNCTION ev_row(p_dt VARCHAR2, p_id VARCHAR2, p_txt BOOLEAN, p_de VARCHAR2,
+                    p_cur NUMBER, p_mu NUMBER, p_sd NUMBER, p_bucket VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN '<div class="evr"><dt>' || p_dt || '</dt><dd><span class="id'
+            || CASE WHEN p_txt THEN ' txt' END || '">' || p_id || '</span>'
+            || '<span class="de">' || nbu(p_de) || '</span></dd>'
+            || '<div class="m">' || delta_span(p_cur, p_mu, p_bucket)
+            || band_span(band_z(p_cur, p_mu, p_sd), p_bucket, 'sm') || '</div></div>';
+    END ev_row;
+
+    -- the band glyph's axis under a card's large band
+    FUNCTION band_axis RETURN VARCHAR2 IS
+    BEGIN
+        RETURN '<span class="bd-ax" aria-hidden="true"><em style="--x:.167">&minus;2</em>'
+            || '<em style="--x:.333">0</em><em style="--x:.500">+2</em>'
+            || '<em style="--x:.583">+3</em><em class="end" style="--x:1">+8&sigma;</em></span>';
+    END band_axis;
+
+    -- a "checked and normal" row: name + normal range | band | value + Delta
+    FUNCTION nr_row(r finding_rec) RETURN VARCHAR2 IS
+        v_s NUMBER := f_scale(r);
+        v_u VARCHAR2(20) := f_unit(r);
+    BEGIN
+        RETURN '<div class="nr"><div class="l" title="' || DBMS_XMLGEN.CONVERT(r.metric_name) || '">'
+            || f_ent(r) || '<small>normal ' || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u)
+            || '</small></div>'
+            || band_span(r.z_score, r.change_bucket, 'sm', CASE WHEN r.canonical = 'N' THEN 'Y' ELSE 'N' END)
+            || '<div class="vv">' || fv(r.cur_val * v_s, v_u)
+            || '<small>' || delta_span(r.cur_val, r.prior_mean, r.change_bucket) || '</small></div></div>';
+    END nr_row;
 
     PROCEDURE emit_domain_table(p_dom VARCHAR2, p_title VARCHAR2) IS
         v_row      VARCHAR2(32767);
         v_sev      VARCHAR2(40);
         v_cls      VARCHAR2(10);
         v_imp      VARCHAR2(1);
-        v_sig      VARCHAR2(1);
         v_count    PLS_INTEGER := 0;
         v_tail_cnt PLS_INTEGER := 0;
         v_tbl_id   VARCHAR2(30);
@@ -234,8 +258,8 @@ DECLARE
             IF rec.metric_domain = p_dom THEN
                 v_count := v_count + 1;
                 -- T1: rows whose severity is "typical" (OK), flat baseline
-                -- or insufficient history are tail candidates the sidebar
-                -- toggle collapses behind an expander.
+                -- or insufficient history are tail candidates the
+                -- expander collapses.
                 IF rec.change_bucket IN ('typical', 'flat baseline', 'insufficient history',
                                          'improved', 'noted') THEN
                     v_tail_cnt := v_tail_cnt + 1;
@@ -246,20 +270,19 @@ DECLARE
 
         v_tbl_id := 'findings-' || LOWER(p_dom);
 
-        -- full-only: the per-domain detail tables (and their
-        -- headings/expanders) when the triage view is on; only the
-        -- "Biggest movers" table stays visible there.
-        DBMS_OUTPUT.PUT_LINE('<h3 class="full-only">' || p_title || '</h3>');
-        DBMS_OUTPUT.PUT_LINE('<table id="' || v_tbl_id || '" class="full-only">'
+        -- All sections only (class "vw in-a"): the per-domain detail
+        -- tables, their headings and expanders.  The bucket is drawn by
+        -- the band glyph (sql/lib/band_glyph.plsql); the row keeps its
+        -- crit / warn / ... class (2px marker, rail counts, J / K).
+        DBMS_OUTPUT.PUT_LINE('<h3 class="vw in-a">' || p_title || '</h3>');
+        DBMS_OUTPUT.PUT_LINE('<table id="' || v_tbl_id || '" class="vw in-a">'
             || '<thead><tr>'
-            || '<th>Change</th>'
             || '<th>Metric</th>'
-            || '<th class="num">Current</th>'
+            || '<th class="num cur-col">Current</th>'
+            || band_head
             || '<th class="num">Prior mean</th>'
             || '<th class="num">Prior sd</th>'
             || '<th class="num">n</th>'
-            || '<th class="num">z-score</th>'
-            || '<th class="num">% &Delta;</th>'
             || '</tr></thead><tbody>');
 
         FOR p IN 1 .. v_table_idx.COUNT LOOP
@@ -267,17 +290,9 @@ DECLARE
             IF rec.metric_domain = p_dom THEN
                 v_sev := rec.change_bucket;
                 v_cls := bucket_cls(v_sev);
-                -- WAIT rows here are rolled up to wait_class (e.g. "Wait
-                -- class: User I/O") -- already a compact high-level
-                -- rollup, so they deliberately carry NO data-imp attribute
-                -- and stay visible in Essential mode (untagged rows are
-                -- never hidden by the CSS rule and never counted by the
-                -- pill JS, which both select only rows with data-imp).
-                -- LOAD/METRIC names are raw stat/metric names and match
-                -- is_essential() directly.
+                -- WAIT rows are wait-class rollups and carry NO data-imp.
                 v_imp := CASE WHEN rec.metric_domain = 'WAIT' THEN NULL
                               ELSE is_essential(rec.metric_domain, rec.metric_name) END;
-                v_sig := is_sig(rec.prior_mean, rec.prior_sd);
                 v_row := '<tr id="' || find_id(rec.metric_domain, rec.metric_name)
                     || '" data-metric="'
                     || REPLACE(DBMS_XMLGEN.CONVERT(rec.metric_name), '"', '&quot;')
@@ -289,7 +304,6 @@ DECLARE
                             THEN ' data-tail="Y"' END
                     || ' class="' || v_cls
                     || CASE WHEN rec.canonical = 'N' THEN ' twin' ELSE '' END || '">'
-                    || '<td><span class="badge ' || v_cls || '">' || v_sev || '</span></td>'
                     || '<td>' || DBMS_XMLGEN.CONVERT(rec.metric_name)
                         || CASE WHEN rec.canonical = 'N'
                                 THEN ' <span class="chip" title="same quantity as a counted '
@@ -297,23 +311,13 @@ DECLARE
                                 ELSE '' END
                         || src_link(rec.metric_domain, rec.metric_name)
                         || '</td>'
-                    || '<td class="num"' || fmt_num_title(rec.cur_val) || '>'
+                    || '<td class="num" data-w="0"' || fmt_num_title(rec.cur_val) || '>'
                         || fmt_num(rec.cur_val) || '</td>'
+                    || band_cells(rec.cur_val, rec.prior_mean, rec.prior_sd, rec.n_prior,
+                                  v_sev, CASE WHEN rec.canonical = 'N' THEN 'Y' ELSE 'N' END)
                     || '<td class="num">' || fmt_num(rec.prior_mean) || '</td>'
                     || '<td class="num">' || fmt_num(rec.prior_sd) || '</td>'
                     || '<td class="num">' || NVL(TO_CHAR(rec.n_prior), '0') || '</td>'
-                    || '<td class="num">' || fmt_z(rec.z_score)
-                        || CASE WHEN v_sig = 'Y' THEN
-                               ' <span class="badge sig" title="baseline barely moved: '
-                               || '&sigma; below 1% of mean (floored to 2% for z); read the % delta instead">'
-                               || '&sigma;&approx;0</span>'
-                           END
-                        || imm_badge(v_sev, rec.z_score)
-                        || '</td>'
-                    || '<td class="num">'
-                        || CASE WHEN v_sig = 'Y' THEN '<b>' || fmt_pct(rec.pct_delta) || '</b>'
-                                ELSE fmt_pct(rec.pct_delta) END
-                        || '</td>'
                     || '</tr>';
                 DBMS_OUTPUT.PUT_LINE(v_row);
             END IF;
@@ -321,55 +325,231 @@ DECLARE
         DBMS_OUTPUT.PUT_LINE('</tbody></table>');
 
         IF v_tail_cnt > 0 THEN
-            DBMS_OUTPUT.PUT_LINE('<span class="expander full-only" data-for="' || v_tbl_id
-                || '" data-n="' || v_tail_cnt || '" data-noun="typical / improved / flat rows">'
-                || '&#9656; Show ' || v_tail_cnt || ' typical / improved / flat rows</span>');
+            DBMS_OUTPUT.PUT_LINE('<span class="expander vw in-a" data-for="' || v_tbl_id
+                || '" data-n="' || v_tail_cnt || '" data-noun="normal / improved / flat rows">'
+                || '&#9656; Show ' || v_tail_cnt || ' normal / improved / flat rows</span>');
         END IF;
     END emit_domain_table;
-BEGIN
-    -- data-normal="Y" keeps this section in the Normal view; the
-    -- per-domain detail tables/headings/expanders carry class
-    -- "full-only" and show only in the Full view.
-    DBMS_OUTPUT.PUT_LINE('<section id="findings" data-normal="Y"><h2 id="findings-heading">Findings summary</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'z = (current &minus; &mu;) &divide; max(&sigma;, 2% of &mu;) over prior valid windows. '
-        || '|z|&gt;3 large, |z|&gt;2 moderate, else typical &mdash; but only when the move is material: '
-        || '|%-delta| &ge; 10 and, for wait classes, &ge; 2% of the Current window''s wait time '
-        || '(otherwise typical, tagged immaterial). '
-        || 'Each metric has its own direction and floors (sql/lib/metric_policy.plsql): '
-        || 'a move in the good direction is <b>improved</b>, an informational counter is <b>noted</b> '
-        || '&mdash; neither is highlighted or counted. '
-        || 'Twins &mdash; the SYSMETRIC rate of a SYSSTAT counter, the CPU half of the CPU/wait ratio '
-        || '&mdash; are shown muted and never counted. '
-        || 'n&lt;3 &rarr; %-delta only. '
-        || '|z| beyond &plusmn;99 is capped for display; '
-        || '&sigma;&approx;0 flags a baseline that barely moved &mdash; read the %-delta there instead.</p>');
 
+    -- One finding card (Summary view): kicker + band, headline, Current and
+    -- normal range, the window chart, evidence rows, the related-metrics
+    -- fold and the footer links.  p_pos = 1 is the lead card (bigger).
+    PROCEDURE emit_card(p_g VARCHAR2, p_pos PLS_INTEGER) IS
+        r       finding_rec := v_findings(v_glead(p_g));
+        m       finding_rec;
+        v_s     NUMBER := metric_scale(r.metric_domain, r.metric_name);
+        v_u     VARCHAR2(20) := metric_unit(r.metric_domain, r.metric_name);
+        v_id    VARCHAR2(80) := card_id(p_g);
+        v_sev   VARCHAR2(40) := r.change_bucket;
+        v_ev    VARCHAR2(32767);
+        v_nev   PLS_INTEGER := 0;
+        v_cap   PLS_INTEGER := CASE WHEN p_g = 'IO' THEN 2 ELSE 4 END;
+        v_rel   VARCHAR2(32767);
+        v_nrel  PLS_INTEGER := 0;
+        v_ntw   PLS_INTEGER := 0;
+        v_split VARCHAR2(1);
+        v_links VARCHAR2(2000);
+        v_ms    NUMBER;
+        v_mu    VARCHAR2(20);
+        v_eb    VARCHAR2(40);
+    BEGIN
+        IF p_g = 'DBTIME' AND v_dbt IS NOT NULL AND v_cpu IS NOT NULL THEN
+            v_split := time_split(v_findings(v_dbt).cur_val, v_findings(v_dbt).prior_mean,
+                                  v_findings(v_cpu).cur_val, v_findings(v_cpu).prior_mean);
+        END IF;
+
+        -- evidence 1: for DB time, where the CPU went (the other half)
+        IF p_g = 'DBTIME' AND v_cpu IS NOT NULL AND v_cpu <> v_glead(p_g) THEN
+            m := v_findings(v_cpu);
+            v_ev := v_ev || ev_row('CPU', f_ent(m), TRUE,
+                fv(m.cur_val * 0.01, 'AAS') || ', normal ' || fv(m.prior_mean * 0.01, 'AAS')
+                || CASE WHEN v_split IN ('W', 'w') THEN '; the rise is wait' END,
+                m.cur_val, m.prior_mean, m.prior_sd, m.change_bucket);
+            v_nev := v_nev + 1;
+        END IF;
+        -- evidence 2: the top events of every flagged wait class on the card
+        FOR e IN 1 .. v_evs.COUNT LOOP
+            EXIT WHEN v_nev >= v_cap;
+            IF card_group('WAIT:' || v_evs(e).wclass) = p_g
+               AND v_flagcls.EXISTS(v_evs(e).wclass) THEN
+                v_eb := policy_bucket('WAIT', v_evs(e).event, v_evs(e).wclass, v_evs(e).cur_val,
+                                      v_evs(e).mu, v_evs(e).sd, v_evs(e).n, v_evs(e).shr);
+                v_ev := v_ev || ev_row('Event',
+                    ent(DBMS_XMLGEN.CONVERT(v_evs(e).event), anchor_id('we', v_evs(e).event), 'event'),
+                    TRUE, fv(v_evs(e).cur_val, 'AAS') || ', normal ' || fv(v_evs(e).mu, 'AAS'),
+                    v_evs(e).cur_val, v_evs(e).mu, v_evs(e).sd, v_eb);
+                v_nev := v_nev + 1;
+            END IF;
+        END LOOP;
+        -- evidence 3: the card's other flagged metrics, loudest first; and the
+        -- related-metrics fold (every other flagged member, twins muted)
+        FOR p IN 1 .. v_table_idx.COUNT LOOP
+            m := v_findings(v_table_idx(p));
+            IF m.grp = p_g AND m.change_bucket IN ('large', 'moderate')
+               AND v_table_idx(p) <> v_glead(p_g) THEN
+                v_ms := metric_scale(m.metric_domain, m.metric_name);
+                v_mu := metric_unit(m.metric_domain, m.metric_name);
+                IF m.canonical = 'Y' AND v_nev < v_cap THEN
+                    v_ev := v_ev || ev_row(dom_word(m.metric_domain), f_ent(m), TRUE,
+                        fv(m.cur_val * v_ms, v_mu) || ', normal ' || fv(m.prior_mean * v_ms, v_mu),
+                        m.cur_val, m.prior_mean, m.prior_sd, m.change_bucket);
+                    v_nev := v_nev + 1;
+                END IF;
+                IF m.canonical = 'N' THEN v_ntw := v_ntw + 1; ELSE v_nrel := v_nrel + 1; END IF;
+                v_rel := v_rel || '<tr class="' || bucket_cls(m.change_bucket)
+                    || CASE WHEN m.canonical = 'N' THEN ' twin' END || '"><td>' || f_ent(m)
+                    || CASE WHEN m.canonical = 'N'
+                            THEN ' <span class="chip" title="same quantity as a counted row; not counted again">twin</span>' END
+                    || '</td><td class="num" data-w="0">' || fv(m.cur_val * v_ms, v_mu) || '</td>'
+                    || band_cells(m.cur_val * v_ms, m.prior_mean * v_ms, m.prior_sd * v_ms, m.n_prior,
+                                  m.change_bucket, CASE WHEN m.canonical = 'N' THEN 'Y' ELSE 'N' END)
+                    || '</tr>';
+            END IF;
+        END LOOP;
+
+        v_links := CASE
+            WHEN p_g = 'IO'     THEN '<a href="#segment-io">Segment I/O</a><a href="#topsql">Top SQL</a>'
+            WHEN p_g = 'DBTIME' THEN '<a href="#waits-fg">Foreground waits</a>'
+                                     || CASE WHEN ~profile_days > 0 THEN '<a href="#day-profile">Day profile</a>'
+                                             ELSE '<a href="#ash-timeline">ASH timeline</a>' END
+            WHEN p_g = 'WRITE'  THEN '<a href="#file-io">File I/O</a><a href="#load">Load profile</a>'
+            WHEN p_g IN ('NET', 'COMMIT') OR p_g LIKE 'WAIT:%' THEN '<a href="#waits-fg">Foreground waits</a>'
+            WHEN r.metric_domain = 'METRIC' THEN '<a href="#metrics">System metrics</a>'
+            ELSE '<a href="#load">Load profile</a>' END;
+
+        DBMS_OUTPUT.PUT_LINE('<article class="panel fc f-' || v_sev
+            || CASE WHEN p_pos = 1 THEN ' lead' WHEN v_sev = 'moderate' THEN ' slim' END
+            || '" id="' || v_id || '" aria-labelledby="' || v_id || '-h">'
+            || '<header class="fc-h"><div class="fc-k"><span class="sv" title="'
+            || DBMS_XMLGEN.CONVERT(card_label(p_g)) || '"><i class="dotk ' || v_sev
+            || '" aria-hidden="true"></i>' || INITCAP(v_sev) || '</span></div>'
+            || '<div class="fc-band" title="z ' || band_ztxt(r.z_score) || ' against the prior normal">'
+            || band_span(r.z_score, v_sev, 'lg') || band_axis || '</div></header>');
+        DBMS_OUTPUT.PUT_LINE('<h3 id="' || v_id || '-h">' || f_ent(r) || ' '
+            || move_txt(r.cur_val, r.prior_mean, v_sev)
+            || CASE WHEN r.metric_name = 'DB time' THEN
+                   CASE v_split WHEN 'W' THEN ', all of it wait' WHEN 'w' THEN ', mostly wait'
+                                WHEN 'c' THEN ', mostly CPU' WHEN 'm' THEN ', CPU and wait alike' END END
+            || '</h3>');
+        DBMS_OUTPUT.PUT_LINE('<div class="fc-b"><div class="fc-main">'
+            || '<div class="big"><span class="v">' || fv_num(r.cur_val * v_s, v_u) || '</span>'
+            || '<span class="u">' || fv_unit(r.cur_val * v_s, v_u) || '</span>'
+            || '<span class="nrm" title="prior mean ' || fv(r.prior_mean * v_s, v_u) || '">normal '
+            || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u) || '</span></div>');
+        DBMS_OUTPUT.PUT_LINE('<div class="wg bare allv"' || wg_attr || '>' || wg_flags(TRUE)
+            || wg_bars(r.wv, v_s, r.prior_mean, r.prior_sd, v_sev) || wg_dates(TRUE) || '</div></div>');
+        DBMS_OUTPUT.PUT_LINE('<dl class="ev">' || v_ev || '</dl></div>');
+        IF v_nrel + v_ntw > 0 THEN
+            DBMS_OUTPUT.PUT_LINE('<details class="rel"><summary>'
+                || CASE WHEN v_nrel > 0 THEN v_nrel || ' related metric' || CASE WHEN v_nrel = 1 THEN '' ELSE 's' END END
+                || CASE WHEN v_nrel > 0 AND v_ntw > 0 THEN ', ' END
+                || CASE WHEN v_ntw > 0 THEN v_ntw || ' twin' || CASE WHEN v_ntw = 1 THEN '' ELSE 's' END END
+                || '</summary><div class="tw"><table data-nocount data-notools data-nosort><thead><tr>'
+                || '<th>Metric</th><th class="num cur-col">Current</th>' || band_head
+                || '</tr></thead><tbody>');
+            DBMS_OUTPUT.PUT_LINE(v_rel);
+            DBMS_OUTPUT.PUT_LINE('</tbody></table></div></details>');
+        END IF;
+        -- "Timeline ->": phase 3's grid row for this metric (data-tl) when it
+        -- exists, else the Timeline view itself (sql/lib/js_wingrid.plsql)
+        DBMS_OUTPUT.PUT_LINE('<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
+            || find_id(r.metric_domain, r.metric_name) || '">Timeline &rarr;</a>'
+            || '<span class="evl">' || v_links || '</span></footer></article>');
+    END emit_card;
+
+    -- v1.6.0 Timeline: the "Headline and load" lane -- the headline
+    -- metrics in Mock D's order, then every other flagged canonical load /
+    -- metric row (a card lead is always canonical; twins stay in the
+    -- tables) -- and the flagged wait classes at the top of the "Waits" lane.
+    -- One grid row each from the collection the tables walk (never a
+    -- separate slice), id tl-fr-<d>-<name> = the "Timeline ->" target of
+    -- the finding cards (sql/lib/timeline.plsql).
+    FUNCTION hl_rank(p_dom VARCHAR2, p_name VARCHAR2) RETURN PLS_INTEGER IS
+    BEGIN
+        RETURN CASE p_dom || ':' || p_name
+            WHEN 'LOAD:DB time'                      THEN 1
+            WHEN 'LOAD:DB CPU'                       THEN 2
+            WHEN 'METRIC:Database Wait Time Ratio'   THEN 3
+            WHEN 'LOAD:session logical reads'        THEN 4
+            WHEN 'LOAD:physical reads'               THEN 5
+            WHEN 'LOAD:physical read total bytes'    THEN 6
+            WHEN 'LOAD:table scans (long tables)'    THEN 7
+            WHEN 'METRIC:SQL Service Response Time'  THEN 8
+            WHEN 'METRIC:Host CPU Utilization (%)'   THEN 9
+            WHEN 'LOAD:redo size'                    THEN 10
+            WHEN 'LOAD:parse count (hard)'           THEN 11 END;
+    END hl_rank;
+
+    FUNCTION tl_row(r finding_rec, p_cls VARCHAR2) RETURN VARCHAR2 IS
+        v_s  NUMBER       := metric_scale(r.metric_domain, r.metric_name);
+        v_u  VARCHAR2(20) := metric_unit(r.metric_domain, r.metric_name);
+        v_tw VARCHAR2(1)  := CASE WHEN r.canonical = 'N' THEN 'Y' ELSE 'N' END;
+    BEGIN
+        RETURN tl_bars(wg_csv(r.wv, v_s), r.prior_mean * v_s, r.prior_sd * v_s,
+            CASE WHEN v_tw = 'N' THEN r.change_bucket END,
+            tl_lab(f_ent(r),
+                   CASE WHEN r.metric_domain = 'WAIT' THEN 'wait class, ' || v_u ELSE v_u END
+                   || CASE WHEN v_tw = 'Y' THEN ', twin' END,
+                   DBMS_XMLGEN.CONVERT(r.metric_name),
+                   CASE WHEN r.metric_domain = 'WAIT'
+                        THEN REGEXP_REPLACE(r.metric_name, '^Wait class: ', '') END),
+            tl_gut(r.cur_val * v_s, r.prior_mean * v_s, r.prior_sd * v_s, r.change_bucket, NULL, v_tw),
+            'tl-' || find_id(r.metric_domain, r.metric_name),
+            TRIM(p_cls || CASE WHEN v_tw = 'Y' THEN ' twin' END),
+            f_label(r), v_u);
+    END tl_row;
+
+    PROCEDURE emit_timeline IS
+        rec finding_rec;
+        v_n PLS_INTEGER := 0;
+    BEGIN
+        FOR h IN 1 .. 11 LOOP
+            FOR p IN 1 .. v_table_idx.COUNT LOOP
+                rec := v_findings(v_table_idx(p));
+                IF hl_rank(rec.metric_domain, rec.metric_name) = h THEN
+                    DBMS_OUTPUT.PUT_LINE(CASE WHEN v_n = 0 THEN tl_open('metrics') END || tl_row(rec, NULL));
+                    v_n := v_n + 1;
+                END IF;
+            END LOOP;
+        END LOOP;
+        FOR p IN 1 .. v_table_idx.COUNT LOOP
+            rec := v_findings(v_table_idx(p));
+            IF rec.metric_domain IN ('LOAD', 'METRIC') AND hl_rank(rec.metric_domain, rec.metric_name) IS NULL
+               AND rec.change_bucket IN ('large', 'moderate') AND rec.canonical = 'Y' THEN
+                DBMS_OUTPUT.PUT_LINE(CASE WHEN v_n = 0 THEN tl_open('metrics') END || tl_row(rec, NULL));
+                v_n := v_n + 1;
+            END IF;
+        END LOOP;
+        IF v_n > 0 THEN DBMS_OUTPUT.PUT_LINE(tl_close); END IF;
+        v_n := 0;
+        FOR p IN 1 .. v_table_idx.COUNT LOOP
+            rec := v_findings(v_table_idx(p));
+            IF rec.metric_domain = 'WAIT' AND rec.change_bucket IN ('large', 'moderate') THEN
+                DBMS_OUTPUT.PUT_LINE(CASE WHEN v_n = 0 THEN tl_open('waits') END || tl_row(rec, 'w'));
+                v_n := v_n + 1;
+            END IF;
+        END LOOP;
+        IF v_n > 0 THEN DBMS_OUTPUT.PUT_LINE(tl_close); END IF;
+    END emit_timeline;
+BEGIN
     --
     -- Recompute LOAD / METRIC / WAIT values per (week_offset, metric) from
-    -- the AWR views, pivot to cur vs prior AVG/STDDEV, derive the change
-    -- bucket, and tag each row with its detail-table view position via
-    -- ROW_NUMBER.  Bulk-collected once; every view below iterates the
-    -- collection.
+    -- the AWR views, pivot to cur vs prior AVG/STDDEV (+ every window as
+    -- offset-keyed pairs for the card charts), and tag each row with its
+    -- detail-table view position via ROW_NUMBER.  Bulk-collected once;
+    -- every view below iterates the collection.
     --
     WITH
     @@sql/lib/windows_cte.sql
     ,
-    -- LOAD domain: DBA_HIST_SYSSTAT cumulative counters, per-sec deltas.
+    -- LOAD domain: DBA_HIST_SYSSTAT cumulative counters (DB time / DB CPU from
+    -- the time model, sql/lib/load_pairs_cte.sql), per-sec deltas.
     load_targets AS (
         @@~template_dir/sysstat_load_targets.sql
     ),
-    load_pairs AS (
-        SELECT w.week_offset, w.dur_sec, ss.stat_name, ss.instance_number,
-               ss.snap_id, ss.value,
-               w.begin_snap_id, w.end_snap_id
-        FROM   valid_windows w
-        JOIN   dba_hist_sysstat ss
-            ON ss.dbid = w.dbid
-           AND ss.snap_id IN (w.begin_snap_id, w.end_snap_id)
-           AND ss.instance_number = w.instance_number
-           AND ss.stat_name IN (SELECT stat_name FROM load_targets)
-    ),
+    -- SYSSTAT counters, with DB time / DB CPU from the time model
+    @@sql/lib/load_pairs_cte.sql
+    ,
     load_bounds AS (
         SELECT week_offset, dur_sec, stat_name, instance_number,
                SUM(CASE WHEN snap_id = begin_snap_id THEN value END) AS beg_val,
@@ -473,7 +653,14 @@ BEGIN
                MAX(CASE WHEN week_offset = 0 THEN metric_value END)  AS cur_val,
                AVG(CASE WHEN week_offset > 0 THEN metric_value END)  AS mu,
                STDDEV(CASE WHEN week_offset > 0 THEN metric_value END) AS sd,
-               COUNT(CASE WHEN week_offset > 0 THEN metric_value END) AS n
+               COUNT(CASE WHEN week_offset > 0 THEN metric_value END) AS n,
+               -- v1.6.0: every window's value as offset-keyed 'k:v' pairs
+               -- (sql/lib/wingrid.plsql wg_tok format) for the card charts
+               LISTAGG(week_offset || ':' ||
+                   CASE WHEN metric_value = 0 THEN '0'
+                        ELSE TO_CHAR(ROUND(metric_value, 6 - FLOOR(LOG(10, ABS(metric_value)))),
+                                     'TM9', 'NLS_NUMERIC_CHARACTERS=''.,''') END, ';')
+                   WITHIN GROUP (ORDER BY week_offset) AS pairs
         FROM   unified
         GROUP BY metric_domain, metric_name
     ),
@@ -485,7 +672,7 @@ BEGIN
         WHERE  week_offset = 0
     ),
     measured AS (
-        SELECT p.metric_domain, p.metric_name, p.cur_val, p.mu, p.sd, p.n,
+        SELECT p.metric_domain, p.metric_name, p.cur_val, p.mu, p.sd, p.n, p.pairs,
                -- sigma floor: 2% of |mean| (see header comment)
                CASE
                    WHEN p.cur_val IS NULL OR p.mu IS NULL OR p.sd IS NULL THEN NULL
@@ -513,14 +700,14 @@ BEGIN
                -- pass below (per-metric direction and floors); the share
                -- rides along for the WAIT rows' materiality test.
                CAST(NULL AS VARCHAR2(40)) AS change_bucket,
-               shr
+               shr, pairs
         FROM   measured
         WHERE  cur_val IS NOT NULL OR mu IS NOT NULL
     ),
     ranked AS (
         SELECT metric_domain, metric_name,
                cur_val, prior_mean, prior_sd, n_prior,
-               z_score, pct_delta, change_bucket, shr,
+               z_score, pct_delta, change_bucket, shr, pairs,
                ROW_NUMBER() OVER (
                    ORDER BY metric_domain,
                             ABS(NVL(z_score, 0)) DESC,
@@ -535,22 +722,22 @@ BEGIN
            CAST(NULL AS VARCHAR2(64)) AS family,
            CAST(NULL AS VARCHAR2(1))  AS canonical,
            CAST(NULL AS VARCHAR2(4))  AS dir,
-           shr
+           shr,
+           pairs                      AS wv,
+           CAST(NULL AS VARCHAR2(64)) AS grp
     BULK COLLECT INTO v_findings
     FROM   ranked
     ORDER  BY heat_pos;
 
-    --
-    -- Single pass over the bulk-collected findings: tallies (large/
-    -- moderate/typical), the detail-table order index, and the "Biggest
-    -- movers" top-8-by-|z| shortlist (kept sorted in a tiny array as we go,
-    -- so no second query is ever issued against v_findings).
+
     --
     -- Pass 1: per-metric policy (family / canonical / direction) and the
-    -- change bucket per row, tallies over CANONICAL rows only, the
-    -- per-family lead, and the detail-table order (insertion sort on
-    -- tbl_before).  'improved' / 'noted' rows are counted separately and
-    -- never highlighted.
+    -- change bucket per row, tallies over CANONICAL rows only, the card
+    -- group of every row and each card's lead, severity and loudest |z|,
+    -- and the detail-table order (insertion sort on tbl_before).
+    -- 'improved' / 'noted' rows are counted separately and never
+    -- highlighted.
+    --
     FOR i IN 1 .. v_findings.COUNT LOOP
       DECLARE
         -- policy_rec lives in the include, which also declares functions,
@@ -568,8 +755,11 @@ BEGIN
                           v_findings(i).cur_val, v_findings(i).prior_mean,
                           v_findings(i).prior_sd, v_findings(i).n_prior,
                           v_findings(i).shr);
+        v_findings(i).grp := card_group(v_findings(i).family);
         f := v_findings(i);
         v_total := v_total + 1;
+        IF f.metric_domain = 'LOAD' AND f.metric_name = 'DB time' THEN v_dbt := i; END IF;
+        IF f.metric_domain = 'LOAD' AND f.metric_name = 'DB CPU'  THEN v_cpu := i; END IF;
         IF f.change_bucket IN ('large', 'moderate', 'improved', 'noted') THEN
             IF f.canonical = 'N' THEN
                 v_folded := v_folded + 1;
@@ -579,14 +769,31 @@ BEGIN
             ELSE                                    v_noted := v_noted + 1;
             END IF;
         END IF;
+        IF f.canonical = 'Y' AND f.change_bucket IN ('typical', 'improved', 'noted', 'flat baseline') THEN
+            v_normal := v_normal + 1;
+        END IF;
 
-        -- family lead = canonical LARGE / MODERATE member with the largest
-        -- |z| (improved / noted / typical rows never lead a family, so
-        -- "Biggest movers" lists real findings only)
+        -- the card this row belongs to (sql/lib/finding_cards.plsql)
         IF f.canonical = 'Y' AND f.change_bucket IN ('large', 'moderate') THEN
-            IF NOT v_lead.EXISTS(f.family)
-               OR ABS(NVL(f.z_score, 0)) > ABS(NVL(v_findings(v_lead(f.family)).z_score, 0)) THEN
-                v_lead(f.family) := i;
+            v_g := f.grp;
+            IF NOT v_glead.EXISTS(v_g) THEN
+                v_glead(v_g) := i;
+                v_gsev(v_g)  := 0;
+                v_gz(v_g)    := 0;
+            ELSIF lead_better(v_g, f.change_bucket, f.family, f.z_score,
+                              v_findings(v_glead(v_g)).change_bucket,
+                              v_findings(v_glead(v_g)).family,
+                              v_findings(v_glead(v_g)).z_score,
+                              metric_label(f.metric_domain, f.metric_name),
+                              metric_label(v_findings(v_glead(v_g)).metric_domain,
+                                           v_findings(v_glead(v_g)).metric_name)) THEN
+                v_glead(v_g) := i;
+            END IF;
+            v_gsev(v_g) := GREATEST(v_gsev(v_g), sev_rank(f.change_bucket));
+            v_gz(v_g)   := GREATEST(v_gz(v_g), ABS(NVL(f.z_score, 0)));
+            IF f.metric_domain = 'WAIT' THEN
+                v_flagcls(REGEXP_REPLACE(f.metric_name, '^Wait class: ', '')) := i;
+                v_wait_flag := TRUE;
             END IF;
         END IF;
 
@@ -600,175 +807,269 @@ BEGIN
         v_n_tbl := v_n_tbl + 1;
     END LOOP;
 
-    -- Pass 2: "Biggest movers" = the top 8 family leads by |z|; the
-    -- number of flagged families is the report's headline finding count.
-    v_fam := v_lead.FIRST;
-    WHILE v_fam IS NOT NULL LOOP
-        f := v_findings(v_lead(v_fam));
-        IF f.change_bucket IN ('large', 'moderate') THEN
-            v_n_fam := v_n_fam + 1;
-        END IF;
-        v_az := ABS(NVL(f.z_score, 0));
-        j := 0;
-        IF v_top_n < 8 THEN
-            v_top_n := v_top_n + 1;
-            v_top(v_top_n) := f;
-            j := v_top_n;
-        ELSIF v_az > ABS(NVL(v_top(8).z_score, 0)) THEN
-            v_top(8) := f;
-            j := 8;
-        END IF;
-        WHILE j > 1 AND ABS(NVL(v_top(j - 1).z_score, 0)) < ABS(NVL(v_top(j).z_score, 0)) LOOP
-            v_tmp := v_top(j - 1);
-            v_top(j - 1) := v_top(j);
-            v_top(j) := v_tmp;
+    -- Card order (00_params.sql's verdict applies the same two steps):
+    -- large before moderate, then the loudest |z|; then a flagged DB time
+    -- card moves up to second place.
+    v_g := v_glead.FIRST;
+    WHILE v_g IS NOT NULL LOOP
+        j := v_order.COUNT;
+        WHILE j >= 1 AND card_before(v_gsev(v_g), v_gz(v_g), v_gsev(v_order(j)), v_gz(v_order(j))) LOOP
+            v_order(j + 1) := v_order(j);
             j := j - 1;
         END LOOP;
-        v_fam := v_lead.NEXT(v_fam);
+        v_order(j + 1) := v_g;
+        v_g := v_glead.NEXT(v_g);
+    END LOOP;
+    FOR k IN 3 .. v_order.COUNT LOOP
+        IF v_order(k) = 'DBTIME' THEN
+            FOR m IN REVERSE 3 .. k LOOP
+                v_tmp := v_order(m); v_order(m) := v_order(m - 1); v_order(m - 1) := v_tmp;
+            END LOOP;
+            EXIT;
+        END IF;
     END LOOP;
 
-    v_typical := v_total - v_crit - v_warn - v_impr - v_noted - v_folded;
-
-    -- B4: rewrite the heading now that we have the counters.  Counts are
-    -- canonical rows only; folded twins get their own muted badge.
-    DBMS_OUTPUT.PUT_LINE('<script>(function(){var h=document.getElementById("findings-heading");'
-        || 'if(h)h.innerHTML=''Findings summary '
-        || '<span class="badge crit" title="families with a large or moderate lead; the '
-        || 'verdict counts the same">' || v_n_fam || ' finding'
-        || CASE WHEN v_n_fam = 1 THEN '' ELSE 's' END || '</span> '
-        || '<span class="badge crit">' || v_crit || ' large</span> '
-        || '<span class="badge warn">' || v_warn || ' moderate</span> '
-        || CASE WHEN v_impr > 0
-                THEN '<span class="badge info" title="moved in the good direction; not counted">'
-                     || v_impr || ' improved</span> ' ELSE '' END
-        || CASE WHEN v_noted > 0
-                THEN '<span class="badge note" title="informational counters that moved; not counted">'
-                     || v_noted || ' noted</span> ' ELSE '' END
-        || '<span class="badge skip">' || v_typical || ' typical</span>'
-        || CASE WHEN v_folded > 0
-                THEN ' <span class="badge skip" title="flagged twins of a counted row '
-                     || '(SYSMETRIC rate of a SYSSTAT counter, CPU half of the CPU/wait ratio)">'
-                     || v_folded || ' folded</span>' ELSE '' END
-        || ''';})();</script>');
-
     --
-    -- T6: "Biggest movers" -- top 8 flagged family leads by |z| across all
-    -- domains, replacing the old ECharts findings heatmap with a plain HTML
-    -- table so it degrades with body.no-charts like everything else and
-    -- never needs a chart lib.  Improved / noted rows never appear here.
+    -- Card evidence: the top 2 foreground events (by Current time waited
+    -- per second) of every wait class, with their prior mean / sd / n and
+    -- share of the Current wait -- one bounded scan, only when a wait
+    -- class is flagged.  Same pairs -> bounds -> deltas shape and template
+    -- filter as 04.
     --
-    IF v_top_n = 0 THEN
-        DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">No material regression: nothing moved beyond its '
-            || 'own floors in the bad direction'
-            || CASE WHEN v_impr > 0 THEN ' (' || v_impr || ' improved)' ELSE '' END
-            || '. The per-domain tables below list every scored metric.</p>');
+    IF v_wait_flag THEN
+        WITH
+        @@sql/lib/windows_cte.sql
+        ,
+        wait_targets AS (
+            @@~template_dir/wait_event_targets.sql
+        ),
+        ev_pairs AS (
+            SELECT w.week_offset, w.dur_sec, se.wait_class, se.event_name,
+                   se.snap_id, se.time_waited_micro, se.instance_number,
+                   w.begin_snap_id, w.end_snap_id
+            FROM   valid_windows w
+            JOIN   dba_hist_system_event se
+                ON se.dbid = w.dbid
+               AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
+               AND se.instance_number = w.instance_number
+               AND se.wait_class <> 'Idle'
+               AND ( EXISTS (SELECT 1 FROM wait_targets WHERE event_name = '*')
+                     OR se.event_name IN (SELECT event_name FROM wait_targets) )
+        ),
+        ev_bounds AS (
+            SELECT week_offset, dur_sec, wait_class, event_name, instance_number,
+                   SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro END) AS beg_us,
+                   SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us
+            FROM   ev_pairs
+            GROUP BY week_offset, dur_sec, wait_class, event_name, instance_number
+        ),
+        ev_rows AS (
+            SELECT week_offset, wait_class, event_name,
+                   CASE WHEN MAX(dur_sec) > 0
+                        THEN SUM(NVL(end_us, 0) - NVL(beg_us, 0)) / MAX(dur_sec) / 1e6
+                   END AS v
+            FROM   ev_bounds
+            GROUP BY week_offset, wait_class, event_name
+        ),
+        ev_tot AS (
+            SELECT SUM(v) AS tot FROM ev_rows WHERE week_offset = 0
+        ),
+        ev_piv AS (
+            SELECT wait_class, event_name,
+                   MAX(CASE WHEN week_offset = 0 THEN v END)    AS cur_val,
+                   AVG(CASE WHEN week_offset > 0 THEN v END)    AS mu,
+                   STDDEV(CASE WHEN week_offset > 0 THEN v END) AS sd,
+                   COUNT(CASE WHEN week_offset > 0 THEN v END)  AS n
+            FROM   ev_rows
+            WHERE  v IS NOT NULL
+            GROUP BY wait_class, event_name
+        ),
+        ev_rank AS (
+            SELECT p.wait_class, p.event_name, p.cur_val, p.mu, p.sd, p.n,
+                   CASE WHEN t.tot > 0 THEN p.cur_val / t.tot END AS shr,
+                   ROW_NUMBER() OVER (PARTITION BY p.wait_class
+                                      ORDER BY p.cur_val DESC, p.event_name) AS rn
+            FROM   ev_piv p
+            CROSS JOIN ev_tot t
+            WHERE  p.cur_val > 0
+        )
+        SELECT wait_class, event_name, cur_val, mu, sd, n, shr
+        BULK COLLECT INTO v_evs
+        FROM   ev_rank
+        WHERE  rn <= 2
+        ORDER  BY wait_class, rn;
     END IF;
-    IF v_top_n > 0 THEN
-        DBMS_OUTPUT.PUT_LINE('<h3>Biggest movers</h3>');
-        DBMS_OUTPUT.PUT_LINE('<p style="font-size:11px;color:var(--muted);margin:-4px 0 8px 0">'
-            || 'one lead row per family (top ' || v_top_n || ' by |z|); '
-            || 'flagged relatives and twins fold under the expander; '
-            || 'bar = |%-delta|, log-scaled</p>');
-        DBMS_OUTPUT.PUT_LINE('<table id="findings-movers" data-nocount data-nosort><thead><tr>'
-            || '<th>Metric</th>'
-            || '<th>Domain</th>'
-            || '<th class="num">z</th>'
-            || '<th class="num">Current</th>'
-            || '<th class="num">Prior mean</th>'
-            || '<th class="num">% &Delta;</th>'
-            || '</tr></thead><tbody>');
 
-        FOR i IN 1 .. v_top_n LOOP
-            f := v_top(i);
-            -- The lead row, then every other flagged member of its family
-            -- (twins included) as a muted, collapsed "member" row.
-            FOR m IN 0 .. v_findings.COUNT LOOP
-                IF m = 0 THEN
-                    f := v_top(i);
-                ELSE
-                    f := v_findings(m);
-                    IF f.family <> v_top(i).family
-                       OR f.metric_name = v_top(i).metric_name
-                       OR f.change_bucket NOT IN ('large', 'moderate') THEN
-                        CONTINUE;
-                    END IF;
-                    v_members := v_members + 1;
-                END IF;
-                DECLARE
-                    v_cls     VARCHAR2(10);
-                    v_sig     VARCHAR2(1);
-                    v_bar_col VARCHAR2(20);
-                    v_apct    NUMBER;
-                BEGIN
-                    v_cls := bucket_cls(f.change_bucket);
-                    v_sig := is_sig(f.prior_mean, f.prior_sd);
-                    v_apct := ABS(f.pct_delta);
-                    -- Log-scaled |%-delta| bar, capped at 150px (a 10% move
-                    -- is a stub, 100% about a third, 500%+ full width).
-                    IF v_apct IS NULL THEN
-                        v_bar_w := 0;
-                    ELSE
-                        v_bar_w := LEAST(150, ROUND(20 + 40 * LN(1 + v_apct / 50)));
-                    END IF;
-                    v_bar_col := CASE v_cls WHEN 'crit' THEN 'var(--crit)'
-                                            WHEN 'warn' THEN 'var(--warn)'
-                                            ELSE             'var(--skip)' END;
+    --
+    -- Section header: title, a one-line subtitle per view, the counts.
+    -- Counts are canonical rows only; folded twins get their own muted
+    -- count.  The "N findings" = cards (card groups of families), the same
+    -- number the verdict pills show.
+    --
+    v_meta := '<span class="meta">'
+        || CASE WHEN v_crit > 0 THEN '<span><i class="dotk large"></i>' || v_crit || ' large</span>' END
+        || CASE WHEN v_warn > 0 THEN '<span><i class="dotk moderate"></i>' || v_warn || ' moderate</span>' END
+        || '<span><i class="dotk typical"></i>' || v_normal || ' normal</span>'
+        || CASE WHEN v_impr > 0
+                THEN '<span title="moved in the good direction; not counted">' || v_impr || ' improved</span>' END
+        || CASE WHEN v_noted > 0
+                THEN '<span title="informational counters that moved; not counted">' || v_noted || ' noted</span>' END
+        || CASE WHEN v_folded > 0
+                THEN '<span title="flagged twins of a counted row (SYSMETRIC rate of a SYSSTAT counter, '
+                     || 'CPU half of the CPU/wait ratio)">' || v_folded || ' folded</span>' END
+        || '</span>';
+    -- class "vw in-s in-a": in both views; the cards are Summary only, the
+    -- per-domain detail tables All sections only.  "sumsec": no panel in
+    -- the Summary view (the cards are the panels).
+    DBMS_OUTPUT.PUT_LINE('<section id="findings" class="vw in-s in-a sumsec"><h2 id="findings-heading">'
+        || CASE WHEN v_order.COUNT > 0
+                THEN '<span class="vw in-s">' || v_order.COUNT || ' finding'
+                     || CASE WHEN v_order.COUNT = 1 THEN '' ELSE 's' END || '</span>'
+                     || '<span class="vw in-a">Findings</span>'
+                ELSE 'Findings' END
+        || v_meta
+        || '<small class="h2sub"><span class="vw in-s">'
+        || CASE WHEN v_order.COUNT > 0
+                THEN (v_crit + v_warn) || ' metric' || CASE WHEN v_crit + v_warn = 1 THEN '' ELSE 's' END
+                     || ' moved, in ' || v_order.COUNT || ' famil'
+                     || CASE WHEN v_order.COUNT = 1 THEN 'y' ELSE 'ies' END
+                ELSE 'Every scored metric against its prior windows' END
+        || '</span><span class="vw in-a">Every scored metric against its prior windows; one table per domain</span>'
+        || '</small></h2>');
 
-                    DBMS_OUTPUT.PUT_LINE('<tr class="' || v_cls
-                        || CASE WHEN m > 0 THEN ' member' ELSE '' END
-                        || CASE WHEN f.canonical = 'N' THEN ' twin' ELSE '' END
-                        || '" data-family="' || f.family || '"'
-                        || CASE WHEN m > 0 THEN ' data-tail="Y"' ELSE '' END || '>'
-                        || '<td>' || DBMS_XMLGEN.CONVERT(f.metric_name)
-                        || CASE WHEN f.canonical = 'N'
-                                THEN ' <span class="chip" title="same quantity as the lead; '
-                                     || 'not counted again">twin</span>'
-                                ELSE '' END
-                        || ' <a class="xlink" href="#' || find_id(f.metric_domain, f.metric_name)
-                        || '" title="Go to this finding''s detail row">&#8599; detail</a>'
-                        || '</td>'
-                        || '<td><span class="chip">' || f.metric_domain || '</span></td>'
-                        || '<td class="num">'
-                        || fmt_z(f.z_score)
-                        || CASE WHEN v_sig = 'Y' THEN
-                               ' <span class="badge sig" title="baseline barely moved: '
-                               || '&sigma; below 1% of mean (floored to 2% for z); read the % delta instead">'
-                               || '&sigma;&approx;0</span>'
-                           END
-                        || '</td>'
-                        || '<td class="num"' || fmt_num_title(f.cur_val) || '>'
-                            || fmt_num(f.cur_val) || '</td>'
-                        || '<td class="num">' || fmt_num(f.prior_mean) || '</td>'
-                        || '<td class="num">'
-                            || CASE WHEN v_bar_w > 0 THEN
-                                   '<span class="zbar" style="width:' || v_bar_w || 'px;'
-                                   || 'background-color:' || v_bar_col || '"></span>'
-                               END
-                            || CASE WHEN v_sig = 'Y' THEN '<b>' || fmt_pct(f.pct_delta) || '</b>'
-                                    ELSE fmt_pct(f.pct_delta) END
-                            || '</td>'
-                        || '</tr>');
-                END;
-            END LOOP;
+    IF v_order.COUNT > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('<div class="cards vw in-s">');
+        FOR k IN 1 .. v_order.COUNT LOOP
+            emit_card(v_order(k), k);
         END LOOP;
-        DBMS_OUTPUT.PUT_LINE('</tbody></table>');
-        IF v_members > 0 THEN
-            DBMS_OUTPUT.PUT_LINE('<span class="expander" data-for="findings-movers"'
-                || ' data-n="' || v_members || '" data-noun="related metrics">'
-                || '&#9656; Show ' || v_members || ' related metrics</span>');
-        END IF;
+        DBMS_OUTPUT.PUT_LINE('</div>');
+        -- the rail's sub-links, one per card, right under "Findings"
+        -- (inserted while the page parses, before the rail JS counts links)
+        DECLARE
+            v_js VARCHAR2(4000);
+        BEGIN
+            FOR k IN 1 .. v_order.COUNT LOOP
+                v_js := v_js || CASE WHEN k > 1 THEN ',' END || '["' || card_id(v_order(k)) || '","'
+                    || REPLACE(REPLACE(card_label(v_order(k)), '"', ''), '<', '') || '"]';
+            END LOOP;
+            DBMS_OUTPUT.PUT_LINE('<script>(function(){var n=document.querySelector(''nav.toc a[href="#findings"]'');'
+                || 'if(!n)return;[' || v_js || '].forEach(function(c){var a=document.createElement("a");'
+                || 'a.className="sub";a.href="#"+c[0];a.setAttribute("data-nodot","");a.textContent=c[1];'
+                || 'n.parentNode.insertBefore(a,n.nextSibling);n=a;});})();</script>');
+        END;
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('<div class="panel calm vw in-s"><p class="calm-empty">'
+            || CASE WHEN v_normal = 0
+                    THEN 'Nothing could be scored: a metric needs at least 3 valid prior windows.'
+                    ELSE 'No finding: every scored metric sits inside its normal range, or moved too little to matter.'
+               END || '</p></div>');
     END IF;
 
     --
     -- Detail tables: one per domain, ordered by sev / |z| / |pct| / name.
-    -- v_table_idx[p] -> index in v_findings, populated above.  Hidden under
-    -- the Normal view (class "full-only") -- only "Biggest movers" shows.
+    -- All sections only (class "vw in-a").
     --
     emit_domain_table('LOAD',   'Load profile');
     emit_domain_table('METRIC', 'System metrics');
     emit_domain_table('WAIT',   'Wait classes');
 
     DBMS_OUTPUT.PUT_LINE('</section>');
+
+    --
+    -- "What changed around it" (Summary): an empty slot; section 12 moves
+    -- its configuration card in here (and unhides the section) when a
+    -- parameter differs across the compared windows.
+    --
+    DBMS_OUTPUT.PUT_LINE('<section id="s-changes" class="vw in-s sumsec" hidden>'
+        || '<h2>What changed around it<small class="h2sub">Plan and configuration changes '
+        || 'under the release flags</small></h2>'
+        || '<div class="cards" id="changes-slot"></div></section>');
+
+    --
+    -- "Checked and normal" (Summary): every other canonical scored row --
+    -- a calm grid of the normal ones (loudest first, then flat baselines),
+    -- the ones past a z threshold but under their materiality floor (and
+    -- the informational "noted" ones), and the improved ones.
+    --
+    DECLARE
+        v_grid  PLS_INTEGER := 0;
+        v_more  PLS_INTEGER := 0;
+        v_small VARCHAR2(32767);
+        v_ns    PLS_INTEGER := 0;
+        v_imp   VARCHAR2(32767);
+        v_ni    PLS_INTEGER := 0;
+        v_first VARCHAR2(16);
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE('<section id="s-normal" class="vw in-s sumsec"><h2>Checked and normal'
+            || '<span class="meta"><span><i class="dotk typical"></i>' || v_normal || ' normal</span></span>'
+            || '<small class="h2sub">Every other scored metric, against the same prior windows</small></h2>');
+        IF v_normal = 0 THEN
+            DBMS_OUTPUT.PUT_LINE('<div class="panel calm"><p class="calm-empty">'
+                || 'Nothing could be scored as normal: a metric needs at least 3 valid prior windows.'
+                || '</p></div>');
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('<div class="panel calm"><div class="ngrid">');
+            -- the calm grid: typical within 2 sigma (loudest first), then flat baselines
+            FOR pass IN 1 .. 2 LOOP
+                FOR p IN 1 .. v_table_idx.COUNT LOOP
+                    f := v_findings(v_table_idx(p));
+                    IF f.canonical = 'Y'
+                       AND ((pass = 1 AND f.change_bucket = 'typical' AND ABS(NVL(f.z_score, 0)) <= 2)
+                         OR (pass = 2 AND f.change_bucket = 'flat baseline')) THEN
+                        IF v_first IS NULL THEN v_first := LOWER(f.metric_domain); END IF;
+                        IF v_grid < 18 THEN
+                            DBMS_OUTPUT.PUT_LINE(nr_row(f));
+                            v_grid := v_grid + 1;
+                        ELSE
+                            v_more := v_more + 1;
+                        END IF;
+                    END IF;
+                END LOOP;
+            END LOOP;
+            DBMS_OUTPUT.PUT_LINE('</div>'
+                || CASE WHEN v_more > 0
+                        THEN '<p class="calm-more">and ' || v_more || ' more normal row'
+                             || CASE WHEN v_more = 1 THEN '' ELSE 's' END || ' in the '
+                             || '<a href="#findings-' || v_first || '">Findings tables</a> (All sections).</p>' END
+                || '</div>');
+            FOR p IN 1 .. v_table_idx.COUNT LOOP
+                f := v_findings(v_table_idx(p));
+                IF f.canonical = 'Y' THEN
+                    IF (f.change_bucket = 'typical' AND ABS(NVL(f.z_score, 0)) > 2)
+                       OR f.change_bucket = 'noted' THEN
+                        IF v_ns < 6 THEN v_small := v_small || nr_row(f); END IF;
+                        v_ns := v_ns + 1;
+                    ELSIF f.change_bucket = 'improved' THEN
+                        IF v_ni < 6 THEN v_imp := v_imp || nr_row(f); END IF;
+                        v_ni := v_ni + 1;
+                    END IF;
+                END IF;
+            END LOOP;
+            DBMS_OUTPUT.PUT_LINE('<div class="calm-notes">'
+                || '<div class="panel note"><h3 title="Past a z threshold but under the metric''s '
+                || 'materiality floor (sql/lib/metric_policy.plsql), or an informational counter">'
+                || 'Moved, too small to matter</h3>'
+                || CASE WHEN v_ns = 0 THEN '<p>Nothing crossed a threshold without clearing its floor.</p>'
+                        ELSE v_small END
+                || CASE WHEN v_ns > 6 THEN '<p class="calm-more">and ' || (v_ns - 6) || ' more</p>' END
+                || '</div>');
+            DBMS_OUTPUT.PUT_LINE('<div class="panel note improved"><h3 title="A material move in the '
+                || 'good direction: not a finding, not counted">'
+                || CASE WHEN v_ni = 0 THEN 'Improved: none material' ELSE 'Improved' END || '</h3>'
+                || CASE WHEN v_ni = 0 THEN '<p>Nothing moved materially in the good direction.</p>'
+                        ELSE v_imp END
+                || CASE WHEN v_ni > 6 THEN '<p class="calm-more">and ' || (v_ni - 6) || ' more</p>' END
+                || '</div></div>');
+        END IF;
+        DBMS_OUTPUT.PUT_LINE('</section>');
+    END;
+    --
+    -- The evidence library's heading (Summary): every section with class
+    -- "lib" follows it as one collapsible row (00's chrome JS, _style.sql).
+    --
+    DBMS_OUTPUT.PUT_LINE('<section id="s-lib" class="vw in-s vhead"><h2>Evidence library'
+        || '<small class="h2sub">Every other section, one line each; open a row to read it here</small></h2></section>');
+    emit_timeline;
 END;
 /
 

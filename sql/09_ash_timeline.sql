@@ -14,6 +14,70 @@
 -- so a fully-busy session contributes 360 rows/hour. AAS for a bucket is
 -- sample_count / (bucket_hours * 360).
 --
+-- v1.6.0 (Mock D): the SAME scan (one pass over
+-- DBA_HIST_ACTIVE_SESS_HISTORY, grouped also by the compared window a
+-- sample falls in and by wait event) feeds the "Activity, whole span"
+-- charts at the top of every view (section#activity, skeleton in
+-- 00_params.sql, drawn by sql/lib/js_timeline.plsql):
+-- window.AWR_DATA.ashx = {t0, end, bh, wh, classes, vals, win, winfg}
+--   t0 / end   span start / end ('YYYY-MM-DD HH24:MI'), bh = chart bucket
+--              in hours = this section's own fine bucket (bucket_hours:
+--              1 h, or the cadence when it is shorter), the grid of the
+--              All-sections chart above; coarsened to a whole multiple
+--              of it only past 10000 buckets (more than a year of hourly
+--              buckets: 52 weekly or 365 daily windows stay hourly).  The
+--              cap bounds the payload (about 5 bytes a value, 30 series
+--              at most: under 1.5 MB) and the client draws at most one
+--              step per pixel column (js_timeline downsamples, keeping
+--              each column's busiest bucket), so it is not a speed cap;
+--   classes    wait classes in a fixed stacking order (CPU first);
+--   vals       per class, one AAS per chart bucket, oldest first (a zero,
+--              never a gap, so nothing left-compacts);
+--   win        per class, one AAS per compared window, oldest first
+--              (samples inside that window / 360 / win_hours), every
+--              session -- the stripe tooltip and the Activity lane;
+--   winfg      the same for FOREGROUND sessions only (session_type) -- the
+--              DB time card's chart: DB time is foreground time, and ASH's
+--              foreground samples are its sampled estimate, so the card's
+--              bars and its DB time headline measure the same thing;
+--   wh         win_hours.  Numbers are dot-decimal (NLS pinned).
+-- window.AWR_DATA.ashe = {t0, end, bh, wh, classes, vals, win} -- the same
+-- shape BY WAIT EVENT (ON CPU = 'CPU', ranked like any event): the 14
+-- events with the most samples over the span (ties by name), biggest
+-- first = bottom of the stack, then one "Other events" series summing
+-- every other event (left out with 14 events or fewer).  Event names
+-- are JSON-escaped (json_escape); "Other events" = the class total minus
+-- the top events, per bucket and per window, so both charts stack to the
+-- same totals.
+-- ashx.fine / ashe.fine = {bm, capped, segs, vals} -- the 1-minute
+-- detail the charts switch to when zoomed into the compared windows,
+-- from the SAME scan (the GROUP BY also keys a sample inside a covered
+-- window by its minute; outside every window that key is NULL, so the
+-- rest of the grouping is unchanged):
+--   bm       bucket minutes (1);
+--   segs     [[first minute since t0, minutes], ...] oldest first: the
+--            compared windows (skipped ones too: ASH does not care about
+--            snapshot pairs), overlapping windows merged into one segment,
+--            so a shared minute is counted ONCE (a time series, unlike
+--            win above);
+--   vals     per series (classes / events, the same series and order as
+--            above, "Other events" = the minute's total less the top 14),
+--            the INTEGER sample count of every minute of every segment in
+--            order (AAS = n / 6: ASH keeps one sample per 10 s), a run of
+--            k >= 2 zero minutes written as -k;
+--   capped   1 when the cap left windows out: at most 40000 minutes (about
+--            28 days of windows; 168 hourly windows = 10140, 52 weekly
+--            1-hour windows = 3180), so past it only the Current and the
+--            most recent windows that fit get the detail (one window
+--            longer than the cap keeps its last 40000 minutes).  About 2
+--            to 4 bytes a busy minute per series, a zero run a few bytes.
+-- plus the Activity lane's row (sql/lib/timeline.plsql; Current vs the
+-- mean of the valid prior windows, not scored).  A sample belongs to
+-- EVERY window whose span [start, start + win_hours) contains it: with
+-- step >= win_hours that is at most one; when win_hours > step_hours the
+-- windows overlap and a sample counts toward each of them, so every
+-- window holds its full win_hours of samples and the divisor is right.
+--
 -- Read-only: pulls ASH rows into a PL/SQL collection in-memory, computes
 -- per-bucket aggregates, and renders directly.  No scratch table.
 --
@@ -40,7 +104,7 @@ DECLARE
     -- per compared window, bounded by weeks_back+1).
     v_hours_json   CLOB;
     v_class_vals   CLOB;
-    v_windows_json VARCHAR2(4000);
+    v_windows_json VARCHAR2(32767);
     v_buf          VARCHAR2(64);
     v_palette      VARCHAR2(400) :=
         '["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1",' ||
@@ -65,7 +129,150 @@ DECLARE
     v_n            NUMBER;
     v_total_n      NUMBER := 0;
     v_aas          NUMBER;
+    -- v1.6.0 Timeline: chart buckets (v_m fine buckets each) and windows
+    v_m            PLS_INTEGER;
+    v_bh           NUMBER;
+    v_nc           PLS_INTEGER;
+    v_ccells       t_cell_tab;          -- (chart bucket | class) -> samples
+    v_wcells       t_cell_tab;          -- (week_offset | class)  -> samples
+    v_wfcells      t_cell_tab;          -- the same, foreground sessions only
+    v_eccells      t_cell_tab;          -- (chart bucket | event) -> samples
+    v_ewcells      t_cell_tab;          -- (week_offset | event)  -> samples
+    v_etot         t_class_tab;         -- event -> samples over the span
+    v_valid        VARCHAR2(4000);      -- '|k=Y|k=N|...' per window
+    v_cls_order    VARCHAR2(4000);      -- '|CPU|User I/O|...' stacking order
+    v_lb           VARCHAR2(32767);     -- lob_add's buffer (one WRITEAPPEND per 30 KB or so)
+    -- the 1-minute detail inside the compared windows (ashx.fine / ashe.fine,
+    -- see the header): at most v_fcap minutes; windows j >= v_jmin (window
+    -- steps after range_start, the Current window is j = weeks_back) and
+    -- minutes >= v_mmin (only when one window alone passes the cap)
+    v_fcap         CONSTANT PLS_INTEGER := 40000;
+    v_nf           NUMBER;
+    v_jmin         NUMBER;
+    v_mmin         NUMBER := 0;
+    v_mend         NUMBER;
+    v_fa           NUMBER;
+    v_fb           NUMBER;
+    v_ns           PLS_INTEGER := 0;
+    TYPE t_int_tab IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
+    v_sa           t_int_tab;           -- segment s: first minute (since range_start)
+    v_se           t_int_tab;           -- segment s: end minute (exclusive)
+    v_fc           t_cell_tab;          -- (minute | class) -> samples
+    v_fe           t_cell_tab;          -- (minute | event) -> samples
+    v_ft           t_cell_tab;          -- (minute | 'Other events') -> samples, filled per payload
     @@sql/lib/put_clob_chunked.plsql
+    @@sql/lib/json_escape.plsql
+    @@sql/lib/fmt_num.plsql
+    @@sql/lib/band_glyph.plsql
+    @@sql/lib/anchor_id.plsql
+    @@sql/lib/finding_cards.plsql
+    @@sql/lib/off_label.plsql
+    @@sql/lib/wingrid.plsql
+    @@sql/lib/timeline.plsql
+
+    -- an AAS as a compact dot-decimal JS number (3 decimals, no trailing zeros)
+    FUNCTION aas_tok(p NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN RTRIM(TO_CHAR(ROUND(NVL(p, 0), 3), 'FM9999999990D999',
+                             'NLS_NUMERIC_CHARACTERS=''.,'''), '.');
+    END aas_tok;
+
+    -- bh / wh as a JSON number: a leading zero (wg_tok gives '.25', which
+    -- JS reads but JSON does not), up to 6 decimals
+    FUNCTION hr_tok(p NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN RTRIM(TO_CHAR(ROUND(p, 6), 'FM9999999990D999999',
+                             'NLS_NUMERIC_CHARACTERS=''.,'''), '.');
+    END hr_tok;
+
+    -- add n to the (key -> samples) cell k
+    PROCEDURE bump(p_tab IN OUT NOCOPY t_cell_tab, p_k VARCHAR2, p_n NUMBER) IS
+    BEGIN
+        IF p_tab.EXISTS(p_k) THEN
+            p_tab(p_k) := p_tab(p_k) + p_n;
+        ELSE
+            p_tab(p_k) := p_n;
+        END IF;
+    END bump;
+
+    -- append p to v_class_vals through the v_lb buffer (thousands of
+    -- values per series: one WRITEAPPEND per 30 KB or so, not per value);
+    -- lob_add(NULL, TRUE) flushes
+    PROCEDURE lob_add(p VARCHAR2, p_flush BOOLEAN DEFAULT FALSE) IS
+    BEGIN
+        IF LENGTH(v_lb) + NVL(LENGTH(p), 0) > 30000 OR p_flush THEN
+            IF v_lb IS NOT NULL THEN
+                DBMS_LOB.WRITEAPPEND(v_class_vals, LENGTH(v_lb), v_lb);
+            END IF;
+            v_lb := NULL;
+        END IF;
+        v_lb := v_lb || p;
+    END lob_add;
+
+    -- one series of the 1-minute detail: integer ASH samples per minute
+    -- (AAS = n / 6), minute by minute over the segments in order, a run of
+    -- k >= 2 zero minutes written as -k (the values are never negative).
+    -- Keys are minute || '|' || p_nm, as the scan's v_fc / v_fe.
+    PROCEDURE fine_put(p_tab IN t_cell_tab, p_nm VARCHAR2) IS
+        v_z  PLS_INTEGER := 0;
+        v_f  BOOLEAN := TRUE;
+        v_x  NUMBER;
+        v_k  VARCHAR2(200);
+    BEGIN
+        DBMS_LOB.TRIM(v_class_vals, 0);
+        FOR s IN 1 .. v_ns LOOP
+            FOR m IN v_sa(s) .. v_se(s) - 1 LOOP
+                v_k := TO_CHAR(m) || '|' || p_nm;
+                v_x := CASE WHEN p_tab.EXISTS(v_k) THEN p_tab(v_k) ELSE 0 END;
+                IF v_x = 0 THEN
+                    v_z := v_z + 1;
+                ELSE
+                    IF v_z > 0 THEN
+                        lob_add(CASE WHEN NOT v_f THEN ',' END
+                            || CASE WHEN v_z = 1 THEN '0' ELSE '-' || TO_CHAR(v_z) END);
+                        v_f := FALSE;
+                        v_z := 0;
+                    END IF;
+                    lob_add(CASE WHEN NOT v_f THEN ',' END || TO_CHAR(v_x));
+                    v_f := FALSE;
+                END IF;
+            END LOOP;
+        END LOOP;
+        IF v_z > 0 THEN
+            lob_add(CASE WHEN NOT v_f THEN ',' END
+                || CASE WHEN v_z = 1 THEN '0' ELSE '-' || TO_CHAR(v_z) END);
+        END IF;
+        lob_add(NULL, TRUE);
+        DBMS_OUTPUT.PUT_LINE('[');
+        put_clob_chunked(v_class_vals);
+        DBMS_OUTPUT.PUT_LINE(']');
+    END fine_put;
+
+    -- the head of a fine block: bm, capped, the segments [first minute, minutes]
+    PROCEDURE fine_head IS
+    BEGIN
+        DBMS_LOB.TRIM(v_class_vals, 0);
+        FOR s IN 1 .. v_ns LOOP
+            lob_add(CASE WHEN s > 1 THEN ',' END || '[' || TO_CHAR(v_sa(s)) || ','
+                || TO_CHAR(v_se(s) - v_sa(s)) || ']');
+        END LOOP;
+        lob_add(NULL, TRUE);
+        DBMS_OUTPUT.PUT_LINE('"fine":{"bm":1,"capped":'
+            || CASE WHEN v_jmin > 0 OR v_mmin > 0 THEN '1' ELSE '0' END || ',"segs":[');
+        put_clob_chunked(v_class_vals);
+        DBMS_OUTPUT.PUT_LINE('],"vals":[');
+    END fine_head;
+
+    -- the Timeline's fixed stacking order: CPU at the bottom, then the
+    -- usual suspects, anything unknown before Other
+    FUNCTION cls_rank(p VARCHAR2) RETURN PLS_INTEGER IS
+    BEGIN
+        RETURN CASE p WHEN 'CPU' THEN 1 WHEN 'User I/O' THEN 2 WHEN 'System I/O' THEN 3
+                      WHEN 'Commit' THEN 4 WHEN 'Application' THEN 5 WHEN 'Concurrency' THEN 6
+                      WHEN 'Network' THEN 7 WHEN 'Configuration' THEN 8 WHEN 'Scheduler' THEN 9
+                      WHEN 'Cluster' THEN 10 WHEN 'Administrative' THEN 11 WHEN 'Queueing' THEN 12
+                      WHEN 'Other' THEN 99 ELSE 50 END;
+    END cls_rank;
 BEGIN
     DBMS_LOB.CREATETEMPORARY(v_hours_json, TRUE);
     DBMS_LOB.CREATETEMPORARY(v_class_vals, TRUE);
@@ -82,6 +289,39 @@ BEGIN
     -- ROUND drops it and the last partial bucket vanishes.  CEIL always keeps
     -- it; integer cadences give ROUND=CEIL, so aligned runs are unchanged (F4).
     v_total_buckets := GREATEST(CEIL(v_total_hours / v_bucket_hours), 1);
+    -- the Activity charts' bucket: this section's own fine bucket (the
+    -- old ECharts timeline's grid), v_m of them only past 10000 buckets
+    -- (see the header)
+    v_m  := GREATEST(1, CEIL(v_total_buckets / 10000));
+    v_bh := v_m * v_bucket_hours;
+    v_nc := CEIL(v_total_buckets / v_m);
+    -- the 1-minute detail's reach (the header): the most recent windows
+    -- whose union stays within v_fcap minutes, the Current one always
+    IF ~step_hours >= ~win_hours THEN
+        v_nf := FLOOR(v_fcap / (~win_hours * 60));
+    ELSE
+        v_nf := FLOOR((v_fcap / 60 - ~win_hours) / ~step_hours) + 1;
+    END IF;
+    v_nf   := LEAST(~weeks_back + 1, GREATEST(v_nf, 1));
+    v_jmin := ~weeks_back - v_nf + 1;
+    v_mend := ROUND((v_range_end - v_range_start) * 1440);
+    IF ~win_hours * 60 > v_fcap THEN
+        v_mmin := GREATEST(0, v_mend - v_fcap);
+    END IF;
+    -- the segments: those windows as minute ranges, overlapping ones merged
+    FOR j IN v_jmin .. ~weeks_back LOOP
+        v_fa := GREATEST(ROUND(j * ~step_hours * 60), v_mmin);
+        v_fb := LEAST(ROUND((j * ~step_hours + ~win_hours) * 60), v_mend);
+        IF v_fb > v_fa THEN
+            IF v_ns > 0 AND v_fa <= v_se(v_ns) THEN
+                v_se(v_ns) := GREATEST(v_se(v_ns), v_fb);
+            ELSE
+                v_ns := v_ns + 1;
+                v_sa(v_ns) := v_fa;
+                v_se(v_ns) := v_fb;
+            END IF;
+        END IF;
+    END LOOP;
     v_bucket_label  :=
         CASE WHEN v_bucket_hours = 1 THEN '1-hour'
              WHEN v_bucket_hours < 1 AND MOD(v_bucket_hours*60, 1) = 0
@@ -91,19 +331,14 @@ BEGIN
                           'NLS_NUMERIC_CHARACTERS=''.,''') || '-hour'
         END;
 
-    DBMS_OUTPUT.PUT_LINE('<section id="ash-timeline" data-normal="Y"><h2>ASH timeline '
-        || '(' || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
-        || ', stacked by wait class)</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || '<code>dba_hist_active_sess_history</code>, '
+    DBMS_OUTPUT.PUT_LINE('<section id="ash-timeline" class="vw in-a"><h2>Active sessions'
+        || '<small class="h2sub">ASH by wait class, '
+        || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
+        || ', '
         || TO_CHAR(CAST(v_range_start AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
         || ' &rarr; '
         || TO_CHAR(CAST(v_range_end   AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
-        || ', '
-        || CASE WHEN v_bucket_hours = 1 THEN 'hourly'
-                ELSE v_bucket_label END
-        || ' buckets. ON-CPU &rarr; <b>CPU</b>; Idle excluded. '
-        || 'Compared windows shaded.</p>');
+        || '; compared windows shaded</small></h2>');
 
     -- Taller container than .chart-big: the stacked area needs room for the
     -- plot, a top-anchored scrolling legend (so it does not collide with the
@@ -118,24 +353,86 @@ BEGIN
         -- bucket_key = floor((sample - range_start) hours / bucket_hours).
         -- Direct floor on a fractional bucket avoids the TRUNC('HH') trap
         -- that collapsed every sub-hour cadence into one bar.
-        SELECT FLOOR(((CAST(ash.sample_time AS DATE) - v_range_start) * 24)
-                     / v_bucket_hours) AS bucket_key,
-               CASE WHEN ash.session_state = 'ON CPU' THEN 'CPU'
-                    ELSE NVL(ash.wait_class, 'Other') END AS wait_class,
-               COUNT(*) AS sample_count
-        FROM   dba_hist_active_sess_history ash
-        WHERE  ash.dbid IN (~dbid_list)
-          AND  (~inst_num = 0 OR ash.instance_number = ~inst_num)
-          AND  ash.sample_time >= CAST(v_range_start AS TIMESTAMP)
-          AND  ash.sample_time <  CAST(v_range_end   AS TIMESTAMP)
-          AND  (ash.session_state = 'ON CPU' OR NVL(ash.wait_class, 'x') <> 'Idle')
-        GROUP BY FLOOR(((CAST(ash.sample_time AS DATE) - v_range_start) * 24)
-                       / v_bucket_hours),
-                 CASE WHEN ash.session_state = 'ON CPU' THEN 'CPU'
-                      ELSE NVL(ash.wait_class, 'Other') END
+        -- j_lo .. j_hi (v1.6.0) = the compared windows the sample falls in,
+        -- as window STEPS after range_start: the window of offset o starts
+        -- j = weeks_back - o steps after range_start and holds a sample h
+        -- hours after range_start when j * step <= h < j * step + win, i.e.
+        -- (h - win) / step < j <= h / step.  An empty range (j_lo > j_hi)
+        -- = between windows; overlapping windows (win > step) give a range
+        -- of more than one.  fg = 1 for a FOREGROUND session's sample.
+        -- event_name (v1.6.0 Activity charts): the wait event, ON CPU = 'CPU'.
+        -- mk (the 1-minute detail) = minutes since range_start for a sample
+        -- inside a compared window within the fine reach (j_hi >= v_jmin:
+        -- the latest window holding it is one of the covered ones), else
+        -- NULL; a time series, so a sample shared by overlapping windows
+        -- still lands in its one minute.
+        SELECT bucket_key, wait_class, event_name, j_lo, j_hi, fg, mk, COUNT(*) AS sample_count
+        FROM (
+          SELECT bucket_key, wait_class, event_name, j_lo, j_hi, fg,
+                 CASE WHEN j_lo <= j_hi AND j_hi >= v_jmin AND hm >= v_mmin
+                      THEN FLOOR(hm) END AS mk
+          FROM (
+            SELECT FLOOR(h / v_bucket_hours) AS bucket_key,
+                   ROUND(h * 60, 4) AS hm,
+                   CASE WHEN session_state = 'ON CPU' THEN 'CPU'
+                        ELSE NVL(wait_class, 'Other') END AS wait_class,
+                   CASE WHEN session_state = 'ON CPU' THEN 'CPU'
+                        ELSE NVL(event, 'Other') END AS event_name,
+                   GREATEST(0, FLOOR((ROUND(h, 6) - ~win_hours) / ~step_hours) + 1) AS j_lo,
+                   LEAST(~weeks_back, FLOOR(ROUND(h, 6) / ~step_hours))           AS j_hi,
+                   CASE WHEN session_type = 'FOREGROUND' THEN 1 ELSE 0 END      AS fg
+            FROM (
+                SELECT (CAST(ash.sample_time AS DATE) - v_range_start) * 24 AS h,
+                       ash.session_state, ash.wait_class, ash.event, ash.session_type
+                FROM   dba_hist_active_sess_history ash
+                WHERE  ash.dbid IN (~dbid_list)
+                  AND  (~inst_num = 0 OR ash.instance_number = ~inst_num)
+                  AND  ash.sample_time >= CAST(v_range_start AS TIMESTAMP)
+                  AND  ash.sample_time <  CAST(v_range_end   AS TIMESTAMP)
+                  AND  (ash.session_state = 'ON CPU' OR NVL(ash.wait_class, 'x') <> 'Idle')
+            )
+          )
+        )
+        GROUP BY bucket_key, wait_class, event_name, j_lo, j_hi, fg, mk
     ) LOOP
+        IF r.mk IS NOT NULL THEN
+            bump(v_fc, TO_CHAR(r.mk) || '|' || r.wait_class, r.sample_count);
+            bump(v_fe, TO_CHAR(r.mk) || '|' || r.event_name, r.sample_count);
+        END IF;
         v_ck := TO_CHAR(r.bucket_key) || '|' || r.wait_class;
-        v_cells(v_ck) := r.sample_count;
+        IF v_cells.EXISTS(v_ck) THEN
+            v_cells(v_ck) := v_cells(v_ck) + r.sample_count;
+        ELSE
+            v_cells(v_ck) := r.sample_count;
+        END IF;
+        v_ck := TO_CHAR(FLOOR(r.bucket_key / v_m)) || '|' || r.wait_class;
+        IF v_ccells.EXISTS(v_ck) THEN
+            v_ccells(v_ck) := v_ccells(v_ck) + r.sample_count;
+        ELSE
+            v_ccells(v_ck) := r.sample_count;
+        END IF;
+        bump(v_eccells, TO_CHAR(FLOOR(r.bucket_key / v_m)) || '|' || r.event_name, r.sample_count);
+        IF v_etot.EXISTS(r.event_name) THEN
+            v_etot(r.event_name) := v_etot(r.event_name) + r.sample_count;
+        ELSE
+            v_etot(r.event_name) := r.sample_count;
+        END IF;
+        FOR j IN r.j_lo .. r.j_hi LOOP
+            bump(v_ewcells, TO_CHAR(~weeks_back - j) || '|' || r.event_name, r.sample_count);
+            v_ck := TO_CHAR(~weeks_back - j) || '|' || r.wait_class;
+            IF v_wcells.EXISTS(v_ck) THEN
+                v_wcells(v_ck) := v_wcells(v_ck) + r.sample_count;
+            ELSE
+                v_wcells(v_ck) := r.sample_count;
+            END IF;
+            IF r.fg = 1 THEN
+                IF v_wfcells.EXISTS(v_ck) THEN
+                    v_wfcells(v_ck) := v_wfcells(v_ck) + r.sample_count;
+                ELSE
+                    v_wfcells(v_ck) := r.sample_count;
+                END IF;
+            END IF;
+        END LOOP;
         IF v_class_totals.EXISTS(r.wait_class) THEN
             v_class_totals(r.wait_class) := v_class_totals(r.wait_class) + r.sample_count;
         ELSE
@@ -160,29 +457,27 @@ BEGIN
     END LOOP;
     DBMS_LOB.WRITEAPPEND(v_hours_json, 1, ']');
 
-    -- Window-band markers: small (one per compared window), LISTAGG is safe.
-    -- Read from the shared windows_rollup CTE (per-week_offset roll-up
-    -- of per-instance windows) so the band gets a single Y/N flag per
-    -- offset regardless of RAC instance count.
-    SELECT '['
-           || LISTAGG(
-                  '["'
-                  || TO_CHAR(win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
-                  || TO_CHAR(win_end_ts,   'YYYY-MM-DD HH24:MI') || '","'
-                  || CASE WHEN week_offset = 0 THEN 'current'
-                          ELSE 'w-' || week_offset END || '",'
-                  || CASE WHEN valid_flag = 'Y' THEN '"1"' ELSE '"0"' END
-                  || ']',
-                  ',')
-                  WITHIN GROUP (ORDER BY week_offset DESC)
-           || ']'
-    INTO   v_windows_json
-    FROM (
+    -- Window-band markers, one per compared window, read from the shared
+    -- windows_rollup CTE (per-week_offset roll-up of per-instance windows)
+    -- so the band gets a single Y/N flag per offset regardless of RAC
+    -- instance count.  Built in PL/SQL, not with LISTAGG: at about 50
+    -- bytes a window, SQL's 4000-byte LISTAGG limit (ORA-01489) would
+    -- abort the run past about 78 windows.
+    FOR r IN (
         WITH
         @@sql/lib/windows_cte.sql
         SELECT week_offset, win_start_ts, win_end_ts, valid_flag
         FROM   windows_rollup
-    );
+        ORDER BY week_offset DESC
+    ) LOOP
+        v_windows_json := v_windows_json || CASE WHEN v_windows_json IS NOT NULL THEN ',' END
+            || '["' || TO_CHAR(r.win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
+            || TO_CHAR(r.win_end_ts, 'YYYY-MM-DD HH24:MI') || '","'
+            || CASE WHEN r.week_offset = 0 THEN 'current' ELSE 'w-' || r.week_offset END || '",'
+            || CASE WHEN r.valid_flag = 'Y' THEN '"1"' ELSE '"0"' END || ']';
+        v_valid := NVL(v_valid, '|') || r.week_offset || '=' || r.valid_flag || '|';
+    END LOOP;
+    v_windows_json := '[' || v_windows_json || ']';
 
     -- Emit JS in chunks so no single PUT_LINE exceeds 32767 bytes.
     DBMS_OUTPUT.PUT_LINE('<script>');
@@ -324,6 +619,280 @@ BEGIN
             || 'ASH not flushed to AWR). Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p>');
         DBMS_OUTPUT.PUT_LINE('<script>(function(){var e=document.getElementById("ash-timeline-stack");if(e)e.style.display="none";})();</script>');
     END IF;
+
+    --
+    -- v1.6.0 Timeline: the full-span chart's payload (AWR_DATA.ashx, see
+    -- the header) and the Activity lane's row, both from the scan above.
+    --
+    DECLARE
+        v_ci    VARCHAR2(64);
+        v_i     PLS_INTEGER;
+        v_k     PLS_INTEGER;
+        v_nm    VARCHAR2(64);
+        v_tmp   VARCHAR2(64);
+        v_cov   NUMBER;
+        v_n2    NUMBER;
+        v_row   VARCHAR2(32767);
+        v_tot   VARCHAR2(4000);
+        v_leg   VARCHAR2(4000);
+        v_gut   VARCHAR2(4000);
+        v_cur   NUMBER;
+        v_mu    NUMBER;
+        v_sum   NUMBER;
+        v_cnt   PLS_INTEGER;
+        TYPE t_names IS TABLE OF VARCHAR2(64) INDEX BY PLS_INTEGER;
+        TYPE t_nums  IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
+        v_cls   t_names;
+        v_wtot  t_nums;          -- per window offset: total AAS
+        v_cc    t_nums;          -- per class index: Current AAS
+        v_cm    t_nums;          -- per class index: prior mean AAS
+    BEGIN
+        -- the classes in stacking order (insertion sort, a dozen at most)
+        v_ci := v_class_totals.FIRST;
+        WHILE v_ci IS NOT NULL LOOP
+            v_i := v_cls.COUNT + 1;
+            WHILE v_i > 1 AND (cls_rank(v_cls(v_i - 1)) > cls_rank(v_ci)
+                    OR (cls_rank(v_cls(v_i - 1)) = cls_rank(v_ci) AND v_cls(v_i - 1) > v_ci)) LOOP
+                v_cls(v_i) := v_cls(v_i - 1);
+                v_i := v_i - 1;
+            END LOOP;
+            v_cls(v_i) := v_ci;
+            v_ci := v_class_totals.NEXT(v_ci);
+        END LOOP;
+
+        DBMS_OUTPUT.PUT_LINE('<script>AWR_DATA.ashx={"t0":"'
+            || TO_CHAR(v_range_start, 'YYYY-MM-DD HH24:MI') || '","end":"'
+            || TO_CHAR(v_range_end, 'YYYY-MM-DD HH24:MI') || '","bh":' || hr_tok(v_bh)
+            || ',"wh":' || hr_tok(~win_hours) || ',"classes":[');
+        FOR c IN 1 .. v_cls.COUNT LOOP
+            DBMS_OUTPUT.PUT_LINE(CASE WHEN c > 1 THEN ',' END || '"' || REPLACE(v_cls(c), '"', '\"') || '"');
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('],"vals":[');
+        FOR c IN 1 .. v_cls.COUNT LOOP
+            DBMS_LOB.TRIM(v_class_vals, 0);
+            FOR b IN 0 .. v_nc - 1 LOOP
+                v_ck := TO_CHAR(b) || '|' || v_cls(c);
+                v_n2 := CASE WHEN v_ccells.EXISTS(v_ck) THEN v_ccells(v_ck) ELSE 0 END;
+                -- the last chart bucket may cover less than bh
+                v_cov := LEAST(v_bh, v_total_hours - b * v_bh);
+                lob_add(CASE WHEN b > 0 THEN ',' END
+                    || aas_tok(CASE WHEN v_cov > 0 THEN v_n2 / (360 * v_cov) ELSE 0 END));
+            END LOOP;
+            lob_add(NULL, TRUE);
+            DBMS_OUTPUT.PUT_LINE(CASE WHEN c > 1 THEN ',' END || '[');
+            put_clob_chunked(v_class_vals);
+            DBMS_OUTPUT.PUT_LINE(']');
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('],"win":[');
+        FOR c IN 1 .. v_cls.COUNT LOOP
+            v_row := NULL;
+            v_sum := 0;
+            v_cnt := 0;
+            FOR k IN REVERSE 0 .. ~weeks_back LOOP
+                v_ck := TO_CHAR(k) || '|' || v_cls(c);
+                v_aas := CASE WHEN v_wcells.EXISTS(v_ck) THEN v_wcells(v_ck) ELSE 0 END / (360 * ~win_hours);
+                v_row := v_row || CASE WHEN k < ~weeks_back THEN ',' END || aas_tok(v_aas);
+                v_wtot(k) := CASE WHEN v_wtot.EXISTS(k) THEN v_wtot(k) ELSE 0 END + v_aas;
+                IF k = 0 THEN
+                    v_cc(c) := v_aas;
+                ELSIF INSTR(v_valid, '|' || k || '=Y|') > 0 THEN
+                    v_sum := v_sum + v_aas;
+                    v_cnt := v_cnt + 1;
+                END IF;
+            END LOOP;
+            v_cm(c) := CASE WHEN v_cnt > 0 THEN v_sum / v_cnt END;
+            DBMS_OUTPUT.PUT_LINE(CASE WHEN c > 1 THEN ',' END || '[' || v_row || ']');
+        END LOOP;
+        -- foreground sessions only (the DB time card's chart)
+        DBMS_OUTPUT.PUT_LINE('],"winfg":[');
+        FOR c IN 1 .. v_cls.COUNT LOOP
+            v_row := NULL;
+            FOR k IN REVERSE 0 .. ~weeks_back LOOP
+                v_ck := TO_CHAR(k) || '|' || v_cls(c);
+                v_row := v_row || CASE WHEN k < ~weeks_back THEN ',' END
+                    || aas_tok(CASE WHEN v_wfcells.EXISTS(v_ck) THEN v_wfcells(v_ck) ELSE 0 END
+                               / (360 * ~win_hours));
+            END LOOP;
+            DBMS_OUTPUT.PUT_LINE(CASE WHEN c > 1 THEN ',' END || '[' || v_row || ']');
+        END LOOP;
+        -- the 1-minute detail by wait class (the header)
+        DBMS_OUTPUT.PUT_LINE('],');
+        fine_head;
+        FOR c IN 1 .. v_cls.COUNT LOOP
+            IF c > 1 THEN DBMS_OUTPUT.PUT_LINE(','); END IF;
+            fine_put(v_fc, v_cls(c));
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE(']}};</script>');
+
+        -- the same BY WAIT EVENT (AWR_DATA.ashe, see the header): pick the
+        -- top 14 by samples (ties: name ascending), biggest first
+        DECLARE
+            v_top  t_names;
+            v_seen t_class_tab;
+            v_best VARCHAR2(64);
+            v_en   VARCHAR2(64);
+            v_ns_ev PLS_INTEGER;
+        BEGIN
+            FOR p IN 1 .. 14 LOOP
+                v_best := NULL;
+                v_en := v_etot.FIRST;
+                WHILE v_en IS NOT NULL LOOP
+                    IF NOT v_seen.EXISTS(v_en)
+                       AND (v_best IS NULL OR v_etot(v_en) > v_etot(v_best)
+                            OR (v_etot(v_en) = v_etot(v_best) AND v_en < v_best)) THEN
+                        v_best := v_en;
+                    END IF;
+                    v_en := v_etot.NEXT(v_en);
+                END LOOP;
+                EXIT WHEN v_best IS NULL;
+                v_seen(v_best) := 1;
+                v_top(p) := v_best;
+            END LOOP;
+            -- series count: the top events, plus "Other events" when any is left
+            v_ns_ev := v_top.COUNT + CASE WHEN v_etot.COUNT > v_top.COUNT THEN 1 ELSE 0 END;
+            DBMS_OUTPUT.PUT_LINE('<script>AWR_DATA.ashe={"t0":"'
+                || TO_CHAR(v_range_start, 'YYYY-MM-DD HH24:MI') || '","end":"'
+                || TO_CHAR(v_range_end, 'YYYY-MM-DD HH24:MI') || '","bh":' || hr_tok(v_bh)
+                || ',"wh":' || hr_tok(~win_hours) || ',"classes":[');
+            FOR e IN 1 .. v_ns_ev LOOP
+                DBMS_OUTPUT.PUT_LINE(CASE WHEN e > 1 THEN ',' END || '"'
+                    || CASE WHEN e <= v_top.COUNT THEN json_escape(v_top(e)) ELSE 'Other events' END || '"');
+            END LOOP;
+            DBMS_OUTPUT.PUT_LINE('],"vals":[');
+            FOR e IN 1 .. v_ns_ev LOOP
+                DBMS_LOB.TRIM(v_class_vals, 0);
+                FOR b IN 0 .. v_nc - 1 LOOP
+                    v_n2 := 0;
+                    IF e <= v_top.COUNT THEN
+                        v_ck := TO_CHAR(b) || '|' || v_top(e);
+                        IF v_eccells.EXISTS(v_ck) THEN v_n2 := v_eccells(v_ck); END IF;
+                    ELSE
+                        -- Other events: the bucket's total less the top events
+                        FOR c IN 1 .. v_cls.COUNT LOOP
+                            v_ck := TO_CHAR(b) || '|' || v_cls(c);
+                            IF v_ccells.EXISTS(v_ck) THEN v_n2 := v_n2 + v_ccells(v_ck); END IF;
+                        END LOOP;
+                        FOR t IN 1 .. v_top.COUNT LOOP
+                            v_ck := TO_CHAR(b) || '|' || v_top(t);
+                            IF v_eccells.EXISTS(v_ck) THEN v_n2 := v_n2 - v_eccells(v_ck); END IF;
+                        END LOOP;
+                    END IF;
+                    v_cov := LEAST(v_bh, v_total_hours - b * v_bh);
+                    lob_add(CASE WHEN b > 0 THEN ',' END
+                        || aas_tok(CASE WHEN v_cov > 0 THEN v_n2 / (360 * v_cov) ELSE 0 END));
+                END LOOP;
+                lob_add(NULL, TRUE);
+                DBMS_OUTPUT.PUT_LINE(CASE WHEN e > 1 THEN ',' END || '[');
+                put_clob_chunked(v_class_vals);
+                DBMS_OUTPUT.PUT_LINE(']');
+            END LOOP;
+            DBMS_OUTPUT.PUT_LINE('],"win":[');
+            FOR e IN 1 .. v_ns_ev LOOP
+                v_row := NULL;
+                FOR k IN REVERSE 0 .. ~weeks_back LOOP
+                    v_n2 := 0;
+                    IF e <= v_top.COUNT THEN
+                        v_ck := TO_CHAR(k) || '|' || v_top(e);
+                        IF v_ewcells.EXISTS(v_ck) THEN v_n2 := v_ewcells(v_ck); END IF;
+                    ELSE
+                        FOR c IN 1 .. v_cls.COUNT LOOP
+                            v_ck := TO_CHAR(k) || '|' || v_cls(c);
+                            IF v_wcells.EXISTS(v_ck) THEN v_n2 := v_n2 + v_wcells(v_ck); END IF;
+                        END LOOP;
+                        FOR t IN 1 .. v_top.COUNT LOOP
+                            v_ck := TO_CHAR(k) || '|' || v_top(t);
+                            IF v_ewcells.EXISTS(v_ck) THEN v_n2 := v_n2 - v_ewcells(v_ck); END IF;
+                        END LOOP;
+                    END IF;
+                    v_row := v_row || CASE WHEN k < ~weeks_back THEN ',' END
+                        || aas_tok(v_n2 / (360 * ~win_hours));
+                END LOOP;
+                DBMS_OUTPUT.PUT_LINE(CASE WHEN e > 1 THEN ',' END || '[' || v_row || ']');
+            END LOOP;
+            -- the 1-minute detail by wait event: "Other events" = the
+            -- minute's total less the top events (integer samples, exact)
+            IF v_ns_ev > v_top.COUNT THEN
+                FOR s IN 1 .. v_ns LOOP
+                    FOR mi IN v_sa(s) .. v_se(s) - 1 LOOP
+                        v_n2 := 0;
+                        FOR c IN 1 .. v_cls.COUNT LOOP
+                            v_ck := TO_CHAR(mi) || '|' || v_cls(c);
+                            IF v_fc.EXISTS(v_ck) THEN v_n2 := v_n2 + v_fc(v_ck); END IF;
+                        END LOOP;
+                        FOR t IN 1 .. v_top.COUNT LOOP
+                            v_ck := TO_CHAR(mi) || '|' || v_top(t);
+                            IF v_fe.EXISTS(v_ck) THEN v_n2 := v_n2 - v_fe(v_ck); END IF;
+                        END LOOP;
+                        IF v_n2 <> 0 THEN
+                            v_ft(TO_CHAR(mi) || '|Other events') := v_n2;
+                        END IF;
+                    END LOOP;
+                END LOOP;
+            END IF;
+            DBMS_OUTPUT.PUT_LINE('],');
+            fine_head;
+            FOR e IN 1 .. v_ns_ev LOOP
+                IF e > 1 THEN DBMS_OUTPUT.PUT_LINE(','); END IF;
+                IF e <= v_top.COUNT THEN
+                    fine_put(v_fe, v_top(e));
+                ELSE
+                    fine_put(v_ft, 'Other events');
+                END IF;
+            END LOOP;
+            DBMS_OUTPUT.PUT_LINE(']}};</script>');
+        END;
+
+        -- The Activity lane: one row of stacked columns (drawn client-side
+        -- from ashx.win), the Current total printed, the gutter = total and
+        -- the three largest classes vs the mean of the valid prior windows.
+        IF v_total_n > 0 THEN
+            v_sum := 0;
+            v_cnt := 0;
+            FOR k IN REVERSE 0 .. ~weeks_back LOOP
+                v_tot := v_tot || CASE WHEN k < ~weeks_back THEN ',' END || wg_tok(v_wtot(k));
+                IF k > 0 AND INSTR(v_valid, '|' || k || '=Y|') > 0 THEN
+                    v_sum := v_sum + v_wtot(k);
+                    v_cnt := v_cnt + 1;
+                END IF;
+            END LOOP;
+            v_cur := v_wtot(0);
+            v_mu  := CASE WHEN v_cnt > 0 THEN v_sum / v_cnt END;
+            FOR c IN 1 .. v_cls.COUNT LOOP
+                v_leg := v_leg || '<li><i class="sw" data-wc="' || DBMS_XMLGEN.CONVERT(v_cls(c))
+                    || '"></i>' || DBMS_XMLGEN.CONVERT(v_cls(c)) || '</li>';
+            END LOOP;
+            v_gut := '<div class="g" role="cell" title="ASH active sessions, Current vs the mean of the '
+                || 'valid prior windows; ASH is not scored"><div class="gl1">'
+                || REPLACE(delta_span(v_cur, v_mu, NULL, 'Y'), 'class="d ', 'class="d d1 ')
+                || '<span class="z">total</span></div>';
+            -- the three classes with the most Current activity
+            FOR n IN 1 .. LEAST(3, v_cls.COUNT) LOOP
+                v_k := NULL;
+                FOR c IN 1 .. v_cls.COUNT LOOP
+                    IF (v_k IS NULL OR v_cc(c) > v_cc(v_k))
+                       AND INSTR(v_gut, 'data-wc="' || DBMS_XMLGEN.CONVERT(v_cls(c)) || '"') = 0 THEN
+                        v_k := c;
+                    END IF;
+                END LOOP;
+                EXIT WHEN v_k IS NULL OR v_cc(v_k) <= 0;
+                v_gut := v_gut || '<span class="d3"><i class="sw" data-wc="' || DBMS_XMLGEN.CONVERT(v_cls(v_k))
+                    || '"></i>' || DBMS_XMLGEN.CONVERT(v_cls(v_k)) || ' '
+                    || REGEXP_REPLACE(delta_span(v_cc(v_k), v_cm(v_k), NULL, 'Y'), '<[^>]+>', '') || '</span>';
+            END LOOP;
+            v_gut := v_gut || '</div>';
+            v_row := '<div class="r ash" id="tl-ash-timeline" data-v="' || v_tot || '"'
+                || ' data-name="Active sessions (ASH)" data-unit="AAS" role="row">'
+                || '<div class="l" role="rowheader"><span class="nm">'
+                || ent('Active sessions', 'ash-timeline', 'chart') || '</span>'
+                || '<span class="sub">ASH, by wait class</span><ul class="leg">' || v_leg || '</ul>'
+                || '<span class="axn" aria-hidden="true"></span></div>';
+            FOR k IN REVERSE 0 .. ~weeks_back LOOP
+                v_row := v_row || '<div class="c' || CASE WHEN k = 0 THEN ' cur' END || '" data-w="' || k
+                    || '"><span class="v">' || fmt_num(v_wtot(k)) || '</span></div>';
+            END LOOP;
+            DBMS_OUTPUT.PUT_LINE(tl_open('activity') || v_row || v_gut || '</div>' || tl_close);
+        END IF;
+    END;
     DBMS_OUTPUT.PUT_LINE('</section>');
 
     DBMS_LOB.FREETEMPORARY(v_hours_json);

@@ -318,7 +318,7 @@ The policy file is the single source of truth; edit a line there and re-run the 
 <li><b>Enough history?</b> Fewer than 3 prior windows &rarr; <span class="badge b-skip">insufficient history</span>. No usable spread (all priors identical and zero) &rarr; <span class="badge b-skip">flat baseline</span>. No Current value &rarr; <span class="badge b-skip">n/a</span>.</li>
 <li><b>How unusual?</b> z = (Current &minus; prior mean) &divide; max(&sigma;, 2% of |prior mean|). The 2% floor stops a dead-flat baseline from turning a trivial wobble into a huge z. |z| &le; 2 &rarr; <span class="badge b-ok">typical</span>.</li>
 <li><b>Is it material?</b> The metric's own <b>minimum %-delta</b> must be met (|Current &minus; mean| / |mean|), and its <b>value floor</b>: at least one of Current / prior mean must reach the floor in the metric's unit (for waits: the row's share of the Current window's non-idle wait time must reach the minimum share). Otherwise <span class="badge b-ok">typical</span>, badged <i>immaterial</i>.</li>
-<li><b>Which direction?</b> Per metric: <code>UP</code> (rise is bad), <code>DOWN</code> (drop is bad), <code>ANY</code> (both), <code>INFO</code> (never a finding). A material move in the <i>good</i> direction &rarr; <span class="badge b-imp">improved</span>; an <code>INFO</code> counter that moved &rarr; <span class="badge b-note">noted</span>. Neither is highlighted, listed as a mover, or counted in the verdict.</li>
+<li><b>Which direction?</b> Per metric: <code>UP</code> (rise is bad), <code>DOWN</code> (drop is bad), <code>ANY</code> (both), <code>INFO</code> (never a finding). A material move in the <i>good</i> direction &rarr; <span class="badge b-imp">improved</span>; an <code>INFO</code> counter that moved &rarr; <span class="badge b-note">noted</span>. Neither is highlighted, leads a finding card, or is counted in the verdict; both are listed under "Checked and normal".</li>
 <li><b>How big?</b> |z| &gt; 3 &rarr; <span class="badge b-crit">large</span>, otherwise <span class="badge b-warn">moderate</span>. A table-wide shift in the wait tables demotes large to moderate.</li>
 </ol>
 <p><b>Worked example.</b> Hard parses (<code>parse count (hard)</code>: rise is bad, min 25%, floor 2/s). Prior windows 0.1, 0.1, 0.2, 0.1 /s; Current 0.6 /s. z is about 8 and the move is +500%, but both values sit below the 2/s floor &rarr; <i>typical, immaterial</i>. Prior windows 12, 11, 13, 12 /s; Current 18 /s: z about 7, +50%, above the floor, a rise &rarr; <i>large</i>. Prior 12 /s, Current 6 /s: a drop &rarr; <i>improved</i>, shown muted, not counted.</p>
@@ -330,10 +330,10 @@ The policy file is the single source of truth; edit a line there and re-run the 
         parts.append(f'<div class="card"><span class="badge b-{d.lower()}">{d}</span> <b>{short}</b><br>{long}</div>')
     parts.append("""</div>
 <div class="card"><div class="kv">
-<b><span class="badge b-crit">large</span></b><span>|z| &gt; 3, material, bad direction. Counted in the verdict, listed in Biggest movers, row tinted.</span>
-<b><span class="badge b-warn">moderate</span></b><span>|z| &gt; 2, material, bad direction. Counted, listed, tinted.</span>
-<b><span class="badge b-ok">typical</span></b><span>Inside the usual spread, or the move was immaterial (badged).</span>
-<b><span class="badge b-imp">improved</span></b><span>Material move in the good direction. Muted badge, no tint, never counted; the verdict says "N improved".</span>
+<b><span class="badge b-crit">large</span></b><span>|z| &gt; 3, material, bad direction. Counted in the verdict, on a finding card, red band dot and row marker.</span>
+<b><span class="badge b-warn">moderate</span></b><span>|z| &gt; 2, material, bad direction. Counted, on a finding card, amber band dot and row marker.</span>
+<b><span class="badge b-ok">typical</span></b><span>Inside the usual spread, or the move was immaterial (noted under the change).</span>
+<b><span class="badge b-imp">improved</span></b><span>Material move in the good direction. Green hollow band dot, no row marker, never counted; listed as Improved under "Checked and normal".</span>
 <b><span class="badge b-note">noted</span></b><span>An informational counter that moved. Grey, never counted.</span>
 <b><span class="badge b-skip">skip</span></b><span>n/a, insufficient history or flat baseline: not scored.</span>
 </div></div>
@@ -361,7 +361,7 @@ The policy file is the single source of truth; edit a line there and re-run the 
     parts.append("""</div></div>
 
 <h2 id="families">Families and twins</h2>
-<p class="sub">Names in one family describe one physical quantity or one story. "Biggest movers" shows one lead row per family (the counted member with the largest |z|) and folds the rest under it; a twin is never the lead.</p>
+<p class="sub">Names in one family describe one physical quantity or one story. A finding card groups related families (Physical I/O, DB time, Network, Commit, ...) and is led by its most telling counted member; the rest are its related metrics, and a twin is never the lead.</p>
 <div class="card"><div class="kv">""")
     for fam in sorted(fams):
         parts.append(f"<b>{esc(FAMILY_TXT.get(fam, fam))}</b><span>{esc(', '.join(fams[fam]))}</span>")
@@ -376,7 +376,7 @@ The policy file is the single source of truth; edit a line there and re-run the 
 <li>A new stat or metric added to a template needs a line here, or <code>./lint.sh</code> (check 12) fails and the stat falls back to the generic default.</li>
 <li>Run <code>./lint.sh</code>, then <code>python3 docs/gen_policy_doc.py</code> and <code>python3 demo/gen_demo_report.py</code>.</li>
 </ol>
-<p>The same policy drives the single-DB report (verdict, findings, headline cards, wait tables, day profile, narrative) and the fleet report's findings band, row worst-finding and headline cards.</p>
+<p>The same policy drives the single-DB report (verdict, finding cards, findings tables, DB time strip, wait tables, day profile, likely-source line) and the fleet report's findings band, row worst-finding and headline cards.</p>
 </div>
 <footer>AWR timeline comparison &middot; scoring policy reference &middot; regenerate with <code>python3 docs/gen_policy_doc.py</code></footer>
 </main></body></html>

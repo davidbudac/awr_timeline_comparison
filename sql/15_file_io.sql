@@ -40,7 +40,7 @@ BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 15_file_io BEGIN -->'); END;
 DECLARE
     v_weeks_back NUMBER := ~weeks_back;
     v_top_n      NUMBER := ~top_n;
-    v_header     VARCHAR2(4000);
+    v_header     VARCHAR2(32767);   -- one th (about 45 bytes) per window
     v_row        VARCHAR2(32767);
     v_weeks_json VARCHAR2(4000);
     v_weeks_iso_json VARCHAR2(4000);
@@ -78,29 +78,38 @@ DECLARE
     v_dim_ftypes_total  t_dim_num;
     v_dim               VARCHAR2(10);
     v_first_dim         BOOLEAN;
+    -- Entity anchors (v1.6.0): the FIRST row a file gets (in any
+    -- ranking table) carries id fl-<file short name> (sql/lib/anchor_id.plsql); a
+    -- different name slugging to an id already taken gets -<n> appended.
+    TYPE t_aid IS TABLE OF VARCHAR2(200) INDEX BY VARCHAR2(4000);
+    v_aid_by_name t_aid;
+    v_aid_used    t_aid;
+    v_aid         VARCHAR2(200);
+    -- v1.6.0 Timeline: the "Where the reads land" lane's rows (the top
+    -- 1 of the MB read ranking), emitted after the tables
+    TYPE t_tl_rows IS TABLE OF VARCHAR2(32767) INDEX BY PLS_INTEGER;
+    v_tl          t_tl_rows;
+    v_tl_csv      VARCHAR2(4000);
+    v_ls          VARCHAR2(2000);   -- the evidence library's row text
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/json_escape.plsql
     @@sql/lib/fmt_num.plsql
+    @@sql/lib/anchor_id.plsql
+    @@sql/lib/band_glyph.plsql
+    @@sql/lib/finding_cards.plsql
+    @@sql/lib/off_label.plsql
+    @@sql/lib/wingrid.plsql
+    @@sql/lib/timeline.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="file-io"><h2>File I/O (top ' || v_top_n
-        || ' per dimension, per window)</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'Data and temp files with the most I/O per window, from '
-        || 'DBA_HIST_FILESTATXS / DBA_HIST_TEMPSTATXS (end snap minus '
-        || 'begin snap; blocks scaled to MB by each file''s block size). '
-        || 'Chart per dimension: each line = one file across windows, '
-        || 'oldest &rarr; current; toggle to the per-file-type view from '
-        || 'DBA_HIST_IOSTAT_FILETYPE &mdash; the AWR report''s '
-        || '&quot;IOStat by Filetype&quot; &mdash; which covers <b>all</b> '
-        || 'database I/O (control file, redo log, archive log, &hellip;), '
-        || 'so the two modes'' totals legitimately differ. '
-        || 'Detail tables collapsed; click to expand.</p>');
+    DBMS_OUTPUT.PUT_LINE('<section id="file-io" class="vw in-s in-a lib" style="--os:6"><h2>File I/O'
+        || '<small class="h2sub">Top ' || v_top_n
+        || ' data and temp files by I/O per window, and I/O by file type; ranked, not scored</small></h2>');
 
     SELECT '['
         || LISTAGG('"' || TO_CHAR(
                CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
-               - (~step_hours/24)*week_offset, '~period_axis_fmt') || '"', ',')
+               - (~step_hours/24)*week_offset, '~period_axis_fmt', 'NLS_DATE_LANGUAGE=ENGLISH') || '"', ',')
                WITHIN GROUP (ORDER BY week_offset DESC)
         || ']'
     INTO   v_weeks_json
@@ -296,7 +305,7 @@ BEGIN
                 || '<th class="num" data-w="0">Current (' || s.dim_unit || ')</th>';
             FOR k IN 1 .. v_weeks_back LOOP
                 v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
-                    || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
+                    || off_label(k) || '</th>';
             END LOOP;
             v_header := v_header || '</tr></thead>';
             DBMS_OUTPUT.PUT_LINE('<table id="fileio-detail-' || v_cur_dim || '">' || v_header || '<tbody>');
@@ -341,7 +350,7 @@ BEGIN
             IF v_new_in_cur THEN
                 FOR k IN 1 .. v_weeks_back LOOP
                     v_prior_s := nth_csv(s.week_vals, k + 1);
-                    IF v_prior_s IS NOT NULL AND v_prior_s <> ''
+                    IF v_prior_s IS NOT NULL
                        AND TO_NUMBER(v_prior_s, 'FM99999999999999990D9',
                                      'NLS_NUMERIC_CHARACTERS=''.,''') > 0 THEN
                         v_new_in_cur := FALSE;
@@ -350,7 +359,16 @@ BEGIN
                 END LOOP;
             END IF;
 
-            v_row := '<tr>'
+            v_aid := NULL;
+            IF NOT v_aid_by_name.EXISTS(s.filename) THEN
+                v_aid := file_anchor(s.filename);
+                IF v_aid_used.EXISTS(v_aid) THEN
+                    v_aid := v_aid || '-' || (v_aid_by_name.COUNT + 1);
+                END IF;
+                v_aid_by_name(s.filename) := v_aid;
+                v_aid_used(v_aid) := s.filename;
+            END IF;
+            v_row := '<tr' || CASE WHEN v_aid IS NOT NULL THEN ' id="' || v_aid || '"' END || '>'
                 || '<td class="mono"><span title="'
                 || DBMS_XMLGEN.CONVERT(s.filename) || '">'
                 || DBMS_XMLGEN.CONVERT(s.file_short) || '</span>'
@@ -378,7 +396,7 @@ BEGIN
                 v_row := v_row || '<td class="num" data-w="' || k || '">'
                       || fmt_num(v_val);
             END IF;
-            IF v_rnk_s IS NOT NULL AND v_rnk_s <> '' THEN
+            IF v_rnk_s IS NOT NULL THEN
                 v_row := v_row || ' <span class="badge skip">#' || v_rnk_s || '</span>';
             END IF;
             v_row := v_row || '</td>';
@@ -386,6 +404,22 @@ BEGIN
 
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
+
+        -- v1.6.0 Timeline: ranked, not scored (a plain ratio vs the mean of
+        -- the prior windows it made the top list in); id tl-<its anchor>
+        IF s.dim = 'READMB' AND v_tl.COUNT < 1 AND s.cur_val IS NOT NULL THEN
+            v_tl_csv := tl_csv(s.week_vals, 'Y');
+            IF v_tl.COUNT = 0 THEN
+                v_ls := '<code>' || DBMS_XMLGEN.CONVERT(s.file_short) || '</code> ' || fmt_num(s.cur_val) || ' MB read'
+                    || CASE WHEN tl_mu(v_tl_csv) IS NOT NULL THEN ' vs ' || fmt_num(tl_mu(v_tl_csv))
+                            ELSE ', new in the top ' || v_top_n END;
+            END IF;
+            v_tl(v_tl.COUNT + 1) := tl_bars(v_tl_csv, tl_mu(v_tl_csv), NULL, NULL,
+                tl_lab(ent(DBMS_XMLGEN.CONVERT(s.file_short), v_aid_by_name(s.filename), 'file'),
+                       'datafile, MB read', DBMS_XMLGEN.CONVERT(s.filename)),
+                tl_gutp(s.cur_val, tl_mu(v_tl_csv), '#' || s.cur_rnk || ' by MB read'),
+                'tl-' || v_aid_by_name(s.filename), 'o', DBMS_XMLGEN.CONVERT(s.file_short), 'MB read');
+        END IF;
     END LOOP;
 
     IF v_cur_dim IS NOT NULL THEN
@@ -396,6 +430,11 @@ BEGIN
             || '(DBA_HIST_FILESTATXS empty for these snapshots, or no valid '
             || 'windows). Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p>');
     END IF;
+    -- the Timeline rows ride after the tables (never inside a <tbody>)
+    FOR i IN 1 .. v_tl.COUNT LOOP
+        DBMS_OUTPUT.PUT_LINE(CASE WHEN i = 1 THEN tl_open('objects') END || v_tl(i)
+            || CASE WHEN i = v_tl.COUNT THEN tl_close END);
+    END LOOP;
 
     -- Second pass: per-file-type breakdown for the chart toggle, straight
     -- from DBA_HIST_IOSTAT_FILETYPE (small + large I/O summed per type).
@@ -561,7 +600,7 @@ BEGIN
                 || '<th class="num" data-w="0">Current</th>';
             FOR k IN 1 .. v_weeks_back LOOP
                 v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
-                    || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
+                    || off_label(k) || '</th>';
             END LOOP;
             v_header := v_header || '</tr></thead>';
             DBMS_OUTPUT.PUT_LINE('<table id="fileio-detail-ftype">' || v_header || '<tbody>');
@@ -587,7 +626,7 @@ BEGIN
                 v_row := v_row || '<td class="num" data-w="' || k || '">'
                       || fmt_num(v_val);
             END IF;
-            IF v_rnk_s IS NOT NULL AND v_rnk_s <> '' THEN
+            IF v_rnk_s IS NOT NULL THEN
                 v_row := v_row || ' <span class="badge skip">#' || v_rnk_s || '</span>';
             END IF;
             v_row := v_row || '</td>';
@@ -662,7 +701,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
         DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
         DBMS_OUTPUT.PUT_LINE('var palette=["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1","#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"];');
-        DBMS_OUTPUT.PUT_LINE('var fmt=function(v){return v==null?"—":(+v).toLocaleString(undefined,{maximumFractionDigits:1});};');
+        DBMS_OUTPUT.PUT_LINE('var fmt=function(v){return v==null?"\u2014":(+v).toLocaleString(undefined,{maximumFractionDigits:1});};');
         DBMS_OUTPUT.PUT_LINE('Object.keys(AWR_DATA.fileIo.dims).forEach(function(dim){');
         DBMS_OUTPUT.PUT_LINE('  var el=document.getElementById("fileio-chart-"+dim); if(!el) return;');
         DBMS_OUTPUT.PUT_LINE('  var d=AWR_DATA.fileIo.dims[dim];');
@@ -712,7 +751,8 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('})();</script>');
     END IF;
 
-    DBMS_OUTPUT.PUT_LINE('</section>');
+    -- the evidence library's row text (Summary view)
+    DBMS_OUTPUT.PUT_LINE(lib_ls('file-io', NVL(v_ls, 'no per-file I/O recorded')) || '</section>');
 END;
 /
 

@@ -5,7 +5,188 @@ The report footer stamps the version that produced it
 top of `awr_trend.sql`. Bump it there when cutting a release and add an
 entry here. Dates are release dates.
 
-## Unreleased
+## 1.6.0 — 2026-09-27
+
+Report redesign "Mock D" (spec: `design/report_mock_d_hybrid.html`,
+decisions and landing places in `design/HANDOFF_report_redesign.md`,
+"Implemented in v1.6.0"). No new substitution vars, no new grants, no new
+query against a new view; one extra bounded `DBA_HIST_SYSTEM_EVENT` read in
+07 (only when a wait class is flagged) and one bounded `DBA_HIST_SQLSTAT`
+read per plan-change card in 18. The fleet report keeps version 0.7.0.
+Byte-identity is **not** preserved (markup, CSS and JS changed by design);
+every number of the v1.5.0 Full view is still in the All sections view.
+Verified on dbmint on the final code (2026-09-27): pinned hourly with
+all three templates, the plan-change window, daily, AUTO weekly, markers +
+profile_days with debug Y / N (identical HTML), ECharts inlined and
+CDN-blocked renders, the pure SQL*Plus heredoc, a fleet run with detail
+reports, weeks_back 52 weekly / 168 hourly / an overlapping grid, and two
+busy windows for the CPU / wait verdict; rc 0, 0 ORA-/SP2-/PLS- outside
+captured SQL text, 20/20 `AWR-SECTION` pairs, verify_report OK on every
+report -- see `CLAUDE.md`, "v1.6.0 verified on dbmint"; the Activity
+charts follow-up re-ran the pinned hourly, plan-change, busy wait / CPU,
+AUTO weekly, 168-hourly and fleet runs (all rc 0, verify_report OK).
+
+- **Three views: Summary / Timeline / All sections** replace Normal /
+  Full. `class="vw in-s|in-t|in-a"` declares which views show an element
+  (body `vs` / `vt` / `va`); the top-bar switch persists localStorage
+  `awr-view` on an explicit click only; `#view=summary|timeline|all` wins
+  over it, and a v1.5.0 `!v=f` link opens All sections. Entity and rail
+  links switch view, reveal (tab, expander, `<details>`, library row,
+  folded lane) and flash their target. JS off: every section stacked.
+  `awr-mode`, `body.normal/.full`, `data-normal`, `.full-only` and the
+  `awr:mode` event are gone (`awr:view` replaces the event).
+- **Summary view.** A sticky top bar (DB, Current window, view switch,
+  theme); a verdict hero with one rule-based sentence, a "Likely source"
+  line and count pills; a hero strip of DB time per window; one finding
+  card per metric family (lead metric, band glyph, per-window bars,
+  evidence rows linking to their tables, related metrics); "What changed
+  around it" (plan-change and configuration cards under the release
+  flags); "Checked and normal"; and an **evidence library** -- every
+  other section as one collapsible row with a one-line status. Removed:
+  the v1.5.0 masthead, verdict banner, all-movers list, windows strip and
+  its DB-time chart, the "What changed" list, the six headline tiles and
+  07's "Biggest movers" table (their numbers stay in 01/02/03/07/10).
+- **Timeline view.** A window grid (one column per compared window,
+  oldest first, release flags on the ruler) with lanes for activity,
+  headline and flagged metrics, waits, the segment / file the reads land
+  on, Top SQL and SQL Monitor, and parameter step lines; click a date to
+  pin that window and re-base every delta against it. Day profile (16)
+  shows here too.
+- **Activity, whole span** at the top of every view, above the verdict
+  (owner request): two stacked inline-SVG charts over one time axis --
+  active sessions by wait class (`AWR_DATA.ashx`) and by wait event
+  (`AWR_DATA.ashe`: the 14 events with the most samples, ON CPU as `CPU`,
+  the rest summed as "Other events"), both from 09's one existing ASH scan
+  (it now also groups by event; no second scan). The fine grid of the
+  v1.5.0 ASH timeline (hourly, or the sub-hour cadence; coarser only past
+  10000 buckets), drawn one step per pixel column when zoomed out (each
+  column's busiest bucket, so spikes stay) and every bucket once zoomed in;
+  each chart has its own legend (toggles restack and rescale), hover
+  tooltip, brush zoom, Reset / double-click, window stripes (Current
+  indigo, pinned amber, skipped grey) and release markers; zoom, the hover
+  crosshair and the pinned window are linked across the two (one chart
+  factory in `js_timeline`). A pinned window now survives a view switch.
+  Rail: a new Overview group links it; the Timeline's "Active sessions,
+  full span" link is gone.
+  Drawn as smooth stacked **areas** (one point per bucket at its midpoint,
+  straight lines, a thin darker top edge per band; zoomed out, still one
+  point per pixel column at its busiest bucket). **1-minute detail**
+  (owner request): the same scan also groups the samples inside the
+  compared windows by minute -- `ashx.fine` / `ashe.fine` = `{bm, capped,
+  segs, vals}`, integer samples per minute (AAS = n / 6), zero runs
+  written as `-k`, overlapping windows merged so a minute counts once, at
+  most 40000 minutes (past it the Current and the most recent windows
+  that fit). Zoomed to 6 hours or less over a compared window, both
+  charts draw those minutes (hourly outside the windows), the range label
+  says "1-min detail", the tooltip names the minute, and the brush may go
+  down to 30 minutes. The window stripe's hit area shrinks to its cap once
+  the stripe is wide, so the plot inside a zoomed window hovers minute by
+  minute.
+- **Band glyph** (`sql/lib/band_glyph.plsql`): Normal range | vs normal
+  (dot on a -4..+8 sigma axis over the 1 / 2 sigma zones) | z | Delta vs
+  mean replaces the Change / z / %-delta columns and the `data-dev` heat
+  tint of prior-window cells (`dev_bucket.plsql` deleted). One Delta rule
+  everywhere (`x n` from 2x, else a percentage).
+- **Micro strips** (`sql/lib/js_microstrip.plsql`): table Trend cells are
+  13-bar strips from zero with the normal zone shaded and Current in the
+  accent (same `data-spark` contract; `js_sparkline.plsql` is now used by
+  the fleet only).
+- **Entity links.** `ent()` + `anchor_id()` / `finding_anchor()` link
+  every named segment, file, event, SQL, parameter and metric to its row
+  (new stable ids `fr-*`, `we-/wa-/wc-`, `be-/ba-`, `sq-<dim>-`, `sm-`,
+  `sg-`, `fl-`, `pa-`; renamed from `find-*`, `fg-*`, `bg-*`,
+  `sqlmon-*`); a link whose row was not emitted is shown as plain text.
+- **Plan-change card** (18): elapsed per window from `DBA_HIST_SQLSTAT`,
+  a plan-hash step line, per-exec / SQL Monitor / CPU evidence.
+- **Reference section** (`sql/19_reference.sql`): "Reading the charts"
+  guide and one "About this report" fold with every method note (the
+  per-section "How this is computed" folds are gone).
+- **Build**: the three client scripts are generated from readable
+  `sql/lib/src/*.js` by `tools/js2plsql.sh` (dev-time, POSIX sh + awk).
+  `lint.sh` checks 17-25: include order of the new libs, the retired view
+  hooks, `class="vw ..."` on every section, one `ent()` emitter, Timeline
+  lane sources closed, generated scripts up to date, ASCII-only output. Fixed a lint bug:
+  findings raised inside a `| while read` loop were lost (subshell).
+- **Fleet-visible side effects** (fleet files untouched): the fleet chrome
+  `@@`-includes `sql/_style.sql`, so the fleet report picks up the new
+  indigo accent, spacing, fonts, neutral rail / tab states, non-uppercase
+  badges and headers, and the 2 px severity marker; a `table.dt`-only
+  rule keeps the fleet findings band's 3 px red / amber row bar, and the
+  first column of every fleet `table.dt` gets a 10 px left padding so its
+  text no longer sits flush against that bar.
+- **Rail:** the active link's inset left bar (a dark crescent on the
+  rounded pill) is gone; hover / active read through background and
+  weight only (lint check 32 keeps it that way).
+- **Fixes found in the release pass.** Three facts the v1.5.0 masthead
+  printed were lost with it and are back: "all DBIDs ..." in the top bar
+  when a report spans more than one DBID, the template name in the top bar
+  for a non-default template, and the connected user in the About run
+  line. The Current column's magnitude bar is no longer drawn (its edge
+  crossed the digits on the Current tint); the Checked-and-normal range
+  text wraps instead of being clipped; the "more normal rows" link is
+  styled (it was browser blue, unreadable in dark); section 11's window
+  labels sit inside the plot instead of under the legend (they overlapped
+  it and had a halo in dark). The Timeline scripts (and four ECharts
+  tooltip formatters) carried literal non-ASCII characters, which a
+  non-UTF-8 SQL*Plus client prints as "?" (skipped-window cells read
+  "???" on dbmint); they are `\u` escapes now and `lint.sh` check 25 keeps
+  every emitted line ASCII.
+- **Fixes from the pre-release code review** (nine findings; verified on
+  dbmint 2026-09-27: the verdict says "mostly CPU" / "all wait" on real
+  busy windows and DB CPU matches `DBA_HIST_SYS_TIME_MODEL` to the digit).
+  - *Wait vs CPU never fired:* `DBA_HIST_SYSSTAT` has no `DB CPU` row, so
+    the verdict's / DB time card's "mostly wait / mostly CPU" and the
+    card's CPU evidence row never appeared on a real DB (the demo invented
+    the row). New `sql/lib/load_pairs_cte.sql` reads DB time / DB CPU from
+    `DBA_HIST_SYS_TIME_MODEL` for 00 / 02 / 07; 08 and the day profile
+    (16, and the fleet's day-profile band, whose DB CPU row was empty too)
+    do the same. The demo model no longer has a SYSSTAT DB CPU.
+  - *"New" Top SQL after skipped windows:* a skipped oldest window no
+    longer makes every Timeline SQL row "new".
+  - *Curated templates:* the verdict now sums the template's wait-event
+    list, like the finding cards it names.
+  - *Overlapping windows* (win_hours > step_hours): per-window ASH counts
+    a sample in every window it falls in (values were scaled by step/win).
+  - *Large weeks_back:* 168 hourly or 52 weekly windows no longer abort the
+    run (ruler, configuration lane and window JSON streamed or built in
+    PL/SQL, wider header buffers, 18's per-window detail truncates the
+    oldest slots instead of ORA-01489); offset labels work past 16
+    windows; 01's ribbon and the Summary grids stay inside the page.
+  - *Likely source:* the plan change it names is 18's own test (Current
+    plan vs the usual prior plan), the most expensive one, not the
+    alphabetically first sql_id with two plans somewhere in the span.
+  - *Entity links:* file links use the parent directory too (every PDB
+    has a `users01.dbf`), hidden `_x` / `__x` parameters get their own ids,
+    and 04 / 05 / 12 guard against duplicate ids.
+  - *DB time card chart:* foreground ASH (DB time is foreground time),
+    the card's DB time kept as its Current value.
+  - *Day / month names* are English whatever the client's language.
+  lint checks 26-30 cover the grep-able ones.
+- **Fixes from the final dbmint pass.**
+  - *Dead `IS NOT NULL AND x <> ''` guards* (an empty string IS NULL in
+    Oracle, so the branch never ran; older than 1.5.0): 06's `plan↑`
+    badges, the "N of M top SQL had a plan change" line and the Timeline
+    plan diamond never appeared, no prior-window cell in 04 / 05 / 06 /
+    14 / 15 carried its `#n` rank chip, and every Segment / File I/O row
+    with a Current value was badged "new". The demo (Python) never had the
+    bug. The fleet's Top SQL band had the same dead `plan↑` badge
+    (`sql/fleet/05_topsql.sql`, display only, no score change). lint check
+    31.
+  - *Plan-change card:* its evidence values use the text face of the spec
+    (they were monospace), and a value never parts from its unit at a line
+    break in any card's evidence ("221.5 / k", "0.006812 / AAS").
+  - *Timeline:* a long segment name ellipsises instead of being clipped
+    mid-letter.
+  - *Verdict hero:* the "too little history" sentence's Windows / Findings
+    links were browser blue (unreadable in dark); styled like the others.
+  - `demo/verify_report.js` accepts no micro strips past 91 windows (they
+    draw nothing there by design).
+- **Demo** (`docs/examples/demo_busy_db.html`) and the website
+  screenshots regenerated in the new design; `demo/verify_report.js`
+  resolves Playwright portably and checks views, links, the Timeline,
+  plan cards and the library.
+
+Also in this release (merged to main after 1.5.0):
 
 - **Removed SQL Monitor "Plan-line drift" (phase 2, `sqlmon_detail`).**
   Taken out entirely at the user's request: the `sqlmon_detail` substitution

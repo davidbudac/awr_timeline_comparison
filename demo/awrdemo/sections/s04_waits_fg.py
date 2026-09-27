@@ -14,13 +14,9 @@ TAG = "04_waits_fg"
 def emit(w) -> str:
     L = ["<!-- AWR-SECTION: " + TAG + " BEGIN -->"]
     top_n = w.top_n
-    L.append('<section id="waits-fg"><h2>Foreground wait events (top '
-             + str(top_n) + " by time waited)</h2>")
-    L.append('<p style="font-size:12px;color:var(--muted)">'
-             "DBA_HIST_SYSTEM_EVENT, foreground waits, Idle excluded. "
-             "Chart stacks wait_class time per window. "
-             "Tables: top-" + str(top_n) + " by time_waited (s) and by avg latency "
-             "(ms = time_waited &divide; total_waits).</p>")
+    L.append('<section id="waits-fg" class="vw in-s in-a lib lopen" style="--os:3"><h2>Foreground waits'
+             '<small class="h2sub">Where foreground sessions waited: top ' + str(top_n)
+             + ' events by time and by average wait, and the wait classes</small></h2>')
     L.append('<div class="chart-wrap chart-small" id="waits-fg-stack"></div>')
 
     deltas = C.window_deltas(w, lambda m: m.fg_waits)
@@ -42,11 +38,34 @@ def emit(w) -> str:
 
     # ---- top-N events, two tables
     rows = C.event_rows(w, deltas)
+    seen_we = {}                                   # v_seen_we (anchor_uniq memo)
     tot = C.current_total_us(deltas)
     shift, n_flag, mean_pct, sd_pct = C.shift_pass(rows, tot)
     L.extend(C.table_time(w, rows, "waits-fg-time",
                           "Top " + str(top_n) + " events &mdash; time waited (s)",
-                          tot, shift, C.shift_note(rows, shift, n_flag, mean_pct, sd_pct)))
+                          tot, shift, C.shift_note(rows, shift, n_flag, mean_pct, sd_pct), memo=seen_we))
+    # ---- v1.6.0 Timeline: the Waits lane's event rows (Table A's order,
+    # rows past the 10th fold, at most 16)
+    nt = min(len(rows), 16)
+    for i, r in enumerate(rows[:16], start=1):
+        share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
+        b = h.policy_bucket("WAIT", r["event_name"], r["wait_class"], C._s(r["cur_us"]),
+                            C._s(r["mu_us"]), C._s(r["sd_us"]), r["n_us"], share, shift)
+        L.append((h.tl_open("waits") if i == 1 else "")
+                 + h.tl_bars(w, h.tl_csv(w, r["spark_vals"]), C._s(r["mu_us"]), C._s(r["sd_us"]), b,
+                             h.tl_lab(h.ent(h.esc(r["event_name"]), h.anchor_uniq(h.anchor_id("we", r["event_name"]), r["event_name"], seen_we), "event"),
+                                      h.esc(r["wait_class"]), None, r["wait_class"]),
+                             h.tl_gut(C._s(r["cur_us"]), C._s(r["mu_us"]), C._s(r["sd_us"]), b),
+                             "tl-" + h.anchor_uniq(h.anchor_id("we", r["event_name"]), r["event_name"], seen_we),
+                             "w" + (" more" if i > 10 else ""),
+                             h.esc(r["event_name"]), "s waited")
+                 + (h.tl_close() if i == nt else ""))
+    moved = 0
+    for r in rows:
+        share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
+        if h.policy_bucket("WAIT", r["event_name"], r["wait_class"], C._s(r["cur_us"]),
+                           C._s(r["mu_us"]), C._s(r["sd_us"]), r["n_us"], share, shift) in ("large", "moderate"):
+            moved += 1
     L.extend(C.table_avg(w, rows, "waits-fg-avg",
                          "Top " + str(top_n) + " events &mdash; avg time per wait (ms)"))
 
@@ -67,22 +86,25 @@ def emit(w) -> str:
              + C.header(w, "<th>Wait class</th>", "s", with_trend=False) + "<tbody>")
     for r in crows:
         cur_s = None if r["cur_us"] is None else r["cur_us"] / 1e6
-        row = ('<tr id="' + h.anchor_id("fgc", r["wait_class"]) + '"><td>' + h.esc(r["wait_class"]) + "</td>"
+        share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
+        row = ('<tr id="' + h.anchor_id("wc", r["wait_class"]) + '"><td>' + h.esc(r["wait_class"]) + "</td>"
                + '<td class="num" data-w="0"' + h.fmt_num_title(cur_s) + "><b>"
-               + h.fmt_num(cur_s) + "</b></td>")
+               + h.fmt_num(cur_s) + "</b></td>"
+               + h.score_cells(cur_s, C._s(r["mu_us"]), C._s(r["sd_us"]), r["n_us"], share,
+                               "WAIT", "Wait class: " + r["wait_class"], r["wait_class"]))
         for k in range(1, w.weeks_back + 1):
             us_s = C.nth_csv(r["week_vals"], k + 1)
             if us_s == "":
                 row += '<td class="num" data-w="' + str(k) + '">&mdash;</td>'
             else:
                 us = float(us_s)
-                row += ('<td class="num" data-w="' + str(k) + '"' + h.dev_attr(cur_s, us) + ">"
+                row += ('<td class="num" data-w="' + str(k) + '">'
                         + h.fmt_num(us) + "</td>")
-        share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
-        row += h.score_cells(r["cur_us"], r["mu_us"], r["sd_us"], r["n_us"], share,
-                             "WAIT", "Wait class: " + r["wait_class"], r["wait_class"])
         row += "</tr>"
         L.append(row)
-    L.append("</tbody></table></section>")
+    L.append("</tbody></table>")
+    L.append(h.lib_ls("waits-fg", "no foreground wait events" if not rows else
+                      (("none" if moved == 0 else "<b>" + str(moved) + "</b>") + " of " + str(len(rows))
+                       + " event" + ("" if len(rows) == 1 else "s") + " moved")) + "</section>")
     L.append("<!-- AWR-SECTION: " + TAG + " END -->")
     return "\n".join(L)

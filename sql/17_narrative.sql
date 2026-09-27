@@ -1,42 +1,53 @@
 --
 -- 17_narrative.sql
--- "What changed" narrative: 2-5 auto-generated plain-English sentences that
--- JOIN findings across sections (I/O <-> file <-> segment <-> SQL, DB time
--- vs DB CPU, throughput ratios, configuration drift, baseline health) so
--- the reader gets the story, not just the numbers.
+-- The cross-section half of the Summary view's verdict hero (v1.6.0):
+-- rules that JOIN findings across sections (I/O <-> file <-> segment <->
+-- SQL, DB time vs DB CPU, throughput ratios, configuration drift, baseline
+-- health, SQL Monitor) so the reader gets the story, not just the numbers.
+-- No free prose: every piece is a fixed phrase around numbers and names.
 --
--- Placement.  The narrative belongs directly under the masthead verdict,
--- but it needs data that only becomes cheap to collect once the whole
--- report has run (top files, top segments, top SQL, parameter drift), and
--- it must not depend on any other section's PL/SQL state ("findings are
--- recomputed, not shared").  So the section runs LAST, emits its block
--- into the document flow, and a tiny inline script relocates the node into
--- the empty <div id="narrative-slot"> that 00_params.sql emitted in the
--- masthead.  The block ships with the `hidden` attribute and the script
--- clears it after the move, so a mid-page flash is impossible.  With
--- JavaScript disabled the block simply stays hidden -- acceptable: every
--- statement it makes is derived from numbers that are also rendered in the
--- sections it links to, so nothing is lost.  (A <noscript> fallback would
--- have to duplicate the markup in a place the layout does not want it.)
+-- Placement.  The pieces belong in the hero 00_params.sql opens at the top
+-- of <main>, but they need data that only becomes cheap to collect once
+-- the whole report has run, and this section must not depend on any other
+-- section's PL/SQL state ("findings are recomputed, not shared").  So it
+-- runs LAST, emits one hidden block (#narr-src) and a tiny inline script
+-- moves each piece into place:
+--   "Likely source:" line  -> #because-slot (reads "Worth a look:" when
+--                             the verdict is quiet)
+--   count pills            -> #pills, before "N metrics normal"
+--   one-line notes         -> #narrative-slot (ul.hnotes); a note whose
+--                             story a Summary card already tells carries
+--                             data-dup=<card id> and is dropped when that
+--                             card exists
+--   ", most of it on SEG"  -> the verdict's .vx[data-vx="io"] clause
+--   Segment / File / SQL   -> evidence rows at the top of the Physical I/O
+--                             card (07, id f-io; data-ev-for)
+-- With JavaScript disabled the block simply stays hidden -- every number it
+-- quotes is also rendered in the sections it links to.
 --
--- Rules (each is a separate cheap SELECT; each emits 0 or 1 <li> row --
--- label | headline number | from -> to | one short why | section link):
---   R1  physical reads moved LARGE  -> ratio + the file / segment / SQL it
---                                      landed on
---   R5  DB time moved LARGE up      -> wait-bound vs CPU-bound
---   R2  bytes-to-client vs user calls, redo vs commits -> per-call /
+-- Rules (each is a separate cheap SELECT):
+--   R1  physical reads moved LARGE  -> note (dup f-io) with the file /
+--                                      segment / SQL it landed on; the
+--                                      same three as I/O card evidence
+--   R5  (retired: the verdict and the DB time card say wait vs CPU)
+--   R2  bytes-to-client vs user calls, redo vs commits -> note: per-call /
 --                                      per-commit payload grew or shrank
---   R3  init parameters differing inside the baseline
---   R4  invalid (skipped) prior windows -> the baseline is thin
---   R6  SQL Monitor: statements with a plan change in the Current window
---                                      -> #sqlmon
---   R7  SQL Monitor: statements with a DOP downgrade in the Current window
---                                      -> #sqlmon
---   R8  SQL Monitor: DONE (ERROR) executions in the Current window
---                                      -> #sqlmon
---   R9  SQL Monitor: sql_ids first seen in the Current window
---                                      -> #sqlmon
--- Emitted in the order R1, R5, R2, R3, R4, R6, R7, R8, R9.
+--   R3  init parameters differing inside the baseline -> note (dup
+--                                      f-config) + "N parameters differ" pill
+--   R4  invalid (skipped) prior windows -> "N of M skipped" pill (the
+--                                      reason in its title)
+--   R6  SQL Monitor: plan change in the Current window  -> pill
+--   R7  SQL Monitor: DOP downgrade in the Current window -> pill
+--   R8  SQL Monitor: DONE (ERROR) in the Current window  -> pill
+--   R9  SQL Monitor: sql_ids first seen in the Current window -> pill
+--   Likely source: a plan change INTO the Current window by section 18's
+--                  test (Current plan vs the prior modal plan; the one
+--                  with the largest Current max elapsed), else R1's
+--                  newcomer SQL, else R9's first statement, else R1's top
+--                  segment.
+-- Entity names link (a.ent) to their rows: fl-<file>, sg-<segment>,
+-- sq-preads-<sql_id>, sm-<sql_id>, #f-config; a target that was never
+-- emitted is unwrapped to plain text by sql/lib/js_wingrid.plsql.
 --
 -- "LARGE" mirrors section 07's `scored` CASE (recomputed here, not shared,
 -- for the handful of stats used below): |z| > 3 against the prior valid
@@ -82,19 +93,38 @@ DECLARE
     v_r      stat_rec;
     -- R1 detail carriers
     v_file      VARCHAR2(600);
+    v_file_aid  VARCHAR2(200);   -- its row id in 15: file_anchor(full path)
     v_file_cur  NUMBER;
     v_file_mu   NUMBER;
     v_seg       VARCHAR2(600);
+    v_seg_cur   NUMBER;
+    v_seg_mu    NUMBER;
     v_sqlid     VARCHAR2(13);
+    v_sql_rd    NUMBER;
+    v_big_pr    BOOLEAN := FALSE;
+
+    -- v1.6.0 Summary pieces (relocated by the script at the end): pills,
+    -- the likely-source line, the I/O card's evidence rows, the verdict's
+    -- segment clause
+    v_pills     VARCHAR2(32767);
+    v_because   VARCHAR2(32767);
+    v_ev_io     VARCHAR2(32767);
+    v_vx_io     VARCHAR2(4000);
+    v_dup       VARCHAR2(40);
 
     -- R3 / R4 carriers
     v_p_names   VARCHAR2(4000);
     v_p_shown   PLS_INTEGER := 0;
     v_p_total   PLS_INTEGER := 0;
 
-    -- Every plain variable must sit ABOVE this include: it declares
+    -- Every plain variable must sit ABOVE these includes: they declare
     -- functions, and PL/SQL forbids a variable after a subprogram.
     @@sql/lib/metric_policy.plsql
+    @@sql/lib/fmt_num.plsql
+    @@sql/lib/band_glyph.plsql
+    @@sql/lib/anchor_id.plsql
+    @@sql/lib/finding_cards.plsql
+    @@sql/lib/off_label.plsql
 
     ------------------------------------------------------------------
     -- Formatting helpers
@@ -120,7 +150,7 @@ DECLARE
     -- Compact offset label for prior window k, e.g. "-1h" / "-2w".
     FUNCTION off_lbl(p_k NUMBER) RETURN VARCHAR2 IS
     BEGIN
-        RETURN '&minus;' || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, p_k);
+        RETURN '&minus;' || off_label(p_k);
     END off_lbl;
 
     FUNCTION esc(p VARCHAR2) RETURN VARCHAR2 IS
@@ -132,19 +162,30 @@ DECLARE
     -- list, not prose): label | headline number | from -> to | one short
     -- "why" clause | a link to the section that has the detail.  Empty
     -- parts are omitted.
+    -- v1.6.0: rendered as one calm line in the verdict hero (#narrative-slot);
+    -- p_dup names the Summary card that already tells the same story -- the
+    -- relocation script drops the line when that card exists.
     PROCEDURE add_item(p_label VARCHAR2, p_num VARCHAR2, p_sub VARCHAR2,
-                       p_why VARCHAR2, p_href VARCHAR2, p_link VARCHAR2) IS
+                       p_why VARCHAR2, p_href VARCHAR2, p_link VARCHAR2,
+                       p_dup VARCHAR2 DEFAULT NULL) IS
     BEGIN
         v_n := v_n + 1;
-        v_sent(v_n) := '<li>'
-            || '<span class="n-lbl">' || p_label || '</span>'
-            || CASE WHEN p_num IS NOT NULL THEN '<span class="n-num">' || p_num || '</span>' END
-            || CASE WHEN p_sub IS NOT NULL THEN '<span class="n-sub">' || p_sub || '</span>' END
-            || CASE WHEN p_why IS NOT NULL THEN '<span class="n-why">' || p_why || '</span>' END
+        v_sent(v_n) := '<li' || CASE WHEN p_dup IS NOT NULL THEN ' data-dup="' || p_dup || '"' END || '>'
+            || '<span class="hl">' || p_label || '</span>'
+            || CASE WHEN p_num IS NOT NULL THEN '<span class="hn">' || p_num || '</span>' END
+            || CASE WHEN p_sub IS NOT NULL THEN '<span class="hs">' || p_sub || '</span>' END
+            || CASE WHEN p_why IS NOT NULL THEN '<span class="hw">' || p_why || '</span>' END
             || CASE WHEN p_href IS NOT NULL
-                    THEN '<a class="n-go" href="' || p_href || '">' || p_link || ' &#8599;</a>' END
+                    THEN '<a class="go" href="' || p_href || '">' || p_link || ' &rarr;</a>' END
             || '</li>';
     END add_item;
+
+    FUNCTION pill(p_href VARCHAR2, p_n NUMBER, p_txt VARCHAR2, p_title VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN '<li><a href="' || p_href || '"'
+            || CASE WHEN p_title IS NOT NULL THEN ' title="' || p_title || '"' END
+            || '><b>' || p_n || '</b> ' || p_txt || '</a></li>';
+    END pill;
 
     ------------------------------------------------------------------
     -- Scoring helpers over v_stats (section 07's rules, recomputed)
@@ -174,15 +215,13 @@ DECLARE
     -- "LARGE": section 07's bucket through the per-metric policy
     -- (sql/lib/metric_policy.plsql): |z| > 3 over the floored sigma AND a
     -- material move past the stat's own floors AND in the bad direction
-    -- (a drop in physical reads is 'improved', not a story).  'TM:' keys
-    -- are the time-model twins of the LOAD names.
+    -- (a drop in physical reads is 'improved', not a story).
     FUNCTION big(p VARCHAR2) RETURN BOOLEAN IS
         r stat_rec;
     BEGIN
         IF NOT has(p) THEN RETURN FALSE; END IF;
         r := v_stats(p);
-        RETURN policy_bucket('LOAD', REGEXP_REPLACE(p, '^TM:', ''), NULL,
-                             r.cur, r.mu, r.sd, r.n) = 'large';
+        RETURN policy_bucket('LOAD', p, NULL, r.cur, r.mu, r.sd, r.n) = 'large';
     END big;
 
     FUNCTION went_up(p VARCHAR2) RETURN BOOLEAN IS
@@ -248,28 +287,6 @@ BEGIN
             FROM   narr_pairs
             GROUP BY week_offset, dur_sec, stat_name, instance_number
         ),
-        -- DB time / DB CPU are TIME MODEL statistics, not SYSSTAT ones:
-        -- v$sysstat has no 'DB CPU' row at all, so R5 has to read
-        -- DBA_HIST_SYS_TIME_MODEL.  Same cumulative pairs -> bounds ->
-        -- deltas shape; values are MICROseconds.  They are keyed with a
-        -- 'TM:' prefix below so the SYSSTAT namespace stays clean.
-        tm_pairs AS (
-            SELECT w.week_offset, w.dur_sec, tm.stat_name, tm.instance_number,
-                   tm.snap_id, tm.value, w.begin_snap_id, w.end_snap_id
-            FROM   valid_windows w
-            JOIN   dba_hist_sys_time_model tm
-                ON tm.dbid = w.dbid
-               AND tm.snap_id IN (w.begin_snap_id, w.end_snap_id)
-               AND tm.instance_number = w.instance_number
-               AND tm.stat_name IN ('DB time', 'DB CPU')
-        ),
-        tm_bounds AS (
-            SELECT week_offset, dur_sec, stat_name, instance_number,
-                   SUM(CASE WHEN snap_id = begin_snap_id THEN value END) AS beg_val,
-                   SUM(CASE WHEN snap_id = end_snap_id   THEN value END) AS end_val
-            FROM   tm_pairs
-            GROUP BY week_offset, dur_sec, stat_name, instance_number
-        ),
         narr_rows AS (
             -- Cross-instance delta over ONE window span (MAX(dur_sec)), with
             -- dur_sec out of the second-level GROUP BY -- the RAC-safe divisor
@@ -279,13 +296,6 @@ BEGIN
                         THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / MAX(dur_sec)
                    END AS metric_value
             FROM   narr_bounds
-            GROUP BY week_offset, stat_name
-            UNION ALL
-            SELECT 'TM:' || stat_name, week_offset,
-                   CASE WHEN MAX(dur_sec) > 0
-                        THEN SUM(NVL(end_val, 0) - NVL(beg_val, 0)) / MAX(dur_sec)
-                   END
-            FROM   tm_bounds
             GROUP BY week_offset, stat_name
         )
         SELECT stat_name,
@@ -310,6 +320,7 @@ BEGIN
     ------------------------------------------------------------------
     IF big('physical reads') THEN
         v_txt := '';
+        v_big_pr := TRUE;
 
         -- Top data/temp file by MB read in the CURRENT window, with the
         -- prior-window mean for the same file (same delta shape as 15).
@@ -363,63 +374,82 @@ BEGIN
                     GROUP BY filename
                 )
                 SELECT REGEXP_REPLACE(filename, '^.*[/\]', '') AS short_name,
-                       cur_mb, mu_mb
+                       filename, cur_mb, mu_mb
                 FROM   nf_piv
                 WHERE  cur_mb > 0
                 ORDER  BY cur_mb DESC, filename
                 FETCH FIRST 1 ROWS ONLY
             ) LOOP
                 v_file     := f.short_name;
+                -- the link target is 15's row id, a pure function of the
+                -- FULL path (sql/lib/anchor_id.plsql): the short name alone
+                -- repeats across containers (every PDB has a users01.dbf)
+                v_file_aid := file_anchor(f.filename);
                 v_file_cur := f.cur_mb;
                 v_file_mu  := f.mu_mb;
             END LOOP;
         END;
 
-        -- Top segment by physical reads in the CURRENT window (same
-        -- deduped name lookup as section 14).
+        -- Top segment by physical reads in the CURRENT window, with its mean
+        -- over the prior windows it appears in (same deduped name lookup as
+        -- section 14, partition included, so the name is 14's row anchor).
         BEGIN
             FOR g IN (
                 WITH
                 @@sql/lib/windows_cte.sql
                 ,
                 ns_raw AS (
-                    SELECT ss.dbid, ss.ts#, ss.obj#, ss.dataobj#,
+                    SELECT w.week_offset, ss.dbid, ss.ts#, ss.obj#, ss.dataobj#,
                            SUM(NVL(ss.physical_reads_delta, 0)) AS phys_reads
                     FROM   valid_windows w
                     JOIN   dba_hist_seg_stat ss
                         ON ss.dbid = w.dbid
                        AND ss.snap_id BETWEEN w.begin_snap_id + 1 AND w.end_snap_id
                        AND ss.instance_number = w.instance_number
-                    WHERE  w.week_offset = 0
-                    GROUP BY ss.dbid, ss.ts#, ss.obj#, ss.dataobj#
+                    GROUP BY w.week_offset, ss.dbid, ss.ts#, ss.obj#, ss.dataobj#
                 ),
                 ns_names AS (
-                    SELECT dbid, ts#, obj#, dataobj#, owner, object_name
+                    SELECT dbid, ts#, obj#, dataobj#, owner, object_name, subobject_name
                     FROM (
                         SELECT o.dbid, o.ts#, o.obj#, o.dataobj#,
-                               o.owner, o.object_name,
+                               o.owner, o.object_name, o.subobject_name,
                                ROW_NUMBER() OVER (PARTITION BY o.dbid, o.ts#,
                                    o.obj#, o.dataobj# ORDER BY NULL) AS rn
                         FROM   dba_hist_seg_stat_obj o
                         WHERE  o.dbid IN (~dbid_list)
                     ) WHERE rn = 1
+                ),
+                ns_named AS (
+                    SELECT r.week_offset,
+                           NVL(o.owner, '(unknown)') || '.'
+                               || NVL(o.object_name, 'OBJ#' || TO_CHAR(r.obj#))
+                               || CASE WHEN o.subobject_name IS NOT NULL
+                                       THEN '.' || o.subobject_name ELSE '' END AS seg_name,
+                           r.phys_reads
+                    FROM   ns_raw r
+                    LEFT JOIN ns_names o
+                        ON o.dbid     = r.dbid
+                       AND o.ts#      = r.ts#
+                       AND o.obj#     = r.obj#
+                       AND o.dataobj# = r.dataobj#
+                ),
+                ns_piv AS (
+                    SELECT seg_name,
+                           SUM(CASE WHEN week_offset = 0 THEN phys_reads END) AS cur_rd,
+                           SUM(CASE WHEN week_offset > 0 THEN phys_reads END)
+                               / NULLIF(COUNT(DISTINCT CASE WHEN week_offset > 0 THEN week_offset END), 0) AS mu_rd
+                    FROM   ns_named
+                    GROUP BY seg_name
                 )
-                SELECT NVL(o.owner, '(unknown)') || '.'
-                           || NVL(o.object_name, 'OBJ#' || TO_CHAR(r.obj#)) AS seg_name,
-                       SUM(r.phys_reads) AS phys_reads
-                FROM   ns_raw r
-                LEFT JOIN ns_names o
-                    ON o.dbid     = r.dbid
-                   AND o.ts#      = r.ts#
-                   AND o.obj#     = r.obj#
-                   AND o.dataobj# = r.dataobj#
-                GROUP BY NVL(o.owner, '(unknown)') || '.'
-                           || NVL(o.object_name, 'OBJ#' || TO_CHAR(r.obj#))
-                HAVING SUM(r.phys_reads) > 0
-                ORDER  BY SUM(r.phys_reads) DESC, 1
+                SELECT seg_name, cur_rd, mu_rd
+                FROM   ns_piv
+                WHERE  cur_rd > 0
+                ORDER  BY cur_rd DESC, seg_name
                 FETCH FIRST 1 ROWS ONLY
             ) LOOP
-                v_seg := g.seg_name;
+                v_seg     := g.seg_name;
+                v_seg_cur := g.cur_rd;
+                v_seg_mu  := g.mu_rd;
             END LOOP;
         END;
 
@@ -447,7 +477,7 @@ BEGIN
                     FROM   nq_agg
                     WHERE  disk_reads > 0
                 )
-                SELECT c.sql_id
+                SELECT c.sql_id, c.disk_reads
                 FROM   nq_ranked c
                 WHERE  c.week_offset = 0
                   AND  c.rn <= (SELECT top_n FROM run_params)
@@ -459,7 +489,8 @@ BEGIN
                 ORDER  BY c.disk_reads DESC, c.sql_id
                 FETCH FIRST 1 ROWS ONLY
             ) LOOP
-                v_sqlid := q.sql_id;
+                v_sqlid  := q.sql_id;
+                v_sql_rd := q.disk_reads;
             END LOOP;
         END;
 
@@ -468,39 +499,59 @@ BEGIN
         -- plain IS NOT NULL -- `v <> ''''` evaluates to NULL.
         v_tail := '';
         IF v_file IS NOT NULL THEN
-            v_tail := 'file <a href="#file-io">' || esc(v_file) || '</a> '
+            v_tail := 'file ' || ent(esc(v_file), v_file_aid, 'file') || ' '
                 || CASE WHEN v_file_mu IS NULL THEN '' ELSE fmt3(v_file_mu) || ' &rarr; ' END
                 || fmt3(v_file_cur) || ' MB';
         END IF;
         IF v_seg IS NOT NULL THEN
             v_tail := v_tail || CASE WHEN v_tail IS NULL THEN '' ELSE ' &middot; ' END
-                || 'segment <a href="#segment-io">' || esc(v_seg) || '</a>';
+                || 'segment ' || ent(esc(v_seg), anchor_id('sg', v_seg), 'segment');
         END IF;
         IF v_sqlid IS NOT NULL THEN
             v_tail := v_tail || CASE WHEN v_tail IS NULL THEN '' ELSE ' &middot; ' END
-                || 'new in top-' || TO_CHAR(v_top_n) || ': <a href="#sql-' || v_sqlid
-                || '"><code>' || v_sqlid || '</code></a>';
+                || 'new in top-' || TO_CHAR(v_top_n) || ': '
+                || ent('<code>' || v_sqlid || '</code>', anchor_id('sq-preads', v_sqlid), 'sql');
         END IF;
         add_item('Physical reads', numtxt('physical reads'), rng('physical reads', '/s'),
-                 v_tail, '#file-io', 'File I/O');
+                 v_tail, '#file-io', 'File I/O', 'f-io');
+
+        -- v1.6.0: the same facts as evidence rows on the Physical I/O card
+        -- (07, id f-io) -- ranked, not scored: a plain ratio -- and the
+        -- verdict's ", most of it on <segment>" clause.
+        IF v_seg IS NOT NULL THEN
+            v_ev_io := v_ev_io || '<div class="evr"><dt>Segment</dt><dd><span class="id">'
+                || ent(esc(v_seg), anchor_id('sg', v_seg), 'segment') || '</span><span class="de">'
+                || nbu(fmt_num(v_seg_cur) || ' blocks read'
+                       || CASE WHEN v_seg_mu IS NOT NULL THEN ', normal ' || fmt_num(v_seg_mu) END)
+                || '</span></dd><div class="m" title="Ranked, not scored">'
+                || delta_span(v_seg_cur, v_seg_mu, NULL, 'Y') || '<span class="ns">not scored</span></div></div>';
+            v_vx_io := ', most of it on ' || ent('<code>' || esc(v_seg) || '</code>', anchor_id('sg', v_seg), 'segment');
+        END IF;
+        IF v_file IS NOT NULL THEN
+            v_ev_io := v_ev_io || '<div class="evr"><dt>File</dt><dd><span class="id">'
+                || ent(esc(v_file), v_file_aid, 'file') || '</span><span class="de">'
+                || nbu(fmt_num(v_file_cur) || ' MB read'
+                       || CASE WHEN v_file_mu IS NOT NULL THEN ', normal ' || fmt_num(v_file_mu) END)
+                || '</span></dd><div class="m" title="Ranked, not scored">'
+                || delta_span(v_file_cur, v_file_mu, NULL, 'Y') || '<span class="ns">not scored</span></div></div>';
+        END IF;
+        IF v_sqlid IS NOT NULL THEN
+            v_ev_io := v_ev_io || '<div class="evr"><dt>SQL</dt><dd><span class="id">'
+                || ent(v_sqlid, anchor_id('sq-preads', v_sqlid), 'sql') || '</span><span class="de">'
+                || nbu(fmt_num(v_sql_rd) || ' blocks read; new in the top ' || TO_CHAR(v_top_n))
+                || '</span></dd><div class="m"><span class="d s-plain">&#10010; new</span></div></div>';
+        END IF;
     END IF;
 
     ------------------------------------------------------------------
-    -- R5: DB time moved LARGE upward -- is the extra time CPU or wait?
+    -- R5 (DB time moved LARGE up -> wait-bound vs CPU-bound) is carried by
+    -- the Summary view itself since v1.6.0: the verdict (00) and the DB
+    -- time card (07) append "all / mostly wait" or "mostly CPU"
+    -- (sql/lib/finding_cards.plsql time_split) from the LOAD 'DB time' /
+    -- 'DB CPU' rows, which sql/lib/load_pairs_cte.sql reads from
+    -- DBA_HIST_SYS_TIME_MODEL (SYSSTAT has no 'DB CPU' row).  A note here
+    -- would only repeat the card.
     ------------------------------------------------------------------
-    IF big('TM:DB time') AND went_up('TM:DB time') AND has('TM:DB CPU') THEN
-        -- Time model values are microseconds/second; dividing by 1e6 renders
-        -- them as average active sessions, which is what a DBA reads.
-        v_txt := '';
-        IF pctd('TM:DB CPU') IS NOT NULL AND ABS(pctd('TM:DB CPU')) < 20 THEN
-            v_txt := 'DB CPU only ' || pcttxt(pctd('TM:DB CPU'))
-                || ': the extra time is wait, not CPU';
-        ELSIF pctd('TM:DB CPU') IS NOT NULL THEN
-            v_txt := 'DB CPU ' || pcttxt(pctd('TM:DB CPU')) || ' with it: CPU-bound';
-        END IF;
-        add_item('DB time', numtxt('TM:DB time'), rng('TM:DB time', 'AAS', 1/1000000),
-                 v_txt, '#waits-fg', 'Foreground waits');
-    END IF;
 
     ------------------------------------------------------------------
     -- R2: throughput ratios.  A payload counter that moves while its call
@@ -654,7 +705,11 @@ BEGIN
                  v_p_names
                  || CASE WHEN v_p_total > v_p_shown
                          THEN ' (+' || TO_CHAR(v_p_total - v_p_shown) || ' more)' ELSE '' END,
-                 '#param-changes', 'Parameters');
+                 '#param-changes', 'Parameters', 'f-config');
+        -- the configuration card (12, id f-config) exists whenever this
+        -- rule fires: section 12 uses the same changed-parameter test
+        v_pills := v_pills || pill('#f-config', v_p_total,
+            'parameter' || CASE WHEN v_p_total = 1 THEN ' differs' ELSE 's differ' END);
     END IF;
 
     ------------------------------------------------------------------
@@ -681,13 +736,9 @@ BEGIN
         FROM dual
     ) LOOP
         IF b.n_bad > 0 THEN
-            add_item('Baseline',
-                     TO_CHAR(b.n_bad) || ' of ' || TO_CHAR(b.n_all) || ' prior window'
-                     || CASE WHEN b.n_all = 1 THEN '' ELSE 's' END || ' skipped',
-                     NULL,
-                     CASE WHEN b.reason IS NULL THEN 'thin prior-window set'
-                          ELSE esc(b.reason) END,
-                     '#windows', 'Windows');
+            v_pills := v_pills || pill('#windows', b.n_bad,
+                'of ' || TO_CHAR(b.n_all) || ' prior window' || CASE WHEN b.n_all = 1 THEN '' ELSE 's' END
+                || ' skipped', CASE WHEN b.reason IS NOT NULL THEN esc(b.reason) END);
         END IF;
     END LOOP;
 
@@ -708,6 +759,7 @@ BEGIN
         v_sm_err_n      PLS_INTEGER := 0;
         v_sm_new_n      PLS_INTEGER := 0;
         v_sm_new_ids    VARCHAR2(4000) := '';
+        v_sm_src        VARCHAR2(64);        -- the likely-source plan change
     BEGIN
         SELECT MIN(win_start_ts), MAX(win_end_ts)
         INTO   v_sm_span_start, v_sm_span_end
@@ -778,6 +830,86 @@ BEGIN
             v_sm_err_n    := m.err_n;
         END LOOP;
 
+        -- R6, the likely-source statement: a plan change by section 18's
+        -- own test (its Plan hash column / plan_changed), not merely "more
+        -- than one plan somewhere in the span" -- a statement alternating
+        -- between two plans for weeks that runs its usual plan now is not
+        -- the cause.  cur = the plan of the Current window's slowest
+        -- non-zero-plan execution; prior = the most frequent non-zero plan
+        -- across the prior VALID windows (tie -> most recent), both over
+        -- executions attributed to a valid window, exactly 18's cur_plan /
+        -- prior_plan CTEs.  Deterministic pick by impact: the largest
+        -- Current-window max elapsed, then sql_id.  The pill above keeps
+        -- its broader count (its title says what it counts).
+        FOR m IN (
+            WITH
+            @@sql/lib/windows_cte.sql
+            ,
+            ls_base AS (
+                SELECT r.report_id, r.key1 AS sql_id,
+                       TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') AS exec_start,
+                       x.plan_hash, NVL(x.elapsed_us, 0) AS elapsed_us
+                FROM   dba_hist_reports r,
+                       XMLTABLE('/report_repository_summary/sql'
+                           PASSING XMLTYPE(r.report_summary)
+                           COLUMNS
+                               plan_hash  NUMBER PATH 'plan_hash',
+                               elapsed_us NUMBER PATH 'stats[@type="monitor"]/stat[@name="elapsed_time"]'
+                       ) x
+                WHERE  r.component_name = 'sqlmonitor'
+                  AND  r.dbid IN (~dbid_list)
+                  AND  (~inst_num = 0 OR r.instance_number = ~inst_num)
+                  AND  r.report_summary IS NOT NULL
+                  AND  r.key1 IS NOT NULL
+                  AND  r.period_start_time >= CAST(v_sm_span_start AS TIMESTAMP) - INTERVAL '1' DAY
+                  AND  r.period_start_time <= CAST(v_sm_span_end   AS TIMESTAMP) + INTERVAL '1' DAY
+                  AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') >= v_sm_span_start
+                  AND  TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') <  v_sm_span_end
+            ),
+            ls_off AS (
+                SELECT b.report_id, b.sql_id, b.exec_start, b.plan_hash, b.elapsed_us,
+                       wr.week_offset
+                FROM   ls_base b
+                JOIN   windows_rollup wr
+                    ON  wr.valid_flag = 'Y'
+                   AND  b.exec_start >= wr.win_start_ts
+                   AND  b.exec_start <  wr.win_end_ts
+            ),
+            ls_cur AS (
+                SELECT sql_id, plan_hash AS cur_ph, max_ela
+                FROM (
+                    SELECT sql_id, plan_hash,
+                           MAX(elapsed_us) OVER (PARTITION BY sql_id) AS max_ela,
+                           ROW_NUMBER() OVER (PARTITION BY sql_id
+                               ORDER BY CASE WHEN plan_hash <> 0 THEN 0 ELSE 1 END,
+                                        elapsed_us DESC NULLS LAST, report_id) AS rn
+                    FROM   ls_off
+                    WHERE  week_offset = 0
+                )
+                WHERE  rn = 1 AND plan_hash <> 0
+            ),
+            ls_prior AS (
+                SELECT sql_id, plan_hash AS prior_ph
+                FROM (
+                    SELECT sql_id, plan_hash,
+                           ROW_NUMBER() OVER (PARTITION BY sql_id
+                               ORDER BY COUNT(*) DESC, MAX(exec_start) DESC) AS rn
+                    FROM   ls_off
+                    WHERE  week_offset > 0 AND plan_hash <> 0
+                    GROUP BY sql_id, plan_hash
+                )
+                WHERE  rn = 1
+            )
+            SELECT c.sql_id
+            FROM   ls_cur c
+            JOIN   ls_prior p ON p.sql_id = c.sql_id
+            WHERE  c.cur_ph <> p.prior_ph
+            ORDER  BY c.max_ela DESC, c.sql_id
+            FETCH FIRST 1 ROWS ONLY
+        ) LOOP
+            v_sm_src := m.sql_id;
+        END LOOP;
+
         -- R9: sql_ids with an execution in Current but none in any prior
         -- valid window. No XML parsing needed -- key1/key3 only.
         FOR m IN (
@@ -829,61 +961,105 @@ BEGIN
             v_sm_new_ids := m.new_ids;
         END LOOP;
 
+        -- v1.6.0: counts as quiet pills in the verdict hero; the details
+        -- are one click away in SQL Monitor (18).  A plan change links to
+        -- its first statement's row (18 always lists a sql_id that ran with
+        -- more than one plan).  The plan-change pill goes first, right
+        -- after the finding counts (Mock D's order).
         IF v_sm_plan_n > 0 THEN
-            add_item('Plan change',
-                     TO_CHAR(v_sm_plan_n) || ' statement' || CASE WHEN v_sm_plan_n = 1 THEN '' ELSE 's' END,
-                     NULL,
-                     '<code>' || esc(v_sm_plan_ids) || '</code>'
-                     || CASE WHEN v_sm_plan_n > 3
-                             THEN ' (+' || TO_CHAR(v_sm_plan_n - 3) || ' more)' ELSE '' END
-                     || ' ran with more than one plan, including now',
-                     '#sqlmon', 'SQL Monitor');
+            v_pills := pill('#sm-' || REGEXP_SUBSTR(v_sm_plan_ids, '[^, ]+', 1, 1), v_sm_plan_n,
+                'plan change' || CASE WHEN v_sm_plan_n = 1 THEN '' ELSE 's' END,
+                'ran with more than one plan, including in the Current window: ' || esc(v_sm_plan_ids)
+                || CASE WHEN v_sm_plan_n > 3 THEN ' (+' || TO_CHAR(v_sm_plan_n - 3) || ' more)' END) || v_pills;
         END IF;
-
-        IF v_sm_dop_n > 0 THEN
-            add_item('DOP downgrade',
-                     TO_CHAR(v_sm_dop_n) || ' statement' || CASE WHEN v_sm_dop_n = 1 THEN '' ELSE 's' END,
-                     NULL, 'fewer parallel servers than requested in the Current window',
-                     '#sqlmon', 'SQL Monitor');
-        END IF;
-
-        IF v_sm_err_n > 0 THEN
-            add_item('Errors',
-                     TO_CHAR(v_sm_err_n) || ' execution' || CASE WHEN v_sm_err_n = 1 THEN '' ELSE 's' END,
-                     NULL, 'ended <code>DONE (ERROR)</code> in the Current window',
-                     '#sqlmon', 'SQL Monitor');
-        END IF;
-
         IF v_sm_new_n > 0 THEN
-            add_item('New SQL',
-                     TO_CHAR(v_sm_new_n) || ' SQL ID' || CASE WHEN v_sm_new_n = 1 THEN '' ELSE 's' END,
-                     NULL,
-                     '<code>' || esc(v_sm_new_ids) || '</code>'
-                     || CASE WHEN v_sm_new_n > 3
-                             THEN ' (+' || TO_CHAR(v_sm_new_n - 3) || ' more)' ELSE '' END
-                     || ' first seen in SQL Monitor this window',
-                     '#sqlmon', 'SQL Monitor');
+            v_pills := v_pills || pill('#sqlmon', v_sm_new_n, 'new SQL',
+                'first seen in SQL Monitor this window: ' || esc(v_sm_new_ids)
+                || CASE WHEN v_sm_new_n > 3 THEN ' (+' || TO_CHAR(v_sm_new_n - 3) || ' more)' END);
+        END IF;
+        IF v_sm_dop_n > 0 THEN
+            v_pills := v_pills || pill('#sqlmon', v_sm_dop_n,
+                'DOP downgrade' || CASE WHEN v_sm_dop_n = 1 THEN '' ELSE 's' END,
+                'fewer parallel servers than requested in the Current window');
+        END IF;
+        IF v_sm_err_n > 0 THEN
+            v_pills := v_pills || pill('#sqlmon', v_sm_err_n,
+                'SQL error' || CASE WHEN v_sm_err_n = 1 THEN '' ELSE 's' END,
+                'executions that ended DONE (ERROR) in the Current window');
+        END IF;
+
+        -- The likely-source line (rule-based, no free prose): a plan change
+        -- into the Current window first (v_sm_src, 18's test), then a newcomer in the top-N by
+        -- physical reads, then a statement first seen this window, then the
+        -- segment the extra reads land on.  "Likely source:" reads "Worth a
+        -- look:" in a quiet report (the relocation script decides).
+        IF v_sm_src IS NOT NULL THEN
+            v_because := ent('<code>' || esc(v_sm_src) || '</code>', 'sm-' || v_sm_src, 'sql')
+                || ' ran with a new plan in the Current window'
+                || '<span data-mk-at="0" data-mk-pre=", after " hidden></span>'
+                || CASE WHEN v_sqlid = v_sm_src
+                        THEN ', and is new in the top ' || TO_CHAR(v_top_n) || ' by physical reads' END;
+        ELSIF v_sqlid IS NOT NULL THEN
+            v_because := ent('<code>' || v_sqlid || '</code>', anchor_id('sq-preads', v_sqlid), 'sql')
+                || ', new in the top ' || TO_CHAR(v_top_n) || ' by physical reads ('
+                || fmt_num(v_sql_rd) || ' blocks)'
+                || CASE WHEN v_seg IS NOT NULL
+                        THEN '; most reads land on ' || ent('<code>' || esc(v_seg) || '</code>',
+                                                             anchor_id('sg', v_seg), 'segment') END;
+        ELSIF v_sm_new_n > 0 THEN
+            v_because := '<code>' || esc(REGEXP_SUBSTR(v_sm_new_ids, '[^, ]+', 1, 1)) || '</code>'
+                || ', first seen in SQL Monitor in the Current window';
+        ELSIF v_big_pr AND v_seg IS NOT NULL THEN
+            v_because := 'the reads land on ' || ent('<code>' || esc(v_seg) || '</code>',
+                                                     anchor_id('sg', v_seg), 'segment')
+                || CASE WHEN v_file IS NOT NULL
+                        THEN ' (file ' || ent(esc(v_file), v_file_aid, 'file') || ')' END;
         END IF;
     END;
 
     ------------------------------------------------------------------
     -- Emit.  Nothing to say => nothing at all (not even an empty div).
     ------------------------------------------------------------------
-    IF v_n > 0 THEN
-        DBMS_OUTPUT.PUT_LINE('<div id="narrative-src" class="narr" hidden>'
-            || '<div class="narr-head">What changed</div><ul class="narr-list">');
-        FOR i IN 1 .. v_n LOOP
-            DBMS_OUTPUT.PUT_LINE(v_sent(i));
-        END LOOP;
-        DBMS_OUTPUT.PUT_LINE('</ul></div>');
-        -- Relocate into the masthead slot 00_params.sql reserved.  If
-        -- JavaScript is off the block just stays hidden (see the header
-        -- comment); every number it quotes is also in the linked sections.
-        DBMS_OUTPUT.PUT_LINE('<script>(function(){'
-            || 'var s=document.getElementById("narrative-slot"),'
-            || 'n=document.getElementById("narrative-src");'
-            || 'if(s&&n){s.appendChild(n);n.hidden=false;}'
-            || '})();</script>');
+    -- v1.6.0: every piece lands in the verdict hero that 00_params.sql
+    -- opened (#because-slot, #pills, #narrative-slot, the verdict's
+    -- .vx[data-vx] clause) or on a finding card of 07 (data-ev-for).  A
+    -- note whose story a card already tells (data-dup) is dropped.  With
+    -- JavaScript off the block stays hidden; every number it quotes is in
+    -- the sections it links to.
+    IF v_n > 0 OR v_pills IS NOT NULL OR v_because IS NOT NULL OR v_ev_io IS NOT NULL THEN
+        DBMS_OUTPUT.PUT_LINE('<div id="narr-src" hidden>');
+        IF v_because IS NOT NULL THEN
+            DBMS_OUTPUT.PUT_LINE('<p class="because-src"><span class="bl">Likely source:</span> '
+                || v_because || '.</p>');
+        END IF;
+        IF v_pills IS NOT NULL THEN
+            DBMS_OUTPUT.PUT_LINE('<ul class="pills-src">' || v_pills || '</ul>');
+        END IF;
+        IF v_n > 0 THEN
+            DBMS_OUTPUT.PUT_LINE('<ul class="notes-src">');
+            FOR i IN 1 .. v_n LOOP
+                DBMS_OUTPUT.PUT_LINE(v_sent(i));
+            END LOOP;
+            DBMS_OUTPUT.PUT_LINE('</ul>');
+        END IF;
+        IF v_vx_io IS NOT NULL THEN
+            DBMS_OUTPUT.PUT_LINE('<span data-vx-src="io">' || v_vx_io || '</span>');
+        END IF;
+        IF v_ev_io IS NOT NULL THEN
+            DBMS_OUTPUT.PUT_LINE('<div data-ev-for="f-io">' || v_ev_io || '</div>');
+        END IF;
+        DBMS_OUTPUT.PUT_LINE('</div>');
+        DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,src=d.getElementById("narr-src");if(!src)return;');
+        DBMS_OUTPUT.PUT_LINE('var b=d.getElementById("because-slot"),bs=src.querySelector(".because-src");');
+        DBMS_OUTPUT.PUT_LINE('if(b&&bs){if(d.querySelector("h1.verdict.quiet")){var l=bs.querySelector(".bl");if(l)l.textContent="Worth a look:";}');
+        DBMS_OUTPUT.PUT_LINE('while(bs.firstChild)b.appendChild(bs.firstChild);b.hidden=false;}');
+        DBMS_OUTPUT.PUT_LINE('var pl=d.getElementById("pills"),nn=pl?pl.querySelector(".pl-normal"):null;');
+        DBMS_OUTPUT.PUT_LINE('src.querySelectorAll(".pills-src > li").forEach(function(li){if(pl)pl.insertBefore(li,nn);});');
+        DBMS_OUTPUT.PUT_LINE('var ns=d.getElementById("narrative-slot");');
+        DBMS_OUTPUT.PUT_LINE('src.querySelectorAll(".notes-src > li").forEach(function(li){var u=li.getAttribute("data-dup");if(u&&d.getElementById(u))return;if(ns){ns.appendChild(li);ns.hidden=false;}});');
+        DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-vx-src]").forEach(function(x){var t=d.querySelector(''.vx[data-vx="''+x.getAttribute("data-vx-src")+''"]'');if(t){t.innerHTML=x.innerHTML;t.hidden=false;}});');
+        DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-ev-for]").forEach(function(x){var c=d.getElementById(x.getAttribute("data-ev-for")),dl=c?c.querySelector("dl.ev"):null;if(!dl)return;var f=dl.firstChild;while(x.firstChild)dl.insertBefore(x.firstChild,f);});');
+        DBMS_OUTPUT.PUT_LINE('src.parentNode.removeChild(src);})();</script>');
     END IF;
 END;
 /

@@ -37,9 +37,10 @@ make a real change stand out.
   noticing a number that "looks high", it scores each metric against its own
   recent history and highlights only genuinely unusual movement, graded as
   OK / Warning / Critical.
-- **It produces one self-contained HTML file.** Headline health cards, trend
-  charts, top SQL statements, wait analysis, and a findings summary — all in a
-  single page that can be mailed or attached to a ticket and opened anywhere.
+- **It produces one self-contained HTML file.** A one-sentence verdict, a card
+  per problem area with the evidence behind it, a window-by-window timeline,
+  top SQL statements, wait analysis and every detail table — all in a single
+  page that can be mailed or attached to a ticket and opened anywhere.
 - **Milestones can be drawn on the timeline.** The release itself (or a patch, a
   config change) can be annotated as a vertical marker on the charts, so "before
   vs. after the release" is visible directly in the pictures.

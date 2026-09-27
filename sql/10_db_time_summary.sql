@@ -37,7 +37,7 @@ DECLARE
     -- stays VARCHAR2 (bounded by weeks_back+1).
     v_times_json   CLOB;
     v_class_vals   CLOB;
-    v_windows_json VARCHAR2(4000);
+    v_windows_json VARCHAR2(32767);
     v_buf          VARCHAR2(64);
     v_palette    VARCHAR2(400) :=
         '["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1",' ||
@@ -85,8 +85,8 @@ BEGIN
           AND  bs.startup_time = es.startup_time
     );
 
-    DBMS_OUTPUT.PUT_LINE('<section id="db-time-summary"><h2>Database time '
-        || '(full comparison span)</h2>');
+    DBMS_OUTPUT.PUT_LINE('<section id="db-time-summary" class="vw in-a"><h2>Database time'
+        || '<small class="h2sub">DB CPU plus non-idle waits across the full span, by wait class</small></h2>');
 
     IF v_range_start IS NULL OR v_range_end IS NULL THEN
         DBMS_OUTPUT.PUT_LINE('<p style="color:var(--muted)">No valid comparison '
@@ -96,15 +96,6 @@ BEGIN
         RETURN;
     END IF;
 
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 6px 0">'
-        || 'DB CPU + non-idle wait time per snap interval, stacked by wait_class, '
-        || 'earliest compared window &rarr; current. '
-        || '<b>CPU</b>: <code>dba_hist_sys_time_model</code> (stat_name=DB CPU, '
-        || 'foreground sessions). '
-        || 'Waits: <code>dba_hist_system_event</code> grouped by <code>wait_class</code> '
-        || '(Idle excluded, <b>all sessions incl. background</b> &mdash; LGWR/DBWR '
-        || 'writes etc.), so this is not a strict foreground DB-time profile. '
-        || 'Snap-pairs across an instance restart &rarr; gap.</p>');
 
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-big" id="db-time-summary-chart"></div>');
 
@@ -113,18 +104,9 @@ BEGIN
     -- xAxis values are the same YYYY-MM-DD HH24:MI format the chart uses
     -- for its category labels, so ECharts matches them by string.
     --
-    SELECT '['
-           || LISTAGG(
-                  '["'
-                  || TO_CHAR(win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
-                  || TO_CHAR(win_end_ts,   'YYYY-MM-DD HH24:MI') || '","'
-                  || CASE WHEN week_offset = 0 THEN 'current'
-                          ELSE 'w-' || week_offset END || '"]',
-                  ',')
-                  WITHIN GROUP (ORDER BY week_offset DESC)
-           || ']'
-    INTO   v_windows_json
-    FROM (
+    -- Built in PL/SQL, not LISTAGG (about 45 bytes a window: SQL's
+    -- 4000-byte LISTAGG limit would abort the run past about 88 windows).
+    FOR r IN (
         WITH
         @@sql/lib/windows_cte.sql
         SELECT w.week_offset,
@@ -137,7 +119,14 @@ BEGIN
           AND  es.snap_id IS NOT NULL
           AND  bs.snap_id <> es.snap_id
           AND  bs.startup_time = es.startup_time
-    );
+        ORDER BY w.week_offset DESC
+    ) LOOP
+        v_windows_json := v_windows_json || CASE WHEN v_windows_json IS NOT NULL THEN ',' END
+            || '["' || TO_CHAR(r.win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
+            || TO_CHAR(r.win_end_ts, 'YYYY-MM-DD HH24:MI') || '","'
+            || CASE WHEN r.week_offset = 0 THEN 'current' ELSE 'w-' || r.week_offset END || '"]';
+    END LOOP;
+    v_windows_json := '[' || v_windows_json || ']';
 
     --
     -- Build the x-axis: distinct snap_id (with a same-startup prior snap)

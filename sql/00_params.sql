@@ -1,11 +1,12 @@
 --
 -- 00_params.sql
--- Emits the report <header> (editorial masthead) and <nav> TOC,
+-- Emits the page chrome (top bar, <nav> rail, chrome JS), opens <main>
+-- and emits the Summary view's verdict hero (v1.6.0) and window.AWR_WIN,
 -- using substitution variables already resolved by the driver.
 -- No DML, no tables.
 --
 -- Also recomputes z-scores in-flight to produce the one-line
--- "verdict" punchline at the top of the masthead. The recompute
+-- verdict sentence at the top of the Summary view. The recompute
 -- mirrors the LOAD / METRIC / WAIT shape from sql/07_summary.sql:
 -- per the "Findings are recomputed, not shared" convention in
 -- CLAUDE.md, every consumer of findings owns its own recompute.
@@ -65,58 +66,38 @@ DECLARE
     TYPE seen_t  IS TABLE OF PLS_INTEGER INDEX BY VARCHAR2(64);
 
     v_scored     mover_t;
-    v_top        mover_t;
-    v_seen       seen_t;        -- families already represented in v_top
-    v_fams       seen_t;        -- families with a canonical large / moderate row
-    v_n_movers   PLS_INTEGER := 0;   -- = v_fams.COUNT: one finding per family
-    v_n_moved    PLS_INTEGER := 0;   -- every flagged row, twins included
+    v_n_moved    PLS_INTEGER := 0;   -- canonical large / moderate rows
     v_n_impr     PLS_INTEGER := 0;   -- canonical improved
+    v_n_normal   PLS_INTEGER := 0;   -- canonical rows scored and not flagged
     v_n_usable   PLS_INTEGER := 0;
     v_max_n      NUMBER      := 0;
+    v_n_valid    PLS_INTEGER := 0;   -- valid prior windows
 
-    v_clean_name VARCHAR2(160);
-    v_pct_cls    VARCHAR2(8);
-    -- Wide enough for the F5 direction-glyph markup wrapped around the
-    -- percentage (a bare signed number used to fit in 24 bytes).
-    v_pct_txt    VARCHAR2(200);
-    v_z_txt      VARCHAR2(24);
-
-    -- Masthead DB-time timeline strip: per-snap total DB time over the
-    -- full compared span, with markArea bands for the windows. Same
-    -- LAG-delta pattern as sql/10_db_time_summary.sql, flattened to a
-    -- single total line (no wait_class stacking) for an at-a-glance
-    -- overview right under the headline.
-    -- TIME-bounded span (not a single snap_id range): snap_ids reset per
-    -- DBID, so after a non-CDB->PDB migration one snap_id range can't cover
-    -- both eras.  v_range_start/v_range_end are the actual snap times of the
-    -- earliest begin and latest end across valid windows; scans filter
-    -- end_interval_time BETWEEN them with dbid IN (dbid_list).  Single-DBID:
-    -- selects exactly the old snap_id range, so output is unchanged.
-    v_range_start  TIMESTAMP;
-    v_range_end    TIMESTAMP;
-    v_buckets      PLS_INTEGER := 0;
-    -- v_times_json / v_vals_json are CLOBs so a long, dense compared
-    -- span (e.g. weeks_back=4 with 15-min AWR snaps -> 2700+ buckets)
-    -- cannot overflow the 32767-byte PL/SQL VARCHAR2 limit and abort
-    -- the masthead with ORA-06502.  v_windows_json stays VARCHAR2 --
-    -- it has one entry per compared window (bounded by weeks_back+1).
-    v_times_json   CLOB;
-    v_vals_json    CLOB;
-    v_windows_json VARCHAR2(4000);
-    v_buf          VARCHAR2(64);
-    TYPE t_idx_tab IS TABLE OF PLS_INTEGER INDEX BY VARCHAR2(40);
-    v_snap_idx     t_idx_tab;
-    TYPE t_num_arr IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
-    v_vals         t_num_arr;
+    -- v1.6.0 verdict: one finding CARD per card group of metric_policy
+    -- families (sql/lib/finding_cards.plsql card_group); g_* are indexed by
+    -- the group key, v_order holds the groups in card order.
+    v_glead      seen_t;        -- group -> index (v_scored) of its lead row
+    v_gsev       seen_t;        -- group -> 2 large / 1 moderate
+    TYPE gz_t    IS TABLE OF NUMBER INDEX BY VARCHAR2(64);
+    v_gz         gz_t;          -- group -> largest |z| of any member
+    TYPE ord_t   IS TABLE OF VARCHAR2(64) INDEX BY PLS_INTEGER;
+    v_order      ord_t;
+    v_g          VARCHAR2(64);
+    v_tmp        VARCHAR2(64);
+    v_j          PLS_INTEGER;
+    v_dbt        PLS_INTEGER;   -- index of the LOAD 'DB time' row
+    v_cpu        PLS_INTEGER;   -- index of the LOAD 'DB CPU' row
+    v_verdict    VARCHAR2(32767);
+    v_win_json   VARCHAR2(32767);   -- window validity flags, |k=Y|k=N|...
     -- Subprogram includes go LAST: PL/SQL forbids a variable / TYPE
     -- declaration after a subprogram in the same DECLARE section.
     @@sql/lib/metric_policy.plsql
-    @@sql/lib/put_clob_chunked.plsql
+    @@sql/lib/fmt_num.plsql
+    @@sql/lib/anchor_id.plsql
+    @@sql/lib/finding_cards.plsql
+    @@sql/lib/off_label.plsql
+    @@sql/lib/wingrid.plsql
 BEGIN
-    DBMS_LOB.CREATETEMPORARY(v_times_json, TRUE);
-    DBMS_LOB.CREATETEMPORARY(v_vals_json,  TRUE);
-    DBMS_LOB.WRITEAPPEND(v_times_json, 1, '[');
-    DBMS_LOB.WRITEAPPEND(v_vals_json,  1, '[');
     --
     -- Recompute LOAD / METRIC / WAIT z-scores. Same query shape as
     -- sql/07_summary.sql, just a narrower projection (we only need
@@ -130,17 +111,9 @@ BEGIN
     load_targets AS (
         @@~template_dir/sysstat_load_targets.sql
     ),
-    load_pairs AS (
-        SELECT w.week_offset, w.dur_sec, ss.stat_name, ss.instance_number,
-               ss.snap_id, ss.value,
-               w.begin_snap_id, w.end_snap_id
-        FROM   valid_windows w
-        JOIN   dba_hist_sysstat ss
-            ON ss.dbid = w.dbid
-           AND ss.snap_id IN (w.begin_snap_id, w.end_snap_id)
-           AND ss.instance_number = w.instance_number
-           AND ss.stat_name IN (SELECT stat_name FROM load_targets)
-    ),
+    -- SYSSTAT counters, with DB time / DB CPU from the time model
+    @@sql/lib/load_pairs_cte.sql
+    ,
     load_bounds AS (
         SELECT week_offset, dur_sec, stat_name, instance_number,
                SUM(CASE WHEN snap_id = begin_snap_id THEN value END) AS beg_val,
@@ -186,6 +159,13 @@ BEGIN
         FROM   metric_per_snap
         GROUP BY week_offset, metric_name
     ),
+    -- The template's wait-event allow-list, with the same idiom as 07's
+    -- wait_pairs: the verdict names the lead of 07's finding cards and its
+    -- pills print 07's counts, so both must sum the SAME events.  The
+    -- comprehensive template's '*' sentinel keeps every non-idle event.
+    wait_targets AS (
+        @@~template_dir/wait_event_targets.sql
+    ),
     wait_pairs AS (
         SELECT w.week_offset, w.dur_sec,
                se.wait_class,
@@ -199,6 +179,8 @@ BEGIN
            AND se.snap_id IN (w.begin_snap_id, w.end_snap_id)
            AND se.instance_number = w.instance_number
            AND se.wait_class <> 'Idle'
+           AND ( EXISTS (SELECT 1 FROM wait_targets WHERE event_name = '*')
+                 OR se.event_name IN (SELECT event_name FROM wait_targets) )
     ),
     wait_bounds AS (
         SELECT week_offset, dur_sec, wait_class, instance_number,
@@ -282,12 +264,11 @@ BEGIN
     ORDER  BY ABS(NVL(z_score, 0)) DESC, metric_name;
 
     -- Single pass: per-metric policy (family / canonical) and the change
-    -- bucket per row, count the canonical large + moderate findings (the
-    -- verdict number) and every large / moderate row (the "metrics moved"
-    -- number; improved / noted rows are counted apart and never
-    -- highlighted), remember max n_prior, and slice the first 3
-    -- distinct-family canonical findings into v_top in the same |z| DESC
-    -- order produced by the SQL.
+    -- bucket per row; counts (canonical rows only: large / moderate =
+    -- "metrics moved", improved apart, scored-and-not-flagged = "normal");
+    -- max n_prior; and, per finding CARD (a card group of metric_policy
+    -- families, sql/lib/finding_cards.plsql), its lead row, its severity
+    -- and its loudest |z| -- the same grouping section 07 draws as cards.
     FOR i IN 1 .. v_scored.COUNT LOOP
       DECLARE
         -- policy_rec lives in the include, which also declares functions,
@@ -305,639 +286,158 @@ BEGIN
         IF NVL(v_scored(i).n_prior, 0) > v_max_n THEN
             v_max_n := v_scored(i).n_prior;
         END IF;
+        IF v_scored(i).metric_domain = 'LOAD' AND v_scored(i).metric_name = 'DB time' THEN
+            v_dbt := i;
+        ELSIF v_scored(i).metric_domain = 'LOAD' AND v_scored(i).metric_name = 'DB CPU' THEN
+            v_cpu := i;
+        END IF;
         IF v_scored(i).z_score IS NOT NULL THEN
             v_n_usable := v_n_usable + 1;
-            IF v_scored(i).change_bucket = 'improved' AND v_scored(i).canonical = 'Y' THEN
-                v_n_impr := v_n_impr + 1;
-            ELSIF v_scored(i).change_bucket IN ('large', 'moderate') THEN
+        END IF;
+        IF v_scored(i).canonical = 'Y' THEN
+            IF v_scored(i).change_bucket IN ('large', 'moderate') THEN
                 v_n_moved := v_n_moved + 1;
-                IF v_scored(i).canonical = 'Y' THEN
-                    v_fams(v_scored(i).family) := i;
-                    v_n_movers := v_fams.COUNT;
-                    IF v_top.COUNT < 3 AND NOT v_seen.EXISTS(v_scored(i).family) THEN
-                        v_top(v_top.COUNT + 1) := v_scored(i);
-                        v_seen(v_scored(i).family) := i;
-                    END IF;
+                v_g := card_group(v_scored(i).family);
+                IF NOT v_glead.EXISTS(v_g) THEN
+                    v_glead(v_g) := i;
+                    v_gsev(v_g)  := 0;
+                    v_gz(v_g)    := 0;
+                ELSIF lead_better(v_g, v_scored(i).change_bucket, v_scored(i).family, v_scored(i).z_score,
+                                  v_scored(v_glead(v_g)).change_bucket, v_scored(v_glead(v_g)).family,
+                                  v_scored(v_glead(v_g)).z_score,
+                                  metric_label(v_scored(i).metric_domain, v_scored(i).metric_name),
+                                  metric_label(v_scored(v_glead(v_g)).metric_domain,
+                                               v_scored(v_glead(v_g)).metric_name)) THEN
+                    v_glead(v_g) := i;
+                END IF;
+                v_gsev(v_g) := GREATEST(v_gsev(v_g), sev_rank(v_scored(i).change_bucket));
+                v_gz(v_g)   := GREATEST(v_gz(v_g), ABS(NVL(v_scored(i).z_score, 0)));
+            ELSIF v_scored(i).change_bucket IN ('typical', 'improved', 'noted', 'flat baseline') THEN
+                v_n_normal := v_n_normal + 1;
+                IF v_scored(i).change_bucket = 'improved' THEN
+                    v_n_impr := v_n_impr + 1;
                 END IF;
             END IF;
         END IF;
     END LOOP;
 
-    -- =========================================================
-    -- Masthead DB-time timeline strip recompute.
-    --
-    -- 1. Resolve the snap range covered by all valid compared windows
-    --    (earliest begin -> latest end).
-    -- 2. Build the markArea bands JSON (one band per resolved window).
-    -- 3. Walk distinct same-startup_time snap pairs in chronological
-    --    order to build v_times_json (x-axis) and a snap_id -> bucket
-    --    index map.
-    -- 4. Pull per-snap total DB time (CPU + non-Idle wait LAG deltas)
-    --    and project into the bucket array.
-    -- 5. Materialize v_vals_json (one number per bucket, zero if no
-    --    DB time was recorded for that snap).
-    --
-    -- This is a third recompute (alongside sections 07 and 08) of the
-    -- AWR delta math, per the "Findings are recomputed, not shared"
-    -- convention in CLAUDE.md. The shape mirrors sql/10_db_time_summary
-    -- .sql; just the cat dimension is collapsed.
-    -- =========================================================
-    SELECT MIN(begin_ts), MAX(end_ts)
-    INTO   v_range_start, v_range_end
-    FROM (
+    -- Card order (same two steps as 07): large before moderate, then the
+    -- loudest |z| (insertion sort); then a flagged DB time card moves up
+    -- to second place.
+    v_g := v_glead.FIRST;
+    WHILE v_g IS NOT NULL LOOP
+        v_j := v_order.COUNT;
+        WHILE v_j >= 1 AND card_before(v_gsev(v_g), v_gz(v_g), v_gsev(v_order(v_j)), v_gz(v_order(v_j))) LOOP
+            v_order(v_j + 1) := v_order(v_j);
+            v_j := v_j - 1;
+        END LOOP;
+        v_order(v_j + 1) := v_g;
+        v_g := v_glead.NEXT(v_g);
+    END LOOP;
+    FOR k IN 3 .. v_order.COUNT LOOP
+        IF v_order(k) = 'DBTIME' THEN
+            FOR m IN REVERSE 3 .. k LOOP
+                v_tmp := v_order(m); v_order(m) := v_order(m - 1); v_order(m - 1) := v_tmp;
+            END LOOP;
+            EXIT;
+        END IF;
+    END LOOP;
+
+    -- The compared windows' validity ('|k=Y|k=N|...') for window.AWR_WIN
+    -- (emitted after <main> opens, below) and the valid-prior count.
+    FOR r IN (
         WITH
         @@sql/lib/windows_cte.sql
-        SELECT bs.end_ts AS begin_ts,
-               es.end_ts AS end_ts
-        FROM   raw_windows w
-        JOIN   begin_snap bs ON bs.week_offset = w.week_offset
-        JOIN   end_snap   es ON es.week_offset = w.week_offset
-        WHERE  bs.snap_id IS NOT NULL
-          AND  es.snap_id IS NOT NULL
-          AND  bs.snap_id <> es.snap_id
-          AND  bs.dbid = es.dbid
-          AND  bs.startup_time = es.startup_time
-    );
-
-    -- Compared windows for the markArea bands (one per valid window).
-    -- xAxis strings match the YYYY-MM-DD HH24:MI category labels used
-    -- by the chart so ECharts can locate them by string equality.
-    SELECT '['
-           || LISTAGG(
-                  '["'
-                  || TO_CHAR(win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
-                  || TO_CHAR(win_end_ts,   'YYYY-MM-DD HH24:MI') || '","'
-                  || CASE WHEN week_offset = 0 THEN 'current'
-                          ELSE 'w-' || week_offset END || '"]',
-                  ',')
-                  WITHIN GROUP (ORDER BY week_offset DESC)
-           || ']'
-    INTO   v_windows_json
-    FROM (
-        WITH
-        @@sql/lib/windows_cte.sql
-        SELECT w.week_offset,
-               CAST(w.win_start_dt AS TIMESTAMP) AS win_start_ts,
-               CAST(w.win_end_dt   AS TIMESTAMP) AS win_end_ts
-        FROM   raw_windows w
-        JOIN   begin_snap bs ON bs.week_offset = w.week_offset
-        JOIN   end_snap   es ON es.week_offset = w.week_offset
-        WHERE  bs.snap_id IS NOT NULL
-          AND  es.snap_id IS NOT NULL
-          AND  bs.snap_id <> es.snap_id
-          AND  bs.startup_time = es.startup_time
-    );
-
-    IF v_range_start IS NOT NULL AND v_range_end IS NOT NULL THEN
-        -- Pass 1: chronological x-axis across all visible DBIDs. snap_id is
-        -- identical across instances at the same point in time, so grouping
-        -- collapses RAC duplicates; (dbid, snap_id) keeps the two eras of a
-        -- migrated DB distinct.
-        FOR s IN (
-            WITH ordered AS (
-                SELECT s.dbid, s.snap_id, s.instance_number, s.end_interval_time,
-                       s.startup_time,
-                       LAG(s.startup_time) OVER (PARTITION BY s.dbid, s.instance_number
-                                                 ORDER BY s.snap_id) AS prev_startup
-                FROM   dba_hist_snapshot s
-                WHERE  s.dbid IN (~dbid_list)
-                  AND  s.end_interval_time BETWEEN v_range_start AND v_range_end
-                  AND  (~inst_num = 0 OR s.instance_number = ~inst_num)
-            )
-            SELECT dbid, snap_id,
-                   MIN(end_interval_time) AS end_ts
-            FROM   ordered
-            WHERE  prev_startup IS NOT NULL
-              AND  startup_time = prev_startup
-            GROUP BY dbid, snap_id
-            ORDER BY MIN(end_interval_time)
-        ) LOOP
-            v_buckets := v_buckets + 1;
-            v_snap_idx(s.dbid || '|' || s.snap_id) := v_buckets;
-            v_vals(v_buckets) := 0;
-            -- CLOB v_times_json was pre-seeded with '[' so every entry
-            -- after the first is comma-separated.  WRITEAPPEND amount
-            -- arg is in chars; LENGTH() of the buffer is correct
-            -- regardless of NLS_CHARACTERSET (the strings are ASCII).
-            IF v_buckets = 1 THEN
-                v_buf := '"' || TO_CHAR(s.end_ts, 'YYYY-MM-DD HH24:MI') || '"';
-            ELSE
-                v_buf := ',"' || TO_CHAR(s.end_ts, 'YYYY-MM-DD HH24:MI') || '"';
-            END IF;
-            DBMS_LOB.WRITEAPPEND(v_times_json, LENGTH(v_buf), v_buf);
-        END LOOP;
-
-        -- Pass 2: per-snap total DB time = CPU + non-Idle wait LAG deltas
-        -- across all valid (snap_id, instance_number) pair_keys.
-        FOR r IN (
-            WITH ordered_snaps AS (
-                SELECT s.dbid, s.snap_id, s.instance_number, s.startup_time,
-                       LAG(s.startup_time) OVER (PARTITION BY s.dbid, s.instance_number
-                                                 ORDER BY s.snap_id) AS prev_startup
-                FROM   dba_hist_snapshot s
-                WHERE  s.dbid IN (~dbid_list)
-                  AND  s.end_interval_time BETWEEN v_range_start AND v_range_end
-                  AND  (~inst_num = 0 OR s.instance_number = ~inst_num)
-            ),
-            pair_keys AS (
-                SELECT dbid, snap_id, instance_number
-                FROM   ordered_snaps
-                WHERE  prev_startup IS NOT NULL
-                  AND  startup_time = prev_startup
-            ),
-            cpu_d AS (
-                -- joined to dba_hist_snapshot so the span is bounded by TIME
-                -- (sys_time_model has no end_interval_time) and the LAG delta
-                -- is partitioned per DBID so it never crosses a migration.
-                SELECT stm.dbid, stm.snap_id, stm.instance_number,
-                       GREATEST(stm.value
-                           - LAG(stm.value) OVER (PARTITION BY stm.dbid, stm.instance_number
-                                                  ORDER BY stm.snap_id), 0) AS micro
-                FROM   dba_hist_sys_time_model stm
-                JOIN   dba_hist_snapshot s2
-                  ON   s2.dbid = stm.dbid
-                 AND   s2.snap_id = stm.snap_id
-                 AND   s2.instance_number = stm.instance_number
-                WHERE  stm.dbid IN (~dbid_list)
-                  AND  stm.stat_name = 'DB CPU'
-                  AND  s2.end_interval_time BETWEEN v_range_start AND v_range_end
-                  AND  (~inst_num = 0 OR stm.instance_number = ~inst_num)
-            ),
-            wait_d AS (
-                SELECT se.dbid, se.snap_id, se.instance_number,
-                       GREATEST(se.time_waited_micro
-                           - LAG(se.time_waited_micro) OVER (
-                               PARTITION BY se.dbid, se.instance_number, se.event_id
-                               ORDER BY se.snap_id), 0) AS micro
-                FROM   dba_hist_system_event se
-                JOIN   dba_hist_snapshot s3
-                  ON   s3.dbid = se.dbid
-                 AND   s3.snap_id = se.snap_id
-                 AND   s3.instance_number = se.instance_number
-                WHERE  se.dbid IN (~dbid_list)
-                  AND  NVL(se.wait_class, 'x') <> 'Idle'
-                  AND  s3.end_interval_time BETWEEN v_range_start AND v_range_end
-                  AND  (~inst_num = 0 OR se.instance_number = ~inst_num)
-            ),
-            all_d AS (
-                SELECT dbid, snap_id, instance_number, micro FROM cpu_d
-                UNION ALL
-                SELECT dbid, snap_id, instance_number, micro FROM wait_d
-            )
-            SELECT a.dbid, a.snap_id, SUM(a.micro)/1e6 AS sec
-            FROM   all_d a
-            JOIN   pair_keys pk
-              ON   pk.dbid = a.dbid
-             AND   pk.snap_id = a.snap_id
-             AND   pk.instance_number = a.instance_number
-            GROUP BY a.dbid, a.snap_id
-            HAVING SUM(a.micro) > 0
-        ) LOOP
-            IF v_snap_idx.EXISTS(r.dbid || '|' || r.snap_id) THEN
-                v_vals(v_snap_idx(r.dbid || '|' || r.snap_id)) := r.sec;
-            END IF;
-        END LOOP;
-
-        -- Materialize v_vals_json walking buckets 1..N (zero-fills the
-        -- snaps that had no DB time so the line is continuous).  CLOB
-        -- v_vals_json was pre-seeded with '['.
-        FOR b IN 1 .. v_buckets LOOP
-            IF b = 1 THEN
-                v_buf := TO_CHAR(v_vals(b), 'FM99999990D000',
-                                 'NLS_NUMERIC_CHARACTERS=''.,''');
-            ELSE
-                v_buf := ',' || TO_CHAR(v_vals(b), 'FM99999990D000',
-                                        'NLS_NUMERIC_CHARACTERS=''.,''');
-            END IF;
-            DBMS_LOB.WRITEAPPEND(v_vals_json, LENGTH(v_buf), v_buf);
-        END LOOP;
-    END IF;
-
-    -- Close the CLOB arrays now that all appends are done.
-    DBMS_LOB.WRITEAPPEND(v_times_json, 1, ']');
-    DBMS_LOB.WRITEAPPEND(v_vals_json,  1, ']');
-    v_windows_json := NVL(v_windows_json, '[]');
+        SELECT week_offset, valid_flag FROM windows_rollup
+    ) LOOP
+        v_win_json := v_win_json || '|' || r.week_offset || '=' || r.valid_flag;
+        IF r.week_offset > 0 AND r.valid_flag = 'Y' THEN
+            v_n_valid := v_n_valid + 1;
+        END IF;
+    END LOOP;
 
     -- =========================================================
-    -- Editorial masthead (header.report)
+    -- Page chrome before <main>: theme, view, top bar, rail
     -- =========================================================
-    -- Early theme script: must run before the masthead chart IIFE below
-    -- (which reads --accent/--muted via getComputedStyle) so charts pick
-    -- up the correct palette at first paint. Applies the saved/preferred
-    -- theme by toggling body.dark before any chart initializes.
+    -- Early theme script: must run before any chart initializes (charts
+    -- read --accent/--muted via getComputedStyle at init) so they pick up
+    -- the correct palette at first paint.
     DBMS_OUTPUT.PUT_LINE('<script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.body.classList.add("dark");}catch(e){}})();</script>');
-    -- Normal / Full view: body.normal is the default, body.full
-    -- the full report.  Decided before first paint from localStorage
-    -- "awr-mode" (a shared link's hash "!v=f" wins), so the short view
-    -- never flashes the long one.  With JS off neither class exists and
-    -- the CSS shows everything.
-    DBMS_OUTPUT.PUT_LINE('<script>(function(){var m="normal";try{if(localStorage.getItem("awr-mode")==="full")m="full";}catch(e){}var h=location.hash||"",i=h.indexOf("!v=");if(i>=0&&h.slice(i+3).split("&")[0].split(",").indexOf("f")>=0)m="full";document.body.classList.add(m);})();</script>');
+    -- Views (v1.6.0): Summary (default) / Timeline / All sections.  One
+    -- of body.vs / body.vt / body.va (+ data-view) is set before first
+    -- paint: a "#view=summary|timeline|all" hash wins, else localStorage
+    -- "awr-view" (written only on an explicit click), else Summary.  A
+    -- v1.5.0 shared link's "!v=f" (Full) opens All sections.  With JS off
+    -- no class exists and the CSS shows everything stacked.
+    DBMS_OUTPUT.PUT_LINE('<script>(function(){var v="summary",h=location.hash||"",m,i;try{var s=localStorage.getItem("awr-view");if(s==="timeline"||s==="all")v=s;}catch(e){}m=/view=(summary|timeline|all)/.exec(h);if(m)v=m[1];else{i=h.indexOf("!v=");if(i>=0&&h.slice(i+3).split("&")[0].split(",").indexOf("f")>=0)v="all";}document.body.classList.add({summary:"vs",timeline:"vt",all:"va"}[v]);document.body.setAttribute("data-view",v);})();</script>');
     -- Phase 4: skip link (visible on keyboard focus only) to the <main>
     -- landmark that opens right after this section's scripts and closes
     -- in the driver's epilogue, just before the footer.
+    -- v1.6.0 evidence library: window.AWR_ls(id, html) puts a section's
+    -- one-line status (span.ls, "27 counters per second") into its h2,
+    -- the row text of the Summary view's library.  Each library section
+    -- calls it from an inline script once it knows its numbers.
+    DBMS_OUTPUT.PUT_LINE('<script>window.AWR_ls=function(id,h){var s=document.getElementById(id),t=s&&s.querySelector("h2");if(!t)return;var e=t.querySelector(".ls");if(!e){e=document.createElement("span");e.className="ls";t.insertBefore(e,t.querySelector(".h2sub,.meta"));}e.innerHTML=h;};</script>');
     DBMS_OUTPUT.PUT_LINE('<a class="skip" href="#main-start">Skip to report</a>');
-    -- The masthead is part of both views (the Normal view hide rule only
-    -- targets main > section).
-    DBMS_OUTPUT.PUT_LINE('<header class="report">');
-
-    -- Brand line above the headline.
-    DBMS_OUTPUT.PUT_LINE('  <div class="brandline">'
-        || '<span class="dot">&#9679;</span> AWR '
-        || '<span class="slash">/</span> TIMELINE COMPARISON'
-        || '</div>');
-
-    -- Top grid: big headline left, run metadata stacked on the right.
-    DBMS_OUTPUT.PUT_LINE('  <div class="topgrid">');
-    DBMS_OUTPUT.PUT_LINE('    <h1>'
-        || DBMS_XMLGEN.CONVERT('~dow_name')
-        || ' <em>' || DBMS_XMLGEN.CONVERT(SUBSTR('~target_end_resolved', 12, 5)) || '</em>'
-        || '<br>'
-        || INITCAP('~period_unit_long') || '-over-' || '~period_unit_long' || ' trend'
-        || ' <span class="badge info">run ' || '~run_id' || '</span>'
-        || '</h1>');
-    DBMS_OUTPUT.PUT_LINE('    <div class="meta">');
-    -- Primary DBID label is emitted EXACTLY as before (the dbid NEW_VALUE,
-    -- including its NUMBER-column padding) so single-DBID output stays
-    -- byte-identical.  Only when the report actually spans more than one DBID
-    -- (non-CDB->PDB migration: INSTR finds a comma in dbid_list) do we append
-    -- the full set, making the crossed eras explicit without disturbing the
-    -- common case.
-    DBMS_OUTPUT.PUT_LINE('      <div><b>' || DBMS_XMLGEN.CONVERT('~db_name')
-        || '</b> &middot; DBID ' || '~dbid'
+    -- v1.6.0 top bar (sticky): who / which window / the view switch / the
+    -- theme toggle.  The Current chip is the page's one indigo accent.
+    DBMS_OUTPUT.PUT_LINE('<div class="topbar" id="topbar">'
+        || '<div class="db"><b>' || DBMS_XMLGEN.CONVERT('~db_name') || '</b>'
+        || '<span>' || DBMS_XMLGEN.CONVERT('~host_name') || ' &middot; '
+        || DBMS_XMLGEN.CONVERT('~db_version') || ' &middot; DBID ' || TRIM('~dbid')
+        -- A report spanning more than one DBID (non-CDB -> PDB migration: a
+        -- comma in dbid_list) names the full set; single-DBID emits nothing.
         || CASE WHEN INSTR('~dbid_list', ',') > 0
                 THEN ' &middot; all DBIDs ' || REPLACE('~dbid_list', ',', ', ')
                 ELSE '' END
-        || '</div>');
-    DBMS_OUTPUT.PUT_LINE('      <div>Host <b>' || DBMS_XMLGEN.CONVERT('~host_name')
-        || '</b> &middot; ' || DBMS_XMLGEN.CONVERT('~db_version') || '</div>');
-    DBMS_OUTPUT.PUT_LINE('      <div>Generated <b>' || '~generated_at_s' || '</b></div>');
-    DBMS_OUTPUT.PUT_LINE('      <div>Run by ' || DBMS_XMLGEN.CONVERT('~caller_user')
-        || ' &middot; read-only, no scratch schema</div>');
-    -- Only when the requested target_end had no snapshot within the 15-min
-    -- edge guard does the resolving SELECT (in awr_trend.sql) snap it back
-    -- to the last actual snapshot -- flag that adjustment here so it is
-    -- never silent. When the two match (the common case, and every run
-    -- that already worked before this feature), nothing is emitted and
-    -- output stays byte-identical to before.
-    IF '~target_end_requested' <> '~target_end_resolved' THEN
-        DBMS_OUTPUT.PUT_LINE('      <div>Requested end '
-            || DBMS_XMLGEN.CONVERT(SUBSTR('~target_end_requested', 1, 16))
-            || ' had no snapshot within 15 min &mdash; snapped to last snapshot '
-            || DBMS_XMLGEN.CONVERT(SUBSTR('~target_end_resolved', 1, 16))
-            || '</div>');
-    END IF;
-    DBMS_OUTPUT.PUT_LINE('    </div>');
-    DBMS_OUTPUT.PUT_LINE('  </div>');
-
-    -- =========================================================
-    -- One-line verdict: top movers above |z| > 2, or a quiet /
-    -- short-baseline fallback. Recomputed above. Anchors to #findings
-    -- so the reader can jump to the full detail in one click.
-    -- =========================================================
-    IF v_n_usable = 0 THEN
-        DBMS_OUTPUT.PUT_LINE('  <div class="verdict v-skip">');
-        DBMS_OUTPUT.PUT_LINE('    <span class="label">Verdict</span>');
-        DBMS_OUTPUT.PUT_LINE('    <span class="lede skip">Baseline too short</span>'
-            || ' <span class="sep">/</span> '
-            || '<span class="body">need at least 3 prior valid windows to score; '
-            || 'only %-delta available in <a href="#findings">findings</a>.</span>');
-    ELSIF v_n_movers = 0 THEN
-        DBMS_OUTPUT.PUT_LINE('  <div class="verdict v-ok">');
-        DBMS_OUTPUT.PUT_LINE('    <span class="label">Verdict</span>');
-        DBMS_OUTPUT.PUT_LINE('    <span class="lede ok">Quiet</span>'
-            || ' <span class="sep">/</span> '
-            || '<span class="body">no material regression vs the prior '
-            || TO_CHAR(v_max_n) || ' window'
-            || CASE WHEN v_max_n = 1 THEN '' ELSE 's' END
-            || CASE WHEN v_n_impr > 0
-                    THEN '; ' || v_n_impr || ' metric'
-                         || CASE WHEN v_n_impr = 1 THEN '' ELSE 's' END
-                         || ' <a href="#findings">improved</a>'
-                    ELSE '' END
-            || '.</span>');
-    ELSE
-        DBMS_OUTPUT.PUT_LINE('  <div class="verdict v-crit">');
-        DBMS_OUTPUT.PUT_LINE('    <span class="label">Verdict</span>');
-        DBMS_OUTPUT.PUT_LINE('    <a href="#findings" class="lede crit">'
-            || v_n_movers || ' finding'
-            || CASE WHEN v_n_movers = 1 THEN '' ELSE 's' END
-            || '</a>'
-            || ' <span class="sep">/</span> '
-            || '<span class="body">' || v_n_moved || ' metric'
-            || CASE WHEN v_n_moved = 1 THEN '' ELSE 's' END
-            || ' moved vs prior ' || TO_CHAR(v_max_n) || ' window'
-            || CASE WHEN v_max_n = 1 THEN '' ELSE 's' END
-            || CASE WHEN v_n_impr > 0
-                    THEN ' &middot; ' || v_n_impr || ' improved' ELSE '' END
-            || '</span>');
-
-        FOR i IN 1 .. v_top.COUNT LOOP
-            v_clean_name := REGEXP_REPLACE(v_top(i).metric_name, '^Wait class: ', '');
-            IF LENGTH(v_clean_name) > 36 THEN
-                v_clean_name := SUBSTR(v_clean_name, 1, 34) || '&hellip;';
-            END IF;
-
-            -- F5: direction is a glyph, not a color.  The up/down class is
-            -- kept (it is a stable hook) but both now render in --ink; only
-            -- the leading triangle inside span.g carries a severity color,
-            -- and only within the verdict block.
-            IF v_top(i).pct_delta IS NULL THEN
-                v_pct_cls := 'up';
-                v_pct_txt := '&mdash;';
-            ELSE
-                v_pct_cls := CASE WHEN v_top(i).pct_delta >= 0 THEN 'up' ELSE 'down' END;
-                v_pct_txt := '<span class="g">'
-                             || CASE WHEN v_top(i).pct_delta >= 0
-                                     THEN '&#9650;' ELSE '&#9660;' END
-                             || '</span> '
-                             || TO_CHAR(ABS(v_top(i).pct_delta),
-                                        'FM999990',
-                                        'NLS_NUMERIC_CHARACTERS=''.,''') || '%';
-            END IF;
-
-            DBMS_OUTPUT.PUT_LINE('    <span class="mover">'
-                || '<span class="name">' || DBMS_XMLGEN.CONVERT(v_clean_name) || '</span>'
-                || ' <span class="pct ' || v_pct_cls || '">' || v_pct_txt || '</span>'
-                || '</span>');
-        END LOOP;
-    END IF;
-    DBMS_OUTPUT.PUT_LINE('  </div>');
-
-    -- =========================================================
-    -- Compact "all movers" list. The verdict above names only the
-    -- top 3; this collapsible strip enumerates every metric beyond
-    -- |z| > 2 in the same |z| DESC order produced by the recompute,
-    -- in a smaller font, so the full set is one click away without
-    -- leaving the masthead. Only emitted when there is a mover.
-    -- =========================================================
-    IF v_n_moved > 0 THEN
-        DBMS_OUTPUT.PUT_LINE('  <details class="movers-all">');
-        DBMS_OUTPUT.PUT_LINE('    <summary>All ' || v_n_moved || ' moved metric'
-            || CASE WHEN v_n_moved = 1 THEN '' ELSE 's' END
-            || ' &middot; material, in the bad direction; twins muted'
-            || CASE WHEN v_n_impr > 0
-                    THEN '; ' || v_n_impr || ' improved not listed' ELSE '' END
-            || '</summary>');
-        DBMS_OUTPUT.PUT_LINE('    <ul class="movers-list">');
-        FOR i IN 1 .. v_scored.COUNT LOOP
-            IF v_scored(i).change_bucket IN ('large', 'moderate') THEN
-                v_clean_name := REGEXP_REPLACE(v_scored(i).metric_name,
-                                               '^Wait class: ', '');
-                IF LENGTH(v_clean_name) > 48 THEN
-                    v_clean_name := DBMS_XMLGEN.CONVERT(SUBSTR(v_clean_name, 1, 46))
-                                    || '&hellip;';
-                ELSE
-                    v_clean_name := DBMS_XMLGEN.CONVERT(v_clean_name);
-                END IF;
-
-                v_z_txt := TO_CHAR(v_scored(i).z_score, 'FMS9990D0',
-                                   'NLS_NUMERIC_CHARACTERS=''.,''');
-
-                -- Same F5 glyph treatment as the verdict movers above.
-                IF v_scored(i).pct_delta IS NULL THEN
-                    v_pct_cls := 'up';
-                    v_pct_txt := '&mdash;';
-                ELSE
-                    v_pct_cls := CASE WHEN v_scored(i).pct_delta >= 0
-                                      THEN 'up' ELSE 'down' END;
-                    v_pct_txt := '<span class="g">'
-                                 || CASE WHEN v_scored(i).pct_delta >= 0
-                                         THEN '&#9650;' ELSE '&#9660;' END
-                                 || '</span> '
-                                 || TO_CHAR(ABS(v_scored(i).pct_delta), 'FM999990',
-                                            'NLS_NUMERIC_CHARACTERS=''.,''') || '%';
-                END IF;
-
-                DBMS_OUTPUT.PUT_LINE('      <li'
-                    || CASE WHEN v_scored(i).canonical = 'N' THEN ' class="twin"'
-                            ELSE '' END
-                    || '>'
-                    || '<span class="m-dom">' || v_scored(i).metric_domain || '</span>'
-                    || '<span class="m-name">' || v_clean_name || '</span>'
-                    || '<span class="m-z">z ' || v_z_txt || '</span>'
-                    || '<span class="m-pct ' || v_pct_cls || '">' || v_pct_txt
-                    || '</span>'
-                    || '</li>');
-            END IF;
-        END LOOP;
-        DBMS_OUTPUT.PUT_LINE('    </ul>');
-        DBMS_OUTPUT.PUT_LINE('  </details>');
-    END IF;
-
-    -- =========================================================
-    -- Narrative slot (section 17).  Deliberately EMPTY here: section 17
-    -- runs last (it needs its own file / segment / SQL / parameter
-    -- queries and must not depend on any other section's PL/SQL state),
-    -- emits its block at the end of the document and a one-line inline
-    -- script moves the node in here.  Always emitted, even when the
-    -- narrative turns out to have nothing to say -- an empty div has no
-    -- box (no padding/border/margin of its own), so a silent run looks
-    -- exactly as it did before.
-    -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('  <div id="narrative-slot"></div>');
-
-    --
-    -- Compared windows strip: a single very-narrow line chart of total
-    -- DB time over the full compared span, with markArea bands marking
-    -- each compared window (current = red tint, prior = neutral). Text
-    -- fallback for body.no-charts mirrors the old <ul> list.
-    --
-    DBMS_OUTPUT.PUT_LINE('  <div class="windows-strip">');
-    DBMS_OUTPUT.PUT_LINE('    <div class="strip-head">'
-        || '<b>Compared windows</b>'
-        || ' <span class="strip-meta">'
-        || DBMS_XMLGEN.CONVERT('~dow_name')
-        || ' &middot; ~win_label each &middot; every ~step_label'
-        || ' &middot; DB time (s) over full span'
-        || CASE WHEN '~template_name' = 'comprehensive' THEN ''
-                ELSE ' &middot; template: <code>~template_name</code>'
-           END
-        || CASE WHEN ~profile_days > 0
-                THEN ' &middot; day profile: ' || '~profile_days' || ' prior days'
-                ELSE '' END
-        || '</span>'
-        || '</div>');
-    -- X2: clickable window chips above the strip chart.  One chip per
-    -- compared window, carrying data-w=<offset> -- the same attribute the
-    -- per-window table columns use -- so a click lights that window up
-    -- everywhere at once and broadcasts awr:window for the chart sections.
-    -- Built from the same CONNECT BY grid as the offline fallback list
-    -- below, so chips and fallback can never disagree.
-    -- v1.5.0: the chip list sits behind a one-line summary (<details>):
-    -- the current window's range, the oldest window's date, the count.
-    -- Chips (and their highlight behaviour) are one click away.
-    DBMS_OUTPUT.PUT_LINE('    <details class="windows-more">');
-    DBMS_OUTPUT.PUT_LINE('      <summary>'
-        || '<span class="wchip cur" data-w="0" title="click to highlight the Current window everywhere">'
-        || '<b>current</b> <span>'
+        || '</span></div>'
+        || '<div class="win"><span class="cchip">Current</span><b>'
         || TO_CHAR(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') - ~win_hours/24,
-                   'Dy DD Mon HH24:MI')
-        || ' &rarr; '
+                   'Dy DD Mon, HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH')
+        || '&ndash;'
         || TO_CHAR(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS'), 'HH24:MI')
-        || '</span></span>'
-        || '<span>vs ' || TO_CHAR(~weeks_back) || ' prior window'
+        || '</b><span>vs ' || TO_CHAR(~weeks_back) || ' prior window'
         || CASE WHEN ~weeks_back = 1 THEN '' ELSE 's' END
-        || ', every ~step_label, back to '
-        || TO_CHAR(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
-                   - ~weeks_back*(~step_hours/24) - ~win_hours/24, 'Dy DD Mon')
-        || '</span>'
-        || '<span class="w-toggle"><span class="closed">show all windows &#9662;</span>'
-        || '<span class="opened">hide windows &#9652;</span></span>'
-        || '</summary>');
-    DBMS_OUTPUT.PUT_LINE('    <div class="windows-chips">');
-    -- Phase 3: each chip carries its DATE when the window starts on a
-    -- different day than the Current window (weekly / daily cadence --
-    -- every chip used to read the same clock range), and the full ISO
-    -- range in its title.
-    FOR w IN (
-        SELECT LEVEL - 1 AS wk,
-               TO_CHAR(
-                   TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
-                       - (LEVEL-1)*(~step_hours/24) - ~win_hours/24,
-                   'HH24:MI') AS w_start,
-               TO_CHAR(
-                   TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
-                       - (LEVEL-1)*(~step_hours/24),
-                   'HH24:MI') AS w_end,
-               TO_CHAR(
-                   TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
-                       - (LEVEL-1)*(~step_hours/24) - ~win_hours/24,
-                   'Dy DD Mon') AS w_day,
-               CASE WHEN TRUNC(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
-                               - (LEVEL-1)*(~step_hours/24) - ~win_hours/24)
-                       = TRUNC(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
-                               - ~win_hours/24)
-                    THEN 'Y' ELSE 'N' END AS same_day,
-               TO_CHAR(
-                   TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
-                       - (LEVEL-1)*(~step_hours/24) - ~win_hours/24,
-                   'YYYY-MM-DD HH24:MI') AS w_start_iso,
-               TO_CHAR(
-                   TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
-                       - (LEVEL-1)*(~step_hours/24),
-                   'YYYY-MM-DD HH24:MI') AS w_end_iso
-        FROM   dual
-        CONNECT BY LEVEL <= ~weeks_back + 1
-        ORDER  BY LEVEL - 1
-    ) LOOP
-        DBMS_OUTPUT.PUT_LINE('      <button type="button" class="wchip'
-            || CASE WHEN w.wk = 0 THEN ' cur' ELSE '' END
-            || '" data-w="' || w.wk || '" title="' || w.w_start_iso || ' &rarr; '
-            || w.w_end_iso || ' &middot; click to highlight this window everywhere">'
-            || CASE WHEN w.wk = 0
-                    THEN '<b>current</b>'
-                    ELSE '<b>&minus;'
-                         || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, w.wk)
-                         || '</b>'
-               END
-            || ' <span>'
-            || CASE WHEN w.same_day = 'N' THEN '<em>' || w.w_day || '</em> ' ELSE '' END
-            || w.w_start || ' &rarr; ' || w.w_end || '</span>'
-            || '</button>');
-    END LOOP;
-    DBMS_OUTPUT.PUT_LINE('    </div>');
-    DBMS_OUTPUT.PUT_LINE('    <div class="windows-hint">click a window to '
-        || 'highlight it everywhere &middot; Esc clears</div>');
-    DBMS_OUTPUT.PUT_LINE('    </details>');
-    DBMS_OUTPUT.PUT_LINE('    <div class="windows-chart" id="masthead-timeline"></div>');
-
-    -- Plain-text fallback (visible only when body.no-charts hides the chart).
-    DBMS_OUTPUT.PUT_LINE('    <div class="windows-fallback">');
-    FOR w IN (
-        SELECT LEVEL - 1 AS wk,
-               TO_CHAR(
-                   TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
-                       - (LEVEL-1)*(~step_hours/24) - ~win_hours/24,
-                   'YYYY-MM-DD HH24:MI') AS w_start,
-               TO_CHAR(
-                   TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
-                       - (LEVEL-1)*(~step_hours/24),
-                   'YYYY-MM-DD HH24:MI') AS w_end
-        FROM   dual
-        CONNECT BY LEVEL <= ~weeks_back + 1
-        ORDER  BY LEVEL - 1
-    ) LOOP
-        DBMS_OUTPUT.PUT_LINE('      <span class="win">'
-            || CASE WHEN w.wk = 0
-                    THEN '<b>current</b> '
-                    ELSE '<b>&minus;'
-                         || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, w.wk)
-                         || '</b> '
-               END
-            || w.w_start || ' &rarr; ' || w.w_end
-            || '</span>');
-    END LOOP;
-    DBMS_OUTPUT.PUT_LINE('    </div>');
-    DBMS_OUTPUT.PUT_LINE('  </div>');
-    DBMS_OUTPUT.PUT_LINE('</header>');
-
-    -- ECharts init for the masthead timeline strip. Same offline
-    -- pattern as every other chart in the report: if ECharts failed
-    -- to load, body.no-charts hides .windows-chart and the
-    -- .windows-fallback list takes over.
-    DBMS_OUTPUT.PUT_LINE('<script>');
-    DBMS_OUTPUT.PUT_LINE('(function(){');
-    DBMS_OUTPUT.PUT_LINE('AWR_DATA.mastheadTimeline={');
-    -- v_times_json / v_vals_json are CLOBs that can exceed the 32767-byte
-    -- per-PUT_LINE limit; emit each in 32500-char chunks (newlines between
-    -- chunks are valid whitespace inside JS array literals).
-    DBMS_OUTPUT.PUT_LINE('times:');
-    put_clob_chunked(v_times_json);
-    DBMS_OUTPUT.PUT_LINE(',');
-    DBMS_OUTPUT.PUT_LINE('vals:');
-    put_clob_chunked(v_vals_json);
-    DBMS_OUTPUT.PUT_LINE(',');
-    DBMS_OUTPUT.PUT_LINE('windows:' || v_windows_json);
-    DBMS_OUTPUT.PUT_LINE('};');
-    DBMS_OUTPUT.PUT_LINE('if(!window.echarts) return;');
-    DBMS_OUTPUT.PUT_LINE('var el=document.getElementById("masthead-timeline"); if(!el) return;');
-    DBMS_OUTPUT.PUT_LINE('var d=AWR_DATA.mastheadTimeline;');
-    DBMS_OUTPUT.PUT_LINE('if(!d.times.length){el.style.display="none"; return;}');
-    DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
-    -- paint() re-reads the CSS vars and theme-picks the hardcoded band/area
-    -- rgba fills each call, so the awr:theme event (F14) re-styles the chart on
-    -- a dark toggle instead of leaving it on the init-time palette.
-    DBMS_OUTPUT.PUT_LINE('function paint(){');
-    DBMS_OUTPUT.PUT_LINE('var cs=getComputedStyle(document.body);');
-    DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
-    DBMS_OUTPUT.PUT_LINE('var red=cs.getPropertyValue("--accent").trim()||"#1f5fa8";');
-    DBMS_OUTPUT.PUT_LINE('var dark=document.body.classList.contains("dark");');
-    DBMS_OUTPUT.PUT_LINE('var bandCurrent=dark?"rgba(91,155,216,0.20)":"rgba(31,95,168,0.18)";');
-    DBMS_OUTPUT.PUT_LINE('var bandPrior=dark?"rgba(133,145,160,0.12)":"rgba(100,116,139,0.10)";');
-    DBMS_OUTPUT.PUT_LINE('var areaFill=dark?"rgba(91,155,216,0.10)":"rgba(31,95,168,0.08)";');
-    DBMS_OUTPUT.PUT_LINE('var markAreaData=(d.windows||[]).map(function(w){return [');
-    DBMS_OUTPUT.PUT_LINE('  {xAxis:w[0],itemStyle:{color:w[2]==="current"?bandCurrent:bandPrior},');
-    -- B1: label only the current band; the oldest band hugs the left grid
-    -- edge and is narrower than its label, so a centered "w-4" bled past
-    -- x=0 and rendered as a stray "-4".
-    DBMS_OUTPUT.PUT_LINE('   label:w[2]==="current"?{show:true,position:"insideTop",color:mu,fontSize:9,formatter:w[2],distance:1}:{show:false}},');
-    DBMS_OUTPUT.PUT_LINE('  {xAxis:w[1]}];});');
-    DBMS_OUTPUT.PUT_LINE('chart.setOption({');
-    DBMS_OUTPUT.PUT_LINE('  animation:false,');
-    DBMS_OUTPUT.PUT_LINE('  tooltip:{trigger:"axis",axisPointer:{type:"line"},');
-    DBMS_OUTPUT.PUT_LINE('    valueFormatter:function(v){return v==null?"\u2014":(+v).toFixed(1)+" s";}},');
-    DBMS_OUTPUT.PUT_LINE('  grid:{left:0,right:0,top:12,bottom:18,containLabel:false},');
-    DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"category",data:d.times,boundaryGap:false,');
-    DBMS_OUTPUT.PUT_LINE('    axisLine:{show:false},axisTick:{show:false},');
-    DBMS_OUTPUT.PUT_LINE('    axisLabel:{color:mu,fontSize:9,hideOverlap:true,showMinLabel:false,showMaxLabel:false,');
-    DBMS_OUTPUT.PUT_LINE('      interval:Math.max(0,Math.floor(d.times.length/8))}},');
-    DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"value",show:false},');
-    DBMS_OUTPUT.PUT_LINE('  series:[{');
-    DBMS_OUTPUT.PUT_LINE('    name:"DB time",type:"line",smooth:true,symbol:"none",');
-    DBMS_OUTPUT.PUT_LINE('    data:d.vals,');
-    DBMS_OUTPUT.PUT_LINE('    lineStyle:{width:1.2,color:red},');
-    DBMS_OUTPUT.PUT_LINE('    areaStyle:{color:areaFill},');
-    DBMS_OUTPUT.PUT_LINE('    markArea:{silent:true,data:markAreaData,itemStyle:{opacity:1},z:0},');
-    DBMS_OUTPUT.PUT_LINE('    markLine:(window.AWR_markLine&&window.AWR_markLine(d.times))||{data:[]},');
-    DBMS_OUTPUT.PUT_LINE('    z:5');
-    DBMS_OUTPUT.PUT_LINE('  }]');
-    DBMS_OUTPUT.PUT_LINE('});');
-    DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('paint();');
-    DBMS_OUTPUT.PUT_LINE('document.addEventListener("awr:theme",paint);');
-    DBMS_OUTPUT.PUT_LINE('new ResizeObserver(function(){chart.resize();}).observe(el);');
-    DBMS_OUTPUT.PUT_LINE('})();');
-    DBMS_OUTPUT.PUT_LINE('</script>');
+        || ', every ~step_label'
+        -- A curated template names itself, so reports can be told apart
+        -- at a glance (the v1.5.0 windows strip carried the same note).
+        || CASE WHEN '~template_name' = 'comprehensive' THEN ''
+                ELSE ' &middot; template <code>' || DBMS_XMLGEN.CONVERT('~template_name') || '</code>'
+           END
+        || '</span></div>'
+        || '<span class="sp"></span>'
+        || '<div class="seg" role="group" aria-label="View">'
+        || '<button type="button" data-v="summary" aria-pressed="true"'
+        || ' title="The answer: verdict, finding cards, what changed, checked and normal">Summary</button>'
+        || '<button type="button" data-v="timeline" aria-pressed="false"'
+        || ' title="The compared windows side by side">Timeline</button>'
+        || '<button type="button" data-v="all" aria-pressed="false"'
+        || ' title="Every section and every scored row">All sections</button>'
+        || '</div>'
+        -- Dark mode toggle: flips body.dark, which (via _style.sql) swaps
+        -- every color token to the dark palette.  Both icons ship inline;
+        -- CSS shows only the one for the mode you would switch TO.
+        || '<button type="button" id="theme-toggle" class="theme-icon-btn"'
+        || ' aria-pressed="false"'
+        || ' aria-label="Toggle dark mode"'
+        || ' title="Switch between light and dark color theme">'
+        || '<svg class="icon-sun" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">'
+        || '<circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/>'
+        || '<path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1'
+        || 'M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"'
+        || ' stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+        || '</svg>'
+        || '<svg class="icon-moon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">'
+        || '<path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5a8.5 8.5 0 1 0 11.2 11.2z" fill="currentColor"/>'
+        || '</svg>'
+        || '</button>'
+        || '</div>');
+    -- v1.6.0: the v1.5.0 masthead (header.report: brand line, headline,
+    -- run metadata, verdict banner, all-movers list, compared-windows
+    -- strip and its full-span DB-time chart) is retired.  The verdict hero
+    -- opens <main> below; the run metadata lives in the top bar, the About
+    -- fold (19) and the footer; the full-span DB time is section 10 and
+    -- the compared windows are section 01 (All sections).
 
     -- =========================================================
     -- Sticky table-of-contents nav. Same anchor IDs the dense
@@ -947,28 +447,9 @@ BEGIN
     -- Grouped to match the visual section order set in _style.sql
     -- (Triage / Workload / SQL / Storage and config), so the scrollspy
     -- walks the rail top-to-bottom.  The hrefs are load-bearing: the
-    -- Normal-view rail rule (norm-dim) keys on them.
+    -- view dimming (railViews, .vdim) resolves each link's target.
     DBMS_OUTPUT.PUT_LINE('<nav class="toc">'
         || '<div class="rail-brand"><span>AWR &middot; Timeline comparison</span>'
-        -- Dark mode toggle: flips body.dark, which (via _style.sql) swaps
-        -- every color token to the Slate Instrument dark palette. Rendered
-        -- as a sun/moon icon button beside the rail's report-title row.
-        -- Both icons ship inline; CSS shows only the one for the mode
-        -- you'd switch TO (moon while light, sun while dark).
-        || '<button type="button" id="theme-toggle" class="theme-icon-btn"'
-        || ' aria-pressed="false"'
-        || ' aria-label="Toggle dark mode"'
-        || ' title="Switch between light and dark color theme">'
-        || '<svg class="icon-sun" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">'
-        || '<circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/>'
-        || '<path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1'
-        || 'M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"'
-        || ' stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
-        || '</svg>'
-        || '<svg class="icon-moon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">'
-        || '<path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5a8.5 8.5 0 1 0 11.2 11.2z" fill="currentColor"/>'
-        || '</svg>'
-        || '</button>'
         || '</div>'
         -- B8 (narrow layout only, display:none on desktop): the current
         -- section name, kept in sync by the scrollspy, plus the hamburger
@@ -989,21 +470,33 @@ BEGIN
         -- them (nav.toc a / nav.toc b, the rail JS)
         -- is a descendant match, so desktop rendering is unchanged.
         || '<div class="rail-list">'
-        || '<b>Triage</b>'
-        -- Unhidden by the chrome JS when section 17 relocated a narrative
-        -- block into the masthead slot.
-        || '<a href="#narrative-slot" class="narr-link" hidden>What changed</a>'
-        || '<a href="#db-time-summary">DB time</a>'
-        || '<a href="#overview">Overview</a>'
-        || '<a href="#ash-timeline">ASH timeline</a>'
+        -- v1.6.0: the Activity charts sit at the top of every view
+        || '<b>Overview</b>'
+        || '<a href="#activity" data-nodot>Activity, whole span</a>'
+        -- v1.6.0 Summary view: the verdict hero, the finding cards, what
+        -- changed around them (12 relocates its card there and unhides the
+        -- link) and the checked-and-normal grid.
+        || '<b>Summary</b>'
+        || '<a href="#verdict" data-nodot>Verdict</a>'
         || '<a href="#findings">Findings</a>'
-        || '<a href="#windows">Windows</a>'
+        || '<a href="#s-changes" data-nodot hidden>What changed around it</a>'
+        || '<a href="#s-normal" data-nodot>Checked and normal</a>'
+        -- the evidence library (every other section, one row each); 07
+        -- adds one sub-link per finding card under Findings
+        || '<a href="#s-lib" data-nodot>Evidence library</a>'
+        -- v1.6.0: the Timeline view -- the grid's lanes (a lane with no
+        -- rows hides its link, js_timeline); dimmed in the other views
+        -- like every out-of-view link.
+        || '<b>Timeline</b>'
+        || '<a href="#lane-activity" data-nodot>Activity</a>'
+        || '<a href="#lane-metrics">Headline and load</a>'
+        || '<a href="#lane-waits">Waits</a>'
+        || '<a href="#lane-objects" data-nodot>Where the reads land</a>'
+        || '<a href="#lane-sql">SQL</a>'
+        || '<a href="#lane-config" data-nodot>Configuration</a>'
+        -- The All sections view's order (_style.sql "All sections order"):
+        -- load and waits, SQL, storage and config, then the whole span.
         || '<b>Workload</b>'
-        -- Day profile link only when the section exists (profile_days > 0);
-        -- '' otherwise keeps the nav byte-identical.
-        || CASE WHEN ~profile_days > 0
-                THEN '<a href="#day-profile">Day profile</a>' ELSE '' END
-        || '<a href="#utilization">Utilization</a>'
         || '<a href="#load">Load profile</a>'
         || '<a href="#metrics">Metrics</a>'
         || '<a href="#waits-fg">Waits &mdash; foreground</a>'
@@ -1016,29 +509,28 @@ BEGIN
         || '<a href="#segment-io">Segment I/O</a>'
         || '<a href="#file-io">File I/O</a>'
         || '<a href="#param-changes">Parameters</a>'
+        || '<b>Whole span</b>'
+        || '<a href="#ash-timeline">ASH timeline</a>'
+        || '<a href="#db-time-summary">DB time</a>'
+        || '<a href="#utilization">Utilization</a>'
+        || '<a href="#windows">Windows</a>'
+        -- Day profile link only when the section exists (profile_days > 0);
+        -- '' otherwise keeps the nav byte-identical.
+        || CASE WHEN ~profile_days > 0
+                THEN '<a href="#day-profile">Day profile</a>' ELSE '' END
+        -- Shown in every view (sql/19_reference.sql).
+        || '<b id="rail-ref">Reference</b>'
+        || '<a href="#guide" data-nodot>Reading the charts</a>'
+        || '<a href="#about" data-nodot>About this report</a>'
         || '</div>'
         || '<div class="rail-foot">'
-        -- Narrow-screen "View" button: opens .view-panel (the mode switch
-        -- + next-finding) as a popover; display:none on
-        -- desktop, where .view-panel is display:contents and the buttons
-        -- sit in the rail.
+        -- Narrow-screen "View" button: opens .view-panel (next-finding)
+        -- as a popover; display:none on desktop, where .view-panel is
+        -- display:contents.  (The view switch lives in the top bar.)
         || '<button type="button" class="view-btn" id="view-btn"'
         || ' aria-expanded="false" aria-controls="view-panel"'
         || ' title="Report view options">View &#9662;</button>'
         || '<div class="view-panel" id="view-panel">'
-        -- Normal / Full mode switch (body.normal / body.full, see
-        -- _style.sql): Normal keeps the verdict, headline metrics,
-        -- findings, ASH timeline and Top SQL (plus parameter changes, SQL
-        -- Monitor and the day profile when they have something to say);
-        -- Full is the whole report.  Persisted in localStorage.
-        || '<div class="mode-switch" role="group" aria-label="Report detail level">'
-        || '<button type="button" id="mode-normal" class="mode-btn" aria-pressed="true"'
-        || ' title="Normal view: verdict, headline metrics, findings, ASH timeline, Top SQL">'
-        || 'Normal</button>'
-        || '<button type="button" id="mode-full" class="mode-btn" aria-pressed="false"'
-        || ' title="Full view: every section and every scored row">'
-        || 'Full</button>'
-        || '</div>'
         -- C2: jump to the next crit finding (J / K also work from anywhere
         -- outside a text field).
         || '<button type="button" id="next-finding" class="next-finding"'
@@ -1098,12 +590,13 @@ BEGIN
     -- the current-section name.
     DBMS_OUTPUT.PUT_LINE('  a.setAttribute("data-label",(a.textContent||"").trim());');
     DBMS_OUTPUT.PUT_LINE('  pairs.push([a,sec]);');
+    DBMS_OUTPUT.PUT_LINE('  if(a.hasAttribute("data-nodot")) return;');
     DBMS_OUTPUT.PUT_LINE('  var dot=document.createElement("span"); dot.className="st";');
     -- skip/insufficient rows don't count as data: a findings table made
     -- entirely of INSUFFICIENT_HISTORY rows keeps the neutral dot.
-    DBMS_OUTPUT.PUT_LINE('  if(sec.querySelector(".crit")) dot.className+=" crit";');
-    DBMS_OUTPUT.PUT_LINE('  else if(sec.querySelector(".warn, td.chg")) dot.className+=" warn";');
-    DBMS_OUTPUT.PUT_LINE('  else if(sec.querySelector("tbody tr:not(.skip) td, .hero-card, .ash-sql-card:not(.insufficient)")) dot.className+=" ok";');
+    DBMS_OUTPUT.PUT_LINE('  if(sec.querySelector(".crit, .bd.s-large")) dot.className+=" crit";');
+    DBMS_OUTPUT.PUT_LINE('  else if(sec.querySelector(".warn, td.chg, .bd.s-moderate")) dot.className+=" warn";');
+    DBMS_OUTPUT.PUT_LINE('  else if(sec.querySelector("tbody tr:not(.skip) td, .ash-sql-card:not(.insufficient)")) dot.className+=" ok";');
     DBMS_OUTPUT.PUT_LINE('  a.insertBefore(dot,a.firstChild);');
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('var pending=false;');
@@ -1147,12 +640,12 @@ BEGIN
     -- report when it does not run.  What it wires up:
     --   T1  .expander[data-for] toggles .open on its table
     --       (tr[data-tail="Y"] rows are CSS-hidden until then)
-    --   T2  --navh / --h2h so the sticky h2 + thead stack correctly
+    --   T2  --navh so the sticky thead clears the sticky top bar
     --   T3  click-to-sort on section table thead th (data-nosort
     --       opts out; th[data-w] drives the window highlight instead)
     --   T4  #row-filter narrows every table by its first two cells
-    --   T8  folds the section intro <p> into details.method and
-    --       keeps its first sentence on the h2 as small.h2sub
+    --   H1  the uniform section header: crit / warn counts (span.meta)
+    --       appended to every section h2
     --   C1  .tabs[data-tabs] / .tabpanel switching (+ ECharts resize)
     --   C2  crit/warn count pills on the rail links, J / K jumping
     --   C4  copy buttons: .copy-btn, per-table CSV / MD toolbars,
@@ -1160,7 +653,10 @@ BEGIN
     --   X2  window highlight: click a th[data-w] or a masthead
     --       .wchip to toggle .hl on every [data-w] element and
     --       broadcast the awr:window CustomEvent for chart sections
-    --   the Normal / Full mode switch (body.normal / body.full)
+    --   V1  the Summary / Timeline / All sections views (body.vs / vt /
+    --       va): the top-bar switch, rail dimming, goTo / reveal for
+    --       every in-page link (view switch, details, tabs, folded rows,
+    --       scroll, flash) and the same for a #hash on load
     --   B8  the narrow-screen hamburger dropdown
     -- No literal tilde anywhere below: this file runs under
     -- SET DEFINE tilde (see the CLAUDE.md tilde gotcha).
@@ -1200,23 +696,6 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  }catch(e){}');
     DBMS_OUTPUT.PUT_LINE('  paste(s); ok();');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('/* ---- T8: fold each section intro into details.method ---- */');
-    DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("section").forEach(function(sec){');
-    DBMS_OUTPUT.PUT_LINE('  var h2=sec.querySelector(":scope > h2"); if(!h2) return;');
-    DBMS_OUTPUT.PUT_LINE('  var p=h2.nextElementSibling;');
-    DBMS_OUTPUT.PUT_LINE('  if(!p||p.tagName!=="P"||p.classList.contains("cdn-warn")) return;');
-    DBMS_OUTPUT.PUT_LINE('  var t=(p.textContent||"").replace(/\s+/g," ").trim(); if(!t) return;');
-    DBMS_OUTPUT.PUT_LINE('  var i=t.indexOf(". ");');
-    DBMS_OUTPUT.PUT_LINE('  var sub=doc.createElement("small");');
-    DBMS_OUTPUT.PUT_LINE('  sub.className="h2sub"; sub.textContent=(i>0?t.slice(0,i+1):t);');
-    DBMS_OUTPUT.PUT_LINE('  h2.appendChild(sub);');
-    DBMS_OUTPUT.PUT_LINE('  var d=doc.createElement("details"); d.className="method";');
-    DBMS_OUTPUT.PUT_LINE('  var s=doc.createElement("summary"); s.textContent="How this is computed";');
-    DBMS_OUTPUT.PUT_LINE('  d.appendChild(s);');
-    DBMS_OUTPUT.PUT_LINE('  p.parentNode.insertBefore(d,p);');
-    DBMS_OUTPUT.PUT_LINE('  p.removeAttribute("style");');
-    DBMS_OUTPUT.PUT_LINE('  d.appendChild(p);');
-    DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('/* ---- C4: permalink anchor on every section heading ---- */');
     DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("section > h2").forEach(function(h2){');
     DBMS_OUTPUT.PUT_LINE('  var sec=h2.parentNode; if(!sec.id) return;');
@@ -1273,7 +752,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  if(tb.closest("tr.sql-detail")||tb.closest("details")) return;');
     DBMS_OUTPUT.PUT_LINE('  if(tb.querySelectorAll("tbody tr").length<4) return;');
     DBMS_OUTPUT.PUT_LINE('  var bar=doc.createElement("div");');
-    DBMS_OUTPUT.PUT_LINE('  bar.className="tbl-tools"+(tb.classList.contains("full-only")?" full-only":"");');
+    DBMS_OUTPUT.PUT_LINE('  var vc=Array.prototype.filter.call(tb.classList,function(c){return c==="vw"||c.indexOf("in-")===0;}).join(" ");');
+    DBMS_OUTPUT.PUT_LINE('  bar.className="tbl-tools"+(vc?" "+vc:"");');
     DBMS_OUTPUT.PUT_LINE('  var mk=function(label,fn){');
     DBMS_OUTPUT.PUT_LINE('    var b=doc.createElement("button");');
     DBMS_OUTPUT.PUT_LINE('    b.type="button"; b.className="tool-btn"; b.textContent=label;');
@@ -1378,7 +858,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){');
     DBMS_OUTPUT.PUT_LINE('  if(closest(ev.target,".tool-btn")) return;');
     DBMS_OUTPUT.PUT_LINE('  var th=closest(ev.target,"section table thead th"); if(!th) return;');
-    DBMS_OUTPUT.PUT_LINE('  if(th.hasAttribute("data-w")) return;');
+    DBMS_OUTPUT.PUT_LINE('  if(th.hasAttribute("data-w")||th.classList.contains("c-band")) return;');
     DBMS_OUTPUT.PUT_LINE('  var tb=closest(th,"table");');
     DBMS_OUTPUT.PUT_LINE('  if(!tb||tb.hasAttribute("data-nosort")) return;');
     DBMS_OUTPUT.PUT_LINE('  var body=tb.tBodies[0]; if(!body) return;');
@@ -1432,23 +912,37 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  dimRail();');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('if(fi) fi.addEventListener("input",applyFilter);');
-    DBMS_OUTPUT.PUT_LINE('/* ---- C2: per-section crit / warn counts on the rail links ---- */');
+    DBMS_OUTPUT.PUT_LINE('/* ---- C2 + H1: per-section large / moderate row counts, on the rail links and in the section header ---- */');
+    DBMS_OUTPUT.PUT_LINE('function isCrit(tr){ return tr.classList.contains("crit")||!!tr.querySelector(".badge.crit, td.c-band .bd.s-large"); }');
+    DBMS_OUTPUT.PUT_LINE('function isWarn(tr){ return tr.classList.contains("warn")||!!tr.querySelector(".badge.warn, td.c-band .bd.s-moderate"); }');
+    DBMS_OUTPUT.PUT_LINE('function secCounts(sec){');
+    DBMS_OUTPUT.PUT_LINE('  var c=0,w=0;');
+    DBMS_OUTPUT.PUT_LINE('  sec.querySelectorAll("tbody tr").forEach(function(tr){');
+    DBMS_OUTPUT.PUT_LINE('    if(tr.closest("table[data-nocount]")) return;');
+    DBMS_OUTPUT.PUT_LINE('    if(tr.classList.contains("twin")||tr.classList.contains("member")) return;');
+    DBMS_OUTPUT.PUT_LINE('    if(isCrit(tr)) c++; else if(isWarn(tr)) w++;');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return [c,w];');
+    DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('if(nav){');
     DBMS_OUTPUT.PUT_LINE('  nav.querySelectorAll("a[href^=\"#\"]").forEach(function(a){');
     DBMS_OUTPUT.PUT_LINE('    var id=a.getAttribute("href").slice(1);');
-    DBMS_OUTPUT.PUT_LINE('    if(id==="overview") return;');
+    DBMS_OUTPUT.PUT_LINE('    if(id==="overview"||a.hasAttribute("data-nodot")) return;');
     DBMS_OUTPUT.PUT_LINE('    var sec=doc.getElementById(id); if(!sec) return;');
-    DBMS_OUTPUT.PUT_LINE('    var c=0,w=0;');
-    DBMS_OUTPUT.PUT_LINE('    sec.querySelectorAll("tbody tr").forEach(function(tr){');
-    DBMS_OUTPUT.PUT_LINE('      if(tr.closest("table[data-nocount]")) return;');
-    DBMS_OUTPUT.PUT_LINE('      if(tr.classList.contains("twin")||tr.classList.contains("member")) return;');
-    DBMS_OUTPUT.PUT_LINE('      if(tr.classList.contains("crit")||tr.querySelector(".badge.crit")) c++;');
-    DBMS_OUTPUT.PUT_LINE('      else if(tr.classList.contains("warn")||tr.querySelector(".badge.warn")) w++;');
-    DBMS_OUTPUT.PUT_LINE('    });');
-    DBMS_OUTPUT.PUT_LINE('    if(c){ var p=doc.createElement("span"); p.className="cnt c"; p.textContent=c; a.appendChild(p); }');
-    DBMS_OUTPUT.PUT_LINE('    if(w){ var q=doc.createElement("span"); q.className="cnt w"; q.textContent=w; a.appendChild(q); }');
+    DBMS_OUTPUT.PUT_LINE('    var n=secCounts(sec);');
+    DBMS_OUTPUT.PUT_LINE('    if(n[0]){ var p=doc.createElement("span"); p.className="cnt c"; p.textContent=n[0]; a.appendChild(p); }');
+    DBMS_OUTPUT.PUT_LINE('    if(n[1]){ var q=doc.createElement("span"); q.className="cnt w"; q.textContent=n[1]; a.appendChild(q); }');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("main > section > h2").forEach(function(h2){');
+    DBMS_OUTPUT.PUT_LINE('  var sec=h2.parentNode; if(sec.id==="overview"||sec.id==="guide"||h2.querySelector(".meta")) return;');
+    DBMS_OUTPUT.PUT_LINE('  var n=secCounts(sec); if(!n[0]&&!n[1]) return;');
+    DBMS_OUTPUT.PUT_LINE('  var m=doc.createElement("span"); m.className="meta";');
+    DBMS_OUTPUT.PUT_LINE('  if(n[0]) m.innerHTML+="<span><i class=\"dotk large\"></i>"+n[0]+" large</span>";');
+    DBMS_OUTPUT.PUT_LINE('  if(n[1]) m.innerHTML+="<span><i class=\"dotk moderate\"></i>"+n[1]+" moderate</span>";');
+    DBMS_OUTPUT.PUT_LINE('  h2.insertBefore(m,h2.querySelector(".permalink"));');
+    DBMS_OUTPUT.PUT_LINE('});');
+
     DBMS_OUTPUT.PUT_LINE('/* ---- C2: next / previous large finding (J / K) ---- */');
     DBMS_OUTPUT.PUT_LINE('var jIdx=-1;');
     DBMS_OUTPUT.PUT_LINE('function findingRows(){');
@@ -1456,7 +950,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("section tbody tr").forEach(function(tr){');
     DBMS_OUTPUT.PUT_LINE('    if(tr.hidden||tr.offsetParent===null) return;');
     DBMS_OUTPUT.PUT_LINE('    if(tr.classList.contains("twin")||tr.classList.contains("member")) return;');
-    DBMS_OUTPUT.PUT_LINE('    if(tr.classList.contains("crit")||tr.querySelector(".badge.crit")) out.push(tr);');
+    DBMS_OUTPUT.PUT_LINE('    if(isCrit(tr)) out.push(tr);');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  return out;');
     DBMS_OUTPUT.PUT_LINE('}');
@@ -1471,56 +965,125 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('var nf=doc.getElementById("next-finding");');
     DBMS_OUTPUT.PUT_LINE('if(nf) nf.addEventListener("click",function(){jump(1);});');
-    DBMS_OUTPUT.PUT_LINE('/* ---- Normal / Full view ---- */');
-    -- Rail links whose target section is not part of the Normal view get
-    -- .norm-dim (hidden in Normal); a group header whose every link is
-    -- dimmed hides with them; one "+ N more sections" line replaces them.
-    DBMS_OUTPUT.PUT_LINE('var hiddenSecs=[];');
-    DBMS_OUTPUT.PUT_LINE('if(nav){');
-    DBMS_OUTPUT.PUT_LINE('  var list=nav.querySelector(".rail-list")||nav, grp=null, gAll=true;');
+    -- V1: the views.  inView(el, v) walks every .vw ancestor (a
+    -- section may be in-s in-a while a table inside it is in-a only);
+    -- viewOf(el) keeps the current view when el is visible there, else
+    -- picks the first view that shows it.  railViews() dims every rail
+    -- link whose target is hidden in the current view (a click on one
+    -- switches view via goTo), counts the sections only All sections
+    -- has, and feeds the "+ N more" rail line and the Summary note at
+    -- the end of <main>.  setView() flips the body class, syncs the
+    -- top-bar switch, persists only when asked (an explicit click),
+    -- and re-measures everything that was display:none (sticky offsets,
+    -- table scroll wrappers, every ECharts instance).
+    DBMS_OUTPUT.PUT_LINE('/* ---- V1: Summary / Timeline / All sections ---- */');
+    DBMS_OUTPUT.PUT_LINE('var VIEWS={summary:"vs",timeline:"vt",all:"va"}, VNAME={summary:"Summary",timeline:"Timeline",all:"All sections"};');
+    DBMS_OUTPUT.PUT_LINE('function curView(){ return bd.getAttribute("data-view")||"summary"; }');
+    DBMS_OUTPUT.PUT_LINE('function inView(el,v){ var k="in-"+v.charAt(0), x=el; while(x&&x!==bd&&x.nodeType===1){ if(x.classList.contains("vw")&&!x.classList.contains(k)) return false; x=x.parentNode; } return true; }');
+    DBMS_OUTPUT.PUT_LINE('function viewOf(el){ var c=curView(), o=["summary","timeline","all"]; if(inView(el,c)) return c; for(var i=0;i<o.length;i++){ if(inView(el,o[i])) return o[i]; } return c; }');
+    DBMS_OUTPUT.PUT_LINE('var hiddenSecs=[], moreLink=null;');
+    DBMS_OUTPUT.PUT_LINE('function railViews(){');
+    DBMS_OUTPUT.PUT_LINE('  if(!nav) return;');
+    DBMS_OUTPUT.PUT_LINE('  var list=nav.querySelector(".rail-list")||nav, grp=null, gAll=true, v=curView();');
+    DBMS_OUTPUT.PUT_LINE('  hiddenSecs=[];');
     DBMS_OUTPUT.PUT_LINE('  Array.prototype.slice.call(list.children).forEach(function(el){');
-    DBMS_OUTPUT.PUT_LINE('    if(el.tagName==="B"){ if(grp&&gAll) grp.classList.add("norm-dim"); grp=el; gAll=true; return; }');
-    DBMS_OUTPUT.PUT_LINE('    if(el.tagName!=="A") return;');
-    DBMS_OUTPUT.PUT_LINE('    var id=(el.getAttribute("href")||"").slice(1), sec=id?doc.getElementById(id):null;');
-    DBMS_OUTPUT.PUT_LINE('    if(sec&&sec.tagName==="SECTION"&&!sec.hasAttribute("data-normal")){ el.classList.add("norm-dim"); var cl=el.cloneNode(true); cl.querySelectorAll("span").forEach(function(x){x.parentNode.removeChild(x);}); hiddenSecs.push((cl.textContent||id).trim()); }');
-    DBMS_OUTPUT.PUT_LINE('    else gAll=false;');
+    DBMS_OUTPUT.PUT_LINE('    if(el.tagName==="B"){ if(grp) grp.classList.toggle("vdim",gAll); grp=el; gAll=true; return; }');
+    DBMS_OUTPUT.PUT_LINE('    if(el.tagName!=="A"||el===moreLink||el.hidden) return;');
+    DBMS_OUTPUT.PUT_LINE('    var id=(el.getAttribute("href")||"").slice(1), t=id?doc.getElementById(id):null, off=!!t&&!inView(t,v);');
+    DBMS_OUTPUT.PUT_LINE('    el.classList.toggle("vdim",off);');
+    DBMS_OUTPUT.PUT_LINE('    if(!off){ gAll=false; return; }');
+    DBMS_OUTPUT.PUT_LINE('    if(v==="summary"&&t.tagName==="SECTION"&&inView(t,"all")){ var cl=el.cloneNode(true); cl.querySelectorAll("span").forEach(function(x){x.parentNode.removeChild(x);}); hiddenSecs.push((cl.textContent||id).trim()); }');
     DBMS_OUTPUT.PUT_LINE('  });');
-    DBMS_OUTPUT.PUT_LINE('  if(grp&&gAll) grp.classList.add("norm-dim");');
-    DBMS_OUTPUT.PUT_LINE('  if(hiddenSecs.length){ var more=doc.createElement("a"); more.className="more-sections"; more.href="#"; more.textContent="+ "+hiddenSecs.length+" more in Full"; more.title=hiddenSecs.join(", "); more.addEventListener("click",function(ev){ ev.preventDefault(); setMode(true); }); list.appendChild(more); }');
+    DBMS_OUTPUT.PUT_LINE('  if(grp) grp.classList.toggle("vdim",gAll);');
+    DBMS_OUTPUT.PUT_LINE('  if(!moreLink){ moreLink=doc.createElement("a"); moreLink.className="more-sections"; moreLink.href="#view=all"; moreLink.addEventListener("click",function(ev){ ev.preventDefault(); setView("all",true); window.scrollTo(0,0); }); list.insertBefore(moreLink,doc.getElementById("rail-ref")); }');
+    DBMS_OUTPUT.PUT_LINE('  moreLink.textContent="+ "+hiddenSecs.length+" more in All sections"; moreLink.title=hiddenSecs.join(", "); moreLink.hidden=!hiddenSecs.length;');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('function modeNote(){');
+    DBMS_OUTPUT.PUT_LINE('function viewNote(){');
     DBMS_OUTPUT.PUT_LINE('  var mn=doc.getElementById("main-start"); if(!mn) return;');
-    DBMS_OUTPUT.PUT_LINE('  var n=doc.getElementById("mode-note");');
-    DBMS_OUTPUT.PUT_LINE('  if(!n){ n=doc.createElement("p"); n.id="mode-note"; n.className="mode-note"; mn.appendChild(n); }');
+    DBMS_OUTPUT.PUT_LINE('  var n=doc.getElementById("view-note");');
+    DBMS_OUTPUT.PUT_LINE('  if(!n){ n=doc.createElement("p"); n.id="view-note"; n.className="view-note"; var g=doc.getElementById("guide"); if(g&&g.parentNode===mn) mn.insertBefore(n,g); else mn.appendChild(n); }');
     DBMS_OUTPUT.PUT_LINE('  n.innerHTML="";');
-    DBMS_OUTPUT.PUT_LINE('  n.appendChild(doc.createTextNode(hiddenSecs.length?("Normal view: "+hiddenSecs.length+" section"+(hiddenSecs.length===1?"":"s")+" and the per-metric detail tables are hidden ("+hiddenSecs.join(", ")+")."):"Normal view: the per-metric detail tables are hidden."));');
-    DBMS_OUTPUT.PUT_LINE('  var b=doc.createElement("button"); b.type="button"; b.textContent="Show Full"; b.addEventListener("click",function(){ setMode(true); }); n.appendChild(b);');
+    DBMS_OUTPUT.PUT_LINE('  n.appendChild(doc.createTextNode(hiddenSecs.length?("Summary view: "+hiddenSecs.length+" more section"+(hiddenSecs.length===1?"":"s")+" and the per-metric detail tables are in All sections ("+hiddenSecs.join(", ")+")."):"Summary view: the per-metric detail tables are in All sections."));');
+    DBMS_OUTPUT.PUT_LINE('  var b=doc.createElement("button"); b.type="button"; b.textContent="Show all sections"; b.addEventListener("click",function(){ setView("all",true); }); n.appendChild(b);');
     DBMS_OUTPUT.PUT_LINE('}');
-    -- setMode(): flip the body classes, sync the switch, persist, and
-    -- re-measure everything that was display:none (sticky offsets, table
-    -- scroll wrappers, and every ECharts instance, which measured a zero
-    -- width while hidden).
-    DBMS_OUTPUT.PUT_LINE('function setMode(det,silent){');
-    DBMS_OUTPUT.PUT_LINE('  bd.classList.toggle("full",!!det); bd.classList.toggle("normal",!det);');
-    DBMS_OUTPUT.PUT_LINE('  var bn=doc.getElementById("mode-normal"), bdt=doc.getElementById("mode-full");');
-    DBMS_OUTPUT.PUT_LINE('  if(bn) bn.setAttribute("aria-pressed",det?"false":"true");');
-    DBMS_OUTPUT.PUT_LINE('  if(bdt) bdt.setAttribute("aria-pressed",det?"true":"false");');
-    DBMS_OUTPUT.PUT_LINE('  if(!silent){ try{localStorage.setItem("awr-mode",det?"full":"normal");}catch(e){} }');
+    -- V2: the evidence library.  Every section with class "lib" is, in the
+    -- Summary view only, one collapsible row: its h2 (title, the one-line
+    -- status span.ls, the counts) toggles .lopen, which shows the rest of
+    -- the section in place (CSS in _style.sql "evidence library"; the
+    -- row order comes from the section's --os).  Charts built while the
+    -- row was closed measure zero width, so opening re-sizes them.  All
+    -- sections ignores .lopen and shows every section in full.
+    DBMS_OUTPUT.PUT_LINE('/* ---- V2: the evidence library (Summary): one collapsible row per section.lib ---- */');
+    DBMS_OUTPUT.PUT_LINE('function libSecs(){ return Array.prototype.slice.call(doc.querySelectorAll("main > section.lib")); }');
+    DBMS_OUTPUT.PUT_LINE('function libResize(sec){ if(window.echarts&&echarts.getInstanceByDom){ sec.querySelectorAll("[_echarts_instance_]").forEach(function(el){ var c=echarts.getInstanceByDom(el); if(c) c.resize(); }); } if(window.AWR_WG&&AWR_WG.refit) AWR_WG.refit(); fitTables(); }');
+    DBMS_OUTPUT.PUT_LINE('function libOpen(sec,on){ sec.classList.toggle("lopen",on); var h=sec.querySelector("h2"); if(h&&curView()==="summary") h.setAttribute("aria-expanded",on?"true":"false"); if(on) setTimeout(function(){ libResize(sec); },30); }');
+    DBMS_OUTPUT.PUT_LINE('function libViews(){');
+    DBMS_OUTPUT.PUT_LINE('  var sm=curView()==="summary", vis=[];');
+    DBMS_OUTPUT.PUT_LINE('  libSecs().forEach(function(sec){ var h=sec.querySelector("h2"); sec.classList.remove("lib-first","lib-last"); if(sm&&sec.offsetParent!==null) vis.push(sec); if(!h) return;');
+    DBMS_OUTPUT.PUT_LINE('    if(sm){ h.setAttribute("tabindex","0"); h.setAttribute("role","button"); h.setAttribute("aria-expanded",sec.classList.contains("lopen")?"true":"false"); }');
+    DBMS_OUTPUT.PUT_LINE('    else { h.removeAttribute("tabindex"); h.removeAttribute("role"); h.removeAttribute("aria-expanded"); } });');
+    DBMS_OUTPUT.PUT_LINE('  vis.sort(function(a,b){ return a.offsetTop-b.offsetTop; });');
+    DBMS_OUTPUT.PUT_LINE('  if(vis.length){ vis[0].classList.add("lib-first"); vis[vis.length-1].classList.add("lib-last"); }');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('libSecs().forEach(function(sec){');
+    DBMS_OUTPUT.PUT_LINE('  var h=sec.querySelector("h2"); if(!h) return;');
+    DBMS_OUTPUT.PUT_LINE('  var lt=doc.createElement("span"); lt.className="lt"; while(h.firstChild&&h.firstChild.nodeType===3) lt.appendChild(h.firstChild); h.insertBefore(lt,h.firstChild);');
+    DBMS_OUTPUT.PUT_LINE('  h.addEventListener("click",function(ev){ if(curView()!=="summary"||closest(ev.target,"a,button")) return; libOpen(sec,!sec.classList.contains("lopen")); });');
+    DBMS_OUTPUT.PUT_LINE('  h.addEventListener("keydown",function(ev){ if(curView()!=="summary"||(ev.key!=="Enter"&&ev.key!==" ")) return; ev.preventDefault(); libOpen(sec,!sec.classList.contains("lopen")); });');
+    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('function setView(v,persist){');
+    DBMS_OUTPUT.PUT_LINE('  if(!VIEWS[v]) v="summary";');
+    DBMS_OUTPUT.PUT_LINE('  bd.classList.remove("vs","vt","va"); bd.classList.add(VIEWS[v]); bd.setAttribute("data-view",v);');
+    DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll(".topbar .seg [data-v]").forEach(function(b){ b.setAttribute("aria-pressed",b.getAttribute("data-v")===v?"true":"false"); });');
+    DBMS_OUTPUT.PUT_LINE('  if(persist){ try{localStorage.setItem("awr-view",v);}catch(e){} if(/view=/.test(location.hash||"")){ try{history.replaceState(null,"",location.pathname+location.search);}catch(e){} } }');
+    DBMS_OUTPUT.PUT_LINE('  railViews(); viewNote(); libViews();');
     DBMS_OUTPUT.PUT_LINE('  measure(); window.dispatchEvent(new Event("resize"));');
     DBMS_OUTPUT.PUT_LINE('  if(window.echarts&&echarts.getInstanceByDom){ doc.querySelectorAll("[_echarts_instance_]").forEach(function(el){ var c=echarts.getInstanceByDom(el); if(c) c.resize(); }); }');
     DBMS_OUTPUT.PUT_LINE('  setTimeout(fitTables,60); closeView();');
-    DBMS_OUTPUT.PUT_LINE('  doc.dispatchEvent(new CustomEvent("awr:mode",{detail:{full:!!det}}));');
-    DBMS_OUTPUT.PUT_LINE('  if(!silent) pushState();');
+    DBMS_OUTPUT.PUT_LINE('  doc.dispatchEvent(new CustomEvent("awr:view",{detail:{view:v}}));');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('window.AWR_setMode=setMode;');
-    DBMS_OUTPUT.PUT_LINE('modeNote();');
-    DBMS_OUTPUT.PUT_LINE('setMode(bd.classList.contains("full"),true);');
-    DBMS_OUTPUT.PUT_LINE('var mbn=doc.getElementById("mode-normal"), mbd=doc.getElementById("mode-full");');
-    DBMS_OUTPUT.PUT_LINE('if(mbn) mbn.addEventListener("click",function(){ setMode(false); });');
-    DBMS_OUTPUT.PUT_LINE('if(mbd) mbd.addEventListener("click",function(){ setMode(true); });');
-    -- inNormal(el): is this element visible in the Normal view?  Used by
-    -- revealHash so a cross-link into hidden content flips to Full.
-    DBMS_OUTPUT.PUT_LINE('function inNormal(el){ var sec=closest(el,"section"); if(sec&&sec.parentNode===doc.getElementById("main-start")&&!sec.hasAttribute("data-normal")) return false; return !closest(el,".full-only"); }');
+    DBMS_OUTPUT.PUT_LINE('window.AWR_setView=setView;');
+    DBMS_OUTPUT.PUT_LINE('window.AWR_setMode=function(det){ setView(det?"all":"summary",false); };');
+    DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll(".topbar .seg [data-v]").forEach(function(b){ b.addEventListener("click",function(){ setView(b.getAttribute("data-v"),true); window.scrollTo(0,0); }); });');
+    DBMS_OUTPUT.PUT_LINE('/* reveal(el): open what hides el inside its view -- a tab, folded tail rows, <details>, a folded Timeline lane */');
+    DBMS_OUTPUT.PUT_LINE('function reveal(el){');
+    DBMS_OUTPUT.PUT_LINE('  if(window.AWR_TL&&AWR_TL.reveal) AWR_TL.reveal(el);');
+    DBMS_OUTPUT.PUT_LINE('  var ls=closest(el,"main > section.lib"); if(ls&&curView()==="summary"&&!ls.classList.contains("lopen")) libOpen(ls,true);');
+    DBMS_OUTPUT.PUT_LINE('  var tp=closest(el,".tabpanel");');
+    DBMS_OUTPUT.PUT_LINE('  if(tp&&!tp.classList.contains("on")){ var t=doc.querySelector(".tabs[data-tabs=\""+tp.getAttribute("data-tabs")+"\"] [data-t=\""+tp.getAttribute("data-t")+"\"]"); if(t) t.click(); }');
+    DBMS_OUTPUT.PUT_LINE('  var tl=closest(el,"[data-tail=\"Y\"]");');
+    DBMS_OUTPUT.PUT_LINE('  if(tl){ var box=tl.parentNode, ex=null; while(box&&box!==bd){ if(box.id){ ex=doc.querySelector(".expander[data-for=\""+box.id+"\"]"); if(ex) break; } box=box.parentNode; }');
+    DBMS_OUTPUT.PUT_LINE('    if(ex&&!box.classList.contains("open")) ex.click(); }');
+    DBMS_OUTPUT.PUT_LINE('  var dt=closest(el,"details"); while(dt){ dt.open=true; dt=dt.parentNode?closest(dt.parentNode,"details"):null; }');
+    DBMS_OUTPUT.PUT_LINE('  if(el.tagName==="DETAILS") el.open=true;');
+    DBMS_OUTPUT.PUT_LINE('  if(el.id==="about"){ var ab=el.querySelector("details"); if(ab) ab.open=true; }');
+    DBMS_OUTPUT.PUT_LINE('  if(el.hidden&&el.tagName==="TR") el.hidden=false;');
+    DBMS_OUTPUT.PUT_LINE('  if(el.classList.contains("sql-row")&&window.AWR_openSqlRow) window.AWR_openSqlRow(el);');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* goTo(el, flash, persist): switch to el''s view, reveal it, scroll it into view, flash it */');
+    DBMS_OUTPUT.PUT_LINE('function goTo(el,flash,persist){');
+    DBMS_OUTPUT.PUT_LINE('  if(!el) return;');
+    DBMS_OUTPUT.PUT_LINE('  var v=viewOf(el); if(v!==curView()) setView(v,persist!==false);');
+    DBMS_OUTPUT.PUT_LINE('  reveal(el);');
+    DBMS_OUTPUT.PUT_LINE('  setTimeout(function(){');
+    DBMS_OUTPUT.PUT_LINE('    el.scrollIntoView({block:el.tagName==="TR"?"center":"start"});');
+    DBMS_OUTPUT.PUT_LINE('    if(flash){ el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); setTimeout(function(){ el.classList.remove("flash"); },2400); }');
+    DBMS_OUTPUT.PUT_LINE('    setTimeout(fitTables,60);');
+    DBMS_OUTPUT.PUT_LINE('  },30);');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('window.AWR_goTo=goTo;');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('  if(ev.defaultPrevented||ev.button||ev.metaKey||ev.ctrlKey||ev.shiftKey) return;');
+    DBMS_OUTPUT.PUT_LINE('  var a=closest(ev.target,"a[href^=\"#\"]"); if(!a||a.classList.contains("skip")) return;');
+    DBMS_OUTPUT.PUT_LINE('  var h=a.getAttribute("href").slice(1); if(!h) return;');
+    DBMS_OUTPUT.PUT_LINE('  var m=/^view=(summary|timeline|all)$/.exec(h);');
+    DBMS_OUTPUT.PUT_LINE('  if(m){ ev.preventDefault(); setView(m[1],true); window.scrollTo(0,0); return; }');
+    DBMS_OUTPUT.PUT_LINE('  var id=h.split("!")[0], el=id?doc.getElementById(id):null; if(!el) return;');
+    DBMS_OUTPUT.PUT_LINE('  ev.preventDefault();');
+    DBMS_OUTPUT.PUT_LINE('  goTo(el,a.classList.contains("ent")||a.classList.contains("xlink")||el.tagName==="TR",true);');
+    DBMS_OUTPUT.PUT_LINE('  try{ history.replaceState(null,"","#"+id); }catch(e){}');
+    DBMS_OUTPUT.PUT_LINE('  if(nav) nav.classList.remove("menu-open");');
+    DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('/* ---- B8: narrow-screen section dropdown ---- */');
     DBMS_OUTPUT.PUT_LINE('var mb=doc.getElementById("rail-menu-btn");');
     DBMS_OUTPUT.PUT_LINE('if(mb&&nav){');
@@ -1535,15 +1098,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    });');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('/* ---- T2: sticky offsets (--navh page-wide, --h2h per section) ---- */');
+    DBMS_OUTPUT.PUT_LINE('/* ---- T2: sticky offset (--navh): the sticky top bar (desktop) or the rail bar (narrow) ---- */');
     DBMS_OUTPUT.PUT_LINE('function measure(){');
-    DBMS_OUTPUT.PUT_LINE('  var navh=0;');
-    DBMS_OUTPUT.PUT_LINE('  if(nav&&getComputedStyle(nav).position==="sticky") navh=nav.offsetHeight;');
-    DBMS_OUTPUT.PUT_LINE('  bd.style.setProperty("--navh",navh+"px");');
-    DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("section").forEach(function(sec){');
-    DBMS_OUTPUT.PUT_LINE('    var h=sec.querySelector(":scope > h2");');
-    DBMS_OUTPUT.PUT_LINE('    sec.style.setProperty("--h2h",(h?h.offsetHeight:48)+"px");');
-    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  var navh=0, tb=doc.getElementById("topbar");');
+    DBMS_OUTPUT.PUT_LINE('  if(tb&&getComputedStyle(tb).position==="sticky") navh=tb.offsetHeight;');
+    DBMS_OUTPUT.PUT_LINE('  else if(nav&&getComputedStyle(nav).position==="sticky") navh=nav.offsetHeight;');
+    DBMS_OUTPUT.PUT_LINE('  doc.documentElement.style.setProperty("--navh",navh+"px"); bd.style.setProperty("--navh",navh+"px");');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('var mt=null;');
     DBMS_OUTPUT.PUT_LINE('window.addEventListener("resize",function(){');
@@ -1557,37 +1117,20 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var id=(a.getAttribute("href")||"").slice(1);');
     DBMS_OUTPUT.PUT_LINE('  if(!id||!doc.getElementById(id)) a.hidden=true;');
     DBMS_OUTPUT.PUT_LINE('});');
-    DBMS_OUTPUT.PUT_LINE('var nl=nav?nav.querySelector(".narr-link"):null;');
-    DBMS_OUTPUT.PUT_LINE('if(nl&&doc.querySelector("#narrative-slot .narr")) nl.hidden=false;');
+    DBMS_OUTPUT.PUT_LINE('var scs=doc.getElementById("s-changes"), scl=nav?nav.querySelector(''a[href="#s-changes"]''):null;');
+    DBMS_OUTPUT.PUT_LINE('if(scs&&scl&&!scs.hidden) scl.hidden=false;');
     DBMS_OUTPUT.PUT_LINE('function revealHash(){');
-    DBMS_OUTPUT.PUT_LINE('  var id=(location.hash||"").slice(1).split("!")[0]; if(!id) return;');
-    DBMS_OUTPUT.PUT_LINE('  var el=doc.getElementById(id); if(!el) return;');
-    DBMS_OUTPUT.PUT_LINE('  if(bd.classList.contains("normal")&&!inNormal(el)){ setMode(true,true); setTimeout(function(){ el.scrollIntoView({block:"start"}); },30); }');
-    DBMS_OUTPUT.PUT_LINE('  var tr=closest(el,"tr");');
-    DBMS_OUTPUT.PUT_LINE('  if(tr&&tr.hasAttribute("data-tail")){');
-    DBMS_OUTPUT.PUT_LINE('    var tb=closest(tr,"table");');
-    DBMS_OUTPUT.PUT_LINE('    if(tb&&!tb.classList.contains("open")){');
-    DBMS_OUTPUT.PUT_LINE('      tb.classList.add("open");');
-    DBMS_OUTPUT.PUT_LINE('      var ex=tb.id?doc.querySelector(".expander[data-for=\""+tb.id+"\"]"):null;');
-    DBMS_OUTPUT.PUT_LINE('      if(ex) ex.textContent="\u25BE Hide "+(ex.getAttribute("data-n")||"")+" "+(ex.getAttribute("data-noun")||"rows");');
-    DBMS_OUTPUT.PUT_LINE('    }');
-    DBMS_OUTPUT.PUT_LINE('    tr.hidden=false;');
-    DBMS_OUTPUT.PUT_LINE('  }');
-    DBMS_OUTPUT.PUT_LINE('  var tp=closest(el,".tabpanel");');
-    DBMS_OUTPUT.PUT_LINE('  if(tp&&!tp.classList.contains("on")){');
-    DBMS_OUTPUT.PUT_LINE('    var t=doc.querySelector(".tabs[data-tabs=\""+tp.getAttribute("data-tabs")+"\"] [data-t=\""+tp.getAttribute("data-t")+"\"]");');
-    DBMS_OUTPUT.PUT_LINE('    if(t) t.click();');
-    DBMS_OUTPUT.PUT_LINE('  }');
-    DBMS_OUTPUT.PUT_LINE('  var dt=closest(el,"details"); while(dt){ dt.open=true; dt=dt.parentNode?closest(dt.parentNode,"details"):null; }');
-    DBMS_OUTPUT.PUT_LINE('  var hi=tr||el; hi.classList.add("jump-hi"); setTimeout(function(){hi.classList.remove("jump-hi");},1600);');
-    DBMS_OUTPUT.PUT_LINE('  setTimeout(fitTables,60);');
+    DBMS_OUTPUT.PUT_LINE('  var h=(location.hash||"").slice(1); if(!h) return;');
+    DBMS_OUTPUT.PUT_LINE('  var m=/^view=(summary|timeline|all)/.exec(h);');
+    DBMS_OUTPUT.PUT_LINE('  if(m){ if(m[1]!==curView()) setView(m[1],false); return; }');
+    DBMS_OUTPUT.PUT_LINE('  var id=h.split("!")[0], el=id?doc.getElementById(id):null; if(!el) return;');
+    DBMS_OUTPUT.PUT_LINE('  goTo(el,el.tagName!=="SECTION",false);');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('window.addEventListener("hashchange",revealHash);');
     DBMS_OUTPUT.PUT_LINE('if(location.hash) setTimeout(revealHash,0);');
     DBMS_OUTPUT.PUT_LINE('/* ---- P3: shareable view state in the hash (#anchor!v=f&tab=CPU&w=3) ---- */');
     DBMS_OUTPUT.PUT_LINE('function stateStr(){');
-    DBMS_OUTPUT.PUT_LINE('  var v=[]; if(bd.classList.contains("full")) v.push("f");');
-    DBMS_OUTPUT.PUT_LINE('  var parts=[]; if(v.length) parts.push("v="+v.join(","));');
+    DBMS_OUTPUT.PUT_LINE('  var parts=[];');
     DBMS_OUTPUT.PUT_LINE('  var tab=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t].on");');
     DBMS_OUTPUT.PUT_LINE('  if(tab&&tab.getAttribute("data-t")!=="ELAPSED") parts.push("tab="+tab.getAttribute("data-t"));');
     DBMS_OUTPUT.PUT_LINE('  if(curW!==null&&curW!==undefined) parts.push("w="+curW);');
@@ -1606,12 +1149,13 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var h=location.hash||"", i=h.indexOf("!"); if(i<0) return;');
     DBMS_OUTPUT.PUT_LINE('  var q={}; h.slice(i+1).split("&").forEach(function(kv){var p=kv.split("="); if(p[0]) q[p[0]]=decodeURIComponent(p[1]||"");});');
     DBMS_OUTPUT.PUT_LINE('  var v=(q.v||"").split(",");');
-    DBMS_OUTPUT.PUT_LINE('  if(v.indexOf("f")>=0&&!bd.classList.contains("full")) setMode(true,true);');
+    DBMS_OUTPUT.PUT_LINE('  if(v.indexOf("f")>=0&&curView()!=="all") setView("all",false);');
     DBMS_OUTPUT.PUT_LINE('  if(q.tab){ var t=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t=\""+q.tab+"\"]"); if(t&&!t.classList.contains("on")) t.click(); }');
     DBMS_OUTPUT.PUT_LINE('  if(q.w!==undefined&&q.w!==""){ curW=String(q.w); applyW(); }');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){ if(closest(ev.target,".tabs [data-t]")) pushState(); });');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("awr:window",pushState);');
+    DBMS_OUTPUT.PUT_LINE('setView(curView(),false);');
     DBMS_OUTPUT.PUT_LINE('applyState();');
     DBMS_OUTPUT.PUT_LINE('/* ---- P5: on phones the Top SQL detail tables open by default (the bump chart is unreadable there) ---- */');
     DBMS_OUTPUT.PUT_LINE('if(doc.documentElement.clientWidth<=700){ doc.querySelectorAll("#topsql .tabpanel > details").forEach(function(d){ d.open=true; }); }');
@@ -1686,12 +1230,212 @@ BEGIN
     -- Phase 4: the report body is one <main> landmark (display:contents,
     -- so the body flex layout is unchanged); closed in awr_trend.sql.
     DBMS_OUTPUT.PUT_LINE('<main id="main-start">');
+    -- v1.6.0: the compared windows for the window component and the
+    -- Timeline (built above): window.AWR_WIN = {np, w:[{o, d, l, s, e, t, v}]}
+    -- oldest first; o = week_offset, d = column label, l = offset label,
+    -- s / e = window start / end 'YYYY-MM-DD HH24:MI', t = full title,
+    -- v = valid (Y / N).  Read by sql/lib/js_wingrid.plsql.
+    -- Streamed through wg_buf (about 115 bytes a window): any window count.
+    DECLARE
+        v_flags VARCHAR2(32767) := v_win_json || '|';
+        v_buf   VARCHAR2(32767) := '<script>window.AWR_WIN={"np":' || ~weeks_back || ',"w":[';
+    BEGIN
+        FOR k IN REVERSE 0 .. ~weeks_back LOOP
+            wg_buf(v_buf, CASE WHEN k < ~weeks_back THEN ',' END
+                || '{"o":' || k
+                || ',"d":"' || wg_date(k) || '"'
+                || ',"l":"' || CASE WHEN k = 0 THEN 'current' ELSE '-' || off_label(k) END || '"'
+                || ',"s":"' || TO_CHAR(wg_start(k), 'YYYY-MM-DD HH24:MI') || '"'
+                || ',"e":"' || TO_CHAR(wg_end(k), 'YYYY-MM-DD HH24:MI') || '"'
+                || ',"t":"' || TO_CHAR(wg_start(k), 'Dy DD Mon, HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH') || '-'
+                            || TO_CHAR(wg_end(k), 'HH24:MI') || '"'
+                || ',"v":"' || CASE WHEN INSTR(v_flags, '|' || k || '=Y|') > 0 THEN 'Y' ELSE 'N' END || '"}');
+        END LOOP;
+        wg_buf(v_buf, ']};</script>');
+        DBMS_OUTPUT.PUT_LINE(v_buf);
+    END;
 
-    -- Temporary CLOBs are session-lived and will free at end-of-session,
-    -- but free explicitly so the report can be regenerated in a loop
-    -- without leaking locators.
-    DBMS_LOB.FREETEMPORARY(v_times_json);
-    DBMS_LOB.FREETEMPORARY(v_vals_json);
+    -- =========================================================
+    -- v1.6.0 Activity, whole span: the bird's-eye view at the top of EVERY
+    -- view (vw in-s in-t in-a), above the verdict.  Two stacked inline-SVG
+    -- charts over one time axis -- active sessions by wait class
+    -- (AWR_DATA.ashx) and by wait event (AWR_DATA.ashe, the top 14 + Other
+    -- events), both payloads from 09's one ASH scan -- drawn by
+    -- sql/lib/js_timeline.plsql (one chart factory, two instances; zoom,
+    -- hover crosshair and the pinned window are linked).  Skeleton only:
+    -- the panel stays hidden until the script runs; JS off shows only the
+    -- ax-nojs note (ASH is not scored, every scored number is in the
+    -- tables).  No ASH rows = the calm #ax-empty note.
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('<section id="activity" class="vw in-s in-t in-a ashtop" aria-labelledby="activity-h">'
+        || '<h2 id="activity-h">Activity, whole span<small class="h2sub">ASH active sessions across every '
+        || 'compared window, by wait class and by wait event</small></h2>'
+        || '<p class="ax-nojs">These charts are drawn by the page script, so they need JavaScript. ASH is not '
+        || 'scored: every scored number is in the tables below.</p>');
+    DBMS_OUTPUT.PUT_LINE('<div class="ashx" id="ashx" role="group" aria-label="Active sessions over the whole span" hidden>'
+        || '<div class="axh"><span class="axs" id="ax-range"></span>'
+        || '<span class="axk" aria-hidden="true"><span><i class="kw"></i>compared window</span>'
+        || '<span><i class="kw cur"></i>Current</span><span><i class="kw pin"></i>pinned</span></span>'
+        || '<button type="button" class="axr" id="ax-reset" hidden>Reset zoom</button></div>'
+        || '<p class="axe" id="ax-empty" hidden>No ASH samples in DBA_HIST_ACTIVE_SESS_HISTORY across the compared span.</p>');
+    DBMS_OUTPUT.PUT_LINE('<div class="axch" id="ax-cls"><div class="axct"><h3>By wait class</h3>'
+        || '<div class="axlg" role="group" aria-label="Wait classes: click to show or hide"></div></div>'
+        || '<div class="axp"><svg class="axsvg" role="img" aria-label="Active sessions stacked by wait class over the '
+        || 'whole compared span, the compared windows shaded and release markers drawn. Drag to zoom."></svg>'
+        || '<div class="axbr" hidden></div></div></div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="axch" id="ax-ev"><div class="axct"><h3>By wait event</h3>'
+        || '<div class="axlg" role="group" aria-label="Wait events: click to show or hide"></div></div>'
+        || '<div class="axp"><svg class="axsvg" role="img" aria-label="Active sessions stacked by wait event (the 14 '
+        || 'largest, the rest as Other events) over the same span. Drag to zoom."></svg>'
+        || '<div class="axbr" hidden></div></div></div>');
+    DBMS_OUTPUT.PUT_LINE('<p class="axn2">Hover for the values; drag across either chart to zoom both '
+        || '(6 hours or less shows the compared windows minute by minute), double-click to reset. Click a shaded window to pin it: the Timeline grid compares against it.</p>'
+        || '</div></section>');
+    -- =========================================================
+    -- v1.6.0 Summary view: the verdict hero.  One rule-based sentence
+    -- from the finding cards (the first two, in card order: the loudest
+    -- card, then DB time when it is flagged), the counts as quiet pills,
+    -- and two slots section 17 fills at the end of the run (it needs the
+    -- file / segment / SQL / parameter data): the "likely source" line
+    -- (#because-slot) and the one-line notes (#narrative-slot).  A quiet
+    -- or unscorable window gets a calm sentence instead of an empty hero.
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('<section id="verdict" class="vw in-s hero" aria-label="Verdict">');
+    IF v_n_usable = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('<h1 class="verdict quiet">Too little history to score this window.</h1>');
+        DBMS_OUTPUT.PUT_LINE('<p class="because">Scoring needs at least 3 valid prior windows; '
+            || TO_CHAR(v_n_valid) || ' of ' || TO_CHAR(~weeks_back) || ' '
+            || CASE WHEN v_n_valid = 1 THEN 'is' ELSE 'are' END
+            || ' valid here (<a href="#windows">Windows</a>). The values are still listed in '
+            || '<a href="#findings">Findings</a>.</p>');
+    ELSIF v_order.COUNT = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('<h1 class="verdict quiet">Nothing moved beyond its normal range.</h1>');
+        DBMS_OUTPUT.PUT_LINE('<p class="because">All ' || TO_CHAR(v_n_normal) || ' scored metrics sit '
+            || 'within their normal range over the prior ' || TO_CHAR(v_max_n) || ' window'
+            || CASE WHEN v_max_n = 1 THEN '' ELSE 's' END
+            || CASE WHEN v_n_impr > 0
+                    THEN '; ' || TO_CHAR(v_n_impr) || ' improved' ELSE '' END
+            || '.</p>');
+    ELSE
+        FOR k IN 1 .. LEAST(2, v_order.COUNT) LOOP
+            DECLARE
+                r mover_rec := v_scored(v_glead(v_order(k)));
+                v_split VARCHAR2(1);
+            BEGIN
+                v_verdict := v_verdict || CASE WHEN k > 1 THEN '; ' END
+                    || ent(DBMS_XMLGEN.CONVERT(metric_label(r.metric_domain, r.metric_name)),
+                           finding_anchor(r.metric_domain, r.metric_name), 'metric')
+                    || ' ' || move_txt(r.cur_val, r.prior_mean, r.change_bucket);
+                IF v_order(k) = 'DBTIME' AND r.metric_name = 'DB time'
+                   AND v_dbt IS NOT NULL AND v_cpu IS NOT NULL THEN
+                    v_split := time_split(v_scored(v_dbt).cur_val, v_scored(v_dbt).prior_mean,
+                                          v_scored(v_cpu).cur_val, v_scored(v_cpu).prior_mean);
+                    v_verdict := v_verdict || CASE v_split WHEN 'W' THEN ', all wait'
+                                                           WHEN 'w' THEN ', mostly wait'
+                                                           WHEN 'c' THEN ', mostly CPU'
+                                                           WHEN 'm' THEN ', CPU and wait alike' END;
+                END IF;
+                -- 17 fills ", mostly on <segment>" when it knows the top one
+                IF v_order(k) = 'IO' THEN
+                    v_verdict := v_verdict || '<span class="vx" data-vx="io" hidden></span>';
+                END IF;
+            END;
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('<h1 class="verdict">' || v_verdict || '.</h1>');
+    END IF;
+    DBMS_OUTPUT.PUT_LINE('<p class="because" id="because-slot" hidden></p>');
+    DBMS_OUTPUT.PUT_LINE('<ul class="pills" id="pills" aria-label="Counts">'
+        || CASE WHEN v_order.COUNT > 0
+                THEN '<li><a href="#findings"><b>' || v_order.COUNT || '</b> finding'
+                     || CASE WHEN v_order.COUNT = 1 THEN '' ELSE 's' END || '</a></li>'
+                     || '<li><a href="#findings"><b>' || v_n_moved || '</b> metric'
+                     || CASE WHEN v_n_moved = 1 THEN '' ELSE 's' END || ' moved</a></li>' END
+        || '<li class="pl-normal"><a href="#s-normal"><b>' || v_n_normal || '</b> metric'
+        || CASE WHEN v_n_normal = 1 THEN '' ELSE 's' END || ' normal</a></li>'
+        || CASE WHEN v_n_impr > 0
+                THEN '<li><a href="#s-normal"><b>' || v_n_impr || '</b> improved</a></li>' END
+        || '</ul>');
+    DBMS_OUTPUT.PUT_LINE('<ul class="hnotes" id="narrative-slot" hidden></ul>');
+    -- Only when the requested target_end had no snapshot within the 15-min
+    -- edge guard does the resolving SELECT (awr_trend.sql) snap it back to
+    -- the last actual snapshot -- flagged here so it is never silent.
+    -- Equal strings (the common case) emit nothing.
+    IF '~target_end_requested' <> '~target_end_resolved' THEN
+        DBMS_OUTPUT.PUT_LINE('<p class="snapnote">Requested end '
+            || DBMS_XMLGEN.CONVERT(SUBSTR('~target_end_requested', 1, 16))
+            || ' had no snapshot within 15 min &mdash; snapped to last snapshot '
+            || DBMS_XMLGEN.CONVERT(SUBSTR('~target_end_resolved', 1, 16))
+            || '</p>');
+    END IF;
+    DBMS_OUTPUT.PUT_LINE('</section>');
+    -- =========================================================
+    -- v1.6.0 Timeline view (Mock D): the skeleton only.  The aligned
+    -- window grid (#tl; the whole-span ASH charts moved to the top of
+    -- every view, section#activity above): the
+    -- shared ruler (sql/lib/wingrid.plsql, dates as pin buttons) over six
+    -- lanes the sections fill from their own cursors while the page parses
+    -- (sql/lib/timeline.plsql tl_open / tl_close): activity (09),
+    -- headline and load (07), waits (07 + 04), where the reads land
+    -- (14 + 15), SQL (06 + 18), configuration (12).  A lane with no rows
+    -- stays hidden.  With JavaScript off the templates stay inert, so the
+    -- section shows its header and the tl-nojs note (every number is in
+    -- All sections).  Section 16 (Day profile) joins the view below it.
+    -- =========================================================
+    DECLARE
+        v_cells VARCHAR2(32767);
+        v_st    DATE := wg_start(0);
+        -- one lane: a head row (fold button, title, caption, counts) and
+        -- the empty row box the sections fill
+        FUNCTION lane_h(p_id VARCHAR2, p_title VARCHAR2, p_kind VARCHAR2,
+                        p_cap VARCHAR2 DEFAULT NULL, p_note VARCHAR2 DEFAULT NULL,
+                        p_noun VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
+        BEGIN
+            RETURN '<div class="lane" id="lane-' || p_id || '" data-kind="' || p_kind || '"'
+                || CASE WHEN p_note IS NOT NULL THEN ' data-note="' || p_note || '"' END
+                || CASE WHEN p_noun IS NOT NULL THEN ' data-noun="' || p_noun || '"' END
+                || ' role="rowgroup" hidden><div class="r gh2" role="row">'
+                || '<div class="l" role="rowheader"><button class="lt2" type="button" aria-expanded="true">'
+                || '<i class="car" aria-hidden="true"></i><span class="lti">' || p_title || '</span></button></div>'
+                || v_cells || '<div class="g" role="cell"><span class="meta"></span></div>'
+                || CASE WHEN p_cap IS NOT NULL THEN '<div class="cap"><span>' || p_cap || '</span></div>' END
+                || '</div><div class="lrows"></div></div>';
+        END lane_h;
+    BEGIN
+        FOR k IN REVERSE 0 .. ~weeks_back LOOP
+            v_cells := v_cells || '<div class="c' || CASE WHEN k = 0 THEN ' cur' END
+                || '" data-w="' || k || '"></div>';
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('<section id="timeline" class="vw in-t">'
+            || '<h2>Timeline<small class="h2sub">Down a column: one window. Across a row: when it started.</small></h2>'
+            || '<p class="tl-nojs">The Timeline is drawn by the page script; with JavaScript off it is not '
+            || 'drawn, and every number it would show is in the sections below.</p>');
+        wg_ruler_put('<div class="panel gridwrap wg hov" id="tl"' || wg_attr
+            || ' role="table" aria-label="Current vs ' || ~weeks_back || ' prior windows, one column per window">',
+            '<span class="ct">'
+                || CASE WHEN ~step_hours = 168 THEN TO_CHAR(v_st, 'FMDay', 'NLS_DATE_LANGUAGE=ENGLISH') || ' '
+                        WHEN ~step_hours = 24 THEN 'Daily ' END
+                || CASE WHEN ~step_hours IN (24, 168)
+                        THEN TO_CHAR(v_st, 'HH24:MI') || '&ndash;' || TO_CHAR(wg_end(0), 'HH24:MI')
+                        ELSE 'Every ~step_label, ~win_label windows' END
+                || '</span><span class="cs">' || (~weeks_back + 1) || ' windows</span>'
+                || '<nav class="jumpnav" aria-label="Jump to lane"><a href="#lane-metrics">Load</a>'
+                || '<a href="#lane-waits">Waits</a><a href="#lane-sql">SQL</a><a href="#lane-config">Config</a>'
+                || CASE WHEN ~profile_days > 0 THEN '<a href="#day-profile">Day</a>' END || '</nav>',
+                '<span class="gt" id="tl-gt">vs prior mean</span><span class="gs" id="tl-gs">click a date to pin</span>',
+                'Y',
+                '<div class="gbody" id="tl-body"><div class="gin" id="tl-in">');
+        DBMS_OUTPUT.PUT_LINE(lane_h('activity', 'Activity', 'ash', NULL, 'ASH, not scored'));
+        DBMS_OUTPUT.PUT_LINE(lane_h('metrics', 'Headline and load', 'scored'));
+        DBMS_OUTPUT.PUT_LINE(lane_h('waits', 'Waits', 'scored', 'wait classes in AAS, events in seconds waited', NULL, 'events'));
+        DBMS_OUTPUT.PUT_LINE(lane_h('objects', 'Where the reads land', 'ranked', NULL, 'ranked, not scored'));
+        DBMS_OUTPUT.PUT_LINE(lane_h('sql', 'SQL', 'sql', 'elapsed s; a dash = not in the top ' || ~top_n));
+        DBMS_OUTPUT.PUT_LINE(lane_h('config', 'Configuration', 'config'));
+        DBMS_OUTPUT.PUT_LINE('</div></div></div></section>');
+        -- the All sections view's heading (Mock D); the sections follow it
+        -- in the order _style.sql gives them there ("All sections order")
+        DBMS_OUTPUT.PUT_LINE('<section id="s-all" class="vw in-a vhead"><h2>All sections'
+            || '<small class="h2sub">Every table of the report</small></h2></section>');
+    END;
 END;
 /
 

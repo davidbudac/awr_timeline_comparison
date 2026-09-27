@@ -182,15 +182,20 @@ def nth_csv(csv, k):
 
 
 def header(w, first_th, unit, with_trend=True):
+    """v1.6.0 column order: Current, the band cells, trend, prior windows."""
     s = "<thead><tr>" + first_th
+    s += '<th class="num" data-w="0">Current (' + unit + ")</th>" + h.band_head()
     if with_trend:
         s += '<th class="trend">Trend</th>'
-    s += '<th class="num" data-w="0">Current (' + unit + ")</th>"
     for k in range(1, w.weeks_back + 1):
         s += ('<th class="num" data-w="' + str(k) + '">&minus;'
               + w.offset_labels[k - 1] + " (" + unit + ")</th>")
-    s += '<th>Change</th><th class="num">z-score</th><th class="num">% &Delta;</th></tr></thead>'
+    s += '</tr></thead>'
     return s
+
+
+def _s(v):
+    return None if v is None else v / 1e6
 
 
 def current_total_us(deltas):
@@ -229,24 +234,28 @@ def shift_note(rows, shift, n_flag, mean_pct, sd_pct):
             + ("&#9650; " if mean_pct >= 0 else "&#9660; ")
             + h.to_char_fixed(abs(mean_pct), 0) + "% &plusmn; "
             + h.to_char_fixed(sd_pct, 0) + " points) &mdash; one throughput-style change, "
-            "not " + str(n_flag) + " separate findings. Per-row badges are demoted to moderate.</p>"]
+            "not " + str(n_flag) + " separate findings. Large rows are demoted to moderate.</p>"]
 
 
-def table_time(w, rows, table_id, heading, tot=None, shift=False, note=(), prefix="fg"):
+def table_time(w, rows, table_id, heading, tot=None, shift=False, note=(), prefix="we", memo=None):
+    memo = {} if memo is None else memo            # anchor_uniq memo (v_seen_<prefix>)
     L = ["<h3>" + heading + "</h3>"]
     L.extend(note)
     L.append('<table id="' + table_id + '">' + header(w, "<th>Event</th>", "s") + "<tbody>")
     for r in rows:
         cur_s = None if r["cur_us"] is None else r["cur_us"] / 1e6
-        row = ('<tr id="' + h.anchor_id(prefix, r["event_name"]) + '" data-imp="'
-               + h.is_essential("WAIT", r["event_name"]) + '">'
+        row = ('<tr id="' + h.anchor_uniq(h.anchor_id(prefix, r["event_name"]), r["event_name"], memo)
+               + '" data-imp="' + h.is_essential("WAIT", r["event_name"]) + '">'
                + "<td>" + h.esc(r["event_name"]) + "</td>"
-               + '<td class="trend" data-spark="' + r["spark_vals"]
-               + '" data-spark-title="' + h.esc(r["event_name"]) + '"></td>'
                + '<td class="num" data-w="0"' + h.fmt_num_title(cur_s) + "><b>" + h.fmt_num(cur_s)
                + (' <span class="badge info">#' + str(r["cur_rnk"]) + "</span>"
                   if r["cur_rnk"] is not None else "")
                + "</b></td>")
+        share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
+        row += h.score_cells(cur_s, _s(r["mu_us"]), _s(r["sd_us"]), r["n_us"], share,
+                             "WAIT", r["event_name"], r["wait_class"], shift)
+        row += ('<td class="trend" data-spark="' + r["spark_vals"]
+                + '" data-spark-title="' + h.esc(r["event_name"]) + '"></td>')
         for k in range(1, w.weeks_back + 1):
             us_s = nth_csv(r["week_us_vals"], k + 1)
             rank_s = nth_csv(r["week_rnk_vals"], k + 1)
@@ -254,41 +263,39 @@ def table_time(w, rows, table_id, heading, tot=None, shift=False, note=(), prefi
                 row += '<td class="num" data-w="' + str(k) + '">&mdash;'
             else:
                 us = float(us_s)
-                row += ('<td class="num" data-w="' + str(k) + '"' + h.dev_attr(cur_s, us) + ">"
+                row += ('<td class="num" data-w="' + str(k) + '">'
                         + h.fmt_num(us))
             if rank_s != "":
                 row += ' <span class="badge skip">#' + rank_s + "</span>"
             row += "</td>"
-        share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
-        row += h.score_cells(r["cur_us"], r["mu_us"], r["sd_us"], r["n_us"], share,
-                             "WAIT", r["event_name"], r["wait_class"], shift)
         row += "</tr>"
         L.append(row)
     L.append("</tbody></table>")
     return L
 
 
-def table_avg(w, rows, table_id, heading, prefix="fgms"):
+def table_avg(w, rows, table_id, heading, prefix="wa"):
+    memo = {}                                      # anchor_uniq memo (v_seen_<prefix>)
     L = ["<h3>" + heading + "</h3>",
          '<table id="' + table_id + '">' + header(w, "<th>Event</th>", "ms") + "<tbody>"]
     for r in rows:
-        row = ('<tr id="' + h.anchor_id(prefix, r["event_name"]) + '" data-imp="'
-               + h.is_essential("WAIT", r["event_name"]) + '">'
+        row = ('<tr id="' + h.anchor_uniq(h.anchor_id(prefix, r["event_name"]), r["event_name"], memo)
+               + '" data-imp="' + h.is_essential("WAIT", r["event_name"]) + '">'
                + "<td>" + h.esc(r["event_name"]) + "</td>"
-               + '<td class="trend" data-spark="' + r["spark_ms_vals"]
-               + '" data-spark-title="' + h.esc(r["event_name"]) + '"></td>'
                + '<td class="num" data-w="0"' + h.fmt_num_title(r["cur_ms"]) + "><b>"
-               + h.fmt_num(r["cur_ms"]) + "</b></td>")
+               + h.fmt_num(r["cur_ms"]) + "</b></td>"
+               + h.score_cells(r["cur_ms"], r["mu_ms"], r["sd_ms"], r["n_ms"], None,
+                               "WAIT", r["event_name"], r["wait_class"])
+               + '<td class="trend" data-spark="' + r["spark_ms_vals"]
+               + '" data-spark-title="' + h.esc(r["event_name"]) + '"></td>')
         for k in range(1, w.weeks_back + 1):
             ms_s = nth_csv(r["week_ms_vals"], k + 1)
             if ms_s == "":
                 row += '<td class="num" data-w="' + str(k) + '">&mdash;</td>'
             else:
                 ms = float(ms_s)
-                row += ('<td class="num" data-w="' + str(k) + '"' + h.dev_attr(r["cur_ms"], ms) + ">"
+                row += ('<td class="num" data-w="' + str(k) + '">'
                         + h.fmt_num(ms) + "</td>")
-        row += h.score_cells(r["cur_ms"], r["mu_ms"], r["sd_ms"], r["n_ms"], None,
-                             "WAIT", r["event_name"], r["wait_class"])
         row += "</tr>"
         L.append(row)
     L.append("</tbody></table>")

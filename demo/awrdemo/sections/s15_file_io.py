@@ -79,19 +79,10 @@ def emit(w) -> str:
     put = out.append
     top_n = w.top_n
     put("<!-- AWR-SECTION: 15_file_io BEGIN -->")
-    put('<section id="file-io"><h2>File I/O (top ' + str(top_n)
-        + " per dimension, per window)</h2>")
-    put('<p style="font-size:12px;color:var(--muted)">'
-        "Data and temp files with the most I/O per window, from "
-        "DBA_HIST_FILESTATXS / DBA_HIST_TEMPSTATXS (end snap minus "
-        "begin snap; blocks scaled to MB by each file's block size). "
-        "Chart per dimension: each line = one file across windows, "
-        "oldest &rarr; current; toggle to the per-file-type view from "
-        "DBA_HIST_IOSTAT_FILETYPE &mdash; the AWR report's "
-        "&quot;IOStat by Filetype&quot; &mdash; which covers <b>all</b> "
-        "database I/O (control file, redo log, archive log, &hellip;), "
-        "so the two modes' totals legitimately differ. "
-        "Detail tables collapsed; click to expand.</p>")
+    put('<section id="file-io" class="vw in-s in-a lib" style="--os:6"><h2>File I/O'
+        '<small class="h2sub">Top ' + str(top_n)
+        + ' data and temp files by I/O per window, and I/O by file type; ranked, not scored</small></h2>')
+    aid_by_name, aid_used = {}, {}
 
     weeks_j, weeks_iso_j = D.weeks_json(w)
     by_win, ft_by_win, meta = _values(w)
@@ -102,6 +93,8 @@ def emit(w) -> str:
 
     # ---- per-dimension detail tables (top-N files) ----------------------
     any_rows = False
+    tl_rows = []
+    ls = None
     for code, _ord, label, unit in DIMS:
         entries = D.per_entity(picked[code], w.weeks_back)
         if not entries:
@@ -137,7 +130,14 @@ def emit(w) -> str:
             D.json_accumulate(files_acc, code, entry)
 
             new = D.new_in_cur(e["cur_val"], tokens, _parse)
-            row = ("<tr>"
+            aid = None
+            if filename not in aid_by_name:
+                aid = H.file_anchor(filename)
+                if aid in aid_used:
+                    aid = aid + "-" + str(len(aid_by_name) + 1)
+                aid_by_name[filename] = aid
+                aid_used[aid] = filename
+            row = ("<tr" + (' id="' + aid + '"' if aid else "") + ">"
                    '<td class="mono"><span title="' + H.esc(filename) + '">'
                    + H.esc(short) + "</span>"
                    + (' <span class="badge info" title="in the top-N '
@@ -148,6 +148,19 @@ def emit(w) -> str:
             row += D.week_cells(w, tokens, e["rnks"], _parse)
             row += "</tr>"
             put(row)
+            # v1.6.0 Timeline: "Where the reads land" (ranked, not scored)
+            if code == "READMB" and len(tl_rows) < 1 and e["cur_val"] is not None:
+                csv = H.tl_csv(w, ",".join("" if t is None else t for t in tokens), "Y")
+                if not tl_rows:
+                    mu0 = H.tl_mu(w, csv)
+                    ls = ("<code>" + H.esc(short) + "</code> " + H.fmt_num(e["cur_val"]) + " MB read"
+                          + (" vs " + H.fmt_num(mu0) if mu0 is not None else ", new in the top " + str(w.top_n)))
+                tl_rows.append(H.tl_bars(
+                    w, csv, H.tl_mu(w, csv), None, None,
+                    H.tl_lab(H.ent(H.esc(short), aid_by_name[filename], "file"),
+                             'datafile, MB read', H.esc(filename)),
+                    H.tl_gutp(e["cur_val"], H.tl_mu(w, csv), "#" + str(e["cur_rnk"]) + " by MB read"),
+                    "tl-" + aid_by_name[filename], "o", H.esc(short), "MB read"))
 
     if any_rows:
         put("</tbody></table></details>")
@@ -156,6 +169,8 @@ def emit(w) -> str:
             "No per-file I/O recorded for any compared window "
             "(DBA_HIST_FILESTATXS empty for these snapshots, or no valid "
             "windows).</p>")
+    for i, r in enumerate(tl_rows, start=1):
+        put((H.tl_open("objects") if i == 1 else "") + r + (H.tl_close() if i == len(tl_rows) else ""))
 
     # ---- second pass: per-file-type breakdown (chart + combined table) --
     ft_picked = D.rank_pick(ft_by_win, _CODES, top_n)
@@ -212,6 +227,6 @@ def emit(w) -> str:
         entries_pl = chrome.put_lines(chrome.sql_path("sql/15_file_io.sql"))
         out.extend(D.lift_script(entries_pl, "}};", "})();</script>"))
 
-    put("</section>")
+    put(H.lib_ls("file-io", ls or "no per-file I/O recorded") + "</section>")
     put("<!-- AWR-SECTION: 15_file_io END -->")
     return "\n".join(out)

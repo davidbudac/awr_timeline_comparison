@@ -31,7 +31,7 @@ BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 14_segment_io BEGIN -->'); END;
 DECLARE
     v_weeks_back NUMBER := ~weeks_back;
     v_top_n      NUMBER := ~top_n;
-    v_header     VARCHAR2(4000);
+    v_header     VARCHAR2(32767);   -- one th (about 45 bytes) per window
     v_row        VARCHAR2(32767);
     v_weeks_json VARCHAR2(4000);
     v_weeks_iso_json VARCHAR2(4000);
@@ -68,27 +68,38 @@ DECLARE
     v_dim_types_total t_dim_num;
     v_dim             VARCHAR2(10);
     v_first_dim       BOOLEAN;
+    -- Entity anchors (v1.6.0): the FIRST row a segment gets (in any
+    -- ranking table) carries id sg-<name> (sql/lib/anchor_id.plsql); a
+    -- different name slugging to an id already taken gets -<n> appended.
+    TYPE t_aid IS TABLE OF VARCHAR2(200) INDEX BY VARCHAR2(4000);
+    v_aid_by_name t_aid;
+    v_aid_used    t_aid;
+    v_aid         VARCHAR2(200);
+    -- v1.6.0 Timeline: the "Where the reads land" lane's rows (the top
+    -- 2 of the physical reads ranking), emitted after the tables
+    TYPE t_tl_rows IS TABLE OF VARCHAR2(32767) INDEX BY PLS_INTEGER;
+    v_tl          t_tl_rows;
+    v_tl_csv      VARCHAR2(4000);
+    v_ls          VARCHAR2(2000);   -- the evidence library's row text
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/json_escape.plsql
     @@sql/lib/fmt_num.plsql
+    @@sql/lib/anchor_id.plsql
+    @@sql/lib/band_glyph.plsql
+    @@sql/lib/finding_cards.plsql
+    @@sql/lib/off_label.plsql
+    @@sql/lib/wingrid.plsql
+    @@sql/lib/timeline.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="segment-io"><h2>Segment I/O (top ' || v_top_n
-        || ' per dimension, per window)</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'Segments with the most I/O activity per window, from '
-        || 'DBA_HIST_SEG_STAT <code>*_DELTA</code> joined to '
-        || 'DBA_HIST_SEG_STAT_OBJ for names. Reads/writes are blocks; '
-        || 'requests are I/O calls. Chart per dimension: each line = one '
-        || 'segment across windows, oldest &rarr; current; toggle to roll '
-        || 'the same totals up by object type (the rollup covers <b>all</b> '
-        || 'segments, not just the charted top-' || v_top_n || '). '
-        || 'Detail tables collapsed; click to expand.</p>');
+    DBMS_OUTPUT.PUT_LINE('<section id="segment-io" class="vw in-s in-a lib" style="--os:5"><h2>Segment I/O'
+        || '<small class="h2sub">Top ' || v_top_n
+        || ' segments by I/O per window; ranked, not scored</small></h2>');
 
     SELECT '['
         || LISTAGG('"' || TO_CHAR(
                CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
-               - (~step_hours/24)*week_offset, '~period_axis_fmt') || '"', ',')
+               - (~step_hours/24)*week_offset, '~period_axis_fmt', 'NLS_DATE_LANGUAGE=ENGLISH') || '"', ',')
                WITHIN GROUP (ORDER BY week_offset DESC)
         || ']'
     INTO   v_weeks_json
@@ -293,7 +304,7 @@ BEGIN
                 || '<th class="num" data-w="0">Current (' || s.dim_unit || ')</th>';
             FOR k IN 1 .. v_weeks_back LOOP
                 v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
-                    || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
+                    || off_label(k) || '</th>';
             END LOOP;
             v_header := v_header || '</tr></thead>';
             DBMS_OUTPUT.PUT_LINE('<table id="segio-detail-' || v_cur_dim || '">' || v_header || '<tbody>');
@@ -339,7 +350,7 @@ BEGIN
             IF v_new_in_cur THEN
                 FOR k IN 1 .. v_weeks_back LOOP
                     v_prior_s := nth_csv(s.week_vals, k + 1);
-                    IF v_prior_s IS NOT NULL AND v_prior_s <> ''
+                    IF v_prior_s IS NOT NULL
                        AND TO_NUMBER(v_prior_s, 'FM99999999999999990',
                                      'NLS_NUMERIC_CHARACTERS=''.,''') > 0 THEN
                         v_new_in_cur := FALSE;
@@ -348,7 +359,16 @@ BEGIN
                 END LOOP;
             END IF;
 
-            v_row := '<tr>'
+            v_aid := NULL;
+            IF NOT v_aid_by_name.EXISTS(s.seg_name) THEN
+                v_aid := anchor_id('sg', s.seg_name);
+                IF v_aid_used.EXISTS(v_aid) THEN
+                    v_aid := v_aid || '-' || (v_aid_by_name.COUNT + 1);
+                END IF;
+                v_aid_by_name(s.seg_name) := v_aid;
+                v_aid_used(v_aid) := s.seg_name;
+            END IF;
+            v_row := '<tr' || CASE WHEN v_aid IS NOT NULL THEN ' id="' || v_aid || '"' END || '>'
                 || '<td class="mono"><span title="tablespace '
                 || DBMS_XMLGEN.CONVERT(s.tablespace_name) || '">'
                 || DBMS_XMLGEN.CONVERT(s.seg_name) || '</span>'
@@ -376,7 +396,7 @@ BEGIN
                 v_row := v_row || '<td class="num" data-w="' || k || '">'
                       || fmt_num(v_val);
             END IF;
-            IF v_rnk_s IS NOT NULL AND v_rnk_s <> '' THEN
+            IF v_rnk_s IS NOT NULL THEN
                 v_row := v_row || ' <span class="badge skip">#' || v_rnk_s || '</span>';
             END IF;
             v_row := v_row || '</td>';
@@ -384,6 +404,22 @@ BEGIN
 
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
+
+        -- v1.6.0 Timeline: ranked, not scored (a plain ratio vs the mean of
+        -- the prior windows it made the top list in); id tl-<its anchor>
+        IF s.dim = 'PREADS' AND v_tl.COUNT < 2 AND s.cur_val IS NOT NULL THEN
+            v_tl_csv := tl_csv(s.week_vals, 'Y');
+            IF v_tl.COUNT = 0 THEN
+                v_ls := '<code>' || DBMS_XMLGEN.CONVERT(s.seg_name) || '</code> ' || fmt_num(s.cur_val) || ' blocks read'
+                    || CASE WHEN tl_mu(v_tl_csv) IS NOT NULL THEN ' vs ' || fmt_num(tl_mu(v_tl_csv))
+                            ELSE ', new in the top ' || v_top_n END;
+            END IF;
+            v_tl(v_tl.COUNT + 1) := tl_bars(v_tl_csv, tl_mu(v_tl_csv), NULL, NULL,
+                tl_lab(ent(DBMS_XMLGEN.CONVERT(s.seg_name), v_aid_by_name(s.seg_name), 'segment'),
+                       LOWER(DBMS_XMLGEN.CONVERT(NVL(s.object_type, 'segment'))) || ', blocks read', DBMS_XMLGEN.CONVERT(s.seg_name)),
+                tl_gutp(s.cur_val, tl_mu(v_tl_csv), '#' || s.cur_rnk || ' by physical reads'),
+                'tl-' || v_aid_by_name(s.seg_name), 'o', DBMS_XMLGEN.CONVERT(s.seg_name), 'blocks read');
+        END IF;
     END LOOP;
 
     IF v_cur_dim IS NOT NULL THEN
@@ -394,6 +430,11 @@ BEGIN
             || '(DBA_HIST_SEG_STAT empty for these snapshots, or no valid '
             || 'windows). Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</p>');
     END IF;
+    -- the Timeline rows ride after the tables (never inside a <tbody>)
+    FOR i IN 1 .. v_tl.COUNT LOOP
+        DBMS_OUTPUT.PUT_LINE(CASE WHEN i = 1 THEN tl_open('objects') END || v_tl(i)
+            || CASE WHEN i = v_tl.COUNT THEN tl_close END);
+    END LOOP;
 
     -- Second pass: per-object-type rollup for the chart toggle. Same
     -- valid_windows + DBA_HIST_SEG_STAT scan, aggregated over ALL segments
@@ -613,7 +654,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
         DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
         DBMS_OUTPUT.PUT_LINE('var palette=["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1","#84cc16","#f97316","#0ea5e9","#d946ef","#64748b"];');
-        DBMS_OUTPUT.PUT_LINE('var fmt=function(v){return v==null?"—":(+v).toLocaleString(undefined,{maximumFractionDigits:0});};');
+        DBMS_OUTPUT.PUT_LINE('var fmt=function(v){return v==null?"\u2014":(+v).toLocaleString(undefined,{maximumFractionDigits:0});};');
         DBMS_OUTPUT.PUT_LINE('Object.keys(AWR_DATA.segIo.dims).forEach(function(dim){');
         DBMS_OUTPUT.PUT_LINE('  var el=document.getElementById("segio-chart-"+dim); if(!el) return;');
         DBMS_OUTPUT.PUT_LINE('  var d=AWR_DATA.segIo.dims[dim];');
@@ -665,7 +706,8 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('})();</script>');
     END IF;
 
-    DBMS_OUTPUT.PUT_LINE('</section>');
+    -- the evidence library's row text (Summary view)
+    DBMS_OUTPUT.PUT_LINE(lib_ls('segment-io', NVL(v_ls, 'no segment-level I/O recorded')) || '</section>');
 END;
 /
 

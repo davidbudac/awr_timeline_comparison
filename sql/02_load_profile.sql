@@ -2,7 +2,9 @@
 -- 02_load_profile.sql
 -- Per-window deltas from DBA_HIST_SYSSTAT for a curated set of stats that
 -- make up the classic AWR Load Profile (redo, DB time, CPU, reads, parses,
--- transactions, sorts, etc.).  Renders as a pivot: metric x week.
+-- transactions, sorts, etc.).  Renders as a pivot: metric x week.  DB time
+-- and DB CPU come from DBA_HIST_SYS_TIME_MODEL instead (SYSSTAT has no
+-- 'DB CPU' row), via sql/lib/load_pairs_cte.sql, in centiseconds.
 --
 -- For cumulative counters we compute end - begin.  Rates are derived from
 -- the window duration in seconds.  Read-only: no scratch table.
@@ -16,7 +18,7 @@ BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 02_load_profile BEGIN -->'); END;
 
 DECLARE
     v_weeks_back NUMBER := ~weeks_back;
-    v_header     VARCHAR2(4000);
+    v_header     VARCHAR2(32767);   -- one th (about 45 bytes) per window
     v_row        VARCHAR2(32767);
     v_label      VARCHAR2(120);
     v_per_sec    NUMBER;
@@ -25,22 +27,30 @@ DECLARE
     v_pct        NUMBER;
 
     v_unit       VARCHAR2(16);
+    v_bucket     VARCHAR2(40);
+    v_nrows      PLS_INTEGER := 0;
+    -- Subprogram includes go LAST, metric_policy first (it opens with a
+    -- TYPE; lint checks 14 / 16), fmt_num before band_glyph (check 17).
+    @@sql/lib/metric_policy.plsql
     @@sql/lib/nth_csv.plsql
     @@sql/lib/is_essential.plsql
     @@sql/lib/anchor_id.plsql
-    @@sql/lib/dev_bucket.plsql
     @@sql/lib/fmt_num.plsql
+    @@sql/lib/band_glyph.plsql
+    @@sql/lib/off_label.plsql
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('<section id="load"><h2>Load profile &mdash; per-second rates</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted)">'
-        || 'DBA_HIST_SYSSTAT (end &minus; begin) &divide; window seconds. '
-        || '<b>Trend</b>: per-window values, oldest &rarr; current. '
-        || '<b>Current</b> cell bar = value &divide; row max.</p>');
+    DBMS_OUTPUT.PUT_LINE('<section id="load" class="vw in-s in-a lib" style="--os:7"><h2>Load profile'
+        || '<small class="h2sub">System statistics per second, Current against its normal range</small></h2>');
 
-    v_header := '<thead><tr><th>Metric</th><th>Unit</th><th class="trend">Trend</th><th class="num" data-w="0">Current</th>';
+    -- v1.6.0: Current, then the baseline band (normal range | band | z |
+    -- Delta, sql/lib/band_glyph.plsql) scored by the per-metric policy --
+    -- the same bucket 07 gives the row -- then the trend and the prior
+    -- windows (plain values; the heat tints are gone).
+    v_header := '<thead><tr><th>Metric</th><th>Unit</th><th class="num" data-w="0">Current</th>'
+        || band_head || '<th class="trend">Trend</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
-            || REGEXP_SUBSTR('~offset_labels', '[^,]+', 1, k) || '</th>';
+            || off_label(k) || '</th>';
     END LOOP;
     v_header := v_header || '</tr></thead>';
     DBMS_OUTPUT.PUT_LINE('<table id="load-profile">' || v_header || '<tbody>');
@@ -49,27 +59,17 @@ BEGIN
         WITH
         @@sql/lib/windows_cte.sql
         ,
-        targets AS (
+        load_targets AS (
             @@~template_dir/sysstat_load_targets.sql
         ),
-        pairs AS (
-            SELECT
-                w.week_offset, w.dur_sec,
-                ss.stat_name, ss.instance_number,
-                ss.snap_id, ss.value,
-                w.begin_snap_id, w.end_snap_id
-            FROM   valid_windows w
-            JOIN   dba_hist_sysstat ss
-                ON ss.dbid = w.dbid
-               AND ss.snap_id IN (w.begin_snap_id, w.end_snap_id)
-               AND ss.instance_number = w.instance_number
-               AND ss.stat_name IN (SELECT stat_name FROM targets)
-        ),
+        -- SYSSTAT counters, with DB time / DB CPU from the time model
+        @@sql/lib/load_pairs_cte.sql
+        ,
         bounds AS (
             SELECT week_offset, dur_sec, stat_name, instance_number,
                    SUM(CASE WHEN snap_id = begin_snap_id THEN value END) AS beg_val,
                    SUM(CASE WHEN snap_id = end_snap_id   THEN value END) AS end_val
-            FROM   pairs
+            FROM   load_pairs
             GROUP BY week_offset, dur_sec, stat_name, instance_number
         ),
         deltas AS (
@@ -96,7 +96,7 @@ BEGIN
         ),
         grid AS (
             SELECT t.stat_name, w.week_offset, f.per_sec
-            FROM   targets t
+            FROM   load_targets t
             CROSS JOIN all_weeks w
             LEFT JOIN facts f
                    ON f.stat_name   = t.stat_name
@@ -105,6 +105,11 @@ BEGIN
         SELECT stat_name,
                MAX(CASE WHEN week_offset = 0 THEN per_sec END) AS cur_ps,
                MAX(per_sec) AS row_max,
+               -- prior-window baseline for the band (valid windows only:
+               -- facts come from valid_windows, so a skipped window is NULL)
+               AVG(CASE WHEN week_offset > 0 THEN per_sec END)    AS mu,
+               STDDEV(CASE WHEN week_offset > 0 THEN per_sec END) AS sd,
+               COUNT(CASE WHEN week_offset > 0 THEN per_sec END)  AS n_prior,
                -- ','||token + SUBSTR: LISTAGG drops NULL measures (and their
                -- delimiter), which would left-compact the CSV and misalign
                -- the positional slots; ','||NULL = ',' keeps the empty slot.
@@ -161,10 +166,6 @@ BEGIN
                                ELSE '' END
               || '>' || v_unit || '</td>';
 
-        v_row := v_row || '<td class="trend" data-spark="'
-              || NVL(m.spark_vals, '') || '" data-spark-title="'
-              || DBMS_XMLGEN.CONVERT(v_label) || '"></td>';
-
         v_row_max := NVL(m.row_max, 0);
 
         IF v_row_max > 0 AND m.cur_ps IS NOT NULL THEN
@@ -178,6 +179,13 @@ BEGIN
               || '<span class="v"><b>' || fmt_num(m.cur_ps)
               || '</b></span></td>';
 
+        v_bucket := policy_bucket('LOAD', m.stat_name, NULL, m.cur_ps, m.mu, m.sd, m.n_prior);
+        v_row := v_row || band_cells(m.cur_ps, m.mu, m.sd, m.n_prior, v_bucket);
+
+        v_row := v_row || '<td class="trend" data-spark="'
+              || NVL(m.spark_vals, '') || '" data-spark-title="'
+              || DBMS_XMLGEN.CONVERT(v_label) || '"></td>';
+
         FOR k IN 1 .. v_weeks_back LOOP
             v_per_sec_s := nth_csv(m.week_vals, k + 1);
             IF v_per_sec_s IS NULL OR v_per_sec_s = '' THEN
@@ -185,16 +193,18 @@ BEGIN
             ELSE
                 v_per_sec := TO_NUMBER(v_per_sec_s, 'FM99999999990D000000',
                                        'NLS_NUMERIC_CHARACTERS=''.,''');
-                v_row := v_row || '<td class="num" data-w="' || k || '"'
-                      || dev_attr(m.cur_ps, v_per_sec) || '>'
+                v_row := v_row || '<td class="num" data-w="' || k || '">'
                       || fmt_num(v_per_sec) || '</td>';
             END IF;
         END LOOP;
         v_row := v_row || '</tr>';
         DBMS_OUTPUT.PUT_LINE(v_row);
+        v_nrows := v_nrows + 1;
     END LOOP;
 
-    DBMS_OUTPUT.PUT_LINE('</tbody></table></section>');
+    DBMS_OUTPUT.PUT_LINE('</tbody></table>');
+    -- the evidence library's row text (Summary view)
+    DBMS_OUTPUT.PUT_LINE(lib_ls('load', v_nrows || ' counters per second') || '</section>');
 END;
 /
 

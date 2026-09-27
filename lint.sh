@@ -15,9 +15,14 @@ set -uo pipefail
 cd "$(dirname "$0")"
 
 fail=0
+# A finding raised inside a `... | while read` loop runs in a subshell, where
+# fail=1 is lost; the flag file carries it back to the final exit code.
+failflag=$(mktemp "${TMPDIR:-/tmp}/awr_lint.XXXXXX") || exit 2
+trap 'rm -f "$failflag"' EXIT
 finding() {                     # finding <check-name> <file:line-ish> <message>
     printf 'LINT [%s] %s\n    %s\n' "$1" "$2" "$3"
     fail=1
+    echo x >> "$failflag"
 }
 
 # All SQL*Plus-parsed sources (the driver + every section/lib/template file).
@@ -276,6 +281,273 @@ for f in $(grep -l '@@sql/lib/metric_policy.plsql' $(sql_files) 2>/dev/null); do
     done
 done
 
+# ----------------------------------------------------------------------
+# 17. sql/lib/band_glyph.plsql calls fmt_num() (normal-range text), and
+#     sql/lib/score_cells.plsql delegates to band_cells(): in every file
+#     fmt_num must be included before band_glyph, and band_glyph before
+#     score_cells (else PLS-00313 at compile time on the DB).
+# ----------------------------------------------------------------------
+for f in $(grep -l -E '@@sql/lib/(band_glyph|score_cells)\.plsql' $(sql_files) 2>/dev/null); do
+    fn=$(grep -n '@@sql/lib/fmt_num.plsql' "$f" | head -1 | cut -d: -f1)
+    bg=$(grep -n '@@sql/lib/band_glyph.plsql' "$f" | head -1 | cut -d: -f1)
+    sc=$(grep -n '@@sql/lib/score_cells.plsql' "$f" | head -1 | cut -d: -f1)
+    if [ -n "$sc" ] && { [ -z "$bg" ] || [ "$bg" -gt "$sc" ]; }; then
+        finding band-include-order "$f:$sc" "sql/lib/score_cells.plsql needs sql/lib/band_glyph.plsql included before it"
+    fi
+    if [ -n "$bg" ] && { [ -z "$fn" ] || [ "$fn" -gt "$bg" ]; }; then
+        finding band-include-order "$f:$bg" "sql/lib/band_glyph.plsql needs sql/lib/fmt_num.plsql included before it"
+    fi
+done
+
+# ----------------------------------------------------------------------
+# 18. The v1.5.0 Normal / Full view model is retired (v1.6.0): sections
+#     declare view membership with class="vw in-s|in-t|in-a" and the chrome
+#     keeps the view in localStorage "awr-view".  The old hooks must not
+#     come back (they would silently match nothing), nor the dev_bucket
+#     heat tint the band glyph replaced.
+# ----------------------------------------------------------------------
+for f in awr_trend.sql sql/*.sql sql/lib/*.plsql; do
+    grep -n -E 'data-normal|full-only|"awr-mode"|data-dev=|dev_attr\(' "$f" | grep -v -E '^[0-9]+:[[:space:]]*--' \
+      | while IFS= read -r line; do
+        finding retired-view-hook "$f:${line%%:*}" "v1.5.0 view hook (data-normal / full-only / awr-mode / data-dev) -- use class=\"vw in-s|in-t|in-a\" (CLAUDE.md, views)"
+    done
+done
+
+# ----------------------------------------------------------------------
+# 19. Every report <section> opts into its views explicitly: a numbered
+#     section must carry class="vw ..." (or be one of the view-less
+#     reference sections, guide / about, shown in every view).
+# ----------------------------------------------------------------------
+for f in sql/[0-9]*.sql; do
+    grep -n "<section id=" "$f" | grep -v 'class="vw ' | grep -v -E 'id="(guide|about)"' \
+      | while IFS= read -r line; do
+        finding section-view-class "$f:${line%%:*}" "<section> without class=\"vw in-s|in-t|in-a\" -- declare which views show it"
+    done
+done
+
+# ----------------------------------------------------------------------
+# 20. sql/lib/wingrid.plsql (the window component) and
+#     sql/lib/finding_cards.plsql (Summary vocabulary) call fmt_num(): in
+#     every file that includes either, fmt_num must come first (else
+#     PLS-00313 at compile time on the DB).
+# ----------------------------------------------------------------------
+for f in $(grep -l -E '@@sql/lib/(wingrid|finding_cards)\.plsql' $(sql_files) 2>/dev/null); do
+    fn=$(grep -n '@@sql/lib/fmt_num.plsql' "$f" | head -1 | cut -d: -f1)
+    for lib in wingrid finding_cards; do
+        ln=$(grep -n "@@sql/lib/$lib.plsql" "$f" | head -1 | cut -d: -f1)
+        if [ -n "$ln" ] && { [ -z "$fn" ] || [ "$fn" -gt "$ln" ]; }; then
+            finding summary-include-order "$f:$ln" "sql/lib/$lib.plsql needs sql/lib/fmt_num.plsql included before it"
+        fi
+    done
+done
+
+# ----------------------------------------------------------------------
+# 21. Entity links (a.ent, v1.6.0) have ONE emitter, ent() in
+#     sql/lib/finding_cards.plsql, fed an id from sql/lib/anchor_id.plsql
+#     (anchor_id / finding_anchor), so a link and its target row can never
+#     drift.  A hand-written class="ent" anywhere else is flagged.
+# ----------------------------------------------------------------------
+for f in awr_trend.sql sql/*.sql sql/lib/*.plsql; do
+    [ "$f" = "sql/lib/finding_cards.plsql" ] && continue
+    grep -n 'class="ent"' "$f" | grep -v -E '^[0-9]+:[[:space:]]*--' \
+      | while IFS= read -r line; do
+        finding ent-emitter "$f:${line%%:*}" "hand-written class=\"ent\" -- use ent(html, anchor_id(kind, name), kind) (sql/lib/finding_cards.plsql)"
+    done
+done
+
+# ----------------------------------------------------------------------
+# 22. sql/lib/timeline.plsql (the Timeline view's grid rows) calls
+#     fmt_num, band_glyph (band_z / band_span / delta_span), ent() from
+#     finding_cards and wg_tok / wg_date from wingrid: in every file that
+#     includes it, all five must come first (else PLS-00313 at compile
+#     time on the DB), anchor_id too (its callers build the row ids).
+# ----------------------------------------------------------------------
+for f in $(grep -l '@@sql/lib/timeline.plsql' $(sql_files) 2>/dev/null); do
+    tl=$(grep -n '@@sql/lib/timeline.plsql' "$f" | head -1 | cut -d: -f1)
+    for lib in fmt_num band_glyph anchor_id finding_cards wingrid; do
+        ln=$(grep -n "@@sql/lib/$lib.plsql" "$f" | head -1 | cut -d: -f1)
+        if [ -z "$ln" ] || [ "$ln" -gt "$tl" ]; then
+            finding timeline-include-order "$f:$tl" "sql/lib/timeline.plsql needs sql/lib/$lib.plsql included before it"
+        fi
+    done
+done
+
+# ----------------------------------------------------------------------
+# 23. A Timeline lane source (tl_open) must be closed (tl_close) in the
+#     same file, and never be emitted inside a table: the inert
+#     <template> would still parse, but a <script> in a <tbody> is easy to
+#     misplace.  Cheap proxy: every file with tl_open( has tl_close.
+# ----------------------------------------------------------------------
+for f in $(grep -l "tl_open(" sql/[0-9]*.sql 2>/dev/null); do
+    if ! grep -q "tl_close" "$f"; then
+        finding timeline-source "$f" "tl_open(...) without tl_close -- the lane's rows never leave their <template>"
+    fi
+done
+
+# ----------------------------------------------------------------------
+# 24. Generated client scripts must match their readable source.  The
+#     PUT_LINE bodies of sql/lib/js_timeline.plsql and js_wingrid.plsql
+#     are generated from sql/lib/src/<name>.js by tools/js2plsql.sh (also
+#     rejects a tilde or an over-long line); edit the .js and regenerate.
+# ----------------------------------------------------------------------
+if ! sh tools/js2plsql.sh --check >/dev/null 2>"${TMPDIR:-/tmp}/lint_js2plsql.$$"; then
+    while IFS= read -r l; do
+        finding generated-js "tools/js2plsql.sh" "$l"
+    done < "${TMPDIR:-/tmp}/lint_js2plsql.$$"
+fi
+rm -f "${TMPDIR:-/tmp}/lint_js2plsql.$$"
+
+# ----------------------------------------------------------------------
+# 25. No non-ASCII byte in anything the single-DB report emits.  SQL*Plus
+#     converts PUT_LINE text to the client character set, and on a client
+#     that is not UTF-8 (dbmint's) every multi-byte character arrives as
+#     "?" -- phase 3/4 shipped literal dashes / triangles in js_timeline
+#     and the Timeline's skipped-window cells read "???".  Use an HTML
+#     entity (&ndash; &sigma;) in markup and a \uXXXX escape in JS.
+#     Comment lines (--) are exempt; the fleet files are out of scope.
+# ----------------------------------------------------------------------
+for f in awr_trend.sql sql/[0-9]*.sql sql/_style.sql sql/lib/*.plsql sql/lib/src/*.js; do
+    [ -f "$f" ] || continue
+    LC_ALL=C grep -n "$(printf '[\200-\377]')" "$f" | grep -v -E '^[0-9]+:[[:space:]]*(--|//)' \
+      | while IFS= read -r line; do
+        finding non-ascii "$f:${line%%:*}" "non-ASCII character in emitted text -- use an HTML entity (markup) or a \\uXXXX escape (JS); non-UTF-8 SQL*Plus clients print ?"
+    done
+done
+
+# ----------------------------------------------------------------------
+# 26. 'DB CPU' is a TIME MODEL statistic: DBA_HIST_SYSSTAT has no such row,
+#     so a SYSSTAT read of it silently returns nothing (v1.6.0 review #1:
+#     the verdict's and the DB time card's "mostly wait / mostly CPU"
+#     never fired on a real DB).  (a) Every single-DB file that includes
+#     the template's sysstat_load_targets.sql must read it through
+#     @@sql/lib/load_pairs_cte.sql (which routes DB time / DB CPU to
+#     DBA_HIST_SYS_TIME_MODEL); (b) no 'DB CPU' filter within 8 lines after
+#     a dba_hist_sysstat reference (the NOT IN exclusion is allowed).
+#     Fleet files are fleet-owned and out of scope.
+# ----------------------------------------------------------------------
+for f in awr_trend.sql sql/[0-9]*.sql sql/lib/*.sql sql/lib/*.plsql; do
+    [ -f "$f" ] || continue
+    if grep -qE '^[[:space:]]*@@~template_dir/sysstat_load_targets\.sql' "$f" \
+       && ! grep -qE '^[[:space:]]*@@sql/lib/load_pairs_cte\.sql' "$f"; then
+        finding sysstat-db-cpu "$f" "includes sysstat_load_targets.sql without @@sql/lib/load_pairs_cte.sql -- 'DB CPU' is not a SYSSTAT row; read LOAD targets through the include"
+    fi
+    awk -v f="$f" '
+        /^[[:space:]]*--/ { next }
+        tolower($0) ~ /dba_hist_sysstat/ { near = 8; next }
+        near > 0 { near--; if ($0 ~ /'"'"'DB CPU'"'"'/ && $0 !~ /NOT IN/) print f ":" NR }
+    ' "$f" | while IFS= read -r hit; do
+        finding sysstat-db-cpu "$hit" "'DB CPU' read from DBA_HIST_SYSSTAT -- it exists only in DBA_HIST_SYS_TIME_MODEL (microseconds); see sql/lib/load_pairs_cte.sql"
+    done
+done
+
+# ----------------------------------------------------------------------
+# 27. A scoring section (one that includes metric_policy.plsql) that reads
+#     wait time from DBA_HIST_SYSTEM_EVENT / BG_EVENT_SUMMARY must honor the
+#     template's wait-event allow-list (@@~template_dir/wait_event_targets.sql
+#     + the '*' sentinel idiom): v1.6.0 review #3 -- 00's verdict summed
+#     every event while 07's cards used the curated list, so under
+#     template=simple|dev the hero could name a card 07 never drew.
+# ----------------------------------------------------------------------
+for f in sql/[0-9]*.sql; do
+    grep -q 'metric_policy\.plsql' "$f" || continue
+    # (awk, not grep -v | grep -q: under pipefail the early-exiting grep -q
+    #  SIGPIPEs the first grep and the pipeline reads as "no match")
+    awk '/^[[:space:]]*--/ { next } tolower($0) ~ /(from|join)[[:space:]]+dba_hist_(system_event|bg_event_summary)/ { hit = 1 } END { exit !hit }' "$f" || continue
+    if ! grep -qE '^[[:space:]]*@@~template_dir/wait_event_targets\.sql' "$f"; then
+        finding wait-targets "$f" "scores wait time from DBA_HIST_SYSTEM_EVENT / BG_EVENT_SUMMARY without the template's wait_event_targets.sql filter"
+    fi
+done
+
+# ----------------------------------------------------------------------
+# 28. Day / month NAMES follow the session's NLS_DATE_LANGUAGE: on a Czech
+#     / German / French client TO_CHAR(d, 'Dy DD Mon') is localized and can
+#     be non-ASCII ("?" on a non-UTF-8 SQL*Plus client, lint 25) and it
+#     disagrees with the English DOW / MON arrays of the report's JS
+#     (v1.6.0 review #9).  A TO_CHAR mask that names a day or month (Dy /
+#     Day / Mon / Month, or the ~period_axis_fmt DEFINE, which is 'Mon DD')
+#     must pass 'NLS_DATE_LANGUAGE=ENGLISH' on the same line.  The driver
+#     also pins the session (its resolving SELECT stays parallel to the
+#     fleet extract, so it is out of scope here); fleet files likewise.
+# ----------------------------------------------------------------------
+for f in sql/[0-9]*.sql sql/lib/*.plsql sql/lib/*.sql; do
+    [ -f "$f" ] || continue
+    case "$f" in sql/lib/js_*) continue;; esac   # generated client JS, no TO_CHAR
+    grep -nE "'(FM|fm)?[^']*(Dy|DY|Day|DAY|Mon|MON|Month|MONTH)[^']*'|'~period_axis_fmt'" "$f" \
+      | grep -E "'[^']*(DD|HH24|YYYY|FM)[^']*'|'(FM)?(Dy|DY|Day|DAY|Mon|MON|Month|MONTH)'|'~period_axis_fmt'" \
+      | grep -v -E '^[0-9]+:[[:space:]]*--' | grep -v 'NLS_DATE_LANGUAGE' \
+      | while IFS= read -r line; do
+        finding date-language "$f:${line%%:*}" "TO_CHAR with a day / month name mask and no 'NLS_DATE_LANGUAGE=ENGLISH' -- the name follows the client's language (non-ASCII -> ?)"
+    done
+done
+
+# ----------------------------------------------------------------------
+# 29. Offset labels ("-1w", "-36h") come from off_label() in
+#     sql/lib/off_label.plsql, for any window count.  The old 16-entry
+#     offset_labels DEFINE left every header past window 16 a bare minus
+#     (v1.6.0 review #5).  (a) sql/lib/wingrid.plsql calls off_label, so
+#     every file that includes wingrid must include off_label.plsql BEFORE
+#     it (PLS-00313 otherwise); (b) a file calling off_label( must include
+#     the lib.  The stray-tilde check (3) already rejects the retired
+#     DEFINE if it comes back.
+# ----------------------------------------------------------------------
+for f in sql/[0-9]*.sql; do
+    ol=$(grep -n '^[[:space:]]*@@sql/lib/off_label.plsql' "$f" | head -1 | cut -d: -f1)
+    wl=$(grep -n '^[[:space:]]*@@sql/lib/wingrid.plsql' "$f" | head -1 | cut -d: -f1)
+    if [ -n "$wl" ] && { [ -z "$ol" ] || [ "$ol" -gt "$wl" ]; }; then
+        finding off-label "$f:$wl" "sql/lib/wingrid.plsql needs sql/lib/off_label.plsql included before it"
+    fi
+    if [ -z "$ol" ] && awk '/^[[:space:]]*--/ { next } /off_label\(/ { hit = 1 } END { exit !hit }' "$f"; then
+        finding off-label "$f" "calls off_label() without @@sql/lib/off_label.plsql"
+    fi
+done
+
+# ----------------------------------------------------------------------
+# 30. Entity ids are a pure function of (kind, FULL name), shared by the
+#     target row and every link (sql/lib/anchor_id.plsql, v1.6.0 review
+#     #7).  A file's id is file_anchor(full path) -- the short name repeats
+#     across containers -- and a parameter's is param_anchor(name) -- a
+#     leading underscore is significant.  So anchor_id('fl', ...) and
+#     anchor_id('pa', ...) may appear only inside anchor_id.plsql.
+# ----------------------------------------------------------------------
+for f in awr_trend.sql sql/[0-9]*.sql sql/lib/*.plsql; do
+    [ "$f" = sql/lib/anchor_id.plsql ] && continue
+    grep -n -E "anchor_id\('(fl|pa)'" "$f" | grep -v -E '^[0-9]+:[[:space:]]*--' \
+      | while IFS= read -r line; do
+        finding anchor-rule "$f:${line%%:*}" "use file_anchor(full path) / param_anchor(name), not anchor_id('fl'|'pa', ...) -- a link and its target must share one pure-function id"
+    done
+done
+
+# ----------------------------------------------------------------------
+# 31. An empty string IS NULL in Oracle, so "x <> ''" (or "x != ''") is
+#     never TRUE and "IF x IS NOT NULL AND x <> '' THEN" never runs its
+#     branch.  That dead guard hid 06's plan-change badges, the prior-window
+#     rank chips of 04 / 05 / 06 / 14 / 15 and made every 14 / 15 row "new"
+#     (found on dbmint 2026-09-27).  "IS NOT NULL" is the whole test.
+#     ('''' -- an escaped quote -- is not an empty string and is skipped.)
+# ----------------------------------------------------------------------
+for f in $(sql_files); do
+    grep -n -E "(<>|!=)[[:space:]]*''([^']|$)" "$f" | grep -v -E '^[0-9]+:[[:space:]]*--' \
+      | while IFS= read -r line; do
+        finding empty-string "$f:${line%%:*}" "comparison with '' is never TRUE in Oracle ('' IS NULL); use IS NOT NULL"
+    done
+done
+
+# ----------------------------------------------------------------------
+# 32. The rail's links (nav.toc a, every state: hover / .on / focus) show
+#     their state through background and font weight only.  A left border
+#     or an inset box-shadow on the rounded pill drew a dark crescent on
+#     its left edge (owner request, v1.6.0).  Any nav.toc a rule block in
+#     sql/_style.sql carrying border-left or an inset shadow is flagged.
+# ----------------------------------------------------------------------
+awk '
+    /nav\.toc a/ && /\{/ { inr = 1 }
+    inr && /border-left|inset/ { printf "%d\n", NR }
+    inr && /\}/ { inr = 0 }
+' sql/_style.sql | while IFS= read -r ln; do
+    finding rail-marker "sql/_style.sql:$ln" "no border-left / inset box-shadow on a rail link state (it drew a crescent on the rounded pill)"
+done
+
+[ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"
 fi

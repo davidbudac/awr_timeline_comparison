@@ -32,7 +32,8 @@ DEFAULT_OUT = os.path.join(ROOT, "docs", "examples", "demo_busy_db.html")
 
 # (module name, AWR-SECTION tag) in driver order -- sql/awr_trend.sql's
 # @@-include order, which is the VISUAL order since v1.5.0 (phase 4):
-# Triage, Workload, SQL, Storage & config; 18 before 17 like the driver.
+# Triage, Workload, SQL, Storage & config; 18 before 17 like the driver;
+# 19 (guide + About, every view) right before 17, which stays last.
 SECTIONS = [
     ("s00_params", "00_params"),
     ("s10_db_time_summary", "10_db_time_summary"),
@@ -52,6 +53,7 @@ SECTIONS = [
     ("s14_segment_io", "14_segment_io"),
     ("s15_file_io", "15_file_io"),
     ("s12_param_changes", "12_param_changes"),
+    ("s19_reference", "19_reference"),
     ("s17_narrative", "17_narrative"),
 ]
 
@@ -79,13 +81,16 @@ def prologue(w, echarts_src: str) -> str:
                    'loaded. Tables still show every number.</div>')
     out.append("<script>window.AWR_DATA = window.AWR_DATA || {};</script>")
     out.append(chrome.lib_script("js_wait_colors.plsql"))
-    out.append(chrome.lib_script("js_sparkline.plsql"))
+    out.append(chrome.lib_script("js_microstrip.plsql"))
     out.append(chrome.lib_script("js_markers.plsql"))
     # sql/lib/markers_inline.sql: one push per milestone
     for t, label in w.markers:
         lbl = label.replace("\\", "\\\\").replace('"', '\\"').replace("</", "<\\/")
         out.append('<script>window.AWR_MARKERS.push({t:"' + t.strftime("%Y-%m-%d %H:%M")
                    + '",label:"' + lbl + '"});</script>')
+    # v1.6.0: the window component + entity-link unwrap (after the markers)
+    out.append(chrome.lib_script("js_wingrid.plsql"))
+    out.append(chrome.lib_script("js_timeline.plsql"))
     return "\n".join(out) + "\n"
 
 

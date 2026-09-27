@@ -62,17 +62,10 @@ def emit(w) -> str:
     put = out.append
     top_n = w.top_n
     put("<!-- AWR-SECTION: 14_segment_io BEGIN -->")
-    put('<section id="segment-io"><h2>Segment I/O (top ' + str(top_n)
-        + " per dimension, per window)</h2>")
-    put('<p style="font-size:12px;color:var(--muted)">'
-        "Segments with the most I/O activity per window, from "
-        "DBA_HIST_SEG_STAT <code>*_DELTA</code> joined to "
-        "DBA_HIST_SEG_STAT_OBJ for names. Reads/writes are blocks; "
-        "requests are I/O calls. Chart per dimension: each line = one "
-        "segment across windows, oldest &rarr; current; toggle to roll "
-        "the same totals up by object type (the rollup covers <b>all</b> "
-        "segments, not just the charted top-" + str(top_n) + "). "
-        "Detail tables collapsed; click to expand.</p>")
+    put('<section id="segment-io" class="vw in-s in-a lib" style="--os:5"><h2>Segment I/O'
+        '<small class="h2sub">Top ' + str(top_n)
+        + ' segments by I/O per window; ranked, not scored</small></h2>')
+    aid_by_name, aid_used = {}, {}
 
     weeks_j, weeks_iso_j = D.weeks_json(w)
     by_win, types_by_win, meta = _segment_values(w)
@@ -84,6 +77,8 @@ def emit(w) -> str:
 
     # ---- per-dimension detail tables (the big cursor) -------------------
     any_rows = False
+    tl_rows = []
+    ls = None
     for code, _ord, label, unit in DIMS:
         entries = D.per_entity(picked[code], w.weeks_back)
         if not entries:
@@ -118,7 +113,14 @@ def emit(w) -> str:
             D.json_accumulate(segs_acc, code, entry)
 
             new = D.new_in_cur(e["cur_val"], tokens, _parse)
-            row = ("<tr>"
+            aid = None
+            if e["name"] not in aid_by_name:
+                aid = H.anchor_id("sg", e["name"])
+                if aid in aid_used:
+                    aid = aid + "-" + str(len(aid_by_name) + 1)
+                aid_by_name[e["name"]] = aid
+                aid_used[aid] = e["name"]
+            row = ("<tr" + (' id="' + aid + '"' if aid else "") + ">"
                    '<td class="mono"><span title="tablespace ' + H.esc(tablespace) + '">'
                    + H.esc(e["name"]) + "</span>"
                    + (' <span class="badge info" title="in the top-N '
@@ -129,6 +131,19 @@ def emit(w) -> str:
             row += D.week_cells(w, tokens, e["rnks"], _parse)
             row += "</tr>"
             put(row)
+            # v1.6.0 Timeline: "Where the reads land" (ranked, not scored)
+            if code == "PREADS" and len(tl_rows) < 2 and e["cur_val"] is not None:
+                csv = H.tl_csv(w, ",".join("" if t is None else t for t in tokens), "Y")
+                if not tl_rows:
+                    mu0 = H.tl_mu(w, csv)
+                    ls = ("<code>" + H.esc(e["name"]) + "</code> " + H.fmt_num(e["cur_val"]) + " blocks read"
+                          + (" vs " + H.fmt_num(mu0) if mu0 is not None else ", new in the top " + str(w.top_n)))
+                tl_rows.append(H.tl_bars(
+                    w, csv, H.tl_mu(w, csv), None, None,
+                    H.tl_lab(H.ent(H.esc(e["name"]), aid_by_name[e["name"]], "segment"),
+                             H.esc(object_type).lower() + ', blocks read', H.esc(e["name"])),
+                    H.tl_gutp(e["cur_val"], H.tl_mu(w, csv), "#" + str(e["cur_rnk"]) + " by physical reads"),
+                    "tl-" + aid_by_name[e["name"]], "o", H.esc(e["name"]), "blocks read"))
 
     if any_rows:
         put("</tbody></table></details>")
@@ -137,6 +152,8 @@ def emit(w) -> str:
             "No segment-level I/O recorded for any compared window "
             "(DBA_HIST_SEG_STAT empty for these snapshots, or no valid "
             "windows).</p>")
+    for i, r in enumerate(tl_rows, start=1):
+        put((H.tl_open("objects") if i == 1 else "") + r + (H.tl_close() if i == len(tl_rows) else ""))
 
     # ---- second pass: per-object-type rollup (chart only) ---------------
     tpicked = D.rank_pick(types_by_win, codes, top_n)
@@ -172,6 +189,6 @@ def emit(w) -> str:
         entries_pl = chrome.put_lines(chrome.sql_path("sql/14_segment_io.sql"))
         out.extend(D.lift_script(entries_pl, "}};", "})();</script>"))
 
-    put("</section>")
+    put(H.lib_ls("segment-io", ls or "no segment-level I/O recorded") + "</section>")
     put("<!-- AWR-SECTION: 14_segment_io END -->")
     return "\n".join(out)

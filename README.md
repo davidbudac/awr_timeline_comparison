@@ -159,8 +159,9 @@ HH24:MI`, 24-hour clock) and a label. Copy
 
 Then pass its path as the `marker_file` argument (wrapper) or
 `DEFINE marker_file = 'my_markers.sql'` (pure SQL\*Plus). Markers appear on
-every calendar-axis chart: the masthead strip, the ASH timeline, the
-DB-time summary, and the per-SQL ASH cards.
+every dated chart: the Activity charts at the top of every view, the
+Timeline's window grid ruler (drawn inline, offline too), the finding cards' window bars, the
+hourly ASH timeline, the DB-time summary, and the per-SQL ASH cards.
 
 **File-free markers** — if you'd rather not keep a file on disk, pass the
 same milestones inline. Each is `WHEN|LABEL`, joined by `;;`:
@@ -185,9 +186,9 @@ Notes:
 - A malformed datetime is skipped (it becomes an HTML comment) rather than
   failing the run. Labels containing a single quote must double it
   (`'Bob''s change'`).
-- Markers are chart-only: with the ECharts CDN blocked they don't draw,
-  and the per-window sparkline tables (Load / Metrics / Waits) never carry
-  them since those aren't calendar timelines.
+- With the ECharts CDN blocked, markers still draw on the Timeline view and
+  the window bars (inline SVG) but not on the ECharts charts; the tables'
+  micro strips never carry them.
 
 Pure SQL\*Plus (no bash) — you must pre-DEFINE the variables or load the
 canonical defaults first:
@@ -213,7 +214,8 @@ SQL> @awr_trend.sql
 
 Output: `reports/awr_trend_<DBID>_<YYYYMMDDHH24MI>_run<run_id>.html`. Open
 it in a browser. The report is self-contained (one HTML file with inline
-CSS and inline SVG sparklines; by default the larger charts load ECharts
+CSS, JS and SVG for the Summary and Timeline views; by default the larger
+All-sections charts load ECharts
 from `cdn.jsdelivr.net` and degrade gracefully when the CDN is blocked).
 For a **fully offline** report — charts and all — see "Offline /
 self-contained report" below.
@@ -251,12 +253,13 @@ console has the same feature as a per-DB heatmap band via
 ### Offline / self-contained report
 
 By default only one thing in the report reaches the network: the Apache
-ECharts library that draws the larger visualizations (hero strip, wait
-stacked bars, top-SQL bump chart, ASH timeline — the Findings "Biggest
-movers" table is a plain HTML table, so it renders with charts off too).
-When the CDN is blocked the report still opens and every table renders — an
-amber "Charts hidden" banner explains why, and the inline-SVG sparklines
-still draw. To make the report render its charts with **no network at
+ECharts library that draws the larger All-sections charts (wait stacked
+bars, top-SQL bump chart, hourly ASH timeline, DB time over the span, I/O
+trends, SQL Monitor scatter). The Summary and Timeline views — finding
+cards, window bars, band glyphs, micro strips, the Activity charts
+— are inline SVG/CSS and never need it. When the CDN is blocked the report
+still opens and every table renders; an amber "Charts hidden" banner
+explains why. To make the report render its charts with **no network at
 all**, set the `ECHARTS` environment variable (wrapper) or the `echarts`
 substitution variable (pure SQL\*Plus):
 
@@ -341,116 +344,116 @@ even `gzip` is missing.
 
 ## Read the report
 
-The header card at the top lists **which windows were compared** —
-the current window plus the prior windows, stepped back by `step ×
-step_unit` each time (default: 7 days), with explicit start → end
-timestamps so you always know exactly what baseline is driving the
-z-scores. Click a window chip (or a per-window column header anywhere in
-the report) to highlight that window across every table and chart at once.
+A sticky **top bar** names the database and the **Current** window ("vs N
+prior windows, every 1w") and carries the view switch and the dark-mode
+toggle. The report has three views of the same numbers:
 
-Directly under the verdict, a **"What changed"** paragraph or two — 2 to 5
-auto-generated sentences that join findings across sections (e.g. a
-physical-reads spike to the file/segment/SQL it landed on, or DB time
-growth to wait- vs CPU-bound) — appears whenever the report has something
-rule-based to say; it's silent otherwise. Every fact it states is also
-rendered in the section it links to.
+- **Summary** (the default) — the answer first.
+- **Timeline** — every compared window side by side, oldest first.
+- **All sections** — every table and chart of the report, in full.
 
-1. **Overview** — hero strip with the six headline load/metric numbers.
-2. **ASH timeline** — hourly stacked-area chart of Active Sessions by wait
-   class from `DBA_HIST_ACTIVE_SESS_HISTORY`, covering the full compare
-   span; compared windows are highlighted as background bands. If you pass
-   a `marker_file`, your milestones appear here (and on the other dated
-   charts) as vertical dashed lines — see "Timeline markers" above.
-3. **Findings** — a "Biggest movers" table (top 8 by `|z|`, log-scaled
-   bars) leads the section, followed by the full per-name detail tables:
-   each metric with `|z|>3` is CRITICAL, `|z|>2` is WARN. Metrics with
-   fewer than 3 valid prior windows fall back to a `%`-delta only.
-4. **Windows** — the compared windows used, with begin/end snap_ids.
-   Windows where the instance restarted mid-window are SKIPPED and
-   excluded from the baseline.
-5. **Load profile** — per-second rates for the classic AWR "Load Profile"
-   stats incl. redo size.
-6. **System metrics** — averages from `DBA_HIST_SYSMETRIC_SUMMARY`.
-7. **Foreground waits** — top-N events + wait-class rollup.
-8. **Background waits** — from `DBA_HIST_BG_EVENT_SUMMARY`.
-9. **Top SQL** — one tab group covering the 5 rankings (elapsed, CPU,
-   buffer gets, physical reads, executions) plus a sortable SQL-pool
-   table (plan-change badges, full SQL text) for the per-SQL detail.
-10. **Segment I/O** — segments (and object types) with the most I/O
-    activity per window from `DBA_HIST_SEG_STAT`: physical reads/writes
-    (blocks) and read/write requests, one line per top segment across
-    windows with a per-object-type rollup toggle.
-11. **File I/O** — data/temp files with the most I/O per window from
-    `DBA_HIST_FILESTATXS` / `DBA_HIST_TEMPSTATXS` (data read/written in
-    MB plus read/write requests), with a toggle to the AWR-report-style
-    "IOStat by Filetype" view from `DBA_HIST_IOSTAT_FILETYPE` covering
-    all database I/O (control file, redo log, archive log, …).
-12. **Parameter changes** — initialization parameters from
-    `DBA_HIST_PARAMETER` whose value differs across the compared windows,
-    pivoted parameter × window (value as of each window's end snapshot).
-13. **Utilization** — descriptive usage profile (transaction / call / logon
-    rates, sessions, data and network volume), template-independent.
-14. **Day profile** *(only with `profile_days > 0`)* — every hour of the
-    24 h ending at `target_end` scored against the same hour-of-day on the
-    N prior days: a signed-z heatmap (hour × metric; red = above the prior
-    days, blue = below), a per-metric line chart (current day vs the
-    prior-day mean with a μ ± 2σ band), and a 24-row table. Nine
-    per-second rates from `DBA_HIST_SYSSTAT` (DB time, DB CPU, user calls,
-    executions, logical/physical reads, physical writes, redo, commits),
-    restart-guarded; an hour covered by < 30 min of snapshots is blank, not
-    0. Independent of the report cadence — the answer to "which hour of
-    the day changed?" without running 24 reports.
+The top-bar switch remembers your choice in `localStorage`; a link can
+force a view with `#view=summary|timeline|all`. Any link to a row in
+another view switches to that view, opens whatever folds it and flashes
+the row. With JavaScript off, every section shows, stacked.
+
+**Activity, whole span** opens every view, above the verdict: two stacked
+charts of ASH active sessions across the whole compared span on one time
+axis, **by wait class** and **by wait event** (the 14 busiest events, on
+CPU as `CPU`, the rest summed as *Other events*), stacked areas, hourly
+(or the sub-hour cadence), the compared windows striped (Current indigo,
+pinned amber, skipped grey), release markers on top. Zoom to 6 hours or
+less over a compared window and both charts switch to **1-minute detail**
+inside the windows (the range label says so; at most 40000 minutes of
+windows, the most recent first). Hover for each series' value (the
+crosshair shows on both charts), click a legend entry to hide a series,
+drag across either chart to zoom both, double-click or **Reset zoom** to
+go back, click a window stripe to pin it.
+
+### Summary
+
+1. **Verdict** — one sentence built from the findings ("DB time up 80%,
+   mostly wait: physical I/O", or "Nothing moved beyond its normal range"),
+   a **Likely source** line (the plan change, new SQL, or the segment the
+   reads landed on) and count pills (findings, metrics moved, plan change,
+   parameters that differ, skipped windows, metrics normal).
+2. **DB time per window** — one bar per compared window, the Current one
+   last and in the accent colour, with its normal range, Δ vs the prior
+   mean and the band glyph (below).
+3. **Findings** — one **card per family** of metrics that moved (physical
+   I/O, DB time, network, commit, parsing, writes and redo, any other wait
+   class): the lead metric's value and normal range, its per-window bars,
+   up to four evidence rows (the event, segment, file or statement behind
+   it, each a link to its table row), the related metrics that moved with
+   it, and a "Timeline →" link.
+4. **What changed around it** — a card per **plan change** (elapsed per
+   window, the plan-hash step line, per-execution / SQL Monitor / CPU
+   evidence) and a **configuration** card (parameters that step between
+   windows), placed under the release markers they follow.
+5. **Checked and normal** — the metrics that stayed in range, the ones
+   that moved too little to matter, and the ones that improved.
+6. **Evidence library** — every other section as one line with its
+   status ("4 of 14 events moved", "none differ"); click a line to open the
+   section in place. Top SQL and Foreground waits open by default.
+
+**The band glyph** is how every scored row reads: *Normal range* (prior
+mean ± 2σ) · a dot on a −4σ … +8σ axis over the shaded ±1σ / ±2σ zones
+(filled red = large, amber = moderate, green = improved, hollow = typical)
+· the z-score · the change vs the prior mean (`▲ ×4.2` from twice the
+mean, else a percentage). The **Trend** cells of the tables are 13-bar
+micro strips: one bar per window from zero, the normal zone shaded, Current
+last. The **Reading the charts** guide and **About this report** at the end
+of every view explain each chart and every method note.
+
+### Timeline
+
+Under the Activity charts, the **window grid**: one
+column per compared window with lanes for activity, the headline and
+flagged metrics, waits, the segments / files the reads land on, Top SQL
+(◆ plan change, ✚ first seen) and SQL Monitor, and parameter step lines.
+Click a date in the ruler (or a window stripe in either Activity chart) to
+**pin** that window: every Δ in the grid is re-based against it; `Esc` or
+the Current column clears the pin (switching views keeps it). The Day profile (with `profile_days > 0`) follows.
+
+### All sections
+
+Every section, full size: Findings (one table per domain with the band
+columns), Load profile, System metrics, Foreground / Background waits, Top
+SQL (five rankings as tabs + bump chart + the per-SQL pool), Top SQL ASH
+cards, SQL Monitor, Segment I/O, File I/O, Parameter changes, the hourly
+ASH timeline, DB time over the span, Utilization, Windows (begin / end
+snap ids, skipped windows and why) and the Day profile.
+
+- **Windows** — restart, a DBID change, a missing snapshot or one more
+  than 15 min off the window edge SKIPS a window; it is excluded from the
+  baseline and struck through in the Timeline ruler.
+- **Findings** — `|z| > 3` large, `|z| > 2` moderate, only when the move
+  is material (see the policy below); fewer than 3 valid prior windows =
+  "too little history".
+- **Top SQL, Segment I/O, File I/O** are **ranked, not scored**: they
+  show where the time and I/O went, not whether it is abnormal.
+- **SQL Monitor** — persisted SQL Monitor executions per statement, with a
+  Plan hash column, errors and DOP downgrades.
 
 ### The navigation rail & dark mode
 
-The report opens with a fixed **navigation rail** down the left edge: a
-scrollspy-tracked link per section, each with a small live status dot
-graded from that section's own content (red for a critical finding, amber
-for a warning, neutral otherwise) so you can see at a glance where the
-trouble is before scrolling. A row filter at the top of the rail (`⌘K` /
-`Ctrl+K` to focus it, `Esc` to clear) narrows the rail to matching
-sections as you type. Under 980px the rail is replaced by a sticky top
-bar with a ☰ menu holding the same links and toggles.
+The **rail** on the left follows the view: Summary lists the verdict, one
+link per finding card and the library; Timeline lists its lanes; the rest
+of the links dim when their section is not in the current view, with a
+"+ N more in All sections" line. Each link carries a live status dot and
+crit / warn counts; `J` / `K` jump between findings; the row filter
+(`⌘K` / `Ctrl+K`, `Esc` to clear) narrows every table to matching rows.
 
-A sun/moon button in the rail's brand row toggles **dark mode** (the
-"Slate Instrument" theme). The first load follows your OS
-`prefers-color-scheme`; after that your choice is remembered in
-`localStorage`, and the theme is applied before the charts initialize so
-there's no flash. The foot of the rail carries the **Normal / Full**
-view switch, described next. All of this is purely client-side CSS/JS: no
-re-run, no DEFINE, and it all works offline.
+The sun/moon button in the top bar toggles **dark mode**. The first load
+follows your OS `prefers-color-scheme`; after that your choice is
+remembered in `localStorage` and applied before first paint.
 
-Every table in the report also supports **click-to-sort** on its column
-headers, and any table with 4+ rows gets a small toolbar above it for
-**copying as CSV or Markdown**; hovering a section heading reveals a `#`
-permalink. Long detail tables collapse their tail behind a "Show N more
-rows" link. None of this needs the network or a re-run.
-
-### Normal and Full views
-
-The report opens in the **Normal** view: the masthead (verdict, "what
-changed" narrative, compared windows, DB-time strip), **Headline
-metrics**, the **Findings** "Biggest movers" table, the **ASH timeline**
-and **Top SQL**. Three more sections join it only when they have something
-to say: **Parameter changes** (a parameter differs across the compared
-windows), **SQL Monitor** (an error, plan change or DOP downgrade on a
-statement that ran in the Current window) and the **Day profile** (a
-day-wide shift). Everything else -- load profile, system metrics, the wait
-tables, per-SQL ASH cards, segment / file I/O, the per-domain findings
-tables, the per-SQL pool -- is one click away in the **Full** view. The
-rail lists only the sections on screen plus a "+ N more in Full" line, a
-note at the end of the page names the hidden sections, and any cross-link
-into hidden content switches to Full by itself. Your choice is remembered
-in `localStorage`; a shared link carries it in the hash (`#findings!v=f`).
-With JavaScript off the whole report shows.
-
-The masthead's **What changed** block is a short structured list, one
-row per finding: what moved, by how much (ratio or percent), from what to
-what, one clause of why, and a link to the section that has the detail.
-The **Compared windows** strip shows the Current window, the number and
-cadence of the prior windows and the date it reaches back to, above the
-DB-time timeline; the full list of dated window chips (click one to
-highlight that window everywhere) folds out on demand.
+Every table supports **click-to-sort** on its column headers; any table
+with 4+ rows gets a toolbar for **copying as CSV or Markdown**; hovering a
+section heading reveals a `#` permalink; long detail tables collapse their
+tail behind a "Show N more rows" link. Click a per-window column header to
+highlight that window across every table and chart. None of this needs the
+network or a re-run.
 
 ### Per-metric policy: direction and floors
 
@@ -461,11 +464,12 @@ and how big a move must be to matter (a minimum |%-delta| and a value
 floor in the metric's own unit; for waits, a minimum share of the Current
 window's wait time). A move in the good direction -- fewer physical reads,
 a lower read latency, fewer hard parses -- is tagged **improved** and is
-never highlighted, never a mover and never counted in the verdict; a
+never highlighted, never leads a finding card and never counted in the verdict; a
 purely informational counter that moved is **noted**. The file is a plain
 one-line-per-metric table meant to be edited: change a floor or a
-direction there and every section (verdict, findings, hero cards, wait
-tables, day profile, narrative) follows. The generated reference
+direction there and every section (verdict, finding cards, findings
+tables, DB time strip, wait tables, day profile, likely-source line)
+follows. The generated reference
 [docs/metric_policy.html](docs/metric_policy.html) lists every metric,
 class and event with its direction, floors, when it fires and when it
 does not (`python3 docs/gen_policy_doc.py` regenerates it).
@@ -624,25 +628,26 @@ SQL> @side/create_weekly_baselines.sql
 ├── sql/
 │   ├── defaults.sql                 -- canonical default DEFINEs
 │   ├── _style.sql                   -- shared CSS (emitted once)
-│   ├── 00_params.sql                -- params + header card
+│   ├── 00_params.sql                -- top bar, rail, views, verdict, Timeline skeleton
 │   ├── 01_windows.sql               -- snapshot window matching
 │   ├── 02_load_profile.sql          -- SYSSTAT deltas (per template)
 │   ├── 03_sysmetric.sql             -- SYSMETRIC averages (per template)
 │   ├── 04_waits_fg.sql              -- foreground waits (per template)
 │   ├── 05_waits_bg.sql              -- background waits (per template)
 │   ├── 06_top_sql.sql               -- Top-N SQL
-│   ├── 07_summary.sql               -- z-score findings + "Biggest movers" table
-│   ├── 08_overview.sql              -- hero strip (headline metrics)
-│   ├── 09_ash_timeline.sql          -- hourly ASH stacked-area timeline
+│   ├── 07_summary.sql               -- z-score findings: Summary cards + per-domain tables
+│   ├── 08_overview.sql              -- Summary strip: DB time per window
+│   ├── 09_ash_timeline.sql          -- hourly ASH timeline + the Activity charts' payloads (+ 1-min detail)
 │   ├── 10_db_time_summary.sql       -- full-span DB time stacked area
 │   ├── 11_top_sql_ash_breakdown.sql -- per-Top-N-SQL ASH cards
-│   ├── 12_param_changes.sql         -- parameters that differ across windows
+│   ├── 12_param_changes.sql         -- parameters that differ across windows (+ config card)
 │   ├── 13_utilization.sql           -- database utilization profile (usage overview)
 │   ├── 14_segment_io.sql            -- top segments by I/O per window
 │   ├── 15_file_io.sql               -- per-file / file-type I/O deltas
 │   ├── 16_day_profile.sql           -- Day profile: hour-of-day vs N prior days (profile_days > 0)
-│   ├── 17_narrative.sql             -- "What changed": rule-based prose, relocated into the masthead
-│   ├── 18_sqlmon.sql                -- SQL Monitor summaries
+│   ├── 17_narrative.sql             -- verdict pieces: likely source, pills, notes (runs last)
+│   ├── 18_sqlmon.sql                -- SQL Monitor summaries (+ plan-change card)
+│   ├── 19_reference.sql             -- "Reading the charts" guide + About this report
 │   ├── fleet/                       -- fleet-report sections (spooled by awr_fleet_extract.sql)
 │   │   ├── 00_fleet_chrome.sql      -- shared page head/CSS/JS + inline-SVG renderers
 │   │   ├── 01_row.sql               -- summary row + detail scaffold + ASH bands
@@ -657,7 +662,13 @@ SQL> @side/create_weekly_baselines.sql
 │   └── lib/                         -- shared @@-included fragments (CTEs, JS, helpers)
 │       ├── day_profile_cte.sql      -- hour-of-day x N-day matrix (shared by 16 + fleet 06)
 │       ├── fmt_num.plsql            -- consistent value-cell number formatting (fmt_num/fmt_int)
-│       ├── dev_bucket.plsql         -- heat-tint bucket for prior-window cells (data-dev)
+│       ├── band_glyph.plsql         -- band glyph + Δ cells (Normal range | band | z | Δ)
+│       ├── anchor_id.plsql          -- stable row ids for entity links
+│       ├── finding_cards.plsql      -- finding-card vocabulary (families, labels, units, ent())
+│       ├── wingrid.plsql            -- per-window bar grid (strip, cards, Timeline)
+│       ├── timeline.plsql           -- Timeline lane rows
+│       ├── js_wingrid.plsql / js_timeline.plsql / js_microstrip.plsql
+│       │                            -- client scripts, generated from src/*.js by tools/js2plsql.sh
 │       ├── js_markers.plsql         -- inits window.AWR_MARKERS + AWR_markLine()
 │       ├── marker.sql               -- emit one timeline marker (used by marker_file)
 │       ├── markers_inline.sql       -- file-free markers parser (used by the MARKERS var)

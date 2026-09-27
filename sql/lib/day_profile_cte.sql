@@ -18,7 +18,8 @@
 --              (LAG(startup_time) = startup_time) -- same idea as the
 --              pair_keys CTE in 00_params.  Each pair carries its span in
 --              seconds and its midpoint.
---   dp_deltas  DBA_HIST_SYSSTAT cumulative-counter deltas for the fixed,
+--   dp_deltas  DBA_HIST_SYSSTAT cumulative-counter deltas (DB time / DB CPU
+--              from DBA_HIST_SYS_TIME_MODEL, via dp_src) for the fixed,
 --              template-independent stat list below, restricted to those
 --              pairs (the stat's LAG row must be the SAME predecessor snap
 --              the pair was built from, so a missing sysstat row can never
@@ -87,18 +88,35 @@ dp_pairs AS (
       AND  startup_time = prev_startup            -- restart guard
       AND  end_dt > prev_end_dt
 ),
-dp_deltas AS (
-    SELECT ss.dbid, ss.snap_id, ss.instance_number, ss.stat_name,
-           ss.value - LAG(ss.value) OVER (PARTITION BY ss.dbid, ss.instance_number, ss.stat_name
-                                          ORDER BY ss.snap_id)     AS delta,
-           LAG(ss.snap_id) OVER (PARTITION BY ss.dbid, ss.instance_number, ss.stat_name
-                                 ORDER BY ss.snap_id)              AS prev_snap_id
+-- DB time / DB CPU are time-model statistics (DBA_HIST_SYSSTAT has no
+-- 'DB CPU' row at all): read from DBA_HIST_SYS_TIME_MODEL in microseconds
+-- and divided by 1e4 so they stay in the centiseconds the scale column
+-- assumes -- the same routing as sql/lib/load_pairs_cte.sql.
+dp_src AS (
+    SELECT ss.dbid, ss.snap_id, ss.instance_number, ss.stat_name, ss.value
     FROM   dba_hist_sysstat ss
     JOIN   dp_snaps s
       ON   s.dbid = ss.dbid
      AND   s.snap_id = ss.snap_id
      AND   s.instance_number = ss.instance_number
     WHERE  ss.stat_name IN (SELECT stat_name FROM dp_targets)
+      AND  ss.stat_name NOT IN ('DB time', 'DB CPU')
+    UNION ALL
+    SELECT tm.dbid, tm.snap_id, tm.instance_number, tm.stat_name, tm.value / 1e4
+    FROM   dba_hist_sys_time_model tm
+    JOIN   dp_snaps s
+      ON   s.dbid = tm.dbid
+     AND   s.snap_id = tm.snap_id
+     AND   s.instance_number = tm.instance_number
+    WHERE  tm.stat_name IN ('DB time', 'DB CPU')
+),
+dp_deltas AS (
+    SELECT dbid, snap_id, instance_number, stat_name,
+           value - LAG(value) OVER (PARTITION BY dbid, instance_number, stat_name
+                                    ORDER BY snap_id)              AS delta,
+           LAG(snap_id) OVER (PARTITION BY dbid, instance_number, stat_name
+                              ORDER BY snap_id)                    AS prev_snap_id
+    FROM   dp_src
 ),
 dp_cells_raw AS (
     SELECT d.stat_name,

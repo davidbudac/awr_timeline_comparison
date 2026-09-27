@@ -29,9 +29,12 @@ BEGIN
         || ' --ink:#12161d;         --ink-soft:#333a45;     --muted:#5d6672;'
         || ' --rule:#c4ccd6;        --hairline:#d9dfe6;     --line-soft:#e8ecf1;'
         || ' --red:#c62828;         --red-deep:#a01c1c;     --chip-bg:#eef1f5;'
-        || ' --track:#e2e7ee;'
-        || ' --cell-bar-bg:rgba(31,95,168,0.10);'
-        || ' --accent:#1f5fa8;      --accent-deep:#123a68;  --accent-bg:#e0eaf4;'
+        || ' --track:#eef0f3;'
+        || ' --cell-bar-bg:rgba(90,67,223,0.10);'
+        -- v1.6.0: ONE accent, indigo, and it means Current (the Current
+        -- column band, the Current chip, the Current bar).  Severity colour
+        -- lives only on dots, the Delta text and the 2px row marker.
+        || ' --accent:#5a43df;      --accent-deep:#4633c4;  --accent-bg:#ece9fc;'
         || ' --accent-2:#3c6591;'
         || ' --rail-w:236px;'
         -- Read by the chart-init scripts (sections 04-15 and
@@ -57,6 +60,17 @@ BEGIN
         || ' --wc-cluster:#E5C228;     --wc-admin:#7B6FA8;'
         || ' --wc-sched:#88C070;       --wc-queue:#E89BB7;'
         || ' --wc-cpu:#3FB344;'
+        -- v1.6.0 (Mock D) tokens: the mock's names, aliased onto the
+        -- workbench palette where one exists, so the band glyph / guide CSS
+        -- below is lifted from design/report_mocks_src/hybrid/style.css as is.
+        || ' --ink-4:#a3acb9;'
+        || ' --zone1:#bec7d2; --zone2:#dce1e7; --tick:#aab3bf; --mean:#4f5b6c; --bar:#c5ccd6;'
+        || ' --acc:#5a43df; --acc-ink:#4633c4; --acc-band:rgba(90,67,223,.07); --acc-soft:rgba(90,67,223,.11);'
+        || ' --crit-dot:#d83a2f; --warn-dot:#e09b1c; --imp:#08777d;'
+        || ' --mk:#3a4556; --mkline:rgba(44,54,68,.26); --flagbg:#e8ebf0;'
+        || ' --hov:rgba(23,32,44,.05); --pin:rgba(178,112,0,.10); --flash:rgba(90,67,223,.22);'
+        -- spacing scale: every gap between and inside sections comes from here
+        || ' --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px;'
         || ' }');
 
     -- =========================================================
@@ -71,9 +85,9 @@ BEGIN
         || ' --ink:#e7ecf2;         --ink-soft:#bcc5d1;     --muted:#8591a0;'
         || ' --rule:#333d49;        --hairline:#2a323d;     --line-soft:#232a34;'
         || ' --red:#e5675c;         --red-deep:#f0837a;     --chip-bg:#1d232d;'
-        || ' --track:#2a323d;'
-        || ' --cell-bar-bg:rgba(91,155,216,0.16);'
-        || ' --accent:#5b9bd8;      --accent-deep:#c4dbf2;  --accent-bg:#18314a;'
+        || ' --track:#1f2630;'
+        || ' --cell-bar-bg:rgba(167,150,255,0.16);'
+        || ' --accent:#a796ff;      --accent-deep:#bdb0ff;  --accent-bg:#231f3d;'
         || ' --accent-2:#7ea6cf;'
         || ' --fg:#bcc5d1;           --border:#2a323d;'
         || ' --crit-fg:#e5675c;      --warn-fg:#e0a53a;'
@@ -85,6 +99,12 @@ BEGIN
         || ' --dot-ok:#43bb82;      --dot-warn:#e0a53a;'
         || ' --dot-crit:#e5675c;    --dot-na:#3a4350;'
         || ' --spark:#e7ecf2;       --spark-fill:rgba(231,236,242,.10);'
+        || ' --ink-4:#566070;'
+        || ' --zone1:#4a5565; --zone2:#2e3744; --tick:#5c6778; --mean:#c3cbd6; --bar:#3e4757;'
+        || ' --acc:#a796ff; --acc-ink:#bdb0ff; --acc-band:rgba(167,150,255,.085); --acc-soft:rgba(167,150,255,.14);'
+        || ' --crit-dot:#ff6255; --warn-dot:#f0a63a; --imp:#4cc7c4;'
+        || ' --mk:#c3ccd8; --mkline:rgba(202,210,221,.24); --flagbg:#222a35;'
+        || ' --hov:rgba(255,255,255,.045); --pin:rgba(242,176,76,.12); --flash:rgba(167,150,255,.22);'
         || ' } }');
 
     -- =========================================================
@@ -92,6 +112,12 @@ BEGIN
     -- sections is set with order: below); the fixed sidebar is cleared
     -- with padding-left.
     -- =========================================================
+    -- The Mock D alias tokens live on body, NOT :root: a var() inside a
+    -- custom property resolves where it is declared, so aliases declared
+    -- on :root would freeze the LIGHT values and ignore body.dark.
+    DBMS_OUTPUT.PUT_LINE('body { --surface:var(--panel); --surface-2:var(--panel-2); --bg:var(--paper);'
+        || ' --ink-2:var(--ink-soft); --ink-3:var(--muted);'
+        || ' --line:var(--line-soft); --line-2:var(--hairline); --row-bg:var(--panel); }');
     DBMS_OUTPUT.PUT_LINE('* { box-sizing:border-box; }');
     -- No html-level scroll-behavior:smooth: embedded webviews can stall
     -- the smooth-scroll animation entirely (page refuses to move), and
@@ -104,7 +130,7 @@ BEGIN
         || ' margin:0;'
         || ' padding:0 32px 96px calc(var(--rail-w) + 32px);'
         || ' display:flex; flex-direction:column; gap:0; align-items:stretch; }');
-    DBMS_OUTPUT.PUT_LINE('main > section, body > section, body > header.report, body > footer.report {'
+    DBMS_OUTPUT.PUT_LINE('main > *, body > section, body > header.report, body > footer.report {'
         || ' width:100%; }');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px) {'
         || ' body { padding:0 20px 64px; } }');
@@ -121,167 +147,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('header.report      { order:1; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc            { order:2; }');
     DBMS_OUTPUT.PUT_LINE('main               { display:contents; }');
-    DBMS_OUTPUT.PUT_LINE('main > section, body > section { order:3; }');
+    DBMS_OUTPUT.PUT_LINE('main > *, body > section { order:3; }');
     DBMS_OUTPUT.PUT_LINE('footer.report      { order:4; }');
-
-    -- =========================================================
-    -- Masthead (header.report) -- compact identity panel at the top
-    -- of the content column: brandline, small headline, run metadata,
-    -- verdict banner, windows strip.
-    -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('header.report {'
-        || ' background:var(--panel); color:var(--ink);'
-        || ' border:1px solid var(--hairline); border-radius:10px;'
-        || ' padding:18px 24px 16px; margin:20px 0 0; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .brandline {'
-        || ' font-weight:700; letter-spacing:0.14em; font-size:10.5px;'
-        || ' text-transform:uppercase; color:var(--muted); margin:0 0 10px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .brandline .dot { color:var(--accent); margin-right:6px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .brandline .slash { color:var(--accent); font-weight:700; }');
-    DBMS_OUTPUT.PUT_LINE('header.report h1 {'
-        || ' font-weight:700; font-size:24px; line-height:1.2;'
-        || ' letter-spacing:-0.01em; margin:0; color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('header.report h1 em {'
-        || ' font-style:normal; color:var(--accent); }');
-    DBMS_OUTPUT.PUT_LINE('header.report h1 .badge { display:none; }');
-    DBMS_OUTPUT.PUT_LINE('@media (max-width: 880px) {'
-        || ' header.report { padding:14px 16px; }'
-        || ' header.report h1 { font-size:19px; } }');
-
-    -- Masthead .topgrid: headline left, run metadata right
-    DBMS_OUTPUT.PUT_LINE('header.report .topgrid {'
-        || ' display:flex; justify-content:space-between; align-items:flex-end;'
-        || ' gap:24px; flex-wrap:wrap; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .meta {'
-        || ' text-align:right; font-size:12px; color:var(--muted);'
-        || ' line-height:1.65; min-width:240px;'
-        || ' display:block; margin-top:0; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .meta div {'
-        || ' color:var(--muted); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .meta b {'
-        || ' color:var(--ink); font-weight:600; margin-right:4px; }');
-
-    -- Header windows-strip: narrow full-width DB-time timeline.
-    -- .strip-head holds a single caption line; .windows-chart is the
-    -- ECharts target (very short); .windows-fallback is shown only when
-    -- body.no-charts hides the chart (offline / CDN-less) and lists
-    -- windows as plain text.
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip {'
-        || ' margin-top:16px; font-size:13px; color:var(--ink-soft); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .strip-head {'
-        || ' display:flex; align-items:baseline; gap:10px;'
-        || ' flex-wrap:wrap; margin-bottom:4px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .strip-head b {'
-        || ' color:var(--muted); font-weight:700;'
-        || ' letter-spacing:0.08em; font-size:10.5px;'
-        || ' text-transform:uppercase; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .strip-meta {'
-        || ' color:var(--muted); font-size:11px;'
-        || ' letter-spacing:0.02em; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .windows-chart {'
-        || ' width:100%; height:64px; }');
-    DBMS_OUTPUT.PUT_LINE('body.no-charts header.report .windows-strip .windows-chart {'
-        || ' display:none; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .windows-fallback {'
-        || ' display:none; font-size:12px; color:var(--ink-soft);'
-        || ' flex-wrap:wrap; gap:4px 14px; margin-top:2px; }');
-    DBMS_OUTPUT.PUT_LINE('body.no-charts header.report .windows-strip .windows-fallback {'
-        || ' display:flex; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .windows-strip .windows-fallback .win b {'
-        || ' color:var(--ink); font-weight:700; margin-right:4px; }');
-
-    -- =========================================================
-    -- Masthead verdict: severity-tinted banner emitted by 00_params.sql
-    -- from a recomputed z-score. The container carries a v-ok / v-crit /
-    -- v-skip class so the whole callout is tinted by severity.
-    -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict {'
-        || ' margin-top:16px; padding:12px 16px;'
-        || ' border:1px solid var(--hairline); border-left:5px solid var(--muted);'
-        || ' border-radius:8px;'
-        || ' background:var(--panel-2);'
-        || ' font-size:13.5px; color:var(--ink-soft); line-height:1.5;'
-        || ' display:flex; flex-wrap:wrap; align-items:center;'
-        || ' column-gap:12px; row-gap:8px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict.v-crit {'
-        || ' border-left-color:var(--crit);'
-        || ' background:var(--crit-bg); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict.v-ok {'
-        || ' border-left-color:var(--ok);'
-        || ' background:var(--ok-bg); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict.v-skip {'
-        || ' border-left-color:var(--muted);'
-        || ' background:var(--skip-bg); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .label {'
-        || ' font-size:10.5px; letter-spacing:0.12em; text-transform:uppercase;'
-        || ' color:var(--muted); font-weight:700; align-self:center; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede {'
-        || ' color:var(--ink); font-weight:700;'
-        || ' font-size:19px; letter-spacing:-0.01em; line-height:1.15;'
-        || ' text-decoration:none; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict a.lede:hover { text-decoration:underline; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede.crit { color:var(--crit); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede.ok   { color:var(--ok); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .lede.skip { color:var(--muted); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .sep {'
-        || ' color:var(--accent); font-weight:700; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .body { color:var(--ink-soft); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .body a {'
-        || ' color:var(--accent); text-decoration:none; font-weight:600; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .body a:hover { text-decoration:underline; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover {'
-        || ' display:inline-flex; align-items:baseline; gap:6px;'
-        || ' white-space:nowrap; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover::before {'
-        || ' content:"\2022"; color:var(--accent); font-weight:700;'
-        || ' margin-right:2px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .name {'
-        || ' color:var(--ink); font-weight:600; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct {'
-        || ' font-variant-numeric:tabular-nums; font-weight:700; }');
-    -- F5: direction is carried by the glyph, not by color.  The percentage
-    -- text stays --ink in BOTH directions (red/green delta coloring is gone
-    -- report-wide: red is reserved for severity).  Only the small triangle
-    -- glyph inside the verdict block keeps a severity color.
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct.up   { color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct.down { color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .verdict .mover .pct .g {'
-        || ' color:var(--crit); font-weight:700; margin-right:1px; }');
-
-    -- Compact "all movers" disclosure under the verdict.
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-all {'
-        || ' margin-top:8px; font-size:12px; color:var(--ink-soft); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-all summary {'
-        || ' cursor:pointer; user-select:none; padding:4px 0;'
-        || ' font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase;'
-        || ' color:var(--muted); font-weight:700; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-all summary:hover { color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list {'
-        || ' list-style:none; margin:6px 0 2px; padding:0;'
-        || ' display:grid;'
-        || ' grid-template-columns:repeat(auto-fill, minmax(290px, 1fr));'
-        || ' gap:1px 20px; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list li {'
-        || ' display:flex; align-items:baseline; gap:8px;'
-        || ' padding:2px 0; line-height:1.4;'
-        || ' border-bottom:1px solid var(--line-soft); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-dom {'
-        || ' font-size:9px; letter-spacing:0.08em; font-weight:700;'
-        || ' color:var(--muted); width:46px; flex:none; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-name {'
-        || ' color:var(--ink); flex:1 1 auto;'
-        || ' overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-z {'
-        || ' font-variant-numeric:tabular-nums; color:var(--muted); flex:none; }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct {'
-        || ' font-variant-numeric:tabular-nums; font-weight:700;'
-        || ' flex:none; min-width:54px; text-align:right; }');
-    -- F5: neutralized (see the verdict .pct rules above).  The glyph in the
-    -- all-movers list is muted -- only the verdict block gets the crit glyph.
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct.up   { color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct.down { color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('header.report .movers-list .m-pct .g {'
-        || ' color:var(--muted); font-weight:700; margin-right:1px; }');
 
     -- =========================================================
     -- Sidebar rail (nav.toc): fixed left column with grouped section
@@ -325,17 +192,20 @@ BEGIN
         || ' color:var(--muted); font-weight:700;'
         || ' letter-spacing:0.14em; font-size:10px;'
         || ' text-transform:uppercase;'
-        || ' margin:14px 10px 5px; }');
+        || ' margin:12px 10px 4px; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc b::before { content:none; }');
     -- Section links
     DBMS_OUTPUT.PUT_LINE('nav.toc a {'
         || ' display:flex; align-items:center; gap:9px;'
-        || ' padding:6px 10px; border-radius:7px;'
+        || ' padding:4px 10px; border-radius:7px;'
         || ' color:var(--ink-soft); text-decoration:none; font-weight:500;'
         || ' transition:color .12s, background .12s; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc a:hover { background:var(--paper); color:var(--ink); }');
+    -- The active link reads through its background and weight only: no
+    -- left bar or inset shadow (on the rounded pill it drew a crescent).
+    -- lint check 32 keeps every rail-link state free of one.
     DBMS_OUTPUT.PUT_LINE('nav.toc a.on {'
-        || ' background:var(--accent-bg); color:var(--accent-deep);'
+        || ' background:var(--panel); color:var(--ink);'
         || ' font-weight:600; }');
     -- Status dots (injected by JS; na = no signal found)
     DBMS_OUTPUT.PUT_LINE('nav.toc a .st {'
@@ -357,141 +227,133 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('nav.toc .view-btn { display:none; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc .view-panel { display:contents; }');
 
-    -- Normal / Full mode switch: a two-button segmented control
-    -- (aria-pressed marks the active half), first thing in the rail foot.
-    DBMS_OUTPUT.PUT_LINE('nav.toc .mode-switch {'
-        || ' display:flex; border:1px solid var(--rule); border-radius:8px;'
-        || ' overflow:hidden; background:var(--panel); }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc .mode-btn {'
-        || ' flex:1 1 0; font:inherit; font-size:11px; font-weight:700;'
-        || ' letter-spacing:0.04em; text-transform:uppercase;'
-        || ' padding:7px 6px; border:0; cursor:pointer; background:transparent;'
-        || ' color:var(--muted); transition:color .12s,background .12s; }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc .mode-btn + .mode-btn { border-left:1px solid var(--rule); }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc .mode-btn:hover { color:var(--accent); }');
-    DBMS_OUTPUT.PUT_LINE('nav.toc .mode-btn[aria-pressed="true"] {'
-        || ' background:var(--accent); color:#fff; }');
-    -- "+ N more sections" line the rail JS appends in the Normal view.
+    -- "+ N more in All sections" line the rail JS appends (Summary view).
     DBMS_OUTPUT.PUT_LINE('nav.toc a.more-sections { display:none; color:var(--muted); font-style:italic; }');
-    DBMS_OUTPUT.PUT_LINE('body.normal nav.toc a.more-sections { display:flex; }');
+    DBMS_OUTPUT.PUT_LINE('body.vs nav.toc a.more-sections { display:flex; }');
 
     -- =========================================================
-    -- "What changed" narrative (section 17), relocated into the masthead
-    -- slot by its own inline script.  A quiet accent-tinted note, not a
-    -- banner: the verdict above it already carries the severity color.
-    -- Kept in the Normal view (it IS the short report) --
+    -- Views (v1.6.0): Summary / Timeline / All sections replace Normal /
+    -- Full.  The early view script in 00_params.sql puts exactly one of
+    -- body.vs / body.vt / body.va on the body before first paint (hash
+    -- "#view=" wins, else localStorage "awr-view", else Summary).  An
+    -- element opts into views with class "vw" plus one in-s / in-t / in-a
+    -- class per view it belongs to (a section, or anything inside one); an
+    -- element with no "vw" class shows in every view (the guide, the About
+    -- fold).  With JS off no body class exists and everything shows.
+    -- Rail links whose target is hidden in the current view are dimmed
+    -- (.vdim, computed by the chrome JS; a click switches view).
     -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('.narr {'
-        || ' border-left:3px solid var(--accent);'
-        || ' background:var(--accent-bg);'
-        || ' font-size:13px; line-height:1.6;'
-        || ' padding:10px 14px; border-radius:0 6px 6px 0;'
-        || ' margin-top:10px; color:var(--ink); }');
-    -- v1.5.0: the block is a structured list, one row per finding --
-    -- label | headline number | from -> to | why | section link.
-    DBMS_OUTPUT.PUT_LINE('.narr .narr-head {'
-        || ' font-size:10.5px; font-weight:700; letter-spacing:0.08em;'
-        || ' text-transform:uppercase; color:var(--accent-deep); margin:0 0 6px; }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list { list-style:none; margin:0; padding:0; }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list li {'
-        || ' display:grid; grid-template-columns:130px auto auto 1fr auto;'
-        || ' column-gap:14px; align-items:baseline; padding:5px 0;'
-        || ' border-top:1px solid color-mix(in srgb, var(--accent) 18%, transparent); }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list li:first-child { border-top:0; }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list .n-lbl { font-weight:700; color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list .n-num {'
-        || ' font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list .n-sub {'
-        || ' color:var(--ink-soft); font-variant-numeric:tabular-nums; white-space:nowrap; }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list .n-why { color:var(--muted); min-width:0; }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list .n-go { white-space:nowrap; font-size:12px; }');
-    DBMS_OUTPUT.PUT_LINE('.narr-list li > :empty { display:none; }');
-    DBMS_OUTPUT.PUT_LINE('@media (max-width:700px) { .narr-list li {'
-        || ' grid-template-columns:1fr auto; }'
-        || ' .narr-list .n-why { grid-column:1 / -1; } }');
-    DBMS_OUTPUT.PUT_LINE('.narr b { font-weight:600; }');
-    DBMS_OUTPUT.PUT_LINE('.narr code {'
-        || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;'
-        || ' font-size:11.5px; }');
-    DBMS_OUTPUT.PUT_LINE('.narr a { color:var(--accent-deep);'
-        || ' text-decoration:none; font-weight:600;'
-        || ' border-bottom:1px solid var(--border); }');
-    DBMS_OUTPUT.PUT_LINE('.narr a:hover { border-bottom-color:var(--accent); }');
-
-    -- =========================================================
-    -- Normal / Full views (body.normal / body.full, set by the
-    -- early mode script in 00_params.sql from localStorage "awr-mode";
-    -- Normal is the default).  Same body-class hook as body.no-charts.
-    -- Sections opt INTO the Normal view with
-    -- data-normal="Y" (06 Top SQL, 07 Findings, 08 Headline metrics, 09
-    -- ASH timeline always; 12 / 16 / 18 only when they have something
-    -- worth the short report, via a one-line inline script); anything
-    -- tagged .full-only (07's per-domain tables, 06's per-SQL pool)
-    -- drops out of Normal even inside a kept section.  Rail links to
-    -- hidden sections carry .norm-dim (computed by the rail JS from the
-    -- same data-normal test) and hide too; the JS appends a "+ N more
-    -- sections" line and a .mode-note at the end of <main> instead.
-    -- With JS off neither body class exists and everything shows.
-    -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('body.normal main > section:not([data-normal]) { display:none; }');
-    DBMS_OUTPUT.PUT_LINE('body.normal .full-only { display:none; }');
-    DBMS_OUTPUT.PUT_LINE('body.normal nav.toc a.norm-dim, body.normal nav.toc b.norm-dim { display:none; }');
-    -- order:3 = the same flex rank as main > section, so the note (appended
-    -- last inside <main>) sits after the last visible section, not first.
-    DBMS_OUTPUT.PUT_LINE('.mode-note {'
-        || ' display:none; order:3; margin:18px 0 0 0; padding:12px 16px; border-radius:10px;'
-        || ' border:1px dashed var(--rule); background:var(--panel-2);'
+    DBMS_OUTPUT.PUT_LINE('body.vs .vw:not(.in-s), body.vt .vw:not(.in-t), body.va .vw:not(.in-a) { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a.vdim { opacity:.45; }'
+        || ' nav.toc a.vdim:hover { opacity:.85; }'
+        || ' nav.toc b.vdim { opacity:.5; }');
+    DBMS_OUTPUT.PUT_LINE('.view-note {'
+        || ' display:none; order:3; margin:var(--s5) 0 0 0; padding:var(--s3) var(--s4); border-radius:10px;'
+        || ' border:1px dashed var(--rule); background:transparent;'
         || ' color:var(--muted); font-size:12.5px; line-height:1.5; }');
-    DBMS_OUTPUT.PUT_LINE('body.normal .mode-note { display:block; }');
-    DBMS_OUTPUT.PUT_LINE('.mode-note button {'
-        || ' font:inherit; font-size:11px; font-weight:700; letter-spacing:0.04em;'
-        || ' text-transform:uppercase; padding:4px 10px; border-radius:6px;'
-        || ' border:1px solid var(--accent); background:transparent; color:var(--accent);'
+    DBMS_OUTPUT.PUT_LINE('body.vs .view-note { display:block; }');
+    DBMS_OUTPUT.PUT_LINE('.view-note button {'
+        || ' font:inherit; font-size:12px; font-weight:600;'
+        || ' padding:3px 10px; border-radius:6px;'
+        || ' border:1px solid var(--rule); background:var(--panel); color:var(--ink);'
         || ' cursor:pointer; margin-left:6px; }');
+    -- v1.6.0 evidence library (Summary view only).  Every section with
+    -- class "lib" is one row of a single panel: chevron, title (span.lt,
+    -- wrapped by the chrome JS), its one-line status (span.ls, set by the
+    -- section through window.AWR_ls) and the counts; a click on the row
+    -- toggles .lopen and shows the section in place.  Rows sort by the
+    -- section's --os after the "Evidence library" heading (#s-lib, 07);
+    -- the reference sections and the footer follow.  All sections (and JS
+    -- off) show every section in full, unchanged.
+    DBMS_OUTPUT.PUT_LINE('body.vs main > #s-lib { order:10; }'
+        || ' body.vs main > section.lib { order:calc(10 + var(--os, 9)); }'
+        || ' body.vs main > .view-note, body.vs main > #guide, body.vs main > #about { order:30; }'
+        || ' body.vs footer.report { order:40; }');
+    DBMS_OUTPUT.PUT_LINE('body.vs main > section.lib { margin:0; border-radius:0; border-top-width:0; padding:0 var(--s5); }'
+        || ' body.vs main > section.lib.lib-first { margin-top:var(--s2); border-top-width:1px; border-radius:10px 10px 0 0; }'
+        || ' body.vs main > section.lib.lib-last { border-radius:0 0 10px 10px; }'
+        || ' body.vs main > section.lib.lib-first.lib-last { border-radius:10px; }');
+    DBMS_OUTPUT.PUT_LINE('body.vs main > section.lib:not(.lopen) > :not(h2) { display:none !important; }');
+    DBMS_OUTPUT.PUT_LINE('body.vs main > section.lib > h2 { cursor:pointer; flex-wrap:nowrap; align-items:center;'
+        || ' margin:0; padding:var(--s4) 0; border-bottom:0; font-size:15px; line-height:22px; }'
+        || ' body.vs main > section.lib.lopen > h2 { border-bottom:1px solid var(--line-soft); margin-bottom:var(--s3); }'
+        || ' body.vs main > section.lib > h2:hover > .lt { color:var(--ink); text-decoration:underline;'
+        || ' text-decoration-color:var(--hairline); text-underline-offset:3px; }'
+        || ' body.vs main > section.lib > h2 .permalink { display:none; }'
+        || ' body.vs main > section.lib > h2 > .h2sub { order:1; flex:1 1 auto; }'
+        || ' body.vs main > section.lib > h2:has(> .ls) > .h2sub { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('body.vs main > section.lib > h2 > .lt { flex:0 0 200px; display:inline-flex; align-items:center; gap:10px; }'
+        || ' body.vs main > section.lib > h2 > .lt::before { content:""; flex:none; width:7px; height:7px;'
+        || ' border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted);'
+        || ' transform:rotate(-45deg); transition:transform .15s; margin:0 4px 0 3px; }'
+        || ' body.vs main > section.lib.lopen > h2 > .lt::before { transform:rotate(45deg); }');
+    DBMS_OUTPUT.PUT_LINE('h2 > .ls { order:1; flex:1 1 auto; min-width:0; font-size:13.5px; font-weight:400;'
+        || ' letter-spacing:0; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }'
+        || ' h2 > .ls code { font-size:12.5px; } h2 > .ls b { font-weight:600; color:var(--ink-soft); }');
+    -- A view heading (the evidence library's #s-lib, All sections' #s-all):
+    -- a section holding only its h2, drawn as a plain heading, no panel.
+    DBMS_OUTPUT.PUT_LINE('section.vhead { background:none; border:0; border-radius:0; padding:0; box-shadow:none; }'
+        || ' section.vhead > h2 { margin:var(--s7) 0 var(--s2); padding:var(--s5) 0 0; border-bottom:0;'
+        || ' border-top:1px solid var(--hairline); }'
+        || ' body.va main > #s-all > h2 { margin-top:var(--s4); border-top:0; padding-top:var(--s4); }');
+    -- All sections order (Mock D): the heading, then Findings, the load /
+    -- metric / wait tables, SQL, storage, parameters, and the full-span
+    -- charts, windows and day profile last; the reference sections and the
+    -- footer follow.  Purely visual: the DOM (and JS off) keeps the driver's
+    -- order.
+    DBMS_OUTPUT.PUT_LINE('body.va main > #s-all { order:4; } body.va main > #findings { order:5; }'
+        || ' body.va main > #load { order:6; } body.va main > #metrics { order:7; }'
+        || ' body.va main > #waits-fg { order:8; } body.va main > #waits-bg { order:9; }'
+        || ' body.va main > #topsql { order:10; } body.va main > #topsql-ash { order:11; }'
+        || ' body.va main > #sqlmon { order:12; } body.va main > #segment-io { order:13; }'
+        || ' body.va main > #file-io { order:14; } body.va main > #param-changes { order:15; }'
+        || ' body.va main > #ash-timeline { order:16; } body.va main > #db-time-summary { order:17; }'
+        || ' body.va main > #utilization { order:18; } body.va main > #windows { order:19; }'
+        || ' body.va main > #day-profile { order:20; }'
+        || ' body.va main > .view-note, body.va main > #guide, body.va main > #about { order:30; }'
+        || ' body.va footer.report { order:40; }');
+    -- rail sub-links: one per finding card, under Findings (07)
+    DBMS_OUTPUT.PUT_LINE('nav.toc a.sub { padding-left:28px; font-size:12.5px; color:var(--muted); }');
+    -- Timeline view placeholder (phase 3 of the redesign fills it).
 
     -- =========================================================
     -- Sections: white panels
     -- =========================================================
-    -- T2: the section's own top padding moved into the sticky h2 (6 + 14 =
-    -- the old 20px of headroom) so the heading can sit flush against the
-    -- viewport top when it sticks, with no transparent gap above it.
-    -- scroll-margin clears the narrow-screen top bar (--navh, 0 on
-    -- desktop); anchors INSIDE a section (rows, cards -- phase 3 links)
-    -- also clear the sticky h2 + thead stack.
+    -- v1.6.0: calm separation -- one panel per section, the page
+    -- background between them, gaps from the spacing scale.  scroll-margin
+    -- clears the sticky top bar (--navh, measured by the chrome JS);
+    -- anchors INSIDE a section (rows, cards) also clear the sticky thead.
     DBMS_OUTPUT.PUT_LINE('section {'
         || ' background:var(--panel); border:1px solid var(--hairline);'
-        || ' border-radius:10px; padding:6px 24px 20px;'
-        || ' margin:18px 0 0; scroll-margin-top:calc(var(--navh, 0px) + 18px); }');
+        || ' border-radius:10px; padding:var(--s1) var(--s5) var(--s5);'
+        || ' margin:var(--s5) 0 0; scroll-margin-top:calc(var(--navh, 0px) + var(--s4)); }');
     DBMS_OUTPUT.PUT_LINE('section tr[id], section [id].ash-sql-card, section h3[id] {'
-        || ' scroll-margin-top:calc(var(--navh, 0px) + var(--h2h, 48px) + 44px); }');
+        || ' scroll-margin-top:calc(var(--navh, 0px) + 56px); }');
+    DBMS_OUTPUT.PUT_LINE('html { scroll-padding-top:calc(var(--navh, 0px) + var(--s4)); }');
     DBMS_OUTPUT.PUT_LINE('h1 { font-size:24px; margin:0; }');
 
-    -- Section <h2>: compact panel heading (the rail does the wayfinding,
-    -- so the big editorial numerals are gone).
-    -- T2 (sticky headers): the section heading sticks to the top of the
-    -- viewport while its section scrolls past.  --navh is 0 on desktop and
-    -- the height of the narrow-screen top bar below 980px (set by the rail
-    -- JS in 00_params.sql); z-index 6 keeps it above .chart-wrap (a z:0
-    -- stacking context) and above the sticky thead (z:4).
+    -- v1.6.0: ONE section header shape -- title, a one-line plain
+    -- subtitle (small.h2sub, emitted by the section) and the counts
+    -- (span.meta, appended by the chrome JS) on the right.  Method notes
+    -- live in the single "About this report" fold at the bottom.
     DBMS_OUTPUT.PUT_LINE('h2 {'
-        || ' font-weight:700; font-size:18px; line-height:1.25;'
-        || ' letter-spacing:-0.01em; color:var(--ink);'
+        || ' font-weight:600; font-size:20px; line-height:28px;'
+        || ' letter-spacing:-0.015em; color:var(--ink);'
         || ' text-transform:none;'
-        || ' margin:0 0 12px; padding:14px 0 10px; border:0;'
+        || ' margin:0 0 var(--s3); padding:var(--s4) 0 var(--s3); border:0;'
         || ' border-bottom:1px solid var(--line-soft);'
-        || ' background:var(--panel);'
-        || ' display:flex; align-items:baseline; gap:10px; }');
-    DBMS_OUTPUT.PUT_LINE('section > h2 {'
-        || ' position:sticky; top:var(--navh, 0px); z-index:6;'
-        || ' white-space:nowrap; }');
-    -- T8: the first sentence of the section intro, kept inline on the
-    -- heading as a muted subtitle (the rest folds into details.method).
-    -- flex:0 1 auto + min-width:0 lets the subtitle shrink and ellipsize
-    -- instead of forcing the h2 (now nowrap) onto a second line when the
-    -- title + subtitle together are wider than the panel.
+        || ' display:flex; flex-wrap:wrap; align-items:baseline; column-gap:var(--s4); row-gap:2px; }');
+    DBMS_OUTPUT.PUT_LINE('h2 > .meta { order:2; margin-left:auto; display:flex; gap:var(--s3);'
+        || ' align-items:center; font-size:12.5px; font-weight:400; color:var(--ink-soft);'
+        || ' letter-spacing:0; white-space:nowrap; }'
+        || ' h2 > .meta span { display:inline-flex; align-items:center; gap:6px; }'
+        || ' h2 > .permalink { order:2; }');
+    DBMS_OUTPUT.PUT_LINE('.dotk { display:inline-block; width:9px; height:9px; border-radius:50%; flex:none; }'
+        || ' .dotk.large { background:var(--crit-dot); } .dotk.moderate { background:var(--warn-dot); }');
+    -- The subtitle takes its own line under the title and ellipsizes.
     DBMS_OUTPUT.PUT_LINE('h2 .h2sub {'
-        || ' font-weight:400; font-size:12px; color:var(--muted);'
-        || ' letter-spacing:0; flex:0 1 auto; min-width:0; overflow:hidden;'
+        || ' order:3; flex-basis:100%; font-weight:400; font-size:13.5px; line-height:20px;'
+        || ' color:var(--muted); letter-spacing:0; min-width:0; overflow:hidden;'
         || ' text-overflow:ellipsis; white-space:nowrap; }');
     DBMS_OUTPUT.PUT_LINE('h2::before { content:none; }');
     DBMS_OUTPUT.PUT_LINE('h2::after { content:none; }');
@@ -504,20 +366,17 @@ BEGIN
     -- below it in the same block, which also carries the accent color; the
     -- accent tick echoes the rail's status-dot language.
     DBMS_OUTPUT.PUT_LINE('h3 {'
-        || ' font-size:13.5px; letter-spacing:0.03em; text-transform:uppercase;'
-        || ' color:var(--ink); font-weight:800; margin:28px 0 10px;'
+        || ' font-size:15px; letter-spacing:0; text-transform:none;'
+        || ' color:var(--ink); font-weight:600; margin:var(--s6) 0 var(--s2);'
         || ' display:flex; align-items:center; gap:8px; }');
-    DBMS_OUTPUT.PUT_LINE('h3::before {'
-        || ' content:""; width:3px; height:12px; flex:none;'
-        || ' background:var(--accent); border-radius:1px; }');
 
     -- Divider before each repeat chart-group block (Top SQL / segment I/O /
     -- file I/O): a rule + extra top space between one dimension's
     -- chart+detail-table and the next, without touching the section's
     -- first h3 (which follows the intro <p>, not a </details>).
     DBMS_OUTPUT.PUT_LINE('details + h3 {'
-        || ' margin-top:36px; padding-top:24px;'
-        || ' border-top:1px solid var(--hairline); }');
+        || ' margin-top:var(--s6); padding-top:var(--s5);'
+        || ' border-top:1px solid var(--line-soft); }');
 
     -- =========================================================
     -- Tables
@@ -540,26 +399,25 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll thead th { position:static; }');
     DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll tr > :first-child {'
         || ' position:sticky; left:0; top:auto; z-index:2; background:var(--panel); }');
-    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll thead th:first-child { background:var(--panel-2); z-index:5; }');
-    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll tr.crit > td:first-child { background:var(--crit-bg); }'
-        || ' .tblwrap.scroll tr.warn > td:first-child { background:var(--warn-bg); }'
-        || ' .tblwrap.scroll tr.info > td:first-child { background:var(--info-bg); }');
+    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll thead th:first-child { background:var(--panel); z-index:5; }');
+    -- band tables are wide (13 windows + the band cells): keep the name on
+    -- one line and let the table scroll instead of wrapping it three times
+    DBMS_OUTPUT.PUT_LINE('table:has(th.c-band) tbody td:first-child { white-space:nowrap; }');
+    DBMS_OUTPUT.PUT_LINE('.tblwrap.scroll tbody tr:hover > td:first-child { background:var(--panel-2); }');
     DBMS_OUTPUT.PUT_LINE('table {'
         || ' width:100%; border-collapse:collapse;'
         || ' font-size:12.5px; background:transparent;'
         || ' border:0; border-radius:0;'
         || ' margin:12px 0 16px; }');
     DBMS_OUTPUT.PUT_LINE('thead th {'
-        || ' background:var(--panel-2); color:var(--muted);'
-        || ' text-align:left; padding:9px 10px 8px;'
-        || ' font-size:10.5px; font-weight:700; letter-spacing:0.09em;'
-        || ' text-transform:uppercase; white-space:nowrap;'
-        || ' border-bottom:1px solid var(--rule); }');
-    -- T2: header row sticks just under the sticky section h2.  --h2h is
-    -- written per section by the rail JS (default 48px), --navh is the
-    -- narrow-screen top-bar height (0 on desktop).
+        || ' background:var(--panel); color:var(--muted);'
+        || ' text-align:left; padding:8px 10px;'
+        || ' font-size:12px; font-weight:500; letter-spacing:0;'
+        || ' text-transform:none; white-space:nowrap; vertical-align:bottom;'
+        || ' border-bottom:1px solid var(--hairline); }');
+    -- T2: the header row sticks just under the sticky top bar (--navh).
     DBMS_OUTPUT.PUT_LINE('section table thead th {'
-        || ' position:sticky; top:calc(var(--navh, 0px) + var(--h2h, 48px));'
+        || ' position:sticky; top:var(--navh, 0px);'
         || ' z-index:4; }');
     -- T3: click-to-sort affordance.  Tables opting out carry data-nosort;
     -- per-window header cells (th[data-w]) drive the X2 window highlight
@@ -568,13 +426,18 @@ BEGIN
         || ' user-select:none; }');
     DBMS_OUTPUT.PUT_LINE('section table[data-nosort] thead th { cursor:default; }');
     DBMS_OUTPUT.PUT_LINE('section table thead th[data-w] { cursor:pointer; }');
-    DBMS_OUTPUT.PUT_LINE('thead th.asc::after  { content:" \2191"; color:var(--accent); }');
-    DBMS_OUTPUT.PUT_LINE('thead th.desc::after { content:" \2193"; color:var(--accent); }');
+    DBMS_OUTPUT.PUT_LINE('thead th.asc::after  { content:" \2191"; color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('thead th.desc::after { content:" \2193"; color:var(--ink); }');
     DBMS_OUTPUT.PUT_LINE('tbody td {'
         || ' padding:8px 10px; border-bottom:1px solid var(--line-soft);'
         || ' vertical-align:middle; }');
     DBMS_OUTPUT.PUT_LINE('tbody tr:last-child td { border-bottom:0; }');
-    DBMS_OUTPUT.PUT_LINE('tbody tr:hover { background:var(--panel-2); }');
+    DBMS_OUTPUT.PUT_LINE('tbody tr:hover { background:var(--panel-2); --row-bg:var(--panel-2); }');
+    -- indigo = Current: the Current column of every per-window table
+    -- (the header cells stack the tint over an opaque panel: they are sticky)
+    DBMS_OUTPUT.PUT_LINE('td[data-w="0"] { background-color:var(--acc-band); }'
+        || ' th[data-w="0"], th.cur-col { background:linear-gradient(var(--acc-band),var(--acc-band)) var(--panel);'
+        || ' color:var(--acc-ink); font-weight:600; }');
     DBMS_OUTPUT.PUT_LINE('td.num, th.num {'
         || ' text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }');
     -- text-transform:none is critical: sql_ids are case-sensitive base32
@@ -593,17 +456,31 @@ BEGIN
     -- sql-pool SQL_ID cell: keep the id and its copy button on one line
     -- instead of the button wrapping under the id.
     DBMS_OUTPUT.PUT_LINE('td.sqlid-cell { white-space:nowrap; }');
-    DBMS_OUTPUT.PUT_LINE('td a { color:var(--accent); text-decoration:none; font-weight:600; }');
-    DBMS_OUTPUT.PUT_LINE('td a:hover { text-decoration:underline; }');
+    DBMS_OUTPUT.PUT_LINE('td a { color:inherit; font-weight:600; text-decoration:underline dotted;'
+        || ' text-decoration-color:var(--ink-4); text-underline-offset:3px; }');
+    DBMS_OUTPUT.PUT_LINE('td a:hover { text-decoration:underline solid; text-decoration-color:var(--muted); }');
 
     -- Severity rows: subtle tinted background + colored left rule
-    DBMS_OUTPUT.PUT_LINE('tr.crit { background:var(--crit-bg); }'
-        || ' tr.crit td:first-child { box-shadow:inset 3px 0 0 var(--crit); }');
-    DBMS_OUTPUT.PUT_LINE('tr.warn { background:var(--warn-bg); }'
-        || ' tr.warn td:first-child { box-shadow:inset 3px 0 0 var(--warn); }');
+    -- v1.6.0 colour diet: a finding row gets a 2px marker on its first
+    -- cell, never a row fill (tr.crit / tr.warn from 07, 16 ...; rows of a
+    -- band table via :has() on the band dot).
+    DBMS_OUTPUT.PUT_LINE('tr.crit td:first-child, tr:has(> td.c-band .bd.s-large) > td:first-child'
+        || ' { box-shadow:inset 2px 0 0 var(--crit-dot); }');
+    DBMS_OUTPUT.PUT_LINE('tr.warn td:first-child, tr:has(> td.c-band .bd.s-moderate) > td:first-child'
+        || ' { box-shadow:inset 2px 0 0 var(--warn-dot); }');
+    -- The fleet report includes this file too (sql/fleet/00_fleet_chrome.sql).
+    -- Its fleet-owned detail tables (table.dt, never used by the single-DB
+    -- sections; their cells carry the detail row's own background) keep
+    -- the 3px severity-coloured bar they had before v1.6.0 instead of the
+    -- 2px dot-coloured marker, which read as a stray hairline on their
+    -- zero-padding first cell.  Every first cell gets a left padding so
+    -- the text clears the bar and the columns stay aligned (the fleet's
+    -- own "table.dt td" rule has a lower specificity).
+    DBMS_OUTPUT.PUT_LINE('table.dt tr > td:first-child, table.dt tr > th:first-child { padding-left:10px; }'
+        || ' table.dt tr.crit td:first-child { box-shadow:inset 3px 0 0 var(--crit); }'
+        || ' table.dt tr.warn td:first-child { box-shadow:inset 3px 0 0 var(--warn); }');
     DBMS_OUTPUT.PUT_LINE('tr.ok   { background:transparent; }');
-    DBMS_OUTPUT.PUT_LINE('tr.info { background:var(--info-bg); }'
-        || ' tr.info td:first-child { box-shadow:inset 3px 0 0 var(--info); }');
+    DBMS_OUTPUT.PUT_LINE('tr.info { background:transparent; }');
     DBMS_OUTPUT.PUT_LINE('tr.skip { color:var(--muted); font-style:italic; }');
     DBMS_OUTPUT.PUT_LINE('tr.imp, tr.note { background:transparent; }'
         || ' tr.imp td, tr.note td { color:var(--muted); }');
@@ -618,15 +495,14 @@ BEGIN
     -- Phase 3 cross-links between sections (07 -> 02/03/04, 08 -> 07,
     -- 06 <-> 11 / 18).  Hidden by the chrome JS when the target id is
     -- absent; a jumped-to card gets the same transient outline as a row.
-    DBMS_OUTPUT.PUT_LINE('.xlink { font-size:10px; font-weight:700; letter-spacing:0.04em;'
-        || ' color:var(--accent); text-decoration:none; margin-left:6px;'
+    DBMS_OUTPUT.PUT_LINE('.xlink { font-size:11px; font-weight:500; letter-spacing:0;'
+        || ' color:var(--muted); text-decoration:none; margin-left:6px;'
         || ' white-space:nowrap; opacity:.85; }');
     DBMS_OUTPUT.PUT_LINE('.xlink:hover { text-decoration:underline; opacity:1; }');
     DBMS_OUTPUT.PUT_LINE('.xlink[hidden] { display:none; }');
     DBMS_OUTPUT.PUT_LINE('.xlinks { display:inline-flex; gap:2px; margin-left:4px; }');
-    DBMS_OUTPUT.PUT_LINE('.ash-sql-card.jump-hi, .hero-card.jump-hi, div.jump-hi {'
+    DBMS_OUTPUT.PUT_LINE('.ash-sql-card.jump-hi, div.jump-hi {'
         || ' outline:2px solid var(--crit); outline-offset:2px; }');
-    DBMS_OUTPUT.PUT_LINE('.wchip em { font-style:normal; color:var(--ink-soft); font-weight:600; }');
     -- Phase 5: the SQL Monitor pool's detail row reads as part of its
     -- statement row (no rule between them, tighter padding).
     DBMS_OUTPUT.PUT_LINE('#sqlmon-pool tbody tr:not(.sqlmon-detail) > td { border-bottom:0; padding-bottom:4px; }'
@@ -641,8 +517,8 @@ BEGIN
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('.badge {'
         || ' display:inline-block; padding:2px 8px; border-radius:6px;'
-        || ' font-size:10.5px; font-weight:700; letter-spacing:0.04em;'
-        || ' text-transform:uppercase; vertical-align:middle;'
+        || ' font-size:11px; font-weight:600; letter-spacing:0;'
+        || ' text-transform:none; vertical-align:middle;'
         || ' border:0; }');
     DBMS_OUTPUT.PUT_LINE('.badge.crit { background:var(--crit-bg); color:var(--crit); }');
     DBMS_OUTPUT.PUT_LINE('.badge.warn { background:var(--warn-bg); color:var(--warn); }');
@@ -705,15 +581,18 @@ BEGIN
         || ' stroke-linecap:round; stroke-linejoin:round; }');
     DBMS_OUTPUT.PUT_LINE('svg.spark .dot { fill:var(--accent); }');
     DBMS_OUTPUT.PUT_LINE('th.trend, td.trend { width:110px; padding:6px 8px; text-align:center; }');
+    -- v1.6.0: the single-DB Trend cell is a 13-bar micro strip (svg.mw,
+    -- sql/lib/js_microstrip.plsql); the fleet keeps the svg.spark line.
+    DBMS_OUTPUT.PUT_LINE('td.trend svg.mw { margin:0 auto; }');
 
     -- =========================================================
-    -- Cell-bar behind the current-value column in load/sysmetric tables
+    -- Cell-bar behind the current-value column in load/sysmetric tables.
+    -- v1.6.0: not drawn.  The Current column carries the accent band and
+    -- the band glyph carries the comparison; the bar's 2px edge crossed
+    -- the digits on the tinted cell.  02/03/13 still emit span.bg (inert).
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('td.cell-bar { position:relative; }');
-    DBMS_OUTPUT.PUT_LINE('td.cell-bar .bg {'
-        || ' position:absolute; left:0; top:0; bottom:0;'
-        || ' background:var(--cell-bar-bg);'
-        || ' border-right:2px solid var(--accent); pointer-events:none; }');
+    DBMS_OUTPUT.PUT_LINE('td.cell-bar .bg { display:none; }');
     DBMS_OUTPUT.PUT_LINE('td.cell-bar .v {'
         || ' position:relative; z-index:1; font-weight:600; }');
 
@@ -772,7 +651,7 @@ BEGIN
         || ' margin:4px 0 8px; padding:0; background:transparent;'
         || ' max-height:48px; overflow:hidden;'
         || ' text-overflow:ellipsis; }');
-    DBMS_OUTPUT.PUT_LINE('body.no-charts .chart-wrap, body.no-charts .hero-card .mini { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('body.no-charts .chart-wrap { display:none; }');
     DBMS_OUTPUT.PUT_LINE('body.no-charts .cdn-warn { display:block !important; }');
     -- Theme-aware: var(--warn-fg) / var(--warn-border) keep the offline-charts
     -- banner legible in dark mode, where --warn-bg is near-black (F13).
@@ -781,56 +660,6 @@ BEGIN
         || ' background:var(--warn-bg); color:var(--warn-fg);'
         || ' padding:8px 12px; border:1px solid var(--warn-border); border-radius:8px;'
         || ' font-size:13px; margin:6px 0; }');
-
-    -- =========================================================
-    -- Overview KPI strip (#overview .hero-grid)
-    -- Panel cards: value on top, mini chart, then deltas at the foot.
-    -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('#overview .hero-grid {'
-        || ' display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px;'
-        || ' background:transparent; border:0; border-radius:0;'
-        || ' margin-top:12px; padding:0; }');
-    DBMS_OUTPUT.PUT_LINE('@media (max-width: 900px) {'
-        || ' #overview .hero-grid { grid-template-columns:repeat(2, minmax(0,1fr)); } }');
-    DBMS_OUTPUT.PUT_LINE('@media (max-width: 520px) {'
-        || ' #overview .hero-grid { grid-template-columns:1fr; } }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card {'
-        || ' background:var(--panel-2);'
-        || ' border:1px solid var(--hairline);'
-        || ' padding:13px 15px;'
-        || ' display:flex; flex-direction:column; gap:6px;'
-        || ' position:relative; min-width:0;'
-        || ' border-radius:8px; box-shadow:none; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .label {'
-        || ' font-size:10.5px; text-transform:uppercase; letter-spacing:0.10em;'
-        || ' color:var(--muted); font-weight:700; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .value {'
-        || ' font-size:25px; font-weight:700; letter-spacing:-0.02em;'
-        || ' line-height:1.05; color:var(--ink);'
-        || ' font-variant-numeric:tabular-nums; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .value small {'
-        || ' font-size:12px; font-weight:500; color:var(--muted);'
-        || ' margin-left:4px; letter-spacing:0; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .mini { width:100%; height:48px; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .foot {'
-        || ' display:flex; justify-content:space-between; align-items:center;'
-        || ' gap:6px; font-size:11px; color:var(--muted); }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .deltas {'
-        || ' display:flex; gap:8px; flex-wrap:wrap; min-width:0; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta {'
-        || ' font-variant-numeric:tabular-nums; white-space:nowrap; font-weight:600; }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta .dp {'
-        || ' color:var(--muted); margin-right:2px; font-size:10.5px; font-weight:500; }');
-    -- F5: hero deltas read direction from the glyph, not from red/green.
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta.up   { color:var(--ink); }');
-    DBMS_OUTPUT.PUT_LINE('.hero-card .delta.down { color:var(--ink); }');
-    -- B6: per-card "vs prior mean ... / range ..." caption line (section 08).
-    DBMS_OUTPUT.PUT_LINE('.hero-card .hc-delta, .hc-delta {'
-        || ' font-size:11.5px; color:var(--muted); line-height:1.45;'
-        || ' font-variant-numeric:tabular-nums; }');
-    DBMS_OUTPUT.PUT_LINE('.hc-delta b { color:var(--ink); font-weight:700; }');
-    -- Generic full-width horizontal-bar SVG (section 08 and friends).
-    DBMS_OUTPUT.PUT_LINE('svg.hbars { display:block; width:100%; height:42px; }');
 
     -- =========================================================
     -- Windows ribbon
@@ -846,8 +675,9 @@ BEGIN
     -- =========================================================
     DBMS_OUTPUT.PUT_LINE('details { margin:6px 0; }');
     DBMS_OUTPUT.PUT_LINE('details summary {'
-        || ' cursor:pointer; padding:4px 0; font-weight:600; color:var(--accent);'
-        || ' font-size:12px; letter-spacing:0.04em; text-transform:uppercase; }');
+        || ' cursor:pointer; padding:4px 0; font-weight:500; color:var(--ink-soft);'
+        || ' font-size:13px; letter-spacing:0; text-transform:none; }');
+    DBMS_OUTPUT.PUT_LINE('details summary:hover { color:var(--ink); }');
     DBMS_OUTPUT.PUT_LINE('pre.sql {'
         || ' background:var(--panel-2); padding:12px; border-radius:8px;'
         || ' border:1px solid var(--hairline);'
@@ -880,20 +710,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('table.open tr[data-tail="Y"] { display:table-row; }');
     DBMS_OUTPUT.PUT_LINE('.expander {'
         || ' display:inline-block; cursor:pointer; user-select:none;'
-        || ' color:var(--accent); font-size:12px; font-weight:700;'
-        || ' letter-spacing:0.01em; padding:8px 9px; }');
+        || ' color:var(--ink-soft); font-size:13px; font-weight:500;'
+        || ' letter-spacing:0; padding:8px 9px; }');
     DBMS_OUTPUT.PUT_LINE('.expander:hover { text-decoration:underline; }');
-
-    -- T5: heat tint on a value cell, graded by how far it deviates
-    -- (1 = mild/amber, 2 = strong, 3 = extreme).  color-mix keeps the
-    -- tint derived from the severity tokens, so dark mode follows for
-    -- free (the tokens are re-declared in the body.dark block above).
-    DBMS_OUTPUT.PUT_LINE('td[data-dev="1"] {'
-        || ' background:color-mix(in srgb, var(--warn) 12%, transparent); }');
-    DBMS_OUTPUT.PUT_LINE('td[data-dev="2"] {'
-        || ' background:color-mix(in srgb, var(--crit) 14%, transparent); }');
-    DBMS_OUTPUT.PUT_LINE('td[data-dev="3"] {'
-        || ' background:color-mix(in srgb, var(--crit) 28%, transparent); }');
 
     -- X2: cross-report window highlight.  Any element carrying data-w=<N>
     -- (window offset; 0 = current) lights up when that window is selected
@@ -901,9 +720,10 @@ BEGIN
     -- on / taken off by the JS in 00_params.sql, which also broadcasts the
     -- awr:window CustomEvent for chart sections to draw their own markArea.
     DBMS_OUTPUT.PUT_LINE('th[data-w], .wchip[data-w] { cursor:pointer; }');
+    -- A picked window is the "pinned" amber of the mock (indigo = Current).
     DBMS_OUTPUT.PUT_LINE('[data-w].hl {'
-        || ' outline:2px solid var(--accent); outline-offset:-2px;'
-        || ' background:color-mix(in srgb, var(--accent) 12%, transparent); }');
+        || ' outline:2px solid var(--warn-dot); outline-offset:-2px;'
+        || ' background:var(--pin); }');
     -- Masthead clickable window chips + the one-line usage hint under them.
     DBMS_OUTPUT.PUT_LINE('header.report .windows-chips {'
         || ' display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 2px; }');
@@ -923,8 +743,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.wchip.cur b { color:var(--accent-deep); }');
     -- Emitted after .wchip.cur so a selected current-window chip still
     -- reads as selected (both selectors are 0,2,0 -- source order decides).
-    DBMS_OUTPUT.PUT_LINE('.wchip.hl {'
-        || ' background:color-mix(in srgb, var(--accent) 22%, transparent); }');
+    DBMS_OUTPUT.PUT_LINE('.wchip.hl { background:var(--pin); }');
     DBMS_OUTPUT.PUT_LINE('header.report .windows-hint {'
         || ' font-size:10.5px; color:var(--muted); margin:2px 0 4px;'
         || ' letter-spacing:0.02em; }');
@@ -998,7 +817,7 @@ BEGIN
         || ' pre > .copy-btn, .codewrap > .copy-btn { opacity:1; pointer-events:auto; }'
         || ' h2 .permalink { opacity:1; } }');
     DBMS_OUTPUT.PUT_LINE('.tabs [data-t].on {'
-        || ' color:var(--accent); border-bottom-color:var(--accent); }');
+        || ' color:var(--ink); border-bottom-color:var(--ink); }');
     DBMS_OUTPUT.PUT_LINE('.tabpanel { display:none; }');
     DBMS_OUTPUT.PUT_LINE('.tabpanel.on { display:block; }');
 
@@ -1021,7 +840,7 @@ BEGIN
         || ' opacity:0; pointer-events:none; z-index:2; }');
     DBMS_OUTPUT.PUT_LINE('pre:hover > .copy-btn, .codewrap:hover > .copy-btn, .copy-btn:focus {'
         || ' opacity:1; pointer-events:auto; }');
-    DBMS_OUTPUT.PUT_LINE('.copy-btn:hover { color:var(--accent); border-color:var(--accent); }');
+    DBMS_OUTPUT.PUT_LINE('.copy-btn:hover { color:var(--ink); border-color:var(--muted); }');
     -- T6: inline |z| bar in the Biggest-movers table (07).
     DBMS_OUTPUT.PUT_LINE('.zbar { display:inline-block; height:8px; vertical-align:middle;'
         || ' border-radius:2px; margin-right:6px; }');
@@ -1035,13 +854,13 @@ BEGIN
         || ' color:var(--muted);'
         || ' transition:color .12s,border-color .12s; }');
     DBMS_OUTPUT.PUT_LINE('.tbl-tools .tool-btn:hover {'
-        || ' color:var(--accent); border-color:var(--accent); }');
+        || ' color:var(--ink); border-color:var(--muted); }');
     DBMS_OUTPUT.PUT_LINE('h2 .permalink {'
-        || ' margin-left:auto; font-size:13px; font-weight:700;'
+        || ' font-size:13px; font-weight:700;'
         || ' color:var(--muted); text-decoration:none; cursor:pointer;'
         || ' opacity:0; transition:opacity .12s,color .12s; }');
     DBMS_OUTPUT.PUT_LINE('h2:hover .permalink, h2 .permalink:focus { opacity:1; }');
-    DBMS_OUTPUT.PUT_LINE('h2 .permalink:hover { color:var(--accent); }');
+    DBMS_OUTPUT.PUT_LINE('h2 .permalink:hover { color:var(--ink); }');
 
     -- Small mono letter chip (dimension / flag markers in the sections).
     DBMS_OUTPUT.PUT_LINE('.chip {'
@@ -1051,21 +870,7 @@ BEGIN
         || ' text-transform:none; letter-spacing:0;'
         || ' font-family:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace; }');
     DBMS_OUTPUT.PUT_LINE('.chip.on {'
-        || ' background:var(--accent); border-color:var(--accent); color:#fff; }');
-
-    -- T8: methodology disclosure.  The rail JS folds each section intro
-    -- paragraph into details.method, keeping its first sentence inline on
-    -- the heading as h2 .h2sub (styled with the h2 rules above).
-    DBMS_OUTPUT.PUT_LINE('details.method { margin:0 0 12px; }');
-    DBMS_OUTPUT.PUT_LINE('details.method > summary {'
-        || ' cursor:pointer; list-style:none; padding:2px 0;'
-        || ' color:var(--accent); font-size:12px; font-weight:600;'
-        || ' text-transform:none; letter-spacing:0; }');
-    DBMS_OUTPUT.PUT_LINE('details.method > summary::-webkit-details-marker { display:none; }');
-    DBMS_OUTPUT.PUT_LINE('details.method > summary::before { content:"\25B8 "; }');
-    DBMS_OUTPUT.PUT_LINE('details.method[open] > summary::before { content:"\25BE "; }');
-    DBMS_OUTPUT.PUT_LINE('details.method > p {'
-        || ' font-size:12px; color:var(--muted); margin:4px 0 0; }');
+        || ' background:var(--ink); border-color:var(--ink); color:var(--panel); }');
 
     -- =========================================================
     -- Rail additions: filter box (T4), per-section finding counts and the
@@ -1111,7 +916,7 @@ BEGIN
         || ' color:var(--muted); cursor:pointer;'
         || ' transition:color .12s,border-color .12s; }');
     DBMS_OUTPUT.PUT_LINE('nav.toc .next-finding:hover {'
-        || ' color:var(--accent); border-color:var(--accent); }');
+        || ' color:var(--ink); border-color:var(--muted); }');
     DBMS_OUTPUT.PUT_LINE('nav.toc .next-finding .keys {'
         || ' font-size:9.5px; letter-spacing:0.08em; color:var(--muted);'
         || ' border:1px solid var(--hairline); border-radius:4px;'
@@ -1180,7 +985,6 @@ BEGIN
         || '   background:var(--panel); border:1px solid var(--hairline);'
         || '   box-shadow:0 8px 18px rgba(0,0,0,.14); }'
         || ' nav.toc .rail-foot.open .view-panel { display:flex; }'
-        || ' nav.toc .mode-btn { min-height:34px; }'
         -- Tap targets: 32px minimum for the small controls below 980px.
         || ' .tabs [data-t], .tbl-tools .tool-btn, .copy-btn, .expander,'
         || ' details > summary, .chipbar button, nav.toc .theme-icon-btn,'
@@ -1194,6 +998,535 @@ BEGIN
         -- measured after layout, so a two-line heading still stacks right.
         || ' section > h2 { white-space:normal; flex-wrap:wrap; row-gap:4px; }'
         || ' nav.toc .rail-brand > span { display:none; } }');
+
+    -- =========================================================
+    -- v1.6.0 redesign ("Mock D", design/report_mock_d_hybrid.html):
+    -- the top bar with the view switch, the baseline band glyph, the
+    -- one Delta rule, entity links + the jump flash, the "Reading the
+    -- charts" guide and the "About this report" fold.  Lifted from
+    -- design/report_mocks_src/hybrid/style.css; the guide's example SVGs
+    -- (sql/19_reference.sql) must stay in lockstep with these rules.
+    -- =========================================================
+    -- Top bar (v1.6.0): identity, the Current window, the view switch, theme
+    DBMS_OUTPUT.PUT_LINE('.topbar{order:0;position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:var(--s2) var(--s4);min-height:56px;margin:0 -32px;padding:8px 32px;'
+        || 'background:color-mix(in srgb,var(--paper) 90%,transparent);backdrop-filter:saturate(1.2) blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--hairline)}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .db{display:flex;align-items:baseline;gap:8px;min-width:0;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .db b{font-size:15px;font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .db span{color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .win{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink-soft);white-space:nowrap;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .win b{color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .sp{flex:1}');
+    DBMS_OUTPUT.PUT_LINE('.cchip{display:inline-flex;align-items:center;font-size:12px;line-height:20px;padding:0 8px;border-radius:999px;background:var(--acc-soft);color:var(--acc-ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.seg{display:inline-flex;border:1px solid var(--rule);border-radius:8px;padding:2px;background:var(--panel)}');
+    DBMS_OUTPUT.PUT_LINE('.seg button{border:0;background:none;padding:4px 12px;border-radius:6px;font:inherit;font-size:13px;color:var(--ink-soft);cursor:pointer;line-height:20px;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.seg button:hover{color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.seg button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .theme-icon-btn{flex:none;width:32px;height:32px;border:1px solid var(--rule);border-radius:8px;background:var(--panel);display:inline-grid;place-items:center;'
+        || 'cursor:pointer;color:var(--ink-soft);padding:0}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .theme-icon-btn:hover{color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .theme-icon-btn .icon-sun{display:none}');
+    DBMS_OUTPUT.PUT_LINE('body.dark .topbar .theme-icon-btn .icon-sun{display:block}');
+    DBMS_OUTPUT.PUT_LINE('body.dark .topbar .theme-icon-btn .icon-moon{display:none}');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 1180px){.topbar .db span{display:none}}');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px){.topbar{order:1;position:static;margin:0 -20px;padding:8px 20px;flex-wrap:wrap}}');
+    -- The band glyph (sql/lib/band_glyph.plsql): one span, one --x, zones and ticks drawn as gradients
+    DBMS_OUTPUT.PUT_LINE('.bd{--x:.3333;position:relative;display:block;height:18px;min-width:120px}');
+    DBMS_OUTPUT.PUT_LINE('.bd::before{content:"";position:absolute;left:10px;right:18px;top:5px;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--track) 16.667%,var(--zone2) 16.667% 25%,'
+        || 'var(--zone1) 25% 41.667%,var(--zone2) 41.667% 50%,var(--track) 50%)}');
+    DBMS_OUTPUT.PUT_LINE('.bd::after{content:"";position:absolute;left:10px;right:18px;top:2px;height:14px;pointer-events:none;opacity:.9;background:linear-gradient(90deg,transparent calc(8.333% - .5px),'
+        || 'var(--tick) 0 calc(8.333% + .5px),transparent 0 calc(16.667% - .5px),var(--tick) 0 calc(16.667% + .5px),transparent 0 calc(33.333% - .5px),var(--mean) 0 calc(33.333% + .5px),'
+        || 'transparent 0 calc(50% - .5px),var(--tick) 0 calc(50% + .5px),transparent 0 calc(58.333% - .5px),var(--tick) 0 calc(58.333% + .5px),transparent 0)}');
+    DBMS_OUTPUT.PUT_LINE('.bd>i{position:absolute;top:9px;left:calc(10px + (100% - 28px) * var(--x));width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;z-index:1;--dc:var(--muted);'
+        || 'background:var(--row-bg);border:1.5px solid var(--dc);box-shadow:0 0 0 2px var(--row-bg)}');
+    DBMS_OUTPUT.PUT_LINE('.bd.s-large>i{--dc:var(--crit-dot);background:var(--dc);border:0;width:11px;height:11px;margin:-5.5px 0 0 -5.5px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.s-moderate>i{--dc:var(--warn-dot);background:var(--dc);border:0}');
+    DBMS_OUTPUT.PUT_LINE('.bd.s-improved>i{--dc:var(--imp);border-width:2px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.twn>i{opacity:.5}');
+    DBMS_OUTPUT.PUT_LINE('.bd.po>i::after,.bd.pu>i::after{content:"";position:absolute;top:50%;margin-top:-4px;border:4px solid transparent}');
+    DBMS_OUTPUT.PUT_LINE('.bd.po>i::after{left:calc(100% + 3px);border-left:5px solid var(--dc);border-right:0}');
+    DBMS_OUTPUT.PUT_LINE('.bd.pu>i::after{right:calc(100% + 3px);border-right:5px solid var(--dc);border-left:0}');
+    DBMS_OUTPUT.PUT_LINE('.bd .ov{position:absolute;top:1px;font:500 11px/16px system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--ink-soft);background:var(--row-bg);padding:0 3px;'
+        || 'border-radius:3px;white-space:nowrap;z-index:1}');
+    DBMS_OUTPUT.PUT_LINE('.bd.po .ov{right:32px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.pu .ov{left:32px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.s-flat::before{background:repeating-linear-gradient(135deg,var(--zone1) 0 1.5px,transparent 1.5px 5px),var(--track)}');
+    DBMS_OUTPUT.PUT_LINE('.bd.s-flat .ov{left:50%;transform:translateX(-50%);color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.bd.na::before,.bd.na::after{opacity:.35}');
+    DBMS_OUTPUT.PUT_LINE('.bd.na .ov{left:50%;transform:translateX(-50%);color:var(--muted);font-weight:400}');
+    DBMS_OUTPUT.PUT_LINE('.bd.sm{min-width:88px;height:16px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.sm::before{top:5px;height:6px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.sm::after{top:2px;height:12px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.sm>i{top:8px;width:9px;height:9px;margin:-4.5px 0 0 -4.5px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.sm.s-large>i{width:10px;height:10px;margin:-5px 0 0 -5px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.sm .ov{font-size:10.5px;line-height:14px;top:1px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.lg{height:24px;min-width:200px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.lg::before{top:7px;height:10px;border-radius:5px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.lg::after{top:3px;height:18px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.lg>i{top:12px;width:13px;height:13px;margin:-6.5px 0 0 -6.5px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.lg.s-large>i,.bd.lg.s-moderate>i{width:14px;height:14px;margin:-7px 0 0 -7px}');
+    DBMS_OUTPUT.PUT_LINE('.bd.lg .ov{top:4px}');
+    DBMS_OUTPUT.PUT_LINE('.bd-ax{position:relative;display:block;height:14px;margin-top:2px;min-width:120px}');
+    DBMS_OUTPUT.PUT_LINE('.bd-ax em{position:absolute;left:calc(10px + (100% - 28px) * var(--x));transform:translateX(-50%);font-style:normal;font-size:11px;line-height:14px;color:var(--muted);'
+        || 'font-variant-numeric:tabular-nums;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.bd-ax em.end{transform:translateX(-100%)}');
+    DBMS_OUTPUT.PUT_LINE('th.c-band,td.c-band{width:176px;min-width:176px;padding-left:4px;padding-right:4px}');
+    DBMS_OUTPUT.PUT_LINE('td.c-rng{color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('td.c-z{color:var(--muted);font-size:12px}');
+    DBMS_OUTPUT.PUT_LINE('td.c-d{white-space:nowrap}');
+    -- Delta text: the only coloured text besides links (one rule: x n at 2x or more, else %)
+    DBMS_OUTPUT.PUT_LINE('.d{white-space:nowrap;font-variant-numeric:tabular-nums}');
+    DBMS_OUTPUT.PUT_LINE('.d.s-large{color:var(--crit);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.d.s-moderate{color:var(--warn);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.d.s-improved{color:var(--imp);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.d.s-typical,.d.s-flat,.d.s-na{color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.d.s-plain{color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.imm{display:block;font-size:11px;line-height:13px;color:var(--muted);font-weight:400}');
+    -- Entity links: a named thing that leads to its detail row -- inherited colour, dotted underline
+    DBMS_OUTPUT.PUT_LINE('a.ent{color:inherit;font-weight:inherit;text-decoration:underline dotted;text-decoration-color:var(--ink-4);text-underline-offset:3px;text-decoration-thickness:1px}');
+    DBMS_OUTPUT.PUT_LINE('a.ent:hover{text-decoration:underline solid;text-decoration-color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('a.ent code{font-size:inherit}');
+    DBMS_OUTPUT.PUT_LINE('tr.flash>td{animation:awr-rowflash 2.2s ease-out}');
+    DBMS_OUTPUT.PUT_LINE('.flash:not(tr){animation:awr-flash 2.2s ease-out}');
+    DBMS_OUTPUT.PUT_LINE('@keyframes awr-rowflash{0%,25%{box-shadow:inset 0 0 0 999px var(--flash)}100%{box-shadow:inset 0 0 0 999px transparent}}');
+    DBMS_OUTPUT.PUT_LINE('@keyframes awr-flash{0%,25%{outline:2px solid var(--acc);outline-offset:2px}100%{outline:2px solid transparent;outline-offset:2px}}');
+    -- Reading the charts (static guide, every view)
+    DBMS_OUTPUT.PUT_LINE('.gdg{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:0;margin:0 calc(-1 * var(--s5)) calc(-1 * var(--s5));overflow:hidden}');
+    DBMS_OUTPUT.PUT_LINE('.gi{display:grid;grid-template-columns:168px minmax(0,1fr);gap:var(--s4);align-items:center;padding:var(--s4) var(--s5);border-top:1px solid var(--line-soft);margin-top:-1px;'
+        || '--row-bg:var(--panel)}');
+    DBMS_OUTPUT.PUT_LINE('.gv{display:flex;flex-direction:column;justify-content:center;gap:4px;min-height:44px}');
+    DBMS_OUTPUT.PUT_LINE('.gv .bd.sm{min-width:0;width:160px}');
+    DBMS_OUTPUT.PUT_LINE('.gx2 h3{font-size:13.5px;font-weight:600;margin:0 0 2px}');
+    DBMS_OUTPUT.PUT_LINE('.gx2 p{margin:0;font-size:12.5px;line-height:1.5;color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.gx2 .g2{color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('svg.gd{display:block;overflow:visible}');
+    DBMS_OUTPUT.PUT_LINE('.gd-b{fill:var(--bar)} .gd-bc{fill:var(--acc)} .gd-cbg{fill:var(--acc-band)}');
+    DBMS_OUTPUT.PUT_LINE('.gd-z2{fill:var(--zone2)} .gd-mn{stroke:var(--mean);stroke-width:1;opacity:.55}');
+    DBMS_OUTPUT.PUT_LINE('.gd-ax{stroke:var(--line-2);stroke-width:1}');
+    DBMS_OUTPUT.PUT_LINE('.gd-dot{fill:var(--crit-dot);stroke:var(--panel);stroke-width:1.5}');
+    DBMS_OUTPUT.PUT_LINE('.gd-mk{stroke:var(--mk);stroke-width:1.5} .gd-mkf{fill:var(--mk)}');
+    DBMS_OUTPUT.PUT_LINE('.gd-flg{fill:var(--flagbg)} .gd-t{font:10.5px system-ui,sans-serif;fill:var(--ink)} .gd-t.m{font-family:ui-monospace,Menlo,Consolas,monospace;fill:var(--muted)}'
+        || ' .gd-t.b{fill:var(--acc-ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.gd-t.pn{fill:var(--warn);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.gd-cell{fill:none} .gd-cl{stroke:var(--line);stroke-width:1}');
+    DBMS_OUTPUT.PUT_LINE('.gd-ar{stroke:var(--panel);stroke-width:.5}');
+    DBMS_OUTPUT.PUT_LINE('.gd-w{fill:var(--muted);opacity:.22} .gd-wc{fill:var(--acc);opacity:.45}');
+    DBMS_OUTPUT.PUT_LINE('.gd-dp{fill:var(--panel);stroke:var(--ink-2);stroke-width:1.2} .gd-dc{fill:var(--acc);stroke:var(--panel);stroke-width:1.2}');
+    DBMS_OUTPUT.PUT_LINE('.gd-st{fill:none;stroke:var(--ink);stroke-width:1.5} .gd-str{stroke:var(--ink);stroke-width:1.5} .gd-nd{fill:var(--ink);stroke:var(--panel);stroke-width:2}');
+    DBMS_OUTPUT.PUT_LINE('.gd-tk{stroke:var(--mean);stroke-width:1.2;opacity:.7}');
+    DBMS_OUTPUT.PUT_LINE('.gd-pin{fill:var(--pin)}');
+    DBMS_OUTPUT.PUT_LINE('.gd-dl,.gd-gl{display:flex;flex-direction:column;gap:2px;font-size:13px}');
+    DBMS_OUTPUT.PUT_LINE('.gd-gl b{display:inline-block;width:16px;font-style:normal}');
+    DBMS_OUTPUT.PUT_LINE('svg.mw{display:block;overflow:visible}');
+    DBMS_OUTPUT.PUT_LINE('.mw .z2{fill:var(--zone2)} .mw .b{fill:var(--bar)} .mw .b.cur{fill:var(--acc)}');
+    -- About this report: the ONE fold holding every method note
+    DBMS_OUTPUT.PUT_LINE('section.aboutsec{padding:0;overflow:hidden}');
+    DBMS_OUTPUT.PUT_LINE('.aboutrep{margin:0}');
+    DBMS_OUTPUT.PUT_LINE('.aboutrep > summary{list-style:none;cursor:pointer;display:flex;align-items:baseline;gap:var(--s4);padding:var(--s4) var(--s5);color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.aboutrep > summary::-webkit-details-marker{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.aboutrep > summary:hover{background:var(--panel-2)}');
+    DBMS_OUTPUT.PUT_LINE('.aboutrep > summary::before{content:"";width:7px;height:7px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(-45deg);'
+        || 'transition:transform .15s;align-self:center;margin-left:3px}');
+    DBMS_OUTPUT.PUT_LINE('.aboutrep[open] > summary::before{transform:rotate(45deg)}');
+    DBMS_OUTPUT.PUT_LINE('.aboutrep .lt{font-weight:600;font-size:15px}');
+    DBMS_OUTPUT.PUT_LINE('.aboutrep .ls{color:var(--muted);font-size:13.5px}');
+    DBMS_OUTPUT.PUT_LINE('.ab-body{padding:0 var(--s5) var(--s5);display:flex;flex-direction:column;gap:var(--s5)}');
+    DBMS_OUTPUT.PUT_LINE('.notes{display:grid;grid-template-columns:200px minmax(0,1fr);gap:var(--s2) var(--s5);margin:0;font-size:13px;color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.notes dt{font-weight:600;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.notes dd{margin:0;max-width:100ch}');
+    DBMS_OUTPUT.PUT_LINE('.notes code,.ab-meta code{font-size:12px}');
+    DBMS_OUTPUT.PUT_LINE('.ab-meta{margin:0;font-size:12.5px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 720px){.notes{grid-template-columns:minmax(0,1fr)}.gi{grid-template-columns:minmax(0,1fr)}}');
+
+    -- =========================================================
+    -- v1.6.0 Summary view (Mock D): the verdict hero (00 / 17), the ONE
+    -- window component .wg (sql/lib/wingrid.plsql + js_wingrid.plsql; the
+    -- hero strip 08, the card charts 07, the config card 12 and the
+    -- Timeline grid of phase 3), finding cards and the checked-and-normal
+    -- grid (07).  Lifted from design/report_mocks_src/hybrid/style.css;
+    -- generic class names are scoped under .wg / .fc / .hero because the
+    -- fleet report includes this file too.
+    -- =========================================================
+    -- Summary sections sit on the page background; their cards are the panels
+    DBMS_OUTPUT.PUT_LINE('body.vs section.sumsec{background:none;border:0;border-radius:0;padding:0;box-shadow:none}');
+    DBMS_OUTPUT.PUT_LINE('body.vs section.sumsec > h2{margin:var(--s7) 0 var(--s5);padding:var(--s5) 0 0;border-bottom:0;border-top:1px solid var(--hairline)}');
+    DBMS_OUTPUT.PUT_LINE('section.sumsec[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.panel{background:var(--panel);border:1px solid var(--hairline);border-radius:10px}');
+    -- the verdict hero
+    DBMS_OUTPUT.PUT_LINE('section.hero{background:none;border:0;border-radius:0;padding:var(--s7) 0 0;margin:0}');
+    DBMS_OUTPUT.PUT_LINE('.hero .verdict{font-size:30px;line-height:1.3;font-weight:400;letter-spacing:-.015em;max-width:30em;margin:0;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .verdict b{font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.hero .verdict code{font-family:inherit;font-size:1em;font-weight:500;overflow-wrap:anywhere}');
+    DBMS_OUTPUT.PUT_LINE('.hero .verdict.quiet{font-size:26px}');
+    DBMS_OUTPUT.PUT_LINE('.hero .because{font-size:16px;line-height:1.55;color:var(--ink-soft);max-width:48em;margin:var(--s3) 0 0}');
+    DBMS_OUTPUT.PUT_LINE('.hero .because code{font-size:.9em}');
+    -- plain links in the hero's second line (the too-little-history
+    -- sentence links Windows / Findings): never browser blue
+    DBMS_OUTPUT.PUT_LINE('.hero .because a:not(.ent){color:var(--ink-soft);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}');
+    DBMS_OUTPUT.PUT_LINE('.hero .pills{display:flex;flex-wrap:wrap;gap:var(--s2);margin:var(--s5) 0 0;padding:0;list-style:none}');
+    DBMS_OUTPUT.PUT_LINE('.hero .pills a,.hero .pills span.pl{display:inline-flex;align-items:center;gap:8px;padding:4px 12px;border:1px solid var(--hairline);border-radius:999px;background:var(--panel);color:var(--ink-soft);font-size:13px;text-decoration:none;line-height:20px}');
+    DBMS_OUTPUT.PUT_LINE('.hero .pills a:hover{border-color:var(--muted);color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .pills b{color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.hero .hnotes{list-style:none;margin:var(--s4) 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13.5px;color:var(--ink-soft);max-width:80em}');
+    DBMS_OUTPUT.PUT_LINE('.hero .hnotes li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}');
+    DBMS_OUTPUT.PUT_LINE('.hero .hnotes .hl{font-weight:600;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .hnotes .hw{color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .hnotes a.go{color:var(--ink-soft);font-size:12.5px;text-decoration:none;border-bottom:1px solid var(--hairline)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .hnotes a.go:hover{color:var(--ink);border-color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .snapnote{margin:var(--s3) 0 0;font-size:12.5px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('section.strip-sec{background:none;border:0;border-radius:0;padding:0;margin:var(--s5) 0 0}');
+    DBMS_OUTPUT.PUT_LINE('.strip{overflow:hidden}');
+    -- ONE window component (.wg, sql/lib/wingrid.plsql): 13 columns, Current last and wider
+    DBMS_OUTPUT.PUT_LINE('.wg{--lab:224px;--gut:172px;--cmin:48px;--np:12;--tcols:repeat(var(--np),minmax(var(--cmin),1fr)) minmax(calc(var(--cmin) * 1.5),1.6fr);position:relative;font-variant-numeric:tabular-nums}');
+    DBMS_OUTPUT.PUT_LINE('.wg.fit{--cmin:18px}');
+    -- more than 30 windows (wg_attr data-many): fitted grids shrink the column
+    -- minimum so the Summary never scrolls sideways; the Timeline scrolls
+    DBMS_OUTPUT.PUT_LINE('.wg[data-many]:not(#tl){--cmin:min(10px, calc(480px / var(--np)))}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r{display:grid;grid-template-columns:var(--lab) var(--tcols) var(--gut);position:relative}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare{--cmin:14px}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .r{grid-template-columns:var(--tcols)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c{position:relative;min-width:0;border-left:1px solid var(--line-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .c{border-left:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.cur{background-color:var(--acc-band)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.mk{box-shadow:inset 1.5px 0 0 var(--mkline)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r > .l{position:sticky;left:0;z-index:4;background:var(--panel);padding:0 12px 0 16px;display:flex;flex-direction:column;justify-content:center;min-width:0;border-right:1px solid var(--hairline)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .l .nm{font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:8px}');
+    -- .nm is a flex box, so its own text-overflow never reaches the name
+    -- link inside it: the link itself must shrink and ellipsise (a long
+    -- segment name was clipped mid-letter on dbmint)
+    DBMS_OUTPUT.PUT_LINE('.wg .l .nm > a{min-width:0;overflow:hidden;text-overflow:ellipsis}');
+    DBMS_OUTPUT.PUT_LINE('.wg .l .sub{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r > .g{border-left:1px solid var(--hairline);padding:4px 12px;display:flex;flex-direction:column;justify-content:center;gap:2px;min-width:0;white-space:nowrap;overflow:hidden;background:var(--panel);--row-bg:var(--panel)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .g .gl1{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:12.5px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .g .gl1 .z{font-size:11px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .g .d1{font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.wg .g .gx{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}');
+    DBMS_OUTPUT.PUT_LINE('.wg .g .bd.sm{margin:0 -6px 0 -10px;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .fr{height:40px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .fr .flags{grid-column:2 / -2;position:relative}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .fr{height:24px}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .fr .flags{grid-column:1 / -1}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .fr.t2{height:40px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .pole{position:absolute;bottom:0;width:0;border-left:1.5px solid var(--mk);pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.wg .flag{position:absolute;height:16px;padding:0 6px 0 5px;font-size:11px;line-height:16px;color:var(--ink);background:var(--flagbg);border-radius:0 3px 3px 0;white-space:nowrap;cursor:default}');
+    DBMS_OUTPUT.PUT_LINE('.wg .flag::before{content:"";position:absolute;left:-1.5px;top:0;height:16px;border-left:1.5px solid var(--mk)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .flag.end{border-radius:3px 0 0 3px;padding:0 5px 0 6px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .flag.end::before{left:auto;right:-1.5px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .dr .h{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.2;padding:4px 0;border-left:1px solid var(--line-soft);min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .dr .h{border-left:0;padding:4px 0 0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .dr .h.cur{background-color:var(--acc-band)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .h.mk{box-shadow:inset 1.5px 0 0 var(--mkline)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .h .hd{font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.wg .h .ho{font-size:10.5px;color:var(--muted);white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.wg .h.cur .hd,.wg .h.cur .ho{color:var(--acc-ink)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .h.cur .ho{font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .h .hd{font-weight:400;font-size:11px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .h.cur .hd{font-weight:600;color:var(--acc-ink)}');
+    DBMS_OUTPUT.PUT_LINE('.wg.tight .h:not(.cur):not(.keep) .hd,.wg.tight .h:not(.cur) .ho{visibility:hidden}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .rin{display:grid;grid-template-columns:var(--lab) var(--tcols) var(--gut);grid-template-rows:40px 40px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler{border-bottom:1px solid var(--line-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .corner{grid-row:1 / 3;grid-column:1;display:flex;flex-direction:column;justify-content:center;gap:2px;background:var(--panel);padding:8px 12px 8px 16px;border-right:1px solid var(--hairline)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .corner .ct{font-weight:600;font-size:13px;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .corner .cs{font-size:11px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .flags{grid-row:1;grid-column:2 / -2;position:relative}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .h{grid-row:2;border-left:1px solid var(--line-soft);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.25;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .h.cur{background-color:var(--acc-band)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .ruler .gh{grid-row:1 / 3;grid-column:-2 / -1;border-left:1px solid var(--hairline);padding:8px 12px;display:flex;flex-direction:column;justify-content:flex-end;gap:2px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .gh .gt{font-weight:600;font-size:12px;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .gh .gs{font-size:11px;color:var(--muted);line-height:1.3}');
+    DBMS_OUTPUT.PUT_LINE('.wg .v{position:absolute;left:0;right:0;top:2px;text-align:center;font-size:10.5px;line-height:14px;color:var(--muted);white-space:nowrap;pointer-events:none;z-index:3}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.cur .v{font-weight:600;color:var(--ink);font-size:12px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .v.nil{top:auto;bottom:4px;color:var(--ink-4)}');
+    DBMS_OUTPUT.PUT_LINE('body.js-wg .wg:not(.allv) .c:not(.cur) .v:not(.nil){opacity:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg.allv.tight .c:not(.cur) .v:not(.nil){opacity:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.hc,.wg .h.hc{background-image:linear-gradient(var(--hov),var(--hov))}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.hc .v{opacity:1!important}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.bars{--rh:44px;--bh:24px;--bb:4px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.bars .c{min-height:var(--rh)}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.b{position:absolute;z-index:2;bottom:var(--bb);left:50%;width:14px;margin-left:-7px;border-radius:3px 3px 0 0;background:var(--bar)}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare i.b{width:calc(100% - 8px);max-width:14px;left:50%;transform:translateX(-50%);margin-left:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.cur i.b{width:20px;margin-left:-10px;background:var(--acc)}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .c.cur i.b{width:calc(100% - 8px);max-width:20px;margin-left:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.sd{position:absolute;z-index:3;left:50%;width:9px;height:9px;margin:0 0 -4.5px -4.5px;border-radius:50%;box-shadow:0 0 0 2px var(--panel)}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.sd.s-large{background:var(--crit-dot)}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.sd.s-moderate{background:var(--warn-dot)}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.z2,.wg i.z1{position:absolute;left:0;right:0;z-index:1;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.z2{background:var(--zone2);opacity:.75}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.z1{background:var(--zone1);opacity:.55}');
+    DBMS_OUTPUT.PUT_LINE('.wg i.mn{position:absolute;left:0;right:0;z-index:2;height:0;border-top:1px solid var(--mean);opacity:.55;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.cur i.z2,.wg .c.cur i.z1{opacity:.5}');
+    DBMS_OUTPUT.PUT_LINE('.wg .base{position:absolute;left:0;right:0;bottom:calc(var(--bb) - 1px);border-top:1px solid var(--hairline);z-index:1}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.p{--rh:40px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.p .c{min-height:var(--rh)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .st{position:absolute;left:0;right:0;height:0;border-top:1.5px solid var(--muted);pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.wg .st.lo{bottom:10px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .st.hi{bottom:24px;border-top-color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .st.rise::before{content:"";position:absolute;left:-1.5px;top:-1.5px;height:15.5px;border-left:1.5px solid var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .nd{position:absolute;left:-4px;bottom:20px;width:8px;height:8px;border-radius:50%;background:var(--ink);box-shadow:0 0 0 2px var(--panel);z-index:3}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.p .pv{position:absolute;left:6px;font:10.5px/14px ui-monospace,Menlo,Consolas,monospace;color:var(--muted);white-space:nowrap;z-index:3;pointer-events:none;max-width:calc(100% - 8px);overflow:hidden;text-overflow:ellipsis}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.p .pv.lo{bottom:12px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.p .pv.hi{bottom:26px;color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.p .c.cur .pv.hi{color:var(--acc-ink)}');
+    DBMS_OUTPUT.PUT_LINE('.kf{display:inline-block;position:relative;width:9px;height:12px;vertical-align:-1px;margin-right:2px}');
+    DBMS_OUTPUT.PUT_LINE('.kf::before{content:"";position:absolute;left:0;top:0;bottom:0;border-left:1.5px solid var(--mk)}');
+    DBMS_OUTPUT.PUT_LINE('.kf::after{content:"";position:absolute;left:1.5px;top:0;width:7px;height:6px;background:var(--mk);clip-path:polygon(0 0,100% 50%,0 100%)}');
+    -- the hero strip: DB time per window on the window geometry
+    DBMS_OUTPUT.PUT_LINE('.strip .wg .r > .l{background:var(--panel)}');
+    DBMS_OUTPUT.PUT_LINE('.strip .r.bars{--rh:128px;--bh:96px;--bb:6px}');
+    DBMS_OUTPUT.PUT_LINE('.strip .r.bars > .l .big{font-size:22px;font-weight:600;letter-spacing:-.02em;line-height:1.1;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.strip .r.bars > .l .big .u{font-size:13px;font-weight:400;color:var(--muted);margin-left:4px;letter-spacing:0}');
+    -- finding cards (one per card group of metric_policy families)
+    DBMS_OUTPUT.PUT_LINE('.cards{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s5)}');
+    DBMS_OUTPUT.PUT_LINE('.fc{position:relative;padding:var(--s5) var(--s6) 0;display:flex;flex-direction:column;min-width:0;scroll-margin-top:calc(var(--navh, 0px) + 16px);--row-bg:var(--panel)}');
+    DBMS_OUTPUT.PUT_LINE('.fc.f-large::before,.fc.f-moderate::before{content:"";position:absolute;left:-1px;top:24px;height:32px;width:2px;border-radius:1px;background:var(--crit-dot)}');
+    DBMS_OUTPUT.PUT_LINE('.fc.f-moderate::before{background:var(--warn-dot)}');
+    DBMS_OUTPUT.PUT_LINE('.fc-h{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 24px;align-items:start}');
+    DBMS_OUTPUT.PUT_LINE('.fc-k{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;font-size:13px;color:var(--muted);padding-top:4px}');
+    DBMS_OUTPUT.PUT_LINE('.fc-k .sv{display:inline-flex;align-items:center;gap:8px;color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.fc-k .gk{font-style:normal;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.fc-band{width:280px}');
+    DBMS_OUTPUT.PUT_LINE('.fc-band .bd-ax{min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.fc h3{font-size:19px;line-height:1.3;font-weight:600;letter-spacing:-.01em;margin:8px 0 0;padding:0;border:0;text-transform:none;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.fc h3::before{content:none}');
+    DBMS_OUTPUT.PUT_LINE('.fc h3,.calm-notes .note h3{display:block}');
+    DBMS_OUTPUT.PUT_LINE('.fc.lead h3{font-size:24px}');
+    DBMS_OUTPUT.PUT_LINE('.fc.slim h3{font-size:17px}');
+    DBMS_OUTPUT.PUT_LINE('.fc-b{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:var(--s4) var(--s7);margin-top:var(--s4)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .big{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .big .v{font-size:32px;font-weight:600;letter-spacing:-.02em;line-height:1.15;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.fc.lead .big .v{font-size:40px}');
+    DBMS_OUTPUT.PUT_LINE('.fc.slim .big .v{font-size:24px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .big .u{color:var(--ink-soft);font-size:14px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .big .nrm{color:var(--muted);font-size:13px;flex-basis:100%}');
+    DBMS_OUTPUT.PUT_LINE('.fc .wg{margin-top:8px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .wg .r.bars{--rh:150px;--bh:118px}');
+    DBMS_OUTPUT.PUT_LINE('.fc.lead .wg .r.bars{--rh:176px;--bh:144px}');
+    DBMS_OUTPUT.PUT_LINE('.fc.slim .wg .r.bars{--rh:100px;--bh:70px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .ev{margin:0;display:flex;flex-direction:column;align-self:start;padding-top:4px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr{display:grid;grid-template-columns:88px minmax(0,1fr) 136px;gap:2px var(--s4);padding:var(--s3) 0;border-top:1px solid var(--line-soft);align-items:start}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr:first-child{border-top:0;padding-top:4px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr dt{color:var(--muted);font-size:13px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr dd{margin:0;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr .id{display:block;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;color:var(--ink);overflow-wrap:anywhere;line-height:1.4}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr .id.txt{font-family:inherit;font-size:14px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr .de{display:block;color:var(--muted);font-size:12.5px;line-height:1.45}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr .m{display:flex;flex-direction:column;align-items:flex-end;gap:2px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr .m .d{font-size:13px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr .m .bd{width:128px;min-width:0;margin-right:-8px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .evr .m .ns{font-size:11px;color:var(--ink-4)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel{margin-top:16px;border-top:1px solid var(--line-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel > summary{list-style:none;cursor:pointer;padding:12px 0;font-size:13.5px;color:var(--ink-soft);display:flex;align-items:center;gap:8px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel > summary::-webkit-details-marker{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel > summary::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .15s;margin:0 4px 0 2px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel[open] > summary::before{transform:rotate(45deg)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel > summary:hover{color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel .tw{margin:0 0 16px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel table{margin:0}');
+    DBMS_OUTPUT.PUT_LINE('.fc-f{margin-top:auto;border-top:1px solid var(--line-soft);padding:var(--s3) 0;font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .rel + .fc-f{margin-top:0}');
+    DBMS_OUTPUT.PUT_LINE('.fc-f .evl{display:flex;flex-wrap:wrap;gap:4px 16px}');
+    DBMS_OUTPUT.PUT_LINE('.fc-f .evl a{color:var(--ink-soft);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}');
+    DBMS_OUTPUT.PUT_LINE('.fc-f .evl a:hover{color:var(--ink);text-decoration-color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.fc-f .jump{color:var(--ink-soft);text-decoration:none;font-weight:500;margin-right:auto;order:2}');
+    DBMS_OUTPUT.PUT_LINE('.fc-f .jump:hover{color:var(--ink);text-decoration:underline}');
+    DBMS_OUTPUT.PUT_LINE('.fc .takeaway{margin:8px 0 0;font-size:14px;color:var(--ink-soft);max-width:80ch}');
+    DBMS_OUTPUT.PUT_LINE('.fc .cfg-wg{margin:var(--s4) calc(-1 * var(--s6)) 0;border-top:1px solid var(--line-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .cfg-wg .wg > .r{border-bottom:1px solid var(--line-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .cfg-wg .wg > .r:last-child{border-bottom:0}');
+    DBMS_OUTPUT.PUT_LINE('.fc .cfg-wg .l .nm{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}');
+    -- the plan-change card (18): who ran it, and the plan step line under
+    -- the elapsed bars (bare, so the hashes may overflow their narrow cells)
+    DBMS_OUTPUT.PUT_LINE('.fc .whereln{margin:0 0 4px;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:help}');
+    DBMS_OUTPUT.PUT_LINE('.fc .wg.bare .r.p .pv{max-width:none} .fc .wg.bare .r.p .c.cur .pv{left:auto;right:2px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .cfg-more{margin:0;padding:var(--s2) 0 0;font-size:12.5px;color:var(--muted)}');
+    -- checked and normal
+    DBMS_OUTPUT.PUT_LINE('.calm{padding:var(--s2) var(--s6)}');
+    DBMS_OUTPUT.PUT_LINE('.ngrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:32px}');
+    DBMS_OUTPUT.PUT_LINE('.nr{display:grid;grid-template-columns:minmax(0,1fr) 112px 88px;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13.5px;--row-bg:var(--panel)}');
+    DBMS_OUTPUT.PUT_LINE('.nr .l{color:var(--ink-soft);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.nr .l small{display:block;color:var(--muted);font-size:12px;white-space:normal}');
+    DBMS_OUTPUT.PUT_LINE('.nr .vv{text-align:right;line-height:1.3;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.nr .vv small{display:block;font-size:12px}');
+    DBMS_OUTPUT.PUT_LINE('.nr .bd{min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.calm-notes{display:grid;grid-template-columns:1fr 1fr;gap:var(--s5);margin-top:var(--s5);align-items:start}');
+    DBMS_OUTPUT.PUT_LINE('.calm-notes .note{padding:var(--s4) var(--s6)}');
+    DBMS_OUTPUT.PUT_LINE('.calm-notes .note h3{font-size:14px;margin:0 0 var(--s1);padding:0;border:0;text-transform:none;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.calm-notes .note h3::before{content:none}');
+    DBMS_OUTPUT.PUT_LINE('.calm-notes .note p{margin:0 0 8px;font-size:13.5px;color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.calm-notes .note .nr:last-child{border-bottom:0}');
+    DBMS_OUTPUT.PUT_LINE('.calm-notes .note.improved{background:transparent;border-style:dashed}');
+    DBMS_OUTPUT.PUT_LINE('.calm-more{margin:var(--s3) 0 0;font-size:12.5px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.calm-more a{color:var(--ink-soft);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}');
+    DBMS_OUTPUT.PUT_LINE('.calm-empty{margin:0;padding:var(--s4) 0;font-size:14px;color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.ent-x{font:inherit}');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.dotk.typical{border:1.5px solid var(--muted)} .dotk.improved{border:2px solid var(--imp)}');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 1180px){.fc-b{grid-template-columns:minmax(0,1fr)}.ngrid{grid-template-columns:repeat(2,minmax(0,1fr))}}');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 900px){.calm-notes{grid-template-columns:1fr}.fc-h{grid-template-columns:minmax(0,1fr)}.fc-band{width:100%}}');
+
+    -- =========================================================
+    -- v1.6.0 Timeline view (Mock D): the #timeline section, the Activity
+    -- charts at the top of every view (section#activity .ashx: by wait
+    -- class and by wait event) and the aligned window grid
+    -- (#tl: sticky ruler, lanes of .wg rows, pin / hover / flash), the
+    -- stacked activity columns (.r.ash, also the DB time card) and the
+    -- shared tooltip (#tip).  Client half: sql/lib/js_timeline.plsql.
+    -- Lifted from design/report_mocks_src/hybrid/style.css; scoped to
+    -- single-DB ids / classes (the fleet report includes this file).
+    -- No sibling combinator "tilde" here: SET DEFINE makes it a
+    -- substitution character (the gin negative margin hides the first
+    -- visible lanes separator instead).
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('section#timeline{background:none;border:0;border-radius:0;padding:0;box-shadow:none}');
+    DBMS_OUTPUT.PUT_LINE('section#timeline > h2{margin:var(--s7) 0 var(--s5);padding:0;border:0}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-nojs{color:var(--muted);font-size:13px;margin:0 0 var(--s3)}');
+    DBMS_OUTPUT.PUT_LINE('body.js-wg #timeline .tl-nojs{display:none}');
+    DBMS_OUTPUT.PUT_LINE('body:not(.js-wg) #tl{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .sw,#tip .sw,.fcleg .sw,.ashx .sw{display:inline-block;width:8px;height:8px;border-radius:2px;flex:none;background:var(--sw,#9AA3AD)}');
+    DBMS_OUTPUT.PUT_LINE('#activity .ax-nojs{color:var(--muted);font-size:13px;margin:0 0 var(--s2)}');
+    DBMS_OUTPUT.PUT_LINE('body.js-wg #activity .ax-nojs{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .muted{color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx{margin:0;padding:0}');
+    DBMS_OUTPUT.PUT_LINE('.ashx[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axh{display:flex;align-items:baseline;gap:var(--s2) var(--s5);flex-wrap:wrap}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axh .axs{flex:1;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axch{margin-top:var(--s3)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axch + .axch{margin-top:var(--s2)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axch[hidden],.ashx .axk[hidden],.ashx .axn2[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axct{display:flex;align-items:baseline;gap:2px var(--s3);flex-wrap:wrap}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axct h3{display:block;font-size:13px;font-weight:600;white-space:nowrap;margin:0;padding:0;border:0;text-transform:none;letter-spacing:0;color:var(--ink-2)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axct h3::before{content:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axs{font-size:13px;color:var(--ink-3);white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axk{display:flex;gap:var(--s4);font-size:12px;color:var(--ink-3)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axk span{display:inline-flex;align-items:center;gap:6px}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .kw{display:inline-block;width:8px;height:12px;border-radius:1px;background:var(--ink-3);opacity:.35}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .kw.cur{background:var(--acc);opacity:.7}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .kw.pin{background:var(--warn-dot);opacity:.6}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axr{font-size:12px;border:1px solid var(--line-2);background:var(--panel);border-radius:6px;padding:2px 10px;cursor:pointer;color:var(--ink-2);line-height:20px}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axr:hover{color:var(--ink);border-color:var(--ink-3)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axr[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axlg{display:flex;flex-wrap:wrap;gap:0 2px;margin:0;flex:1;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axc{display:inline-flex;align-items:center;gap:6px;border:0;background:none;border-radius:6px;padding:1px 6px;font:inherit;font-size:12px;color:var(--ink-2);cursor:pointer;line-height:18px}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axc:hover{background:var(--hov);color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axc[aria-pressed="false"]{color:var(--ink-4);text-decoration:line-through;text-decoration-color:var(--ink-4)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axc[aria-pressed="false"] .sw{background:none;box-shadow:inset 0 0 0 1.5px var(--sw)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axp{position:relative;margin-top:var(--s1);user-select:none;-webkit-user-select:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axp[hidden],.ashx .axe[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axe{margin:var(--s3) 0;font-size:13px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axsvg{display:block;width:100%;cursor:crosshair}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axbr{position:absolute;top:0;pointer-events:none;background:var(--acc-soft);border-left:1px solid var(--acc);border-right:1px solid var(--acc)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axbr[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axn2{margin:var(--s1) 0 0;font-size:12px;color:var(--ink-3)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .gl{stroke:var(--line);stroke-width:1}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .ax{stroke:var(--line-2);stroke-width:1}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .at{font:11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink-3);font-variant-numeric:tabular-nums}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .cf{stroke:var(--mk);stroke-width:1.5}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .cfl{stroke:var(--mkline);stroke-width:1.5}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .cfh{fill:var(--flagbg)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .cft{font:11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xa{stroke:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xe{fill:none;stroke-width:.8;stroke-linejoin:round}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xw{fill:var(--ink-3);opacity:.16}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xw.cur{fill:var(--acc);opacity:.28}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xw.on{fill:var(--warn-dot);opacity:.35}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xw.sk{fill:var(--ink-4);opacity:.1}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xw.wd{opacity:.07}.ashx .xw.cur.wd{opacity:.1}.ashx .xw.on.wd{opacity:.14}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xwc{fill:var(--ink-3)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xwc.cur{fill:var(--acc)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xwc.on{fill:var(--warn-dot)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xwc.sk{fill:var(--ink-4)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xwh{fill:transparent;cursor:pointer}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xwh:focus-visible{outline:none;stroke:var(--acc);stroke-width:2}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xch{stroke:var(--ink);stroke-width:1;opacity:.55;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xbk{fill:var(--ink);opacity:.06;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('#tip{position:fixed;z-index:100;pointer-events:none;background:var(--ink);color:var(--panel);font-size:12px;line-height:1.45;padding:6px 10px;border-radius:6px;max-width:320px;box-shadow:0 4px 14px rgba(0,0,0,.25);font-variant-numeric:tabular-nums}');
+    DBMS_OUTPUT.PUT_LINE('#tip[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tip .tm{opacity:.72}');
+    DBMS_OUTPUT.PUT_LINE('#tip .tr2{display:flex;align-items:center;gap:6px;justify-content:space-between}');
+    DBMS_OUTPUT.PUT_LINE('#tip .tr2 span{display:inline-flex;align-items:center;gap:6px}');
+    DBMS_OUTPUT.PUT_LINE('#tip .tr2 b{font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('#tip .tsum{border-top:1px solid color-mix(in srgb,var(--panel) 30%,transparent);margin-top:3px;padding-top:3px}');
+    DBMS_OUTPUT.PUT_LINE('#tl.gridwrap{position:relative}');
+    DBMS_OUTPUT.PUT_LINE('#tl > .ruler{position:sticky;top:var(--navh,0px);z-index:30;overflow:hidden;background:var(--panel);border-radius:10px 10px 0 0;border-bottom:1px solid var(--line-2);box-shadow:0 6px 12px -10px rgba(20,26,40,.35)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .rin,#tl .gin{min-width:calc(var(--lab) + var(--gut) + (var(--np) + 1.6) * var(--cmin))}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .corner{position:sticky;left:0;z-index:5;justify-content:space-between}');
+    DBMS_OUTPUT.PUT_LINE('#tl .jumpnav{display:flex;flex-wrap:nowrap;gap:8px;font-size:11.5px;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('#tl .jumpnav a{color:var(--ink-2);text-decoration:none;border-bottom:1px solid var(--line-2)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .jumpnav a:hover{color:var(--ink);border-color:var(--ink-3)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .jumpnav a[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .h{cursor:pointer;border:0;border-left:1px solid var(--line-soft);padding:0;margin:0;background-color:transparent;font:inherit;color:inherit}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .h.cur{background-color:var(--acc-band)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .h:hover .hd{color:var(--acc-ink)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .h.skw .hd,#tl .ruler .h.skw .ho{color:var(--ink-4);text-decoration:line-through;text-decoration-color:var(--ink-4)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .h:focus-visible{outline:2px solid var(--acc);outline-offset:-2px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .h[aria-pressed="true"] .ho{font-size:0}');
+    DBMS_OUTPUT.PUT_LINE('#tl .ruler .h[aria-pressed="true"] .ho::after{content:"pinned";font-size:10.5px;color:var(--warn);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gh .unpin{font:inherit;font-size:11px;font-weight:400;border:1px solid var(--line-2);background:none;border-radius:4px;padding:0 6px;margin-left:4px;cursor:pointer;color:var(--ink-2)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gh .unpin:hover{color:var(--ink);border-color:var(--ink-3)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gbody{overflow-x:auto;overflow-y:hidden;border-radius:0 0 10px 10px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r{border-bottom:1px solid var(--line-soft);scroll-margin-top:calc(var(--navh,0px) + 96px)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.bars{--rh:48px;--bh:22px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.bars.w{--rh:44px;--bh:19px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.bars.q.sub{--rh:40px;--bh:15px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.q .l .nm,#tl .gin .r.p .l .nm{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.q.sub .l{padding-left:32px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.q.sub .l .nm{font-family:inherit;font-weight:500;color:var(--ink-2)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.q.sub .l::before{content:"";position:absolute;left:18px;top:0;height:50%;width:8px;border-left:1px solid var(--line-2);border-bottom:1px solid var(--line-2)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.twin .l .nm{color:var(--ink-3);font-weight:400}');
+    DBMS_OUTPUT.PUT_LINE('#tl .l .sq{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--ink-4);margin-left:4px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.more{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lane.showmore .r.more{display:grid}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lane.showmore .r.xpr{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.xpr .l{padding:8px 16px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .xpb{border:0;background:none;padding:0;font:inherit;color:var(--ink-2);font-size:12.5px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--line-2);text-align:left}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lane[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lane{scroll-margin-top:calc(var(--navh,0px) + 96px)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin{margin-top:calc(-1 * var(--s3))}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin > .lane{border-top:var(--s3) solid var(--paper)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.gh2{background:var(--panel-2);border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);margin-top:-1px;min-height:44px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.gh2 > .l,#tl .r.gh2 > .g{background:var(--panel-2)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.gh2 .c{min-height:40px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lt2{display:flex;align-items:center;gap:8px;border:0;background:none;padding:0;cursor:pointer;text-align:left;width:100%;font:inherit;color:inherit}');
+    DBMS_OUTPUT.PUT_LINE('#tl .car{width:0;height:0;border-left:4.5px solid transparent;border-right:4.5px solid transparent;border-top:6px solid var(--ink-3);transition:transform .12s;flex:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lane.closed .car{transform:rotate(-90deg)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lti{font-weight:600;font-size:14.5px;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .cap{position:absolute;left:calc(var(--lab) + 16px + var(--sl, 0px));top:0;bottom:0;width:calc(var(--vw, 100%) - var(--lab) - var(--gut) - 32px);display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3);pointer-events:none;white-space:nowrap;z-index:4;overflow:hidden}');
+    DBMS_OUTPUT.PUT_LINE('#tl .cap > span{overflow:hidden;text-overflow:ellipsis}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.gh2 .g .meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--ink-2)}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.gh2 .g .meta span{display:inline-flex;align-items:center;gap:6px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .lane.closed .lrows{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.ash .l{justify-content:flex-start;padding-top:12px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .gin .r.ash .g{justify-content:flex-start;padding-top:12px;gap:4px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .g .d3{font-size:11.5px;color:var(--ink-2);display:flex;align-items:center;gap:6px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .leg{list-style:none;margin:8px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:11.5px;color:var(--ink-2);max-width:176px}');
+    DBMS_OUTPUT.PUT_LINE('#tl .leg li{display:flex;align-items:center;gap:6px;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.ash{--rh:184px;--bh:148px;--bb:6px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .r.ash .c{min-height:var(--rh)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .stk{position:absolute;bottom:var(--bb);left:50%;width:18px;margin-left:-9px;z-index:2}');
+    DBMS_OUTPUT.PUT_LINE('.wg .stk i{position:absolute;left:0;right:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .stk i:last-child{border-radius:3px 3px 0 0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .c.cur .stk{width:24px;margin-left:-12px}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .stk{width:calc(100% - 8px);max-width:14px;margin-left:0;transform:translateX(-50%)}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare .c.cur .stk{max-width:20px;margin-left:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .gline{position:absolute;left:0;right:0;border-top:1px dashed var(--line);pointer-events:none;z-index:0}');
+    DBMS_OUTPUT.PUT_LINE('.wg .dl{position:absolute;left:calc(50% + 16px);display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;line-height:1;color:var(--ink);white-space:nowrap;transform:translateY(50%);z-index:3}');
+    DBMS_OUTPUT.PUT_LINE('.wg .dl .sw{display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--sw)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .axn{position:absolute;right:8px;top:0;bottom:0;width:22px}');
+    DBMS_OUTPUT.PUT_LINE('.wg .axn i{position:absolute;right:0;font:10px/1 ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;color:var(--ink-3);font-style:normal;transform:translateY(50%)}');
+    DBMS_OUTPUT.PUT_LINE('.wg .glf{position:absolute;top:3px;right:4px;font-style:normal;font-size:11px;line-height:1;color:var(--ink);z-index:4;cursor:help}');
+    DBMS_OUTPUT.PUT_LINE('.fc .wg .r.ash{--rh:150px;--bh:118px;--bb:4px}');
+    DBMS_OUTPUT.PUT_LINE('.fc.lead .wg .r.ash{--rh:176px;--bh:144px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fcleg{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink-2)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fcleg li{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.flash{animation:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r::after{content:"";position:absolute;inset:0;background:var(--flash);opacity:0;pointer-events:none;z-index:6}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.flash::after{animation:tl-flash 2s ease-out}');
+    DBMS_OUTPUT.PUT_LINE('@keyframes tl-flash{0%{opacity:1}100%{opacity:0}}');
+    DBMS_OUTPUT.PUT_LINE('#tl .c.colflash,#tl .h.colflash{animation:awr-rowflash 1.8s ease-out}');
+    DBMS_OUTPUT.PUT_LINE('#tl .c.pc,#tl .h.pc{background-image:linear-gradient(var(--pin),var(--pin))}');
+    DBMS_OUTPUT.PUT_LINE('#tl .c.pc .v{opacity:1!important}');
+    DBMS_OUTPUT.PUT_LINE('body[data-pw] #tl .g .d1{color:var(--ink-2)}');
+    DBMS_OUTPUT.PUT_LINE('body[data-pw] #tl .g .z{display:none}');
+    DBMS_OUTPUT.PUT_LINE('@media (prefers-reduced-motion: reduce){#tl .r.flash::after,#tl .c.colflash,#tl .h.colflash{animation:none}}');
 
     -- =========================================================
     -- Print
@@ -1214,10 +1547,8 @@ BEGIN
         || '   background:transparent; }'
         || ' section table thead th { position:static; }'
         || ' .tbl-tools, .copy-btn, .permalink, .expander, .tag,'
-        || ' .mode-note, .next-finding, .windows-hint,'
+        || ' .view-note, .next-finding, .windows-hint, .topbar,'
         || ' .theme-icon-btn { display:none !important; }'
-        || ' details.method > summary { display:none; }'
-        || ' details.method > * { display:block; }'
         || ' tr[data-tail="Y"] { display:table-row !important; }'
         || ' .tblwrap.scroll { overflow:visible; box-shadow:none; }'
         || ' .tblwrap.scroll tr > :first-child { position:static; }'

@@ -54,7 +54,7 @@ DECLARE
     -- VARCHAR2 since it is bounded by weeks_back+1.
     v_hours_json    CLOB;
     v_event_vals    CLOB;
-    v_windows_json  VARCHAR2(4000);
+    v_windows_json  VARCHAR2(32767);
     v_buf           VARCHAR2(512);
 
     -- Cell store: key sql_id|bucket|event -> sample count.
@@ -132,23 +132,14 @@ BEGIN
                           'NLS_NUMERIC_CHARACTERS=''.,''') || '-hour'
         END;
 
-    DBMS_OUTPUT.PUT_LINE('<section id="topsql-ash"><h2>Top SQL ASH breakdown '
-        || '(' || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
-        || ', per SQL, stacked by wait event)</h2>');
-    DBMS_OUTPUT.PUT_LINE('<p style="font-size:12px;color:var(--muted);margin:0 0 10px 0">'
-        || 'For each SQL in the Top-N pool (union across all ranking dimensions), '
-        || 'per-bucket ASH samples split by individual wait event '
-        || '(top ' || v_top_events || ' per SQL by sample count; '
-        || 'remainder grouped as <b>Other</b>; <b>CPU</b> = ON-CPU). '
-        || '<code>dba_hist_active_sess_history</code>, '
+    DBMS_OUTPUT.PUT_LINE('<section id="topsql-ash" class="vw in-a"><h2>Top SQL activity'
+        || '<small class="h2sub">ASH samples of each Top SQL statement by wait event, '
+        || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
+        || ', '
         || TO_CHAR(CAST(v_range_start AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
         || ' &rarr; '
         || TO_CHAR(CAST(v_range_end   AS TIMESTAMP), 'YYYY-MM-DD HH24:MI')
-        || ', '
-        || CASE WHEN v_bucket_hours = 1 THEN 'hourly' ELSE v_bucket_label END
-        || ' buckets. Compared windows shaded. '
-        || 'SQLs with fewer than ' || v_min_samples
-        || ' samples appear as placeholders.</p>');
+        || '</small></h2>');
 
     -- Shared bucket-label grid (one entry per chart-X-axis tick).
     -- Same logic as section 09 lines 144-155.
@@ -166,25 +157,22 @@ BEGIN
     DBMS_LOB.WRITEAPPEND(v_hours_json, 1, ']');
 
     -- Window-band markers. Same shape and source as section 09 lines 161-179.
-    SELECT '['
-           || LISTAGG(
-                  '["'
-                  || TO_CHAR(win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
-                  || TO_CHAR(win_end_ts,   'YYYY-MM-DD HH24:MI') || '","'
-                  || CASE WHEN week_offset = 0 THEN 'current'
-                          ELSE 'w-' || week_offset END || '",'
-                  || CASE WHEN valid_flag = 'Y' THEN '"1"' ELSE '"0"' END
-                  || ']',
-                  ',')
-                  WITHIN GROUP (ORDER BY week_offset DESC)
-           || ']'
-    INTO   v_windows_json
-    FROM (
+    -- Built in PL/SQL, not LISTAGG (about 50 bytes a window: SQL's
+    -- 4000-byte LISTAGG limit would abort the run past about 78 windows).
+    FOR r IN (
         WITH
         @@sql/lib/windows_cte.sql
         SELECT week_offset, win_start_ts, win_end_ts, valid_flag
         FROM   windows_rollup
-    );
+        ORDER BY week_offset DESC
+    ) LOOP
+        v_windows_json := v_windows_json || CASE WHEN v_windows_json IS NOT NULL THEN ',' END
+            || '["' || TO_CHAR(r.win_start_ts, 'YYYY-MM-DD HH24:MI') || '","'
+            || TO_CHAR(r.win_end_ts, 'YYYY-MM-DD HH24:MI') || '","'
+            || CASE WHEN r.week_offset = 0 THEN 'current' ELSE 'w-' || r.week_offset END || '",'
+            || CASE WHEN r.valid_flag = 'Y' THEN '"1"' ELSE '"0"' END || ']';
+    END LOOP;
+    v_windows_json := '[' || v_windows_json || ']';
 
     -- Single big ASH cursor:
     --   * re-derive section 06's "picked" pool inline (no shared state),
@@ -603,7 +591,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  chart.setOption({');
     DBMS_OUTPUT.PUT_LINE('    aria:{enabled:true,decal:{show:true}},');
     DBMS_OUTPUT.PUT_LINE('    tooltip:{trigger:"axis",axisPointer:{type:"line"},');
-    DBMS_OUTPUT.PUT_LINE('      valueFormatter:function(v){return v==null?"—":(+v).toFixed(2);}},');
+    DBMS_OUTPUT.PUT_LINE('      valueFormatter:function(v){return v==null?"\u2014":(+v).toFixed(2);}},');
     DBMS_OUTPUT.PUT_LINE('    legend:{top:0,left:"center",textStyle:{color:fg,fontSize:10},itemWidth:10,itemHeight:7,type:"scroll"},');
     DBMS_OUTPUT.PUT_LINE('    grid:{left:42,right:14,top:30,bottom:showSlider?46:26,containLabel:true},');
     DBMS_OUTPUT.PUT_LINE('    xAxis:{type:"category",data:d.hours,boundaryGap:false,axisLabel:{color:mu,fontSize:9,hideOverlap:true}},');
@@ -616,7 +604,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('        lineStyle:{width:0.5,color:color},itemStyle:{color:color},');
     DBMS_OUTPUT.PUT_LINE('        data:e.vals};');
     DBMS_OUTPUT.PUT_LINE('      if(i===0 && markAreaData.length){');
-    DBMS_OUTPUT.PUT_LINE('        s.markArea={silent:true,data:markAreaData,itemStyle:{opacity:1}};}');
+    DBMS_OUTPUT.PUT_LINE('        s.markArea={silent:true,data:markAreaData,itemStyle:{opacity:1},label:{position:"insideTop",color:mu,fontSize:9,textBorderWidth:0,distance:2}};}');
     DBMS_OUTPUT.PUT_LINE('      if(i===0){var __ml=window.AWR_markLine&&window.AWR_markLine(d.hours); if(__ml) s.markLine=__ml;}');
     DBMS_OUTPUT.PUT_LINE('      return s;})');
     DBMS_OUTPUT.PUT_LINE('  });');
