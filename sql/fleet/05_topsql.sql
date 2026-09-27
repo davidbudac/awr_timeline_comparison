@@ -231,7 +231,7 @@ BEGIN
         IF s.cur_phv IS NOT NULL THEN
             FOR k IN 1 .. v_weeks_back LOOP
                 v_phv_s := nth_csv(s.week_phvs, k + 1);
-                IF v_phv_s IS NOT NULL AND v_phv_s <> ''
+                IF v_phv_s IS NOT NULL
                    AND TO_NUMBER(v_phv_s) <> s.cur_phv THEN
                     v_plan_flip := TRUE;
                     EXIT;

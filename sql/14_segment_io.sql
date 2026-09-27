@@ -350,7 +350,7 @@ BEGIN
             IF v_new_in_cur THEN
                 FOR k IN 1 .. v_weeks_back LOOP
                     v_prior_s := nth_csv(s.week_vals, k + 1);
-                    IF v_prior_s IS NOT NULL AND v_prior_s <> ''
+                    IF v_prior_s IS NOT NULL
                        AND TO_NUMBER(v_prior_s, 'FM99999999999999990',
                                      'NLS_NUMERIC_CHARACTERS=''.,''') > 0 THEN
                         v_new_in_cur := FALSE;
@@ -396,7 +396,7 @@ BEGIN
                 v_row := v_row || '<td class="num" data-w="' || k || '">'
                       || fmt_num(v_val);
             END IF;
-            IF v_rnk_s IS NOT NULL AND v_rnk_s <> '' THEN
+            IF v_rnk_s IS NOT NULL THEN
                 v_row := v_row || ' <span class="badge skip">#' || v_rnk_s || '</span>';
             END IF;
             v_row := v_row || '</td>';

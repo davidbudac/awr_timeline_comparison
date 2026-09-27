@@ -448,7 +448,7 @@ BEGIN
                 v_row := v_row || '<td class="num" data-w="' || k || '">'
                       || fmt_num(v_us);
             END IF;
-            IF v_rank_s IS NOT NULL AND v_rank_s <> '' THEN
+            IF v_rank_s IS NOT NULL THEN
                 v_row := v_row || ' <span class="badge skip">#' || v_rank_s || '</span>';
             END IF;
             v_row := v_row || '</td>';

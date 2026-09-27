@@ -517,6 +517,21 @@ for f in awr_trend.sql sql/[0-9]*.sql sql/lib/*.plsql; do
     done
 done
 
+# ----------------------------------------------------------------------
+# 31. An empty string IS NULL in Oracle, so "x <> ''" (or "x != ''") is
+#     never TRUE and "IF x IS NOT NULL AND x <> '' THEN" never runs its
+#     branch.  That dead guard hid 06's plan-change badges, the prior-window
+#     rank chips of 04 / 05 / 06 / 14 / 15 and made every 14 / 15 row "new"
+#     (found on dbmint 2026-09-27).  "IS NOT NULL" is the whole test.
+#     ('''' -- an escaped quote -- is not an empty string and is skipped.)
+# ----------------------------------------------------------------------
+for f in $(sql_files); do
+    grep -n -E "(<>|!=)[[:space:]]*''([^']|$)" "$f" | grep -v -E '^[0-9]+:[[:space:]]*--' \
+      | while IFS= read -r line; do
+        finding empty-string "$f:${line%%:*}" "comparison with '' is never TRUE in Oracle ('' IS NULL); use IS NOT NULL"
+    done
+done
+
 [ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"

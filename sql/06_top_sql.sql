@@ -436,7 +436,7 @@ BEGIN
         IF s.cur_phv IS NOT NULL THEN
             FOR k IN 1 .. v_weeks_back LOOP
                 v_phv_s := nth_csv(s.week_phvs, k + 1);
-                IF v_phv_s IS NOT NULL AND v_phv_s <> ''
+                IF v_phv_s IS NOT NULL
                    AND TO_NUMBER(v_phv_s) <> s.cur_phv THEN
                     v_plan_flip := TRUE;
                     EXIT;
@@ -517,10 +517,10 @@ BEGIN
                 v_row := v_row || '<td class="num" data-w="' || k || '">'
                       || fmt_num(v_val/s.dim_div);
             END IF;
-            IF v_rnk_s IS NOT NULL AND v_rnk_s <> '' THEN
+            IF v_rnk_s IS NOT NULL THEN
                 v_row := v_row || ' <span class="badge skip">#' || v_rnk_s || '</span>';
             END IF;
-            IF v_phv_s IS NOT NULL AND v_phv_s <> '' AND s.cur_phv IS NOT NULL
+            IF v_phv_s IS NOT NULL AND s.cur_phv IS NOT NULL
                AND TO_NUMBER(v_phv_s) <> s.cur_phv THEN
                 v_row := v_row || ' <span class="badge warn" title="Plan changed. Prior PHV '
                       || v_phv_s || '">plan&#8593;</span>';
