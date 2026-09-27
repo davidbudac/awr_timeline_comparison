@@ -161,7 +161,9 @@ doc.addEventListener('click',function(ev){
   var o=+h.getAttribute('data-w');
   if(o===0){W.pin(null);flashCol(0);}else W.pin(o);
 });
-doc.addEventListener('keydown',function(ev){if(ev.key==='Escape'&&PW!==null)W.pin(null);});
+/* Esc: the first press clears a highlighted Activity series (hlEsc,
+   section 6), the next one the pinned window */
+doc.addEventListener('keydown',function(ev){if(ev.key!=='Escape')return;if(hlEsc())return;if(PW!==null)W.pin(null);});
 /* the pin survives a view switch: the Activity charts that show it are at
    the top of every view (Esc, Current or the gutter's clear unpin) */
 doc.addEventListener('awr:view',function(ev){
@@ -179,11 +181,17 @@ function place(e){
 }
 /* per-series AAS rows, top of the stack first; names / colours from the
    payload (classes or events), vis = the legend state (null = all) */
-function ashRows(names,cols,get,vis,noun){
-  var h='',tot=0,hid=false;
+function ashRows(names,cols,get,vis,noun,hl){
+  var h='',tot=0,hid=false,lead=[],hs=0;
   for(var c=names.length-1;c>=0;c--){if(vis&&!vis[c]){hid=true;continue;}var v=get(c);if(v==null)continue;tot+=v;
+    if(hl&&hl[c]){lead.push([c,v]);hs+=v;continue;}
     if(v>=0.005)h+='<div class="tr2"><span><i class="sw" style="--sw:'+cols[c]+'"></i>'+esc(names[c])+'</span><b>'+v.toFixed(2)+'</b></div>';}
-  return h+'<div class="tr2 tsum"><span>'+(hid?'Total, shown '+(noun||'classes'):'Total')+'</span><b>'+tot.toFixed(1)+' AAS</b></div>';
+  /* a highlighted series leads (its share of the total beside it); several
+     (a wait class's events) add their sum */
+  var pc=function(v){return tot>0?' <span class="tpc">'+Math.round(v/tot*100)+'%</span>':'';},l='';
+  lead.forEach(function(x){l+='<div class="tr2 thl"><span><i class="sw" style="--sw:'+cols[x[0]]+'"></i>'+esc(names[x[0]])+'</span><b>'+x[1].toFixed(2)+pc(x[1])+'</b></div>';});
+  if(lead.length>1)l+='<div class="tr2 thl"><span>Highlighted, together</span><b>'+hs.toFixed(2)+pc(hs)+'</b></div>';
+  return (l?'<div class="thlb">'+l+'</div>':'')+h+'<div class="tr2 tsum"><span>'+(hid?'Total, shown '+(noun||'classes'):'Total')+'</span><b>'+tot.toFixed(1)+' AAS</b></div>';
 }
 function cellTip(cell){
   var row=cell.closest('.r');if(!row||!row.getAttribute('data-name'))return '';
@@ -261,8 +269,59 @@ function activity(){
    (AWR_DATA.ashx) and by wait event (AWR_DATA.ashe).  Linked: a zoom on
    either zooms both, the hover crosshair is mirrored, the pinned window
    (AWR_WG.pin) is the same stripe in both.  Hover, legend, brush zoom,
-   Reset / double-click, window stripes, release markers in each. */
+   Reset / double-click, window stripes, release markers in each.
+   Series highlight: a legend entry hovered or keyboard-focused (or a
+   sticky one) is drawn from zero with the y axis fitted to it, the other
+   series faded on top; the series under the pointer in the plot is
+   highlighted in place (no re-stacking, so it cannot slide away from the
+   pointer).  Linked through ashe.ecls (each event's wait class): a class
+   highlights its events in the event chart, an event its class, lightly,
+   in the class chart.  Sticky: a click on a band in the plot or
+   Shift+click / Shift+Enter on a legend entry; the same again, a click
+   off the stack or Esc clears it (the next Esc unpins the window). */
 var AX=null,AE=null,CH=[],SP=null,DRAG=null,cvs=null;
+/* the highlight: HS sticky, HT passing (legend hover / focus, or soft =
+   the plot hover), each {c: chart, k: series}; HT wins while it lasts */
+var HS=null,HT=null;
+function hlSame(a,b){return a===b||!!(a&&b&&a.c===b.c&&a.k===b.k&&!!a.soft===!!b.soft);}
+function hlSet(t){if(hlSame(HT,t))return;HT=t;hlApply();}
+function hlStick(c,k){HS=(k<0||(HS&&HS.c===c&&HS.k===k))?null:{c:c,k:k};HT=null;hlApply();}
+function hlEsc(){if(!HS&&!HT)return false;HS=null;HT=null;hlApply();return true;}
+/* each chart's c.hl = {set: {series: 1}, strong: re-based + fitted, fade:
+   the others' opacity, note}; redraw only the charts whose state changed */
+function hlApply(){
+  var E=HT||HS;
+  CH.forEach(function(c){c.hl=null;});
+  if(E&&E.c.vis[E.k]){
+    var s=E.c,strong=!E.soft,nm=s.P.classes[E.k],one={},m=s.xmap&&s.xmap[E.k],o=s.peer;
+    var tail=E===HS?' \u00b7 Esc clears':'';
+    one[E.k]=1;
+    s.hl={set:one,strong:strong,fade:strong?0.12:0.3,note:strong?nm+' drawn from zero, y axis fitted to it'+tail:''};
+    if(o&&m&&m.length){
+      var set={};m.forEach(function(q){set[q]=1;});
+      var on1=m.length===1&&o.P.classes[m[0]]===nm;
+      o.hl=s===CH[0]?{set:set,strong:strong,fade:strong?0.12:0.3,note:strong?(on1?nm+' drawn from zero, y axis fitted to it':'The '+nm+' events drawn from zero, y axis fitted to them')+tail:''}
+                    :{set:set,strong:false,fade:0.35,note:''};
+    }
+  }
+  CH.forEach(function(c){
+    var h=c.hl,key=h?Object.keys(h.set).join(',')+'|'+h.strong+'|'+h.fade+'|'+h.note:'';
+    if(c.lg){c.lg.classList.toggle('hlon',!!h);$$('.axc',c.lg).forEach(function(b){b.classList.toggle('hl',!!(h&&h.set[+b.getAttribute('data-c')]));});}
+    if(key!==c.hk){c.hk=key;draw(c,true);}
+  });
+}
+/* the series drawn under client point (x, y) on chart c, or -1 (off the
+   stack): the bucket under x, its values stacked in the drawn order */
+function seriesAt(c,x,y){
+  if(!c.g||!c.g.ord)return -1;
+  var r=c.svg.getBoundingClientRect(),sy=(y-r.top)*c.g.W/r.width;
+  if(sy<c.g.top||sy>c.g.top+c.g.ph)return -1;
+  var t=tAt(c,x);if(t<c.g.d0||t>c.g.d1)return -1;
+  var ref=refAt(t);if(ref==null)return -1;
+  var v=(c.g.top+c.g.ph-sy)/c.g.ph*c.g.ymax,acc=0;
+  for(var q=0;q<c.g.ord.length;q++){var k=c.g.ord[q],a=rV(c,k,ref)||0;if(a<=0)continue;acc+=a;if(v<=acc)return k;}
+  return -1;
+}
 /* the event palette: 15 categorical hues, the first 13 (all a chart can
    use: 14 events, CPU among them) well apart, readable on both themes, no
    green (CPU keeps the wait-class CPU green, "Other events" a fixed grey) */
@@ -346,6 +405,13 @@ function spInit(){
   CH.forEach(function(c){c.FV=fineVals(c.P);});
   if(CH.some(function(c){return !c.FV;}))SP.F=null;
   if(CH.length)CH[CH.length-1].xl=true;
+  /* the link between the charts: ashe.ecls[e] = event e's wait class
+     (CPU -> CPU, Other events -> null) */
+  if(CH.length===2&&AE&&AE.ecls&&AE.ecls.length===AE.classes.length){
+    var ca=CH[0],ce=CH[1];ca.peer=ce;ce.peer=ca;
+    ca.xmap=AX.classes.map(function(cn){var o=[];AE.ecls.forEach(function(x,e){if(x===cn)o.push(e);});return o;});
+    ce.xmap=AE.ecls.map(function(x){var i=x==null?-1:AX.classes.indexOf(x);return i<0?[]:[i];});
+  }
   if(SP.reset)SP.reset.addEventListener('click',spReset);
   doc.addEventListener('mousemove',function(e){
     var dg=DRAG;if(!dg)return;
@@ -361,26 +427,45 @@ function spInit(){
   doc.addEventListener('mouseup',function(){
     var dg=DRAG;if(!dg)return;DRAG=null;CH.forEach(function(o){o.br.hidden=true;});
     if(dg.moved){if(dg.b-dg.a>6)spZoom(tAt(dg.c,dg.a),tAt(dg.c,dg.b));return;}
-    if(dg.w!=null){SP.sel={prev:PW,t:Date.now()};spSelect(dg.w);}
+    if(dg.w!=null){SP.sel={prev:PW,t:Date.now()};spSelect(dg.w);return;}
+    /* a click on a band makes its highlight sticky (the same band again,
+       or a click off the stack, clears it) */
+    var k=seriesAt(dg.c,dg.x0,dg.y0);
+    if(k>=0||HS){SP.hsel={prev:HS,t:Date.now()};hlStick(dg.c,k);}
   });
 }
 function mkChart(root,P,cols,opt){
   if(!root)return null;
   var c={root:root,P:P,cols:cols,svg:$('.axsvg',root),plot:$('.axp',root),br:$('.axbr',root),
-         vis:P.classes.map(function(){return true;}),flags:!!opt.flags,noun:opt.noun,what:opt.what,xl:false,g:null,w:0,uid:root.id};
-  var lg=$('.axlg',root);
-  if(lg){lg.innerHTML=P.classes.map(function(nm,k){return '<button type="button" class="axc" data-c="'+k+'" aria-pressed="true" title="Show or hide '+esc(nm)+'"><i class="sw" style="--sw:'+cols[k]+'" aria-hidden="true"></i>'+esc(nm)+'</button>';}).join('');
-    $$('.axc',lg).forEach(function(b){b.addEventListener('click',function(){var k=+b.getAttribute('data-c');c.vis[k]=!c.vis[k];b.setAttribute('aria-pressed',String(c.vis[k]));draw(c,true);});});}
+         vis:P.classes.map(function(){return true;}),flags:!!opt.flags,noun:opt.noun,what:opt.what,xl:false,g:null,w:0,uid:root.id,
+         lg:$('.axlg',root),hl:null,hk:'',peer:null,xmap:null};
+  var lg=c.lg;
+  if(lg){lg.innerHTML=P.classes.map(function(nm,k){return '<button type="button" class="axc" data-c="'+k+'" aria-pressed="true" title="'+esc(nm)+': hover to highlight, click to show or hide, Shift+click to keep it highlighted"><i class="sw" style="--sw:'+cols[k]+'" aria-hidden="true"></i>'+esc(nm)+'</button>';}).join('');
+    /* hover / keyboard focus highlights; a click hides / shows; Shift+click
+       or Shift+Enter keeps the highlight */
+    $$('.axc',lg).forEach(function(b){
+      var k=+b.getAttribute('data-c'),mine=function(){return HT&&HT.c===c&&HT.k===k;};
+      b.addEventListener('click',function(e){
+        if(e.shiftKey){e.preventDefault();hlStick(c,k);return;}
+        c.vis[k]=!c.vis[k];b.setAttribute('aria-pressed',String(c.vis[k]));hlApply();draw(c,true);});
+      b.addEventListener('keydown',function(e){if(e.key==='Enter'&&e.shiftKey){e.preventDefault();hlStick(c,k);}});
+      b.addEventListener('mouseenter',function(){hlSet({c:c,k:k});});
+      b.addEventListener('mouseleave',function(){if(mine())hlSet(null);});
+      b.addEventListener('focus',function(){var fv=true;try{fv=b.matches(':focus-visible');}catch(x){}if(fv)hlSet({c:c,k:k});});
+      b.addEventListener('blur',function(){if(mine())hlSet(null);});
+    });}
   var s=c.svg;
   s.addEventListener('mousemove',function(e){hover(c,e);});
-  s.addEventListener('mouseleave',function(){if(!DRAG){tipOff();hideAll();}});
+  s.addEventListener('mouseleave',function(){if(!DRAG){tipOff();hideAll();if(HT&&HT.soft)hlSet(null);}});
   s.addEventListener('mousedown',function(e){
     if(e.button!==0||!c.g)return;e.preventDefault();
     /* the second press of a double-click resets the zoom (the chart is redrawn
        between the two presses, so a dblclick event may never fire) and undoes
        the pin the first press made on a window stripe */
-    if(e.detail>=2){if(SP.sel&&Date.now()-SP.sel.t<700)W.pin(SP.sel.prev);SP.sel=null;DRAG=null;spReset();return;}
-    var wh=e.target.closest('.xwh');DRAG={c:c,x0:e.clientX,moved:false,w:wh?+wh.getAttribute('data-i'):null};
+    if(e.detail>=2){if(SP.sel&&Date.now()-SP.sel.t<700)W.pin(SP.sel.prev);SP.sel=null;
+      if(SP.hsel&&Date.now()-SP.hsel.t<700){HS=SP.hsel.prev;HT=null;hlApply();}SP.hsel=null;
+      DRAG=null;spReset();return;}
+    var wh=e.target.closest('.xwh');DRAG={c:c,x0:e.clientX,y0:e.clientY,moved:false,w:wh?+wh.getAttribute('data-i'):null};
   });
   s.addEventListener('dblclick',spReset);
   s.addEventListener('keydown',function(e){var wh=e.target.closest&&e.target.closest('.xwh');if(wh&&(e.key==='Enter'||e.key===' ')){e.preventDefault();spSelect(+wh.getAttribute('data-i'));}});
@@ -398,7 +483,7 @@ function spHead(){
 function draw(c,force){
   if(!c||!SP||!shown(c.plot))return;
   var Wd=Math.max(480,c.plot.clientWidth),d0=SP.dom[0],d1=SP.dom[1];
-  if(!force&&c.w===Wd&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1)return;c.w=Wd;c.pw=PW;
+  if(!force&&c.w===Wd&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk)return;c.w=Wd;c.pw=PW;
   var mks=W.markers?W.markers():[],P=c.P;
   var top=c.flags&&mks.length?46:22,ph=150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;
   c.svg.setAttribute('viewBox','0 0 '+Wd+' '+H);c.svg.setAttribute('height',H);
@@ -409,34 +494,54 @@ function draw(c,force){
      column's busiest bucket (largest stacked total), so a one-bucket spike
      still shows; the tooltip always reads the bucket under the cursor.
      The first / last bucket of the data runs flat out to its edge. */
-  var R=refs(d0,d1),pts=[],cb=null,mx=0.05,i,k,sm,r;
-  for(i=0;i<R.length;i++){r=R[i];sm=0;for(k=0;k<P.vals.length;k++)if(c.vis[k])sm+=rV(c,k,r)||0;
-    var ra=rS(r),rb=rE(r);if(sm>mx&&rb>d0&&ra<d1)mx=sm;
+  /* the highlight (hlApply): on[k] = series k highlighted and shown; re-based
+     (strong) = the highlighted series stacked first, from zero, the y axis
+     fitted to them and each pixel column keeping THEIR busiest bucket */
+  var hl=c.hl,on=null,i,k,sm,sh,r;
+  if(hl){on=P.classes.map(function(x,q){return !!hl.set[q]&&c.vis[q];});if(!on.some(Boolean)){hl=null;on=null;}}
+  var reb=!!(hl&&hl.strong),ord=[];
+  for(k=0;k<P.vals.length;k++)if(c.vis[k]&&(!reb||on[k]))ord.push(k);
+  if(reb)for(k=0;k<P.vals.length;k++)if(c.vis[k]&&!on[k])ord.push(k);
+  var R=refs(d0,d1),pts=[],cb=null,mx=0.05,mh=0;
+  for(i=0;i<R.length;i++){r=R[i];sm=0;sh=0;for(k=0;k<P.vals.length;k++)if(c.vis[k]){var vk=rV(c,k,r)||0;sm+=vk;if(reb&&on[k])sh+=vk;}
+    var ra=rS(r),rb=rE(r);if(rb>d0&&ra<d1){if(sm>mx)mx=sm;if(sh>mh)mh=sh;}
     var xm=X((ra+rb)/2),col=Math.floor(xm),g=pts[pts.length-1];
-    if(g&&col===cb){if(sm>g[2]){g[0]=xm;g[1]=r;g[2]=sm;}}else{pts.push([xm,r,sm]);cb=col;}}
+    if(g&&col===cb){if(reb?(sh>g[3]||(sh===g[3]&&sm>g[2])):sm>g[2]){g[0]=xm;g[1]=r;g[2]=sm;g[3]=sh;}}else{pts.push([xm,r,sm,sh]);cb=col;}}
   if(pts.length){var pf=pts[0],pl=pts[pts.length-1];
-    if(rS(pf[1])>=d0)pts.unshift([X(rS(pf[1])),pf[1],pf[2]]);
-    if(rE(pl[1])<=d1)pts.push([X(rE(pl[1])),pl[1],pl[2]]);}
-  var step=niceStep(mx,3),ymax=Math.ceil(mx/step-1e-9)*step;
+    if(rS(pf[1])>=d0)pts.unshift([X(rS(pf[1])),pf[1],pf[2],pf[3]]);
+    if(rE(pl[1])<=d1)pts.push([X(rE(pl[1])),pl[1],pl[2],pl[3]]);}
+  var yb=reb&&mh>0?Math.max(mh,0.05):mx,step=niceStep(yb,3),ymax=Math.ceil(yb/step-1e-9)*step;
   var Y=function(v){return top+ph-ph*v/ymax;},clip='axclip-'+c.uid;
-  var s='<defs><clipPath id="'+clip+'"><rect x="'+padL+'" y="'+(top-6)+'" width="'+pw+'" height="'+(ph+6)+'"/></clipPath></defs>';
+  var s='<defs><clipPath id="'+clip+'"><rect x="'+padL+'" y="'+(top-6)+'" width="'+pw+'" height="'+(ph+6)+'"/></clipPath>'
+    +(reb?'<clipPath id="'+clip+'f"><rect x="'+padL+'" y="'+top+'" width="'+pw+'" height="'+ph+'"/></clipPath>':'')+'</defs>';
   for(var v=0;v<=ymax+1e-9;v+=step){var dec=step<1?(step<0.1?2:1):0;
     s+='<line class="gl" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="at" x="'+(padL-6)+'" y="'+(Y(v)+4).toFixed(1)+'" text-anchor="end">'+v.toFixed(dec)+'</text>';}
   s+='<text class="at" x="'+(padL-6)+'" y="'+(top-10)+'" text-anchor="end">AAS</text><g clip-path="url(#'+clip+')">';
   /* one fill per series, painted top of the stack first: each fills from
      the axis up to its own cumulative line and the series below paint over
      it (no seams); then each band's top edge, a thin darker line.  A point
-     in the middle of a flat run is left out of the path. */
-  var lo=pts.map(function(){return 0;}),np=pts.length,y0=Y(0).toFixed(1),fills=[],edges=[];
-  P.vals.forEach(function(vals,k){
-    if(!c.vis[k]||!np)return;
-    var hi=lo.map(function(l,j){return l+(rV(c,k,pts[j][1])||0);}),ys=hi.map(function(h){return Y(h).toFixed(1);}),ln='';
-    for(var j=0;j<np;j++){if(j>0&&j<np-1&&ys[j]===ys[j-1]&&ys[j]===ys[j+1])continue;ln+=(ln?'L':'')+pts[j][0].toFixed(1)+' '+ys[j];}
-    fills.push('<path class="xa" fill="'+c.cols[k]+'" d="M'+pts[0][0].toFixed(1)+' '+y0+'L'+ln+'L'+pts[np-1][0].toFixed(1)+' '+y0+'Z"/>');
-    edges.push('<path class="xe" stroke="'+shade(c.cols[k])+'" d="M'+ln+'"/>');
+     in the middle of a flat run is left out of the path.  Highlighted: the
+     other series paint the same way inside one faded group (the group's
+     opacity applies once, so their overlap does not darken), then each
+     highlighted series as its own band (between its lower and upper line)
+     at full colour with a clear top edge. */
+  var lo=pts.map(function(){return 0;}),np=pts.length,y0=Y(0).toFixed(1),fills=[],edges=[],hf=[],he=[];
+  var pl2=function(ys,rev){var o='',j,q;for(q=0;q<np;q++){j=rev?np-1-q:q;if(q>0&&q<np-1&&ys[j]===ys[rev?j+1:j-1]&&ys[j]===ys[rev?j-1:j+1])continue;o+=(o?'L':'')+pts[j][0].toFixed(1)+' '+ys[j];}return o;};
+  ord.forEach(function(k){
+    if(!np)return;
+    var hi=lo.map(function(l,j){return l+(rV(c,k,pts[j][1])||0);}),ys=hi.map(function(h){return Y(h).toFixed(1);}),ln=pl2(ys,false);
+    if(on&&on[k]){
+      hf.push('<path class="xa xah" fill="'+c.cols[k]+'" d="M'+ln+'L'+pl2(lo.map(function(h){return Y(h).toFixed(1);}),true)+'Z"/>');
+      he.push('<path class="xe xeh" stroke="'+shade(c.cols[k])+'" d="M'+ln+'"/>');
+    }else{
+      fills.push('<path class="xa" fill="'+c.cols[k]+'" d="M'+pts[0][0].toFixed(1)+' '+y0+'L'+ln+'L'+pts[np-1][0].toFixed(1)+' '+y0+'Z"/>');
+      edges.push('<path class="xe" stroke="'+shade(c.cols[k])+'" d="M'+ln+'"/>');
+    }
     lo=hi;
   });
-  s+=fills.reverse().join('')+edges.reverse().join('');
+  if(!hl)s+=fills.reverse().join('')+edges.reverse().join('');
+  /* fitted below the stack's top, the faded stack would fill the plot: fainter then */
+  else s+=(reb?'<g clip-path="url(#'+clip+'f)">':'')+'<g class="xfd" opacity="'+(reb&&ymax<mx?Math.min(hl.fade,0.07):hl.fade)+'">'+fills.reverse().join('')+'</g>'+hf.join('')+he.join('')+(reb?'</g>':'');
   s+='<rect class="xbk" x="0" y="'+top+'" width="0" height="'+ph+'" visibility="hidden"/>';
   var ws=wins(),hit=[],cur=ws.length-1;
   SP.win.forEach(function(r,i){
@@ -476,6 +581,7 @@ function draw(c,force){
       return false;
     });
   });
+  if(hl&&hl.note)s+='<text class="xhn" x="'+(padL+6)+'" y="'+(top+13)+'">'+esc(hl.note)+'</text>';
   s+='<line class="xch" x1="0" x2="0" y1="'+top+'" y2="'+(top+ph)+'" visibility="hidden"/>';
   /* a stripe's hit area: the whole stripe while it is narrow; zoomed into
      a window (a wide stripe) only its cap, so the plot under it hovers
@@ -486,7 +592,7 @@ function draw(c,force){
       +esc((w.o===0?'Current window, ':offTxt(w)+' window, ')+w.t+(w.o===0?'':'. Pin it'))+'"/>';
   });
   c.svg.innerHTML=s;
-  c.g={X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1};
+  c.g={X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,hk:c.hk};
 }
 function tAt(c,cx){var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*c.g.W/r.width;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}
 function bucketAt(t){var j=Math.floor((t-SP.t0)/SP.bh);return j>=0&&j<SP.T.length&&t<SP.T1[j]?j:-1;}
@@ -504,15 +610,18 @@ function hover(c,e){
   var wh=e.target.closest&&e.target.closest('.xwh'),P=c.P;
   if(wh){
     var i=+wh.getAttribute('data-i'),w=wins()[i];hideAll();
+    if(HT&&HT.soft)hlSet(null);
     tipOn('<b>'+esc(w.t)+'</b><br><span class="tm">'+(w.o===0?'Current window':offTxt(w)+' window')+(w.v==='N'?', skipped':'')+', by '+c.what+'</span>'
-      +(P.win?ashRows(P.classes,c.cols,function(k){return P.win[k][i];},c.vis,c.noun):'')+(w.o===0?'':'<span class="tm">Click to pin this window</span>'),e);
+      +(P.win?ashRows(P.classes,c.cols,function(k){return P.win[k][i];},c.vis,c.noun,c.hl&&c.hl.set):'')+(w.o===0?'':'<span class="tm">Click to pin this window</span>'),e);
     return;
   }
   var t=tAt(c,e.clientX),r=refAt(t);
-  if(r==null||t<c.g.d0||t>c.g.d1){hideAll();tipOff();return;}
+  if(r==null||t<c.g.d0||t>c.g.d1){hideAll();tipOff();if(HT&&HT.soft)hlSet(null);return;}
+  /* the band under the pointer highlights in place (not while one is sticky) */
+  if(!HS&&!DRAG){var hk=seriesAt(c,e.clientX,e.clientY);hlSet(hk<0?null:{c:c,k:hk,soft:true});}
   CH.forEach(function(o){cross(o,t,r);});
   tipOn('<b>'+fAt(rS(r))+'\u2013'+fHM(rE(r))+'</b><br><span class="tm">'+(r<0?'1-min':bLab((rE(r)-rS(r))/H1))+' average, by '+c.what+'</span>'
-    +ashRows(P.classes,c.cols,function(q){return rV(c,q,r);},c.vis,c.noun),e);
+    +ashRows(P.classes,c.cols,function(q){return rV(c,q,r);},c.vis,c.noun,c.hl&&c.hl.set),e);
 }
 /* a window stripe: pin it (Current unpins); in the Timeline view the grid
    column flashes and comes into view */

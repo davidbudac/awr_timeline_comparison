@@ -236,8 +236,11 @@ freely with a weekly or hourly main comparison:
 You get a signed-z heatmap (hour × metric; red = above the prior days, blue
 = below, hover for current / mean / σ / n / %Δ), a per-metric line chart
 (current day against the prior-day mean with a μ ± 2σ band and the
-individual prior days as faint lines; click a heatmap cell to switch metric
-and jump to that hour's row), and a 24-row table that also serves as the
+individual prior days as faint lines), picked from a row of buttons, one per
+metric, each with a severity dot, its large / moderate hour counts and its
+largest z (so the unusual ones stand out); the arrow keys cycle them, and a
+heatmap row label or cell switches too (a cell also jumps to that hour's
+row), and a 24-row table that also serves as the
 offline fallback. Nine per-second rates come from `DBA_HIST_SYSSTAT`
 snapshot deltas (DB time and DB CPU as average active sessions / CPUs busy,
 user calls, executions, logical and physical reads, physical writes, redo
@@ -368,7 +371,14 @@ inside the windows (the range label says so; at most 40000 minutes of
 windows, the most recent first). Hover for each series' value (the
 crosshair shows on both charts), click a legend entry to hide a series,
 drag across either chart to zoom both, double-click or **Reset zoom** to
-go back, click a window stripe to pin it.
+go back, click a window stripe to pin it. **Hover a wait class or event**
+(its legend entry, or keyboard focus) to highlight it: it is redrawn from
+zero with the y axis fitted to it, the other series faded above, so its
+shape over time reads directly; a class also lights its events in the event
+chart (and an event its class). Hovering a band in the plot highlights it in
+place; click the band, or Shift+click the legend entry, to keep the
+highlight; the same again or **Esc** clears it (the next Esc unpins the
+window).
 
 ### Summary
 

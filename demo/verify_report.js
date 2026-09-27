@@ -35,6 +35,15 @@
  *     (ruler aria-pressed, gutter "vs <date>", amber stripe on both
  *     charts); Current unpinning + flashing, Enter / Esc; "Other events"
  *     in the event legend (required for the demo, which has > 14 events);
+ *   - the series highlight (v1.6.1): ashe.ecls present; a class legend
+ *     hover re-bases that class (band on the axis, the rest faded, the
+ *     note) and its events in the event chart; an event lights its class
+ *     in place; nothing left on after the pointer leaves; keyboard focus;
+ *     Shift+click sticky, the tooltip leads with it, Esc clears it before
+ *     unpinning; a click on a band keeps it, the same click clears it;
+ *   - the Day profile metric picker (v1.6.1, profile_days > 0; required
+ *     for the demo): one role=tab button per stat with its indicator, a
+ *     click / arrows / Home / End switch the line chart;
  *   - the rail: no link state (active / hover) draws a left border or an
  *     inset shadow;
  *   - the Timeline view (v1.6.0): every lane source template was moved in,
@@ -434,7 +443,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
           return xs.size === 1 ? 'ok (mirrored)' : 'FAIL crosshair x differs ' + [...xs].join(',');
         }, [hx === null, id]);
         if (!/^ok/.test(tl['hover_' + k])) fail('activity ' + k + ': hover ' + tl['hover_' + k]);
-        await page.mouse.move(box.x + box.width * 0.5, box.y - 60); await page.waitForTimeout(80);
+        await page.mouse.move(2, box.y + box.height + 40); await page.waitForTimeout(80);
         // legend: hide the first series -> one layer less; hide every series but
         // the last -> the y axis rescales; show them all again -> restored
         const st = () => page.evaluate((id) => ({ n: document.querySelectorAll('#' + id + ' .axsvg path.xa').length,
@@ -449,6 +458,8 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         await page.waitForTimeout(120);
         const s2 = await st();
         for (let i = 0; i < nBtn - 1; i++) { await page.click(sel + ':nth-child(' + (i + 1) + ')'); await page.waitForTimeout(30); }
+        // off the legend: hovering an entry highlights (and re-scales) its series
+        await page.mouse.move(2, box.y + box.height + 40);
         await page.waitForTimeout(120);
         const s3 = await st();
         const okL = s1.off === 1 && s1.n === s0.n - 1 && (nBtn < 3 || (s2.off === nBtn - 1 && s2.y !== s0.y)) && s3.off === 0 && s3.n === s0.n && s3.y === s0.y;
@@ -477,8 +488,9 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         await page.waitForTimeout(150);
         await page.mouse.dblclick(box.x + box.width * 0.55, box.y + box.height * 0.5); await page.waitForTimeout(200);
         tl['dblclick_' + k] = await page.evaluate((r0) => document.getElementById('ax-reset').hidden && document.getElementById('ax-range').textContent === r0
-          && !document.body.hasAttribute('data-pw') ? 'ok' : 'FAIL', r0);
+          && !document.body.hasAttribute('data-pw') && !document.querySelector('.ashx .axsvg g.xfd') ? 'ok' : 'FAIL', r0);
         if (tl['dblclick_' + k] !== 'ok') fail('activity ' + k + ': double-click reset');
+        await page.mouse.move(2, box.y + box.height + 40); await page.waitForTimeout(80);
         // a prior window stripe pins its grid column; the stripe turns amber on BOTH charts
         const pin = await page.evaluate(async (id) => {
           const hs = [...document.querySelectorAll('#' + id + ' .axsvg .xwh')].filter(x => x.getAttribute('data-w') !== '0');
@@ -525,6 +537,96 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         }, id);
         tl['keys_' + k] = kb;
         if (/^FAIL/.test(kb)) fail('activity ' + k + ': Enter / Esc ' + kb);
+      }
+      // v1.6.1 series highlight: a legend hover re-bases the series (drawn
+      // from zero: its band's lower edge on the axis) and fades the rest; a
+      // class lights its events (ashe.ecls) in the event chart, re-based
+      // too; an event lights its class in place; Shift+click keeps it, the
+      // tooltip leads with it, Esc clears it first and unpins second; a
+      // click on a band keeps it, the same click again clears it
+      {
+        const hl = {};
+        const state = () => page.evaluate(() => {
+          const one = (id) => {
+            const s = document.querySelector('#' + id + ' .axsvg'); if (!s) return null;
+            const ax = s.querySelector('line.ax'), y0 = ax ? +ax.getAttribute('y1') : NaN;
+            const bands = [...s.querySelectorAll('path.xah')];
+            const onAxis = bands.length > 0 && bands.some(b => { const m = /([\d.]+) ([\d.]+)Z$/.exec(b.getAttribute('d')); return m && Math.abs(+m[2] - y0) < 0.6; });
+            return { fd: !!s.querySelector('g.xfd'), n: bands.length, onAxis, note: !!s.querySelector('text.xhn'),
+                     lit: document.querySelectorAll('#' + id + ' .axlg .axc.hl').length,
+                     y: [...s.querySelectorAll('text.at')].map(t => t.textContent).join('|') };
+          };
+          return { c: one('ax-cls'), e: one('ax-ev') };
+        });
+        const ecls = await page.evaluate(() => (window.AWR_DATA.ashe || {}).ecls || null);
+        const cls = await page.evaluate(() => window.AWR_DATA.ashx.classes);
+        hl.ecls = ecls ? 'ok (' + ecls.length + ')' : 'FAIL missing';
+        if (!ecls) fail('activity: ashe.ecls missing');
+        // the class with the most events in the event chart
+        let ci = 0, best = -1;
+        cls.forEach((c, i) => { const n = ecls ? ecls.filter(x => x === c).length : 0; if (n > best) { best = n; ci = i; } });
+        const s0 = await state();
+        await page.hover('#ax-cls .axlg .axc[data-c="' + ci + '"]'); await page.waitForTimeout(150);
+        const s1 = await state();
+        const okC = s1.c.fd && s1.c.n === 1 && s1.c.onAxis && s1.c.note && s1.c.lit === 1
+          && (!ecls || !best || (s1.e.fd && s1.e.n === best && s1.e.onAxis && s1.e.lit === best));
+        hl.cls = okC ? 'ok (' + cls[ci] + ' -> ' + best + ' events' + (s1.c.y !== s0.c.y ? ', axis fitted' : '') + ')' : 'FAIL ' + JSON.stringify(s1);
+        if (!/^ok/.test(hl.cls)) fail('activity: class legend highlight ' + hl.cls);
+        // an event lights its class, in place (no note, not re-based)
+        const ei = ecls ? ecls.findIndex(x => x && x !== 'CPU' && cls.includes(x)) : -1;
+        if (ei >= 0) {
+          await page.hover('#ax-ev .axlg .axc[data-c="' + ei + '"]'); await page.waitForTimeout(150);
+          const s2 = await state();
+          hl.ev = (s2.e.fd && s2.e.n === 1 && s2.e.onAxis && s2.e.note && s2.c.n === 1 && !s2.c.note && s2.c.lit === 1) ? 'ok (' + ecls[ei] + ' lit)' : 'FAIL ' + JSON.stringify(s2);
+          if (!/^ok/.test(hl.ev)) fail('activity: event legend highlight ' + hl.ev);
+        }
+        await page.mouse.move(10, 10); await page.waitForTimeout(120);
+        const s3 = await state();
+        hl.leave = (!s3.c.fd && !s3.e.fd && !s3.c.lit && s3.c.y === s0.c.y) ? 'ok' : 'FAIL ' + JSON.stringify(s3);
+        if (hl.leave !== 'ok') fail('activity: highlight left on after the pointer left ' + hl.leave);
+        // keyboard focus highlights too
+        await page.focus('#ax-cls .axlg .axc[data-c="' + ci + '"]');
+        await page.keyboard.press('Shift+Tab'); await page.keyboard.press('Tab'); await page.waitForTimeout(80);
+        const sk = await state();
+        await page.evaluate(() => document.activeElement && document.activeElement.blur()); await page.waitForTimeout(80);
+        hl.focus = sk.c.n === 1 ? 'ok' : 'FAIL';
+        if (hl.focus !== 'ok') fail('activity: keyboard focus on a legend entry does not highlight');
+        // sticky: Shift+click, the tooltip leads with it, Esc clears it first
+        await page.click('#ax-cls .axlg .axc[data-c="' + ci + '"]', { modifiers: ['Shift'] }); await page.waitForTimeout(120);
+        const cb = await (await page.$('#ax-cls .axsvg')).boundingBox();
+        await page.mouse.move(cb.x + cb.width * 0.5, cb.y + cb.height * 0.6); await page.waitForTimeout(150);
+        const s4 = await state();
+        const tipLead = await page.evaluate((nm) => { const t = document.getElementById('tip'); const l = t && !t.hidden && t.querySelector('.thlb .thl'); return !!l && l.textContent.indexOf(nm) === 0; }, cls[ci]);
+        await page.mouse.move(10, 10); await page.waitForTimeout(100);
+        const s5 = await state();
+        await page.evaluate(() => { const h = document.querySelector('#tl .ruler .h:not(.cur)'); if (h) h.click(); });
+        await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+        const s6 = await state(); const pw6 = await page.evaluate(() => document.body.hasAttribute('data-pw'));
+        await page.keyboard.press('Escape'); await page.waitForTimeout(100);
+        const pw7 = await page.evaluate(() => document.body.hasAttribute('data-pw'));
+        hl.sticky = (s4.c.n === 1 && tipLead && s5.c.n === 1 && s5.c.note && !s6.c.fd && pw6 && !pw7) ? 'ok (tooltip leads, Esc clears it, then unpins)'
+          : 'FAIL ' + JSON.stringify([s4.c.n, tipLead, s5.c.n, s6.c.fd, pw6, pw7]);
+        if (!/^ok/.test(hl.sticky)) fail('activity: sticky highlight / Esc ' + hl.sticky);
+        // a click on the bottom band keeps it; the same click clears it
+        const px = await page.evaluate(() => { const s = document.querySelector('#ax-cls .axsvg'), r = s.getBoundingClientRect(), ax = s.querySelector('line.ax'), sc = r.width / s.viewBox.baseVal.width;
+          const y = r.top + (+ax.getAttribute('y1') - 1.5) * sc;
+          for (let f = 0.3; f < 0.97; f += 0.005) { const e = document.elementFromPoint(r.left + r.width * f, y); if (e && e.matches('path.xa')) return { x: r.left + r.width * f, y }; }
+          return { x: r.left + r.width * 0.5, y }; });
+        await page.mouse.click(px.x, px.y); await page.waitForTimeout(150);
+        await page.mouse.move(10, 10); await page.waitForTimeout(100);
+        const s8 = await state();
+        await page.mouse.click(px.x, px.y); await page.waitForTimeout(150);
+        await page.mouse.move(10, 10); await page.waitForTimeout(100);
+        const s9 = await state();
+        hl.click = (s8.c.n === 1 && s8.c.onAxis && !s9.c.fd) ? 'ok' : 'FAIL ' + JSON.stringify([s8.c, s9.c.fd]);
+        if (!/^ok/.test(hl.click)) fail('activity: click-to-keep highlight ' + hl.click);
+        tl.highlight = hl;
+        if (shots) {
+          await page.evaluate(() => window.scrollTo(0, 0));
+          await page.hover('#ax-cls .axlg .axc[data-c="' + ci + '"]'); await page.waitForTimeout(150);
+          const a = await page.$('#activity'); if (a) await a.screenshot({ path: path.join(shots, 'activity-highlight.png') });
+          await page.mouse.move(10, 10); await page.waitForTimeout(80);
+        }
       }
       // the 1-minute detail: the payload agrees with the per-window values
       // (the Current window's minutes summed = ashx.win), and zooming into
@@ -626,6 +728,45 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       await page.screenshot({ path: path.join(shots, 'timeline-top.png') });
     }
     if (errors.length) fail('timeline: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 5b. v1.6.1 Day profile metric picker (profile_days > 0): one button
+  // per stat drives the line chart (a click, the arrow keys, Home / End;
+  // roving tabindex), each with its severity indicator
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const dp = await page.evaluate(async () => {
+      const pk = document.getElementById('day-profile-pick'); if (!pk) return 'none';
+      if (!window.echarts) return 'no charts';
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const bs = [...pk.querySelectorAll('.dpb')], d = AWR_DATA.dayProfile, n = bs.length;
+      const line = echarts.getInstanceByDom(document.getElementById('day-profile-line'));
+      if (!line) return 'FAIL no line chart';
+      const cur = () => { const o = line.getOption(); return { name: o.yAxis[0].name, sel: bs.findIndex(b => b.getAttribute('aria-selected') === 'true'),
+        tab: bs.filter(b => b.tabIndex === 0).length, data: JSON.stringify(o.series[o.series.length - 1].data) }; };
+      if (n !== d.stats.length) return 'FAIL ' + n + ' buttons for ' + d.stats.length + ' stats';
+      const c0 = cur();
+      if (c0.sel !== 0 || c0.name !== d.stats[0].name || c0.tab !== 1) return 'FAIL initial ' + JSON.stringify(c0);
+      const j = Math.min(3, n - 1);
+      bs[j].click(); await wait(80);
+      const c3 = cur();
+      if (c3.sel !== j || c3.name !== d.stats[j].name || c3.tab !== 1 || (n > 1 && c3.data === c0.data && d.stats[j].name === d.stats[0].name)) return 'FAIL click ' + JSON.stringify([c3.sel, c3.name]);
+      const key = (k) => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+      const seq = [];
+      bs[j].focus();
+      for (const k of ['ArrowRight', 'ArrowDown', 'End', 'ArrowRight', 'ArrowLeft', 'Home', 'ArrowUp']) { key(k); await wait(40); seq.push(cur().sel); }
+      const want = [(j + 1) % n, (j + 2) % n, n - 1, 0, n - 1, 0, n - 1];
+      const okK = seq.every((v, i) => v === want[i]) && document.activeElement === bs[n - 1] && cur().name === d.stats[n - 1].name;
+      const ind = bs.every(b => b.querySelector('.dpd') && b.querySelector('.dpz') && b.getAttribute('role') === 'tab');
+      bs[0].click();
+      return okK && ind ? 'ok (' + n + ' metrics; click, arrows, Home / End)' : 'FAIL keys ' + JSON.stringify([seq, want, ind]);
+    });
+    console.log('day profile picker', dp);
+    if (/^FAIL/.test(dp)) fail('day profile picker: ' + dp);
+    if (/demo_busy_db\.html$/.test(file) && dp === 'none') fail('day profile picker: the demo must have it');
+    if (shots && /^ok/.test(dp)) { const el = await page.$('#day-profile'); await el.scrollIntoViewIfNeeded(); await page.waitForTimeout(200); await el.screenshot({ path: path.join(shots, 'day-profile.png') }); }
+    if (errors.length) fail('day profile: ' + errors.slice(0, 5).join(' | '));
     await page.close();
   }
 

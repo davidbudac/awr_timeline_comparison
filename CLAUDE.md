@@ -469,14 +469,18 @@ and foreground flag; no second ASH scan):
   same for `session_type = 'FOREGROUND'` only (the DB time card's bars: DB
   time is foreground time; the card keeps its DB time value as the Current
   label, review #8).
-- `AWR_DATA.ashe = {t0, end, bh, wh, classes, vals, win, fine}` — the same shape
-  by **wait event** (ON CPU = `CPU`, ranked like any event): the 14 events
+- `AWR_DATA.ashe = {t0, end, bh, wh, classes, ecls, vals, win, fine}` — the
+  same shape by **wait event** (ON CPU = `CPU`, ranked like any event): the 14 events
   with the most samples over the span (ties: name ascending), biggest first
   = bottom of the stack, then `"Other events"` LAST = the class total less
   the top events per bucket / per window (integer samples, so exactly the
-  rest; left out with ≤ 14 events). Names through `json_escape`. Same
-  semantics as the fleet's `FLEET_ASH_EV` (`sql/fleet/02_ash.sql`), which
-  stays its own copy.
+  rest; left out with ≤ 14 events). Names through `json_escape`. `ecls`
+  (v1.6.1) = each series' wait class, parallel to `classes` (`"CPU"` for
+  CPU, `null` for "Other events"; an event seen under two classes keeps the
+  first by name), collected in the same scan loop (`v_ecls`): it links the
+  two charts' highlight (a payload without it: no cross-chart highlight).
+  Same semantics as the fleet's `FLEET_ASH_EV` (`sql/fleet/02_ash.sql`),
+  which stays its own copy (no `ecls` there).
 - `ashx.fine` / `ashe.fine = {bm, capped, segs, vals}` -- the **1-minute
   detail** (owner request), from the SAME scan: its GROUP BY also carries
   `mk` = the sample's minute since `t0` when the sample sits in a compared
@@ -538,6 +542,36 @@ align. Heights ≈ 180–200 px each (`ph` 150). Colours: classes from
 green). A click on a stripe in Summary / All sections pins too
 (the grid follows when you open the Timeline). JS off: only the note;
 payload without classes: `#ax-empty`, key / charts / hint hidden.
+
+**Series highlight (v1.6.1, owner request):** state `HS` (sticky) / `HT`
+(passing; wins while it lasts), each `{c: chart, k: series[, soft]}`;
+`hlApply()` derives each chart's `c.hl = {set, strong, fade, note}` and
+redraws only the charts whose state key changed (`c.hk`, also part of
+draw's cache check). **Strong** (legend hover, legend keyboard focus when
+`:focus-visible`, sticky) = re-based: the highlighted series stacked first
+from zero, the y axis fitted to it (`mh`; the rest clipped by a second
+clipPath), each pixel column keeping ITS busiest bucket; the other series
+in one `g.xfd` group at opacity .12 (.07 when the fit cuts the stack) so
+their overlap does not darken; the highlighted ones as `path.xa.xah` bands
+(upper + lower line) with a `.xeh` edge; a `text.xhn` note ("... drawn
+from zero, y axis fitted to it", "· Esc clears" when sticky). **Soft**
+(the band under the pointer in the plot, `seriesAt()`) = in place, not
+re-stacked (a re-base would slide the band away from the pointer and
+flicker); off while one is sticky. Cross-chart via `c.peer` / `c.xmap`
+(built from `ashe.ecls` in `spInit`): a class highlights its events in the
+event chart (strong when the class is), an event its class in the class
+chart, lightly (in place, the rest at .35). Sticky: a click on a band
+(mouseup without a drag, not on a stripe; a click off the stack clears) or
+Shift+click / Shift+Enter on a legend entry; the same again toggles it
+off; the double-click reset undoes the first press's sticky (`SP.hsel`,
+like `SP.sel` for the pin). **Esc: the first press clears the highlight
+(`hlEsc`), the next one unpins the window.** A legend click still hides /
+shows (a hidden series never highlights). Tooltip: `ashRows(..., hl)`
+leads with the highlighted rows (`.thlb` / `.thl`, share of the total
+`.tpc`; several add a "together" sum). Legend: `.axlg.hlon`, `.axc.hl`
+(no font-weight change: a wider label would shift the legend under the
+pointer and flicker). CSS in `_style.sql` next to the other `.ashx` rules.
+Without a highlight `draw` emits exactly the pre-1.6.1 SVG.
 
 ### Window component (`sql/lib/wingrid.plsql` + `js_wingrid.plsql`)
 
@@ -898,7 +932,24 @@ is the hour ending at `target_end`; consumers `ORDER BY hour_slot DESC` for a
 chronological axis; `hour_label` is the hour's START. In v1.6.0 it shows in the
 Timeline and All sections views (`vw in-t in-a`) and is an evidence-library
 row in Summary (row text names the day-wide shifts; never auto-opens). The section's heatmap
-is **signed** z (diverging ramp), unlike 07's |z|. **Byte-identity at 0:**
+is **signed** z (diverging ramp), unlike 07's |z|. **Metric picker
+(v1.6.1, owner request):** the old `<select id="day-profile-sel">` is gone;
+`div.dpk#day-profile-pick[role=tablist]` holds one `button.dpb[role=tab]
+#dpb-<i>` per stat (roving tabindex, `aria-selected`, `aria-controls=
+"day-profile-line"`), each with the stat name (`.dpn`) and an indicator
+line `.dps`: a dot `.dpd.crit|warn|ok` (any large / any moderate hour /
+none), the counts ("6 large", "2 large · 1 mod.", "▲ day-wide, 23 h",
+"not flagged" when |z| > 2 but no hour is large / moderate: immaterial,
+improved or noted; "normal") and the signed z of the largest |z| (`.dpz`); the title spells it
+out. Per-stat `v_lg` / `v_md` / `v_zx` come from pass 1. The script's
+`pick(i, focus)` sets the tab state, redraws the line chart and bolds the
+heatmap's row label (`ylab()`: an `axisLabel` formatter + `rich`,
+re-applied on `awr:theme`); Left / Right / Up / Down cycle, Home / End;
+the heatmap's y-axis labels are clickable (`triggerEvent`), a cell click
+picks its stat too (and flashes the hour row, as before). It sits inside
+the `.chart-wrap`, so `body.no-charts` hides it with the charts (the table
+keeps every number). Twin `s16_day_profile.py` (the script lines are
+lifted literally, the buttons hand-ported). **Byte-identity at 0:**
 the section emits only its two `AWR-SECTION` markers (no `<section>`), the
 rail link, the Timeline jump-nav link and the About note are `CASE … ELSE ''`, the
 fleet band and the drill command's 12-slot tail are likewise guarded. The
@@ -1502,8 +1553,13 @@ headless smoke test (bundled Chromium, else system Chrome): 0 console errors in
 3 views × light/dark, every in-page href resolves to exactly one id, every
 visible `a.ent` clicked through, view switch / persistence / rail dimming,
 Timeline lanes + `data-tl` jumps + label links + chart hover / legend / zoom /
-reset / pin / Esc, plan cards, library rows, rail sub-links, All sections
-completeness (`allFull`), micro strips. ~3 min per report; **one instance at a
+reset / pin / Esc, the series highlight (legend hover re-base, class ->
+events, event -> class, focus, sticky, Esc order, click to keep), the Day
+profile picker (click / arrows / Home / End; required for the demo), plan
+cards, library rows, rail sub-links, All sections completeness (`allFull`),
+micro strips. The legend / highlight steps park the pointer BELOW the chart
+(x 2), never above it: above the event chart is the class legend, and a
+hovered legend entry re-scales the chart. ~3 min per report; **one instance at a
 time** (parallel runs hang Chrome). It works on any report, dbmint's included.
 The "No Python" rule applies to the toolkit, not to this docs tooling --
 nothing under `sql/`, `awr_trend.sql` or the wrappers may depend on `demo/`.

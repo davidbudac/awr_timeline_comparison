@@ -1289,7 +1289,9 @@ BEGIN
         || 'largest, the rest as Other events) over the same span. Drag to zoom."></svg>'
         || '<div class="axbr" hidden></div></div></div>');
     DBMS_OUTPUT.PUT_LINE('<p class="axn2">Hover for the values; drag across either chart to zoom both '
-        || '(6 hours or less shows the compared windows minute by minute), double-click to reset. Click a shaded window to pin it: the Timeline grid compares against it.</p>'
+        || '(6 hours or less shows the compared windows minute by minute), double-click to reset. Click a shaded window to pin it: the Timeline grid compares against it. '
+        || 'Hover a wait class or event to highlight it (a class also lights its events): from the legend it is drawn from zero with the y axis fitted to it, '
+        || 'so its shape over time reads directly. Click its band, or Shift+click the legend entry, to keep it; Esc clears.</p>'
         || '</div></section>');
     -- =========================================================
     -- v1.6.0 Summary view: the verdict hero.  One rule-based sentence

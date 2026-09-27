@@ -606,6 +606,27 @@ BEGIN
         || ' white-space:normal; overflow-wrap:break-word;'
         || ' max-width:320px; vertical-align:top; }');
     DBMS_OUTPUT.PUT_LINE('#day-profile td:first-child, #windows-table td { white-space:nowrap; }');
+    -- v1.6.1 Day profile metric picker (16): one button per stat, the
+    -- picked one in the accent colour; a dot + counts + largest z per stat
+    DBMS_OUTPUT.PUT_LINE('#day-profile .dpk { display:grid; grid-template-columns:repeat(auto-fill,minmax(172px,1fr));'
+        || ' gap:6px; margin:2px 0 8px; }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile .dpb { display:flex; flex-direction:column; justify-content:space-between; gap:3px;'
+        || ' min-width:0; text-align:left; border:1px solid var(--line-2); background:var(--panel); border-radius:8px;'
+        || ' padding:6px 9px; font:inherit; font-size:12px; line-height:1.3; color:var(--ink-2); cursor:pointer; }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile .dpb:hover { border-color:var(--ink-3); color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile .dpb[aria-selected="true"] { border-color:var(--acc); background:var(--acc-soft);'
+        || ' color:var(--ink); box-shadow:inset 0 0 0 1px var(--acc); }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile .dpb:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile .dpn { font-weight:600; overflow-wrap:anywhere; }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile .dps { display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--ink-3);'
+        || ' font-variant-numeric:tabular-nums; white-space:nowrap; }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile .dpt { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile .dpz { flex:none; }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile .dpd { width:8px; height:8px; border-radius:50%; flex:none;'
+        || ' background:transparent; box-shadow:inset 0 0 0 1.5px var(--ink-4); }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile .dpd.crit { background:var(--crit-dot); box-shadow:none; }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile .dpd.warn { background:var(--warn-dot); box-shadow:none; }');
+    DBMS_OUTPUT.PUT_LINE('#day-profile .dpcap { font-size:12px; color:var(--muted); margin:0 4px 6px; }');
     DBMS_OUTPUT.PUT_LINE('#param-changes td.pval code {'
         || ' font-size:11.5px; color:var(--ink-soft); }');
     DBMS_OUTPUT.PUT_LINE('#param-changes td.cur code { font-weight:700; color:var(--ink); }');
@@ -1449,6 +1470,17 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ashx .xwh:focus-visible{outline:none;stroke:var(--acc);stroke-width:2}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xch{stroke:var(--ink);stroke-width:1;opacity:.55;pointer-events:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xbk{fill:var(--ink);opacity:.06;pointer-events:none}');
+    -- v1.6.1 series highlight (js_timeline section 6): the highlighted band's
+    -- top edge, the fitted-axis note, the legend entry lit and the rest dimmed
+    DBMS_OUTPUT.PUT_LINE('.ashx .xeh{stroke-width:1.8}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xhn{font:600 11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axc.hl{background:var(--hov);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line-2)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axlg.hlon .axc:not(.hl){opacity:.55}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axlg.hlon .axc:not(.hl):hover,.ashx .axlg.hlon .axc:not(.hl):focus-visible{opacity:1}');
+    DBMS_OUTPUT.PUT_LINE('#tip .thlb{border-bottom:1px solid color-mix(in srgb,var(--panel) 30%,transparent);margin-bottom:3px;padding-bottom:3px}');
+    DBMS_OUTPUT.PUT_LINE('#tip .thl{font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('#tip .thl .sw{width:10px;height:10px}');
+    DBMS_OUTPUT.PUT_LINE('#tip .tpc{font-weight:400;opacity:.72;margin-left:4px}');
     DBMS_OUTPUT.PUT_LINE('#tip{position:fixed;z-index:100;pointer-events:none;background:var(--ink);color:var(--panel);font-size:12px;line-height:1.45;padding:6px 10px;border-radius:6px;max-width:320px;box-shadow:0 4px 14px rgba(0,0,0,.25);font-variant-numeric:tabular-nums}');
     DBMS_OUTPUT.PUT_LINE('#tip[hidden]{display:none}');
     DBMS_OUTPUT.PUT_LINE('#tip .tm{opacity:.72}');

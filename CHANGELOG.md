@@ -5,6 +5,49 @@ The report footer stamps the version that produced it
 top of `awr_trend.sql`. Bump it there when cutting a release and add an
 entry here. Dates are release dates.
 
+## 1.6.1 — 2026-09-27
+
+Two owner requests on the v1.6.0 report: highlight a wait class or event
+across the Activity charts, and a one-click metric picker in the Day
+profile. No new substitution vars, no new grants, no new query; the ASH
+scan in 09 also records each event's wait class. The fleet report keeps
+version 0.7.0. Verified on dbmint: the pinned hourly window and the busy
+daily window (`2026-09-22 13:00` 1/7/1d), both with `profile_days=7`, and
+a `profile_days=0` run (section 16 emits only its two markers); rc 0,
+20/20 `AWR-SECTION` pairs, 0 ORA-/SP2-/PLS- in the logs (ORA- in the
+report only as captured SQL text); verify_report OK on the busy report and
+the demo.
+
+- **Series highlight on the Activity charts.** Hover (or keyboard-focus) a
+  legend entry and that wait class / event is redrawn from zero with the y
+  axis fitted to it, the other series faded above it, so its shape over
+  time reads directly against the axis; the tooltip leads with its value
+  and share. A wait class also lights its events in the event chart (drawn
+  from zero together), an event its class in the class chart (lightly, in
+  place). Hovering a band in the plot highlights it in place (no
+  re-stacking under the pointer). Click the band, or Shift+click /
+  Shift+Enter the legend entry, to keep the highlight; the same again, a
+  click off the stack or Esc clears it. **Esc now clears a highlight first
+  and unpins the window on the next press.** A legend click still hides /
+  shows a series; zoom, the 1-minute detail, pinned windows and release
+  markers work as before, and with nothing highlighted the charts draw
+  exactly as in 1.6.0.
+- **`AWR_DATA.ashe.ecls`**: each event series' wait class, parallel to
+  `classes` (`"CPU"` for CPU, `null` for "Other events"), from the same
+  ASH scan -- the link between the two charts.
+- **Day profile metric picker.** The "Metric:" drop-down is replaced by a
+  row of buttons, one per stat, each with a severity dot, its large /
+  moderate hour counts (or "day-wide") and its largest z, so the unusual
+  ones stand out before a click. One click switches the line chart; the
+  arrow keys (and Home / End) cycle; a click on a heatmap row label picks
+  that stat, and the picked row's label is bold. JS off / charts blocked:
+  the hour table still shows every number.
+- Reference: the "Full-span activity" and "Day profile" guide items, the
+  ASH note in About and the Activity hint describe the new interactions.
+  `demo/verify_report.js` tests the highlight (legend re-base, class to
+  events, event to class, focus, sticky, Esc order, click to keep) and the
+  picker (click, arrows, Home / End).
+
 ## 1.6.0 — 2026-09-27
 
 Report redesign "Mock D" (spec: `design/report_mock_d_hybrid.html`,

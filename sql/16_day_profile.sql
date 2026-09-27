@@ -17,7 +17,10 @@
 --     matters for a day profile, so the ramp is diverging, unlike section
 --     07's |z| ramp),
 --   * a per-stat line chart (current day vs prior-day mean, mu +/- 2 sigma
---     band, faint prior-day lines), picked via a <select>,
+--     band, faint prior-day lines), picked with a row of buttons (v1.6.1:
+--     one per stat, each with a severity dot, its large / moderate hour
+--     counts and its largest z; role=tab, the arrow keys cycle) or a click
+--     on a heatmap row label,
 --   * a plain table (24 rows x 9 stats) that is ALWAYS emitted and doubles
 --     as the body.no-charts fallback.  Rows carry class="crit|warn" when
 --     any cell is large/moderate so the rail status dot grades.
@@ -83,6 +86,11 @@ DECLARE
     v_nshift    NUMBER := 0;
     v_isolated  NUMBER := 0;
     v_tmpz      NUMBER;
+    -- the metric picker (v1.6.1): per ord, large / moderate hours and the
+    -- signed z of the largest |z| (the button's indicator)
+    v_lg        num_t;
+    v_md        num_t;
+    v_zx        num_t;
     v_hour_hit  BOOLEAN;
     v_has_cur   BOOLEAN := FALSE;   -- any current-day cell populated?
     v_key       VARCHAR2(40);
@@ -164,9 +172,13 @@ BEGIN
         v_colmax(c.ord) := GREATEST(v_colmax(c.ord), NVL(ABS(c.cur_val), 0), NVL(ABS(c.mu), 0));
         IF NOT v_up.EXISTS(c.ord) THEN
             v_up(c.ord) := 0; v_down(c.ord) := 0; v_shift(c.ord) := 0;
+            v_lg(c.ord) := 0; v_md(c.ord) := 0; v_zx(c.ord) := NULL;
         END IF;
-        IF c.change_bucket = 'large' THEN v_crit := v_crit + 1;
-        ELSIF c.change_bucket = 'moderate' THEN v_warn := v_warn + 1;
+        IF c.change_bucket = 'large' THEN v_crit := v_crit + 1; v_lg(c.ord) := v_lg(c.ord) + 1;
+        ELSIF c.change_bucket = 'moderate' THEN v_warn := v_warn + 1; v_md(c.ord) := v_md(c.ord) + 1;
+        END IF;
+        IF c.z_score IS NOT NULL AND (v_zx(c.ord) IS NULL OR ABS(c.z_score) > ABS(v_zx(c.ord))) THEN
+            v_zx(c.ord) := c.z_score;
         END IF;
         IF c.change_bucket IN ('large', 'moderate') THEN
             IF c.z_score >= 0 THEN v_up(c.ord) := v_up(c.ord) + 1;
@@ -271,16 +283,41 @@ BEGIN
 
     -- Charts (hidden wholesale by body.no-charts; the table below is the fallback).
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-big" id="day-profile-heatmap"></div>');
+    -- The metric picker: one button per stat (role=tab; the page script
+    -- selects the first and wires clicks and the arrow keys), each with a
+    -- severity dot, its flagged-hour counts and its largest z, so the
+    -- unusual ones stand out before a click.
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap" id="day-profile-line-wrap">'
-        || '<div style="font-size:12px;color:var(--muted);margin:2px 4px 6px">Metric: '
-        || '<select id="day-profile-sel">');
+        || '<div class="dpk" id="day-profile-pick" role="tablist" aria-label="Day profile metric">');
     FOR o IN 1 .. v_nstat LOOP
-        DBMS_OUTPUT.PUT_LINE('<option value="' || (o - 1) || '">'
-            || DBMS_XMLGEN.CONVERT(v_labels(o)) || '</option>');
+        DBMS_OUTPUT.PUT_LINE('<button type="button" class="dpb" role="tab" id="dpb-' || (o - 1)
+            || '" data-i="' || (o - 1) || '" aria-controls="day-profile-line" aria-selected="'
+            || CASE WHEN o = 1 THEN 'true" tabindex="0"' ELSE 'false" tabindex="-1"' END
+            || ' title="' || DBMS_XMLGEN.CONVERT(v_labels(o)) || ': '
+            || v_lg(o) || ' large, ' || v_md(o) || ' moderate hour' || CASE WHEN v_lg(o) + v_md(o) = 1 THEN '' ELSE 's' END
+            || CASE WHEN v_shift(o) > 0 THEN ', a day-wide shift above the prior days'
+                    WHEN v_shift(o) < 0 THEN ', a day-wide shift below the prior days' END
+            || CASE WHEN v_zx(o) IS NOT NULL THEN '; largest z ' || TO_CHAR(v_zx(o), 'FMS9990D0') END || '">'
+            || '<span class="dpn">' || DBMS_XMLGEN.CONVERT(v_labels(o)) || '</span>'
+            || '<span class="dps"><i class="dpd ' || CASE WHEN v_lg(o) > 0 THEN 'crit' WHEN v_md(o) > 0 THEN 'warn' ELSE 'ok' END
+            || '" aria-hidden="true"></i><span class="dpt">'
+            || CASE WHEN v_shift(o) <> 0
+                    THEN CASE WHEN v_shift(o) > 0 THEN '&#9650;' ELSE '&#9660;' END
+                         || ' day-wide, ' || (v_lg(o) + v_md(o)) || ' h'
+                    WHEN v_lg(o) + v_md(o) > 0
+                    THEN CASE WHEN v_lg(o) > 0 THEN v_lg(o) || ' large' END
+                         || CASE WHEN v_lg(o) > 0 AND v_md(o) > 0 THEN ' &middot; ' END
+                         || CASE WHEN v_md(o) > 0 THEN v_md(o) || ' mod.' END
+                    WHEN ABS(v_zx(o)) > 2 THEN 'not flagged'
+                    ELSE 'normal' END
+            || '</span><span class="dpz">'
+            || CASE WHEN v_zx(o) IS NULL THEN '&mdash;' ELSE 'z ' || REPLACE(TO_CHAR(v_zx(o), 'FMS9990D0'), '-', '&minus;') END
+            || '</span></span></button>');
     END LOOP;
-    DBMS_OUTPUT.PUT_LINE('</select> &mdash; current day (teal) vs prior-day mean (dashed) '
-        || 'with the &mu;&nbsp;&plusmn;&nbsp;2&sigma; band; faint lines are the individual prior days.</div>'
-        || '<div id="day-profile-line" style="height:240px"></div></div>');
+    DBMS_OUTPUT.PUT_LINE('</div><div class="dpcap">Current day (teal) vs prior-day mean (dashed) '
+        || 'with the &mu;&nbsp;&plusmn;&nbsp;2&sigma; band; faint lines are the individual prior days. '
+        || 'Arrow keys switch the metric; so does a row label of the heatmap.</div>'
+        || '<div id="day-profile-line" role="tabpanel" aria-label="The picked metric by hour" style="height:240px"></div></div>');
 
     -- Table: one row per hour (chronological), one column per stat.
     -- All sections only: the hour-by-hour table; the shifts table and the
@@ -415,12 +452,14 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
     DBMS_OUTPUT.PUT_LINE('var fmt=function(v){return v==null?"\u2014":(+v).toLocaleString(undefined,{maximumFractionDigits:3});};');
     DBMS_OUTPUT.PUT_LINE('var data=[];d.stats.forEach(function(s,i){s.z.forEach(function(z,j){data.push({value:[j,i,z==null?null:Math.max(-3.5,Math.min(3.5,z))],raw:{i:i,j:j}});});});');
+    -- the picked metric's row label is bold (ylab); a row label is clickable
+    DBMS_OUTPUT.PUT_LINE('var cur=0;function ylab(){var c=getComputedStyle(document.body),f=c.getPropertyValue("--fg").trim()||"#333";return {color:f,fontSize:10,formatter:function(v,j){return j===cur?"{b|"+v+"}":v;},rich:{b:{color:f,fontSize:10,fontWeight:"bold"}}};}');
     DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
     DBMS_OUTPUT.PUT_LINE('chart.setOption({');
     DBMS_OUTPUT.PUT_LINE('  tooltip:{formatter:function(p){if(!p.data||!p.data.raw)return "";var s=d.stats[p.data.raw.i],j=p.data.raw.j;return "<b>"+s.name+"</b> @ "+d.hours[j]+"<br/>change: <b>"+s.sev[j]+"</b><br/>current: "+fmt(s.cur[j])+"<br/>prior \u03BC: "+fmt(s.mu[j])+" (\u03C3 "+fmt(s.sd[j])+", n="+s.n[j]+")<br/>z-score: "+(s.z[j]==null?"\u2014":(+s.z[j]).toFixed(2))+"<br/>% \u0394: "+(s.pct[j]==null?"\u2014":s.pct[j]+"%");}},');
     DBMS_OUTPUT.PUT_LINE('  grid:{left:10,right:10,top:10,bottom:70,containLabel:true},');
     DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"category",data:d.hours,axisLabel:{color:mu,fontSize:10,interval:0},splitArea:{show:true}},');
-    DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"category",data:d.stats.map(function(s){return s.name;}),inverse:true,axisLabel:{color:fg,fontSize:10},splitArea:{show:true}},');
+    DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"category",data:d.stats.map(function(s){return s.name;}),inverse:true,triggerEvent:true,axisLabel:ylab(),splitArea:{show:true}},');
     DBMS_OUTPUT.PUT_LINE('  visualMap:{min:-3.5,max:3.5,calculable:true,orient:"horizontal",left:"center",bottom:8,itemWidth:12,itemHeight:160,textStyle:{color:mu,fontSize:10},inRange:{color:["#1d4ed8","#93c5fd","#eef1f5","#fca5a5","#8a1c1c"]},text:["z\u2265+3","z\u2264\u22123"]},');
     -- Phase 4: a sign glyph on the |z| > 3 cells so the heatmap is not
     -- colour-only (up / down triangle, same as the table badges).
@@ -428,7 +467,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('});');
     DBMS_OUTPUT.PUT_LINE('new ResizeObserver(function(){chart.resize();}).observe(el);');
     -- Line chart: current day vs prior-day mean and mu +/- 2 sigma band.
-    DBMS_OUTPUT.PUT_LINE('var lel=document.getElementById("day-profile-line"),sel=document.getElementById("day-profile-sel");');
+    DBMS_OUTPUT.PUT_LINE('var lel=document.getElementById("day-profile-line"),pk=document.getElementById("day-profile-pick"),btns=pk?[].slice.call(pk.querySelectorAll(".dpb")):[];');
     DBMS_OUTPUT.PUT_LINE('var line=lel?echarts.init(lel):null;');
     DBMS_OUTPUT.PUT_LINE('function drawLine(i){if(!line)return;var s=d.stats[i],ser=[];');
     DBMS_OUTPUT.PUT_LINE('  for(var k=0;k<s.days.length-1;k++){ser.push({name:d.dates[k],type:"line",data:s.days[k],symbol:"none",lineStyle:{width:1,color:"rgba(148,163,184,0.55)"},emphasis:{disabled:true}});}');
@@ -439,13 +478,18 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  ser.push({name:"current day",type:"line",data:s.cur,symbol:"circle",symbolSize:5,lineStyle:{width:2.5,color:"#0d9488"},itemStyle:{color:"#0d9488"}});');
     DBMS_OUTPUT.PUT_LINE('  var c3=getComputedStyle(document.body),fg3=c3.getPropertyValue("--fg").trim()||"#333",mu3=c3.getPropertyValue("--muted").trim()||"#888",gr3=c3.getPropertyValue("--border").trim()||"#e0e0e0";');
     DBMS_OUTPUT.PUT_LINE('  line.setOption({tooltip:{trigger:"axis",valueFormatter:function(v){return fmt(v);}},legend:{top:0,data:["current day","prior-day mean","\u03BC \u00B1 2\u03C3"],textStyle:{color:fg3,fontSize:11}},grid:{left:50,right:16,top:34,bottom:28,containLabel:true},xAxis:{type:"category",data:d.hours,boundaryGap:false,axisLabel:{color:mu3,fontSize:10}},yAxis:{type:"value",name:s.name,nameTextStyle:{color:mu3,fontSize:11},axisLabel:{color:mu3},splitLine:{lineStyle:{color:gr3}}},series:ser},true);}');
-    DBMS_OUTPUT.PUT_LINE('if(sel){sel.addEventListener("change",function(){drawLine(+sel.value);});drawLine(+sel.value||0);}');
+    -- the picker (v1.6.1): one click per metric; roving tabindex, the arrow
+    -- keys / Home / End move the selection and the focus together
+    DBMS_OUTPUT.PUT_LINE('function pick(i,focus){if(!(i>=0&&i<d.stats.length))return;cur=i;btns.forEach(function(b,j){var on=j===i;b.setAttribute("aria-selected",on?"true":"false");b.tabIndex=on?0:-1;b.classList.toggle("on",on);});if(focus&&btns[i])btns[i].focus();drawLine(i);chart.setOption({yAxis:{axisLabel:ylab()}});}');
+    DBMS_OUTPUT.PUT_LINE('btns.forEach(function(b,j){b.addEventListener("click",function(){pick(j);});b.addEventListener("keydown",function(e){var n=btns.length,k=e.key,t=(k==="ArrowRight"||k==="ArrowDown")?(j+1)%n:(k==="ArrowLeft"||k==="ArrowUp")?(j-1+n)%n:k==="Home"?0:k==="End"?n-1:-1;if(t<0)return;e.preventDefault();pick(t,true);});});');
+    DBMS_OUTPUT.PUT_LINE('pick(0);');
     DBMS_OUTPUT.PUT_LINE('if(line){new ResizeObserver(function(){line.resize();}).observe(lel);}');
-    -- Click a heatmap cell: switch the line chart to that stat and flash the hour row.
-    DBMS_OUTPUT.PUT_LINE('chart.on("click",function(p){if(!p.data||!p.data.raw)return;var r=p.data.raw;if(sel){sel.value=String(r.i);drawLine(r.i);}var row=document.querySelector("#day-profile tr[data-hour=\""+(23-r.j)+"\"]");if(row){row.scrollIntoView({behavior:"smooth",block:"center"});row.style.transition="outline 1.5s";row.style.outline="2px solid "+cs.getPropertyValue("--accent");setTimeout(function(){row.style.outline="none";},1600);}});');
+    -- Click a heatmap cell: switch the line chart to that stat and flash the hour row;
+    -- a row label: switch to that stat.
+    DBMS_OUTPUT.PUT_LINE('chart.on("click",function(p){if(p.componentType==="yAxis"){d.stats.forEach(function(s,j){if(s.name===p.value)pick(j);});return;}if(!p.data||!p.data.raw)return;var r=p.data.raw;pick(r.i);var row=document.querySelector("#day-profile tr[data-hour=\""+(23-r.j)+"\"]");if(row){row.scrollIntoView({behavior:"smooth",block:"center"});row.style.transition="outline 1.5s";row.style.outline="2px solid "+cs.getPropertyValue("--accent");setTimeout(function(){row.style.outline="none";},1600);}});');
     -- Theme flip: re-read the CSS vars; the diverging ramp itself is theme-independent.
     DBMS_OUTPUT.PUT_LINE('document.addEventListener("awr:theme",function(){var c2=getComputedStyle(document.body),fg2=c2.getPropertyValue("--fg").trim()||"#333",mu2=c2.getPropertyValue("--muted").trim()||"#888";');
-    DBMS_OUTPUT.PUT_LINE('chart.setOption({xAxis:{axisLabel:{color:mu2}},yAxis:{axisLabel:{color:fg2}},visualMap:{textStyle:{color:mu2}},series:[{emphasis:{itemStyle:{borderColor:fg2}}}]});if(sel)drawLine(+sel.value||0);});');
+    DBMS_OUTPUT.PUT_LINE('chart.setOption({xAxis:{axisLabel:{color:mu2}},yAxis:{axisLabel:ylab()},visualMap:{textStyle:{color:mu2}},series:[{emphasis:{itemStyle:{borderColor:fg2}}}]});drawLine(cur);});');
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');
 

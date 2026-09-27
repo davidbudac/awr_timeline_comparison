@@ -10,6 +10,9 @@ range_start + b*bucket_hours, the bucket's START) holds the hour ending
 at range_start + (b+1)h, exactly as the SQL's FLOOR((sample_time -
 range_start)*24 / bucket_hours) assignment.
 
+v1.6.1: ashe.ecls = each event's wait class (the model's (wait_class,
+event) key, the first by name as the SQL), null for "Other events".
+
 v1.6.0 Activity charts: AWR_DATA.ashe (by wait event) from
 HourMetrics.ash_events ({(wait_class, event): samples}, ('CPU', 'CPU')
 for on-CPU), rounded per (hour, event) like the classes.  The SQL's
@@ -136,6 +139,9 @@ def emit(w) -> str:
         for (ewc, ev), smp in m.ash_events.items():
             evs[ev] = evs.get(ev, 0.0) + smp
             fine_src["evc"].setdefault(ev, ewc)
+            # ashe.ecls: an event under two classes keeps the first by name (SQL v_ecls)
+            if ewc < fine_src["evc"][ev]:
+                fine_src["evc"][ev] = ewc
         for ev, smp in evs.items():
             n = int(ora_round(smp, 0))
             if n > 0:
@@ -333,6 +339,9 @@ def _events(w, range_start, total_hours, cbh, m, nc, events_by_hour, fine):
            + ',"wh":' + hr_tok(w.win_hours) + ',"classes":[']
     for i, e in enumerate(names):
         out.append(("," if i else "") + '"' + helpers.json_escape(e) + '"')
+    # ecls (v1.6.1): each series' wait class, "Other events" -> null
+    out.append('],"ecls":[' + ",".join('"' + helpers.json_escape(fine.src["evc"].get(e, "Other")) + '"'
+                                        for e in top) + (",null" if rest else ""))
     out.append('],"vals":[')
     for i in range(len(names)):
         vals = []

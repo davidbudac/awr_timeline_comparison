@@ -41,14 +41,16 @@
 --              foreground samples are its sampled estimate, so the card's
 --              bars and its DB time headline measure the same thing;
 --   wh         win_hours.  Numbers are dot-decimal (NLS pinned).
--- window.AWR_DATA.ashe = {t0, end, bh, wh, classes, vals, win} -- the same
+-- window.AWR_DATA.ashe = {t0, end, bh, wh, classes, ecls, vals, win} -- the same
 -- shape BY WAIT EVENT (ON CPU = 'CPU', ranked like any event): the 14
 -- events with the most samples over the span (ties by name), biggest
 -- first = bottom of the stack, then one "Other events" series summing
 -- every other event (left out with 14 events or fewer).  Event names
 -- are JSON-escaped (json_escape); "Other events" = the class total minus
 -- the top events, per bucket and per window, so both charts stack to the
--- same totals.
+-- same totals.  ecls (v1.6.1) = each series' wait class, parallel to
+-- classes ("CPU" for CPU, null for "Other events"; an event seen under two
+-- classes keeps the first by name): the charts' linked highlight.
 -- ashx.fine / ashe.fine = {bm, capped, segs, vals} -- the 1-minute
 -- detail the charts switch to when zoomed into the compared windows,
 -- from the SAME scan (the GROUP BY also keys a sample inside a covered
@@ -155,6 +157,10 @@ DECLARE
     v_fb           NUMBER;
     v_ns           PLS_INTEGER := 0;
     TYPE t_int_tab IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
+    -- v1.6.1: each event's wait class (ashe.ecls: the charts' linked
+    -- highlight); an event seen under two classes keeps the first by name
+    TYPE t_str_tab IS TABLE OF VARCHAR2(64) INDEX BY VARCHAR2(64);
+    v_ecls         t_str_tab;
     v_sa           t_int_tab;           -- segment s: first minute (since range_start)
     v_se           t_int_tab;           -- segment s: end minute (exclusive)
     v_fc           t_cell_tab;          -- (minute | class) -> samples
@@ -412,6 +418,11 @@ BEGIN
             v_ccells(v_ck) := r.sample_count;
         END IF;
         bump(v_eccells, TO_CHAR(FLOOR(r.bucket_key / v_m)) || '|' || r.event_name, r.sample_count);
+        IF NOT v_ecls.EXISTS(r.event_name) THEN
+            v_ecls(r.event_name) := r.wait_class;
+        ELSIF r.wait_class < v_ecls(r.event_name) THEN
+            v_ecls(r.event_name) := r.wait_class;
+        END IF;
         IF v_etot.EXISTS(r.event_name) THEN
             v_etot(r.event_name) := v_etot(r.event_name) + r.sample_count;
         ELSE
@@ -758,6 +769,14 @@ BEGIN
                 DBMS_OUTPUT.PUT_LINE(CASE WHEN e > 1 THEN ',' END || '"'
                     || CASE WHEN e <= v_top.COUNT THEN json_escape(v_top(e)) ELSE 'Other events' END || '"');
             END LOOP;
+            -- ecls: each series' wait class, parallel to classes (CPU for
+            -- CPU, null for Other events)
+            v_row := NULL;
+            FOR e IN 1 .. v_ns_ev LOOP
+                v_row := v_row || CASE WHEN e > 1 THEN ',' END
+                    || CASE WHEN e <= v_top.COUNT THEN '"' || json_escape(v_ecls(v_top(e))) || '"' ELSE 'null' END;
+            END LOOP;
+            DBMS_OUTPUT.PUT_LINE('],"ecls":[' || v_row);
             DBMS_OUTPUT.PUT_LINE('],"vals":[');
             FOR e IN 1 .. v_ns_ev LOOP
                 DBMS_LOB.TRIM(v_class_vals, 0);

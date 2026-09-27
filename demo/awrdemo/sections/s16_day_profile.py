@@ -134,12 +134,20 @@ def emit(w) -> str:
     # Pass 1: per-column format masks, severity counters.
     colmax = {o: 0.0 for o in labels}
     crit = warn = 0
-    for (o, _h), c in cells.items():
+    # the metric picker (v1.6.1): large / moderate hours, signed z of the largest |z|
+    lg = {o: 0 for o in labels}
+    md = {o: 0 for o in labels}
+    zx = {o: None for o in labels}
+    for (o, _h), c in sorted(cells.items(), key=lambda kv: (kv[0][0], -kv[0][1])):   # ORDER BY ord, hour_slot DESC
         colmax[o] = max(colmax[o], abs(c["cur_val"] or 0), abs(c["mu"] or 0))
         if c["change_bucket"] == "large":
             crit += 1
+            lg[o] += 1
         elif c["change_bucket"] == "moderate":
             warn += 1
+            md[o] += 1
+        if c["z_score"] is not None and (zx[o] is None or abs(c["z_score"]) > abs(zx[o])):
+            zx[o] = c["z_score"]
     fmt = {o: _col_fmt(colmax[o]) for o in labels}
     hours_hit = 0
     for h in range(24):
@@ -204,13 +212,38 @@ def emit(w) -> str:
     # Charts (hidden wholesale by body.no-charts; the table below is the fallback).
     put('<div class="chart-wrap chart-big" id="day-profile-heatmap"></div>')
     put('<div class="chart-wrap" id="day-profile-line-wrap">'
-        '<div style="font-size:12px;color:var(--muted);margin:2px 4px 6px">Metric: '
-        '<select id="day-profile-sel">')
+        '<div class="dpk" id="day-profile-pick" role="tablist" aria-label="Day profile metric">')
+    zt = lambda z: H.to_char_fixed(z, 1, plus=True)     # TO_CHAR(z, 'FMS9990D0')
     for o in range(1, nstat + 1):
-        put('<option value="' + str(o - 1) + '">' + H.esc(labels[o]) + "</option>")
-    put("</select> &mdash; current day (teal) vs prior-day mean (dashed) "
-        "with the &mu;&nbsp;&plusmn;&nbsp;2&sigma; band; faint lines are the individual prior days.</div>"
-        '<div id="day-profile-line" style="height:240px"></div></div>')
+        nf = lg[o] + md[o]
+        title = (H.esc(labels[o]) + ": " + str(lg[o]) + " large, " + str(md[o]) + " moderate hour"
+                 + ("" if nf == 1 else "s")
+                 + (", a day-wide shift above the prior days" if shift[o] > 0
+                    else ", a day-wide shift below the prior days" if shift[o] < 0 else "")
+                 + ("; largest z " + zt(zx[o]) if zx[o] is not None else ""))
+        if shift[o] != 0:
+            txt = ("&#9650;" if shift[o] > 0 else "&#9660;") + " day-wide, " + str(nf) + " h"
+        elif nf > 0:
+            txt = ((str(lg[o]) + " large") if lg[o] > 0 else "") \
+                + (" &middot; " if lg[o] > 0 and md[o] > 0 else "") \
+                + ((str(md[o]) + " mod.") if md[o] > 0 else "")
+        elif zx[o] is not None and abs(zx[o]) > 2:
+            txt = "not flagged"     # past 2 sigma but immaterial / improved / noted
+        else:
+            txt = "normal"
+        put('<button type="button" class="dpb" role="tab" id="dpb-' + str(o - 1)
+            + '" data-i="' + str(o - 1) + '" aria-controls="day-profile-line" aria-selected="'
+            + ('true" tabindex="0"' if o == 1 else 'false" tabindex="-1"')
+            + ' title="' + title + '">'
+            + '<span class="dpn">' + H.esc(labels[o]) + '</span>'
+            + '<span class="dps"><i class="dpd ' + ("crit" if lg[o] > 0 else "warn" if md[o] > 0 else "ok")
+            + '" aria-hidden="true"></i><span class="dpt">' + txt + '</span><span class="dpz">'
+            + ("&mdash;" if zx[o] is None else "z " + zt(zx[o]).replace("-", "&minus;"))
+            + "</span></span></button>")
+    put('</div><div class="dpcap">Current day (teal) vs prior-day mean (dashed) '
+        "with the &mu;&nbsp;&plusmn;&nbsp;2&sigma; band; faint lines are the individual prior days. "
+        "Arrow keys switch the metric; so does a row label of the heatmap.</div>"
+        '<div id="day-profile-line" role="tabpanel" aria-label="The picked metric by hour" style="height:240px"></div></div>')
 
     # Table: one row per hour (chronological), one column per stat.
     row = "<table class=\"vw in-a\"><thead><tr><th>Hour</th>"

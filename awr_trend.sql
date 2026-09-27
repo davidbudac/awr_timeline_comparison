@@ -106,7 +106,7 @@ ALTER SESSION SET NLS_DATE_LANGUAGE = ENGLISH;
 -- not in sql/defaults.sql).  Bump on release and record it in CHANGELOG.md;
 -- it is stamped into the report footer so a circulated HTML file can always
 -- be traced back to the build that produced it.
-DEFINE awr_version = '1.6.0'
+DEFINE awr_version = '1.6.1'
 
 -- The caller MUST have set target_end / win_hours / weeks_back / top_n /
 -- inst_num before invoking this driver.  For the canonical defaults, do:
