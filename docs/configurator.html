@@ -645,7 +645,7 @@ function validate(cfg){
 
   const wb = num(cfg.weeks_back);
   if(wb===null || wb<1 || !Number.isInteger(wb)) fail('weeks_back', 'Prior windows (<code>weeks_back</code>) must be a whole number ≥ 1.');
-  else if(wb < 3) info.push('With <code>weeks_back</code> &lt; 3 there is not enough history for z-score findings — the report falls back to "Baseline too short" and simple %-deltas.');
+  else if(wb < 3) info.push('With <code>weeks_back</code> &lt; 3 there is not enough history for z-score findings — the verdict reads "Too little history to score this window" and rows show plain changes, graded "insufficient history".');
 
   const tn = num(cfg.top_n);
   if(tn===null || tn<1 || !Number.isInteger(tn)) fail('top_n', 'Top-N (<code>top_n</code>) must be a whole number ≥ 1.');

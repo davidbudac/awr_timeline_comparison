@@ -139,9 +139,9 @@
     <div class="sec-head"><h2 id="what-title">What you get</h2></div>
     <div class="grid4">
       <article class="panel c-shot">
-        <h3>The answer comes first</h3>
-        <p>A one-line verdict, then one card per problem with the evidence behind it.</p>
-        <div class="screen"><img class="on-light" src="assets/shot_demo_masthead.jpg" width="1806" height="1350" alt="Top of the demo report, light theme: the Activity charts, active sessions over twelve weeks by wait class and by wait event with release markers and the compared windows striped, the Current one in indigo; below them the verdict: Physical reads 5.4 times normal, most of it on ORDERS_APP.ORDER_LINES; DB time up 79.7%, mostly wait."><img class="on-dark" src="assets/shot_demo_masthead_dark.jpg" width="1806" height="1350" alt="Top of the demo report, dark theme: the Activity charts, active sessions over twelve weeks by wait class and by wait event with release markers and the compared windows striped, the Current one in indigo; below them the verdict: Physical reads 5.4 times normal, most of it on ORDERS_APP.ORDER_LINES; DB time up 79.7%, mostly wait." loading="lazy"></div>
+        <h3>The whole span, then the answer</h3>
+        <p>Active sessions across every compared window on top; below them a one-line verdict and one card per problem with the evidence behind it.</p>
+        <div class="screen"><img class="on-light" src="assets/shot_demo_masthead.jpg" width="1808" height="1350" alt="Top of the demo report, light theme: the top bar with the Current window and the Summary / Timeline / All sections switch, then the Activity charts: hourly active sessions over twelve weeks, stacked by wait class and by wait event, release markers on top, the compared windows striped."><img class="on-dark" src="assets/shot_demo_masthead_dark.jpg" width="1808" height="1350" alt="Top of the demo report, dark theme: the top bar with the Current window and the Summary / Timeline / All sections switch, then the Activity charts: hourly active sessions over twelve weeks, stacked by wait class and by wait event, release markers on top, the compared windows striped." loading="lazy"></div>
       </article>
       <article class="panel c-zero">
         <div class="big" aria-hidden="true">0<small>database<br>writes</small></div>
@@ -205,8 +205,8 @@
                 </ul>
               </div>
               <figure>
-                <div class="screen"><img class="dim" src="assets/shot_demo_ash.jpg" width="1710" height="826" alt="Activity charts: active sessions over twelve weeks in 6-hour averages, stacked by wait class above and by wait event below (the 14 busiest events and Other events), compared windows striped, release, hotfix and patch markers, a spike in the Current window." loading="lazy"></div>
-                <figcaption>Activity, whole span, at the top of every view: active sessions by wait class and by wait event on one time axis, with release markers.</figcaption>
+                <div class="screen"><img class="dim" src="assets/shot_demo_ash.jpg" width="1726" height="1448" alt="Activity charts zoomed into the Current window, 09:00 to 10:00: active sessions minute by minute, stacked by wait class above (CPU and User I/O spikes to 50) and by wait event below (the 14 busiest events and Other events)." loading="lazy"></div>
+                <figcaption>The Activity charts open every view: active sessions across the whole span by wait class and by wait event. Drag to zoom both; at 6 hours or less the compared windows show minute by minute (here the Current hour).</figcaption>
               </figure>
             </div>
           </div>
@@ -245,8 +245,10 @@
                 <p>From the end time and cadence the tool builds <code>weeks_back + 1</code> windows, each <code>win_hours</code> wide. A window is skipped if its snapshots are missing, cross a restart or DBID change, or sit more than 15 minutes off.</p>
                 <h3>Scoring</h3>
                 <p>Counters are differenced per window and divided by its length. The current value is compared with the mean and standard deviation of the valid prior windows: z = (current &minus; mean) &divide; sd.</p>
+                <h3>Views</h3>
+                <p><b>Summary</b> answers first: verdict and likely source, finding cards, what changed around it, and every other section as a one-line evidence library. <b>Timeline</b> lines up every window side by side. <b>All sections</b> shows every table and chart in full. Every named segment, event, SQL or parameter links to its row.</p>
                 <h3>Charts</h3>
-                <p>Each chart is drawn from the same query as its table, so the plotted numbers are the printed numbers. Every scored row shows its normal range (mean &plusmn; 2&sigma;), a dot on a &sigma; axis, z and the change vs the mean.</p>
+                <p>Each chart is drawn from the same query as its table, so the plotted numbers are the printed numbers. Every scored row shows its normal range (mean &plusmn; 2&sigma;), a dot on a &sigma; axis, z and the change vs the mean. A &ldquo;Reading the charts&rdquo; guide closes the report.</p>
               </div>
               <div style="display:grid;gap:12px;align-content:start;margin-top:6px">
                 <div class="tw"><table class="dt">
@@ -263,8 +265,12 @@
               </div>
             </div>
             <figure>
-              <div class="screen"><img class="dim" src="assets/shot_demo_findings.jpg" width="1425" height="2136" alt="Findings in the Summary view: 4 findings from 11 moved metrics; the Physical I/O card with its value, normal range, per-window bars and the segment, file and wait events behind it; the DB time card split into CPU and wait by class; the Network card." loading="lazy" style="max-height:440px;object-fit:cover;object-position:top"></div>
+              <div class="screen"><img class="dim" src="assets/shot_demo_findings.jpg" width="1734" height="2130" alt="Findings in the Summary view: 4 findings from 11 moved metrics; the Physical reads card with its value, normal range, per-window bars under the release flags and the segment, file and wait events behind it; the DB time card with per-window bars stacked by wait class, split into CPU and wait." loading="lazy" style="max-height:440px;object-fit:cover;object-position:top"></div>
               <figcaption>Finding cards: one per family of metrics that moved, each with its evidence. Every metric's table row, with prior mean, sd, n and grade, is one click away.</figcaption>
+            </figure>
+            <figure>
+              <div class="screen"><img class="dim" src="assets/shot_demo_timeline.jpg" width="1974" height="1500" alt="Timeline view: thirteen weekly windows as columns, oldest first, release flags on the ruler, the Current window 10 Sep highlighted; an Activity lane of active sessions per window stacked by wait class, then rows for DB time, DB CPU, wait time ratio, logical and physical reads with each window's bar and the change vs the prior mean." loading="lazy" style="max-height:440px;object-fit:cover;object-position:top"></div>
+              <figcaption>Timeline: every window side by side. Click a date to pin it and re-base every change against that window.</figcaption>
             </figure>
           </div>
         </section>
@@ -374,15 +380,15 @@ reporting | reporting_ro/@RPT</pre><button class="copy" type="button" data-copy=
           <span id="examples"></span>
           <div class="doc-head"><h2 id="h-ex">Example reports</h2></div>
           <div class="doc-body">
-            <p>Real output files. The first uses generated data so every section has something to show; the others come from a small lab database.</p>
+            <p>Real output files. The first uses generated data so every section has something to show; the others are v1.6.0 runs on a small, mostly idle lab database (four prior hours, hourly cadence).</p>
             <div class="exgrid">
               <a class="ex feat" href="examples/demo_busy_db.html">
                 <b>Demo: busy database, twelve weeks, four releases</b>
                 <span>The latest release changed an execution plan: physical reads &times;5, User I/O &times;4, graded large.</span>
                 <em>demo_busy_db.html</em>
               </a>
-              <a class="ex" href="examples/hourly_comprehensive.html"><b>Full report</b><span>Default template, hourly cadence.</span><em>hourly_comprehensive.html</em></a>
-              <a class="ex" href="examples/hourly_simple_template.html"><b>Triage view</b><span><code>template=simple</code></span><em>hourly_simple_template.html</em></a>
+              <a class="ex" href="examples/hourly_comprehensive.html"><b>Lab database</b><span>Default template, hourly cadence.</span><em>hourly_comprehensive.html</em></a>
+              <a class="ex" href="examples/hourly_simple_template.html"><b>Short template</b><span><code>template=simple</code></span><em>hourly_simple_template.html</em></a>
               <a class="ex" href="examples/hourly_with_markers.html"><b>With markers</b><span>Events drawn on every chart.</span><em>hourly_with_markers.html</em></a>
             </div>
           </div>
