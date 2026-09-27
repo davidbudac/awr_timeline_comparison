@@ -705,7 +705,12 @@ exists only to keep the fleet findings band's pre-1.6 severity bar.
   over the one scan instead (18's scatter query, 2026-09-22).
 - PL/SQL `v <> ''` is never TRUE — an empty string `IS NULL` in Oracle, so
   a guard must be `v IS NOT NULL`, not `v <> ''''` (bit `17_narrative.sql`'s
-  `v_tail` guard live).
+  `v_tail` guard live). Worse, `IF v IS NOT NULL AND v <> '' THEN` never
+  runs its branch at all: that dead guard (present since before v1.5.0)
+  hid 06's `plan↑` badges and Timeline plan diamonds, every
+  prior-window `#n` rank chip in 04 / 05 / 06 / 14 / 15, and flagged every
+  14 / 15 row "new" -- the demo twins (Python, where `'' != None`) never
+  showed it; found on dbmint 2026-09-27. lint check 31.
 - `DB CPU` lives ONLY in `DBA_HIST_SYS_TIME_MODEL` (microseconds);
   `DBA_HIST_SYSSTAT` has no `DB CPU` row at all (it does carry `DB time`,
   in centiseconds). v1.6.0 shipped reading `'DB CPU'` from SYSSTAT, so the
@@ -1436,7 +1441,8 @@ the demo.
   section reading wait events without the template's wait list (27), a
   day / month name `TO_CHAR` without `NLS_DATE_LANGUAGE` (28), `off_label`
   missing / after `wingrid` (29), `anchor_id('fl'|'pa', ...)` outside
-  `anchor_id.plsql` (30). No DB needed; add a check when a new
+  `anchor_id.plsql` (30), and a comparison with `''` (31: `<> ''` /
+  `!= ''` is never TRUE). No DB needed; add a check when a new
   gotcha bites. A `finding` inside a `| while read` loop must go through
   `finding` (it records to a flag file; a subshell `fail=1` is lost).
 - **Test DB: dbmint** (Oracle 19c CDB1, `connect / as sysdba`). The host name
@@ -1489,33 +1495,42 @@ the demo.
   dbmint); a series name containing `\`; the no-AWR-history-at-all branch of
   the `target_end` snap; the fleet "Compared windows" `part` and
   snap-mismatch states (all dbmint aliases hit one instance).
-- **v1.6.0 verification (2026-09-26):** phases 1–4 each ran on dbmint
-  (pinned hourly `2026-09-18 12:00` 1/4/1h, `simple` / `dev`, plan-change
-  `2026-09-08 23:00` 1/8/1d, daily 2/7/1d, `AUTO` weekly ~80 s (18
-  dominates), markers + `profile_days=7`, fleet `FLEET_DETAIL=all`): rc 0,
-  0 ORA-/SP2-/PLS- apart from captured-SQL-text hits, 20/20 `AWR-SECTION`
-  pairs, verify_report OK on each. The phase-5 release pass (docs, lost-fact
-  fixes, visual fixes) was verified on the demo only (verify_report OK, md5
-  stable, offline-inlined and CDN-blocked renders OK, 137 server tests OK) —
-  **dbmint went offline mid-pass, so the full matrix on the final code is
-  still to run**: the hourly (3 templates) / plan-change / daily / AUTO /
-  markers + profile_days runs plus `ECHARTS=vendor/echarts.min.js` (then open with all http(s) blocked), the
-  pure-SQL\*Plus heredoc, and a `debug=Y` vs `debug=N` md5 after the
-  byte-identity `sed`. Never exercised: a plan-change statement with no
+- **v1.6.0 verified on dbmint (2026-09-27), final code incl. the nine
+  review fixes:** a `nohup`'d runner on dbmint (rsync without
+  `--delete`, output `reports/v160/`). Matrix, all rc 0 with 20/20 `AWR-SECTION`
+  pairs: pinned hourly `2026-09-18 12:00` 1/4/1h under comprehensive /
+  simple / dev (~10 s each); plan-change `2026-09-08 23:00` 1/8/1d (plan
+  card as2dr3ag24gay 811755146 -> 2628649851 "new plan since 7 Sep",
+  likely source = that statement); daily 2/7/1d; `AUTO` weekly 1/4 (94 s
+  to 160 s; 18 dominates); markers + `profile_days=7` with `debug=Y` and
+  `debug=N` back to back (identical md5 after the byte-identity `sed` plus
+  the bare run id); `ECHARTS=vendor/echarts.min.js` inlined (all http(s)
+  blocked: 19 ECharts instances drawn, 0 errors) and the hourly report
+  with the CDN blocked (`no-charts` + banner, grid / strips / ASH present,
+  pin / Esc OK); the pure-SQL\*Plus heredoc; a fleet run with
+  `FLEET_DETAIL=all FLEET_PROFILE_DAYS=7` (the day-profile DB CPU row now
+  has values) plus one on a busy window (`2026-09-22 13:00` 1/7/1d: crit
+  16 / warn 1, the `table.dt` 3 px red / amber bar in both themes); stress
+  `weeks_back=52` weekly `AUTO` (109-184 s), 168 hourly windows (152-225 s,
+  18 MB),
+  an overlapping grid (win 2 h every 1 h). The CPU / wait split fired on
+  two busy windows (`2026-09-22 13:00` 1/7/1d: "DB time 28.3x normal,
+  mostly CPU"; `2026-09-10 12:00` 1/7/1d: "DB time 180x normal, all
+  wait") and every DB CPU / DB time value matched a read-only
+  `DBA_HIST_SYS_TIME_MODEL` spot query to the digit. `ORA-` hits are all
+  captured SQL text (a top SQL's text / tooltip naming `ORA-200nn` or
+  `ORA-01014`, section 06's own PL/SQL comment captured as a top
+  statement). verify_report OK on every report (one Chrome at a time) and
+  a 3 views x light / dark visual pass of the plan-change and hourly
+  reports: no "???", no broken layout. That pass found and fixed: the dead
+  `IS NOT NULL AND x <> ''` guards (lint 31, see the gotcha), the plan
+  card's monospace evidence and unit / number line breaks, a clipped long
+  segment name in the Timeline, browser-blue links in the "too little
+  history" hero (an AUTO run with 3 of 4 valid windows; the demo never has
+  it), and verify_report's micro-strip check past 91 windows. Still never exercised: a plan-change statement with no
   Current SQLSTAT row (SQL Monitor fallback), > 3 plan cards, RAC,
-  multi-DBID top bar.
-- **v1.6.0 review fixes (2026-09-27, `scratchpad` review_findings #1-#9):**
-  time-model DB CPU, validity-aware "new", template wait filter in 00,
-  overlapping-window ASH, many-window streaming / labels / layout,
-  likely-source by 18's plan test, pure-function anchors, foreground ASH on
-  the DB time card, English date names. Verified on the demo only (lint,
-  md5 stable, verify_report OK; stress renders at 168 hourly / 52 weekly /
-  2 h every 1 h: 0 console errors, no output line > 32767 B; the micro
-  strips intentionally draw nothing past about 91 windows) -- **dbmint was
-  offline: every SQL change here is unexercised on Oracle** (first run:
-  pinned hourly + `template=simple`, plan-change, then weeks_back 52 / 168
-  and an overlapping grid; watch 18's `LISTAGG ... ON OVERFLOW TRUNCATE`
-  and the time-model joins).
+  multi-DBID top bar, the fleet `plan↑` badge (no fleet Top SQL row on
+  dbmint).
 - **v1.5.0 / fleet 0.7.0 verified on dbmint (2026-09-22):** built without
   a database on 2026-09-21 (synthetic demo + Playwright + the 137-test
   server suite), then run against dbmint: pinned hourly window

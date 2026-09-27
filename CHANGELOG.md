@@ -5,7 +5,7 @@ The report footer stamps the version that produced it
 top of `awr_trend.sql`. Bump it there when cutting a release and add an
 entry here. Dates are release dates.
 
-## 1.6.0 — 2026-09-26
+## 1.6.0 — 2026-09-27
 
 Report redesign "Mock D" (spec: `design/report_mock_d_hybrid.html`,
 decisions and landing places in `design/HANDOFF_report_redesign.md`,
@@ -15,11 +15,14 @@ query against a new view; one extra bounded `DBA_HIST_SYSTEM_EVENT` read in
 read per plan-change card in 18. The fleet report keeps version 0.7.0.
 Byte-identity is **not** preserved (markup, CSS and JS changed by design);
 every number of the v1.5.0 Full view is still in the All sections view.
-Verified on dbmint during development (2026-09-26: pinned hourly, simple
-and dev templates, plan-change window, daily, AUTO weekly, markers +
-profile_days, fleet with detail reports; 0 ORA-/SP2-/PLS-, verify_report
-OK); the pre-release full-matrix re-run on the final code is still to do
-(dbmint was unreachable) -- see `CLAUDE.md`, "v1.6.0 verification".
+Verified on dbmint on the final code (2026-09-27): pinned hourly with
+all three templates, the plan-change window, daily, AUTO weekly, markers +
+profile_days with debug Y / N (identical HTML), ECharts inlined and
+CDN-blocked renders, the pure SQL*Plus heredoc, a fleet run with detail
+reports, weeks_back 52 weekly / 168 hourly / an overlapping grid, and two
+busy windows for the CPU / wait verdict; rc 0, 0 ORA-/SP2-/PLS- outside
+captured SQL text, 20/20 `AWR-SECTION` pairs, verify_report OK on every
+report -- see `CLAUDE.md`, "v1.6.0 verified on dbmint".
 
 - **Three views: Summary / Timeline / All sections** replace Normal /
   Full. `class="vw in-s|in-t|in-a"` declares which views show an element
@@ -94,8 +97,9 @@ OK); the pre-release full-matrix re-run on the final code is still to do
   non-UTF-8 SQL*Plus client prints as "?" (skipped-window cells read
   "???" on dbmint); they are `\u` escapes now and `lint.sh` check 25 keeps
   every emitted line ASCII.
-- **Fixes from the pre-release code review** (nine findings; SQL
-  unexercised on Oracle so far -- dbmint was offline).
+- **Fixes from the pre-release code review** (nine findings; verified on
+  dbmint 2026-09-27: the verdict says "mostly CPU" / "all wait" on real
+  busy windows and DB CPU matches `DBA_HIST_SYS_TIME_MODEL` to the digit).
   - *Wait vs CPU never fired:* `DBA_HIST_SYSSTAT` has no `DB CPU` row, so
     the verdict's / DB time card's "mostly wait / mostly CPU" and the
     card's CPU evidence row never appeared on a real DB (the demo invented
@@ -124,6 +128,25 @@ OK); the pre-release full-matrix re-run on the final code is still to do
     the card's DB time kept as its Current value.
   - *Day / month names* are English whatever the client's language.
   lint checks 26-30 cover the grep-able ones.
+- **Fixes from the final dbmint pass.**
+  - *Dead `IS NOT NULL AND x <> ''` guards* (an empty string IS NULL in
+    Oracle, so the branch never ran; older than 1.5.0): 06's `plan↑`
+    badges, the "N of M top SQL had a plan change" line and the Timeline
+    plan diamond never appeared, no prior-window cell in 04 / 05 / 06 /
+    14 / 15 carried its `#n` rank chip, and every Segment / File I/O row
+    with a Current value was badged "new". The demo (Python) never had the
+    bug. The fleet's Top SQL band had the same dead `plan↑` badge
+    (`sql/fleet/05_topsql.sql`, display only, no score change). lint check
+    31.
+  - *Plan-change card:* its evidence values use the text face of the spec
+    (they were monospace), and a value never parts from its unit at a line
+    break in any card's evidence ("221.5 / k", "0.006812 / AAS").
+  - *Timeline:* a long segment name ellipsises instead of being clipped
+    mid-letter.
+  - *Verdict hero:* the "too little history" sentence's Windows / Findings
+    links were browser blue (unreadable in dark); styled like the others.
+  - `demo/verify_report.js` accepts no micro strips past 91 windows (they
+    draw nothing there by design).
 - **Demo** (`docs/examples/demo_busy_db.html`) and the website
   screenshots regenerated in the new design; `demo/verify_report.js`
   resolves Playwright portably and checks views, links, the Timeline,
