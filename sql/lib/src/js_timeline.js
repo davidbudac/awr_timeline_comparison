@@ -140,7 +140,7 @@ W.pin=function(o){
   if(same||o===null||o===0){
     PW=null;bd.removeAttribute('data-pw');
     if(gt)gt.textContent='vs prior mean';if(gs)gs.textContent='click a date to pin';
-    axDraw();return;
+    drawAll(true);return;
   }
   var w=winAt(o),i=idxOf(o);if(!w)return;
   PW=o;bd.setAttribute('data-pw',String(o));
@@ -154,7 +154,7 @@ W.pin=function(o){
   });
   if(gt){gt.innerHTML='vs '+esc(w.d)+' <button type="button" class="unpin" aria-label="Clear the pinned window">clear</button>';$('.unpin',gt).addEventListener('click',function(){W.pin(null);});}
   if(gs)gs.textContent='band stays vs prior mean';
-  axDraw();
+  drawAll(true);
 };
 doc.addEventListener('click',function(ev){
   var h=ev.target&&ev.target.closest?ev.target.closest('#tl .ruler .h[data-w]'):null;if(!h)return;
@@ -162,10 +162,11 @@ doc.addEventListener('click',function(ev){
   if(o===0){W.pin(null);flashCol(0);}else W.pin(o);
 });
 doc.addEventListener('keydown',function(ev){if(ev.key==='Escape'&&PW!==null)W.pin(null);});
+/* the pin survives a view switch: the Activity charts that show it are at
+   the top of every view (Esc, Current or the gutter's clear unpin) */
 doc.addEventListener('awr:view',function(ev){
   var v=ev.detail&&ev.detail.view;
-  if(v!=='timeline'&&PW!==null)W.pin(null);
-  if(v==='timeline')setTimeout(function(){axDraw(true);sync();startAtCurrent();},50);
+  setTimeout(function(){drawAll(true);if(v==='timeline'){sync();startAtCurrent();}},50);
 });
 /* ---- 4. tooltip over the grid and the full-span chart */
 var tip=null;
@@ -176,17 +177,19 @@ function place(e){
   if(x+w>innerWidth-8)x=e.clientX-w-12;if(y+h>innerHeight-8)y=e.clientY-h-12;
   tip.style.left=Math.max(8,x)+'px';tip.style.top=Math.max(8,y)+'px';
 }
-function ashRows(get,cls){
-  var h='',tot=0,A=AX;
-  for(var c=A.classes.length-1;c>=0;c--){if(cls&&!cls[c])continue;var v=get(c);if(v==null)continue;tot+=v;
-    if(v>=0.005)h+='<div class="tr2"><span><i class="sw" style="--sw:'+wcol(A.classes[c])+'"></i>'+esc(A.classes[c])+'</span><b>'+v.toFixed(2)+'</b></div>';}
-  return h+'<div class="tr2 tsum"><span>'+(cls?'Total, shown classes':'Total')+'</span><b>'+tot.toFixed(1)+' AAS</b></div>';
+/* per-series AAS rows, top of the stack first; names / colours from the
+   payload (classes or events), vis = the legend state (null = all) */
+function ashRows(names,cols,get,vis,noun){
+  var h='',tot=0,hid=false;
+  for(var c=names.length-1;c>=0;c--){if(vis&&!vis[c]){hid=true;continue;}var v=get(c);if(v==null)continue;tot+=v;
+    if(v>=0.005)h+='<div class="tr2"><span><i class="sw" style="--sw:'+cols[c]+'"></i>'+esc(names[c])+'</span><b>'+v.toFixed(2)+'</b></div>';}
+  return h+'<div class="tr2 tsum"><span>'+(hid?'Total, shown '+(noun||'classes'):'Total')+'</span><b>'+tot.toFixed(1)+' AAS</b></div>';
 }
 function cellTip(cell){
   var row=cell.closest('.r');if(!row||!row.getAttribute('data-name'))return '';
   var o=+cell.getAttribute('data-w'),w=winAt(o),i=idxOf(o);if(!w)return '';
   var head='<b>'+esc(row.getAttribute('data-name'))+'</b><br><span class="tm">'+esc(w.t)+', '+offTxt(w)+(w.v==='N'?', skipped window':'')+'</span><br>';
-  if(row.classList.contains('ash')&&AX&&AX.win)return head+ashRows(function(c){return AX.win[c][i];});
+  if(row.classList.contains('ash')&&AX&&AX.win)return head+ashRows(AX.classes,AX.classes.map(wcol),function(c){return AX.win[c][i];});
   if(row.classList.contains('p'))return head+'<b>'+esc(cell.getAttribute('data-pv')||'')+'</b>';
   var v=nums(row.getAttribute('data-v'))[i];
   if(v==null)return head+'<span class="tm">'+(row.classList.contains('q')||row.classList.contains('o')?'not in the top list in this window':'no value in this window')+'</span>';
@@ -195,12 +198,12 @@ function cellTip(cell){
 }
 doc.addEventListener('mouseover',function(e){
   var t=e.target;if(!t||!t.closest||!tip)return;
-  if(t.closest('#ax-plot'))return;
+  if(t.closest('.ashx .axp'))return;
   var c=t.closest('#tl .lrows .c[data-w]');
   if(c){var s=cellTip(c);if(s){tipOn(s,e);return;}}
   tipOff();
 });
-doc.addEventListener('mousemove',function(e){if(tip&&!tip.hidden&&!(e.target.closest&&e.target.closest('#ax-plot')))place(e);},{passive:true});
+doc.addEventListener('mousemove',function(e){if(tip&&!tip.hidden&&!(e.target.closest&&e.target.closest('.ashx .axp')))place(e);},{passive:true});
 doc.addEventListener('scroll',tipOff,{passive:true});
 /* ---- 5. stacked activity per window: the Activity lane and the DB time card */
 function stack(row,vals,opt){
@@ -253,77 +256,111 @@ function activity(){
   var wg=row.closest('.wg');wg.parentNode.insertBefore(ul,wg);
   wg.title='Foreground active sessions (ASH, a sampled estimate of DB time) per compared window, stacked by wait class; Current '+tot.toFixed(2)+' AAS in ASH. The Current value is the DB time headline.';
 }
-/* ---- 6. the full-span ASH chart: hover, legend, brush zoom, windows, markers */
-var AX=null,ax=null,cvs=null;
+/* ---- 6. Activity, whole span (section#activity, top of every view): one
+   chart factory, two instances over one time axis -- by wait class
+   (AWR_DATA.ashx) and by wait event (AWR_DATA.ashe).  Linked: a zoom on
+   either zooms both, the hover crosshair is mirrored, the pinned window
+   (AWR_WG.pin) is the same stripe in both.  Hover, legend, brush zoom,
+   Reset / double-click, window stripes, release markers in each. */
+var AX=null,AE=null,CH=[],SP=null,DRAG=null,cvs=null;
+/* the event palette: 15 categorical hues, the first 13 (all a chart can
+   use: 14 events, CPU among them) well apart, readable on both themes, no
+   green (CPU keeps the wait-class CPU green, "Other events" a fixed grey) */
+var EVP=['#4E79A7','#F28E2B','#E15759','#76B7B2','#EDC948','#B07AA1','#FF9DA7','#9C755F','#A0CBE8','#D37295','#17BECF','#B6992D','#7F3C8D','#FFBE7D','#499894'],EVO='#9AA3AD';
+function evColors(names){var j=0;return names.map(function(n){if(n==='CPU')return wcol('CPU');if(n==='Other events')return EVO;return EVP[(j++)%EVP.length];});}
 function tw(t){if(!cvs)cvs=doc.createElement('canvas').getContext('2d');cvs.font='11px ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, system-ui, sans-serif';return cvs.measureText(t).width;}
-function axInit(){
-  AX=(window.AWR_DATA||{}).ashx||null;
-  var panel=doc.getElementById('tl-ash');if(!panel||!AX||!AX.t0)return;
+function okPay(P,n){return !!(P&&P.classes&&P.classes.length&&P.vals&&P.vals.length===P.classes.length&&P.vals[0]&&P.vals[0].length===n);}
+function spInit(){
+  var D=window.AWR_DATA||{};AX=D.ashx||null;AE=D.ashe||null;
+  var panel=doc.getElementById('ashx');if(!panel)return;
   panel.hidden=false;
-  if(!AX.classes||!AX.classes.length){var n=$('#ax-empty',panel);if(n)n.hidden=false;var p=$('#ax-plot',panel);if(p)p.hidden=true;return;}
-  var bh=AX.bh*H1,t0=PT(AX.t0),end=PT(AX.end),n2=AX.vals[0].length,T=[],T1=[];
-  for(var i=0;i<n2;i++){T.push(t0+i*bh);T1.push(Math.min(t0+(i+1)*bh,end));}
-  ax={svg:$('#ax-svg'),plot:$('#ax-plot'),br:$('#ax-brush'),reset:$('#ax-reset'),range:$('#ax-range'),T:T,T1:T1,full:[t0,end],dom:[t0,end],
-      vis:AX.classes.map(function(){return true;}),win:wins().map(function(w){return [PT(w.s),PT(w.e)];}),g:null,drag:null,w:0,
-      min:Math.max(3*bh,Math.min(12*H1,(end-t0)/4)),bhTxt:AX.bh===1?'hourly':(Math.round(AX.bh*100)/100)+'-hour averages'};
-  var lg=$('#ax-lg');
-  if(lg){lg.innerHTML=AX.classes.map(function(c,k){return '<button type="button" class="axc" data-c="'+k+'" aria-pressed="true" title="Show or hide '+esc(c)+'"><i class="sw" style="--sw:'+wcol(c)+'" aria-hidden="true"></i>'+esc(c)+'</button>';}).join('');
-    $$('.axc',lg).forEach(function(b){b.addEventListener('click',function(){var c=+b.getAttribute('data-c');ax.vis[c]=!ax.vis[c];b.setAttribute('aria-pressed',String(ax.vis[c]));axDraw(true);});});}
-  var s=ax.svg;
-  s.addEventListener('mousemove',axHover);
-  s.addEventListener('mouseleave',function(){tipOff();axHide();});
+  var n=AX&&AX.vals&&AX.vals[0]?AX.vals[0].length:0;
+  if(!AX||!AX.t0||!okPay(AX,n)){var e=$('#ax-empty',panel);if(e)e.hidden=false;$$('.axch,.axn2,.axk',panel).forEach(function(x){x.hidden=true;});return;}
+  var bh=AX.bh*H1,t0=PT(AX.t0),end=PT(AX.end),T=[],T1=[];
+  for(var i=0;i<n;i++){T.push(t0+i*bh);T1.push(Math.min(t0+(i+1)*bh,end));}
+  SP={T:T,T1:T1,full:[t0,end],dom:[t0,end],win:wins().map(function(w){return [PT(w.s),PT(w.e)];}),
+      min:Math.max(3*bh,Math.min(12*H1,(end-t0)/4)),bhTxt:AX.bh===1?'hourly':(Math.round(AX.bh*100)/100)+'-hour averages',
+      reset:doc.getElementById('ax-reset'),range:doc.getElementById('ax-range'),sel:null};
+  CH=[];
+  mkChart(doc.getElementById('ax-cls'),AX,AX.classes.map(wcol),{flags:true,noun:'classes',what:'wait class'});
+  var ev=doc.getElementById('ax-ev');
+  if(okPay(AE,n))mkChart(ev,AE,evColors(AE.classes),{noun:'events',what:'wait event'});
+  else if(ev)ev.hidden=true;
+  if(CH.length)CH[CH.length-1].xl=true;
+  if(SP.reset)SP.reset.addEventListener('click',spReset);
+  doc.addEventListener('mousemove',function(e){
+    var dg=DRAG;if(!dg)return;
+    if(!dg.moved&&Math.abs(e.clientX-dg.x0)<5)return;
+    dg.moved=true;tipOff();hideAll();
+    var c=dg.c,r=c.svg.getBoundingClientRect(),sc=r.width/c.g.W,mn=r.left+c.g.padL*sc,mx=r.left+(c.g.W-c.g.padR)*sc;
+    dg.a=Math.max(mn,Math.min(dg.x0,e.clientX));dg.b=Math.min(mx,Math.max(dg.x0,e.clientX));
+    /* the brush shows on both charts: same width, same x mapping */
+    CH.forEach(function(o){if(!o.g)return;var ro=o.svg.getBoundingClientRect(),so=ro.width/o.g.W;
+      o.br.hidden=false;o.br.style.left=(dg.a-ro.left)+'px';o.br.style.width=Math.max(0,dg.b-dg.a)+'px';
+      o.br.style.top=(o.g.top*so)+'px';o.br.style.height=(o.g.ph*so)+'px';});
+  });
+  doc.addEventListener('mouseup',function(){
+    var dg=DRAG;if(!dg)return;DRAG=null;CH.forEach(function(o){o.br.hidden=true;});
+    if(dg.moved){if(dg.b-dg.a>6)spZoom(tAt(dg.c,dg.a),tAt(dg.c,dg.b));return;}
+    if(dg.w!=null){SP.sel={prev:PW,t:Date.now()};spSelect(dg.w);}
+  });
+}
+function mkChart(root,P,cols,opt){
+  if(!root)return null;
+  var c={root:root,P:P,cols:cols,svg:$('.axsvg',root),plot:$('.axp',root),br:$('.axbr',root),
+         vis:P.classes.map(function(){return true;}),flags:!!opt.flags,noun:opt.noun,what:opt.what,xl:false,g:null,w:0,uid:root.id};
+  var lg=$('.axlg',root);
+  if(lg){lg.innerHTML=P.classes.map(function(nm,k){return '<button type="button" class="axc" data-c="'+k+'" aria-pressed="true" title="Show or hide '+esc(nm)+'"><i class="sw" style="--sw:'+cols[k]+'" aria-hidden="true"></i>'+esc(nm)+'</button>';}).join('');
+    $$('.axc',lg).forEach(function(b){b.addEventListener('click',function(){var k=+b.getAttribute('data-c');c.vis[k]=!c.vis[k];b.setAttribute('aria-pressed',String(c.vis[k]));draw(c,true);});});}
+  var s=c.svg;
+  s.addEventListener('mousemove',function(e){hover(c,e);});
+  s.addEventListener('mouseleave',function(){if(!DRAG){tipOff();hideAll();}});
   s.addEventListener('mousedown',function(e){
-    if(e.button!==0||!ax.g)return;e.preventDefault();
+    if(e.button!==0||!c.g)return;e.preventDefault();
     /* the second press of a double-click resets the zoom (the chart is redrawn
        between the two presses, so a dblclick event may never fire) and undoes
        the pin the first press made on a window stripe */
-    if(e.detail>=2){if(ax.sel&&Date.now()-ax.sel.t<700)W.pin(ax.sel.prev);ax.sel=null;ax.drag=null;ax.dom=ax.full.slice();axDraw(true);return;}
-    var wh=e.target.closest('.xwh');ax.drag={x0:e.clientX,moved:false,w:wh?+wh.getAttribute('data-i'):null};
+    if(e.detail>=2){if(SP.sel&&Date.now()-SP.sel.t<700)W.pin(SP.sel.prev);SP.sel=null;DRAG=null;spReset();return;}
+    var wh=e.target.closest('.xwh');DRAG={c:c,x0:e.clientX,moved:false,w:wh?+wh.getAttribute('data-i'):null};
   });
-  doc.addEventListener('mousemove',function(e){
-    var dg=ax.drag;if(!dg)return;
-    if(!dg.moved&&Math.abs(e.clientX-dg.x0)<5)return;
-    dg.moved=true;tipOff();
-    var r=ax.svg.getBoundingClientRect(),sc=r.width/ax.g.W,mn=r.left+ax.g.padL*sc,mx=r.left+(ax.g.W-ax.g.padR)*sc;
-    var a=Math.max(mn,Math.min(dg.x0,e.clientX)),b=Math.min(mx,Math.max(dg.x0,e.clientX));
-    ax.br.hidden=false;ax.br.style.left=(a-r.left)+'px';ax.br.style.width=Math.max(0,b-a)+'px';
-    ax.br.style.top=(ax.g.top*sc)+'px';ax.br.style.height=(ax.g.ph*sc)+'px';dg.a=a;dg.b=b;
-  });
-  doc.addEventListener('mouseup',function(){
-    var dg=ax.drag;if(!dg)return;ax.drag=null;ax.br.hidden=true;
-    if(dg.moved){if(dg.b-dg.a>6)axZoom(axTime(dg.a),axTime(dg.b));return;}
-    if(dg.w!=null){ax.sel={prev:PW,t:Date.now()};axSelect(dg.w);}
-  });
-  s.addEventListener('dblclick',function(){ax.dom=ax.full.slice();axDraw(true);});
-  s.addEventListener('keydown',function(e){var wh=e.target.closest&&e.target.closest('.xwh');if(wh&&(e.key==='Enter'||e.key===' ')){e.preventDefault();axSelect(+wh.getAttribute('data-i'));}});
-  ax.reset.addEventListener('click',function(){ax.dom=ax.full.slice();axDraw(true);});
+  s.addEventListener('dblclick',spReset);
+  s.addEventListener('keydown',function(e){var wh=e.target.closest&&e.target.closest('.xwh');if(wh&&(e.key==='Enter'||e.key===' ')){e.preventDefault();spSelect(+wh.getAttribute('data-i'));}});
+  CH.push(c);
+  return c;
 }
-function axHide(){var hb=doc.getElementById('ax-hb'),ch=doc.getElementById('ax-ch');if(hb){hb.setAttribute('visibility','hidden');ch.setAttribute('visibility','hidden');}}
-function axDraw(force){
-  if(!ax||!shown(ax.plot))return;
-  var Wd=Math.max(480,ax.plot.clientWidth);if(!force&&ax.w===Wd&&ax.g&&ax.pw===PW)return;ax.w=Wd;ax.pw=PW;
-  var top=44,ph=236,bot=26,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR,d0=ax.dom[0],d1=ax.dom[1],A=AX;
-  ax.svg.setAttribute('viewBox','0 0 '+Wd+' '+H);ax.svg.setAttribute('height',H);
+function drawAll(force){CH.forEach(function(c){draw(c,force);});spHead();}
+function spHead(){
+  if(!SP)return;var d0=SP.dom[0],d1=SP.dom[1],zoomed=d0>SP.full[0]||d1<SP.full[1];
+  if(SP.reset)SP.reset.hidden=!zoomed;
+  if(SP.range)SP.range.textContent=zoomed?fAt(d0)+' to '+fAt(d1)+', zoomed':fDay(SP.full[0])+' to '+fDay(SP.full[1])+', '+SP.bhTxt;
+}
+function draw(c,force){
+  if(!c||!SP||!shown(c.plot))return;
+  var Wd=Math.max(480,c.plot.clientWidth),d0=SP.dom[0],d1=SP.dom[1];
+  if(!force&&c.w===Wd&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1)return;c.w=Wd;c.pw=PW;
+  var mks=W.markers?W.markers():[],P=c.P,T=SP.T,T1=SP.T1;
+  var top=c.flags&&mks.length?46:22,ph=150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;
+  c.svg.setAttribute('viewBox','0 0 '+Wd+' '+H);c.svg.setAttribute('height',H);
   var X=function(t){return padL+pw*(t-d0)/(d1-d0);};
-  var idx=[];for(var i=0;i<ax.T.length;i++)if(ax.T1[i]>d0&&ax.T[i]<d1)idx.push(i);
-  var tot=idx.map(function(i){var s=0;A.vals.forEach(function(v,c){if(ax.vis[c])s+=v[i]||0;});return s;});
-  var mx=Math.max.apply(null,tot.concat([0.05])),step=niceStep(mx,4),ymax=Math.ceil(mx/step-1e-9)*step;
-  var Y=function(v){return top+ph-ph*v/ymax;};
-  var s='<defs><clipPath id="ax-clip"><rect x="'+padL+'" y="'+(top-6)+'" width="'+pw+'" height="'+(ph+6)+'"/></clipPath></defs>';
+  var idx=[];for(var i=0;i<T.length;i++)if(T1[i]>d0&&T[i]<d1)idx.push(i);
+  var tot=idx.map(function(i){var s=0;P.vals.forEach(function(v,k){if(c.vis[k])s+=v[i]||0;});return s;});
+  var mx=Math.max.apply(null,tot.concat([0.05])),step=niceStep(mx,3),ymax=Math.ceil(mx/step-1e-9)*step;
+  var Y=function(v){return top+ph-ph*v/ymax;},clip='axclip-'+c.uid;
+  var s='<defs><clipPath id="'+clip+'"><rect x="'+padL+'" y="'+(top-6)+'" width="'+pw+'" height="'+(ph+6)+'"/></clipPath></defs>';
   for(var v=0;v<=ymax+1e-9;v+=step){var dec=step<1?(step<0.1?2:1):0;
     s+='<line class="gl" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="at" x="'+(padL-6)+'" y="'+(Y(v)+4).toFixed(1)+'" text-anchor="end">'+v.toFixed(dec)+'</text>';}
-  s+='<text class="at" x="'+(padL-6)+'" y="'+(top-10)+'" text-anchor="end">AAS</text><g clip-path="url(#ax-clip)">';
+  s+='<text class="at" x="'+(padL-6)+'" y="'+(top-10)+'" text-anchor="end">AAS</text><g clip-path="url(#'+clip+')">';
   var lo=idx.map(function(){return 0;});
-  A.vals.forEach(function(vals,c){
-    if(!ax.vis[c]||!idx.length)return;
+  P.vals.forEach(function(vals,k){
+    if(!c.vis[k]||!idx.length)return;
     var hi=lo.map(function(l,j){return l+(vals[idx[j]]||0);}),d='';
-    idx.forEach(function(i,j){var y=Y(hi[j]).toFixed(1);d+=(j?'L':'M')+X(ax.T[i]).toFixed(1)+' '+y+'L'+X(ax.T1[i]).toFixed(1)+' '+y;});
-    for(var j=idx.length-1;j>=0;j--){var y0=Y(lo[j]).toFixed(1);d+='L'+X(ax.T1[idx[j]]).toFixed(1)+' '+y0+'L'+X(ax.T[idx[j]]).toFixed(1)+' '+y0;}
-    s+='<path class="xa" fill="'+wcol(A.classes[c])+'" d="'+d+'Z"/>';lo=hi;
+    idx.forEach(function(i,j){var y=Y(hi[j]).toFixed(1);d+=(j?'L':'M')+X(T[i]).toFixed(1)+' '+y+'L'+X(T1[i]).toFixed(1)+' '+y;});
+    for(var j=idx.length-1;j>=0;j--){var y0=Y(lo[j]).toFixed(1);d+='L'+X(T1[idx[j]]).toFixed(1)+' '+y0+'L'+X(T[idx[j]]).toFixed(1)+' '+y0;}
+    s+='<path class="xa" fill="'+c.cols[k]+'" d="'+d+'Z"/>';lo=hi;
   });
-  s+='<rect id="ax-hb" class="xbk" x="0" y="'+top+'" width="0" height="'+ph+'" visibility="hidden"/>';
+  s+='<rect class="xbk" x="0" y="'+top+'" width="0" height="'+ph+'" visibility="hidden"/>';
   var ws=wins(),hit=[],cur=ws.length-1;
-  ax.win.forEach(function(r,i){
+  SP.win.forEach(function(r,i){
     var xa=X(r[0]),xb=X(r[1]);if(xb<padL-2||xa>Wd-padR+2)return;
     var w=Math.max(i===cur?4:3,xb-xa),x=(xa+xb)/2-w/2,cls=(i===cur?' cur':'')+(ws[i].o===PW?' on':'')+(ws[i].v==='N'?' sk':'');
     s+='<rect class="xw'+cls+'" x="'+x.toFixed(1)+'" y="'+top+'" width="'+w.toFixed(1)+'" height="'+ph+'"/><rect class="xwc'+cls+'" x="'+x.toFixed(1)+'" y="'+(top-5)+'" width="'+w.toFixed(1)+'" height="4" rx="1"/>';
@@ -331,19 +368,22 @@ function axDraw(force){
   });
   s+='</g><line class="ax" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+(top+ph)+'" y2="'+(top+ph)+'"/>';
   /* x ticks: the smallest interval that leaves about 88 px per label, counted from
-     midnight of the Current window's day (weekly ticks land on its weekday) */
+     midnight of the Current window's day (weekly ticks land on its weekday);
+     labels on the lower chart only -- one shared axis */
   var IVS=[1,2,3,6,12,24,48,168,336,672].map(function(h){return h*H1;}),iv=IVS[IVS.length-1];
   for(var q=0;q<IVS.length;q++){if(pw*IVS[q]/(d1-d0)>=88){iv=IVS[q];break;}}
-  var org=Math.floor(ax.win[cur][0]/864e5)*864e5;
+  var org=Math.floor(SP.win[cur][0]/864e5)*864e5;
   for(var tt=org+Math.ceil((d0-org)/iv)*iv;tt<=d1;tt+=iv){
     var xt=X(tt);if(xt<padL+12||xt>Wd-padR-12)continue;
-    var lab=(iv>=24*H1||new Date(tt).getUTCHours()===0)?fDay(tt):fHM(tt);
-    s+='<line class="ax" x1="'+xt.toFixed(1)+'" x2="'+xt.toFixed(1)+'" y1="'+(top+ph)+'" y2="'+(top+ph+4)+'"/><text class="at" x="'+xt.toFixed(1)+'" y="'+(top+ph+18)+'" text-anchor="middle">'+lab+'</text>';
+    s+='<line class="ax" x1="'+xt.toFixed(1)+'" x2="'+xt.toFixed(1)+'" y1="'+(top+ph)+'" y2="'+(top+ph+4)+'"/>';
+    if(c.xl)s+='<text class="at" x="'+xt.toFixed(1)+'" y="'+(top+ph+18)+'" text-anchor="middle">'+((iv>=24*H1||new Date(tt).getUTCHours()===0)?fDay(tt):fHM(tt))+'</text>';
   }
-  /* release markers: a flag in a two-tier band, a line through the plot */
+  /* release markers: a line through the plot on both charts; the flags (two
+     tiers) on the upper one */
   var tiers=[[],[]];
-  (W.markers?W.markers():[]).forEach(function(m){
+  mks.forEach(function(m){
     var x=X(PT(m.at));if(x<padL||x>Wd-padR)return;
+    if(!c.flags){s+='<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+top+'" y2="'+(top+ph)+'"><title>'+esc(m.l+', '+m.t)+'</title></line>';return;}
     [m.l,m.s].some(function(lb){
       var w=tw(lb)+12,x0=x+w>Wd-padR?x-w:x,end=x0!==x;
       for(var L=0;L<2;L++){
@@ -357,49 +397,57 @@ function axDraw(force){
       return false;
     });
   });
-  s+='<line id="ax-ch" class="xch" x1="0" x2="0" y1="'+top+'" y2="'+(top+ph)+'" visibility="hidden"/>';
+  s+='<line class="xch" x1="0" x2="0" y1="'+top+'" y2="'+(top+ph)+'" visibility="hidden"/>';
   hit.forEach(function(q){
     var i=q[0],w=ws[i],hw=Math.max(12,q[2]),hx=q[1]+q[2]/2-hw/2;
     s+='<rect class="xwh" data-i="'+i+'" data-w="'+w.o+'" x="'+hx.toFixed(1)+'" y="'+(top-6)+'" width="'+hw.toFixed(1)+'" height="'+(ph+6)+'" tabindex="0" role="button" aria-label="'
-      +esc((w.o===0?'Current window, ':offTxt(w)+' window, ')+w.t+(w.o===0?'':'. Pin its column in the grid'))+'"/>';
+      +esc((w.o===0?'Current window, ':offTxt(w)+' window, ')+w.t+(w.o===0?'':'. Pin it'))+'"/>';
   });
-  ax.svg.innerHTML=s;
-  ax.g={X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1};
-  var zoomed=d0>ax.full[0]||d1<ax.full[1];
-  ax.reset.hidden=!zoomed;
-  ax.range.textContent=zoomed?fAt(d0)+' to '+fAt(d1)+', zoomed':fDay(ax.full[0])+' to '+fDay(ax.full[1])+', '+ax.bhTxt;
+  c.svg.innerHTML=s;
+  c.g={X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1};
 }
-function axTime(cx){var r=ax.svg.getBoundingClientRect(),x=(cx-r.left)*ax.g.W/r.width;return ax.g.d0+(x-ax.g.padL)/ax.g.pw*(ax.g.d1-ax.g.d0);}
-function axHover(e){
-  if(!ax.g||ax.drag&&ax.drag.moved)return;
-  var hb=doc.getElementById('ax-hb'),ch=doc.getElementById('ax-ch'),wh=e.target.closest&&e.target.closest('.xwh');
-  if(wh){
-    var i=+wh.getAttribute('data-i'),w=wins()[i];axHide();
-    tipOn('<b>'+esc(w.t)+'</b><br><span class="tm">'+(w.o===0?'Current window':offTxt(w)+' window')+(w.v==='N'?', skipped':'')+', the window itself</span>'
-      +ashRows(function(c){return AX.win[c][i];},ax.vis)+(w.o===0?'':'<span class="tm">Click to pin this column below</span>'),e);
-    return;
-  }
-  var t=axTime(e.clientX),k=-1;
-  for(var j=0;j<ax.T.length;j++)if(ax.T[j]<=t&&t<ax.T1[j]){k=j;break;}
-  if(k<0||t<ax.g.d0||t>ax.g.d1){axHide();tipOff();return;}
-  var xa=Math.max(ax.g.padL,ax.g.X(ax.T[k])),xb=Math.min(ax.g.W-ax.g.padR,ax.g.X(ax.T1[k])),x=ax.g.X(t);
+function tAt(c,cx){var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*c.g.W/r.width;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}
+function bucketAt(t){for(var j=0;j<SP.T.length;j++)if(SP.T[j]<=t&&t<SP.T1[j])return j;return -1;}
+function hideCross(c){var hb=$('.xbk',c.svg),ch=$('.xch',c.svg);if(hb){hb.setAttribute('visibility','hidden');ch.setAttribute('visibility','hidden');}}
+function hideAll(){CH.forEach(hideCross);}
+/* the crosshair + bucket band at time t (bucket k) on chart c */
+function cross(c,t,k){
+  var hb=$('.xbk',c.svg),ch=$('.xch',c.svg);if(!c.g||!hb)return;
+  var xa=Math.max(c.g.padL,c.g.X(SP.T[k])),xb=Math.min(c.g.W-c.g.padR,c.g.X(SP.T1[k])),x=c.g.X(t);
   hb.setAttribute('x',xa.toFixed(1));hb.setAttribute('width',Math.max(1,xb-xa).toFixed(1));hb.setAttribute('visibility','visible');
   ch.setAttribute('x1',x.toFixed(1));ch.setAttribute('x2',x.toFixed(1));ch.setAttribute('visibility','visible');
-  var hrs=Math.round((ax.T1[k]-ax.T[k])/H1*100)/100;
-  tipOn('<b>'+fAt(ax.T[k])+'\u2013'+fHM(ax.T1[k])+'</b><br><span class="tm">'+(hrs===1?'1-hour':hrs+'-hour')+' average</span>'+ashRows(function(c){return AX.vals[c][k];},ax.vis),e);
 }
-function axSelect(i){
+function hover(c,e){
+  if(!c.g||DRAG&&DRAG.moved)return;
+  var wh=e.target.closest&&e.target.closest('.xwh'),P=c.P;
+  if(wh){
+    var i=+wh.getAttribute('data-i'),w=wins()[i];hideAll();
+    tipOn('<b>'+esc(w.t)+'</b><br><span class="tm">'+(w.o===0?'Current window':offTxt(w)+' window')+(w.v==='N'?', skipped':'')+', by '+c.what+'</span>'
+      +(P.win?ashRows(P.classes,c.cols,function(k){return P.win[k][i];},c.vis,c.noun):'')+(w.o===0?'':'<span class="tm">Click to pin this window</span>'),e);
+    return;
+  }
+  var t=tAt(c,e.clientX),k=bucketAt(t);
+  if(k<0||t<c.g.d0||t>c.g.d1){hideAll();tipOff();return;}
+  CH.forEach(function(o){cross(o,t,k);});
+  var hrs=Math.round((SP.T1[k]-SP.T[k])/H1*100)/100;
+  tipOn('<b>'+fAt(SP.T[k])+'\u2013'+fHM(SP.T1[k])+'</b><br><span class="tm">'+(hrs===1?'1-hour':hrs+'-hour')+' average, by '+c.what+'</span>'
+    +ashRows(P.classes,c.cols,function(q){return P.vals[q][k];},c.vis,c.noun),e);
+}
+/* a window stripe: pin it (Current unpins); in the Timeline view the grid
+   column flashes and comes into view */
+function spSelect(i){
   var w=wins()[i];if(!w)return;
   if(w.o===0){if(PW!==null)W.pin(null);}else W.pin(w.o);
   flashCol(w.o);
-  var tl=doc.getElementById('tl');if(!tl)return;
+  var tl=doc.getElementById('tl');if(!tl||!shown(tl))return;
   var r=tl.getBoundingClientRect();if(r.top>innerHeight-220)window.scrollBy({top:r.top-innerHeight+320,behavior:reduced()?'auto':'smooth'});
 }
-function axZoom(a,b){
-  a=Math.max(ax.full[0],a);b=Math.min(ax.full[1],b);
-  if(b-a<ax.min){var m=(a+b)/2;a=Math.max(ax.full[0],m-ax.min/2);b=Math.min(ax.full[1],a+ax.min);a=Math.max(ax.full[0],b-ax.min);}
-  ax.dom=[a,b];axDraw(true);
+function spZoom(a,b){
+  a=Math.max(SP.full[0],a);b=Math.min(SP.full[1],b);
+  if(b-a<SP.min){var m=(a+b)/2;a=Math.max(SP.full[0],m-SP.min/2);b=Math.min(SP.full[1],a+SP.min);a=Math.max(SP.full[0],b-SP.min);}
+  SP.dom=[a,b];drawAll(true);
 }
+function spReset(){if(!SP)return;SP.dom=SP.full.slice();drawAll(true);}
 /* ---- 7. the grid's scroll: the sticky ruler follows the body, lane captions stay in view */
 function sync(){var b=doc.getElementById('tl-body'),i=doc.getElementById('tl-in'),r=$('#tl > .ruler');if(!b||!i)return;if(r)r.scrollLeft=b.scrollLeft;i.style.setProperty('--sl',b.scrollLeft+'px');i.style.setProperty('--vw',b.clientWidth+'px');}
 function startAtCurrent(){var b=doc.getElementById('tl-body');if(b&&b.scrollWidth>b.clientWidth+2&&!b.scrollLeft)b.scrollLeft=b.scrollWidth;sync();}
@@ -410,10 +458,10 @@ doc.addEventListener('DOMContentLoaded',function(){
   AX=(window.AWR_DATA||{}).ashx||null;
   lanes();
   activity();
-  axInit();
+  spInit();
   var b=doc.getElementById('tl-body');if(b)b.addEventListener('scroll',sync,{passive:true});
   var tl=doc.getElementById('tl');if(tl&&W.render)W.render(tl);
-  setTimeout(function(){axDraw(true);startAtCurrent();},60);
-  var rt=null;window.addEventListener('resize',function(){if(rt)clearTimeout(rt);rt=setTimeout(function(){axDraw();sync();},120);});
+  setTimeout(function(){drawAll(true);startAtCurrent();},60);
+  var rt=null;window.addEventListener('resize',function(){if(rt)clearTimeout(rt);rt=setTimeout(function(){drawAll();sync();},120);});
 });
 })();

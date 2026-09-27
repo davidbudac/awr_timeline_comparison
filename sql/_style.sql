@@ -1364,8 +1364,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 900px){.calm-notes{grid-template-columns:1fr}.fc-h{grid-template-columns:minmax(0,1fr)}.fc-band{width:100%}}');
 
     -- =========================================================
-    -- v1.6.0 Timeline view (Mock D): the #timeline section, the full-span
-    -- interactive ASH chart (.ashx, #tl-ash) and the aligned window grid
+    -- v1.6.0 Timeline view (Mock D): the #timeline section, the Activity
+    -- charts at the top of every view (section#activity .ashx: by wait
+    -- class and by wait event) and the aligned window grid
     -- (#tl: sticky ruler, lanes of .wg rows, pin / hover / flash), the
     -- stacked activity columns (.r.ash, also the DB time card) and the
     -- shared tooltip (#tip).  Client half: sql/lib/js_timeline.plsql.
@@ -1380,14 +1381,20 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('#timeline .tl-nojs{color:var(--muted);font-size:13px;margin:0 0 var(--s3)}');
     DBMS_OUTPUT.PUT_LINE('body.js-wg #timeline .tl-nojs{display:none}');
     DBMS_OUTPUT.PUT_LINE('body:not(.js-wg) #tl{display:none}');
-    DBMS_OUTPUT.PUT_LINE('#timeline .sw,#tip .sw,.fcleg .sw{display:inline-block;width:8px;height:8px;border-radius:2px;flex:none;background:var(--sw,#9AA3AD)}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .sw,#tip .sw,.fcleg .sw,.ashx .sw{display:inline-block;width:8px;height:8px;border-radius:2px;flex:none;background:var(--sw,#9AA3AD)}');
+    DBMS_OUTPUT.PUT_LINE('#activity .ax-nojs{color:var(--muted);font-size:13px;margin:0 0 var(--s2)}');
+    DBMS_OUTPUT.PUT_LINE('body.js-wg #activity .ax-nojs{display:none}');
     DBMS_OUTPUT.PUT_LINE('#timeline .muted{color:var(--muted)}');
-    DBMS_OUTPUT.PUT_LINE('.ashx{margin:0 0 var(--s5);padding:var(--s4) var(--s5) var(--s3)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx{margin:0;padding:0}');
     DBMS_OUTPUT.PUT_LINE('.ashx[hidden]{display:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axh{display:flex;align-items:baseline;gap:var(--s2) var(--s5);flex-wrap:wrap}');
-    DBMS_OUTPUT.PUT_LINE('.ashx .axt{display:flex;align-items:baseline;gap:var(--s3);min-width:0;flex:1}');
-    DBMS_OUTPUT.PUT_LINE('.ashx .axt h3{display:block;font-size:15px;font-weight:600;white-space:nowrap;margin:0;padding:0;border:0;text-transform:none;color:var(--ink)}');
-    DBMS_OUTPUT.PUT_LINE('.ashx .axt h3::before{content:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axh .axs{flex:1;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axch{margin-top:var(--s3)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axch + .axch{margin-top:var(--s2)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axch[hidden],.ashx .axk[hidden],.ashx .axn2[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axct{display:flex;align-items:baseline;gap:2px var(--s3);flex-wrap:wrap}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axct h3{display:block;font-size:13px;font-weight:600;white-space:nowrap;margin:0;padding:0;border:0;text-transform:none;letter-spacing:0;color:var(--ink-2)}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axct h3::before{content:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axs{font-size:13px;color:var(--ink-3);white-space:nowrap}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axk{display:flex;gap:var(--s4);font-size:12px;color:var(--ink-3)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axk span{display:inline-flex;align-items:center;gap:6px}');
@@ -1397,15 +1404,15 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ashx .axr{font-size:12px;border:1px solid var(--line-2);background:var(--panel);border-radius:6px;padding:2px 10px;cursor:pointer;color:var(--ink-2);line-height:20px}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axr:hover{color:var(--ink);border-color:var(--ink-3)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axr[hidden]{display:none}');
-    DBMS_OUTPUT.PUT_LINE('.ashx .axlg{display:flex;flex-wrap:wrap;gap:2px 4px;margin:var(--s2) 0 0 -6px}');
-    DBMS_OUTPUT.PUT_LINE('.ashx .axc{display:inline-flex;align-items:center;gap:6px;border:0;background:none;border-radius:6px;padding:2px 6px;font:inherit;font-size:12px;color:var(--ink-2);cursor:pointer;line-height:18px}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axlg{display:flex;flex-wrap:wrap;gap:0 2px;margin:0;flex:1;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axc{display:inline-flex;align-items:center;gap:6px;border:0;background:none;border-radius:6px;padding:1px 6px;font:inherit;font-size:12px;color:var(--ink-2);cursor:pointer;line-height:18px}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axc:hover{background:var(--hov);color:var(--ink)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axc[aria-pressed="false"]{color:var(--ink-4);text-decoration:line-through;text-decoration-color:var(--ink-4)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axc[aria-pressed="false"] .sw{background:none;box-shadow:inset 0 0 0 1.5px var(--sw)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axp{position:relative;margin-top:var(--s1);user-select:none;-webkit-user-select:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axp[hidden],.ashx .axe[hidden]{display:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axe{margin:var(--s3) 0;font-size:13px;color:var(--muted)}');
-    DBMS_OUTPUT.PUT_LINE('#ax-svg{display:block;width:100%;cursor:crosshair}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axsvg{display:block;width:100%;cursor:crosshair}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axbr{position:absolute;top:0;pointer-events:none;background:var(--acc-soft);border-left:1px solid var(--acc);border-right:1px solid var(--acc)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axbr[hidden]{display:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axn2{margin:var(--s1) 0 0;font-size:12px;color:var(--ink-3)}');
