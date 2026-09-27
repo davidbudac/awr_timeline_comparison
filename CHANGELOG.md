@@ -121,6 +121,14 @@ AUTO weekly, 168-hourly and fleet runs (all rc 0, verify_report OK).
   in the compared windows, hourly elsewhere") no longer runs under the
   stripe key at laptop widths; it wraps instead (found while re-shooting
   the website screenshots after the merge).
+- **Finding cards at narrower widths:** the card body stacked only below a
+  1180 px *viewport*, which ignores the 236 px rail, so at ~1190-1360 px
+  the evidence rows (fixed 88 + 136 px columns) squeezed the name to a few
+  words beside the bars. The cards are now a CSS container (`awrfc`):
+  under 1000 px of card content the row kind moves above the name, under
+  890 px the evidence stacks below the bars; the config card's grid gets a
+  narrower label / gutter there and its Current value no longer cuts to
+  "FOR...". CSS only; wide layout (>= ~1360 px) unchanged.
 - **Fixes found in the release pass.** Three facts the v1.5.0 masthead
   printed were lost with it and are back: "all DBIDs ..." in the top bar
   when a report spans more than one DBID, the template name in the top bar

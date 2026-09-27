@@ -1362,6 +1362,17 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.dotk.typical{border:1.5px solid var(--muted)} .dotk.improved{border:2px solid var(--imp)}');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 1180px){.fc-b{grid-template-columns:minmax(0,1fr)}.ngrid{grid-template-columns:repeat(2,minmax(0,1fr))}}');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 900px){.calm-notes{grid-template-columns:1fr}.fc-h{grid-template-columns:minmax(0,1fr)}.fc-band{width:100%}}');
+    -- card-width tiers (the rail eats 236 px, so a viewport breakpoint
+    -- misjudges the card): the evidence rows' fixed 88 + 136 px columns
+    -- squeezed the name to a few words beside the bars. Under 1000 px of
+    -- card content the row kind moves above the name, under 890 px the evidence
+    -- stacks below the bars (the 1180 px media rule stays as the fallback).
+    DBMS_OUTPUT.PUT_LINE('.fc{container-name:awrfc;container-type:inline-size}');
+    DBMS_OUTPUT.PUT_LINE('@container awrfc (min-width: 890px) and (max-width: 999.98px){.fc .evr{grid-template-columns:minmax(0,1fr) 136px;row-gap:0}.fc .evr dt{grid-column:1 / -1;font-size:12px}}');
+    DBMS_OUTPUT.PUT_LINE('@container awrfc (max-width: 889.98px){.fc-b{grid-template-columns:minmax(0,1fr)}}');
+    -- the config card's grid (12): narrower label / gutter, and the Current
+    -- value may run left over the prior cell instead of cutting to "FOR..."
+    DBMS_OUTPUT.PUT_LINE('@container awrfc (max-width: 999.98px){.fc .cfg-wg .wg{--lab:184px;--gut:140px}.fc .cfg-wg .r.p .c.cur .pv{left:auto;right:2px;max-width:none;padding-left:3px;background:linear-gradient(var(--acc-band),var(--acc-band)) var(--panel)}}');
 
     -- =========================================================
     -- v1.6.0 Timeline view (Mock D): the #timeline section, the Activity
