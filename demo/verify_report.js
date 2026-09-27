@@ -29,7 +29,8 @@
  *   - the Activity charts (section#activity, v1.6.0): at the top of every
  *     view, above the verdict, both drawn (by wait class, by wait event);
  *     on each chart: hover crosshair + tooltip (mirrored on the other),
- *     legend toggle + restore (restack / rescale), brush zoom (zooms both)
+ *     legend toggle + restore (restack / rescale), brush zoom (zooms both),
+ *     the 1-minute detail (payload vs ashx.win, zoom into Current -> 1-min)
  *     + Reset, double-click reset, a window click pinning its grid column
  *     (ruler aria-pressed, gutter "vs <date>", amber stripe on both
  *     charts); Current unpinning + flashing, Enter / Esc; "Other events"
@@ -524,6 +525,63 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         }, id);
         tl['keys_' + k] = kb;
         if (/^FAIL/.test(kb)) fail('activity ' + k + ': Enter / Esc ' + kb);
+      }
+      // the 1-minute detail: the payload agrees with the per-window values
+      // (the Current window's minutes summed = ashx.win), and zooming into
+      // the Current window switches both charts to it (range label, a
+      // one-minute tooltip, the crosshair on both)
+      const fine = await page.evaluate(() => {
+        const out = [];
+        for (const key of ['ashx', 'ashe']) {
+          const P = window.AWR_DATA[key], f = P && P.fine;
+          if (!f) { out.push(key + ' no fine'); continue; }
+          const n = f.segs.reduce((a, g) => a + g[1], 0), W = window.AWR_WIN.w, cur = W[W.length - 1];
+          const t0 = Date.parse(P.t0.replace(' ', 'T') + ':00Z'), cs = Date.parse(cur.s.replace(' ', 'T') + ':00Z'), ce = Date.parse(cur.e.replace(' ', 'T') + ':00Z');
+          let worst = 0;
+          P.classes.forEach((c, k) => {
+            const v = []; f.vals[k].forEach(x => { if (x < 0) for (let z = 0; z < -x; z++) v.push(0); else v.push(x); });
+            if (v.length !== n) worst = Infinity;
+            let sm = 0, j = 0;
+            f.segs.forEach(g => { for (let q = 0; q < g[1]; q++, j++) { const t = t0 + (g[0] + q) * 6e4; if (t >= cs && t < ce) sm += v[j]; } });
+            const a = sm / 6 / 60 / P.wh, b = P.win[k][P.win[k].length - 1];
+            worst = Math.max(worst, Math.abs(a - b));
+          });
+          out.push(key + ' ' + n + ' min' + (f.capped ? ' (capped)' : '') + ', Current vs win max diff ' + worst.toFixed(4) + (worst <= 0.002 * P.classes.length + 1e-9 ? '' : ' FAIL'));
+        }
+        return out.join('; ');
+      });
+      tl.fine = fine;
+      if (/FAIL|no fine/.test(fine)) fail('activity: 1-minute payload ' + fine);
+      {
+        let r = '';
+        for (let it = 0; it < 5; it++) {
+          await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(100);
+          const g = await page.evaluate(() => {
+            const s = document.querySelector('#ax-cls .axsvg'), c = s.querySelector('.xw.cur'), rs = s.getBoundingClientRect(), rc = c.getBoundingClientRect();
+            const sc = rs.width / s.viewBox.baseVal.width;
+            return { cx: rc.left + rc.width / 2, w: rc.width, l: rs.left + 40 * sc, r: rs.right - 14 * sc, y: rs.top + rs.height * 0.6 };
+          });
+          const half = Math.max(40, g.w * 0.4), a = Math.max(g.l + 1, g.cx - half), b = g.cx + half;
+          await page.mouse.move(a, g.y); await page.mouse.down(); await page.mouse.move(b, g.y, { steps: 6 }); await page.mouse.up();
+          await page.waitForTimeout(200);
+          r = await page.evaluate(() => document.getElementById('ax-range').textContent);
+          if (/1-min detail/.test(r)) break;
+        }
+        const hv = await page.evaluate(() => {
+          const s = document.querySelector('#ax-cls .axsvg'), c = s.querySelector('.xw.cur').getBoundingClientRect(), rs = s.getBoundingClientRect();
+          return { x: c.left + c.width * 0.5, y: rs.top + rs.height * 0.65 };
+        });
+        await page.mouse.move(hv.x, hv.y); await page.waitForTimeout(150);
+        const tt = await page.evaluate(() => {
+          const t = document.getElementById('tip'), chs = [...document.querySelectorAll('.ashx .axsvg .xch')];
+          const on = chs.filter(c => c.getAttribute('visibility') === 'visible').length;
+          const m = /(\d\d):(\d\d)\u2013(\d\d):(\d\d)/.exec(t.textContent || '');
+          const mins = m ? ((+m[3] * 60 + +m[4]) - (+m[1] * 60 + +m[2]) + 1440) % 1440 : -1;
+          return { ok: !t.hidden && mins === 1 && /1-min average/.test(t.textContent) && on === chs.length, txt: (t.textContent || '').slice(0, 60), on };
+        });
+        tl.fine_zoom = (/1-min detail/.test(r) && tt.ok) ? 'ok (' + r.replace(/^.*zoomed, /, '') + '; tip ' + tt.txt.replace(/average.*/, 'average') + ')' : 'FAIL ' + r + ' | ' + JSON.stringify(tt);
+        if (/^FAIL/.test(tl.fine_zoom)) fail('activity: zoom into the Current window ' + tl.fine_zoom);
+        await page.mouse.move(hv.x, hv.y - 400); await page.click('#ax-reset').catch(() => {}); await page.waitForTimeout(150);
       }
       // a ruler date pins too; the pin survives a view switch (the charts at
       // the top of every view show it) and Esc clears it

@@ -1424,10 +1424,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ashx .cfh{fill:var(--flagbg)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .cft{font:11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xa{stroke:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xe{fill:none;stroke-width:.8;stroke-linejoin:round}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xw{fill:var(--ink-3);opacity:.16}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xw.cur{fill:var(--acc);opacity:.28}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xw.on{fill:var(--warn-dot);opacity:.35}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xw.sk{fill:var(--ink-4);opacity:.1}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xw.wd{opacity:.07}.ashx .xw.cur.wd{opacity:.1}.ashx .xw.on.wd{opacity:.14}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xwc{fill:var(--ink-3)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xwc.cur{fill:var(--acc)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xwc.on{fill:var(--warn-dot)}');

@@ -63,8 +63,8 @@ BEGIN
         || ' y="0" width="2.2" height="44"/><rect class="gd-w" x="49.3" y="0" width="2.2" height="44"/><rect class="gd-w" x="60.5" y="0" width="2.2" height="44"/><rect class="gd-w" x="71.7" y="0" width="2.2"'
         || ' height="44"/><rect class="gd-w" x="82.9" y="0" width="2.2" height="44"/><rect class="gd-w" x="94.1" y="0" width="2.2" height="44"/><rect class="gd-w" x="105.3" y="0" width="2.2" height="44"/><rect'
         || ' class="gd-w" x="116.5" y="0" width="2.2" height="44"/><rect class="gd-w" x="127.7" y="0" width="2.2" height="44"/><rect class="gd-wc" x="138.9" y="0" width="3" height="44"/></svg></div><div'
-        || ' class="gx2"><h3>Full-span activity</h3><p>Top of every view: active sessions over the whole span, hourly (or the shorter cadence), by wait class and by wait event (the 14 largest, the rest'
-        || ' as Other events). <span class="g2">Stripes = compared windows (Current indigo, pinned amber, skipped grey). Hover for each series&rsquo; AAS, drag across either chart to zoom both,'
+        || ' class="gx2"><h3>Full-span activity</h3><p>Top of every view: active sessions over the whole span as stacked areas, hourly (or the shorter cadence), by wait class and by wait event (the 14'
+        || ' largest, the rest as Other events); zoomed to 6 hours or less, the compared windows minute by minute. <span class="g2">Stripes = compared windows (Current indigo, pinned amber, skipped grey). Hover for each series&rsquo; AAS, drag across either chart to zoom both,'
         || ' double-click to reset; a legend item hides its series, a stripe pins its window.</span></p></div></div>');
     DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="152" height="44" viewBox="0 0 152 44" role="img" aria-label="One stacked column per compared window"><rect class="gd-cbg" x="130.4" y="0"'
         || ' width="15.8" height="44"/><rect x="2.0" y="30.6" width="8.4" height="11.4" fill="#3FB344"/><rect x="2.0" y="26.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="2.0" y="23.6" width="8.4"'
@@ -171,7 +171,9 @@ BEGIN
         || ' All sections shows every section in full.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>ASH timeline</dt><dd><code>dba_hist_active_sess_history</code> over the full span, one scan: hourly (or the cadence) in All sections; at the top of'
         || ' every view (Activity, whole span) on the same grid (coarser only past 10000 buckets), by wait class and by wait event (the 14 events with the most samples, ties by name,'
-        || ' the rest summed as Other events), plus each compared window&rsquo;s own values (samples &divide; 360 &divide; window hours; overlapping windows each count a shared sample).'
+        || ' the rest summed as Other events), plus each compared window&rsquo;s own values (samples &divide; 360 &divide; window hours; overlapping windows each count a shared sample)'
+        || ' and a 1-minute series inside the compared windows (samples &divide; 6, each minute once; at most 40000 minutes, the most recent windows first), drawn when zoomed'
+        || ' to 6 hours or less.'
         || ' ON CPU is <b>CPU</b> in both; Idle excluded. Compared windows shaded. ASH is not scored.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Timeline</dt><dd>One column per compared window, one row per metric, from the same values and scoring as the tables: the headline and every flagged load / metric'
         || ' row, flagged wait classes and the top foreground events, the top segments and datafile by reads, the top statements by elapsed (SQL Monitor rows for a plan change or a DOP'

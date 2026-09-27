@@ -454,7 +454,7 @@ addressed by class (the old single-chart `#tl-ash` / `#ax-svg` / `#ax-lg`
 ECharts chart; it groups by bucket, class, **event**, `j_lo..j_hi` = every
 compared window the sample falls in — overlapping windows each count it —
 and foreground flag; no second ASH scan):
-- `AWR_DATA.ashx = {t0, end, bh, wh, classes, vals, win, winfg}` — by wait
+- `AWR_DATA.ashx = {t0, end, bh, wh, classes, vals, win, winfg, fine}` — by wait
   class. `bh` = `v_m × bucket_hours`, `v_m = GREATEST(1, CEIL(total_buckets
   / 10000))`: the fine grid of 09's ECharts chart (hourly, or the sub-hour
   cadence), as in v1.5.0 (owner request: "much more granular"), coarsened
@@ -469,7 +469,7 @@ and foreground flag; no second ASH scan):
   same for `session_type = 'FOREGROUND'` only (the DB time card's bars: DB
   time is foreground time; the card keeps its DB time value as the Current
   label, review #8).
-- `AWR_DATA.ashe = {t0, end, bh, wh, classes, vals, win}` — the same shape
+- `AWR_DATA.ashe = {t0, end, bh, wh, classes, vals, win, fine}` — the same shape
   by **wait event** (ON CPU = `CPU`, ranked like any event): the 14 events
   with the most samples over the span (ties: name ascending), biggest first
   = bottom of the stack, then `"Other events"` LAST = the class total less
@@ -477,16 +477,37 @@ and foreground flag; no second ASH scan):
   rest; left out with ≤ 14 events). Names through `json_escape`. Same
   semantics as the fleet's `FLEET_ASH_EV` (`sql/fleet/02_ash.sql`), which
   stays its own copy.
+- `ashx.fine` / `ashe.fine = {bm, capped, segs, vals}` -- the **1-minute
+  detail** (owner request), from the SAME scan: its GROUP BY also carries
+  `mk` = the sample's minute since `t0` when the sample sits in a compared
+  window within the fine reach, else NULL (so the rest of the grouping is
+  unchanged). `bm` = 1 (bucket minutes); `segs` = `[[first minute, buckets],
+  ...]` oldest first = the compared windows (skipped ones included),
+  overlapping windows MERGED so a minute counts once (a time series,
+  unlike `win`); `vals` per series (same series / order as the coarse
+  payload, "Other events" = the minute's total less the top 14) = the
+  INTEGER sample count of every minute of every segment in order (AAS =
+  n / 6), a run of k >= 2 zero minutes written as `-k`; `capped` = 1 when
+  the cap left windows out. Cap: 40000 minutes (`v_fcap`; 168 hourly =
+  10140, 52 weekly 1 h = 3180) -- past it the Current plus the most
+  recent windows whose union fits (`v_jmin` = first covered window step;
+  one window longer than the cap keeps its last 40000 minutes, `v_mmin`).
+  Emitted by `fine_head` / `fine_put` through `put_clob_chunked` (the segs
+  too: 15-min windows make thousands). Cross-check: a window's minutes
+  summed / 6 / 60 / win_hours = its `win` value (verify_report checks the
+  Current window).
 Numbers via `RTRIM(TO_CHAR(ROUND(v,3),'FM9999999990D999'),'.')`.
 
 **Client** (`js_timeline`, section 6): ONE chart factory — `mkChart(root,
 payload, colours, opt)` + `draw(c)` — two instances in `CH`, sharing `SP`
-(bucket times, the zoom domain, windows, `#ax-range` / `#ax-reset`). Per
-chart: step areas (one `path` per series, painted top of the stack
-first, each from the axis to its cumulative height; `bRange` / `bucketAt`
-are O(1) on the regular grid; zoomed out past one bucket per pixel the
-path takes one step per pixel column at that column's busiest bucket, so
-spikes survive and a brush zoom shows every bucket; the tooltip reads the
+(bucket times, the zoom domain, windows, `#ax-range` / `#ax-reset`, the
+decoded fine grid `SP.F`). Per chart: smooth stacked AREAS (a point per
+bucket at its midpoint, straight lines; one fill `path.xa` per series,
+painted top of the stack first, each from the axis to its cumulative
+line, then a thin darker top edge `path.xe` per band; the data's first /
+last bucket runs flat to its edge; `bRange` / `bucketAt` are O(1) on the
+regular grid; zoomed out past one bucket per pixel there is one point per
+pixel column at that column's busiest bucket, so spikes survive and a brush zoom shows every bucket; the tooltip reads the
 exact bucket; ticks go down to 5 min, `bLab` names 15-min buckets), legend toggles restack / rescale, hover tooltip (time +
 each shown series' AAS; a stripe's tooltip = that window's `win` values),
 window stripes from `AWR_WIN` (`.cur` indigo / `.on` pinned amber / `.sk`
@@ -496,7 +517,19 @@ chart, lines on both). Linked: a brush (≥ 5 px) on either sets the shared
 domain and redraws both (the brush shows on both); Reset / double-click
 (mousedown `e.detail >= 2`: a stripe click re-renders the SVG so
 `dblclick` may never fire) reset both; the hover crosshair + bucket band
-are drawn on both at the same x; `W.pin` redraws both. One time axis: x
+are drawn on both at the same x; `W.pin` redraws both. **Fine rule:** a
+bucket is a ref (coarse `i >= 0`, 1-minute `-1 - j`; `rS` / `rE` / `rV`);
+`fineOn(d0, d1)` = the view is `FMAX` (6 h) or narrower AND overlaps a
+segment -> `refs()` merges the minutes inside the segments with the
+coarse buckets that overlap no segment (a couple of buckets past each
+edge so lines leave the plot), `refAt(t)` hovers the minute, `#ax-range`
+says "1-min detail" (or "... in the compared windows, hourly
+elsewhere"), and `spZoom`'s minimum drops from `SP.min` to `FMIN` (30
+min) when the brushed range touches a segment. A wide window stripe
+(> 24 px) is hit-tested on its cap only (`.xw.wd` fades its fill), so the
+plot inside a zoomed window hovers / brushes minute by minute. Fine data
+is used only when EVERY chart decodes it (length = the segments'
+minutes), else both stay coarse. One time axis: x
 labels only on the lower chart (tick marks on both), ticks counted from
 midnight of the Current window's day, `padL` / `padR` fixed so the plots
 align. Heights ≈ 180–200 px each (`ph` 150). Colours: classes from
@@ -1460,8 +1493,10 @@ lifts the CSS/JS literally from `sql/_style.sql` and `sql/lib/js_*.plsql`;
 each `demo/awrdemo/sections/sNN_*.py` is a hand-ported twin of `sql/NN_*.sql`
 (contract: `demo/PORTING.md`; `demo/awrdemo/helpers.py` twins every shared
 PL/SQL lib: band glyph, anchors, card vocabulary, `wg_*`, `tl_*`, `lib_ls`).
-**When a section's markup/JS changes, re-port its twin in the same commit and
-regenerate**; generation is deterministic (two runs, same md5). `NODE_PATH=<any
+s09's `fine` payloads are SYNTHETIC (seeded minute profiles spread each
+hour's samples by largest remainder, so window sums stay exact) and its SQL
+lines are sliced by anchor, not index. **When a section's markup/JS changes,
+re-port its twin in the same commit and regenerate**; generation is deterministic (two runs, same md5). `NODE_PATH=<any
 node_modules with playwright> node demo/verify_report.js <html> [shots/]` is the
 headless smoke test (bundled Chromium, else system Chrome): 0 console errors in
 3 views × light/dark, every in-page href resolves to exactly one id, every

@@ -68,6 +68,20 @@ AUTO weekly, 168-hourly and fleet runs (all rc 0, verify_report OK).
   factory in `js_timeline`). A pinned window now survives a view switch.
   Rail: a new Overview group links it; the Timeline's "Active sessions,
   full span" link is gone.
+  Drawn as smooth stacked **areas** (one point per bucket at its midpoint,
+  straight lines, a thin darker top edge per band; zoomed out, still one
+  point per pixel column at its busiest bucket). **1-minute detail**
+  (owner request): the same scan also groups the samples inside the
+  compared windows by minute -- `ashx.fine` / `ashe.fine` = `{bm, capped,
+  segs, vals}`, integer samples per minute (AAS = n / 6), zero runs
+  written as `-k`, overlapping windows merged so a minute counts once, at
+  most 40000 minutes (past it the Current and the most recent windows
+  that fit). Zoomed to 6 hours or less over a compared window, both
+  charts draw those minutes (hourly outside the windows), the range label
+  says "1-min detail", the tooltip names the minute, and the brush may go
+  down to 30 minutes. The window stripe's hit area shrinks to its cap once
+  the stripe is wide, so the plot inside a zoomed window hovers minute by
+  minute.
 - **Band glyph** (`sql/lib/band_glyph.plsql`): Normal range | vs normal
   (dot on a -4..+8 sigma axis over the 1 / 2 sigma zones) | z | Delta vs
   mean replaces the Change / z / %-delta columns and the `data-dev` heat

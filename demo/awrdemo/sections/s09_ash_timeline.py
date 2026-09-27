@@ -17,6 +17,17 @@ for on-CPU), rounded per (hour, event) like the classes.  The SQL's
 so exactly the sum of the other events); here it is the sum of the other
 events' rounded samples, which stays >= 0 although the model rounds
 classes and events separately.
+
+ashx.fine / ashe.fine (the 1-minute detail inside the compared windows,
+same segments / cap / run-length encoding as the SQL) are SYNTHETIC: the
+model is hourly, so each hour's integer samples per class are spread over
+its 60 minutes by a seeded, deterministic minute profile (an AR(1) wobble
+plus the odd short burst, model.rng keyed by the hour and the series;
+largest-remainder rounding, so a window's minutes sum EXACTLY to its
+hourly samples and the fine data agrees with ashx.win).  Each event is
+spread with its class's minute counts as the weights, so the event chart's
+minutes track the class chart's (they differ by rounding only; in the SQL
+both come from the same samples and stack to the same totals).
 """
 from __future__ import annotations
 
@@ -24,7 +35,7 @@ import math
 import re
 from datetime import timedelta
 
-from awrdemo import chrome, helpers
+from awrdemo import chrome, helpers, model
 from awrdemo.helpers import ora_round, to_char_fixed, ts_min
 
 SQL = chrome.sql_path("sql/09_ash_timeline.sql")
@@ -87,7 +98,8 @@ def emit(w) -> str:
                '<small class="h2sub">ASH by wait class, ' + hourly + ', '
                + ts_min(range_start) + ' &rarr; ' + ts_min(range_end)
                + '; compared windows shaded</small></h2>')
-    out.append(L[2])   # chart div
+    ci = L.index('<div class="chart-wrap chart-ash" id="ash-timeline-stack"></div>')   # anchor, not an index
+    out.append(L[ci])   # chart div
 
     # ---- aggregate: (bucket, wait_class) -> samples ; class totals
     cells: dict[tuple[int, str], int] = {}
@@ -99,6 +111,7 @@ def emit(w) -> str:
     # background-wait samples (the SQL's session_type = 'FOREGROUND').
     cells_by_hour = []
     events_by_hour = []          # (bucket, [week_offsets], event, samples)
+    fine_src = {"cls": {}, "ev": {}, "evc": {}}   # hour index -> {name: samples}; event -> class
     for m in w.hours(range_start, range_end):
         t = m.ts - timedelta(hours=1)
         b = int((t - range_start).total_seconds() / 3600 / bh)
@@ -118,20 +131,23 @@ def emit(w) -> str:
             cells[(b, wc)] = cells.get((b, wc), 0) + n
             class_totals[wc] = class_totals.get(wc, 0) + n
             cells_by_hour.append((b, wks, wc, n, nfg))
+            fine_src["cls"].setdefault(int(round(hh)), {})[wc] = n
         evs = {}
-        for (_wc, ev), smp in m.ash_events.items():
+        for (ewc, ev), smp in m.ash_events.items():
             evs[ev] = evs.get(ev, 0.0) + smp
+            fine_src["evc"].setdefault(ev, ewc)
         for ev, smp in evs.items():
             n = int(ora_round(smp, 0))
             if n > 0:
                 events_by_hour.append((b, wks, ev, n))
+                fine_src["ev"].setdefault(int(round(hh)), {})[ev] = n
 
     hours_json = "[" + ",".join('"' + ts_min(range_start + timedelta(hours=b * bh)) + '"'
                                 for b in range(total_buckets)) + "]"
 
-    out.append(L[3])   # <script>
-    out.append(L[4])   # (function(){
-    out.append(L[5])   # AWR_DATA.ashTimeline = {
+    out.append(L[ci + 1])   # <script>
+    out.append(L[ci + 2])   # (function(){
+    out.append(L[ci + 3])   # AWR_DATA.ashTimeline = {
     out.append("hours:")
     out.extend(put_clob_chunked(hours_json))
     out.append(",")
@@ -152,11 +168,13 @@ def emit(w) -> str:
         out.extend(put_clob_chunked(",".join(vals)))
         out.append("]}")
     out.append("]};")
-    out.append(L[14])
-    out.append(L[15])
+    ei = L.index("if(!window.echarts) return;")
+    out.append(L[ei])
+    out.append(L[ei + 1])
     out.append("var d=AWR_DATA.ashTimeline, palette=" + PALETTE + ";")
-    out.extend(L[17:L.index("</script>", 17) + 1])      # verbatim ECharts init .. </script>
-    out.extend(_timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour, events_by_hour))
+    out.extend(L[ei + 3:L.index("</script>", ei + 3) + 1])      # verbatim ECharts init .. </script>
+    out.extend(_timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour, events_by_hour,
+                         _Fine(w, range_start, range_end, fine_src)))
     out.append("</section>")
     out.append(L[-1])
     return "\n".join(out)
@@ -180,7 +198,119 @@ def aas_tok(v) -> str:
     return helpers.to_char_trim(ora_round(v or 0, 3), 3)
 
 
-def _events(w, range_start, total_hours, cbh, m, nc, events_by_hour):
+# ---------------------------------------------------------------------
+# the 1-minute detail (ashx.fine / ashe.fine), synthesized -- see the top
+# ---------------------------------------------------------------------
+FCAP = 40000
+
+
+class _Fine:
+    def __init__(self, w, range_start, range_end, src):
+        wb, st, wh = w.weeks_back, w.step_hours, w.win_hours
+        if st >= wh:
+            nf = math.floor(FCAP / (wh * 60))
+        else:
+            nf = math.floor((FCAP / 60 - wh) / st) + 1
+        nf = min(wb + 1, max(nf, 1))
+        jmin = wb - nf + 1
+        mend = int(ora_round((range_end - range_start).total_seconds() / 60, 0))
+        mmin = max(0, mend - FCAP) if wh * 60 > FCAP else 0
+        segs = []
+        for j in range(jmin, wb + 1):
+            a = max(int(ora_round(j * st * 60, 0)), mmin)
+            b = min(int(ora_round((j * st + wh) * 60, 0)), mend)
+            if b > a:
+                if segs and a <= segs[-1][1]:
+                    segs[-1][1] = max(segs[-1][1], b)
+                else:
+                    segs.append([a, b])
+        self.segs = segs
+        self.capped = jmin > 0 or mmin > 0
+        self.start = range_start
+        self.src = src
+        self._prof = {}
+        self._cls = {}
+        self._ev = {}
+
+    def minutes(self):
+        for a, b in self.segs:
+            yield from range(a, b)
+
+    def _key(self, hb):
+        return (self.start + timedelta(hours=hb)).strftime("%Y-%m-%d %H:%M")
+
+    def _profile(self, hb):
+        """the hour's shared minute wobble: AR(1) in log space, a burst or two"""
+        if hb not in self._prof:
+            r = model.rng("ash-fine", self._key(hb))
+            x, wt = r.gauss(0, 0.3), []
+            for _ in range(60):
+                x = 0.8 * x + r.gauss(0, 0.22)
+                wt.append(math.exp(x))
+            for _ in range(r.choice((0, 0, 1, 1, 2))):
+                c0, ln, amp = r.randrange(60), r.randint(2, 7), r.uniform(0.5, 1.8)
+                for i in range(c0, min(60, c0 + ln)):
+                    wt[i] *= 1 + amp
+            self._prof[hb] = wt
+        return self._prof[hb]
+
+    @staticmethod
+    def _alloc(n, wt):
+        """n integer samples over the minutes, largest remainder"""
+        if n <= 0:
+            return [0] * 60
+        s = sum(wt)
+        q = [n * x / s for x in wt]
+        fl = [int(math.floor(v)) for v in q]
+        for i in sorted(range(60), key=lambda i: (-(q[i] - fl[i]), i))[:n - sum(fl)]:
+            fl[i] += 1
+        return fl
+
+    def cls(self, hb, wc):
+        if (hb, wc) not in self._cls:
+            r = model.rng("ash-fine", self._key(hb), wc)
+            wt = [x * math.exp(r.gauss(0, 0.3)) for x in self._profile(hb)]
+            self._cls[(hb, wc)] = self._alloc(self.src["cls"].get(hb, {}).get(wc, 0), wt)
+        return self._cls[(hb, wc)]
+
+    def ev(self, hb, ev):
+        if (hb, ev) not in self._ev:
+            r = model.rng("ash-fine", self._key(hb), "ev", ev)
+            base = self.cls(hb, self.src["evc"].get(ev, "Other"))
+            wt = [(x + 0.15) * math.exp(r.gauss(0, 0.2)) for x in base]
+            self._ev[(hb, ev)] = self._alloc(self.src["ev"].get(hb, {}).get(ev, 0), wt)
+        return self._ev[(hb, ev)]
+
+    def series(self, get):
+        """RLE of get(hour, minute) over every segment minute (as fine_put)"""
+        out, z = [], 0
+        for m in self.minutes():
+            v = get(m // 60, m % 60)
+            if v == 0:
+                z += 1
+                continue
+            if z:
+                out.append("0" if z == 1 else "-" + str(z))
+                z = 0
+            out.append(str(v))
+        if z:
+            out.append("0" if z == 1 else "-" + str(z))
+        return ["["] + put_clob_chunked(",".join(out)) + ["]"]
+
+    def block(self, gets):
+        """'],' + fine_head + the series + ']}};</script>' (the SQL's lines)"""
+        out = ["],", '"fine":{"bm":1,"capped":' + ("1" if self.capped else "0") + ',"segs":[']
+        out.extend(put_clob_chunked(",".join("[" + str(a) + "," + str(b - a) + "]" for a, b in self.segs)))
+        out.append('],"vals":[')
+        for i, g in enumerate(gets):
+            if i:
+                out.append(",")
+            out.extend(self.series(g))
+        out.append("]}};</script>")
+        return out
+
+
+def _events(w, range_start, total_hours, cbh, m, nc, events_by_hour, fine):
     """AWR_DATA.ashe: the top 14 events (samples desc, name asc), biggest
     first, then "Other events" (only when more are left)."""
     ec, ew, et = {}, {}, {}
@@ -216,11 +346,16 @@ def _events(w, range_start, total_hours, cbh, m, nc, events_by_hour):
     for i in range(len(names)):
         row = [aas_tok(cell(ew, k, i) / (360 * w.win_hours)) for k in range(w.weeks_back, -1, -1)]
         out.append(("," if i else "") + "[" + ",".join(row) + "]")
-    out.append("]};</script>")
+
+    def fget(i):
+        if i < len(top):
+            return lambda hb, mi: fine.ev(hb, top[i])[mi]
+        return lambda hb, mi: sum(fine.ev(hb, e)[mi] for e in rest)
+    out.extend(fine.block([fget(i) for i in range(len(names))]))
     return out
 
 
-def _timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour, events_by_hour):
+def _timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour, events_by_hour, fine):
     out = []
     # the fine grid; coarsened only past 10000 buckets (SQL v_m)
     m = max(1, math.ceil(total_buckets / 10000))
@@ -270,8 +405,8 @@ def _timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour, eve
     for i, c in enumerate(classes):
         row = [aas_tok(wfcells.get((k, c), 0) / (360 * w.win_hours)) for k in range(w.weeks_back, -1, -1)]
         out.append(("," if i else "") + "[" + ",".join(row) + "]")
-    out.append("]};</script>")
-    out.extend(_events(w, range_start, total_hours, cbh, m, nc, events_by_hour))
+    out.extend(fine.block([(lambda c: lambda hb, mi: fine.cls(hb, c)[mi])(c) for c in classes]))
+    out.extend(_events(w, range_start, total_hours, cbh, m, nc, events_by_hour, fine))
     if not totals:
         return out
     prior = [wtot[k] for k in range(w.weeks_back, 0, -1) if valid.get(k) == "Y"]

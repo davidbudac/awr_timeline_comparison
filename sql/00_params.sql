@@ -1288,8 +1288,8 @@ BEGIN
         || '<div class="axp"><svg class="axsvg" role="img" aria-label="Active sessions stacked by wait event (the 14 '
         || 'largest, the rest as Other events) over the same span. Drag to zoom."></svg>'
         || '<div class="axbr" hidden></div></div></div>');
-    DBMS_OUTPUT.PUT_LINE('<p class="axn2">Hover for the values; drag across either chart to zoom both, '
-        || 'double-click to reset. Click a shaded window to pin it: the Timeline grid compares against it.</p>'
+    DBMS_OUTPUT.PUT_LINE('<p class="axn2">Hover for the values; drag across either chart to zoom both '
+        || '(6 hours or less shows the compared windows minute by minute), double-click to reset. Click a shaded window to pin it: the Timeline grid compares against it.</p>'
         || '</div></section>');
     -- =========================================================
     -- v1.6.0 Summary view: the verdict hero.  One rule-based sentence

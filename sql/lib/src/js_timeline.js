@@ -270,19 +270,59 @@ var EVP=['#4E79A7','#F28E2B','#E15759','#76B7B2','#EDC948','#B07AA1','#FF9DA7','
 function evColors(names){var j=0;return names.map(function(n){if(n==='CPU')return wcol('CPU');if(n==='Other events')return EVO;return EVP[(j++)%EVP.length];});}
 /* a bucket's length as text: 15-min, 1-hour, 2-hour, 0.75 h = 45-min */
 function bLab(h){return h<1&&Math.abs(h*60-Math.round(h*60))<1e-6?Math.round(h*60)+'-min':(Math.round(h*100)/100)+'-hour';}
+/* the 1-minute detail (ashx.fine / ashe.fine): when the view is FMAX or
+   narrower and overlaps a compared window, the minutes inside the windows
+   replace the coarse buckets they overlap; zoomed that far the brush may
+   go down to FMIN.  A bucket is a ref: coarse i >= 0, 1-minute j = -1 - j. */
+var FMAX=6*H1,FMIN=30*6e4;
+function rS(r){return r>=0?SP.T[r]:SP.F.T[-1-r];}
+function rE(r){return r>=0?SP.T1[r]:Math.min(SP.F.T[-1-r]+SP.F.bm,SP.full[1]);}
+function rV(c,k,r){return r>=0?c.P.vals[k][r]:c.FV[k][-1-r];}
+/* a fine series: integer samples a minute, -k = k zero minutes; AAS = n / div */
+function unRle(a,n,div){if(!a||!a.length)return null;var o=[],i,z,x;for(i=0;i<a.length;i++){x=+a[i];if(x<0){for(z=0;z<-x;z++)o.push(0);}else o.push(x/div);}return o.length===n?o:null;}
+function fineInit(f){
+  if(!f||!f.segs||!f.segs.length||!(f.bm>0))return null;
+  var bm=f.bm*6e4,T=[],S=[];
+  f.segs.forEach(function(g){var a=SP.t0+g[0]*6e4;S.push([a,a+g[1]*bm,T.length]);for(var q=0;q<g[1];q++)T.push(a+q*bm);});
+  return {T:T,S:S,bm:bm,div:6*f.bm,capped:!!f.capped};
+}
+function fineVals(P){
+  var f=P.fine,F=SP.F;if(!F||!f||!f.vals||f.vals.length!==P.classes.length)return null;
+  var o=f.vals.map(function(a){return unRle(a,F.T.length,F.div);});
+  return o.some(function(a){return !a;})?null:o;
+}
+/* the time the segments cover in [a, b) */
+function fineCov(a,b){var F=SP.F,v=0;if(!F)return 0;F.S.forEach(function(g){var x=Math.max(a,g[0]),y=Math.min(b,g[1]);if(y>x)v+=y-x;});return v;}
+function fineOn(a,b){return !!SP.F&&b-a<=FMAX+1&&fineCov(a,b)>0;}
+/* the buckets drawn for [d0, d1], in time order, a bucket or two past each
+   edge so the lines run out of the plot */
+function refs(d0,d1){
+  var key=d0+'|'+d1;if(SP.rk===key)return SP.rv;
+  var br=bRange(d0,d1),n=SP.T.length,i0=Math.max(0,br[0]-1),i1=Math.min(n-1,br[1]+1),out=[],i;
+  if(!fineOn(d0,d1)){for(i=i0;i<=i1;i++)out.push(i);}
+  else{
+    var F=SP.F,fl=[],cl=[],pa=d0-2*SP.bh,pb=d1+2*SP.bh;
+    F.S.forEach(function(g){
+      if(g[1]<=pa||g[0]>=pb)return;
+      var nb=Math.round((g[1]-g[0])/F.bm),ja=Math.max(0,Math.floor((pa-g[0])/F.bm)),jb=Math.min(nb-1,Math.ceil((pb-g[0])/F.bm));
+      for(var j=ja;j<=jb;j++)fl.push(-1-(g[2]+j));
+    });
+    for(i=i0;i<=i1;i++){var a=SP.T[i],b=SP.T1[i];if(!F.S.some(function(g){return g[0]<b&&g[1]>a;}))cl.push(i);}
+    var p=0,q=0;while(p<cl.length||q<fl.length){if(q>=fl.length||(p<cl.length&&rS(cl[p])<rS(fl[q])))out.push(cl[p++]);else out.push(fl[q++]);}
+  }
+  SP.rk=key;SP.rv=out;return out;
+}
+/* the ref under time t (fine inside a window when the view shows the detail) */
+function refAt(t){
+  var F=SP.F;
+  if(F&&fineOn(SP.dom[0],SP.dom[1]))for(var q=0;q<F.S.length;q++){var g=F.S[q];if(t>=g[0]&&t<g[1])return -1-(g[2]+Math.floor((t-g[0])/F.bm));}
+  var j=bucketAt(t);return j<0?null:j;
+}
+/* a band's top edge: the fill colour, darker */
+function shade(h){var m=/^#([0-9a-f]{6})$/i.exec(h);if(!m)return h;var n=parseInt(m[1],16);return 'rgb('+[n>>16,(n>>8)&255,n&255].map(function(v){return Math.round(v*0.8);}).join(',')+')';}
 /* the buckets in [a, b): first and last index, O(1) on the regular grid */
 function bRange(a,b){var n=SP.T.length,i0=Math.max(0,Math.floor((a-SP.t0)/SP.bh)),i1=Math.min(n-1,Math.ceil((b-SP.t0)/SP.bh)-1);
   while(i0<n&&SP.T1[i0]<=a)i0++;while(i1>=0&&SP.T[i1]>=b)i1--;return [i0,i1];}
-/* one step line through segments [x0, x1] at heights ys (SVG y strings),
-   a run of equal heights drawn as one horizontal; fwd = left to right,
-   else right to left (the lower edge of a band).  Starts with 'L'. */
-function stepPath(sg,ys,fwd){
-  var d='',n=sg.length,q,j,y;
-  for(q=0;q<n;q++){j=fwd?q:n-1-q;y=ys[j];
-    if(q===0||ys[fwd?j-1:j+1]!==y)d+='L'+(fwd?sg[j][0]:sg[j][1]).toFixed(1)+' '+y;
-    if(q===n-1||ys[fwd?j+1:j-1]!==y)d+='L'+(fwd?sg[j][1]:sg[j][0]).toFixed(1)+' '+y;}
-  return d;
-}
 function tw(t){if(!cvs)cvs=doc.createElement('canvas').getContext('2d');cvs.font='11px ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, system-ui, sans-serif';return cvs.measureText(t).width;}
 function okPay(P,n){return !!(P&&P.classes&&P.classes.length&&P.vals&&P.vals.length===P.classes.length&&P.vals[0]&&P.vals[0].length===n);}
 function spInit(){
@@ -295,12 +335,16 @@ function spInit(){
   for(var i=0;i<n;i++){T.push(t0+i*bh);T1.push(Math.min(t0+(i+1)*bh,end));}
   SP={T:T,T1:T1,t0:t0,bh:bh,full:[t0,end],dom:[t0,end],win:wins().map(function(w){return [PT(w.s),PT(w.e)];}),
       min:Math.max(4*bh,Math.min(6*H1,(end-t0)/4)),bhTxt:AX.bh===1?'hourly':bLab(AX.bh)+' averages',
-      reset:doc.getElementById('ax-reset'),range:doc.getElementById('ax-range'),sel:null};
+      reset:doc.getElementById('ax-reset'),range:doc.getElementById('ax-range'),sel:null,F:null,rk:null,rv:null};
+  SP.F=fineInit(AX.fine);
   CH=[];
   mkChart(doc.getElementById('ax-cls'),AX,AX.classes.map(wcol),{flags:true,noun:'classes',what:'wait class'});
   var ev=doc.getElementById('ax-ev');
   if(okPay(AE,n))mkChart(ev,AE,evColors(AE.classes),{noun:'events',what:'wait event'});
   else if(ev)ev.hidden=true;
+  /* the detail only when every chart has it */
+  CH.forEach(function(c){c.FV=fineVals(c.P);});
+  if(CH.some(function(c){return !c.FV;}))SP.F=null;
   if(CH.length)CH[CH.length-1].xl=true;
   if(SP.reset)SP.reset.addEventListener('click',spReset);
   doc.addEventListener('mousemove',function(e){
@@ -347,52 +391,57 @@ function drawAll(force){CH.forEach(function(c){draw(c,force);});spHead();}
 function spHead(){
   if(!SP)return;var d0=SP.dom[0],d1=SP.dom[1],zoomed=d0>SP.full[0]||d1<SP.full[1];
   if(SP.reset)SP.reset.hidden=!zoomed;
-  if(SP.range)SP.range.textContent=zoomed?fAt(d0)+' to '+fAt(d1)+', zoomed':fDay(SP.full[0])+' to '+fDay(SP.full[1])+', '+SP.bhTxt;
+  var res=SP.bhTxt;
+  if(fineOn(d0,d1))res=fineCov(d0,d1)>=d1-d0-1?'1-min detail':'1-min detail in the compared windows, '+SP.bhTxt+' elsewhere';
+  if(SP.range)SP.range.textContent=zoomed?fAt(d0)+' to '+fAt(d1)+', zoomed, '+res:fDay(SP.full[0])+' to '+fDay(SP.full[1])+', '+SP.bhTxt;
 }
 function draw(c,force){
   if(!c||!SP||!shown(c.plot))return;
   var Wd=Math.max(480,c.plot.clientWidth),d0=SP.dom[0],d1=SP.dom[1];
   if(!force&&c.w===Wd&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1)return;c.w=Wd;c.pw=PW;
-  var mks=W.markers?W.markers():[],P=c.P,T=SP.T,T1=SP.T1;
+  var mks=W.markers?W.markers():[],P=c.P;
   var top=c.flags&&mks.length?46:22,ph=150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;
   c.svg.setAttribute('viewBox','0 0 '+Wd+' '+H);c.svg.setAttribute('height',H);
   var X=function(t){return padL+pw*(t-d0)/(d1-d0);};
-  /* the buckets in view, their stacked totals, and the drawn segments: one
-     per bucket while a bucket is at least a pixel wide; zoomed out further,
-     one per pixel column, drawn at the column's busiest bucket (largest
-     stacked total), so a one-bucket spike still shows; zooming in brings
-     back every bucket, and the tooltip always reads the bucket under the
-     cursor */
-  var br=bRange(d0,d1),i0=br[0],i1=br[1],tot=[],mx=0.05,sg=[],cb=null,i,k,sm;
-  for(i=i0;i<=i1;i++){sm=0;for(k=0;k<P.vals.length;k++)if(c.vis[k])sm+=P.vals[k][i]||0;tot.push(sm);if(sm>mx)mx=sm;
-    var xa=X(T[i]),xb=X(T1[i]),col=Math.floor(xa),g=sg[sg.length-1];
-    if(g&&col===cb){g[1]=xb;if(sm>tot[g[2]-i0])g[2]=i;}else{sg.push([xa,xb,i]);cb=col;}}
+  /* stacked areas: one point per bucket at its midpoint, straight lines
+     between them.  While a bucket is at least a pixel wide every bucket is
+     a point; zoomed out further, one point per pixel column at the
+     column's busiest bucket (largest stacked total), so a one-bucket spike
+     still shows; the tooltip always reads the bucket under the cursor.
+     The first / last bucket of the data runs flat out to its edge. */
+  var R=refs(d0,d1),pts=[],cb=null,mx=0.05,i,k,sm,r;
+  for(i=0;i<R.length;i++){r=R[i];sm=0;for(k=0;k<P.vals.length;k++)if(c.vis[k])sm+=rV(c,k,r)||0;
+    var ra=rS(r),rb=rE(r);if(sm>mx&&rb>d0&&ra<d1)mx=sm;
+    var xm=X((ra+rb)/2),col=Math.floor(xm),g=pts[pts.length-1];
+    if(g&&col===cb){if(sm>g[2]){g[0]=xm;g[1]=r;g[2]=sm;}}else{pts.push([xm,r,sm]);cb=col;}}
+  if(pts.length){var pf=pts[0],pl=pts[pts.length-1];
+    if(rS(pf[1])>=d0)pts.unshift([X(rS(pf[1])),pf[1],pf[2]]);
+    if(rE(pl[1])<=d1)pts.push([X(rE(pl[1])),pl[1],pl[2]]);}
   var step=niceStep(mx,3),ymax=Math.ceil(mx/step-1e-9)*step;
   var Y=function(v){return top+ph-ph*v/ymax;},clip='axclip-'+c.uid;
   var s='<defs><clipPath id="'+clip+'"><rect x="'+padL+'" y="'+(top-6)+'" width="'+pw+'" height="'+(ph+6)+'"/></clipPath></defs>';
   for(var v=0;v<=ymax+1e-9;v+=step){var dec=step<1?(step<0.1?2:1):0;
     s+='<line class="gl" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="at" x="'+(padL-6)+'" y="'+(Y(v)+4).toFixed(1)+'" text-anchor="end">'+v.toFixed(dec)+'</text>';}
   s+='<text class="at" x="'+(padL-6)+'" y="'+(top-10)+'" text-anchor="end">AAS</text><g clip-path="url(#'+clip+')">';
-  /* one path per series, painted top of the stack first: each fills from
-     the axis up to its own cumulative height, and the series below paint
-     over it, so a path is one step line plus the axis (half the markup of
-     a two-edged band, and no seams); every shown series gets its path,
-     even a flat one (a sparse series can be absent from every drawn
-     column when zoomed out) */
-  var lo=sg.map(function(){return 0;}),y0=Y(0).toFixed(1),bands=[];
+  /* one fill per series, painted top of the stack first: each fills from
+     the axis up to its own cumulative line and the series below paint over
+     it (no seams); then each band's top edge, a thin darker line.  A point
+     in the middle of a flat run is left out of the path. */
+  var lo=pts.map(function(){return 0;}),np=pts.length,y0=Y(0).toFixed(1),fills=[],edges=[];
   P.vals.forEach(function(vals,k){
-    if(!c.vis[k]||!sg.length)return;
-    var hi=lo.map(function(l,j){return l+(vals[sg[j][2]]||0);});
-    bands.push('<path class="xa" fill="'+c.cols[k]+'" d="M'+sg[0][0].toFixed(1)+' '+y0
-      +stepPath(sg,hi.map(function(h){return Y(h).toFixed(1);}),true)+'L'+sg[sg.length-1][1].toFixed(1)+' '+y0+'Z"/>');
+    if(!c.vis[k]||!np)return;
+    var hi=lo.map(function(l,j){return l+(rV(c,k,pts[j][1])||0);}),ys=hi.map(function(h){return Y(h).toFixed(1);}),ln='';
+    for(var j=0;j<np;j++){if(j>0&&j<np-1&&ys[j]===ys[j-1]&&ys[j]===ys[j+1])continue;ln+=(ln?'L':'')+pts[j][0].toFixed(1)+' '+ys[j];}
+    fills.push('<path class="xa" fill="'+c.cols[k]+'" d="M'+pts[0][0].toFixed(1)+' '+y0+'L'+ln+'L'+pts[np-1][0].toFixed(1)+' '+y0+'Z"/>');
+    edges.push('<path class="xe" stroke="'+shade(c.cols[k])+'" d="M'+ln+'"/>');
     lo=hi;
   });
-  s+=bands.reverse().join('');
+  s+=fills.reverse().join('')+edges.reverse().join('');
   s+='<rect class="xbk" x="0" y="'+top+'" width="0" height="'+ph+'" visibility="hidden"/>';
   var ws=wins(),hit=[],cur=ws.length-1;
   SP.win.forEach(function(r,i){
     var xa=X(r[0]),xb=X(r[1]);if(xb<padL-2||xa>Wd-padR+2)return;
-    var w=Math.max(i===cur?4:3,xb-xa),x=(xa+xb)/2-w/2,cls=(i===cur?' cur':'')+(ws[i].o===PW?' on':'')+(ws[i].v==='N'?' sk':'');
+    var w=Math.max(i===cur?4:3,xb-xa),x=(xa+xb)/2-w/2,cls=(i===cur?' cur':'')+(ws[i].o===PW?' on':'')+(ws[i].v==='N'?' sk':'')+(w>40?' wd':'');
     s+='<rect class="xw'+cls+'" x="'+x.toFixed(1)+'" y="'+top+'" width="'+w.toFixed(1)+'" height="'+ph+'"/><rect class="xwc'+cls+'" x="'+x.toFixed(1)+'" y="'+(top-5)+'" width="'+w.toFixed(1)+'" height="4" rx="1"/>';
     hit.push([i,x,w]);
   });
@@ -428,9 +477,12 @@ function draw(c,force){
     });
   });
   s+='<line class="xch" x1="0" x2="0" y1="'+top+'" y2="'+(top+ph)+'" visibility="hidden"/>';
+  /* a stripe's hit area: the whole stripe while it is narrow; zoomed into
+     a window (a wide stripe) only its cap, so the plot under it hovers
+     bucket by bucket and a drag there zooms */
   hit.forEach(function(q){
-    var i=q[0],w=ws[i],hw=Math.max(12,q[2]),hx=q[1]+q[2]/2-hw/2;
-    s+='<rect class="xwh" data-i="'+i+'" data-w="'+w.o+'" x="'+hx.toFixed(1)+'" y="'+(top-6)+'" width="'+hw.toFixed(1)+'" height="'+(ph+6)+'" tabindex="0" role="button" aria-label="'
+    var i=q[0],w=ws[i],hw=Math.max(12,q[2]),hx=q[1]+q[2]/2-hw/2,hh=q[2]>24?10:ph+6;
+    s+='<rect class="xwh" data-i="'+i+'" data-w="'+w.o+'" x="'+hx.toFixed(1)+'" y="'+(top-6)+'" width="'+hw.toFixed(1)+'" height="'+hh+'" tabindex="0" role="button" aria-label="'
       +esc((w.o===0?'Current window, ':offTxt(w)+' window, ')+w.t+(w.o===0?'':'. Pin it'))+'"/>';
   });
   c.svg.innerHTML=s;
@@ -440,10 +492,10 @@ function tAt(c,cx){var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*c.g.W/r.wid
 function bucketAt(t){var j=Math.floor((t-SP.t0)/SP.bh);return j>=0&&j<SP.T.length&&t<SP.T1[j]?j:-1;}
 function hideCross(c){var hb=$('.xbk',c.svg),ch=$('.xch',c.svg);if(hb){hb.setAttribute('visibility','hidden');ch.setAttribute('visibility','hidden');}}
 function hideAll(){CH.forEach(hideCross);}
-/* the crosshair + bucket band at time t (bucket k) on chart c */
-function cross(c,t,k){
+/* the crosshair + bucket band at time t (bucket ref r) on chart c */
+function cross(c,t,r){
   var hb=$('.xbk',c.svg),ch=$('.xch',c.svg);if(!c.g||!hb)return;
-  var xa=Math.max(c.g.padL,c.g.X(SP.T[k])),xb=Math.min(c.g.W-c.g.padR,c.g.X(SP.T1[k])),x=c.g.X(t);
+  var xa=Math.max(c.g.padL,c.g.X(rS(r))),xb=Math.min(c.g.W-c.g.padR,c.g.X(rE(r))),x=c.g.X(t);
   hb.setAttribute('x',xa.toFixed(1));hb.setAttribute('width',Math.max(1,xb-xa).toFixed(1));hb.setAttribute('visibility','visible');
   ch.setAttribute('x1',x.toFixed(1));ch.setAttribute('x2',x.toFixed(1));ch.setAttribute('visibility','visible');
 }
@@ -456,11 +508,11 @@ function hover(c,e){
       +(P.win?ashRows(P.classes,c.cols,function(k){return P.win[k][i];},c.vis,c.noun):'')+(w.o===0?'':'<span class="tm">Click to pin this window</span>'),e);
     return;
   }
-  var t=tAt(c,e.clientX),k=bucketAt(t);
-  if(k<0||t<c.g.d0||t>c.g.d1){hideAll();tipOff();return;}
-  CH.forEach(function(o){cross(o,t,k);});
-  tipOn('<b>'+fAt(SP.T[k])+'\u2013'+fHM(SP.T1[k])+'</b><br><span class="tm">'+bLab((SP.T1[k]-SP.T[k])/H1)+' average, by '+c.what+'</span>'
-    +ashRows(P.classes,c.cols,function(q){return P.vals[q][k];},c.vis,c.noun),e);
+  var t=tAt(c,e.clientX),r=refAt(t);
+  if(r==null||t<c.g.d0||t>c.g.d1){hideAll();tipOff();return;}
+  CH.forEach(function(o){cross(o,t,r);});
+  tipOn('<b>'+fAt(rS(r))+'\u2013'+fHM(rE(r))+'</b><br><span class="tm">'+(r<0?'1-min':bLab((rE(r)-rS(r))/H1))+' average, by '+c.what+'</span>'
+    +ashRows(P.classes,c.cols,function(q){return rV(c,q,r);},c.vis,c.noun),e);
 }
 /* a window stripe: pin it (Current unpins); in the Timeline view the grid
    column flashes and comes into view */
@@ -473,7 +525,8 @@ function spSelect(i){
 }
 function spZoom(a,b){
   a=Math.max(SP.full[0],a);b=Math.min(SP.full[1],b);
-  if(b-a<SP.min){var m=(a+b)/2;a=Math.max(SP.full[0],m-SP.min/2);b=Math.min(SP.full[1],a+SP.min);a=Math.max(SP.full[0],b-SP.min);}
+  var mn=SP.F&&fineCov(a,b)>0?Math.min(SP.min,FMIN):SP.min;
+  if(b-a<mn){var m=(a+b)/2;a=Math.max(SP.full[0],m-mn/2);b=Math.min(SP.full[1],a+mn);a=Math.max(SP.full[0],b-mn);}
   SP.dom=[a,b];drawAll(true);
 }
 function spReset(){if(!SP)return;SP.dom=SP.full.slice();drawAll(true);}

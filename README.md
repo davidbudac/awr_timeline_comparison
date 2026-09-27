@@ -360,12 +360,15 @@ the row. With JavaScript off, every section shows, stacked.
 **Activity, whole span** opens every view, above the verdict: two stacked
 charts of ASH active sessions across the whole compared span on one time
 axis, **by wait class** and **by wait event** (the 14 busiest events, on
-CPU as `CPU`, the rest summed as *Other events*), hourly or coarser, the
-compared windows striped (Current indigo, pinned amber, skipped grey),
-release markers on top. Hover for each series' value (the crosshair shows
-on both charts), click a legend entry to hide a series, drag across either
-chart to zoom both, double-click or **Reset zoom** to go back, click a
-window stripe to pin it.
+CPU as `CPU`, the rest summed as *Other events*), stacked areas, hourly
+(or the sub-hour cadence), the compared windows striped (Current indigo,
+pinned amber, skipped grey), release markers on top. Zoom to 6 hours or
+less over a compared window and both charts switch to **1-minute detail**
+inside the windows (the range label says so; at most 40000 minutes of
+windows, the most recent first). Hover for each series' value (the
+crosshair shows on both charts), click a legend entry to hide a series,
+drag across either chart to zoom both, double-click or **Reset zoom** to
+go back, click a window stripe to pin it.
 
 ### Summary
 
@@ -634,7 +637,7 @@ SQL> @side/create_weekly_baselines.sql
 │   ├── 06_top_sql.sql               -- Top-N SQL
 │   ├── 07_summary.sql               -- z-score findings: Summary cards + per-domain tables
 │   ├── 08_overview.sql              -- Summary strip: DB time per window
-│   ├── 09_ash_timeline.sql          -- hourly ASH timeline + the Activity charts' payloads
+│   ├── 09_ash_timeline.sql          -- hourly ASH timeline + the Activity charts' payloads (+ 1-min detail)
 │   ├── 10_db_time_summary.sql       -- full-span DB time stacked area
 │   ├── 11_top_sql_ash_breakdown.sql -- per-Top-N-SQL ASH cards
 │   ├── 12_param_changes.sql         -- parameters that differ across windows (+ config card)
