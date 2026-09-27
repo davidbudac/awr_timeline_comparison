@@ -26,13 +26,20 @@
  *   - every a.ent (entity link, v1.6.0) has a target, and clicking each
  *     one visible in Summary switches view as needed and brings its
  *     target (row, card, section) into the viewport;
+ *   - the Activity charts (section#activity, v1.6.0): at the top of every
+ *     view, above the verdict, both drawn (by wait class, by wait event);
+ *     on each chart: hover crosshair + tooltip (mirrored on the other),
+ *     legend toggle + restore (restack / rescale), brush zoom (zooms both)
+ *     + Reset, double-click reset, a window click pinning its grid column
+ *     (ruler aria-pressed, gutter "vs <date>", amber stripe on both
+ *     charts); Current unpinning + flashing, Enter / Esc; "Other events"
+ *     in the event legend (required for the demo, which has > 14 events);
+ *   - the rail: no link state (active / hover) draws a left border or an
+ *     inset shadow;
  *   - the Timeline view (v1.6.0): every lane source template was moved in,
  *     every "Timeline ->" (data-tl) target exists and a click lands on it,
- *     every grid label (a.ent) resolves; the full-span ASH chart's hover
- *     tooltip, legend toggle + restore, brush zoom + Reset, double-click
- *     reset, a window click pinning its grid column (ruler aria-pressed,
- *     gutter "vs <date>", amber stripe), Current unpinning + flashing,
- *     Enter / Esc, ruler pin + unpin on leaving the view, grid tooltip;
+ *     every grid label (a.ent) resolves; ruler pin (it survives a view
+ *     switch), grid tooltip;
  *   - phase 4 (v1.6.0): every plan-change card sits in "What changed
  *     around it" with its bars, plan step line and links; every evidence
  *     library row (section.lib) shows in Summary with its one-line status,
@@ -154,6 +161,20 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
           guide: vis(document.getElementById('guide')),
           about: vis(document.getElementById('about')),
           timeline: vis(document.getElementById('timeline')),
+          // the Activity charts: first visible section, both drawn
+          act: (() => {
+            const a = document.getElementById('activity');
+            if (!vis(a)) return 'hidden';
+            const secs = [...document.querySelectorAll('main > section')].filter(x => x !== a && vis(x));
+            const top = a.getBoundingClientRect().top;
+            const above = secs.filter(x => x.getBoundingClientRect().top < top).map(x => x.id);
+            if (above.length) return 'below ' + above.slice(0, 3).join(',');
+            const has = !!(window.AWR_DATA && AWR_DATA.ashx && AWR_DATA.ashx.classes && AWR_DATA.ashx.classes.length);
+            const n1 = document.querySelectorAll('#ax-cls .axsvg path.xa').length, n2 = document.querySelectorAll('#ax-ev .axsvg path.xa').length;
+            if (has && !(n1 && n2)) return 'not drawn (' + n1 + '/' + n2 + ')';
+            if (!has && !vis(document.getElementById('ax-empty'))) return 'no data and no empty note';
+            return 'ok';
+          })(),
           pressed: (document.querySelector('.topbar .seg [aria-pressed="true"]') || {}).textContent || '',
           hOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
           // a visible link left in the browser's default blue / purple has no
@@ -170,10 +191,11 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       if (!st.guide) fail(tag + ': #guide not visible');
       if (!st.about) fail(tag + ': #about not visible');
       if ((v === 'timeline') !== st.timeline) fail(tag + ': #timeline visible=' + st.timeline);
+      if (st.act !== 'ok') fail(tag + ': Activity charts ' + st.act);
       if (st.hOverflow > 1) fail(tag + ': horizontal page overflow ' + st.hOverflow + 'px');
       if (st.rawLinks.length) fail(tag + ': unstyled (browser-default colour) links in ' + st.rawLinks.join(', '));
       if (errors.length) fail(tag + ': ' + errors.slice(0, 5).join(' | '));
-      console.log('view ' + tag + ': ' + st.sections + ' sections visible, switch=' + st.pressed.trim() + (errors.length ? ', ERRORS' : ', 0 errors'));
+      console.log('view ' + tag + ': ' + st.sections + ' sections visible, switch=' + st.pressed.trim() + ', activity ' + st.act + (errors.length ? ', ERRORS' : ', 0 errors'));
       if (shots) await page.screenshot({ path: path.join(shots, v + '-' + scheme + '.png'), fullPage: v !== 'all' });
       await page.close();
     }
@@ -239,6 +261,19 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (th) { await th.click(); await page.waitForTimeout(200); toggles.sort = 'clicked'; }
     const exp = await page.$('.expander');
     if (exp) { await exp.click(); await page.waitForTimeout(200); toggles.expander = 'clicked'; }
+    // the rail: no link state draws a left border or an inset shadow (the
+    // owner's "crescent"): the active link, and a hovered one
+    const railMark = async (sel) => page.evaluate((sel) => {
+      const a = document.querySelector(sel); if (!a) return 'none';
+      const cs = getComputedStyle(a);
+      return (parseFloat(cs.borderLeftWidth) || 0) === 0 && cs.boxShadow === 'none' ? 'ok' : 'FAIL ' + cs.borderLeftWidth + ' / ' + cs.boxShadow;
+    }, sel);
+    await page.evaluate(() => { const a = document.querySelector('nav.toc a[href="#activity"]'); if (a && !document.querySelector('nav.toc a.on')) a.classList.add('on'); });
+    const rOn = await railMark('nav.toc a.on');
+    await page.hover('nav.toc a[href="#findings"]'); await page.waitForTimeout(200);
+    const rHov = await railMark('nav.toc a[href="#findings"]');
+    toggles.railMarker = rOn + ' / ' + rHov;
+    if (/FAIL/.test(toggles.railMarker)) fail('rail link state marker: ' + toggles.railMarker);
     console.log('toggles', JSON.stringify(toggles));
     if (errors.length) fail('interactions: ' + errors.slice(0, 5).join(' | '));
     if (shots) await page.screenshot({ path: path.join(shots, 'top.png'), clip: { x: 0, y: 0, width: 1440, height: 1000 } });
@@ -292,12 +327,13 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     await page.close();
   }
 
-  // ---- 5. the Timeline view (v1.6.0 phase 3): the full-span ASH chart and
-  // the window grid.  Hover tooltip, legend toggle + restore, brush zoom +
-  // Reset, double-click reset, a window click pins its grid column (ruler
-  // aria-pressed, gutter "vs <date>"), Current unpins and flashes, Esc
-  // clears; every "Timeline ->" target (data-tl) and every grid label
-  // (a.ent) resolves.
+  // ---- 5. the Timeline view and the Activity charts (v1.6.0): every
+  // "Timeline ->" target (data-tl) and every grid label (a.ent) resolves;
+  // on each Activity chart (by wait class, by wait event) hover (crosshair
+  // mirrored), legend toggle + restore, brush zoom of both + Reset,
+  // double-click reset, a window click pins its grid column (ruler
+  // aria-pressed, gutter "vs <date>", amber on both), Current unpins and
+  // flashes, Enter / Esc; a ruler pin survives a view switch.
   {
     const { page, errors } = await openPage('#view=timeline', 'light');
     const tl = {};
@@ -310,7 +346,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       const ent = [...document.querySelectorAll('#tl a.ent')];
       const dangling = ent.filter(a => !document.getElementById(a.getAttribute('href').slice(1).split('!')[0])).map(a => a.getAttribute('href'));
       const leftover = document.querySelectorAll('template.tl-src').length;
-      return { ash: vis(document.getElementById('tl-ash')), grid: vis(document.getElementById('tl')), rows: rows.length, lanes,
+      return { ash: vis(document.getElementById('ashx')), grid: vis(document.getElementById('tl')), rows: rows.length, lanes,
                dtl: dtl.length, missing, ent: ent.length, dangling, leftover,
                chart: !!(window.AWR_DATA && AWR_DATA.ashx && AWR_DATA.ashx.classes && AWR_DATA.ashx.classes.length) };
     });
@@ -358,119 +394,153 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (labels.bad.length) fail('timeline: grid label links: ' + labels.bad.slice(0, 8).join(', '));
     await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(300);
     if (inv.chart && inv.ash) {
-      const svg = await page.$('#ax-svg');
-      const box = await svg.boundingBox();
-      // hover: crosshair + tooltip with per-class AAS -- at a point off every
-      // window stripe; when the stripes tile the whole span (step = window),
-      // the stripe's own tooltip instead
-      const hx = await page.evaluate((b) => {
-        for (let f = 0.45; f < 0.95; f += 0.01) {
-          const el = document.elementFromPoint(b.x + b.width * f, b.y + b.height * 0.6);
-          if (el && !el.closest('.xwh')) return f;
-        }
-        return null;
-      }, box);
-      await page.mouse.move(box.x + box.width * (hx || 0.45), box.y + box.height * 0.6); await page.waitForTimeout(150);
-      tl.hover = await page.evaluate((stripe) => { const t = document.getElementById('tip'); const ch = document.getElementById('ax-ch');
-        if (!t || t.hidden || !/AAS/.test(t.textContent)) return 'FAIL';
-        if (stripe) return /window/.test(t.textContent) ? 'ok (stripe)' : 'FAIL';
-        return ch && ch.getAttribute('visibility') === 'visible' ? 'ok' : 'FAIL'; }, hx === null);
-      if (!/^ok/.test(tl.hover)) fail('timeline: chart hover tooltip');
-      // legend: hide the first class -> one layer less; hide every class but
-      // the last -> the y axis rescales; show them all again -> restored
-      const axState = () => page.evaluate(() => ({ n: document.querySelectorAll('#ax-svg path.xa').length,
-        y: [...document.querySelectorAll('#ax-svg text.at')].map(t => t.textContent).join('|'),
-        off: document.querySelectorAll('#ax-lg .axc[aria-pressed="false"]').length }));
-      const s0 = await axState();
-      const nBtn = await page.$$eval('#ax-lg .axc', b => b.length);
-      await page.click('#ax-lg .axc'); await page.waitForTimeout(120);
-      const s1 = await axState();
-      for (let i = 1; i < nBtn - 1; i++) { await page.click('#ax-lg .axc:nth-child(' + (i + 1) + ')'); await page.waitForTimeout(40); }
-      await page.waitForTimeout(120);
-      const s2 = await axState();
-      for (let i = 0; i < nBtn - 1; i++) { await page.click('#ax-lg .axc:nth-child(' + (i + 1) + ')'); await page.waitForTimeout(40); }
-      await page.waitForTimeout(120);
-      const s3 = await axState();
-      const okL = s1.off === 1 && s1.n === s0.n - 1 && (nBtn < 3 || (s2.off === nBtn - 1 && s2.y !== s0.y)) && s3.off === 0 && s3.n === s0.n && s3.y === s0.y;
-      tl.legend = okL ? 'ok' : 'FAIL ' + JSON.stringify([s0.n, s1.n, s2.off, s2.y === s0.y, s3.n, s3.y === s0.y]);
-      if (!/^ok/.test(tl.legend)) fail('timeline: legend toggle ' + tl.legend);
-      // brush zoom, then Reset
-      const r0 = await page.evaluate(() => document.getElementById('ax-range').textContent);
-      await page.mouse.move(box.x + box.width * 0.30, box.y + box.height * 0.5);
-      await page.mouse.down(); await page.mouse.move(box.x + box.width * 0.40, box.y + box.height * 0.5, { steps: 6 }); await page.mouse.up();
-      await page.waitForTimeout(200);
-      const z = await page.evaluate(() => ({ r: document.getElementById('ax-range').textContent, reset: !document.getElementById('ax-reset').hidden }));
-      tl.zoom = (z.reset && /zoomed/.test(z.r)) ? 'ok' : 'FAIL ' + z.r;
-      if (tl.zoom !== 'ok') fail('timeline: brush zoom ' + tl.zoom);
-      await page.click('#ax-reset'); await page.waitForTimeout(150);
-      const rz = await page.evaluate(() => ({ r: document.getElementById('ax-range').textContent, reset: !document.getElementById('ax-reset').hidden }));
-      tl.reset = (!rz.reset && rz.r === r0) ? 'ok' : 'FAIL';
-      if (tl.reset !== 'ok') fail('timeline: reset zoom');
-      // zoom again, double-click resets
-      await page.mouse.move(box.x + box.width * 0.50, box.y + box.height * 0.5);
-      await page.mouse.down(); await page.mouse.move(box.x + box.width * 0.62, box.y + box.height * 0.5, { steps: 6 }); await page.mouse.up();
-      await page.waitForTimeout(150);
-      await page.mouse.dblclick(box.x + box.width * 0.55, box.y + box.height * 0.5); await page.waitForTimeout(200);
-      tl.dblclick = await page.evaluate((r0) => document.getElementById('ax-reset').hidden && document.getElementById('ax-range').textContent === r0
-        && !document.body.hasAttribute('data-pw') ? 'ok' : 'FAIL', r0);
-      if (tl.dblclick !== 'ok') fail('timeline: double-click reset');
-      // a prior window stripe pins its grid column
-      const pin = await page.evaluate(async () => {
-        const hs = [...document.querySelectorAll('#ax-svg .xwh')].filter(x => x.getAttribute('data-w') !== '0');
-        if (!hs.length) return 'none';
-        const hwin = hs[Math.floor(hs.length / 2)], w = hwin.getAttribute('data-w');
-        const rc = hwin.getBoundingClientRect();
-        const o = { bubbles: true, clientX: rc.left + rc.width / 2, clientY: rc.top + rc.height / 2, button: 0 };
-        hwin.dispatchEvent(new MouseEvent('mousedown', o)); document.dispatchEvent(new MouseEvent('mouseup', o));
-        await new Promise(r => setTimeout(r, 200));
-        const h = document.querySelector('#tl .ruler .h[data-w="' + w + '"]');
-        const gt = document.getElementById('tl-gt').textContent;
-        const cells = document.querySelectorAll('#tl .lrows .c.pc[data-w="' + w + '"]').length;
-        const d1 = document.querySelector('#tl .r.bars .g .d1');
-        const ok = h.getAttribute('aria-pressed') === 'true' && document.body.getAttribute('data-pw') === w && cells > 0
-          && /^vs /.test(gt) && (!d1 || / vs /.test(d1.textContent)) && document.querySelector('#ax-svg .xw.on');
-        return ok ? 'ok (w=' + w + ', ' + gt.replace(/\s*clear$/, '') + ')' : 'FAIL ' + JSON.stringify([h.getAttribute('aria-pressed'), gt, cells]);
+      const CHS = ['ax-cls', 'ax-ev'];
+      const other = await page.evaluate(() => {
+        const e = (window.AWR_DATA && AWR_DATA.ashe) || null;
+        return { n: e && e.classes ? e.classes.length : 0,
+                 last: e && e.classes ? e.classes[e.classes.length - 1] : '',
+                 chip: [...document.querySelectorAll('#ax-ev .axlg .axc')].some(b => b.textContent === 'Other events') };
       });
-      tl.pin = pin;
-      if (/^FAIL/.test(pin)) fail('timeline: window click pin ' + pin);
-      // Current unpins and flashes the Current column
-      const unpin = await page.evaluate(async () => {
-        const c = document.querySelector('#ax-svg .xwh[data-w="0"]');
-        if (!c) return 'none';
-        const rc = c.getBoundingClientRect();
-        const o = { bubbles: true, clientX: rc.left + rc.width / 2, clientY: rc.top + rc.height / 2, button: 0 };
-        c.dispatchEvent(new MouseEvent('mousedown', o)); document.dispatchEvent(new MouseEvent('mouseup', o));
-        await new Promise(r => setTimeout(r, 120));
-        const fl = document.querySelectorAll('#tl .c.colflash[data-w="0"]').length;
-        return (!document.body.hasAttribute('data-pw') && !document.querySelector('#tl .ruler .h[aria-pressed="true"]') && fl > 0
-          && document.getElementById('tl-gt').textContent === 'vs prior mean') ? 'ok (' + fl + ' cells flashed)' : 'FAIL';
-      });
-      tl.unpin = unpin;
-      if (/^FAIL/.test(unpin)) fail('timeline: Current unpin ' + unpin);
-      // keyboard: Enter on a focused stripe pins, Esc clears
-      const kb = await page.evaluate(() => {
-        const hs = [...document.querySelectorAll('#ax-svg .xwh')].filter(x => x.getAttribute('data-w') !== '0');
-        if (!hs.length) return 'none';
-        const hwin = hs[0]; hwin.focus();
-        hwin.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-        const pinned = document.body.getAttribute('data-pw') === hwin.getAttribute('data-w');
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-        return pinned && !document.body.hasAttribute('data-pw') ? 'ok' : 'FAIL';
-      });
-      tl.keys = kb;
-      if (/^FAIL/.test(kb)) fail('timeline: Enter / Esc ' + kb);
-      // a ruler date pins too, and leaving the view unpins
+      tl.events = other.n + ' series' + (other.last === 'Other events' ? ', Other events ' + (other.chip ? 'in the legend' : 'NOT in the legend') : '');
+      if (other.last === 'Other events' && !other.chip) fail('activity: "Other events" missing from the event legend');
+      if (other.n > 15 || (other.n === 15 && other.last !== 'Other events')) fail('activity: more than 14 events without the Other events rollup');
+      if (/demo_busy_db\.html$/.test(file) && other.last !== 'Other events') fail('activity: the demo must show the "Other events" rollup');
+      for (const id of CHS) {
+        const k = id === 'ax-cls' ? 'cls' : 'ev';
+        await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(150);
+        const svg = await page.$('#' + id + ' .axsvg');
+        const box = await svg.boundingBox();
+        // hover: crosshair + tooltip with per-series AAS -- at a point off every
+        // window stripe (when the stripes tile the whole span, step = window,
+        // the stripe's own tooltip instead); the crosshair is mirrored on the
+        // other chart at the same x
+        const hx = await page.evaluate(([b, id]) => {
+          for (let f = 0.45; f < 0.95; f += 0.01) {
+            const el = document.elementFromPoint(b.x + b.width * f, b.y + b.height * 0.6);
+            if (el && el.closest('#' + id) && !el.closest('.xwh')) return f;
+          }
+          return null;
+        }, [box, id]);
+        await page.mouse.move(box.x + box.width * (hx || 0.45), box.y + box.height * 0.6); await page.waitForTimeout(150);
+        tl['hover_' + k] = await page.evaluate(([stripe, id]) => {
+          const t = document.getElementById('tip');
+          if (!t || t.hidden || !/AAS/.test(t.textContent)) return 'FAIL tooltip';
+          if (stripe) return /window/.test(t.textContent) ? 'ok (stripe)' : 'FAIL';
+          const chs = [...document.querySelectorAll('.ashx .axsvg .xch')];
+          const on = chs.filter(c => c.getAttribute('visibility') === 'visible');
+          if (on.length !== chs.length) return 'FAIL crosshair on ' + on.length + '/' + chs.length + ' charts';
+          const xs = new Set(on.map(c => c.getAttribute('x1')));
+          return xs.size === 1 ? 'ok (mirrored)' : 'FAIL crosshair x differs ' + [...xs].join(',');
+        }, [hx === null, id]);
+        if (!/^ok/.test(tl['hover_' + k])) fail('activity ' + k + ': hover ' + tl['hover_' + k]);
+        await page.mouse.move(box.x + box.width * 0.5, box.y - 60); await page.waitForTimeout(80);
+        // legend: hide the first series -> one layer less; hide every series but
+        // the last -> the y axis rescales; show them all again -> restored
+        const st = () => page.evaluate((id) => ({ n: document.querySelectorAll('#' + id + ' .axsvg path.xa').length,
+          y: [...document.querySelectorAll('#' + id + ' .axsvg text.at')].map(t => t.textContent).join('|'),
+          off: document.querySelectorAll('#' + id + ' .axlg .axc[aria-pressed="false"]').length }), id);
+        const sel = '#' + id + ' .axlg .axc';
+        const s0 = await st();
+        const nBtn = await page.$$eval(sel, b => b.length);
+        await page.click(sel); await page.waitForTimeout(120);
+        const s1 = await st();
+        for (let i = 1; i < nBtn - 1; i++) { await page.click(sel + ':nth-child(' + (i + 1) + ')'); await page.waitForTimeout(30); }
+        await page.waitForTimeout(120);
+        const s2 = await st();
+        for (let i = 0; i < nBtn - 1; i++) { await page.click(sel + ':nth-child(' + (i + 1) + ')'); await page.waitForTimeout(30); }
+        await page.waitForTimeout(120);
+        const s3 = await st();
+        const okL = s1.off === 1 && s1.n === s0.n - 1 && (nBtn < 3 || (s2.off === nBtn - 1 && s2.y !== s0.y)) && s3.off === 0 && s3.n === s0.n && s3.y === s0.y;
+        tl['legend_' + k] = okL ? 'ok (' + nBtn + ' series)' : 'FAIL ' + JSON.stringify([s0.n, s1.n, s2.off, s2.y === s0.y, s3.n, s3.y === s0.y]);
+        if (!/^ok/.test(tl['legend_' + k])) fail('activity ' + k + ': legend toggle ' + tl['legend_' + k]);
+        // brush zoom on this chart zooms BOTH, then Reset restores both
+        const paths = () => page.evaluate(() => [...document.querySelectorAll('.ashx .axsvg')].map(s => (s.querySelector('path.xa') || {}).getAttribute ? s.querySelector('path.xa').getAttribute('d') : ''));
+        const r0 = await page.evaluate(() => document.getElementById('ax-range').textContent);
+        const p0 = await paths();
+        await page.mouse.move(box.x + box.width * 0.30, box.y + box.height * 0.5);
+        await page.mouse.down(); await page.mouse.move(box.x + box.width * 0.40, box.y + box.height * 0.5, { steps: 6 }); await page.mouse.up();
+        await page.waitForTimeout(200);
+        const z = await page.evaluate(() => ({ r: document.getElementById('ax-range').textContent, reset: !document.getElementById('ax-reset').hidden }));
+        const p1 = await paths();
+        const both = p1.length === p0.length && p1.every((d, i) => d !== p0[i]);
+        tl['zoom_' + k] = (z.reset && /zoomed/.test(z.r) && both) ? 'ok (both charts)' : 'FAIL ' + z.r + ' both=' + both;
+        if (!/^ok/.test(tl['zoom_' + k])) fail('activity ' + k + ': brush zoom ' + tl['zoom_' + k]);
+        await page.click('#ax-reset'); await page.waitForTimeout(150);
+        const rz = await page.evaluate(() => ({ r: document.getElementById('ax-range').textContent, reset: !document.getElementById('ax-reset').hidden }));
+        const p2 = await paths();
+        tl['reset_' + k] = (!rz.reset && rz.r === r0 && p2.every((d, i) => d === p0[i])) ? 'ok' : 'FAIL';
+        if (tl['reset_' + k] !== 'ok') fail('activity ' + k + ': reset zoom');
+        // zoom again, double-click resets
+        await page.mouse.move(box.x + box.width * 0.50, box.y + box.height * 0.5);
+        await page.mouse.down(); await page.mouse.move(box.x + box.width * 0.62, box.y + box.height * 0.5, { steps: 6 }); await page.mouse.up();
+        await page.waitForTimeout(150);
+        await page.mouse.dblclick(box.x + box.width * 0.55, box.y + box.height * 0.5); await page.waitForTimeout(200);
+        tl['dblclick_' + k] = await page.evaluate((r0) => document.getElementById('ax-reset').hidden && document.getElementById('ax-range').textContent === r0
+          && !document.body.hasAttribute('data-pw') ? 'ok' : 'FAIL', r0);
+        if (tl['dblclick_' + k] !== 'ok') fail('activity ' + k + ': double-click reset');
+        // a prior window stripe pins its grid column; the stripe turns amber on BOTH charts
+        const pin = await page.evaluate(async (id) => {
+          const hs = [...document.querySelectorAll('#' + id + ' .axsvg .xwh')].filter(x => x.getAttribute('data-w') !== '0');
+          if (!hs.length) return 'none';
+          const hwin = hs[Math.floor(hs.length / 2)], w = hwin.getAttribute('data-w');
+          const rc = hwin.getBoundingClientRect();
+          const o = { bubbles: true, clientX: rc.left + rc.width / 2, clientY: rc.top + rc.height / 2, button: 0 };
+          hwin.dispatchEvent(new MouseEvent('mousedown', o)); document.dispatchEvent(new MouseEvent('mouseup', o));
+          await new Promise(r => setTimeout(r, 200));
+          const h = document.querySelector('#tl .ruler .h[data-w="' + w + '"]');
+          const gt = document.getElementById('tl-gt').textContent;
+          const cells = document.querySelectorAll('#tl .lrows .c.pc[data-w="' + w + '"]').length;
+          const d1 = document.querySelector('#tl .r.bars .g .d1');
+          const amber = document.querySelectorAll('.ashx .axsvg .xw.on').length;
+          const ok = h.getAttribute('aria-pressed') === 'true' && document.body.getAttribute('data-pw') === w && cells > 0
+            && /^vs /.test(gt) && (!d1 || / vs /.test(d1.textContent)) && amber === document.querySelectorAll('.ashx .axsvg').length;
+          return ok ? 'ok (w=' + w + ', ' + gt.replace(/\s*clear$/, '') + ', amber on ' + amber + ' charts)' : 'FAIL ' + JSON.stringify([h.getAttribute('aria-pressed'), gt, cells, amber]);
+        }, id);
+        tl['pin_' + k] = pin;
+        if (/^FAIL/.test(pin)) fail('activity ' + k + ': window click pin ' + pin);
+        // Current unpins and flashes the Current column
+        const unpin = await page.evaluate(async (id) => {
+          const c = document.querySelector('#' + id + ' .axsvg .xwh[data-w="0"]');
+          if (!c) return 'none';
+          const rc = c.getBoundingClientRect();
+          const o = { bubbles: true, clientX: rc.left + rc.width / 2, clientY: rc.top + rc.height / 2, button: 0 };
+          c.dispatchEvent(new MouseEvent('mousedown', o)); document.dispatchEvent(new MouseEvent('mouseup', o));
+          await new Promise(r => setTimeout(r, 120));
+          const fl = document.querySelectorAll('#tl .c.colflash[data-w="0"]').length;
+          return (!document.body.hasAttribute('data-pw') && !document.querySelector('#tl .ruler .h[aria-pressed="true"]') && fl > 0
+            && document.getElementById('tl-gt').textContent === 'vs prior mean' && !document.querySelector('.ashx .axsvg .xw.on')) ? 'ok (' + fl + ' cells flashed)' : 'FAIL';
+        }, id);
+        tl['unpin_' + k] = unpin;
+        if (/^FAIL/.test(unpin)) fail('activity ' + k + ': Current unpin ' + unpin);
+        // keyboard: Enter on a focused stripe pins, Esc clears
+        const kb = await page.evaluate((id) => {
+          const hs = [...document.querySelectorAll('#' + id + ' .axsvg .xwh')].filter(x => x.getAttribute('data-w') !== '0');
+          if (!hs.length) return 'none';
+          const hwin = hs[0]; hwin.focus();
+          hwin.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+          const pinned = document.body.getAttribute('data-pw') === hwin.getAttribute('data-w');
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          return pinned && !document.body.hasAttribute('data-pw') ? 'ok' : 'FAIL';
+        }, id);
+        tl['keys_' + k] = kb;
+        if (/^FAIL/.test(kb)) fail('activity ' + k + ': Enter / Esc ' + kb);
+      }
+      // a ruler date pins too; the pin survives a view switch (the charts at
+      // the top of every view show it) and Esc clears it
       const ruler = await page.evaluate(async () => {
         const h = document.querySelector('#tl .ruler .h:not(.cur)'); if (!h) return 'none';
         h.click(); await new Promise(r => setTimeout(r, 80));
-        const a = document.body.getAttribute('data-pw') === h.getAttribute('data-w');
-        window.AWR_setView('summary', false); await new Promise(r => setTimeout(r, 80));
-        const b = !document.body.hasAttribute('data-pw');
+        const w = h.getAttribute('data-w');
+        const a = document.body.getAttribute('data-pw') === w;
+        window.AWR_setView('summary', false); await new Promise(r => setTimeout(r, 120));
+        const b = document.body.getAttribute('data-pw') === w && !!document.querySelector('.ashx .axsvg .xw.on');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        const c = !document.body.hasAttribute('data-pw');
         window.AWR_setView('timeline', false);
-        return a && b ? 'ok' : 'FAIL';
+        return a && b && c ? 'ok' : 'FAIL ' + JSON.stringify([a, b, c]);
       });
       tl.ruler = ruler;
-      if (/^FAIL/.test(ruler)) fail('timeline: ruler pin / view unpin ' + ruler);
+      if (/^FAIL/.test(ruler)) fail('timeline: ruler pin / survives view / Esc ' + ruler);
     } else tl.chart = 'no ASH payload';
     // grid hover tooltip
     const cell = await page.$('#tl .lrows .r.bars .c:not(.cur)');

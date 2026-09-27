@@ -264,8 +264,8 @@ def _hero(w, st) -> list[str]:
 
 
 def _timeline(w) -> list[str]:
-    """00_params.sql's v1.6.0 Timeline skeleton: the ASH chart panel, the
-    grid's ruler (dates as pin buttons) and six empty lanes."""
+    """00_params.sql's v1.6.0 Timeline skeleton: the grid's ruler (dates as
+    pin buttons) and six empty lanes."""
     cells = "".join('<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k) + '"></div>'
                     for k in range(w.weeks_back, -1, -1))
 
@@ -291,19 +291,6 @@ def _timeline(w) -> list[str]:
              '<h2>Timeline<small class="h2sub">Down a column: one window. Across a row: when it started.</small></h2>'
              '<p class="tl-nojs">The Timeline is drawn by the page script; with JavaScript off it is not '
              'drawn, and every number it would show is in the sections below.</p>')
-    o.append('<div class="panel ashx" id="tl-ash" role="group" aria-labelledby="tl-ash-h" hidden>'
-             '<div class="axh"><div class="axt"><h3 id="tl-ash-h">Active sessions, full span</h3>'
-             '<span class="axs" id="ax-range"></span></div>'
-             '<span class="axk" aria-hidden="true"><span><i class="kw"></i>compared window</span>'
-             '<span><i class="kw cur"></i>Current</span><span><i class="kw pin"></i>pinned</span></span>'
-             '<button type="button" class="axr" id="ax-reset" hidden>Reset zoom</button></div>'
-             '<div class="axlg" id="ax-lg" role="group" aria-label="Wait classes: click to show or hide"></div>'
-             '<p class="axe" id="ax-empty" hidden>No ASH samples in DBA_HIST_ACTIVE_SESS_HISTORY across the compared span.</p>'
-             '<div class="axp" id="ax-plot"><svg id="ax-svg" role="img" aria-label="Active sessions stacked by wait class '
-             'over the whole compared span, the compared windows shaded and release markers drawn. Drag to zoom."></svg>'
-             '<div class="axbr" id="ax-brush" hidden></div></div>'
-             '<p class="axn2">Drag across the chart to zoom, double-click to reset. '
-             'Click a shaded window to pin its column in the grid below.</p></div>')
     o.append(wg_ruler_put(w, '<div class="panel gridwrap wg hov" id="tl"' + wg_attr(w)
              + ' role="table" aria-label="Current vs ' + str(w.weeks_back) + ' prior windows, one column per window">',
                         '<span class="ct">' + ct + '</span><span class="cs">' + str(w.weeks_back + 1)
@@ -393,6 +380,8 @@ def emit(w) -> str:
         '<span class="kbd">&#8984;K</span>'
         '</div>'
         '<div class="rail-list">'
+        '<b>Overview</b>'
+        '<a href="#activity" data-nodot>Activity, whole span</a>'
         '<b>Summary</b>'
         '<a href="#verdict" data-nodot>Verdict</a>'
         '<a href="#findings">Findings</a>'
@@ -400,7 +389,6 @@ def emit(w) -> str:
         '<a href="#s-normal" data-nodot>Checked and normal</a>'
         '<a href="#s-lib" data-nodot>Evidence library</a>'
         '<b>Timeline</b>'
-        '<a href="#tl-ash" data-nodot>Active sessions, full span</a>'
         '<a href="#lane-activity" data-nodot>Activity</a>'
         '<a href="#lane-metrics">Headline and load</a>'
         '<a href="#lane-waits">Waits</a>'
@@ -450,6 +438,10 @@ def emit(w) -> str:
     o.extend(_literal_slice(L, i_nav + 1, i_main))
     # ---- AWR_WIN + the verdict hero (hand-ported) ----------------------
     put('<script>window.AWR_WIN=' + _win_json(w) + ';</script>')
+    # ---- the Activity charts' skeleton (literal in the SQL: lifted) ----
+    i_act = next(i for i in range(len(L)) if L[i][0].startswith('<section id="activity"'))
+    i_ver = next(i for i in range(i_act, len(L)) if L[i][0].startswith('<section id="verdict"'))
+    o.extend(_literal_slice(L, i_act, i_ver - 1))
     o.extend(_hero(w, st))
     # ---- the Timeline skeleton (hand-ported) ---------------------------
     o.extend(_timeline(w))

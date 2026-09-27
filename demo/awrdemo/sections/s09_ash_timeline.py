@@ -9,6 +9,14 @@ for every hour ending in (range_start, range_end]; bucket b (label =
 range_start + b*bucket_hours, the bucket's START) holds the hour ending
 at range_start + (b+1)h, exactly as the SQL's FLOOR((sample_time -
 range_start)*24 / bucket_hours) assignment.
+
+v1.6.0 Activity charts: AWR_DATA.ashe (by wait event) from
+HourMetrics.ash_events ({(wait_class, event): samples}, ('CPU', 'CPU')
+for on-CPU), rounded per (hour, event) like the classes.  The SQL's
+"Other events" is the class total less the top events (integer samples,
+so exactly the sum of the other events); here it is the sum of the other
+events' rounded samples, which stays >= 0 although the model rounds
+classes and events separately.
 """
 from __future__ import annotations
 
@@ -90,6 +98,7 @@ def emit(w) -> str:
     # range_start, as the SQL); foreground = ash_class minus the model's
     # background-wait samples (the SQL's session_type = 'FOREGROUND').
     cells_by_hour = []
+    events_by_hour = []          # (bucket, [week_offsets], event, samples)
     for m in w.hours(range_start, range_end):
         t = m.ts - timedelta(hours=1)
         b = int((t - range_start).total_seconds() / 3600 / bh)
@@ -109,6 +118,13 @@ def emit(w) -> str:
             cells[(b, wc)] = cells.get((b, wc), 0) + n
             class_totals[wc] = class_totals.get(wc, 0) + n
             cells_by_hour.append((b, wks, wc, n, nfg))
+        evs = {}
+        for (_wc, ev), smp in m.ash_events.items():
+            evs[ev] = evs.get(ev, 0.0) + smp
+        for ev, smp in evs.items():
+            n = int(ora_round(smp, 0))
+            if n > 0:
+                events_by_hour.append((b, wks, ev, n))
 
     hours_json = "[" + ",".join('"' + ts_min(range_start + timedelta(hours=b * bh)) + '"'
                                 for b in range(total_buckets)) + "]"
@@ -140,7 +156,7 @@ def emit(w) -> str:
     out.append(L[15])
     out.append("var d=AWR_DATA.ashTimeline, palette=" + PALETTE + ";")
     out.extend(L[17:L.index("</script>", 17) + 1])      # verbatim ECharts init .. </script>
-    out.extend(_timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour))
+    out.extend(_timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour, events_by_hour))
     out.append("</section>")
     out.append(L[-1])
     return "\n".join(out)
@@ -159,7 +175,47 @@ def aas_tok(v) -> str:
     return helpers.to_char_trim(ora_round(v or 0, 3), 3)
 
 
-def _timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour):
+def _events(w, range_start, total_hours, cbh, m, nc, events_by_hour):
+    """AWR_DATA.ashe: the top 14 events (samples desc, name asc), biggest
+    first, then "Other events" (only when more are left)."""
+    ec, ew, et = {}, {}, {}
+    for b, wks, ev, n in events_by_hour:
+        ec[(b // m, ev)] = ec.get((b // m, ev), 0) + n
+        for wk in wks:
+            ew[(wk, ev)] = ew.get((wk, ev), 0) + n
+        et[ev] = et.get(ev, 0) + n
+    top = sorted(et, key=lambda e: (-et[e], e))[:14]
+    rest = [e for e in et if e not in top]
+    names = top + (["Other events"] if rest else [])
+
+    def cell(d, key0, i):
+        if i < len(top):
+            return d.get((key0, top[i]), 0)
+        return sum(d.get((key0, e), 0) for e in rest)
+
+    out = ['<script>AWR_DATA.ashe={"t0":"' + ts_min(range_start) + '","end":"'
+           + ts_min(w.target_end) + '","bh":' + helpers.wg_tok(cbh)
+           + ',"wh":' + helpers.wg_tok(w.win_hours) + ',"classes":[']
+    for i, e in enumerate(names):
+        out.append(("," if i else "") + '"' + helpers.json_escape(e) + '"')
+    out.append('],"vals":[')
+    for i in range(len(names)):
+        vals = []
+        for b in range(nc):
+            cov = min(cbh, total_hours - b * cbh)
+            vals.append(aas_tok(cell(ec, b, i) / (360 * cov) if cov > 0 else 0))
+        out.append(("," if i else "") + "[")
+        out.extend(put_clob_chunked(",".join(vals)))
+        out.append("]")
+    out.append('],"win":[')
+    for i in range(len(names)):
+        row = [aas_tok(cell(ew, k, i) / (360 * w.win_hours)) for k in range(w.weeks_back, -1, -1)]
+        out.append(("," if i else "") + "[" + ",".join(row) + "]")
+    out.append("]};</script>")
+    return out
+
+
+def _timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour, events_by_hour):
     out = []
     m = max(1, math.ceil(max(1, total_hours / 400) / bh))
     cbh = m * bh
@@ -209,6 +265,7 @@ def _timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour):
         row = [aas_tok(wfcells.get((k, c), 0) / (360 * w.win_hours)) for k in range(w.weeks_back, -1, -1)]
         out.append(("," if i else "") + "[" + ",".join(row) + "]")
     out.append("]};</script>")
+    out.extend(_events(w, range_start, total_hours, cbh, m, nc, events_by_hour))
     if not totals:
         return out
     prior = [wtot[k] for k in range(w.weeks_back, 0, -1) if valid.get(k) == "Y"]

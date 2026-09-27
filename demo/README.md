@@ -82,9 +82,12 @@ Timeline / All sections) in light and dark, on an in-page href that does
 not resolve to exactly one id, or on a duplicate id. It also exercises the
 view switch and its persistence, cross-view jumps, rail dimming, tabs,
 sort and expanders; clicks every visible entity link (`a.ent`) and checks
-its target is shown; walks the Timeline (lanes, `data-tl` jumps, label
-links, chart hover / legend / zoom / reset / double-click, pin / unpin,
-keyboard); checks plan cards, the evidence library rows and their toggle,
+its target is shown; checks the Activity charts are the first section of
+every view and drawn, and on each (by wait class, by wait event) hover
+with the crosshair mirrored, legend toggle / restore, zoom of both / reset
+/ double-click, pin / unpin, keyboard, plus "Other events" (the demo has
+more than 14 events); checks no rail link state draws a left bar; walks
+the Timeline (lanes, `data-tl` jumps, label links, ruler pin); checks plan cards, the evidence library rows and their toggle,
 the rail sub-links, that All sections shows every section in full, and the
 micro strips; and writes a screenshot per view x theme. It runs against
 any report (dbmint's too) in ~3 minutes; run one instance at a time
