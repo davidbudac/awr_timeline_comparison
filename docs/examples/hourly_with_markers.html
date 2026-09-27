@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AWR Timeline Comparison &mdash; run 20260927135303511</title>
+<title>AWR Timeline Comparison &mdash; run 20260927142403238</title>
 <style>
 :root { --paper:#eceef1;       --panel:#ffffff;        --panel-2:#f4f6f8; --ink:#12161d;         --ink-soft:#333a45;     --muted:#5d6672; --rule:#c4ccd6;        --hairline:#d9dfe6;     --line-soft:#e8ecf1; --red:#c62828;         --red-deep:#a01c1c;     --chip-bg:#eef1f5; --track:#eef0f3; --cell-bar-bg:rgba(90,67,223,0.10); --accent:#5a43df;      --accent-deep:#4633c4;  --accent-bg:#ece9fc; --accent-2:#3c6591; --rail-w:236px; --fg:#333a45;           --border:#d9dfe6; --crit-fg:#a01c1c;      --warn-fg:#8a5a00; --crit:#b01c1c;        --warn:#8a5a00;         --ok:#1f7a4d; --info:#2f6fb0;        --skip:#7a828e; --crit-bg:#fbeceb;     --warn-bg:#faf2df;      --ok-bg:#e8f3ed; --warn-border:#f0d77a; --info-bg:#e7eef7;     --skip-bg:#eef1f4; --dot-ok:#1f9d63;      --dot-warn:#d99a1a; --dot-crit:#c62828;    --dot-na:#c1c9d3; --spark:#12161d;       --spark-fill:rgba(18,22,29,.07); --wc-sysio:#1F4E89;       --wc-other:#C77CB0; --wc-userio:#4A90D9;      --wc-commit:#E89B40; --wc-config:#793C32;      --wc-concurrency:#8B0000; --wc-network:#967259;     --wc-application:#D62728; --wc-cluster:#E5C228;     --wc-admin:#7B6FA8; --wc-sched:#88C070;       --wc-queue:#E89BB7; --wc-cpu:#3FB344; --ink-4:#a3acb9; --zone1:#bec7d2; --zone2:#dce1e7; --tick:#aab3bf; --mean:#4f5b6c; --bar:#c5ccd6; --acc:#5a43df; --acc-ink:#4633c4; --acc-band:rgba(90,67,223,.07); --acc-soft:rgba(90,67,223,.11); --crit-dot:#d83a2f; --warn-dot:#e09b1c; --imp:#08777d; --mk:#3a4556; --mkline:rgba(44,54,68,.26); --flagbg:#e8ebf0; --hov:rgba(23,32,44,.05); --pin:rgba(178,112,0,.10); --flash:rgba(90,67,223,.22); --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px; }
 @media screen { body.dark { --paper:#0f1319;       --panel:#161b23;        --panel-2:#1d232d; --ink:#e7ecf2;         --ink-soft:#bcc5d1;     --muted:#8591a0; --rule:#333d49;        --hairline:#2a323d;     --line-soft:#232a34; --red:#e5675c;         --red-deep:#f0837a;     --chip-bg:#1d232d; --track:#1f2630; --cell-bar-bg:rgba(167,150,255,0.16); --accent:#a796ff;      --accent-deep:#bdb0ff;  --accent-bg:#231f3d; --accent-2:#7ea6cf; --fg:#bcc5d1;           --border:#2a323d; --crit-fg:#e5675c;      --warn-fg:#e0a53a; --crit:#e5675c;        --warn:#e0a53a;         --ok:#43bb82; --info:#6fa8dc;        --skip:#8591a0; --crit-bg:#2b1a1a;     --warn-bg:#2a2413;      --ok-bg:#15271e; --warn-border:#6d5a22; --info-bg:#172431;     --skip-bg:#1d232d; --dot-ok:#43bb82;      --dot-warn:#e0a53a; --dot-crit:#e5675c;    --dot-na:#3a4350; --spark:#e7ecf2;       --spark-fill:rgba(231,236,242,.10); --ink-4:#566070; --zone1:#4a5565; --zone2:#2e3744; --tick:#5c6778; --mean:#c3cbd6; --bar:#3e4757; --acc:#a796ff; --acc-ink:#bdb0ff; --acc-band:rgba(167,150,255,.085); --acc-soft:rgba(167,150,255,.14); --crit-dot:#ff6255; --warn-dot:#f0a63a; --imp:#4cc7c4; --mk:#c3ccd8; --mkline:rgba(202,210,221,.24); --flagbg:#222a35; --hov:rgba(255,255,255,.045); --pin:rgba(242,176,76,.12); --flash:rgba(167,150,255,.22); } }
@@ -551,6 +551,10 @@ nav.toc a[hidden]{display:none}
 .dotk.typical{border:1.5px solid var(--muted)} .dotk.improved{border:2px solid var(--imp)}
 @media (max-width: 1180px){.fc-b{grid-template-columns:minmax(0,1fr)}.ngrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width: 900px){.calm-notes{grid-template-columns:1fr}.fc-h{grid-template-columns:minmax(0,1fr)}.fc-band{width:100%}}
+.fc{container-name:awrfc;container-type:inline-size}
+@container awrfc (min-width: 890px) and (max-width: 999.98px){.fc .evr{grid-template-columns:minmax(0,1fr) 136px;row-gap:0}.fc .evr dt{grid-column:1 / -1;font-size:12px}}
+@container awrfc (max-width: 889.98px){.fc-b{grid-template-columns:minmax(0,1fr)}}
+@container awrfc (max-width: 999.98px){.fc .cfg-wg .wg{--lab:184px;--gut:140px}.fc .cfg-wg .r.p .c.cur .pv{left:auto;right:2px;max-width:none;padding-left:3px;background:linear-gradient(var(--acc-band),var(--acc-band)) var(--panel)}}
 section#timeline{background:none;border:0;border-radius:0;padding:0;box-shadow:none}
 section#timeline > h2{margin:var(--s7) 0 var(--s5);padding:0;border:0}
 #timeline .tl-nojs{color:var(--muted);font-size:13px;margin:0 0 var(--s3)}
@@ -3539,7 +3543,7 @@ Object.keys(AWR_DATA.topSql.dims).forEach(function(dim){
 <tr class="sql-row" id="sql-fhf8upax5cxsz" data-sys="Y">
 <td class="mono sqlid-cell"><span id="sqlid-fhf8upax5cxsz">fhf8upax5cxsz</span> <button type="button" class="copy-btn" data-copy="#sqlid-fhf8upax5cxsz">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-fhf8upax5cxsz" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-fhf8upax5cxsz" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip on" title="ELAPSED">E</span><span class="chip on" title="CPU">C</span><span class="chip" title="GETS">G</span><span class="chip" title="PREADS">R</span></td>
-<td class="mono">SYS</td><td class="num">0</td><td class="num">9,293</td><td class="num">2,198</td><td>2026-08-23 11:38</td><td class="mono sqltext">BEGIN sys.dbms_auto_report_internal.i_save_report (:rep_ref, :snap_id, :pr_class,         &hellip;</td>
+<td class="mono">SYS</td><td class="num">0</td><td class="num">9,297</td><td class="num">2,199</td><td>2026-08-23 11:38</td><td class="mono sqltext">BEGIN sys.dbms_auto_report_internal.i_save_report (:rep_ref, :snap_id, :pr_class,         &hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="fhf8upax5cxsz" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono"><span class="muted">&mdash;</span></dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>147 chars</dd></dl>
@@ -3548,12 +3552,12 @@ Object.keys(AWR_DATA.topSql.dims).forEach(function(dim){
 <tr class="sql-row" id="sql-0w26sk6t6gq98" data-sys="Y">
 <td class="mono sqlid-cell"><span id="sqlid-0w26sk6t6gq98">0w26sk6t6gq98</span> <button type="button" class="copy-btn" data-copy="#sqlid-0w26sk6t6gq98">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-0w26sk6t6gq98" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-0w26sk6t6gq98" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="ELAPSED">E</span><span class="chip on" title="CPU">C</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">9,117</td><td class="num">2,185</td><td>2026-08-23 11:38</td><td class="mono sqltext">SELECT XMLTYPE(DBMS_REPORT.GET_REPORT_WITH_SUMMARY(:B1 )) FROM DUAL</td>
+<td class="mono">SYS</td><td class="num">1</td><td class="num">9,121</td><td class="num">2,186</td><td>2026-08-23 11:38</td><td class="mono sqltext">SELECT XMLTYPE(DBMS_REPORT.GET_REPORT_WITH_SUMMARY(:B1 )) FROM DUAL</td>
 </tr>
 <tr class="sql-detail" data-sql="0w26sk6t6gq98" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono">9931397711087819739</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>67 chars</dd></dl>
 <table id="phv-summary-0w26sk6t6gq98"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">1388734953</td><td>2026-08-23 11:38</td><td>2026-09-27 13:45</td><td class="num">2,185</td><td class="num">9,117</td><td class="num">0.09263</td><td class="num">325.5</td></tr>
+<tr><td class="num mono">1388734953</td><td>2026-08-23 11:38</td><td>2026-09-27 14:15</td><td class="num">2,186</td><td class="num">9,121</td><td class="num">0.09262</td><td class="num">325.4</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-0w26sk6t6gq98"></div>
 <script>AWR_DATA.sqlDetails["0w26sk6t6gq98"]={snaps:[
@@ -5742,18 +5746,19 @@ Object.keys(AWR_DATA.topSql.dims).forEach(function(dim){
 ,{"t":"2026-09-27 13:15","phv":"1388734953","exec":4,"ela":0.167436}
 ,{"t":"2026-09-27 13:30","phv":"1388734953","exec":6,"ela":0.176841}
 ,{"t":"2026-09-27 13:45","phv":"1388734953","exec":20,"ela":0.131251}
+,{"t":"2026-09-27 14:15","phv":"1388734953","exec":4,"ela":0.064770}
 ]};</script>
 <pre class="sql">SELECT XMLTYPE(DBMS_REPORT.GET_REPORT_WITH_SUMMARY(:B1 )) FROM DUAL</pre>
 </td></tr>
 <tr class="sql-row" id="sql-0za9fv0j1vgkk" data-sys="Y">
 <td class="mono sqlid-cell"><span id="sqlid-0za9fv0j1vgkk">0za9fv0j1vgkk</span> <button type="button" class="copy-btn" data-copy="#sqlid-0za9fv0j1vgkk">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-0za9fv0j1vgkk" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-0za9fv0j1vgkk" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="ELAPSED">E</span><span class="chip on" title="CPU">C</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">9,256</td><td class="num">2,218</td><td>2026-08-23 11:38</td><td class="mono sqltext">WITH MONITOR_DATA AS (SELECT * FROM TABLE(GV$(CURSOR( SELECT USERENV(&apos;instance&apos;) AS INST_I&hellip;</td>
+<td class="mono">SYS</td><td class="num">1</td><td class="num">9,262</td><td class="num">2,220</td><td>2026-08-23 11:38</td><td class="mono sqltext">WITH MONITOR_DATA AS (SELECT * FROM TABLE(GV$(CURSOR( SELECT USERENV(&apos;instance&apos;) AS INST_I&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="0za9fv0j1vgkk" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono">3827900917462555511</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>92,634 chars</dd></dl>
 <table id="phv-summary-0za9fv0j1vgkk"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">3205475971</td><td>2026-08-23 11:38</td><td>2026-09-27 13:45</td><td class="num">2,218</td><td class="num">9,256</td><td class="num">0.0764</td><td class="num">168.5</td></tr>
+<tr><td class="num mono">3205475971</td><td>2026-08-23 11:38</td><td>2026-09-27 14:15</td><td class="num">2,220</td><td class="num">9,262</td><td class="num">0.07638</td><td class="num">168.4</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-0za9fv0j1vgkk"></div>
 <script>AWR_DATA.sqlDetails["0za9fv0j1vgkk"]={snaps:[
@@ -7975,6 +7980,8 @@ Object.keys(AWR_DATA.topSql.dims).forEach(function(dim){
 ,{"t":"2026-09-27 13:15","phv":"3205475971","exec":4,"ela":0.144020}
 ,{"t":"2026-09-27 13:30","phv":"3205475971","exec":6,"ela":0.142927}
 ,{"t":"2026-09-27 13:45","phv":"3205475971","exec":20,"ela":0.090042}
+,{"t":"2026-09-27 14:00","phv":"3205475971","exec":2,"ela":0.049994}
+,{"t":"2026-09-27 14:15","phv":"3205475971","exec":4,"ela":0.051049}
 ]};</script>
 <pre class="sql">WITH MONITOR_DATA AS (SELECT * FROM TABLE(GV$(CURSOR( SELECT USERENV(&apos;instance&apos;) AS INST_ID, KEY, NVL2(PX_QCSID, NULL, STATUS) STATUS, FIRST_REFRESH_TIME, LAST_REFRESH_TIME, REFRESH_COUNT, PROCESS_NAME, SID, SQL_ID, SQL_EXEC_START, SQL_EXEC_ID, DBOP_NAME, DBOP_EXEC_ID, SQL_PLAN_HASH_VALUE, SQL_FULL_PLAN_HASH_VALUE, SESSION_SERIAL#, SQL_TEXT, PX_SERVER#, PX_SERVER_GROUP, PX_SERVER_SET, PX_QCINST_ID, PX_QCSID, CASE WHEN ELAPSED_TIME &lt; (CPU_TIME+ APPLICATION_WAIT_TIME+ CONCURRENCY_WAIT_TIME+ CLUSTER_WAIT_TIME+ USER_IO_WAIT_TIME+ QUEUING_TIME) THEN (CPU_TIME+ APPLICATION_WAIT_TIME+ CONCURRENCY_WAIT_TIME+ CLUSTER_WAIT_TIME+ USER_IO_WAIT_TIME+ QUEUING_TIME) ELSE ELAPSED_TIME END ELAPSED_TIME, QUEUING_TIME, CPU_TIME, APPLICATION_WAIT_TIME, CONCURRENCY_WAIT_TIME, CLUSTER_WAIT_TIME, USER_IO_WAIT_TIME, CASE WHEN ELAPSED_TIME &lt; (CPU_TIME+ APPLICATION_WAIT_TIME+ CONCURRENCY_WAIT_TIME+ CLUSTER_WAIT_TIME+ USER_IO_WAIT_TIME+ QUEUING_TIME) THEN 0 ELSE ELAPSED_TIME - (CPU_TIME+ APPLICATION_WAIT_TIME+ CONCURRENCY_WAIT_TIME+ CLUSTER_WAIT_TIME+ USER_IO_WAIT_TIME+ QUEUING_TIME) END OTHER_WAIT_TIME, PLSQL_EXEC_TIME, JAVA_EXEC_TIME, FETCHES, BUFFER_GETS, IO_INTERCONNECT_BYTES IO_INTER_BYTES, PHYSICAL_READ_REQUESTS READ_REQS, PHYSICAL_READ_BYTES READ_BYTES, PHYSICAL_WRITE_REQUESTS WRITE_REQS, PHYSICAL_WRITE_BYTES WRITE_BYTES, NVL(PHYSICAL_READ_BYTES, 0) + NVL(PHYSICAL_WRITE_BYTES, 0) IO_BYTES, NVL(PHYSICAL_READ_REQUESTS, 0) + NVL(PHYSICAL_WRITE_REQUESTS, 0) IO_REQS, IO_CELL_UNCOMPRESSED_BYTES IO_UNC_BYTES, IO_CELL_OFFLOAD_ELIGIBLE_BYTES IO_ELIG_BYTES, IO_CELL_OFFLOAD_RETURNED_BYTES IO_RET_BYTES, USER# USERID, USERNAME, MODULE, ACTION, SERVICE_NAME, CLIENT_IDENTIFIER, CLIENT_INFO, PROGRAM, PLSQL_OBJECT_ID PL_OID, PLSQL_SUBPROGRAM_ID PL_PROGID, PLSQL_ENTRY_OBJECT_ID PL_ENTRY_OID, PLSQL_ENTRY_SUBPROGRAM_ID PL_ENTRY_PROGID, PX_MAXDOP MAX_DOP, PX_IS_CROSS_INSTANCE, PX_MAXDOP_INSTANCES MAX_DOP_INSTANCES, PX_SERVERS_REQUESTED SERVERS_REQUESTED, PX_SERVERS_ALLOCATED SERVERS_ALLOCATED, ERROR_NUMBER, ERROR_FACILITY, ERROR_MESSAGE, NVL2(OTHER_XML, &apos;Y&apos;, NULL) HAS_OTHER_XML, NVL2(BINDS_XML, &apos;Y&apos;, NULL) HAS_BINDS_XML, NVL2(RM_CONSUMER_GROUP, NVL2(RM_LAST_ACTION_TIME, TO_CHAR(RM_LAST_ACTION_TIME, :B12 ), &apos;00/00/0000 00:00:01&apos;) || XMLELEMENT( &quot;rminfo&quot;, XMLATTRIBUTES( RM_LAST_ACTION AS &quot;rmlastact&quot;, RM_LAST_ACTION_REASON AS &quot;rmlastreason&quot;, TO_CHAR(RM_LAST_ACTION_TIME, :B12 ) AS &quot;rmlasttime&quot;, RM_CONSUMER_GROUP AS &quot;rmcg&quot;)).GETSTRINGVAL(), &apos;00/00/0000 00:00:00&apos;) RM_INFO, CON_NAME, CON_ID FROM V$ALL_SQL_MONITOR MO1 WHERE USERENV(&apos;INSTANCE&apos;) BETWEEN :B11 AND :B10 AND MO1.SQL_ID = NVL(:B9 , MO1.SQL_ID) AND MO1.SQL_EXEC_START = NVL(:B8 , MO1.SQL_EXEC_START) AND MO1.SQL_EXEC_ID = NVL(:B7 , MO1.SQL_EXEC_ID) OR (MO1.DBOP_NAME = NVL(:B6 , MO1.DBOP_NAME) AND MO1.DBOP_EXEC_ID = NVL(:B5 , MO1.DBOP_EXEC_ID)) AND ((:B4 = 1 AND MO1.PX_QCSID IS NULL) OR (MO1.PX_SERVER_GROUP = NVL(:B3 , MO1.PX_SERVER_GROUP) AND MO1.PX_SERVER_SET = NVL(:B2 , MO1.PX_SERVER_SET) AND MO1.PX_SERVER# = NVL(:B1 , MO1.PX_SERVER#))) ))) ), MONITOR_AGG AS (SELECT MAX_PX_QCSID, MAX_KEY, MAX_INST_ID, MAX_SESSION_ID, MAX_SESSION_SERIAL, MAX_PX_DOP, MAX_PX_DOP_INSTANCES, MAX_PX_IS_CROSS_INSTANCE, SUM_SERVERS_REQUESTED, SUM_SERVERS_ALLOCATED, DIST_INST_COUNT, DIST_PX_GROUP_COUNT, DIST_PX_SET_COUNT, MAX_PLAN_HASH_VALUE, MAX_FULL_PLAN_HASH_VALUE, MAX_USERID, MAX_PROGRAM, MAX_USERNAME, MAX_MODULE, MAX_ACTION, MAX_SERVICE_NAME, MAX_CLIENT_ID, MAX_CLIENT_INFO, MAX_ERROR_NUMBER, MAX_ERROR_FACILITY, MAX_ERROR_MESSAGE, QC_HAS_OTHER_XML, QC_HAS_BINDS_XML, MAX_PL_OID, MAX_PL_PROGID, MAX_PL_ENTRY_OID, MAX_PL_ENTRY_PROGID, MAX_SQL_ID, MAX_SQL_EXEC_START, MAX_SQL_EXEC_ID, MAX_LAST_REFRESH_TIME, MAX_DBOP_NAME, MAX_DBOP_EXEC_ID, CASE WHEN MAX_PL_OID IS NOT NULL THEN NVL((SELECT P.OWNER || &apos;.&apos; || P.OBJECT_NAME || DECODE(P.PROCEDURE_NAME, NULL, &apos;&apos;, &apos;.&apos; || P.PROCEDURE_NAME) FROM ALL_PROCEDURES P WHERE P.OBJECT_ID = MAX_PL_OID AND P.SUBPROGRAM_ID = MAX_PL_PROGID AND ROWNUM = 1), &apos;Unavailable&apos;) END MAX_PL_NAME, CASE WHEN MAX_PL_ENTRY_OID IS NOT NULL THEN NVL((SELECT P.OWNER || &apos;.&apos; || P.OBJECT_NAME || DECODE(P.PROCEDURE_NAME, NULL, &apos;&apos;, &apos;.&apos; || P.PROCEDURE_NAME) FROM ALL_PROCEDURES P WHERE P.OBJECT_ID = MAX_PL_ENTRY_OID AND P.SUBPROGRAM_ID = MAX_PL_ENTRY_PROGID AND ROWNUM = 1), &apos;Unavailable&apos;) END MAX_PL_ENTRY_NAME, MAX_STATUS, SUM_REFRESH_COUNT, MIN_FIRST_REFRESH_TIME, SQLMON_TEXT, SUM_ELAPSED_TIME, MAX_ELAPSED_TIME, MAX_QUEUING_TIME, SUM_CPU_TIME, SUM_USER_IO_WAIT_TIME, SUM_APPLICATION_WAIT_TIME, SUM_CONCURRENCY_WAIT_TIME, SUM_CLUSTER_WAIT_TIME, SUM_PLSQL_EXEC_TIME, SUM_JAVA_EXEC_TIME, SUM_OTHER_WAIT_TIME, SUM_FETCHES, SUM_BUFFER_GETS, SUM_READ_REQS, SUM_READ_BYTES, SUM_WRITE_REQS, SUM_WRITE_BYTES, SUM_IO_BYTES, SUM_IO_INTER_BYTES, SUM_IO_UNC_BYTES, SUM_IO_ELIG_BYTES, SUM_IO_RET_BYTES, DECODE(:B14 , 1, &apos;db_name&apos;, SYS_CONTEXT(&apos;userenv&apos;, &apos;db_unique_name&apos;)) DB_UNIQUE_NAME, DECODE(:B14 , 1, &apos;platform_name&apos;, SYS.DBMS_UTILITY.PORT_STRING) PLATFORM_NAME, DECODE(:B14 , 1, &apos;host_name&apos;, SYS_CONTEXT(&apos;userenv&apos;, &apos;server_host&apos;)) HOST_NAME, AGG_RM_INFO MAX_RM_INFO, MAX_CON_NAME, DECODE(MAX_CON_ID, 0, NULL, MAX_CON_ID) MAX_CON_ID FROM (SELECT MAX(PX_QCSID) MAX_PX_QCSID, MAX(CASE WHEN PX_QCSID IS NULL THEN KEY ELSE NULL END) MAX_KEY, MAX(CASE WHEN PX_QCSID IS NULL THEN INST_ID ELSE NULL END) MAX_INST_ID, MAX(CASE WHEN PX_QCSID IS NULL THEN SID ELSE NULL END) MAX_SESSION_ID, MAX(CASE WHEN PX_QCSID IS NULL THEN SESSION_SERIAL# ELSE NULL END) MAX_SESSION_SERIAL, MAX(MAX_DOP) MAX_PX_DOP, MAX(MAX_DOP_INSTANCES) MAX_PX_DOP_INSTANCES, MAX(PX_IS_CROSS_INSTANCE) MAX_PX_IS_CROSS_INSTANCE, SUM(SERVERS_REQUESTED) SUM_SERVERS_REQUESTED, SUM(SERVERS_ALLOCATED) SUM_SERVERS_ALLOCATED, COUNT(DISTINCT INST_ID) DIST_INST_COUNT, COUNT(DISTINCT PX_SERVER_GROUP) DIST_PX_GROUP_COUNT, COUNT(DISTINCT PX_SERVER_SET) DIST_PX_SET_COUNT, MAX(SQL_PLAN_HASH_VALUE) MAX_PLAN_HASH_VALUE, MAX(SQL_FULL_PLAN_HASH_VALUE) MAX_FULL_PLAN_HASH_VALUE, MAX(USERID) MAX_USERID, MAX(PROGRAM) MAX_PROGRAM, MAX(USERNAME) MAX_USERNAME, MAX(MODULE) MAX_MODULE, MAX(ACTION) MAX_ACTION, MAX(SERVICE_NAME) MAX_SERVICE_NAME, MAX(CLIENT_IDENTIFIER) MAX_CLIENT_ID, MAX(CLIENT_INFO) MAX_CLIENT_INFO, MAX(ERROR_NUMBER) MAX_ERROR_NUMBER, MAX(ERROR_FACILITY) MAX_ERROR_FACILITY, MAX(ERROR_MESSAGE) MAX_ERROR_MESSAGE, MAX(NVL2(PX_QCSID, HAS_OTHER_XML, NULL)) QC_HAS_OTHER_XML, MAX(HAS_BINDS_XML) QC_HAS_BINDS_XML, MAX(PL_OID) MAX_PL_OID, MAX(PL_PROGID) MAX_PL_PROGID, MAX(PL_ENTRY_OID) MAX_PL_ENTRY_OID, MAX(PL_ENTRY_PROGID) MAX_PL_ENTRY_PROGID, MAX(SQL_ID) MAX_SQL_ID, MAX(SQL_EXEC_START) MAX_SQL_EXEC_START, MAX(SQL_EXEC_ID) MAX_SQL_EXEC_ID, MAX(LAST_REFRESH_TIME) MAX_LAST_REFRESH_TIME, MAX(STATUS) MAX_STATUS, SUM(REFRESH_COUNT) SUM_REFRESH_COUNT, MIN(FIRST_REFRESH_TIME) MIN_FIRST_REFRESH_TIME, MAX(DBOP_NAME) MAX_DBOP_NAME, MAX(DBOP_EXEC_ID) MAX_DBOP_EXEC_ID, CASE WHEN :B13 = 0 THEN NULL ELSE MAX(SQL_TEXT) END SQLMON_TEXT, SUM(ELAPSED_TIME) SUM_ELAPSED_TIME, MAX(ELAPSED_TIME) MAX_ELAPSED_TIME, MAX(QUEUING_TIME) MAX_QUEUING_TIME, SUM(CPU_TIME) SUM_CPU_TIME, SUM(USER_IO_WAIT_TIME) SUM_USER_IO_WAIT_TIME, SUM(APPLICATION_WAIT_TIME) SUM_APPLICATION_WAIT_TIME, SUM(CONCURRENCY_WAIT_TIME) SUM_CONCURRENCY_WAIT_TIME, SUM(CLUSTER_WAIT_TIME) SUM_CLUSTER_WAIT_TIME, SUM(PLSQL_EXEC_TIME) SUM_PLSQL_EXEC_TIME, SUM(JAVA_EXEC_TIME) SUM_JAVA_EXEC_TIME, SUM(OTHER_WAIT_TIME) SUM_OTHER_WAIT_TIME, SUM(FETCHES) SUM_FETCHES, SUM(BUFFER_GETS) SUM_BUFFER_GETS, SUM(READ_REQS) SUM_READ_REQS, SUM(READ_BYTES) SUM_READ_BYTES, SUM(WRITE_REQS) SUM_WRITE_REQS, SUM(WRITE_BYTES) SUM_WRITE_BYTES, NVL(SUM(READ_BYTES), 0) + NVL(SUM(WRITE_BYTES), 0) SUM_IO_BYTES, SUM(IO_INTER_BYTES) SUM_IO_INTER_BYTES, SUM(IO_UNC_BYTES) SUM_IO_UNC_BYTES, SUM(IO_ELIG_BYTES) SUM_IO_ELIG_BYTES, SUM(IO_RET_BYTES) SUM_IO_RET_BYTES, MAX(RM_INFO) AGG_RM_INFO, MAX(CON_NAME) MAX_CON_NAME, MAX(CON_ID) MAX_CON_ID FROM MONITOR_DATA) MD), ASH_DATA AS (SELECT AD0.INST_ID, AD0.SESSION_ID, AD0.PLAN_LINE_ID, AD0.PLSQL_OBJECT_ID, AD0.PLSQL_SUBPROGRAM_ID, AD0.ACTIVITY_BUCKET_NUM, AD0.PLAN_ACTIVITY_BUCKET_NUM, AD0.SQL, AD0.TOP_
 ... (truncated, 92634 chars total)</pre>
@@ -7982,7 +7989,7 @@ Object.keys(AWR_DATA.topSql.dims).forEach(function(dim){
 <tr class="sql-row" id="sql-9pd2ghtwmafzg" data-sys="Y">
 <td class="mono sqlid-cell"><span id="sqlid-9pd2ghtwmafzg">9pd2ghtwmafzg</span> <button type="button" class="copy-btn" data-copy="#sqlid-9pd2ghtwmafzg">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-9pd2ghtwmafzg" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-9pd2ghtwmafzg" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="ELAPSED">E</span><span class="chip" title="CPU">C</span><span class="chip on" title="EXEC">X</span></td>
-<td class="mono">SYS</td><td class="num">0</td><td class="num">658,920</td><td class="num">2,220</td><td>2026-08-23 11:49</td><td class="mono sqltext">BEGIN dbms_drs.do_observe(:indoc, :outdoc); END;</td>
+<td class="mono">SYS</td><td class="num">0</td><td class="num">659,520</td><td class="num">2,222</td><td>2026-08-23 11:49</td><td class="mono sqltext">BEGIN dbms_drs.do_observe(:indoc, :outdoc); END;</td>
 </tr>
 <tr class="sql-detail" data-sql="9pd2ghtwmafzg" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd>dgmgrl@ol9-19-dg3.localdomain (TNS V1-V3)</dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono">3292330648709112879</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>48 chars</dd></dl>
@@ -7991,7 +7998,7 @@ Object.keys(AWR_DATA.topSql.dims).forEach(function(dim){
 <tr class="sql-row" id="sql-35k8v3jjhv3k6" data-sys="Y">
 <td class="mono sqlid-cell"><span id="sqlid-35k8v3jjhv3k6">35k8v3jjhv3k6</span> <button type="button" class="copy-btn" data-copy="#sqlid-35k8v3jjhv3k6">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-35k8v3jjhv3k6" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-35k8v3jjhv3k6" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="ELAPSED">E</span><span class="chip" title="GETS">G</span><span class="chip on" title="PREADS">R</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">1,126</td><td class="num">1,117</td><td>2026-08-23 11:38</td><td class="mono sqltext">
+<td class="mono">SYS</td><td class="num">1</td><td class="num">1,127</td><td class="num">1,118</td><td>2026-08-23 11:38</td><td class="mono sqltext">
 WITH cdb_last_failed_jobs AS
 (
 SELECT CON_ID,
@@ -8002,7 +8009,7 @@ MAX(ACTUAL_START_DATE) AS &hellip;</td>
 <tr class="sql-detail" data-sql="35k8v3jjhv3k6" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd>emagent_SQL_oracle_database</dd><dt>Action</dt><dd>cdbjob_status</dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono">13562461939718721680</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>3,039 chars</dd></dl>
 <table id="phv-summary-35k8v3jjhv3k6"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">542043329</td><td>2026-08-23 11:38</td><td>2026-09-27 13:15</td><td class="num">1,117</td><td class="num">1,126</td><td class="num">0.3522</td><td class="num">2,069</td></tr>
+<tr><td class="num mono">542043329</td><td>2026-08-23 11:38</td><td>2026-09-27 14:15</td><td class="num">1,118</td><td class="num">1,127</td><td class="num">0.3521</td><td class="num">2,070</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-35k8v3jjhv3k6"></div>
 <script>AWR_DATA.sqlDetails["35k8v3jjhv3k6"]={snaps:[
@@ -9123,6 +9130,7 @@ MAX(ACTUAL_START_DATE) AS &hellip;</td>
 ,{"t":"2026-09-27 12:15","phv":"542043329","exec":1,"ela":0.216855}
 ,{"t":"2026-09-27 12:45","phv":"542043329","exec":1,"ela":0.340609}
 ,{"t":"2026-09-27 13:15","phv":"542043329","exec":1,"ela":0.724742}
+,{"t":"2026-09-27 14:15","phv":"542043329","exec":1,"ela":0.245551}
 ]};</script>
 <pre class="sql">
 WITH cdb_last_failed_jobs AS
@@ -9253,12 +9261,12 @@ WHERE cdb_final_count_details.con_id = TO_NUMBER(c.con_id)
 <tr class="sql-row" id="sql-22356bkgsdcnh" data-sys="Y">
 <td class="mono sqlid-cell"><span id="sqlid-22356bkgsdcnh">22356bkgsdcnh</span> <button type="button" class="copy-btn" data-copy="#sqlid-22356bkgsdcnh">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-22356bkgsdcnh" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-22356bkgsdcnh" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="ELAPSED">E</span><span class="chip" title="CPU">C</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">6,026</td><td class="num">2,169</td><td>2026-08-23 11:38</td><td class="mono sqltext">SELECT COUNT(*) FROM X$KSPPI A, X$KSPPCV2 B WHERE A.INDX + 1 = KSPFTCTXPN AND KSPPINM = &apos;_&hellip;</td>
+<td class="mono">SYS</td><td class="num">1</td><td class="num">6,031</td><td class="num">2,170</td><td>2026-08-23 11:38</td><td class="mono sqltext">SELECT COUNT(*) FROM X$KSPPI A, X$KSPPCV2 B WHERE A.INDX + 1 = KSPFTCTXPN AND KSPPINM = &apos;_&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="22356bkgsdcnh" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd>emagent_SQL_oracle_database</dd><dt>Action</dt><dd>ha_backup_sbt</dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono">4105016950430450626</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>146 chars</dd></dl>
 <table id="phv-summary-22356bkgsdcnh"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">585200625</td><td>2026-08-23 11:38</td><td>2026-09-27 13:15</td><td class="num">2,169</td><td class="num">6,026</td><td class="num">0.04569</td><td class="num">0.05924</td></tr>
+<tr><td class="num mono">585200625</td><td>2026-08-23 11:38</td><td>2026-09-27 14:15</td><td class="num">2,170</td><td class="num">6,031</td><td class="num">0.04569</td><td class="num">0.05919</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-22356bkgsdcnh"></div>
 <script>AWR_DATA.sqlDetails["22356bkgsdcnh"]={snaps:[
@@ -11431,6 +11439,7 @@ WHERE cdb_final_count_details.con_id = TO_NUMBER(c.con_id)
 ,{"t":"2026-09-27 12:30","phv":"585200625","exec":3,"ela":0.071628}
 ,{"t":"2026-09-27 12:45","phv":"585200625","exec":3,"ela":0.040964}
 ,{"t":"2026-09-27 13:15","phv":"585200625","exec":4,"ela":0.041807}
+,{"t":"2026-09-27 14:15","phv":"585200625","exec":5,"ela":0.041734}
 ]};</script>
 <pre class="sql">SELECT COUNT(*) FROM X$KSPPI A, X$KSPPCV2 B WHERE A.INDX + 1 = KSPFTCTXPN AND KSPPINM = &apos;_deferred_log_dest_is_valid&apos; AND UPPER(KSPFTCTXVL)=&apos;TRUE&apos;</pre>
 </td></tr>
@@ -11568,7 +11577,7 @@ WHERE cdb_final_count_details.con_id = TO_NUMBER(c.con_id)
 <tr class="sql-row" id="sql-1fvsn5j51ugz3" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-1fvsn5j51ugz3">1fvsn5j51ugz3</span> <button type="button" class="copy-btn" data-copy="#sqlid-1fvsn5j51ugz3">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-1fvsn5j51ugz3" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-1fvsn5j51ugz3" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="ELAPSED">E</span><span class="chip" title="CPU">C</span></td>
-<td class="mono">SYS</td><td class="num">0</td><td class="num">2,397</td><td class="num">2,078</td><td>2026-08-23 11:49</td><td class="mono sqltext">      begin
+<td class="mono">SYS</td><td class="num">0</td><td class="num">2,399</td><td class="num">2,079</td><td>2026-08-23 11:49</td><td class="mono sqltext">      begin
          dbms_rcvman.resetAll;
       end;</td>
 </tr>
@@ -11581,12 +11590,12 @@ WHERE cdb_final_count_details.con_id = TO_NUMBER(c.con_id)
 <tr class="sql-row" id="sql-03guhbfpak0w7" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-03guhbfpak0w7">03guhbfpak0w7</span> <button type="button" class="copy-btn" data-copy="#sqlid-03guhbfpak0w7">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-03guhbfpak0w7" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-03guhbfpak0w7" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="PREADS">R</span></td>
-<td class="mono">SYS</td><td class="num">2</td><td class="num">19,866</td><td class="num">522</td><td>2026-08-23 11:38</td><td class="mono sqltext">select /*+ index(idl_ub1$ i_idl_ub11) */ piece#,length,piece from idl_ub1$ where obj#=:1 a&hellip;</td>
+<td class="mono">SYS</td><td class="num">2</td><td class="num">19,867</td><td class="num">523</td><td>2026-08-23 11:38</td><td class="mono sqltext">select /*+ index(idl_ub1$ i_idl_ub11) */ piece#,length,piece from idl_ub1$ where obj#=:1 a&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="03guhbfpak0w7" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono">11693190177341983400</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>131 chars</dd></dl>
 <table id="phv-summary-03guhbfpak0w7"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">3246118364</td><td>2026-08-23 11:38</td><td>2026-09-27 13:45</td><td class="num">521</td><td class="num">19,702</td><td class="num">0.001212</td><td class="num">14.71</td></tr>
+<tr><td class="num mono">3246118364</td><td>2026-08-23 11:38</td><td>2026-09-27 14:00</td><td class="num">522</td><td class="num">19,703</td><td class="num">0.001212</td><td class="num">14.71</td></tr>
 <tr><td class="num mono">2334475966</td><td>2026-08-26 19:34</td><td>2026-08-26 19:44</td><td class="num">1</td><td class="num">164</td><td class="num">0.009374</td><td class="num">15.83</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-03guhbfpak0w7"></div>
@@ -12103,6 +12112,7 @@ WHERE cdb_final_count_details.con_id = TO_NUMBER(c.con_id)
 ,{"t":"2026-09-27 13:15","phv":"3246118364","exec":34,"ela":0.001502}
 ,{"t":"2026-09-27 13:30","phv":"3246118364","exec":20,"ela":0.004707}
 ,{"t":"2026-09-27 13:45","phv":"3246118364","exec":1,"ela":0.000407}
+,{"t":"2026-09-27 14:00","phv":"3246118364","exec":1,"ela":0.000797}
 ]};</script>
 <pre class="sql">select /*+ index(idl_ub1$ i_idl_ub11) */ piece#,length,piece from idl_ub1$ where obj#=:1 and part=:2 and version=:3 order by piece#</pre>
 </td></tr>
@@ -12226,7 +12236,7 @@ AND   vpb.con_id(+) = pdb.con_id
 <tr class="sql-row" id="sql-09tdt28zbb322" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-09tdt28zbb322">09tdt28zbb322</span> <button type="button" class="copy-btn" data-copy="#sqlid-09tdt28zbb322">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-09tdt28zbb322" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-09tdt28zbb322" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="EXEC">X</span></td>
-<td class="mono">SYS</td><td class="num">0</td><td class="num">99,002</td><td class="num">373</td><td>2026-09-03 08:45</td><td class="mono sqltext">      declare
+<td class="mono">SYS</td><td class="num">0</td><td class="num">99,563</td><td class="num">374</td><td>2026-09-03 08:45</td><td class="mono sqltext">      declare
          agedFileRec   dbms_rcvman.agedFileRec_t;
          first         boo&hellip;</td>
 </tr>
@@ -12486,13 +12496,13 @@ AND   vpb.con_id(+) = pdb.con_id
 <tr class="sql-row" id="sql-1pzw83n4gngjs" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-1pzw83n4gngjs">1pzw83n4gngjs</span> <button type="button" class="copy-btn" data-copy="#sqlid-1pzw83n4gngjs">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-1pzw83n4gngjs" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-1pzw83n4gngjs" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="ELAPSED">E</span><span class="chip" title="CPU">C</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">23,193</td><td class="num">1,559</td><td>2026-08-29 11:30</td><td class="mono sqltext">select json_object(
+<td class="mono">SYS</td><td class="num">1</td><td class="num">23,208</td><td class="num">1,560</td><td>2026-08-29 11:30</td><td class="mono sqltext">select json_object(
   &apos;collected_at&apos; value to_char(sys_extract_utc(systimestamp), &apos;YYYY-MM&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="1pzw83n4gngjs" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd>sqlplus@ol9-19-dg1.localdomain (TNS V1-V3)</dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono">935332091860047417</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>648 chars</dd></dl>
 <table id="phv-summary-1pzw83n4gngjs"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">3181894540</td><td>2026-08-29 11:30</td><td>2026-09-27 13:15</td><td class="num">1,559</td><td class="num">23,193</td><td class="num">0.004829</td><td class="num">27.05</td></tr>
+<tr><td class="num mono">3181894540</td><td>2026-08-29 11:30</td><td>2026-09-27 14:15</td><td class="num">1,560</td><td class="num">23,208</td><td class="num">0.004829</td><td class="num">27.07</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-1pzw83n4gngjs"></div>
 <script>AWR_DATA.sqlDetails["1pzw83n4gngjs"]={snaps:[
@@ -14055,6 +14065,7 @@ AND   vpb.con_id(+) = pdb.con_id
 ,{"t":"2026-09-27 12:30","phv":"3181894540","exec":15,"ela":0.013351}
 ,{"t":"2026-09-27 12:45","phv":"3181894540","exec":15,"ela":0.007446}
 ,{"t":"2026-09-27 13:15","phv":"3181894540","exec":15,"ela":0.005555}
+,{"t":"2026-09-27 14:15","phv":"3181894540","exec":15,"ela":0.005204}
 ]};</script>
 <pre class="sql">select json_object(
   &apos;collected_at&apos; value to_char(sys_extract_utc(systimestamp), &apos;YYYY-MM-DD&quot;T&quot;HH24:MI:SS.FF3&quot;Z&quot;&apos;),
@@ -14075,7 +14086,7 @@ AND   vpb.con_id(+) = pdb.con_id
 <tr class="sql-row" id="sql-1rpgk59t8pvs6" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-1rpgk59t8pvs6">1rpgk59t8pvs6</span> <button type="button" class="copy-btn" data-copy="#sqlid-1rpgk59t8pvs6">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-1rpgk59t8pvs6" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-1rpgk59t8pvs6" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="EXEC">X</span></td>
-<td class="mono">SYS</td><td class="num">0</td><td class="num">198,241</td><td class="num">2,182</td><td>2026-08-23 16:56</td><td class="mono sqltext">      begin
+<td class="mono">SYS</td><td class="num">0</td><td class="num">198,929</td><td class="num">2,184</td><td>2026-08-23 16:56</td><td class="mono sqltext">      begin
          dbms_output.get_line(:line, :status);
       end;</td>
 </tr>
@@ -14088,7 +14099,7 @@ AND   vpb.con_id(+) = pdb.con_id
 <tr class="sql-row" id="sql-28bgqbzpa87xf" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-28bgqbzpa87xf">28bgqbzpa87xf</span> <button type="button" class="copy-btn" data-copy="#sqlid-28bgqbzpa87xf">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-28bgqbzpa87xf" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-28bgqbzpa87xf" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="ELAPSED">E</span><span class="chip" title="CPU">C</span></td>
-<td class="mono">SYS</td><td class="num">0</td><td class="num">2,090</td><td class="num">2,072</td><td>2026-08-23 11:49</td><td class="mono sqltext">      declare
+<td class="mono">SYS</td><td class="num">0</td><td class="num">2,091</td><td class="num">2,073</td><td>2026-08-23 11:49</td><td class="mono sqltext">      declare
          policy        varchar2(512);
          alldest       number  := dbms&hellip;</td>
 </tr>
@@ -14153,12 +14164,12 @@ AND   vpb.con_id(+) = pdb.con_id
 <tr class="sql-row" id="sql-2jzz7j5bkc3xj" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-2jzz7j5bkc3xj">2jzz7j5bkc3xj</span> <button type="button" class="copy-btn" data-copy="#sqlid-2jzz7j5bkc3xj">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-2jzz7j5bkc3xj" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-2jzz7j5bkc3xj" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="GETS">G</span><span class="chip" title="PREADS">R</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">602</td><td class="num">602</td><td>2026-08-23 21:30</td><td class="mono sqltext">insert into  WRH$_EVENT_HISTOGRAM  (dbid, per_pdb, con_dbid, snap_id, instance_number,    &hellip;</td>
+<td class="mono">SYS</td><td class="num">1</td><td class="num">603</td><td class="num">603</td><td>2026-08-23 21:30</td><td class="mono sqltext">insert into  WRH$_EVENT_HISTOGRAM  (dbid, per_pdb, con_dbid, snap_id, instance_number,    &hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="2jzz7j5bkc3xj" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono">14894371175163409544</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>417 chars</dd></dl>
 <table id="phv-summary-2jzz7j5bkc3xj"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">4139502717</td><td>2026-08-23 21:30</td><td>2026-09-27 12:15</td><td class="num">602</td><td class="num">602</td><td class="num">0.0676</td><td class="num">1,109</td></tr>
+<tr><td class="num mono">4139502717</td><td>2026-08-23 21:30</td><td>2026-09-27 14:15</td><td class="num">603</td><td class="num">603</td><td class="num">0.06753</td><td class="num">1,109</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-2jzz7j5bkc3xj"></div>
 <script>AWR_DATA.sqlDetails["2jzz7j5bkc3xj"]={snaps:[
@@ -14764,6 +14775,7 @@ AND   vpb.con_id(+) = pdb.con_id
 ,{"t":"2026-09-26 16:15","phv":"4139502717","exec":1,"ela":0.078841}
 ,{"t":"2026-09-27 10:15","phv":"4139502717","exec":1,"ela":0.054770}
 ,{"t":"2026-09-27 12:15","phv":"4139502717","exec":1,"ela":0.029658}
+,{"t":"2026-09-27 14:15","phv":"4139502717","exec":1,"ela":0.020994}
 ]};</script>
 <pre class="sql">insert into  WRH$_EVENT_HISTOGRAM  (dbid, per_pdb, con_dbid, snap_id, instance_number,     event_id, wait_time_milli, wait_count ) select  :dbid,  s.con_id, con_id_to_dbid(s.con_id)  con_dbid,  :snap_id, :instance_number,        d.ksledhash, s.kslsesmaxdur/1024,        s.kslsesval   FROM x$kslseshist_micro   s, x$ksled   d  WHERE  (1 = 1)  AND ( s.con_id &lt; 4099  )   and s.kslsesenum = d.indx   and s.kslsesval &gt; 0 </pre>
 </td></tr>
@@ -14818,12 +14830,12 @@ select client_name, status from DBA_AUTOTASK_CLIENT
 <tr class="sql-row" id="sql-3dbzmtf9ahvzt" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-3dbzmtf9ahvzt">3dbzmtf9ahvzt</span> <button type="button" class="copy-btn" data-copy="#sqlid-3dbzmtf9ahvzt">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-3dbzmtf9ahvzt" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-3dbzmtf9ahvzt" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="GETS">G</span><span class="chip" title="PREADS">R</span><span class="chip" title="EXEC">X</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">293,072</td><td class="num">2,342</td><td>2026-08-23 16:56</td><td class="mono sqltext">merge /* KSXM:OPTIM_DML_INF */  into sys.mon_mods_all$ m                   using dual     &hellip;</td>
+<td class="mono">SYS</td><td class="num">1</td><td class="num">293,318</td><td class="num">2,344</td><td>2026-08-23 16:56</td><td class="mono sqltext">merge /* KSXM:OPTIM_DML_INF */  into sys.mon_mods_all$ m                   using dual     &hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="3dbzmtf9ahvzt" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono">7187657109694262111</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>2,323 chars</dd></dl>
 <table id="phv-summary-3dbzmtf9ahvzt"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">3238164414</td><td>2026-08-23 16:56</td><td>2026-09-27 13:45</td><td class="num">2,342</td><td class="num">293,072</td><td class="num">0.000097</td><td class="num">6.079</td></tr>
+<tr><td class="num mono">3238164414</td><td>2026-08-23 16:56</td><td>2026-09-27 14:15</td><td class="num">2,344</td><td class="num">293,318</td><td class="num">0.000097</td><td class="num">6.079</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-3dbzmtf9ahvzt"></div>
 <script>AWR_DATA.sqlDetails["3dbzmtf9ahvzt"]={snaps:[
@@ -17060,6 +17072,8 @@ select client_name, status from DBA_AUTOTASK_CLIENT
 ,{"t":"2026-09-27 13:15","phv":"3238164414","exec":162,"ela":0.000085}
 ,{"t":"2026-09-27 13:30","phv":"3238164414","exec":134,"ela":0.000064}
 ,{"t":"2026-09-27 13:45","phv":"3238164414","exec":128,"ela":0.000080}
+,{"t":"2026-09-27 14:00","phv":"3238164414","exec":118,"ela":0.000791}
+,{"t":"2026-09-27 14:15","phv":"3238164414","exec":128,"ela":0.000070}
 ]};</script>
 <pre class="sql">merge /* KSXM:OPTIM_DML_INF */  into sys.mon_mods_all$ m                   using dual                                                                 on (m.obj# = :objn and                                                         (:pobjn = 0 or                                                              m.obj# = :pobjn or                                                         m.obj# in (select obj#                                                                from tabpart$                                                              where bo# = :pobjn and obj# = :objn                                        union all                                                                  select obj#                                                                from tabcompart$                                                           where bo# = :pobjn and obj# = :objn                                        union all                                                                  select tsp.obj#                                                            from tabsubpart$ tsp, tabcompart$ tcp                                      where tsp.pobj# = tcp.obj#                                                   and (tcp.bo# = :pobjn or tcp.obj# = :pobjn)                                and tsp.obj# = :objn)))                                  when matched then                                                            update                                                                     set inserts = decode(:reset, 1, 0, inserts) + :ins,                            updates = decode(:reset, 1, 0, updates) + :upd,                            deletes = decode(:reset, 1, 0, deletes) + :del,                            flags =  decode(:reset, 1, 0, flags - bitand(flags, :flag)) + :flag,       drop_segments = decode(:reset, 1, 0, drop_segments) + :dropseg,            timestamp = :time                                                    when NOT matched then                                                        insert (obj#, inserts, updates, deletes,                                           timestamp, flags, drop_segments)                                   values (:objn, :ins, :upd, :del, :time, :flag, :dropseg)                   where :ins != 0 or :upd != 0 or :del != 0 or :flag != 0 or :dropseg !=0</pre>
 </td></tr>
@@ -17151,12 +17165,12 @@ select client_name, status from DBA_AUTOTASK_CLIENT
 <tr class="sql-row" id="sql-3rdvj2msrkpn0" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-3rdvj2msrkpn0">3rdvj2msrkpn0</span> <button type="button" class="copy-btn" data-copy="#sqlid-3rdvj2msrkpn0">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-3rdvj2msrkpn0" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-3rdvj2msrkpn0" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="CPU">C</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">22,896</td><td class="num">2,010</td><td>2026-08-23 11:38</td><td class="mono sqltext">select T.*  from table(dbms_xplan.get_plan_rows(:tab_name, :stmt_id, :plan_id, :format, :f&hellip;</td>
+<td class="mono">SYS</td><td class="num">1</td><td class="num">22,908</td><td class="num">2,011</td><td>2026-08-23 11:38</td><td class="mono sqltext">select T.*  from table(dbms_xplan.get_plan_rows(:tab_name, :stmt_id, :plan_id, :format, :f&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="3rdvj2msrkpn0" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono">15265304128816016130</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>108 chars</dd></dl>
 <table id="phv-summary-3rdvj2msrkpn0"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">307411756</td><td>2026-08-23 11:38</td><td>2026-09-27 12:45</td><td class="num">2,010</td><td class="num">22,896</td><td class="num">0.004722</td><td class="num">0.4538</td></tr>
+<tr><td class="num mono">307411756</td><td>2026-08-23 11:38</td><td>2026-09-27 14:15</td><td class="num">2,011</td><td class="num">22,908</td><td class="num">0.004722</td><td class="num">0.4536</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-3rdvj2msrkpn0"></div>
 <script>AWR_DATA.sqlDetails["3rdvj2msrkpn0"]={snaps:[
@@ -19170,18 +19184,19 @@ select client_name, status from DBA_AUTOTASK_CLIENT
 ,{"t":"2026-09-27 12:15","phv":"307411756","exec":12,"ela":0.003210}
 ,{"t":"2026-09-27 12:30","phv":"307411756","exec":12,"ela":0.008514}
 ,{"t":"2026-09-27 12:45","phv":"307411756","exec":9,"ela":0.011872}
+,{"t":"2026-09-27 14:15","phv":"307411756","exec":12,"ela":0.003091}
 ]};</script>
 <pre class="sql">select T.*  from table(dbms_xplan.get_plan_rows(:tab_name, :stmt_id, :plan_id, :format, :fpreds, 1, null)) T</pre>
 </td></tr>
 <tr class="sql-row" id="sql-3un99a0zwp4vd" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-3un99a0zwp4vd">3un99a0zwp4vd</span> <button type="button" class="copy-btn" data-copy="#sqlid-3un99a0zwp4vd">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-3un99a0zwp4vd" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-3un99a0zwp4vd" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="PREADS">R</span></td>
-<td class="mono">SYS</td><td class="num">2</td><td class="num">52,616</td><td class="num">1,039</td><td>2026-08-23 11:38</td><td class="mono sqltext">select owner#,name,namespace,remoteowner,linkname,p_timestamp,p_obj#, nvl(property,0),subn&hellip;</td>
+<td class="mono">SYS</td><td class="num">2</td><td class="num">52,619</td><td class="num">1,041</td><td>2026-08-23 11:38</td><td class="mono sqltext">select owner#,name,namespace,remoteowner,linkname,p_timestamp,p_obj#, nvl(property,0),subn&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="3un99a0zwp4vd" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono">16955708195488272379</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>191 chars</dd></dl>
 <table id="phv-summary-3un99a0zwp4vd"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">1475428744</td><td>2026-08-23 11:38</td><td>2026-09-27 13:45</td><td class="num">977</td><td class="num">52,304</td><td class="num">0.000544</td><td class="num">12.72</td></tr>
+<tr><td class="num mono">1475428744</td><td>2026-08-23 11:38</td><td>2026-09-27 14:15</td><td class="num">979</td><td class="num">52,307</td><td class="num">0.000544</td><td class="num">12.72</td></tr>
 <tr><td class="num mono">4184428695</td><td>2026-08-26 19:34</td><td>2026-08-31 07:00</td><td class="num">62</td><td class="num">312</td><td class="num">0.001502</td><td class="num">15.94</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-3un99a0zwp4vd"></div>
@@ -20053,18 +20068,20 @@ select client_name, status from DBA_AUTOTASK_CLIENT
 ,{"t":"2026-09-27 13:15","phv":"1475428744","exec":59,"ela":0.000217}
 ,{"t":"2026-09-27 13:30","phv":"1475428744","exec":38,"ela":0.000194}
 ,{"t":"2026-09-27 13:45","phv":"1475428744","exec":3,"ela":0.000289}
+,{"t":"2026-09-27 14:00","phv":"1475428744","exec":2,"ela":0.000775}
+,{"t":"2026-09-27 14:15","phv":"1475428744","exec":1,"ela":0.000192}
 ]};</script>
 <pre class="sql">select owner#,name,namespace,remoteowner,linkname,p_timestamp,p_obj#, nvl(property,0),subname,type#,flags,d_attrs from dependency$ d, obj$ o where d_obj#=:1 and p_obj#=obj#(+) order by order#</pre>
 </td></tr>
 <tr class="sql-row" id="sql-5dqz0hqtp9fru" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-5dqz0hqtp9fru">5dqz0hqtp9fru</span> <button type="button" class="copy-btn" data-copy="#sqlid-5dqz0hqtp9fru">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-5dqz0hqtp9fru" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-5dqz0hqtp9fru" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="GETS">G</span><span class="chip" title="EXEC">X</span></td>
-<td class="mono">SYS</td><td class="num">3 <span class="badge warn">plan flip</span></td><td class="num">384,205</td><td class="num">1,891</td><td>2026-08-23 11:38</td><td class="mono sqltext">select /*+ connect_by_filtering index(sysauth$ i_sysauth1) */ privilege#, bitand(nvl(optio&hellip;</td>
+<td class="mono">SYS</td><td class="num">3 <span class="badge warn">plan flip</span></td><td class="num">384,439</td><td class="num">1,892</td><td>2026-08-23 11:38</td><td class="mono sqltext">select /*+ connect_by_filtering index(sysauth$ i_sysauth1) */ privilege#, bitand(nvl(optio&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="5dqz0hqtp9fru" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd>sqlplus@ol9-19-dg1.localdomain (TNS V1-V3)</dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono">15923375254844418634</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>226 chars</dd></dl>
 <table id="phv-summary-5dqz0hqtp9fru"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">1227530427</td><td>2026-08-23 11:38</td><td>2026-09-27 13:45</td><td class="num">1,812</td><td class="num">380,468</td><td class="num">0.000022</td><td class="num">4.120</td></tr>
+<tr><td class="num mono">1227530427</td><td>2026-08-23 11:38</td><td>2026-09-27 14:15</td><td class="num">1,813</td><td class="num">380,702</td><td class="num">0.000022</td><td class="num">4.120</td></tr>
 <tr><td class="num mono">4147495557</td><td>2026-08-23 16:46</td><td>2026-08-26 19:44</td><td class="num">2</td><td class="num">770</td><td class="num">0.000033</td><td class="num">4.104</td></tr>
 <tr><td class="num mono">1158320201</td><td>2026-08-29 14:06</td><td>2026-09-09 12:45</td><td class="num">77</td><td class="num">2,967</td><td class="num">0.00017</td><td class="num">28.17</td></tr>
 </tbody></table>
@@ -21725,6 +21742,7 @@ select client_name, status from DBA_AUTOTASK_CLIENT
 ,{"t":"2026-09-27 12:45","phv":"1227530427","exec":234,"ela":0.000040}
 ,{"t":"2026-09-27 13:15","phv":"1227530427","exec":234,"ela":0.000024}
 ,{"t":"2026-09-27 13:45","phv":"1227530427","exec":234,"ela":0.000028}
+,{"t":"2026-09-27 14:15","phv":"1227530427","exec":234,"ela":0.000021}
 ]};</script>
 <pre class="sql">select /*+ connect_by_filtering index(sysauth$ i_sysauth1) */ privilege#, bitand(nvl(option$, 0), 72), grantee#, level from sysauth$ connect by grantee#=prior privilege# and privilege#&gt;0 start with grantee#=:1 and privilege#&gt;0</pre>
 </td></tr>
@@ -21828,13 +21846,13 @@ select parameter as name,value as selected from v$option
 <tr class="sql-row" id="sql-6xvp6nxs4a9n4" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-6xvp6nxs4a9n4">6xvp6nxs4a9n4</span> <button type="button" class="copy-btn" data-copy="#sqlid-6xvp6nxs4a9n4">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-6xvp6nxs4a9n4" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-6xvp6nxs4a9n4" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip on" title="EXEC">X</span></td>
-<td class="mono">SYS</td><td class="num">2</td><td class="num">375,175</td><td class="num">3,807</td><td>2026-08-23 20:41</td><td class="mono sqltext">select nvl(sum(space),0) from recyclebin$ where ts# = :1</td>
+<td class="mono">SYS</td><td class="num">2</td><td class="num">375,674</td><td class="num">3,811</td><td>2026-08-23 20:41</td><td class="mono sqltext">select nvl(sum(space),0) from recyclebin$ where ts# = :1</td>
 </tr>
 <tr class="sql-detail" data-sql="6xvp6nxs4a9n4" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono">5206426832808080579</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>56 chars</dd></dl>
 <table id="phv-summary-6xvp6nxs4a9n4"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">3523134145</td><td>2026-08-23 20:41</td><td>2026-09-27 13:45</td><td class="num">3,721</td><td class="num">362,564</td><td class="num">0.000023</td><td class="num">0.3914</td></tr>
-<tr><td class="num mono">571474032</td><td>2026-09-26 05:00</td><td>2026-09-27 13:45</td><td class="num">86</td><td class="num">12,611</td><td class="num">0.000043</td><td class="num">2.010</td></tr>
+<tr><td class="num mono">3523134145</td><td>2026-08-23 20:41</td><td>2026-09-27 14:15</td><td class="num">3,723</td><td class="num">362,737</td><td class="num">0.000023</td><td class="num">0.3917</td></tr>
+<tr><td class="num mono">571474032</td><td>2026-09-26 05:00</td><td>2026-09-27 14:15</td><td class="num">88</td><td class="num">12,937</td><td class="num">0.000043</td><td class="num">2.009</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-6xvp6nxs4a9n4"></div>
 <script>AWR_DATA.sqlDetails["6xvp6nxs4a9n4"]={snaps:[
@@ -23901,6 +23919,10 @@ select parameter as name,value as selected from v$option
 ,{"t":"2026-09-27 13:30","phv":"3523134145","exec":88,"ela":0.000028}
 ,{"t":"2026-09-27 13:45","phv":"571474032","exec":155,"ela":0.000038}
 ,{"t":"2026-09-27 13:45","phv":"3523134145","exec":86,"ela":0.000031}
+,{"t":"2026-09-27 14:00","phv":"571474032","exec":172,"ela":0.000046}
+,{"t":"2026-09-27 14:00","phv":"3523134145","exec":88,"ela":0.000030}
+,{"t":"2026-09-27 14:15","phv":"571474032","exec":154,"ela":0.000042}
+,{"t":"2026-09-27 14:15","phv":"3523134145","exec":85,"ela":0.000029}
 ]};</script>
 <pre class="sql">select nvl(sum(space),0) from recyclebin$ where ts# = :1</pre>
 </td></tr>
@@ -23948,12 +23970,12 @@ select parameter as name,value as selected from v$option
 <tr class="sql-row" id="sql-7dhg9ys7r45hx" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-7dhg9ys7r45hx">7dhg9ys7r45hx</span> <button type="button" class="copy-btn" data-copy="#sqlid-7dhg9ys7r45hx">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-7dhg9ys7r45hx" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-7dhg9ys7r45hx" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="GETS">G</span></td>
-<td class="mono">AUDSYS</td><td class="num">3 <span class="badge warn">plan flip</span></td><td class="num">263</td><td class="num">262</td><td>2026-08-23 11:38</td><td class="mono sqltext">SELECT /*+ NO_STATEMENT_QUEUING RESULT_CACHE (SYSOBJ=TRUE SHELFLIFE=30) */ &quot;DBUSERNAME&quot;,&quot;E&hellip;</td>
+<td class="mono">AUDSYS</td><td class="num">3 <span class="badge warn">plan flip</span></td><td class="num">264</td><td class="num">263</td><td>2026-08-23 11:38</td><td class="mono sqltext">SELECT /*+ NO_STATEMENT_QUEUING RESULT_CACHE (SYSOBJ=TRUE SHELFLIFE=30) */ &quot;DBUSERNAME&quot;,&quot;E&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="7dhg9ys7r45hx" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">AUDSYS</dd><dt>Module</dt><dd>Oracle Enterprise Manager.Metric Engine</dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono">5149218935331065413</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>339 chars</dd></dl>
 <table id="phv-summary-7dhg9ys7r45hx"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">1429948838</td><td>2026-08-23 11:38</td><td>2026-09-27 13:15</td><td class="num">127</td><td class="num">128</td><td class="num">0.05035</td><td class="num">1,656</td></tr>
+<tr><td class="num mono">1429948838</td><td>2026-08-23 11:38</td><td>2026-09-27 14:15</td><td class="num">128</td><td class="num">129</td><td class="num">0.05012</td><td class="num">1,657</td></tr>
 <tr><td class="num mono">2758041994</td><td>2026-08-23 21:15</td><td>2026-09-27 10:45</td><td class="num">134</td><td class="num">134</td><td class="num">0.0372</td><td class="num">1,405</td></tr>
 <tr><td class="num mono">1784545626</td><td>2026-09-02 18:30</td><td>2026-09-02 18:45</td><td class="num">1</td><td class="num">1</td><td class="num">0.02248</td><td class="num">1,393</td></tr>
 </tbody></table>
@@ -24221,18 +24243,19 @@ select parameter as name,value as selected from v$option
 ,{"t":"2026-09-27 10:45","phv":"2758041994","exec":1,"ela":0.023877}
 ,{"t":"2026-09-27 12:45","phv":"1429948838","exec":1,"ela":0.023369}
 ,{"t":"2026-09-27 13:15","phv":"1429948838","exec":1,"ela":0.069031}
+,{"t":"2026-09-27 14:15","phv":"1429948838","exec":1,"ela":0.021574}
 ]};</script>
 <pre class="sql">SELECT /*+ NO_STATEMENT_QUEUING RESULT_CACHE (SYSOBJ=TRUE SHELFLIFE=30) */ &quot;DBUSERNAME&quot;,&quot;EVENT_TIMESTAMP&quot;,&quot;ACTION_NAME&quot;,&quot;RETURN_CODE&quot; FROM &quot;AUDSYS&quot;.&quot;UNIFIED_AUDIT_TRAIL&quot; &quot;K&quot; WHERE &quot;K&quot;.&quot;ACTION_NAME&quot;=&apos;LOGON&apos; AND &quot;K&quot;.&quot;RETURN_CODE&quot;&lt;&gt;0 AND SYS_EXTRACT_UTC(&quot;K&quot;.&quot;EVENT_TIMESTAMP&quot;)&gt;=SYS_EXTRACT_UTC(CURRENT_TIMESTAMP(6)-TO_DSINTERVAL(&apos;0 0:30:00&apos;))</pre>
 </td></tr>
 <tr class="sql-row" id="sql-7h6kvx22p1mvc" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-7h6kvx22p1mvc">7h6kvx22p1mvc</span> <button type="button" class="copy-btn" data-copy="#sqlid-7h6kvx22p1mvc">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-7h6kvx22p1mvc" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-7h6kvx22p1mvc" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="GETS">G</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">1,049</td><td class="num">1,044</td><td>2026-08-23 11:38</td><td class="mono sqltext">SELECT TO_CHAR(current_timestamp AT TIME ZONE &apos;GMT&apos;, &apos;YYYY-MM-DD HH24:MI:SS TZD&apos;)  AS curr&hellip;</td>
+<td class="mono">SYS</td><td class="num">1</td><td class="num">1,050</td><td class="num">1,045</td><td>2026-08-23 11:38</td><td class="mono sqltext">SELECT TO_CHAR(current_timestamp AT TIME ZONE &apos;GMT&apos;, &apos;YYYY-MM-DD HH24:MI:SS TZD&apos;)  AS curr&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="7h6kvx22p1mvc" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd>Oracle Enterprise Manager.Metric Engine</dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono">15582271173586173236</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>1,011 chars</dd></dl>
 <table id="phv-summary-7h6kvx22p1mvc"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">1561607518</td><td>2026-08-23 11:38</td><td>2026-09-27 13:15</td><td class="num">1,044</td><td class="num">1,049</td><td class="num">0.05949</td><td class="num">4,142</td></tr>
+<tr><td class="num mono">1561607518</td><td>2026-08-23 11:38</td><td>2026-09-27 14:15</td><td class="num">1,045</td><td class="num">1,050</td><td class="num">0.05949</td><td class="num">4,142</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-7h6kvx22p1mvc"></div>
 <script>AWR_DATA.sqlDetails["7h6kvx22p1mvc"]={snaps:[
@@ -25280,18 +25303,19 @@ select parameter as name,value as selected from v$option
 ,{"t":"2026-09-27 12:15","phv":"1561607518","exec":1,"ela":0.048565}
 ,{"t":"2026-09-27 12:45","phv":"1561607518","exec":1,"ela":0.083252}
 ,{"t":"2026-09-27 13:15","phv":"1561607518","exec":1,"ela":0.113659}
+,{"t":"2026-09-27 14:15","phv":"1561607518","exec":1,"ela":0.064677}
 ]};</script>
 <pre class="sql">SELECT TO_CHAR(current_timestamp AT TIME ZONE &apos;GMT&apos;, &apos;YYYY-MM-DD HH24:MI:SS TZD&apos;)  AS curr_timestamp, SUM(failed_count) AS failed_count ,   TO_CHAR(MIN(first_occur_time), &apos;yyyy-mm-dd hh24:mi:ss&apos;) AS first_occur_time,    TO_CHAR(MAX(last_occur_time), &apos;yyyy-mm-dd hh24:mi:ss&apos;) AS last_occur_time,  name FROM (SELECT COUNT(DBUSERNAME) AS failed_count,  MIN(event_timestamp) AS first_occur_time, MAX(event_timestamp) AS last_occur_time, c.name  FROM cdb_unified_audit_trail a,  v$containers c  WHERE a.ACTION_NAME=&apos;LOGON&apos; and a.return_code &lt;&gt; 0  AND a.event_timestamp &gt;= current_timestamp - TO_DSINTERVAL(&apos;0 0:30:00&apos;)  AND a.con_id = c.con_id  GROUP BY c.name  UNION  SELECT COUNT(username) AS failed_count,  MIN(timestamp) AS first_occur_time,  MAX(timestamp) AS last_occur_time, c.name  FROM  sys.cdb_audit_session a, v$containers c  WHERE a.returncode != 0  AND  a.ACTION_NAME = &apos;LOGON&apos;  AND a.timestamp &gt;= current_timestamp - TO_DSINTERVAL(&apos;0 0:30:00&apos;)  AND a.con_id = c.con_id  GROUP BY c.name ) GROUP BY name </pre>
 </td></tr>
 <tr class="sql-row" id="sql-7kub1nvw8wmq3" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-7kub1nvw8wmq3">7kub1nvw8wmq3</span> <button type="button" class="copy-btn" data-copy="#sqlid-7kub1nvw8wmq3">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-7kub1nvw8wmq3" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-7kub1nvw8wmq3" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="ELAPSED">E</span><span class="chip" title="CPU">C</span><span class="chip" title="PREADS">R</span></td>
-<td class="mono">SYS</td><td class="num">2</td><td class="num">2,085</td><td class="num">2,206</td><td>2026-08-23 16:56</td><td class="mono sqltext">insert into  wrh$_mvparameter  (dbid, per_pdb, con_dbid, snap_id, instance_number, paramet&hellip;</td>
+<td class="mono">SYS</td><td class="num">2</td><td class="num">2,086</td><td class="num">2,207</td><td>2026-08-23 16:56</td><td class="mono sqltext">insert into  wrh$_mvparameter  (dbid, per_pdb, con_dbid, snap_id, instance_number, paramet&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="7kub1nvw8wmq3" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono">8202132710599047039</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>468 chars</dd></dl>
 <table id="phv-summary-7kub1nvw8wmq3"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">2243849280</td><td>2026-08-23 16:56</td><td>2026-09-27 13:15</td><td class="num">2,084</td><td class="num">2,071</td><td class="num">0.05706</td><td class="num">15.40</td></tr>
+<tr><td class="num mono">2243849280</td><td>2026-08-23 16:56</td><td>2026-09-27 14:15</td><td class="num">2,085</td><td class="num">2,072</td><td class="num">0.05706</td><td class="num">15.40</td></tr>
 <tr><td class="num mono">1796491218</td><td>2026-08-29 13:59</td><td>2026-09-11 04:45</td><td class="num">122</td><td class="num">14</td><td class="num">0.0182</td><td class="num">31.93</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-7kub1nvw8wmq3"></div>
@@ -27502,6 +27526,7 @@ select parameter as name,value as selected from v$option
 ,{"t":"2026-09-27 12:30","phv":"2243849280","exec":1,"ela":0.101614}
 ,{"t":"2026-09-27 12:45","phv":"2243849280","exec":1,"ela":0.047304}
 ,{"t":"2026-09-27 13:15","phv":"2243849280","exec":1,"ela":0.053199}
+,{"t":"2026-09-27 14:15","phv":"2243849280","exec":1,"ela":0.055765}
 ]};</script>
 <pre class="sql">insert into  wrh$_mvparameter  (dbid, per_pdb, con_dbid, snap_id, instance_number, parameter_hash, ordinal, value, isdefault, ismodified)  select  :dbid,  sv.con_id, con_id_to_dbid(sv.con_id)  con_dbid,  :snap_id, :instance_number, sv.hash, sv.ordinal, substr(sv.value, 1, 512), sv.isdefault, sv.ismodified  from v$system_parameter2    sv  where exists (select 1 from v$system_parameter4    i  where i.num = sv.num                    and bitand(i.param_flag,32) = 32) </pre>
 </td></tr>
@@ -27540,12 +27565,12 @@ select parameter as name,value as selected from v$option
 <tr class="sql-row" id="sql-8swypbbr0m372" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-8swypbbr0m372">8swypbbr0m372</span> <button type="button" class="copy-btn" data-copy="#sqlid-8swypbbr0m372">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-8swypbbr0m372" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-8swypbbr0m372" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="PREADS">R</span></td>
-<td class="mono">SYS</td><td class="num">2</td><td class="num">52,220</td><td class="num">1,021</td><td>2026-08-23 11:38</td><td class="mono sqltext">select order#,columns,types from access$ where d_obj#=:1</td>
+<td class="mono">SYS</td><td class="num">2</td><td class="num">52,222</td><td class="num">1,022</td><td>2026-08-23 11:38</td><td class="mono sqltext">select order#,columns,types from access$ where d_obj#=:1</td>
 </tr>
 <tr class="sql-detail" data-sql="8swypbbr0m372" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono">734444955242386636</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>56 chars</dd></dl>
 <table id="phv-summary-8swypbbr0m372"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">570326988</td><td>2026-08-23 11:38</td><td>2026-09-27 13:45</td><td class="num">958</td><td class="num">51,908</td><td class="num">0.000274</td><td class="num">8.686</td></tr>
+<tr><td class="num mono">570326988</td><td>2026-08-23 11:38</td><td>2026-09-27 14:00</td><td class="num">959</td><td class="num">51,910</td><td class="num">0.000274</td><td class="num">8.686</td></tr>
 <tr><td class="num mono">893970548</td><td>2026-08-26 19:34</td><td>2026-08-31 07:00</td><td class="num">63</td><td class="num">312</td><td class="num">0.000897</td><td class="num">14.17</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-8swypbbr0m372"></div>
@@ -28410,18 +28435,19 @@ select parameter as name,value as selected from v$option
 ,{"t":"2026-09-27 13:15","phv":"570326988","exec":59,"ela":0.000082}
 ,{"t":"2026-09-27 13:30","phv":"570326988","exec":38,"ela":0.000234}
 ,{"t":"2026-09-27 13:45","phv":"570326988","exec":3,"ela":0.000127}
+,{"t":"2026-09-27 14:00","phv":"570326988","exec":2,"ela":0.000250}
 ]};</script>
 <pre class="sql">select order#,columns,types from access$ where d_obj#=:1</pre>
 </td></tr>
 <tr class="sql-row" id="sql-8y6q8umcqybwr" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-8y6q8umcqybwr">8y6q8umcqybwr</span> <button type="button" class="copy-btn" data-copy="#sqlid-8y6q8umcqybwr">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-8y6q8umcqybwr" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-8y6q8umcqybwr" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="GETS">G</span><span class="chip" title="PREADS">R</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">1,747</td><td class="num">1,747</td><td>2026-08-23 21:30</td><td class="mono sqltext">insert into  wrh$_parameter  (dbid, per_pdb, con_dbid, snap_id, instance_number, parameter&hellip;</td>
+<td class="mono">SYS</td><td class="num">1</td><td class="num">1,748</td><td class="num">1,748</td><td>2026-08-23 21:30</td><td class="mono sqltext">insert into  wrh$_parameter  (dbid, per_pdb, con_dbid, snap_id, instance_number, parameter&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="8y6q8umcqybwr" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono">17935924578192521696</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>303 chars</dd></dl>
 <table id="phv-summary-8y6q8umcqybwr"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">2844803677</td><td>2026-08-23 21:30</td><td>2026-09-27 12:30</td><td class="num">1,747</td><td class="num">1,747</td><td class="num">0.02398</td><td class="num">681.3</td></tr>
+<tr><td class="num mono">2844803677</td><td>2026-08-23 21:30</td><td>2026-09-27 14:15</td><td class="num">1,748</td><td class="num">1,748</td><td class="num">0.02398</td><td class="num">681.4</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-8y6q8umcqybwr"></div>
 <script>AWR_DATA.sqlDetails["8y6q8umcqybwr"]={snaps:[
@@ -30172,6 +30198,7 @@ select parameter as name,value as selected from v$option
 ,{"t":"2026-09-27 12:00","phv":"2844803677","exec":1,"ela":0.013209}
 ,{"t":"2026-09-27 12:15","phv":"2844803677","exec":1,"ela":0.037761}
 ,{"t":"2026-09-27 12:30","phv":"2844803677","exec":1,"ela":0.040611}
+,{"t":"2026-09-27 14:15","phv":"2844803677","exec":1,"ela":0.018897}
 ]};</script>
 <pre class="sql">insert into  wrh$_parameter  (dbid, per_pdb, con_dbid, snap_id, instance_number, parameter_hash, value, isdefault, ismodified)  select  :dbid,  sp.con_id, con_id_to_dbid(sp.con_id)  con_dbid,  :snap_id, :instance_number, hash, substr(value, 1, 512), isdefault, ismodified  from v$system_parameter    sp </pre>
 </td></tr>
@@ -30240,7 +30267,7 @@ select parameter as name,value as selected from v$option
 <tr class="sql-row" id="sql-a0qc12302fzfk" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-a0qc12302fzfk">a0qc12302fzfk</span> <button type="button" class="copy-btn" data-copy="#sqlid-a0qc12302fzfk">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-a0qc12302fzfk" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-a0qc12302fzfk" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="EXEC">X</span></td>
-<td class="mono">SYS</td><td class="num">0</td><td class="num">228,061</td><td class="num">2,242</td><td>2026-08-23 11:49</td><td class="mono sqltext">begin dbms_application_info.set_module(:1  , :2  ); end;
+<td class="mono">SYS</td><td class="num">0</td><td class="num">228,261</td><td class="num">2,244</td><td>2026-08-23 11:49</td><td class="mono sqltext">begin dbms_application_info.set_module(:1  , :2  ); end;
 </td>
 </tr>
 <tr class="sql-detail" data-sql="a0qc12302fzfk" hidden><td colspan="8">
@@ -30251,7 +30278,7 @@ select parameter as name,value as selected from v$option
 <tr class="sql-row" id="sql-aak3mmhp5a8ft" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-aak3mmhp5a8ft">aak3mmhp5a8ft</span> <button type="button" class="copy-btn" data-copy="#sqlid-aak3mmhp5a8ft">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-aak3mmhp5a8ft" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-aak3mmhp5a8ft" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip on" title="GETS">G</span><span class="chip" title="PREADS">R</span></td>
-<td class="mono">SYS</td><td class="num">0</td><td class="num">2,007</td><td class="num">2,007</td><td>2026-08-23 18:00</td><td class="mono sqltext">BEGIN
+<td class="mono">SYS</td><td class="num">0</td><td class="num">2,008</td><td class="num">2,008</td><td>2026-08-23 18:00</td><td class="mono sqltext">BEGIN
               sys.prvt_hdm.auto_execute(
                 db_id =&gt; :bind_dbid,
       &hellip;</td>
@@ -31025,13 +31052,13 @@ select parameter as name,value as selected from v$option
 <tr class="sql-row" id="sql-bg8azzm6ms51b" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-bg8azzm6ms51b">bg8azzm6ms51b</span> <button type="button" class="copy-btn" data-copy="#sqlid-bg8azzm6ms51b">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-bg8azzm6ms51b" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-bg8azzm6ms51b" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="GETS">G</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">22,750</td><td class="num">1,540</td><td>2026-08-29 11:30</td><td class="mono sqltext">select json_object(
+<td class="mono">SYS</td><td class="num">1</td><td class="num">22,765</td><td class="num">1,541</td><td>2026-08-29 11:30</td><td class="mono sqltext">select json_object(
   &apos;collected_at&apos; value to_char(sys_extract_utc(systimestamp), &apos;YYYY-MM&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="bg8azzm6ms51b" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd>sqlplus@ol9-19-dg1.localdomain (TNS V1-V3)</dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono">1169769593972080845</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>2,455 chars</dd></dl>
 <table id="phv-summary-bg8azzm6ms51b"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">473814785</td><td>2026-08-29 11:30</td><td>2026-09-27 12:45</td><td class="num">1,540</td><td class="num">22,750</td><td class="num">0.003238</td><td class="num">51.46</td></tr>
+<tr><td class="num mono">473814785</td><td>2026-08-29 11:30</td><td>2026-09-27 14:15</td><td class="num">1,541</td><td class="num">22,765</td><td class="num">0.003238</td><td class="num">51.47</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-bg8azzm6ms51b"></div>
 <script>AWR_DATA.sqlDetails["bg8azzm6ms51b"]={snaps:[
@@ -32575,6 +32602,7 @@ select parameter as name,value as selected from v$option
 ,{"t":"2026-09-27 12:15","phv":"473814785","exec":15,"ela":0.002806}
 ,{"t":"2026-09-27 12:30","phv":"473814785","exec":15,"ela":0.006220}
 ,{"t":"2026-09-27 12:45","phv":"473814785","exec":15,"ela":0.004169}
+,{"t":"2026-09-27 14:15","phv":"473814785","exec":15,"ela":0.002889}
 ]};</script>
 <pre class="sql">select json_object(
   &apos;collected_at&apos; value to_char(sys_extract_utc(systimestamp), &apos;YYYY-MM-DD&quot;T&quot;HH24:MI:SS.FF3&quot;Z&quot;&apos;),
@@ -32627,13 +32655,13 @@ select parameter as name,value as selected from v$option
 <tr class="sql-row" id="sql-c398axtp4r62g" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-c398axtp4r62g">c398axtp4r62g</span> <button type="button" class="copy-btn" data-copy="#sqlid-c398axtp4r62g">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-c398axtp4r62g" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-c398axtp4r62g" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="EXEC">X</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">129,217</td><td class="num">2,157</td><td>2026-08-23 16:56</td><td class="mono sqltext">SELECT nonprimarydb.name as pdbName
+<td class="mono">SYS</td><td class="num">1</td><td class="num">129,337</td><td class="num">2,159</td><td>2026-08-23 16:56</td><td class="mono sqltext">SELECT nonprimarydb.name as pdbName
 ,MAX(CASE WHEN takecdbstatus.open_mode LIKE &apos;MOUNT%&apos; T&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="c398axtp4r62g" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd>emagent_SQL_oracle_database</dd><dt>Action</dt><dd>pdbResponse_cdb</dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono">826682939208367061</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>828 chars</dd></dl>
 <table id="phv-summary-c398axtp4r62g"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">4161125554</td><td>2026-08-23 16:56</td><td>2026-09-27 13:45</td><td class="num">2,157</td><td class="num">129,217</td><td class="num">0.000314</td><td class="num">0</td></tr>
+<tr><td class="num mono">4161125554</td><td>2026-08-23 16:56</td><td>2026-09-27 14:15</td><td class="num">2,159</td><td class="num">129,337</td><td class="num">0.000314</td><td class="num">0</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-c398axtp4r62g"></div>
 <script>AWR_DATA.sqlDetails["c398axtp4r62g"]={snaps:[
@@ -34794,6 +34822,8 @@ select parameter as name,value as selected from v$option
 ,{"t":"2026-09-27 13:15","phv":"4161125554","exec":60,"ela":0.000309}
 ,{"t":"2026-09-27 13:30","phv":"4161125554","exec":60,"ela":0.000306}
 ,{"t":"2026-09-27 13:45","phv":"4161125554","exec":60,"ela":0.000311}
+,{"t":"2026-09-27 14:00","phv":"4161125554","exec":60,"ela":0.000313}
+,{"t":"2026-09-27 14:15","phv":"4161125554","exec":60,"ela":0.000305}
 ]};</script>
 <pre class="sql">SELECT nonprimarydb.name as pdbName
 ,MAX(CASE WHEN takecdbstatus.open_mode LIKE &apos;MOUNT%&apos; THEN 1
@@ -34823,13 +34853,13 @@ GROUP BY primarydb.name
 <tr class="sql-row" id="sql-csnp95dz2r8ss" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-csnp95dz2r8ss">csnp95dz2r8ss</span> <button type="button" class="copy-btn" data-copy="#sqlid-csnp95dz2r8ss">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-csnp95dz2r8ss" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-csnp95dz2r8ss" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip on" title="EXEC">X</span></td>
-<td class="mono">SYS</td><td class="num">2</td><td class="num">374,329</td><td class="num">3,745</td><td>2026-08-23 20:41</td><td class="mono sqltext">select file#, block# from recyclebin$ where ts# = :1     and file# != 0 and block# != 0 an&hellip;</td>
+<td class="mono">SYS</td><td class="num">2</td><td class="num">374,829</td><td class="num">3,749</td><td>2026-08-23 20:41</td><td class="mono sqltext">select file#, block# from recyclebin$ where ts# = :1     and file# != 0 and block# != 0 an&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="csnp95dz2r8ss" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono">14254076203360972390</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>101 chars</dd></dl>
 <table id="phv-summary-csnp95dz2r8ss"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">2567466223</td><td>2026-08-23 20:41</td><td>2026-09-27 13:45</td><td class="num">3,660</td><td class="num">362,768</td><td class="num">0.000011</td><td class="num">0.3909</td></tr>
-<tr><td class="num mono">1329207485</td><td>2026-09-26 05:15</td><td>2026-09-27 13:45</td><td class="num">85</td><td class="num">11,561</td><td class="num">0.000018</td><td class="num">2.015</td></tr>
+<tr><td class="num mono">2567466223</td><td>2026-08-23 20:41</td><td>2026-09-27 14:15</td><td class="num">3,662</td><td class="num">362,941</td><td class="num">0.000011</td><td class="num">0.3912</td></tr>
+<tr><td class="num mono">1329207485</td><td>2026-09-26 05:15</td><td>2026-09-27 14:15</td><td class="num">87</td><td class="num">11,888</td><td class="num">0.000018</td><td class="num">2.014</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-csnp95dz2r8ss"></div>
 <script>AWR_DATA.sqlDetails["csnp95dz2r8ss"]={snaps:[
@@ -36895,6 +36925,10 @@ GROUP BY primarydb.name
 ,{"t":"2026-09-27 13:30","phv":"2567466223","exec":88,"ela":0.000013}
 ,{"t":"2026-09-27 13:45","phv":"1329207485","exec":155,"ela":0.000017}
 ,{"t":"2026-09-27 13:45","phv":"2567466223","exec":86,"ela":0.000015}
+,{"t":"2026-09-27 14:00","phv":"1329207485","exec":172,"ela":0.000017}
+,{"t":"2026-09-27 14:00","phv":"2567466223","exec":88,"ela":0.000014}
+,{"t":"2026-09-27 14:15","phv":"1329207485","exec":155,"ela":0.000019}
+,{"t":"2026-09-27 14:15","phv":"2567466223","exec":85,"ela":0.000014}
 ]};</script>
 <pre class="sql">select file#, block# from recyclebin$ where ts# = :1     and file# != 0 and block# != 0 and space = 0</pre>
 </td></tr>
@@ -37373,14 +37407,14 @@ GROUP BY primarydb.name
 <tr class="sql-row" id="sql-dvu40a9avazf8" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-dvu40a9avazf8">dvu40a9avazf8</span> <button type="button" class="copy-btn" data-copy="#sqlid-dvu40a9avazf8">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-dvu40a9avazf8" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-dvu40a9avazf8" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="ELAPSED">E</span><span class="chip" title="CPU">C</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">24,357</td><td class="num">2,071</td><td>2026-08-23 11:38</td><td class="mono sqltext">select xmlagg(
+<td class="mono">SYS</td><td class="num">1</td><td class="num">24,369</td><td class="num">2,072</td><td>2026-08-23 11:38</td><td class="mono sqltext">select xmlagg(
                         xmlelement(&quot;operation&quot;, 
                           &hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="dvu40a9avazf8" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono">18260049357392869104</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>4,280 chars</dd></dl>
 <table id="phv-summary-dvu40a9avazf8"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">1660022729</td><td>2026-08-23 11:38</td><td>2026-09-27 13:15</td><td class="num">2,071</td><td class="num">24,357</td><td class="num">0.006384</td><td class="num">2.174</td></tr>
+<tr><td class="num mono">1660022729</td><td>2026-08-23 11:38</td><td>2026-09-27 14:15</td><td class="num">2,072</td><td class="num">24,369</td><td class="num">0.006383</td><td class="num">2.173</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-dvu40a9avazf8"></div>
 <script>AWR_DATA.sqlDetails["dvu40a9avazf8"]={snaps:[
@@ -39455,6 +39489,7 @@ GROUP BY primarydb.name
 ,{"t":"2026-09-27 12:30","phv":"1660022729","exec":12,"ela":0.011012}
 ,{"t":"2026-09-27 12:45","phv":"1660022729","exec":9,"ela":0.016822}
 ,{"t":"2026-09-27 13:15","phv":"1660022729","exec":12,"ela":0.004891}
+,{"t":"2026-09-27 14:15","phv":"1660022729","exec":12,"ela":0.004357}
 ]};</script>
 <pre class="sql">select xmlagg(
                         xmlelement(&quot;operation&quot;, 
@@ -39531,12 +39566,12 @@ GROUP BY primarydb.name
 <tr class="sql-row" id="sql-dxh2b8padhfby" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-dxh2b8padhfby">dxh2b8padhfby</span> <button type="button" class="copy-btn" data-copy="#sqlid-dxh2b8padhfby">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-dxh2b8padhfby" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-dxh2b8padhfby" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip on" title="GETS">G</span><span class="chip" title="PREADS">R</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">1,187</td><td class="num">1,185</td><td>2026-08-23 18:00</td><td class="mono sqltext">insert into  WRH$_SYSSTAT  (dbid, per_pdb, con_dbid, snap_id, instance_number, stat_id, va&hellip;</td>
+<td class="mono">SYS</td><td class="num">1</td><td class="num">1,188</td><td class="num">1,186</td><td>2026-08-23 18:00</td><td class="mono sqltext">insert into  WRH$_SYSSTAT  (dbid, per_pdb, con_dbid, snap_id, instance_number, stat_id, va&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="dxh2b8padhfby" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono">9667685456159467029</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>316 chars</dd></dl>
 <table id="phv-summary-dxh2b8padhfby"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">3652932668</td><td>2026-08-23 18:00</td><td>2026-09-27 12:30</td><td class="num">1,185</td><td class="num">1,187</td><td class="num">0.03202</td><td class="num">4,857</td></tr>
+<tr><td class="num mono">3652932668</td><td>2026-08-23 18:00</td><td>2026-09-27 14:15</td><td class="num">1,186</td><td class="num">1,188</td><td class="num">0.03201</td><td class="num">4,857</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-dxh2b8padhfby"></div>
 <script>AWR_DATA.sqlDetails["dxh2b8padhfby"]={snaps:[
@@ -40725,18 +40760,19 @@ GROUP BY primarydb.name
 ,{"t":"2026-09-27 12:00","phv":"3652932668","exec":1,"ela":0.028025}
 ,{"t":"2026-09-27 12:15","phv":"3652932668","exec":1,"ela":0.034301}
 ,{"t":"2026-09-27 12:30","phv":"3652932668","exec":1,"ela":0.031143}
+,{"t":"2026-09-27 14:15","phv":"3652932668","exec":1,"ela":0.021102}
 ]};</script>
 <pre class="sql">insert into  WRH$_SYSSTAT  (dbid, per_pdb, con_dbid, snap_id, instance_number, stat_id, value)  select /*+ use_hash(v$sysstat) */  :dbid,  sysstat.con_id, con_id_to_dbid(sysstat.con_id)  con_dbid,  :snap_id, :instance_number, stat_id, value  FROM v$sysstat    sysstat  WHERE  (1 = 1)  AND ( sysstat.con_id &lt; 4099  ) </pre>
 </td></tr>
 <tr class="sql-row" id="sql-f3ww8rgva3hrs" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-f3ww8rgva3hrs">f3ww8rgva3hrs</span> <button type="button" class="copy-btn" data-copy="#sqlid-f3ww8rgva3hrs">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-f3ww8rgva3hrs" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-f3ww8rgva3hrs" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="PREADS">R</span><span class="chip" title="EXEC">X</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">241,149</td><td class="num">1,110</td><td>2026-08-23 16:46</td><td class="mono sqltext">update /* KSXM:FLUSH COL */ sys.col_usage$ set                  equality_preds    = equali&hellip;</td>
+<td class="mono">SYS</td><td class="num">1</td><td class="num">241,338</td><td class="num">1,112</td><td>2026-08-23 16:46</td><td class="mono sqltext">update /* KSXM:FLUSH COL */ sys.col_usage$ set                  equality_preds    = equali&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="f3ww8rgva3hrs" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono">17672333066769939224</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>620 chars</dd></dl>
 <table id="phv-summary-f3ww8rgva3hrs"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">477378112</td><td>2026-08-23 16:46</td><td>2026-09-27 13:45</td><td class="num">1,110</td><td class="num">241,149</td><td class="num">0.000062</td><td class="num">3.417</td></tr>
+<tr><td class="num mono">477378112</td><td>2026-08-23 16:46</td><td>2026-09-27 14:15</td><td class="num">1,112</td><td class="num">241,338</td><td class="num">0.000062</td><td class="num">3.417</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-f3ww8rgva3hrs"></div>
 <script>AWR_DATA.sqlDetails["f3ww8rgva3hrs"]={snaps:[
@@ -41615,6 +41651,8 @@ GROUP BY primarydb.name
 ,{"t":"2026-09-27 13:15","phv":"477378112","exec":1517,"ela":0.000041}
 ,{"t":"2026-09-27 13:30","phv":"477378112","exec":535,"ela":0.000043}
 ,{"t":"2026-09-27 13:45","phv":"477378112","exec":162,"ela":0.000046}
+,{"t":"2026-09-27 14:00","phv":"477378112","exec":134,"ela":0.000063}
+,{"t":"2026-09-27 14:15","phv":"477378112","exec":55,"ela":0.000073}
 ]};</script>
 <pre class="sql">update /* KSXM:FLUSH COL */ sys.col_usage$ set                  equality_preds    = equality_preds    + decode(bitand(:flag,1),0,0,1),   equijoin_preds    = equijoin_preds    + decode(bitand(:flag,2),0,0,1),   nonequijoin_preds = nonequijoin_preds + decode(bitand(:flag,4),0,0,1),   range_preds       = range_preds       + decode(bitand(:flag,8),0,0,1),   like_preds        = like_preds        + decode(bitand(:flag,16),0,0,1),   null_preds        = null_preds        + decode(bitand(:flag,32),0,0,1),   flags             = flags + :flag - bitand(flags,:flag),    timestamp = :time where obj# = :objn and intcol# = :coln</pre>
 </td></tr>
@@ -42939,14 +42977,14 @@ GROUP BY primarydb.name
 <tr class="sql-row" id="sql-f7b069b8zkhvu" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-f7b069b8zkhvu">f7b069b8zkhvu</span> <button type="button" class="copy-btn" data-copy="#sqlid-f7b069b8zkhvu">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-f7b069b8zkhvu" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-f7b069b8zkhvu" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="CPU">C</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">68,746</td><td class="num">1,958</td><td>2026-08-23 11:38</td><td class="mono sqltext">SELECT to_number(value)
+<td class="mono">SYS</td><td class="num">1</td><td class="num">68,782</td><td class="num">1,959</td><td>2026-08-23 11:38</td><td class="mono sqltext">SELECT to_number(value)
          FROM sys.v$parameter
          WHERE name = &apos;_qa_lrg_type&apos;</td>
 </tr>
 <tr class="sql-detail" data-sql="f7b069b8zkhvu" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono">2292061080557672067</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>90 chars</dd></dl>
 <table id="phv-summary-f7b069b8zkhvu"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">4250213283</td><td>2026-08-23 11:38</td><td>2026-09-27 13:15</td><td class="num">1,958</td><td class="num">68,746</td><td class="num">0.001637</td><td class="num">0.000902</td></tr>
+<tr><td class="num mono">4250213283</td><td>2026-08-23 11:38</td><td>2026-09-27 14:15</td><td class="num">1,959</td><td class="num">68,782</td><td class="num">0.001636</td><td class="num">0.000901</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-f7b069b8zkhvu"></div>
 <script>AWR_DATA.sqlDetails["f7b069b8zkhvu"]={snaps:[
@@ -44904,6 +44942,7 @@ GROUP BY primarydb.name
 ,{"t":"2026-09-27 12:30","phv":"4250213283","exec":36,"ela":0.003268}
 ,{"t":"2026-09-27 12:45","phv":"4250213283","exec":27,"ela":0.003623}
 ,{"t":"2026-09-27 13:15","phv":"4250213283","exec":36,"ela":0.001309}
+,{"t":"2026-09-27 14:15","phv":"4250213283","exec":36,"ela":0.001279}
 ]};</script>
 <pre class="sql">SELECT to_number(value)
          FROM sys.v$parameter
@@ -44912,7 +44951,7 @@ GROUP BY primarydb.name
 <tr class="sql-row" id="sql-f7xnvp44nukp7" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-f7xnvp44nukp7">f7xnvp44nukp7</span> <button type="button" class="copy-btn" data-copy="#sqlid-f7xnvp44nukp7">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-f7xnvp44nukp7" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-f7xnvp44nukp7" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="PREADS">R</span><span class="chip" title="EXEC">X</span></td>
-<td class="mono">SYS</td><td class="num">0</td><td class="num">238,191</td><td class="num">2,262</td><td>2026-08-23 16:46</td><td class="mono sqltext">insert into  wrm$_snapshot_details  (snap_id,dbid,instance_number,table_id,begin_time,end_&hellip;</td>
+<td class="mono">SYS</td><td class="num">0</td><td class="num">238,401</td><td class="num">2,264</td><td>2026-08-23 16:46</td><td class="mono sqltext">insert into  wrm$_snapshot_details  (snap_id,dbid,instance_number,table_id,begin_time,end_&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="f7xnvp44nukp7" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono"><span class="muted">&mdash;</span></dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>177 chars</dd></dl>
@@ -45249,12 +45288,12 @@ GROUP BY primarydb.name
 <tr class="sql-row" id="sql-fs4p95w7yg25b" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-fs4p95w7yg25b">fs4p95w7yg25b</span> <button type="button" class="copy-btn" data-copy="#sqlid-fs4p95w7yg25b">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-fs4p95w7yg25b" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-fs4p95w7yg25b" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">26,108</td><td class="num">1,421</td><td>2026-08-23 21:00</td><td class="mono sqltext">select pob.parttype from sys.tabpart$ tp, sys.partobj$ pob  where tp.bo# = pob.obj# and tp&hellip;</td>
+<td class="mono">SYS</td><td class="num">1</td><td class="num">26,138</td><td class="num">1,422</td><td>2026-08-23 21:00</td><td class="mono sqltext">select pob.parttype from sys.tabpart$ tp, sys.partobj$ pob  where tp.bo# = pob.obj# and tp&hellip;</td>
 </tr>
 <tr class="sql-detail" data-sql="fs4p95w7yg25b" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd>sqlplus@ol9-19-dg1.localdomain (TNS V1-V3)</dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono"><span class="muted">&mdash;</span></dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>102 chars</dd></dl>
 <table id="phv-summary-fs4p95w7yg25b"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">2313771059</td><td>2026-08-23 21:00</td><td>2026-09-27 12:30</td><td class="num">1,421</td><td class="num">26,108</td><td class="num">0.000022</td><td class="num">4.998</td></tr>
+<tr><td class="num mono">2313771059</td><td>2026-08-23 21:00</td><td>2026-09-27 14:00</td><td class="num">1,422</td><td class="num">26,138</td><td class="num">0.000022</td><td class="num">4.998</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-fs4p95w7yg25b"></div>
 <script>AWR_DATA.sqlDetails["fs4p95w7yg25b"]={snaps:[
@@ -46670,13 +46709,14 @@ GROUP BY primarydb.name
 ,{"t":"2026-09-26 21:00","phv":"2313771059","exec":28,"ela":0.000011}
 ,{"t":"2026-09-27 11:00","phv":"2313771059","exec":16,"ela":0.000018}
 ,{"t":"2026-09-27 12:30","phv":"2313771059","exec":17,"ela":0.000038}
+,{"t":"2026-09-27 14:00","phv":"2313771059","exec":30,"ela":0.000029}
 ]};</script>
 <pre class="sql">select pob.parttype from sys.tabpart$ tp, sys.partobj$ pob  where tp.bo# = pob.obj# and tp.obj# = :oid</pre>
 </td></tr>
 <tr class="sql-row" id="sql-gj5r9jj2xad7f" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-gj5r9jj2xad7f">gj5r9jj2xad7f</span> <button type="button" class="copy-btn" data-copy="#sqlid-gj5r9jj2xad7f">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-gj5r9jj2xad7f" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-gj5r9jj2xad7f" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="EXEC">X</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">129,225</td><td class="num">2,159</td><td>2026-08-23 16:56</td><td class="mono sqltext">
+<td class="mono">SYS</td><td class="num">1</td><td class="num">129,345</td><td class="num">2,161</td><td>2026-08-23 16:56</td><td class="mono sqltext">
 SELECT  1, status, &apos;&apos;,archiver, database_status, active_state FROM v$instance
 
 </td>
@@ -46684,7 +46724,7 @@ SELECT  1, status, &apos;&apos;,archiver, database_status, active_state FROM v$i
 <tr class="sql-detail" data-sql="gj5r9jj2xad7f" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd>emagent_SQL_oracle_database</dd><dt>Action</dt><dd>Response</dd><dt>Optimizer mode</dt><dd class="mono">ALL_ROWS</dd><dt>Force-match sig</dt><dd class="mono">14841237291181284952</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>80 chars</dd></dl>
 <table id="phv-summary-gj5r9jj2xad7f"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">4175978637</td><td>2026-08-23 16:56</td><td>2026-09-27 13:45</td><td class="num">2,159</td><td class="num">129,225</td><td class="num">0.000129</td><td class="num">0</td></tr>
+<tr><td class="num mono">4175978637</td><td>2026-08-23 16:56</td><td>2026-09-27 14:15</td><td class="num">2,161</td><td class="num">129,345</td><td class="num">0.000129</td><td class="num">0</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-gj5r9jj2xad7f"></div>
 <script>AWR_DATA.sqlDetails["gj5r9jj2xad7f"]={snaps:[
@@ -48847,6 +48887,8 @@ SELECT  1, status, &apos;&apos;,archiver, database_status, active_state FROM v$i
 ,{"t":"2026-09-27 13:15","phv":"4175978637","exec":60,"ela":0.000105}
 ,{"t":"2026-09-27 13:30","phv":"4175978637","exec":60,"ela":0.000111}
 ,{"t":"2026-09-27 13:45","phv":"4175978637","exec":60,"ela":0.000110}
+,{"t":"2026-09-27 14:00","phv":"4175978637","exec":60,"ela":0.000108}
+,{"t":"2026-09-27 14:15","phv":"4175978637","exec":60,"ela":0.000105}
 ]};</script>
 <pre class="sql">
 SELECT  1, status, &apos;&apos;,archiver, database_status, active_state FROM v$instance
@@ -48856,12 +48898,12 @@ SELECT  1, status, &apos;&apos;,archiver, database_status, active_state FROM v$i
 <tr class="sql-row" id="sql-gjaap3w3qbf8c" data-sys="Y" data-tail="Y" hidden>
 <td class="mono sqlid-cell"><span id="sqlid-gjaap3w3qbf8c">gjaap3w3qbf8c</span> <button type="button" class="copy-btn" data-copy="#sqlid-gjaap3w3qbf8c">&#10687;</button><span class="xlinks"><a class="xlink" href="#ash-card-gjaap3w3qbf8c" title="ASH breakdown of this SQL" onclick="event.stopPropagation()">ASH</a><a class="xlink" href="#sm-gjaap3w3qbf8c" title="SQL Monitor row for this SQL" onclick="event.stopPropagation()">MON</a></span></td>
 <td><span class="chip" title="EXEC">X</span></td>
-<td class="mono">SYS</td><td class="num">1</td><td class="num">122,136</td><td class="num">4,069</td><td>2026-08-23 16:56</td><td class="mono sqltext">select count(*) from ilmobj$ where rownum = 1</td>
+<td class="mono">SYS</td><td class="num">1</td><td class="num">122,256</td><td class="num">4,073</td><td>2026-08-23 16:56</td><td class="mono sqltext">select count(*) from ilmobj$ where rownum = 1</td>
 </tr>
 <tr class="sql-detail" data-sql="gjaap3w3qbf8c" hidden><td colspan="8">
 <dl class="sql-meta"><dt>Parsing schema</dt><dd class="mono">SYS</dd><dt>Module</dt><dd><span class="muted">&mdash;</span></dd><dt>Action</dt><dd><span class="muted">&mdash;</span></dd><dt>Optimizer mode</dt><dd class="mono">CHOOSE</dd><dt>Force-match sig</dt><dd class="mono">6818841153930862287</dd><dt>SQL profile</dt><dd><span class="muted">&mdash;</span></dd><dt>Text length</dt><dd>45 chars</dd></dl>
 <table id="phv-summary-gjaap3w3qbf8c"><thead><tr><th class="num" title="plan_hash_value">Plan hash</th><th>First seen</th><th>Last seen</th><th class="num">Snapshots</th><th class="num">Executions</th><th class="num">Avg s/exec</th><th class="num">Avg gets/exec</th></tr></thead><tbody>
-<tr><td class="num mono">4233836756</td><td>2026-08-23 16:56</td><td>2026-09-27 12:45</td><td class="num">4,069</td><td class="num">122,136</td><td class="num">0.00004</td><td class="num">1.000</td></tr>
+<tr><td class="num mono">4233836756</td><td>2026-08-23 16:56</td><td>2026-09-27 14:15</td><td class="num">4,073</td><td class="num">122,256</td><td class="num">0.00004</td><td class="num">1.000</td></tr>
 </tbody></table>
 <div class="chart-wrap chart-medium" id="sqltl-gjaap3w3qbf8c"></div>
 <script>AWR_DATA.sqlDetails["gjaap3w3qbf8c"]={snaps:[
@@ -50909,6 +50951,8 @@ SELECT  1, status, &apos;&apos;,archiver, database_status, active_state FROM v$i
 ,{"t":"2026-09-27 12:15","phv":"4233836756","exec":60,"ela":0.000039}
 ,{"t":"2026-09-27 12:30","phv":"4233836756","exec":60,"ela":0.000159}
 ,{"t":"2026-09-27 12:45","phv":"4233836756","exec":60,"ela":0.000080}
+,{"t":"2026-09-27 14:00","phv":"4233836756","exec":60,"ela":0.000037}
+,{"t":"2026-09-27 14:15","phv":"4233836756","exec":60,"ela":0.000036}
 ]};</script>
 <pre class="sql">select count(*) from ilmobj$ where rownum = 1</pre>
 </td></tr>
@@ -51519,13 +51563,13 @@ Object.keys(AWR_DATA.fileIo.dims).forEach(function(dim){
 <dt>Segment and file I/O</dt><dd>Segments: <code>DBA_HIST_SEG_STAT</code> <code>*_DELTA</code> joined to <code>DBA_HIST_SEG_STAT_OBJ</code>; reads and writes in blocks, requests in I/O calls. Files: <code>DBA_HIST_FILESTATXS</code> / <code>DBA_HIST_TEMPSTATXS</code> deltas, blocks scaled to MB by block size; the file-type view is <code>DBA_HIST_IOSTAT_FILETYPE</code> (all database I/O, so its totals differ). Ranked, not scored; the type rollups cover <b>all</b> segments and files.</dd>
 <dt>Parameters</dt><dd>Initialization parameters from <code>dba_hist_parameter</code> whose value differs across the compared windows (value as of each window&rsquo;s end snapshot, lowest container wins in a CDB). Highlighted cells differ from Current; &mdash; = not present at that snapshot; (unset) = present but empty.</dd>
 </dl>
-<p class="ab-meta">Run <code>20260927135303511</code> &middot; template <code>comprehensive</code> &middot; top_n 10 &middot; generated 2026-09-27 13:53:03 +00:00 by SYS &middot; read-only against <code>DBA_HIST_*</code>, no scratch schema.</p>
+<p class="ab-meta">Run <code>20260927142403238</code> &middot; template <code>comprehensive</code> &middot; top_n 10 &middot; generated 2026-09-27 14:24:03 +00:00 by SYS &middot; read-only against <code>DBA_HIST_*</code>, no scratch schema.</p>
 </div></details></section>
 <!-- AWR-SECTION: 19_reference END -->
 <!-- AWR-SECTION: 17_narrative BEGIN -->
 <!-- AWR-SECTION: 17_narrative END -->
 </main>
 <footer class="report">
-Generated by awr_trend.sql v1.6.0 &mdash; run 20260927135303511 &mdash; read-only against the source database, no scratch schema.
+Generated by awr_trend.sql v1.6.0 &mdash; run 20260927142403238 &mdash; read-only against the source database, no scratch schema.
 </footer>
 </body></html>
