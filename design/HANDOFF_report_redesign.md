@@ -546,7 +546,7 @@ Also decided: the band glyph replaces the `dev_bucket` heat tint
 
 | Piece | Code |
 |---|---|
-| Top bar, view switch, rail, chrome JS (setView / goTo / reveal), verdict hero, Timeline skeleton, `AWR_WIN` | `sql/00_params.sql` |
+| Top bar, view switch, rail, chrome JS (setView / goTo / reveal), Activity charts' skeleton (`#activity`), verdict hero, Timeline skeleton, `AWR_WIN` | `sql/00_params.sql` |
 | DB time hero strip | `sql/08_overview.sql` on `sql/lib/wingrid.plsql` + `js_wingrid.plsql` |
 | Finding cards, Checked and normal, `#changes-slot`, Evidence library heading, Timeline metric / wait-class rows | `sql/07_summary.sql`, vocabulary `sql/lib/finding_cards.plsql` |
 | Verdict "Likely source", pills, notes, I/O card evidence | `sql/17_narrative.sql` (relocated by inline scripts) |
@@ -555,12 +555,27 @@ Also decided: the band glyph replaces the `dev_bucket` heat tint
 | Band glyph, Δ rule, library row text | `sql/lib/band_glyph.plsql` (+ `score_cells.plsql` delegates to it) |
 | Entity links / anchors | `ent()` in `finding_cards.plsql`, `sql/lib/anchor_id.plsql`; unwrap of missing targets in `js_wingrid` |
 | Timeline grid rows | `sql/lib/timeline.plsql` (tl_*), emitted by 04 / 06 / 07 / 09 / 12 / 14 / 15 / 18; client `sql/lib/js_timeline.plsql` |
-| Full-span interactive ASH | payload `AWR_DATA.ashx` from 09's existing scan, drawn by `js_timeline` |
+| Activity, whole span (top of every view): ASH by wait class + by wait event | payloads `AWR_DATA.ashx` / `AWR_DATA.ashe` from 09's one existing scan, drawn by one chart factory in `js_timeline` (two linked instances) |
 | Micro strips | `sql/lib/js_microstrip.plsql` (replaces js_sparkline in the single-DB report; the fleet keeps js_sparkline) |
 | Graph guide + About | `sql/19_reference.sql` |
 | Readable JS sources | `sql/lib/src/*.js` → `tools/js2plsql.sh` (lint check 24) |
 | CSS | `sql/_style.sql` (also reaches the fleet chrome; `table.dt` keeps the fleet's severity bar) |
 | Demo twins | `demo/awrdemo/sections/*`, `demo/awrdemo/helpers.py`; smoke test `demo/verify_report.js` |
+
+**Owner follow-ups after the dbmint pass (2026-09-27):**
+
+- The full-span ASH chart moved out of the Timeline view to the very top
+  of the report, above the verdict, in all three views ("Activity, whole
+  span", `section#activity`), and became two stacked charts on one time
+  axis: by wait class and by wait event (top 14 events, ON CPU as `CPU`,
+  the rest as "Other events", the fleet's `FLEET_ASH_EV` rules). Each has
+  its own legend, hover, zoom, window stripes and markers; zoom, hover
+  crosshair and the pinned window are linked. The Timeline view keeps the
+  window grid; the pin now survives a view switch.
+- The rail's active-link crescent (an inset left shadow on the rounded
+  pill) is gone in every state (lint check 32).
+- Fleet `table.dt` first cells get a 10 px left padding off the severity
+  bar (in `sql/_style.sql`; fleet files untouched).
 
 **Conscious divergences from the mock** (phase 4's sweep, kept):
 

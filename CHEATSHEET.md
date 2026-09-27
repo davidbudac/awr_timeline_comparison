@@ -281,8 +281,8 @@ SQL
 
 ## Timeline markers (`marker_file`)
 
-Annotate the dated charts (the Timeline view's activity chart and window
-ruler, the finding cards' window bars, the ASH timeline, DB-time summary,
+Annotate the dated charts (the Activity charts at the top of every view,
+the Timeline's window ruler, the finding cards' window bars, the ASH timeline, DB-time summary,
 per-SQL ASH cards) with your own milestones — a patch, an index rebuild, a
 stats gather, an incident — so a spike lines up with a known change.
 Optional: no `marker_file` means no markers and no change to the report.
@@ -395,7 +395,7 @@ value would stop for an "Enter value" prompt.)
 
 The report is almost entirely self-contained already — inline CSS and JS,
 and the Summary / Timeline views (finding cards, window bars, band glyphs,
-micro strips, the full-span activity chart) are inline SVG. Its one network
+micro strips, the Activity charts) are inline SVG. Its one network
 dependency is the Apache ECharts library that draws the larger All-sections
 charts (wait-class bars, top-SQL bump chart, hourly ASH timeline, DB time,
 I/O trends). When it can't load, the tables still render every number and

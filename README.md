@@ -159,8 +159,8 @@ HH24:MI`, 24-hour clock) and a label. Copy
 
 Then pass its path as the `marker_file` argument (wrapper) or
 `DEFINE marker_file = 'my_markers.sql'` (pure SQL\*Plus). Markers appear on
-every dated chart: the Timeline view's full-span activity chart and window
-grid ruler (drawn inline, offline too), the finding cards' window bars, the
+every dated chart: the Activity charts at the top of every view, the
+Timeline's window grid ruler (drawn inline, offline too), the finding cards' window bars, the
 hourly ASH timeline, the DB-time summary, and the per-SQL ASH cards.
 
 **File-free markers** — if you'd rather not keep a file on disk, pass the
@@ -256,7 +256,7 @@ By default only one thing in the report reaches the network: the Apache
 ECharts library that draws the larger All-sections charts (wait stacked
 bars, top-SQL bump chart, hourly ASH timeline, DB time over the span, I/O
 trends, SQL Monitor scatter). The Summary and Timeline views — finding
-cards, window bars, band glyphs, micro strips, the full-span activity chart
+cards, window bars, band glyphs, micro strips, the Activity charts
 — are inline SVG/CSS and never need it. When the CDN is blocked the report
 still opens and every table renders; an amber "Charts hidden" banner
 explains why. To make the report render its charts with **no network at
@@ -357,6 +357,16 @@ force a view with `#view=summary|timeline|all`. Any link to a row in
 another view switches to that view, opens whatever folds it and flashes
 the row. With JavaScript off, every section shows, stacked.
 
+**Activity, whole span** opens every view, above the verdict: two stacked
+charts of ASH active sessions across the whole compared span on one time
+axis, **by wait class** and **by wait event** (the 14 busiest events, on
+CPU as `CPU`, the rest summed as *Other events*), hourly or coarser, the
+compared windows striped (Current indigo, pinned amber, skipped grey),
+release markers on top. Hover for each series' value (the crosshair shows
+on both charts), click a legend entry to hide a series, drag across either
+chart to zoom both, double-click or **Reset zoom** to go back, click a
+window stripe to pin it.
+
 ### Summary
 
 1. **Verdict** — one sentence built from the findings ("DB time up 80%,
@@ -394,16 +404,13 @@ of every view explain each chart and every method note.
 
 ### Timeline
 
-A **full-span active-sessions chart** (ASH by wait class across the whole
-compared span, hourly or coarser buckets, compared windows striped, release
-markers on top): hover for a bucket, drag to zoom, double-click to reset,
-click a legend entry to hide a class. Below it, the **window grid**: one
+Under the Activity charts, the **window grid**: one
 column per compared window with lanes for activity, the headline and
 flagged metrics, waits, the segments / files the reads land on, Top SQL
 (◆ plan change, ✚ first seen) and SQL Monitor, and parameter step lines.
-Click a date in the ruler (or a window stripe in the chart) to **pin** that
-window: every Δ in the grid is re-based against it; `Esc` or the Current
-column clears the pin. The Day profile (with `profile_days > 0`) follows.
+Click a date in the ruler (or a window stripe in either Activity chart) to
+**pin** that window: every Δ in the grid is re-based against it; `Esc` or
+the Current column clears the pin (switching views keeps it). The Day profile (with `profile_days > 0`) follows.
 
 ### All sections
 
@@ -627,7 +634,7 @@ SQL> @side/create_weekly_baselines.sql
 │   ├── 06_top_sql.sql               -- Top-N SQL
 │   ├── 07_summary.sql               -- z-score findings: Summary cards + per-domain tables
 │   ├── 08_overview.sql              -- Summary strip: DB time per window
-│   ├── 09_ash_timeline.sql          -- hourly ASH timeline + the Timeline's full-span chart
+│   ├── 09_ash_timeline.sql          -- hourly ASH timeline + the Activity charts' payloads
 │   ├── 10_db_time_summary.sql       -- full-span DB time stacked area
 │   ├── 11_top_sql_ash_breakdown.sql -- per-Top-N-SQL ASH cards
 │   ├── 12_param_changes.sql         -- parameters that differ across windows (+ config card)

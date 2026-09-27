@@ -141,7 +141,7 @@
       <article class="panel c-shot">
         <h3>The answer comes first</h3>
         <p>A one-line verdict, then one card per problem with the evidence behind it.</p>
-        <div class="screen"><img class="on-light" src="assets/shot_demo_masthead.jpg" width="1806" height="1350" alt="Summary view of the demo report, light theme: the verdict reads Physical reads 5.4 times normal, most of it on ORDERS_APP.ORDER_LINES; DB time up 79.7%, mostly wait. Below it the likely source (a new plan after Release 4.2), count pills, DB time per window with release flags and the Current window in indigo, and the first finding card."><img class="on-dark" src="assets/shot_demo_masthead_dark.jpg" width="1806" height="1350" alt="Summary view of the demo report, dark theme: the verdict reads Physical reads 5.4 times normal, most of it on ORDERS_APP.ORDER_LINES; DB time up 79.7%, mostly wait. Below it the likely source (a new plan after Release 4.2), count pills, DB time per window with release flags and the Current window in indigo, and the first finding card." loading="lazy"></div>
+        <div class="screen"><img class="on-light" src="assets/shot_demo_masthead.jpg" width="1806" height="1350" alt="Top of the demo report, light theme: the Activity charts, active sessions over twelve weeks by wait class and by wait event with release markers and the compared windows striped, the Current one in indigo; below them the verdict: Physical reads 5.4 times normal, most of it on ORDERS_APP.ORDER_LINES; DB time up 79.7%, mostly wait."><img class="on-dark" src="assets/shot_demo_masthead_dark.jpg" width="1806" height="1350" alt="Top of the demo report, dark theme: the Activity charts, active sessions over twelve weeks by wait class and by wait event with release markers and the compared windows striped, the Current one in indigo; below them the verdict: Physical reads 5.4 times normal, most of it on ORDERS_APP.ORDER_LINES; DB time up 79.7%, mostly wait." loading="lazy"></div>
       </article>
       <article class="panel c-zero">
         <div class="big" aria-hidden="true">0<small>database<br>writes</small></div>
@@ -205,8 +205,8 @@
                 </ul>
               </div>
               <figure>
-                <div class="screen"><img class="dim" src="assets/shot_demo_ash.jpg" width="1710" height="826" alt="Timeline view: active sessions by wait class over twelve weeks in 6-hour averages, compared windows striped, release, hotfix and patch markers, a spike in the Current window; below it the window grid ruler, one column per compared week." loading="lazy"></div>
-                <figcaption>The Timeline view: active sessions across the compared span, with release markers, above one column per compared window.</figcaption>
+                <div class="screen"><img class="dim" src="assets/shot_demo_ash.jpg" width="1710" height="826" alt="Activity charts: active sessions over twelve weeks in 6-hour averages, stacked by wait class above and by wait event below (the 14 busiest events and Other events), compared windows striped, release, hotfix and patch markers, a spike in the Current window." loading="lazy"></div>
+                <figcaption>Activity, whole span, at the top of every view: active sessions by wait class and by wait event on one time axis, with release markers.</figcaption>
               </figure>
             </div>
           </div>
@@ -345,7 +345,7 @@ reporting | reporting_ro/@RPT</pre><button class="copy" type="button" data-copy=
             <div class="tw"><table class="dt stack">
               <thead><tr><th>Group</th><th>Sections</th><th>Source views</th></tr></thead>
               <tbody>
-                <tr><td class="k" data-l="Group">Summary, Timeline</td><td class="n" data-l="Sections">Verdict, DB time per window, finding cards, plan and parameter changes, window grid, full-span ASH, DB time over the span, compared windows</td><td class="m vw" data-l="Views">SYS_TIME_MODEL, SYSSTAT, ACTIVE_SESS_HISTORY, SNAPSHOT</td></tr>
+                <tr><td class="k" data-l="Group">Summary, Timeline</td><td class="n" data-l="Sections">Verdict, DB time per window, finding cards, plan and parameter changes, window grid, Activity charts (ASH by wait class and event), DB time over the span, compared windows</td><td class="m vw" data-l="Views">SYS_TIME_MODEL, SYSSTAT, ACTIVE_SESS_HISTORY, SNAPSHOT</td></tr>
                 <tr><td class="k" data-l="Group">Workload</td><td class="n" data-l="Sections">Day profile, utilization, load profile, system metrics, waits</td><td class="m vw" data-l="Views">SYSSTAT, SYSMETRIC_SUMMARY, SYSTEM_EVENT, BG_EVENT_SUMMARY</td></tr>
                 <tr><td class="k" data-l="Group">SQL</td><td class="n" data-l="Sections">Top SQL five ways with plan changes, per-SQL ASH, SQL Monitor</td><td class="m vw" data-l="Views">SQLSTAT, SQLTEXT, ACTIVE_SESS_HISTORY, REPORTS</td></tr>
                 <tr><td class="k" data-l="Group">Storage, config</td><td class="n" data-l="Sections">Top segments and files by I/O, I/O by file type, changed parameters</td><td class="m vw" data-l="Views">SEG_STAT, FILESTATXS, IOSTAT_FILETYPE, PARAMETER</td></tr>

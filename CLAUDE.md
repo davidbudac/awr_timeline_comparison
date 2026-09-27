@@ -22,7 +22,7 @@ writes is `side/create_weekly_baselines.sql` (optional, orthogonal, calls
 charts. If the CDN is unreachable, `<script onerror>` sets `body.no-charts`,
 hiding chart divs (tables still show every number) with an amber banner. Every
 v1.6.0 chart (band glyph, micro strips, window component, Timeline grid,
-full-span ASH chart, guide examples) is inline SVG/CSS and the client JS ships
+Activity charts by wait class / event, guide examples) is inline SVG/CSS and the client JS ships
 inline, so those work offline. The
 `echarts` var (below) redirects or inlines the library for air-gapped use.
 
@@ -55,8 +55,9 @@ awr_trend.sql            -- driver: prologue (CSS + client libs), SPOOL, section
 sql/
 ├── defaults.sql         -- canonical DEFINEs for the substitution vars
 ├── _style.sql           -- embedded CSS (emitted once; ALSO @@-included by the fleet chrome)
-├── 00_params.sql        -- top bar, rail, view switch + chrome JS, verdict hero,
-│                        --   Timeline skeleton (#timeline / #tl-ash / #tl), AWR_WIN
+├── 00_params.sql        -- top bar, rail, view switch + chrome JS, AWR_WIN, the Activity
+│                        --   charts' skeleton (#activity, top of every view), verdict hero,
+│                        --   Timeline skeleton (#timeline / #tl)
 ├── 01_windows.sql       -- aligned windows, snap pairs, restart guard
 ├── 02_load_profile.sql  -- SYSSTAT deltas (per template)
 ├── 03_sysmetric.sql     -- SYSMETRIC_SUMMARY averages (per template)
@@ -67,8 +68,8 @@ sql/
 ├── 07_summary.sql       -- scored findings: Summary finding cards + per-domain tables,
 │                        --   #s-changes slot, #s-normal, #s-lib heading
 ├── 08_overview.sql      -- Summary hero strip: DB time per window on the window component
-├── 09_ash_timeline.sql  -- ONE ASH scan: hourly ECharts timeline + AWR_DATA.ashx
-│                        --   (Timeline full-span chart) + the Activity lane row
+├── 09_ash_timeline.sql  -- ONE ASH scan: hourly ECharts timeline + AWR_DATA.ashx / .ashe
+│                        --   (Activity charts: by wait class / by wait event) + the Activity lane row
 ├── 10_db_time_summary.sql      -- stacked DB time across the full span (ECharts)
 ├── 11_top_sql_ash_breakdown.sql-- per-Top-N-SQL ASH cards (stacked by wait event)
 ├── 12_param_changes.sql -- init params differing across windows + config card
@@ -105,7 +106,8 @@ sql/
     ├── put_clob_chunked.plsql-- emits a CLOB payload in PUT_LINE-sized chunks
     ├── fmt_num.plsql         -- T7: consistent value-cell number formatting (fmt_num/fmt_int)
     ├── js_wingrid.plsql      -- GENERATED (src/js_wingrid.js): window.AWR_WG, markers, pin, ent unwrap
-    ├── js_timeline.plsql     -- GENERATED (src/js_timeline.js): window.AWR_TL, lanes, full-span ASH chart
+    ├── js_timeline.plsql     -- GENERATED (src/js_timeline.js): window.AWR_TL, lanes, the two
+    │                         --   Activity charts (one chart factory, linked zoom / crosshair / pin)
     ├── js_microstrip.plsql   -- GENERATED (src/js_microstrip.js): data-spark → 13-bar micro strips
     ├── src/*.js              -- readable sources of the three generated scripts (tools/js2plsql.sh)
     ├── js_sparkline.plsql    -- inline-SVG line sparklines -- FLEET-ONLY since v1.6.0
@@ -254,7 +256,9 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
 - **JS off:** no body class → every section stacked in DOM (driver) order,
   nothing hidden; `#timeline` shows only its header + `p.tl-nojs` note (the
   grid is built client-side); every number is still in the tables.
-- **Assignment:** Summary = verdict hero `#verdict` (00), hero strip
+- **Assignment:** EVERY view = `section#activity` (00, `vw in-s in-t
+  in-a`, the first section after `<main>`, above the verdict; see
+  "Activity, whole span" below). Summary = verdict hero `#verdict` (00), hero strip
   `#overview` (08), finding cards (07 `div.cards.vw.in-s`), `#s-changes`
   (plan / config cards, hidden until filled), `#s-normal`, the evidence
   library heading `#s-lib` + the `section.lib` rows. Timeline = `#timeline`
@@ -283,13 +287,17 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
 - **Rail:** `railViews()` dims (`.vdim`) links whose target is hidden in the
   current view (a group `<b>` dims when all its links do) and adds
   `a.more-sections` "+ N more in All sections" (Summary only, before
-  `#rail-ref`); `data-nodot` = no status dot / count pill. Groups: Summary
+  `#rail-ref`); `data-nodot` = no status dot / count pill. Groups: Overview
+  (Activity, whole span → `#activity`, never dimmed), Summary
   (Verdict, Findings + one `a.sub` per card inserted by 07's inline script,
   What changed around it, Checked and normal, Evidence library), Timeline
   (the lane links, hidden when a lane is empty; pills from row `data-sev`),
   Workload, SQL, Storage & config, Whole span, Reference (`#guide`,
   `#about`). The v1.4 row filter, status dots, count pills, J/K and the
-  scrollspy are kept.
+  scrollspy are kept. A link's state (hover, `.on`) shows through its
+  background and font weight only — no `border-left` / inset
+  `box-shadow` (it drew a crescent on the rounded pill; lint check 32,
+  verify_report's `railMarker`).
 - **Top bar** `div.topbar#topbar` (sticky, 00, before `<main>`): DB · host ·
   version · DBID, the Current window chip + "vs N prior windows, every …",
   the view switch and `#theme-toggle`. `measure()` sets `--navh` (html +
@@ -382,7 +390,6 @@ ignores `.lopen`. `vhead` = heading-only section (`#s-lib`, `#s-all`).
 ### Timeline view (v1.6.0)
 
 `section#timeline.vw.in-t` (00, after the verdict hero) holds
-`div#tl-ash.panel.ashx[hidden]` (the full-span interactive ASH chart) and
 `div#tl.panel.gridwrap.wg.hov[data-wg]` (the window grid: sticky ruler,
 `#tl-body` scrolls horizontally with a scroll-synced ruler, six empty lanes).
 Sections fill the lanes; a lane without rows stays hidden (its rail link
@@ -421,33 +428,74 @@ content into its lane (`data-after` → under that row), `reveal(el)`;
 DOMContentLoaded: `#tip` tooltip, wait swatches from `AWR_WAIT_COLORS`, lane
 meta counts / folds / "+ Show N more" / rail pills, skipped windows struck
 through in the ruler, prior values filled, the activity rows + DB time
-card, the ASH chart, `AWR_WG.render(#tl)`. **Pin:** `AWR_WG.pin(o)` /
+card, the Activity charts, `AWR_WG.render(#tl)`. **Pin:** `AWR_WG.pin(o)` /
 `pinned()` — `body[data-pw]`, `.pc` on `#tl [data-w=o]`, ruler buttons
 `aria-pressed`, every gutter Δ re-based "vs <date>" (`data-orig` restores),
-chart stripe `.on`; Esc, Current, leaving the Timeline (`awr:view`) unpin.
-Separate from the X2 `th[data-w]` highlight (`.hl` + `awr:window`).
+the stripe `.on` on both Activity charts; Esc, Current or the gutter's
+"clear" unpin. A view switch KEEPS the pin (the Activity charts show it in
+every view; before the charts moved to the top, leaving the Timeline
+unpinned). Separate from the X2 `th[data-w]` highlight (`.hl` + `awr:window`).
 
-**Full-span ASH payload `AWR_DATA.ashx`** (09, the SAME
-`DBA_HIST_ACTIVE_SESS_HISTORY` scan as 09's ECharts chart, which also groups
-by `j_lo..j_hi` = every compared window the sample falls in — overlapping
-windows each count it): `{t0, end, bh, wh, classes, vals, win, winfg}`; `bh`
-= `v_m × bucket_hours`, `v_m = CEIL(GREATEST(1, span_h/400) / bucket_hours)`
-(≥ 1 h, ≤ ~400 buckets; the last bucket divided by its covered hours);
-classes in a fixed stacking order (CPU, User I/O, System I/O, Commit,
-Application, Concurrency, Network, Configuration, Scheduler, Cluster,
-Administrative, Queueing, unknown, Other); `vals` zeros, never gaps; `win`
-per class per window (oldest first) = samples ÷ 360 ÷ win_hours, all
-sessions (Activity lane, stripe tooltips); `winfg` the same for
-`session_type = 'FOREGROUND'` only (the DB time card's bars: DB time is
-foreground time; the card keeps its DB time value as the Current label,
-review #8). Numbers via
-`RTRIM(TO_CHAR(ROUND(v,3),'FM9999999990D999'),'.')`. The chart: step areas,
-legend toggles restack/rescale, brush zoom (≥ 5 px), `#ax-reset` +
-double-click reset (mousedown `e.detail >= 2`, a stripe click re-renders the
-SVG so `dblclick` never fires), ticks counted from midnight of the Current
-window's day, markers from `AWR_WG.markers()` in two tiers, window stripes
-from `AWR_WIN` (`.cur` / `.on` pinned / `.sk` skipped), hit rects
-`.xwh[data-w][tabindex=0]` (Enter / Space pin). `#ax-empty` when no classes.
+### Activity, whole span (`section#activity`, top of every view)
+
+The bird's-eye ASH view (owner request, v1.6.0): `section#activity.vw.in-s
+.in-t.in-a.ashtop` is emitted by 00 right after `AWR_WIN`, before the
+verdict hero, so it is the first section in every view (and with JS off).
+Skeleton (static, lifted verbatim by the demo twin): h2 "Activity, whole
+span" + `.h2sub`, `p.ax-nojs` (hidden under `body.js-wg`), `div#ashx.ashx
+[hidden]` › `.axh` (`#ax-range`, the stripe key `.axk`, `#ax-reset`),
+`#ax-empty`, two charts `div.axch#ax-cls` / `#ax-ev` (each `.axct` = small
+h3 + its own legend `.axlg`, then `.axp` › `svg.axsvg` + `.axbr` brush),
+`p.axn2`. The chart ids are `ax-cls` / `ax-ev`; everything inside is
+addressed by class (the old single-chart `#tl-ash` / `#ax-svg` / `#ax-lg`
+/ `#ax-plot` ids are gone).
+
+**Payloads** (09, the SAME `DBA_HIST_ACTIVE_SESS_HISTORY` scan as 09's
+ECharts chart; it groups by bucket, class, **event**, `j_lo..j_hi` = every
+compared window the sample falls in — overlapping windows each count it —
+and foreground flag; no second ASH scan):
+- `AWR_DATA.ashx = {t0, end, bh, wh, classes, vals, win, winfg}` — by wait
+  class. `bh` = `v_m × bucket_hours`, `v_m = CEIL(GREATEST(1, span_h/400) /
+  bucket_hours)` (≥ 1 h, ≤ ~400 buckets; the last bucket divided by its
+  covered hours); classes in a fixed stacking order (CPU, User I/O, System
+  I/O, Commit, Application, Concurrency, Network, Configuration, Scheduler,
+  Cluster, Administrative, Queueing, unknown, Other); `vals` zeros, never
+  gaps; `win` per class per window (oldest first) = samples ÷ 360 ÷
+  win_hours, all sessions (Activity lane, stripe tooltips); `winfg` the
+  same for `session_type = 'FOREGROUND'` only (the DB time card's bars: DB
+  time is foreground time; the card keeps its DB time value as the Current
+  label, review #8).
+- `AWR_DATA.ashe = {t0, end, bh, wh, classes, vals, win}` — the same shape
+  by **wait event** (ON CPU = `CPU`, ranked like any event): the 14 events
+  with the most samples over the span (ties: name ascending), biggest first
+  = bottom of the stack, then `"Other events"` LAST = the class total less
+  the top events per bucket / per window (integer samples, so exactly the
+  rest; left out with ≤ 14 events). Names through `json_escape`. Same
+  semantics as the fleet's `FLEET_ASH_EV` (`sql/fleet/02_ash.sql`), which
+  stays its own copy.
+Numbers via `RTRIM(TO_CHAR(ROUND(v,3),'FM9999999990D999'),'.')`.
+
+**Client** (`js_timeline`, section 6): ONE chart factory — `mkChart(root,
+payload, colours, opt)` + `draw(c)` — two instances in `CH`, sharing `SP`
+(bucket times, the zoom domain, windows, `#ax-range` / `#ax-reset`). Per
+chart: step areas, legend toggles restack / rescale, hover tooltip (time +
+each shown series' AAS; a stripe's tooltip = that window's `win` values),
+window stripes from `AWR_WIN` (`.cur` indigo / `.on` pinned amber / `.sk`
+skipped grey; hit rects `.xwh[data-w][tabindex=0]`, click / Enter / Space
+pin, Current unpins), release markers (flags in two tiers on the upper
+chart, lines on both). Linked: a brush (≥ 5 px) on either sets the shared
+domain and redraws both (the brush shows on both); Reset / double-click
+(mousedown `e.detail >= 2`: a stripe click re-renders the SVG so
+`dblclick` may never fire) reset both; the hover crosshair + bucket band
+are drawn on both at the same x; `W.pin` redraws both. One time axis: x
+labels only on the lower chart (tick marks on both), ticks counted from
+midnight of the Current window's day, `padL` / `padR` fixed so the plots
+align. Heights ≈ 180–200 px each (`ph` 150). Colours: classes from
+`AWR_WAIT_COLORS`; events `evColors()` — CPU = the wait-class CPU green,
+"Other events" = `#9AA3AD`, the rest cycle `EVP` (15 Tableau-like hues, no
+green). A click on a stripe in Summary / All sections pins too
+(the grid follows when you open the Timeline). JS off: only the note;
+payload without classes: `#ax-empty`, key / charts / hint hidden.
 
 ### Window component (`sql/lib/wingrid.plsql` + `js_wingrid.plsql`)
 
@@ -573,7 +621,8 @@ check 25; see the gotcha).
 
 `awr_trend.sql` includes the sections in **DOM** order (00, 10, 08, 09, 07,
 01, 16, 13, 02, 03, 04, 05, 06, 11, 18, 14, 15, 12, 19, 17) = the JS-off
-stacking. Views reorder visually: Summary via the library's `--os`
+stacking; 00 emits `#activity` first (before the verdict), and with the
+default `order:3` it stays first in every view. Views reorder visually: Summary via the library's `--os`
 (`order:calc(10 + var(--os))`), All sections via `_style.sql`'s "All
 sections order" block keyed by section id (Findings, Load, Metrics, FG
 waits, BG waits, Top SQL, Top SQL ASH, SQL Monitor, Segment, File,
@@ -635,7 +684,10 @@ class="h2sub">…</small></h2>`; the chrome appends `span.meta` (dot + "N large
 `:has(.bd.s-large|s-moderate)`. **`_style.sql` is also included by the fleet
 chrome** (`sql/fleet/00_fleet_chrome.sql`): scope new rules to single-DB
 classes; `table.dt tr.crit|warn td:first-child{box-shadow:inset 3px 0 0 …}`
-exists only to keep the fleet findings band's pre-1.6 severity bar.
+exists only to keep the fleet findings band's pre-1.6 severity bar, and
+`table.dt tr > td|th:first-child{padding-left:10px}` keeps the fleet's
+first-column text off that bar (the fleet's own `table.dt td` rule has 0
+left padding and a lower specificity).
 
 ### Gotchas from the v1.5.0 / v1.6.0 passes
 
@@ -1441,8 +1493,9 @@ the demo.
   section reading wait events without the template's wait list (27), a
   day / month name `TO_CHAR` without `NLS_DATE_LANGUAGE` (28), `off_label`
   missing / after `wingrid` (29), `anchor_id('fl'|'pa', ...)` outside
-  `anchor_id.plsql` (30), and a comparison with `''` (31: `<> ''` /
-  `!= ''` is never TRUE). No DB needed; add a check when a new
+  `anchor_id.plsql` (30), a comparison with `''` (31: `<> ''` /
+  `!= ''` is never TRUE), and a `border-left` / inset shadow on a rail
+  link state (32). No DB needed; add a check when a new
   gotcha bites. A `finding` inside a `| while read` loop must go through
   `finding` (it records to a flag file; a subshell `fail=1` is lost).
 - **Test DB: dbmint** (Oracle 19c CDB1, `connect / as sysdba`). The host name
@@ -1489,7 +1542,8 @@ the demo.
     need a live-browser pass too.
 - **Still unexercised (environment-limited):** a busy DB (real segment/file
   I/O volume, app-set module/action, >14 distinct ASH events for the fleet
-  "Other events" rollup); RAC per-instance `dur_sec`; a migrated PDB
+  "Other events" rollup -- the single-DB Activity chart's rollup IS
+  exercised on dbmint and in the demo); RAC per-instance `dur_sec`; a migrated PDB
   (multi-DBID); a genuinely slow DB against the 3600-s detail timeout; the
   "no snapshot within 15 min of edge" skip reason (restart wins the CASE on
   dbmint); a series name containing `\`; the no-AWR-history-at-all branch of
@@ -1531,6 +1585,23 @@ the demo.
   Current SQLSTAT row (SQL Monitor fallback), > 3 plan cards, RAC,
   multi-DBID top bar, the fleet `plan↑` badge (no fleet Top SQL row on
   dbmint).
+- **Activity charts on top (v1.6.0 follow-up) verified on dbmint
+  (2026-09-27):** `reports/ashtop2/` (the v160 runner with `ASHTOP_OUT`,
+  168-hourly now `debug=Y`): pinned hourly `2026-09-18 12:00` 1/4/1h,
+  plan-change `2026-09-08 23:00` 1/8/1d, the busy wait `2026-09-10 12:00`
+  and CPU `2026-09-22 13:00` windows (1/7/1d), `AUTO` weekly, 168 hourly
+  windows (19 MB) and fleet runs with `FLEET_DETAIL=all` (quiet and busy
+  window): all rc 0, 20/20 `AWR-SECTION` pairs, `ORA-` hits only in
+  captured SQL text, no `__FLEET_`; verify_report OK on every report (one
+  Chrome at a time) incl. both charts' hover / mirrored crosshair /
+  legend / linked zoom / reset / pin. Real "Other events" rollups on
+  dbmint (14 events + Other on every run but the pinned hourly one, 12
+  series there); the class and event charts stack to the same totals
+  within the 3-decimal rounding. Section 09's time (debug markers):
+  AUTO 0.20 s before, 0.11-0.24 s after; 168 hourly 0.35 s before,
+  0.28-0.40 s after (noise; the extra event grouping costs nothing
+  measurable). Fleet `table.dt` first cells 10 px padded, the 3 px bar
+  intact (busy window, both themes).
 - **v1.5.0 / fleet 0.7.0 verified on dbmint (2026-09-22):** built without
   a database on 2026-09-21 (synthetic demo + Playwright + the 137-test
   server suite), then run against dbmint: pinned hourly window
@@ -1580,7 +1651,7 @@ the demo.
 - Don't concat user strings into HTML without `DBMS_XMLGEN.CONVERT`.
 - Don't add external JS/CSS beyond the single ECharts tag — every dependency must
   degrade via `body.no-charts`. The v1.6.0 components (band, micro strips,
-  window grid, Timeline, full-span ASH chart, guide) stay inline SVG/CSS.
+  window grid, Timeline, the Activity charts, guide) stay inline SVG/CSS.
 - Don't bring back the v1.5.0 view hooks (`data-normal`, `.full-only`,
   `awr-mode`, `data-dev`) or a section without `class="vw in-*"`; and don't
   drop a number from All sections — views change presentation only.

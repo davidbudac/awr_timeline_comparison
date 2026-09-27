@@ -443,7 +443,7 @@ SQL</pre><button class="copy" type="button" data-copy="cs-nowrapper-2"><svg view
   <p>
     The report is almost entirely self-contained already — inline CSS and JS,
     and the Summary and Timeline views (finding cards, window bars, band glyphs,
-    micro strips, the full-span activity chart) are inline SVG. Its one network
+    micro strips, the Activity charts) are inline SVG. Its one network
     dependency is the Apache ECharts library that draws the larger All-sections
     charts (wait-class bars, top-SQL bump chart, hourly ASH timeline, DB time,
     I/O trends). When it can't load, the
@@ -508,8 +508,8 @@ line=<span class="s">"$(grep -nF "src=\"$lib\"" "$html" | head -1 | cut -d: -f1)
 
   <h3>“Walk me through the last 12 hours hour by hour”</h3>
 <div class="lcode"><pre id="cs-playbooks-2">./run_awr_trend.sh user/pw@svc AUTO 1 12 10 0 1 h</pre><button class="copy" type="button" data-copy="cs-playbooks-2"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg><span class="lbl">Copy</span></button></div>
-  <p class="aside">Open the report's <strong>Timeline</strong> view: the full-span activity chart and
-  the window grid put the twelve hours side by side; <strong>All sections</strong>
+  <p class="aside">The Activity charts at the top (by wait class and by wait event) show the
+  twelve hours in one span; the <strong>Timeline</strong> view's window grid puts them side by side; <strong>All sections</strong>
   adds the hourly ASH timeline and the DB time stacked areas.</p>
 
   <h3>“Did yesterday's batch differ from the previous five Tuesdays?”</h3>

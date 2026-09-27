@@ -22,7 +22,9 @@ CDN-blocked renders, the pure SQL*Plus heredoc, a fleet run with detail
 reports, weeks_back 52 weekly / 168 hourly / an overlapping grid, and two
 busy windows for the CPU / wait verdict; rc 0, 0 ORA-/SP2-/PLS- outside
 captured SQL text, 20/20 `AWR-SECTION` pairs, verify_report OK on every
-report -- see `CLAUDE.md`, "v1.6.0 verified on dbmint".
+report -- see `CLAUDE.md`, "v1.6.0 verified on dbmint"; the Activity
+charts follow-up re-ran the pinned hourly, plan-change, busy wait / CPU,
+AUTO weekly, 168-hourly and fleet runs (all rc 0, verify_report OK).
 
 - **Three views: Summary / Timeline / All sections** replace Normal /
   Full. `class="vw in-s|in-t|in-a"` declares which views show an element
@@ -48,11 +50,21 @@ report -- see `CLAUDE.md`, "v1.6.0 verified on dbmint".
   oldest first, release flags on the ruler) with lanes for activity,
   headline and flagged metrics, waits, the segment / file the reads land
   on, Top SQL and SQL Monitor, and parameter step lines; click a date to
-  pin that window and re-base every delta against it. Above it, a
-  full-span interactive ASH chart (`AWR_DATA.ashx` from 09's existing
-  scan: adaptive >= 1 h buckets, stacked by wait class, legend toggles,
-  brush zoom, window stripes, markers, pin shared with the grid). Day
-  profile (16) shows here too.
+  pin that window and re-base every delta against it. Day profile (16)
+  shows here too.
+- **Activity, whole span** at the top of every view, above the verdict
+  (owner request): two stacked inline-SVG charts over one time axis --
+  active sessions by wait class (`AWR_DATA.ashx`) and by wait event
+  (`AWR_DATA.ashe`: the 14 events with the most samples, ON CPU as `CPU`,
+  the rest summed as "Other events"), both from 09's one existing ASH scan
+  (it now also groups by event; no second scan). Adaptive >= 1 h buckets;
+  each chart has its own legend (toggles restack and rescale), hover
+  tooltip, brush zoom, Reset / double-click, window stripes (Current
+  indigo, pinned amber, skipped grey) and release markers; zoom, the hover
+  crosshair and the pinned window are linked across the two (one chart
+  factory in `js_timeline`). A pinned window now survives a view switch.
+  Rail: a new Overview group links it; the Timeline's "Active sessions,
+  full span" link is gone.
 - **Band glyph** (`sql/lib/band_glyph.plsql`): Normal range | vs normal
   (dot on a -4..+8 sigma axis over the 1 / 2 sigma zones) | z | Delta vs
   mean replaces the Change / z / %-delta columns and the `data-dev` heat
@@ -82,7 +94,12 @@ report -- see `CLAUDE.md`, "v1.6.0 verified on dbmint".
   `@@`-includes `sql/_style.sql`, so the fleet report picks up the new
   indigo accent, spacing, fonts, neutral rail / tab states, non-uppercase
   badges and headers, and the 2 px severity marker; a `table.dt`-only
-  rule keeps the fleet findings band's 3 px red / amber row bar.
+  rule keeps the fleet findings band's 3 px red / amber row bar, and the
+  first column of every fleet `table.dt` gets a 10 px left padding so its
+  text no longer sits flush against that bar.
+- **Rail:** the active link's inset left bar (a dark crescent on the
+  rounded pill) is gone; hover / active read through background and
+  weight only (lint check 32 keeps it that way).
 - **Fixes found in the release pass.** Three facts the v1.5.0 masthead
   printed were lost with it and are back: "all DBIDs ..." in the top bar
   when a report spans more than one DBID, the template name in the top bar
