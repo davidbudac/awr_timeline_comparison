@@ -540,6 +540,8 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       out.allFull = libs.filter(x => { const t = x.querySelector('table, .chart-wrap'); return t && !vis(t); }).map(x => x.id);
       out.strips = document.querySelectorAll('td.trend svg.mw').length;
       out.lines = document.querySelectorAll('td.trend svg.spark').length;
+      // js_microstrip draws nothing past 91 windows (no pixel per bar left)
+      out.nwin = (window.AWR_WIN && window.AWR_WIN.w) ? window.AWR_WIN.w.length : 0;
       window.AWR_setView('summary', false);
       return out;
     });
@@ -553,7 +555,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (/^FAIL/.test(p4.reveal)) fail('evidence library reveal ' + p4.reveal);
     if (!p4.subsOk) fail('rail card sub-links ' + p4.subs);
     if (p4.allFull.length) fail('All sections: library sections not shown in full: ' + p4.allFull.join(', '));
-    if (!p4.strips || p4.lines) fail('micro strips: ' + p4.strips + ' svg.mw, ' + p4.lines + ' line sparklines left');
+    if ((!p4.strips && p4.nwin <= 91) || p4.lines) fail('micro strips: ' + p4.strips + ' svg.mw, ' + p4.lines + ' line sparklines left');
     if (errors.length) fail('phase 4: ' + errors.slice(0, 5).join(' | '));
     if (shots) {
       const pc = await page.$('#s-changes');
