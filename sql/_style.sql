@@ -1388,7 +1388,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ashx{margin:0;padding:0}');
     DBMS_OUTPUT.PUT_LINE('.ashx[hidden]{display:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axh{display:flex;align-items:baseline;gap:var(--s2) var(--s5);flex-wrap:wrap}');
-    DBMS_OUTPUT.PUT_LINE('.ashx .axh .axs{flex:1;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axh .axs{flex:1 1 auto;min-width:0;white-space:normal}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axch{margin-top:var(--s3)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axch + .axch{margin-top:var(--s2)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axch[hidden],.ashx .axk[hidden],.ashx .axn2[hidden]{display:none}');
