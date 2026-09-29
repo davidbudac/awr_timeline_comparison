@@ -182,7 +182,7 @@ Environment variables:
                 reports/<report-basename>.<zip|tar.gz|tar>, entry = the bare
                 report filename.  e.g. ARCHIVE=zip
                 A bad ARCHIVE value or a missing required tool exits 2 before
-                sqlplus runs; an archive failure AFTER a successful report
+                sqlplus runs (as does sqlplus not being on PATH); an archive failure AFTER a successful report
                 exits 4 (the report itself still succeeded).
 
 Tip: not sure which arguments you need?  Run  ./run_awr_trend.sh --configure
@@ -199,6 +199,37 @@ list_templates() {
     done
     [[ -n "$found" ]] || found='comprehensive simple dev '
     printf '%s' "${found% }"
+}
+
+# ---------------------------------------------------------------------------
+# check_oracle_env -- fail-fast preflight: is `sqlplus` runnable from PATH?
+# Without it every sqlplus call dies with shell exit 127 ("command not found")
+# and the failure surfaces only as an opaque downstream symptom.  Passes
+# silently when `command -v sqlplus` succeeds (ORACLE_HOME is NOT required --
+# Instant Client works without it); otherwise prints a hint tailored to
+# ORACLE_HOME and return 2 (nothing ran).
+# ---------------------------------------------------------------------------
+check_oracle_env() {
+    command -v sqlplus >/dev/null 2>&1 && return 0
+    {
+        echo "error: sqlplus was not found on PATH -- nothing was run."
+        if [[ -n "${ORACLE_HOME:-}" && -x "$ORACLE_HOME/bin/sqlplus" ]]; then
+            echo "  sqlplus exists at $ORACLE_HOME/bin/sqlplus but $ORACLE_HOME/bin is not on PATH."
+            echo "  Fix:  export PATH=\"\$ORACLE_HOME/bin:\$PATH\""
+        elif [[ -n "${ORACLE_HOME:-}" ]]; then
+            echo "  ORACLE_HOME is set to '$ORACLE_HOME' but it has no bin/sqlplus --"
+            echo "  ORACLE_HOME looks wrong (or the client is not installed there)."
+        else
+            echo "  Neither ORACLE_HOME is set nor is sqlplus on PATH.  For a full install:"
+            echo "    export ORACLE_HOME=/u01/app/oracle/product/19c/dbhome_1"
+            echo "    export PATH=\$ORACLE_HOME/bin:\$PATH"
+            echo "  (or run  . oraenv  to set them).  For Instant Client only PATH is"
+            echo "  needed (plus LD_LIBRARY_PATH, or LIBPATH on AIX)."
+        fi
+        echo "  Note: cron, sudo, non-login shells and the server/ scheduler often do not"
+        echo "  source your profile.  Verify with:  command -v sqlplus"
+    } >&2
+    return 2
 }
 
 # ---------------------------------------------------------------------------
@@ -340,6 +371,8 @@ run_report() {
     local CONN="$1" TARGET_END="$2" WIN_HOURS="$3" WEEKS_BACK="$4" TOP_N="$5" \
           INST_NUM="$6" STEP="$7" STEP_UNIT="$8" TEMPLATE="$9" DEBUG="${10}" \
           MARKER_FILE="${11}" PROFILE_DAYS="${12:-$DEF_PROFILE_DAYS}"
+
+    check_oracle_env || return 2
 
     cd "$SCRIPT_DIR"
     mkdir -p reports

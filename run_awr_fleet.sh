@@ -90,7 +90,8 @@
 #
 # Exit codes:
 #   0   report written, at least one DB reported OK
-#   2   usage error or a bad fleet.conf / argument (nothing run)
+#   2   usage error, a bad fleet.conf / argument, or sqlplus not on PATH
+#       (nothing run)
 #   3   report written, but every DB failed (unreachable/truncated/error)
 #   4   report written (>=1 DB OK), but FLEET_ARCHIVE was requested and
 #       archiving the run folder failed
@@ -291,8 +292,8 @@ A DB flagged "|detail" in fleet.conf (or forced via FLEET_DETAIL=all) also
 gets a full single-DB report (awr_trend.sql) generated alongside the fleet
 report and linked from that DB's row.
 
-Exit codes: 0 = report written, >=1 DB OK; 2 = usage/config error (nothing
-run); 3 = report written but every DB failed; 4 = report written (>=1 DB
+Exit codes: 0 = report written, >=1 DB OK; 2 = usage/config error or sqlplus
+not on PATH (nothing run); 3 = report written but every DB failed; 4 = report written (>=1 DB
 OK) but FLEET_ARCHIVE was requested and archiving the run folder failed.
 USAGE
 }
@@ -541,6 +542,37 @@ archive_fleet_run() {
     fi
     echo "warning: could not create archive $parent/$name.$ext" >&2
     return 1
+}
+
+# ---------------------------------------------------------------------------
+# check_oracle_env -- fail-fast preflight: is `sqlplus` runnable from PATH?
+# Without it every sqlplus call dies with shell exit 127 ("command not found")
+# and the failure surfaces only as an opaque downstream symptom.  Passes
+# silently when `command -v sqlplus` succeeds (ORACLE_HOME is NOT required --
+# Instant Client works without it); otherwise prints a hint tailored to
+# ORACLE_HOME and exit 2 (nothing ran).
+# ---------------------------------------------------------------------------
+check_oracle_env() {
+    command -v sqlplus >/dev/null 2>&1 && return 0
+    {
+        echo "error: sqlplus was not found on PATH -- nothing was run."
+        if [[ -n "${ORACLE_HOME:-}" && -x "$ORACLE_HOME/bin/sqlplus" ]]; then
+            echo "  sqlplus exists at $ORACLE_HOME/bin/sqlplus but $ORACLE_HOME/bin is not on PATH."
+            echo "  Fix:  export PATH=\"\$ORACLE_HOME/bin:\$PATH\""
+        elif [[ -n "${ORACLE_HOME:-}" ]]; then
+            echo "  ORACLE_HOME is set to '$ORACLE_HOME' but it has no bin/sqlplus --"
+            echo "  ORACLE_HOME looks wrong (or the client is not installed there)."
+        else
+            echo "  Neither ORACLE_HOME is set nor is sqlplus on PATH.  For a full install:"
+            echo "    export ORACLE_HOME=/u01/app/oracle/product/19c/dbhome_1"
+            echo "    export PATH=\$ORACLE_HOME/bin:\$PATH"
+            echo "  (or run  . oraenv  to set them).  For Instant Client only PATH is"
+            echo "  needed (plus LD_LIBRARY_PATH, or LIBPATH on AIX)."
+        fi
+        echo "  Note: cron, sudo, non-login shells and the server/ scheduler often do not"
+        echo "  source your profile.  Verify with:  command -v sqlplus"
+    } >&2
+    exit 2
 }
 
 # ---------------------------------------------------------------------------
@@ -1587,6 +1619,9 @@ _pos_clean fleet_template "$FLEET_TEMPLATE"
 
 parse_conf "$CONF_PATH"
 parse_markers
+
+# Fail fast if sqlplus is not runnable, before any workdir is created.
+check_oracle_env
 
 # Fail fast on a bad FLEET_DETAIL_ECHARTS local path BEFORE any DB is queried
 # (a whole fleet run is expensive to waste on a typo caught only afterwards).
