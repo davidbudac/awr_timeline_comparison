@@ -63,6 +63,8 @@
 #       ./run_awr_trend.sh user/pw@svc AUTO
 #   # Also zip the finished report alongside it:
 #   ARCHIVE=zip ./run_awr_trend.sh user/pw@svc AUTO
+#   # Skip the SQL Monitor section (DBA_HIST_REPORTS can be slow to read):
+#   SQLMON=N ./run_awr_trend.sh user/pw@svc AUTO
 #   # Don't remember the argument order?  Let the configurator drive:
 #   ./run_awr_trend.sh --configure
 #
@@ -125,6 +127,17 @@ DEF_PROFILE_DAYS='0'
 # e.g.  ARCHIVE=zip ./run_awr_trend.sh / AUTO
 : "${ARCHIVE:=}"
 
+# Whether to run the SQL Monitor section (18) travels in the SQLMON
+# environment variable (an env var, like ARCHIVE, so the positional order
+# stays symmetric with awr_trend.sql).  Case-insensitive:
+#   empty / 1 / Y / yes / on / true  -> run it (default)
+#   0 / N / no / off / false         -> skip it: no SQL Monitor section, no
+#                                       SQL Monitor pills in the verdict, so
+#                                       DBA_HIST_REPORTS is never read (its
+#                                       XML parsing can take minutes)
+# Rides into the sqlmon DEFINE; normalised to Y / N by norm_sqlmon.
+: "${SQLMON:=}"
+
 # ---- optional terminal styling (degrades to plain text) --------------------
 # NB: a missing capability must never be fatal.  Some terminfo entries (notably
 # several AIX terminal types) lack the half-bright `dim` cap, so `tput dim`
@@ -184,6 +197,10 @@ Environment variables:
                 A bad ARCHIVE value or a missing required tool exits 2 before
                 sqlplus runs (as does sqlplus not being on PATH); an archive failure AFTER a successful report
                 exits 4 (the report itself still succeeded).
+  SQLMON        N/no/0/off/false skips the SQL Monitor section (18) and its
+                verdict pills, so DBA_HIST_REPORTS is never read (it can take
+                minutes on a busy DB).  Empty/Y (default) = run it.
+                e.g. SQLMON=N
 
 Tip: not sure which arguments you need?  Run  ./run_awr_trend.sh --configure
 USAGE
@@ -289,6 +306,16 @@ newest_report() {
 # the return status -- run_report reacts to a non-zero return with `return 2`
 # so a bad ARCHIVE is caught before sqlplus ever runs (mirrors the ECHARTS
 # quote-check / marker_file existence check immediately above it).
+# norm_sqlmon <value> -- prints Y or N for SQLMON; exits 1 on anything else.
+norm_sqlmon() {
+    case "$1" in
+        ''|[Yy]|[Yy][Ee][Ss]|1|[Oo][Nn]|[Tt]|[Tt][Rr][Uu][Ee]) echo Y ;;
+        [Nn]|[Nn][Oo]|0|[Oo][Ff][Ff]|[Ff]|[Ff][Aa][Ll][Ss][Ee]) echo N ;;
+        *) echo "error: SQLMON='$1' must be Y/yes/1/on (default) or N/no/0/off." >&2
+           return 1 ;;
+    esac
+}
+
 resolve_archive_fmt() {
     local raw="$1" v="${1,,}"
     case "$v" in
@@ -393,6 +420,7 @@ run_report() {
     fi
     local ARCHIVE_FMT
     ARCHIVE_FMT="$(resolve_archive_fmt "$ARCHIVE")" || return 2
+    SQLMON="$(norm_sqlmon "$SQLMON")" || return 2
 
     # awr_trend.sql does not DEFINE defaults itself; we set them here and the
     # driver inherits them from this sqlplus session.  We load sql/defaults.sql
@@ -417,6 +445,7 @@ DEFINE marker_file = '${MARKER_FILE}'
 DEFINE profile_days = ${PROFILE_DAYS}
 DEFINE markers = '${MARKERS}'
 DEFINE echarts = '${ECHARTS}'
+DEFINE sqlmon = '${SQLMON:-Y}'
 @@awr_trend.sql
 EXIT
 EOF
@@ -630,6 +659,7 @@ build_shell_cmd() {
     [[ -n "$MARKERS" ]] && out+="MARKERS=$(shq "$MARKERS") "
     [[ -n "$ECHARTS" ]] && out+="ECHARTS=$(shq "$ECHARTS") "
     [[ -n "$ARCHIVE" ]] && out+="ARCHIVE=$(shq "$ARCHIVE") "
+    [[ "$SQLMON" == N ]] && out+="SQLMON=N "
     out+='./run_awr_trend.sh'
     for (( i = 0; i <= last; i++ )); do
         out+=" $(shq "${vals[$i]}")"
@@ -658,6 +688,7 @@ DEFINE marker_file = '${MARKER_FILE}'
 DEFINE profile_days = ${PROFILE_DAYS}
 DEFINE markers = '${MARKERS}'
 DEFINE echarts = '${ECHARTS}'
+DEFINE sqlmon = '${SQLMON:-Y}'
 @@awr_trend.sql
 EXIT
 EOF
@@ -707,6 +738,7 @@ print_summary() {
     [[ -n "$MARKERS" ]] && printf '  %-14s %s\n' 'markers' "$MARKERS"
     [[ -n "$ECHARTS" ]] && printf '  %-14s %s\n' 'echarts' "$ECHARTS"
     [[ -n "$ARCHIVE" ]] && printf '  %-14s %s\n' 'archive' "$ARCHIVE"
+    printf '  %-14s %s\n' 'sqlmon' "$([[ "$SQLMON" == N ]] && echo 'N  (SQL Monitor section skipped)' || echo 'Y')"
     echo "${BOLD}=================================================================${RST}"
     print_span_hint
     echo
@@ -732,6 +764,7 @@ configure() {
     TOP_N="$DEF_TOP_N"; INST_NUM="$DEF_INST_NUM"; STEP="$DEF_STEP"; STEP_UNIT="$DEF_STEP_UNIT"
     TEMPLATE="$DEF_TEMPLATE"; DEBUG="$DEF_DEBUG"; MARKER_FILE="$DEF_MARKER_FILE"
     PROFILE_DAYS="$DEF_PROFILE_DAYS"
+    SQLMON="$(norm_sqlmon "$SQLMON")" || exit 2
 
     echo "${BOLD}AWR timeline comparison — interactive configurator${RST}"
     echo "${DIM}Press Enter to accept the [default] shown for each question.  Ctrl-C to abort.${RST}"
@@ -771,6 +804,8 @@ configure() {
         prompt_yesno DEBUG "Print per-section progress markers to stdout?" "$DEBUG"
         prompt_marker
         prompt_value PROFILE_DAYS "Day profile: score each hour of the last 24 h against how many prior days? (0 = off)" "$PROFILE_DAYS" v_nonneg
+        echo "${DIM}SQL Monitor reads DBA_HIST_REPORTS XML, which can take minutes on a busy DB.${RST}"
+        prompt_yesno SQLMON "Include the SQL Monitor section?" "$SQLMON"
 
         print_summary
 

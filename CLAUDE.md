@@ -29,8 +29,8 @@ inline, so those work offline. The
 ## Entry points
 
 - `run_awr_trend.sh user/pw@svc [target_end] [win_hours] [weeks_back] [top_n] [inst_num] [step] [step_unit] [template] [debug] [marker_file] [profile_days]`
-  — wrapper; sets DEFINEs via heredoc then `@@awr_trend.sql`. `MARKERS=` and
-  `ECHARTS=` ride as **env vars** (not positional, to keep arg order symmetric).
+  — wrapper; sets DEFINEs via heredoc then `@@awr_trend.sql`. `MARKERS=`,
+  `ECHARTS=`, `ARCHIVE=` and `SQLMON=` ride as **env vars** (not positional, to keep arg order symmetric).
 - `run_awr_trend.sh --configure` (also `-c`/`-i`, or no args at a TTY) —
   interactive bash configurator living in the *same* wrapper. Prompts for every
   var, then prints both a `./run_awr_trend.sh …` command and the equivalent
@@ -114,6 +114,7 @@ sql/
     ├── js_wait_colors.plsql  -- shared wait_class palette
     ├── js_markers.plsql      -- inits AWR_MARKERS + AWR_markLine()
     ├── marker.sql / markers_inline.sql / no_markers.sql -- marker emitters
+    ├── no_sqlmon.sql         -- stub @@-included instead of 18 when sqlmon=N
     ├── debug_log.sql         -- per-section progress markers (no spool pollution)
     └── templates/<name>/     -- comprehensive (default) / simple / dev (+ fleet/, fleet-owned)
         ├── sysstat_load_targets.sql
@@ -132,12 +133,13 @@ the band glyph replaced it.
 
 ## Substitution variables
 
-Thirteen user-facing vars, all DEFINEs (defaults in `sql/defaults.sql`):
+Fourteen user-facing vars, all DEFINEs (defaults in `sql/defaults.sql`):
 `target_end` (`'AUTO'`=prior full hour), `win_hours`, `weeks_back`, `top_n`,
 `inst_num` (`0`=aggregate across RAC, else filter to that instance), `step` +
 `step_unit` (`'h'`/`'d'`/`'w'`; default `1`+`'w'` = same hour-of-week N weeks
 back), `template`, `debug`, `marker_file`, `profile_days` (`0`=off; the 12th
-and last wrapper positional), `markers`, `echarts`.
+and last wrapper positional), `markers`, `echarts`, `sqlmon` (`'Y'`;
+falsy = skip section 18 + 17's R6-R9, see SQL Monitor).
 
 The driver resolves many derived vars **once** up front via `COLUMN … NEW_VALUE`
 and every section references them as `~name` (never re-resolves): `step_hours`
@@ -1012,6 +1014,17 @@ not a date, and Oracle may evaluate the `TO_DATE` before the
 section plus R6-R9 scan `dba_hist_reports` (with `XMLTYPE` parsing) seven
 times over the span — fine at thousands of rows, worth a single BULK COLLECT
 if a busy DB ever makes it slow.
+
+**Opt-out (`sqlmon`, env `SQLMON=N`).** The driver resolves `~sqlmon_on`
+(`'N'` only for a falsy form, else `'Y'`) and `~sqlmon_include` =
+`sql/18_sqlmon.sql` or the stub `sql/lib/no_sqlmon.sql` (only the two
+`AWR-SECTION` markers, so the 20/20 pair count holds); 00 drops the rail
+link, 17 wraps its R6-R9 scans in `IF '~sqlmon_on' = 'Y'` (body not
+re-indented), 19's About meta line says "SQL Monitor skipped". 06's MON
+xlinks are hidden by the chrome (missing target). `sqlmon=Y` output is
+unchanged. dbmint AUTO weekly 1/4: 84 s on, 9 s off (2026-10-08). The
+fleet's `06b_sqlmon` band is not affected (detail runs load
+`sql/defaults.sql`, so they keep SQL Monitor on).
 
 **Plan-hash column.** The per-statement table's "Plan hash" column (right
 after "User / module") compares `cur` = the plan_hash of the Current

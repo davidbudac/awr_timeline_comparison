@@ -33,7 +33,7 @@ sql_files() {
 
 # ----------------------------------------------------------------------
 # 1. @@ include paths.  Nested @@ resolves against the OUTERMOST caller
-#    (the driver at project root), so only @@sql/... and the two resolved
+#    (the driver at project root), so only @@sql/... and the three resolved
 #    substitution forms are legal.  @@lib/... or @@../... silently include
 #    the wrong file (or nothing).
 # ----------------------------------------------------------------------
@@ -41,7 +41,7 @@ while IFS= read -r hit; do
     file=${hit%%:*}; rest=${hit#*:}; lineno=${rest%%:*}
     inc=$(sed -E 's/^[^:]+:[0-9]+:[[:space:]]*//' <<<"$hit")
     case "$inc" in
-        @@sql/*|@@~template_dir/*|@@~marker_include*) : ;;
+        @@sql/*|@@~template_dir/*|@@~marker_include*|@@~sqlmon_include*) : ;;
         *) finding include-path "$file:$lineno" \
              "include '$inc' does not resolve from the project root; use @@sql/lib/<file> or @@~template_dir/<file> (see CLAUDE.md)";;
     esac

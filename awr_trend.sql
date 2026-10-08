@@ -48,6 +48,9 @@
 --                  optional "Day profile" section (16): every hour of the
 --                  24 h ending at target_end vs the same hour-of-day on the
 --                  N prior days, 1-day cadence regardless of step_unit.
+--   sqlmon       'Y' (default) or 'N' -- 'N' skips the SQL Monitor section
+--                  (18) and the verdict's SQL Monitor pills (17 R6-R9),
+--                  i.e. every DBA_HIST_REPORTS read; it can be slow.
 --
 -- The cadence between adjacent comparison windows is step*step_unit.
 -- Default step=1, step_unit='w' reproduces the original "same hour-of-week,
@@ -212,6 +215,12 @@ COLUMN debug_termout       NEW_VALUE debug_termout       NOPRINT
 -- to the caller's marker_file path, else sql/lib/markers_inline.sql when the
 -- file-free markers var is set, else the no-op stub sql/lib/no_markers.sql.
 COLUMN marker_include      NEW_VALUE marker_include      NOPRINT
+-- sqlmon_on is 'Y' unless ~sqlmon is a falsy form (N / NO / 0 / OFF / FALSE /
+-- F); sqlmon_include is the file the section list @@-includes for section
+-- 18: sql/18_sqlmon.sql, or the no-op stub sql/lib/no_sqlmon.sql when off.
+-- 17_narrative.sql skips its own DBA_HIST_REPORTS scans (R6-R9) on 'N'.
+COLUMN sqlmon_on           NEW_VALUE sqlmon_on           NOPRINT
+COLUMN sqlmon_include      NEW_VALUE sqlmon_include      NOPRINT
 -- dbg_ts is refreshed inside sql/lib/debug_log.sql before each marker.
 -- Declaring the COLUMN once here keeps the helper from re-declaring it
 -- on every call.  NOPRINT suppresses the value from any visible output
@@ -277,7 +286,10 @@ SELECT
     tpl.template_name                                              AS template_name,
     tpl.template_dir                                               AS template_dir,
     dbg.debug_termout                                              AS debug_termout,
-    mk.marker_include                                              AS marker_include
+    mk.marker_include                                              AS marker_include,
+    sm.sqlmon_on                                                   AS sqlmon_on,
+    CASE sm.sqlmon_on WHEN 'Y' THEN 'sql/18_sqlmon.sql'
+                      ELSE 'sql/lib/no_sqlmon.sql' END             AS sqlmon_include
 FROM v$database d
 CROSS JOIN v$instance i
 CROSS JOIN (
@@ -439,7 +451,16 @@ CROSS JOIN (
             ELSE 'sql/lib/no_markers.sql'
         END AS marker_include
     FROM dual
-) mk;
+) mk
+CROSS JOIN (
+    -- SQL Monitor (section 18 + 17's R6-R9) is on unless sqlmon is an
+    -- explicit falsy form: its DBA_HIST_REPORTS XML parsing can dominate
+    -- the run on a busy DB.  Empty / unrecognised = on (the default).
+    SELECT
+        CASE WHEN UPPER(TRIM('~sqlmon')) IN ('N','NO','0','OFF','FALSE','F')
+             THEN 'N' ELSE 'Y' END AS sqlmon_on
+    FROM dual
+) sm;
 
 -- -------------------------------------------------------------------
 -- Derived labels (win_label, step_label, bucket_hours)
@@ -623,9 +644,9 @@ DEFINE _dbg_msg = 'section 06 top_sql (Top-N SQL ranked 5 ways + regression)'
 DEFINE _dbg_msg = 'section 11 top_sql_ash_breakdown (per-SQL ASH; one cursor per pool)'
 @@sql/lib/debug_log.sql
 @@sql/11_top_sql_ash_breakdown.sql
-DEFINE _dbg_msg = 'section 18 sqlmon (SQL Monitor summaries from DBA_HIST_REPORTS)'
+DEFINE _dbg_msg = 'section 18 sqlmon (SQL Monitor summaries from DBA_HIST_REPORTS; skipped when sqlmon=N)'
 @@sql/lib/debug_log.sql
-@@sql/18_sqlmon.sql
+@@~sqlmon_include
 DEFINE _dbg_msg = 'section 14 segment_io (top segments by I/O per window)'
 @@sql/lib/debug_log.sql
 @@sql/14_segment_io.sql

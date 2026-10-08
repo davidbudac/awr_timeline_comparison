@@ -13,11 +13,12 @@
 -- below and metric_policy-independent score_cells() call for the row.
 --
 -- Template-INDEPENDENT (like 13-16): SQL Monitor coverage doesn't depend on
--- which triage template the caller picked. Always on, no DEFINE -- unlike
--- section 16 (profile_days), this section still renders (with a one-line
--- note) when there is nothing to show, because "SQL Monitor persisted
--- nothing this run" is itself useful information, not a feature the caller
--- opted out of.
+-- which triage template the caller picked. On by default; sqlmon = 'N'
+-- (SQLMON=N run_awr_trend.sh) swaps this file for the no-op stub
+-- sql/lib/no_sqlmon.sql, because the XML parsing below can take minutes on
+-- a busy DB. When it runs it still renders (with a one-line note) when
+-- there is nothing to show, because "SQL Monitor persisted nothing this
+-- run" is itself useful information.
 --
 -- Source: DBA_HIST_REPORTS WHERE component_name = 'sqlmonitor'. key1 =
 -- sql_id, key2 = sql_exec_id, key3 = sql_exec_start as the STRING

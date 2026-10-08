@@ -93,6 +93,7 @@ Or pass positional arguments to the shell wrapper (it sets all substitution vars
 MARKERS='2026-06-10 09:00|Release 2.0' ./run_awr_trend.sh user/pw@svc  # file-free inline markers
 ECHARTS=vendor/echarts.min.js ./run_awr_trend.sh user/pw@svc           # self-contained / offline HTML
 ARCHIVE=zip ./run_awr_trend.sh user/pw@svc                             # also zip the finished report
+SQLMON=N ./run_awr_trend.sh user/pw@svc                                # skip SQL Monitor (slow DBA_HIST_REPORTS reads)
 ```
 
 Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template [debug [marker_file [profile_days]]]]]]]]]]]`
@@ -118,6 +119,7 @@ self-contained report" below).
 | `MARKERS` *(env var)* | *(empty)* | File-free alternative to `marker_file`: inline `WHEN\|LABEL` milestones joined by `;;`. `marker_file` wins when both are set. See "Timeline markers" below |
 | `ECHARTS` *(env var)* | *(empty)* | Where the ECharts chart library loads from. Empty = public CDN (`cdn.jsdelivr.net`). An `http(s)` URL = used as-is (internal mirror). A local file path = inlined into the report for a single self-contained, offline-capable HTML file. See "Offline / self-contained report" below |
 | `ARCHIVE` *(env var)* | *(empty)* | Also zip/tar the finished report. Empty/`0`/`N`/`no`/`off` = disabled. `1`/`Y`/`yes`/`on`/`auto` = auto-pick zip, else tar+gzip, else plain tar. `zip`/`tgz`/`tar` force that format. See "Archive the output (zip)" below |
+| `SQLMON` *(env var)* / `sqlmon` *(DEFINE)* | `Y` | `N`/`no`/`0`/`off` skips the SQL Monitor section (18) and the verdict's SQL Monitor pills, so `DBA_HIST_REPORTS` is never read (its XML parsing can take minutes on a busy DB). The About line notes the skip |
 
 `step` × `step_unit` defines the gap between adjacent comparison
 windows. `step=1, step_unit=w` (the default) reproduces the original

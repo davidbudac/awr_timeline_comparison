@@ -761,6 +761,9 @@ BEGIN
         v_sm_new_ids    VARCHAR2(4000) := '';
         v_sm_src        VARCHAR2(64);        -- the likely-source plan change
     BEGIN
+        -- sqlmon=N skips every DBA_HIST_REPORTS scan below (counts stay 0,
+        -- v_sm_src NULL); the body is deliberately not re-indented.
+        IF '~sqlmon_on' = 'Y' THEN
         SELECT MIN(win_start_ts), MAX(win_end_ts)
         INTO   v_sm_span_start, v_sm_span_end
         FROM (
@@ -960,6 +963,7 @@ BEGIN
             v_sm_new_n   := m.new_n;
             v_sm_new_ids := m.new_ids;
         END LOOP;
+        END IF;  -- sqlmon_on
 
         -- v1.6.0: counts as quiet pills in the verdict hero; the details
         -- are one click away in SQL Monitor (18).  A plan change links to

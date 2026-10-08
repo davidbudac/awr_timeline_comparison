@@ -504,7 +504,9 @@ BEGIN
         || '<b>SQL</b>'
         || '<a href="#topsql">Top SQL</a>'
         || '<a href="#topsql-ash">Top SQL &mdash; ASH</a>'
-        || '<a href="#sqlmon">SQL Monitor</a>'
+        -- SQL Monitor link only when section 18 runs (sqlmon not 'N').
+        || CASE WHEN '~sqlmon_on' = 'Y'
+                THEN '<a href="#sqlmon">SQL Monitor</a>' ELSE '' END
         || '<b>Storage &amp; config</b>'
         || '<a href="#segment-io">Segment I/O</a>'
         || '<a href="#file-io">File I/O</a>'

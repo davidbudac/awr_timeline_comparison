@@ -46,6 +46,10 @@ DEFINE marker_file = ''
 -- days to compare against (z-scores need at least 3).  Section 16 /
 -- sql/lib/day_profile_cte.sql.
 DEFINE profile_days = 0
+-- sqlmon 'Y' (default) runs the SQL Monitor section (18) and the verdict's
+-- SQL Monitor pills (17 R6-R9); 'N' skips both, i.e. every DBA_HIST_REPORTS
+-- read (its XML parsing can take minutes on a busy DB).
+DEFINE sqlmon = 'Y'
 -- markers optional file-free timeline markers: a list of milestones
 -- "WHEN|LABEL" separated by ";;", e.g.
 --   DEFINE markers = '2026-06-10 09:00|Release 2.0;;2026-06-11 03:00|Patch'

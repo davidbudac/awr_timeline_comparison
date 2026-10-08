@@ -211,6 +211,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<p class="ab-meta">Run <code>~run_id</code> &middot; template <code>'
         || DBMS_XMLGEN.CONVERT('~template_name') || '</code> &middot; top_n ~top_n'
         || ' &middot; generated ~generated_at_s by ' || DBMS_XMLGEN.CONVERT('~caller_user')
+        || CASE WHEN '~sqlmon_on' = 'N'
+                THEN ' &middot; SQL Monitor skipped (<code>sqlmon=N</code>)' END
         || ' &middot; read-only against '
         || '<code>DBA_HIST_*</code>, no scratch schema.</p>');
     DBMS_OUTPUT.PUT_LINE('</div></details></section>');
