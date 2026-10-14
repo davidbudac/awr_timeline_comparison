@@ -322,8 +322,11 @@ def emit(w) -> str:
 
     put('<script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.body.classList.add("dark");}catch(e){}})();</script>')
     L = _lines()
-    # the early view script is literal in the SQL: lift it verbatim
-    put(next(t for t, ok in L if ok and t.startswith('<script>(function(){var v="summary"')))
+    # the early view script is literal in the SQL: lift it verbatim, but
+    # the demo defaults to All sections (a reader's saved choice / a
+    # #view= hash still wins, as in the real report)
+    put(next(t for t, ok in L if ok and t.startswith('<script>(function(){var v="summary"'))
+        .replace('var v="summary"', 'var v="all"', 1))
     put(next(t for t, ok in L if ok and t.startswith('<script>window.AWR_ls=')))
     put('<a class="skip" href="#main-start">Skip to report</a>')
     # ---- v1.6.0 top bar (hand-ported: DEFINEs + the Current window) --
@@ -343,11 +346,11 @@ def emit(w) -> str:
         + '</span></div>'
         '<span class="sp"></span>'
         '<div class="seg" role="group" aria-label="View">'
-        '<button type="button" data-v="summary" aria-pressed="true"'
+        '<button type="button" data-v="summary" aria-pressed="false"'
         ' title="The answer: verdict, finding cards, what changed, checked and normal">Summary</button>'
         '<button type="button" data-v="timeline" aria-pressed="false"'
         ' title="The compared windows side by side">Timeline</button>'
-        '<button type="button" data-v="all" aria-pressed="false"'
+        '<button type="button" data-v="all" aria-pressed="true"'
         ' title="Every section and every scored row">All sections</button>'
         '</div>'
         '<button type="button" id="theme-toggle" class="theme-icon-btn"'

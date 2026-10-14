@@ -125,7 +125,10 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       };
     });
     console.log(JSON.stringify(info, null, 1));
-    if (info.view !== 'summary') fail('default view is ' + info.view + ', expected summary');
+    // the default = the early view script's literal (the demo opens All sections)
+    const dm = /<script>\(function\(\)\{var v="(summary|timeline|all)"/.exec(fs.readFileSync(file, 'utf8'));
+    const defView = dm ? dm[1] : 'summary';
+    if (info.view !== defView) fail('default view is ' + info.view + ', expected ' + defView);
     // every href="#x" resolves to exactly one id; no duplicate ids
     const links = await page.evaluate(() => {
       const ids = {};
