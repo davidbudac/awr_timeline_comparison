@@ -500,8 +500,8 @@ const ARG_ORDER = ['target_end','win_hours','weeks_back','top_n','inst_num',
 // `markers` (rides the MARKERS env var on the shell path) and `echarts` (rides
 // the ECHARTS env var). Both must be emitted so the driver never prompts for an
 // undefined substitution var.
-const SQL_DEFINES = ARG_ORDER.concat(['markers','echarts']);
-const STRING_DEFINES = new Set(['target_end','step_unit','template','debug','marker_file','markers','echarts']);
+const SQL_DEFINES = ARG_ORDER.concat(['markers','echarts','sqlmon']);
+const STRING_DEFINES = new Set(['target_end','step_unit','template','debug','marker_file','markers','echarts','sqlmon']);
 const UNIT_HOURS = {h:1, d:24, w:168};
 const UNIT_WORD  = {h:'hourly', d:'daily', w:'weekly'};
 const UNIT_NOUN  = {h:'hour', d:'day', w:'week'};
@@ -627,7 +627,9 @@ function readConfig(){
     // 'custom' = the path/URL in echarts_path (a local file the wrapper inlines,
     // or an internal mirror URL). Emitting it as a DEFINE keeps the run
     // prompt-free regardless of which option is picked.
-    echarts:    $('echarts_mode').value === 'custom' ? $('echarts_path').value.trim() : ''
+    echarts:    $('echarts_mode').value === 'custom' ? $('echarts_path').value.trim() : '',
+    // The driver references ~sqlmon unconditionally too; no UI control, keep the default.
+    sqlmon:     'Y'
   };
 }
 
