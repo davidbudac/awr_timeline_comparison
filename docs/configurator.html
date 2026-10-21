@@ -14,241 +14,273 @@
 <script>try{var t=localStorage.getItem('awr-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <style>
   /* ---- page-local: configurator components. Only shared tokens from
-     assets/site.css are used, so both themes just work. ---- */
-  html { scroll-padding-block-start: calc(var(--top-h) + 58px); }
+     assets/site.css are used, so both themes just work. The vocabulary is
+     the home page's: numbered steps on a connector rail, the meter chart,
+     hairline rules, one accent. ---- */
+  html { scroll-padding-block-start: calc(var(--top-h) + 64px); }
   @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 
-  .intro { color:var(--fg-2); max-width:46em; margin-block-end:18px; }
+  .page-head { padding-block:40px 30px; }
+  .page-head .lede { max-width:40em; }
+  .page-body { padding-block:0 72px; }
 
   /* ---- sticky step bar (scrollspy + per-section state dots) ---- */
-  .stepbar { position:sticky; inset-block-start:var(--top-h); z-index:40; display:flex; gap:4px; flex-wrap:wrap; align-items:center;
-    background:color-mix(in oklch, var(--bg) 88%, transparent); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
-    border-block-end:1px solid var(--rule); padding-block:8px; margin-block-end:18px; }
-  .stepbar a { display:inline-flex; align-items:center; gap:7px; font-size:12.5px; font-weight:500; color:var(--fg-2);
-    border:1px solid transparent; border-radius:999px; padding:5px 11px; text-decoration:none; }
-  .stepbar a .dot { inline-size:7px; block-size:7px; border-radius:50%; background:var(--rule-strong); flex:none; }
-  .stepbar a.chg .dot { background:var(--accent); }
-  .stepbar a.err .dot { background:var(--crit); }
-  .stepbar a.act { background:var(--accent-soft); color:var(--accent); border-color:var(--accent-line); }
-  .stepbar a:active { transform:scale(.97); }
+  .stepbar { position:sticky; inset-block-start:var(--top-h); z-index:40; display:flex; gap:2px; align-items:center;
+    background:color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter:saturate(1.4) blur(8px); -webkit-backdrop-filter:saturate(1.4) blur(8px);
+    border-block-end:1px solid var(--rule); margin-block-end:34px; overflow-x:auto; scrollbar-width:none; }
+  .stepbar::-webkit-scrollbar { display:none; }
+  .stepbar a { position:relative; display:inline-flex; align-items:center; gap:8px; font-size:13.5px; font-weight:500; color:var(--muted);
+    padding:15px 12px 13px; text-decoration:none; white-space:nowrap; border-block-end:2px solid transparent; margin-block-end:-1px; }
+  .stepbar a .dot { inline-size:6px; block-size:6px; border-radius:50%; background:var(--rule-strong); flex:none; }
+  .stepbar a.chg .dot { background:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .stepbar a.err .dot { background:var(--crit); box-shadow:0 0 0 3px var(--crit-soft); }
+  .stepbar a.act { color:var(--fg); border-block-end-color:var(--accent); }
+  .stepbar a:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; border-radius:4px; }
   .stepbar .spacer { flex:1 1 auto; }
-  .stepbar .status { font-size:12px; font-weight:600; border-radius:999px; padding:4px 10px; border:1px solid var(--ok); color:var(--ok); background:var(--ok-soft); white-space:nowrap; }
-  .stepbar .status.bad { border-color:var(--crit); color:var(--crit); background:var(--crit-soft); }
-  @media (hover: hover) and (pointer: fine) { .stepbar a:hover { color:var(--accent); border-color:var(--accent-line); } }
+  .stepbar .status { font:500 12px/1 var(--mono); border-radius:4px; padding:5px 8px; color:var(--ok); background:var(--ok-soft); white-space:nowrap; margin-inline-start:8px; }
+  .stepbar .status.bad { color:var(--crit); background:var(--crit-soft); }
+  @media (hover: hover) and (pointer: fine) { .stepbar a:hover { color:var(--fg); } }
 
   /* ---- two-column build layout ---- */
-  .config { display:grid; grid-template-columns:minmax(0,1fr) 430px; gap:22px; align-items:start; }
+  .config { display:grid; grid-template-columns:minmax(0,1fr) 440px; gap:48px; align-items:start; }
   .leftcol { min-inline-size:0; }
-  @media (max-width:1180px) { .config { grid-template-columns:minmax(0,1fr) 380px; } }
+  @media (max-width:1180px) { .config { grid-template-columns:minmax(0,1fr) 390px; gap:32px; } }
   @media (max-width:900px)  { .config { grid-template-columns:minmax(0,1fr); } }
 
-  /* ---- sections: <details class="sec"> with a live readout in the summary ---- */
-  details.sec { background:var(--bg-sub); border:1px solid var(--rule); border-radius:8px; margin-block-end:12px; overflow:clip; }
-  details.sec > summary { list-style:none; cursor:pointer; padding:12px 16px; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:10px 12px; user-select:none; }
+  /* ---- sections: numbered steps on a connector rail (home-page vocabulary) ---- */
+  details.sec { position:relative; padding-inline-start:50px; padding-block-end:34px; }
+  details.sec::before { content:""; position:absolute; inset-inline-start:15px; inset-block:36px 0; inline-size:1px; background:var(--rule); }
+  details.sec:last-of-type::before { display:none; }
+  details.sec > summary { list-style:none; cursor:pointer; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; column-gap:16px; user-select:none; }
   details.sec > summary::-webkit-details-marker { display:none; }
-  details.sec[open] > summary { border-block-end:1px solid var(--rule); }
-  .sec .n { grid-column:1; color:var(--accent); font:500 13px/1 var(--mono); inline-size:26px; block-size:26px; border-radius:50%; border:1px solid var(--accent-line); background:var(--accent-soft); display:inline-grid; place-items:center; flex:none; }
+  .sec .n { position:absolute; inset-inline-start:0; inset-block-start:0; inline-size:30px; block-size:30px; border-radius:50%; border:1px solid var(--accent-line); background:var(--accent-soft);
+    color:var(--accent); display:grid; place-items:center; font:500 13.5px/1 var(--mono); }
   .sec.has-err .n { color:var(--crit); border-color:var(--crit); background:var(--crit-soft); }
-  .sec .ttl { grid-column:2; font-size:16px; font-weight:600; color:var(--fg); letter-spacing:-.01em; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .sec .ttl .opt { font-size:10px; font-weight:600; letter-spacing:.08em; color:var(--muted); border:1px solid var(--rule); border-radius:999px; padding:1px 8px; background:var(--surface); }
-  .sec .ro { grid-column:2; font:400 12px/1.4 var(--mono); color:var(--muted); overflow-wrap:anywhere; }
+  .sec .ttl { font-size:19px; font-weight:600; letter-spacing:-.012em; color:var(--fg); line-height:30px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .sec .ttl .opt { font:500 11.5px/1 var(--mono); color:var(--muted); border:1px solid var(--rule); border-radius:4px; padding:3px 6px; }
+  .sec .ro { grid-column:1; font:400 13px/1.5 var(--mono); color:var(--muted); margin-block-start:4px; overflow-wrap:anywhere; }
   .sec .ro b { color:var(--fg-2); font-weight:500; }
-  .sec .ro .pill { display:inline-block; font-size:10.5px; font-weight:600; font-family:var(--sans); color:var(--accent); background:var(--accent-soft); border-radius:999px; padding:1px 7px; margin-inline-start:6px; vertical-align:1px; }
-  .sec .chev { grid-column:3; grid-row:1 / span 2; color:var(--muted); font-size:12px; }
+  .sec .chev { grid-column:2; grid-row:1 / span 2; align-self:start; margin-block-start:7px; inline-size:16px; block-size:16px; display:grid; place-items:center; color:var(--faint); font-size:11px; }
   details.sec[open] .chev { transform:rotate(90deg); }
   @media (prefers-reduced-motion: no-preference) { .sec .chev { transition:transform .15s ease-out; } }
   @media (hover: hover) and (pointer: fine) { details.sec > summary:hover .ttl { color:var(--accent); } }
-  .sec-body { padding:16px 16px 18px; }
-  .subhead { font-size:10.5px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); margin:0 0 4px; }
-  .subgroup { margin-block-start:22px; padding-block-start:16px; border-block-start:1px solid var(--rule); }
+  .sec-body { padding-block-start:20px; }
+  .subhead { font-size:13.5px; font-weight:500; color:var(--fg-2); margin:0 0 10px; }
+  .subgroup { margin-block-start:26px; padding-block-start:22px; border-block-start:1px solid var(--rule); }
 
   /* ---- fields ---- */
-  .field { margin-block-end:14px; position:relative; border-radius:6px; }
+  .field { margin-block-end:22px; position:relative; border-radius:6px; }
   .field:last-child { margin-block-end:0; }
-  .field > label, label.lbl { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; font-size:13.5px; font-weight:500; color:var(--fg-2); margin-block-end:6px; }
-  .field > label code, label.lbl code { font-size:.85em; color:var(--muted); }
-  .help { font-size:12.5px; color:var(--muted); margin-block-start:6px; line-height:1.5; }
-  .help strong, .help b { color:var(--fg-2); }
-  .echo { font-weight:600; color:var(--accent); font-family:var(--mono); font-size:12px; }
-  .chgtag { display:none; margin-inline-start:auto; font-size:11px; font-weight:600; color:var(--accent); }
-  .chgtag button { font:inherit; color:var(--muted); background:none; border:0; border-block-end:1px dashed var(--muted); padding:0; cursor:pointer; margin-inline-start:6px; }
+  .field > label, label.lbl { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; font-size:14.5px; font-weight:500; color:var(--fg); margin-block-end:8px; }
+  .field > label code, label.lbl code { font:400 12px/1 var(--mono); color:var(--muted); background:none; border:0; padding:0; }
+  .help { font-size:13px; color:var(--muted); margin-block-start:7px; line-height:1.55; max-width:62em; }
+  .help strong, .help b { color:var(--fg-2); font-weight:500; }
+  .echo { font:500 12.5px/1 var(--mono); color:var(--accent); }
+  .chgtag { display:none; margin-inline-start:auto; font:500 12px/1 var(--mono); color:var(--accent); }
+  .chgtag button { font:inherit; color:var(--accent); background:none; border:0; padding:0; cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px; }
+  .chgtag button::before { content:"\21BA\00a0"; }
   .field.chg .chgtag { display:inline-flex; align-items:baseline; }
-  .field.chg > label::before, .field.chg > .lbl::before { content:""; position:absolute; inset-inline-start:-10px; inset-block:2px; inline-size:3px; border-radius:2px; background:var(--accent); }
-  .field.hl { background:var(--accent-soft); box-shadow:0 0 0 6px var(--accent-soft); }
-  .ferr { display:none; font-size:12.5px; color:var(--crit); margin-block-start:6px; }
+  .field.chg::before { content:""; position:absolute; inset-inline-start:-50px; inset-block:4px; inline-size:3px; border-radius:2px; background:var(--accent); }
+  .field.hl { background:var(--accent-soft); box-shadow:0 0 0 8px var(--accent-soft); }
+  @media (prefers-reduced-motion: no-preference) { .field { transition:background-color .25s, box-shadow .25s; } }
+  .ferr { display:none; font-size:13px; color:var(--crit); margin-block-start:7px; }
   .field.bad .ferr { display:block; }
-  @media (hover: hover) and (pointer: fine) { .chgtag button:hover { color:var(--accent); border-color:var(--accent); } }
+  @media (hover: hover) and (pointer: fine) { .chgtag button:hover { color:var(--accent); } }
 
   input[type=text], input[type=number], input[type=datetime-local], select {
-    inline-size:100%; font-family:inherit; font-size:13.5px; color:var(--fg); background:var(--surface);
-    border:1px solid var(--rule-strong); border-radius:7px; padding:8px 10px; line-height:1.3; }
-  input[type=text].mono { font-family:var(--mono); font-size:12.5px; }
+    inline-size:100%; font-family:inherit; font-size:14px; color:var(--fg); background:var(--surface);
+    border:1px solid var(--rule-strong); border-radius:6px; padding:0 11px; block-size:38px; line-height:36px; }
+  select { appearance:none; -webkit-appearance:none; padding-inline-end:32px;
+    background-image:linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position:calc(100% - 17px) 16px, calc(100% - 12px) 16px; background-size:5px 5px; background-repeat:no-repeat; }
+  input[type=text].mono { font-family:var(--mono); font-size:13.5px; }
   input:focus-visible, select:focus-visible { outline:2px solid transparent; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
   .field.bad input, .field.bad select { border-color:var(--crit); box-shadow:0 0 0 3px var(--crit-soft); }
-  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  .row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
-  .row-step { display:grid; grid-template-columns:1fr 130px; gap:10px; align-items:start; }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+  .row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:22px; }
+  .row-step { display:grid; grid-template-columns:1fr 140px; gap:10px; align-items:start; }
   @media (max-width:560px) { .row2, .row3, .row-step { grid-template-columns:1fr; } }
 
   /* number stepper */
-  .stp { display:grid; grid-template-columns:36px 1fr 36px; border:1px solid var(--rule-strong); border-radius:7px; overflow:clip; background:var(--surface); }
-  .stp input { border:0; border-radius:0; text-align:center; font-family:var(--mono); -moz-appearance:textfield; appearance:textfield; }
+  .stp { display:grid; grid-template-columns:38px 1fr 38px; border:1px solid var(--rule-strong); border-radius:6px; overflow:clip; background:var(--surface); block-size:38px; }
+  .stp input { border:0; border-radius:0; text-align:center; font:500 15px/36px var(--mono); block-size:36px; padding:0; -moz-appearance:textfield; appearance:textfield; }
   .stp input::-webkit-outer-spin-button, .stp input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
   .stp input:focus-visible { box-shadow:none; }
-  .stp button { font:500 16px/1 var(--mono); color:var(--fg-2); background:var(--bg-sub); border:0; cursor:pointer; }
-  .stp button:first-child { border-inline-end:1px solid var(--rule); }
-  .stp button:last-child { border-inline-start:1px solid var(--rule); }
-  .stp button:active { transform:scale(.95); }
+  .stp button { font:400 18px/1 var(--mono); color:var(--muted); background:none; border:0; cursor:pointer; }
+  .stp button:active { color:var(--accent); transform:scale(.92); }
   .stp:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
   .field.bad .stp { border-color:var(--crit); box-shadow:0 0 0 3px var(--crit-soft); }
   @media (hover: hover) and (pointer: fine) { .stp button:hover { color:var(--accent); background:var(--accent-soft); } }
 
-  /* segmented control */
-  .seg { display:inline-flex; border:1px solid var(--rule-strong); border-radius:7px; overflow:clip; background:var(--surface); flex-wrap:wrap; }
-  .seg label { position:relative; padding:7px 13px; font-size:12.5px; font-weight:600; cursor:pointer; color:var(--fg-2); border-inline-end:1px solid var(--rule-strong); }
-  .seg label:last-child { border-inline-end:none; }
+  /* segmented control: a track with a raised selected segment */
+  .seg { display:inline-flex; gap:2px; padding:3px; border-radius:7px; background:var(--bg-sub); border:1px solid var(--rule); flex-wrap:wrap; }
+  .seg label { position:relative; padding:6px 13px; font-size:13px; font-weight:500; cursor:pointer; color:var(--muted); border-radius:5px; line-height:1.3; }
   .seg label input { position:absolute; opacity:0; inline-size:0; block-size:0; pointer-events:none; }
-  .seg label.on { background:var(--btn); color:#fff; }
-  .seg label:has(input:focus-visible) { outline:2px solid var(--accent); outline-offset:-2px; }
+  .seg label.on { background:var(--surface); color:var(--fg); box-shadow:0 1px 2px rgba(16,33,58,.12), 0 0 0 1px var(--rule); }
+  .seg label:has(input:focus-visible) { outline:2px solid var(--accent); outline-offset:1px; }
   .seg label:active { transform:scale(.98); }
+  @media (hover: hover) and (pointer: fine) { .seg label:not(.on):hover { color:var(--fg); } }
 
-  /* quick-pick chips (connect samples, dates) */
+  /* quick-pick chips */
   .chiprow { display:flex; flex-wrap:wrap; gap:6px; margin-block-start:8px; }
-  .chiprow .qp { font:600 11px/1.5 var(--mono); color:var(--fg-2); background:var(--surface); border:1px solid var(--rule); border-radius:999px; padding:3px 10px; cursor:pointer; }
+  .chiprow .qp { font:400 12px/1 var(--mono); color:var(--fg-2); background:var(--surface); border:1px solid var(--rule); border-radius:4px; padding:6px 9px; cursor:pointer; }
   .chiprow .qp:active { transform:scale(.97); }
-  @media (hover: hover) and (pointer: fine) { .chiprow .qp:hover { border-color:var(--accent); color:var(--accent); } }
+  @media (hover: hover) and (pointer: fine) { .chiprow .qp:hover { border-color:var(--accent-line); color:var(--accent); background:var(--accent-soft); } }
 
-  .toggle { display:flex; align-items:flex-start; gap:10px; }
-  .toggle input { inline-size:16px; block-size:16px; accent-color:var(--accent); cursor:pointer; margin:3px 0 0; flex:none; }
-  .toggle label { font-size:13.5px; color:var(--fg); cursor:pointer; }
-  .toggle label small { display:block; font-size:12.5px; color:var(--muted); margin-block-start:2px; line-height:1.5; }
+  .toggle { display:flex; align-items:flex-start; gap:12px; }
+  .toggle input { inline-size:17px; block-size:17px; accent-color:var(--accent); cursor:pointer; margin:2px 0 0; flex:none; }
+  .toggle label { font-size:14.5px; font-weight:500; color:var(--fg); cursor:pointer; }
+  .toggle label small { display:block; font-size:13px; font-weight:400; color:var(--muted); margin-block-start:4px; line-height:1.55; max-width:62em; }
 
   .hidden { display:none !important; }
 
-  /* option cards (starting points, templates, charts) */
-  .cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:8px; }
-  .card { text-align:start; background:var(--surface); border:1px solid var(--rule); border-radius:8px; padding:10px 12px; cursor:pointer;
-    display:flex; flex-direction:column; gap:3px; font:inherit; color:inherit; position:relative; }
-  .card.sel { border-color:var(--accent); background:var(--accent-soft); box-shadow:inset 3px 0 0 var(--accent); }
-  .card .sn { font-size:13px; font-weight:600; color:var(--fg); }
-  .card.sel .sn { color:var(--accent-hover); }
-  .card .sd { font-size:12px; color:var(--fg-2); line-height:1.4; }
-  .card .sm { font-size:10.5px; color:var(--muted); font-family:var(--mono); margin-block-start:2px; }
-  .card:active { transform:scale(.98); }
-  @media (hover: hover) and (pointer: fine) { .card:hover { border-color:var(--accent); } }
-  @media (prefers-reduced-motion: no-preference) { .card { transition:border-color .12s, background .12s, transform .12s ease-out; } }
-  .cards-note { font-size:12.5px; color:var(--muted); margin-block-start:8px; line-height:1.5; }
+  /* ---- option cards: shapes (with a window glyph) and templates (with counts) ---- */
+  .cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:10px; }
+  .card { text-align:start; background:var(--surface); border:1px solid var(--rule); border-radius:var(--r); padding:13px 14px 12px; cursor:pointer;
+    display:flex; flex-direction:column; gap:4px; font:inherit; color:inherit; position:relative; }
+  .card.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent), var(--shadow); }
+  .card.sel::after { content:""; position:absolute; inset-block-start:12px; inset-inline-end:12px; inline-size:8px; block-size:8px; border-radius:50%; background:var(--accent); }
+  .card .gl { display:block; margin-block-end:6px; }
+  .card .gl svg { display:block; overflow:visible; }
+  .card .sn { font-size:14px; font-weight:600; color:var(--fg); padding-inline-end:16px; }
+  .card .sd { font-size:12.5px; color:var(--muted); line-height:1.45; }
+  .card .sm { font:400 11.5px/1.4 var(--mono); color:var(--faint); margin-block-start:4px; }
+  .card .stats { display:flex; gap:12px; margin-block-start:6px; flex-wrap:wrap; }
+  .card .stats span { display:grid; font:400 11px/1.3 var(--sans); color:var(--muted); }
+  .card .stats b { font:500 15px/1.2 var(--mono); color:var(--fg); }
+  .card:active { transform:scale(.985); }
+  .card:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  @media (hover: hover) and (pointer: fine) { .card:not(.sel):hover { border-color:var(--rule-strong); background:var(--bg-sub); } }
+  @media (prefers-reduced-motion: no-preference) { .card { transition:border-color .12s, box-shadow .12s, background-color .12s, transform .1s ease-out; } }
+  #templates.cards { grid-template-columns:repeat(3, minmax(0,1fr)); }
+  @media (max-width:640px) { #templates.cards { grid-template-columns:1fr; } }
+  .cards-note { font-size:13px; color:var(--muted); margin-block-start:10px; line-height:1.5; }
+
+  /* option list (charts source): radio rows */
+  .optlist { display:grid; border:1px solid var(--rule); border-radius:var(--r); overflow:clip; background:var(--surface); }
+  .optlist .card { border:0; border-radius:0; border-block-start:1px solid var(--rule); padding:11px 14px 11px 40px; gap:2px; }
+  .optlist .card:first-child { border-block-start:0; }
+  .optlist .card::before { content:""; position:absolute; inset-inline-start:14px; inset-block-start:14px; inline-size:14px; block-size:14px; border-radius:50%; border:1.5px solid var(--rule-strong); background:var(--surface); }
+  .optlist .card.sel { box-shadow:none; background:var(--accent-soft); }
+  .optlist .card.sel::before { border-color:var(--accent); border-width:4.5px; }
+  .optlist .card.sel::after { display:none; }
+  .optlist .card .sn { font-weight:500; }
+  .optlist .card:active { transform:none; }
 
   /* target-end live echo */
-  .te-echo { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-block-start:10px; font-size:12.5px; color:var(--fg-2); }
-  .te-echo .big { font:500 14px/1.2 var(--mono); color:var(--fg); background:var(--surface); border:1px solid var(--rule); border-radius:6px; padding:5px 9px; }
+  .te-echo { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-block-start:10px; font-size:13px; color:var(--muted); }
+  .te-echo .big { font:500 14px/1 var(--mono); color:var(--fg); border:1px dashed var(--rule-strong); border-radius:var(--r-sm); padding:9px 11px; }
 
   /* markers editor */
-  .mk-row { display:grid; grid-template-columns:200px 1fr 36px; gap:8px; margin-block-end:8px; align-items:stretch; }
+  .mk-row { display:grid; grid-template-columns:210px 1fr 38px; gap:8px; margin-block-end:8px; align-items:stretch; }
   @media (max-width:560px) { .mk-row { grid-template-columns:1fr; } }
-  .mk-x { border:1px solid var(--rule-strong); background:var(--surface); border-radius:7px; color:var(--muted); cursor:pointer; font-size:17px; line-height:1; padding:0; }
+  .mk-x { border:1px solid var(--rule-strong); background:var(--surface); border-radius:6px; color:var(--muted); cursor:pointer; font-size:17px; line-height:1; padding:0; }
   .mk-x:active { transform:scale(.95); }
-  .mk-add { font:inherit; font-size:12.5px; font-weight:600; color:var(--fg-2); background:var(--surface); border:1px dashed var(--rule-strong); border-radius:7px; padding:8px 14px; cursor:pointer; inline-size:100%; }
-  .mk-add:active { transform:scale(.99); }
+  .mk-add { font:inherit; font-size:13px; font-weight:500; color:var(--fg-2); background:none; border:1px dashed var(--rule-strong); border-radius:6px; padding:9px 14px; cursor:pointer; inline-size:100%; }
+  .mk-add:active { transform:scale(.995); }
   @media (hover: hover) and (pointer: fine) {
     .mk-x:hover { border-color:var(--crit); color:var(--crit); }
-    .mk-add:hover { border-color:var(--accent); color:var(--accent); }
+    .mk-add:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
   }
 
-  /* ---- right column: "This run" ---- */
-  .output { position:sticky; inset-block-start:calc(var(--top-h) + 58px); align-self:start; max-block-size:calc(100vh - var(--top-h) - 70px); overflow:auto; }
-  .output .outp { background:var(--bg-sub); border:1px solid var(--rule); border-radius:8px; padding:14px 16px 16px; box-shadow:var(--shadow); border-block-start:3px solid var(--accent); }
-  .output .ph { font-size:15px; font-weight:600; color:var(--fg); margin:0; display:flex; align-items:center; gap:10px; }
-  .output .ph .ready { margin-inline-start:auto; font-size:11px; font-weight:600; border-radius:999px; padding:3px 9px; border:1px solid var(--ok); color:var(--ok); background:var(--ok-soft); }
-  .output .ph .ready.bad { border-color:var(--crit); color:var(--crit); background:var(--crit-soft); }
-  .headline { font-size:13.5px; line-height:1.55; color:var(--fg); margin:10px 0 0; }
-  .headline b { color:var(--accent); font-weight:600; }
+  /* ---- right column: "This run" (the quick-start card's treatment) ---- */
+  .output { position:sticky; inset-block-start:calc(var(--top-h) + 64px); align-self:start; max-block-size:calc(100vh - var(--top-h) - 76px); overflow:auto; scrollbar-width:thin; }
+  .output .outp { background:var(--surface); border:1px solid var(--rule); border-block-start:3px solid var(--accent); border-radius:var(--r); box-shadow:var(--shadow-lg); padding:20px 22px 18px; }
+  .output .ph { font-size:22px; font-weight:600; letter-spacing:-.015em; color:var(--fg); margin:0; display:flex; align-items:baseline; gap:12px; }
+  .output .ph .ready { margin-inline-start:auto; font:500 12px/1 var(--mono); border-radius:4px; padding:5px 8px; color:var(--ok); background:var(--ok-soft); }
+  .output .ph .ready.bad { color:var(--crit); background:var(--crit-soft); }
+  .headline { font-size:14.5px; line-height:1.6; color:var(--fg-2); margin:8px 0 0; }
+  .headline b { color:var(--fg); font-weight:600; }
 
-  /* window diagram */
-  .diag { margin-block-start:12px; background:var(--surface); border:1px solid var(--rule); border-radius:8px; padding:10px 10px 6px; }
+  /* window diagram: the meter chart from the home page */
+  .diag { margin:16px 0 0; padding-block-start:16px; border-block-start:1px solid var(--rule); }
   .diag svg { display:block; inline-size:100%; block-size:auto; overflow:visible; font-family:var(--sans); }
-  .diag .cap { font-size:11.5px; color:var(--muted); margin-block-start:4px; line-height:1.45; }
+  .diag .cap { font-size:12.5px; color:var(--muted); margin-block-start:10px; line-height:1.5; }
   .diag .cap b { color:var(--fg-2); font-weight:500; }
-  .dplane { display:flex; align-items:center; gap:10px; margin-block-start:8px; padding-block-start:8px; border-block-start:1px dashed var(--rule); font-size:11.5px; color:var(--muted); }
+  .dplane { display:flex; align-items:center; gap:12px; margin-block-start:10px; padding-block-start:10px; border-block-start:1px dashed var(--rule-strong); font-size:12.5px; color:var(--muted); line-height:1.5; }
   .dplane svg { flex:none; inline-size:auto; }
+  .dplane b { color:var(--fg-2); font-weight:500; }
 
   /* "what the report will contain" */
-  .will { margin:12px 0 0; padding:0; list-style:none; display:grid; gap:3px; }
-  .will li { display:grid; grid-template-columns:16px minmax(0,1fr); gap:8px; align-items:baseline; font-size:12.5px; color:var(--fg-2); line-height:1.45; }
-  .will li .ic { font-size:11px; color:var(--ok); font-weight:700; text-align:center; }
+  .will { margin:6px 0 0; padding:0; list-style:none; display:grid; }
+  .will li { display:grid; grid-template-columns:18px minmax(0,1fr); gap:10px; align-items:baseline; font-size:13px; color:var(--fg-2); line-height:1.5; padding:6px 0; border-block-start:1px solid var(--rule); }
+  .will li:first-child { border-block-start:0; }
+  .will li .ic { font:600 11px/1 var(--mono); color:var(--ok); text-align:center; }
   .will li.off { color:var(--muted); }
   .will li.off .ic { color:var(--faint); }
   .will li.warn .ic { color:var(--warn); }
   .will li b { color:var(--fg); font-weight:500; }
-  .will li a { color:inherit; text-decoration:none; border-block-end:1px dotted var(--rule-strong); }
+  .will li a { color:inherit; text-decoration:none; }
   .will li a:active { color:var(--accent); }
-  @media (hover: hover) and (pointer: fine) { .will li a:hover { color:var(--accent); border-color:var(--accent); } }
-  details.fold2 { margin-block-start:12px; }
-  details.fold2 > summary { list-style:none; cursor:pointer; font-size:12px; font-weight:600; color:var(--muted); user-select:none; }
+  @media (hover: hover) and (pointer: fine) { .will li a:hover { color:var(--accent); } .will li a:hover b { color:var(--accent); } }
+  details.fold2 { margin-block-start:14px; padding-block-start:12px; border-block-start:1px solid var(--rule); }
+  details.fold2 > summary { list-style:none; cursor:pointer; font-size:13.5px; font-weight:500; color:var(--fg-2); user-select:none; display:flex; align-items:center; gap:8px; }
   details.fold2 > summary::-webkit-details-marker { display:none; }
-  details.fold2 > summary::before { content:"\25B8"; display:inline-block; margin-inline-end:6px; }
+  details.fold2 > summary::before { content:"\25B8"; color:var(--faint); font-size:11px; }
   details.fold2[open] > summary::before { content:"\25BE"; }
+  details.fold2 > summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:3px; }
 
   /* changed-from-defaults chips */
-  .diffs { display:flex; flex-wrap:wrap; gap:5px; margin-block-start:10px; align-items:center; }
-  .diffs .lab { font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-inline-end:4px; }
-  .diffs .dchip { display:inline-flex; align-items:center; gap:4px; font:500 11px/1.5 var(--mono); color:var(--accent); background:var(--accent-soft); border:1px solid var(--accent-line); border-radius:999px; padding:2px 4px 2px 8px; }
+  .diffs { display:flex; flex-wrap:wrap; gap:6px; margin-block-start:14px; align-items:center; padding-block-start:12px; border-block-start:1px solid var(--rule); }
+  .diffs .lab { font-size:13px; color:var(--muted); margin-inline-end:4px; }
+  .diffs .dchip { display:inline-flex; align-items:center; gap:2px; font:400 12px/1 var(--mono); color:var(--accent); background:var(--accent-soft); border-radius:4px; padding:5px 3px 5px 8px; }
   .diffs .dchip a { color:inherit; text-decoration:none; }
-  .diffs .dchip button { font:inherit; line-height:1; color:var(--accent); background:none; border:0; border-radius:50%; inline-size:16px; block-size:16px; cursor:pointer; padding:0; }
-  .diffs .none { font-size:12px; color:var(--muted); }
-  .diffs .resetall { font:600 11px/1.5 var(--sans); color:var(--muted); background:none; border:0; border-block-end:1px dashed var(--muted); padding:0; cursor:pointer; margin-inline-start:auto; }
+  .diffs .dchip button { font:inherit; line-height:1; color:var(--accent); background:none; border:0; border-radius:3px; inline-size:18px; block-size:18px; cursor:pointer; padding:0; opacity:.7; }
+  .diffs .none { font-size:13px; color:var(--faint); }
+  .diffs .resetall { font:400 12px/1 var(--mono); color:var(--muted); background:none; border:0; padding:0; cursor:pointer; margin-inline-start:auto; text-decoration:underline dotted; text-underline-offset:3px; }
   @media (hover: hover) and (pointer: fine) {
-    .diffs .dchip button:hover { background:var(--accent); color:#fff; }
-    .diffs .resetall:hover { color:var(--accent); border-color:var(--accent); }
+    .diffs .dchip button:hover { opacity:1; background:var(--accent); color:#fff; }
+    .diffs .resetall:hover { color:var(--accent); }
   }
 
   /* command tabs + code */
-  .tabs { display:flex; gap:6px; margin:14px 0 10px; align-items:center; }
-  .tab { font:inherit; font-size:13px; font-weight:500; padding:6px 12px; border-radius:7px; cursor:pointer; border:1px solid var(--rule-strong); background:var(--surface); color:var(--fg); }
-  .tab.on { background:var(--btn); color:#fff; border-color:var(--btn); }
+  .tabs { display:flex; gap:2px; margin:16px 0 10px; align-items:center; padding:3px; border-radius:7px; background:var(--bg-sub); border:1px solid var(--rule); }
+  .tab { font:inherit; font-size:13px; font-weight:500; padding:6px 12px; border-radius:5px; cursor:pointer; border:0; background:none; color:var(--muted); }
+  .tab.on { background:var(--surface); color:var(--fg); box-shadow:0 1px 2px rgba(16,33,58,.12), 0 0 0 1px var(--rule); }
   .tab:active { transform:scale(.97); }
-  @media (hover: hover) and (pointer: fine) { .tab:hover:not(.on) { border-color:var(--accent); color:var(--accent); } }
+  .tab:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  @media (hover: hover) and (pointer: fine) { .tab:hover:not(.on) { color:var(--fg); } }
   .tabs .link { margin-inline-start:auto; }
   .codeblock { margin:0 0 10px; }
   .codeblock .cbhead { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-block-end:6px; }
-  .codeblock .cbhead .t { font:500 12px/1 var(--mono); color:var(--muted); }
+  .codeblock .cbhead .t { font:400 12px/1 var(--mono); color:var(--muted); }
   .cbhead .copy, .tabs .copy { position:static; box-shadow:none; }
   .output pre { margin:0; background:var(--code-bg); border:1px solid var(--rule); border-radius:var(--r-sm); padding:12px 14px; font:400 12.5px/1.65 var(--mono); color:var(--fg); overflow-x:auto; white-space:pre; }
-  .tok { border-radius:3px; padding:0 1px; cursor:help; }
+  .tok { border-radius:3px; padding:1px 1px; cursor:help; }
   .tok.chg { color:var(--accent); font-weight:500; }
   .tok.hl { background:var(--accent-soft); box-shadow:0 0 0 2px var(--accent-soft); color:var(--accent); }
   .tok.env { color:var(--warn); }
   @media (hover: hover) and (pointer: fine) { .tok:hover { background:var(--accent-soft); } }
 
   /* argument map under the shell command */
-  .argmap { display:grid; grid-template-columns:auto auto minmax(0,1fr); gap:1px 10px; font:400 11.5px/1.6 var(--mono); margin:6px 0 0; }
-  .argmap .k { color:var(--muted); }
+  .argmap { display:grid; grid-template-columns:auto auto minmax(0,1fr); gap:2px 12px; font:400 12px/1.6 var(--mono); margin:8px 0 0; }
+  .argmap .k { color:var(--muted); cursor:help; }
   .argmap .i { color:var(--faint); text-align:end; }
   .argmap .v { color:var(--fg); overflow-wrap:anywhere; }
-  .argmap .om .v, .argmap .om .k { color:var(--faint); font-style:italic; }
+  .argmap .om .v, .argmap .om .k { color:var(--faint); }
   .argmap .ch .v { color:var(--accent); font-weight:500; }
   .argmap div.hl { background:var(--accent-soft); }
-  .argmap .k { cursor:help; }
 
-  .notes { margin-block-start:10px; }
-  .note-item { border-radius:8px; padding:8px 12px; font-size:12.5px; margin-block-end:6px; line-height:1.5; border:1px solid transparent; }
-  .note-item code { background:rgba(0,0,0,.06); border-color:transparent; color:inherit; }
-  .note-err  { background:var(--crit-soft); color:var(--crit); }
-  .note-info { background:var(--warn-soft); color:var(--warn); border-color:var(--warn-line); }
-  .note-tip  { background:var(--skip-soft); color:var(--fg-2); border-color:var(--rule); }
-  .out-foot { font-size:12px; color:var(--muted); margin-block-start:10px; line-height:1.55; }
+  .notes { margin-block-start:12px; display:grid; gap:8px; }
+  .note-item { padding:2px 0 2px 12px; font-size:13px; line-height:1.55; border-inline-start:3px solid var(--rule-strong); color:var(--fg-2); }
+  .note-item code { background:var(--code-bg); color:inherit; }
+  .note-err  { border-color:var(--crit); color:var(--crit); }
+  .note-info { border-color:var(--warn); }
+  .note-tip  { border-color:var(--accent-line); color:var(--muted); }
+  .out-foot { font-size:12.5px; color:var(--muted); margin-block-start:12px; line-height:1.55; }
   .out-foot code, .help code { white-space:normal; overflow-wrap:anywhere; }
 
   /* mobile-only floating jump-to-command button */
   .jump-cmd { display:none; }
   @media (max-width:900px) {
     .output { position:static; max-block-size:none; overflow:visible; scroll-margin-block-start:calc(var(--top-h) + 64px); }
+    details.sec { padding-inline-start:44px; }
+    .field.chg::before { inset-inline-start:-44px; }
     .jump-cmd { display:inline-flex; align-items:center; gap:7px; position:fixed; inset-inline-end:16px; inset-block-end:16px; z-index:60;
       background:var(--btn); color:#fff; border:1px solid var(--btn); border-radius:999px; font:inherit;
-      font-size:12px; font-weight:600; letter-spacing:.03em; padding:10px 16px; cursor:pointer; box-shadow:0 8px 20px -8px rgba(0,0,0,.45); }
+      font-size:13px; font-weight:500; padding:11px 18px; cursor:pointer; box-shadow:0 8px 20px -8px rgba(0,0,0,.45); }
     .jump-cmd:active { transform:translateY(1px); }
   }
-  #build .doc-head { margin-block-end:8px; }
 </style>
 </head>
 <body>
@@ -352,7 +384,7 @@
 
         <div class="subgroup"></div>
         <div class="field" data-k="target_end" id="f_target_end">
-          <label class="lbl">When does the newest window end? <code>target_end</code><span class="chgtag">changed<button type="button" data-reset="target_end">reset</button></span></label>
+          <label class="lbl">When does the newest window end? <code>target_end</code><span class="chgtag"><button type="button" data-reset="target_end">reset</button></span></label>
           <div class="seg" id="te_seg">
             <label data-te="auto" class="on"><input type="radio" name="temode" value="auto" checked>Prior full hour (AUTO)</label>
             <label data-te="specific"><input type="radio" name="temode" value="specific">Specific date &amp; time</label>
@@ -370,13 +402,13 @@
 
         <div class="row2">
           <div class="field" data-k="win_hours" id="f_win_hours">
-            <label class="lbl" for="win_hours">Window width <code>win_hours</code><span class="echo" id="wh_echo"></span><span class="chgtag">changed<button type="button" data-reset="win_hours">reset</button></span></label>
+            <label class="lbl" for="win_hours">Window width <code>win_hours</code><span class="echo" id="wh_echo"></span><span class="chgtag"><button type="button" data-reset="win_hours">reset</button></span></label>
             <div class="stp"><button type="button" data-step="win_hours" data-d="-1" aria-label="Narrower">&minus;</button><input type="number" id="win_hours" value="1" min="0.25" step="0.25"><button type="button" data-step="win_hours" data-d="1" aria-label="Wider">+</button></div>
             <div class="ferr">Must be a positive number of hours.</div>
             <div class="help">Length of every window, in hours. <code>0.25</code> = 15 min, <code>9</code> = a business day.</div>
           </div>
           <div class="field" data-k="weeks_back" id="f_weeks_back">
-            <label class="lbl" for="weeks_back">Prior windows <code>weeks_back</code><span class="echo" id="wb_echo"></span><span class="chgtag">changed<button type="button" data-reset="weeks_back">reset</button></span></label>
+            <label class="lbl" for="weeks_back">Prior windows <code>weeks_back</code><span class="echo" id="wb_echo"></span><span class="chgtag"><button type="button" data-reset="weeks_back">reset</button></span></label>
             <div class="stp"><button type="button" data-step="weeks_back" data-d="-1" aria-label="Fewer">&minus;</button><input type="number" id="weeks_back" value="4" min="1" step="1"><button type="button" data-step="weeks_back" data-d="1" aria-label="More">+</button></div>
             <div class="ferr">Must be a whole number of at least 1.</div>
             <div class="help">How many earlier windows the newest one is compared with (a count; the name is historical).
@@ -385,7 +417,7 @@
         </div>
 
         <div class="field" data-k="step" id="f_step">
-          <label class="lbl">Cadence: how far apart the windows are <code>step &times; step_unit</code><span class="echo" id="st_echo"></span><span class="chgtag">changed<button type="button" data-reset="step">reset</button></span></label>
+          <label class="lbl">Cadence: how far apart the windows are <code>step &times; step_unit</code><span class="echo" id="st_echo"></span><span class="chgtag"><button type="button" data-reset="step">reset</button></span></label>
           <div class="seg" id="cad_seg">
             <label data-cad="w"><input type="radio" name="cadence" value="w" checked>Weekly</label>
             <label data-cad="d"><input type="radio" name="cadence" value="d">Daily</label>
@@ -414,7 +446,7 @@
       </summary>
       <div class="sec-body">
         <div class="field" data-k="template" id="f_template">
-          <label class="lbl">Template: which metrics and waits are scored <code>template</code><span class="chgtag">changed<button type="button" data-reset="template">reset</button></span></label>
+          <label class="lbl">Template: which metrics and waits are scored <code>template</code><span class="chgtag"><button type="button" data-reset="template">reset</button></span></label>
           <div class="cards" id="templates"></div>
           <select id="template" class="hidden" aria-hidden="true" tabindex="-1">
             <option value="comprehensive" selected>comprehensive</option>
@@ -427,13 +459,13 @@
 
         <div class="row2" style="margin-block-start:16px">
           <div class="field" data-k="top_n" id="f_top_n">
-            <label class="lbl" for="top_n">Rows per ranking <code>top_n</code><span class="chgtag">changed<button type="button" data-reset="top_n">reset</button></span></label>
+            <label class="lbl" for="top_n">Rows per ranking <code>top_n</code><span class="chgtag"><button type="button" data-reset="top_n">reset</button></span></label>
             <div class="stp"><button type="button" data-step="top_n" data-d="-1" aria-label="Fewer rows">&minus;</button><input type="number" id="top_n" value="10" min="1" step="1"><button type="button" data-step="top_n" data-d="1" aria-label="More rows">+</button></div>
             <div class="ferr">Must be a whole number of at least 1.</div>
             <div class="help" id="tn_help"></div>
           </div>
           <div class="field" data-k="inst_num" id="f_inst_num">
-            <label class="lbl" for="inst_num">RAC instance <code>inst_num</code><span class="chgtag">changed<button type="button" data-reset="inst_num">reset</button></span></label>
+            <label class="lbl" for="inst_num">RAC instance <code>inst_num</code><span class="chgtag"><button type="button" data-reset="inst_num">reset</button></span></label>
             <div class="stp"><button type="button" data-step="inst_num" data-d="-1" aria-label="Previous instance">&minus;</button><input type="number" id="inst_num" value="0" min="0" step="1"><button type="button" data-step="inst_num" data-d="1" aria-label="Next instance">+</button></div>
             <div class="ferr">Must be 0 (all instances) or a positive whole number.</div>
             <div class="help" id="in_help"></div>
@@ -441,7 +473,7 @@
         </div>
 
         <div class="field" data-k="profile_days" id="f_profile_days" style="margin-block-start:16px">
-          <label class="lbl" for="profile_days">Day profile: which hour of the day changed? <code>profile_days</code><span class="chgtag">changed<button type="button" data-reset="profile_days">reset</button></span></label>
+          <label class="lbl" for="profile_days">Day profile: which hour of the day changed? <code>profile_days</code><span class="chgtag"><button type="button" data-reset="profile_days">reset</button></span></label>
           <div class="row2">
             <div class="stp"><button type="button" data-step="profile_days" data-d="-1" aria-label="Fewer days">&minus;</button><input type="number" id="profile_days" min="0" step="1" value="0"><button type="button" data-step="profile_days" data-d="1" aria-label="More days">+</button></div>
             <div class="help" id="pd_help" style="margin:0"></div>
@@ -455,7 +487,7 @@
         <div class="field" data-k="sqlmon" id="f_sqlmon" style="margin-block-start:16px">
           <div class="toggle">
             <input type="checkbox" id="sqlmon" checked>
-            <label for="sqlmon">SQL Monitor section <code>SQLMON</code><span class="chgtag">changed<button type="button" data-reset="sqlmon">reset</button></span>
+            <label for="sqlmon">SQL Monitor section <code>SQLMON</code><span class="chgtag"><button type="button" data-reset="sqlmon">reset</button></span>
               <small>Persisted SQL Monitor executions in the compared span: plan changes, DOP downgrades, errors, new statements,
                 plus the verdict's plan-change finding. Reads <code>DBA_HIST_REPORTS</code> (XML parsing: often the slowest
                 section on a busy DB). Turn it off for a faster run.</small></label>
@@ -472,15 +504,15 @@
       </summary>
       <div class="sec-body">
         <div class="field" data-k="echarts" id="f_echarts">
-          <label class="lbl">Where the charts library comes from <code>ECHARTS</code><span class="chgtag">changed<button type="button" data-reset="echarts">reset</button></span></label>
-          <div class="cards" id="echarts_cards"></div>
+          <label class="lbl">Where the charts library comes from <code>ECHARTS</code><span class="chgtag"><button type="button" data-reset="echarts">reset</button></span></label>
+          <div class="optlist" id="echarts_cards"></div>
           <input type="text" id="echarts_path" class="mono hidden" value="" placeholder="https://mirror.example.com/echarts.min.js" autocomplete="off" spellcheck="false" style="margin-block-start:8px">
           <div class="help" id="echarts_help"></div>
         </div>
 
         <div class="row2" style="margin-block-start:16px">
           <div class="field" data-k="archive" id="f_archive">
-            <label class="lbl" for="archive">Archive the finished report <code>ARCHIVE</code><span class="chgtag">changed<button type="button" data-reset="archive">reset</button></span></label>
+            <label class="lbl" for="archive">Archive the finished report <code>ARCHIVE</code><span class="chgtag"><button type="button" data-reset="archive">reset</button></span></label>
             <select id="archive">
               <option value="" selected>No, just the .html</option>
               <option value="zip">zip</option>
@@ -491,7 +523,7 @@
             <div class="help">Shell wrapper only. Written next to the report after the run; a failed archive never undoes a finished report (exit code 4).</div>
           </div>
           <div class="field" data-k="debug" id="f_debug">
-            <label class="lbl">Console progress <code>debug</code><span class="chgtag">changed<button type="button" data-reset="debug">reset</button></span></label>
+            <label class="lbl">Console progress <code>debug</code><span class="chgtag"><button type="button" data-reset="debug">reset</button></span></label>
             <div class="toggle" style="margin-block-start:9px">
               <input type="checkbox" id="debug" checked>
               <label for="debug">One timestamped line per section on stdout<small>Shows which section is running on a slow DB. The HTML is byte-identical either way.</small></label>
@@ -509,7 +541,7 @@
       </summary>
       <div class="sec-body">
         <div class="field" data-k="markers" id="f_markers">
-          <label class="lbl">Milestones drawn on the dated charts <code>MARKERS</code><span class="chgtag">changed<button type="button" data-reset="markers">reset</button></span></label>
+          <label class="lbl">Milestones drawn on the dated charts <code>MARKERS</code><span class="chgtag"><button type="button" data-reset="markers">reset</button></span></label>
           <div id="marker_rows"></div>
           <button type="button" class="mk-add" id="marker_add">+ Add a milestone</button>
           <div class="help">A release, a patch, an incident: each becomes a vertical line on the Activity charts, the
@@ -834,13 +866,13 @@ function renderDiagram(cfg, v){
   const stepH = st*UNIT_HOURS[cfg.step_unit];
   const N = wb+1;
   const W = Math.max(260, box.clientWidth || 380);
-  const padL = 8, padR = 8, top = 22, barH = 26, H = 112;
+  const padL = 6, padR = 6, top = 24, barH = 34, H = 118;
   const MAXS = 26;
   const slots = Math.min(N, MAXS);
   const elided = N - slots;                       // oldest windows folded into the first slot
   const slotW = (W - padL - padR) / slots;
   const ratio = Math.min(1, wh/stepH);
-  const barW = Math.max(4, Math.min(slotW - 2, slotW*ratio));
+  const barW = Math.max(6, Math.min(slotW - 2, slotW*ratio));
   const overlap = wh > stepH;
   const end = cfg.resolvedEnd;
   const ns = 'http://www.w3.org/2000/svg';
@@ -850,8 +882,9 @@ function renderDiagram(cfg, v){
   svg.setAttribute('role', 'img');
   svg.setAttribute('aria-label', N+' windows of '+fmtHours(wh,true)+', '+fmtHours(stepH,true)+' apart, newest on the right');
   const el = (t, a, txt) => { const e = document.createElementNS(ns, t); for(const k in a) e.setAttribute(k, a[k]); if(txt!=null) e.textContent = txt; svg.appendChild(e); return e; };
-  // axis
-  el('line', {x1:padL, y1:top+barH+6, x2:W-padR, y2:top+barH+6, stroke:'var(--rule-strong)', 'stroke-width':1});
+  // baseline + a soft band behind the Current slot
+  el('rect', {x:padL + (slots-1)*slotW, y:top-14, width:slotW, height:barH+16, rx:4, fill:'var(--accent-soft)'});
+  el('line', {x1:padL, y1:top+barH+.5, x2:W-padR, y2:top+barH+.5, stroke:'var(--rule-strong)', 'stroke-width':1});
   // one slot per window, oldest on the left; the bar's right edge = the window end
   const labelEvery = slotW >= 54 ? 1 : slotW >= 30 ? 2 : Math.ceil(60/slotW);
   for(let i=0;i<slots;i++){
@@ -860,8 +893,9 @@ function renderDiagram(cfg, v){
     const xEnd = padL + (i+1)*slotW - 1;
     const x = xEnd - barW;
     const cur = (k===0);
-    const bar = el('rect', {x:x, y:top, width:barW, height:barH, rx:3,
+    const bar = el('rect', {x:x, y:top, width:barW, height:barH, rx:2,
       fill: cur ? 'var(--accent)' : 'var(--bar)', opacity: overlap && !cur ? .65 : 1});
+    el('line', {x1:xEnd+.5, y1:top+barH, x2:xEnd+.5, y2:top+barH+5, stroke:'var(--rule-strong)', 'stroke-width':1});
     const wEnd = addH(end, -kk*stepH), wBeg = addH(wEnd, -wh);
     const title = document.createElementNS(ns,'title');
     title.textContent = (cur?'Current: ':'-'+fmtHours(kk*stepH)+': ')+fmtDay(wBeg)+' '+fmtHM(wBeg)+' to '+(fmtDay(wEnd)===fmtDay(wBeg)?'':fmtDay(wEnd)+' ')+fmtHM(wEnd)+(cfg.mode==='auto'?' (if run now)':'');
@@ -869,25 +903,26 @@ function renderDiagram(cfg, v){
     if(i===0 && elided>0 && barW >= 18){
       el('text', {x:x+barW/2, y:top+barH/2+4, 'text-anchor':'middle', 'font-size':10, fill:'#fff', 'font-weight':600}, '+'+elided);
     }
-    const showLab = cur || i===0 || slotW >= 54 || (k % labelEvery === 0 && k*slotW >= 50 && i*slotW >= 50);
+    // never label the slot next to Current unless there is room for both words
+    const showLab = cur || i===0 || (k !== 1 || slotW >= 76) && (slotW >= 54 || (k % labelEvery === 0 && k*slotW >= 50 && i*slotW >= 50));
     if(showLab){
       const anchor = cur ? 'end' : (i===0 ? 'start' : 'middle');
       const tx = cur ? xEnd : (i===0 ? Math.max(padL, x) : xEnd - barW/2);
-      el('text', {x:tx, y:top-8, 'text-anchor':anchor, 'font-size':10.5, 'font-weight':cur?600:500, fill: cur?'var(--accent)':'var(--muted)'},
+      el('text', {x:tx, y:top-4, 'text-anchor':anchor, 'font-size':10.5, 'font-family':'var(--mono)', 'font-weight':cur?600:400, fill: cur?'var(--accent)':'var(--muted)'},
          cur ? 'Current' : (i===0 && elided ? 'oldest, -'+fmtHours(kk*stepH) : '-'+fmtHours(kk*stepH)));
       if(slotW >= 84 || cur || i===0){
-        el('text', {x:tx, y:top+barH+20, 'text-anchor':anchor, 'font-size':10, fill:'var(--fg-2)'}, slotW >= 84 || slots <= 2 ? fmtDay(wEnd) : (cur ? fmtDay(wEnd) : wEnd.getDate()+' '+MON[wEnd.getMonth()]));
-        el('text', {x:tx, y:top+barH+33, 'text-anchor':anchor, 'font-size':10, fill:'var(--muted)', 'font-family':'var(--mono)'}, fmtHM(wBeg)+'–'+fmtHM(wEnd));
+        el('text', {x:tx, y:top+barH+19, 'text-anchor':anchor, 'font-size':10.5, 'font-weight':cur?500:400, fill: cur?'var(--fg)':'var(--fg-2)'}, slotW >= 84 || slots <= 2 ? fmtDay(wEnd) : (cur ? fmtDay(wEnd) : wEnd.getDate()+' '+MON[wEnd.getMonth()]));
+        el('text', {x:tx, y:top+barH+32, 'text-anchor':anchor, 'font-size':10, fill:'var(--muted)', 'font-family':'var(--mono)'}, fmtHM(wBeg)+'–'+fmtHM(wEnd));
       }
     }
   }
   // cadence arrow between the last two windows (when there is room)
   if(slots >= 2 && slotW >= 40){
-    const xa = padL + (slots-1)*slotW - 1, xb = padL + slots*slotW - 1, y = top+barH+6;
-    el('line', {x1:xa, y1:y+58, x2:xb, y2:y+58, stroke:'var(--accent)', 'stroke-width':1});
-    el('line', {x1:xa, y1:y+54, x2:xa, y2:y+62, stroke:'var(--accent)', 'stroke-width':1});
-    el('line', {x1:xb, y1:y+54, x2:xb, y2:y+62, stroke:'var(--accent)', 'stroke-width':1});
-    el('text', {x:(xa+xb)/2, y:y+54, 'text-anchor':'middle', 'font-size':9.5, fill:'var(--accent)', 'font-weight':600}, fmtHours(stepH)+' apart');
+    const xa = padL + (slots-1)*slotW - 1, xb = padL + slots*slotW - 1, y = top+barH+52;
+    el('line', {x1:xa, y1:y, x2:xb, y2:y, stroke:'var(--accent)', 'stroke-width':1});
+    el('line', {x1:xa, y1:y-4, x2:xa, y2:y+4, stroke:'var(--accent)', 'stroke-width':1});
+    el('line', {x1:xb, y1:y-4, x2:xb, y2:y+4, stroke:'var(--accent)', 'stroke-width':1});
+    el('text', {x:(xa+xb)/2, y:y-6, 'text-anchor':'middle', 'font-size':10, 'font-family':'var(--mono)', fill:'var(--accent)'}, fmtHours(stepH)+' apart');
   }
   // markers that fall inside the drawn span
   const spanH = wb*stepH + wh;
@@ -899,8 +934,8 @@ function renderDiagram(cfg, v){
     const back = (end.getTime()-d.getTime())/3600000;
     if(back < 0 || back > spanH || elided > 0 && back > (slots-1)*stepH + wh){ outside++; return; }
     const x = Math.max(padL, Math.min(xCur, xCur - back*perHour));
-    el('line', {x1:x, y1:top-4, x2:x, y2:top+barH+6, stroke:'var(--warn)', 'stroke-width':1.5, 'stroke-dasharray':'3 2'});
-    const t = el('polygon', {points:x+','+(top-4)+' '+(x+9)+','+(top-1)+' '+x+','+(top+2), fill:'var(--warn)'});
+    el('line', {x1:x, y1:top-2, x2:x, y2:top+barH, stroke:'var(--warn)', 'stroke-width':1.5, 'stroke-dasharray':'3 2'});
+    const t = el('polygon', {points:x+','+(top-2)+' '+(x+9)+','+(top+1.5)+' '+x+','+(top+5), fill:'var(--warn)'});
     const title = document.createElementNS(ns,'title'); title.textContent = (r.label||'milestone')+' at '+fmtFull(d); t.appendChild(title);
   });
   box.innerHTML = ''; box.appendChild(svg);
@@ -1279,11 +1314,29 @@ function render(){
 function onEdit(){ if(!applying) deselectShapeIfNeeded(); render(); }
 
 /* ------------------------------------------------------------- shapes */
+/* A 72x22 glyph of the shape: one bar per window (newest = accent), bar
+   width = window / cadence, a dotted lane for the Day profile, a flag for
+   the release marker. Pure markup, no user text. */
+function shapeGlyph(p){
+  const e = Object.assign({win_hours:DEFAULTS.win_hours, weeks_back:DEFAULTS.weeks_back, cadence:'w', profile_days:'0'}, p.set);
+  const n = Math.min(Number(e.weeks_back)+1, 12), W = 72, H = 22, base = 16;
+  const slot = W / n, ratio = Math.min(1, Number(e.win_hours) / UNIT_HOURS[e.cadence]);
+  const bw = Math.max(3, Math.min(slot-2, slot*ratio));
+  let out = '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" aria-hidden="true">';
+  out += '<line x1="0" y1="'+(base+.5)+'" x2="'+W+'" y2="'+(base+.5)+'" stroke="var(--rule-strong)"/>';
+  for(let i=0;i<n;i++){
+    const x = (i+1)*slot - bw - 1, cur = i===n-1;
+    out += '<rect x="'+x.toFixed(1)+'" y="4" width="'+bw.toFixed(1)+'" height="'+(base-4)+'" rx="1" fill="'+(cur?'var(--accent)':'var(--bar)')+'"/>';
+  }
+  if(e.profile_days!=='0'){ for(let i=0;i<12;i++) out += '<rect x="'+(i*6)+'" y="19" width="4" height="2" fill="var(--accent-line)"/>'; }
+  if(p.markers){ const x = (n-3)*slot + slot/2; out += '<line x1="'+x+'" y1="1" x2="'+x+'" y2="'+base+'" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="2 2"/><path d="M'+x+',1 l7,2.5 l-7,2.5z" fill="var(--warn)"/>'; }
+  return out+'</svg>';
+}
 function shapeMeta(p){
   const e = Object.assign({win_hours:DEFAULTS.win_hours, weeks_back:DEFAULTS.weeks_back, cadence:'w', profile_days:'0'}, p.set);
-  let s = fmtHours(Number(e.win_hours))+' × '+(Number(e.weeks_back)+1)+' windows · '+UNIT_WORD[e.cadence];
-  if(e.profile_days!=='0') s += ' · day profile';
-  if(p.markers) s += ' · marker';
+  let s = (Number(e.weeks_back)+1)+' windows of '+fmtHours(Number(e.win_hours),true)+', '+UNIT_WORD[e.cadence];
+  if(e.profile_days!=='0') s += ', with day profile';
+  if(p.markers) s += ', with a marker';
   return s;
 }
 function applyShape(p){
@@ -1345,9 +1398,10 @@ function stepNum(id, d){
 }
 
 /* ---------------------------------------------------------------- init */
-function mkCard(sn, sd, sm, attrs){
+function mkCard(sn, sd, sm, attrs, glyph){
   const c = document.createElement('button'); c.type='button'; c.className='card';
   for(const k in attrs) c.setAttribute(k, attrs[k]);
+  if(glyph){ const g = document.createElement('span'); g.className='gl'; g.innerHTML = glyph; c.appendChild(g); }
   const n = document.createElement('span'); n.className='sn'; n.textContent=sn; c.appendChild(n);
   if(sd){ const d = document.createElement('span'); d.className='sd'; d.textContent=sd; c.appendChild(d); }
   if(sm){ const m = document.createElement('span'); m.className='sm'; m.textContent=sm; c.appendChild(m); }
@@ -1355,10 +1409,15 @@ function mkCard(sn, sd, sm, attrs){
 }
 function init(){
   // shapes
-  SHAPES.forEach(p => { const c = mkCard(p.name, p.desc, shapeMeta(p), {'data-id':p.id}); c.addEventListener('click', () => applyShape(p)); $('shapes').appendChild(c); });
+  SHAPES.forEach(p => { const c = mkCard(p.name, p.desc, shapeMeta(p), {'data-id':p.id}, shapeGlyph(p)); c.addEventListener('click', () => applyShape(p)); $('shapes').appendChild(c); });
   // templates
   Object.values(TEMPLATES).forEach(t => {
-    const c = mkCard(t.sn, t.sd, t.load+' load stats · '+t.metric+' metrics · '+t.wait, {'data-v':t.name});
+    const c = mkCard(t.sn, t.sd, null, {'data-v':t.name});
+    const st = document.createElement('span'); st.className='stats';
+    [[t.load,'load stats'],[t.metric,'metrics'],[t.wait==='all wait events'?'all':String(t.wait).replace(/ waits$/,''),'waits']].forEach(([n,l]) => {
+      const sp = document.createElement('span'); const b = document.createElement('b'); b.textContent = n; sp.appendChild(b); sp.appendChild(document.createTextNode(l)); st.appendChild(sp);
+    });
+    c.appendChild(st);
     c.addEventListener('click', () => { $('template').value = t.name; syncTemplateCards(); onEdit(); });
     $('templates').appendChild(c);
   });
