@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Configurator: AWR Timeline Comparison</title>
-<meta name="description" content="Builds a ready-to-run run_awr_trend.sh or SQL*Plus command for the AWR Timeline Comparison report. Pick what to compare, the window end, template and Top-N; copy the command. 100% in your browser, no data leaves the page.">
+<meta name="description" content="Point-and-click builder for run_awr_trend.sh and the SQL*Plus invocation. Pick your windows, cadence, template and markers; copy a ready-to-run command. 100% in your browser, no data leaves the page.">
 <meta name="theme-color" content="#0E1621" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13,38 +13,150 @@
 <link rel="stylesheet" href="assets/site.css">
 <script>try{var t=localStorage.getItem('awr-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <style>
-  /* page-local: one form card + one output card; shared tokens only */
-  .form .cpanel { max-width:720px; }
-  .cpanel { background:var(--bg-sub); border:1px solid var(--rule); border-radius:8px; padding:18px 20px; margin-bottom:20px; }
-  .cpanel h2 { font-size:18px; margin:0 0 14px; }
-  .field { margin-bottom:16px; }
+  /* ---- page-local: configurator components. Only shared tokens from
+     assets/site.css are used, so both themes just work. */
+
+  /* two-column build layout */
+  .config { display:grid; grid-template-columns:minmax(0,1fr) 400px; gap:22px; align-items:start; margin-top:14px; }
+  .leftcol { min-width:0; }
+  @media (max-width:1180px) { .config { grid-template-columns:minmax(0,1fr) 360px; } }
+  @media (max-width:900px)  { .config { grid-template-columns:minmax(0,1fr); } }
+
+  /* inner cards (steps) */
+  .cpanel { background:var(--bg-sub); border:1px solid var(--rule); border-radius:8px; padding:16px 18px 18px; margin-bottom:14px; }
+  .ph { font-size:16.5px; color:var(--fg); font-weight:600; margin:0 0 6px; display:flex; align-items:center; gap:8px; letter-spacing:-.01em; }
+  .ph .n { color:var(--accent); font:500 13px/1 var(--mono); width:24px; height:24px; border-radius:50%; border:1px solid var(--accent-line); background:var(--accent-soft); display:inline-grid; place-items:center; flex:none; }
+  .ph .opt { font-size:10px; font-weight:600; letter-spacing:.08em; color:var(--muted); border:1px solid var(--rule);
+    border-radius:999px; padding:1px 8px; background:var(--surface); margin-left:2px; }
+  .psub { font-size:12.5px; color:var(--muted); margin:0 0 14px; line-height:1.5; }
+  .psub a { font-weight:600; }
+
+  /* collapsible folds (fine-tune / markers) */
+  details.fold { background:var(--bg-sub); border:1px solid var(--rule); border-radius:8px; margin-bottom:14px; overflow:hidden; }
+  details.fold > summary { list-style:none; cursor:pointer; padding:14px 18px; display:flex; align-items:center; gap:10px; user-select:none; }
+  details.fold > summary::-webkit-details-marker { display:none; }
+  details.fold > summary .ph { margin:0; }
+  details.fold > summary:hover .ph { color:var(--accent); }
+  details.fold > summary .chev { margin-left:auto; color:var(--muted); font-size:12px; transition:transform .15s ease; }
+  details.fold[open] > summary .chev { transform:rotate(90deg); }
+  details.fold[open] > summary { border-bottom:1px solid var(--rule); }
+  .fold-body { padding:16px 18px 18px; }
+  .subhead { font-size:10.5px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); margin:0 0 3px; }
+  .subhead-sub { font-size:12.5px; color:var(--muted); margin:0 0 14px; line-height:1.5; }
+  .subgroup { margin-top:24px; padding-top:16px; border-top:1px solid var(--rule); }
+
+  /* fields */
+  .field { margin-bottom:14px; }
   .field:last-child { margin-bottom:0; }
-  .field > label, .field > .lbl { display:block; font-size:13.5px; font-weight:500; color:var(--fg-2); margin-bottom:6px; }
+  label.lbl, .field > label { display:block; font-size:13.5px; font-weight:500; color:var(--fg-2); margin-bottom:6px; }
+  .field > label code { font-size:.85em; }
   .help { font-size:13px; color:var(--muted); margin-top:6px; line-height:1.5; }
+  .help strong, .help b { color:var(--fg-2); }
+  .echo { font-weight:600; color:var(--accent); text-transform:none; letter-spacing:0; margin-left:8px; font-family:var(--mono); }
+
   input[type=text], input[type=number], input[type=datetime-local], select {
-    width:100%; font:inherit; font-size:13.5px; color:var(--fg); background:var(--surface);
-    border:1px solid var(--rule-strong); border-radius:7px; padding:8px 10px; }
-  input.mono { font-family:var(--mono); font-size:12.5px; }
+    width:100%; font-family:inherit; font-size:13.5px; color:var(--fg); background:var(--surface);
+    border:1px solid var(--rule-strong); border-radius:7px; padding:8px 10px; line-height:1.3; }
+  input[type=text].mono { font-family:var(--mono); font-size:12.5px; }
   input:focus, select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
-  input.invalid { border-color:var(--crit); box-shadow:0 0 0 3px var(--crit-soft); }
-  .radios label { display:inline-flex; align-items:center; gap:6px; margin:0 18px 0 0; font-size:13.5px; cursor:pointer; }
-  .radios input { accent-color:var(--accent); margin:0; }
-  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-  .row > .field { margin-bottom:0; }
-  #custom_fields { margin-top:12px; padding:12px; border:1px dashed var(--rule-strong); border-radius:7px; }
+  input.invalid, select.invalid { border-color:var(--crit) !important; box-shadow:0 0 0 3px var(--crit-soft) !important; }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .row-step { display:grid; grid-template-columns:1fr 150px; gap:12px; align-items:start; }
+  @media (max-width:520px) { .row2, .row-step { grid-template-columns:1fr; } }
+
+  /* segmented radio control */
+  .seg { display:inline-flex; border:1px solid var(--rule-strong); border-radius:7px; overflow:hidden; background:var(--surface); flex-wrap:wrap; }
+  .seg label { position:relative; padding:7px 14px; font-size:12.5px; font-weight:600; cursor:pointer; color:var(--fg-2); border-right:1px solid var(--rule-strong); }
+  .seg label:last-child { border-right:none; }
+  .seg label input { position:absolute; opacity:0; width:0; height:0; pointer-events:none; }
+  .seg label.on { background:var(--btn); color:#fff; }
+
+  /* connect-string example chips (page-local .chip, overrides the shared mono pill) */
+  .chiprow { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .chiprow .chip { font-size:11px; font-weight:600; color:var(--fg-2); background:var(--surface); border:1px solid var(--rule);
+    border-radius:999px; padding:3px 10px; cursor:pointer; font-family:var(--mono); line-height:1.5; }
+  .chiprow .chip:hover { border-color:var(--accent); color:var(--accent); }
+
+  .toggle { display:flex; align-items:center; gap:10px; }
+  .toggle input { width:16px; height:16px; accent-color:var(--accent); cursor:pointer; margin:0; }
+  .toggle label { font-size:13.5px; color:var(--fg); cursor:pointer; }
+
+  .hidden { display:none !important; }
+
+  /* scenario cards */
+  .scenarios { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  @media (max-width:560px) { .scenarios { grid-template-columns:1fr; } }
+  .scenario { text-align:left; background:var(--surface); border:1px solid var(--rule); border-radius:8px; padding:11px 13px; cursor:pointer;
+    display:flex; flex-direction:column; gap:3px; font:inherit; color:inherit; transition:border-color .12s, background .12s; }
+  .scenario:hover { border-color:var(--accent); }
+  .scenario.sel { border-color:var(--accent); background:var(--accent-soft); box-shadow:inset 3px 0 0 var(--accent); }
+  .scenario .sn { font-size:13.5px; font-weight:600; color:var(--fg); }
+  .scenario.sel .sn { color:var(--accent-hover); }
+  .scenario .sd { font-size:12px; color:var(--fg-2); line-height:1.4; }
+  .scenario .sm { font-size:10.5px; color:var(--muted); font-family:var(--mono); margin-top:2px; }
+  .scenario-custom { font-size:12.5px; color:var(--muted); font-style:italic; margin-top:10px; }
+  .reset-link { font-size:12px; font-weight:600; color:var(--muted); text-decoration:none; border-bottom:1px dashed var(--muted); white-space:nowrap; }
+  .reset-link:hover { color:var(--accent); border-bottom-color:var(--accent); text-decoration:none; }
+
+  /* window preview (.win = the report's .wchip look) */
+  .preview .cap { font-size:12.5px; color:var(--fg-2); margin-bottom:10px; line-height:1.5; }
+  .preview .cap b { color:var(--fg); }
+  .wins { display:flex; flex-wrap:wrap; gap:6px; align-items:flex-end; }
+  .win { flex:0 0 auto; background:var(--surface); border:1px solid var(--rule); border-radius:999px; padding:3px 10px;
+    display:inline-flex; align-items:baseline; gap:6px; white-space:nowrap; }
+  .win .o { font-size:11px; font-weight:600; color:var(--fg); font-variant-numeric:tabular-nums; }
+  .win .t { font-size:11px; color:var(--fg-2); font-family:var(--mono); }
+  .win.target { background:var(--accent-soft); border-color:var(--accent); }
+  .win.target .o, .win.target .t { color:var(--accent-hover); }
+  .win-more { align-self:center; font-size:12px; color:var(--muted); font-style:italic; }
+
+  /* markers editor */
+  .mk-row { display:grid; grid-template-columns:200px 1fr 36px; gap:8px; margin-bottom:8px; align-items:stretch; }
+  @media (max-width:560px) { .mk-row { grid-template-columns:1fr; } }
+  .mk-x { border:1px solid var(--rule-strong); background:var(--surface); border-radius:7px; color:var(--muted); cursor:pointer; font-size:17px; line-height:1; padding:0; }
+  .mk-x:hover { border-color:var(--crit); color:var(--crit); }
+  .mk-add { font:inherit; font-size:12.5px; font-weight:600; color:var(--fg-2); background:var(--surface); border:1px dashed var(--rule-strong);
+    border-radius:7px; padding:8px 14px; cursor:pointer; width:100%; }
+  .mk-add:hover { border-color:var(--accent); color:var(--accent); }
+
+  /* output column (sticky on desktop) */
+  .output { position:sticky; top:calc(var(--top-h) + 16px); }
+  .output .cpanel { margin-bottom:0; }
+  .summary { background:var(--accent-soft); color:var(--accent); border-radius:8px; padding:8px 12px; font-size:12.5px; margin:0 0 14px; line-height:1.5; }
+  .summary b { color:inherit; }
   .tabs { display:flex; gap:6px; margin-bottom:12px; }
   .tab { font:inherit; font-size:13.5px; font-weight:500; padding:6px 12px; border-radius:8px; cursor:pointer;
-    border:1px solid var(--rule-strong); background:var(--surface); color:var(--fg); }
+    border:1px solid var(--rule-strong); background:var(--surface); color:var(--fg); transition:color .12s, background .12s, border-color .12s; }
   .tab:hover { border-color:var(--accent); color:var(--accent); }
   .tab.on { background:var(--btn); color:#fff; border-color:var(--btn); }
-  .cbhead { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
-  .cbhead .t { font:500 12.5px/1 var(--mono); color:var(--muted); }
+  .codeblock { margin:0 0 12px; }
+  .codeblock .cbhead { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:6px; }
+  .codeblock .cbhead .t { font:500 12.5px/1 var(--mono); color:var(--muted); }
   .cbhead .copy { position:static; box-shadow:none; }
-  pre { margin:0; background:var(--code-bg); border:1px solid var(--rule); border-radius:var(--r-sm); padding:12px 14px; font:400 13px/1.65 var(--mono); color:var(--fg); overflow-x:auto; white-space:pre; }
-  .note-item { border-radius:8px; padding:8px 12px; font-size:12.5px; margin-top:10px; line-height:1.5; }
-  .note-err { background:var(--crit-soft); color:var(--crit); }
-  .out-foot { font-size:12.5px; color:var(--muted); margin-top:12px; line-height:1.55; }
-  @media (max-width:520px) { .row { grid-template-columns:1fr; } }
+  .output pre { margin:0; background:var(--code-bg); border:1px solid var(--rule); border-radius:var(--r-sm); padding:12px 14px; font:400 13px/1.65 var(--mono); color:var(--fg); overflow-x:auto; white-space:pre; }
+  .notes { margin-top:4px; }
+  .note-item { border-radius:8px; padding:8px 12px; font-size:12.5px; margin-bottom:8px; line-height:1.5; border:1px solid transparent; }
+  .note-item code { background:rgba(0,0,0,.06); border-color:transparent; color:inherit; }
+  .note-err  { background:var(--crit-soft); color:var(--crit); }
+  .note-info { background:var(--warn-soft); color:var(--warn); border-color:var(--warn-line); }
+  .out-foot { font-size:12px; color:var(--muted); margin-top:12px; line-height:1.55; }
+  .out-foot code, .help code { white-space:normal; overflow-wrap:anywhere; }
+
+  /* mobile-only floating jump-to-command button */
+  .jump-cmd { display:none; }
+  @media (max-width:900px) {
+    .output { position:static; scroll-margin-top:64px; }
+    .jump-cmd { display:inline-flex; align-items:center; gap:7px; position:fixed; right:16px; bottom:16px; z-index:60;
+      background:var(--btn); color:#fff; border:1px solid var(--btn); border-radius:999px; font:inherit;
+      font-size:12px; font-weight:600; letter-spacing:.03em; padding:10px 16px; cursor:pointer; box-shadow:0 8px 20px -8px rgba(0,0,0,.45); }
+    .jump-cmd:hover { background:var(--btn-hover); border-color:var(--btn-hover); }
+    .jump-cmd:active { transform:translateY(1px); }
+  }
+
+  .intro { color:var(--fg-2); max-width:46em; margin-bottom:6px; }
+  #build .doc-head { margin-bottom:10px; }
+  .output .cpanel { box-shadow:var(--shadow); border-top:3px solid var(--accent); }
+  .scenario, .cpanel, details.fold { box-shadow:none; }
 </style>
 </head>
 <body>
@@ -87,124 +199,262 @@
   </div>
 </header>
 
-
 <main id="main" tabindex="-1">
 <header class="page-head">
   <div class="wrap">
     <span class="kicker">Configurator &middot; runs in your browser &middot; v1.6.0</span>
     <h1>Build your run command</h1>
-    <p class="lede">Fill in the form and copy a ready-to-run command; it is built in your browser and nothing is sent anywhere.
-      The wrapper has the same thing built in: run <code>./run_awr_trend.sh --configure</code>.</p>
+    <p class="lede">Connect, pick what to compare, and copy a ready-to-run
+        <code>run_awr_trend.sh</code> or SQL*Plus invocation; fine-tune any parameter if you want to.
+        Everything runs in your browser; nothing is sent anywhere. Prefer the terminal?
+        The shell wrapper has the same thing built in: run
+        <code>./run_awr_trend.sh --configure</code>.</p>
+    <div class="cta"><a class="btn primary" href="#output">Your command</a><a class="btn" href="#step-compare">Pick a scenario</a><a class="btn" href="cheatsheet.html">Cheat sheet</a></div>
+    <nav class="chips" aria-label="On this page">
+      <a href="#step-connect">1 &middot; Connect</a>
+      <a href="#step-compare">2 &middot; What to compare</a>
+      <a href="#step-tune">3 &middot; Fine-tune</a>
+      <a href="#step-markers">Timeline markers</a>
+      <a href="#output">Your command</a>
+    </nav>
   </div>
 </header>
 
 <div class="page-body">
-<div class="wrap form">
+<div class="wrap">
+<section id="build">
+  <div class="doc-head"><h2>Build the command</h2><p class="doc-sub">The command on the right updates live as you go.</p></div>
+<div>
+  <p class="intro">
+    Three steps: <b>connect</b>, choose <b>what to compare</b>, and copy your command. Everything
+    else has a sensible default &mdash; open <b>Fine-tune</b> if you want to adjust it.
+  </p>
 
-  <div class="cpanel">
-    <div class="field">
-      <label for="connect">Connect string</label>
-      <input type="text" id="connect" class="mono" value="user/pw@svc" autocomplete="off" spellcheck="false">
-      <div class="help">Any SQL*Plus logon: <code>user/pw@host:port/service</code>, a TNS alias, or <code>/ as sysdba</code>.</div>
+  <div class="config">
+   <div class="leftcol">
+
+    <!-- ============ 1 · CONNECT ============ -->
+    <div class="cpanel" id="step-connect">
+      <div class="ph"><span class="n">1</span>Connect</div>
+      <div class="field">
+        <label class="lbl" for="connect">Connect string</label>
+        <input type="text" id="connect" class="mono" value="user/pw@svc" autocomplete="off" spellcheck="false">
+        <div class="chiprow" id="connect_chips"></div>
+        <div class="help">Any SQL*Plus logon: <code>user/pw@host:port/service</code>, a TNS alias, or
+          <code>/ as sysdba</code>. Used locally &mdash; the password never leaves this page.</div>
+      </div>
     </div>
 
-    <div class="field">
-      <label for="compare">Compare</label>
-      <select id="compare">
-        <option value="weekly" selected>Weekly: this hour vs the same hour on the 4 previous weeks</option>
-        <option value="daily">Daily: this hour across the last 7 days</option>
-        <option value="hourly">Hourly: the last 12 consecutive hours</option>
-        <option value="custom">Custom&hellip;</option>
-      </select>
-      <div id="custom_fields" class="hidden">
-        <div class="row">
+    <!-- ============ 2 · WHAT TO COMPARE ============ -->
+    <div class="cpanel" id="step-compare">
+      <div class="ph"><span class="n">2</span>What do you want to compare?</div>
+      <div class="psub">Pick the scenario closest to what you need &mdash; it fills in the windows, cadence and
+        template in Fine-tune below. <a href="#" class="reset-link" id="reset_link">&#8634; Reset to defaults</a></div>
+
+      <div class="scenarios" id="scenarios"></div>
+      <div class="scenario-custom hidden" id="scenario_custom">Custom configuration &mdash; pick a scenario any time to start fresh.</div>
+
+      <div class="field" style="margin-top:18px">
+        <label class="lbl">When does the newest window end?
+          <span style="text-transform:none;font-weight:600;letter-spacing:0;color:var(--muted)">(target_end)</span></label>
+        <div class="seg" id="te_seg">
+          <label data-te="auto" class="on"><input type="radio" name="temode" value="auto" checked>Prior full hour (AUTO)</label>
+          <label data-te="specific"><input type="radio" name="temode" value="specific">Specific date &amp; time</label>
+        </div>
+        <div id="te_specific_wrap" class="hidden" style="margin-top:10px">
+          <input type="datetime-local" id="target_dt">
+        </div>
+        <div class="help"><strong>AUTO</strong> ends the newest window at the most recent completed
+          clock hour. Pick a specific time to pin it &mdash; e.g. a Monday 09:00 or the end of a batch run.</div>
+      </div>
+    </div>
+
+    <!-- ============ 3 · FINE-TUNE (collapsed) ============ -->
+    <details class="fold" id="fold_tune">
+      <summary id="step-tune">
+        <span class="ph"><span class="n">3</span>Fine-tune<span class="opt">optional</span></span>
+        <span class="chev">&#9656;</span>
+      </summary>
+      <div class="fold-body">
+
+        <!-- Windows + cadence -->
+        <div class="subhead">Windows &amp; cadence</div>
+        <div class="subhead-sub">How wide each compared window is, how many you compare, and the gap between them.</div>
+
+        <div class="row2">
           <div class="field">
-            <label for="win_hours">Window width (hours)</label>
+            <label class="lbl" for="win_hours">Window width (win_hours)<span class="echo" id="wh_echo"></span></label>
             <input type="number" id="win_hours" value="1" min="0.25" step="0.25">
+            <div class="help">Length of every window. Below 1 reads as minutes (<code>0.25</code> = 15 min).</div>
           </div>
           <div class="field">
-            <label for="weeks_back">Prior windows</label>
+            <label class="lbl" for="weeks_back">Prior windows (weeks_back)</label>
             <input type="number" id="weeks_back" value="4" min="1" step="1">
+            <div class="help">How many earlier windows to compare against &mdash; a count (the name is historical).
+              The report needs <strong>&ge; 3</strong> to compute z-score findings.</div>
           </div>
         </div>
-        <div class="row" style="margin-top:12px">
-          <div class="field">
-            <label for="step">Cadence between windows</label>
-            <input type="number" id="step" value="1" min="0" step="any">
-          </div>
-          <div class="field">
-            <label for="step_unit">Unit</label>
+
+        <div class="field">
+          <label class="lbl">Cadence between windows (step &times; step_unit)</label>
+          <div class="row-step">
+            <input type="number" id="step" value="1" min="0.25" step="1">
             <select id="step_unit">
               <option value="w" selected>weeks</option>
               <option value="d">days</option>
               <option value="h">hours</option>
             </select>
           </div>
+          <div class="help">The gap between adjacent windows. <code>1 week</code> (default) is the classic
+            same-hour-of-week trend; <code>1 hour</code> walks straight back; <code>2 days</code> is every
+            other day.</div>
+        </div>
+
+        <div class="field preview">
+          <label class="lbl">Comparison preview</label>
+          <div class="cap" id="preview_caption"></div>
+          <div class="wins" id="preview_chips"></div>
+        </div>
+
+        <!-- Content + scope -->
+        <div class="subgroup subhead">Content &amp; scope</div>
+        <div class="subhead-sub">How much detail to show and which instances to read.</div>
+
+        <div class="row2">
+          <div class="field">
+            <label class="lbl" for="top_n">Top-N SQL / rows (top_n)</label>
+            <input type="number" id="top_n" value="10" min="1" step="1">
+            <div class="help">Rows per ranking in Top SQL and the wait tables.</div>
+          </div>
+          <div class="field">
+            <label class="lbl" for="inst_num">Instance (inst_num)</label>
+            <input type="number" id="inst_num" value="0" min="0" step="1">
+            <div class="help"><code>0</code> aggregates across all RAC instances; any other number filters
+              to that one instance.</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="lbl" for="template">Template &mdash; which metrics &amp; waits</label>
+          <select id="template">
+            <option value="comprehensive" selected>comprehensive — for DBAs (full lists)</option>
+            <option value="simple">simple — triage-friendly subset</option>
+            <option value="dev">dev — application-developer view</option>
+          </select>
+          <div class="help" id="template_help"></div>
+        </div>
+
+        <div class="field">
+          <div class="toggle">
+            <input type="checkbox" id="debug" checked>
+            <label for="debug">Print per-section progress markers to stdout (debug=Y, the default)</label>
+          </div>
+          <div class="help">Timestamped one-liner per section while it runs &mdash; handy on a busy DB.
+            The HTML report is byte-identical whether this is on or off.</div>
+        </div>
+
+        <div class="field">
+          <label for="profile_days">Day profile &mdash; prior days (<code>profile_days</code>)</label>
+          <input type="number" id="profile_days" min="0" step="1" value="0">
+          <div class="help">0 = off. N &gt; 0 adds a section scoring <b>each hour of the last 24 h</b>
+            against the same hour-of-day on the N prior days (1-day cadence, independent of the
+            cadence above) &mdash; an hour-of-day &times; metric heatmap showing <em>which hour</em> changed.
+            z-scores need at least 3 prior days.</div>
+        </div>
+
+        <div class="field">
+          <label class="lbl" for="echarts_mode">Charts library (echarts)</label>
+          <select id="echarts_mode">
+            <option value="default" selected>Internet CDN — load ECharts from cdn.jsdelivr.net (default)</option>
+            <option value="custom">Local / mirror path — for air-gapped or offline use</option>
+          </select>
+          <input type="text" id="echarts_path" class="hidden" value="vendor/echarts.min.js"
+                 autocomplete="off" spellcheck="false">
+          <div class="help" id="echarts_help"></div>
+        </div>
+
+      </div>
+    </details>
+
+    <!-- ============ TIMELINE MARKERS (collapsed) ============ -->
+    <details class="fold" id="fold_markers">
+      <summary id="step-markers">
+        <span class="ph">Timeline markers<span class="opt">optional</span></span>
+        <span class="chev">&#9656;</span>
+      </summary>
+      <div class="fold-body">
+        <div class="psub">Annotate the dated charts with milestones &mdash; a release, a patch, an incident.
+          They are baked straight into the command (no separate file to save), so it stays a single copy-paste.</div>
+
+        <div class="field">
+          <label class="lbl">Milestones</label>
+          <div id="marker_rows"></div>
+          <button type="button" class="mk-add" id="marker_add">+ Add milestone</button>
+          <div class="help">Each milestone needs a date &amp; time and a label. They ride inline in the command
+            (the <code>MARKERS</code> env var for the shell, <code>DEFINE&nbsp;markers</code> for SQL*Plus).
+            A straight apostrophe in a label is swapped to a typographic one (&rsquo;) so the command stays one
+            copy-paste; for exotic labels use a <code>marker_file</code> on disk instead.</div>
         </div>
       </div>
-    </div>
+    </details>
 
-    <div class="field">
-      <span class="lbl">Newest window ends</span>
-      <div class="radios">
-        <label><input type="radio" name="temode" value="auto" checked>AUTO (prior full hour)</label>
-        <label><input type="radio" name="temode" value="specific">Specific date &amp; time</label>
-      </div>
-      <input type="datetime-local" id="target_dt" class="hidden" style="margin-top:10px">
-      <div class="help">AUTO ends the newest window at the last completed clock hour; pin a time to reproduce an incident or a batch run.</div>
-    </div>
+   </div><!-- /leftcol -->
 
-    <div class="row">
-      <div class="field">
-        <label for="template">Template</label>
-        <select id="template">
-          <option value="comprehensive" selected>comprehensive &mdash; for DBAs (full lists)</option>
-          <option value="simple">simple &mdash; triage-friendly subset</option>
-          <option value="dev">dev &mdash; application-developer view</option>
-        </select>
+    <!-- ============ OUTPUT (right, sticky) ============ -->
+    <aside class="output" id="output">
+      <div class="cpanel">
+        <div class="ph">Your command</div>
+        <div class="summary" id="out_summary"></div>
+
+        <div class="tabs">
+          <button type="button" class="tab on" data-tab="shell">Shell wrapper</button>
+          <button type="button" class="tab" data-tab="sql">SQL*Plus</button>
+        </div>
+
+        <!-- Shell -->
+        <div id="panel_shell">
+          <div class="codeblock">
+            <div class="cbhead">
+              <span class="t">run_awr_trend.sh</span>
+              <button class="copy" type="button" data-copy="out_shell"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg><span class="lbl">Copy</span></button>
+            </div>
+            <pre id="out_shell"></pre>
+          </div>
+          <div class="out-foot">Run from the repo root. Trailing arguments left at their defaults are
+            omitted automatically.</div>
+        </div>
+
+        <!-- SQL -->
+        <div id="panel_sql" class="hidden">
+          <div class="codeblock">
+            <div class="cbhead">
+              <span class="t">SQL*Plus session</span>
+              <button class="copy" type="button" data-copy="out_sql_interactive"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg><span class="lbl">Copy</span></button>
+            </div>
+            <pre id="out_sql_interactive"></pre>
+          </div>
+          <div class="out-foot">No shell needed &mdash; Windows-friendly. Connect, then paste the block. Every
+            <code>DEFINE</code> is emitted explicitly so it works without loading <code>sql/defaults.sql</code>.</div>
+        </div>
+
+        <div class="notes" id="notes"></div>
+
+        <div class="out-foot">
+          Output lands in <code>reports/awr_trend_&lt;db_name&gt;_&lt;dbid&gt;_&lt;YYYYMMDDHH24MI&gt;_run&lt;id&gt;.html</code>.
+          New here? See the <a href="index.html#s-install">Quick start</a> or the
+          <a href="cheatsheet.html">cheat sheet</a>.
+        </div>
       </div>
-      <div class="field">
-        <label for="top_n">Top-N SQL</label>
-        <input type="number" id="top_n" value="10" min="1" step="1">
-      </div>
-    </div>
+    </aside>
+
   </div>
-
-  <div class="cpanel" id="output">
-    <h2>Your command</h2>
-    <div class="tabs">
-      <button type="button" class="tab on" data-tab="shell">Shell wrapper</button>
-      <button type="button" class="tab" data-tab="sql">SQL*Plus</button>
-    </div>
-
-    <div id="panel_shell">
-      <div class="cbhead">
-        <span class="t">run_awr_trend.sh</span>
-        <button class="copy" type="button" data-copy="out_shell"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg><span class="lbl">Copy</span></button>
-      </div>
-      <pre id="out_shell"></pre>
-    </div>
-
-    <div id="panel_sql" class="hidden">
-      <div class="cbhead">
-        <span class="t">SQL*Plus session</span>
-        <button class="copy" type="button" data-copy="out_sql_interactive"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg><span class="lbl">Copy</span></button>
-      </div>
-      <pre id="out_sql_interactive"></pre>
-    </div>
-
-    <div id="notes"></div>
-
-    <div class="out-foot">
-      Output lands in <code>reports/awr_trend_&lt;db_name&gt;_&lt;dbid&gt;_&lt;YYYYMMDDHH24MI&gt;_run&lt;id&gt;.html</code>.
-      Every other parameter (markers, instance filter, day profile, offline charts, SQLMON, ARCHIVE) is in the
-      <a href="cheatsheet.html">cheat sheet</a>.
-    </div>
-  </div>
-
+</div>
+</section>
 </div>
 </div>
 </main>
+
+<button type="button" class="jump-cmd" id="jump_cmd" aria-label="Jump to your command">&darr; Your command</button>
 
 <footer class="site">
   <div class="wrap">
@@ -224,24 +474,64 @@
 <script>
 "use strict";
 
-/* Defaults mirror sql/defaults.sql. The shell command emits positionals up to
-   the last one that differs from its default; SQL*Plus DEFINEs every var
-   (the driver references markers/echarts/sqlmon unconditionally, so an
-   undefined one makes SQL*Plus prompt and hang). */
+/* =====================================================================
+   Defaults + the positional argument order of run_awr_trend.sh.
+   These mirror sql/defaults.sql exactly. The shell command emits only up
+   to the last argument that differs from its default (the wrapper fills
+   the rest in); the SQL path emits every DEFINE explicitly.
+   ===================================================================== */
 const DEFAULTS = {
   target_end:'AUTO', win_hours:'1', weeks_back:'4', top_n:'10', inst_num:'0',
   step:'1', step_unit:'w', template:'comprehensive', debug:'Y', marker_file:'', profile_days:'0',
-  markers:'', echarts:'', sqlmon:'Y'
+  // File-free inline markers (not a positional arg): the configurator builds
+  // this "WHEN|LABEL;;..." string from the milestone rows and threads it
+  // through the MARKERS env var (shell) / DEFINE markers (SQL*Plus).
+  markers:'',
+  // ECharts source. Empty = public CDN (the driver's default). The web UI
+  // has no control for it, but the SQL*Plus path must still DEFINE it: the
+  // driver references ~echarts unconditionally, so an undefined var stalls
+  // the run at an "Enter value for echarts:" prompt. Emitting the default
+  // keeps the generated block prompt-free.
+  echarts:''
 };
 const ARG_ORDER = ['target_end','win_hours','weeks_back','top_n','inst_num',
                    'step','step_unit','template','debug','marker_file','profile_days'];
-const SQL_DEFINES = ARG_ORDER.concat(['markers','echarts','sqlmon']);
-const STRING_DEFINES = new Set(['target_end','step_unit','template','debug','marker_file','markers','echarts','sqlmon']);
-/* compare preset -> [win_hours, weeks_back, step, step_unit] */
-const COMPARE = { weekly:['1','4','1','w'], daily:['1','6','1','d'], hourly:['1','11','1','h'] };
+// The SQL*Plus path DEFINEs every positional plus the two non-positional vars
+// `markers` (rides the MARKERS env var on the shell path) and `echarts` (rides
+// the ECHARTS env var). Both must be emitted so the driver never prompts for an
+// undefined substitution var.
+const SQL_DEFINES = ARG_ORDER.concat(['markers','echarts']);
+const STRING_DEFINES = new Set(['target_end','step_unit','template','debug','marker_file','markers','echarts']);
+const UNIT_HOURS = {h:1, d:24, w:168};
+const UNIT_WORD  = {h:'hourly', d:'daily', w:'weekly'};
+const UNIT_NOUN  = {h:'hour', d:'day', w:'week'};
+
+const TEMPLATE_HELP = {
+  comprehensive:'The default: 27 load stats, 23 system metrics and the full firehose of wait events ranked by time.',
+  simple:'A quick-glance subset — 9 load stats, 8 metrics, ~10 commonly-watched waits. The top bar names the template.',
+  dev:'What the application drives: throughput, query work, parsing, sorts, SQL*Net chattiness and app-caused contention — no host/OS or storage internals.'
+};
 
 const $ = id => document.getElementById(id);
+
+// Guard: programmatic control changes made by applyPreset must not trip the
+// "user edited a param -> deselect the scenario card" logic.
+let applyingPreset = false;
+
+/* ---------------------------------------------------------------- utils */
 function pad(n){ return String(n).padStart(2,'0'); }
+
+/* Compact, unit-aware label for a number of hours — mirrors fmt_one() in
+   awr_trend.sql: 0.25 -> "15m", 168 -> "1w", 24 -> "1d", 1 -> "1h". */
+function fmtHours(h){
+  if(h==null || isNaN(h)) return '';
+  const isInt = x => Math.abs(x-Math.round(x)) < 1e-9;
+  if(h < 1 && isInt(h*60)) return Math.round(h*60)+'m';
+  if(isInt(h/168))         return Math.round(h/168)+'w';
+  if(isInt(h/24))          return Math.round(h/24)+'d';
+  if(isInt(h))             return Math.round(h)+'h';
+  return parseFloat(h.toFixed(2))+'h';
+}
 
 /* datetime-local value "YYYY-MM-DDTHH:MM" -> Date (local), or null */
 function parseLocal(v){
@@ -251,6 +541,9 @@ function parseLocal(v){
   return new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5]);
 }
 function fmtFull(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes()); }
+function fmtShort(d){ return pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes()); }
+/* datetime-local input value "YYYY-MM-DDTHH:MM" from a Date */
+function fmtLocalInput(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes()); }
 
 /* Shell single-quote only when needed. */
 function shellQuote(s){
@@ -261,107 +554,479 @@ function shellQuote(s){
 /* Oracle string literal (double embedded single quotes). */
 function sqlQuote(s){ return "'" + String(s).replace(/'/g, "''") + "'"; }
 
-function readConfig(){
-  const specific = document.querySelector('input[name="temode"]:checked').value === 'specific';
-  const d = specific ? parseLocal($('target_dt').value) : null;
-  return Object.assign({}, DEFAULTS, {
-    connect:    $('connect').value.trim(),
-    specific,
-    target_end: specific ? (d ? fmtFull(d) : '') : 'AUTO',
-    win_hours:  $('win_hours').value.trim(),
-    weeks_back: $('weeks_back').value.trim(),
-    step:       $('step').value.trim(),
-    step_unit:  $('step_unit').value,
-    template:   $('template').value,
-    top_n:      $('top_n').value.trim()
+/* ------------------------------------------------------ connect samples */
+const CONNECT_SAMPLES = [
+  ['user/pw@svc','user / password @ service'],
+  ['/ as sysdba','/ as sysdba'],
+  ['system/pw@//db.example.com:1521/PROD','EZConnect']
+];
+function buildConnectChips(boxId, inputId, onpick){
+  CONNECT_SAMPLES.forEach(([val,label]) => {
+    const c = document.createElement('span'); c.className='chip'; c.textContent=label; c.title=val;
+    c.addEventListener('click', () => { $(inputId).value = val; onpick(); });
+    $(boxId).appendChild(c);
   });
 }
 
-/* Hard errors only; fixed strings (no user text is ever interpolated). */
-function validate(cfg){
-  const errors = [];
-  const num = v => (v === '' || isNaN(Number(v))) ? null : Number(v);
-  const fail = (id, msg) => errors.push({id, msg});
-  const wh = num(cfg.win_hours), wb = num(cfg.weeks_back), st = num(cfg.step), tn = num(cfg.top_n);
-  if(!cfg.connect) fail('connect', 'Enter a connect string.');
-  if(cfg.specific && !cfg.target_end) fail('target_dt', 'Pick a date and time, or switch back to AUTO.');
-  if(wh === null || wh <= 0) fail('win_hours', 'Window width must be a positive number of hours.');
-  if(wb === null || wb < 1 || !Number.isInteger(wb)) fail('weeks_back', 'Prior windows must be a whole number, 1 or more.');
-  if(st === null || st <= 0) fail('step', 'Cadence must be a positive number.');
-  if(tn === null || tn < 1 || !Number.isInteger(tn)) fail('top_n', 'Top-N SQL must be a whole number, 1 or more.');
-  return errors;
+/* Resolve a preset's dynamic target marker to a datetime-local value
+   (computed at apply time from the browser clock). */
+function resolveDynamicTarget(spec){
+  const now = new Date();
+  if(spec === 'yesterday@17'){
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate()-1, 17, 0);
+    return fmtLocalInput(d);
+  }
+  return '';
 }
 
+/* Effective parameter values a preset resolves to (defaults + its overrides). */
+function effFromPreset(p){
+  const keys = ['win_hours','weeks_back','top_n','inst_num','step','step_unit','template'];
+  const e = Object.assign({}, DEFAULTS);
+  keys.forEach(k => { if(p.set[k]!==undefined) e[k] = String(p.set[k]); });
+  return e;
+}
+/* One-line "shape" caption shown on each scenario card. */
+function scenarioMeta(p){
+  const e = effFromPreset(p);
+  let s = fmtHours(Number(e.win_hours))+' × '+(Number(e.weeks_back)+1)+' windows · '+UNIT_WORD[e.step_unit];
+  if(e.template!=='comprehensive') s += ' · '+e.template;
+  return s;
+}
+
+/* ---------------------------------------------------------------- read */
+function readConfig(){
+  const mode = document.querySelector('input[name="temode"]:checked').value;
+  let target_end = 'AUTO';
+  let targetDate = null;          // resolved Date for the preview (specific only)
+  let targetMissing = false;
+  if(mode === 'specific'){
+    const v = $('target_dt').value;
+    targetDate = parseLocal(v);
+    if(targetDate){ target_end = fmtFull(targetDate); }
+    else { target_end = ''; targetMissing = true; }
+  }
+  return {
+    connect:    $('connect').value.trim(),
+    mode, target_end, targetDate, targetMissing,
+    win_hours:  $('win_hours').value.trim(),
+    weeks_back: $('weeks_back').value.trim(),
+    top_n:      $('top_n').value.trim(),
+    inst_num:   $('inst_num').value.trim(),
+    step:       $('step').value.trim(),
+    step_unit:  $('step_unit').value,
+    template:   $('template').value,
+    debug:      $('debug').checked ? 'Y' : 'N',
+    profile_days: $('profile_days').value.trim() || '0',
+    // File-free markers only: marker_file stays empty (the on-disk escape
+    // hatch is still in the driver for power users, but the web UI builds an
+    // inline string instead).
+    marker_file:'',
+    markers:    markersInline(),
+    // ECharts source. 'default' = empty (public CDN, the driver's default);
+    // 'custom' = the path/URL in echarts_path (a local file the wrapper inlines,
+    // or an internal mirror URL). Emitting it as a DEFINE keeps the run
+    // prompt-free regardless of which option is picked.
+    echarts:    $('echarts_mode').value === 'custom' ? $('echarts_path').value.trim() : ''
+  };
+}
+
+/* ------------------------------------------------------------ validate */
+function validate(cfg){
+  const errors = [], info = [], bad = {};
+  const num = v => (v==='' || isNaN(Number(v))) ? null : Number(v);
+  const fail = (id, msg) => { bad[id] = true; errors.push(msg); };
+
+  if(!cfg.connect) fail('connect', 'Enter a connect string (arg 1).');
+  if(cfg.targetMissing) fail('target_dt', 'Pick a specific date and time, or switch back to AUTO.');
+
+  const wh = num(cfg.win_hours);
+  if(wh===null || wh<=0) fail('win_hours', 'Window width (<code>win_hours</code>) must be a positive number.');
+
+  const wb = num(cfg.weeks_back);
+  if(wb===null || wb<1 || !Number.isInteger(wb)) fail('weeks_back', 'Prior windows (<code>weeks_back</code>) must be a whole number ≥ 1.');
+  else if(wb < 3) info.push('With <code>weeks_back</code> &lt; 3 there is not enough history for z-score findings — the verdict reads "Too little history to score this window" and rows show plain changes, graded "insufficient history".');
+
+  const tn = num(cfg.top_n);
+  if(tn===null || tn<1 || !Number.isInteger(tn)) fail('top_n', 'Top-N (<code>top_n</code>) must be a whole number ≥ 1.');
+
+  const inst = num(cfg.inst_num);
+  if(inst===null || inst<0 || !Number.isInteger(inst)) fail('inst_num', 'Instance (<code>inst_num</code>) must be 0 (aggregate) or a positive whole number.');
+
+  const st = num(cfg.step);
+  if(st===null || st<=0) fail('step', 'Cadence count (<code>step</code>) must be a positive number.');
+
+  const pd = num(cfg.profile_days);
+  if(pd===null || pd<0 || !Number.isInteger(pd)) fail('profile_days', 'Day profile (<code>profile_days</code>) must be 0 (off) or a whole number of prior days.');
+  else if(pd>0 && pd<3) info.push('A day profile with fewer than 3 prior days cannot compute z-scores — every hour shows "insufficient history" (values and %-deltas still render).');
+
+  // Hourly cadence resolution hint
+  if(!errors.length && cfg.step_unit==='h' && wh<=1 && st>=1){
+    info.push('Hourly cadence with a 1-hour window needs the AWR snapshot interval ≤ the window — the default 1-hour interval gives exactly one snap pair per window. Cut the interval to 30 min or widen the window for intra-window detail.');
+  }
+  // Marker milestones: a row with a label but no valid date/time is silently
+  // dropped by the driver, so warn here.  Reference rows by number only so no
+  // user text is interpolated into the notes' innerHTML.
+  const badMk = [];
+  markerRows().forEach((r,i) => { if((r.label || r.when) && !parseLocal(r.when)) badMk.push(i+1); });
+  if(badMk.length){
+    info.push('Milestone'+(badMk.length>1?'s':'')+' '+badMk.join(', ')+
+              ' need'+(badMk.length>1?'':'s')+' a date &amp; time like <code>2026-06-10 09:00</code> — '+
+              (badMk.length>1?'they':'it')+' will be skipped otherwise.');
+  }
+  // ECharts source: explain what each non-default value does.
+  if(cfg.echarts){
+    if(/^https?:\/\//i.test(cfg.echarts)){
+      info.push('Charts will load ECharts from <code>'+cfg.echarts.replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))+
+                '</code> instead of the public CDN — point this at an internal mirror for air-gapped networks.');
+    } else {
+      info.push('A local path is used as the charts source. The <code>run_awr_trend.sh</code> wrapper '+
+                '<strong>inlines</strong> that file into the report after generation, giving a single, '+
+                'fully-offline HTML. The pure-SQL*Plus path cannot inline — it leaves the path as the '+
+                '<code>&lt;script src&gt;</code> (resolved relative to the report), so prefer the shell '+
+                'wrapper for a self-contained file. A pinned copy ships at <code>vendor/echarts.min.js</code>.');
+    }
+  }
+  return {errors, info, bad, ok: errors.length===0};
+}
+
+/* "= 60 minutes" / "= 2 hours" plain-language echo for the window width. */
+function whEcho(v){
+  const h = Number(v);
+  if(v==='' || isNaN(h) || h<=0) return '';
+  if(h < 1)                return '= '+Math.round(h*60)+' minutes';
+  if(Number.isInteger(h))  return '= '+h+' hour'+(h===1?'':'s');
+  return '= '+h+' hours ('+Math.round(h*60)+' min)';
+}
+
+/* Toggle a red border on the inputs the validator flagged. */
+function markFields(bad){
+  ['connect','target_dt','win_hours','weeks_back','top_n','inst_num','step']
+    .forEach(id => { const el=$(id); if(el) el.classList.toggle('invalid', !!bad[id]); });
+}
+
+/* ------------------------------------------------------------- preview */
+function renderPreview(cfg){
+  const cap = $('preview_caption'), chips = $('preview_chips');
+  const wh = Number(cfg.win_hours), wb = Number(cfg.weeks_back), st = Number(cfg.step);
+  chips.innerHTML = '';
+  if(isNaN(wh)||wh<=0||isNaN(wb)||wb<1||!Number.isInteger(wb)||isNaN(st)||st<=0){
+    cap.textContent = 'Set valid window, count and cadence values to preview the comparison.';
+    return;
+  }
+  const stepHours = st * UNIT_HOURS[cfg.step_unit];
+  const total = wb + 1;
+  const span = wb*stepHours + wh;
+  cap.innerHTML = '<b>'+total+'</b> windows · each <b>'+fmtHours(wh)+'</b> wide · '+UNIT_WORD[cfg.step_unit]+
+    ' cadence (<b>'+fmtHours(stepHours)+'</b> apart) · spans <b>'+fmtHours(span)+'</b> back from the target.';
+
+  const CAP = 14;                       // keep the strip readable
+  const shown = Math.min(wb, CAP);
+  // oldest -> newest (target on the right), matching the report's spark order
+  for(let k=shown; k>=0; k--){
+    const div = document.createElement('div');
+    div.className = 'win' + (k===0 ? ' target' : '');
+    const o = document.createElement('div'); o.className='o';
+    o.textContent = (k===0) ? 'target' : ('−'+fmtHours(k*stepHours));
+    div.appendChild(o);
+    if(cfg.targetDate){
+      const end = new Date(cfg.targetDate.getTime() - k*stepHours*3600*1000);
+      const begin = new Date(end.getTime() - wh*3600*1000);
+      const t = document.createElement('div'); t.className='t';
+      t.textContent = pad(end.getHours())+':'+pad(end.getMinutes());
+      div.title = fmtFull(begin)+'  →  '+fmtFull(end);
+      const d = document.createElement('div'); d.className='t';
+      d.textContent = fmtShort(end).split(' ')[0];
+      div.appendChild(d); div.appendChild(t);
+    }
+    chips.appendChild(div);
+  }
+  if(wb > CAP){
+    const more = document.createElement('div');
+    more.className = 'win-more';
+    more.textContent = '+ '+(wb-CAP)+' older';
+    chips.insertBefore(more, chips.firstChild);
+  }
+}
+
+/* ------------------------------------------------------------ summary */
+function summarize(cfg){
+  const wh = fmtHours(Number(cfg.win_hours));
+  const stepHours = Number(cfg.step) * UNIT_HOURS[cfg.step_unit];
+  const target = (cfg.mode==='auto') ? 'the prior full hour' : (cfg.target_end || 'a specific time');
+  const inst = (cfg.inst_num==='0') ? 'all RAC instances aggregated' : ('instance '+cfg.inst_num+' only');
+  let s = 'Compares a '+wh+' window ending '+target+' against '+cfg.weeks_back+' prior window'+
+          (cfg.weeks_back==='1'?'':'s')+' at '+UNIT_WORD[cfg.step_unit]+' cadence ('+fmtHours(stepHours)+
+          ' apart). Top '+cfg.top_n+' SQL · '+inst+' · '+cfg.template+' template.';
+  if(cfg.debug==='Y') s += ' Progress markers on.';
+  if(Number(cfg.profile_days)>0) s += ' Day profile: each hour of the last 24 h vs the '+cfg.profile_days+' prior days.';
+  const nmk = cfg.markers ? cfg.markers.split(';;').length : 0;
+  if(nmk) s += ' '+nmk+' timeline marker'+(nmk===1?'':'s')+'.';
+  return s;
+}
+
+/* ------------------------------------------------------- command build */
 function buildShell(cfg){
   const vals = ARG_ORDER.map(k => cfg[k]);
   let last = -1;
   vals.forEach((v,i) => { if(v !== DEFAULTS[ARG_ORDER[i]]) last = i; });
   const parts = ['./run_awr_trend.sh', shellQuote(cfg.connect || 'user/pw@svc')];
   for(let i=0; i<=last; i++) parts.push(shellQuote(vals[i]));
-  return parts.join(' ');
+  // Non-positional vars ride env-var prefixes (kept out of the positional args
+  // to keep the wrapper/SQL*Plus arg order symmetric): MARKERS for inline
+  // timeline markers, ECHARTS for a local/mirror charts library.
+  const env = [];
+  if(cfg.markers) env.push('MARKERS='+shellQuote(cfg.markers));
+  if(cfg.echarts) env.push('ECHARTS='+shellQuote(cfg.echarts));
+  return (env.length ? env.join(' ')+' ' : '') + parts.join(' ');
 }
-function buildSql(cfg){
-  const width = Math.max(...SQL_DEFINES.map(k => k.length));   // align '='
-  const defs = SQL_DEFINES.map(k => {
+
+function defineLines(cfg){
+  const width = Math.max(...SQL_DEFINES.map(k=>k.length));   // align '='
+  return SQL_DEFINES.map(k => {
     const val = STRING_DEFINES.has(k) ? sqlQuote(cfg[k]) : cfg[k];
     return 'DEFINE '+k.padEnd(width)+' = '+val;
   });
-  return ['sqlplus -S -L '+shellQuote(cfg.connect || 'user/pw@svc')].concat(defs, ['@awr_trend.sql']).join('\n');
+}
+function buildSqlInteractive(cfg){
+  return [ 'sqlplus -S -L '+shellQuote(cfg.connect || 'user/pw@svc') ]
+    .concat(defineLines(cfg), ['@awr_trend.sql']).join('\n');
 }
 
-/* Text nodes only: user input is never interpreted as HTML. */
-function setCode(id, body){
+/* Render a code block as a coloured comment line + plain command body,
+   built from DOM text nodes so user input is never interpreted as HTML. */
+function setCode(id, comment, body){
   const pre = $(id);
   pre.textContent = '';
+  if(comment){
+    const c = document.createElement('span'); c.className='c'; c.textContent = comment;
+    pre.appendChild(c); pre.appendChild(document.createTextNode('\n'));
+  }
   pre.appendChild(document.createTextNode(body));
 }
 
-function render(){
-  const cfg = readConfig();
-  setCode('out_shell', buildShell(cfg));
-  setCode('out_sql_interactive', buildSql(cfg));
-
-  const errors = validate(cfg);
-  const box = $('notes');
-  box.textContent = '';
-  errors.forEach(e => {
-    const d = document.createElement('div'); d.className = 'note-item note-err'; d.textContent = e.msg; box.appendChild(d);
-  });
-  ['connect','target_dt','win_hours','weeks_back','step','top_n'].forEach(id =>
-    $(id).classList.toggle('invalid', errors.some(e => e.id === id)));
+/* --------------------------------------------------------- markers ui */
+function markerRows(){
+  return Array.from(document.querySelectorAll('#marker_rows .mk-row')).map(row => ({
+    when: row.querySelector('.mk-when').value,
+    label: row.querySelector('.mk-label').value.trim()
+  }));
+}
+function addMarkerRow(when='', label=''){
+  const row = document.createElement('div');
+  row.className = 'mk-row';
+  const w = document.createElement('input'); w.type='datetime-local'; w.className='mk-when'; w.value=when;
+  const l = document.createElement('input'); l.type='text'; l.className='mk-label';
+  l.placeholder='Label (e.g. Applied patch 19.22)'; l.value=label; l.autocomplete='off';
+  const x = document.createElement('button'); x.type='button'; x.className='mk-x'; x.textContent='×'; x.title='Remove';
+  x.addEventListener('click', () => { row.remove(); render(); });
+  w.addEventListener('input', render);
+  l.addEventListener('input', render);
+  row.appendChild(w); row.appendChild(l); row.appendChild(x);
+  $('marker_rows').appendChild(row);
 }
 
-/* A preset writes its values into the (hidden) custom fields so readConfig()
-   has one path; Custom just reveals them, prefilled from the last preset. */
-function onCompare(){
-  const mode = $('compare').value, p = COMPARE[mode];
-  if(p){
-    $('win_hours').value = p[0]; $('weeks_back').value = p[1];
-    $('step').value = p[2]; $('step_unit').value = p[3];
-  }
-  $('custom_fields').classList.toggle('hidden', mode !== 'custom');
+/* Build the file-free inline markers string the driver parses
+   (sql/lib/markers_inline.sql): milestones "WHEN|LABEL" joined by ";;".
+   The whole value travels through shell single-quotes, a SQL*Plus DEFINE
+   and a PL/SQL string literal, so the transport must be single-quote-free:
+   we swap any straight apostrophe to a typographic one (’) and strip the
+   reserved separators ('|', ';;') and '~' (live DEFINE char in the driver)
+   from labels.  Rows without a valid instant are skipped (the driver would
+   skip them anyway). */
+function markersInline(){
+  return markerRows().map(r => {
+    const d = parseLocal(r.when);
+    if(!d) return null;                       // no valid instant -> skip
+    const label = (r.label || 'milestone')
+      .replace(/'/g, '’')                // ' -> ’  (single-quote-free transport)
+      .replace(/\|/g, '/')                    // '|' is the WHEN|LABEL separator
+      .replace(/;;/g, ';')                    // ';;' is the milestone separator
+      .replace(/~/g, '-')                     // '~' is the driver's live DEFINE char
+      .replace(/&/g, '+')                     // '&' is SQL*Plus' DEFINE-time substitution char
+      .trim();
+    return fmtFull(d) + '|' + label;
+  }).filter(Boolean).join(';;');
+}
+
+/* -------------------------------------------------------------- notes */
+function renderNotes(v){
+  const box = $('notes');
+  box.innerHTML = '';
+  v.errors.forEach(e => {
+    const d = document.createElement('div'); d.className='note-item note-err'; d.innerHTML = e; box.appendChild(d);
+  });
+  v.info.forEach(e => {
+    const d = document.createElement('div'); d.className='note-item note-info'; d.innerHTML = e; box.appendChild(d);
+  });
+}
+
+/* ----------------------------------------------------------- orchestrate */
+function render(){
+  const cfg = readConfig();
+  $('template_help').textContent = TEMPLATE_HELP[cfg.template];
+  $('wh_echo').textContent = whEcho(cfg.win_hours);
+
+  const ecCustom = $('echarts_mode').value === 'custom';
+  $('echarts_path').classList.toggle('hidden', !ecCustom);
+  $('echarts_help').textContent = ecCustom
+    ? 'A local ECharts file (the run_awr_trend.sh wrapper inlines it into the report for a fully offline single file) or an http(s):// mirror URL. Prefilled with the copy bundled in the repo.'
+    : 'Loads ECharts from the public jsDelivr CDN. If it is unreachable the report hides charts but every number still shows in the tables.';
+
+  renderPreview(cfg);
+  $('out_summary').textContent = summarize(cfg);
+
+  setCode('out_shell', '# '+summarize(cfg), buildShell(cfg));
+  setCode('out_sql_interactive', '-- connect, then paste into SQL*Plus', buildSqlInteractive(cfg));
+
+  const v = validate(cfg);
+  renderNotes(v);
+  markFields(v.bad);
+}
+
+/* --------------------------------------------------- scenario selection */
+/* Highlight one scenario card (or none, for a custom config) and toggle the
+   subtle "custom" hint under the grid. */
+function selectScenario(card){
+  document.querySelectorAll('.scenario').forEach(x => x.classList.remove('sel'));
+  if(card) card.classList.add('sel');
+  $('scenario_custom').classList.toggle('hidden', !!card);
+}
+/* A user edit to any parameter control (not the connect string, not markers)
+   means the config no longer matches a card, so drop the highlight. Guarded so
+   applyPreset's own programmatic writes don't trip it. */
+function onParamEdit(){
+  if(!applyingPreset) selectScenario(null);
   render();
 }
 
+/* ------------------------------------------------------------- presets */
+/* Each `set` lists only what differs from the canonical defaults; applyPreset
+   resets everything else, so a card always yields exactly the shape its meta
+   line advertises regardless of what was configured before. */
+const PRESETS = [
+  {name:'Default · weekly', desc:'This hour vs the same hour on the 4 previous weeks — the classic like-for-like trend.', set:{}, markers:[]},
+  {name:'Yesterday 08–17 · vs 4 weeks', desc:"Yesterday's business hours (08:00–17:00) as one 9-hour window, compared with the same weekday and hours on the 4 previous weeks.", set:{temode:'specific', target:'yesterday@17', win_hours:'9'}},
+  {name:'Hourly walkthrough (12 h)', desc:'The last 12 consecutive hours, walking straight back — spot an intraday spike.', set:{weeks_back:'11', step_unit:'h'}},
+  {name:'Daily · one week', desc:'This hour across each of the last 7 days — the day-over-day pattern.', set:{weeks_back:'6', step_unit:'d'}},
+  {name:'Developer view', desc:'Weekly trend with app-focused metrics & waits — throughput, SQL, contention.', set:{template:'dev'}},
+  {name:'Lean triage', desc:'Weekly trend, minimal metric set — a fast first glance.', set:{template:'simple'}},
+  {name:'Top-25 SQL', desc:'Weekly trend, but 25 rows in every SQL ranking — a wider net.', set:{top_n:'25'}},
+  {name:'Post-release (hourly + marker)', desc:'Hourly windows with a release marker line — before/after a deploy.', set:{weeks_back:'6', step_unit:'h'}, markers:[{when:'', label:'Application release'}]}
+];
+function applyPreset(p){
+  applyingPreset = true;
+  // Defaults first, then the preset's overrides — cards are deterministic.
+  const s = Object.assign({
+    temode:'auto', win_hours:DEFAULTS.win_hours, weeks_back:DEFAULTS.weeks_back,
+    top_n:DEFAULTS.top_n, inst_num:DEFAULTS.inst_num, step:DEFAULTS.step,
+    step_unit:DEFAULTS.step_unit, template:DEFAULTS.template, debug:true, echarts:'',
+    profile_days:DEFAULTS.profile_days
+  }, p.set);
+  document.querySelector('input[name="temode"][value="'+s.temode+'"]').checked = true;
+  syncTeSeg();
+  $('te_specific_wrap').classList.toggle('hidden', s.temode!=='specific');
+  // Dynamic target (e.g. yesterday@17): resolved against the browser clock now.
+  if(s.target){
+    const tv = resolveDynamicTarget(s.target);
+    if(tv) $('target_dt').value = tv;
+  }
+  ['win_hours','weeks_back','top_n','inst_num','step'].forEach(k=>{ $(k).value = s[k]; });
+  $('step_unit').value = s.step_unit;
+  $('template').value = s.template;
+  $('debug').checked = !!s.debug;
+  $('profile_days').value = s.profile_days;
+  // '' -> CDN default; any other value -> custom path (prefilled into the field).
+  $('echarts_mode').value = s.echarts ? 'custom' : 'default';
+  if(s.echarts) $('echarts_path').value = s.echarts;
+  // Markers annotate real-world events, not the comparison shape, so a preset
+  // leaves them alone unless it brings its own list.
+  if(p.markers){
+    $('marker_rows').innerHTML='';
+    p.markers.forEach(m => addMarkerRow(m.when, m.label));
+  }
+  render();
+  applyingPreset = false;
+}
+
+/* ---------------------------------------------------------------- copy */
+/* Copy buttons (.copy[data-copy]) are handled by the shared assets/site.js. */
+
+/* ------------------------------------------------------- te segmented */
+function syncTeSeg(){
+  const mode = document.querySelector('input[name="temode"]:checked').value;
+  document.querySelectorAll('#te_seg label').forEach(l =>
+    l.classList.toggle('on', l.getAttribute('data-te')===mode));
+}
+
+/* ---------------------------------------------------------------- init */
 function init(){
-  $('compare').addEventListener('change', onCompare);
-  document.querySelectorAll('input[name="temode"]').forEach(r => r.addEventListener('change', () => {
-    $('target_dt').classList.toggle('hidden', r.value !== 'specific' || !r.checked);
+  // scenario cards — each applies a preset and becomes the selected card
+  const sbox = $('scenarios');
+  PRESETS.forEach(p => {
+    const c = document.createElement('button'); c.type='button'; c.className='scenario';
+    const n = document.createElement('span'); n.className='sn'; n.textContent=p.name;
+    const d = document.createElement('span'); d.className='sd'; d.textContent=p.desc||'';
+    const m = document.createElement('span'); m.className='sm'; m.textContent=scenarioMeta(p);
+    c.appendChild(n); c.appendChild(d); c.appendChild(m);
+    c.addEventListener('click', () => {
+      applyPreset(p);            // sets the authoritative controls + renders
+      selectScenario(c);
+    });
+    sbox.appendChild(c);
+  });
+
+  // explicit reset link (applies the first preset = canonical defaults)
+  $('reset_link').addEventListener('click', e => {
+    e.preventDefault();
+    applyPreset(PRESETS[0]);
+    selectScenario(sbox.firstChild);
+  });
+
+  // connect quick-picks
+  buildConnectChips('connect_chips', 'connect', render);
+
+  // target_end segmented control — a user pick is a param edit (deselect card)
+  document.querySelectorAll('input[name="temode"]').forEach(r => r.addEventListener('change', ()=>{
+    syncTeSeg();
+    $('te_specific_wrap').classList.toggle('hidden', r.value!=='specific');
+    if(!applyingPreset) selectScenario(null);
     render();
   }));
+
+  // connect string edits re-render but never deselect a scenario card
+  $('connect').addEventListener('input', render);
+  $('connect').addEventListener('change', render);
+  // select the sample value on focus so it's replaced in one go
   $('connect').addEventListener('focus', e => e.target.select());
-  ['connect','target_dt','win_hours','weeks_back','step','step_unit','template','top_n'].forEach(id => {
-    $(id).addEventListener('input', render);
-    $(id).addEventListener('change', render);
-  });
-  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
+
+  // every parameter control -> deselect card (if user-driven) + re-render
+  ['target_dt','win_hours','weeks_back','step','step_unit','top_n','inst_num','template','debug',
+   'profile_days','echarts_mode','echarts_path']
+    .forEach(id => { const el=$(id); el.addEventListener('input', onParamEdit); el.addEventListener('change', onParamEdit); });
+
+  $('marker_add').addEventListener('click', ()=>{ addMarkerRow(); render(); });
+
+  // tabs
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
     t.classList.add('on');
     const tab = t.getAttribute('data-tab');
-    $('panel_shell').classList.toggle('hidden', tab !== 'shell');
-    $('panel_sql').classList.toggle('hidden', tab !== 'sql');
+    $('panel_shell').classList.toggle('hidden', tab!=='shell');
+    $('panel_sql').classList.toggle('hidden', tab!=='sql');
   }));
-  onCompare();
+
+  // mobile-only: jump to the generated command
+  $('jump_cmd').addEventListener('click', ()=>{
+    const out = document.querySelector('.output');
+    if(out) out.scrollIntoView({behavior:'smooth', block:'start'});
+  });
+
+  syncTeSeg();
+
+  // defaults == first scenario; select it and render
+  selectScenario(sbox.firstChild);
+  render();
 }
 document.addEventListener('DOMContentLoaded', init);
 </script>
