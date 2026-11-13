@@ -61,7 +61,9 @@ DECLARE
     -- Totals: sql_id|event and sql_id, used for legend ordering and
     -- the per-card "dominant event" / "total samples" header line.
     TYPE t_num_by_str  IS TABLE OF NUMBER       INDEX BY VARCHAR2(200);
-    TYPE t_str_by_str  IS TABLE OF VARCHAR2(256) INDEX BY VARCHAR2(30);
+    -- 1000 bytes: holds 200 CHARACTERS of SQL text at up to 4 bytes each
+    -- (AL32UTF8); 256 raised ORA-06502 on multibyte text.
+    TYPE t_str_by_str  IS TABLE OF VARCHAR2(1000) INDEX BY VARCHAR2(30);
     v_cells         t_num_by_str;
     v_evt_totals    t_num_by_str;
     v_sql_totals    t_num_by_str;

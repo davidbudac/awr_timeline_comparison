@@ -1107,7 +1107,10 @@ BEGIN
                 v_snip := '(text not in DBA_HIST_SQLTEXT)';
             ELSE
                 v_len  := DBMS_LOB.GETLENGTH(v_text);
-                v_snip := DBMS_LOB.SUBSTR(v_text, 8000, 1);
+                -- 8000 characters can be up to 32000 bytes in AL32UTF8 and
+                -- v_snip holds 8000 BYTES: cut by bytes (SUBSTRB never
+                -- returns a partial character). ASCII text is unchanged.
+                v_snip := SUBSTRB(DBMS_LOB.SUBSTR(v_text, 8000, 1), 1, 8000);
             END IF;
 
             -- C1: summary row. The <tr> id is the link target for SQL_ID
@@ -1327,7 +1330,7 @@ BEGIN
 
             DBMS_OUTPUT.PUT_LINE('<pre class="sql">'
                 || DBMS_XMLGEN.CONVERT(v_snip)
-                || CASE WHEN v_len > 8000
+                || CASE WHEN v_len > LENGTH(v_snip)
                         THEN CHR(10) || '... (truncated, ' || v_len || ' chars total)'
                         ELSE '' END
                 || '</pre>');
