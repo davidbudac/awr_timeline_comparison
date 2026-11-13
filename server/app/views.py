@@ -17,7 +17,7 @@ from string import Template
 
 from . import fleetconf, records
 
-_STYLE = """
+_STYLE = r"""
 :root {
   --paper:#eceef1; --panel:#ffffff; --panel-2:#f4f6f8;
   --ink:#12161d; --ink-soft:#333a45; --muted:#5d6672;
@@ -137,7 +137,7 @@ code { font-size:12px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mo
 """
 
 _PAGE = Template(
-    """<title>$title</title>
+    r"""<title>$title</title>
 <style>$style</style>
 <script>(function(){try{var s=localStorage.getItem("awr-theme");var d=s?s==="dark":(window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches);if(d)document.documentElement.classList.add("dark-early");}catch(e){}})();</script>
 <header class="top">

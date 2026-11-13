@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # fake_bin/run_awr_fleet.sh -- test double for the real run_awr_fleet.sh,
 # used only by server/tests. It honors the same positional argv layout and
-# emits stdout in the same summary format (see run_awr_fleet.sh:1053-1059)
-# closely enough for server/app/runner.py + records.py to be exercised
+# emits stdout in the same summary format (see the summary loop at the end
+# of do_assemble in run_awr_fleet.sh) closely enough for server/app/runner.py + records.py to be exercised
 # end-to-end without a database. Matches the real wrapper's per-run folder
 # output layout: reports/awr_fleet_<ts>_run<id>/index.html plus one
 # detail_<alias>.html per detail-flagged DB, in the same folder.
@@ -17,6 +17,8 @@
 #                                should report detail=failed instead of ok
 #   FAKE_RUN_ID                 override the generated RUN_ID (deterministic
 #                                report/detail filenames in tests)
+#   FAKE_TOOK                   per-DB duration text printed as took=; default
+#                                has a space on purpose ("1m 05s")
 #   FLEET_DETAIL                all|none|'' -- same override semantics as
 #                                the real wrapper
 set -uo pipefail
@@ -32,6 +34,7 @@ if [[ -n "${FAKE_SLEEP:-}" ]]; then
     sleep "$FAKE_SLEEP"
 fi
 
+TOOK="${FAKE_TOOK:-1m 05s}"
 RUN_ID="${FAKE_RUN_ID:-$(date +%Y%m%d%H%M%S)$$}"
 REPORT_TS="$(date +%Y%m%d%H%M)"
 RUN_DIR="reports/awr_fleet_${REPORT_TS}_run${RUN_ID}"
@@ -74,7 +77,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
         n_err=$((n_err + 1))
         dstat='-'
         [[ "$detail_flag" == 'Y' ]] && dstat='skipped'
-        SUMMARY_LINES+=("$(printf '%-24s ERROR  rc=%-5s detail=%-7s %s' "$db_alias" "1" "$dstat" "simulated failure for $db_alias")")
+        SUMMARY_LINES+=("$(printf '%-24s ERROR  rc=%-5s took=%-7s detail=%-7s %s' "$db_alias" "1" "$TOOK" "$dstat" "simulated failure for $db_alias")")
         continue
     fi
 
@@ -89,7 +92,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
             printf '<html><body>fake detail report for %s</body></html>\n' "$db_alias" > "$dfile"
         fi
     fi
-    SUMMARY_LINES+=("$(printf '%-24s OK     score=%-4s crit=%s warn=%s suppressed=%s topsql_n=%s topsql_pts=%s detail=%s' "$db_alias" "3" "0" "1" "0" "2" "3" "$dstat")")
+    SUMMARY_LINES+=("$(printf '%-24s OK     score=%-4s crit=%s warn=%s suppressed=%s topsql_n=%s topsql_pts=%s took=%s detail=%s' "$db_alias" "3" "0" "1" "0" "2" "3" "$TOOK" "$dstat")")
 done < "$CONF"
 
 printf '<html><body>fake fleet report run %s</body></html>\n' "$RUN_ID" > "$REPORT"

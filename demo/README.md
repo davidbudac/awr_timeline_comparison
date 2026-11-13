@@ -16,6 +16,7 @@ nothing under `sql/`, `awr_trend.sql` or the wrappers depends on it.
 python3 demo/gen_demo_report.py                      # -> docs/examples/demo_busy_db.html (ECharts inlined, offline)
 python3 demo/gen_demo_report.py --cdn out.html       # link ECharts from the public CDN instead
 python3 demo/gen_demo_report.py --only=06_top_sql x.html   # one section (debugging a port)
+python3 demo/gen_demo_report.py --check   # CI gate: exit 1 if docs/examples/demo_busy_db.html is stale
 node demo/verify_report.js docs/examples/demo_busy_db.html shots/   # headless smoke test + screenshots
 # no node_modules in the repo: point NODE_PATH at any playwright install, e.g.
 #   T=$(mktemp -d); (cd $T && npm i playwright@1.55); NODE_PATH=$T/node_modules node demo/verify_report.js ...

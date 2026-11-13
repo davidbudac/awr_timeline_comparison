@@ -12,6 +12,7 @@ emitter, fed from one coherent hourly model (awrdemo/model.py).
     python3 demo/gen_demo_report.py                # -> docs/examples/demo_busy_db.html
     python3 demo/gen_demo_report.py out.html       # explicit output path
     python3 demo/gen_demo_report.py --cdn out.html # link ECharts from the CDN instead of inlining
+    python3 demo/gen_demo_report.py --check        # compare with the existing file, write nothing, exit 1 if stale
 
 See demo/README.md.
 """
@@ -147,11 +148,24 @@ def main(argv):
     html = render(w, src, only)
     if "--cdn" not in flags and "--no-inline" not in flags:
         html = inline_echarts(html, src)
+    if "--check" in flags:
+        try:
+            with open(out_path, encoding="utf-8") as fh:
+                current = fh.read()
+        except OSError:
+            current = None
+        if current != html:
+            print(f"STALE: {out_path} is not what the generator produces now. "
+                  "Run: python3 demo/gen_demo_report.py  and commit the result.")
+            return 1
+        print(f"up to date: {out_path}")
+        return 0
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(html)
     print(f"wrote {out_path} ({len(html.encode('utf-8'))/1024:.0f} KB)")
+    return 0
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    sys.exit(main(sys.argv[1:]))

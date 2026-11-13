@@ -74,15 +74,33 @@ class PruneRunsTest(unittest.TestCase):
         self.assertFalse((self.reports_dir / "tracked.html").exists())
 
     def test_path_traversal_in_record_is_ignored(self):
+        # A real file OUTSIDE reports_dir that the recorded path points at.
+        outside = Path(tempfile.mkdtemp(dir=str(self.reports_dir.parent)))
+        victim = outside / "victim.html"
+        victim.write_text("do not delete", encoding="utf-8")
         rec = records.new_record("evil", records.KIND_FLEET, "manual")
         rec["state"] = records.STATE_SUCCESS
         rec["started_at"] = self.now - 100 * 86400
-        rec["report_path"] = "reports/../../etc/passwd"
+        rec["report_path"] = "reports/../%s/victim.html" % outside.name
         records.save_record(self.data_dir, rec)
-        # must not raise, and must not touch anything outside reports_dir
-        outside_target = self.reports_dir.parent / "etc_passwd_sentinel"
         retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, keep_fleet_runs=0, keep_days=0, keep_run_records=999)
-        self.assertFalse(outside_target.exists())
+        self.assertTrue(victim.exists(), "a path escaping reports_dir must never be deleted")
+
+    def test_reports_dir_itself_is_never_deleted(self):
+        stray = self.reports_dir / "adhoc_cli_report.html"
+        stray.write_text("<html></html>", encoding="utf-8")
+        for i, (report_path, workdir) in enumerate(
+            [("reports/", None), ("reports/.", None), ("reports", None), (None, "."), (None, "")]
+        ):
+            rec = records.new_record("base%d" % i, records.KIND_FLEET, "manual")
+            rec["state"] = records.STATE_SUCCESS
+            rec["started_at"] = self.now - 100 * 86400
+            rec["report_path"] = report_path
+            rec["workdir"] = workdir
+            records.save_record(self.data_dir, rec)
+        retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, keep_fleet_runs=0, keep_days=0, keep_run_records=999)
+        self.assertTrue(self.reports_dir.is_dir())
+        self.assertTrue(stray.exists(), "reports/ itself must never be treated as an artifact")
 
     def test_thins_old_records_and_logs_beyond_keep_run_records(self):
         for i in range(5):
@@ -159,22 +177,109 @@ class PruneRunsTest(unittest.TestCase):
         self.assertTrue((folder / "detail_prod_east.html").exists())
 
     def test_run_folder_never_escapes_reports_dir(self):
-        # Same path-traversal guard as the flat-file case, exercised against
-        # a report_path claiming to live inside a folder.
+        # A run-folder-shaped directory OUTSIDE reports_dir: the "delete the
+        # whole run folder" expansion must not follow the path out.
+        outside = Path(tempfile.mkdtemp(dir=str(self.reports_dir.parent)))
+        folder = outside / "awr_fleet_1_run1"
+        folder.mkdir()
+        victim = folder / "index.html"
+        victim.write_text("do not delete", encoding="utf-8")
         rec = records.new_record("evil2", records.KIND_FLEET, "manual")
         rec["state"] = records.STATE_SUCCESS
         rec["started_at"] = self.now - 100 * 86400
-        rec["report_path"] = "reports/awr_fleet_1_run1/../../../etc/index.html"
+        rec["report_path"] = "reports/../%s/awr_fleet_1_run1/index.html" % outside.name
         records.save_record(self.data_dir, rec)
-        outside_target = self.reports_dir.parent / "etc_passwd_sentinel"
         retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, keep_fleet_runs=0, keep_days=0, keep_run_records=999)
-        self.assertFalse(outside_target.exists())
+        self.assertTrue(victim.exists())
+        self.assertTrue(folder.is_dir())
 
     def test_run_folder_idempotent_second_pass_is_a_noop(self):
         self._make_fleet_record_with_run_folder("r0", age_days=100, detail_aliases=["prod_east"])
         retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, keep_fleet_runs=0, keep_days=0, keep_run_records=999)
         summary2 = retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, keep_fleet_runs=0, keep_days=0, keep_run_records=999)
         self.assertEqual(summary2["artifacts_pruned"], 0)
+
+
+class RecordThinningTest(unittest.TestCase):
+    """Pass 3 (keep_run_records) and the detail-report rules."""
+
+    def setUp(self):
+        self.data_dir = Path(tempfile.mkdtemp())
+        self.reports_dir = Path(tempfile.mkdtemp())
+        self.now = time.time()
+
+    def _fleet(self, run_id, age_days, wrapper_id, state=records.STATE_SUCCESS):
+        rec = records.new_record(run_id, records.KIND_FLEET, "manual")
+        started = self.now - age_days * 86400
+        rec["started_at"] = started
+        rec["queued_at"] = started
+        rec["state"] = state
+        folder = self.reports_dir / ("awr_fleet_202607230000_run%s" % wrapper_id)
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "index.html").write_text("<html></html>", encoding="utf-8")
+        rec["report_path"] = "reports/%s/index.html" % folder.name
+        records.save_record(self.data_dir, rec)
+        return rec, folder
+
+    def _detail(self, run_id, alias, age_days, wrapper_id, state=records.STATE_SUCCESS):
+        rec = records.new_record(run_id, records.KIND_DETAIL, "manual", alias=alias)
+        started = self.now - age_days * 86400
+        rec["started_at"] = started
+        rec["queued_at"] = started
+        rec["state"] = state
+        folder = self.reports_dir / ("awr_fleet_202607230000_run%s" % wrapper_id)
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / ("detail_%s.html" % alias)).write_text("<html></html>", encoding="utf-8")
+        rec["report_path"] = "reports/%s/detail_%s.html" % (folder.name, alias)
+        records.save_record(self.data_dir, rec)
+        return rec, folder
+
+    def _prune(self, **kw):
+        args = dict(keep_fleet_runs=999, keep_days=999, keep_run_records=999)
+        args.update(kw)
+        return retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, **args)
+
+    def test_dropping_a_record_also_deletes_its_artifacts(self):
+        # keep_run_records smaller than keep_fleet_runs used to orphan the
+        # report folder (record gone, files left forever).
+        _, new_folder = self._fleet("new", 1, "1")
+        _, old_folder = self._fleet("old", 5, "2")
+        self._prune(keep_run_records=1)
+        self.assertIsNotNone(records.load_record(self.data_dir, "new"))
+        self.assertIsNone(records.load_record(self.data_dir, "old"))
+        self.assertTrue(new_folder.is_dir())
+        self.assertFalse(old_folder.exists())
+
+    def test_queued_and_running_records_are_never_dropped(self):
+        self._fleet("done", 1, "1")
+        rec, _ = self._fleet("stuck", 50, "2", state=records.STATE_RUNNING)
+        self._prune(keep_run_records=1)
+        self.assertIsNotNone(records.load_record(self.data_dir, "stuck"))
+
+    def test_old_detail_reports_are_pruned_but_latest_per_alias_survives(self):
+        _, f_old = self._detail("d_old", "prod_east", 100, "10")
+        _, f_new = self._detail("d_new", "prod_east", 90, "11")
+        _, f_other = self._detail("d_other", "prod_west", 200, "12")
+        self._prune(keep_days=30)
+        self.assertFalse(f_old.exists(), "superseded detail report older than keep_days is pruned")
+        self.assertTrue(f_new.exists(), "newest successful detail per alias is always kept")
+        self.assertTrue(f_other.exists(), "the only detail report of an alias is always kept")
+        self.assertTrue(records.load_record(self.data_dir, "d_old")["artifacts_pruned"])
+
+    def test_recent_detail_reports_are_kept(self):
+        _, f_a = self._detail("d_a", "prod_east", 2, "20")
+        _, f_b = self._detail("d_b", "prod_east", 1, "21")
+        self._prune(keep_days=30)
+        self.assertTrue(f_a.exists())
+        self.assertTrue(f_b.exists())
+
+    def test_latest_detail_record_survives_record_thinning(self):
+        _, f_detail = self._detail("d_only", "prod_east", 300, "30")
+        for i in range(3):
+            self._fleet("f%d" % i, i, str(40 + i))
+        self._prune(keep_run_records=2)
+        self.assertIsNotNone(records.load_record(self.data_dir, "d_only"))
+        self.assertTrue(f_detail.exists())
 
 
 if __name__ == "__main__":

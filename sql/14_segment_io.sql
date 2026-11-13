@@ -674,7 +674,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('    var top3=rows.map(function(s,i){return i;}).sort(function(a,b){return (lastVal(rows[b].vals)==null?-Infinity:lastVal(rows[b].vals))-(lastVal(rows[a].vals)==null?-Infinity:lastVal(rows[a].vals));}).slice(0,3);');
         DBMS_OUTPUT.PUT_LINE('    chart.setOption({');
         DBMS_OUTPUT.PUT_LINE('      labelLayout:{moveOverlap:"shiftY"},');
-        DBMS_OUTPUT.PUT_LINE('      tooltip:{trigger:"axis",axisPointer:{type:"line"},formatter:function(ps){var hdr="<b>"+ps[0].axisValue+"</b>";var rs=ps.filter(function(p){return p.value!=null;}).sort(function(a,b){return (b.value||0)-(a.value||0);}).map(function(p){return p.marker+" "+p.seriesName+": <b>"+fmt(p.value)+" "+d.unit+"</b>";}).join("<br/>");return hdr+"<br/>"+rs;}},');
+        DBMS_OUTPUT.PUT_LINE('      tooltip:{trigger:"axis",axisPointer:{type:"line"},formatter:function(ps){var hdr="<b>"+ps[0].axisValue+"</b>";var rs=ps.filter(function(p){return p.value!=null;}).sort(function(a,b){return (b.value||0)-(a.value||0);}).map(function(p){return p.marker+" "+String(p.seriesName).replace(/&/g,"&amp;").replace(/</g,"&lt;")+": <b>"+fmt(p.value)+" "+d.unit+"</b>";}).join("<br/>");return hdr+"<br/>"+rs;}},');
         DBMS_OUTPUT.PUT_LINE('      legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},');
         DBMS_OUTPUT.PUT_LINE('      grid:{left:50,right:128,top:10,bottom:44,containLabel:true},');
         DBMS_OUTPUT.PUT_LINE('      xAxis:{type:"category",data:weeks,axisLabel:{color:fg,fontWeight:600},splitLine:{show:true,lineStyle:{color:gr}}},');

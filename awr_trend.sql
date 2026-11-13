@@ -346,10 +346,16 @@ CROSS JOIN (
     -- section actually sees as target_end_resolved:
     --   - no snapshot at/before req_ts at all  -> eff_ts = req_ts (behave
     --     as today; windows_cte's own guard handles the fallout)
-    --   - a snapshot already within the 15-min edge guard -> keep req_ts
-    --     verbatim (byte-identical to current behavior for every request
-    --     that already resolves valid windows)
-    --   - otherwise                             -> snap back to
+    --   - the last snapshot is within 15 min before req_ts AND a snapshot
+    --     exists in [req_ts - 5 min, req_ts + 15 min] (exactly what
+    --     windows_cte accepts as the end snapshot) -> keep req_ts verbatim
+    --     (byte-identical for every request that already resolved valid
+    --     windows)
+    --   - the last snapshot is 6-15 min before req_ts and none follows
+    --     within 15 min (hourly snaps at :45-:54, or a request made just
+    --     before the next snapshot is taken) -> snap back, else windows_cte
+    --     would reject every window
+    --   - otherwise                            -> snap back to
     --     last_snap_ts, minute precision
     -- No dbid filter is needed: dba_hist_snapshot is container-scoped and
     -- dbid_list above is built from this very same view.
@@ -357,7 +363,8 @@ CROSS JOIN (
         rs.req_ts                                                  AS req_ts,
         CASE
             WHEN rs.last_snap_ts IS NULL THEN rs.req_ts
-            WHEN rs.req_ts - rs.last_snap_ts <= 15/1440 THEN rs.req_ts
+            WHEN rs.req_ts - rs.last_snap_ts <= 15/1440
+                 AND rs.edge_snaps > 0 THEN rs.req_ts
             ELSE TRUNC(rs.last_snap_ts, 'MI')
         END                                                        AS eff_ts
     FROM (
@@ -366,7 +373,12 @@ CROSS JOIN (
             (SELECT MAX(CAST(end_interval_time AS DATE))
              FROM   dba_hist_snapshot
              WHERE  CAST(end_interval_time AS DATE) <= req.req_ts + 5/1440)
-                                                                    AS last_snap_ts
+                                                                    AS last_snap_ts,
+            (SELECT COUNT(*)
+             FROM   dba_hist_snapshot
+             WHERE  CAST(end_interval_time AS DATE) >= req.req_ts - 5/1440
+               AND  CAST(end_interval_time AS DATE) <= req.req_ts + 15/1440)
+                                                                    AS edge_snaps
         FROM (
             SELECT
                 CASE

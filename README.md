@@ -47,6 +47,7 @@ analyst user):
 ```sql
 GRANT SELECT ON DBA_HIST_SNAPSHOT            TO <user>;
 GRANT SELECT ON DBA_HIST_SYSSTAT             TO <user>;
+GRANT SELECT ON DBA_HIST_SYS_TIME_MODEL      TO <user>;
 GRANT SELECT ON DBA_HIST_SYSTEM_EVENT        TO <user>;
 GRANT SELECT ON DBA_HIST_BG_EVENT_SUMMARY    TO <user>;
 GRANT SELECT ON DBA_HIST_SYSMETRIC_SUMMARY   TO <user>;
@@ -59,6 +60,9 @@ GRANT SELECT ON DBA_HIST_TEMPSTATXS          TO <user>;
 GRANT SELECT ON DBA_HIST_IOSTAT_FILETYPE     TO <user>;
 GRANT SELECT ON DBA_HIST_ACTIVE_SESS_HISTORY TO <user>;
 GRANT SELECT ON DBA_HIST_PARAMETER           TO <user>;
+-- SQL Monitor section, verdict pills and fleet band. Still needed with
+-- SQLMON=N: the verdict's PL/SQL names the view at compile time.
+GRANT SELECT ON DBA_HIST_REPORTS             TO <user>;
 GRANT SELECT ON V_$DATABASE                  TO <user>;
 GRANT SELECT ON V_$INSTANCE                  TO <user>;
 -- Only if you use side/create_weekly_baselines.sql (optional, writes baselines):

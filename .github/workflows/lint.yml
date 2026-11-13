@@ -1,18 +1,13 @@
 #
-# Static lint of the SQL*Plus sources (see lint.sh) — catches the footguns
-# documented in CLAUDE.md (bad @@ include paths, stray ~substitutions,
-# dbid equality, literal-7 cadence, …) without needing a database.
+# Runs tools/check.sh: the static lint of the SQL*Plus sources (lint.sh),
+# bash -n on every tracked *.sh, a strict parse of every tracked *.py and
+# the server unit tests. None of these needs a database.
 #
-name: Lint SQL sources
+name: Checks
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'awr_trend.sql'
-      - 'sql/**'
-      - 'lint.sh'
-      - '.github/workflows/lint.yml'
   pull_request:
   workflow_dispatch:
 
@@ -26,5 +21,5 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Run lint.sh
-        run: ./lint.sh
+      - name: Run tools/check.sh (lint, shell syntax, Python parse, server tests)
+        run: ./tools/check.sh

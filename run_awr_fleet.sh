@@ -331,6 +331,19 @@ _pos_clean() {  # reject newline / single-quote / tab in a heredoc-bound string 
     case "$2" in *$'\n'*) _pos_die "$1" "$2" "must not contain a newline";; esac
     case "$2" in *$'\t'*) _pos_die "$1" "$2" "must not contain a tab";; esac
 }
+# _pos_clean_conn -- _pos_clean for a connect string: same three checks, but
+# the message shows the MASKED value, never the raw one (it holds a password).
+# Printed as-is, not through _pos_die's printf %q, which would turn the mask
+# into scott/\*\*\*@svc.
+_pos_clean_conn() {
+    local what="$1" val="$2" why=''
+    case "$val" in *$'\t'*) why="must not contain a tab";; esac
+    case "$val" in *$'\n'*) why="must not contain a newline";; esac
+    case "$val" in *"'"*) why="must not contain a single quote";; esac
+    [[ -z "$why" ]] && return 0
+    echo "error: argument '$what' = $(mask_conn "$val") is invalid -- $why" >&2
+    exit 2
+}
 
 # html_escape -- pipe filter, bash-side equivalent of the SQL side's
 # DBMS_XMLGEN.CONVERT(...) convention (CLAUDE.md "HTML emission"): every
@@ -350,7 +363,8 @@ html_escape() {
 mask_conn() {
     local c="$1"
     [[ "$c" == /* ]] && { printf '%s' "$c"; return; }
-    if [[ "$c" =~ ^([^/]+)/[^@]*@(.*)$ ]]; then
+    # greedy up to the LAST @: a password may itself contain @
+    if [[ "$c" =~ ^([^/]+)/.*@([^@]*)$ ]]; then
         printf '%s/***@%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
         return
     fi
@@ -626,8 +640,16 @@ parse_markers() {
 # resolve_timeout_bin -- sets TIMEOUT_BIN to 'timeout' or 'gtimeout' if
 # either is on PATH, else '' with a one-time warning.  A missing timeout
 # binary must never be fatal (FLEET_TIMEOUT just stops being enforced).
+#
+# TIMEOUT_FG is '--foreground' when that timeout supports it (GNU coreutils
+# 8.13+), else ''.  Without it GNU timeout moves sqlplus into a NEW process
+# group, so Ctrl-C on this script, or a caller that signals this script's
+# process group (the fleet server does), kills the wrapper but leaves every
+# sqlplus running until its own timeout expires.  Probed, never assumed:
+# BusyBox timeout has no such flag.
 # ---------------------------------------------------------------------------
 resolve_timeout_bin() {
+    TIMEOUT_FG=''
     if command -v timeout >/dev/null 2>&1; then
         TIMEOUT_BIN=timeout
     elif command -v gtimeout >/dev/null 2>&1; then
@@ -636,6 +658,9 @@ resolve_timeout_bin() {
         TIMEOUT_BIN=''
         echo "warning: neither 'timeout' nor 'gtimeout' found on PATH;" \
              "FLEET_TIMEOUT=${FLEET_TIMEOUT}s will not be enforced (runs unbounded)." >&2
+    fi
+    if [[ -n "$TIMEOUT_BIN" ]] && "$TIMEOUT_BIN" --foreground 5 true >/dev/null 2>&1; then
+        TIMEOUT_FG='--foreground'
     fi
 }
 
@@ -667,7 +692,7 @@ parse_conf() {
         [[ -z "${line//[[:space:]]/}" ]] && continue           # blank
         [[ "$line" =~ ^[[:space:]]*# ]] && continue             # comment
         if [[ "$line" != *'|'* ]]; then
-            echo "error: fleet.conf '$conf' line $lineno: expected 'alias|connect[|detail]', got: $line" >&2
+            echo "error: fleet.conf '$conf' line $lineno: expected 'alias|connect[|detail]' (no '|' found; line content not shown, it may hold a password)" >&2
             exit 2
         fi
         alias="${line%%|*}"
@@ -692,7 +717,7 @@ parse_conf() {
         fi
 
         [[ -n "$conn" ]] || { echo "error: fleet.conf '$conf' line $lineno: empty connect string for alias '$alias'" >&2; exit 2; }
-        _pos_clean "connect (alias $alias, line $lineno)" "$conn"
+        _pos_clean_conn "connect (alias $alias, line $lineno)" "$conn"
         ALIASES+=("$alias")
         CONNS+=("$conn")
         CONN_DISPS+=("$(mask_conn "$conn")")
@@ -779,7 +804,7 @@ run_one_db() {
     local log="$WORK/$alias.log" rcfile="$WORK/$alias.rc"
     local rc=0 t0=$SECONDS secs
     local -a cmd=(sqlplus -S -L "$conn")
-    [[ -n "$TIMEOUT_BIN" ]] && cmd=("$TIMEOUT_BIN" "$FLEET_TIMEOUT" "${cmd[@]}")
+    [[ -n "$TIMEOUT_BIN" ]] && cmd=("$TIMEOUT_BIN" ${TIMEOUT_FG:+"$TIMEOUT_FG"} "$FLEET_TIMEOUT" "${cmd[@]}")
 
     say "[$idx/$total] $alias: extract started ($disp)"
     "${cmd[@]}" > "$log" 2>&1 <<SQLEOF || rc=$?
@@ -856,7 +881,7 @@ run_one_detail() {
     ln -s "$SCRIPT_DIR/sql" "$ddir/sql"
 
     local -a cmd=(sqlplus -S -L "$conn")
-    [[ -n "$TIMEOUT_BIN" && "$FLEET_DETAIL_TIMEOUT" -gt 0 ]] && cmd=("$TIMEOUT_BIN" "$FLEET_DETAIL_TIMEOUT" "${cmd[@]}")
+    [[ -n "$TIMEOUT_BIN" && "$FLEET_DETAIL_TIMEOUT" -gt 0 ]] && cmd=("$TIMEOUT_BIN" ${TIMEOUT_FG:+"$TIMEOUT_FG"} "$FLEET_DETAIL_TIMEOUT" "${cmd[@]}")
 
     say "$alias: detailed single-DB report started (template $FLEET_DETAIL_TEMPLATE)"
 
@@ -1353,8 +1378,15 @@ FALLBACK_CHROME
                 if [[ "$woff2" -eq 0 ]]; then
                     label='current'
                 else
-                    wk=$(( woff2 * STEP ))
-                    label="-${wk}${STEP_UNIT}"
+                    # STEP may be fractional (0.25 = 15 min) or carry a
+                    # leading zero; bash arithmetic is integer-only, and an
+                    # error here would lose the whole assembled report.
+                    if [[ "$STEP" =~ ^[1-9][0-9]*$ ]]; then
+                        wk=$(( woff2 * STEP ))
+                        label="-${wk}${STEP_UNIT}"
+                    else
+                        label="-${woff2}x${STEP}${STEP_UNIT}"
+                    fi
                 fi
                 datepart="${beginv:0:10}"
                 if [[ "${endv:0:10}" == "$datepart" ]]; then

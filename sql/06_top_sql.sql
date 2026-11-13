@@ -743,10 +743,13 @@ BEGIN
         -- module/action are app-set free text; escape backslash, quote, and
         -- stray CR/LF so the JS string literal and one-line PUT_LINE both stay
         -- well-formed (schema names are tame, but route them through the same
-        -- escape for uniformity).
+        -- escape for uniformity). A less-than sign becomes the JSON escape
+        -- \u003c so the value can not end the script element (same rule as
+        -- sql/lib/json_escape.plsql)
         v_new_entry := '{"name":"'
-            || REPLACE(REPLACE(REPLACE(REPLACE(sc.grp_value,
-                   '\', '\\'), '"', '\"'), CHR(13), ' '), CHR(10), ' ')
+            || REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(sc.grp_value,
+                   '\', '\\'), '"', '\"'), CHR(13), ' '), CHR(10), ' '),
+                   '<', '\u003c')
             || '","cur":' || NVL(TO_CHAR(sc.cur_rnk), 'null')
             -- Tag system-ness only for the schema breakdown (module/action are
             -- app-set free text, not schema-derived). Informational since
@@ -889,7 +892,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('    var top3=rows.map(function(s,i){return i;}).sort(function(a,b){return (lastVal(rows[b].vals)==null?-Infinity:lastVal(rows[b].vals))-(lastVal(rows[a].vals)==null?-Infinity:lastVal(rows[a].vals));}).slice(0,3);');
         DBMS_OUTPUT.PUT_LINE('    chart.setOption({');
         DBMS_OUTPUT.PUT_LINE('      labelLayout:{moveOverlap:"shiftY"},');
-        DBMS_OUTPUT.PUT_LINE('      tooltip:{trigger:"axis",axisPointer:{type:"line"},formatter:function(ps){var hdr="<b>"+ps[0].axisValue+"</b>";var rs=ps.filter(function(p){return p.value!=null;}).sort(function(a,b){return (b.value||0)-(a.value||0);}).map(function(p){return p.marker+" "+p.seriesName+": <b>"+fmt(p.value)+" "+d.unit+"</b>";}).join("<br/>");return hdr+"<br/>"+rs;}},');
+        DBMS_OUTPUT.PUT_LINE('      tooltip:{trigger:"axis",axisPointer:{type:"line"},formatter:function(ps){var hdr="<b>"+ps[0].axisValue+"</b>";var rs=ps.filter(function(p){return p.value!=null;}).sort(function(a,b){return (b.value||0)-(a.value||0);}).map(function(p){return p.marker+" "+String(p.seriesName).replace(/&/g,"&amp;").replace(/</g,"&lt;")+": <b>"+fmt(p.value)+" "+d.unit+"</b>";}).join("<br/>");return hdr+"<br/>"+rs;}},');
         DBMS_OUTPUT.PUT_LINE('      legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},');
         DBMS_OUTPUT.PUT_LINE('      grid:{left:50,right:128,top:10,bottom:44,containLabel:true},');
         DBMS_OUTPUT.PUT_LINE('      xAxis:{type:"category",data:weeks,axisLabel:{color:fg,fontWeight:600},splitLine:{show:true,lineStyle:{color:gr}}},');
@@ -982,6 +985,12 @@ BEGIN
         v_text            CLOB;
         v_len             NUMBER;
         v_snip            VARCHAR2(8000);
+        -- v_snip escaped for the <pre> block, built 500 characters at a
+        -- time (see the loop before the PUT_LINE), and how many characters
+        -- of v_snip it covers.
+        v_snip_esc        VARCHAR2(32767);
+        v_snip_part       VARCHAR2(4000);
+        v_snip_shown      PLS_INTEGER;
         v_first_seen      VARCHAR2(30);
         v_last_seen       VARCHAR2(30);
         v_phv_count       NUMBER;
@@ -1104,7 +1113,10 @@ BEGIN
                 v_snip := '(text not in DBA_HIST_SQLTEXT)';
             ELSE
                 v_len  := DBMS_LOB.GETLENGTH(v_text);
-                v_snip := DBMS_LOB.SUBSTR(v_text, 8000, 1);
+                -- 8000 characters can be up to 32000 bytes in AL32UTF8 and
+                -- v_snip holds 8000 BYTES: cut by bytes (SUBSTRB never
+                -- returns a partial character). ASCII text is unchanged.
+                v_snip := SUBSTRB(DBMS_LOB.SUBSTR(v_text, 8000, 1), 1, 8000);
             END IF;
 
             -- C1: summary row. The <tr> id is the link target for SQL_ID
@@ -1322,9 +1334,26 @@ BEGIN
                 DBMS_OUTPUT.PUT_LINE(']};</script>');
             END IF;
 
+            -- DBMS_XMLGEN.CONVERT raises ORA-19011 when the escaped text
+            -- outgrows its internal buffer (667 quotes are enough), which
+            -- under WHENEVER SQLERROR EXIT ends the whole report. Escaping
+            -- is per character, so 500-character pieces give the same
+            -- bytes and can not overflow (500 x 6 = 3000). The pieces stop
+            -- before the PUT_LINE limit of 32767 bytes -- only text that is
+            -- mostly quotes or angle brackets gets there -- and the note
+            -- below then reports the cut.
+            v_snip_esc   := NULL;
+            v_snip_shown := 0;
+            WHILE v_snip_shown < NVL(LENGTH(v_snip), 0) LOOP
+                v_snip_part := DBMS_XMLGEN.CONVERT(SUBSTR(v_snip, v_snip_shown + 1, 500));
+                EXIT WHEN NVL(LENGTHB(v_snip_esc), 0) + LENGTHB(v_snip_part) > 32000;
+                v_snip_esc   := v_snip_esc || v_snip_part;
+                v_snip_shown := LEAST(v_snip_shown + 500, LENGTH(v_snip));
+            END LOOP;
+
             DBMS_OUTPUT.PUT_LINE('<pre class="sql">'
-                || DBMS_XMLGEN.CONVERT(v_snip)
-                || CASE WHEN v_len > 8000
+                || v_snip_esc
+                || CASE WHEN v_len > v_snip_shown
                         THEN CHR(10) || '... (truncated, ' || v_len || ' chars total)'
                         ELSE '' END
                 || '</pre>');

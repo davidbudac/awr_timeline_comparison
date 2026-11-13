@@ -220,11 +220,14 @@ CROSS JOIN (
     -- view -- see that file for the full rationale. req_ts is the literal
     -- requested instant (the original, unmodified CASE); eff_ts is what
     -- every downstream section actually sees as target_end_resolved.
+    -- The request is kept only when a snapshot also exists in
+    -- [req_ts - 5 min, req_ts + 15 min], the window rule's end test
     SELECT
         rs.req_ts                                                  AS req_ts,
         CASE
             WHEN rs.last_snap_ts IS NULL THEN rs.req_ts
-            WHEN rs.req_ts - rs.last_snap_ts <= 15/1440 THEN rs.req_ts
+            WHEN rs.req_ts - rs.last_snap_ts <= 15/1440
+                 AND rs.edge_snaps > 0 THEN rs.req_ts
             ELSE TRUNC(rs.last_snap_ts, 'MI')
         END                                                        AS eff_ts
     FROM (
@@ -233,7 +236,12 @@ CROSS JOIN (
             (SELECT MAX(CAST(end_interval_time AS DATE))
              FROM   dba_hist_snapshot
              WHERE  CAST(end_interval_time AS DATE) <= req.req_ts + 5/1440)
-                                                                    AS last_snap_ts
+                                                                    AS last_snap_ts,
+            (SELECT COUNT(*)
+             FROM   dba_hist_snapshot
+             WHERE  CAST(end_interval_time AS DATE) >= req.req_ts - 5/1440
+               AND  CAST(end_interval_time AS DATE) <= req.req_ts + 15/1440)
+                                                                    AS edge_snaps
         FROM (
             SELECT
                 CASE

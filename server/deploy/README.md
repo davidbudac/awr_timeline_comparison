@@ -10,7 +10,7 @@ Files in this directory:
 
 | File | Purpose |
 |------|---------|
-| `Dockerfile` | The image: Oracle Linux 8 slim + Instant Client + bash + python3. |
+| `Dockerfile` | The image: Oracle Linux 8 slim + Instant Client + bash + Python 3.9. |
 | `docker-entrypoint.sh` | Container bootstrap (config seeding + bind-host fix). |
 | `docker-compose.yml` | One-command run with the right mounts and port binding. |
 | `awr-fleet-server.service` | systemd unit, for a non-Docker Linux host. |
@@ -196,6 +196,12 @@ restart mid-run is safe: on startup any run left `running` is flipped to
 `failed` ("server restarted mid-run"). Reports and history live on the host
 mounts, so they survive `down`/`up`.
 
+The image defines a `HEALTHCHECK` that requests `/healthz` on the
+container's loopback (standard library only, no curl); `docker ps` and
+`docker compose ps` show `healthy` once the server is up. The build itself
+fails if the image's `python3` is older than 3.9, so an interpreter the
+server cannot run never reaches a container.
+
 ---
 
 ## Troubleshooting
@@ -228,11 +234,12 @@ build`. Behind a proxy, pass it through with `--build-arg` /
 
 ## Image notes
 
-- Base: `oraclelinux:8-slim`. Instant Client (`basiclite` + `sqlplus`) is
+- Base: `oraclelinux:8-slim`. Instant Client (`basic` + `sqlplus`) is
   installed from Oracle's own yum repo — by building, you accept Oracle's
   Instant Client license.
 - `sqlplus` is located by glob (not a hardcoded version) and symlinked onto
   `PATH`; `sqlplus -V` runs at build time as a smoke test, so a broken client
   fails the build rather than the first fleet run.
-- The wrappers use bash + `timeout`/`stat`/`date` (coreutils), `find`
-  (findutils), `grep`, `sed` — all installed. No `awk` is used.
+- The wrappers use bash + `timeout`/`stat`/`date`/`du` (coreutils), `find`
+  (findutils), `grep`, `sed`, `awk`, and `tar` + `gzip` for the optional
+  `FLEET_ARCHIVE` — all installed.

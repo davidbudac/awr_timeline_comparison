@@ -133,11 +133,17 @@ def recover_stuck_running(data_dir):
 
 
 # ---------------------------------------------------------------------------
-# Summary parsing -- run_awr_fleet.sh:1053-1059
+# Summary parsing -- the summary loop at the end of do_assemble in
+# run_awr_fleet.sh prints one line per database, then the report path:
 #
-#   %-24s ERROR  rc=%-5s detail=%-7s %s
-#   %-24s OK     score=%-4s crit=%s warn=%s suppressed=%s topsql_n=%s topsql_pts=%s detail=%s
+#   %-24s ERROR  rc=%-5s took=%-7s detail=%-7s %s
+#   %-24s OK     score=%-4s crit=%s warn=%s suppressed=%s topsql_n=%s topsql_pts=%s took=%s detail=%s
 #   Report: reports/awr_fleet_<YYYYMMDDHHMM>_run<RUN_ID>/index.html
+#
+# took= is the wrapper's fmt_dur output: "7s" under a minute, "1m 05s" from
+# one minute up (it CONTAINS A SPACE, so it is matched lazily up to the
+# following " detail="), or "?" for an old workdir. The field is optional:
+# logs written before the wrapper added it still parse (took is then None).
 #
 # The report path is the per-run folder's index.html (current wrapper,
 # v0.4.0+ folder-per-run layout); _REPORT_RE also still matches the OLD flat
@@ -150,11 +156,14 @@ def recover_stuck_running(data_dir):
 # ---------------------------------------------------------------------------
 
 _ERROR_RE = re.compile(
-    r"^(?P<alias>\S+)\s+ERROR\s+rc=(?P<rc>\S+)\s+detail=(?P<detail>\S+)\s+(?P<reason>.*)$"
+    r"^(?P<alias>\S+)\s+ERROR\s+rc=(?P<rc>\S+)"
+    r"(?:\s+took=(?P<took>.*?))?"
+    r"\s+detail=(?P<detail>\S+)\s+(?P<reason>.*)$"
 )
 _OK_RE = re.compile(
     r"^(?P<alias>\S+)\s+OK\s+score=(?P<score>\S+)\s+crit=(?P<crit>\S+)\s+warn=(?P<warn>\S+)"
     r"\s+suppressed=(?P<suppressed>\S+)\s+topsql_n=(?P<topsql_n>\S+)\s+topsql_pts=(?P<topsql_pts>\S+)"
+    r"(?:\s+took=(?P<took>.*?))?"
     r"\s+detail=(?P<detail>\S+)$"
 )
 _REPORT_RE = re.compile(
@@ -185,6 +194,7 @@ def parse_fleet_summary(text):
                     "rc": m.group("rc"),
                     "detail": m.group("detail"),
                     "reason": m.group("reason"),
+                    "took": m.group("took"),
                 }
             )
             continue
@@ -201,6 +211,7 @@ def parse_fleet_summary(text):
                     "topsql_n": m.group("topsql_n"),
                     "topsql_pts": m.group("topsql_pts"),
                     "detail": m.group("detail"),
+                    "took": m.group("took"),
                 }
             )
             continue

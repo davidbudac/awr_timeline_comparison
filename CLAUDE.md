@@ -151,9 +151,11 @@ literal `7`**.
 ### `target_end` snap-to-snapshot-grid
 Both resolving SELECTs (`awr_trend.sql` and `awr_fleet_extract.sql` — a
 deliberate lockstep copy, keep them textually parallel) resolve the requested
-end via a `snp` inline view: if a snapshot exists within 15 min of the
-requested instant (mirroring `windows_cte`'s edge guard), the request is kept
-**verbatim** (byte-identical to pre-feature behavior); otherwise it snaps back
+end via a `snp` inline view: if the last snapshot is at most 15 min before the
+requested instant **and** a snapshot exists in `[request − 5 min, request + 15
+min]` (the exact range `windows_cte` accepts for the end snapshot), the request
+is kept **verbatim** (byte-identical for every request that already resolved
+valid windows); otherwise it snaps back
 to `TRUNC(last snapshot at or before request + 5 min tolerance, 'MI')`, so an
 off-grid request (e.g. 16:30 against on-the-hour snaps, or a request inside a
 snapshot gap) produces the last real window instead of an all-empty report. No
@@ -163,8 +165,10 @@ pre-snap instant; `00_params.sql` (verdict hero `p.snapnote`) and `sql/fleet/07_
 (drill panel) emit a "Requested end … snapped to last snapshot …" note **only
 when the two strings differ** — equal strings must emit nothing. The fleet
 drill command uses `~target_end_resolved`, so it echoes the snapped instant and
-reproduces the same window. Dense snap grids (≤15-min spacing) can never
-trigger the snap, by design.
+reproduces the same window. A dense snap grid (≤15-min spacing) triggers the
+snap only when the request falls 6–15 min after the last snapshot and the next
+one has not been taken yet (an `AUTO` run just after the hour); the window then
+ends on that last real snapshot instead of leaving the Current window empty.
 
 ## Core conventions (non-obvious, easy to break)
 
@@ -894,6 +898,14 @@ left padding and a lower specificity).
 - A `.copy-btn` is inline by default and absolutely positioned only inside
   `pre`/`.codewrap` — placing one elsewhere without that ancestor needs an
   explicit position context or it flows inline unexpectedly.
+- **`DBMS_XMLGEN.CONVERT` on a long `VARCHAR2` can raise ORA-19011**: the
+  escaped result must fit an internal buffer of about `max(4000, 4/3 x
+  input)` bytes, so 667 quotes fail while 8000 plain bytes pass. Fine for
+  names and snippets cut to a few hundred characters (400 x 6 = 2400);
+  anything longer is escaped in 500-character pieces, as 06 does for the
+  full SQL text (which also stops before `PUT_LINE`'s 32767 bytes). Bit a
+  168-window run on dbmint, 2026-11-13: a top statement with 216 quotes
+  ended the report with exit code 67.
 
 ### `echarts` var (offline / self-contained)
 Polymorphic on value: **empty** → public CDN (byte-identical to before, via
@@ -1568,7 +1580,9 @@ PL/SQL lib: band glyph, anchors, card vocabulary, `wg_*`, `tl_*`, `lib_ls`).
 s09's `fine` payloads are SYNTHETIC (seeded minute profiles spread each
 hour's samples by largest remainder, so window sums stay exact) and its SQL
 lines are sliced by anchor, not index. **When a section's markup/JS changes,
-re-port its twin in the same commit and regenerate**; generation is deterministic (two runs, same md5). `NODE_PATH=<any
+re-port its twin in the same commit and regenerate**; generation is deterministic (two runs, same md5), and identical across Python 3.12-3.14 because `helpers.mean_sd` (and the model's physical-reads total) use `math.fsum` (the built-in `sum()` of floats differs by an ulp between versions, which once reordered tied rows in CI).
+`tools/check.sh` (CI) fails when either generated page is stale
+(`gen_demo_report.py --check`, `gen_policy_doc.py --check`). `NODE_PATH=<any
 node_modules with playwright> node demo/verify_report.js <html> [shots/]` is the
 headless smoke test (bundled Chromium, else system Chrome): 0 console errors in
 3 views × light/dark, every in-page href resolves to exactly one id, every
@@ -1592,6 +1606,11 @@ the demo.
 
 ## Verification & testing
 
+- **`./tools/check.sh` is the one command** (CI runs exactly this on every
+  push to `main` and every PR): `./lint.sh`, `bash -n` on every tracked
+  `*.sh`, a strict parse of every tracked `*.py` (a `SyntaxWarning` fails)
+  and the server unit tests (`python3 -m unittest discover -s server/tests
+  -t .`). No DB needed, about 5 s.
 - **`./lint.sh` first** (also runs in CI): grep-based checks that encode the
   footguns below — bad `@@` include paths, flat template-target includes,
   stray `~word` substitutions (the tilde gotcha), `dbid = ~dbid` equality,

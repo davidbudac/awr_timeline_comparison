@@ -5,6 +5,156 @@ The report footer stamps the version that produced it
 top of `awr_trend.sql`. Bump it there when cutting a release and add an
 entry here. Dates are release dates.
 
+## Unreleased
+
+Changes on `main` since 1.6.1 (the footer still says v1.6.1 until the next
+release bumps `awr_version`).
+
+- **`SQLMON=N` skips the SQL Monitor section.** Env var `SQLMON` (wrapper)
+  / DEFINE `sqlmon` (SQL\*Plus), default `Y`; the configurator asks for it
+  too. A falsy value (`N`, `no`, `0`, `off`, `false`, `f`) swaps section 18
+  for a no-op stub and skips the verdict's SQL Monitor pills, so no query
+  reads `DBA_HIST_REPORTS` — its XML parsing can take minutes on a busy
+  database. The rail link is dropped and the About line notes the skip.
+  The `DBA_HIST_REPORTS` grant is still needed (the verdict's PL/SQL names
+  the view). The fleet report's SQL Monitor band is unaffected.
+- **Wrappers fail fast when `sqlplus` is not on `PATH`.** Both
+  `run_awr_trend.sh` and `run_awr_fleet.sh` check for a runnable `sqlplus`
+  before any database work and exit 2 with a hint based on
+  `ORACLE_HOME`, instead of every fleet extract dying with exit 127.
+  `--assemble`, `--help` and the configurator's print-only path are
+  unaffected.
+- **README grant list completed.** It now lists `DBA_HIST_SYS_TIME_MODEL`
+  (DB time / DB CPU, read on every run) and `DBA_HIST_REPORTS` (SQL
+  Monitor), which the report already read; a least-privilege user that
+  followed the old list got `ORA-00942`.
+
+### Report
+- **Long SQL text no longer aborts the report.** On an AL32UTF8 database
+  a long or multibyte (for example CJK-commented) top statement overflowed
+  a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in
+  section 06 a statement text with many quotes or angle brackets made
+  `DBMS_XMLGEN.CONVERT` raise `ORA-19011`. Either ended the whole run.
+  Section 06 now cuts the text by bytes and escapes it 500 characters at a
+  time, stopping before the 32767-byte line limit; a cut shows in the
+  existing "truncated, N chars total" note. Statements that rendered
+  before produce the same output.
+- **A changed parameter's window list no longer overflows.** The verdict's
+  configuration note lists the prior windows in which a changed parameter
+  differs from the Current window; with many compared windows that list
+  outgrew its buffer and section 17 raised `ORA-06502`, ending the run.
+  The buffers are now sized for hundreds of windows.
+- **`target_end` snaps back in one more case.** The requested end was kept
+  whenever the last snapshot was at most 15 minutes before it, but a
+  window's end snapshot must lie between 5 minutes before and 15 minutes
+  after the requested end. With the last snapshot 6 to 15 minutes before
+  the request and none in the next 15 minutes (hourly snapshots taken at
+  :45 to :54, or a request made before the next snapshot is taken), the
+  Current window was skipped, on a regular snapshot grid every window, and
+  the report came out empty. The end now snaps back to the last snapshot,
+  with the usual "snapped to last snapshot" note. Requests that already
+  resolved valid windows are unchanged; the fleet extract uses the same
+  rule.
+- **Day profile rates are cluster-wide on RAC.** The Day profile (section
+  16, and the fleet report's Day profile band, which shares its query)
+  divided each hour's deltas by the covered seconds of all instances added
+  together, so on an N-node RAC every rate was 1/N of the cluster rate and
+  the materiality floors could hide real findings. Coverage is now taken
+  per instance and the cluster delta divided by the longest one, as the
+  other sections do. Single-instance output is unchanged; not yet verified
+  on a RAC database.
+- **Names in chart data can no longer break the page.** An application-set
+  MODULE / ACTION, segment or file name containing `<` could end the
+  inline `<script>` that carries the chart data; `<` is now written as the
+  JSON escape `\u003c`, which the browser decodes back, so displayed names
+  are unchanged. The Top SQL, Segment I/O and File I/O chart tooltips
+  HTML-escape series names.
+
+### Wrappers and fleet
+- **Fractional `step` / `win_hours` no longer crash the bash side.** A
+  value such as `0.25` (15 minutes), which the wrappers accept, or one
+  with a leading zero reached bash integer arithmetic: the fleet wrapper
+  died while drawing the "Compared windows" strip after every extract had
+  finished, losing the whole report, and the single-DB configurator's span
+  hint aborted and fell through into the positional path. The fleet strip
+  now labels such windows `-<offset>x<step><unit>` and the configurator
+  prints the span as text. Whole-number values give the same output as
+  before.
+- **Connect strings are never echoed in clear.** A password containing `@`
+  is now masked in full (masking runs to the last `@`, in the fleet
+  wrapper and in the server). A `fleet.conf` line without `|` is reported
+  by line number without its content, and an invalid connect string is
+  shown masked (fleet) or as `<hidden>` (single-DB wrapper). At startup
+  the server deletes leftover `detail_*.conf` temp files, which hold a
+  verbatim `fleet.conf` line and were left behind by a server killed
+  mid-run.
+- **Stopping a fleet run stops its `sqlplus` sessions.** GNU `timeout` put
+  each `sqlplus` in a new process group, so Ctrl-C on `run_awr_fleet.sh`,
+  or the server killing the wrapper's process group, left every `sqlplus`
+  running until its own `FLEET_TIMEOUT` / `FLEET_DETAIL_TIMEOUT` expired.
+  The wrapper now passes `--foreground` when the installed `timeout`
+  supports it; a `timeout` without that flag behaves as before.
+
+### Server
+- **Retention now runs.** `[retention]` was implemented but never applied,
+  so a scheduled server filled `reports/` and `server/data/runs/` without
+  bound. It now runs at startup and after every run, so **the first start
+  after upgrading prunes old runs according to `[retention]`** (defaults
+  in `server/server.conf.example`: `keep_fleet_runs = 14`, `keep_days =
+  30`, `keep_run_records = 200`). The newest fleet run and each database's
+  newest successful detail report are always kept, even when a setting is
+  0. Detail reports older than `keep_days` are pruned too, a record
+  dropped by `keep_run_records` takes its report files with it (queued and
+  running records are skipped), `reports/` itself is never deleted, and
+  only artifacts the server generated and recorded are touched.
+- **Cross-origin POSTs are refused.** `POST /api/fleet/run` and `POST
+  /api/detail/run` return HTTP 403 when the request's `Origin` (or
+  `Referer`) names a different host than `Host` / `X-Forwarded-Host`, or
+  is `null`, so a web page open in the browser can no longer start runs.
+  Clients that send neither header (curl, scripts) are still accepted;
+  this is not authentication. A reverse proxy that rewrites `Host` must
+  pass `X-Forwarded-Host` (see `server/README.md`).
+- **Fleet run summaries are parsed again.** The wrapper's per-database
+  summary lines carry a `took=` field the server did not expect, so no
+  line matched: partial runs were recorded as successful, detail-report
+  regenerations failed and runs had no per-database rows. The field is
+  now parsed, and logs written without it still parse.
+- **Scheduler.** `catchup` now works in daily mode: a slot missed while
+  the server was down fires once at startup (or is skipped with `catchup
+  = false`); a first-ever start fires nothing. The schedule is anchored on
+  the planned fire time, so the 30-second tick no longer makes the cadence
+  drift, and a failed state write is reported on stderr instead of ending
+  the scheduler thread.
+- **Shutting down the server ends the running fleet run.** Before, the
+  wrapper outlived the server and a restarted server could start a second
+  fleet run next to it. The server now sends SIGTERM to the wrapper's
+  process group (SIGKILL after the timeout), starts no queued job while
+  stopping, and records the interrupted run with a "server was shutting
+  down" warning.
+- **Sort arrows in the web UI.** The table sort indicators showed a
+  control character instead of an arrow, and Python 3.12+ printed a
+  `SyntaxWarning` for the page's JavaScript; both fixed.
+
+### Docker
+- **The image builds again and the server starts in it.** Instant Client
+  is now the full `basic` package instead of `basiclite` (a larger image):
+  the current Instant Client repository's `sqlplus` requires `basic`, so
+  the image no longer built. Python 3.9 is installed from AppStream (the
+  base image's `python3` is 3.6, on which the server could not start), and
+  the build fails if `python3` is older than 3.9. `gawk`, `tar` and `gzip`
+  are installed (the wrappers use `awk`; `FLEET_ARCHIVE` uses `tar` +
+  `gzip`), and a `HEALTHCHECK` requests `/healthz`, so `docker ps` shows
+  `healthy` once the server is up.
+
+### Tooling
+- **`tools/check.sh` runs every database-free check.** `lint.sh`, `bash
+  -n` on every tracked `*.sh`, a strict parse of every tracked `*.py` (a
+  `SyntaxWarning` fails it), the server unit tests, and `--check` runs of
+  `demo/gen_demo_report.py` and `docs/gen_policy_doc.py`, which fail when
+  the committed demo report or policy page is stale. CI ("Checks",
+  formerly "Lint SQL sources") runs exactly this on every push to `main`
+  and every pull request, not only when SQL files change.
+
 ## 1.6.1 — 2026-09-27
 
 Two owner requests on the v1.6.0 report: highlight a wait class or event

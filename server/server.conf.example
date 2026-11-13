@@ -83,19 +83,29 @@ daily_at = 02:00
 # or a drift).
 every_hours = 24
 
-# If the server was down across a scheduled fire time, catchup=true fires
-# it once immediately at startup; catchup=false silently skips the missed
-# occurrence(s) and waits for the next one.
+# Applies to both modes (daily and every). At startup, if a scheduled fire
+# time passed while the server was down, catchup=true starts one run
+# immediately -- never more than one, however many were missed. A first-ever
+# start (no recorded fire yet) does not trigger it in daily mode.
+# catchup=false silently skips the missed occurrence(s) and waits for the
+# next scheduled time.
 catchup = true
 
 [retention]
 # Prune only what this server has a run record for -- it never touches
 # reports/ files it didn't itself generate and track.
 #
+# Applied automatically at server start and after every run.
+# Per-DB detail reports follow keep_days too, except that the newest
+# successful detail report of each database is always kept.
+# The most recent fleet run and the most recent record are never removed,
+# even when a value below is 0.
+#
 # Keep the newest N fleet runs' report/detail-report/workdir artifacts...
 keep_fleet_runs = 14
 # ...OR anything younger than this many days, whichever keeps more.
 keep_days = 30
 # Beyond this many total run records (any kind), old .json records and
-# .log files are deleted outright (not just their report artifacts).
+# .log files are deleted outright, and a record removed by this limit
+# takes its report files with it.
 keep_run_records = 200

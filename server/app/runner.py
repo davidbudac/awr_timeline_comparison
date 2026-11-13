@@ -18,7 +18,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import fleetconf, paths, records
+from . import fleetconf, paths, records, retention
 
 WRAPPER_ENV_VAR = "AWRSERVE_WRAPPER"
 DEFAULT_WRAPPER = "run_awr_fleet.sh"
@@ -58,22 +58,77 @@ class RunManager:
         self._queued_jobs = []
         self._worker_thread = None
         self._stop = threading.Event()
+        self._current_proc = None
 
     # ------------------------------------------------------------------
     # lifecycle
     # ------------------------------------------------------------------
     def start(self):
         paths.ensure_data_dirs(self.data_dir)
+        self._purge_stale_detail_confs()
         self.reports_dir.mkdir(parents=True, exist_ok=True)
         recovered = records.recover_stuck_running(self.data_dir)
+        self._prune()
         self._worker_thread = threading.Thread(
             target=self._worker_loop, name="awrserve-worker", daemon=True
         )
         self._worker_thread.start()
         return recovered
 
+    def _purge_stale_detail_confs(self):
+        """A detail run's temp conf holds a verbatim fleet.conf line (possibly
+        a password). The worker deletes it when the run ends; this removes
+        any left behind by a server that was killed mid-run. Safe at
+        startup: the single-instance lock guarantees no other worker is
+        using the directory."""
+        tmp_dir = self.data_dir / "tmp"
+        try:
+            leftovers = list(tmp_dir.glob("detail_*.conf"))
+        except OSError:
+            return 0
+        removed = 0
+        for p in leftovers:
+            try:
+                p.unlink()
+                removed += 1
+            except OSError:
+                pass
+        return removed
+
+    def _prune(self):
+        """Apply [retention] (see retention.prune_runs). Called at startup
+        and after every job, always from a point where no wrapper is
+        running. Never raises: housekeeping must not fail a run. The newest
+        fleet run and the newest record are always kept, whatever the
+        configured numbers."""
+        ret = getattr(self.config, "retention", None)
+        if ret is None:
+            return None
+        try:
+            return retention.prune_runs(
+                self.data_dir,
+                reports_dir=self.reports_dir,
+                keep_fleet_runs=max(1, ret.keep_fleet_runs),
+                keep_days=ret.keep_days,
+                keep_run_records=max(1, ret.keep_run_records),
+            )
+        except Exception:
+            return None
+
     def stop(self, timeout=5):
+        """Shut down: terminate a wrapper that is still running (its whole
+        process group -- the wrapper, its per-DB jobs and their sqlplus
+        children), then stop the worker. Without this the wrapper would
+        outlive the server and a restarted server could start a second run
+        next to it."""
         self._stop.set()
+        proc = self._current_proc
+        if proc is not None and proc.poll() is None:
+            self._killpg(proc.pid, "SIGTERM")
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                self._killpg(proc.pid, "SIGKILL")
         self._queue.put(None)
         if self._worker_thread:
             self._worker_thread.join(timeout=timeout)
@@ -242,6 +297,10 @@ class RunManager:
                 if self._stop.is_set():
                     return
                 continue
+            if self._stop.is_set():
+                # shutting down: do not start another wrapper
+                self._queue.task_done()
+                continue
             with self._lock:
                 if job in self._queued_jobs:
                     self._queued_jobs.remove(job)
@@ -250,6 +309,7 @@ class RunManager:
             try:
                 self._run_job(job)
             finally:
+                self._prune()
                 with self._lock:
                     self._current_job = None
                 self._queue.task_done()
@@ -299,17 +359,21 @@ class RunManager:
                 stdin=subprocess.DEVNULL,
                 start_new_session=True,
             )
+            self._current_proc = proc
             timeout_s = max_run_minutes * 60 if max_run_minutes else None
             try:
-                exit_code = proc.wait(timeout=timeout_s)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                self._killpg(proc.pid, "SIGTERM")
                 try:
-                    exit_code = proc.wait(timeout=30)
+                    exit_code = proc.wait(timeout=timeout_s)
                 except subprocess.TimeoutExpired:
-                    self._killpg(proc.pid, "SIGKILL")
-                    exit_code = proc.wait()
+                    timed_out = True
+                    self._killpg(proc.pid, "SIGTERM")
+                    try:
+                        exit_code = proc.wait(timeout=30)
+                    except subprocess.TimeoutExpired:
+                        self._killpg(proc.pid, "SIGKILL")
+                        exit_code = proc.wait()
+            finally:
+                self._current_proc = None
         return exit_code, timed_out
 
     @staticmethod
@@ -418,6 +482,8 @@ class RunManager:
             exit_code, timed_out = self._run_subprocess(
                 argv, env, str(log_path_), self.config.fleet.max_run_minutes
             )
+            if self._stop.is_set():
+                rec["warnings"].append("run terminated: the server was shutting down")
 
             try:
                 log_text = log_path_.read_text(encoding="utf-8", errors="replace")

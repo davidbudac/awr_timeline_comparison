@@ -248,16 +248,20 @@ looks hung. `debug=Y` prints one timestamped line per section to
 You'll see output like:
 ```
 [awr_trend 08:38:42.369] section 00 params (header + nav)
-[awr_trend 08:38:42.594] section 01 windows (aligned begin/end snap pairs)
-[awr_trend 08:38:42.600] section 02 load_profile (SYSSTAT deltas)
-[awr_trend 08:38:44.188] section 03 sysmetric (SYSMETRIC_SUMMARY averages)
+[awr_trend 08:38:42.594] section 10 db_time_summary (DB time over the full span)
+[awr_trend 08:38:42.600] section 08 overview (hero strip; recomputes z-scores)
+[awr_trend 08:38:44.188] section 09 ash_timeline (ASH stacked-area; often the slowest)
 …
 [awr_trend 08:38:45.142] all sections rendered; writing HTML epilogue
 ```
 
+Sections run in the report's page order (00, 10, 08, 09, 07, 01, …), not
+in numeric order.
+
 Diff two consecutive timestamps to see which section is your slowest.
 Any case-insensitive truthy value enables debug (`Y`, `YES`, `1`, `ON`,
-`TRUE`, `T`); everything else (including the default `N`) disables it.
+`TRUE`, `T`); everything else disables it. Debug is **on by default**
+(`Y`); pass `N` as the 10th argument to silence it.
 
 ### Tee into a log so you keep the timings
 ```bash

@@ -222,6 +222,45 @@ ROUTES = [
 ]
 
 
+def _same_origin(headers):
+    """Request-authenticity check for state-changing (POST) routes.
+
+    A browser attaches Origin (or at least Referer) to a cross-site POST and
+    a page on another site cannot forge either, so a POST is accepted when:
+      - it carries neither header (curl / scripts -- not driven by a web
+        page), or
+      - the header's host[:port] equals the Host the request was sent to
+        (or X-Forwarded-Host, when a reverse proxy rewrote Host).
+    'Origin: null' (an opaque origin) is refused. This is not
+    authentication -- see server/README.md, "Data & security".
+    """
+    if not headers:
+        return True
+    source = headers.get("Origin")
+    if source is None:
+        source = headers.get("Referer")
+    if source is None:
+        return True
+    source = source.strip()
+    if not source or source.lower() == "null":
+        return False
+    try:
+        netloc = urllib.parse.urlsplit(source).netloc.lower()
+    except ValueError:
+        return False
+    if not netloc:
+        return False
+    allowed = set()
+    for name in ("Host", "X-Forwarded-Host"):
+        value = headers.get(name)
+        if value:
+            for part in value.split(","):
+                part = part.strip().lower()
+                if part:
+                    allowed.add(part)
+    return netloc in allowed
+
+
 def dispatch(ctx, method, raw_path, headers, body):
     """headers: a mapping supporting .get(name) case-insensitively (an
     http.client.HTTPMessage works; a plain dict with a 'Content-Type' key
@@ -238,6 +277,8 @@ def dispatch(ctx, method, raw_path, headers, body):
             continue
         matched_path = True
         if rt_method == method:
+            if method == "POST" and not _same_origin(headers):
+                return text_response("cross-origin request refused\n", status=403)
             try:
                 return handler(ctx, m, query, content_type, body)
             except Exception as exc:  # pragma: no cover -- last-resort safety net
