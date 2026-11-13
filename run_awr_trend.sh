@@ -708,16 +708,24 @@ SQLBLK
 print_span_hint() {
     local mult=168
     case "$STEP_UNIT" in h) mult=1;; d) mult=24;; w) mult=168;; esac
-    local step_hours=$(( STEP * mult ))
-    local span_hours=$(( WEEKS_BACK * step_hours + WIN_HOURS ))
-    local span_days=$(( span_hours / 24 ))
-    local rem_hours=$(( span_hours % 24 ))
-    local span_txt="${span_hours} h"
-    [[ "$span_days" -gt 0 ]] && span_txt="${span_days} d ${rem_hours} h (${span_hours} h)"
     echo "Windows:   current window + ${WEEKS_BACK} prior, spaced ${STEP}${STEP_UNIT} apart."
-    echo "Span:      reaches back ~${span_txt}; AWR retention must cover it."
-    [[ "$span_days" -ge 8 ]] && \
-        echo "           ${DIM}(default 19c retention is 8 days — check dba_hist_wr_control.)${RST}"
+    # Bash arithmetic is integer-only: a fractional step / win_hours (0.25 =
+    # 15 min, both accepted by v_posdec) or a leading zero must never reach
+    # $(( )) -- the error would abort the dispatch case and fall through into
+    # the positional path.
+    if [[ "$STEP" =~ ^[1-9][0-9]*$ && "$WIN_HOURS" =~ ^[1-9][0-9]*$ ]]; then
+        local step_hours=$(( STEP * mult ))
+        local span_hours=$(( WEEKS_BACK * step_hours + WIN_HOURS ))
+        local span_days=$(( span_hours / 24 ))
+        local rem_hours=$(( span_hours % 24 ))
+        local span_txt="${span_hours} h"
+        [[ "$span_days" -gt 0 ]] && span_txt="${span_days} d ${rem_hours} h (${span_hours} h)"
+        echo "Span:      reaches back ~${span_txt}; AWR retention must cover it."
+        [[ "$span_days" -ge 8 ]] && \
+            echo "           ${DIM}(default 19c retention is 8 days — check dba_hist_wr_control.)${RST}"
+    else
+        echo "Span:      reaches back ${WEEKS_BACK} x ${STEP}${STEP_UNIT} + ${WIN_HOURS} h; AWR retention must cover it."
+    fi
     return 0
 }
 

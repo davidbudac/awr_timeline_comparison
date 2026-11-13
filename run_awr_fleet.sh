@@ -1353,8 +1353,15 @@ FALLBACK_CHROME
                 if [[ "$woff2" -eq 0 ]]; then
                     label='current'
                 else
-                    wk=$(( woff2 * STEP ))
-                    label="-${wk}${STEP_UNIT}"
+                    # STEP may be fractional (0.25 = 15 min) or carry a
+                    # leading zero; bash arithmetic is integer-only, and an
+                    # error here would lose the whole assembled report.
+                    if [[ "$STEP" =~ ^[1-9][0-9]*$ ]]; then
+                        wk=$(( woff2 * STEP ))
+                        label="-${wk}${STEP_UNIT}"
+                    else
+                        label="-${woff2}x${STEP}${STEP_UNIT}"
+                    fi
                 fi
                 datepart="${beginv:0:10}"
                 if [[ "${endv:0:10}" == "$datepart" ]]; then
