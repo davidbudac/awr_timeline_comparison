@@ -80,6 +80,18 @@ class RouteMatrixTest(WebappTestBase):
         self.assertIn("text/html", r.content_type)
         self.assertIn(b"AWR Fleet Server", r.body)
 
+    def test_home_page_css_and_js_escapes_survive(self):
+        r = self.dispatch("GET", "/")
+        body = r.body.decode("utf-8")
+        # CSS unicode escapes for the sort arrows must reach the browser intact
+        self.assertIn('content:" \\2191"', body)
+        self.assertIn('content:" \\2193"', body)
+        # the numeric-sort regexes must keep their backslashes
+        self.assertIn("/[,%\\s]/g", body)
+        self.assertIn("/^-?\\d+(\\.\\d+)?$/", body)
+        # no control characters leaked into the page
+        self.assertNotIn("\x11", body)
+
     def test_runs_page(self):
         r = self.dispatch("GET", "/runs")
         self.assertEqual(r.status, 200)
