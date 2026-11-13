@@ -58,6 +58,7 @@ class RunManager:
         self._queued_jobs = []
         self._worker_thread = None
         self._stop = threading.Event()
+        self._current_proc = None
 
     # ------------------------------------------------------------------
     # lifecycle
@@ -115,7 +116,19 @@ class RunManager:
             return None
 
     def stop(self, timeout=5):
+        """Shut down: terminate a wrapper that is still running (its whole
+        process group -- the wrapper, its per-DB jobs and their sqlplus
+        children), then stop the worker. Without this the wrapper would
+        outlive the server and a restarted server could start a second run
+        next to it."""
         self._stop.set()
+        proc = self._current_proc
+        if proc is not None and proc.poll() is None:
+            self._killpg(proc.pid, "SIGTERM")
+            try:
+                proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                self._killpg(proc.pid, "SIGKILL")
         self._queue.put(None)
         if self._worker_thread:
             self._worker_thread.join(timeout=timeout)
@@ -284,6 +297,10 @@ class RunManager:
                 if self._stop.is_set():
                     return
                 continue
+            if self._stop.is_set():
+                # shutting down: do not start another wrapper
+                self._queue.task_done()
+                continue
             with self._lock:
                 if job in self._queued_jobs:
                     self._queued_jobs.remove(job)
@@ -342,17 +359,21 @@ class RunManager:
                 stdin=subprocess.DEVNULL,
                 start_new_session=True,
             )
+            self._current_proc = proc
             timeout_s = max_run_minutes * 60 if max_run_minutes else None
             try:
-                exit_code = proc.wait(timeout=timeout_s)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                self._killpg(proc.pid, "SIGTERM")
                 try:
-                    exit_code = proc.wait(timeout=30)
+                    exit_code = proc.wait(timeout=timeout_s)
                 except subprocess.TimeoutExpired:
-                    self._killpg(proc.pid, "SIGKILL")
-                    exit_code = proc.wait()
+                    timed_out = True
+                    self._killpg(proc.pid, "SIGTERM")
+                    try:
+                        exit_code = proc.wait(timeout=30)
+                    except subprocess.TimeoutExpired:
+                        self._killpg(proc.pid, "SIGKILL")
+                        exit_code = proc.wait()
+            finally:
+                self._current_proc = None
         return exit_code, timed_out
 
     @staticmethod
@@ -461,6 +482,8 @@ class RunManager:
             exit_code, timed_out = self._run_subprocess(
                 argv, env, str(log_path_), self.config.fleet.max_run_minutes
             )
+            if self._stop.is_set():
+                rec["warnings"].append("run terminated: the server was shutting down")
 
             try:
                 log_text = log_path_.read_text(encoding="utf-8", errors="replace")
