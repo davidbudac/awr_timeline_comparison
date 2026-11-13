@@ -25,12 +25,14 @@
 --              the pair was built from, so a missing sysstat row can never
 --              silently widen a delta across a gap)
 --   dp_cells   one cell per (stat, day_off 0..N, hour_slot 0..23): the pair
---              lands in the cell that contains its midpoint; the cell value
---              is the per-second rate SUM(delta)/SUM(span), summed across
---              instances (additive counters, like section 02).
---              COVERAGE GUARD: a cell whose pairs cover < 30 min of the hour
---              is NULL (2-h snap intervals, snapshot gaps, restart-dropped
---              pairs) -- never a misleading 0.
+--              lands in the cell that contains its midpoint.  dp_cells_inst
+--              sums each instance's deltas and covered seconds; the cell
+--              value is the cross-instance delta divided by the longest
+--              per-instance coverage (additive counters summed across
+--              instances, like section 02 -- the seconds are not summed).
+--              COVERAGE GUARD: a cell in which no instance covers at least
+--              30 min of the hour is NULL (2-h snap intervals, snapshot
+--              gaps, restart-dropped pairs) -- never a misleading 0.
 --   dp_grid    dense 9 x 24 x (N+1) frame so every slot exists
 --   dp_pivot   per (stat, hour): cur (day 0), mu / sd / n over days 1..N,
 --              and a positional per-day CSV (oldest day first, current last)
@@ -120,6 +122,7 @@ dp_deltas AS (
 ),
 dp_cells_raw AS (
     SELECT d.stat_name,
+           d.instance_number,
            FLOOR(p.t_end - pr.mid_dt)                               AS day_off,
            FLOOR((p.t_end - pr.mid_dt) * 24)
              - 24 * FLOOR(p.t_end - pr.mid_dt)                      AS hour_slot,
@@ -135,11 +138,25 @@ dp_cells_raw AS (
     WHERE  pr.mid_dt <  p.t_end
       AND  pr.mid_dt >= p.t_end - (p.n_days + 1)
 ),
+-- Per instance first: an hour usually holds several snapshot pairs, and
+-- each instance covers its own seconds.
+dp_cells_inst AS (
+    SELECT stat_name, day_off, hour_slot, instance_number,
+           SUM(delta)                                               AS delta,
+           SUM(span_sec)                                            AS span_sec
+    FROM   dp_cells_raw
+    GROUP BY stat_name, day_off, hour_slot, instance_number
+),
+-- Across instances the deltas add up, the time does not: divide by the
+-- longest per-instance coverage (the rule sections 00/02/07/08 use with
+-- MAX(dur_sec)).  Summing the seconds of N instances made every RAC rate
+-- 1/N of the cluster rate.  Single instance: identical to the old
+-- SUM(delta) / SUM(span_sec).
 dp_cells AS (
     SELECT stat_name, day_off, hour_slot,
-           CASE WHEN SUM(span_sec) >= 1800
-                THEN SUM(delta) / SUM(span_sec) END                 AS rate
-    FROM   dp_cells_raw
+           CASE WHEN MAX(span_sec) >= 1800
+                THEN SUM(delta) / MAX(span_sec) END                 AS rate
+    FROM   dp_cells_inst
     GROUP BY stat_name, day_off, hour_slot
 ),
 dp_grid AS (
