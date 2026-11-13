@@ -7,6 +7,7 @@ minimum %-delta, value floor).  This page is generated from it so the
 documentation can never drift from the code:
 
     python3 docs/gen_policy_doc.py          # rewrites docs/metric_policy.html
+    python3 docs/gen_policy_doc.py --check  # exit 1 if the page is stale
 
 Docs tooling only (like demo/): nothing under sql/ depends on it.
 """
@@ -275,7 +276,8 @@ def table(rows, first_col="Metric (unit)"):
             f'<th>Example / note</th></tr></thead><tbody>' + "\n".join(rows) + "</tbody></table></div>")
 
 
-def main() -> None:
+def main(argv=None) -> int:
+    check = "--check" in (argv or [])
     pol = h._POLICY
     notes = read_notes()
     load = [(k[1], v) for k, v in pol.items() if k[0] == "LOAD"]
@@ -303,6 +305,18 @@ def main() -> None:
                 f"<td>{yes}</td><td>{no}</td><td><div>{ex}</div>{('<div class=why>' + esc(note) + '</div>') if note else ''}</td></tr>")
 
     gen = _dt.datetime.now().strftime("%Y-%m-%d")
+    existing = None
+    if check:
+        # The page stamps its generation date; compare as if generated on
+        # the date already in the committed file.
+        try:
+            with open(OUT, encoding="utf-8") as fh:
+                existing = fh.read()
+        except OSError:
+            existing = None
+        m = re.search(r"Generated (\d{4}-\d{2}-\d{2}) from", existing or "")
+        if m:
+            gen = m.group(1)
     parts = [f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Scoring policy</title>{HEAD_EXTRA}<style>{CSS}</style></head><body>{TOP_BAR}<main>
@@ -381,10 +395,19 @@ The policy file is the single source of truth; edit a line there and re-run the 
 <footer>AWR timeline comparison &middot; scoring policy reference &middot; regenerate with <code>python3 docs/gen_policy_doc.py</code></footer>
 </main></body></html>
 """)
+    text = "\n".join(parts)
+    if check:
+        if existing != text:
+            print(f"STALE: {OUT} is not what the generator produces now. "
+                  "Run: python3 docs/gen_policy_doc.py  and commit the result.")
+            return 1
+        print(f"up to date: {OUT}")
+        return 0
     with open(OUT, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(parts))
+        fh.write(text)
     print(f"wrote {OUT} ({len(load)} load, {len(metric)} metric, {len(wclass)} wait classes, {len(wevent)} event overrides)")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main(sys.argv[1:]))

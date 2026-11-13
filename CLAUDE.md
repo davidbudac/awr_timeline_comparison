@@ -1572,7 +1572,9 @@ PL/SQL lib: band glyph, anchors, card vocabulary, `wg_*`, `tl_*`, `lib_ls`).
 s09's `fine` payloads are SYNTHETIC (seeded minute profiles spread each
 hour's samples by largest remainder, so window sums stay exact) and its SQL
 lines are sliced by anchor, not index. **When a section's markup/JS changes,
-re-port its twin in the same commit and regenerate**; generation is deterministic (two runs, same md5). `NODE_PATH=<any
+re-port its twin in the same commit and regenerate**; generation is deterministic (two runs, same md5).
+`tools/check.sh` (CI) fails when either generated page is stale
+(`gen_demo_report.py --check`, `gen_policy_doc.py --check`). `NODE_PATH=<any
 node_modules with playwright> node demo/verify_report.js <html> [shots/]` is the
 headless smoke test (bundled Chromium, else system Chrome): 0 console errors in
 3 views × light/dark, every in-page href resolves to exactly one id, every
