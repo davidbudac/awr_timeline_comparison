@@ -6,6 +6,8 @@ if _SERVER_DIR not in _sys.path:
     _sys.path.insert(0, _SERVER_DIR)
 
 import json
+import re
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -110,6 +112,51 @@ class ParseFleetSummaryTest(unittest.TestCase):
             records.detail_report_filename("prod_east", "12345", report_path=report_path),
             "awr_fleet_detail_prod_east_run12345.html",
         )
+
+
+class WrapperSummaryContractTest(unittest.TestCase):
+    """The parser must understand whatever the REAL run_awr_fleet.sh prints.
+    The format strings are read from the wrapper itself, so a change there
+    that the parser cannot read fails this test instead of production."""
+
+    WRAPPER = Path(__file__).resolve().parents[2] / "run_awr_fleet.sh"
+
+    def _formats(self):
+        src = self.WRAPPER.read_text(encoding="utf-8")
+        err = re.findall(r"printf '([^']*ERROR  rc=[^']*)'", src)
+        ok = re.findall(r"printf '([^']*OK     score=[^']*)'", src)
+        self.assertEqual(len(err), 1, "expected exactly one ERROR summary printf in the wrapper")
+        self.assertEqual(len(ok), 1, "expected exactly one OK summary printf in the wrapper")
+        return err[0], ok[0]
+
+    @staticmethod
+    def _render(fmt, *args):
+        out = subprocess.run(
+            ["bash", "-c", 'printf "$1" "${@:2}"', "_", fmt] + list(args),
+            stdout=subprocess.PIPE,
+            check=True,
+        ).stdout
+        return out.decode("utf-8")
+
+    def test_real_wrapper_lines_parse(self):
+        err_fmt, ok_fmt = self._formats()
+        for took in ("7s", "1m 05s", "?"):
+            text = (
+                self._render(err_fmt, "deadbox", "1", took, "skipped", "ORA-12541: TNS:no listener")
+                + self._render(ok_fmt, "prod_east", "16", "1", "2", "0", "3", "25", took, "ok")
+                + "Report: reports/awr_fleet_202607221200_run20260722120005123/index.html\n"
+            )
+            r = records.parse_fleet_summary(text)
+            self.assertEqual(len(r["databases"]), 2, "took=%r: %r" % (took, text))
+            self.assertEqual(r["databases"][0]["status"], "ERROR")
+            self.assertEqual(r["databases"][0]["rc"], "1")
+            self.assertEqual(r["databases"][0]["detail"], "skipped")
+            self.assertEqual(r["databases"][0]["reason"], "ORA-12541: TNS:no listener")
+            self.assertEqual(r["databases"][0]["took"], took)
+            self.assertEqual(r["databases"][1]["status"], "OK")
+            self.assertEqual(r["databases"][1]["score"], "16")
+            self.assertEqual(r["databases"][1]["detail"], "ok")
+            self.assertEqual(r["databases"][1]["took"], took)
 
 
 class RecordPersistenceTest(unittest.TestCase):
