@@ -6,7 +6,7 @@
 > — unless a reviewer dispatched you and told you they maintain the index.
 >
 > **Drift check (run first)**:
-> `git diff --stat 8d5103d..HEAD -- sql/17_narrative.sql`
+> `git diff --stat 5d7361b..HEAD -- sql/17_narrative.sql`
 > must be empty. If it is not, compare the "Current state" excerpts with the
 > live file; a mismatch is a STOP condition.
 
@@ -18,7 +18,7 @@
 - **Depends on**: none (found right behind plan 018's defect: the same
   168-window run that used to stop in section 06 now reaches section 17)
 - **Category**: bug
-- **Planned at**: commit `852649d`, 2026-11-13
+- **Planned at**: commit `50c7044`, 2026-11-13
 
 ## Why this matters
 

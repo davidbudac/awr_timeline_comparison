@@ -6,7 +6,7 @@
 > — unless a reviewer dispatched you and told you they maintain the index.
 >
 > **Drift check (run first)**:
-> `git diff --stat 8d5103d..HEAD -- sql/06_top_sql.sql`
+> `git diff --stat 5d7361b..HEAD -- sql/06_top_sql.sql`
 > must be empty. If it is not, compare the "Current state" excerpts with the
 > live file; a mismatch is a STOP condition.
 
@@ -17,7 +17,7 @@
 - **Risk**: LOW (output is byte-identical for every statement that renders today)
 - **Depends on**: 006 (already executed: it changed the `v_snip` assignment quoted below)
 - **Category**: bug
-- **Planned at**: commit `8d5103d`, 2026-11-13. Found by plan 017's shape-C run
+- **Planned at**: commit `5d7361b`, 2026-11-13. Found by plan 017's shape-C run
   (see `plans/017-results.md`, "Defect found"); reproduced on the tree before
   plans 001-017 as well (exit code 67), so it is not a regression.
 

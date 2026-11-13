@@ -1,6 +1,6 @@
 # Results of plan 017 — ASH pruning and per-SQL lookups
 
-- Investigated at commit: `8d5103d`
+- Investigated at commit: `5d7361b`
 - Date: 2026-11-13
 - Database: Oracle 19.27 EE, single instance, CDB root, one DBID, open
   read-write (primary). AWR retention 35 days, snapshot interval 15 min,

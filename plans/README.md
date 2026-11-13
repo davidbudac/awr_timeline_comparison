@@ -13,31 +13,31 @@ audit, or another plan's text to be executed.
 
 | Plan | Title | Audit # | Priority | Effort | Risk | Depends on | Status |
 |------|-------|---------|----------|--------|------|------------|--------|
-| [001](001-server-parse-took-field.md) | Server parses the wrapper's `took=` summary lines again | 1 | P1 | S | LOW | — | DONE (`f4b79cc`) |
-| [002](002-server-views-raw-strings.md) | `views.py`: no invalid escapes, sort arrows render | 10 | P1 | S | LOW | — | DONE (`0fe1feb`) |
-| [003](003-ci-run-all-db-free-checks.md) | CI runs lint + shell syntax + strict Python parse + server tests | 2 | P1 | S | LOW | 001, 002 | DONE (`b948abe`) |
-| [004](004-escape-db-names-in-script-and-tooltips.md) | DB-sourced names can not break out of inline `<script>` JSON / tooltips | 3 | P1 | S | LOW | — | DONE (`cd62a26`); DB run OK |
-| [005](005-wrappers-fractional-step.md) | Fractional `step` / `win_hours` no longer breaks assembler or configurator | 5 | P1 | S | LOW | — | DONE (`4910c39`); DB run OK |
-| [006](006-sql-text-multibyte-overflow.md) | Multibyte SQL text can not abort the report (06 and 11) | 6 | P1 | S | LOW | — | DONE (`63c3458`); DB run OK for ASCII text, multibyte branch not exercised |
-| [007](007-target-end-snap-rule-matches-window-rule.md) | `target_end` snaps whenever the window rule would reject the Current window | 4 | P1 | S | LOW-MED | — | DONE (`7f7be45`); DB run OK |
-| [008](008-stop-password-leaks-in-errors-and-tmp.md) | Passwords never appear in errors, masked displays or leftover temp files | 8 | P2 | S | LOW | — | DONE (`08f5d0e`) |
-| [009](009-server-reject-cross-origin-posts.md) | Server refuses cross-origin POSTs | 13 | P2 | S | LOW | — | DONE (`79525f7`) |
-| [010](010-server-wire-retention.md) | `[retention]` is applied, safely | 7 | P2 | M | MED | 001 | DONE (`b81118f`, `2886f4f`, `e939a20`, `72c12b1`) |
-| [011](011-server-scheduler-catchup-drift.md) | Scheduler: daily catch-up, no drift, survives a failed state write | 9 | P2 | S | LOW | — | DONE (`5e4970d`) |
-| [012](012-docs-grants-and-stale-facts.md) | Docs: missing grants, wrong debug default, stale versions, changelog | 11 | P2 | S | LOW | — | DONE (`2a7270c`) |
-| [013](013-day-profile-rac-rate.md) | Day profile shows the cluster-wide rate on RAC | 12 | P2 | S | MED | — | DONE (`82d4de2`); DB run OK on single instance, RAC not exercised |
-| [014](014-generators-check-mode.md) | Stale demo / policy page fails the check (`--check`) | 14 | P3 | S | LOW | 003 | DONE (`6703004`) |
-| [015](015-stop-means-stop.md) | Stopping a run stops its `sqlplus` sessions (timeout, Ctrl-C, shutdown) | 15 | P3 | M | MED | — | DONE (`8ac678a`, `abad360`); DB run OK (SIGTERM to the process group) |
-| [016](016-docker-image-python-and-health.md) | Docker image: guaranteed Python ≥ 3.9, HEALTHCHECK | 16 | P3 | S | MED | — | DONE (`8d5103d`); image built and healthy; Instant Client `basic` (step 1b) |
-| [017](017-investigate-ash-pruning-and-per-sql-lookups.md) | Investigation: ASH partition pruning and per-SQL history lookups | 17 | P3 | S–M | LOW | DB access | DONE (`f8e53a7`): ASH: cannot tell on this database; lookups: not worth changing. See [017-results.md](017-results.md) |
-| [018](018-top-sql-text-escape-overflow.md) | A top statement with many quotes can not abort the report (06, ORA-19011) | found by 017 | P1 | S | LOW | 006 | DONE (`852649d`); DB run OK |
-| [019](019-narrative-param-window-list-overflow.md) | A parameter that differs in many windows can not abort the report (17, ORA-06502) | found by 018's DB run | P1 | S | LOW | — | DONE (`499e702`); DB run OK |
+| [001](001-server-parse-took-field.md) | Server parses the wrapper's `took=` summary lines again | 1 | P1 | S | LOW | — | DONE (`2bc3a79`) |
+| [002](002-server-views-raw-strings.md) | `views.py`: no invalid escapes, sort arrows render | 10 | P1 | S | LOW | — | DONE (`65e5cd8`) |
+| [003](003-ci-run-all-db-free-checks.md) | CI runs lint + shell syntax + strict Python parse + server tests | 2 | P1 | S | LOW | 001, 002 | DONE (`de68884`) |
+| [004](004-escape-db-names-in-script-and-tooltips.md) | DB-sourced names can not break out of inline `<script>` JSON / tooltips | 3 | P1 | S | LOW | — | DONE (`020d799`); DB run OK |
+| [005](005-wrappers-fractional-step.md) | Fractional `step` / `win_hours` no longer breaks assembler or configurator | 5 | P1 | S | LOW | — | DONE (`0d6f0b8`); DB run OK |
+| [006](006-sql-text-multibyte-overflow.md) | Multibyte SQL text can not abort the report (06 and 11) | 6 | P1 | S | LOW | — | DONE (`754d795`); DB run OK for ASCII text, multibyte branch not exercised |
+| [007](007-target-end-snap-rule-matches-window-rule.md) | `target_end` snaps whenever the window rule would reject the Current window | 4 | P1 | S | LOW-MED | — | DONE (`f05d9ce`); DB run OK |
+| [008](008-stop-password-leaks-in-errors-and-tmp.md) | Passwords never appear in errors, masked displays or leftover temp files | 8 | P2 | S | LOW | — | DONE (`a99c674`) |
+| [009](009-server-reject-cross-origin-posts.md) | Server refuses cross-origin POSTs | 13 | P2 | S | LOW | — | DONE (`0e43410`) |
+| [010](010-server-wire-retention.md) | `[retention]` is applied, safely | 7 | P2 | M | MED | 001 | DONE (`c8ea90d`, `64713c8`, `0456e75`, `c756fa2`) |
+| [011](011-server-scheduler-catchup-drift.md) | Scheduler: daily catch-up, no drift, survives a failed state write | 9 | P2 | S | LOW | — | DONE (`f2a70f0`) |
+| [012](012-docs-grants-and-stale-facts.md) | Docs: missing grants, wrong debug default, stale versions, changelog | 11 | P2 | S | LOW | — | DONE (`bd8298c`) |
+| [013](013-day-profile-rac-rate.md) | Day profile shows the cluster-wide rate on RAC | 12 | P2 | S | MED | — | DONE (`507caca`); DB run OK on single instance, RAC not exercised |
+| [014](014-generators-check-mode.md) | Stale demo / policy page fails the check (`--check`) | 14 | P3 | S | LOW | 003 | DONE (`29a7ed1`) |
+| [015](015-stop-means-stop.md) | Stopping a run stops its `sqlplus` sessions (timeout, Ctrl-C, shutdown) | 15 | P3 | M | MED | — | DONE (`9809164`, `1cbf72f`); DB run OK (SIGTERM to the process group) |
+| [016](016-docker-image-python-and-health.md) | Docker image: guaranteed Python ≥ 3.9, HEALTHCHECK | 16 | P3 | S | MED | — | DONE (`5d7361b`); image built and healthy; Instant Client `basic` (step 1b) |
+| [017](017-investigate-ash-pruning-and-per-sql-lookups.md) | Investigation: ASH partition pruning and per-SQL history lookups | 17 | P3 | S–M | LOW | DB access | DONE (`b649dc6`): ASH: cannot tell on this database; lookups: not worth changing. See [017-results.md](017-results.md) |
+| [018](018-top-sql-text-escape-overflow.md) | A top statement with many quotes can not abort the report (06, ORA-19011) | found by 017 | P1 | S | LOW | 006 | DONE (`50c7044`); DB run OK |
+| [019](019-narrative-param-window-list-overflow.md) | A parameter that differs in many windows can not abort the report (17, ORA-06502) | found by 018's DB run | P1 | S | LOW | — | DONE (`06c0f57`); DB run OK |
 
 "Audit #" is the finding's number in the audit table shown to the owner.
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale — finding fixed independently or approach abandoned)
 
-## Execution log (2026-11-13, branch `feat/implement-audit-plans`)
+## Execution log (2026-11-13, branch `feat/audit-improvements`)
 
 All plans were executed in order on one branch (not on per-plan `advisor/`
 branches), each by a separate executor, and each commit was reviewed against
