@@ -151,9 +151,11 @@ literal `7`**.
 ### `target_end` snap-to-snapshot-grid
 Both resolving SELECTs (`awr_trend.sql` and `awr_fleet_extract.sql` — a
 deliberate lockstep copy, keep them textually parallel) resolve the requested
-end via a `snp` inline view: if a snapshot exists within 15 min of the
-requested instant (mirroring `windows_cte`'s edge guard), the request is kept
-**verbatim** (byte-identical to pre-feature behavior); otherwise it snaps back
+end via a `snp` inline view: if the last snapshot is at most 15 min before the
+requested instant **and** a snapshot exists in `[request − 5 min, request + 15
+min]` (the exact range `windows_cte` accepts for the end snapshot), the request
+is kept **verbatim** (byte-identical for every request that already resolved
+valid windows); otherwise it snaps back
 to `TRUNC(last snapshot at or before request + 5 min tolerance, 'MI')`, so an
 off-grid request (e.g. 16:30 against on-the-hour snaps, or a request inside a
 snapshot gap) produces the last real window instead of an all-empty report. No
@@ -163,8 +165,10 @@ pre-snap instant; `00_params.sql` (verdict hero `p.snapnote`) and `sql/fleet/07_
 (drill panel) emit a "Requested end … snapped to last snapshot …" note **only
 when the two strings differ** — equal strings must emit nothing. The fleet
 drill command uses `~target_end_resolved`, so it echoes the snapped instant and
-reproduces the same window. Dense snap grids (≤15-min spacing) can never
-trigger the snap, by design.
+reproduces the same window. A dense snap grid (≤15-min spacing) triggers the
+snap only when the request falls 6–15 min after the last snapshot and the next
+one has not been taken yet (an `AUTO` run just after the hour); the window then
+ends on that last real snapshot instead of leaving the Current window empty.
 
 ## Core conventions (non-obvious, easy to break)
 
