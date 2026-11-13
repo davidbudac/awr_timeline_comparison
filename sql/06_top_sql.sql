@@ -743,10 +743,13 @@ BEGIN
         -- module/action are app-set free text; escape backslash, quote, and
         -- stray CR/LF so the JS string literal and one-line PUT_LINE both stay
         -- well-formed (schema names are tame, but route them through the same
-        -- escape for uniformity).
+        -- escape for uniformity). A less-than sign becomes the JSON escape
+        -- \u003c so the value can not end the script element (same rule as
+        -- sql/lib/json_escape.plsql)
         v_new_entry := '{"name":"'
-            || REPLACE(REPLACE(REPLACE(REPLACE(sc.grp_value,
-                   '\', '\\'), '"', '\"'), CHR(13), ' '), CHR(10), ' ')
+            || REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(sc.grp_value,
+                   '\', '\\'), '"', '\"'), CHR(13), ' '), CHR(10), ' '),
+                   '<', '\u003c')
             || '","cur":' || NVL(TO_CHAR(sc.cur_rnk), 'null')
             -- Tag system-ness only for the schema breakdown (module/action are
             -- app-set free text, not schema-derived). Informational since
@@ -889,7 +892,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('    var top3=rows.map(function(s,i){return i;}).sort(function(a,b){return (lastVal(rows[b].vals)==null?-Infinity:lastVal(rows[b].vals))-(lastVal(rows[a].vals)==null?-Infinity:lastVal(rows[a].vals));}).slice(0,3);');
         DBMS_OUTPUT.PUT_LINE('    chart.setOption({');
         DBMS_OUTPUT.PUT_LINE('      labelLayout:{moveOverlap:"shiftY"},');
-        DBMS_OUTPUT.PUT_LINE('      tooltip:{trigger:"axis",axisPointer:{type:"line"},formatter:function(ps){var hdr="<b>"+ps[0].axisValue+"</b>";var rs=ps.filter(function(p){return p.value!=null;}).sort(function(a,b){return (b.value||0)-(a.value||0);}).map(function(p){return p.marker+" "+p.seriesName+": <b>"+fmt(p.value)+" "+d.unit+"</b>";}).join("<br/>");return hdr+"<br/>"+rs;}},');
+        DBMS_OUTPUT.PUT_LINE('      tooltip:{trigger:"axis",axisPointer:{type:"line"},formatter:function(ps){var hdr="<b>"+ps[0].axisValue+"</b>";var rs=ps.filter(function(p){return p.value!=null;}).sort(function(a,b){return (b.value||0)-(a.value||0);}).map(function(p){return p.marker+" "+String(p.seriesName).replace(/&/g,"&amp;").replace(/</g,"&lt;")+": <b>"+fmt(p.value)+" "+d.unit+"</b>";}).join("<br/>");return hdr+"<br/>"+rs;}},');
         DBMS_OUTPUT.PUT_LINE('      legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},');
         DBMS_OUTPUT.PUT_LINE('      grid:{left:50,right:128,top:10,bottom:44,containLabel:true},');
         DBMS_OUTPUT.PUT_LINE('      xAxis:{type:"category",data:weeks,axisLabel:{color:fg,fontWeight:600},splitLine:{show:true,lineStyle:{color:gr}}},');

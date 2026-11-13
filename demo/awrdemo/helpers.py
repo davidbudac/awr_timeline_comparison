@@ -529,7 +529,8 @@ def json_escape(s) -> str:
     if s is None:
         return ""
     return (str(s).replace("\\", "\\\\").replace('"', '\\"')
-            .replace("\r", " ").replace("\n", " "))
+            .replace("\r", " ").replace("\n", " ")
+            .replace("<", "\\u003c"))
 
 
 # ---------------------------------------------------------------------
