@@ -18,10 +18,15 @@
 -- never changes the row score / sort order (10*crit + 3*warn + top-SQL
 -- points stay as documented) -- it is a drill-down aid, not a ranking input.
 --
--- Payload shape (all numbers NLS-pinned, NULL cells as the literal null):
+-- Payload shape (all numbers NLS-pinned):
 --   window.FLEET_PROFILE["<alias>"] = {ndays:N, hours:["HH:MM",...24],
 --       stats:["label",...], z:[[24]...], cur:[[24]...], mu:[[24]...],
---       n:[[24]...], pct:[[24]...], sev:[["bucket",...24]...]}
+--       n:[[24]...], pct:[[24]...], sk:["bucket",...], sev:["<24 chars>",...]}
+-- Compact form, same values: numbers carry no trailing zeros
+-- (still up to 6 decimals), a NULL cell is an EMPTY array slot ([,,1.5] --
+-- it reads back as undefined, which the renderer treats like null) and sev
+-- is one string per stat, one base-36 digit per hour indexing the bucket
+-- names in sk.  A payload without sk is read as the old array-of-names form.
 -- Row order = stat order (dp_targets.ord); hours chronological (oldest
 -- first, the hour ending at target_end last).  Labels are JS-string escaped
 -- (backslash + double quote), same as 02_ash.sql.
@@ -44,6 +49,10 @@ DECLARE
     v_warn     NUMBER := 0;
     v_has_cur  BOOLEAN := FALSE;   -- any current-day cell populated?
     v_bucket   VARCHAR2(40);
+    TYPE idx_t IS TABLE OF PLS_INTEGER INDEX BY VARCHAR2(40);
+    v_skidx    idx_t;              -- bucket name -> position in sk
+    v_sk       VARCHAR2(4000);     -- sk array body
+    v_nsk      PLS_INTEGER := 0;
 
     -- Shared per-metric policy + scoring rule (read-only lib reuse): each
     -- cell is re-bucketed through policy_bucket() so a drop in a cost-type
@@ -53,8 +62,8 @@ DECLARE
 
     FUNCTION jn(p NUMBER) RETURN VARCHAR2 IS
     BEGIN
-        IF p IS NULL THEN RETURN 'null'; END IF;
-        RETURN TO_CHAR(p, 'FM99999999990D000000', 'NLS_NUMERIC_CHARACTERS=''.,''');
+        IF p IS NULL THEN RETURN ''; END IF;   -- empty slot = undefined in JS
+        RETURN RTRIM(TO_CHAR(p, 'FM99999999990D999999', 'NLS_NUMERIC_CHARACTERS=''.,'''), '.');
     END;
     FUNCTION js(p VARCHAR2) RETURN VARCHAR2 IS
     BEGIN
@@ -99,7 +108,13 @@ BEGIN
         v_n(v_nstat)   := v_n(v_nstat)   || ',' || NVL(c.n, 0);
         v_pct(v_nstat) := v_pct(v_nstat) || ',' || jn(ROUND(c.pct_delta, 1));
         v_bucket := policy_bucket('LOAD', c.stat_name, NULL, c.cur_val, c.mu, c.sd, c.n);
-        v_sev(v_nstat) := v_sev(v_nstat) || ',' || js(v_bucket);
+        IF NOT v_skidx.EXISTS(v_bucket) THEN
+            v_nsk := v_nsk + 1;            -- 1-based here, 0-based digit below
+            v_skidx(v_bucket) := v_nsk;
+            v_sk := v_sk || ',' || js(v_bucket);
+        END IF;
+        v_sev(v_nstat) := v_sev(v_nstat)
+            || SUBSTR('0123456789abcdefghijklmnopqrstuvwxyz', v_skidx(v_bucket), 1);
         IF v_bucket = 'large' THEN v_crit := v_crit + 1;
         ELSIF v_bucket = 'moderate' THEN v_warn := v_warn + 1;
         END IF;
@@ -133,7 +148,11 @@ BEGIN
     emit_matrix('mu',  v_mu);  DBMS_OUTPUT.PUT_LINE(',');
     emit_matrix('n',   v_n);   DBMS_OUTPUT.PUT_LINE(',');
     emit_matrix('pct', v_pct); DBMS_OUTPUT.PUT_LINE(',');
-    emit_matrix('sev', v_sev);
+    DBMS_OUTPUT.PUT_LINE('sk:[' || SUBSTR(v_sk, 2) || '],sev:[');
+    FOR o IN 1 .. v_nstat LOOP
+        DBMS_OUTPUT.PUT_LINE(CASE WHEN o > 1 THEN ',' ELSE '' END || '"' || v_sev(o) || '"');
+    END LOOP;
+    DBMS_OUTPUT.PUT_LINE(']');
     DBMS_OUTPUT.PUT_LINE('};</script>');
 END;
 /

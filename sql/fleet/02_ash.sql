@@ -30,6 +30,13 @@
 -- ASH persists 1-in-10 ten-second samples, so a fully-busy session
 -- contributes 360 rows/hour -> AAS = sample_count / (360 * bucket_hours).
 --
+-- Compact payload: {t0, bh, k, classes, vals}.  vals holds the
+-- INTEGER sample count per bucket, not the AAS; k = 360 * bucket_hours is the
+-- divisor (AAS = count / k) and a run of n >= 2 empty buckets is written as
+-- the single token -n.  The renderer's ashDec() expands it once per payload
+-- (a payload without k is taken as plain AAS values).  Exact, where the old
+-- form rounded the AAS to 4 decimals, and about a third of the bytes.
+--
 -- The <script> blocks are emitted INSIDE the detail row (opened by
 -- 01_row.sql, before the headline strip added by 03_headline.sql), which is
 -- valid: a <script> is legal inside a <div> inside a <td>.  Render order does
@@ -62,7 +69,6 @@ DECLARE
     v_ck      VARCHAR2(200);
     v_wc      VARCHAR2(64);
     v_classes VARCHAR2(4000) := '';
-    v_vals    VARCHAR2(8000);
     v_first   BOOLEAN;
     v_n       NUMBER;
     -- event-level structures (second payload: top-14 events + rolled "Other")
@@ -83,11 +89,42 @@ DECLARE
     v_best    VARCHAR2(64);
     v_bestval NUMBER;
     v_evclasses VARCHAR2(4000) := '';
-    v_evvals  VARCHAR2(8000);
+    v_row     VARCHAR2(32767);              -- one series' token list
+    v_zr      PLS_INTEGER := 0;             -- pending run of empty buckets
+    v_kdiv    VARCHAR2(40);                 -- 360 * bucket_hours, JS literal
+
+    -- compact tokens: an integer sample count, a zero run of n >= 2 as -n
+    PROCEDURE tok_flush IS
+    BEGIN
+        IF v_zr = 1 THEN
+            v_row := v_row || ',0';
+        ELSIF v_zr > 1 THEN
+            v_row := v_row || ',-' || TO_CHAR(v_zr);
+        END IF;
+        v_zr := 0;
+    END;
+    PROCEDURE tok_add(p_n NUMBER) IS
+    BEGIN
+        IF NVL(p_n, 0) = 0 THEN
+            v_zr := v_zr + 1;
+        ELSE
+            tok_flush;
+            v_row := v_row || ',' || TO_CHAR(p_n);
+        END IF;
+    END;
+    PROCEDURE tok_put(p_first BOOLEAN) IS
+    BEGIN
+        tok_flush;
+        DBMS_OUTPUT.PUT_LINE(CASE WHEN p_first THEN '' ELSE ',' END
+            || '[' || SUBSTR(v_row, 2) || ']');
+        v_row := '';
+    END;
 BEGIN
     v_span_h := ~weeks_back * TO_NUMBER('~step_hours') + ~win_hours;
     v_bh     := GREATEST(v_span_h / 168, 0.25);
     v_nb     := CEIL(v_span_h / v_bh - 1e-9);
+
+    v_kdiv   := RTRIM(TO_CHAR(360 * v_bh, 'FM9999990D999999', 'NLS_NUMERIC_CHARACTERS=''.,'''), '.');
 
     SELECT CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
                - v_span_h / 24
@@ -140,7 +177,7 @@ BEGIN
         END IF;
     END LOOP;
 
-    -- ===== by-class payload (window.FLEET_ASH) -- unchanged output =====
+    -- ===== by-class payload (window.FLEET_ASH) =====
     -- classes list (JS string array body), iterated in stable key order
     v_wc := v_cls.FIRST;
     v_first := TRUE;
@@ -156,14 +193,13 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('window.FLEET_ASH["' || '~fleet_alias' || '"]={t0:"'
         || TO_CHAR(v_range_start, 'YYYY-MM-DD HH24:MI') || '",bh:'
         || TO_CHAR(v_bh, 'FM99990D999999', 'NLS_NUMERIC_CHARACTERS=''.,''')
-        || ',classes:[' || v_classes || '],vals:[');
+        || ',k:' || v_kdiv || ',classes:[' || v_classes || '],vals:[');
 
-    -- per-class v_nb-value AAS arrays, iterated in the SAME key order as
+    -- per-class v_nb-bucket sample-count arrays, iterated in the SAME key order as
     -- classes so vals[k] lines up with classes[k]
     v_wc := v_cls.FIRST;
     v_first := TRUE;
     WHILE v_wc IS NOT NULL LOOP
-        v_vals := '';
         FOR b IN 0 .. v_nb - 1 LOOP
             v_ck := TO_CHAR(b) || '|' || v_wc;
             IF v_cells.EXISTS(v_ck) THEN
@@ -171,11 +207,9 @@ BEGIN
             ELSE
                 v_n := 0;
             END IF;
-            v_vals := v_vals
-                || CASE WHEN b = 0 THEN '' ELSE ',' END
-                || TO_CHAR(v_n / (360 * v_bh), 'FM99999990D0000', 'NLS_NUMERIC_CHARACTERS=''.,''');
+            tok_add(v_n);
         END LOOP;
-        DBMS_OUTPUT.PUT_LINE(CASE WHEN v_first THEN '' ELSE ',' END || '[' || v_vals || ']');
+        tok_put(v_first);
         v_first := FALSE;
         v_wc := v_cls.NEXT(v_wc);
     END LOOP;
@@ -244,13 +278,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('window.FLEET_ASH_EV["' || '~fleet_alias' || '"]={t0:"'
         || TO_CHAR(v_range_start, 'YYYY-MM-DD HH24:MI') || '",bh:'
         || TO_CHAR(v_bh, 'FM99990D999999', 'NLS_NUMERIC_CHARACTERS=''.,''')
-        || ',classes:[' || v_evclasses || '],vals:[');
+        || ',k:' || v_kdiv || ',classes:[' || v_evclasses || '],vals:[');
 
-    -- per-event AAS arrays in the SAME order as the event names (top first),
+    -- per-event sample-count arrays in the SAME order as the event names (top first),
     -- then the rolled "Other events" row last
     v_first := TRUE;
     FOR i IN 1 .. v_top.COUNT LOOP
-        v_evvals := '';
         FOR b IN 0 .. v_nb - 1 LOOP
             v_eck := TO_CHAR(b) || '|' || v_top(i);
             IF v_ecells.EXISTS(v_eck) THEN
@@ -258,26 +291,21 @@ BEGIN
             ELSE
                 v_n := 0;
             END IF;
-            v_evvals := v_evvals
-                || CASE WHEN b = 0 THEN '' ELSE ',' END
-                || TO_CHAR(v_n / (360 * v_bh), 'FM99999990D0000', 'NLS_NUMERIC_CHARACTERS=''.,''');
+            tok_add(v_n);
         END LOOP;
-        DBMS_OUTPUT.PUT_LINE(CASE WHEN v_first THEN '' ELSE ',' END || '[' || v_evvals || ']');
+        tok_put(v_first);
         v_first := FALSE;
     END LOOP;
     IF v_has_other THEN
-        v_evvals := '';
         FOR b IN 0 .. v_nb - 1 LOOP
             IF v_other.EXISTS(b) THEN
                 v_n := v_other(b);
             ELSE
                 v_n := 0;
             END IF;
-            v_evvals := v_evvals
-                || CASE WHEN b = 0 THEN '' ELSE ',' END
-                || TO_CHAR(v_n / (360 * v_bh), 'FM99999990D0000', 'NLS_NUMERIC_CHARACTERS=''.,''');
+            tok_add(v_n);
         END LOOP;
-        DBMS_OUTPUT.PUT_LINE(CASE WHEN v_first THEN '' ELSE ',' END || '[' || v_evvals || ']');
+        tok_put(v_first);
         v_first := FALSE;
     END IF;
 

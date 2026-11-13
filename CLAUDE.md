@@ -1342,10 +1342,18 @@ cramped).
   GREATEST(span/168, 0.25) — at most 168 buckets, 15-min floor — from
   `DBA_HIST_ACTIVE_SESS_HISTORY` (`dbid IN (~dbid_list)`, all instances, ON-CPU
   → 'CPU', Idle excluded, AAS = samples/(360 × bucket_hours)), emitted once per
-  DB as a `window.FLEET_ASH[<alias>]={t0,bh,classes,vals}` JS payload
+  DB as a `window.FLEET_ASH[<alias>]={t0,bh,k,classes,vals}` JS payload
   (NLS-pinned numbers; `bh` = real bucket hours, consumed by the renderer for
   marker positioning and x-label cadence — HH:MM labels for spans ≤48h, MM-DD
-  HH:MM beyond). The renderer draws it into `data-ash-of` divs — ribbon mode in
+  HH:MM beyond). **Compact form (file-size work, 2026-11-13):** `vals` holds
+  INTEGER sample counts, a run of n ≥ 2 empty buckets is the single token
+  `-n`, `k` = 360 × bucket hours; the renderer's `ashDec()` expands a payload
+  once to plain AAS arrays (no `k` = old AAS form). Same for `FLEET_ASH_EV`.
+  `FLEET_PROFILE` is compact too: no trailing zeros, a NULL cell is an empty
+  array slot (`[,,1.5]`, reads as undefined), `sev` is one string per stat
+  with a base-36 digit per hour indexing `sk` (the bucket names). dbmint, 3
+  DBs, 7 daily windows + 7 profile days: 287 KB → 200 KB, payloads 124 KB →
+  37 KB, decoded values / SVG / tooltips identical to the old form. The renderer draws it into `data-ash-of` divs — ribbon mode in
   the dbrow, timeline mode in the detailrow. The timeline renders at its
   container's real width (lazily on first row-expand, since the hidden
   detailrow measures 0; a debounced resize listener re-renders on width
@@ -1357,7 +1365,7 @@ cramped).
 - **Per-event ASH timeline (second detail band)** — the SAME single ASH scan
   in `02_ash.sql` additionally groups by event (ON-CPU → 'CPU') and emits a
   second payload `window.FLEET_ASH_EV[<alias>]` with the identical
-  `{t0,bh,classes,vals}` shape: the top 14 events by total samples (tie-break
+  `{t0,bh,k,classes,vals}` shape: the top 14 events by total samples (tie-break
   name asc; CPU ranks like any series), biggest-total first = bottom of the
   stack, every remaining event rolled into a synthetic `"Other events"` series
   emitted LAST (omitted entirely when ≤14 distinct events). The class sums in
