@@ -323,5 +323,79 @@ class StaleDetailConfCleanupTest(unittest.TestCase):
             rm.stop(timeout=5)
 
 
+class RetentionWiringTest(unittest.TestCase):
+    """[retention] must actually be applied: at startup and after each job."""
+
+    def _env(self, keep_fleet_runs, keep_days=0):
+        cwd = Path(tempfile.mkdtemp())
+        (cwd / "reports").mkdir()
+        data_dir = Path(tempfile.mkdtemp())
+        conf_path = cwd / "fleet.conf"
+        conf_path.write_text("good1|/@x\n", encoding="utf-8")
+        cfg = make_config(conf_path)
+        cfg.retention = config_mod.RetentionConfig(
+            keep_fleet_runs=keep_fleet_runs, keep_days=keep_days, keep_run_records=200
+        )
+        return cwd, data_dir, cfg
+
+    def _old_fleet_record(self, cwd, data_dir, run_id, wrapper_id, age_days):
+        folder = cwd / "reports" / ("awr_fleet_202601010000_run%s" % wrapper_id)
+        folder.mkdir()
+        (folder / "index.html").write_text("<html></html>", encoding="utf-8")
+        rec = records.new_record(run_id, records.KIND_FLEET, "schedule")
+        rec["state"] = records.STATE_SUCCESS
+        rec["started_at"] = time.time() - age_days * 86400
+        rec["queued_at"] = rec["started_at"]
+        rec["report_path"] = "reports/%s/index.html" % folder.name
+        records.save_record(data_dir, rec)
+        return folder
+
+    def test_prune_runs_at_startup(self):
+        cwd, data_dir, cfg = self._env(keep_fleet_runs=1)
+        old = self._old_fleet_record(cwd, data_dir, "old", "1", age_days=20)
+        newer = self._old_fleet_record(cwd, data_dir, "newer", "2", age_days=10)
+        rm = runner.RunManager(cfg, data_dir=data_dir, cwd=cwd, wrapper_path=FAKE_WRAPPER)
+        rm.start()
+        try:
+            self.assertFalse(old.exists())
+            self.assertTrue(newer.exists())
+        finally:
+            rm.stop(timeout=5)
+
+    def test_prune_runs_after_each_job_and_keeps_the_new_report(self):
+        cwd, data_dir, cfg = self._env(keep_fleet_runs=1)
+        rm = runner.RunManager(cfg, data_dir=data_dir, cwd=cwd, wrapper_path=FAKE_WRAPPER)
+        rm.start()
+        try:
+            old = self._old_fleet_record(cwd, data_dir, "old", "1", age_days=20)
+            rec = rm.enqueue_fleet("manual")
+            self.assertTrue(wait_until(lambda: not old.exists()), "old run folder was not pruned after the job")
+            done = records.load_record(data_dir, rec["run_id"])
+            self.assertEqual(done["state"], records.STATE_SUCCESS)
+            self.assertTrue((cwd / done["report_path"]).is_file(), "the run that just finished must keep its report")
+        finally:
+            rm.stop(timeout=5)
+
+    def test_zero_keep_values_never_delete_the_newest_run(self):
+        cwd, data_dir, cfg = self._env(keep_fleet_runs=0, keep_days=0)
+        cfg.retention.keep_run_records = 0
+        rm = runner.RunManager(cfg, data_dir=data_dir, cwd=cwd, wrapper_path=FAKE_WRAPPER)
+        rm.start()
+        try:
+            rec = rm.enqueue_fleet("manual")
+            self.assertTrue(
+                wait_until(
+                    lambda: (records.load_record(data_dir, rec["run_id"]) or {}).get("state")
+                    in records.TERMINAL_STATES
+                )
+            )
+            rm._queue.join()
+            done = records.load_record(data_dir, rec["run_id"])
+            self.assertIsNotNone(done)
+            self.assertTrue((cwd / done["report_path"]).is_file())
+        finally:
+            rm.stop(timeout=5)
+
+
 if __name__ == "__main__":
     unittest.main()

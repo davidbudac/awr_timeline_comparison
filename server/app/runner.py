@@ -18,7 +18,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import fleetconf, paths, records
+from . import fleetconf, paths, records, retention
 
 WRAPPER_ENV_VAR = "AWRSERVE_WRAPPER"
 DEFAULT_WRAPPER = "run_awr_fleet.sh"
@@ -67,6 +67,7 @@ class RunManager:
         self._purge_stale_detail_confs()
         self.reports_dir.mkdir(parents=True, exist_ok=True)
         recovered = records.recover_stuck_running(self.data_dir)
+        self._prune()
         self._worker_thread = threading.Thread(
             target=self._worker_loop, name="awrserve-worker", daemon=True
         )
@@ -92,6 +93,26 @@ class RunManager:
             except OSError:
                 pass
         return removed
+
+    def _prune(self):
+        """Apply [retention] (see retention.prune_runs). Called at startup
+        and after every job, always from a point where no wrapper is
+        running. Never raises: housekeeping must not fail a run. The newest
+        fleet run and the newest record are always kept, whatever the
+        configured numbers."""
+        ret = getattr(self.config, "retention", None)
+        if ret is None:
+            return None
+        try:
+            return retention.prune_runs(
+                self.data_dir,
+                reports_dir=self.reports_dir,
+                keep_fleet_runs=max(1, ret.keep_fleet_runs),
+                keep_days=ret.keep_days,
+                keep_run_records=max(1, ret.keep_run_records),
+            )
+        except Exception:
+            return None
 
     def stop(self, timeout=5):
         self._stop.set()
@@ -271,6 +292,7 @@ class RunManager:
             try:
                 self._run_job(job)
             finally:
+                self._prune()
                 with self._lock:
                     self._current_job = None
                 self._queue.task_done()
