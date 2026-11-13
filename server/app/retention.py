@@ -62,6 +62,10 @@ def _recorded_artifact_paths(rec, reports_dir):
             resolved.relative_to(base)
         except (ValueError, OSError):
             continue
+        if resolved == base:
+            # "reports/", "reports/." or a workdir of "." resolve to the
+            # reports directory itself -- never a deletable artifact.
+            continue
         parent = resolved.parent
         if (
             resolved.is_file()

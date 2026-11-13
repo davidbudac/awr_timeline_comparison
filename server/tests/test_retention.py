@@ -74,15 +74,33 @@ class PruneRunsTest(unittest.TestCase):
         self.assertFalse((self.reports_dir / "tracked.html").exists())
 
     def test_path_traversal_in_record_is_ignored(self):
+        # A real file OUTSIDE reports_dir that the recorded path points at.
+        outside = Path(tempfile.mkdtemp(dir=str(self.reports_dir.parent)))
+        victim = outside / "victim.html"
+        victim.write_text("do not delete", encoding="utf-8")
         rec = records.new_record("evil", records.KIND_FLEET, "manual")
         rec["state"] = records.STATE_SUCCESS
         rec["started_at"] = self.now - 100 * 86400
-        rec["report_path"] = "reports/../../etc/passwd"
+        rec["report_path"] = "reports/../%s/victim.html" % outside.name
         records.save_record(self.data_dir, rec)
-        # must not raise, and must not touch anything outside reports_dir
-        outside_target = self.reports_dir.parent / "etc_passwd_sentinel"
         retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, keep_fleet_runs=0, keep_days=0, keep_run_records=999)
-        self.assertFalse(outside_target.exists())
+        self.assertTrue(victim.exists(), "a path escaping reports_dir must never be deleted")
+
+    def test_reports_dir_itself_is_never_deleted(self):
+        stray = self.reports_dir / "adhoc_cli_report.html"
+        stray.write_text("<html></html>", encoding="utf-8")
+        for i, (report_path, workdir) in enumerate(
+            [("reports/", None), ("reports/.", None), ("reports", None), (None, "."), (None, "")]
+        ):
+            rec = records.new_record("base%d" % i, records.KIND_FLEET, "manual")
+            rec["state"] = records.STATE_SUCCESS
+            rec["started_at"] = self.now - 100 * 86400
+            rec["report_path"] = report_path
+            rec["workdir"] = workdir
+            records.save_record(self.data_dir, rec)
+        retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, keep_fleet_runs=0, keep_days=0, keep_run_records=999)
+        self.assertTrue(self.reports_dir.is_dir())
+        self.assertTrue(stray.exists(), "reports/ itself must never be treated as an artifact")
 
     def test_thins_old_records_and_logs_beyond_keep_run_records(self):
         for i in range(5):
@@ -159,16 +177,21 @@ class PruneRunsTest(unittest.TestCase):
         self.assertTrue((folder / "detail_prod_east.html").exists())
 
     def test_run_folder_never_escapes_reports_dir(self):
-        # Same path-traversal guard as the flat-file case, exercised against
-        # a report_path claiming to live inside a folder.
+        # A run-folder-shaped directory OUTSIDE reports_dir: the "delete the
+        # whole run folder" expansion must not follow the path out.
+        outside = Path(tempfile.mkdtemp(dir=str(self.reports_dir.parent)))
+        folder = outside / "awr_fleet_1_run1"
+        folder.mkdir()
+        victim = folder / "index.html"
+        victim.write_text("do not delete", encoding="utf-8")
         rec = records.new_record("evil2", records.KIND_FLEET, "manual")
         rec["state"] = records.STATE_SUCCESS
         rec["started_at"] = self.now - 100 * 86400
-        rec["report_path"] = "reports/awr_fleet_1_run1/../../../etc/index.html"
+        rec["report_path"] = "reports/../%s/awr_fleet_1_run1/index.html" % outside.name
         records.save_record(self.data_dir, rec)
-        outside_target = self.reports_dir.parent / "etc_passwd_sentinel"
         retention.prune_runs(self.data_dir, reports_dir=self.reports_dir, keep_fleet_runs=0, keep_days=0, keep_run_records=999)
-        self.assertFalse(outside_target.exists())
+        self.assertTrue(victim.exists())
+        self.assertTrue(folder.is_dir())
 
     def test_run_folder_idempotent_second_pass_is_a_noop(self):
         self._make_fleet_record_with_run_folder("r0", age_days=100, detail_aliases=["prod_east"])
