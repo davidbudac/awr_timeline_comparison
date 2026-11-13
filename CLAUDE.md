@@ -1592,6 +1592,11 @@ the demo.
 
 ## Verification & testing
 
+- **`./tools/check.sh` is the one command** (CI runs exactly this on every
+  push to `main` and every PR): `./lint.sh`, `bash -n` on every tracked
+  `*.sh`, a strict parse of every tracked `*.py` (a `SyntaxWarning` fails)
+  and the server unit tests (`python3 -m unittest discover -s server/tests
+  -t .`). No DB needed, about 5 s.
 - **`./lint.sh` first** (also runs in CI): grep-based checks that encode the
   footguns below — bad `@@` include paths, flat template-target includes,
   stray `~word` substitutions (the tilde gotcha), `dbid = ~dbid` equality,
