@@ -144,6 +144,34 @@ first pull if you were not told that is acceptable.
   **refuted** for the Python version. Skip step 2's package change but keep
   its build-time assertion, and continue.
 
+### Step 1b (reviewer addendum, 2026-11-13): Instant Client `basic`, not `basiclite`
+
+Found by the first execution attempt: the image does not build today, with
+or without this plan's edits. Oracle's Instant Client 21 repository now
+ships `oracle-instantclient-sqlplus-21.24`, which requires
+`oracle-instantclient-basic >= 21.24`; `basic` conflicts with `basiclite`,
+so the recipe's `basiclite` + `sqlplus` pair has no solution
+(`microdnf`: "requires oracle-instantclient-basic >= 21.24.0.0.0, but none
+of the providers can be installed"). This is a deterministic dependency
+change, not a network problem, so it is no longer the "pre-existing Instant
+Client step" STOP condition below.
+
+Reviewer's decision: install `oracle-instantclient-basic` instead of
+`oracle-instantclient-basiclite` (a functional superset: the same client
+plus every language / character-set file; the image grows by roughly
+150 MB). Do NOT pin an older Instant Client version and do not change the
+base image.
+
+In `server/deploy/Dockerfile`: replace the package
+`oracle-instantclient-basiclite` with `oracle-instantclient-basic`, and
+change "(basiclite + sqlplus)" in the header comment to "(basic +
+sqlplus)". In `server/deploy/README.md` (the "Base:" bullet): change
+`` `basiclite` + `sqlplus` `` to `` `basic` + `sqlplus` ``.
+
+**Verify**: the build in step 2 gets past the Instant Client layer and
+`sqlplus -V` prints a version in the build log. If the depsolve still
+fails with `basic` → STOP and report the exact `microdnf` output.
+
 ### Step 2: Install Python 3.9 explicitly and assert it at build time
 
 In `server/deploy/Dockerfile`:

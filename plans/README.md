@@ -13,27 +13,97 @@ audit, or another plan's text to be executed.
 
 | Plan | Title | Audit # | Priority | Effort | Risk | Depends on | Status |
 |------|-------|---------|----------|--------|------|------------|--------|
-| [001](001-server-parse-took-field.md) | Server parses the wrapper's `took=` summary lines again | 1 | P1 | S | LOW | — | TODO |
-| [002](002-server-views-raw-strings.md) | `views.py`: no invalid escapes, sort arrows render | 10 | P1 | S | LOW | — | TODO |
-| [003](003-ci-run-all-db-free-checks.md) | CI runs lint + shell syntax + strict Python parse + server tests | 2 | P1 | S | LOW | 001, 002 | TODO |
-| [004](004-escape-db-names-in-script-and-tooltips.md) | DB-sourced names can not break out of inline `<script>` JSON / tooltips | 3 | P1 | S | LOW | — | TODO |
-| [005](005-wrappers-fractional-step.md) | Fractional `step` / `win_hours` no longer breaks assembler or configurator | 5 | P1 | S | LOW | — | TODO |
-| [006](006-sql-text-multibyte-overflow.md) | Multibyte SQL text can not abort the report (06 and 11) | 6 | P1 | S | LOW | — | TODO |
-| [007](007-target-end-snap-rule-matches-window-rule.md) | `target_end` snaps whenever the window rule would reject the Current window | 4 | P1 | S | LOW-MED | — | TODO |
-| [008](008-stop-password-leaks-in-errors-and-tmp.md) | Passwords never appear in errors, masked displays or leftover temp files | 8 | P2 | S | LOW | — | TODO |
-| [009](009-server-reject-cross-origin-posts.md) | Server refuses cross-origin POSTs | 13 | P2 | S | LOW | — | TODO |
-| [010](010-server-wire-retention.md) | `[retention]` is applied, safely | 7 | P2 | M | MED | 001 | TODO |
-| [011](011-server-scheduler-catchup-drift.md) | Scheduler: daily catch-up, no drift, survives a failed state write | 9 | P2 | S | LOW | — | TODO |
-| [012](012-docs-grants-and-stale-facts.md) | Docs: missing grants, wrong debug default, stale versions, changelog | 11 | P2 | S | LOW | — | TODO |
-| [013](013-day-profile-rac-rate.md) | Day profile shows the cluster-wide rate on RAC | 12 | P2 | S | MED | — | TODO |
-| [014](014-generators-check-mode.md) | Stale demo / policy page fails the check (`--check`) | 14 | P3 | S | LOW | 003 | TODO |
-| [015](015-stop-means-stop.md) | Stopping a run stops its `sqlplus` sessions (timeout, Ctrl-C, shutdown) | 15 | P3 | M | MED | — | TODO |
-| [016](016-docker-image-python-and-health.md) | Docker image: guaranteed Python ≥ 3.9, HEALTHCHECK | 16 | P3 | S | MED | — | TODO |
-| [017](017-investigate-ash-pruning-and-per-sql-lookups.md) | Investigation: ASH partition pruning and per-SQL history lookups | 17 | P3 | S–M | LOW | DB access | TODO |
+| [001](001-server-parse-took-field.md) | Server parses the wrapper's `took=` summary lines again | 1 | P1 | S | LOW | — | DONE (`f4b79cc`) |
+| [002](002-server-views-raw-strings.md) | `views.py`: no invalid escapes, sort arrows render | 10 | P1 | S | LOW | — | DONE (`0fe1feb`) |
+| [003](003-ci-run-all-db-free-checks.md) | CI runs lint + shell syntax + strict Python parse + server tests | 2 | P1 | S | LOW | 001, 002 | DONE (`b948abe`) |
+| [004](004-escape-db-names-in-script-and-tooltips.md) | DB-sourced names can not break out of inline `<script>` JSON / tooltips | 3 | P1 | S | LOW | — | DONE (`cd62a26`); DB run OK |
+| [005](005-wrappers-fractional-step.md) | Fractional `step` / `win_hours` no longer breaks assembler or configurator | 5 | P1 | S | LOW | — | DONE (`4910c39`); DB run OK |
+| [006](006-sql-text-multibyte-overflow.md) | Multibyte SQL text can not abort the report (06 and 11) | 6 | P1 | S | LOW | — | DONE (`63c3458`); DB run OK for ASCII text, multibyte branch not exercised |
+| [007](007-target-end-snap-rule-matches-window-rule.md) | `target_end` snaps whenever the window rule would reject the Current window | 4 | P1 | S | LOW-MED | — | DONE (`7f7be45`); DB run OK |
+| [008](008-stop-password-leaks-in-errors-and-tmp.md) | Passwords never appear in errors, masked displays or leftover temp files | 8 | P2 | S | LOW | — | DONE (`08f5d0e`) |
+| [009](009-server-reject-cross-origin-posts.md) | Server refuses cross-origin POSTs | 13 | P2 | S | LOW | — | DONE (`79525f7`) |
+| [010](010-server-wire-retention.md) | `[retention]` is applied, safely | 7 | P2 | M | MED | 001 | DONE (`b81118f`, `2886f4f`, `e939a20`, `72c12b1`) |
+| [011](011-server-scheduler-catchup-drift.md) | Scheduler: daily catch-up, no drift, survives a failed state write | 9 | P2 | S | LOW | — | DONE (`5e4970d`) |
+| [012](012-docs-grants-and-stale-facts.md) | Docs: missing grants, wrong debug default, stale versions, changelog | 11 | P2 | S | LOW | — | DONE (`2a7270c`) |
+| [013](013-day-profile-rac-rate.md) | Day profile shows the cluster-wide rate on RAC | 12 | P2 | S | MED | — | DONE (`82d4de2`); DB run OK on single instance, RAC not exercised |
+| [014](014-generators-check-mode.md) | Stale demo / policy page fails the check (`--check`) | 14 | P3 | S | LOW | 003 | DONE (`6703004`) |
+| [015](015-stop-means-stop.md) | Stopping a run stops its `sqlplus` sessions (timeout, Ctrl-C, shutdown) | 15 | P3 | M | MED | — | DONE (`8ac678a`, `abad360`); DB run OK (SIGTERM to the process group) |
+| [016](016-docker-image-python-and-health.md) | Docker image: guaranteed Python ≥ 3.9, HEALTHCHECK | 16 | P3 | S | MED | — | DONE (`8d5103d`); image built and healthy; Instant Client `basic` (step 1b) |
+| [017](017-investigate-ash-pruning-and-per-sql-lookups.md) | Investigation: ASH partition pruning and per-SQL history lookups | 17 | P3 | S–M | LOW | DB access | DONE (`f8e53a7`): ASH: cannot tell on this database; lookups: not worth changing. See [017-results.md](017-results.md) |
+| [018](018-top-sql-text-escape-overflow.md) | A top statement with many quotes can not abort the report (06, ORA-19011) | found by 017 | P1 | S | LOW | 006 | DONE (`852649d`); DB run OK |
+| [019](019-narrative-param-window-list-overflow.md) | A parameter that differs in many windows can not abort the report (17, ORA-06502) | found by 018's DB run | P1 | S | LOW | — | DONE (`499e702`); DB run OK |
 
 "Audit #" is the finding's number in the audit table shown to the owner.
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale — finding fixed independently or approach abandoned)
+
+## Execution log (2026-11-13, branch `feat/implement-audit-plans`)
+
+All plans were executed in order on one branch (not on per-plan `advisor/`
+branches), each by a separate executor, and each commit was reviewed against
+its plan before the next one started. `./tools/check.sh` passes at the tip
+(lint, shell syntax, strict Python parse, 172 server tests, generated docs
+fresh); `demo/verify_report.js` passes on the regenerated demo (38 charts,
+0 console errors).
+
+### Runs on the test database (Oracle 19.27, single instance, 15-minute snapshots)
+
+The tree before the plans and the tree after them were run side by side,
+read-only, from separate directories.
+
+| Check | Before | After |
+|---|---|---|
+| Pinned on-grid hourly run, Day profile on (004, 006, 007, 013) | rc 0, 20/20 sections | rc 0, 20/20; every section byte-identical except the three changed tooltip lines (06, 14, 15) and the order of same-second points in 18's scatter (same set of points: an existing tie-order effect, not a change) |
+| Request 10 min after the last snapshot before a gap (007) | kept as requested, Current window skipped | snapped to the last snapshot, note shown, Current window valid |
+| Request 40 min after it (007) | snapped | snapped, identical apart from the tooltip lines |
+| Fleet, on-grid, Day profile band (013, 007) | rc 0 | rc 0; `FLEET_PROFILE` payload byte-identical |
+| Fleet with the off-grid request (007) | Current window invalid, drill echoes the request | note shown, drill echoes the snapped instant |
+| Fleet at 15-minute cadence (005) | bash arithmetic error, no report | rc 0, labels `-1x0.25h` ... `-8x0.25h` |
+| SIGTERM to the fleet wrapper's process group mid-extract (015) | `sqlplus` survives in its own group | no `sqlplus` left |
+| 168 hourly windows (018, 019) | exit 67 in section 06 (ORA-19011) | rc 0, 20/20, longest line 32506 bytes |
+
+Not exercised: a RAC database (013), a multibyte top statement (006: the
+test database's AWR holds none, and creating one needs a snapshot, i.e. a
+write), Ctrl-C from a terminal (015: the same mechanism as the SIGTERM
+check), GitHub Actions itself (003: nothing was pushed).
+
+### Decisions taken during execution (owner may want to revisit)
+
+- **016**: the image did not build at all (the Instant Client repository's
+  `sqlplus` now requires `basic`, which conflicts with `basiclite`). Step 1b
+  switches to `basic`; the image is larger.
+- **012**: the plan's claim "with `SQLMON=N` the `DBA_HIST_REPORTS` grant is
+  not needed" was wrong — section 17 names the view in static SQL, which is
+  compiled even when skipped. The README says the grant is still needed.
+- **018 / 019** were not in the audit: both are crashes of the 168-window
+  run found while executing 017, written up as plans and fixed.
+- `CHANGELOG.md` got `## Unreleased` entries for everything on the branch.
+
+### Follow-ups noticed by the executors (not planned)
+
+- Section 18 (SQL Monitor) takes 160-190 s of a 180-220 s default run on
+  the test database; it is the one section worth a performance plan
+  (017's measurements).
+- Section 11's time grows with the bucket count (4 s at 52 weekly windows);
+  its PL/SQL loop, not its ASH scan.
+- In the container `python3` is PID 1 and does not reap orphaned
+  grandchildren: after a killed run they stay as zombies, and the unit test
+  `ShutdownTerminatesWrapperTest` fails inside the image unless run with
+  `docker run --init`. `init: true` in `docker-compose.yml` would fix it.
+- Section 17 still writes out a non-contiguous window list in full (correct,
+  but long with 100+ windows); capping it changes existing output.
+- Section 18's execution scatter orders same-second executions
+  non-deterministically (shows up only when byte-diffing).
+- `WEEKLY_FLEET_CHECK.md` line 93 still describes the old snap rule ("when
+  none is within 15 min").
+- `server/server.conf.example`: the `every_hours` comment still says
+  "anchored to the last actual fire time"; since 011 it is the scheduled time.
+- `run_awr_trend.sh` prints the hidden connect string as `\<hidden\>`
+  (the `%q` of `_pos_die`); cosmetic.
+- Tooling hazard for future plans: a backslash followed by `uXXXX` typed
+  into an agent's tool input can be turned into the character itself. Plan
+  004's literals had lost their backslashes this way (restored); write such
+  sequences from a script and check the bytes.
 
 ## Dependency notes
 

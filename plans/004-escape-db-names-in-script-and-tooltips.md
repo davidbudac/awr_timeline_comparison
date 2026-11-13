@@ -178,7 +178,7 @@ doubled by the backslash step):
     BEGIN
         RETURN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(p_str,
                    '\', '\\'), '"', '\"'), CHR(13), ' '), CHR(10), ' '),
-                   '<', '<');
+                   '<', '\u003c');
     END json_escape;
 ```
 
@@ -203,7 +203,7 @@ def json_escape(s) -> str:
 ```
 
 **Verify**:
-`PYTHONPATH=demo python3 -c "from awrdemo.helpers import json_escape as j; assert j('a</b>c') == r'a</b>c', j('a</b>c'); assert j('plain') == 'plain'; assert j(None) == ''; print('ok')"`
+`PYTHONPATH=demo python3 -c "from awrdemo.helpers import json_escape as j; assert j('a</b>c') == r'a\u003c/b>c', j('a</b>c'); assert j('plain') == 'plain'; assert j(None) == ''; print('ok')"`
 → prints `ok`.
 
 ### Step 3: Fix section 06's inline copy
@@ -215,7 +215,7 @@ In `sql/06_top_sql.sql` at the `v_new_entry := '{"name":"'` statement
         v_new_entry := '{"name":"'
             || REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(sc.grp_value,
                    '\', '\\'), '"', '\"'), CHR(13), ' '), CHR(10), ' '),
-                   '<', '<')
+                   '<', '\u003c')
             || '","cur":' || NVL(TO_CHAR(sc.cur_rnk), 'null')
 ```
 
