@@ -113,7 +113,7 @@ DECLARE
     v_dup       VARCHAR2(40);
 
     -- R3 / R4 carriers
-    v_p_names   VARCHAR2(4000);
+    v_p_names   VARCHAR2(32767);   -- up to 3 parameters x a per-window list (v_acc below)
     v_p_shown   PLS_INTEGER := 0;
     v_p_total   PLS_INTEGER := 0;
 
@@ -670,7 +670,9 @@ BEGIN
         DECLARE
             v_k      PLS_INTEGER := 1;
             v_off    VARCHAR2(20);
-            v_acc    VARCHAR2(400) := '';
+            -- one label per differing window (about 7 bytes each): a
+            -- per-window string, so sized for hundreds of windows, not 13
+            v_acc    VARCHAR2(8000) := '';
             v_first  NUMBER;
             v_last   NUMBER;
             v_prev   NUMBER;
