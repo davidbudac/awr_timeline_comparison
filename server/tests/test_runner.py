@@ -300,5 +300,28 @@ class ClampAndRestartRecoveryTest(unittest.TestCase):
             rm.stop()
 
 
+class StaleDetailConfCleanupTest(unittest.TestCase):
+    def test_start_removes_leftover_detail_confs(self):
+        cwd = Path(tempfile.mkdtemp())
+        (cwd / "reports").mkdir()
+        data_dir = Path(tempfile.mkdtemp())
+        conf_path = cwd / "fleet.conf"
+        conf_path.write_text("good1|/@x\n", encoding="utf-8")
+        tmp_dir = data_dir / "tmp"
+        tmp_dir.mkdir(parents=True)
+        stale = tmp_dir / "detail_good1_abc123.conf"
+        stale.write_text("good1|scott/tiger@ORCL|detail\n", encoding="utf-8")
+        other = tmp_dir / "unrelated.txt"
+        other.write_text("keep me", encoding="utf-8")
+
+        rm = runner.RunManager(make_config(conf_path), data_dir=data_dir, cwd=cwd, wrapper_path=FAKE_WRAPPER)
+        rm.start()
+        try:
+            self.assertFalse(stale.exists())
+            self.assertTrue(other.exists())
+        finally:
+            rm.stop(timeout=5)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -36,6 +36,11 @@ class MaskConnParityTest(unittest.TestCase):
         ("user/pw|extra", "user/***"),
         # empty password segment
         ("user/@svc", "user/***@svc"),
+        # a password that itself contains '@' -- mask through the LAST '@'
+        ("scott/ti@ger@ORCL", "scott/***@ORCL"),
+        ("scott/a@b@c@host:1521/svc", "scott/***@host:1521/svc"),
+        # a password containing '/'
+        ("scott/ti/ger@ORCL", "scott/***@ORCL"),
     ]
 
     def test_parity_table(self):
@@ -107,9 +112,11 @@ class ParseFleetConfTest(unittest.TestCase):
                 fleetconf.parse_fleet_conf(p)
 
     def test_missing_pipe_errors(self):
-        p = self._write("just_an_alias_no_pipe\n")
-        with self.assertRaises(fleetconf.FleetConfError):
+        p = self._write("scott/tiger@ORCL\n")
+        with self.assertRaises(fleetconf.FleetConfError) as cm:
             fleetconf.parse_fleet_conf(p)
+        self.assertNotIn("tiger", str(cm.exception))
+        self.assertIn("line 1", str(cm.exception))
 
     def test_empty_connect_errors(self):
         p = self._write("a|\n")

@@ -64,6 +64,7 @@ class RunManager:
     # ------------------------------------------------------------------
     def start(self):
         paths.ensure_data_dirs(self.data_dir)
+        self._purge_stale_detail_confs()
         self.reports_dir.mkdir(parents=True, exist_ok=True)
         recovered = records.recover_stuck_running(self.data_dir)
         self._worker_thread = threading.Thread(
@@ -71,6 +72,26 @@ class RunManager:
         )
         self._worker_thread.start()
         return recovered
+
+    def _purge_stale_detail_confs(self):
+        """A detail run's temp conf holds a verbatim fleet.conf line (possibly
+        a password). The worker deletes it when the run ends; this removes
+        any left behind by a server that was killed mid-run. Safe at
+        startup: the single-instance lock guarantees no other worker is
+        using the directory."""
+        tmp_dir = self.data_dir / "tmp"
+        try:
+            leftovers = list(tmp_dir.glob("detail_*.conf"))
+        except OSError:
+            return 0
+        removed = 0
+        for p in leftovers:
+            try:
+                p.unlink()
+                removed += 1
+            except OSError:
+                pass
+        return removed
 
     def stop(self, timeout=5):
         self._stop.set()

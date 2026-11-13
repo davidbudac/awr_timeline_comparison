@@ -42,7 +42,8 @@ def mask_conn(conn):
     """
     if conn.startswith("/"):
         return conn
-    m = re.match(r"^([^/]+)/[^@]*@(.*)$", conn)
+    # greedy up to the LAST @: a password may itself contain @
+    m = re.match(r"^([^/]+)/.*@([^@]*)$", conn)
     if m:
         return "%s/***@%s" % (m.group(1), m.group(2))
     m = re.match(r"^([^/]+)/.+$", conn)
@@ -88,8 +89,9 @@ def parse_fleet_conf(path):
             continue
         if "|" not in line:
             raise FleetConfError(
-                "fleet.conf '%s' line %d: expected 'alias|connect[|detail]', got: %s"
-                % (path, lineno, line),
+                "fleet.conf '%s' line %d: expected 'alias|connect[|detail]' "
+                "(no '|' found; line content not shown, it may hold a password)"
+                % (path, lineno),
                 lineno,
             )
         alias_raw, conn = line.split("|", 1)

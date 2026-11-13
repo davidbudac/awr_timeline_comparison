@@ -331,6 +331,19 @@ _pos_clean() {  # reject newline / single-quote / tab in a heredoc-bound string 
     case "$2" in *$'\n'*) _pos_die "$1" "$2" "must not contain a newline";; esac
     case "$2" in *$'\t'*) _pos_die "$1" "$2" "must not contain a tab";; esac
 }
+# _pos_clean_conn -- _pos_clean for a connect string: same three checks, but
+# the message shows the MASKED value, never the raw one (it holds a password).
+# Printed as-is, not through _pos_die's printf %q, which would turn the mask
+# into scott/\*\*\*@svc.
+_pos_clean_conn() {
+    local what="$1" val="$2" why=''
+    case "$val" in *$'\t'*) why="must not contain a tab";; esac
+    case "$val" in *$'\n'*) why="must not contain a newline";; esac
+    case "$val" in *"'"*) why="must not contain a single quote";; esac
+    [[ -z "$why" ]] && return 0
+    echo "error: argument '$what' = $(mask_conn "$val") is invalid -- $why" >&2
+    exit 2
+}
 
 # html_escape -- pipe filter, bash-side equivalent of the SQL side's
 # DBMS_XMLGEN.CONVERT(...) convention (CLAUDE.md "HTML emission"): every
@@ -350,7 +363,8 @@ html_escape() {
 mask_conn() {
     local c="$1"
     [[ "$c" == /* ]] && { printf '%s' "$c"; return; }
-    if [[ "$c" =~ ^([^/]+)/[^@]*@(.*)$ ]]; then
+    # greedy up to the LAST @: a password may itself contain @
+    if [[ "$c" =~ ^([^/]+)/.*@([^@]*)$ ]]; then
         printf '%s/***@%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
         return
     fi
@@ -667,7 +681,7 @@ parse_conf() {
         [[ -z "${line//[[:space:]]/}" ]] && continue           # blank
         [[ "$line" =~ ^[[:space:]]*# ]] && continue             # comment
         if [[ "$line" != *'|'* ]]; then
-            echo "error: fleet.conf '$conf' line $lineno: expected 'alias|connect[|detail]', got: $line" >&2
+            echo "error: fleet.conf '$conf' line $lineno: expected 'alias|connect[|detail]' (no '|' found; line content not shown, it may hold a password)" >&2
             exit 2
         fi
         alias="${line%%|*}"
@@ -692,7 +706,7 @@ parse_conf() {
         fi
 
         [[ -n "$conn" ]] || { echo "error: fleet.conf '$conf' line $lineno: empty connect string for alias '$alias'" >&2; exit 2; }
-        _pos_clean "connect (alias $alias, line $lineno)" "$conn"
+        _pos_clean_conn "connect (alias $alias, line $lineno)" "$conn"
         ALIASES+=("$alias")
         CONNS+=("$conn")
         CONN_DISPS+=("$(mask_conn "$conn")")

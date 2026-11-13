@@ -909,7 +909,10 @@ _pos_clean() {  # reject newline / single-quote in a heredoc-bound string arg
     case "$2" in *"'"*) _pos_die "$1" "$2" "must not contain a single quote";; esac
     case "$2" in *$'\n'*) _pos_die "$1" "$2" "must not contain a newline";; esac
 }
-_pos_clean connect     "$CONN"
+# The connect string holds a password: validate it like _pos_clean does, but
+# never echo it.
+case "$CONN" in *"'"*)  _pos_die connect '<hidden>' "must not contain a single quote";; esac
+case "$CONN" in *$'\n'*) _pos_die connect '<hidden>' "must not contain a newline";; esac
 _pos_clean target_end  "$TARGET_END"
 _pos_clean step_unit   "$STEP_UNIT"
 _pos_clean template    "$TEMPLATE"
