@@ -70,6 +70,71 @@ class ComputeNextFireTest(unittest.TestCase):
         self.assertEqual(scheduler.compute_next_fire(cfg, now, last), dt(2026, 7, 22, 13, 0))
 
 
+class DailyCatchupTest(unittest.TestCase):
+    """A daily_at slot missed while the server was down must be detectable."""
+
+    CFG = dict(mode="daily", daily_at=["02:00"])
+
+    def test_missed_slot_is_overdue_and_fires_with_catchup(self):
+        cfg = config_mod.ScheduleConfig(catchup=True, **self.CFG)
+        last = dt(2026, 7, 21, 2, 0)          # fired yesterday
+        now = dt(2026, 7, 22, 9, 0)           # server back up after today's 02:00
+        nf = scheduler.compute_next_fire(cfg, now, last)
+        self.assertEqual(nf, dt(2026, 7, 22, 2, 0))
+        self.assertLessEqual(scheduler.apply_catchup(nf, now, True, cfg), now)
+
+    def test_missed_slot_is_skipped_without_catchup(self):
+        cfg = config_mod.ScheduleConfig(catchup=False, **self.CFG)
+        last = dt(2026, 7, 21, 2, 0)
+        now = dt(2026, 7, 22, 9, 0)
+        nf = scheduler.compute_next_fire(cfg, now, last)
+        self.assertEqual(scheduler.apply_catchup(nf, now, False, cfg), dt(2026, 7, 23, 2, 0))
+
+    def test_nothing_missed_waits_for_the_next_slot(self):
+        cfg = config_mod.ScheduleConfig(catchup=True, **self.CFG)
+        last = dt(2026, 7, 22, 2, 0)          # today's slot already fired
+        now = dt(2026, 7, 22, 9, 0)
+        nf = scheduler.compute_next_fire(cfg, now, last)
+        self.assertEqual(scheduler.apply_catchup(nf, now, True, cfg), dt(2026, 7, 23, 2, 0))
+
+    def test_first_ever_start_does_not_fire_a_past_slot(self):
+        cfg = config_mod.ScheduleConfig(catchup=True, **self.CFG)
+        now = dt(2026, 7, 22, 9, 0)
+        nf = scheduler.compute_next_fire(cfg, now, None)
+        self.assertEqual(scheduler.apply_catchup(nf, now, True, cfg), dt(2026, 7, 23, 2, 0))
+
+    def test_many_missed_days_fire_once(self):
+        cfg = config_mod.ScheduleConfig(catchup=True, **self.CFG)
+        last = dt(2026, 7, 1, 2, 0)
+        now = dt(2026, 7, 22, 9, 0)
+        self.assertLessEqual(scheduler.compute_next_fire(cfg, now, last), now)
+        # after the catch-up fire, last_fire is 'now' -> next is tomorrow
+        after = scheduler.anchor_after_fire(cfg, now, dt(2026, 7, 2, 2, 0))
+        self.assertEqual(after, now)
+        self.assertEqual(scheduler.compute_next_fire(cfg, now, after), dt(2026, 7, 23, 2, 0))
+
+
+class AnchorAfterFireTest(unittest.TestCase):
+    def test_every_mode_anchors_on_the_scheduled_time(self):
+        cfg = config_mod.ScheduleConfig(mode="every", every_hours=6)
+        scheduled = dt(2026, 7, 22, 6, 0)
+        now = scheduled + datetime.timedelta(seconds=29)   # tick noticed it late
+        last = scheduler.anchor_after_fire(cfg, now, scheduled)
+        self.assertEqual(last, scheduled)
+        self.assertEqual(scheduler.compute_next_fire(cfg, now, last), dt(2026, 7, 22, 12, 0))
+
+    def test_every_mode_reanchors_when_a_full_period_late(self):
+        cfg = config_mod.ScheduleConfig(mode="every", every_hours=6)
+        scheduled = dt(2026, 7, 22, 6, 0)
+        now = dt(2026, 7, 22, 15, 0)
+        self.assertEqual(scheduler.anchor_after_fire(cfg, now, scheduled), now)
+
+    def test_daily_mode_records_now(self):
+        cfg = config_mod.ScheduleConfig(mode="daily", daily_at=["02:00"])
+        now = dt(2026, 7, 22, 2, 0) + datetime.timedelta(seconds=12)
+        self.assertEqual(scheduler.anchor_after_fire(cfg, now, dt(2026, 7, 22, 2, 0)), now)
+
+
 class ApplyCatchupTest(unittest.TestCase):
     def test_not_due_yet_passes_through_unchanged(self):
         now = dt(2026, 7, 22, 10, 0)
@@ -164,6 +229,72 @@ class SchedulerThreadTest(unittest.TestCase):
         sched = scheduler.Scheduler(self.cfg, self.rm, data_dir=self.data_dir, sleep_slice=0.05)
         sched.start()
         self.assertIsNone(sched._thread)
+
+
+class SchedulerRobustnessTest(unittest.TestCase):
+    """Driven tick by tick with a fake clock and a fake run manager."""
+
+    class _RM:
+        def __init__(self):
+            self.calls = 0
+
+        def enqueue_fleet(self, trigger):
+            self.calls += 1
+
+    def _sched(self, schedule, now):
+        cfg = config_mod.Config()
+        cfg.schedule = schedule
+        self.clock_now = now
+        self.rm = self._RM()
+        self.data_dir = Path(tempfile.mkdtemp())
+        return scheduler.Scheduler(cfg, self.rm, data_dir=self.data_dir, clock=lambda: self.clock_now)
+
+    def test_state_save_failure_does_not_refire_or_raise(self):
+        sched = self._sched(
+            config_mod.ScheduleConfig(enabled=True, mode="daily", daily_at=["02:00"]), dt(2026, 7, 22, 1, 0)
+        )
+        sched._next_fire = dt(2026, 7, 22, 2, 0)
+
+        def boom():
+            raise OSError("disk full")
+
+        sched._save_state = boom
+        self.clock_now = dt(2026, 7, 22, 2, 0)
+        sched._tick()
+        sched._tick()
+        self.assertEqual(self.rm.calls, 1)
+        self.assertEqual(sched._next_fire, dt(2026, 7, 23, 2, 0))
+
+    def test_every_mode_does_not_drift_over_many_cycles(self):
+        sched = self._sched(
+            config_mod.ScheduleConfig(enabled=True, mode="every", every_hours=1), dt(2026, 7, 22, 0, 0)
+        )
+        sched._next_fire = dt(2026, 7, 22, 0, 0)
+        for hour in range(0, 24):
+            # every tick notices the occurrence 29 s late
+            self.clock_now = dt(2026, 7, 22, hour, 0) + datetime.timedelta(seconds=29)
+            sched._tick()
+        self.assertEqual(self.rm.calls, 24)
+        self.assertEqual(sched._next_fire, dt(2026, 7, 23, 0, 0))
+
+    def test_daily_catchup_fires_at_start_after_downtime(self):
+        sched = self._sched(
+            config_mod.ScheduleConfig(enabled=True, mode="daily", daily_at=["02:00"], catchup=True),
+            dt(2026, 7, 22, 9, 0),
+        )
+        (self.data_dir / "state.json").write_text(
+            '{"last_fire": "2026-07-21T02:00:05", "next_fire": "2026-07-22T02:00:00"}', encoding="utf-8"
+        )
+        sched.sleep_slice = 0.02
+        sched.start()
+        try:
+            deadline = time.time() + 5
+            while time.time() < deadline and self.rm.calls == 0:
+                time.sleep(0.02)
+            self.assertEqual(self.rm.calls, 1)
+        finally:
+            sched.stop()
+        self.assertEqual(sched._next_fire, dt(2026, 7, 23, 2, 0))
 
 
 if __name__ == "__main__":

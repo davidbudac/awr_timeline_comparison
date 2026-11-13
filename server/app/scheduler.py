@@ -5,12 +5,15 @@ solved: a 'daily_at' fire can shift by an hour across a DST transition.
 State (last_fire/next_fire) persists to server/data/state.json so an
 'every_hours' cadence survives a server restart without refiring
 immediately, and so a 'daily_at' schedule can tell whether today's slot
-was already missed.
+was already missed. At startup a 'daily_at' occurrence that fell between
+the last recorded fire and now is treated as missed: with catchup it fires
+once, immediately.
 """
 
 import datetime
 import json
 import os
+import sys
 import threading
 from pathlib import Path
 
@@ -49,9 +52,34 @@ def next_fire_every(every_hours, now, last_fire):
 
 
 def compute_next_fire(schedule_cfg, now, last_fire):
+    """Next occurrence after the last fire. The result may already be due
+    (<= now) when the server was down across an occurrence -- the caller
+    passes it through apply_catchup() to decide whether to fire it."""
     if schedule_cfg.mode == "daily":
-        return next_fire_daily(schedule_cfg.daily_at, now)
+        # Anchor on last_fire when there is one, so a 'daily_at' slot missed
+        # while the server was down is seen as overdue (catchup). With no
+        # recorded fire (first ever start) nothing is overdue: next slot.
+        anchor = last_fire if last_fire is not None else now
+        return next_fire_daily(schedule_cfg.daily_at, anchor)
     return next_fire_every(schedule_cfg.every_hours, now, last_fire)
+
+
+def anchor_after_fire(schedule_cfg, now, fired_for):
+    """What to record as last_fire after firing the occurrence `fired_for`
+    at wall-clock `now`.
+
+    'every' mode anchors the cadence on the SCHEDULED time, not on the tick
+    that noticed it (the loop wakes up to sleep_slice late, and anchoring on
+    'now' drifts by that much every cycle). A catch-up fire that is a full
+    period or more late re-anchors on 'now', as before. 'daily' mode always
+    records 'now' (a catch-up fire must not be followed by another one for
+    the same missed day)."""
+    if schedule_cfg.mode != "every" or fired_for is None:
+        return now
+    period = datetime.timedelta(hours=schedule_cfg.every_hours)
+    if fired_for <= now and now - fired_for < period:
+        return fired_for
+    return now
 
 
 def apply_catchup(next_fire_dt, now, catchup, schedule_cfg):
@@ -141,15 +169,29 @@ class Scheduler:
             "last_fire": self._last_fire.isoformat() if self._last_fire else None,
         }
 
+    def _tick(self):
+        now = self._clock()
+        if not (self._next_fire and now >= self._next_fire):
+            return
+        fired_for = self._next_fire
+        try:
+            self.run_manager.enqueue_fleet("schedule")
+        except Exception as exc:
+            print("scheduler: could not enqueue the scheduled run: %s" % exc, file=sys.stderr, flush=True)
+        # Advance the in-memory schedule BEFORE persisting it: if the state
+        # file cannot be written, the next tick must not fire this
+        # occurrence again.
+        self._last_fire = anchor_after_fire(self.config.schedule, now, fired_for)
+        self._next_fire = compute_next_fire(self.config.schedule, now, self._last_fire)
+        try:
+            self._save_state()
+        except OSError as exc:
+            print("scheduler: could not save %s: %s" % (self._state_path(), exc), file=sys.stderr, flush=True)
+
     def _loop(self):
         while not self._stop.is_set():
-            now = self._clock()
-            if self._next_fire and now >= self._next_fire:
-                try:
-                    self.run_manager.enqueue_fleet("schedule")
-                except Exception:
-                    pass  # a scheduler tick must never crash the thread
-                self._last_fire = now
-                self._next_fire = compute_next_fire(self.config.schedule, now, self._last_fire)
-                self._save_state()
+            try:
+                self._tick()
+            except Exception as exc:  # a scheduler tick must never kill the thread
+                print("scheduler: tick failed: %s" % exc, file=sys.stderr, flush=True)
             self._stop.wait(self.sleep_slice)
