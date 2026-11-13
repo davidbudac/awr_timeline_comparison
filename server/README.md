@@ -91,8 +91,10 @@ only the canonical `detail_<alias>.html`, alongside it in the same
 
 `[retention]` in `server.conf` prunes only artifacts the server itself
 generated and recorded -- it never glob-deletes `reports/awr_*`, so ad-hoc
-CLI-run reports are untouched. See the comments in
-`server.conf.example` for the three knobs.
+CLI-run reports are untouched. Retention runs at startup and after each
+run; the newest fleet run and each database's newest successful detail
+report are always kept. See the comments in `server.conf.example` for the
+three knobs.
 
 ## Docker (easiest)
 

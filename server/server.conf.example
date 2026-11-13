@@ -92,10 +92,17 @@ catchup = true
 # Prune only what this server has a run record for -- it never touches
 # reports/ files it didn't itself generate and track.
 #
+# Applied automatically at server start and after every run.
+# Per-DB detail reports follow keep_days too, except that the newest
+# successful detail report of each database is always kept.
+# The most recent fleet run and the most recent record are never removed,
+# even when a value below is 0.
+#
 # Keep the newest N fleet runs' report/detail-report/workdir artifacts...
 keep_fleet_runs = 14
 # ...OR anything younger than this many days, whichever keeps more.
 keep_days = 30
 # Beyond this many total run records (any kind), old .json records and
-# .log files are deleted outright (not just their report artifacts).
+# .log files are deleted outright, and a record removed by this limit
+# takes its report files with it.
 keep_run_records = 200
