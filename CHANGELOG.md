@@ -66,7 +66,7 @@ release bumps `awr_version`).
 - **Names in chart data can no longer break the page.** An application-set
   MODULE / ACTION, segment or file name containing `<` could end the
   inline `<script>` that carries the chart data; `<` is now written as the
-  JSON escape `<`, which the browser decodes back, so displayed names
+  JSON escape `\u003c`, which the browser decodes back, so displayed names
   are unchanged. The Top SQL, Segment I/O and File I/O chart tooltips
   HTML-escape series names.
 
