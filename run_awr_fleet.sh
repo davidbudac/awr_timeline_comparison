@@ -640,8 +640,16 @@ parse_markers() {
 # resolve_timeout_bin -- sets TIMEOUT_BIN to 'timeout' or 'gtimeout' if
 # either is on PATH, else '' with a one-time warning.  A missing timeout
 # binary must never be fatal (FLEET_TIMEOUT just stops being enforced).
+#
+# TIMEOUT_FG is '--foreground' when that timeout supports it (GNU coreutils
+# 8.13+), else ''.  Without it GNU timeout moves sqlplus into a NEW process
+# group, so Ctrl-C on this script, or a caller that signals this script's
+# process group (the fleet server does), kills the wrapper but leaves every
+# sqlplus running until its own timeout expires.  Probed, never assumed:
+# BusyBox timeout has no such flag.
 # ---------------------------------------------------------------------------
 resolve_timeout_bin() {
+    TIMEOUT_FG=''
     if command -v timeout >/dev/null 2>&1; then
         TIMEOUT_BIN=timeout
     elif command -v gtimeout >/dev/null 2>&1; then
@@ -650,6 +658,9 @@ resolve_timeout_bin() {
         TIMEOUT_BIN=''
         echo "warning: neither 'timeout' nor 'gtimeout' found on PATH;" \
              "FLEET_TIMEOUT=${FLEET_TIMEOUT}s will not be enforced (runs unbounded)." >&2
+    fi
+    if [[ -n "$TIMEOUT_BIN" ]] && "$TIMEOUT_BIN" --foreground 5 true >/dev/null 2>&1; then
+        TIMEOUT_FG='--foreground'
     fi
 }
 
@@ -793,7 +804,7 @@ run_one_db() {
     local log="$WORK/$alias.log" rcfile="$WORK/$alias.rc"
     local rc=0 t0=$SECONDS secs
     local -a cmd=(sqlplus -S -L "$conn")
-    [[ -n "$TIMEOUT_BIN" ]] && cmd=("$TIMEOUT_BIN" "$FLEET_TIMEOUT" "${cmd[@]}")
+    [[ -n "$TIMEOUT_BIN" ]] && cmd=("$TIMEOUT_BIN" ${TIMEOUT_FG:+"$TIMEOUT_FG"} "$FLEET_TIMEOUT" "${cmd[@]}")
 
     say "[$idx/$total] $alias: extract started ($disp)"
     "${cmd[@]}" > "$log" 2>&1 <<SQLEOF || rc=$?
@@ -870,7 +881,7 @@ run_one_detail() {
     ln -s "$SCRIPT_DIR/sql" "$ddir/sql"
 
     local -a cmd=(sqlplus -S -L "$conn")
-    [[ -n "$TIMEOUT_BIN" && "$FLEET_DETAIL_TIMEOUT" -gt 0 ]] && cmd=("$TIMEOUT_BIN" "$FLEET_DETAIL_TIMEOUT" "${cmd[@]}")
+    [[ -n "$TIMEOUT_BIN" && "$FLEET_DETAIL_TIMEOUT" -gt 0 ]] && cmd=("$TIMEOUT_BIN" ${TIMEOUT_FG:+"$TIMEOUT_FG"} "$FLEET_DETAIL_TIMEOUT" "${cmd[@]}")
 
     say "$alias: detailed single-DB report started (template $FLEET_DETAIL_TEMPLATE)"
 
