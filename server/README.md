@@ -74,6 +74,13 @@ only the canonical `detail_<alias>.html`, alongside it in the same
   access, put a reverse proxy with auth (or an SSH tunnel) in front --
   do not bind a non-loopback address without one. See the warning at the
   top of `server.conf.example`.
+- **Cross-site requests are refused.** The two state-changing routes
+  (`POST /api/fleet/run`, `POST /api/detail/run`) reject a request whose
+  `Origin` / `Referer` names a different host than the one it was sent to
+  (HTTP 403), so a web page open in your browser cannot start runs. This is
+  not authentication: scripts that send neither header are accepted, and
+  anyone who can reach the port can still use the server. Behind a reverse
+  proxy that rewrites `Host`, have it pass `X-Forwarded-Host`.
 - Report files are served only if the request shape fullmatches either a
   bare `[A-Za-z0-9._-]+\.html` filename or one `awr_fleet_<digits>_run
   <digits>/` folder segment followed by such a filename, **and** the

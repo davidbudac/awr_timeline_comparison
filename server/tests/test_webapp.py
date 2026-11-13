@@ -243,6 +243,73 @@ class PostEndpointsTest(WebappTestBase):
         self.assertEqual(r.status, 409)
 
 
+class PostOriginCheckTest(WebappTestBase):
+    """State-changing routes must refuse requests issued by another web
+    origin, and keep working for the server's own pages and for scripts."""
+
+    JSON = {"Content-Type": "application/json"}
+
+    def _post(self, extra):
+        headers = dict(self.JSON)
+        headers.update(extra)
+        return self.dispatch("POST", "/api/fleet/run", headers=headers, body=b"{}")
+
+    def test_no_origin_no_referer_is_allowed(self):
+        self.assertEqual(self._post({}).status, 202)
+
+    def test_same_origin_is_allowed(self):
+        r = self._post({"Host": "127.0.0.1:8765", "Origin": "http://127.0.0.1:8765"})
+        self.assertEqual(r.status, 202)
+
+    def test_same_origin_via_referer_is_allowed(self):
+        r = self._post({"Host": "127.0.0.1:8765", "Referer": "http://127.0.0.1:8765/"})
+        self.assertEqual(r.status, 202)
+
+    def test_cross_origin_is_refused(self):
+        r = self._post({"Host": "127.0.0.1:8765", "Origin": "https://example.org"})
+        self.assertEqual(r.status, 403)
+        self.assertEqual(self.rm.enqueue_fleet_calls, [])
+
+    def test_cross_origin_referer_is_refused(self):
+        r = self._post({"Host": "127.0.0.1:8765", "Referer": "https://example.org/page"})
+        self.assertEqual(r.status, 403)
+
+    def test_null_origin_is_refused(self):
+        r = self._post({"Host": "127.0.0.1:8765", "Origin": "null"})
+        self.assertEqual(r.status, 403)
+
+    def test_different_port_is_refused(self):
+        r = self._post({"Host": "127.0.0.1:8765", "Origin": "http://127.0.0.1:3000"})
+        self.assertEqual(r.status, 403)
+
+    def test_host_comparison_is_case_insensitive(self):
+        r = self._post({"Host": "Fleet.Example.Net", "Origin": "https://fleet.example.net"})
+        self.assertEqual(r.status, 202)
+
+    def test_proxy_forwarded_host_is_accepted(self):
+        r = self._post(
+            {
+                "Host": "127.0.0.1:8765",
+                "X-Forwarded-Host": "fleet.example.net",
+                "Origin": "https://fleet.example.net",
+            }
+        )
+        self.assertEqual(r.status, 202)
+
+    def test_detail_route_is_guarded_too(self):
+        r = self.dispatch(
+            "POST",
+            "/api/detail/run",
+            headers={"Content-Type": "application/json", "Host": "127.0.0.1:8765", "Origin": "https://example.org"},
+            body=b'{"alias": "good1"}',
+        )
+        self.assertEqual(r.status, 403)
+
+    def test_get_is_never_blocked(self):
+        r = self.dispatch("GET", "/healthz", headers={"Host": "127.0.0.1:8765", "Origin": "https://example.org"})
+        self.assertEqual(r.status, 200)
+
+
 class ReportServingTest(WebappTestBase):
     def setUp(self):
         super().setUp()
