@@ -5,6 +5,30 @@ The report footer stamps the version that produced it
 top of `awr_trend.sql`. Bump it there when cutting a release and add an
 entry here. Dates are release dates.
 
+## Unreleased
+
+Changes on `main` since 1.6.1 (the footer still says v1.6.1 until the next
+release bumps `awr_version`).
+
+- **`SQLMON=N` skips the SQL Monitor section.** Env var `SQLMON` (wrapper)
+  / DEFINE `sqlmon` (SQL\*Plus), default `Y`; the configurator asks for it
+  too. A falsy value (`N`, `no`, `0`, `off`, `false`, `f`) swaps section 18
+  for a no-op stub and skips the verdict's SQL Monitor pills, so no query
+  reads `DBA_HIST_REPORTS` — its XML parsing can take minutes on a busy
+  database. The rail link is dropped and the About line notes the skip.
+  The `DBA_HIST_REPORTS` grant is still needed (the verdict's PL/SQL names
+  the view). The fleet report's SQL Monitor band is unaffected.
+- **Wrappers fail fast when `sqlplus` is not on `PATH`.** Both
+  `run_awr_trend.sh` and `run_awr_fleet.sh` check for a runnable `sqlplus`
+  before any database work and exit 2 with a hint based on
+  `ORACLE_HOME`, instead of every fleet extract dying with exit 127.
+  `--assemble`, `--help` and the configurator's print-only path are
+  unaffected.
+- **README grant list completed.** It now lists `DBA_HIST_SYS_TIME_MODEL`
+  (DB time / DB CPU, read on every run) and `DBA_HIST_REPORTS` (SQL
+  Monitor), which the report already read; a least-privilege user that
+  followed the old list got `ORA-00942`.
+
 ## 1.6.1 — 2026-09-27
 
 Two owner requests on the v1.6.0 report: highlight a wait class or event
