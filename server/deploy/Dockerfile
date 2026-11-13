@@ -1,6 +1,6 @@
 # Dockerfile -- turnkey AWR Fleet Server image.
 #
-# Oracle Linux 8 slim + Oracle Instant Client (basiclite + sqlplus) + bash +
+# Oracle Linux 8 slim + Oracle Instant Client (basic + sqlplus) + bash +
 # python3 + the coreutils/findutils the wrappers shell out to. The Instant
 # Client comes straight from Oracle's own yum repo (you accept Oracle's
 # Instant Client license by using it); no RPM to supply by hand.
@@ -26,23 +26,30 @@
 FROM oraclelinux:8-slim
 
 # Instant Client (sqlplus + client libs) + the POSIX toolbox the wrappers
-# call (bash, timeout/stat/date via coreutils, find via findutils, grep,
-# sed). No awk is used by the wrappers.
+# call (bash, timeout/stat/date/du via coreutils, find via findutils, grep,
+# sed, awk; tar + gzip for the optional FLEET_ARCHIVE). Python 3.9 from
+# AppStream: the distribution's default python3 is 3.6, and the server
+# needs dataclasses / fromisoformat / ThreadingHTTPServer (3.7+; the
+# project documents 3.9+).
 RUN microdnf install -y oracle-instantclient-release-el8 \
     && microdnf install -y \
-        oracle-instantclient-basiclite \
+        oracle-instantclient-basic \
         oracle-instantclient-sqlplus \
-        bash python3 findutils grep sed \
+        bash python39 findutils grep sed gawk tar gzip \
     && microdnf clean all \
     && rm -rf /var/cache/dnf /var/cache/yum
 
 # Put sqlplus on PATH and make the client libs resolvable regardless of the
 # Instant Client version the repo currently ships (don't hardcode "21").
+# Make `python3` resolve to the 3.9 interpreter and fail the build if it is
+# older than the server needs.
 RUN set -eux; \
     bindir="$(dirname "$(find /usr/lib/oracle -type f -name sqlplus | head -n1)")"; \
     ln -sf "$bindir/sqlplus" /usr/local/bin/sqlplus; \
     ldconfig; \
-    sqlplus -V
+    sqlplus -V; \
+    command -v python3 >/dev/null 2>&1 || ln -sf "$(command -v python3.9)" /usr/local/bin/python3; \
+    python3 -c "import sys, dataclasses; assert sys.version_info >= (3, 9), sys.version; print(sys.version)"
 
 WORKDIR /app
 COPY . /app
@@ -55,6 +62,12 @@ RUN chmod +x server/deploy/docker-entrypoint.sh \
 VOLUME ["/app/server/data", "/app/reports"]
 
 EXPOSE 8765
+
+# /healthz answers 200 "ok" once the HTTP server is up. Pure stdlib -- the
+# image has no curl. (A long-running fleet job does not block it: the web
+# server is threaded and the job runs in a worker thread.)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python3 -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8765/healthz', timeout=4).status == 200 else 1)"
 
 # TNS_ADMIN is where a mounted wallet / tnsnames lives; override at runtime
 # (`-e TNS_ADMIN=/app/wallet -v /path/to/wallet:/app/wallet:ro`) when your
