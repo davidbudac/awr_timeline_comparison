@@ -173,10 +173,12 @@ def mean_sd(vals):
     n = len(v)
     if n == 0:
         return None, None, 0
-    mu = sum(v) / n
+    # math.fsum, not sum(): the built-in sum() of floats is not bit-identical
+    # across Python versions; a 1-ulp sd broke an exact z tie (rows reordered on 3.14).
+    mu = math.fsum(v) / n
     if n < 2:
         return mu, None, n
-    var = sum((x - mu) ** 2 for x in v) / (n - 1)
+    var = math.fsum((x - mu) ** 2 for x in v) / (n - 1)
     sd = math.sqrt(var)
     # Oracle's decimal arithmetic yields STDDEV = 0 for identical values;
     # binary floats leave ~1e-16 residue that would blow z up to 1e15.

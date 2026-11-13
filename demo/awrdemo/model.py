@@ -907,7 +907,9 @@ def hour(ts: datetime) -> HourMetrics:
     commits = 3600 * 505 * inten * (1 + 0.25 * e.loyalty) * _noise(r, 0.03) + 3600 * 40 * bf
     hard = 3600 * 3.1 * inten * e.hard_parse * _noise(r, 0.08)
     lreads = sum(x.gets for x in sql.values()) * 1.25 * _noise(r, 0.02) + 3600 * 60000 * bf
-    preads = (sum(x.reads for x in sql.values()) * 1.3 + 3600 * 1800 * bf) * _noise(r, 0.03)
+    # math.fsum: reads mix int and float, and sum() of such a mix rounds
+    # differently on Python 3.14 (1 ulp, which reordered tied rows)
+    preads = (math.fsum(x.reads for x in sql.values()) * 1.3 + 3600 * 1800 * bf) * _noise(r, 0.03)
     preads *= 1 + 0.15 * (e.phys_reads - 1)
     pwrites = (3600 * 1850 * inten + 3600 * 2600 * bf + 3600 * 1400 * mef) * _noise(r, 0.04)
     redo = (3600 * 3.4e6 * inten * (1 + 0.15 * e.loyalty) + 3600 * 5.5e6 * bf + 3600 * 4e6 * mef) * _noise(r, 0.03)

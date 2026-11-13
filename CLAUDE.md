@@ -1580,7 +1580,7 @@ PL/SQL lib: band glyph, anchors, card vocabulary, `wg_*`, `tl_*`, `lib_ls`).
 s09's `fine` payloads are SYNTHETIC (seeded minute profiles spread each
 hour's samples by largest remainder, so window sums stay exact) and its SQL
 lines are sliced by anchor, not index. **When a section's markup/JS changes,
-re-port its twin in the same commit and regenerate**; generation is deterministic (two runs, same md5).
+re-port its twin in the same commit and regenerate**; generation is deterministic (two runs, same md5), and identical across Python 3.12-3.14 because `helpers.mean_sd` (and the model's physical-reads total) use `math.fsum` (the built-in `sum()` of floats differs by an ulp between versions, which once reordered tied rows in CI).
 `tools/check.sh` (CI) fails when either generated page is stale
 (`gen_demo_report.py --check`, `gen_policy_doc.py --check`). `NODE_PATH=<any
 node_modules with playwright> node demo/verify_report.js <html> [shots/]` is the
