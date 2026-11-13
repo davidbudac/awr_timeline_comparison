@@ -898,6 +898,14 @@ left padding and a lower specificity).
 - A `.copy-btn` is inline by default and absolutely positioned only inside
   `pre`/`.codewrap` — placing one elsewhere without that ancestor needs an
   explicit position context or it flows inline unexpectedly.
+- **`DBMS_XMLGEN.CONVERT` on a long `VARCHAR2` can raise ORA-19011**: the
+  escaped result must fit an internal buffer of about `max(4000, 4/3 x
+  input)` bytes, so 667 quotes fail while 8000 plain bytes pass. Fine for
+  names and snippets cut to a few hundred characters (400 x 6 = 2400);
+  anything longer is escaped in 500-character pieces, as 06 does for the
+  full SQL text (which also stops before `PUT_LINE`'s 32767 bytes). Bit a
+  168-window run on dbmint, 2026-11-13: a top statement with 216 quotes
+  ended the report with exit code 67.
 
 ### `echarts` var (offline / self-contained)
 Polymorphic on value: **empty** → public CDN (byte-identical to before, via

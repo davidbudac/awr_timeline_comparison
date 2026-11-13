@@ -985,6 +985,12 @@ BEGIN
         v_text            CLOB;
         v_len             NUMBER;
         v_snip            VARCHAR2(8000);
+        -- v_snip escaped for the <pre> block, built 500 characters at a
+        -- time (see the loop before the PUT_LINE), and how many characters
+        -- of v_snip it covers.
+        v_snip_esc        VARCHAR2(32767);
+        v_snip_part       VARCHAR2(4000);
+        v_snip_shown      PLS_INTEGER;
         v_first_seen      VARCHAR2(30);
         v_last_seen       VARCHAR2(30);
         v_phv_count       NUMBER;
@@ -1328,9 +1334,26 @@ BEGIN
                 DBMS_OUTPUT.PUT_LINE(']};</script>');
             END IF;
 
+            -- DBMS_XMLGEN.CONVERT raises ORA-19011 when the escaped text
+            -- outgrows its internal buffer (667 quotes are enough), which
+            -- under WHENEVER SQLERROR EXIT ends the whole report. Escaping
+            -- is per character, so 500-character pieces give the same
+            -- bytes and can not overflow (500 x 6 = 3000). The pieces stop
+            -- before the PUT_LINE limit of 32767 bytes -- only text that is
+            -- mostly quotes or angle brackets gets there -- and the note
+            -- below then reports the cut.
+            v_snip_esc   := NULL;
+            v_snip_shown := 0;
+            WHILE v_snip_shown < NVL(LENGTH(v_snip), 0) LOOP
+                v_snip_part := DBMS_XMLGEN.CONVERT(SUBSTR(v_snip, v_snip_shown + 1, 500));
+                EXIT WHEN NVL(LENGTHB(v_snip_esc), 0) + LENGTHB(v_snip_part) > 32000;
+                v_snip_esc   := v_snip_esc || v_snip_part;
+                v_snip_shown := LEAST(v_snip_shown + 500, LENGTH(v_snip));
+            END LOOP;
+
             DBMS_OUTPUT.PUT_LINE('<pre class="sql">'
-                || DBMS_XMLGEN.CONVERT(v_snip)
-                || CASE WHEN v_len > LENGTH(v_snip)
+                || v_snip_esc
+                || CASE WHEN v_len > v_snip_shown
                         THEN CHR(10) || '... (truncated, ' || v_len || ' chars total)'
                         ELSE '' END
                 || '</pre>');
