@@ -1,1 +1,59 @@
-/* css_instmap: styles of section 27_instance_map (Instance map).  STUB (scaffold). */
+/* css_instmap: styles of section 27_instance_map (Instance map).
+   The map is one server-drawn SVG; every colour comes from the report's
+   tokens so the theme toggle and the quiet / dashboard designs restyle it. */
+#instance-map .im-wrap{position:relative}
+#instance-map .im-lg{display:flex;flex-wrap:wrap;gap:4px 16px;margin:0 0 8px;padding:0;list-style:none;font-size:12px;color:var(--ink-2)}
+#instance-map .im-lg li{display:inline-flex;align-items:center;gap:6px}
+#instance-map .im-lg .im-lgn{color:var(--muted)}
+#instance-map .im-k{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none;box-sizing:border-box}
+#instance-map .im-k.s-large{background:var(--crit-dot)}
+#instance-map .im-k.s-moderate{background:var(--warn-dot)}
+#instance-map .im-k.s-improved{border:2px solid var(--imp)}
+#instance-map .im-k.s-typical{border:1.5px solid var(--muted)}
+#instance-map .im-k.s-nm{border:1.5px dashed var(--muted);opacity:.7}
+#instance-map .im-scroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+#instance-map .im-svg{display:block;width:100%;min-width:740px;max-width:1120px;height:auto;font-family:inherit}
+#instance-map .im-ct{fill:var(--surface-2);stroke:var(--line);stroke-dasharray:5 4}
+#instance-map .im-cl{font-size:11px;fill:var(--muted);letter-spacing:.02em}
+#instance-map .im-al{font-size:11px;fill:var(--muted)}
+#instance-map .im-b{fill:var(--panel);stroke:var(--line-2);stroke-width:1}
+#instance-map .im-t{font-size:13px;font-weight:600;fill:var(--ink)}
+#instance-map .im-m{font-size:12px;fill:var(--ink-2)}
+#instance-map .im-s{font-size:12px;fill:var(--ink-2)}
+#instance-map .im-sw{font-weight:600}
+#instance-map .im-d{fill:none;stroke:var(--muted);stroke-width:1.5}
+#instance-map .im-n.s-large .im-b{fill:color-mix(in srgb,var(--crit-dot) 10%,var(--panel));stroke:var(--crit-dot);stroke-width:1.8}
+#instance-map .im-n.s-large .im-d{fill:var(--crit-dot);stroke:none}
+#instance-map .im-n.s-moderate .im-b{fill:color-mix(in srgb,var(--warn-dot) 11%,var(--panel));stroke:var(--warn-dot);stroke-width:1.8}
+#instance-map .im-n.s-moderate .im-d{fill:var(--warn-dot);stroke:none}
+#instance-map .im-n.s-improved .im-b{stroke:var(--imp);stroke-width:1.5}
+#instance-map .im-n.s-improved .im-d{stroke:var(--imp);stroke-width:2}
+#instance-map .im-n.s-nm .im-b{fill:none;stroke-dasharray:4 3}
+#instance-map .im-n.s-nm .im-d{stroke-dasharray:2 2}
+#instance-map .im-n.s-nm .im-t,#instance-map .im-n.s-nm .im-m,#instance-map .im-n.s-nm .im-s{fill:var(--muted)}
+#instance-map .im-n{cursor:default;outline:none}
+#instance-map a.im-n{cursor:pointer}
+#instance-map .im-n:hover .im-b,#instance-map .im-n.on .im-b{stroke-width:2.4}
+#instance-map .im-n:focus-visible .im-b{stroke:var(--acc);stroke-width:2.6}
+#instance-map .im-a polyline{fill:none;stroke:var(--tick);stroke-width:1.5;stroke-linejoin:round}
+#instance-map .im-a polygon{fill:var(--tick)}
+#instance-map .im-a.dash polyline{stroke-dasharray:3 3}
+#instance-map .im-a.s-large polyline{stroke:var(--crit-dot);stroke-width:3.5}
+#instance-map .im-a.s-large polygon{fill:var(--crit-dot)}
+#instance-map .im-a.s-moderate polyline{stroke:var(--warn-dot);stroke-width:2.6}
+#instance-map .im-a.s-moderate polygon{fill:var(--warn-dot)}
+#instance-map .im-rd{margin:8px 0 12px;color:var(--ink-2)}
+#instance-map .im-pop{position:absolute;z-index:30;max-width:360px;min-width:220px;background:var(--panel);color:var(--ink);border:1px solid var(--line-2);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.18);padding:10px 12px;font-size:12px;line-height:1.45}
+#instance-map .im-pop[hidden]{display:none}
+#instance-map .im-pt{font-size:13px}
+#instance-map .im-st{display:inline-flex;align-items:center;gap:5px;margin-left:6px;font-weight:600}
+#instance-map .im-pw{margin:4px 0;color:var(--muted)}
+#instance-map .im-pm{margin:6px 0 0;padding:0 0 0 2px;list-style:none}
+#instance-map .im-pm li{margin:3px 0}
+#instance-map .im-pv{color:var(--ink-2);font-variant-numeric:tabular-nums}
+#instance-map .im-pc{margin:8px 0 0}
+#instance-map .im-pop a.im-go{color:var(--acc-ink);font-weight:600;text-decoration:none;margin-right:10px}
+#instance-map .im-pop a.im-go:hover{text-decoration:underline}
+#instance-map .im-tbl .im-tst{white-space:nowrap}
+#instance-map .im-tbl .im-tst .im-k{margin-right:6px;vertical-align:-1px}
+#instance-map .im-tscroll{overflow-x:auto;max-width:100%}
