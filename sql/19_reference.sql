@@ -229,7 +229,8 @@ BEGIN
         || ' stacked by wait class, from the earliest compared window to Current. Not a strict foreground DB-time profile. A snapshot pair across an instance restart is a gap.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Verdict</dt><dd>One sentence from the first two finding cards (the card that added the most DB time, then DB time when it is flagged): the lead metric and its move, &times;n at twice the mean'
         || ' or more, else a percentage. For DB time, where the extra time went: CPU vs wait from DB CPU against DB time. <b>Likely source</b>: a statement that ran with a new plan in the'
-        || ' Current window, else a newcomer in the top SQL by physical reads, else a statement first seen this window, else the segment the extra reads land on. Fixed phrases, no free text.</dd>');
+        || ' Current window, else a newcomer in the top SQL by physical reads, else a statement first seen this window, else the segment the extra reads land on. Fixed phrases, no free text.'
+        || ' <b>Where the extra DB time went</b>: the DB-time rise split into DB CPU and each wait class (Current minus prior mean, average active sessions), largest first; solid = behind a finding, hatched = grew but stayed inside its normal range. Wait-class time counts background sessions too, so the parts can add up to slightly more than the rise.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Finding cards</dt><dd>One card per metric family of the scoring policy (<code>sql/lib/metric_policy.plsql</code>); families that tell one story share a card:'
         || ' Physical I/O (physical and logical reads, long table scans, User I/O waits), DB time (DB time, the CPU / wait ratio, response time), Network (Network waits, SQL*Net bytes), Commit'
         || ' (Commit waits, commits), Parsing, Writes and redo. A card is led by its loudest large, else moderate, metric of the card&rsquo;s main family.'

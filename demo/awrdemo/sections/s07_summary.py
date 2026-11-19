@@ -349,6 +349,100 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp):
                + '">Timeline &rarr;</a><span class="evl">' + links + '</span></footer></article>')
 
 
+def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
+    """v1.7 "Where the extra DB time went" (plan 021): the DB-time rise split
+    into DB CPU and the wait classes (the cards' impact), largest first;
+    printed hidden and moved into 00's #att-slot.  Twin of 07's nested block
+    before the section header."""
+    dd = imp.get("DBTIME")
+    if not (order and dd is not None and dbt is not None):
+        return
+    parts, pos = [], 0.0
+    for f in findings:                      # heat_pos order, like the PL/SQL loop
+        if f.cur is None or f.mu is None:
+            continue
+        if not (f.domain == "WAIT" or (f.domain == "LOAD" and f.name == "DB CPU")):
+            continue
+        lab = "CPU" if f.domain == "LOAD" else (
+            f.name[len("Wait class: "):] if f.name.startswith("Wait class: ") else f.name)
+        d = (f.cur - f.mu) * h.metric_scale(f.domain, f.name)
+        grp = h.impact_group(f.domain, f.name, f.family)
+        aid = h.card_id(grp) if grp in lead else _find_id(f)
+        parts.append({"lab": lab, "d": d, "grp": grp, "aid": aid})
+        if d > 0:
+            pos += d
+    parts.sort(key=lambda p: -p["d"])       # stable = the insertion sort's strict >
+    if dd > 0:
+        base = max(dd, pos)
+        bar, lg, small, nsm = "", "", 0.0, 0
+        for p in parts:
+            d = p["d"]
+            if d > 0 and d >= 0.01 * base:
+                fl = p["grp"] in lead
+                pct = int(h.ora_round(d / dd * 100, 0))
+                lab = h.esc(p["lab"])
+                bar += ('<i class="att-s' + ('' if fl else ' nf') + '" data-wc="' + lab
+                        + '" style="flex-grow:' + h.imp_tok(d) + '" title="'
+                        + lab + ': +' + h.fmt_num(d) + ' AAS, ' + str(pct) + '% of the DB-time rise'
+                        + ('' if fl else ', inside its normal range') + '">'
+                        + ('<span>' + lab + ' +' + h.fmt_num(d) + '</span>' if d >= 0.18 * base else '')
+                        + '</i>')
+                lg += ('<li><i class="sw' + ('' if fl else ' nf') + '" data-wc="' + lab + '" aria-hidden="true"></i>'
+                       + h.ent(lab, p["aid"], "card" if fl else "metric")
+                       + ' <b>+' + h.fmt_num(d) + '</b> <span class="sh">'
+                       + ('&lt;1' if pct < 1 else str(pct)) + '%</span>'
+                       + ((' <span class="st"><i class="dotk '
+                           + ('large' if gsev[p["grp"]] == 2 else 'moderate')
+                           + '" aria-hidden="true"></i>finding</span>') if fl
+                          else ' <span class="st nf">inside normal</span>')
+                       + '</li>')
+            elif d > 0:
+                small += d
+                nsm += 1
+        if nsm > 0:
+            bar += ('<i class="att-s att-small" style="flex-grow:' + h.imp_tok(small)
+                    + '" title="' + str(nsm) + ' smaller part' + ('s' if nsm > 1 else '')
+                    + ': +' + h.fmt_num(small) + ' AAS"></i>')
+            lg += '<li class="att-more">+ ' + str(nsm) + ' smaller (' + h.fmt_num(small) + ' AAS)</li>'
+        rest = dd - pos
+        if rest > 0.01 * dd:
+            bar += ('<i class="att-s att-rest" style="flex-grow:' + h.imp_tok(rest)
+                    + '" title="Not in the parts above (classes that fell, or waits outside this'
+                    + ' template&#39;s event list): +' + h.fmt_num(rest) + ' AAS"></i>')
+        # the largest drops: the parts are sorted largest first, so walk backwards
+        fell, nfell = "", 0
+        for p in reversed(parts):
+            if p["d"] >= 0 or nfell >= 3:
+                break
+            if -p["d"] >= 0.01 * dd:
+                fell += (', ' if nfell > 0 else '') + h.esc(p["lab"]) + ' &minus;' + h.fmt_num(-p["d"])
+                nfell += 1
+        note = ""
+        if fell:
+            note += 'Fell: ' + fell + ' AAS. '
+        if pos > dd * 1.005:
+            note += ('The parts add up to ' + h.imp_txt(pos) + ', more than the DB-time'
+                     ' rise: wait-class time also counts background sessions, DB time does not.')
+        out.append('<div id="att-src" hidden><div class="att-h"><b>Where the extra DB time went</b>'
+                   '<span>DB time ' + h.fmt_num(dbt.mu * 0.01) + ' &rarr; '
+                   + h.fmt_num(dbt.cur * 0.01) + ' AAS, <b>' + h.imp_txt(dd) + '</b></span></div>')
+        out.append('<div class="att-bar" role="img" aria-label="The DB-time rise by wait class and CPU,'
+                   ' largest part first">' + bar + '</div>')
+        out.append('<ul class="att-lg">' + lg + '</ul>'
+                   + ('<p class="att-n">' + note.rstrip(' ') + '</p>' if note else '')
+                   + '</div>')
+    else:
+        out.append('<div id="att-src" hidden><p class="att-n"><b>DB time</b> did not rise: '
+                   + h.fmt_num(dbt.cur * 0.01) + ' AAS, against a prior mean of '
+                   + h.fmt_num(dbt.mu * 0.01) + ' AAS.</p></div>')
+    out.append('<script>(function(){var d=document,s=d.getElementById("att-src"),'
+               't=d.getElementById("att-slot"),c=window.AWR_WAIT_COLORS||{};if(!s)return;'
+               's.querySelectorAll("[data-wc]").forEach(function(e){var k=e.getAttribute("data-wc");'
+               'if(c[k])e.style.setProperty("--c",c[k]);});'
+               'if(t){while(s.firstChild)t.appendChild(s.firstChild);t.hidden=false;}'
+               's.parentNode.removeChild(s);})();</script>')
+
+
 def emit(w) -> str:
     out = ["<!-- AWR-SECTION: 07_summary BEGIN -->"]
     findings = compute_findings(w)
@@ -382,6 +476,7 @@ def emit(w) -> str:
     order = h.card_order({g: (gsev[g], gz[g], imp.get(g)) for g in lead})
     evs = _events(w) if flagcls else []
     ordered = _table_order(findings)
+    _att(out, findings, order, lead, gsev, dbt, imp)
 
     meta = ('<span class="meta">'
             + ('<span><i class="dotk large"></i>' + str(crit) + ' large</span>' if crit > 0 else '')

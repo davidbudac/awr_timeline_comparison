@@ -62,7 +62,9 @@
  *     sub-link per finding card; All sections shows every library section
  *     in full; the Trend cells are micro strips (svg.mw), no line left;
  *     v1.7: cards ordered by data-impact, chip present, Summary z capped
- *     at 10;
+ *     at 10; the DB-time breakdown under the verdict (#att-slot) shown
+ *     (required for the demo), #att-src gone, every part coloured from
+ *     AWR_WAIT_COLORS;
  *   - the design (window.AWR_DESIGN, design=quiet|dashboard; none =
  *     classic): quiet and dashboard -- "How to read" opens / closes the
  *     Activity help, a table's copy menu holds CSV + Markdown; dashboard --
@@ -860,6 +862,13 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       out.impOrder = imp.every((v, i) => i === 0 || imp[i - 1] >= v);
       out.impAttrs = fc.every(c => c.hasAttribute('data-impact') && c.hasAttribute('data-share'));
       out.impChips = fc.filter(c => parseFloat(c.getAttribute('data-impact')) > 0).every(c => c.querySelector('.fc-k .fc-imp'));
+      // v1.7: the DB-time breakdown under the verdict
+      const att = document.getElementById('att-slot');
+      out.att = (att && !att.hidden && vis(att)) ? att.querySelectorAll('.att-s').length : 0;
+      out.attSrcGone = !document.getElementById('att-src');
+      const wcs = window.AWR_WAIT_COLORS || {};
+      out.attColors = [...document.querySelectorAll('#att-slot [data-wc]')]
+        .every(e => !wcs[e.getAttribute('data-wc')] || !!e.style.getPropertyValue('--c'));
       // the related-metrics fold (details.rel) is a table and keeps the exact z
       out.zcap = [...document.querySelectorAll('#findings article.fc .fc-h .bd .ov, #findings article.fc dl.ev .bd .ov, '
         + '#changes-slot article.fc .fc-h .bd .ov, #changes-slot dl.ev .bd .ov, #s-normal .nr .bd .ov, #overview .bd .ov, '
@@ -878,6 +887,9 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       return out;
     });
     console.log('phase 4', JSON.stringify(p4));
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && !p4.att) fail('DB-time breakdown: not shown under the verdict');
+    if (!p4.attSrcGone) fail('DB-time breakdown: #att-src left in the page');
+    if (!p4.attColors) fail('DB-time breakdown: a part has no wait-class colour');
     if (!p4.impAttrs) fail('finding cards: data-impact / data-share missing');
     if (!p4.impOrder) fail('finding cards: not ordered by impact');
     if (!p4.impChips) fail('finding cards: impact chip missing');

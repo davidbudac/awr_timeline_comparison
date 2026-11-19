@@ -1376,6 +1376,8 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('<h1 class="verdict">' || v_verdict || '.</h1>');
     END IF;
     DBMS_OUTPUT.PUT_LINE('<p class="because" id="because-slot" hidden></p>');
+    -- v1.7: "Where the extra DB time went" -- 07 moves its breakdown in here
+    DBMS_OUTPUT.PUT_LINE('<div class="att" id="att-slot" hidden></div>');
     DBMS_OUTPUT.PUT_LINE('<ul class="pills" id="pills" aria-label="Counts">'
         || CASE WHEN v_order.COUNT > 0
                 THEN '<li><a href="#findings"><b>' || v_order.COUNT || '</b> finding'

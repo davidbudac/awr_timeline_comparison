@@ -248,6 +248,7 @@ def _hero(w, st) -> list[str]:
                 v += '<span class="vx" data-vx="io" hidden></span>'
         put('<h1 class="verdict">' + v + '.</h1>')
     put('<p class="because" id="because-slot" hidden></p>')
+    put('<div class="att" id="att-slot" hidden></div>')
     nm, nn, ni = st["n_moved"], st["n_normal"], st["n_impr"]
     put('<ul class="pills" id="pills" aria-label="Counts">'
         + (('<li><a href="#findings"><b>' + str(len(order)) + '</b> finding' + ('' if len(order) == 1 else 's')

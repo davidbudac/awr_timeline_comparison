@@ -86,6 +86,15 @@ DECLARE
         shr     NUMBER
     );
     TYPE ev_t IS TABLE OF ev_rec INDEX BY PLS_INTEGER;
+    -- v1.7 "Where the extra DB time went" (plan 021): one part per wait
+    -- class and one for DB CPU, in AAS above the prior mean
+    TYPE part_rec IS RECORD (
+        lab VARCHAR2(64),     -- 'CPU' or the wait class name
+        d   NUMBER,           -- Current - prior mean, AAS (may be negative)
+        grp VARCHAR2(64),     -- the card group this part is the time measure of
+        aid VARCHAR2(200)     -- link target: the card, else the detail row
+    );
+    TYPE part_t IS TABLE OF part_rec INDEX BY PLS_INTEGER;
 
     v_findings   findings_t;
     v_table_idx  idx_t;
@@ -117,6 +126,7 @@ DECLARE
     v_dbt        PLS_INTEGER;
     v_cpu        PLS_INTEGER;
     v_meta       VARCHAR2(4000);
+    v_parts      part_t;
 
     @@sql/lib/metric_policy.plsql
     @@sql/lib/is_essential.plsql
@@ -932,6 +942,139 @@ BEGIN
         WHERE  rn <= 2
         ORDER  BY wait_class, rn;
     END IF;
+
+    --
+    -- v1.7: "Where the extra DB time went" (plan 021).  The DB-time rise
+    -- split into DB CPU and the wait classes -- the same numbers as the
+    -- cards' impact (impact_group, sql/lib/finding_cards.plsql), largest
+    -- first.  Solid = the part's card is a finding; hatched = it grew but
+    -- stayed inside its normal range.  Printed hidden and moved into 00's
+    -- #att-slot by the script below (JavaScript off: it stays hidden; every
+    -- number is in the Wait classes table and the DB CPU row).  Only when
+    -- there is at least one finding card.
+    --
+    DECLARE
+        v_dd    NUMBER := g_imp('DBTIME');
+        v_p     part_rec;
+        v_pos   NUMBER := 0;      -- sum of the parts that rose
+        v_base  NUMBER;           -- the bar's 100%: GREATEST(rise, sum of parts)
+        v_small NUMBER := 0;      -- parts under 1% of the base, merged
+        v_nsm   PLS_INTEGER := 0;
+        v_rest  NUMBER;
+        v_pct   NUMBER;
+        v_fl    BOOLEAN;
+        v_bar   VARCHAR2(32767);
+        v_lg    VARCHAR2(32767);
+        v_fell  VARCHAR2(4000);
+        v_nfell PLS_INTEGER := 0;
+        v_note  VARCHAR2(4000);
+        k       PLS_INTEGER;
+    BEGIN
+      IF v_order.COUNT > 0 AND v_dd IS NOT NULL AND v_dbt IS NOT NULL THEN
+        -- the parts, largest rise first (insertion sort, stable)
+        FOR i IN 1 .. v_findings.COUNT LOOP
+            f := v_findings(i);
+            IF f.cur_val IS NOT NULL AND f.prior_mean IS NOT NULL
+               AND (f.metric_domain = 'WAIT'
+                    OR (f.metric_domain = 'LOAD' AND f.metric_name = 'DB CPU')) THEN
+                v_p.lab := CASE WHEN f.metric_domain = 'LOAD' THEN 'CPU'
+                                ELSE REGEXP_REPLACE(f.metric_name, '^Wait class: ', '') END;
+                v_p.d   := (f.cur_val - f.prior_mean) * metric_scale(f.metric_domain, f.metric_name);
+                v_p.grp := impact_group(f.metric_domain, f.metric_name, f.family);
+                v_p.aid := CASE WHEN v_glead.EXISTS(v_p.grp) THEN card_id(v_p.grp)
+                                ELSE find_id(f.metric_domain, f.metric_name) END;
+                k := v_parts.COUNT;
+                WHILE k >= 1 AND v_p.d > v_parts(k).d LOOP
+                    v_parts(k + 1) := v_parts(k);
+                    k := k - 1;
+                END LOOP;
+                v_parts(k + 1) := v_p;
+                IF v_p.d > 0 THEN v_pos := v_pos + v_p.d; END IF;
+            END IF;
+        END LOOP;
+
+        IF v_dd > 0 THEN
+            v_base := GREATEST(v_dd, v_pos);
+            FOR k2 IN 1 .. v_parts.COUNT LOOP
+                v_p := v_parts(k2);
+                IF v_p.d > 0 AND v_p.d >= 0.01 * v_base THEN
+                    v_fl  := v_glead.EXISTS(v_p.grp);
+                    v_pct := ROUND(v_p.d / v_dd * 100);
+                    v_bar := v_bar || '<i class="att-s' || CASE WHEN NOT v_fl THEN ' nf' END
+                        || '" data-wc="' || DBMS_XMLGEN.CONVERT(v_p.lab)
+                        || '" style="flex-grow:' || imp_tok(v_p.d) || '" title="'
+                        || DBMS_XMLGEN.CONVERT(v_p.lab) || ': +' || fmt_num(v_p.d) || ' AAS, '
+                        || v_pct || '% of the DB-time rise'
+                        || CASE WHEN NOT v_fl THEN ', inside its normal range' END || '">'
+                        || CASE WHEN v_p.d >= 0.18 * v_base
+                                THEN '<span>' || DBMS_XMLGEN.CONVERT(v_p.lab) || ' +' || fmt_num(v_p.d) || '</span>' END
+                        || '</i>';
+                    v_lg := v_lg || '<li><i class="sw' || CASE WHEN NOT v_fl THEN ' nf' END
+                        || '" data-wc="' || DBMS_XMLGEN.CONVERT(v_p.lab) || '" aria-hidden="true"></i>'
+                        || ent(DBMS_XMLGEN.CONVERT(v_p.lab), v_p.aid, CASE WHEN v_fl THEN 'card' ELSE 'metric' END)
+                        || ' <b>+' || fmt_num(v_p.d) || '</b> <span class="sh">'
+                        || CASE WHEN v_pct < 1 THEN '&lt;1' ELSE TO_CHAR(v_pct) END || '%</span>'
+                        || CASE WHEN v_fl
+                                THEN ' <span class="st"><i class="dotk '
+                                     || CASE WHEN v_gsev(v_p.grp) = 2 THEN 'large' ELSE 'moderate' END
+                                     || '" aria-hidden="true"></i>finding</span>'
+                                ELSE ' <span class="st nf">inside normal</span>' END
+                        || '</li>';
+                ELSIF v_p.d > 0 THEN
+                    v_small := v_small + v_p.d;
+                    v_nsm   := v_nsm + 1;
+                END IF;
+            END LOOP;
+            IF v_nsm > 0 THEN
+                v_bar := v_bar || '<i class="att-s att-small" style="flex-grow:' || imp_tok(v_small)
+                    || '" title="' || v_nsm || ' smaller part' || CASE WHEN v_nsm > 1 THEN 's' END
+                    || ': +' || fmt_num(v_small) || ' AAS"></i>';
+                v_lg := v_lg || '<li class="att-more">+ ' || v_nsm || ' smaller ('
+                    || fmt_num(v_small) || ' AAS)</li>';
+            END IF;
+            v_rest := v_dd - v_pos;
+            IF v_rest > 0.01 * v_dd THEN
+                v_bar := v_bar || '<i class="att-s att-rest" style="flex-grow:' || imp_tok(v_rest)
+                    || '" title="Not in the parts above (classes that fell, or waits outside this'
+                    || ' template&#39;s event list): +' || fmt_num(v_rest) || ' AAS"></i>';
+            END IF;
+            -- the largest drops: the parts are sorted largest first, so walk backwards
+            FOR k2 IN REVERSE 1 .. v_parts.COUNT LOOP
+                EXIT WHEN v_parts(k2).d >= 0 OR v_nfell >= 3;
+                IF -v_parts(k2).d >= 0.01 * v_dd THEN
+                    v_fell := v_fell || CASE WHEN v_nfell > 0 THEN ', ' END
+                        || DBMS_XMLGEN.CONVERT(v_parts(k2).lab) || ' &minus;' || fmt_num(-v_parts(k2).d);
+                    v_nfell := v_nfell + 1;
+                END IF;
+            END LOOP;
+            IF v_fell IS NOT NULL THEN
+                v_note := v_note || 'Fell: ' || v_fell || ' AAS. ';
+            END IF;
+            IF v_pos > v_dd * 1.005 THEN
+                v_note := v_note || 'The parts add up to ' || imp_txt(v_pos) || ', more than the DB-time'
+                    || ' rise: wait-class time also counts background sessions, DB time does not.';
+            END IF;
+            DBMS_OUTPUT.PUT_LINE('<div id="att-src" hidden><div class="att-h"><b>Where the extra DB time went</b>'
+                || '<span>DB time ' || fmt_num(v_findings(v_dbt).prior_mean * 0.01) || ' &rarr; '
+                || fmt_num(v_findings(v_dbt).cur_val * 0.01) || ' AAS, <b>' || imp_txt(v_dd) || '</b></span></div>');
+            DBMS_OUTPUT.PUT_LINE('<div class="att-bar" role="img" aria-label="The DB-time rise by wait class and CPU,'
+                || ' largest part first">' || v_bar || '</div>');
+            DBMS_OUTPUT.PUT_LINE('<ul class="att-lg">' || v_lg || '</ul>'
+                || CASE WHEN v_note IS NOT NULL THEN '<p class="att-n">' || RTRIM(v_note) || '</p>' END
+                || '</div>');
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('<div id="att-src" hidden><p class="att-n"><b>DB time</b> did not rise: '
+                || fmt_num(v_findings(v_dbt).cur_val * 0.01) || ' AAS, against a prior mean of '
+                || fmt_num(v_findings(v_dbt).prior_mean * 0.01) || ' AAS.</p></div>');
+        END IF;
+        DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,s=d.getElementById("att-src"),'
+            || 't=d.getElementById("att-slot"),c=window.AWR_WAIT_COLORS||{};if(!s)return;'
+            || 's.querySelectorAll("[data-wc]").forEach(function(e){var k=e.getAttribute("data-wc");'
+            || 'if(c[k])e.style.setProperty("--c",c[k]);});'
+            || 'if(t){while(s.firstChild)t.appendChild(s.firstChild);t.hidden=false;}'
+            || 's.parentNode.removeChild(s);})();</script>');
+      END IF;
+    END;
 
     --
     -- Section header: title, a one-line subtitle per view, the counts.

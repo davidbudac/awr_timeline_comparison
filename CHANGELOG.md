@@ -125,6 +125,11 @@ release bumps `awr_version`).
   moderate. DB time stays second. The verdict follows the same order. Band
   glyphs in the Summary view print z only up to ">+10 sigma"; tables keep
   the exact z. A flagged DB CPU card is labelled "CPU" (was "Cpu").
+- **The verdict shows where the extra DB time went.** A bar under the
+  verdict splits the DB-time rise into DB CPU and each wait class (AAS
+  above the prior mean, largest first), solid when the part is behind a
+  finding, hatched when it grew but stayed normal, with the classes that
+  fell named under it. Same numbers as the finding cards' impact.
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

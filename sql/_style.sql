@@ -1201,6 +1201,21 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.hero .hnotes a.go{color:var(--ink-soft);font-size:12.5px;text-decoration:none;border-bottom:1px solid var(--hairline)}');
     DBMS_OUTPUT.PUT_LINE('.hero .hnotes a.go:hover{color:var(--ink);border-color:var(--muted)}');
     DBMS_OUTPUT.PUT_LINE('.hero .snapnote{margin:var(--s3) 0 0;font-size:12.5px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att{margin:var(--s5) 0 0;max-width:60em}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-h{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 16px;font-size:13.5px;color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-h b{color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-bar{display:flex;gap:2px;height:24px;margin:8px 0 8px}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-s{--c:var(--muted);flex-basis:0;min-width:3px;display:flex;align-items:center;overflow:hidden;padding:0 7px;border-radius:3px;background:var(--c);color:#fff;font-size:11.5px;font-weight:600;font-style:normal;white-space:nowrap;text-shadow:0 0 2px rgba(0,0,0,.45)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-s.nf{background:repeating-linear-gradient(135deg,var(--c) 0 4px,transparent 4px 8px);box-shadow:inset 0 0 0 1px var(--c)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-s.att-small,.hero .att-s.att-rest{--c:var(--hairline);color:var(--ink-soft);text-shadow:none}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-lg{display:flex;flex-wrap:wrap;gap:4px 18px;margin:0;padding:0;list-style:none;font-size:12.5px;color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-lg li{display:inline-flex;align-items:center;gap:6px}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-lg .sw{--c:var(--muted);display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--c)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-lg .sw.nf{background:repeating-linear-gradient(135deg,var(--c) 0 3px,transparent 3px 6px);box-shadow:inset 0 0 0 1px var(--c)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-lg b{color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-lg .st{display:inline-flex;align-items:center;gap:5px}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-lg .st.nf,.hero .att-lg .att-more{color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-n{margin:6px 0 0;font-size:12.5px;color:var(--muted)}');
     DBMS_OUTPUT.PUT_LINE('section.strip-sec{background:none;border:0;border-radius:0;padding:0;margin:var(--s5) 0 0}');
     DBMS_OUTPUT.PUT_LINE('.strip{overflow:hidden}');
     -- ONE window component (.wg, sql/lib/wingrid.plsql): 13 columns, Current last and wider

@@ -336,7 +336,7 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
 
 | Piece | Emitter | Notes |
 |---|---|---|
-| Verdict hero `section#verdict.vw.in-s.hero` | 00 | one rule-based h1 sentence (no free prose), `p#because-slot` "Likely source:" (17 fills), `ul#pills` (17 inserts before `li.pl-normal`), `ul#narrative-slot.hnotes` (17), `p.snapnote` (target_end snapped) |
+| Verdict hero `section#verdict.vw.in-s.hero` | 00 | one rule-based h1 sentence (no free prose), `p#because-slot` "Likely source:" (17 fills), `ul#pills` (17 inserts before `li.pl-normal`), `ul#narrative-slot.hnotes` (17), `p.snapnote` (target_end snapped), `#att-slot` (07 fills: DB-time breakdown, `.att-h` / `.att-bar` / `.att-lg`, parts coloured from `AWR_WAIT_COLORS` via `--c`) |
 | Hero strip `section#overview` | 08 | DB time (AAS) per window on the window component, `#hero-dbt`; replaced the six v1.5 headline tiles |
 | Finding cards `#findings div.cards` | 07 | one `article.fc` per card group (below); header band glyph, big value, window bars, ≤4 evidence rows, related-metrics fold, footer `a.jump[data-tl]` "Timeline →" |
 | `section#s-changes[hidden]` | 07 (`#changes-slot`) | 18's plan cards then 12's config card move in and unhide it |
@@ -389,7 +389,8 @@ elapsed, not "more than one plan in the span" (review #6).
 that fills a slot owned by an earlier section emits its block hidden and a
 one-line inline `<script>` moves it while the page parses. Slots:
 `#changes-slot` (07; 18 plan cards `f-plan-<sql_id>` first, then 12's
-`#f-config`, as the driver runs 18 before 12), `#because-slot` / `#pills` /
+`#f-config`, as the driver runs 18 before 12), `#att-slot` (07, the
+DB-time breakdown under the verdict), `#because-slot` / `#pills` /
 `#narrative-slot` / verdict `.vx[data-vx="io"]` / I/O card evidence
 `[data-ev-for]` (17, which runs last). These scripts run BEFORE any
 DOMContentLoaded handler (ent unwrap, chrome), so they must not depend on
