@@ -2535,6 +2535,77 @@ function spHead(){
   if(fineOn(d0,d1))res=fineCov(d0,d1)>=d1-d0-1?'1-min detail':'1-min detail in the compared windows, '+SP.bhTxt+' elsewhere';
   if(SP.range)SP.range.textContent=zoomed?fAt(d0)+' to '+fAt(d1)+', zoomed, '+res:fDay(SP.full[0])+' to '+fDay(SP.full[1])+', '+SP.bhTxt;
 }
+/* the highlight state and the series drawing order of chart c (re-based:
+   the highlighted series first) */
+function hlOrd(c){
+  var P=c.P,hl=c.hl,on=null,k,ord=[];
+  if(hl){on=P.classes.map(function(x,q){return !!hl.set[q]&&c.vis[q];});if(!on.some(Boolean)){hl=null;on=null;}}
+  var reb=!!(hl&&hl.strong);
+  for(k=0;k<P.vals.length;k++)if(c.vis[k]&&(!reb||on[k]))ord.push(k);
+  if(reb)for(k=0;k<P.vals.length;k++)if(c.vis[k]&&!on[k])ord.push(k);
+  return {hl:hl,on:on,reb:reb,ord:ord};
+}
+/* the points drawn for refs R over [d0, d1] mapped by X (see draw) and the
+   largest stacked total mx / highlighted total mh inside [d0, d1] */
+function colPts(c,R,X,d0,d1,reb,on){
+  var P=c.P,pts=[],cb=null,mx=0.05,mh=0,i,k,sm,sh,r;
+  for(i=0;i<R.length;i++){r=R[i];sm=0;sh=0;for(k=0;k<P.vals.length;k++)if(c.vis[k]){var vk=rV(c,k,r)||0;sm+=vk;if(reb&&on[k])sh+=vk;}
+    var ra=rS(r),rb=rE(r);if(rb>d0&&ra<d1){if(sm>mx)mx=sm;if(sh>mh)mh=sh;}
+    var xm=X((ra+rb)/2),col=Math.floor(xm),g=pts[pts.length-1];
+    if(g&&col===cb){if(reb?(sh>g[3]||(sh===g[3]&&sm>g[2])):sm>g[2]){g[0]=xm;g[1]=r;g[2]=sm;g[3]=sh;}}else{pts.push([xm,r,sm,sh]);cb=col;}}
+  if(pts.length){var pf=pts[0],pl=pts[pts.length-1];
+    if(rS(pf[1])>=d0)pts.unshift([X(rS(pf[1])),pf[1],pf[2],pf[3]]);
+    if(rE(pl[1])<=d1)pts.push([X(rE(pl[1])),pl[1],pl[2],pl[3]]);}
+  return {pts:pts,mx:mx,mh:mh};
+}
+/* the band paths of points pts (colPts) in series order ord, y mapped by Y:
+   one fill per series, painted top of the stack first (the caller reverses
+   fills / edges): each fills from the axis up to its own cumulative line
+   and the series below paint over it (no seams); then each band's top
+   edge, a thin darker line.  A point in the middle of a flat run is left
+   out of the path.  Highlighted: the other series paint the same way inside
+   one faded group (the group's opacity applies once, so their overlap does
+   not darken), then each highlighted series as its own band (hf, between
+   its lower and upper line) at full colour with a clear top edge (he). */
+function bands(c,pts,ord,on,Y){
+  var lo=pts.map(function(){return 0;}),np=pts.length,y0=Y(0).toFixed(1),fills=[],edges=[],hf=[],he=[];
+  var pl2=function(ys,rev){var o='',j,q;for(q=0;q<np;q++){j=rev?np-1-q:q;if(q>0&&q<np-1&&ys[j]===ys[rev?j+1:j-1]&&ys[j]===ys[rev?j-1:j+1])continue;o+=(o?'L':'')+pts[j][0].toFixed(1)+' '+ys[j];}return o;};
+  ord.forEach(function(k){
+    if(!np)return;
+    var hi=lo.map(function(l,j){return l+(rV(c,k,pts[j][1])||0);}),ys=hi.map(function(h){return Y(h).toFixed(1);}),ln=pl2(ys,false);
+    if(on&&on[k]){
+      hf.push('<path class="xa xah" fill="'+c.cols[k]+'" d="M'+ln+'L'+pl2(lo.map(function(h){return Y(h).toFixed(1);}),true)+'Z"/>');
+      he.push('<path class="xe xeh" stroke="'+shade(c.cols[k])+'" d="M'+ln+'"/>');
+    }else{
+      fills.push('<path class="xa" fill="'+c.cols[k]+'" d="M'+pts[0][0].toFixed(1)+' '+y0+'L'+ln+'L'+pts[np-1][0].toFixed(1)+' '+y0+'Z"/>');
+      edges.push('<path class="xe" stroke="'+shade(c.cols[k])+'" d="M'+ln+'"/>');
+    }
+    lo=hi;
+  });
+  return {fills:fills,edges:edges,hf:hf,he:he};
+}
+/* the release markers of list [{x: px, m: marker}]: a line through the plot
+   on every chart shown, the flags (two tiers) on the chart with c.flags */
+function flagSvg(c,list,top,ph,Wd,padL,padR){
+  var s='',tiers=[[],[]];
+  list.forEach(function(it){
+    var x=it.x,m=it.m;if(x<padL||x>Wd-padR)return;
+    if(!c.flags){s+='<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+top+'" y2="'+(top+ph)+'"><title>'+esc(m.l+', '+m.t)+'</title></line>';return;}
+    [m.l,m.s].some(function(lb){
+      var w=tw(lb)+12,x0=x+w>Wd-padR?x-w:x,end=x0!==x;
+      for(var L=0;L<2;L++){
+        if(tiers[L].some(function(r){return x0<r[1]+6&&x0+w>r[0]-6;}))continue;
+        tiers[L].push([x0,x0+w]);var y=2+L*19;
+        s+='<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+(y+16)+'" y2="'+(top+ph)+'"/><line class="cf" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+y+'" y2="'+(y+16)+'"/>'
+          +'<rect class="cfh" x="'+(end?x0:x+1).toFixed(1)+'" y="'+y+'" width="'+(w-1)+'" height="16" rx="2"/>'
+          +'<text class="cft" x="'+(end?x-6:x+6).toFixed(1)+'" y="'+(y+12)+'" text-anchor="'+(end?'end':'start')+'"><title>'+esc(m.l+', '+m.t)+'</title>'+esc(lb)+'</text>';
+        return true;
+      }
+      return false;
+    });
+  });
+  return s;
+}
 function draw(c,force){
   if(!c||!SP||!shown(c.plot))return;
   /* the release flags go on the first chart shown, the x labels on the
@@ -2556,19 +2627,8 @@ function draw(c,force){
   /* the highlight (hlApply): on[k] = series k highlighted and shown; re-based
      (strong) = the highlighted series stacked first, from zero, the y axis
      fitted to them and each pixel column keeping THEIR busiest bucket */
-  var hl=c.hl,on=null,i,k,sm,sh,r;
-  if(hl){on=P.classes.map(function(x,q){return !!hl.set[q]&&c.vis[q];});if(!on.some(Boolean)){hl=null;on=null;}}
-  var reb=!!(hl&&hl.strong),ord=[];
-  for(k=0;k<P.vals.length;k++)if(c.vis[k]&&(!reb||on[k]))ord.push(k);
-  if(reb)for(k=0;k<P.vals.length;k++)if(c.vis[k]&&!on[k])ord.push(k);
-  var R=refs(d0,d1),pts=[],cb=null,mx=0.05,mh=0;
-  for(i=0;i<R.length;i++){r=R[i];sm=0;sh=0;for(k=0;k<P.vals.length;k++)if(c.vis[k]){var vk=rV(c,k,r)||0;sm+=vk;if(reb&&on[k])sh+=vk;}
-    var ra=rS(r),rb=rE(r);if(rb>d0&&ra<d1){if(sm>mx)mx=sm;if(sh>mh)mh=sh;}
-    var xm=X((ra+rb)/2),col=Math.floor(xm),g=pts[pts.length-1];
-    if(g&&col===cb){if(reb?(sh>g[3]||(sh===g[3]&&sm>g[2])):sm>g[2]){g[0]=xm;g[1]=r;g[2]=sm;g[3]=sh;}}else{pts.push([xm,r,sm,sh]);cb=col;}}
-  if(pts.length){var pf=pts[0],pl=pts[pts.length-1];
-    if(rS(pf[1])>=d0)pts.unshift([X(rS(pf[1])),pf[1],pf[2],pf[3]]);
-    if(rE(pl[1])<=d1)pts.push([X(rE(pl[1])),pl[1],pl[2],pl[3]]);}
+  var h=hlOrd(c),hl=h.hl,on=h.on,reb=h.reb,ord=h.ord;
+  var cp=colPts(c,refs(d0,d1),X,d0,d1,reb,on),pts=cp.pts,mx=cp.mx,mh=cp.mh;
   var yb=reb&&mh>0?Math.max(mh,0.05):mx,step=niceStep(yb,3),ymax=Math.ceil(yb/step-1e-9)*step;
   var Y=function(v){return top+ph-ph*v/ymax;},clip='axclip-'+c.uid;
   var s='<defs><clipPath id="'+clip+'"><rect x="'+padL+'" y="'+(top-6)+'" width="'+pw+'" height="'+(ph+6)+'"/></clipPath>'
@@ -2576,28 +2636,7 @@ function draw(c,force){
   for(var v=0;v<=ymax+1e-9;v+=step){var dec=step<1?(step<0.1?2:1):0;
     s+='<line class="gl" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="at" x="'+(padL-6)+'" y="'+(Y(v)+4).toFixed(1)+'" text-anchor="end">'+v.toFixed(dec)+'</text>';}
   s+='<text class="at" x="'+(padL-6)+'" y="'+(top-10)+'" text-anchor="end">AAS</text><g clip-path="url(#'+clip+')">';
-  /* one fill per series, painted top of the stack first: each fills from
-     the axis up to its own cumulative line and the series below paint over
-     it (no seams); then each band's top edge, a thin darker line.  A point
-     in the middle of a flat run is left out of the path.  Highlighted: the
-     other series paint the same way inside one faded group (the group's
-     opacity applies once, so their overlap does not darken), then each
-     highlighted series as its own band (between its lower and upper line)
-     at full colour with a clear top edge. */
-  var lo=pts.map(function(){return 0;}),np=pts.length,y0=Y(0).toFixed(1),fills=[],edges=[],hf=[],he=[];
-  var pl2=function(ys,rev){var o='',j,q;for(q=0;q<np;q++){j=rev?np-1-q:q;if(q>0&&q<np-1&&ys[j]===ys[rev?j+1:j-1]&&ys[j]===ys[rev?j-1:j+1])continue;o+=(o?'L':'')+pts[j][0].toFixed(1)+' '+ys[j];}return o;};
-  ord.forEach(function(k){
-    if(!np)return;
-    var hi=lo.map(function(l,j){return l+(rV(c,k,pts[j][1])||0);}),ys=hi.map(function(h){return Y(h).toFixed(1);}),ln=pl2(ys,false);
-    if(on&&on[k]){
-      hf.push('<path class="xa xah" fill="'+c.cols[k]+'" d="M'+ln+'L'+pl2(lo.map(function(h){return Y(h).toFixed(1);}),true)+'Z"/>');
-      he.push('<path class="xe xeh" stroke="'+shade(c.cols[k])+'" d="M'+ln+'"/>');
-    }else{
-      fills.push('<path class="xa" fill="'+c.cols[k]+'" d="M'+pts[0][0].toFixed(1)+' '+y0+'L'+ln+'L'+pts[np-1][0].toFixed(1)+' '+y0+'Z"/>');
-      edges.push('<path class="xe" stroke="'+shade(c.cols[k])+'" d="M'+ln+'"/>');
-    }
-    lo=hi;
-  });
+  var B=bands(c,pts,ord,on,Y),fills=B.fills,edges=B.edges,hf=B.hf,he=B.he;
   if(!hl)s+=fills.reverse().join('')+edges.reverse().join('');
   /* fitted below the stack's top, the faded stack would fill the plot: fainter then */
   else s+=(reb?'<g clip-path="url(#'+clip+'f)">':'')+'<g class="xfd" opacity="'+(reb&&ymax<mx?Math.min(hl.fade,0.07):hl.fade)+'">'+fills.reverse().join('')+'</g>'+hf.join('')+he.join('')+(reb?'</g>':'');
@@ -2623,23 +2662,7 @@ function draw(c,force){
   }
   /* release markers: a line through the plot on both charts; the flags (two
      tiers) on the upper one */
-  var tiers=[[],[]];
-  mks.forEach(function(m){
-    var x=X(PT(m.at));if(x<padL||x>Wd-padR)return;
-    if(!c.flags){s+='<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+top+'" y2="'+(top+ph)+'"><title>'+esc(m.l+', '+m.t)+'</title></line>';return;}
-    [m.l,m.s].some(function(lb){
-      var w=tw(lb)+12,x0=x+w>Wd-padR?x-w:x,end=x0!==x;
-      for(var L=0;L<2;L++){
-        if(tiers[L].some(function(r){return x0<r[1]+6&&x0+w>r[0]-6;}))continue;
-        tiers[L].push([x0,x0+w]);var y=2+L*19;
-        s+='<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+(y+16)+'" y2="'+(top+ph)+'"/><line class="cf" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+y+'" y2="'+(y+16)+'"/>'
-          +'<rect class="cfh" x="'+(end?x0:x+1).toFixed(1)+'" y="'+y+'" width="'+(w-1)+'" height="16" rx="2"/>'
-          +'<text class="cft" x="'+(end?x-6:x+6).toFixed(1)+'" y="'+(y+12)+'" text-anchor="'+(end?'end':'start')+'"><title>'+esc(m.l+', '+m.t)+'</title>'+esc(lb)+'</text>';
-        return true;
-      }
-      return false;
-    });
-  });
+  s+=flagSvg(c,mks.map(function(m){return {x:X(PT(m.at)),m:m};}),top,ph,Wd,padL,padR);
   if(hl&&hl.note)s+='<text class="xhn" x="'+(padL+6)+'" y="'+(top+13)+'">'+esc(hl.note)+'</text>';
   s+='<line class="xch" x1="0" x2="0" y1="'+top+'" y2="'+(top+ph)+'" visibility="hidden"/>';
   /* a stripe's hit area: the whole stripe while it is narrow; zoomed into
