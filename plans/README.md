@@ -89,7 +89,7 @@ What the re-check added to the plans:
 | [022](022-one-finding-count.md) | One finding count everywhere: a finding is a card | 3 | P2 | S-M | LOW | 020 | DONE (`3db73d5`); DB run pending (owner) |
 | [023](023-verdict-first-compact-activity.md) | Summary: the verdict comes first, the Activity charts open compact | 4 | P1 | M | LOW | — | DONE (`ecb0be3`, option A); DB run pending (owner) |
 | [024](024-activity-windows-side-by-side.md) | Activity charts: "Windows side by side" mode | 5 | P2 | L | MED | 023 | DONE (`862ae3f`, default Full span); DB run pending (owner) |
-| [025](025-findings-triage-list-and-folded-cards.md) | Findings triage list, folded secondary cards, quieter card charts | 6 | P1 | M | MED | 020 | TODO (owner: keep) |
+| [025](025-findings-triage-list-and-folded-cards.md) | Findings triage list, folded secondary cards, quieter card charts | 6 | P1 | M | MED | 020 | DONE (`e3f8cad`); DB run pending (owner) |
 | [026](026-cause-next-to-effect-io-card.md) | The Physical I/O card names its top statement; the plan card that explains it sits under it | 7 | P2 | M | MED | after 025 | TODO |
 | [027](027-pattern-tags-on-findings.md) | Pattern tags: spike / step / trend / after a release | 8 | P2 | M | LOW | 025 (soft) | TODO |
 | [028](028-baseline-switch-on-finding-cards.md) | Baseline switch on finding cards (as scored / robust / since last release), display only | 9 | P3 | M | LOW | — | DROPPED (owner 2026-11-19: sections 26 / 28 cover it) |
