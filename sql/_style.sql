@@ -1502,6 +1502,13 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ashx .xwh:focus-visible{outline:none;stroke:var(--acc);stroke-width:2}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xch{stroke:var(--ink);stroke-width:1;opacity:.55;pointer-events:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xbk{fill:var(--ink);opacity:.06;pointer-events:none}');
+    -- "Windows side by side" (js_timeline section 6, SP.mode win): the mode
+    -- switch, the panel backgrounds (rect.xw.xpn, under the bands) and the
+    -- window labels under the lower chart (text.xpl)
+    DBMS_OUTPUT.PUT_LINE('.ashx .seg.axlayout{padding:1px}.ashx .seg.axlayout[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .seg.axlayout button{font-size:12px;padding:2px 10px;line-height:18px}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xw.xpn{opacity:.05}.ashx .xw.xpn.cur{opacity:.1}.ashx .xw.xpn.on{opacity:.16}.ashx .xw.xpn.sk{opacity:.03}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xpl.cur{fill:var(--acc-ink);font-weight:600}.ashx .xpl.sk{fill:var(--ink-4);text-decoration:line-through}');
     -- v1.6.1 series highlight (js_timeline section 6): the highlighted band's
     -- top edge, the fitted-axis note, the legend entry lit and the rest dimmed
     DBMS_OUTPUT.PUT_LINE('.ashx .xeh{stroke-width:1.8}');

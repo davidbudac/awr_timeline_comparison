@@ -66,7 +66,7 @@ BEGIN
         || ' class="gx2"><h3>Full-span activity</h3><p>Under the verdict in Summary (compact: by wait class; Show by wait event adds the second chart), at the top of Timeline and All sections: active sessions over the whole span as stacked areas, hourly (or the shorter cadence), by wait class and by wait event (the 14'
         || ' largest, the rest as Other events); zoomed to 6 hours or less, the compared windows minute by minute. <span class="g2">Stripes = compared windows (Current indigo, pinned amber, skipped grey). Hover for each series&rsquo; AAS, drag across either chart to zoom both,'
         || ' double-click to reset; a legend item hides its series, a stripe pins its window. Hover a class or event to highlight it: from the legend it is drawn from zero, its own axis;'
-        || ' a class lights its events below. Click its band (or Shift+click the legend) to keep it, Esc clears.</span></p></div></div>');
+        || ' a class lights its events below. Click its band (or Shift+click the legend) to keep it, Esc clears. <b>Windows side by side</b>: the compared windows as adjacent panels on one y axis, a panel&rsquo;s top edge pins it.</span></p></div></div>');
     DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="152" height="44" viewBox="0 0 152 44" role="img" aria-label="One stacked column per compared window"><rect class="gd-cbg" x="130.4" y="0"'
         || ' width="15.8" height="44"/><rect x="2.0" y="30.6" width="8.4" height="11.4" fill="#3FB344"/><rect x="2.0" y="26.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="2.0" y="23.6" width="8.4"'
         || ' height="2.4" fill="#E89B40"/><rect x="12.8" y="29.6" width="8.4" height="12.4" fill="#3FB344"/><rect x="12.8" y="25.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="12.8" y="22.6" width="8.4"'
@@ -252,6 +252,7 @@ BEGIN
         || ' the rest summed as Other events), plus each compared window&rsquo;s own values (samples &divide; 360 &divide; window hours; overlapping windows each count a shared sample)'
         || ' and a 1-minute series inside the compared windows (samples &divide; 6, each minute once; at most 40000 minutes, the most recent windows first), drawn when zoomed'
         || ' to 6 hours or less.'
+        || ' <b>Windows side by side</b> draws each compared window as its own panel from the same data: the 1-minute series where it covers the whole window, else the coarse buckets.'
         || ' ON CPU is <b>CPU</b> in both; Idle excluded. Compared windows shaded. ASH is not scored. Each event carries its wait class from the same scan, so'
         || ' highlighting a class lights its events (and an event its class); a highlighted series is re-stacked from zero on its own y axis, the others faded above it.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Timeline</dt><dd>One column per compared window, one row per metric, from the same values and scoring as the tables: the headline and every flagged load / metric'

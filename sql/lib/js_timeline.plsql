@@ -22,6 +22,8 @@
 --                 unhides the lane.  Runs while the page parses.
 --   reveal(el)    opens a folded lane / the "+ Show N more" rows that hide
 --                 el (called by the chrome's reveal() before a goTo).
+--   axLayout(m, persist)  'win' = windows side by side, 'span' = full span
+--                 (persist: the reader clicked, localStorage awr-axlayout).
 -- and on window.AWR_WG:
 --   pin(o)        pin window offset o (0 / null / the pinned one = unpin):
 --                 its grid column tints amber, every gutter Delta compares
@@ -42,6 +44,10 @@
 -- In the Summary view the charts open compact (#activity.ax-cmp: the
 -- by-class chart only, 96-px plot; #ax-more toggles, localStorage awr-ax;
 -- off in the dashboard design, whose tabs show one chart at a time).
+-- "Windows side by side" (SP.mode win): one panel per compared window,
+-- shared y axis, 1-minute data where it covers the window; caps pin; no zoom
+-- (drawWin, wSlice, panAt / wRefAt; shared with draw: hlOrd, colPts,
+-- bands, flagSvg).
 -- v1.6.1 series highlight: a legend entry hovered / focused (or kept by a
 -- click on its band, Shift+click) is drawn from zero on its own y axis,
 -- the rest faded; a class lights its events (AWR_DATA.ashe.ecls) and an
@@ -378,8 +384,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  if(!c.g||!c.g.ord)return -1;');
     DBMS_OUTPUT.PUT_LINE('  var r=c.svg.getBoundingClientRect(),sy=(y-r.top)*c.g.W/r.width;');
     DBMS_OUTPUT.PUT_LINE('  if(sy<c.g.top||sy>c.g.top+c.g.ph)return -1;');
-    DBMS_OUTPUT.PUT_LINE('  var t=tAt(c,x);if(t<c.g.d0||t>c.g.d1)return -1;');
-    DBMS_OUTPUT.PUT_LINE('  var ref=refAt(t);if(ref==null)return -1;');
+    DBMS_OUTPUT.PUT_LINE('  var ref;');
+    DBMS_OUTPUT.PUT_LINE('  if(c.g.mode===''win''){var pq=panAt(c,x);if(!pq)return -1;ref=wRefAt(c,pq.q,pq.t);}');
+    DBMS_OUTPUT.PUT_LINE('  else{var t=tAt(c,x);if(t<c.g.d0||t>c.g.d1)return -1;ref=refAt(t);}');
+    DBMS_OUTPUT.PUT_LINE('  if(ref==null)return -1;');
     DBMS_OUTPUT.PUT_LINE('  var v=(c.g.top+c.g.ph-sy)/c.g.ph*c.g.ymax,acc=0;');
     DBMS_OUTPUT.PUT_LINE('  for(var q=0;q<c.g.ord.length;q++){var k=c.g.ord[q],a=rV(c,k,ref)||0;if(a<=0)continue;acc+=a;if(v<=acc)return k;}');
     DBMS_OUTPUT.PUT_LINE('  return -1;');
@@ -456,7 +464,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  for(var i=0;i<n;i++){T.push(t0+i*bh);T1.push(Math.min(t0+(i+1)*bh,end));}');
     DBMS_OUTPUT.PUT_LINE('  SP={T:T,T1:T1,t0:t0,bh:bh,full:[t0,end],dom:[t0,end],win:wins().map(function(w){return [PT(w.s),PT(w.e)];}),');
     DBMS_OUTPUT.PUT_LINE('      min:Math.max(4*bh,Math.min(6*H1,(end-t0)/4)),bhTxt:AX.bh===1?''hourly'':bLab(AX.bh)+'' averages'',');
-    DBMS_OUTPUT.PUT_LINE('      reset:doc.getElementById(''ax-reset''),range:doc.getElementById(''ax-range''),sel:null,F:null,rk:null,rv:null};');
+    DBMS_OUTPUT.PUT_LINE('      reset:doc.getElementById(''ax-reset''),range:doc.getElementById(''ax-range''),sel:null,F:null,rk:null,rv:null,mode:''span'',wk:0,wf:0};');
     DBMS_OUTPUT.PUT_LINE('  SP.F=fineInit(AX.fine);');
     DBMS_OUTPUT.PUT_LINE('  CH=[];');
     DBMS_OUTPUT.PUT_LINE('  mkChart(doc.getElementById(''ax-cls''),AX,AX.classes.map(wcol),{flags:true,noun:''classes'',what:''wait class''});');
@@ -488,11 +496,25 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('      drawAll(true);');
     DBMS_OUTPUT.PUT_LINE('    });');
     DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  /* the layout switch (Windows side by side / Full span): shown when at');
+    DBMS_OUTPUT.PUT_LINE('     least two windows get a panel AXMP px wide; the reader''s last click');
+    DBMS_OUTPUT.PUT_LINE('     (localStorage awr-axlayout) wins, else AXDEF (54 = draw''s padL + padR) */');
+    DBMS_OUTPUT.PUT_LINE('  var mg=$(''#activity .axlayout''),sm=null,pw0=CH.length?Math.max(480,CH[0].plot.clientWidth)-54:0;');
+    DBMS_OUTPUT.PUT_LINE('  try{sm=localStorage.getItem(''awr-axlayout'');}catch(e){}');
+    DBMS_OUTPUT.PUT_LINE('  if(mg&&SP.win.length>=2&&winFit(pw0)>=2){');
+    DBMS_OUTPUT.PUT_LINE('    mg.hidden=false;');
+    DBMS_OUTPUT.PUT_LINE('    SP.mode=(sm===''win''||sm===''span'')?sm:(AXDEF===''win''&&SP.win.length<=winFit(pw0)?''win'':''span'');');
+    DBMS_OUTPUT.PUT_LINE('    $$(''[data-m]'',mg).forEach(function(b){');
+    DBMS_OUTPUT.PUT_LINE('      b.setAttribute(''aria-pressed'',String(b.getAttribute(''data-m'')===SP.mode));');
+    DBMS_OUTPUT.PUT_LINE('      b.addEventListener(''click'',function(){TL.axLayout(b.getAttribute(''data-m''),true);});');
+    DBMS_OUTPUT.PUT_LINE('    });');
+    DBMS_OUTPUT.PUT_LINE('  }');
     DBMS_OUTPUT.PUT_LINE('  if(SP.reset)SP.reset.addEventListener(''click'',spReset);');
     DBMS_OUTPUT.PUT_LINE('  doc.addEventListener(''mousemove'',function(e){');
     DBMS_OUTPUT.PUT_LINE('    var dg=DRAG;if(!dg)return;');
     DBMS_OUTPUT.PUT_LINE('    if(!dg.moved&&Math.abs(e.clientX-dg.x0)<5)return;');
     DBMS_OUTPUT.PUT_LINE('    dg.moved=true;tipOff();hideAll();');
+    DBMS_OUTPUT.PUT_LINE('    if(SP.mode===''win'')return;');
     DBMS_OUTPUT.PUT_LINE('    var c=dg.c,r=c.svg.getBoundingClientRect(),sc=r.width/c.g.W,mn=r.left+c.g.padL*sc,mx=r.left+(c.g.W-c.g.padR)*sc;');
     DBMS_OUTPUT.PUT_LINE('    dg.a=Math.max(mn,Math.min(dg.x0,e.clientX));dg.b=Math.min(mx,Math.max(dg.x0,e.clientX));');
     DBMS_OUTPUT.PUT_LINE('    /* the brush shows on both charts: same width, same x mapping */');
@@ -502,7 +524,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  doc.addEventListener(''mouseup'',function(){');
     DBMS_OUTPUT.PUT_LINE('    var dg=DRAG;if(!dg)return;DRAG=null;CH.forEach(function(o){o.br.hidden=true;});');
-    DBMS_OUTPUT.PUT_LINE('    if(dg.moved){if(dg.b-dg.a>6)spZoom(tAt(dg.c,dg.a),tAt(dg.c,dg.b));return;}');
+    DBMS_OUTPUT.PUT_LINE('    if(dg.moved){if(SP.mode!==''win''&&dg.b-dg.a>6)spZoom(tAt(dg.c,dg.a),tAt(dg.c,dg.b));return;}');
     DBMS_OUTPUT.PUT_LINE('    if(dg.w!=null){SP.sel={prev:PW,t:Date.now()};spSelect(dg.w);return;}');
     DBMS_OUTPUT.PUT_LINE('    /* a click on a band makes its highlight sticky (the same band again,');
     DBMS_OUTPUT.PUT_LINE('       or a click off the stack, clears it) */');
@@ -540,10 +562,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('       the pin the first press made on a window stripe */');
     DBMS_OUTPUT.PUT_LINE('    if(e.detail>=2){if(SP.sel&&Date.now()-SP.sel.t<700)W.pin(SP.sel.prev);SP.sel=null;');
     DBMS_OUTPUT.PUT_LINE('      if(SP.hsel&&Date.now()-SP.hsel.t<700){HS=SP.hsel.prev;HT=null;hlApply();}SP.hsel=null;');
-    DBMS_OUTPUT.PUT_LINE('      DRAG=null;spReset();return;}');
+    DBMS_OUTPUT.PUT_LINE('      DRAG=null;if(SP.mode!==''win'')spReset();return;}');
     DBMS_OUTPUT.PUT_LINE('    var wh=e.target.closest(''.xwh'');DRAG={c:c,x0:e.clientX,y0:e.clientY,moved:false,w:wh?+wh.getAttribute(''data-i''):null};');
     DBMS_OUTPUT.PUT_LINE('  });');
-    DBMS_OUTPUT.PUT_LINE('  s.addEventListener(''dblclick'',spReset);');
+    DBMS_OUTPUT.PUT_LINE('  s.addEventListener(''dblclick'',function(){if(SP.mode!==''win'')spReset();});');
     DBMS_OUTPUT.PUT_LINE('  s.addEventListener(''keydown'',function(e){var wh=e.target.closest&&e.target.closest(''.xwh'');if(wh&&(e.key===''Enter''||e.key==='' '')){e.preventDefault();spSelect(+wh.getAttribute(''data-i''));}});');
     DBMS_OUTPUT.PUT_LINE('  CH.push(c);');
     DBMS_OUTPUT.PUT_LINE('  return c;');
@@ -551,8 +573,24 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('function drawAll(force){CH.forEach(function(c){draw(c,force);});spHead();}');
     DBMS_OUTPUT.PUT_LINE('/* redraw both Activity charts now (a design that shows / hides one calls it) */');
     DBMS_OUTPUT.PUT_LINE('TL.redraw=function(){drawAll(true);};');
+    DBMS_OUTPUT.PUT_LINE('/* the Activity charts'' layout: ''win'' (windows side by side) or ''span''');
+    DBMS_OUTPUT.PUT_LINE('   (full span); persist = the reader clicked (localStorage awr-axlayout) */');
+    DBMS_OUTPUT.PUT_LINE('TL.axLayout=function(m,persist){');
+    DBMS_OUTPUT.PUT_LINE('  if(!SP||(m!==''win''&&m!==''span''))return;');
+    DBMS_OUTPUT.PUT_LINE('  SP.mode=m;');
+    DBMS_OUTPUT.PUT_LINE('  $$(''#activity .axlayout [data-m]'').forEach(function(b){b.setAttribute(''aria-pressed'',String(b.getAttribute(''data-m'')===m));});');
+    DBMS_OUTPUT.PUT_LINE('  if(persist){try{localStorage.setItem(''awr-axlayout'',m);}catch(e){}}');
+    DBMS_OUTPUT.PUT_LINE('  hideAll();tipOff();drawAll(true);');
+    DBMS_OUTPUT.PUT_LINE('};');
     DBMS_OUTPUT.PUT_LINE('function spHead(){');
     DBMS_OUTPUT.PUT_LINE('  if(!SP)return;var d0=SP.dom[0],d1=SP.dom[1],zoomed=d0>SP.full[0]||d1<SP.full[1];');
+    DBMS_OUTPUT.PUT_LINE('  if(SP.mode===''win''){');
+    DBMS_OUTPUT.PUT_LINE('    if(SP.reset)SP.reset.hidden=true;');
+    DBMS_OUTPUT.PUT_LINE('    var n=SP.win.length,K=SP.wk||n,f=SP.wf||0;');
+    DBMS_OUTPUT.PUT_LINE('    if(SP.range)SP.range.textContent=(K===n?n+'' compared windows side by side'':''The ''+K+'' most recent of ''+n+'' compared windows side by side (Full span shows all)'')');
+    DBMS_OUTPUT.PUT_LINE('      +(f===K?'', 1-min detail'':f>0?'', 1-min detail in the ''+f+'' most recent, ''+SP.bhTxt+'' in the rest'':'', ''+SP.bhTxt);');
+    DBMS_OUTPUT.PUT_LINE('    return;');
+    DBMS_OUTPUT.PUT_LINE('  }');
     DBMS_OUTPUT.PUT_LINE('  if(SP.reset)SP.reset.hidden=!zoomed;');
     DBMS_OUTPUT.PUT_LINE('  var res=SP.bhTxt;');
     DBMS_OUTPUT.PUT_LINE('  if(fineOn(d0,d1))res=fineCov(d0,d1)>=d1-d0-1?''1-min detail'':''1-min detail in the compared windows, ''+SP.bhTxt+'' elsewhere'';');
@@ -629,18 +667,110 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  return s;');
     DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* ---- "Windows side by side" (SP.mode ''win''): each compared window as its');
+    DBMS_OUTPUT.PUT_LINE('   own panel on one shared y axis, oldest left, Current last.  A panel is');
+    DBMS_OUTPUT.PUT_LINE('   drawn minute by minute when every minute of its window is in the');
+    DBMS_OUTPUT.PUT_LINE('   1-minute detail (SP.F), else from the coarse buckets overlapping it.');
+    DBMS_OUTPUT.PUT_LINE('   Panels are at least AXMP px wide, AXGAP px apart: when not all windows');
+    DBMS_OUTPUT.PUT_LINE('   fit, the most recent that fit (the Current always).  No zoom here; a');
+    DBMS_OUTPUT.PUT_LINE('   click on a panel''s top edge pins its window.  AXDEF = the mode for a');
+    DBMS_OUTPUT.PUT_LINE('   reader who never clicked the switch (''win'': side by side when every');
+    DBMS_OUTPUT.PUT_LINE('   window fits, else full span). */');
+    DBMS_OUTPUT.PUT_LINE('var AXMP=24,AXGAP=6,AXDEF=''span'';');
+    DBMS_OUTPUT.PUT_LINE('function winFit(pw){return Math.max(1,Math.floor((pw+AXGAP)/(AXMP+AXGAP)));}');
+    DBMS_OUTPUT.PUT_LINE('/* the refs of window i: its 1-minute buckets when the detail covers it all,');
+    DBMS_OUTPUT.PUT_LINE('   else the coarse buckets overlapping it */');
+    DBMS_OUTPUT.PUT_LINE('function wSlice(i){');
+    DBMS_OUTPUT.PUT_LINE('  var a=SP.win[i][0],b=SP.win[i][1],F=SP.F,out=[],q,g,j,j0,j1;');
+    DBMS_OUTPUT.PUT_LINE('  if(F&&fineCov(a,b)>=b-a-1){');
+    DBMS_OUTPUT.PUT_LINE('    for(q=0;q<F.S.length;q++){g=F.S[q];if(g[1]<=a||g[0]>=b)continue;');
+    DBMS_OUTPUT.PUT_LINE('      j0=Math.max(0,Math.floor((a-g[0])/F.bm));j1=Math.min(Math.round((g[1]-g[0])/F.bm),Math.ceil((b-g[0])/F.bm))-1;');
+    DBMS_OUTPUT.PUT_LINE('      for(j=j0;j<=j1;j++)out.push(-1-(g[2]+j));}');
+    DBMS_OUTPUT.PUT_LINE('    return {r:out,fine:true};');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  var br=bRange(a,b);for(j=br[0];j<=br[1];j++)out.push(j);');
+    DBMS_OUTPUT.PUT_LINE('  return {r:out,fine:false};');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* the panel under client x on chart c: {q: panel index, t: time} or null */');
+    DBMS_OUTPUT.PUT_LINE('function panAt(c,cx){');
+    DBMS_OUTPUT.PUT_LINE('  var g=c.g;if(!g||g.mode!==''win'')return null;');
+    DBMS_OUTPUT.PUT_LINE('  var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*g.W/r.width;');
+    DBMS_OUTPUT.PUT_LINE('  for(var q=0;q<g.pan.length;q++){var p=g.pan[q];if(x>=p.x0&&x<p.x0+p.w)return {q:q,t:p.a+(x-p.x0)/p.w*(p.b-p.a)};}');
+    DBMS_OUTPUT.PUT_LINE('  return null;');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* the ref drawn at time t in panel q (1-minute or coarse, as the panel) */');
+    DBMS_OUTPUT.PUT_LINE('function wRefAt(c,q,t){');
+    DBMS_OUTPUT.PUT_LINE('  var p=c.g.pan[q];if(!p)return null;');
+    DBMS_OUTPUT.PUT_LINE('  if(p.fine){var F=SP.F;for(var k=0;k<F.S.length;k++){var g=F.S[k];if(t>=g[0]&&t<g[1])return -1-(g[2]+Math.floor((t-g[0])/F.bm));}return null;}');
+    DBMS_OUTPUT.PUT_LINE('  var j=bucketAt(t);return j<0?null:j;');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* chart c side by side (draw passes its size; flags / labels follow');
+    DBMS_OUTPUT.PUT_LINE('   c.flags / c.xl as in draw) */');
+    DBMS_OUTPUT.PUT_LINE('function drawWin(c,o){');
+    DBMS_OUTPUT.PUT_LINE('  var Wd=o.Wd,top=o.top,ph=o.ph,padL=o.padL,padR=o.padR,pw=o.pw;');
+    DBMS_OUTPUT.PUT_LINE('  var n=SP.win.length,K=Math.min(n,winFit(pw)),w=(pw-AXGAP*(K-1))/K,ws=wins(),cur=ws.length-1;');
+    DBMS_OUTPUT.PUT_LINE('  var h=hlOrd(c),hl=h.hl,on=h.on,reb=h.reb,ord=h.ord,pan=[],mx=0.05,mh=0,nf=0,q;');
+    DBMS_OUTPUT.PUT_LINE('  for(q=0;q<K;q++){');
+    DBMS_OUTPUT.PUT_LINE('    var i=n-K+q,a=SP.win[i][0],b=SP.win[i][1],x0=padL+q*(w+AXGAP),sl=wSlice(i);');
+    DBMS_OUTPUT.PUT_LINE('    var X=(function(x0,a,b){return function(t){return x0+w*Math.min(1,Math.max(0,(t-a)/(b-a)));};})(x0,a,b);');
+    DBMS_OUTPUT.PUT_LINE('    var cp=colPts(c,sl.r,X,a,b,reb,on);');
+    DBMS_OUTPUT.PUT_LINE('    if(cp.mx>mx)mx=cp.mx;if(cp.mh>mh)mh=cp.mh;if(sl.fine)nf++;');
+    DBMS_OUTPUT.PUT_LINE('    pan.push({i:i,x0:x0,w:w,a:a,b:b,X:X,fine:sl.fine,pts:cp.pts});');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  SP.wk=K;SP.wf=nf;');
+    DBMS_OUTPUT.PUT_LINE('  /* y scale, clip paths, gridlines, "AAS", open the clipped group: as draw */');
+    DBMS_OUTPUT.PUT_LINE('  var yb=reb&&mh>0?Math.max(mh,0.05):mx,step=niceStep(yb,3),ymax=Math.ceil(yb/step-1e-9)*step;');
+    DBMS_OUTPUT.PUT_LINE('  var Y=function(v){return top+ph-ph*v/ymax;},clip=''axclip-''+c.uid;');
+    DBMS_OUTPUT.PUT_LINE('  var s=''<defs><clipPath id="''+clip+''"><rect x="''+padL+''" y="''+(top-6)+''" width="''+pw+''" height="''+(ph+6)+''"/></clipPath>''');
+    DBMS_OUTPUT.PUT_LINE('    +(reb?''<clipPath id="''+clip+''f"><rect x="''+padL+''" y="''+top+''" width="''+pw+''" height="''+ph+''"/></clipPath>'':'''')+''</defs>'';');
+    DBMS_OUTPUT.PUT_LINE('  for(var v=0;v<=ymax+1e-9;v+=step){var dec=step<1?(step<0.1?2:1):0;');
+    DBMS_OUTPUT.PUT_LINE('    s+=''<line class="gl" x1="''+padL+''" x2="''+(Wd-padR)+''" y1="''+Y(v).toFixed(1)+''" y2="''+Y(v).toFixed(1)+''"/><text class="at" x="''+(padL-6)+''" y="''+(Y(v)+4).toFixed(1)+''" text-anchor="end">''+v.toFixed(dec)+''</text>'';}');
+    DBMS_OUTPUT.PUT_LINE('  s+=''<text class="at" x="''+(padL-6)+''" y="''+(top-10)+''" text-anchor="end">AAS</text><g clip-path="url(#''+clip+'')">'';');
+    DBMS_OUTPUT.PUT_LINE('  /* panel backgrounds under the bands; classes as the stripes'' */');
+    DBMS_OUTPUT.PUT_LINE('  var hit=[];');
+    DBMS_OUTPUT.PUT_LINE('  pan.forEach(function(p){var wi=ws[p.i],cls=(p.i===cur?'' cur'':'''')+(wi.o===PW?'' on'':'''')+(wi.v===''N''?'' sk'':'''');');
+    DBMS_OUTPUT.PUT_LINE('    s+=''<rect class="xw xpn''+cls+''" x="''+p.x0.toFixed(1)+''" y="''+top+''" width="''+p.w.toFixed(1)+''" height="''+ph+''"/>'';');
+    DBMS_OUTPUT.PUT_LINE('    hit.push([p.i,p.x0,p.w,cls]);});');
+    DBMS_OUTPUT.PUT_LINE('  /* the bands, panel by panel (each panel''s fills top of the stack first, as draw) */');
+    DBMS_OUTPUT.PUT_LINE('  var F=[],E=[],HF=[],HE=[];');
+    DBMS_OUTPUT.PUT_LINE('  pan.forEach(function(p){var B=bands(c,p.pts,ord,on,Y);F=F.concat(B.fills.reverse());E=E.concat(B.edges.reverse());HF=HF.concat(B.hf);HE=HE.concat(B.he);});');
+    DBMS_OUTPUT.PUT_LINE('  if(!hl)s+=F.join('''')+E.join('''');');
+    DBMS_OUTPUT.PUT_LINE('  else s+=(reb?''<g clip-path="url(#''+clip+''f)">'':'''')+''<g class="xfd" opacity="''+(reb&&ymax<mx?Math.min(hl.fade,0.07):hl.fade)+''">''+F.join('''')+''</g>''+HF.join('''')+HE.join('''')+(reb?''</g>'':'''');');
+    DBMS_OUTPUT.PUT_LINE('  /* the hidden bucket band: as draw; the caps */');
+    DBMS_OUTPUT.PUT_LINE('  s+=''<rect class="xbk" x="0" y="''+top+''" width="0" height="''+ph+''" visibility="hidden"/>'';');
+    DBMS_OUTPUT.PUT_LINE('  hit.forEach(function(r){s+=''<rect class="xwc''+r[3]+''" x="''+r[1].toFixed(1)+''" y="''+(top-5)+''" width="''+r[2].toFixed(1)+''" height="4" rx="1"/>'';});');
+    DBMS_OUTPUT.PUT_LINE('  /* close the group and the x axis line: as draw */');
+    DBMS_OUTPUT.PUT_LINE('  s+=''</g><line class="ax" x1="''+padL+''" x2="''+(Wd-padR)+''" y1="''+(top+ph)+''" y2="''+(top+ph)+''"/>'';');
+    DBMS_OUTPUT.PUT_LINE('  /* window labels under the lower chart: every st-th panel counted from the Current one */');
+    DBMS_OUTPUT.PUT_LINE('  if(o.xl){var lw=0;pan.forEach(function(p){lw=Math.max(lw,tw(ws[p.i].d));});var st=Math.max(1,Math.ceil((lw+8)/(w+AXGAP)));');
+    DBMS_OUTPUT.PUT_LINE('    pan.forEach(function(p,q){if((K-1-q)%st)return;var wi=ws[p.i];');
+    DBMS_OUTPUT.PUT_LINE('      s+=''<text class="at xpl''+(p.i===cur?'' cur'':'''')+(wi.v===''N''?'' sk'':'''')+''" x="''+(p.x0+p.w/2).toFixed(1)+''" y="''+(top+ph+18)+''" text-anchor="middle">''+esc(wi.d)+''</text>'';});}');
+    DBMS_OUTPUT.PUT_LINE('  /* release markers: in the gap before the window they precede */');
+    DBMS_OUTPUT.PUT_LINE('  var list=[];o.mks.forEach(function(m){var ib=idxOf(m.o);pan.forEach(function(p){if(p.i===ib)list.push({x:Math.max(padL,p.x0-AXGAP/2),m:m});});});');
+    DBMS_OUTPUT.PUT_LINE('  s+=flagSvg(c,list,top,ph,Wd,padL,padR);');
+    DBMS_OUTPUT.PUT_LINE('  /* highlight note and crosshair: as draw */');
+    DBMS_OUTPUT.PUT_LINE('  if(hl&&hl.note)s+=''<text class="xhn" x="''+(padL+6)+''" y="''+(top+13)+''">''+esc(hl.note)+''</text>'';');
+    DBMS_OUTPUT.PUT_LINE('  s+=''<line class="xch" x1="0" x2="0" y1="''+top+''" y2="''+(top+ph)+''" visibility="hidden"/>'';');
+    DBMS_OUTPUT.PUT_LINE('  /* hit areas: the caps only (a band in the plot keeps its highlight on a click) */');
+    DBMS_OUTPUT.PUT_LINE('  hit.forEach(function(r){var wi=ws[r[0]];');
+    DBMS_OUTPUT.PUT_LINE('    s+=''<rect class="xwh" data-i="''+r[0]+''" data-w="''+wi.o+''" x="''+r[1].toFixed(1)+''" y="''+(top-6)+''" width="''+r[2].toFixed(1)+''" height="10" tabindex="0" role="button" aria-label="''');
+    DBMS_OUTPUT.PUT_LINE('      +esc((wi.o===0?''Current window, '':offTxt(wi)+'' window, '')+wi.t+(wi.o===0?'''':''. Pin it''))+''"/>'';});');
+    DBMS_OUTPUT.PUT_LINE('  c.svg.innerHTML=s;');
+    DBMS_OUTPUT.PUT_LINE('  c.g={mode:''win'',pan:pan,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:SP.dom[0],d1:SP.dom[1],ymax:ymax,ord:ord,hk:c.hk,cm:o.cm};');
+    DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function draw(c,force){');
     DBMS_OUTPUT.PUT_LINE('  if(!c||!SP||!shown(c.plot))return;');
     DBMS_OUTPUT.PUT_LINE('  /* the release flags go on the first chart shown, the x labels on the');
     DBMS_OUTPUT.PUT_LINE('     last one (both on one chart when a design shows a single chart) */');
     DBMS_OUTPUT.PUT_LINE('  var vis=CH.filter(function(x){return shown(x.plot);}),lay;c.flags=vis[0]===c;c.xl=vis[vis.length-1]===c;lay=(c.flags?1:0)+(c.xl?2:0);');
     DBMS_OUTPUT.PUT_LINE('  var Wd=Math.max(480,c.plot.clientWidth),d0=SP.dom[0],d1=SP.dom[1];');
-    DBMS_OUTPUT.PUT_LINE('  if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk&&c.g.cm===cmp())return;c.w=Wd;c.pw=PW;c.lay=lay;');
+    DBMS_OUTPUT.PUT_LINE('  if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk&&c.g.cm===cmp()&&(c.g.mode||''span'')===SP.mode)return;c.w=Wd;c.pw=PW;c.lay=lay;');
     DBMS_OUTPUT.PUT_LINE('  var mks=W.markers?W.markers():[],P=c.P;');
     DBMS_OUTPUT.PUT_LINE('  var cm=cmp();');
     DBMS_OUTPUT.PUT_LINE('  var top=c.flags&&mks.length?46:22,ph=cm?96:150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;');
     DBMS_OUTPUT.PUT_LINE('  c.svg.setAttribute(''viewBox'',''0 0 ''+Wd+'' ''+H);c.svg.setAttribute(''height'',H);');
     DBMS_OUTPUT.PUT_LINE('  var X=function(t){return padL+pw*(t-d0)/(d1-d0);};');
+    DBMS_OUTPUT.PUT_LINE('  if(SP.mode===''win''){drawWin(c,{Wd:Wd,top:top,ph:ph,padL:padL,padR:padR,pw:pw,xl:c.xl,cm:cm,mks:mks});return;}');
     DBMS_OUTPUT.PUT_LINE('  /* stacked areas: one point per bucket at its midpoint, straight lines');
     DBMS_OUTPUT.PUT_LINE('     between them.  While a bucket is at least a pixel wide every bucket is');
     DBMS_OUTPUT.PUT_LINE('     a point; zoomed out further, one point per pixel column at the');
@@ -697,18 +827,26 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('      +esc((w.o===0?''Current window, '':offTxt(w)+'' window, '')+w.t+(w.o===0?'''':''. Pin it''))+''"/>'';');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  c.svg.innerHTML=s;');
-    DBMS_OUTPUT.PUT_LINE('  c.g={X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,hk:c.hk,cm:cm};');
+    DBMS_OUTPUT.PUT_LINE('  c.g={mode:''span'',X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,hk:c.hk,cm:cm};');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function tAt(c,cx){var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*c.g.W/r.width;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}');
     DBMS_OUTPUT.PUT_LINE('function bucketAt(t){var j=Math.floor((t-SP.t0)/SP.bh);return j>=0&&j<SP.T.length&&t<SP.T1[j]?j:-1;}');
     DBMS_OUTPUT.PUT_LINE('function hideCross(c){var hb=$(''.xbk'',c.svg),ch=$(''.xch'',c.svg);if(hb){hb.setAttribute(''visibility'',''hidden'');ch.setAttribute(''visibility'',''hidden'');}}');
     DBMS_OUTPUT.PUT_LINE('function hideAll(){CH.forEach(hideCross);}');
-    DBMS_OUTPUT.PUT_LINE('/* the crosshair + bucket band at time t (bucket ref r) on chart c */');
-    DBMS_OUTPUT.PUT_LINE('function cross(c,t,r){');
+    DBMS_OUTPUT.PUT_LINE('/* the crosshair + bucket band at time t (bucket ref r) on chart c (side by');
+    DBMS_OUTPUT.PUT_LINE('   side: in panel q) */');
+    DBMS_OUTPUT.PUT_LINE('function cross(c,t,r,q){');
     DBMS_OUTPUT.PUT_LINE('  var hb=$(''.xbk'',c.svg),ch=$(''.xch'',c.svg);if(!c.g||!hb)return;');
-    DBMS_OUTPUT.PUT_LINE('  var xa=Math.max(c.g.padL,c.g.X(rS(r))),xb=Math.min(c.g.W-c.g.padR,c.g.X(rE(r))),x=c.g.X(t);');
+    DBMS_OUTPUT.PUT_LINE('  var X=c.g.X,lo=c.g.padL,hi=c.g.W-c.g.padR;');
+    DBMS_OUTPUT.PUT_LINE('  if(c.g.mode===''win''){var p=c.g.pan&&c.g.pan[q];if(!p){hideCross(c);return;}X=p.X;lo=p.x0;hi=p.x0+p.w;}');
+    DBMS_OUTPUT.PUT_LINE('  var xa=Math.max(lo,X(rS(r))),xb=Math.min(hi,X(rE(r))),x=X(t);');
     DBMS_OUTPUT.PUT_LINE('  hb.setAttribute(''x'',xa.toFixed(1));hb.setAttribute(''width'',Math.max(1,xb-xa).toFixed(1));hb.setAttribute(''visibility'',''visible'');');
     DBMS_OUTPUT.PUT_LINE('  ch.setAttribute(''x1'',x.toFixed(1));ch.setAttribute(''x2'',x.toFixed(1));ch.setAttribute(''visibility'',''visible'');');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* the tooltip of ref r (a bucket or a minute) on chart c */');
+    DBMS_OUTPUT.PUT_LINE('function ptTip(c,r,e){var P=c.P;');
+    DBMS_OUTPUT.PUT_LINE('  tipOn(''<b>''+fAt(rS(r))+''\u2013''+fHM(rE(r))+''</b><br><span class="tm">''+(r<0?''1-min'':bLab((rE(r)-rS(r))/H1))+'' average, by ''+c.what+''</span>''');
+    DBMS_OUTPUT.PUT_LINE('    +ashRows(P.classes,c.cols,function(q){return rV(c,q,r);},c.vis,c.noun,c.hl&&c.hl.set),e);');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function hover(c,e){');
     DBMS_OUTPUT.PUT_LINE('  if(!c.g||DRAG&&DRAG.moved)return;');
@@ -720,13 +858,19 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('      +(P.win?ashRows(P.classes,c.cols,function(k){return P.win[k][i];},c.vis,c.noun,c.hl&&c.hl.set):'''')+(w.o===0?'''':''<span class="tm">Click to pin this window</span>''),e);');
     DBMS_OUTPUT.PUT_LINE('    return;');
     DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  if(c.g.mode===''win''){');
+    DBMS_OUTPUT.PUT_LINE('    var pq=panAt(c,e.clientX),pr=pq?wRefAt(c,pq.q,pq.t):null;');
+    DBMS_OUTPUT.PUT_LINE('    if(pr==null){hideAll();tipOff();if(HT&&HT.soft)hlSet(null);return;}');
+    DBMS_OUTPUT.PUT_LINE('    if(!HS&&!DRAG){var pk=seriesAt(c,e.clientX,e.clientY);hlSet(pk<0?null:{c:c,k:pk,soft:true});}');
+    DBMS_OUTPUT.PUT_LINE('    CH.forEach(function(o){cross(o,pq.t,pr,pq.q);});');
+    DBMS_OUTPUT.PUT_LINE('    ptTip(c,pr,e);return;');
+    DBMS_OUTPUT.PUT_LINE('  }');
     DBMS_OUTPUT.PUT_LINE('  var t=tAt(c,e.clientX),r=refAt(t);');
     DBMS_OUTPUT.PUT_LINE('  if(r==null||t<c.g.d0||t>c.g.d1){hideAll();tipOff();if(HT&&HT.soft)hlSet(null);return;}');
     DBMS_OUTPUT.PUT_LINE('  /* the band under the pointer highlights in place (not while one is sticky) */');
     DBMS_OUTPUT.PUT_LINE('  if(!HS&&!DRAG){var hk=seriesAt(c,e.clientX,e.clientY);hlSet(hk<0?null:{c:c,k:hk,soft:true});}');
     DBMS_OUTPUT.PUT_LINE('  CH.forEach(function(o){cross(o,t,r);});');
-    DBMS_OUTPUT.PUT_LINE('  tipOn(''<b>''+fAt(rS(r))+''\u2013''+fHM(rE(r))+''</b><br><span class="tm">''+(r<0?''1-min'':bLab((rE(r)-rS(r))/H1))+'' average, by ''+c.what+''</span>''');
-    DBMS_OUTPUT.PUT_LINE('    +ashRows(P.classes,c.cols,function(q){return rV(c,q,r);},c.vis,c.noun,c.hl&&c.hl.set),e);');
+    DBMS_OUTPUT.PUT_LINE('  ptTip(c,r,e);');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* a window stripe: pin it (Current unpins); in the Timeline view the grid');
     DBMS_OUTPUT.PUT_LINE('   column flashes and comes into view */');

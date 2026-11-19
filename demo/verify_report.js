@@ -49,6 +49,9 @@
  *     in place; nothing left on after the pointer leaves; keyboard focus;
  *     Shift+click sticky, the tooltip leads with it, Esc clears it before
  *     unpinning; a click on a band keeps it, the same click clears it;
+ *   - the Activity charts' Windows side by side mode (plan 024): one panel
+ *     per window, hover / crosshair, no zoom, cap click pins, legend,
+ *     markers, the switch remembered in awr-axlayout;
  *   - the Day profile metric picker (v1.6.1, profile_days > 0; required
  *     for the demo): one role=tab button per stat with its indicator, a
  *     click / arrows / Home / End switch the line chart;
@@ -135,7 +138,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
   // ---- 1. load in the default view: inventory + link integrity --------
   {
     const { page, errors } = await openPage('', 'light');
-    await page.evaluate(() => { try { localStorage.removeItem('awr-view'); localStorage.removeItem('awr-theme'); localStorage.removeItem('awr-ax'); } catch (e) {} });
+    await page.evaluate(() => { try { localStorage.removeItem('awr-view'); localStorage.removeItem('awr-theme'); localStorage.removeItem('awr-ax'); localStorage.removeItem('awr-axlayout'); } catch (e) {} });
     await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(1200);
     const info = await page.evaluate(() => {
       const sections = [...document.querySelectorAll('main > section, body > section')].map(s => s.id);
@@ -492,6 +495,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     // the dashboard shows one Activity chart at a time: these checks need both
     if (DESIGN === 'dashboard') { await page.evaluate(() => window.AWR_axMode && window.AWR_axMode('both')); await page.waitForTimeout(250); }
     if (inv.chart && inv.ash) {
+      await page.evaluate(() => { if (window.AWR_TL && AWR_TL.axLayout) AWR_TL.axLayout('span', false); }); await page.waitForTimeout(200);
       const CHS = ['ax-cls', 'ax-ev'];
       const other = await page.evaluate(() => {
         const e = (window.AWR_DATA && AWR_DATA.ashe) || null;
@@ -816,6 +820,79 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       await page.screenshot({ path: path.join(shots, 'timeline-top.png') });
     }
     if (errors.length) fail('timeline: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 5c. the Activity charts' "Windows side by side" mode (plan 024):
+  // panels = windows, hover + mirrored crosshair, no zoom, cap click pins,
+  // legend toggle per panel, markers in the gaps, the switch remembered
+  {
+    const { page, errors } = await openPage('#view=timeline', 'light');
+    const sb = {};
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file);
+    if (DESIGN === 'dashboard') { await page.evaluate(() => window.AWR_axMode && window.AWR_axMode('both')); await page.waitForTimeout(250); }
+    const can = await page.evaluate(() => !!(window.AWR_TL && AWR_TL.axLayout && document.querySelector('#activity .axlayout:not([hidden])')));
+    if (!can) { sb.mode = 'unavailable'; if (isDemo) fail('side by side: mode switch missing on the demo'); }
+    else {
+      await page.evaluate(() => AWR_TL.axLayout('win', false)); await page.waitForTimeout(250);
+      sb.panels = await page.evaluate(() => {
+        const n = window.AWR_WIN.w.length, out = [];
+        for (const id of ['ax-cls', 'ax-ev']) {
+          const s = document.querySelector('#' + id + ' .axsvg'); if (!s || !s.getClientRects().length) continue;
+          const caps = s.querySelectorAll('.xwh').length, pans = s.querySelectorAll('.xw.xpn').length, cur = s.querySelectorAll('.xw.xpn.cur').length, xa = s.querySelectorAll('path.xa').length;
+          out.push(id + ' ' + caps + '/' + pans + ' panels, cur ' + cur + ', ' + xa + ' paths' + (caps === pans && caps >= 2 && caps <= n && cur === 1 && xa > 0 ? '' : ' FAIL'));
+        }
+        const r = document.getElementById('ax-range').textContent;
+        return out.join('; ') + '; range "' + r + '"' + (/side by side/.test(r) && document.getElementById('ax-reset').hidden ? '' : ' FAIL');
+      });
+      if (/FAIL/.test(sb.panels)) fail('side by side: ' + sb.panels);
+      const cp = await page.evaluate(() => { const c = document.querySelector('#ax-cls .axsvg .xw.xpn.cur').getBoundingClientRect(); return { x: c.left + c.width / 2, y: c.top + c.height * 0.6 }; });
+      await page.mouse.move(cp.x, cp.y); await page.waitForTimeout(150);
+      sb.hover = await page.evaluate(() => {
+        const t = document.getElementById('tip'); if (!t || t.hidden || !/AAS/.test(t.textContent)) return 'FAIL tooltip';
+        const chs = [...document.querySelectorAll('.ashx .axsvg')].filter(s => s.getClientRects().length).map(s => s.querySelector('.xch'));
+        const on = chs.filter(c => c && c.getAttribute('visibility') === 'visible');
+        if (on.length !== chs.length) return 'FAIL crosshair on ' + on.length + '/' + chs.length;
+        return new Set(on.map(c => c.getAttribute('x1'))).size === 1 ? 'ok' + (/1-min average/.test(t.textContent) ? ' (1-min)' : '') : 'FAIL crosshair x differs';
+      });
+      if (!/^ok/.test(sb.hover)) fail('side by side: hover ' + sb.hover);
+      if (isDemo && !/1-min/.test(sb.hover)) fail('side by side: the demo has 1-minute data for every window');
+      const r0 = await page.evaluate(() => document.getElementById('ax-range').textContent);
+      const bb = await (await page.$('#ax-cls .axsvg')).boundingBox();
+      await page.mouse.move(bb.x + bb.width * 0.3, bb.y + bb.height * 0.6); await page.mouse.down();
+      await page.mouse.move(bb.x + bb.width * 0.7, bb.y + bb.height * 0.6, { steps: 6 }); await page.mouse.up(); await page.waitForTimeout(200);
+      sb.noZoom = await page.evaluate((r0) => document.getElementById('ax-range').textContent === r0 && document.getElementById('ax-reset').hidden ? 'ok' : 'FAIL', r0);
+      if (sb.noZoom !== 'ok') fail('side by side: a drag zoomed');
+      const hw = await page.evaluate(() => { const h = [...document.querySelectorAll('#ax-cls .axsvg .xwh')].find(x => x.getAttribute('data-w') !== '0'); if (!h) return null; const r = h.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: h.getAttribute('data-w') }; });
+      if (hw) {
+        await page.mouse.click(hw.x, hw.y); await page.waitForTimeout(200);
+        const a = await page.evaluate((w) => document.body.getAttribute('data-pw') === w && [...document.querySelectorAll('.ashx .axsvg')].filter(s => s.getClientRects().length).every(s => s.querySelector('.xw.xpn.on')), hw.w);
+        await page.mouse.move(2, bb.y + bb.height + 40);
+        await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+        const b = await page.evaluate(() => !document.body.hasAttribute('data-pw'));
+        sb.pin = a && b ? 'ok' : 'FAIL ' + JSON.stringify([a, b]);
+        if (sb.pin !== 'ok') fail('side by side: panel pin / Esc ' + sb.pin);
+      }
+      const nx = () => page.evaluate(() => document.querySelectorAll('#ax-cls .axsvg path.xa').length);
+      const caps = await page.evaluate(() => document.querySelectorAll('#ax-cls .axsvg .xwh').length);
+      const n0 = await nx(); await page.click('#ax-cls .axlg .axc[data-c="0"]'); await page.waitForTimeout(150);
+      const n1 = await nx(); await page.click('#ax-cls .axlg .axc[data-c="0"]'); await page.mouse.move(2, bb.y + bb.height + 40); await page.waitForTimeout(150);
+      const n2 = await nx();
+      sb.legend = n1 === n0 - caps && n2 === n0 ? 'ok' : 'FAIL ' + [n0, n1, n2, caps].join('/');
+      if (sb.legend !== 'ok') fail('side by side: legend toggle ' + sb.legend);
+      sb.markers = await page.evaluate(() => (window.AWR_MARKERS || []).length ? document.querySelectorAll('#ax-cls .axsvg .cfl').length : -1);
+      if (sb.markers === 0) fail('side by side: release markers missing');
+      await page.click('#activity .axlayout [data-m="span"]'); await page.waitForTimeout(200);
+      const s1 = await page.evaluate(() => { let v = null; try { v = localStorage.getItem('awr-axlayout'); } catch (e) {} return { v, r: document.getElementById('ax-range').textContent, n: document.querySelectorAll('#ax-cls .axsvg .xw.xpn').length }; });
+      await page.click('#activity .axlayout [data-m="win"]'); await page.waitForTimeout(200);
+      await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(1200);
+      const s2 = await page.evaluate(() => { let v = null; try { v = localStorage.getItem('awr-axlayout'); } catch (e) {} return { v, r: document.getElementById('ax-range').textContent }; });
+      sb.persist = s1.v === 'span' && !/side by side/.test(s1.r) && s1.n === 0 && s2.v === 'win' && /side by side/.test(s2.r) ? 'ok' : 'FAIL ' + JSON.stringify([s1, s2]);
+      if (sb.persist !== 'ok') fail('side by side: switch / persistence ' + sb.persist);
+      await page.evaluate(() => { try { localStorage.removeItem('awr-axlayout'); } catch (e) {} });
+    }
+    console.log('side by side', JSON.stringify(sb));
+    if (errors.length) fail('side by side: ' + errors.slice(0, 5).join(' | '));
     await page.close();
   }
 

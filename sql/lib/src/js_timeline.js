@@ -322,8 +322,10 @@ function seriesAt(c,x,y){
   if(!c.g||!c.g.ord)return -1;
   var r=c.svg.getBoundingClientRect(),sy=(y-r.top)*c.g.W/r.width;
   if(sy<c.g.top||sy>c.g.top+c.g.ph)return -1;
-  var t=tAt(c,x);if(t<c.g.d0||t>c.g.d1)return -1;
-  var ref=refAt(t);if(ref==null)return -1;
+  var ref;
+  if(c.g.mode==='win'){var pq=panAt(c,x);if(!pq)return -1;ref=wRefAt(c,pq.q,pq.t);}
+  else{var t=tAt(c,x);if(t<c.g.d0||t>c.g.d1)return -1;ref=refAt(t);}
+  if(ref==null)return -1;
   var v=(c.g.top+c.g.ph-sy)/c.g.ph*c.g.ymax,acc=0;
   for(var q=0;q<c.g.ord.length;q++){var k=c.g.ord[q],a=rV(c,k,ref)||0;if(a<=0)continue;acc+=a;if(v<=acc)return k;}
   return -1;
@@ -400,7 +402,7 @@ function spInit(){
   for(var i=0;i<n;i++){T.push(t0+i*bh);T1.push(Math.min(t0+(i+1)*bh,end));}
   SP={T:T,T1:T1,t0:t0,bh:bh,full:[t0,end],dom:[t0,end],win:wins().map(function(w){return [PT(w.s),PT(w.e)];}),
       min:Math.max(4*bh,Math.min(6*H1,(end-t0)/4)),bhTxt:AX.bh===1?'hourly':bLab(AX.bh)+' averages',
-      reset:doc.getElementById('ax-reset'),range:doc.getElementById('ax-range'),sel:null,F:null,rk:null,rv:null};
+      reset:doc.getElementById('ax-reset'),range:doc.getElementById('ax-range'),sel:null,F:null,rk:null,rv:null,mode:'span',wk:0,wf:0};
   SP.F=fineInit(AX.fine);
   CH=[];
   mkChart(doc.getElementById('ax-cls'),AX,AX.classes.map(wcol),{flags:true,noun:'classes',what:'wait class'});
@@ -432,11 +434,25 @@ function spInit(){
       drawAll(true);
     });
   }
+  /* the layout switch (Windows side by side / Full span): shown when at
+     least two windows get a panel AXMP px wide; the reader's last click
+     (localStorage awr-axlayout) wins, else AXDEF (54 = draw's padL + padR) */
+  var mg=$('#activity .axlayout'),sm=null,pw0=CH.length?Math.max(480,CH[0].plot.clientWidth)-54:0;
+  try{sm=localStorage.getItem('awr-axlayout');}catch(e){}
+  if(mg&&SP.win.length>=2&&winFit(pw0)>=2){
+    mg.hidden=false;
+    SP.mode=(sm==='win'||sm==='span')?sm:(AXDEF==='win'&&SP.win.length<=winFit(pw0)?'win':'span');
+    $$('[data-m]',mg).forEach(function(b){
+      b.setAttribute('aria-pressed',String(b.getAttribute('data-m')===SP.mode));
+      b.addEventListener('click',function(){TL.axLayout(b.getAttribute('data-m'),true);});
+    });
+  }
   if(SP.reset)SP.reset.addEventListener('click',spReset);
   doc.addEventListener('mousemove',function(e){
     var dg=DRAG;if(!dg)return;
     if(!dg.moved&&Math.abs(e.clientX-dg.x0)<5)return;
     dg.moved=true;tipOff();hideAll();
+    if(SP.mode==='win')return;
     var c=dg.c,r=c.svg.getBoundingClientRect(),sc=r.width/c.g.W,mn=r.left+c.g.padL*sc,mx=r.left+(c.g.W-c.g.padR)*sc;
     dg.a=Math.max(mn,Math.min(dg.x0,e.clientX));dg.b=Math.min(mx,Math.max(dg.x0,e.clientX));
     /* the brush shows on both charts: same width, same x mapping */
@@ -446,7 +462,7 @@ function spInit(){
   });
   doc.addEventListener('mouseup',function(){
     var dg=DRAG;if(!dg)return;DRAG=null;CH.forEach(function(o){o.br.hidden=true;});
-    if(dg.moved){if(dg.b-dg.a>6)spZoom(tAt(dg.c,dg.a),tAt(dg.c,dg.b));return;}
+    if(dg.moved){if(SP.mode!=='win'&&dg.b-dg.a>6)spZoom(tAt(dg.c,dg.a),tAt(dg.c,dg.b));return;}
     if(dg.w!=null){SP.sel={prev:PW,t:Date.now()};spSelect(dg.w);return;}
     /* a click on a band makes its highlight sticky (the same band again,
        or a click off the stack, clears it) */
@@ -484,10 +500,10 @@ function mkChart(root,P,cols,opt){
        the pin the first press made on a window stripe */
     if(e.detail>=2){if(SP.sel&&Date.now()-SP.sel.t<700)W.pin(SP.sel.prev);SP.sel=null;
       if(SP.hsel&&Date.now()-SP.hsel.t<700){HS=SP.hsel.prev;HT=null;hlApply();}SP.hsel=null;
-      DRAG=null;spReset();return;}
+      DRAG=null;if(SP.mode!=='win')spReset();return;}
     var wh=e.target.closest('.xwh');DRAG={c:c,x0:e.clientX,y0:e.clientY,moved:false,w:wh?+wh.getAttribute('data-i'):null};
   });
-  s.addEventListener('dblclick',spReset);
+  s.addEventListener('dblclick',function(){if(SP.mode!=='win')spReset();});
   s.addEventListener('keydown',function(e){var wh=e.target.closest&&e.target.closest('.xwh');if(wh&&(e.key==='Enter'||e.key===' ')){e.preventDefault();spSelect(+wh.getAttribute('data-i'));}});
   CH.push(c);
   return c;
@@ -495,8 +511,24 @@ function mkChart(root,P,cols,opt){
 function drawAll(force){CH.forEach(function(c){draw(c,force);});spHead();}
 /* redraw both Activity charts now (a design that shows / hides one calls it) */
 TL.redraw=function(){drawAll(true);};
+/* the Activity charts' layout: 'win' (windows side by side) or 'span'
+   (full span); persist = the reader clicked (localStorage awr-axlayout) */
+TL.axLayout=function(m,persist){
+  if(!SP||(m!=='win'&&m!=='span'))return;
+  SP.mode=m;
+  $$('#activity .axlayout [data-m]').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-m')===m));});
+  if(persist){try{localStorage.setItem('awr-axlayout',m);}catch(e){}}
+  hideAll();tipOff();drawAll(true);
+};
 function spHead(){
   if(!SP)return;var d0=SP.dom[0],d1=SP.dom[1],zoomed=d0>SP.full[0]||d1<SP.full[1];
+  if(SP.mode==='win'){
+    if(SP.reset)SP.reset.hidden=true;
+    var n=SP.win.length,K=SP.wk||n,f=SP.wf||0;
+    if(SP.range)SP.range.textContent=(K===n?n+' compared windows side by side':'The '+K+' most recent of '+n+' compared windows side by side (Full span shows all)')
+      +(f===K?', 1-min detail':f>0?', 1-min detail in the '+f+' most recent, '+SP.bhTxt+' in the rest':', '+SP.bhTxt);
+    return;
+  }
   if(SP.reset)SP.reset.hidden=!zoomed;
   var res=SP.bhTxt;
   if(fineOn(d0,d1))res=fineCov(d0,d1)>=d1-d0-1?'1-min detail':'1-min detail in the compared windows, '+SP.bhTxt+' elsewhere';
@@ -573,18 +605,110 @@ function flagSvg(c,list,top,ph,Wd,padL,padR){
   });
   return s;
 }
+/* ---- "Windows side by side" (SP.mode 'win'): each compared window as its
+   own panel on one shared y axis, oldest left, Current last.  A panel is
+   drawn minute by minute when every minute of its window is in the
+   1-minute detail (SP.F), else from the coarse buckets overlapping it.
+   Panels are at least AXMP px wide, AXGAP px apart: when not all windows
+   fit, the most recent that fit (the Current always).  No zoom here; a
+   click on a panel's top edge pins its window.  AXDEF = the mode for a
+   reader who never clicked the switch ('win': side by side when every
+   window fits, else full span). */
+var AXMP=24,AXGAP=6,AXDEF='span';
+function winFit(pw){return Math.max(1,Math.floor((pw+AXGAP)/(AXMP+AXGAP)));}
+/* the refs of window i: its 1-minute buckets when the detail covers it all,
+   else the coarse buckets overlapping it */
+function wSlice(i){
+  var a=SP.win[i][0],b=SP.win[i][1],F=SP.F,out=[],q,g,j,j0,j1;
+  if(F&&fineCov(a,b)>=b-a-1){
+    for(q=0;q<F.S.length;q++){g=F.S[q];if(g[1]<=a||g[0]>=b)continue;
+      j0=Math.max(0,Math.floor((a-g[0])/F.bm));j1=Math.min(Math.round((g[1]-g[0])/F.bm),Math.ceil((b-g[0])/F.bm))-1;
+      for(j=j0;j<=j1;j++)out.push(-1-(g[2]+j));}
+    return {r:out,fine:true};
+  }
+  var br=bRange(a,b);for(j=br[0];j<=br[1];j++)out.push(j);
+  return {r:out,fine:false};
+}
+/* the panel under client x on chart c: {q: panel index, t: time} or null */
+function panAt(c,cx){
+  var g=c.g;if(!g||g.mode!=='win')return null;
+  var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*g.W/r.width;
+  for(var q=0;q<g.pan.length;q++){var p=g.pan[q];if(x>=p.x0&&x<p.x0+p.w)return {q:q,t:p.a+(x-p.x0)/p.w*(p.b-p.a)};}
+  return null;
+}
+/* the ref drawn at time t in panel q (1-minute or coarse, as the panel) */
+function wRefAt(c,q,t){
+  var p=c.g.pan[q];if(!p)return null;
+  if(p.fine){var F=SP.F;for(var k=0;k<F.S.length;k++){var g=F.S[k];if(t>=g[0]&&t<g[1])return -1-(g[2]+Math.floor((t-g[0])/F.bm));}return null;}
+  var j=bucketAt(t);return j<0?null:j;
+}
+/* chart c side by side (draw passes its size; flags / labels follow
+   c.flags / c.xl as in draw) */
+function drawWin(c,o){
+  var Wd=o.Wd,top=o.top,ph=o.ph,padL=o.padL,padR=o.padR,pw=o.pw;
+  var n=SP.win.length,K=Math.min(n,winFit(pw)),w=(pw-AXGAP*(K-1))/K,ws=wins(),cur=ws.length-1;
+  var h=hlOrd(c),hl=h.hl,on=h.on,reb=h.reb,ord=h.ord,pan=[],mx=0.05,mh=0,nf=0,q;
+  for(q=0;q<K;q++){
+    var i=n-K+q,a=SP.win[i][0],b=SP.win[i][1],x0=padL+q*(w+AXGAP),sl=wSlice(i);
+    var X=(function(x0,a,b){return function(t){return x0+w*Math.min(1,Math.max(0,(t-a)/(b-a)));};})(x0,a,b);
+    var cp=colPts(c,sl.r,X,a,b,reb,on);
+    if(cp.mx>mx)mx=cp.mx;if(cp.mh>mh)mh=cp.mh;if(sl.fine)nf++;
+    pan.push({i:i,x0:x0,w:w,a:a,b:b,X:X,fine:sl.fine,pts:cp.pts});
+  }
+  SP.wk=K;SP.wf=nf;
+  /* y scale, clip paths, gridlines, "AAS", open the clipped group: as draw */
+  var yb=reb&&mh>0?Math.max(mh,0.05):mx,step=niceStep(yb,3),ymax=Math.ceil(yb/step-1e-9)*step;
+  var Y=function(v){return top+ph-ph*v/ymax;},clip='axclip-'+c.uid;
+  var s='<defs><clipPath id="'+clip+'"><rect x="'+padL+'" y="'+(top-6)+'" width="'+pw+'" height="'+(ph+6)+'"/></clipPath>'
+    +(reb?'<clipPath id="'+clip+'f"><rect x="'+padL+'" y="'+top+'" width="'+pw+'" height="'+ph+'"/></clipPath>':'')+'</defs>';
+  for(var v=0;v<=ymax+1e-9;v+=step){var dec=step<1?(step<0.1?2:1):0;
+    s+='<line class="gl" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="at" x="'+(padL-6)+'" y="'+(Y(v)+4).toFixed(1)+'" text-anchor="end">'+v.toFixed(dec)+'</text>';}
+  s+='<text class="at" x="'+(padL-6)+'" y="'+(top-10)+'" text-anchor="end">AAS</text><g clip-path="url(#'+clip+')">';
+  /* panel backgrounds under the bands; classes as the stripes' */
+  var hit=[];
+  pan.forEach(function(p){var wi=ws[p.i],cls=(p.i===cur?' cur':'')+(wi.o===PW?' on':'')+(wi.v==='N'?' sk':'');
+    s+='<rect class="xw xpn'+cls+'" x="'+p.x0.toFixed(1)+'" y="'+top+'" width="'+p.w.toFixed(1)+'" height="'+ph+'"/>';
+    hit.push([p.i,p.x0,p.w,cls]);});
+  /* the bands, panel by panel (each panel's fills top of the stack first, as draw) */
+  var F=[],E=[],HF=[],HE=[];
+  pan.forEach(function(p){var B=bands(c,p.pts,ord,on,Y);F=F.concat(B.fills.reverse());E=E.concat(B.edges.reverse());HF=HF.concat(B.hf);HE=HE.concat(B.he);});
+  if(!hl)s+=F.join('')+E.join('');
+  else s+=(reb?'<g clip-path="url(#'+clip+'f)">':'')+'<g class="xfd" opacity="'+(reb&&ymax<mx?Math.min(hl.fade,0.07):hl.fade)+'">'+F.join('')+'</g>'+HF.join('')+HE.join('')+(reb?'</g>':'');
+  /* the hidden bucket band: as draw; the caps */
+  s+='<rect class="xbk" x="0" y="'+top+'" width="0" height="'+ph+'" visibility="hidden"/>';
+  hit.forEach(function(r){s+='<rect class="xwc'+r[3]+'" x="'+r[1].toFixed(1)+'" y="'+(top-5)+'" width="'+r[2].toFixed(1)+'" height="4" rx="1"/>';});
+  /* close the group and the x axis line: as draw */
+  s+='</g><line class="ax" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+(top+ph)+'" y2="'+(top+ph)+'"/>';
+  /* window labels under the lower chart: every st-th panel counted from the Current one */
+  if(o.xl){var lw=0;pan.forEach(function(p){lw=Math.max(lw,tw(ws[p.i].d));});var st=Math.max(1,Math.ceil((lw+8)/(w+AXGAP)));
+    pan.forEach(function(p,q){if((K-1-q)%st)return;var wi=ws[p.i];
+      s+='<text class="at xpl'+(p.i===cur?' cur':'')+(wi.v==='N'?' sk':'')+'" x="'+(p.x0+p.w/2).toFixed(1)+'" y="'+(top+ph+18)+'" text-anchor="middle">'+esc(wi.d)+'</text>';});}
+  /* release markers: in the gap before the window they precede */
+  var list=[];o.mks.forEach(function(m){var ib=idxOf(m.o);pan.forEach(function(p){if(p.i===ib)list.push({x:Math.max(padL,p.x0-AXGAP/2),m:m});});});
+  s+=flagSvg(c,list,top,ph,Wd,padL,padR);
+  /* highlight note and crosshair: as draw */
+  if(hl&&hl.note)s+='<text class="xhn" x="'+(padL+6)+'" y="'+(top+13)+'">'+esc(hl.note)+'</text>';
+  s+='<line class="xch" x1="0" x2="0" y1="'+top+'" y2="'+(top+ph)+'" visibility="hidden"/>';
+  /* hit areas: the caps only (a band in the plot keeps its highlight on a click) */
+  hit.forEach(function(r){var wi=ws[r[0]];
+    s+='<rect class="xwh" data-i="'+r[0]+'" data-w="'+wi.o+'" x="'+r[1].toFixed(1)+'" y="'+(top-6)+'" width="'+r[2].toFixed(1)+'" height="10" tabindex="0" role="button" aria-label="'
+      +esc((wi.o===0?'Current window, ':offTxt(wi)+' window, ')+wi.t+(wi.o===0?'':'. Pin it'))+'"/>';});
+  c.svg.innerHTML=s;
+  c.g={mode:'win',pan:pan,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:SP.dom[0],d1:SP.dom[1],ymax:ymax,ord:ord,hk:c.hk,cm:o.cm};
+}
 function draw(c,force){
   if(!c||!SP||!shown(c.plot))return;
   /* the release flags go on the first chart shown, the x labels on the
      last one (both on one chart when a design shows a single chart) */
   var vis=CH.filter(function(x){return shown(x.plot);}),lay;c.flags=vis[0]===c;c.xl=vis[vis.length-1]===c;lay=(c.flags?1:0)+(c.xl?2:0);
   var Wd=Math.max(480,c.plot.clientWidth),d0=SP.dom[0],d1=SP.dom[1];
-  if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk&&c.g.cm===cmp())return;c.w=Wd;c.pw=PW;c.lay=lay;
+  if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk&&c.g.cm===cmp()&&(c.g.mode||'span')===SP.mode)return;c.w=Wd;c.pw=PW;c.lay=lay;
   var mks=W.markers?W.markers():[],P=c.P;
   var cm=cmp();
   var top=c.flags&&mks.length?46:22,ph=cm?96:150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;
   c.svg.setAttribute('viewBox','0 0 '+Wd+' '+H);c.svg.setAttribute('height',H);
   var X=function(t){return padL+pw*(t-d0)/(d1-d0);};
+  if(SP.mode==='win'){drawWin(c,{Wd:Wd,top:top,ph:ph,padL:padL,padR:padR,pw:pw,xl:c.xl,cm:cm,mks:mks});return;}
   /* stacked areas: one point per bucket at its midpoint, straight lines
      between them.  While a bucket is at least a pixel wide every bucket is
      a point; zoomed out further, one point per pixel column at the
@@ -641,18 +765,26 @@ function draw(c,force){
       +esc((w.o===0?'Current window, ':offTxt(w)+' window, ')+w.t+(w.o===0?'':'. Pin it'))+'"/>';
   });
   c.svg.innerHTML=s;
-  c.g={X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,hk:c.hk,cm:cm};
+  c.g={mode:'span',X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,hk:c.hk,cm:cm};
 }
 function tAt(c,cx){var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*c.g.W/r.width;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}
 function bucketAt(t){var j=Math.floor((t-SP.t0)/SP.bh);return j>=0&&j<SP.T.length&&t<SP.T1[j]?j:-1;}
 function hideCross(c){var hb=$('.xbk',c.svg),ch=$('.xch',c.svg);if(hb){hb.setAttribute('visibility','hidden');ch.setAttribute('visibility','hidden');}}
 function hideAll(){CH.forEach(hideCross);}
-/* the crosshair + bucket band at time t (bucket ref r) on chart c */
-function cross(c,t,r){
+/* the crosshair + bucket band at time t (bucket ref r) on chart c (side by
+   side: in panel q) */
+function cross(c,t,r,q){
   var hb=$('.xbk',c.svg),ch=$('.xch',c.svg);if(!c.g||!hb)return;
-  var xa=Math.max(c.g.padL,c.g.X(rS(r))),xb=Math.min(c.g.W-c.g.padR,c.g.X(rE(r))),x=c.g.X(t);
+  var X=c.g.X,lo=c.g.padL,hi=c.g.W-c.g.padR;
+  if(c.g.mode==='win'){var p=c.g.pan&&c.g.pan[q];if(!p){hideCross(c);return;}X=p.X;lo=p.x0;hi=p.x0+p.w;}
+  var xa=Math.max(lo,X(rS(r))),xb=Math.min(hi,X(rE(r))),x=X(t);
   hb.setAttribute('x',xa.toFixed(1));hb.setAttribute('width',Math.max(1,xb-xa).toFixed(1));hb.setAttribute('visibility','visible');
   ch.setAttribute('x1',x.toFixed(1));ch.setAttribute('x2',x.toFixed(1));ch.setAttribute('visibility','visible');
+}
+/* the tooltip of ref r (a bucket or a minute) on chart c */
+function ptTip(c,r,e){var P=c.P;
+  tipOn('<b>'+fAt(rS(r))+'\u2013'+fHM(rE(r))+'</b><br><span class="tm">'+(r<0?'1-min':bLab((rE(r)-rS(r))/H1))+' average, by '+c.what+'</span>'
+    +ashRows(P.classes,c.cols,function(q){return rV(c,q,r);},c.vis,c.noun,c.hl&&c.hl.set),e);
 }
 function hover(c,e){
   if(!c.g||DRAG&&DRAG.moved)return;
@@ -664,13 +796,19 @@ function hover(c,e){
       +(P.win?ashRows(P.classes,c.cols,function(k){return P.win[k][i];},c.vis,c.noun,c.hl&&c.hl.set):'')+(w.o===0?'':'<span class="tm">Click to pin this window</span>'),e);
     return;
   }
+  if(c.g.mode==='win'){
+    var pq=panAt(c,e.clientX),pr=pq?wRefAt(c,pq.q,pq.t):null;
+    if(pr==null){hideAll();tipOff();if(HT&&HT.soft)hlSet(null);return;}
+    if(!HS&&!DRAG){var pk=seriesAt(c,e.clientX,e.clientY);hlSet(pk<0?null:{c:c,k:pk,soft:true});}
+    CH.forEach(function(o){cross(o,pq.t,pr,pq.q);});
+    ptTip(c,pr,e);return;
+  }
   var t=tAt(c,e.clientX),r=refAt(t);
   if(r==null||t<c.g.d0||t>c.g.d1){hideAll();tipOff();if(HT&&HT.soft)hlSet(null);return;}
   /* the band under the pointer highlights in place (not while one is sticky) */
   if(!HS&&!DRAG){var hk=seriesAt(c,e.clientX,e.clientY);hlSet(hk<0?null:{c:c,k:hk,soft:true});}
   CH.forEach(function(o){cross(o,t,r);});
-  tipOn('<b>'+fAt(rS(r))+'\u2013'+fHM(rE(r))+'</b><br><span class="tm">'+(r<0?'1-min':bLab((rE(r)-rS(r))/H1))+' average, by '+c.what+'</span>'
-    +ashRows(P.classes,c.cols,function(q){return rV(c,q,r);},c.vis,c.noun,c.hl&&c.hl.set),e);
+  ptTip(c,r,e);
 }
 /* a window stripe: pin it (Current unpins); in the Timeline view the grid
    column flashes and comes into view */

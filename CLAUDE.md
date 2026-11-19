@@ -632,6 +632,23 @@ leads with the highlighted rows (`.thlb` / `.thl`, share of the total
 pointer and flicker). CSS in `_style.sql` next to the other `.ashx` rules.
 Without a highlight `draw` emits exactly the pre-1.6.1 SVG.
 
+**Windows side by side (plan 024)**: `SP.mode` `'win'` / `'span'`,
+`span.seg.axlayout` in `.axh` (hidden when fewer than 2 windows or panels
+would be narrower than `AXMP`), `AWR_TL.axLayout(m, persist)`, localStorage
+`awr-axlayout` written on a click only, default `AXDEF` (`'span'`; `'win'`
+would apply the fit rule). `drawWin` draws one panel per window
+(`rect.xw.xpn` + `cur` / `on` / `sk` under the bands, caps `.xwc`, hit
+`.xwh` on the caps only, labels `text.xpl` on the lower chart) from
+`wSlice(i)`: the 1-minute refs when `fineCov` covers the whole window,
+else `bRange`; `colPts` / `bands` / `flagSvg` / `hlOrd` are shared with
+Full span (`draw`); `c.g.mode`, `c.g.pan`; `panAt` / `wRefAt` /
+`cross(c,t,r,q)` map the pointer; no brush, no Reset. Too many windows:
+the most recent `winFit(pw)` panels. Labels / flags follow `c.xl` /
+`c.flags` (the last / first chart SHOWN), so it works with one chart
+hidden (compact Summary, the dashboard's tabs). Not to be confused with
+the dashboard's `window.AWR_axMode` (which chart is shown). The
+`js_timeline.plsql` header lists these functions.
+
 ### Window component (`sql/lib/wingrid.plsql` + `js_wingrid.plsql`)
 
 The ONE per-window bar grid — hero strip (08), finding / plan / config
@@ -760,7 +777,9 @@ designs) and the server's env whitelist.
   `#row-filter`; Esc stops propagation so it never unpins); Activity
   `.axseg` (cls / ev / both: `#ashx.ax-cls-only|ax-ev-only`, then
   `AWR_TL.redraw()` -- js_timeline puts the flags on the first chart
-  shown and the x labels on the last); `.dkpis` after `#verdict` (DB time
+  shown and the x labels on the last; plan 024's layout switch
+  `.seg.axlayout` sits in the same `.axh` row; `css_design.css` gives it
+  the `.axseg` look); `.dkpis` after `#verdict` (DB time
   from `#hero-dbt` + one per finding card, bars from the card's / Timeline
   row's `data-v`); in `#findings` a `.dgrid` = `.dmain` (chrome-style
   `.tabs[data-tabs="dfind"]` Moved / Normal / Improved, so `reveal()`

@@ -1417,6 +1417,9 @@ BEGIN
         || 'scored: every scored number is in the tables below.</p>');
     DBMS_OUTPUT.PUT_LINE('<div class="ashx" id="ashx" role="group" aria-label="Active sessions over the whole span" hidden>'
         || '<div class="axh"><span class="axs" id="ax-range"></span>'
+        || '<span class="seg axlayout" role="group" aria-label="Chart layout" hidden>'
+        || '<button type="button" data-m="win" aria-pressed="false">Windows side by side</button>'
+        || '<button type="button" data-m="span" aria-pressed="true">Full span</button></span>'
         || '<span class="axk" aria-hidden="true"><span><i class="kw"></i>compared window</span>'
         || '<span><i class="kw cur"></i>Current</span><span><i class="kw pin"></i>pinned</span></span>'
         || '<button type="button" class="axr axm" id="ax-more" aria-controls="ax-ev" aria-expanded="false" hidden>Show by wait event</button>'
@@ -1434,6 +1437,8 @@ BEGIN
         || '<div class="axbr" hidden></div></div></div>');
     DBMS_OUTPUT.PUT_LINE('<p class="axn2">Hover for the values; drag across either chart to zoom both '
         || '(6 hours or less shows the compared windows minute by minute), double-click to reset. Click a shaded window to pin it: the Timeline grid compares against it. '
+        || 'Windows side by side shows each compared window as its own panel, oldest left, minute by minute where the 1-minute detail covers it; '
+        || 'click a panel&rsquo;s top edge to pin it (Full span zooms). '
         || 'Hover a wait class or event to highlight it (a class also lights its events): from the legend it is drawn from zero with the y axis fitted to it, '
         || 'so its shape over time reads directly. Click its band, or Shift+click the legend entry, to keep it; Esc clears.</p>'
         || '</div></section>');

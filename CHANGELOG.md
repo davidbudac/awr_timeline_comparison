@@ -144,6 +144,13 @@ release bumps `awr_version`).
   All sections are unchanged: the charts are still their first section.
   The dashboard design is unchanged (it already led with the verdict and
   shows one chart at a time).
+- **Activity charts: Windows side by side.** A switch above the charts
+  shows the compared windows as adjacent panels on one y axis (minute by
+  minute where the 1-minute data covers the window), the Current one last
+  and highlighted, release markers between the panels; hover, legend,
+  highlight and pin work as before, zoom stays in Full span. Full span
+  stays the default; the reader's choice is remembered. Works in all three
+  designs, next to the dashboard's chart tabs.
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in
