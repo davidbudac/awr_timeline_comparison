@@ -98,6 +98,7 @@ MARKERS='2026-06-10 09:00|Release 2.0' ./run_awr_trend.sh user/pw@svc  # file-fr
 ECHARTS=vendor/echarts.min.js ./run_awr_trend.sh user/pw@svc           # self-contained / offline HTML
 ARCHIVE=zip ./run_awr_trend.sh user/pw@svc                             # also zip the finished report
 SQLMON=N ./run_awr_trend.sh user/pw@svc                                # skip SQL Monitor (slow DBA_HIST_REPORTS reads)
+DESIGN=dashboard ./run_awr_trend.sh user/pw@svc                        # another look: classic (default) / quiet / dashboard
 ```
 
 Arguments: `connect_string [target_end [win_hours [weeks_back [top_n [inst_num [step [step_unit [template [debug [marker_file [profile_days]]]]]]]]]]]`
@@ -124,6 +125,7 @@ self-contained report" below).
 | `ECHARTS` *(env var)* | *(empty)* | Where the ECharts chart library loads from. Empty = public CDN (`cdn.jsdelivr.net`). An `http(s)` URL = used as-is (internal mirror). A local file path = inlined into the report for a single self-contained, offline-capable HTML file. See "Offline / self-contained report" below |
 | `ARCHIVE` *(env var)* | *(empty)* | Also zip/tar the finished report. Empty/`0`/`N`/`no`/`off` = disabled. `1`/`Y`/`yes`/`on`/`auto` = auto-pick zip, else tar+gzip, else plain tar. `zip`/`tgz`/`tar` force that format. See "Archive the output (zip)" below |
 | `SQLMON` *(env var)* / `sqlmon` *(DEFINE)* | `Y` | `N`/`no`/`0`/`off` skips the SQL Monitor section (18) and the verdict's SQL Monitor pills, so `DBA_HIST_REPORTS` is never read (its XML parsing can take minutes on a busy DB). The About line notes the skip |
+| `DESIGN` *(env var)* / `design` *(DEFINE)* | `classic` | The report's look; presentation only, every number, section and view is in all three. `classic` = the report as before (byte-identical). `quiet` = the same layout in a neutral, shadcn-like skin (zinc greys, the Geist typeface embedded, hairline borders, release flags without boxes, severity as a dot). `dashboard` = that skin plus a scan-first Summary: the verdict and KPI cards on top, the Activity charts one at a time (or both), every moved metric as a row you open in place with "What changed around it" beside the table, and a Ctrl+K "Jump to" palette instead of the left rail. An unknown name aborts the run. See "Report designs" below |
 
 `step` × `step_unit` defines the gap between adjacent comparison
 windows. `step=1, step_unit=w` (the default) reproduces the original
@@ -470,6 +472,39 @@ section heading reveals a `#` permalink; long detail tables collapse their
 tail behind a "Show N more rows" link. Click a per-window column header to
 highlight that window across every table and chart. None of this needs the
 network or a re-run.
+
+### Report designs (`DESIGN`)
+
+The same report comes in three looks, picked when you create it
+(`DESIGN=quiet ./run_awr_trend.sh …`, `DEFINE design = 'quiet'` in
+SQL\*Plus, or the configurator's Output step). Only the presentation
+changes: every number, section and view is in all three, and the Oracle
+wait-class / wait-event colours never change.
+
+- **classic** (default): the report described above, byte-identical to a
+  run without the option.
+- **quiet**: the same layout, rail and views in a neutral, shadcn-like
+  skin: zinc greys, the Geist / Geist Mono typefaces (embedded, about
+  70 KB, SIL OFL, `vendor/fonts/`), one border weight and no shadows,
+  sentence-case labels, release flags without boxes, the verdict counts as
+  one line, severity as a leading dot in the tables and a single dot +
+  count on the rail. The Activity help text sits behind a "How to read"
+  button and each table's CSV / Markdown copy behind one `···` menu.
+- **dashboard**: the quiet skin plus a scan-first Summary. The verdict and
+  one KPI card per finding (plus DB time: value, Δ, per-window bars) come
+  first, then the Activity card (by wait class, by wait event, or both),
+  then every moved metric as a table row that opens in place (its
+  per-window bars, and the finding's evidence on the lead row), with
+  Normal / Improved as tabs and "What changed around it" (plan change,
+  parameters, releases) beside the table. There is no left rail: `Ctrl+K`
+  (or the "Jump to…" button) opens a palette that finds any section,
+  finding, metric, event, SQL id, segment, file or parameter row, and can
+  filter every table. Timeline and All sections are the same as classic.
+
+With JavaScript off the dashboard falls back to the quiet look with every
+section stacked. Live examples:
+[quiet](https://davidbudac.github.io/awr_timeline_comparison/examples/demo_busy_db_quiet.html),
+[dashboard](https://davidbudac.github.io/awr_timeline_comparison/examples/demo_busy_db_dashboard.html).
 
 ### Per-metric policy: direction and floors
 

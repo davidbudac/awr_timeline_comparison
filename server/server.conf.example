@@ -61,6 +61,7 @@ max_run_minutes = 60
 # FLEET_DETAIL     =
 # FLEET_DETAIL_TIMEOUT   = 3600
 # FLEET_DETAIL_TEMPLATE  = comprehensive
+# FLEET_DETAIL_DESIGN    = classic   # or quiet / dashboard
 # FLEET_DETAIL_ECHARTS   =
 # FLEET_PROFILE_DAYS     = 0     # N > 0 adds the per-DB "Day profile" band
 

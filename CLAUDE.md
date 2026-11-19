@@ -109,7 +109,14 @@ sql/
     ├── js_timeline.plsql     -- GENERATED (src/js_timeline.js): window.AWR_TL, lanes, the two
     │                         --   Activity charts (one chart factory, linked zoom / crosshair / pin)
     ├── js_microstrip.plsql   -- GENERATED (src/js_microstrip.js): data-spark → 13-bar micro strips
-    ├── src/*.js              -- readable sources of the three generated scripts (tools/js2plsql.sh)
+    ├── src/*.js              -- readable sources of the generated scripts (tools/js2plsql.sh)
+    ├── src/css_design.css    -- readable source of css_design.plsql (the quiet / dashboard stylesheet)
+    ├── no_design.sql         -- empty stub: design_head / design_tail for design=classic
+    ├── design_head.sql       -- quiet / dashboard <head>: css_fonts.plsql + css_design.plsql
+    ├── design_tail.sql       -- quiet / dashboard script: window.AWR_DESIGN + js_design.plsql
+    ├── css_fonts.plsql       -- GENERATED (tools/fonts2plsql.sh, vendor/fonts/): Geist @font-face
+    ├── css_design.plsql      -- GENERATED (src/css_design.css): the design stylesheet
+    ├── js_design.plsql       -- GENERATED (src/js_design.js): the design's client half
     ├── js_sparkline.plsql    -- inline-SVG line sparklines -- FLEET-ONLY since v1.6.0
     ├── js_wait_colors.plsql  -- shared wait_class palette
     ├── js_markers.plsql      -- inits AWR_MARKERS + AWR_markLine()
@@ -120,7 +127,8 @@ sql/
         ├── sysstat_load_targets.sql
         ├── sysmetric_targets.sql   -- names + is_additive flag
         └── wait_event_targets.sql  -- single '*' row = "no filter" sentinel
-tools/js2plsql.sh                   -- dev-time generator for the js_* .plsql bodies (lint check 24)
+tools/js2plsql.sh                   -- dev-time generator for the js_* / css_design .plsql bodies (lint check 24)
+tools/fonts2plsql.sh                -- dev-time generator for sql/lib/css_fonts.plsql (lint check 33)
 side/create_weekly_baselines.sql    -- optional baselines (the only writer)
 run_awr_fleet.sh, awr_fleet_extract.sql, sql/fleet/ -- fleet report (see that section)
 server/                             -- optional scheduler web app (see that section)
@@ -133,13 +141,14 @@ the band glyph replaced it.
 
 ## Substitution variables
 
-Fourteen user-facing vars, all DEFINEs (defaults in `sql/defaults.sql`):
+Fifteen user-facing vars, all DEFINEs (defaults in `sql/defaults.sql`):
 `target_end` (`'AUTO'`=prior full hour), `win_hours`, `weeks_back`, `top_n`,
 `inst_num` (`0`=aggregate across RAC, else filter to that instance), `step` +
 `step_unit` (`'h'`/`'d'`/`'w'`; default `1`+`'w'` = same hour-of-week N weeks
 back), `template`, `debug`, `marker_file`, `profile_days` (`0`=off; the 12th
 and last wrapper positional), `markers`, `echarts`, `sqlmon` (`'Y'`;
-falsy = skip section 18 + 17's R6-R9, see SQL Monitor).
+falsy = skip section 18 + 17's R6-R9, see SQL Monitor), `design`
+(`'classic'`; `quiet` / `dashboard`, see Report designs).
 
 The driver resolves many derived vars **once** up front via `COLUMN … NEW_VALUE`
 and every section references them as `~name` (never re-resolves): `step_hours`
@@ -659,6 +668,86 @@ first (lint 16). Placement: 02/03/13 (13 unscored: bucket NULL + plain Δ),
   other `href="#…"` to hit exactly one id and clicks every visible `a.ent`.
 - CSS: `a.ent` inherits colour, dotted underline; `.flash` (`tr.flash>td`
   inset wash, other elements outline).
+
+### Report designs (`design`, env `DESIGN`)
+
+Three looks of the SAME report, chosen at creation; presentation only (every
+number, section, view and id is in all three). The driver resolves
+`~design_name` (`classic` / `quiet` / `dashboard`; `a` / `c` / `dash` short
+forms; empty = classic; anything else = the `TO_NUMBER('x')` abort, like a
+template) and two include paths: `~design_head` (@@ right after
+`_style.sql`) and `~design_tail` (@@ after the footer, before `</body>`).
+Classic resolves both to `sql/lib/no_design.sql` (emits nothing), so **a
+classic report is byte-identical** to one from before the option -- keep
+it that way: never put design rules in `_style.sql` or design markup in a
+section. Wrapper: `DESIGN` env var (`norm_design`, configurator menu);
+web configurator (`docs/configurator.html`, hash key `ds`); fleet:
+`FLEET_DETAIL_DESIGN` (detail runs only; the fleet report itself has no
+designs) and the server's env whitelist.
+
+- **Head** (`design_head.sql`): `css_fonts.plsql` (Geist + Geist Mono,
+  latin, variable; base64 `@font-face` cut into 2000-char lines that end
+  in `\` -- a backslash-newline inside a CSS string is dropped; generated
+  by `tools/fonts2plsql.sh` from `vendor/fonts/*.woff2`, OFL, lint 33)
+  and `css_design.plsql` (generated from `sql/lib/src/css_design.css` by
+  `tools/js2plsql.sh`, which wraps `.css` sources in `<style>`). The CSS
+  overrides the SAME tokens as `_style.sql` on `:root` / `@media screen
+  { body.dark }` (zinc oklch values; indigo = Current, red / amber =
+  severity; wait colours untouched), then restyles components (rail counts
+  dot + number, verdict pills as one stats line, `tr.crit|warn` first
+  cell a leading dot instead of the inset bar, boxless `.wg .flag` and
+  Activity `.cfh`, `.wg.allv` priors on hover, phone-width fixes). The
+  skin applies with JS off; every dashboard layout rule is under
+  `body.d-dash`, which the script sets only after building the layout
+  (JS off: the dashboard looks like quiet, every section stacked).
+- **Tail** (`design_tail.sql`): `window.AWR_DESIGN="~design_name"`, then
+  `js_design.plsql` (from `sql/lib/src/js_design.js`). Its
+  DOMContentLoaded handler is the page's LAST one, so it runs after the
+  chrome (00), js_wingrid and js_timeline built their DOM; it only MOVES
+  and restyles (ids and listeners survive; the chrome's handlers are
+  delegated). Both designs: `p.axn2` behind a "How to read" button
+  (`#ashx.howable`), each `.tbl-tools` pair inside a `details.tmenu`.
+  Dashboard (`body.d-dash`): rail hidden (`--rail-w:0`); `button.dsearch`
+  + `dialog.dpal` palette (Ctrl/Cmd+K in the capture phase, so the
+  chrome's row-filter focus never sees it; items = rail links, every
+  `main tr[id]` (group = its table caption), cards, ASH / SQL Monitor
+  ids; Enter -> `AWR_goTo`; a "Filter every table" item drives
+  `#row-filter`; Esc stops propagation so it never unpins); Activity
+  `.axseg` (cls / ev / both: `#ashx.ax-cls-only|ax-ev-only`, then
+  `AWR_TL.redraw()` -- js_timeline puts the flags on the first chart
+  shown and the x labels on the last); `.dkpis` after `#verdict` (DB time
+  from `#hero-dbt` + one per finding card, bars from the card's / Timeline
+  row's `data-v`); in `#findings` a `.dgrid` = `.dmain` (chrome-style
+  `.tabs[data-tabs="dfind"]` Moved / Normal / Improved, so `reveal()`
+  switches the tab; Moved = `.dft` of `details.drow`: the lead row of
+  each card holds the MOVED `article.fc` (so `#f-<group>` and every link
+  into it open the row via reveal's `<details>` rule), then each
+  non-twin crit / warn row of the card's related table, its bars drawn
+  from `#tl-<detail id>` data-v; each row `id="dr-<card id | detail id>"`
+  (the palette lists them by display name); the Trend cell is the shared
+  micro strip, else (past 91 windows, where it draws nothing) the
+  design's own mini bars; nothing moved -> 07's "No finding" note goes
+  into the Moved tab; Normal = `#s-normal` moved in; Improved
+  = its `.note.improved`) + `aside.dside` (`#s-changes` moved in, plus
+  the releases from `AWR_WG.markers()`; a card body inside the grid
+  scrolls on its own, so a 169-column plan card never widens the page).
+  Summary order:
+  `body.d-dash.vs` puts `#activity` at order 5 and `#findings` at 6, so
+  the verdict + KPI cards lead (original mock C; Timeline / All keep
+  Activity first); `#overview` hides (its numbers are the DB time KPI).
+- **Demo**: `gen_demo_report.py` writes `demo_busy_db.html` (classic),
+  `demo_busy_db_quiet.html`, `demo_busy_db_dashboard.html` (`--design=`;
+  `--check` covers all three). **verify_report.js** reads
+  `window.AWR_DESIGN`: dashboard skips the rail checks, lets the verdict
+  sit above Activity in Summary, runs the Activity interaction checks with
+  both charts shown, and its section 7 checks the KPI cards, the table
+  (one lead row per card, rows = the Moved count, trends), row expansion,
+  the tabs + a jump into Normal, the Activity tabs (x labels + flags on
+  the one chart shown), and the palette (Ctrl+K, search + Enter lands,
+  Esc keeps a pin); both designs: How to read, the copy menu.
+- Adding a rule: edit `sql/lib/src/css_design.css` / `js_design.js`, run
+  `tools/js2plsql.sh`, regenerate the demo; ASCII only (`\uXXXX` in JS,
+  `\2014` in CSS `content`), no tilde (the CSS sibling combinator too).
 
 ### Micro strips (`js_microstrip.plsql`)
 
@@ -1453,7 +1542,7 @@ cramped).
   and linked from that DB's row via a bare relative href. Env knobs:
   `FLEET_DETAIL` (all|none|''), `FLEET_DETAIL_TIMEOUT` (default 3600, 0 = no
   limit; rc=124 surfaces as a distinct "timed out" state with the last
-  progress marker shown in the report and a stderr hint), `FLEET_DETAIL_TEMPLATE`,
+  progress marker shown in the report and a stderr hint), `FLEET_DETAIL_TEMPLATE`, `FLEET_DETAIL_DESIGN` (the detail report's `design`, default classic),
   `FLEET_DETAIL_ECHARTS` — **offline by default** (v0.4.0): empty inlines
   `vendor/echarts.min.js` for a fully self-contained detailed report (falls
   back to the public CDN, with a warning, if that file is missing/unreadable);

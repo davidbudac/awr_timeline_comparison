@@ -51,6 +51,10 @@
 --   sqlmon       'Y' (default) or 'N' -- 'N' skips the SQL Monitor section
 --                  (18) and the verdict's SQL Monitor pills (17 R6-R9),
 --                  i.e. every DBA_HIST_REPORTS read; it can be slow.
+--   design       'classic' (default), 'quiet' or 'dashboard' -- the
+--                  report's look (presentation only; see sql/defaults.sql).
+--                  classic is byte-identical to the report before the
+--                  option; an unknown name aborts the run.
 --
 -- The cadence between adjacent comparison windows is step*step_unit.
 -- Default step=1, step_unit='w' reproduces the original "same hour-of-week,
@@ -221,6 +225,13 @@ COLUMN marker_include      NEW_VALUE marker_include      NOPRINT
 -- 17_narrative.sql skips its own DBA_HIST_REPORTS scans (R6-R9) on 'N'.
 COLUMN sqlmon_on           NEW_VALUE sqlmon_on           NOPRINT
 COLUMN sqlmon_include      NEW_VALUE sqlmon_include      NOPRINT
+-- design_name is classic / quiet / dashboard (see the dsg inline view);
+-- design_head is @@-included right after sql/_style.sql (the design's
+-- fonts + stylesheet) and design_tail right before </body> (its script):
+-- both the no-op stub sql/lib/no_design.sql for classic.
+COLUMN design_name         NEW_VALUE design_name         NOPRINT
+COLUMN design_head         NEW_VALUE design_head         NOPRINT
+COLUMN design_tail         NEW_VALUE design_tail         NOPRINT
 -- dbg_ts is refreshed inside sql/lib/debug_log.sql before each marker.
 -- Declaring the COLUMN once here keeps the helper from re-declaring it
 -- on every call.  NOPRINT suppresses the value from any visible output
@@ -289,7 +300,12 @@ SELECT
     mk.marker_include                                              AS marker_include,
     sm.sqlmon_on                                                   AS sqlmon_on,
     CASE sm.sqlmon_on WHEN 'Y' THEN 'sql/18_sqlmon.sql'
-                      ELSE 'sql/lib/no_sqlmon.sql' END             AS sqlmon_include
+                      ELSE 'sql/lib/no_sqlmon.sql' END             AS sqlmon_include,
+    dsg.design_name                                                AS design_name,
+    CASE dsg.design_name WHEN 'classic' THEN 'sql/lib/no_design.sql'
+                         ELSE 'sql/lib/design_head.sql' END        AS design_head,
+    CASE dsg.design_name WHEN 'classic' THEN 'sql/lib/no_design.sql'
+                         ELSE 'sql/lib/design_tail.sql' END        AS design_tail
 FROM v$database d
 CROSS JOIN v$instance i
 CROSS JOIN (
@@ -472,7 +488,25 @@ CROSS JOIN (
         CASE WHEN UPPER(TRIM('~sqlmon')) IN ('N','NO','0','OFF','FALSE','F')
              THEN 'N' ELSE 'Y' END AS sqlmon_on
     FROM dual
-) sm;
+) sm
+CROSS JOIN (
+    -- The look of the report.  Empty = classic (an old caller that never set
+    -- the var keeps the classic report); a / c are short forms of the two
+    -- mock names.  Anything else forces ORA-01722, like an unknown
+    -- template, so a typo never silently produces the wrong look.
+    SELECT
+        CASE LOWER(TRIM('~design'))
+            WHEN 'classic'   THEN 'classic'
+            WHEN 'quiet'     THEN 'quiet'
+            WHEN 'a'         THEN 'quiet'
+            WHEN 'dashboard' THEN 'dashboard'
+            WHEN 'dash'      THEN 'dashboard'
+            WHEN 'c'         THEN 'dashboard'
+            ELSE CASE WHEN TRIM('~design') IS NULL THEN 'classic'
+                      ELSE TO_CHAR(TO_NUMBER('x')) END   -- unknown design
+        END AS design_name
+    FROM dual
+) dsg;
 
 -- -------------------------------------------------------------------
 -- Derived labels (win_label, step_label, bucket_hours)
@@ -542,6 +576,9 @@ END;
 /
 
 @@sql/_style.sql
+-- The design's fonts + stylesheet (quiet / dashboard); the no-op stub for
+-- classic, so a classic report is byte-identical to before the option.
+@@~design_head
 
 BEGIN
     DBMS_OUTPUT.PUT_LINE('</head><body>');
@@ -687,6 +724,12 @@ BEGIN
         || ' &mdash; run ' || '~run_id'
         || ' &mdash; read-only against the source database, no scratch schema.');
     DBMS_OUTPUT.PUT_LINE('</footer>');
+END;
+/
+-- The design's script (quiet / dashboard), after every section so its
+-- DOMContentLoaded handler runs after the chrome's; nothing for classic.
+@@~design_tail
+BEGIN
     DBMS_OUTPUT.PUT_LINE('</body></html>');
 END;
 /

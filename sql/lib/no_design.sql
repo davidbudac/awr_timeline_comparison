@@ -1,0 +1,10 @@
+--
+-- sql/lib/no_design.sql -- no-op stub for the classic design.
+--
+-- The driver resolves design_head and design_tail to this file when the
+-- design substitution variable is 'classic' (the default), so the prologue
+-- and the epilogue can always @@-include exactly one file each.  It emits
+-- nothing: a classic report is byte-identical to a report from before the
+-- design option existed.  See awr_trend.sql (the dsg inline view) and
+-- sql/lib/design_head.sql / design_tail.sql for the other designs.
+--

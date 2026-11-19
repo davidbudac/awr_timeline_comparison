@@ -526,6 +526,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  return c;');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function drawAll(force){CH.forEach(function(c){draw(c,force);});spHead();}');
+    DBMS_OUTPUT.PUT_LINE('/* redraw both Activity charts now (a design that shows / hides one calls it) */');
+    DBMS_OUTPUT.PUT_LINE('TL.redraw=function(){drawAll(true);};');
     DBMS_OUTPUT.PUT_LINE('function spHead(){');
     DBMS_OUTPUT.PUT_LINE('  if(!SP)return;var d0=SP.dom[0],d1=SP.dom[1],zoomed=d0>SP.full[0]||d1<SP.full[1];');
     DBMS_OUTPUT.PUT_LINE('  if(SP.reset)SP.reset.hidden=!zoomed;');
@@ -535,8 +537,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function draw(c,force){');
     DBMS_OUTPUT.PUT_LINE('  if(!c||!SP||!shown(c.plot))return;');
+    DBMS_OUTPUT.PUT_LINE('  /* the release flags go on the first chart shown, the x labels on the');
+    DBMS_OUTPUT.PUT_LINE('     last one (both on one chart when a design shows a single chart) */');
+    DBMS_OUTPUT.PUT_LINE('  var vis=CH.filter(function(x){return shown(x.plot);}),lay;c.flags=vis[0]===c;c.xl=vis[vis.length-1]===c;lay=(c.flags?1:0)+(c.xl?2:0);');
     DBMS_OUTPUT.PUT_LINE('  var Wd=Math.max(480,c.plot.clientWidth),d0=SP.dom[0],d1=SP.dom[1];');
-    DBMS_OUTPUT.PUT_LINE('  if(!force&&c.w===Wd&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk)return;c.w=Wd;c.pw=PW;');
+    DBMS_OUTPUT.PUT_LINE('  if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk)return;c.w=Wd;c.pw=PW;c.lay=lay;');
     DBMS_OUTPUT.PUT_LINE('  var mks=W.markers?W.markers():[],P=c.P;');
     DBMS_OUTPUT.PUT_LINE('  var top=c.flags&&mks.length?46:22,ph=150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;');
     DBMS_OUTPUT.PUT_LINE('  c.svg.setAttribute(''viewBox'',''0 0 ''+Wd+'' ''+H);c.svg.setAttribute(''height'',H);');
