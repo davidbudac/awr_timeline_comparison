@@ -85,7 +85,7 @@ What the re-check added to the plans:
 | Plan | Title | Item # | Priority | Effort | Risk | Depends on | Status |
 |------|-------|--------|----------|--------|------|------------|--------|
 | [020](020-rank-finding-cards-by-impact.md) | Finding cards are ranked by the DB time they added; Summary shows z capped at 10 sigma | 1, 19 | P1 | M | MED | — | DONE (`91671ce`); DB run pending (owner) |
-| [021](021-db-time-breakdown-in-verdict.md) | The verdict shows where the extra DB time went (DB CPU + wait classes) | 2 | P1 | M | LOW-MED | 020 | TODO |
+| [021](021-db-time-breakdown-in-verdict.md) | The verdict shows where the extra DB time went (DB CPU + wait classes) | 2 | P1 | M | LOW-MED | 020 | DONE (`dc8dbff`); DB run pending (owner) |
 | [022](022-one-finding-count.md) | One finding count everywhere: a finding is a card | 3 | P2 | S-M | LOW | 020 | TODO |
 | [023](023-verdict-first-compact-activity.md) | Summary: the verdict comes first, the Activity charts open compact | 4 | P1 | M | LOW | — | TODO (owner: option A) |
 | [024](024-activity-windows-side-by-side.md) | Activity charts: "Windows side by side" mode | 5 | P2 | L | MED | 023 | TODO (owner: default Full span) |
