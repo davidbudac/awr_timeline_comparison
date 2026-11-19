@@ -357,6 +357,9 @@ END;
 /
 SET DEFINE '~'
 
+-- Co-anomaly grid stylesheet (generated from sql/fleet/src/css_fleet_coanom.css).
+@@sql/fleet/css_fleet_coanom.plsql
+
 BEGIN
     DBMS_OUTPUT.PUT_LINE('</head><body>');
 END;
@@ -381,6 +384,11 @@ END;
 -- window.FLEET_ASH, row expand/collapse, theme toggle, and marker
 -- positioning from window.FLEET_MARKERS.  No ECharts.
 @@sql/fleet/js_fleet_charts.plsql
+
+-- Fleet co-anomaly grid (#coanom above the console table): DBs x time
+-- buckets from the FLEET_ASH payloads, drawn client-side; generated from
+-- sql/fleet/src/js_fleet_coanom.js.  After js_fleet_charts (row opening).
+@@sql/fleet/js_fleet_coanom.plsql
 
 -- Deliberately ends here, inside <body>, with no closing tags: the bash
 -- assembler appends the masthead, the console <table> open, every DB's

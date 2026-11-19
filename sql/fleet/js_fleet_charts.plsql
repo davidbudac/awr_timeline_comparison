@@ -196,6 +196,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot);else boot();');
     DBMS_OUTPUT.PUT_LINE('window.__fleetRenderAsh=renderAsh;');
     DBMS_OUTPUT.PUT_LINE('window.__fleetRenderProfile=renderProfile;');
+    -- the co-anomaly grid (js_fleet_coanom.plsql) opens rows through the
+    -- same single open/close path
+    DBMS_OUTPUT.PUT_LINE('window.__fleetSetRowOpen=setRowOpen;');
     DBMS_OUTPUT.PUT_LINE('})();</script>');
 END;
 /
