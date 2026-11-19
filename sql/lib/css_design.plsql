@@ -363,6 +363,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.dside .fc-h{grid-template-columns:minmax(0,1fr)}');
     DBMS_OUTPUT.PUT_LINE('.dside .fc-band{width:100%}');
     DBMS_OUTPUT.PUT_LINE('.dside .fc h3{font-size:15px}');
+    DBMS_OUTPUT.PUT_LINE('.dside .fc-k .xpl .xu{display:none}');
     DBMS_OUTPUT.PUT_LINE('.dside .fc-b{grid-template-columns:minmax(0,1fr);gap:var(--s3)}');
     DBMS_OUTPUT.PUT_LINE('.dside .fc .big .v{font-size:24px}');
     DBMS_OUTPUT.PUT_LINE('.dside .fc .evr{grid-template-columns:72px minmax(0,1fr) 108px}');

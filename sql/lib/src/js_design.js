@@ -209,7 +209,7 @@ function kpis(){
     row.appendChild(kpi({label:"DB time",value:txt(big),unit:unit,sev:dbc?sevOf(dbc):(hb.getAttribute("data-sev")==="large"||hb.getAttribute("data-sev")==="moderate"?hb.getAttribute("data-sev"):""),
       delta:cl($(".d",g)),data:rowData(hb),ctx:ctx.filter(Boolean).join(MID),href:dbc?"#f-dbtime":"",title:"DB time per compared window"+(z?", "+z:"")}));
   }
-  $$("#findings .cards > article.fc").forEach(function(card){
+  $$("#findings .cards > article.fc:not(.chg)").forEach(function(card){
     if(card.id==="f-dbtime")return;
     var det=detailOf(card),r=$(".wg .r.bars",card)||(det&&doc.getElementById("tl-"+det.id));
     var ev=$(".ev .evr dd .id",card),ctx=[txt($(".big .nrm",card)),txt(ev)];
@@ -260,7 +260,7 @@ function findTable(){
   var fs=$("#findings");if(!fs)return null;
   /* the cards, or (nothing moved) 07's "No finding" note */
   var cw=$(":scope > .cards",fs),calm=$(":scope > .panel.calm.in-s",fs),h2=$(":scope > h2",fs);
-  var cards=cw?$$(":scope > article.fc",cw):[];
+  var cards=cw?$$(":scope > article.fc:not(.chg)",cw):[];
   var grid=mk("div","dgrid vw in-s");fs.insertBefore(grid,cw||calm||(h2?h2.nextSibling:fs.firstChild));
   var main=mk("div","dmain",grid);
   var tabs=mk("div","tabs dtabs",main);tabs.setAttribute("data-tabs","dfind");tabs.setAttribute("role","tablist");tabs.setAttribute("aria-label","Findings");
@@ -313,10 +313,21 @@ function findTable(){
   return grid;
 }
 
+/* plan 026: a plan-change card that 17 moved under the card it explains
+   goes back to "What changed around it", which the dashboard shows
+   beside the findings table */
+function explainsBack(){
+  var sl=$("#changes-slot"),sc=$("#s-changes");if(!sl)return;
+  var ex=$$("#findings article.fc[data-explains]");if(!ex.length)return;
+  ex.reverse().forEach(function(p){sl.insertBefore(p,sl.firstChild);});
+  if(sc&&sc.hidden){sc.hidden=false;var rl=$('nav.toc a[href="#s-changes"]');if(rl)rl.hidden=false;}
+}
+
 function dashboard(){
   var bd=doc.body;
   palette();
   activityTabs();
+  explainsBack();
   kpis();
   findTable();
   bd.classList.add("d-dash");

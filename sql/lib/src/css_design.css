@@ -359,6 +359,7 @@ body.d-dash .ashx .seg.axlayout button{line-height:20px}
 .dside .fc-h{grid-template-columns:minmax(0,1fr)}
 .dside .fc-band{width:100%}
 .dside .fc h3{font-size:15px}
+.dside .fc-k .xpl .xu{display:none}
 .dside .fc-b{grid-template-columns:minmax(0,1fr);gap:var(--s3)}
 .dside .fc .big .v{font-size:24px}
 .dside .fc .evr{grid-template-columns:72px minmax(0,1fr) 108px}

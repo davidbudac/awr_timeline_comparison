@@ -227,7 +227,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    row.appendChild(kpi({label:"DB time",value:txt(big),unit:unit,sev:dbc?sevOf(dbc):(hb.getAttribute("data-sev")==="large"||hb.getAttribute("data-sev")==="moderate"?hb.getAttribute("data-sev"):""),');
     DBMS_OUTPUT.PUT_LINE('      delta:cl($(".d",g)),data:rowData(hb),ctx:ctx.filter(Boolean).join(MID),href:dbc?"#f-dbtime":"",title:"DB time per compared window"+(z?", "+z:"")}));');
     DBMS_OUTPUT.PUT_LINE('  }');
-    DBMS_OUTPUT.PUT_LINE('  $$("#findings .cards > article.fc").forEach(function(card){');
+    DBMS_OUTPUT.PUT_LINE('  $$("#findings .cards > article.fc:not(.chg)").forEach(function(card){');
     DBMS_OUTPUT.PUT_LINE('    if(card.id==="f-dbtime")return;');
     DBMS_OUTPUT.PUT_LINE('    var det=detailOf(card),r=$(".wg .r.bars",card)||(det&&doc.getElementById("tl-"+det.id));');
     DBMS_OUTPUT.PUT_LINE('    var ev=$(".ev .evr dd .id",card),ctx=[txt($(".big .nrm",card)),txt(ev)];');
@@ -277,7 +277,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var fs=$("#findings");if(!fs)return null;');
     DBMS_OUTPUT.PUT_LINE('  /* the cards, or (nothing moved) 07''s "No finding" note */');
     DBMS_OUTPUT.PUT_LINE('  var cw=$(":scope > .cards",fs),calm=$(":scope > .panel.calm.in-s",fs),h2=$(":scope > h2",fs);');
-    DBMS_OUTPUT.PUT_LINE('  var cards=cw?$$(":scope > article.fc",cw):[];');
+    DBMS_OUTPUT.PUT_LINE('  var cards=cw?$$(":scope > article.fc:not(.chg)",cw):[];');
     DBMS_OUTPUT.PUT_LINE('  var grid=mk("div","dgrid vw in-s");fs.insertBefore(grid,cw||calm||(h2?h2.nextSibling:fs.firstChild));');
     DBMS_OUTPUT.PUT_LINE('  var main=mk("div","dmain",grid);');
     DBMS_OUTPUT.PUT_LINE('  var tabs=mk("div","tabs dtabs",main);tabs.setAttribute("data-tabs","dfind");tabs.setAttribute("role","tablist");tabs.setAttribute("aria-label","Findings");');
@@ -329,10 +329,20 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  if(!side.children.length)grid.classList.add("noside");');
     DBMS_OUTPUT.PUT_LINE('  return grid;');
     DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* plan 026: a plan-change card that 17 moved under the card it explains');
+    DBMS_OUTPUT.PUT_LINE('   goes back to "What changed around it", which the dashboard shows');
+    DBMS_OUTPUT.PUT_LINE('   beside the findings table */');
+    DBMS_OUTPUT.PUT_LINE('function explainsBack(){');
+    DBMS_OUTPUT.PUT_LINE('  var sl=$("#changes-slot"),sc=$("#s-changes");if(!sl)return;');
+    DBMS_OUTPUT.PUT_LINE('  var ex=$$("#findings article.fc[data-explains]");if(!ex.length)return;');
+    DBMS_OUTPUT.PUT_LINE('  ex.reverse().forEach(function(p){sl.insertBefore(p,sl.firstChild);});');
+    DBMS_OUTPUT.PUT_LINE('  if(sc&&sc.hidden){sc.hidden=false;var rl=$(''nav.toc a[href="#s-changes"]'');if(rl)rl.hidden=false;}');
+    DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function dashboard(){');
     DBMS_OUTPUT.PUT_LINE('  var bd=doc.body;');
     DBMS_OUTPUT.PUT_LINE('  palette();');
     DBMS_OUTPUT.PUT_LINE('  activityTabs();');
+    DBMS_OUTPUT.PUT_LINE('  explainsBack();');
     DBMS_OUTPUT.PUT_LINE('  kpis();');
     DBMS_OUTPUT.PUT_LINE('  findTable();');
     DBMS_OUTPUT.PUT_LINE('  bd.classList.add("d-dash");');

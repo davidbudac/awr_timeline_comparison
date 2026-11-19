@@ -158,6 +158,13 @@ release bumps `awr_version`).
   values on hover only and name only the release right before the
   Current window. The dashboard design keeps its own findings table (no
   list there, every card open inside its row).
+- **Cause next to effect.** The Physical I/O card names the statement
+  reading the most blocks in the Current window (blocks, gets per
+  execution then and now, its plan change), and that statement's
+  plan-change card moves right under the card with an "explains Physical
+  I/O" chip. A statement new in the top N by reads keeps its own "New SQL"
+  row when it is not the top one. The dashboard design keeps the plan card
+  in "What changed around it", the column beside its findings table.
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

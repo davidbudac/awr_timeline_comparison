@@ -416,6 +416,18 @@ DB-time breakdown under the verdict), `#because-slot` / `#pills` /
 DOMContentLoaded handler (ent unwrap, chrome), so they must not depend on
 them. JS off → the block stays hidden (every fact is also in its section).
 17 with nothing to say emits only its two `AWR-SECTION` markers.
+17 also moves the plan-change card of the I/O card's top statement (by
+Current physical reads) right after `#f-io` (`data-explains="f-io"`, a
+`span.xpl` "explains Physical I/O ↑" chip in its `.fc-k`, the arrow in
+`i.xu`; plan 026) and re-hides `#s-changes` when that empties it; anything
+counting finding cards in the DOM must exclude `.chg` (plan-change /
+configuration cards). R1's I/O card evidence: the top statement by
+Current physical reads, any statement (row "SQL": blocks vs its mean over
+the prior windows it ran in, gets per execution then and now, an
+`ent()` "new plan A → B" link to `#f-plan-<id>` when its plan changed),
+plus the newcomer (top-N by reads, in no prior top-N) as "New SQL" when
+it is a different statement; the likely-source line and R1's note still
+use the newcomer only.
 
 **Plan-change card** (18, twin `s18._plan_card`): one per statement whose
 Plan hash column fires (`plan_changed='Y'`) with a Current execution and
@@ -818,6 +830,12 @@ designs) and the server's env whitelist.
   (`#s-changes` moved in, plus
   the releases from `AWR_WG.markers()`; a card body inside the grid
   scrolls on its own, so a 169-column plan card never widens the page).
+  Before the KPI cards and the findings table are built, `explainsBack()`
+  returns a plan card that 17 moved under the card it explains
+  (`article.fc[data-explains]`) to `#changes-slot` (the side column, chip
+  kept, its `i.xu` arrow hidden) and unhides `#s-changes` + its rail link
+  if 17 had re-hidden them; `kpis()` / `findTable()` select
+  `article.fc:not(.chg)` (plan 026).
   Summary order:
   `body.d-dash.vs` puts `#activity` at order 5 and `#findings` at 6, so
   the verdict + KPI cards lead (original mock C; Timeline / All keep

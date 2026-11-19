@@ -589,6 +589,8 @@ body.js-wg .wg:not(.allv) .c:not(.cur) .v:not(.nil){opacity:0}
 .fc.fold > .fc-b,.fc.fold > .rel,.fc.fold > .fc-f,.fc.fold .fc-band .bd-ax{display:none}
 .fc.fold h3,.fc.lead.fold h3,.fc.slim.fold h3{font-size:16px;margin-top:4px}
 .wg.bare.qf .fr.t2{height:22px}
+.fc .fc-k .xpl{font-size:12px;font-weight:500;color:var(--ink-soft);padding:1px 8px;border:1px solid var(--hairline);border-radius:10px}
+.fc .fc-k .xpl a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}
 .calm{padding:var(--s2) var(--s6)}
 .ngrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:32px}
 .nr{display:grid;grid-template-columns:minmax(0,1fr) 112px 88px;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line-soft);font-size:13.5px;--row-bg:var(--panel)}
@@ -1727,6 +1729,7 @@ body.d-dash .ashx .seg.axlayout button{line-height:20px}
 .dside .fc-h{grid-template-columns:minmax(0,1fr)}
 .dside .fc-band{width:100%}
 .dside .fc h3{font-size:15px}
+.dside .fc-k .xpl .xu{display:none}
 .dside .fc-b{grid-template-columns:minmax(0,1fr);gap:var(--s3)}
 .dside .fc .big .v{font-size:24px}
 .dside .fc .evr{grid-template-columns:72px minmax(0,1fr) 108px}
@@ -53697,7 +53700,8 @@ Object.keys(AWR_DATA.fileIo.dims).forEach(function(dim){
 <li data-dup="f-config"><span class="hl">Configuration</span><span class="hn">4 parameters differ</span><span class="hw"><code>optimizer_adaptive_plans</code> in every prior window; <code>pga_aggregate_target</code> in &minus;5w to &minus;12w; <code>sga_target</code> in &minus;8w to &minus;12w (+1 more)</span><a class="go" href="#param-changes">Parameters &rarr;</a></li>
 </ul>
 <span data-vx-src="io">, most of it on <a class="ent" href="#sg-orders-app-order-lines" data-ent="segment"><code>ORDERS_APP.ORDER_LINES</code></a></span>
-<div data-ev-for="f-io"><div class="evr"><dt>Segment</dt><dd><span class="id"><a class="ent" href="#sg-orders-app-order-lines" data-ent="segment">ORDERS_APP.ORDER_LINES</a></span><span class="de">95.07&nbsp;M blocks read, normal 8.489&nbsp;M</span></dd><div class="m" title="Ranked, not scored"><span class="d s-plain">&#9650; &times;11.2</span><span class="ns">not scored</span></div></div><div class="evr"><dt>File</dt><dd><span class="id"><a class="ent" href="#fl-datafile-ts-orders-data-301-1131588213" data-ent="file">ts_orders_data.301.1131588213</a></span><span class="de">345.0&nbsp;k MB read, normal 74.01&nbsp;k</span></dd><div class="m" title="Ranked, not scored"><span class="d s-plain">&#9650; &times;4.7</span><span class="ns">not scored</span></div></div></div>
+<div data-ev-for="f-io"><div class="evr"><dt>Segment</dt><dd><span class="id"><a class="ent" href="#sg-orders-app-order-lines" data-ent="segment">ORDERS_APP.ORDER_LINES</a></span><span class="de">95.07&nbsp;M blocks read, normal 8.489&nbsp;M</span></dd><div class="m" title="Ranked, not scored"><span class="d s-plain">&#9650; &times;11.2</span><span class="ns">not scored</span></div></div><div class="evr"><dt>File</dt><dd><span class="id"><a class="ent" href="#fl-datafile-ts-orders-data-301-1131588213" data-ent="file">ts_orders_data.301.1131588213</a></span><span class="de">345.0&nbsp;k MB read, normal 74.01&nbsp;k</span></dd><div class="m" title="Ranked, not scored"><span class="d s-plain">&#9650; &times;4.7</span><span class="ns">not scored</span></div></div><div class="evr"><dt>SQL</dt><dd><span class="id"><a class="ent" href="#sq-preads-7k2m9dx4qp1zb" data-ent="sql">7k2m9dx4qp1zb</a></span><span class="de">43.43&nbsp;M blocks read, normal 2.912&nbsp;M; 700.0&nbsp;gets per execution, was 38.00; <a class="ent" href="#f-plan-7k2m9dx4qp1zb" data-ent="sql">new plan 3197245811 &rarr; 2088341150</a></span></dd><div class="m" title="Ranked, not scored"><span class="d s-plain">&#9650; &times;14.9</span><span class="ns">not scored</span></div></div></div>
+<span data-explains-src="f-plan-7k2m9dx4qp1zb" data-for="f-io"></span>
 </div>
 <script>(function(){var d=document,src=d.getElementById("narr-src");if(!src)return;
 var b=d.getElementById("because-slot"),bs=src.querySelector(".because-src");
@@ -53709,6 +53713,7 @@ var ns=d.getElementById("narrative-slot");
 src.querySelectorAll(".notes-src > li").forEach(function(li){var u=li.getAttribute("data-dup");if(u&&d.getElementById(u))return;if(ns){ns.appendChild(li);ns.hidden=false;}});
 src.querySelectorAll("[data-vx-src]").forEach(function(x){var t=d.querySelector('.vx[data-vx="'+x.getAttribute("data-vx-src")+'"]');if(t){t.innerHTML=x.innerHTML;t.hidden=false;}});
 src.querySelectorAll("[data-ev-for]").forEach(function(x){var c=d.getElementById(x.getAttribute("data-ev-for")),dl=c?c.querySelector("dl.ev"):null;if(!dl)return;var f=dl.firstChild;while(x.firstChild)dl.insertBefore(x.firstChild,f);});
+src.querySelectorAll("[data-explains-src]").forEach(function(x){var p=d.getElementById(x.getAttribute("data-explains-src")),c=d.getElementById(x.getAttribute("data-for"));if(!p||!c||!c.parentNode||p===c)return;c.parentNode.insertBefore(p,c.nextSibling);p.hidden=false;p.setAttribute("data-explains",c.id);var k=p.querySelector(".fc-k"),sv=c.querySelector(".fc-k .sv"),lb=(sv&&sv.getAttribute("title"))||"the card above";if(k&&!k.querySelector(".xpl")){var s=d.createElement("span");s.className="xpl";s.appendChild(d.createTextNode("explains "));var a=d.createElement("a");a.href="#"+c.id;a.textContent=lb;s.appendChild(a);s.insertAdjacentHTML("beforeend","<i class=\"xu\" aria-hidden=\"true\"> &uarr;</i>");k.appendChild(s);}var sl=d.getElementById("changes-slot"),sc=d.getElementById("s-changes");if(sl&&sc&&!sl.children.length)sc.hidden=true;});
 src.parentNode.removeChild(src);})();</script>
 <!-- AWR-SECTION: 17_narrative END -->
 </main>
@@ -53922,7 +53927,7 @@ function kpis(){
     row.appendChild(kpi({label:"DB time",value:txt(big),unit:unit,sev:dbc?sevOf(dbc):(hb.getAttribute("data-sev")==="large"||hb.getAttribute("data-sev")==="moderate"?hb.getAttribute("data-sev"):""),
       delta:cl($(".d",g)),data:rowData(hb),ctx:ctx.filter(Boolean).join(MID),href:dbc?"#f-dbtime":"",title:"DB time per compared window"+(z?", "+z:"")}));
   }
-  $$("#findings .cards > article.fc").forEach(function(card){
+  $$("#findings .cards > article.fc:not(.chg)").forEach(function(card){
     if(card.id==="f-dbtime")return;
     var det=detailOf(card),r=$(".wg .r.bars",card)||(det&&doc.getElementById("tl-"+det.id));
     var ev=$(".ev .evr dd .id",card),ctx=[txt($(".big .nrm",card)),txt(ev)];
@@ -53972,7 +53977,7 @@ function findTable(){
   var fs=$("#findings");if(!fs)return null;
   /* the cards, or (nothing moved) 07's "No finding" note */
   var cw=$(":scope > .cards",fs),calm=$(":scope > .panel.calm.in-s",fs),h2=$(":scope > h2",fs);
-  var cards=cw?$$(":scope > article.fc",cw):[];
+  var cards=cw?$$(":scope > article.fc:not(.chg)",cw):[];
   var grid=mk("div","dgrid vw in-s");fs.insertBefore(grid,cw||calm||(h2?h2.nextSibling:fs.firstChild));
   var main=mk("div","dmain",grid);
   var tabs=mk("div","tabs dtabs",main);tabs.setAttribute("data-tabs","dfind");tabs.setAttribute("role","tablist");tabs.setAttribute("aria-label","Findings");
@@ -54024,10 +54029,20 @@ function findTable(){
   if(!side.children.length)grid.classList.add("noside");
   return grid;
 }
+/* plan 026: a plan-change card that 17 moved under the card it explains
+   goes back to "What changed around it", which the dashboard shows
+   beside the findings table */
+function explainsBack(){
+  var sl=$("#changes-slot"),sc=$("#s-changes");if(!sl)return;
+  var ex=$$("#findings article.fc[data-explains]");if(!ex.length)return;
+  ex.reverse().forEach(function(p){sl.insertBefore(p,sl.firstChild);});
+  if(sc&&sc.hidden){sc.hidden=false;var rl=$('nav.toc a[href="#s-changes"]');if(rl)rl.hidden=false;}
+}
 function dashboard(){
   var bd=doc.body;
   palette();
   activityTabs();
+  explainsBack();
   kpis();
   findTable();
   bd.classList.add("d-dash");

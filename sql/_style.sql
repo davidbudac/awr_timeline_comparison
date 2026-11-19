@@ -1414,6 +1414,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.fc.fold > .fc-b,.fc.fold > .rel,.fc.fold > .fc-f,.fc.fold .fc-band .bd-ax{display:none}');
     DBMS_OUTPUT.PUT_LINE('.fc.fold h3,.fc.lead.fold h3,.fc.slim.fold h3{font-size:16px;margin-top:4px}');
     DBMS_OUTPUT.PUT_LINE('.wg.bare.qf .fr.t2{height:22px}');
+    -- plan 026: the "explains <card>" chip on a plan-change card moved under
+    -- the finding card it explains (17's relocation script)
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-k .xpl{font-size:12px;font-weight:500;color:var(--ink-soft);padding:1px 8px;border:1px solid var(--hairline);border-radius:10px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-k .xpl a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}');
     -- checked and normal
     DBMS_OUTPUT.PUT_LINE('.calm{padding:var(--s2) var(--s6)}');
     DBMS_OUTPUT.PUT_LINE('.ngrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:32px}');

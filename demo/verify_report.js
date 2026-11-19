@@ -77,7 +77,10 @@
  *     the card sub-links' text / data-label carry no share (CSS ::after
  *     only); plan 025: the triage list (one row per card), all but one
  *     card folded, a row click opens its card, card charts show prior
- *     values on hover only and one release label;
+ *     values on hover only and one release label; plan 026: the Physical
+ *     I/O card's SQL row; a plan-change card that explains a card sits
+ *     right under it (dashboard: in What changed around it, beside the
+ *     findings);
  *   - the design (window.AWR_DESIGN, design=quiet|dashboard; none =
  *     classic): quiet and dashboard -- "How to read" opens / closes the
  *     Activity help, a table's copy menu holds CSV + Markdown; dashboard --
@@ -948,7 +951,9 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       // plan-change cards: moved into "What changed around it", bars + step line
       const pcs = [...document.querySelectorAll('article.fc[id^="f-plan-"]')];
       out.planCards = pcs.length;
-      out.planOk = pcs.every(c => c.closest('#changes-slot') && vis(c)
+      out.planOk = pcs.every(c => (c.closest('#changes-slot')
+          || (c.getAttribute('data-explains') && c.previousElementSibling
+              && c.previousElementSibling.id === c.getAttribute('data-explains'))) && vis(c)
         && c.querySelector('.wg .r.bars') && c.querySelector('.wg .r.p .pv')
         && c.querySelector('a.ent[href^="#sm-"]') && c.querySelector('a.jump[data-tl]'));
       // the evidence library: every row has its one-line status, one first /
@@ -1013,6 +1018,20 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       const pv = open ? open.querySelector('.wg .c:not(.cur) .v:not(.nil)') : null;
       out.quietV = !pv || getComputedStyle(pv).opacity === '0';
       out.quietFlags = cards.every(c => c.querySelectorAll('.wg.qf .flags .flag').length <= 1);
+      // plan 026: the I/O card names its top statement by physical reads, and a
+      // plan-change card that explains it sits right under it with its chip.
+      // The dashboard design keeps it in "What changed around it" instead
+      // (a column beside its findings table), chip and all.
+      const dashX = document.body.classList.contains('d-dash');
+      const io = document.getElementById('f-io');
+      out.ioSql = io ? [...io.querySelectorAll('dl.ev .evr > dt')].some(dt => dt.textContent.trim() === 'SQL') : null;
+      const ex = [...document.querySelectorAll('article.fc[data-explains]')];
+      out.explains = ex.length;
+      out.explainsOk = ex.every(p => (dashX ? !!p.closest('#changes-slot')
+          : p.previousElementSibling && p.previousElementSibling.id === p.getAttribute('data-explains'))
+        && p.querySelector('.fc-k .xpl a[href="#' + p.getAttribute('data-explains') + '"]'));
+      const sl = document.getElementById('changes-slot'), sc = document.getElementById('s-changes');
+      out.changesOk = !sl || !sc || (sl.children.length > 0) === !sc.hidden;
       // v1.7: cards ordered by impact; chip; Summary z capped at 10
       // (#findings article.fc:not(.chg): the dashboard moves the cards into
       // its findings table, and the plan / config cards carry .chg)
@@ -1071,7 +1090,11 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (!p4.impOrder) fail('finding cards: not ordered by impact');
     if (!p4.impChips) fail('finding cards: impact chip missing');
     if (p4.zcap.length) fail('Summary glyphs print z past 10: ' + p4.zcap.join(', '));
-    if (!p4.planOk) fail('plan-change card incomplete or not in #changes-slot');
+    if (!p4.planOk) fail('plan-change card incomplete, or neither in #changes-slot nor right under the card it explains');
+    if (p4.ioSql === false && /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) fail('demo: the Physical I/O card has no SQL evidence row');
+    if (!p4.explainsOk) fail('an explaining plan-change card is not right under its card (dashboard: not in #changes-slot) or lacks its chip');
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && p4.explains !== 1) fail('demo: expected the plan card of 7k2m9dx4qp1zb to explain the Physical I/O card, got ' + p4.explains);
+    if (!p4.changesOk) fail('"What changed around it" visible while empty, or hidden while it holds a card');
     if (!p4.lib || p4.libVisible !== p4.lib) fail('evidence library: ' + p4.libVisible + '/' + p4.lib + ' rows visible in Summary');
     if (p4.libNoLs.length) fail('evidence library rows without a one-line status: ' + p4.libNoLs.join(', '));
     if (!p4.libHead) fail('evidence library heading #s-lib not visible');
