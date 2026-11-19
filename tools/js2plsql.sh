@@ -1,14 +1,17 @@
 #!/bin/sh
 #
 # tools/js2plsql.sh -- regenerate the PUT_LINE bodies of the generated
-# client-side scripts from their readable JavaScript source.
+# client-side scripts (and stylesheets) from their readable source.
 #
 #   sql/lib/src/<name>.js   (readable source, edit this)
 #     -> sql/lib/<name>.plsql (generated: the header comment block above the
-#        BEGIN line is kept as is, everything from BEGIN on is rewritten)
+#        BEGIN line is kept as is, everything from BEGIN on is rewritten;
+#        the body is wrapped in <script> .. </script>)
+#   sql/lib/src/<name>.css  the same, wrapped in <style> .. </style>
+#        (the design stylesheet, sql/lib/css_design.plsql)
 #
 # Usage:
-#   tools/js2plsql.sh            regenerate every sql/lib/src/*.js
+#   tools/js2plsql.sh            regenerate every sql/lib/src/*.js and *.css
 #   tools/js2plsql.sh js_wingrid regenerate one (name without .js)
 #   tools/js2plsql.sh --check    exit 1 if a committed .plsql is stale
 #                                (lint.sh runs this; no file is written)
@@ -18,8 +21,9 @@
 # beyond what SQL*Plus already has).  POSIX sh + awk, no GNU-only flags.
 #
 # Rules the generator enforces (each would break the report run):
-#   - no tilde anywhere in the JS (SET DEFINE tilde in every section:
-#     a stray one prompts "Enter value for" and truncates the output)
+#   - no tilde anywhere in the source (SET DEFINE tilde in every section:
+#     a stray one prompts "Enter value for" and truncates the output; in
+#     CSS that includes the general-sibling combinator)
 #   - no source line of 2300 characters or more (SQL*Plus rejects input
 #     lines past 2499 characters, and the PUT_LINE wrapper adds ~30)
 #   - blank lines are dropped; single quotes are doubled
@@ -36,15 +40,21 @@ for a in "$@"; do
     esac
 done
 if [ -z "$names" ]; then
-    for f in sql/lib/src/*.js; do
+    for f in sql/lib/src/*.js sql/lib/src/*.css; do
         [ -f "$f" ] || continue
-        b=$(basename "$f" .js)
+        b=$(basename "$f")
+        b=${b%.*}
         names="$names $b"
     done
 fi
 
 gen() {  # $1 = name; writes the generated .plsql to stdout
     src="sql/lib/src/$1.js"
+    tag=script
+    if [ ! -f "$src" ] && [ -f "sql/lib/src/$1.css" ]; then
+        src="sql/lib/src/$1.css"
+        tag=style
+    fi
     dst="sql/lib/$1.plsql"
     if [ ! -f "$src" ] || [ ! -f "$dst" ]; then
         echo "js2plsql: missing $src or $dst" >&2
@@ -55,14 +65,14 @@ gen() {  # $1 = name; writes the generated .plsql to stdout
         return 2
     fi
     awk '/^BEGIN$/ {exit} {print}' "$dst"
-    printf '%s\n' 'BEGIN' "    DBMS_OUTPUT.PUT_LINE('<script>');"
+    printf '%s\n' 'BEGIN' "    DBMS_OUTPUT.PUT_LINE('<$tag>');"
     awk -v src="$src" '
         /^[ \t]*$/ { next }
         length($0) >= 2300 { printf "js2plsql: %s:%d is %d chars (limit 2299)\n", src, NR, length($0) > "/dev/stderr"; bad = 1; next }
         { s = $0; gsub(/\047/, "\047\047", s); printf "    DBMS_OUTPUT.PUT_LINE(\047%s\047);\n", s }
         END { if (bad) exit 2 }
     ' "$src" || return 2
-    printf '%s\n' "    DBMS_OUTPUT.PUT_LINE('</script>');" 'END;' '/'
+    printf '%s\n' "    DBMS_OUTPUT.PUT_LINE('</$tag>');" 'END;' '/'
 }
 
 rc=0

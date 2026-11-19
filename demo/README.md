@@ -13,10 +13,13 @@ toolkit: the real report is still pure SQL\*Plus, still read-only, and
 nothing under `sql/`, `awr_trend.sql` or the wrappers depends on it.
 
 ```sh
-python3 demo/gen_demo_report.py                      # -> docs/examples/demo_busy_db.html (ECharts inlined, offline)
+python3 demo/gen_demo_report.py                      # -> the three demo pages (ECharts inlined, offline), one per design:
+                                                     #    docs/examples/demo_busy_db.html (classic),
+                                                     #    demo_busy_db_quiet.html, demo_busy_db_dashboard.html
+python3 demo/gen_demo_report.py --design=dashboard out.html   # one design to an explicit path
 python3 demo/gen_demo_report.py --cdn out.html       # link ECharts from the public CDN instead
 python3 demo/gen_demo_report.py --only=06_top_sql x.html   # one section (debugging a port)
-python3 demo/gen_demo_report.py --check   # CI gate: exit 1 if docs/examples/demo_busy_db.html is stale
+python3 demo/gen_demo_report.py --check   # CI gate: exit 1 if any of the three demo pages is stale
 node demo/verify_report.js docs/examples/demo_busy_db.html shots/   # headless smoke test + screenshots
 # no node_modules in the repo: point NODE_PATH at any playwright install, e.g.
 #   T=$(mktemp -d); (cd $T && npm i playwright@1.55); NODE_PATH=$T/node_modules node demo/verify_report.js ...

@@ -503,7 +503,17 @@
         <span class="ro" id="ro_output"></span>
       </summary>
       <div class="sec-body">
-        <div class="field" data-k="echarts" id="f_echarts">
+        <div class="field" data-k="design" id="f_design">
+          <label class="lbl" for="design">How the report looks <code>DESIGN</code><span class="chgtag"><button type="button" data-reset="design">reset</button></span></label>
+          <select id="design">
+            <option value="classic" selected>Classic (default): the report as it has always looked</option>
+            <option value="quiet">Quiet: the same layout in a neutral, shadcn-like skin</option>
+            <option value="dashboard">Dashboard: KPI cards, an expandable findings table, Ctrl+K "Jump to"</option>
+          </select>
+          <div class="help" id="design_help">Presentation only: every number, section and view is in all three, and the Oracle wait-class / wait-event colours never change.</div>
+        </div>
+
+        <div class="field" data-k="echarts" id="f_echarts" style="margin-block-start:16px">
           <label class="lbl">Where the charts library comes from <code>ECHARTS</code><span class="chgtag"><button type="button" data-reset="echarts">reset</button></span></label>
           <div class="optlist" id="echarts_cards"></div>
           <input type="text" id="echarts_path" class="mono hidden" value="" placeholder="https://mirror.example.com/echarts.min.js" autocomplete="off" spellcheck="false" style="margin-block-start:8px">
@@ -586,7 +596,7 @@
             <summary>Argument map: which value goes where</summary>
             <div class="argmap" id="argmap"></div>
             <div class="out-foot">Positional arguments after the last one you changed are omitted; the wrapper fills in the defaults.
-              <code>MARKERS</code>, <code>ECHARTS</code>, <code>ARCHIVE</code> and <code>SQLMON</code> ride as environment variables.</div>
+              <code>MARKERS</code>, <code>ECHARTS</code>, <code>ARCHIVE</code>, <code>SQLMON</code> and <code>DESIGN</code> ride as environment variables.</div>
           </details>
         </div>
 
@@ -657,6 +667,7 @@ const DEFAULTS = {
   markers:'',      // inline "WHEN|LABEL;;..." (MARKERS env var / DEFINE markers)
   echarts:'',      // '' = public CDN; a path the wrapper inlines; or a mirror URL
   sqlmon:'Y',      // SQLMON env var / DEFINE sqlmon
+  design:'classic',// DESIGN env var / DEFINE design (classic | quiet | dashboard)
   archive:''       // ARCHIVE env var, wrapper-only (no DEFINE)
 };
 const ARG_ORDER = ['target_end','win_hours','weeks_back','top_n','inst_num',
@@ -664,8 +675,13 @@ const ARG_ORDER = ['target_end','win_hours','weeks_back','top_n','inst_num',
 // The SQL*Plus path DEFINEs every positional plus the non-positional vars the
 // driver references unconditionally (an undefined one would stall the run at
 // a silent "Enter value for" prompt).
-const SQL_DEFINES = ARG_ORDER.concat(['markers','echarts','sqlmon']);
-const STRING_DEFINES = new Set(['target_end','step_unit','template','debug','marker_file','markers','echarts','sqlmon']);
+const SQL_DEFINES = ARG_ORDER.concat(['markers','echarts','sqlmon','design']);
+const STRING_DEFINES = new Set(['target_end','step_unit','template','debug','marker_file','markers','echarts','sqlmon','design']);
+const DESIGNS = {
+  classic:{help:'The report as it has always looked: the left rail, the finding cards, the Summary / Timeline / All sections views.'},
+  quiet:{help:'The same layout and views in a neutral skin: zinc greys, the Geist typeface (embedded, about 70 KB), one border weight, release flags without boxes, the verdict counts as one line, severity as a dot. Wait-class / wait-event colours unchanged.'},
+  dashboard:{help:'The quiet skin plus a scan-first Summary: KPI cards under the verdict, the Activity charts one at a time (or both), every moved metric as a row you open in place, What changed around it beside the table. No left rail: Ctrl+K opens a Jump to palette. Timeline and All sections are unchanged.'}
+};
 const UNIT_HOURS = {h:1, d:24, w:168};
 const UNIT_WORD  = {h:'hourly', d:'daily', w:'weekly'};
 const UNIT_NOUN  = {h:'hour', d:'day', w:'week'};
@@ -700,7 +716,7 @@ const CONNECT_SAMPLES = [
 ];
 /* URL hash keys (the connect string is deliberately never put in the URL). */
 const HASH_KEYS = {te:'target_end', wh:'win_hours', wb:'weeks_back', tn:'top_n', in:'inst_num', st:'step', su:'step_unit',
-                   tpl:'template', dbg:'debug', pd:'profile_days', ec:'echarts', ar:'archive', sm:'sqlmon', mk:'markers'};
+                   tpl:'template', dbg:'debug', pd:'profile_days', ec:'echarts', ar:'archive', sm:'sqlmon', ds:'design', mk:'markers'};
 
 const $ = id => document.getElementById(id);
 let applying = false;      // programmatic writes must not deselect cards / rewrite the hash mid-way
@@ -772,6 +788,7 @@ function readConfig(){
     markers: markersInline(),
     echarts: ecMode === 'custom' ? $('echarts_path').value.trim() : ecMode,
     sqlmon: $('sqlmon').checked ? 'Y' : 'N',
+    design: $('design').value,
     archive: $('archive').value
   };
 }
@@ -983,6 +1000,7 @@ function renderWill(cfg, v){
     {on:true, html: cfg.inst_num==='0' ? 'All RAC instances aggregated' : '<b>Instance '+esc(cfg.inst_num)+' only</b>', k:'inst_num'},
     {on:nmk>0, html: nmk ? '<b>'+nmk+' milestone'+(nmk>1?'s':'')+'</b> drawn on the dated charts' : 'No timeline markers', k:'markers'},
     {on:true, html: !cfg.echarts ? 'Large charts from the public CDN; tables and inline charts work offline' : /^https?:/i.test(cfg.echarts) ? 'Large charts from <b>your mirror</b>' : '<b>Fully offline</b>: charts library inlined by the wrapper', k:'echarts'},
+    {on:cfg.design!=='classic', html: cfg.design==='quiet' ? '<b>Quiet design</b>: the same layout in a neutral skin' : cfg.design==='dashboard' ? '<b>Dashboard design</b>: KPI cards, an expandable findings table, Ctrl+K palette' : 'The classic look', k:'design'},
     {on:!!cfg.archive, html: cfg.archive ? '<b>Archived</b> as '+esc(cfg.archive)+' next to the report (wrapper)' : 'One .html file, no archive', k:'archive'},
     {on:cfg.debug==='Y', html: cfg.debug==='Y' ? 'Progress lines on the console while it runs' : 'Silent run (no progress lines)', k:'debug'}
   ];
@@ -1017,6 +1035,7 @@ function summaryComment(cfg){
   if(cfg.inst_num!=='0') s += ', instance '+cfg.inst_num;
   if(Number(cfg.profile_days)>0) s += ', day profile '+cfg.profile_days+'d';
   if(cfg.sqlmon==='N') s += ', no SQL Monitor';
+  if(cfg.design!=='classic') s += ', '+cfg.design+' design';
   return s;
 }
 
@@ -1038,6 +1057,7 @@ function buildShell(cfg){
     if(cfg[k]){ tokenSpan(pre, name+'='+shellQuote(cfg[k]), k, true, name+' (environment variable)', 'env'); pre.appendChild(document.createTextNode(' ')); }
   });
   if(cfg.sqlmon==='N'){ tokenSpan(pre, 'SQLMON=N', 'sqlmon', true, 'SQLMON (environment variable)', 'env'); pre.appendChild(document.createTextNode(' ')); }
+  if(cfg.design!=='classic'){ tokenSpan(pre, 'DESIGN='+cfg.design, 'design', true, 'DESIGN (environment variable)', 'env'); pre.appendChild(document.createTextNode(' ')); }
   pre.appendChild(document.createTextNode('./run_awr_trend.sh '));
   tokenSpan(pre, shellQuote(cfg.connect || 'user/pw@svc'), 'connect', false, 'argument 1: connect string');
   const vals = ARG_ORDER.map(k => cfg[k]);
@@ -1064,9 +1084,9 @@ function renderArgMap(cfg, last){
     const om = i > last;
     row(i+2, k, (om ? cfg[k]+'  (omitted, default)' : cfg[k]) , om ? 'om' : (chg ? 'ch' : ''));
   });
-  [['markers','MARKERS'],['echarts','ECHARTS'],['archive','ARCHIVE'],['sqlmon','SQLMON']].forEach(([k,n]) => {
-    const set = k==='sqlmon' ? cfg.sqlmon==='N' : !!cfg[k];
-    row('env', k, set ? (k==='sqlmon' ? 'N' : cfg[k]) : (k==='sqlmon' ? 'Y  (default, not emitted)' : 'not set'), set ? 'ch' : 'om', n+' environment variable');
+  [['markers','MARKERS'],['echarts','ECHARTS'],['archive','ARCHIVE'],['sqlmon','SQLMON'],['design','DESIGN']].forEach(([k,n]) => {
+    const set = k==='sqlmon' ? cfg.sqlmon==='N' : k==='design' ? cfg.design!=='classic' : !!cfg[k];
+    row('env', k, set ? (k==='sqlmon' ? 'N' : cfg[k]) : (k==='sqlmon' ? 'Y  (default, not emitted)' : k==='design' ? 'classic  (default, not emitted)' : 'not set'), set ? 'ch' : 'om', n+' environment variable');
   });
 }
 function buildSql(cfg){
@@ -1132,9 +1152,9 @@ function setMarkersFromInline(s){
 /* ------------------------------------------------------- diff chips */
 const FIELD_LABEL = {target_end:'window end', win_hours:'window', weeks_back:'prior windows', step:'cadence', step_unit:'cadence unit',
   top_n:'top-N', inst_num:'instance', template:'template', debug:'console', profile_days:'day profile', sqlmon:'SQL Monitor',
-  echarts:'charts', archive:'archive', markers:'markers'};
+  echarts:'charts', archive:'archive', markers:'markers', design:'design'};
 function changedKeys(cfg){
-  const keys = ['target_end','win_hours','weeks_back','step','step_unit','template','top_n','inst_num','profile_days','sqlmon','echarts','archive','debug','markers'];
+  const keys = ['target_end','win_hours','weeks_back','step','step_unit','template','top_n','inst_num','profile_days','sqlmon','design','echarts','archive','debug','markers'];
   return keys.filter(k => String(cfg[k]) !== String(DEFAULTS[k]));
 }
 function renderDiffs(cfg){
@@ -1160,7 +1180,7 @@ function renderDiffs(cfg){
     chip.appendChild(a); chip.appendChild(x); box.appendChild(chip);
   });
   const all = document.createElement('button'); all.type='button'; all.className='resetall'; all.textContent='reset all';
-  all.addEventListener('click', () => { applyShape(SHAPES[0]); resetField('template'); resetField('top_n'); resetField('inst_num'); resetField('sqlmon'); resetField('echarts'); resetField('archive'); resetField('debug'); resetField('markers'); });
+  all.addEventListener('click', () => { applyShape(SHAPES[0]); resetField('template'); resetField('top_n'); resetField('inst_num'); resetField('sqlmon'); resetField('design'); resetField('echarts'); resetField('archive'); resetField('debug'); resetField('markers'); });
   box.appendChild(all);
 }
 function resetField(k){
@@ -1174,6 +1194,7 @@ function resetField(k){
     case 'sqlmon': $('sqlmon').checked = true; break;
     case 'echarts': selectEcharts(''); break;
     case 'archive': $('archive').value = ''; break;
+    case 'design': $('design').value = DEFAULTS.design; break;
     case 'markers': $('marker_rows').innerHTML = ''; break;
   }
   applying = false;
@@ -1191,14 +1212,14 @@ function renderReadouts(cfg, v){
   const pd = num(cfg.profile_days)||0;
   $('ro_content').innerHTML = '<b>'+esc(cfg.template)+'</b>, top '+esc(cfg.top_n)+', '+(cfg.inst_num==='0'?'all instances':'instance '+esc(cfg.inst_num))+
     ', SQL Monitor '+(cfg.sqlmon==='Y'?'on':'<b>off</b>')+', day profile '+(pd>0?'<b>'+pd+' d</b>':'off');
-  $('ro_output').innerHTML = 'charts: '+(!cfg.echarts?'CDN':/^https?:/i.test(cfg.echarts)?'<b>mirror</b>':'<b>offline, inlined</b>')+
+  $('ro_output').innerHTML = (cfg.design!=='classic'?'<b>'+esc(cfg.design)+'</b> design; ':'')+'charts: '+(!cfg.echarts?'CDN':/^https?:/i.test(cfg.echarts)?'<b>mirror</b>':'<b>offline, inlined</b>')+
     '; archive: '+(cfg.archive?'<b>'+esc(cfg.archive)+'</b>':'no')+'; console progress: '+(cfg.debug==='Y'?'on':'<b>off</b>');
   const n = cfg.markers ? cfg.markers.split(';;').length : 0, rows = markerRows().length;
   $('ro_markers').innerHTML = n ? '<b>'+n+' milestone'+(n>1?'s':'')+'</b>'+(rows>n?' ('+(rows-n)+' incomplete)':'') : (rows ? '<b>'+rows+' incomplete</b>' : 'none');
   // per-section state: changed / error
   const secOf = {connect:'s-connect', target_end:'s-windows', win_hours:'s-windows', weeks_back:'s-windows', step:'s-windows', step_unit:'s-windows',
     template:'s-content', top_n:'s-content', inst_num:'s-content', profile_days:'s-content', sqlmon:'s-content',
-    echarts:'s-output', archive:'s-output', debug:'s-output', markers:'s-markers'};
+    echarts:'s-output', archive:'s-output', debug:'s-output', design:'s-output', markers:'s-markers'};
   const chg = {}, err = {};
   changedKeys(cfg).forEach(k => chg[secOf[k]] = true);
   Object.keys(v.bad).forEach(k => err[secOf[k]] = true);
@@ -1251,6 +1272,7 @@ function readHash(){
   const tpl = p.get('tpl'); if(tpl && TEMPLATES[tpl]) $('template').value = tpl;
   if(p.get('dbg')==='N') $('debug').checked = false;
   if(p.get('sm')==='N') $('sqlmon').checked = false;
+  const ds = p.get('ds'); if(ds && DESIGNS[ds]) $('design').value = ds;
   const ar = p.get('ar'); if(ar && ['zip','tgz','tar','auto'].indexOf(ar)>=0) $('archive').value = ar;
   const ec = p.get('ec'); if(ec){ if(ec==='vendor/echarts.min.js') selectEcharts(ec); else { selectEcharts('custom'); $('echarts_path').value = ec; } }
   const mk = p.get('mk'); if(mk) setMarkersFromInline(mk);
@@ -1274,6 +1296,7 @@ function render(){
   const inst = num(cfg.inst_num);
   $('in_help').textContent = (inst===0) ? 'Aggregates every RAC instance: windows are validated per instance, and rates are summed across the cluster.' : (inst>0 ? 'Only instance '+inst+' is read; a window where that instance restarted is skipped.' : '0 = all instances aggregated; N = that instance only.');
   const pd = num(cfg.profile_days);
+  $('design_help').textContent = (DESIGNS[cfg.design]||DESIGNS.classic).help+' Presentation only: every number is in all three.';
   $('pd_help').innerHTML = (pd===0) ? 'Off: no Day profile section.' : (pd>0 && Number.isInteger(pd)) ? 'On: <b>24 hours &times; '+(pd+1)+' days</b> heatmap, each hour scored against '+pd+' prior day'+(pd===1?'':'s')+(pd<3?' (too few for z-scores)':'')+'.' : '';
   // target_end echo
   const end = cfg.resolvedEnd;
@@ -1457,7 +1480,7 @@ function init(){
     onEdit();
   }));
   // every other control
-  ['target_dt','win_hours','weeks_back','step','step_unit','top_n','inst_num','template','debug','profile_days','sqlmon','archive']
+  ['target_dt','win_hours','weeks_back','step','step_unit','top_n','inst_num','template','debug','profile_days','sqlmon','design','archive']
     .forEach(id => { const el=$(id); el.addEventListener('input', onEdit); el.addEventListener('change', onEdit); });
   // steppers + per-field reset
   document.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => stepNum(b.getAttribute('data-step'), Number(b.getAttribute('data-d')))));

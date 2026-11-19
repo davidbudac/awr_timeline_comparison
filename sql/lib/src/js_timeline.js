@@ -473,6 +473,8 @@ function mkChart(root,P,cols,opt){
   return c;
 }
 function drawAll(force){CH.forEach(function(c){draw(c,force);});spHead();}
+/* redraw both Activity charts now (a design that shows / hides one calls it) */
+TL.redraw=function(){drawAll(true);};
 function spHead(){
   if(!SP)return;var d0=SP.dom[0],d1=SP.dom[1],zoomed=d0>SP.full[0]||d1<SP.full[1];
   if(SP.reset)SP.reset.hidden=!zoomed;
@@ -482,8 +484,11 @@ function spHead(){
 }
 function draw(c,force){
   if(!c||!SP||!shown(c.plot))return;
+  /* the release flags go on the first chart shown, the x labels on the
+     last one (both on one chart when a design shows a single chart) */
+  var vis=CH.filter(function(x){return shown(x.plot);}),lay;c.flags=vis[0]===c;c.xl=vis[vis.length-1]===c;lay=(c.flags?1:0)+(c.xl?2:0);
   var Wd=Math.max(480,c.plot.clientWidth),d0=SP.dom[0],d1=SP.dom[1];
-  if(!force&&c.w===Wd&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk)return;c.w=Wd;c.pw=PW;
+  if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk)return;c.w=Wd;c.pw=PW;c.lay=lay;
   var mks=W.markers?W.markers():[],P=c.P;
   var top=c.flags&&mks.length?46:22,ph=150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;
   c.svg.setAttribute('viewBox','0 0 '+Wd+' '+H);c.svg.setAttribute('height',H);

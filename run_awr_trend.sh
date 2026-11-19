@@ -65,6 +65,8 @@
 #   ARCHIVE=zip ./run_awr_trend.sh user/pw@svc AUTO
 #   # Skip the SQL Monitor section (DBA_HIST_REPORTS can be slow to read):
 #   SQLMON=N ./run_awr_trend.sh user/pw@svc AUTO
+#   # Another look for the report (classic / quiet / dashboard):
+#   DESIGN=dashboard ./run_awr_trend.sh user/pw@svc AUTO
 #   # Don't remember the argument order?  Let the configurator drive:
 #   ./run_awr_trend.sh --configure
 #
@@ -138,6 +140,17 @@ DEF_PROFILE_DAYS='0'
 # Rides into the sqlmon DEFINE; normalised to Y / N by norm_sqlmon.
 : "${SQLMON:=}"
 
+# The report's look travels in the DESIGN environment variable (an env var
+# for the same reason).  Presentation only -- every number and section is in
+# all three:
+#   empty / classic   the classic look (default; unchanged)
+#   quiet  (or a)     same layout, neutral shadcn-like skin (zinc, Geist)
+#   dashboard (c)     that skin + a scan-first Summary: KPI cards, the
+#                     findings as an expandable table, a Ctrl+K "Jump to"
+#                     palette instead of the left rail
+# Rides into the design DEFINE; normalised by norm_design.
+: "${DESIGN:=}"
+
 # ---- optional terminal styling (degrades to plain text) --------------------
 # NB: a missing capability must never be fatal.  Some terminfo entries (notably
 # several AIX terminal types) lack the half-bright `dim` cap, so `tput dim`
@@ -201,6 +214,11 @@ Environment variables:
                 verdict pills, so DBA_HIST_REPORTS is never read (it can take
                 minutes on a busy DB).  Empty/Y (default) = run it.
                 e.g. SQLMON=N
+  DESIGN        the report's look (presentation only, same numbers):
+                classic (default) | quiet | dashboard.  quiet = the same
+                layout in a neutral, shadcn-like skin; dashboard = that skin
+                plus KPI cards, an expandable findings table and a Ctrl+K
+                "Jump to" palette instead of the left rail.  e.g. DESIGN=quiet
 
 Tip: not sure which arguments you need?  Run  ./run_awr_trend.sh --configure
 USAGE
@@ -316,6 +334,26 @@ norm_sqlmon() {
     esac
 }
 
+# norm_design <value> -- prints classic / quiet / dashboard for DESIGN;
+# exits 1 on anything else (the driver would abort on it too).
+norm_design() {
+    case "${1,,}" in
+        ''|classic)        echo classic ;;
+        quiet|a)           echo quiet ;;
+        dashboard|dash|c)  echo dashboard ;;
+        *) echo "error: DESIGN='$1' must be classic (default), quiet or dashboard." >&2
+           return 1 ;;
+    esac
+}
+
+design_desc() {
+    case "$1" in
+        classic)   echo "the classic look" ;;
+        quiet)     echo "same layout, neutral shadcn-like skin" ;;
+        dashboard) echo "KPI cards, expandable findings table, Ctrl+K palette" ;;
+    esac
+}
+
 resolve_archive_fmt() {
     local raw="$1" v="${1,,}"
     case "$v" in
@@ -421,6 +459,7 @@ run_report() {
     local ARCHIVE_FMT
     ARCHIVE_FMT="$(resolve_archive_fmt "$ARCHIVE")" || return 2
     SQLMON="$(norm_sqlmon "$SQLMON")" || return 2
+    DESIGN="$(norm_design "$DESIGN")" || return 2
 
     # awr_trend.sql does not DEFINE defaults itself; we set them here and the
     # driver inherits them from this sqlplus session.  We load sql/defaults.sql
@@ -446,6 +485,7 @@ DEFINE profile_days = ${PROFILE_DAYS}
 DEFINE markers = '${MARKERS}'
 DEFINE echarts = '${ECHARTS}'
 DEFINE sqlmon = '${SQLMON:-Y}'
+DEFINE design = '${DESIGN:-classic}'
 @@awr_trend.sql
 EXIT
 EOF
@@ -510,6 +550,7 @@ v_posdec()    { { [[ "$1" =~ ^([0-9]+|[0-9]*\.[0-9]+|[0-9]+\.[0-9]*)$ ]] && [[ "
                   && return 0; echo "  -> enter a positive number (e.g. 1, or 0.25 for 15 min)." >&2; return 1; }
 v_step_unit() { case "$1" in h|d|w) return 0;; esac; echo "  -> enter h, d or w." >&2; return 1; }
 v_cadence()   { [[ "$1" =~ ^[1-4]$ ]] && return 0; echo "  -> enter 1, 2, 3 or 4." >&2; return 1; }
+v_design()    { case "$1" in 1|2|3|classic|quiet|dashboard) return 0;; esac; echo "  -> enter 1, 2 or 3 (or classic / quiet / dashboard)." >&2; return 1; }
 v_target_end() {
     [[ "$1" =~ ^[Aa][Uu][Tt][Oo]$ ]] && return 0
     if [[ "$1" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}$ ]]; then
@@ -590,6 +631,23 @@ choose_cadence() {
     esac
 }
 
+# Sets DESIGN from a numbered menu (accepts a number or the name).
+choose_design() {
+    local cur=1 choice
+    case "$DESIGN" in quiet) cur=2;; dashboard) cur=3;; esac
+    echo
+    echo "${BOLD}Design${RST} — the report's look (every number is in all three):"
+    echo "  1) classic    $(design_desc classic)"
+    echo "  2) quiet      $(design_desc quiet)"
+    echo "  3) dashboard  $(design_desc dashboard)"
+    prompt_value choice "Choose 1-3" "$cur" v_design
+    case "$choice" in
+        1|classic)   DESIGN=classic;;
+        2|quiet)     DESIGN=quiet;;
+        3|dashboard) DESIGN=dashboard;;
+    esac
+}
+
 # Sets TEMPLATE from a numbered menu (accepts a number or the name).
 choose_template() {
     echo
@@ -660,6 +718,7 @@ build_shell_cmd() {
     [[ -n "$ECHARTS" ]] && out+="ECHARTS=$(shq "$ECHARTS") "
     [[ -n "$ARCHIVE" ]] && out+="ARCHIVE=$(shq "$ARCHIVE") "
     [[ "$SQLMON" == N ]] && out+="SQLMON=N "
+    [[ -n "$DESIGN" && "$DESIGN" != classic ]] && out+="DESIGN=$DESIGN "
     out+='./run_awr_trend.sh'
     for (( i = 0; i <= last; i++ )); do
         out+=" $(shq "${vals[$i]}")"
@@ -689,6 +748,7 @@ DEFINE profile_days = ${PROFILE_DAYS}
 DEFINE markers = '${MARKERS}'
 DEFINE echarts = '${ECHARTS}'
 DEFINE sqlmon = '${SQLMON:-Y}'
+DEFINE design = '${DESIGN:-classic}'
 @@awr_trend.sql
 EXIT
 EOF
@@ -747,6 +807,7 @@ print_summary() {
     [[ -n "$ECHARTS" ]] && printf '  %-14s %s\n' 'echarts' "$ECHARTS"
     [[ -n "$ARCHIVE" ]] && printf '  %-14s %s\n' 'archive' "$ARCHIVE"
     printf '  %-14s %s\n' 'sqlmon' "$([[ "$SQLMON" == N ]] && echo 'N  (SQL Monitor section skipped)' || echo 'Y')"
+    printf '  %-14s %s  %s%s%s\n' 'design' "${DESIGN:-classic}" "$DIM" "$(design_desc "${DESIGN:-classic}")" "$RST"
     echo "${BOLD}=================================================================${RST}"
     print_span_hint
     echo
@@ -773,6 +834,7 @@ configure() {
     TEMPLATE="$DEF_TEMPLATE"; DEBUG="$DEF_DEBUG"; MARKER_FILE="$DEF_MARKER_FILE"
     PROFILE_DAYS="$DEF_PROFILE_DAYS"
     SQLMON="$(norm_sqlmon "$SQLMON")" || exit 2
+    DESIGN="$(norm_design "$DESIGN")" || exit 2
 
     echo "${BOLD}AWR timeline comparison — interactive configurator${RST}"
     echo "${DIM}Press Enter to accept the [default] shown for each question.  Ctrl-C to abort.${RST}"
@@ -814,6 +876,7 @@ configure() {
         prompt_value PROFILE_DAYS "Day profile: score each hour of the last 24 h against how many prior days? (0 = off)" "$PROFILE_DAYS" v_nonneg
         echo "${DIM}SQL Monitor reads DBA_HIST_REPORTS XML, which can take minutes on a busy DB.${RST}"
         prompt_yesno SQLMON "Include the SQL Monitor section?" "$SQLMON"
+        choose_design
 
         print_summary
 

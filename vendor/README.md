@@ -43,3 +43,32 @@ curl -fsSL "https://cdn.jsdelivr.net/npm/echarts@${ver}/NOTICE"              -o 
 Then update the version number above. Keep the report's CDN URL (in
 `awr_trend.sql`) on the same major (`echarts@5`) so the default and the
 vendored copy stay API-compatible.
+
+## fonts/ (Geist, Geist Mono)
+
+- **What:** the two typefaces of the `quiet` and `dashboard` report designs
+  (`design=quiet|dashboard`): Geist (text) and Geist Mono (SQL ids, plan
+  hashes, segment / file / parameter names). The classic design does not
+  use them.
+- **Files:** `geist-latin-wght-normal.woff2`, `geist-mono-latin-wght-normal.woff2`
+  (variable weight 100-900, Latin subset, upright only).
+- **Version:** 5.3.0 of the Fontsource packages `@fontsource-variable/geist`
+  and `@fontsource-variable/geist-mono` (unmodified files from their
+  `files/` directory).
+- **License:** SIL Open Font License 1.1 (`OFL-Geist.txt`,
+  `OFL-GeistMono.txt`, copied from the packages). The OFL allows bundling
+  and embedding; the fonts are not sold on their own.
+- **How they reach the report:** `tools/fonts2plsql.sh` writes both files as
+  base64 `@font-face` rules into `sql/lib/css_fonts.plsql` (generated,
+  committed), which `sql/lib/design_head.sql` emits, so the report stays a
+  single offline file (about 70 KB more). Lint runs `tools/fonts2plsql.sh
+  --check`; after replacing a font file run `tools/fonts2plsql.sh`.
+
+### Updating
+
+```bash
+ver=5.3.0   # bump as needed
+for p in geist geist-mono; do npm pack "@fontsource-variable/$p@$ver"; done
+# copy files/<name>-latin-wght-normal.woff2 and LICENSE from each tarball,
+# then: tools/fonts2plsql.sh
+```

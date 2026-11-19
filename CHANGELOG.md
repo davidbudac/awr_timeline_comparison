@@ -10,6 +10,42 @@ entry here. Dates are release dates.
 Changes on `main` since 1.6.1 (the footer still says v1.6.1 until the next
 release bumps `awr_version`).
 
+- **Report designs: `DESIGN=classic|quiet|dashboard`.** Env var `DESIGN`
+  (wrapper) / DEFINE `design` (SQL\*Plus), default `classic`; the shell
+  and web configurators ask for it and the fleet's detail reports take
+  `FLEET_DETAIL_DESIGN`. Presentation only: every number, section and view
+  is in all three. `classic` emits nothing new (byte-identical apart from
+  the js_timeline change below). `quiet` keeps the layout in a neutral,
+  shadcn-like skin: zinc tokens, Geist / Geist Mono embedded (SIL OFL,
+  `vendor/fonts/`, generated into `sql/lib/css_fonts.plsql` by
+  `tools/fonts2plsql.sh`), hairline borders, sentence-case labels,
+  boxless release flags, the verdict counts as one stats line, severity as
+  a leading dot, rail counts as dot + number, "How to read" behind a
+  button, CSV / Markdown copy behind one menu. `dashboard` adds a
+  scan-first Summary: verdict, KPI cards (DB time + one per finding),
+  Activity as tabs (class / event / both), the findings as an expandable
+  table (Moved / Normal / Improved) with "What changed around it" beside
+  it, and a `Ctrl+K` "Jump to" palette instead of the rail. Built by
+  `sql/lib/design_head.sql` (fonts + `css_design.plsql`, generated from
+  `sql/lib/src/css_design.css`) and `design_tail.sql` (`js_design.plsql`,
+  from `sql/lib/src/js_design.js`, which only moves and restyles what the
+  chrome built). An unknown name aborts the run (ORA-01722). Demo pages:
+  `docs/examples/demo_busy_db_quiet.html`, `demo_busy_db_dashboard.html`.
+  Both designs also keep a 390 px phone free of page-wide horizontal
+  scrolling (wide tables and the parameter grid scroll in their own box),
+  and style the config card's "and N more in Parameters" link (left in the
+  browser's default blue by the classic stylesheet when a config card
+  folds rows). Verified on dbmint (hourly 12 / 24 / 168 windows, daily and
+  weekly AUTO, markers, the simple and dev templates, pure SQL\*Plus, a
+  fleet run with dashboard detail reports) and with verify_report.js.
+- **js_timeline:** the release flags go on the first Activity chart that
+  is shown and the x labels on the last (the same charts as before when
+  both show), and `AWR_TL.redraw()` redraws both; the dashboard uses it
+  to show one chart at a time.
+- `tools/js2plsql.sh` also generates a stylesheet from
+  `sql/lib/src/<name>.css`; lint check 25 covers those sources, check 33
+  keeps `css_fonts.plsql` in step with `vendor/fonts/`.
+
 - **`SQLMON=N` skips the SQL Monitor section.** Env var `SQLMON` (wrapper)
   / DEFINE `sqlmon` (SQL\*Plus), default `Y`; the configurator asks for it
   too. A falsy value (`N`, `no`, `0`, `off`, `false`, `f`) swaps section 18

@@ -53,6 +53,8 @@
 #                          as FLEET_TIMEOUT; 0 = no limit            [3600]
 #   FLEET_DETAIL_TEMPLATE  awr_trend.sql template for the detailed run
 #                                                            [comprehensive]
+#   FLEET_DETAIL_DESIGN    the detailed report's look: classic | quiet |
+#                          dashboard (awr_trend.sql's `design` var)  [classic]
 #   FLEET_DETAIL_ECHARTS   passed to the single-DB report's `echarts` var;
 #                          empty (default) = inline vendor/echarts.min.js
 #                          for a fully offline detailed report (falls back
@@ -135,6 +137,7 @@ FLEET_ARCHIVE="${FLEET_ARCHIVE:-}"
 FLEET_DETAIL="${FLEET_DETAIL:-}"
 FLEET_DETAIL_TIMEOUT="${FLEET_DETAIL_TIMEOUT:-3600}"
 FLEET_DETAIL_TEMPLATE="${FLEET_DETAIL_TEMPLATE:-comprehensive}"
+FLEET_DETAIL_DESIGN="${FLEET_DETAIL_DESIGN:-classic}"
 FLEET_DETAIL_ECHARTS="${FLEET_DETAIL_ECHARTS:-}"
 
 # ---- optional Day profile band (sql/fleet/06_day_profile.sql) --------------
@@ -175,6 +178,15 @@ case "$FLEET_DETAIL_TEMPLATE" in
     *"'"*|*$'\n'*|*$'\t'*)
         echo "error: FLEET_DETAIL_TEMPLATE must not contain a single quote, newline, or tab (got '$FLEET_DETAIL_TEMPLATE')" >&2
         exit 2 ;;
+esac
+# FLEET_DETAIL_DESIGN rides into the detailed run's `design` DEFINE; the same
+# names (and short forms) as run_awr_trend.sh's DESIGN, normalised here so a
+# typo fails before any DB is queried rather than aborting every detail run.
+case "${FLEET_DETAIL_DESIGN,,}" in
+    classic)          FLEET_DETAIL_DESIGN=classic ;;
+    quiet|a)          FLEET_DETAIL_DESIGN=quiet ;;
+    dashboard|dash|c) FLEET_DETAIL_DESIGN=dashboard ;;
+    *) echo "error: FLEET_DETAIL_DESIGN must be classic, quiet or dashboard (got '$FLEET_DETAIL_DESIGN')" >&2; exit 2 ;;
 esac
 # FLEET_DETAIL_ECHARTS rides into a double-quoted <script src> AND a single-
 # quoted DEFINE (see run_awr_trend.sh's ECHARTS validation for the <script
@@ -268,6 +280,8 @@ Environment variables:
                          0 = no limit                               [3600]
   FLEET_DETAIL_TEMPLATE  awr_trend.sql template for the detailed run
                                                           [comprehensive]
+  FLEET_DETAIL_DESIGN    the detailed report's look: classic, quiet or
+                         dashboard                               [classic]
   FLEET_DETAIL_ECHARTS   echarts source for the detailed report; empty
                          (default) = inline vendor/echarts.min.js (fully
                          offline; falls back to CDN with a warning if
@@ -772,6 +786,7 @@ FLEET_TEMPLATE='${FLEET_TEMPLATE}'
 RUN_ID='${RUN_ID}'
 REPORT_TS='${REPORT_TS}'
 FLEET_DETAIL_TEMPLATE='${FLEET_DETAIL_TEMPLATE}'
+FLEET_DETAIL_DESIGN='${FLEET_DETAIL_DESIGN}'
 FLEET_DETAIL_TIMEOUT='${FLEET_DETAIL_TIMEOUT}'
 FLEET_DETAIL_ECHARTS='${FLEET_DETAIL_ECHARTS}'
 DETAIL_ECHARTS_EFF='${DETAIL_ECHARTS_EFF}'
@@ -901,6 +916,7 @@ DEFINE template   = '${FLEET_DETAIL_TEMPLATE}'
 DEFINE profile_days = ${FLEET_PROFILE_DAYS}
 DEFINE markers    = '${DETAIL_MARKERS}'
 DEFINE echarts    = '${DETAIL_ECHARTS_EFF}'
+DEFINE design     = '${FLEET_DETAIL_DESIGN}'
 @awr_trend.sql
 EXIT
 SQLEOF

@@ -56,6 +56,18 @@
  *     opens / shuts on a click and opens for a jump into it; one rail
  *     sub-link per finding card; All sections shows every library section
  *     in full; the Trend cells are micro strips (svg.mw), no line left;
+ *   - the design (window.AWR_DESIGN, design=quiet|dashboard; none =
+ *     classic): quiet and dashboard -- "How to read" opens / closes the
+ *     Activity help, a table's copy menu holds CSV + Markdown; dashboard --
+ *     no rail (its checks are skipped), the Summary puts the verdict and
+ *     the KPI cards above Activity, one KPI per finding card + DB time
+ *     with bars, every finding card inside a row of the findings table
+ *     (count = the Moved tab), a row opens to its bars / its card, the
+ *     Normal tab shows #s-normal and a jump into it switches the tab, the
+ *     Activity tabs show one chart (x labels + release flags on it) or
+ *     both, Ctrl+K opens the palette (not the row filter), a search +
+ *     Enter lands on the row, Esc closes it without unpinning; the
+ *     Activity interaction checks run with both charts shown;
  * and writes screenshots per view x theme when shots_dir is given.
  */
 const path = require('path');
@@ -91,6 +103,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
   const browser = await launch();
   const failures = [];
   const fail = (m) => { failures.push(m); };
+  let DESIGN = 'classic';
 
   async function openPage(hash, scheme) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: scheme || 'light' });
@@ -125,6 +138,8 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       };
     });
     console.log(JSON.stringify(info, null, 1));
+    DESIGN = await page.evaluate(() => window.AWR_DESIGN || 'classic');
+    console.log('design: ' + DESIGN);
     // the default = the early view script's literal (the demo opens All sections)
     const dm = /<script>\(function\(\)\{var v="(summary|timeline|all)"/.exec(fs.readFileSync(file, 'utf8'));
     const defView = dm ? dm[1] : 'summary';
@@ -178,13 +193,17 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
           act: (() => {
             const a = document.getElementById('activity');
             if (!vis(a)) return 'hidden';
-            const secs = [...document.querySelectorAll('main > section')].filter(x => x !== a && vis(x));
+            // the dashboard's Summary puts the verdict (and the KPI cards) above it
+            const dashS = document.body.classList.contains('d-dash') && document.body.classList.contains('vs');
+            const secs = [...document.querySelectorAll('main > section')].filter(x => x !== a && vis(x) && !(dashS && x.id === 'verdict'));
             const top = a.getBoundingClientRect().top;
             const above = secs.filter(x => x.getBoundingClientRect().top < top).map(x => x.id);
             if (above.length) return 'below ' + above.slice(0, 3).join(',');
             const has = !!(window.AWR_DATA && AWR_DATA.ashx && AWR_DATA.ashx.classes && AWR_DATA.ashx.classes.length);
+            // every chart shown is drawn (the dashboard shows one at a time)
+            const c1 = vis(document.querySelector('#ax-cls .axp')), c2 = vis(document.querySelector('#ax-ev .axp'));
             const n1 = document.querySelectorAll('#ax-cls .axsvg path.xa').length, n2 = document.querySelectorAll('#ax-ev .axsvg path.xa').length;
-            if (has && !(n1 && n2)) return 'not drawn (' + n1 + '/' + n2 + ')';
+            if (has && (!(c1 || c2) || (c1 && !n1) || (c2 && !n2))) return 'not drawn (' + n1 + '/' + n2 + ')';
             if (!has && !vis(document.getElementById('ax-empty'))) return 'no data and no empty note';
             return 'ok';
           })(),
@@ -245,8 +264,8 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     });
     toggles.jump = jumped;
     if (/^FAIL/.test(jumped)) fail('cross-view jump: ' + jumped);
-    // rail: a dimmed link switches view on click
-    const rail = await page.evaluate(async () => {
+    // rail: a dimmed link switches view on click (no rail in the dashboard)
+    const rail = DESIGN === 'dashboard' ? 'none (dashboard)' : await page.evaluate(async () => {
       const a = document.querySelector('nav.toc a.vdim[href^="#"]');
       if (!a) return 'none';
       const id = a.getAttribute('href').slice(1);
@@ -259,11 +278,11 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (/^FAIL/.test(rail)) fail('rail dimmed link: ' + rail);
     await page.evaluate(() => window.AWR_setView && window.AWR_setView('all', false));
     await page.waitForTimeout(300);
-    const tab = await page.$('.tabs [data-t]:nth-child(2)');
+    const tab = await page.$('.tabs:not(.dtabs) [data-t]:nth-child(2)');
     if (tab) {
       await tab.click(); await page.waitForTimeout(200);
       toggles.tabs = await page.evaluate(() => {
-        const t = document.querySelector('.tabs [data-t]:nth-child(2)');
+        const t = document.querySelector('.tabs:not(.dtabs) [data-t]:nth-child(2)');
         const g = t.closest('.tabs').getAttribute('data-tabs');
         const p = document.querySelector(`.tabpanel[data-tabs="${g}"][data-t="${t.getAttribute('data-t')}"]`);
         return p && getComputedStyle(p).display !== 'none' ? 'ok' : 'FAIL';
@@ -281,11 +300,14 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       const cs = getComputedStyle(a);
       return (parseFloat(cs.borderLeftWidth) || 0) === 0 && cs.boxShadow === 'none' ? 'ok' : 'FAIL ' + cs.borderLeftWidth + ' / ' + cs.boxShadow;
     }, sel);
-    await page.evaluate(() => { const a = document.querySelector('nav.toc a[href="#activity"]'); if (a && !document.querySelector('nav.toc a.on')) a.classList.add('on'); });
-    const rOn = await railMark('nav.toc a.on');
-    await page.hover('nav.toc a[href="#findings"]'); await page.waitForTimeout(200);
-    const rHov = await railMark('nav.toc a[href="#findings"]');
-    toggles.railMarker = rOn + ' / ' + rHov;
+    if (DESIGN === 'dashboard') toggles.railMarker = 'none (dashboard)';
+    else {
+      await page.evaluate(() => { const a = document.querySelector('nav.toc a[href="#activity"]'); if (a && !document.querySelector('nav.toc a.on')) a.classList.add('on'); });
+      const rOn = await railMark('nav.toc a.on');
+      await page.hover('nav.toc a[href="#findings"]'); await page.waitForTimeout(200);
+      const rHov = await railMark('nav.toc a[href="#findings"]');
+      toggles.railMarker = rOn + ' / ' + rHov;
+    }
     if (/FAIL/.test(toggles.railMarker)) fail('rail link state marker: ' + toggles.railMarker);
     console.log('toggles', JSON.stringify(toggles));
     if (errors.length) fail('interactions: ' + errors.slice(0, 5).join(' | '));
@@ -406,6 +428,8 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     tl.labels = labels.ok + ' ok' + (labels.bad.length ? ', FAIL ' + labels.bad.slice(0, 5).join(',') : '');
     if (labels.bad.length) fail('timeline: grid label links: ' + labels.bad.slice(0, 8).join(', '));
     await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(300);
+    // the dashboard shows one Activity chart at a time: these checks need both
+    if (DESIGN === 'dashboard') { await page.evaluate(() => window.AWR_axMode && window.AWR_axMode('both')); await page.waitForTimeout(250); }
     if (inv.chart && inv.ash) {
       const CHS = ['ax-cls', 'ax-ev'];
       const other = await page.evaluate(() => {
@@ -817,7 +841,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       } else out.reveal = 'none';
       // the rail: one sub-link per finding card, each to its card
       const subs = [...document.querySelectorAll('nav.toc a.sub')];
-      const cards = [...document.querySelectorAll('#findings .cards > article.fc')];
+      const cards = [...document.querySelectorAll('#findings article.fc:not(.chg)')];
       out.subs = subs.length + '/' + cards.length;
       out.subsOk = subs.length === cards.length && subs.every((a, i) => a.getAttribute('href') === '#' + cards[i].id);
       // All sections: every library section shows in full, row state or not
@@ -848,6 +872,126 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       const lh = await page.$('#s-lib');
       if (lh) { await lh.scrollIntoViewIfNeeded(); await page.waitForTimeout(200); await page.screenshot({ path: path.join(shots, 'library.png') }); }
     }
+    await page.close();
+  }
+
+  // ---- 7. the design (quiet / dashboard): the shared pieces, then the
+  // dashboard's KPI cards, findings table, Activity tabs and palette
+  if (DESIGN !== 'classic') {
+    const { page, errors } = await openPage('#view=summary', 'light');
+    const dz = {};
+    dz.how = await page.evaluate(async () => {
+      const b = document.querySelector('#ashx .axhow'), p = document.querySelector('#ashx .axn2');
+      if (!b || !p) return 'FAIL missing';
+      const vis = el => el.getClientRects().length > 0;
+      if (vis(p)) return 'FAIL open before the click';
+      b.click(); await new Promise(r => setTimeout(r, 80));
+      const open = vis(p) && b.getAttribute('aria-expanded') === 'true';
+      document.body.click(); await new Promise(r => setTimeout(r, 80));
+      return open && !vis(p) ? 'ok' : 'FAIL ' + open;
+    });
+    if (!/^ok/.test(dz.how)) fail('design: How to read ' + dz.how);
+    dz.menu = await page.evaluate(async () => {
+      window.AWR_setView('all', false); await new Promise(r => setTimeout(r, 200));
+      const bars = [...document.querySelectorAll('.tbl-tools')], raw = bars.filter(b => b.querySelector(':scope > .tool-btn')).length;
+      const m = bars.map(b => b.querySelector('details.tmenu')).find(d => d && d.getClientRects().length);
+      if (!m) return bars.length ? 'FAIL no visible menu' : 'none';
+      m.querySelector('summary').click(); await new Promise(r => setTimeout(r, 60));
+      const n = m.open ? m.querySelectorAll('.tool-btn').length : 0;
+      document.body.click(); await new Promise(r => setTimeout(r, 60));
+      window.AWR_setView('summary', false);
+      return n === 2 && !m.open && !raw ? 'ok (' + bars.length + ' menus)' : 'FAIL ' + JSON.stringify([n, m.open, raw]);
+    });
+    if (/^FAIL/.test(dz.menu)) fail('design: table copy menu ' + dz.menu);
+    if (DESIGN === 'dashboard') {
+      await page.waitForTimeout(200);
+      const lay = await page.evaluate(() => {
+        const vis = el => !!el && el.getClientRects().length > 0;
+        const kp = [...document.querySelectorAll('.dkpis .dkpi')];
+        const cards = [...document.querySelectorAll('#findings article.fc:not(.chg)')];
+        const rows = [...document.querySelectorAll('.dft details.drow')];
+        const tab = document.querySelector('.dtabs [data-t="moved"] .n');
+        const top = id => { const e = document.getElementById(id); return e ? e.getBoundingClientRect().top : NaN; };
+        return { dash: document.body.classList.contains('d-dash'), rail: vis(document.querySelector('nav.toc')), search: vis(document.querySelector('.dsearch')),
+          kpis: kp.length, kpiBars: kp.filter(k => k.querySelector('svg.dwb rect.dbc')).length, cards: cards.length,
+          dbtCard: !!document.getElementById('f-dbtime'), hero: !!document.getElementById('hero-dbt'),
+          inRows: cards.filter(c => c.parentElement.closest('details.drow.lead')).length, rows: rows.length, tabN: tab ? +tab.textContent : 0,
+          trends: rows.filter(r => r.querySelector('.dtr svg')).length,
+          order: top('verdict') < top('activity') && document.querySelector('.dkpis').getBoundingClientRect().top < top('activity') && top('activity') < top('findings') };
+      });
+      dz.layout = lay;
+      const nk = (lay.hero ? 1 : 0) + lay.cards - (lay.dbtCard && lay.hero ? 1 : 0);
+      if (!lay.dash || lay.rail || !lay.search) fail('dashboard: body.d-dash / rail hidden / Jump to button ' + JSON.stringify(lay));
+      if (lay.kpis !== nk || lay.kpiBars !== lay.kpis) fail('dashboard: KPI cards ' + lay.kpis + ' (expected ' + nk + '), ' + lay.kpiBars + ' with bars');
+      if (lay.inRows !== lay.cards || lay.rows !== lay.tabN || lay.trends !== lay.rows) fail('dashboard: findings table ' + JSON.stringify(lay));
+      if (!lay.order) fail('dashboard: Summary order (verdict, KPI cards, Activity, findings)');
+      // rows open: a lead row shows its card, another row draws its bars
+      dz.rows = await page.evaluate(async () => {
+        const vis = el => !!el && el.getClientRects().length > 0;
+        const lead = document.querySelector('details.drow.lead'), other = document.querySelector('details.drow:not(.lead)');
+        if (!lead) return 'none';
+        lead.querySelector('summary').click(); await new Promise(r => setTimeout(r, 120));
+        const a = lead.open && vis(lead.querySelector('article.fc .wg'));
+        let b = true;
+        if (other) { other.querySelector('summary').click(); await new Promise(r => setTimeout(r, 120)); b = other.open && other.querySelectorAll('.dbars svg.dwb rect.dbc').length === 1; other.open = false; }
+        lead.open = false;
+        return a && b ? 'ok' : 'FAIL ' + JSON.stringify([a, b]);
+      });
+      if (/^FAIL/.test(dz.rows)) fail('dashboard: row expansion ' + dz.rows);
+      // the Normal tab, and a jump into it switches the tab
+      dz.tabs = await page.evaluate(async () => {
+        const vis = el => !!el && el.getClientRects().length > 0;
+        const sn = document.getElementById('s-normal'); if (!sn) return 'none';
+        const n = document.querySelector('.dtabs [data-t="normal"]'), m = document.querySelector('.dtabs [data-t="moved"]');
+        if (vis(sn)) return 'FAIL normal shown under Moved';
+        n.click(); await new Promise(r => setTimeout(r, 80)); const a = vis(sn);
+        m.click(); await new Promise(r => setTimeout(r, 80));
+        window.AWR_goTo(sn, false, false); await new Promise(r => setTimeout(r, 200));
+        const b = vis(sn) && n.classList.contains('on');
+        m.click();
+        return a && b ? 'ok' : 'FAIL ' + JSON.stringify([a, b]);
+      });
+      if (/^FAIL/.test(dz.tabs)) fail('dashboard: findings tabs ' + dz.tabs);
+      // the Activity tabs: one chart (x labels + flags on it) or both
+      dz.ax = await page.evaluate(async () => {
+        const vis = el => !!el && el.getClientRects().length > 0;
+        const wait = ms => new Promise(r => setTimeout(r, ms));
+        const mk = (window.AWR_WG && AWR_WG.markers ? AWR_WG.markers() : []).length;
+        const st = id => ({ v: vis(document.querySelector('#' + id + ' .axp')), xa: document.querySelectorAll('#' + id + ' .axsvg path.xa').length,
+          x: document.querySelectorAll('#' + id + ' .axsvg text.at[text-anchor="middle"]').length, f: document.querySelectorAll('#' + id + ' .axsvg text.cft').length });
+        const out = [];
+        for (const m of ['ev', 'cls', 'both']) {
+          document.querySelector('.axseg [data-ax="' + m + '"]').click(); await wait(250);
+          const c = st('ax-cls'), e = st('ax-ev');
+          const ok = m === 'both' ? c.v && e.v && c.xa && e.xa && !c.x && e.x && (!mk || (c.f && !e.f))
+            : (m === 'cls' ? c.v && !e.v && c.xa && c.x && (!mk || c.f) : e.v && !c.v && e.xa && e.x && (!mk || e.f));
+          out.push(m + (ok ? ' ok' : ' FAIL ' + JSON.stringify([c, e])));
+        }
+        document.querySelector('.axseg [data-ax="cls"]').click(); await wait(150);
+        return out.join(', ');
+      });
+      if (/FAIL/.test(dz.ax)) fail('dashboard: Activity tabs ' + dz.ax);
+      // the palette: Ctrl+K opens it (not the row filter), a search + Enter
+      // lands on the row, Esc closes it and leaves a pinned window pinned
+      const q = await page.evaluate(() => { const r = document.querySelector('details.drow:not(.lead) .dnm b') || document.querySelector('details.drow .dnm b'); return r ? r.textContent : 'Load profile'; });
+      await page.keyboard.press('Control+k'); await page.waitForTimeout(150);
+      const o1 = await page.evaluate(() => ({ open: document.querySelector('dialog.dpal').open, fi: document.activeElement && document.activeElement.id === 'row-filter' }));
+      await page.keyboard.type(q); await page.waitForTimeout(150);
+      const pick = await page.evaluate(() => { const li = document.querySelector('dialog.dpal li[aria-selected="true"]'); return li ? li.textContent : ''; });
+      await page.keyboard.press('Enter'); await page.waitForTimeout(500);
+      const o2 = await page.evaluate(() => { const h = (location.hash || '').slice(1), t = h && document.getElementById(h);
+        const r = t && t.getBoundingClientRect(); return { open: document.querySelector('dialog.dpal').open, id: h, shown: !!t && t.getClientRects().length > 0 && r.top < innerHeight && r.bottom > 0 }; });
+      await page.evaluate(() => { const w = (window.AWR_WIN && AWR_WIN.w) || []; if (w.length > 1 && window.AWR_WG && AWR_WG.pin) AWR_WG.pin(w[0].o); });
+      await page.keyboard.press('Control+k'); await page.waitForTimeout(120);
+      await page.keyboard.press('Escape'); await page.waitForTimeout(120);
+      const o3 = await page.evaluate(() => ({ open: document.querySelector('dialog.dpal').open, pinned: document.body.hasAttribute('data-pw') }));
+      dz.palette = (o1.open && !o1.fi && pick && !o2.open && o2.shown && !o3.open && o3.pinned) ? 'ok ("' + q + '" -> #' + o2.id + ')' : 'FAIL ' + JSON.stringify([o1, pick, o2, o3]);
+      if (!/^ok/.test(dz.palette)) fail('dashboard: palette ' + dz.palette);
+      await page.keyboard.press('Escape');
+      if (shots) { await page.evaluate(() => window.scrollTo(0, 0)); await page.waitForTimeout(150); await page.screenshot({ path: path.join(shots, 'dashboard-top.png') }); }
+    }
+    console.log('design ' + DESIGN + ': ' + JSON.stringify(dz));
+    if (errors.length) fail('design: ' + errors.slice(0, 5).join(' | '));
     await page.close();
   }
 

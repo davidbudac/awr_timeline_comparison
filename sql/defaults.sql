@@ -50,6 +50,16 @@ DEFINE profile_days = 0
 -- SQL Monitor pills (17 R6-R9); 'N' skips both, i.e. every DBA_HIST_REPORTS
 -- read (its XML parsing can take minutes on a busy DB).
 DEFINE sqlmon = 'Y'
+-- design picks the report's look (presentation only: every number, section
+-- and view is the same in all three).  'classic' (the default) is the
+-- v1.6 look, byte-identical to before the option existed.  'quiet' keeps
+-- the same layout in a neutral, shadcn-like skin (zinc greys, Geist,
+-- hairline borders, release flags without boxes).  'dashboard' uses that
+-- skin plus a scan-first Summary: KPI cards, the Activity charts as tabs,
+-- the findings as an expandable table with "What changed around it"
+-- beside it, and a Ctrl+K "Jump to" palette instead of the left rail.
+-- Anything else aborts the run (ORA-01722), like an unknown template.
+DEFINE design = 'classic'
 -- markers optional file-free timeline markers: a list of milestones
 -- "WHEN|LABEL" separated by ";;", e.g.
 --   DEFINE markers = '2026-06-10 09:00|Release 2.0;;2026-06-11 03:00|Patch'
