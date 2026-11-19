@@ -294,6 +294,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ashx .axseg button{font-size:12px;padding:2px 10px}');
     DBMS_OUTPUT.PUT_LINE('/* plan 024: the layout switch matches the dashboard''s chart tabs */');
     DBMS_OUTPUT.PUT_LINE('.ashx .seg.axlayout{flex:none;padding:3px}');
+    DBMS_OUTPUT.PUT_LINE('body.d-dash .ashx .seg.axlayout button{line-height:20px}');
     DBMS_OUTPUT.PUT_LINE('.ashx.ax-cls-only #ax-ev,.ashx.ax-ev-only #ax-cls{display:none}');
     DBMS_OUTPUT.PUT_LINE('/* the findings grid: the table card + What changed around it */');
     DBMS_OUTPUT.PUT_LINE('.dgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,400px);gap:var(--s4);align-items:start;margin-top:var(--s2)}');
