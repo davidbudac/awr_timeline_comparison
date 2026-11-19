@@ -992,11 +992,14 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       const dash = document.body.classList.contains('d-dash');
       const tri = document.getElementById('triage');
       const trows = tri ? [...tri.querySelectorAll('.tri-row[data-card]')] : [];
+      // no finding card -> 07 emits no list at all; past 91 windows the
+      // micro strip draws nothing (js_microstrip), so the strip is optional
+      const triWin = (window.AWR_WIN && window.AWR_WIN.w) ? window.AWR_WIN.w.length : 0;
       out.triage = trows.length + '/' + cards.length + (dash ? ' (dashboard)' : '');
       out.triageOk = trows.length === cards.length
         && trows.every((r, i) => r.getAttribute('data-card') === cards[i].id
-          && (dash || (r.querySelector('.tri-spark svg.mw') && r.querySelector('.tri-imp').textContent.trim() !== '')))
-        && (dash ? !vis(tri) : !!tri && vis(tri));
+          && (dash || ((triWin > 91 || r.querySelector('.tri-spark svg.mw')) && r.querySelector('.tri-imp').textContent.trim() !== '')))
+        && (!cards.length ? !tri : dash ? !vis(tri) : !!tri && vis(tri));
       const folded = cards.filter(c => c.classList.contains('fold'));
       out.folded = folded.length;
       out.foldOk = dash ? folded.length === 0 : (cards.length < 2 || folded.length === cards.length - 1);

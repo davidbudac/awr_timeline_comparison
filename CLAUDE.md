@@ -304,7 +304,8 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
   **`awr:view`** `{detail:{view}}` (replaced `awr:mode`;
   `window.AWR_setMode(det)` is a compat shim). `inView(el, v)` / `viewOf(el)`
   walk every `.vw` ancestor. `reveal(el)` — `AWR_TL.reveal` first (folded
-  Timeline lane / "+ Show N more"), opens a closed library row, clicks the
+  Timeline lane / "+ Show N more"), opens a folded finding card
+  (`window.AWR_fcOpen`, plan 025), opens a closed library row, clicks the
   tab of a hidden `.tabpanel`, opens the `[data-tail]` expander, every
   ancestor `<details>`, un-hides a filtered `tr`, `AWR_openSqlRow` for a 06
   `tr.sql-row`. `goTo(el, flash, persist)` / `window.AWR_goTo` — switch view,
