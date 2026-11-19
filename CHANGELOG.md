@@ -168,8 +168,8 @@ release bumps `awr_version`).
 - **Finding cards name the shape of the change.** Up to two tags per card
   ("jump after Release 4.2", "step up at Release 4.1", "spike: Current
   only", "high for 3 windows", "rising across 12 windows"), computed in the
-  browser from the card's 13 values and the release markers. A hint only:
-  severities, order and counts are unchanged.
+  browser from the card's per-window values and the release markers. A
+  hint only: severities, order and counts are unchanged.
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

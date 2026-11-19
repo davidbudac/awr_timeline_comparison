@@ -711,16 +711,20 @@ unit-tested in `tools/js_unit_tests.js`. At most two tags per row, the
 Current one first. Nothing is tagged with fewer than 4 valid prior windows
 or no Current value. Current outside the band (prior mean +/- 2 sigma,
 sigma floored at 2 % of the mean -- the band `sizeRow` and the band glyph
-draw) is "spike" / "dip" ("jump" / "drop after <marker>" when a release
-marker sits on Current's left edge) when the window just before it is
-inside the band, else a run ("high / low for N windows"; a skipped window
-ends the run). A step needs at least 3 valid windows before and 2 after
+draw) is a run ("high / low for N windows") when the window just before
+it is outside on the same side too (a skipped window ends the run), else
+"spike" / "dip" ("jump" / "drop after <marker>" when a release marker
+sits on Current's left edge) -- but only when no valid prior window is
+outside on that side, so "Current only" holds (a recurring spike gets no
+Current tag). A step needs at least 3 valid windows before and 2 after
 the split, at least 90 % of the after / before pairs on the same side, a
 mean shift of at least 10 % and more than 2 x the larger side's floored
-sigma ("step up at <marker>" or "... on <date>"); a trend needs at least 6
-valid windows, R squared >= 0.6 and a total rise of at least 10 % of the
-mean, and wins over a step only when a straight line fits at least as
-well (smaller or equal residual sum of squares). `tagCards()` (on
+sigma ("step up at <marker>" or "... on <date>"; a skipped window makes
+the splits around it equal, and the one with a marker wins, else the
+later); a trend needs at least 6 valid windows, R squared >= 0.6 and a
+total rise of at least 10 % of the mean, and wins over a step only when a
+straight line fits at least as well (smaller or equal residual sum of
+squares). `tagCards()` (on
 DOMContentLoaded, after `render`) fills `.fc-tags` in every `#findings
 article.fc:not(.chg)` header and the card's `#triage .tri-tags` (plan 025's
 containers) with `span.ptag.p-<kind>[.p-rel][title]` chips, from the

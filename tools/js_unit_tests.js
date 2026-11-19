@@ -60,6 +60,18 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
   test('fewer than 4 valid priors: nothing', () =>
     assert.strictEqual(tags([null, null, null, null, null, null, null, null, null, 3, 4, 5, 9], ALL, []), ''));
   test('no Current value: nothing', () => assert.strictEqual(tags([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, null], ALL, []), ''));
+  /* plan 027 review: "Current only" must hold -- an earlier valid window
+     outside the band on the same side means no spike / jump tag */
+  test('recurring spike: no "Current only"', () =>
+    assert.strictEqual(tags([100, 101, 99, 100, 102, 98, 100, 300, 99, 100, 100, 101, 320], ALL, MARKS), ''));
+  const SB = [100, 101, 99, 100, 102, 98, 100, 101, 99, 100, 300, null, 320];
+  const SBV = ALL.slice(); SBV[11] = false;
+  test('skipped window before Current does not hide a high one before it', () =>
+    assert.strictEqual(tags(SB, SBV, []), ''));
+  const S8 = PR.slice(); S8[8] = null;
+  const S8V = ALL.slice(); S8V[8] = false;
+  test('step at a skipped window: the split with the marker wins', () =>
+    assert.strictEqual(tags(S8, S8V, MARKS), 'jump+[Release 4.2] step+@8[Release 4.1]'));
   test('text', () => {
     const D = ['18 Jun', '25 Jun', '2 Jul', '9 Jul', '16 Jul', '23 Jul', '30 Jul', '6 Aug', '13 Aug', '20 Aug', '27 Aug', '3 Sep', '10 Sep'];
     assert.strictEqual(W.patternText({ k: 'jump', dir: 1, m: 'Release 4.2' }, D).text, 'jump after Release 4.2');

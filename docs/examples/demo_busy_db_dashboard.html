@@ -1965,17 +1965,20 @@ W.markers=function(){
   return MK;
 };
 W.markerAt=function(o){var r=null;W.markers().forEach(function(m){if(m.o===o)r=m;});return r;};
-/* ---- pattern tags (plan 027): the shape of one row's 13 values, as a
-   hint.  Pure: vals oldest first (null = no value), valid[i] false = a
+/* ---- pattern tags (plan 027): the shape of one row's per-window values,
+   as a hint.  Pure: vals oldest first (null = no value), valid[i] false = a
    skipped window, mu / sd = the row's prior mean / sd (data-mu / data-sd),
    marks = [{i: column index whose LEFT edge carries a marker, l: label}].
    At most two tags, the Current one first:
      {k:"jump"|"spike", dir, m}  only Current is outside mean +- 2 floored
-         sigma ("jump" when a marker sits on Current's left edge, m = label)
+         sigma on that side: no valid prior window is (else no Current tag;
+         "jump" when a marker sits on Current's left edge, m = label)
      {k:"run", dir, n}  Current and the n-1 windows right before it are all
          outside on the same side (a skipped window ends the run)
      {k:"step", dir, at, m}  the prior windows from index at on sit apart
-         from the ones before (m = the marker on that edge, else null)
+         from the ones before (m = the marker on that edge, else null; a
+         skipped window makes the splits around it equal: the one with a
+         marker wins, else the later)
      {k:"trend", dir, n}  the n prior windows follow a line better than a step
    dir = 1 up, -1 down.  Thresholds in W.PAT.  Tags never change a
    severity, an order or a count. */
@@ -1994,7 +1997,7 @@ W.patterns=function(vals,valid,mu,sd,marks){
     var run=0;
     for(i=n-2;i>=0;i--){var v=vals[i];if(v==null||valid[i]===false)break;if((dir>0&&v>hi)||(dir<0&&v<lo))run++;else break;}
     if(run>=1)out.push({k:"run",dir:dir,n:run+1});
-    else{var lm=mkAt(n-1);out.push({k:lm?"jump":"spike",dir:dir,m:lm});}
+    else if(!pi.some(function(x){return dir>0?vals[x]>hi:vals[x]<lo;})){var lm=mkAt(n-1);out.push({k:lm?"jump":"spike",dir:dir,m:lm});}
   }
   var best=null,s;
   for(s=1;s<n-1;s++){
@@ -2005,7 +2008,8 @@ W.patterns=function(vals,valid,mu,sd,marks){
     R.forEach(function(r){L.forEach(function(l){if(d>0?r>l:r<l)pairs++;});});
     var gap=Math.abs(mR-mL),fl=Math.max(sdev(L),sdev(R),0.02*Math.abs(mL)),sc=gap/fl;
     if(pairs/(L.length*R.length)<P.STEP_PAIR||gap/Math.abs(mL)<P.STEP_REL||gap<=P.STEP_SEP*fl)continue;
-    if(!best||sc>best.sc||(sc===best.sc&&s>best.at))best={dir:d,at:s,m:mkAt(s),sc:sc,rss:sqs(L)+sqs(R)};
+    var sm=mkAt(s);
+    if(!best||sc>best.sc||(sc===best.sc&&(sm&&!best.m||!sm===!best.m&&s>best.at)))best={dir:d,at:s,m:sm,sc:sc,rss:sqs(L)+sqs(R)};
   }
   var tr=null;
   if(pi.length>=P.TREND_MIN){
