@@ -95,6 +95,7 @@ DECLARE
     v_row         VARCHAR2(32767);
     v_flags       VARCHAR2(400);
     v_plancell    VARCHAR2(400);
+    v_sk          VARCHAR2(1);       -- display order key: 0 large, 1 moderate, 2 rest
 
     v_windows_json    VARCHAR2(32767);
     v_weeks_iso_json  VARCHAR2(4000);
@@ -519,10 +520,17 @@ BEGIN
             ELSE '&mdash;'
         END;
 
+        -- display order (client-side, below): flagged statements first.
+        -- The loop itself stays in rnk order -- plan cards, Timeline rows
+        -- and the tail all depend on it.
+        v_sk := CASE score_bucket(s.cur_val, s.mu, s.sd, s.n_prior)
+                     WHEN 'large' THEN '0' WHEN 'moderate' THEN '1' ELSE '2' END;
+
         -- entity anchor sm-<sql_id> (sql/lib/anchor_id.plsql's rule; a
         -- sql_id is already lower-case [0-9a-z], so the slug is the id)
         v_row := '<tr id="sm-' || s.sql_id || '" data-sys="' || is_oracle_schema(s.last_username) || '"'
-            || CASE WHEN s.rnk > v_top_n OR s.cur_val IS NULL THEN ' data-tail="Y" hidden' ELSE '' END
+            || CASE WHEN s.rnk > v_top_n OR s.cur_val IS NULL THEN ' data-tail="Y" hidden'
+                    ELSE ' data-sk="' || v_sk || '"' END
             || '>'
             || '<td class="mono">' || s.sql_id
             || ' <a class="xlink" href="#sql-' || s.sql_id
@@ -649,6 +657,14 @@ BEGIN
 
     IF v_any_row THEN
         DBMS_OUTPUT.PUT_LINE('</tbody></table>');
+        -- Flagged statements first (large, moderate, then the rest; each
+        -- group in rnk order).  Runs while the page parses; with JS off the
+        -- table stays in rnk order (Current-window max elapsed).
+        DBMS_OUTPUT.PUT_LINE('<script>(function(){var t=document.getElementById("sqlmon-pool");'
+            || 'if(!t||!t.tBodies.length)return;var b=t.tBodies[0],tail=b.querySelector("tr[data-tail]"),'
+            || 'ps=[].slice.call(b.querySelectorAll("tr[data-sk]")).map(function(r,i){return {r:r,d:r.nextElementSibling,k:+r.getAttribute("data-sk"),i:i};});'
+            || 'ps.sort(function(x,y){return x.k-y.k||x.i-y.i;});'
+            || 'ps.forEach(function(p){b.insertBefore(p.r,tail);if(p.d&&p.d.classList.contains("sqlmon-detail"))b.insertBefore(p.d,tail);});})();</script>');
         IF v_tail_cnt > 0 THEN
             DBMS_OUTPUT.PUT_LINE('<span class="expander" data-for="sqlmon-pool" data-n="'
                 || v_tail_cnt || '" data-noun="more statements'

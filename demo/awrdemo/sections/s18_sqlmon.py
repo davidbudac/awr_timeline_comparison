@@ -435,7 +435,12 @@ def emit(w) -> str:
             tail_cnt += 1
             if p["cur_val"] is None:
                 nocur_cnt += 1
-        put('<tr id="sm-' + sid + '" data-sys="' + sysflag + '"' + tail + ">"
+        # display order (client-side, the script after the table): flagged
+        # statements first; the loop stays in rnk order (twin of 18's v_sk)
+        sk = {"large": "0", "moderate": "1"}.get(
+            H.policy_bucket("SQL", None, None, p["cur_val"], p["mu"], p["sd"], p["n_prior"]), "2")
+        put('<tr id="sm-' + sid + '" data-sys="' + sysflag + '"'
+            + (tail if tail else ' data-sk="' + sk + '"') + ">"
             + '<td class="mono">' + sid
             + ' <a class="xlink" href="#sql-' + sid + '" title="This SQL in the Top SQL pool">&#8599; Top SQL</a></td>'
             + "<td>" + esc(st["last_username"] if st["last_username"] is not None else "?")
@@ -516,6 +521,8 @@ def emit(w) -> str:
 
     if ranked:
         put("</tbody></table>")
+        put(next(t for t, _ in chrome.put_lines(chrome.sql_path(SQL_FILE))
+                 if t.startswith('<script>(function(){var t=document.getElementById("sqlmon-pool")')))
         if tail_cnt > 0:
             noun = "more statements" + (" (" + str(nocur_cnt) + " without a Current-window execution)"
                                         if nocur_cnt > 0 else "")
