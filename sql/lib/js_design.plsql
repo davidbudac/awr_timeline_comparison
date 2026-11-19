@@ -296,8 +296,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    var tl=det?doc.getElementById("tl-"+det.id):null;');
     DBMS_OUTPUT.PUT_LINE('    var unit=txt($(".big .u",card)),nrm=txt($(".big .nrm",card)).replace(/^normal\s+/,"");');
     DBMS_OUTPUT.PUT_LINE('    if(unit&&nrm.slice(-unit.length)===unit)nrm=nrm.slice(0,-unit.length).trim();');
-    DBMS_OUTPUT.PUT_LINE('    tbl.appendChild(drow({lead:true,key:card.id,sev:sev,name:lead?txt(lead):fam,fam:fam,cur:(txt($(".big .v",card))+(/^[\/%]/.test(unit)?"":" ")+unit).trim(),nrm:nrm,');
-    DBMS_OUTPUT.PUT_LINE('      band:cl(det&&$("td.c-band .bd",det))||cl($(".fc-band .bd",card)),delta:cl(det&&$("td.c-d .d",det))||cl($("h3 .d",card)),data:rowData(tl||$(".wg .r.bars",card)),body:card}));');
+    DBMS_OUTPUT.PUT_LINE('    var lrow=drow({lead:true,key:card.id,sev:sev,name:lead?txt(lead):fam,fam:fam,cur:(txt($(".big .v",card))+(/^[\/%]/.test(unit)?"":" ")+unit).trim(),nrm:nrm,');
+    DBMS_OUTPUT.PUT_LINE('      band:cl(det&&$("td.c-band .bd",det))||cl($(".fc-band .bd",card)),delta:cl(det&&$("td.c-d .d",det))||cl($("h3 .d",card)),data:rowData(tl||$(".wg .r.bars",card)),body:card});');
+    DBMS_OUTPUT.PUT_LINE('    tbl.appendChild(lrow);');
+    DBMS_OUTPUT.PUT_LINE('    /* plan 027: the card''s pattern tags (js_wingrid tagCards ran before) on the row */');
+    DBMS_OUTPUT.PUT_LINE('    var ptg=$(".fc-tags",card);if(ptg&&ptg.children.length){var pcl=ptg.cloneNode(true);pcl.className="fc-tags dtags";$(".dnm",lrow).appendChild(pcl);}');
     DBMS_OUTPUT.PUT_LINE('    moved++;');
     DBMS_OUTPUT.PUT_LINE('    $$(".rel tbody tr",card).forEach(function(tr){');
     DBMS_OUTPUT.PUT_LINE('      if(tr.classList.contains("twin")||!(tr.classList.contains("crit")||tr.classList.contains("warn")))return;');

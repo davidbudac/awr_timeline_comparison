@@ -209,6 +209,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.fc.f-large .fc-k .sv{color:var(--crit);background:color-mix(in oklch,var(--crit) 9%,transparent);border-color:color-mix(in oklch,var(--crit) 22%,transparent)}');
     DBMS_OUTPUT.PUT_LINE('.fc.f-moderate .fc-k .sv{color:var(--warn);background:color-mix(in oklch,var(--warn-dot) 13%,transparent);border-color:color-mix(in oklch,var(--warn-dot) 30%,transparent)}');
     DBMS_OUTPUT.PUT_LINE('.fc-k .sv > .dotk,.fc-k .sv > i{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.fc .ptag,#triage .ptag{border-color:var(--hairline);border-radius:6px;background:none}');
+    DBMS_OUTPUT.PUT_LINE('.drow .dnm .dtags{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}');
+    DBMS_OUTPUT.PUT_LINE('.drow .dtags .ptag{display:inline-block;font-size:11px;line-height:16px;padding:0 6px;border:1px solid var(--hairline);border-radius:6px;color:var(--ink-2);white-space:nowrap;cursor:help}');
+    DBMS_OUTPUT.PUT_LINE('.drow .dtags .ptag.p-rel{border-color:var(--acc);color:var(--acc-ink)}');
     DBMS_OUTPUT.PUT_LINE('.fc-k .fc-imp{height:22px;padding:0 8px;border-radius:6px;border:1px solid var(--hairline);background:none;font-size:12px;font-weight:500;color:var(--ink)}');
     DBMS_OUTPUT.PUT_LINE('.fc h3{font-size:17px;letter-spacing:-.012em}');
     DBMS_OUTPUT.PUT_LINE('.fc.lead h3{font-size:20px}');

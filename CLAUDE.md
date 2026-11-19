@@ -143,6 +143,7 @@ sql/
         └── wait_event_targets.sql  -- single '*' row = "no filter" sentinel
 tools/js2plsql.sh                   -- dev-time generator for the js_* / css_design .plsql bodies (lint check 24)
 tools/fonts2plsql.sh                -- dev-time generator for sql/lib/css_fonts.plsql (lint check 33)
+tools/js_unit_tests.js              -- node unit tests of the client scripts' pure helpers (check.sh)
 side/create_weekly_baselines.sql    -- optional baselines (the only writer)
 run_awr_fleet.sh, awr_fleet_extract.sql, sql/fleet/ -- fleet report (see that section)
 server/                             -- optional scheduler web app (see that section)
@@ -704,6 +705,32 @@ at}`, short labels "Release 4.2" → "R 4.2"), `markerAt(o)`, `sizeRow`,
 `[data-mk-at="o"]` slots get the marker on that boundary (`data-mk-pre`,
 `data-mk-icon`). `body.js-wg` hides prior values until hover.
 
+**Pattern tags (plan 027).** `AWR_WG.patterns(vals, valid, mu, sd,
+marks)` / `patternText(tag, dates)` / `PAT` (the thresholds) are pure and
+unit-tested in `tools/js_unit_tests.js`. At most two tags per row, the
+Current one first. Nothing is tagged with fewer than 4 valid prior windows
+or no Current value. Current outside the band (prior mean +/- 2 sigma,
+sigma floored at 2 % of the mean -- the band `sizeRow` and the band glyph
+draw) is "spike" / "dip" ("jump" / "drop after <marker>" when a release
+marker sits on Current's left edge) when the window just before it is
+inside the band, else a run ("high / low for N windows"; a skipped window
+ends the run). A step needs at least 3 valid windows before and 2 after
+the split, at least 90 % of the after / before pairs on the same side, a
+mean shift of at least 10 % and more than 2 x the larger side's floored
+sigma ("step up at <marker>" or "... on <date>"); a trend needs at least 6
+valid windows, R squared >= 0.6 and a total rise of at least 10 % of the
+mean, and wins over a step only when a straight line fits at least as
+well (smaller or equal residual sum of squares). `tagCards()` (on
+DOMContentLoaded, after `render`) fills `.fc-tags` in every `#findings
+article.fc:not(.chg)` header and the card's `#triage .tri-tags` (plan 025's
+containers) with `span.ptag.p-<kind>[.p-rel][title]` chips, from the
+card's `.fc-main .wg .r[data-v]` row (`.r[data-v]`, not `.r.bars`:
+js_timeline turns the DB time card's row into `.r.ash`), `data-mu0`-or-
+`data-mu` / `data-sd`, the windows' validity and dates from `AWR_WIN` and
+the markers from `AWR_WG.markers()`. Tags are a hint: they never change a
+severity, the card order or a count. Section 25 (Onset) is not their data
+source (fixed metrics on the continuous series; the tags compare periods).
+
 ### Band glyph (`sql/lib/band_glyph.plsql`, twin `helpers.py`)
 
 Replaces the v1.4 `data-dev` heat tint and the old Change / z / %Δ columns
@@ -826,7 +853,10 @@ designs) and the server's env whitelist.
   into the Moved tab; Normal = `#s-normal` moved in; Improved
   = its `.note.improved`; `findTable()` calls `window.AWR_fcOpen(card)`
   on every card it moves into a row -- the row is the fold -- and
-  `css_design.css` hides 07's `#triage` list, plan 025) + `aside.dside`
+  `css_design.css` hides 07's `#triage` list, plan 025;
+  the lead row of each card shows a copy of the card's `.fc-tags` in its
+  `.dnm` cell, `.fc-tags.dtags` after the `<small>` the palette reads,
+  plan 027) + `aside.dside`
   (`#s-changes` moved in, plus
   the releases from `AWR_WG.markers()`; a card body inside the grid
   scrolls on its own, so a 169-column plan card never widens the page).
@@ -2112,9 +2142,11 @@ the demo.
 
 - **`./tools/check.sh` is the one command** (CI runs exactly this on every
   push to `main` and every PR): `./lint.sh`, `bash -n` on every tracked
-  `*.sh`, a strict parse of every tracked `*.py` (a `SyntaxWarning` fails)
-  and the server unit tests (`python3 -m unittest discover -s server/tests
-  -t .`). No DB needed, about 5 s.
+  `*.sh`, a strict parse of every tracked `*.py` (a `SyntaxWarning` fails),
+  the server unit tests (`python3 -m unittest discover -s server/tests
+  -t .`) and the client JS unit tests (`node tools/js_unit_tests.js`: the
+  pure helpers of `sql/lib/src/*.js` under a stub window / document;
+  skipped without node). No DB needed, about 5 s.
 - **`./lint.sh` first** (also runs in CI): grep-based checks that encode the
   footguns below — bad `@@` include paths, flat template-target includes,
   stray `~word` substitutions (the tilde gotcha), `dbid = ~dbid` equality,

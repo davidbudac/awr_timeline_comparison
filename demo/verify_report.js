@@ -81,6 +81,10 @@
  *     I/O card's SQL row; a plan-change card that explains a card sits
  *     right under it (dashboard: in What changed around it, beside the
  *     findings);
+ *   - pattern tags (plan 027): every chip has text and a title, none on a
+ *     plan / config card, a triage row and a dashboard findings row show
+ *     their card's chips, the demo Physical I/O card reads "jump after
+ *     Release 4.2" + "step up at Release 4.1";
  *   - the design (window.AWR_DESIGN, design=quiet|dashboard; none =
  *     classic): quiet and dashboard -- "How to read" opens / closes the
  *     Activity help, a table's copy menu holds CSV + Markdown; dashboard --
@@ -1072,6 +1076,25 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       } else out.jk = 'none (no large card)';
       // the rail sub-link names stay clean (the share is CSS ::after only)
       out.subNames = [...document.querySelectorAll('nav.toc a.sub')].every(a => !/%/.test(a.textContent) && !/%/.test(a.getAttribute('data-label') || ''));
+      // plan 027: pattern tags on the finding cards (and the triage rows)
+      const fcs = [...document.querySelectorAll('#findings article.fc:not(.chg)')];
+      out.tagCards = fcs.length;
+      out.tagNoTitle = [...document.querySelectorAll('#findings .ptag')].filter(t => !t.title || !t.textContent).length;
+      out.tagChg = document.querySelectorAll('article.fc.chg .ptag').length;
+      out.tagIo = [...document.querySelectorAll('#f-io .fc-tags .ptag')].map(t => t.textContent).join('|');
+      out.tagTri = [...document.querySelectorAll('#triage .tri-row[data-card]')].filter(r => {
+        const c = document.getElementById(r.getAttribute('data-card'));
+        const a = c ? [...c.querySelectorAll('.fc-tags .ptag')].map(t => t.textContent).join('|') : '';
+        const b = [...r.querySelectorAll('.tri-tags .ptag')].map(t => t.textContent).join('|');
+        return a !== b;
+      }).map(r => r.getAttribute('data-card'));
+      // dashboard design: each lead row shows its card's tags (step 6b)
+      out.tagRows = [...document.querySelectorAll('details.drow.lead')].filter(r => {
+        const c = r.querySelector('article.fc');
+        const a = c ? [...c.querySelectorAll('.fc-tags .ptag')].map(t => t.textContent).join('|') : '';
+        const b = [...r.querySelectorAll(':scope > summary .dtags .ptag')].map(t => t.textContent).join('|');
+        return a !== b;
+      }).map(r => r.id);
       // All sections: every library section shows in full, row state or not
       window.AWR_setView('all', false); await wait(250);
       out.allFull = libs.filter(x => { const t = x.querySelector('table, .chart-wrap'); return t && !vis(t); }).map(x => x.id);
@@ -1102,6 +1125,12 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (/^FAIL/.test(p4.toggle)) fail('evidence library row toggle ' + p4.toggle);
     if (/^FAIL/.test(p4.reveal)) fail('evidence library reveal ' + p4.reveal);
     if (!p4.subsOk) fail('rail card sub-links ' + p4.subs);
+    if (p4.tagNoTitle) fail('pattern tags: ' + p4.tagNoTitle + ' chip(s) without text / title');
+    if (p4.tagChg) fail('pattern tags: ' + p4.tagChg + ' chip(s) on a plan / config card');
+    if (p4.tagTri.length) fail('pattern tags: triage row differs from its card: ' + p4.tagTri.join(', '));
+    if (p4.tagRows.length) fail('pattern tags: dashboard row differs from its card: ' + p4.tagRows.join(', '));
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && p4.tagIo !== 'jump after Release 4.2|step up at Release 4.1')
+      fail('pattern tags: the demo Physical I/O card shows "' + p4.tagIo + '"');
     if (!p4.triageOk) fail('triage list: ' + p4.triage + ' rows (expected one per card, in card order, micro strip + impact cell)');
     if (!p4.foldOk) fail('folded cards: ' + p4.folded + ' start folded (expected all but one)');
     if (/^FAIL/.test(p4.unfold)) fail('a triage row click did not open its card: ' + p4.unfold);

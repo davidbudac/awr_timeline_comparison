@@ -1408,6 +1408,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 900px){#triage .tri-hd{display:none}#triage .tri-row{grid-template-columns:minmax(0,1fr) 140px}#triage .tri-imp,#triage .tri-spark{display:none}}');
     DBMS_OUTPUT.PUT_LINE('.fc .fc-sum{font-weight:400;color:var(--ink-soft)} .fc:not(.fold) .fc-sum{display:none}');
     DBMS_OUTPUT.PUT_LINE('.fc .fc-tags{display:inline-flex;flex-wrap:wrap;gap:4px} .fc .fc-tags:empty{display:none}');
+    -- plan 027: pattern tags (js_wingrid tagCards) in the card header and
+    -- the triage rows (#triage, plan 025); a hint, never a severity colour
+    -- (the .fc-tags / .tri-tags containers are styled by plan 025 above)
+    DBMS_OUTPUT.PUT_LINE('.fc .ptag,#triage .ptag{display:inline-block;font-size:11.5px;font-weight:400;line-height:18px;padding:0 8px;border:1px solid var(--line-2);border-radius:9px;color:var(--ink-2);background:var(--panel);white-space:nowrap;cursor:help}');
+    DBMS_OUTPUT.PUT_LINE('.fc .ptag.p-rel,#triage .ptag.p-rel{border-color:var(--acc);color:var(--acc-ink)}');
     DBMS_OUTPUT.PUT_LINE('.fc .fc-tg{font:inherit;font-size:12px;color:var(--ink-soft);background:var(--panel);border:1px solid var(--hairline);border-radius:6px;padding:1px 8px;cursor:pointer}');
     DBMS_OUTPUT.PUT_LINE('.fc .fc-tg:hover{color:var(--ink);border-color:var(--muted)}');
     DBMS_OUTPUT.PUT_LINE('.fc.fold{padding-bottom:var(--s4);cursor:pointer}');

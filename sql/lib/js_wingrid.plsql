@@ -20,6 +20,10 @@
 --                 the flags of every [data-wg] under scope
 --   fit(wg) / refit()   re-measure (tight labels, flag layout) after a
 --                 layout change; run on resize, awr:view and details toggle
+--   patterns(vals, valid, mu, sd, marks)   pattern tags of one row (pure;
+--                 plan 027), patternText(tag, dates) their words, PAT the
+--                 thresholds; tagCards() fills the finding cards' .fc-tags
+--                 (and #triage .tri-tags) on DOMContentLoaded
 -- Also, at DOMContentLoaded: every a.ent whose target id is missing is
 -- unwrapped to plain text (only link to rows that are emitted); every
 -- [data-mk-at="o"] slot gets the marker on that boundary; a.jump[data-tl]
@@ -64,6 +68,95 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  return MK;');
     DBMS_OUTPUT.PUT_LINE('};');
     DBMS_OUTPUT.PUT_LINE('W.markerAt=function(o){var r=null;W.markers().forEach(function(m){if(m.o===o)r=m;});return r;};');
+    DBMS_OUTPUT.PUT_LINE('/* ---- pattern tags (plan 027): the shape of one row''s 13 values, as a');
+    DBMS_OUTPUT.PUT_LINE('   hint.  Pure: vals oldest first (null = no value), valid[i] false = a');
+    DBMS_OUTPUT.PUT_LINE('   skipped window, mu / sd = the row''s prior mean / sd (data-mu / data-sd),');
+    DBMS_OUTPUT.PUT_LINE('   marks = [{i: column index whose LEFT edge carries a marker, l: label}].');
+    DBMS_OUTPUT.PUT_LINE('   At most two tags, the Current one first:');
+    DBMS_OUTPUT.PUT_LINE('     {k:"jump"|"spike", dir, m}  only Current is outside mean +- 2 floored');
+    DBMS_OUTPUT.PUT_LINE('         sigma ("jump" when a marker sits on Current''s left edge, m = label)');
+    DBMS_OUTPUT.PUT_LINE('     {k:"run", dir, n}  Current and the n-1 windows right before it are all');
+    DBMS_OUTPUT.PUT_LINE('         outside on the same side (a skipped window ends the run)');
+    DBMS_OUTPUT.PUT_LINE('     {k:"step", dir, at, m}  the prior windows from index at on sit apart');
+    DBMS_OUTPUT.PUT_LINE('         from the ones before (m = the marker on that edge, else null)');
+    DBMS_OUTPUT.PUT_LINE('     {k:"trend", dir, n}  the n prior windows follow a line better than a step');
+    DBMS_OUTPUT.PUT_LINE('   dir = 1 up, -1 down.  Thresholds in W.PAT.  Tags never change a');
+    DBMS_OUTPUT.PUT_LINE('   severity, an order or a count. */');
+    DBMS_OUTPUT.PUT_LINE('W.PAT={MIN_PRIOR:4,STEP_L:3,STEP_R:2,STEP_PAIR:0.9,STEP_REL:0.10,STEP_SEP:2,TREND_MIN:6,TREND_R2:0.6,TREND_REL:0.10};');
+    DBMS_OUTPUT.PUT_LINE('function avg(a){var s=0;for(var i=0;i<a.length;i++)s+=a[i];return s/a.length;}');
+    DBMS_OUTPUT.PUT_LINE('function sdev(a){if(a.length<2)return 0;var m=avg(a),s=0;for(var i=0;i<a.length;i++)s+=(a[i]-m)*(a[i]-m);return Math.sqrt(s/(a.length-1));}');
+    DBMS_OUTPUT.PUT_LINE('function sqs(a){var m=avg(a),s=0;for(var i=0;i<a.length;i++)s+=(a[i]-m)*(a[i]-m);return s;}');
+    DBMS_OUTPUT.PUT_LINE('W.patterns=function(vals,valid,mu,sd,marks){');
+    DBMS_OUTPUT.PUT_LINE('  var P=W.PAT,n=vals.length,c=vals[n-1],out=[],pi=[],i;');
+    DBMS_OUTPUT.PUT_LINE('  if(c==null||mu==null||n<2)return out;');
+    DBMS_OUTPUT.PUT_LINE('  for(i=0;i<n-1;i++)if(vals[i]!=null&&valid[i]!==false)pi.push(i);');
+    DBMS_OUTPUT.PUT_LINE('  if(pi.length<P.MIN_PRIOR)return out;');
+    DBMS_OUTPUT.PUT_LINE('  var mkAt=function(x){for(var k=0;k<(marks||[]).length;k++)if(marks[k].i===x)return marks[k].l;return null;};');
+    DBMS_OUTPUT.PUT_LINE('  var den=Math.max(sd||0,0.02*Math.abs(mu)),hi=mu+2*den,lo=mu-2*den,dir=c>hi?1:c<lo?-1:0;');
+    DBMS_OUTPUT.PUT_LINE('  if(dir){');
+    DBMS_OUTPUT.PUT_LINE('    var run=0;');
+    DBMS_OUTPUT.PUT_LINE('    for(i=n-2;i>=0;i--){var v=vals[i];if(v==null||valid[i]===false)break;if((dir>0&&v>hi)||(dir<0&&v<lo))run++;else break;}');
+    DBMS_OUTPUT.PUT_LINE('    if(run>=1)out.push({k:"run",dir:dir,n:run+1});');
+    DBMS_OUTPUT.PUT_LINE('    else{var lm=mkAt(n-1);out.push({k:lm?"jump":"spike",dir:dir,m:lm});}');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  var best=null,s;');
+    DBMS_OUTPUT.PUT_LINE('  for(s=1;s<n-1;s++){');
+    DBMS_OUTPUT.PUT_LINE('    var L=[],R=[];pi.forEach(function(x){(x<s?L:R).push(vals[x]);});');
+    DBMS_OUTPUT.PUT_LINE('    if(L.length<P.STEP_L||R.length<P.STEP_R)continue;');
+    DBMS_OUTPUT.PUT_LINE('    var mL=avg(L),mR=avg(R);if(mL===0)continue;');
+    DBMS_OUTPUT.PUT_LINE('    var d=mR>mL?1:-1,pairs=0;');
+    DBMS_OUTPUT.PUT_LINE('    R.forEach(function(r){L.forEach(function(l){if(d>0?r>l:r<l)pairs++;});});');
+    DBMS_OUTPUT.PUT_LINE('    var gap=Math.abs(mR-mL),fl=Math.max(sdev(L),sdev(R),0.02*Math.abs(mL)),sc=gap/fl;');
+    DBMS_OUTPUT.PUT_LINE('    if(pairs/(L.length*R.length)<P.STEP_PAIR||gap/Math.abs(mL)<P.STEP_REL||gap<=P.STEP_SEP*fl)continue;');
+    DBMS_OUTPUT.PUT_LINE('    if(!best||sc>best.sc||(sc===best.sc&&s>best.at))best={dir:d,at:s,m:mkAt(s),sc:sc,rss:sqs(L)+sqs(R)};');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  var tr=null;');
+    DBMS_OUTPUT.PUT_LINE('  if(pi.length>=P.TREND_MIN){');
+    DBMS_OUTPUT.PUT_LINE('    var ys=pi.map(function(x){return vals[x];}),mx=avg(pi),my=avg(ys),sxx=0,sxy=0,syy=0;');
+    DBMS_OUTPUT.PUT_LINE('    pi.forEach(function(x,k){sxx+=(x-mx)*(x-mx);sxy+=(x-mx)*(ys[k]-my);syy+=(ys[k]-my)*(ys[k]-my);});');
+    DBMS_OUTPUT.PUT_LINE('    if(sxx>0&&syy>0&&my!==0){');
+    DBMS_OUTPUT.PUT_LINE('      var b=sxy/sxx,r2=sxy*sxy/(sxx*syy),rss=syy-sxy*sxy/sxx,rise=Math.abs(b*(pi[pi.length-1]-pi[0]));');
+    DBMS_OUTPUT.PUT_LINE('      if(r2>=P.TREND_R2&&rise>=P.TREND_REL*Math.abs(my))tr={dir:b>0?1:-1,n:pi.length,rss:rss};');
+    DBMS_OUTPUT.PUT_LINE('    }');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  if(tr&&(!best||tr.rss<=best.rss))out.push({k:"trend",dir:tr.dir,n:tr.n});');
+    DBMS_OUTPUT.PUT_LINE('  else if(best)out.push({k:"step",dir:best.dir,at:best.at,m:best.m});');
+    DBMS_OUTPUT.PUT_LINE('  return out;');
+    DBMS_OUTPUT.PUT_LINE('};');
+    DBMS_OUTPUT.PUT_LINE('/* a tag''s words: text (on the chip) and title (the hover) */');
+    DBMS_OUTPUT.PUT_LINE('W.patternText=function(t,dates){');
+    DBMS_OUTPUT.PUT_LINE('  var up=t.dir>0,dt=function(i){return (dates&&dates[i])||"?";},lab=function(l){l=String(l);return l.length>24?l.slice(0,23)+"...":l;};');
+    DBMS_OUTPUT.PUT_LINE('  if(t.k==="jump")return {text:(up?"jump":"drop")+" after "+lab(t.m),title:"Only the Current window is outside the normal range of the prior windows; the marker "+t.m+" sits right before it."};');
+    DBMS_OUTPUT.PUT_LINE('  if(t.k==="spike")return {text:(up?"spike":"dip")+": Current only",title:"Only the Current window is outside the normal range of the prior windows."};');
+    DBMS_OUTPUT.PUT_LINE('  if(t.k==="run")return {text:(up?"high":"low")+" for "+t.n+" windows",title:"The Current window and the "+(t.n-1)+" before it are all "+(up?"above":"below")+" the normal range."};');
+    DBMS_OUTPUT.PUT_LINE('  if(t.k==="step")return {text:"step "+(up?"up":"down")+(t.m?" at "+lab(t.m):" on "+dt(t.at)),title:"The prior windows from "+dt(t.at)+" on sit "+(up?"above":"below")+" the ones before"+(t.m?" (marker "+t.m+")":"")+": the normal range mixes two levels."};');
+    DBMS_OUTPUT.PUT_LINE('  return {text:(up?"rising":"falling")+" across "+t.n+" windows",title:"The prior windows follow a steady "+(up?"rise":"fall")+": the normal range is a moving target."};');
+    DBMS_OUTPUT.PUT_LINE('};');
+    DBMS_OUTPUT.PUT_LINE('function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];});}');
+    DBMS_OUTPUT.PUT_LINE('/* the compared windows as column indices: validity, dates, marker columns */');
+    DBMS_OUTPUT.PUT_LINE('function winIdx(){');
+    DBMS_OUTPUT.PUT_LINE('  var w=(window.AWR_WIN&&window.AWR_WIN.w)||[],valid=[],dates=[],ix={};');
+    DBMS_OUTPUT.PUT_LINE('  w.forEach(function(x,i){valid.push(x.v!=="N");dates.push(x.d);ix[x.o]=i;});');
+    DBMS_OUTPUT.PUT_LINE('  var marks=W.markers().map(function(m){return {i:ix[m.o],l:m.l};}).filter(function(m){return m.i!=null;});');
+    DBMS_OUTPUT.PUT_LINE('  return {valid:valid,dates:dates,marks:marks};');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* every finding card (07) gets its tags in its header; plan 025''s triage');
+    DBMS_OUTPUT.PUT_LINE('   row for the card gets the same chips */');
+    DBMS_OUTPUT.PUT_LINE('function tagCards(){');
+    DBMS_OUTPUT.PUT_LINE('  var X=winIdx();if(!X.valid.length)return;');
+    DBMS_OUTPUT.PUT_LINE('  $$("#findings article.fc:not(.chg)").forEach(function(card){');
+    DBMS_OUTPUT.PUT_LINE('    var row=card.querySelector(".fc-main .wg .r[data-v]");if(!row)return;');
+    DBMS_OUTPUT.PUT_LINE('    var vals=nums(row.getAttribute("data-v"));if(vals.length!==X.valid.length)return;');
+    DBMS_OUTPUT.PUT_LINE('    var a=function(n){var v=row.getAttribute(n+"0");return num(v!=null?v:row.getAttribute(n));};');
+    DBMS_OUTPUT.PUT_LINE('    var tags=W.patterns(vals,X.valid,a("data-mu"),a("data-sd"),X.marks);if(!tags.length)return;');
+    DBMS_OUTPUT.PUT_LINE('    var html=tags.map(function(t){var p=W.patternText(t,X.dates);');
+    DBMS_OUTPUT.PUT_LINE('      return ''<span class="ptag p-''+t.k+(t.m?'' p-rel'':'''')+''" title="''+esc(p.title)+''">''+esc(p.text)+''</span>'';}).join("");');
+    DBMS_OUTPUT.PUT_LINE('    var box=card.querySelector(".fc-tags");');
+    DBMS_OUTPUT.PUT_LINE('    if(!box){var k=card.querySelector(".fc-h .fc-k");if(!k)return;box=mk("span","fc-tags",k);}');
+    DBMS_OUTPUT.PUT_LINE('    box.innerHTML=html;');
+    DBMS_OUTPUT.PUT_LINE('    $$(''#triage .tri-row[data-card="''+card.id+''"] .tri-tags'').forEach(function(t){t.innerHTML=html;});');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* one bars row: grey prior columns, the Current one in the accent, the');
     DBMS_OUTPUT.PUT_LINE('   prior normal zone (mean +- 1 / 2 floored sigma; in the Timeline grid');
     DBMS_OUTPUT.PUT_LINE('   #tl only behind the Current bar) and a severity dot */');
@@ -172,7 +265,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('window.addEventListener("resize",function(){if(rt)clearTimeout(rt);rt=setTimeout(refit,120);});');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("awr:view",function(){setTimeout(refit,40);});');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("toggle",function(ev){var t=ev.target;if(t&&t.querySelector&&t.querySelector("[data-wg]"))setTimeout(function(){W.render(t);},20);},true);');
-    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("DOMContentLoaded",function(){unwrap();fillMk();W.render(doc);setTimeout(refit,300);});');
+    DBMS_OUTPUT.PUT_LINE('doc.addEventListener("DOMContentLoaded",function(){unwrap();fillMk();W.render(doc);tagCards();setTimeout(refit,300);});');
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');
 END;
