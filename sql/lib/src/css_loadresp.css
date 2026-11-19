@@ -1,1 +1,52 @@
-/* css_loadresp: styles of section 20_load_response (Load vs response time).  STUB (scaffold). */
+/* css_loadresp: styles of section 20 (Load vs response time).  Every
+   selector starts with #load-response; colours are the report's tokens,
+   so the theme toggle and the quiet / dashboard designs restyle it. */
+#load-response .lr-chart{display:none;margin:var(--s3) 0 var(--s2)}
+#load-response.lr-js .lr-chart{display:block}
+#load-response .lr-ctl{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);align-items:center;margin-bottom:var(--s2)}
+#load-response .lr-seg{display:inline-flex;align-items:center;flex-wrap:nowrap;max-width:100%;border:1px solid var(--hairline);border-radius:8px;padding:2px;background:var(--panel)}
+#load-response .lr-sl{font-size:12px;color:var(--muted);padding:0 8px 0 6px}
+#load-response .lr-seg button{border:0;background:none;padding:3px 10px;border-radius:6px;font:inherit;font-size:13px;line-height:20px;color:var(--ink-2);cursor:pointer;white-space:nowrap}
+#load-response .lr-seg button:hover{color:var(--ink)}
+#load-response .lr-seg button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
+#load-response .lr-seg button:disabled{opacity:.4;cursor:default}
+#load-response .lr-seg button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+#load-response .lr-lg{display:flex;flex-wrap:wrap;gap:4px var(--s4);font-size:12px;color:var(--ink-3);margin-bottom:var(--s1)}
+#load-response .lr-lg span{display:inline-flex;align-items:center;gap:6px}
+#load-response .lr-k{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}
+#load-response .lr-k.kc{background:var(--acc)}
+#load-response .lr-k.kp{border:1.6px solid var(--ink-2);background:var(--panel);box-sizing:border-box}
+#load-response .lr-k.kb{width:6px;height:6px;background:var(--ink-4)}
+#load-response .lr-k.kn{width:16px;height:0;border-radius:0;border-top:2px dashed var(--mean)}
+#load-response .lr-k.kd{width:14px;height:9px;border-radius:2px;background:var(--zone2)}
+#load-response .lr-plot{width:100%;min-height:40px;overflow:hidden}
+#load-response .lr-svg{display:block;overflow:visible}
+#load-response .lr-svg text{font-size:11px;font-variant-numeric:tabular-nums}
+#load-response .lr-tl{fill:var(--ink-3)}
+#load-response .lr-at{fill:var(--ink-3);font-size:11.5px}
+#load-response .lr-g{stroke:var(--line);stroke-width:1}
+#load-response .lr-ax{stroke:var(--zone1);stroke-width:1}
+#load-response .lr-band{fill:var(--zone2);opacity:.85}
+#load-response .lr-norm{fill:none;stroke:var(--mean);stroke-width:1.6;stroke-dasharray:6 4}
+#load-response .lr-b{fill:var(--ink-4);opacity:.55}
+#load-response .lr-b.c{fill:var(--acc);opacity:.6}
+#load-response .lr-b.out{opacity:.8}
+#load-response .lr-w{fill:var(--panel);stroke:var(--ink-2);stroke-width:1.6;cursor:pointer}
+#load-response .lr-w:hover,#load-response .lr-w:focus-visible,#load-response .lr-w.hl{stroke:var(--ink);stroke-width:2.4;outline:none}
+#load-response .lr-cur{fill:var(--acc);stroke:var(--panel);stroke-width:2;cursor:pointer}
+#load-response .lr-cur:focus-visible{stroke:var(--ink);outline:none}
+#load-response .lr-cl{stroke:var(--acc);stroke-width:1.5;stroke-dasharray:2 3}
+#load-response .lr-ce{fill:var(--panel);stroke:var(--acc);stroke-width:1.5}
+#load-response .lr-cll{fill:var(--ink);font-weight:600;font-size:12.5px}
+#load-response .lr-cls{fill:var(--ink-3)}
+#load-response .lr-rd{margin:var(--s2) 0 var(--s3);max-width:76ch}
+#load-response .lr-tbl caption,#load-response .lr-tbl2 caption{caption-side:top;text-align:left;font-size:12px;color:var(--ink-3);padding-bottom:4px}
+#load-response .lr-z{color:var(--ink-3);font-size:12px;margin-left:4px}
+#load-response .lr-sk,#load-response .lr-dt{color:var(--ink-3)}
+#load-response tr.lr-nrm td{color:var(--ink-3);border-top:1px solid var(--hairline)}
+#load-response .lr-all{margin-top:var(--s3)}
+#load-response .lr-all summary{cursor:pointer;color:var(--ink-2);font-size:13px}
+#load-response .lr-tw{max-width:100%;overflow-x:auto}
+#load-response .lr-tbl td:nth-child(2){white-space:nowrap}
+#load-response .lr-tbl td,#load-response .lr-tbl2 td{white-space:nowrap}
+@media (max-width:560px){#load-response .lr-lg{font-size:11px}#load-response .lr-seg button{padding:3px 6px;font-size:12px}#load-response .lr-sl{padding:0 4px}}
