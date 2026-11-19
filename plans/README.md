@@ -87,7 +87,7 @@ What the re-check added to the plans:
 | [020](020-rank-finding-cards-by-impact.md) | Finding cards are ranked by the DB time they added; Summary shows z capped at 10 sigma | 1, 19 | P1 | M | MED | — | DONE (`91671ce`); DB run pending (owner) |
 | [021](021-db-time-breakdown-in-verdict.md) | The verdict shows where the extra DB time went (DB CPU + wait classes) | 2 | P1 | M | LOW-MED | 020 | DONE (`dc8dbff`); DB run pending (owner) |
 | [022](022-one-finding-count.md) | One finding count everywhere: a finding is a card | 3 | P2 | S-M | LOW | 020 | DONE (`3db73d5`); DB run pending (owner) |
-| [023](023-verdict-first-compact-activity.md) | Summary: the verdict comes first, the Activity charts open compact | 4 | P1 | M | LOW | — | TODO (owner: option A) |
+| [023](023-verdict-first-compact-activity.md) | Summary: the verdict comes first, the Activity charts open compact | 4 | P1 | M | LOW | — | DONE (`ecb0be3`, option A); DB run pending (owner) |
 | [024](024-activity-windows-side-by-side.md) | Activity charts: "Windows side by side" mode | 5 | P2 | L | MED | 023 | TODO (owner: default Full span) |
 | [025](025-findings-triage-list-and-folded-cards.md) | Findings triage list, folded secondary cards, quieter card charts | 6 | P1 | M | MED | 020 | TODO (owner: keep) |
 | [026](026-cause-next-to-effect-io-card.md) | The Physical I/O card names its top statement; the plan card that explains it sits under it | 7 | P2 | M | MED | after 025 | TODO |
