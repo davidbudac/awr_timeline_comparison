@@ -864,8 +864,9 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       out.zcap = [...document.querySelectorAll('#findings article.fc .fc-h .bd .ov, #findings article.fc dl.ev .bd .ov, '
         + '#changes-slot article.fc .fc-h .bd .ov, #changes-slot dl.ev .bd .ov, #s-normal .nr .bd .ov, #overview .bd .ov, '
         + '.dft .drow .dbd .bd .ov')]
-        .map(b => b.textContent).filter(t => /\u03c3/.test(t) && !/^[<>]/.test(t))
-        .filter(t => Math.abs(parseFloat(t.replace('\u2212', '-'))) > 10);
+        .map(b => b.textContent).filter(t => /\u03c3/.test(t))
+        // a capped text reads >+10 / <-10 (= 10, passes); an uncapped >+99 fails
+        .filter(t => Math.abs(parseFloat(t.replace(/^[<>]/, '').replace('\u2212', '-'))) > 10);
       // All sections: every library section shows in full, row state or not
       window.AWR_setView('all', false); await wait(250);
       out.allFull = libs.filter(x => { const t = x.querySelector('table, .chart-wrap'); return t && !vis(t); }).map(x => x.id);

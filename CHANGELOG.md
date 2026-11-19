@@ -120,7 +120,7 @@ release bumps `awr_version`).
 ### Report
 - **Finding cards are ranked by the DB time they added.** Each card's time
   measure (DB time, DB CPU or its wait class) above its prior mean, in AAS,
-  orders the cards and shows as a chip ("+6.315 AAS · 70% of the
+  orders the cards and shows as a chip ("+6.313 AAS · 70% of the
   DB-time rise"); cards without a time measure follow, large before
   moderate. DB time stays second. The verdict follows the same order. Band
   glyphs in the Summary view print z only up to ">+10 sigma"; tables keep
