@@ -138,6 +138,79 @@ BEGIN
         || ' width="21.4" height="44"/><line class="gd-cl" x1="128.4" x2="128.4" y1="0" y2="44"/><rect class="gd-bc" x="135.1" y="14" width="8" height="26" rx="1"/><text class="gd-t pn" x="53.5" y="10"'
         || ' text-anchor="middle">pinned</text></svg></div><div class="gx2"><h3>Hover and pin</h3><p>Timeline: hover a column for its values; click a date or an ASH stripe to pin it. <span class="g2">The gutter'
         || ' then compares against it (&ldquo;vs 13 Aug&rdquo;); Current or Esc clears it.</span></p></div></div>');
+    -- the visualization sections (20-28): one item each
+    DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="Scatter of load against response time with a dashed normal'
+        || ' curve"><path d="M6 12 C30 30 70 33 144 34" style="stroke:var(--ink-3);fill:none" stroke-dasharray="3 3"/><circle cx="14" cy="20" r="1.6" style="fill:var(--ink-4)"/><circle'
+        || ' cx="22" cy="26" r="1.6" style="fill:var(--ink-4)"/><circle cx="34" cy="30" r="1.6" style="fill:var(--ink-4)"/><circle cx="46" cy="31" r="1.6" style="fill:var(--ink-4)"/><circle'
+        || ' cx="58" cy="33" r="1.6" style="fill:var(--ink-4)"/><circle cx="70" cy="32" r="1.6" style="fill:var(--ink-4)"/><circle cx="82" cy="34" r="1.6" style="fill:var(--ink-4)"/><circle'
+        || ' cx="94" cy="33" r="1.6" style="fill:var(--ink-4)"/><circle cx="106" cy="35" r="1.6" style="fill:var(--ink-4)"/><circle cx="120" cy="34" r="1.6" style="fill:var(--ink-4)"/><circle'
+        || ' cx="132" cy="33" r="1.6" style="fill:var(--ink-4)"/><circle cx="96" cy="10" r="4" style="fill:var(--acc)"/></svg></div><div class="gx2"><h3>Load vs response time</h3><p>Further'
+        || ' right means busier, higher means each call took longer; a Current dot along the dashed curve is just more traffic. <span class="g2">A Current dot high above the curve at its'
+        || ' usual load means each call got slower: something broke, not the volume.</span></p></div></div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="Log-log plane: executions across, time per execution up,'
+        || ' diagonals of equal total time"><line x1="6" x2="144" y1="30" y2="30" style="stroke:var(--line-2);fill:none"/><line x1="60" x2="60" y1="2" y2="42"'
+        || ' style="stroke:var(--line-2);fill:none"/><line x1="20" x2="110" y1="2" y2="42" style="stroke:var(--ink-3);fill:none" stroke-dasharray="3 3"/><circle cx="56" cy="31" r="2"'
+        || ' style="fill:var(--ink-4)"/><circle cx="63" cy="28" r="2" style="fill:var(--ink-4)"/><circle cx="66" cy="32" r="2" style="fill:var(--ink-4)"/><circle cx="72" cy="29" r="2"'
+        || ' style="fill:var(--ink-4)"/><circle cx="62" cy="9" r="5" style="fill:var(--crit-dot)"/><circle cx="118" cy="29" r="3.5" style="fill:var(--crit-dot)"/></svg></div><div'
+        || ' class="gx2"><h3>Volume vs unit cost</h3><p>Each dot is a statement or wait event: how often it ran across, how long each run took up, both against its own normal; dot area is its'
+        || ' time in Current. <span class="g2">Right = ran more often (look at the caller); up = slower per run (plan, I/O, locks); the dashed diagonals mark equal total'
+        || ' time.</span></p></div></div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="Histogram of wait latency: Current bars against the normal'
+        || ' shape"><rect x="8" y="36" width="12" height="4" rx="1" style="fill:var(--acc);fill-opacity:.75"/><rect x="22" y="26" width="12" height="14" rx="1"'
+        || ' style="fill:var(--acc);fill-opacity:.75"/><rect x="36" y="10" width="12" height="30" rx="1" style="fill:var(--acc);fill-opacity:.75"/><rect x="50" y="18" width="12" height="22"'
+        || ' rx="1" style="fill:var(--acc);fill-opacity:.75"/><rect x="64" y="32" width="12" height="8" rx="1" style="fill:var(--acc);fill-opacity:.75"/><rect x="78" y="38" width="12"'
+        || ' height="2" rx="1" style="fill:var(--acc);fill-opacity:.75"/><rect x="106" y="38" width="12" height="2" rx="1" style="fill:var(--acc);fill-opacity:.75"/><rect x="120" y="34"'
+        || ' width="12" height="6" rx="1" style="fill:var(--acc);fill-opacity:.75"/><path d="M8 37H22V27H36V9H50V16H64V31H78V37H134V40" style="stroke:var(--ink-3);fill:none"/></svg></div><div'
+        || ' class="gx2"><h3>Latency histogram</h3><p>Bars are the Current window&rsquo;s share of an event&rsquo;s waits per latency bucket (each bucket twice as wide as the one before); the'
+        || ' stepped line is the normal shape. <span class="g2">A bar standing alone to the right of the line is a slow tail; the whole hump sliding right means every wait got'
+        || ' slower.</span></p></div></div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="Icicle chart of a plan: one bar per plan step"><rect x="4"'
+        || ' y="2" width="142" height="9" rx="1" style="fill:var(--zone2)"/><rect x="4" y="13" width="120" height="9" rx="1" style="fill:var(--zone2)"/><rect x="4" y="24" width="20"'
+        || ' height="9" rx="1" style="fill:var(--zone2)"/><rect x="26" y="24" width="96" height="9" rx="1" fill="#4A90D9"/><rect x="124" y="13" width="10" height="9" rx="1"'
+        || ' fill="#3FB344"/><rect x="26" y="35" width="30" height="7" rx="1" style="fill:var(--zone2)"/></svg></div><div class="gx2"><h3>Plan shape (icicle)</h3><p>Each bar is one plan step,'
+        || ' as wide as the DB time spent on it and every step beneath it, so the widest path down is where a statement&rsquo;s time goes. <span class="g2">The coloured end of a bar is time'
+        || ' on the step itself, by what it was doing; old and new plan share one scale.</span></p></div></div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="Blocking graph: a holder on the left, the sessions waiting'
+        || ' behind it on the right"><rect x="4" y="14" width="44" height="16" rx="3" style="fill:none;stroke:var(--ink-2);stroke-width:1.5"/><rect x="98" y="2" width="48" height="11" rx="3"'
+        || ' style="fill:var(--acc-band);stroke:var(--acc)"/><rect x="98" y="17" width="48" height="11" rx="3" style="fill:var(--acc-band);stroke:var(--acc)"/><rect x="98" y="32" width="48"'
+        || ' height="11" rx="3" style="fill:var(--acc-band);stroke:var(--acc)"/><path d="M48 22 C70 22 76 7 98 7" style="stroke:var(--acc);fill:none;stroke-width:3;stroke-opacity:.6"/><path'
+        || ' d="M48 22H98" style="stroke:var(--acc);fill:none;stroke-width:1.5;stroke-opacity:.6"/><path d="M48 22 C70 22 76 37 98 37"'
+        || ' style="stroke:var(--acc);fill:none;stroke-width:1;stroke-opacity:.6"/></svg></div><div class="gx2"><h3>Blocking graph</h3><p>Each box is a session: the final holder on the left,'
+        || ' the sessions waiting behind it to the right; an arrow&rsquo;s width and label are the seconds that waiter spent behind the holder. <span class="g2">A dashed holder was never'
+        || ' sampled in the window, often a session idle in an open transaction.</span></p></div></div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="A series that steps up at a detected onset"><rect x="4" y="22"'
+        || ' width="142" height="12" style="fill:var(--zone2)"/><path d="M4 29 L20 26 L36 30 L52 27 L68 29 L84 28 L92 14 L108 10 L124 13 L146 9"'
+        || ' style="stroke:var(--ink-2);fill:none;stroke-width:1.5"/><line x1="86" x2="86" y1="2" y2="42" style="stroke:var(--crit-dot);stroke-width:1.5"/></svg></div><div'
+        || ' class="gx2"><h3>Onset</h3><p>The line is a metric at every snapshot interval, the grey band its normal for that hour, and the red rule the detected onset: when the shift that is'
+        || ' still open began. <span class="g2">The strip below is the CUSUM: it climbs while the series stays off its level, and a step is called where it crosses the dashed'
+        || ' threshold.</span></p></div></div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="Matrix of window-to-window similarity with one odd row and'
+        || ' column"><rect x="50" y="2" width="9" height="9" style="fill:var(--mean);fill-opacity:.15"/><rect x="60" y="2" width="9" height="9"'
+        || ' style="fill:var(--mean);fill-opacity:.75"/><rect x="70" y="2" width="9" height="9" style="fill:var(--mean);fill-opacity:.15"/><rect x="80" y="2" width="9" height="9"'
+        || ' style="fill:var(--mean);fill-opacity:.15"/><rect x="50" y="12" width="9" height="9" style="fill:var(--mean);fill-opacity:.75"/><rect x="60" y="12" width="9" height="9"'
+        || ' style="fill:var(--mean);fill-opacity:.15"/><rect x="70" y="12" width="9" height="9" style="fill:var(--mean);fill-opacity:.75"/><rect x="80" y="12" width="9" height="9"'
+        || ' style="fill:var(--mean);fill-opacity:.75"/><rect x="50" y="22" width="9" height="9" style="fill:var(--mean);fill-opacity:.15"/><rect x="60" y="22" width="9" height="9"'
+        || ' style="fill:var(--mean);fill-opacity:.75"/><rect x="70" y="22" width="9" height="9" style="fill:var(--mean);fill-opacity:.15"/><rect x="80" y="22" width="9" height="9"'
+        || ' style="fill:var(--mean);fill-opacity:.15"/><rect x="50" y="32" width="9" height="9" style="fill:var(--mean);fill-opacity:.15"/><rect x="60" y="32" width="9" height="9"'
+        || ' style="fill:var(--mean);fill-opacity:.75"/><rect x="70" y="32" width="9" height="9" style="fill:var(--mean);fill-opacity:.15"/><rect x="80" y="32" width="9" height="9"'
+        || ' style="fill:var(--mean);fill-opacity:.15"/></svg></div><div class="gx2"><h3>Window similarity</h3><p>Each cell compares two compared windows over every material metric: the'
+        || ' stronger the shade, the further apart they are, so a strong row and column is a prior window unlike the rest (a holiday, a month-end, an outage). <span class="g2">The chips below'
+        || ' drop a prior window and re-score the report in the page, so you see what the verdict would be without it.</span></p></div></div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="Schematic of the instance with one area flagged"><rect x="4"'
+        || ' y="14" width="34" height="16" rx="3" style="fill:none;stroke:var(--line-2)"/><rect x="58" y="14" width="34" height="16" rx="3" style="fill:none;stroke:var(--line-2)"/><rect'
+        || ' x="112" y="14" width="34" height="16" rx="3" style="fill:var(--crit-dot);fill-opacity:.12;stroke:var(--crit-dot)"/><path d="M38 22H58"'
+        || ' style="stroke:var(--line-2);fill:none"/><path d="M112 22H92" style="stroke:var(--crit-dot);fill:none;stroke-width:2"/><circle cx="119" cy="22" r="2.5"'
+        || ' style="fill:var(--crit-dot)"/></svg></div><div class="gx2"><h3>Instance map</h3><p>Boxes are parts of the instance, arrows the flow of work; a red or amber box (and its thicker'
+        || ' arrow) is where the findings are, with its loudest metric and &Delta; inside. <span class="g2">Hover a box for its flagged metrics; click it to open its finding'
+        || ' card.</span></p></div></div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="Lollipop rows: the change after a release against the usual'
+        || ' variation"><line x1="60" x2="60" y1="2" y2="42" style="stroke:var(--line-2);fill:none"/><rect x="52" y="5" width="16" height="8" rx="2" style="fill:var(--zone2)"/><rect x="50"'
+        || ' y="18" width="20" height="8" rx="2" style="fill:var(--zone2)"/><rect x="54" y="31" width="12" height="8" rx="2" style="fill:var(--zone2)"/><line x1="60" x2="128" y1="9" y2="9"'
+        || ' style="stroke:var(--crit-dot);stroke-width:2"/><circle cx="128" cy="9" r="3.5" style="fill:var(--crit-dot)"/><line x1="60" x2="92" y1="22" y2="22"'
+        || ' style="stroke:var(--crit-dot);stroke-width:2"/><circle cx="92" cy="22" r="3.5" style="fill:var(--crit-dot)"/><circle cx="63" cy="35" r="3"'
+        || ' style="fill:var(--ink-4)"/></svg></div><div class="gx2"><h3>Before and after a release</h3><p>Each row is one metric: the grey band is how much it varied in the windows before'
+        || ' the split, the dot how far its mean moved after it. <span class="g2">A hollow dot means only one window follows; small ticks are the individual windows after; the word says'
+        || ' whether the move is outside the band and in the bad direction.</span></p></div></div>');
     DBMS_OUTPUT.PUT_LINE('</div></section>');
     -- About this report: every method note, one fold.  Parameter values
     -- come from the driver's DEFINEs.
@@ -207,6 +280,61 @@ BEGIN
         || ' totals differ). Ranked, not scored; the type rollups cover <b>all</b> segments and files.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Parameters</dt><dd>Initialization parameters from <code>dba_hist_parameter</code> whose value differs across the compared windows (value as of each window&rsquo;s end snapshot, lowest container'
         || ' wins in a CDB). Highlighted cells differ from Current; &mdash; = not present at that snapshot; (unset) = present but empty.</dd>');
+    -- the visualization sections (20-28)
+    DBMS_OUTPUT.PUT_LINE('<dt>Instance map</dt><dd>The findings drawn on a schematic of the instance. Each area takes the worst bucket of the counted metrics behind it: their policy family decides the area'
+        || ' (network and calls &rarr; clients; DB time, CPU, response &rarr; sessions; Application / Concurrency waits &rarr; locks; parses &rarr; shared pool; logical reads &rarr; buffer'
+        || ' cache; physical writes &rarr; DBWR; redo, commits &rarr; LGWR; physical reads, User I/O &rarr; datafiles; System I/O &rarr; redo logs; disk sorts &rarr; temp; other wait classes'
+        || ' &rarr; other). It is scored with the same rule as the finding cards, so a flagged area always has a card, and clicking the area opens it. Twins never colour a box; with fewer'
+        || ' than 3 valid prior windows every area is &ldquo;not measured&rdquo;.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Load vs response time</dt><dd>Each dot is one snapshot interval (<code>DBA_HIST_SYSMETRIC_SUMMARY</code>): x = load (user calls, executions or logical reads per second), y ='
+        || ' response time (SQL Service Response Time, or DB time divided by that load). The dashed &ldquo;normal for that load&rdquo; curve joins the medians of up to 8 equal-count load bins'
+        || ' of every interval outside the Current window; the band is their 25th&ndash;75th percentile. The verdict compares Current with the prior windows on both axes through the'
+        || ' report&rsquo;s own rule (z over max(&sigma;, 2% of the mean) plus the policy&rsquo;s materiality floors) and, when both rose, Current&rsquo;s ratio to the curve with the prior'
+        || ' windows&rsquo; ratios. It explains; it adds no finding.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Before and after a release</dt><dd>The valid compared windows are split at a release marker (or a window boundary you pick): windows ending at or before it are'
+        || ' &ldquo;before&rdquo;, windows starting at or after it are &ldquo;after&rdquo; (Current is always after), a window containing it belongs to neither. Per metric the after mean is'
+        || ' compared with the before mean; the band is the before windows&rsquo; mean &plusmn; 2 sd (sd floored at 2% of the mean). Outside the band and past the metric policy&rsquo;s'
+        || ' materiality floor = marked worse / better / changed by the policy&rsquo;s direction. Markers exist only in the page, so the split is computed by the page script; JS off shows'
+        || ' Current against all prior windows.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Wait latency histograms</dt><dd>From <code>DBA_HIST_EVENT_HISTOGRAM</code>: per compared window, end minus begin per power-of-two latency bucket (a bucket missing in one'
+        || ' snapshot never goes negative), summed over instances, valid windows only. For the Current window&rsquo;s top foreground events (the Foreground waits order, at most 8), the'
+        || ' Current share of waits per bucket is set against the mean share over prior valid windows with 30 or more waits, with their min&ndash;max. Fixed rules on the count percentiles'
+        || ' (one bucket = a factor of two): slow tail = p95 up two or more buckets while the median moves at most one; shifted = median moves two or more; tail gone = p95 down two or more;'
+        || ' volume only = shape alike but the count ratio is 2x or more (or 0.5x or less). Fewer than 30 Current waits, or fewer than two qualifying prior windows, is not compared. By time'
+        || ' weights each bucket by waits &times; its midpoint (an approximation). Explanatory only: no findings, no severity. Needs SELECT on <code>DBA_HIST_EVENT_HISTOGRAM</code>; without'
+        || ' it the section shows a note.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Blocking</dt><dd>Blocked time = ASH samples whose holder is known by session (<code>blocking_session_status</code> VALID) &times; 10 s, any event, per compared window; GLOBAL'
+        || ' (holder on another RAC instance, not named) is counted apart; NO HOLDER / NOT IN WAIT / UNKNOWN are ignored. Not scored: no metric policy line fits, the strip shows the plain'
+        || ' &Delta; vs the prior mean. The graph follows every blocked Current sample up its chain to the final holder in that same sample (sessions keyed by instance, sid and serial#; a'
+        || ' cycle stops the walk), then sums the paths: top 5 holders, 6 direct waiters, 3 below each, deeper waiters summed. The row opens at 300 s or more of Current blocked time when that'
+        || ' is at least twice the prior mean (or there is no usable baseline).</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Volume vs unit cost</dt><dd>Each statement in the Current window&rsquo;s top by elapsed time (and each foreground wait event of the Foreground waits table) is placed against'
+        || ' its own normal, taken over the valid prior windows in which it completed at least one execution (had at least one wait): across = executions (waits) now / normal, up = time per'
+        || ' execution (per wait) now / normal, where normal time per execution = normal total / normal executions, so the diagonals of equal total time are exact. &ldquo;Costs more&rdquo; ='
+        || ' total time at least 1.5&times; normal and at least 2% of the plotted Current total; &ldquo;more often&rdquo; = executions at least 1.5&times; with time per run under 1.5&times;,'
+        || ' &ldquo;slower per run&rdquo; the reverse, anything else &ldquo;both&rdquo;. A statement no valid prior window saw is listed as new in Current (a skipped window never makes it'
+        || ' new); one with no completed execution now is only counted. Foreground columns of <code>DBA_HIST_SYSTEM_EVENT</code>, so event numbers can differ from the Foreground waits table,'
+        || ' which shows all sessions. Explains only: it adds no findings.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Plan shape</dt><dd>For statements in the Current window&rsquo;s top N by elapsed whose plan hash differs from the plan they used most in the prior valid windows (at most'
+        || ' three), ASH samples are counted per plan line: the new plan inside the Current window, the old plan inside the prior windows divided by the number of prior windows it has samples'
+        || ' in. One sample is about 10 s of DB time, so both read in seconds per window. The plan tree comes from <code>DBA_HIST_SQL_PLAN</code> (without SELECT on it the section lists the'
+        || ' samples by plan line only); samples without a plan line are counted on the root step. With no plan change, the highest-ranked of the first three top statements with at least 5'
+        || ' samples is shown alone.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Onset</dt><dd>Every snapshot interval of the span (time-weighted over irregular snapshots; a restart or a missed snapshot is a gap, never 0) of DB time, DB CPU, user calls,'
+        || ' executions, logical and physical reads and redo is compared with its normal: the median of the same hour of the week in the other weeks (spans of 21 days or more), else of the'
+        || ' same hour of the day on the other days (3 days or more), else of every point before the Current window. Spread = interquartile range / 1.349, at least 2% of the median and the'
+        || ' metric&rsquo;s materiality floor from the policy; a point needs 3 same-hour points from 2 other periods (flat: 8). Residuals, clipped to &plusmn;3 spreads, feed a two-sided CUSUM'
+        || ' with the textbook slack k = 0.5 and threshold h = 5 (about 465 points between false alarms on clean noise, about 10 points to catch a one-spread shift). At each crossing the scan'
+        || ' records a step (onset = where that sum last stood at zero) and restarts from the new level, so a shift on top of an earlier one is dated from its own start. A shift is open when'
+        || ' the last run of steps is still away from the normal and the Current window&rsquo;s median residual agrees. A release marker within 6 h of an onset is named beside it. On a span'
+        || ' under 3 days the normal is flat, so a daily rhythm can read as a shift; the sentence says which normal it used.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Window similarity</dt><dd>Each canonical metric that reaches its materiality floor in at least one window (twins left out) is scaled per window as (value &minus; median)'
+        || ' &divide; spread over the valid windows, spread = 1.4826 &times; MAD floored at 2% of |median| (else 1.2533 &times; the mean absolute deviation; a constant metric is left out).'
+        || ' Two windows&rsquo; distance is the mean, over the metrics both have, of min(|a &minus; b|, 5): how many robust spreads apart they are on average, capped so one metric cannot'
+        || ' decide alone. A mean absolute difference rather than a correlation, because it reads in the band glyph&rsquo;s unit and a correlation is blind to a uniformly lower window (a'
+        || ' holiday). A prior window&rsquo;s distance from the other priors is the median of its distances to them; it is odd above max(median + 3 &times; 1.4826 &times; MAD, 1.5 &times;'
+        || ' median) of those distances. Odd windows that are alike each other form a group (a change or an episode, not a single odd window). The what-if re-scores every metric in the'
+        || ' browser with the findings&rsquo; own rule against the priors left; with nothing dropped it reproduces the reported buckets exactly.</dd>');
     DBMS_OUTPUT.PUT_LINE('</dl>');
     DBMS_OUTPUT.PUT_LINE('<p class="ab-meta">Run <code>~run_id</code> &middot; template <code>'
         || DBMS_XMLGEN.CONVERT('~template_name') || '</code> &middot; top_n ~top_n'

@@ -262,7 +262,7 @@ def emit(w) -> str:
             n_vol += 1
         else:
             cls, glyph, word = "same", "=", "shape unchanged"
-            head = "shape unchanged: median " + brng(cp50, M) + ", p95 " + brng(cp95, M)
+            head = "median " + brng(cp50, M) + ", p95 " + brng(cp95, M)
             n_same += 1
         if cls in ("tail", "up", "down", "gone"):
             n_chg += 1

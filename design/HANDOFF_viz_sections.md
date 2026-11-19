@@ -1,5 +1,11 @@
 # Handoff: the visualization sections (20-28) and the fleet co-anomaly grid
 
+> **Implemented** (2026-11-19, branch `feat/new-visualizations`): all ten
+> items are merged; the as-built notes live in `CLAUDE.md` ("Visualization
+> sections (20-28)", and "Co-anomaly grid" under the fleet report). This
+> file is kept as the contract a new view of the same kind should follow;
+> the dbmint dates below have since aged out of its 35-day AWR retention.
+
 Ten new views are added to the report, one owner each, built in parallel in
 separate checkouts and merged afterwards.  This file is the shared contract;
 your task message names YOUR item and its specifics.  Read `CLAUDE.md`

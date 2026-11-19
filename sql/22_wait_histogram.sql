@@ -417,7 +417,7 @@ BEGIN
             v_n_vol := v_n_vol + 1;
         ELSE
             v_cls := 'same'; v_glyph := '='; v_word := 'shape unchanged';
-            v_head := 'shape unchanged: median ' || brng(v_cp50, '&micro;') || ', p95 '
+            v_head := 'median ' || brng(v_cp50, '&micro;') || ', p95 '
                 || brng(v_cp95, '&micro;');
             v_n_same := v_n_same + 1;
         END IF;

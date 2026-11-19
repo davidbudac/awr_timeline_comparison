@@ -57,7 +57,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('#volume-cost .vc-drop{margin:0 0 var(--s3);font-size:12px;color:var(--muted)}');
     DBMS_OUTPUT.PUT_LINE('#volume-cost table.vc-t td.mono{white-space:nowrap}');
     DBMS_OUTPUT.PUT_LINE('@media (max-width:760px){');
-    DBMS_OUTPUT.PUT_LINE('#volume-cost .vc-wrap{flex-direction:column;gap:var(--s3)}');
+    DBMS_OUTPUT.PUT_LINE('#volume-cost .vc-wrap{flex-direction:column;align-items:stretch;gap:var(--s3)}');
     DBMS_OUTPUT.PUT_LINE('#volume-cost .vc-new{flex:none;align-self:stretch;border-left:0;border-top:1px solid var(--line);padding:var(--s2) 0 0;margin-top:0}');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('</style>');

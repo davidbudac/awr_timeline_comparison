@@ -1012,6 +1012,289 @@ left padding and a lower specificity).
   168-window run on dbmint, 2026-11-13: a top statement with 216 quotes
   ended the report with exit code 67.
 
+### Visualization sections (20-28)
+
+Nine diagnostic views, one numbered section each, added in one pass from
+`design/viz_ideas_mock.html` (the mock) under the contract in
+`design/HANDOFF_viz_sections.md`. They EXPLAIN: none adds a finding, a
+count, a pill or a severity of its own (27 and 26 re-use `policy_bucket()`
+and must agree with 07). Common shape, keep it when touching any of them:
+
+- **Placement.** Each is `<section id=X class="vw in-s in-a lib"
+  style="--os:N">` (25 also `in-t`): a Summary evidence-library row
+  (`--os` 10-18, after Parameters; `lopen` only when the view has something
+  to say) and a full section in All sections, where it takes the CSS
+  `order` of the section it extends and follows it in the DOM (driver
+  order), so it shows right after it: 27 / 20 / 28 after Findings, 22 after
+  Foreground waits, 24 after Background waits, 21 after Top SQL, 23 after
+  SQL Monitor, 25 after DB time, 26 after Windows. Rail: group
+  **Diagnosis** (27, 20, 28) + one link next to each extended section, all
+  `data-nodot`. The section is ALWAYS emitted (h2 + `p.note` when there is
+  nothing to draw): the rail links to it.
+- **Files per view** (lib base `<b>` = loadresp, volcost, waithist,
+  planflame, blocking, onset, winsim, instmap, reldelta):
+  `sql/NN_<name>.sql`, `sql/lib/src/css_<b>.css` -> `sql/lib/css_<b>.plsql`
+  (in `<head>` via `sql/lib/viz_head.sql`, after `_style.sql`, before the
+  design's stylesheet; single-DB only), `sql/lib/src/js_<b>.js` ->
+  `sql/lib/js_<b>.plsql` (@@-included by the section AFTER its markup and
+  its `window.AWR_DATA.<b>` payload), twin
+  `demo/awrdemo/sections/sNN_<name>.py` (synthetic data derived in the twin
+  with `w.rng`, `model.py` untouched), private CTEs `sql/lib/<b>_cte.sql`
+  (20, 25). `tools/js2plsql.sh` picks every `sql/lib/src/*.js|css` up by
+  itself (lint 24); lint 34 checks `viz_head.sql`'s includes exist.
+- **Contract.** Inline SVG / HTML only, never in a `.chart-wrap` (they must
+  draw with the CDN blocked); a chart draws when its box has a width
+  (`ResizeObserver` + `awr:view` + resize: a closed library row measures
+  0); colours from CSS tokens, so the theme toggle and the quiet /
+  dashboard designs restyle them with no listener; every selector starts
+  with the section id or the lib base; `lib_ls(id, html)` gives the row's
+  one-line answer; a "Reads as:" sentence computed in PL/SQL (28: in the
+  page, markers are client-only); next to every chart a real table of its
+  numbers (JS off: the note and the tables). Links only through `ent()` /
+  `anchor_id()` and only to emitted rows.
+- **Optional grants (lint 35).** `DBA_HIST_EVENT_HISTOGRAM` (22) and
+  `DBA_HIST_SQL_PLAN` (23) are NOT in the README's required list: read them
+  only through `OPEN c FOR '...' USING` inside a handler for ORA-00942 /
+  ORA-01031 that renders a "needs SELECT on" note; the windows / statements
+  come from static SQL first. A static `FROM` on either aborts the whole
+  run for an analyst user without the grant.
+- **Tooltip.** js_timeline hides the shared `#tip` on every document
+  `mouseover`; a view that reuses `#tip` shows it on `mousemove`, or from a
+  document `mouseover` listener registered after js_timeline's (20, 22,
+  24), or uses its own tip element (23).
+- **Cost on dbmint** (debug markers, 9-48 windows): each 0.2-2.6 s; the
+  nine together add about 4-8 s to a run.
+
+#### Instance map (`sql/27_instance_map.sql`, `section#instance-map`)
+
+Section 07's findings drawn on one PL/SQL-emitted inline SVG (viewBox 1040 x
+410, complete with JS off): 11 areas (clients, sessions, locks, shpool,
+bufcache, dbwr, lgwr, datafiles, redologs, temp, other), arrows as
+axis-aligned polylines plus triangle heads (`arrow()`, half-pixel coordinates
+only so the twin prints the same numbers). Recompute = 07's unified query
+copied as-is, minus the per-window LISTAGG; buckets ONLY via
+`policy_bucket()`; the ONE family -> area table is `im_comp` (twin `_COMP`);
+only canonical rows colour an area. Area state = worst row: large > moderate >
+improved > normal (typical / noted / flat baseline) > not measured. Lead:
+flagged / improved -> `lead_before` (bucket, card_primary member, |z|, shorter
+label); normal -> `im_pref`'s metric, else any measured row. A flagged area is
+`<a href="#f-<group>">` of its lead's card (07 emits a card for every group
+with a canonical large/moderate row = the same condition); `data-sev`,
+`data-cards` (every card behind it) carry the agreement contract (card sev ==
+max sev of the areas listing it). Hidden `div.im-src[data-c]` per area is
+cloned into the one `div.im-pop` popover by js_instmap (hover / focus; Esc in
+the capture phase only while open; a click on a flagged box -> `AWR_goTo(card,
+true, true)`). Payload `AWR_DATA.instmap = {areas, measured, comps:[{k, sev,
+cards}]}`. Table `data-nocount` (07's rows already feed the rail pills). < 3
+valid prior windows: query skipped, all "not measured" + note. Twin
+`s27_instance_map.py` reuses `s07_summary.compute_findings`. Unexercised: the
+improved state, RAC, multi-DBID.
+
+#### Load vs response time (`sql/20_load_response.sql`, lib base `loadresp`)
+
+Scatter, x = load, y = response time, from DBA_HIST_SYSMETRIC_SUMMARY only;
+fixed metric list (template-independent): User Calls / Executions / Logical
+Reads Per Sec, SQL Service Response Time (cs, emitted as ms), Database Time
+Per Sec. Cloud = every interval of the span via the private
+`sql/lib/loadresp_cte.sql` (continues a WITH after windows_cte: lr_span,
+lr_snaps with the 00/10 restart guard, lr_cur, lr_pts = SUM for rates / AVG
+for the ratio across instances). Window dots = 03's window average. Six pairs
+p = load index + 3 * response kind (0 service time, 1 DB time per unit, x1000
+for logical reads); default = most points. Curve: one SQL, ROW_NUMBER over (x,
+y), LEAST(8, FLOOR(n/6)) equal-count bins, MEDIAN / PERCENTILE_CONT, needs >=
+12 non-Current intervals. Verdict per pair in PL/SQL through policy_bucket
+(load policy = the x metric's; response = SQL Service Response Time's, values
+/ 10); the "slower than that load explains" test runs policy_bucket on
+Current's ratio to the curve vs the priors' ratios. Reads-as per pair in the
+payload (JS swaps it); library row = the default pair's verdict + a
+`data-mk-at="0"` release slot (js_loadresp re-fills it after a swap). Payload
+`AWR_DATA.loadresp = {def, t0, n, stride, p:[{n, xl, yl, xu, yu, e, c:[[mx,
+my, q1, q3]], r}] x6, w:[{o, l, t, v, m:[uc, ex, lr, srt_ms, dbt]}] oldest
+first, bt (minutes since t0), bc (Current flags), b0..b4}`; numeric arrays
+through put_clob_chunked (strings never, it splits at commas). Cloud thinned
+to about 6000 points by stride (Current kept). Client: draws only when
+.lr-plot has a width (ResizeObserver, awr:view, resize);
+`#load-response.lr-js` shows the chart (JS off: note + tables). Tooltip = the
+shared #tip shown on mousemove (js_timeline hides #tip on every document
+mouseover, so mouseover-driven tips get erased). Gotchas: an incident in the
+prior windows inflates sigma, so Current reads "normal" (dbmint run D); the
+default table follows the default pair only. Unexercised: RAC, multi-DBID,
+thinning, empty-data notes.
+
+#### Before and after a release (`sql/28_release_delta.sql`)
+
+`section#release-delta.vw.in-s.in-a.lib` (--os 18). PL/SQL re-runs 07's
+recompute (load_pairs_cte, additive SYSMETRIC, per-class SYSTEM_EVENT,
+template wait list), keeps metric_policy canonical rows and emits
+`AWR_DATA.reldelta = {nv, m:[{d:"L|M|W", n, l (metric_label), u, s
+(metric_scale), dir, mp, ma (policy min_pct / min_abs), id (finding_anchor),
+v:{"<week_offset>":raw}}]}` in lines < 30000 bytes. Markers live only on the
+client, so `js_reldelta` (src/js_reldelta.js) does the split from AWR_WIN s/e
+strings (before: e <= t, after: s >= t, else straddles; valid windows only),
+usable = >= 2 before and >= 1 after; one button per usable AWR_MARKERS entry
+(newest first, default the newest), a select of every boundary (W[i].s),
+outside-span / unusable markers listed in `p.rd-skip`. Stats: sample sd, floor
+2% of |mean|, out = |z| > 2, material = min_pct + min_abs (WAIT: share of the
+after wait total); status worse / better / changed (ANY, INFO) / small /
+inside. Rows are HTML/CSS (left in %), no SVG and no width needed; axis
+symmetric, clamp at +-400% ("> x5"). Library row upgraded via `AWR_ls`; the
+split table `table.rd-tbl[data-nocount]` (tbody replaced per split, chrome
+sort works). JS off: `p.rd-nojs` + `table.rd-tall`. Never call anything a
+finding or use large / moderate. Links are built as `a.className="ent"` only
+when the target id exists (lint 21 scans the generated plsql for the literal).
+Unexercised: RAC, multi-DBID, a before mean of 0, a marker inside Current on a
+real DB.
+
+#### Wait latency histograms (`sql/22_wait_histogram.sql`, `#wait-hist`)
+
+Library row `--os:12` (`lopen` only when an event changed shape), All sections
+after Foreground waits. Source DBA_HIST_EVENT_HISTOGRAM (NOT in the README
+grant list): windows (BULK COLLECT from valid_windows) and the events (04's
+Current ranking over SYSTEM_EVENT, template wait list, Idle out, LEAST(8,
+top_n)) by static SQL; the histogram per valid window row by `OPEN c FOR` with
+binds (events bound as a `sys.odcivarchar2list`), inside a block catching -942
+/ -1031 -> "needs SELECT on" note + lib_ls. 19c carries sub-ms buckets:
+wait_time_milli 2^-10 .. 2^k (k folded into -10..40, the time midpoint capped
+at 2^22 ms; only Idle events reach the 1.8e16 bucket). Deltas GREATEST(0, end
+- begin) per instance; a valid prior window without rows = 0 waits, a skipped
+one is absent. Normal = mean share over prior windows with >= 30 waits; band =
+per-bucket min / max (a folded end sums them, capped at 1). Classification in
+PL/SQL on the raw count percentile buckets (header comment). Payload
+`AWR_DATA.waithist = {min, ev:[{n, cl, k, nc, nn, np, lab, rg, cc, ct, mc, mt,
+lc, hc, lt, ht}]}`: display-bucket arrays (counts, time ms, normal / band
+shares by count and time); `lab` axis labels, `rg` ranges (micro sign as a JS
+escape). Client `js_waithist` draws `.whp` per `article.whc[data-i]`
+(ResizeObserver, awr:view, resize), computes the marks from the shown
+distribution, tooltip on the shared #tip via a document mouseover registered
+after js_timeline's (an element listener would be hidden by its tipOff).
+`.whseg` buttons hidden until JS. Twin s22 synthesizes log-normal buckets from
+the model's waits / avg (w.rng), db file sequential read gets a 6% ~5 ms mode
+after Release 4.2. Unexercised: RAC, multi-DBID, ORA-01031, con_id fan-out.
+
+#### Blocking (`sql/24_blocking.sql`)
+
+`section#blocking.vw.in-s.in-a.lib` (`--os:14`, `lopen` at >= 300 s Current
+blocked AND (n < 3 or mean 0 or >= 2x mean)). Part 1: `.wg` strip (`#bk-bars`,
+minutes) of VALID-holder ASH samples x 10 s per valid window, UNSCORED (no
+policy line fits; plain `delta_span(..., 'Y')`). Part 2: the Current window's
+holder trees. ONE bounded ASH scan joined to `valid_windows` per instance
+(snap range + sample time), aggregated by a 4-row generator cross join (1
+window, 2 edge `w|b` for event / sql / object, 3 session for holder info, 4
+one row per blocked Current sample) -- NOT GROUPING SETS: 19c's rewrite raises
+ORA-00905 on the `#` columns. PL/SQL `flush_sample` resolves each sample
+(inst, sample_id): waiter -> holder -> ... -> final holder (visited set =
+cycle stop, `pa_cyc`); the paths form a prefix tree (`pa_*`, levels 0-2,
+deeper summed into the level-2 ancestor). Payload `AWR_DATA.blocking = {cur,
+roots, shown,
+nodes:[{i,p,lv,r,k:r|w|m,id,who,ns,sql,ev,obj,s,bn,bs,cyc,deep}]}` (seconds),
+one node per PUT_LINE. Client `js_blocking` lays out bands per root, edge
+width 2 + 14 s / max(maxEdge, 300 s), tooltip in `#tip` via a document
+mouseover registered after js_timeline's (which hides the tip elsewhere);
+Enter / click -> `AWR_goTo(#sq-elapsed-<id>)`. Names: ALL_USERS (public; uid 0
+= SYS; other containers -> "user id N (container c)"), DBA_HIST_SEG_STAT_OBJ
+for current_obj#, else the number. Gotcha: beware `#` columns under GROUPING
+SETS. Demo twin synthesizes a batch-holder chain from the model's row-lock +
+TX index samples (Current total stays normal). Unexercised: RAC / GLOBAL /
+cross-instance chains, a real deadlock cycle, a skipped Current window, the
+500k-sample / 3000-edge caps.
+
+#### Volume vs unit cost (`sql/21_volume_cost.sql`, `volcost`)
+
+`section#volume-cost.vw.in-s.in-a.lib` (`--os:11`, `lopen` when a statement is
+slower per run): did what got more expensive RUN MORE OFTEN or did EACH RUN
+GET SLOWER. Statements = Current's top by elapsed from DBA_HIST_SQLSTAT (06's
+join; `LEAST(60, GREATEST(2*top_n, top_n+10))`); events = 04's event set
+(template wait list + `'*'` sentinel, top_n by all-session time in any valid
+window) measured on the `*_FG` columns (pairs -> bounds -> deltas). Normal =
+over the valid prior windows with a completed run: mean executions, mean
+total, per run = total / executions (so x * y = the total ratio exactly; a
+mean of per-run values breaks the diagonals). States: P placed, N new in
+Current (no valid prior window saw it), Z nothing now, B no prior run (counted
+in `p.vc-drop`). Fixed thresholds 1.5x / 2% share (`v_thr`, `v_floor`) drive
+the PL/SQL "Reads as:" (`p.vc-rd[data-vk]`) and `lib_ls`; no scoring. Payload
+`AWR_DATA.volcost = {thr, top, sql:[item], ev:[item]}`, item `{n, l (link id
+or ""), r (own row id vc-sq-/vc-ev-), ec, ep, pc, pp, tc, tp, k (cost u/d/e +
+category m/s/b), g (label rank)}`, placed items only, one PUT_LINE each.
+Client (`js_volcost`): `section.vc-on` hides nothing with JS off; `data-mode`
+sql|ev + `[data-vk]` swap the axis titles / strips / sentence; log2 domain
+clamped to +-14; dots tabindex 0, Enter -> `AWR_goTo` (the 06 / 04 row, else
+its own table row); labels `pointer-events:none`; reuses `#tip`. Links only to
+emitted rows: `sq-elapsed-` when the statement was 06's top_n somewhere.
+Unexercised: two events that slug alike (anchor_uniq `-2` on the vc-ev id; the
+we- link reaches 04's first), the no-valid-prior path, RAC.
+
+#### Plan shape (`sql/23_plan_flame.sql`, lib base `planflame`)
+
+Lib row `--os:13` (`lopen` when a top-N statement changed plan). Picks <= 3
+Current top-N statements (06's elapsed ranking) whose last non-zero SQLSTAT
+plan differs from the prior valid windows' modal plan (tie: most recent); none
+-> one statement (first of the top 3 with a plan and >= 5 Current ASH samples,
+else the first). One ASH scan (sql_id IN 3 binds, valid_windows snap ranges,
+Idle dropped) by window / phv / line / class. Old plan divided by prior
+windows with samples. DBA_HIST_SQL_PLAN via OPEN ... FOR with binds (not in
+the README grant list; -942 / -1031 -> note + per-line tables); copy with
+latest id-0 TIMESTAMP wins. Plans > 60 lines keep sampled steps + ancestors,
+the rest fold into "+ n steps" rows. Line-less samples -> root. Payload
+`AWR_DATA.planflame = {spw, min, mode, st:[{id, sql, p:[{r, phv, div, n, nol,
+lines, state, s:[[id, pid, op, opt, owner, obj, self, {class:n},
+hidden]]}]}]}`, strings comma-free (`,`) for put_clob_chunked. Block id
+`anchor_id('pf', sql_id)`, h3 `ent()` -> `sq-elapsed-`. JS: own tooltip
+`.planflame-tip` (js_timeline's #tip is hidden by its own mouseover), chain
+folding past 14 rows, cut at 18, slivers <= 30 % of width, roving focus, Enter
+-> AWR_goTo(table row), adds `a.pf-cl` "Plan shape" to `#f-plan-<sql_id> .evl`
+on DOMContentLoaded. Unexercised: RAC, multi-DBID, real ORA-01031, the 18-row
+cut.
+
+#### Onset (`sql/25_onset.sql`, `sql/lib/onset_cte.sql`, `js_onset`)
+
+"WHEN did it start": a continuous series over the report span for 7 fixed
+metrics (template-independent), one point per snapshot interval (median pair
+span, widened past 3000 points), each pair's rate spread over the buckets it
+overlaps; a pair > 1.9 intervals or a bucket < 50% covered is a gap. ONE SQL
+scan (onset_cte: snaps -> pairs with the restart guard -> SYSSTAT / time-model
+deltas with the prev_snap_id match); the normal (median / PERCENTILE_CONT per
+(metric, phase, excluded period), cached) and the change-point scan are PL/SQL
+-- a SQL self-join with an OR join into a UNION ALL view ran 7 min on dbmint.
+Normal: hour of week (>= 21 days) -> hour of day (>= 3 days) -> flat (points
+before the Current window), stepping down when < half the points can be
+judged. `cusum_scan`: two-sided CUSUM of clipped z against the current level,
+k 0.5, h 5; on a crossing it records a step and restarts from the new level
+(median z from the onset, at least k beyond). Runs of same-side levels; the
+last run is OPEN when the Current median z agrees. The sentence (+ lib_ls) is
+PL/SQL; `span.onset-mk` is filled client-side with the nearest release marker
+within 6 h. Payload `AWR_DATA.onset = {t1, bm, nb, tc, mode, k, h, lead,
+m:[{n, u, d, st, on:[onset, base, dir], cl:[onset, end, dir], sp:[[onset,
+found, dir, level*10]], x, md, s, c}]}` (bucket indices oldest first, empty
+slot = no value, c = CUSUM x 10, S- negative), via put_clob_chunked. `lopen`
+when a shift is open. Twin: s25_onset.py (Release 4.2 -> onset at the marker,
+on top of 4.1). Unexercised: the no-open-shift / closed-lead sentence in the
+final code, widened buckets, RAC, multi-DBID.
+
+#### Window similarity (`sql/26_window_similarity.sql`, `win-sim`)
+
+Is the baseline sound? 07's per-window recompute verbatim (one query: unified
+rows + analytic AVG / STDDEV / COUNT, Current wait total, each window's wait
+total), robust-scaled vectors of the canonical, material metrics, a capped
+mean-absolute-difference matrix (PL/SQL, BINARY_DOUBLE), odd-one-out rule,
+then groups (connected components of flagged windows alike each other, `odd =
+2`). Suggestions: 1 = every single odd window, then one per group (at most 4);
+each re-scored in PL/SQL (`score_set`). Payload `AWR_DATA.winsim = {cap, thr,
+medd, cv, nvec, w:[{o,v,dd,odd,top}],
+m:[{d,n,l,k,dir,p,a,sh,g,pb,sb:[..],vec,md,sp,lk,v:[..]}], dm:[[..]], cb,
+sug:[{k,drop,chg,ca}]}`, oldest first like AWR_WIN; `dm` row i = distances to
+windows 0..i-1; one PUT_LINE per metric / matrix row. **`bucket()` in
+`js_winsim.js` twins `policy_bucket()`** -- keep in lockstep; on load it
+compares every metric with `pb` and each suggestion with `sb[s]` / `chg` /
+`ca` and `cb` with its own card count, and console.errors a mismatch
+(`window.AWR_WINSIM.check`, section attribute `data-winsim-check`;
+verify_report fails on it). Links in the what-if are PL/SQL `ent()` HTML
+(`lk`). Matrix: SVG up to 60 windows, a canvas past that (colours resolved
+through a probe element, redrawn on `awr:theme`). Own tooltip `.winsim-tip`
+(js_timeline's document mouseover hides `#tip`). The per-window table is
+`data-nocount` (its flagged rows are `winsim-fl`, not `warn`, so no rail
+pill). Section time on dbmint: 0.8 s for 8 windows, 1.8 s for 168.
+Unexercised: RAC, multi-DBID, non-comprehensive templates.
+
 ### `echarts` var (offline / self-contained)
 Polymorphic on value: **empty** → public CDN (byte-identical to before, via
 `CASE WHEN TRIM('~echarts') IS NULL`); **http(s) URL** → used verbatim as
@@ -1632,6 +1915,27 @@ cramped).
   moved from the ribbon into its caption (B3). Sed-safety: `↗` and `·` are
   embedded as raw UTF-8, not HTML entities, so they survive the assembler's
   `sed`-based placeholder substitution unescaped.
+- **Co-anomaly grid (v0.8.0, `#coanom`)** -- above the console table: DBs x
+  time buckets on one absolute axis, so a cause several databases share
+  (storage, network, host, batch window) lines up as a column. The assembler
+  emits only the skeleton + `window.FLEET_COANOM={rows:[[alias, isErr],...]}`
+  (error rows in conf order, then OK rows score-desc);
+  `sql/fleet/js_fleet_coanom.plsql` (in the chrome, GENERATED from
+  `sql/fleet/src/js_fleet_coanom.js` / `css_fleet_coanom.css` by `sh
+  sql/fleet/src/fleet_js2plsql.sh [--check]`) derives every cell in the
+  browser from `window.FLEET_ASH` -- no extract change, no FLEET-COUNTS, no
+  score / sort / exit-code impact. Rules: resample to the coarsest `bh` in the
+  fleet (time-weighted, < 50% covered = no data); per DB a robust z of total
+  AAS vs median / MAD of the same hour of day (span >= 3 days and >= 3 buckets
+  for that hour) else of the whole span, sigma = max(1.4826 MAD, 20% of
+  median, 0.05 AAS); raised z >= 2, far out >= 3, extreme >= 6; rises only. A
+  bucket is shared when >= 25% (and >= 2) of the DBs with data are far out;
+  runs of shared buckets = episodes, the biggest (count, then summed z) is
+  named in `.ca-sum`. Clicks open rows through `window.__fleetSetRowOpen`
+  (exported by js_fleet_charts); a shared bar emphasises its DBs
+  (`.ca-row.dim`, `tr.dbrow.ca-hit`); Esc clears. JS off / older chrome on
+  `--assemble`: `p.ca-nojs` stays. Unexercised: a real heterogeneous multi-DB
+  fleet.
 
 ### AWR Fleet Server (`server/`)
 
@@ -1798,6 +2102,36 @@ the demo.
   dbmint); a series name containing `\`; the no-AWR-history-at-all branch of
   the `target_end` snap; the fleet "Compared windows" `part` and
   snap-mismatch states (all dbmint aliases hit one instance).
+- **dbmint keeps 35 days of AWR** (`DBA_HIST_WR_CONTROL`), so every pinned
+  `target_end` quoted in this file expires: the September / October dates
+  below return all-empty windows now. Probe first (snapshots per day and
+  per `startup_time`, ASH rows per hour) and pin inside a restart-free
+  stretch; on 2026-11-19 that was 2026-11-07 14:45 to 2026-11-09 16:15
+  (`"2026-11-08 15:00" 1 8 10 0 1 h` = a heavy blocking hour against eight
+  quiet ones).
+- **Visualization sections 20-28 + fleet co-anomaly grid verified on dbmint
+  (2026-11-19):** each section by its owner on its own runs (numbers
+  checked against an independent read-only query: DB time, ASH per plan
+  line, blocked samples and final holders, histogram bucket counts,
+  SQLSTAT executions / elapsed), then the merged branch: 13 runs, all rc 0,
+  29/29 `AWR-SECTION` pairs, no `ORA-` / `SP2-` / `PLS-` in the logs, max
+  line < 32767 -- the incident hour with markers (29 s, 18 s of it section
+  18; each new section under 1 s), `DESIGN=quiet` / `dashboard`, the
+  incident in the prior windows (24 hourly), `simple` and `dev` templates,
+  a plan change (`"2026-11-08 11:00" 1 8 10 0 1 h`: b84c2ncqhcw23), 48
+  hourly windows with skipped ones, 2 daily windows (the too-little-history
+  notes), 168 hourly windows (81 s), overlapping windows (2 h every 1 h),
+  `AUTO` weekly, `profile_days=7`; a fleet run with `FLEET_DETAIL=all
+  FLEET_PROFILE_DAYS=7` (3 detail reports, 58 markers each, `#coanom`
+  present, no `__FLEET_`). verify_report OK (incl. its section 8: every
+  view drawn, the instance map vs the cards, the what-if's JS rule vs the
+  PL/SQL buckets, 390 px) on the three demo designs and on the incident
+  and the thin-history report. The missing-grant branch of 22 / 23 was
+  simulated (a non-existent view name in a scratch copy): note shown, rc 0.
+  Never exercised: RAC, multi-DBID, a real ORA-01031, a real heterogeneous
+  fleet for the co-anomaly grid (synthetic 1 / 3 / 12 / 40 DBs), the
+  onset's "no open shift" sentence, 26 under a non-comprehensive template's
+  what-if beyond the bucket self-check.
 - **v1.6.0 verified on dbmint (2026-09-27), final code incl. the nine
   review fixes:** a `nohup`'d runner on dbmint (rsync without
   `--delete`, output `reports/v160/`). Matrix, all rc 0 with 20/20 `AWR-SECTION`

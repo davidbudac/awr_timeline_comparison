@@ -1065,10 +1065,9 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       if (/^FAIL/.test(im)) fail('viz: instance map ' + im);
       // the window-similarity what-if re-scores with the report's own rule
       const ws = await page.evaluate(() => {
-        const api = window.AWR_WINSIM;
-        if (!api || typeof api.selfCheck !== 'function') return 'none';
-        try { const r = api.selfCheck(); return (r && r.bad && r.bad.length) ? 'FAIL ' + r.bad.length + ' of ' + r.n + ' buckets differ: ' + r.bad.slice(0, 3).join('; ') : 'ok (' + (r ? r.n : 0) + ' metrics)'; }
-        catch (e) { return 'FAIL ' + e.message; }
+        const api = window.AWR_WINSIM, sec = document.getElementById('win-sim');
+        if (!api || !Array.isArray(api.check)) return (sec && sec.querySelector('p.note')) ? 'none (too few windows)' : 'FAIL no AWR_WINSIM.check';
+        return api.check.length ? 'FAIL ' + api.check.length + ' mismatches: ' + api.check.slice(0, 3).join('; ') : 'ok (' + (sec.getAttribute('data-winsim-check') || '') + ')';
       });
       console.log('viz window similarity, JS rule vs PL/SQL buckets: ' + ws);
       if (/^FAIL/.test(ws)) fail('viz: window similarity ' + ws);
