@@ -171,7 +171,7 @@ HH24:MI`, 24-hour clock) and a label. Copy
 
 Then pass its path as the `marker_file` argument (wrapper) or
 `DEFINE marker_file = 'my_markers.sql'` (pure SQL\*Plus). Markers appear on
-every dated chart: the Activity charts at the top of every view, the
+every dated chart: the Activity charts (in every view), the
 Timeline's window grid ruler (drawn inline, offline too), the finding cards' window bars, the
 hourly ASH timeline, the DB-time summary, and the per-SQL ASH cards.
 
@@ -372,8 +372,8 @@ force a view with `#view=summary|timeline|all`. Any link to a row in
 another view switches to that view, opens whatever folds it and flashes
 the row. With JavaScript off, every section shows, stacked.
 
-**Activity, whole span** opens every view, above the verdict: two stacked
-charts of ASH active sessions across the whole compared span on one time
+**Activity, whole span** opens the Timeline and All sections views and
+follows the verdict in Summary: two stacked charts of ASH active sessions across the whole compared span on one time
 axis, **by wait class** and **by wait event** (the 14 busiest events, on
 CPU as `CPU`, the rest summed as *Other events*), stacked areas, hourly
 (or the sub-hour cadence), the compared windows striped (Current indigo,
@@ -390,7 +390,10 @@ shape over time reads directly; a class also lights its events in the event
 chart (and an event its class). Hovering a band in the plot highlights it in
 place; click the band, or Shift+click the legend entry, to keep the
 highlight; the same again or **Esc** clears it (the next Esc unpins the
-window).
+window). In Summary the charts open compact: the by-class chart only, a
+shorter plot; **Show by wait event** brings back the second chart, and
+the choice is remembered in this browser (the dashboard design keeps its
+own chart tabs instead).
 
 ### Summary
 

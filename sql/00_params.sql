@@ -491,7 +491,8 @@ BEGIN
         -- them (nav.toc a / nav.toc b, the rail JS)
         -- is a descendant match, so desktop rendering is unchanged.
         || '<div class="rail-list">'
-        -- v1.6.0: the Activity charts sit at the top of every view
+        -- v1.6.0: the Activity charts (first in Timeline / All sections,
+        -- under the verdict in Summary since plan 023)
         || '<b>Overview</b>'
         || '<a href="#activity" data-nodot>Activity, whole span</a>'
         -- v1.6.0 Summary view: the verdict hero, the finding cards, what

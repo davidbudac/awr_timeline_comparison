@@ -1783,8 +1783,8 @@ doc.addEventListener('click',function(ev){
 /* Esc: the first press clears a highlighted Activity series (hlEsc,
    section 6), the next one the pinned window */
 doc.addEventListener('keydown',function(ev){if(ev.key!=='Escape')return;if(hlEsc())return;if(PW!==null)W.pin(null);});
-/* the pin survives a view switch: the Activity charts that show it are at
-   the top of every view (Esc, Current or the gutter's clear unpin) */
+/* the pin survives a view switch: the Activity charts that show it are in
+   every view (Esc, Current or the gutter's clear unpin) */
 doc.addEventListener('awr:view',function(ev){
   var v=ev.detail&&ev.detail.view;
   setTimeout(function(){drawAll(true);if(v==='timeline'){sync();startAtCurrent();}},50);

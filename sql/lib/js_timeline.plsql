@@ -4,7 +4,7 @@
 -- Client half of the Timeline view (v1.6.0, Mock D): the aligned window
 -- grid (#tl, skeleton emitted by sql/00_params.sql, rows by the sections
 -- through sql/lib/timeline.plsql), and the "Activity, whole span" charts
--- at the top of every view (section#activity, skeleton in 00; payloads
+-- in every view (section#activity, skeleton in 00; payloads
 -- window.AWR_DATA.ashx by wait class and AWR_DATA.ashe by wait event, both
 -- from sql/09_ash_timeline.sql's one ASH scan).
 -- Emitted once by the driver prologue, right after js_wingrid.plsql (it
@@ -220,8 +220,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('/* Esc: the first press clears a highlighted Activity series (hlEsc,');
     DBMS_OUTPUT.PUT_LINE('   section 6), the next one the pinned window */');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener(''keydown'',function(ev){if(ev.key!==''Escape'')return;if(hlEsc())return;if(PW!==null)W.pin(null);});');
-    DBMS_OUTPUT.PUT_LINE('/* the pin survives a view switch: the Activity charts that show it are at');
-    DBMS_OUTPUT.PUT_LINE('   the top of every view (Esc, Current or the gutter''s clear unpin) */');
+    DBMS_OUTPUT.PUT_LINE('/* the pin survives a view switch: the Activity charts that show it are in');
+    DBMS_OUTPUT.PUT_LINE('   every view (Esc, Current or the gutter''s clear unpin) */');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener(''awr:view'',function(ev){');
     DBMS_OUTPUT.PUT_LINE('  var v=ev.detail&&ev.detail.view;');
     DBMS_OUTPUT.PUT_LINE('  setTimeout(function(){drawAll(true);if(v===''timeline''){sync();startAtCurrent();}},50);');

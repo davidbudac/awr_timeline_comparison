@@ -1424,7 +1424,7 @@ BEGIN
 
     -- =========================================================
     -- v1.6.0 Timeline view (Mock D): the #timeline section, the Activity
-    -- charts at the top of every view (section#activity .ashx: by wait
+    -- charts in every view (section#activity .ashx: by wait
     -- class and by wait event) and the aligned window grid
     -- (#tl: sticky ruler, lanes of .wg rows, pin / hover / flash), the
     -- stacked activity columns (.r.ash, also the DB time card) and the

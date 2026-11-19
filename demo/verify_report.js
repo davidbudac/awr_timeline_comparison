@@ -773,8 +773,8 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         if (/^FAIL/.test(tl.fine_zoom)) fail('activity: zoom into the Current window ' + tl.fine_zoom);
         await page.mouse.move(hv.x, hv.y - 400); await page.click('#ax-reset').catch(() => {}); await page.waitForTimeout(150);
       }
-      // a ruler date pins too; the pin survives a view switch (the charts at
-      // the top of every view show it) and Esc clears it
+      // a ruler date pins too; the pin survives a view switch (the charts in
+      // every view show it) and Esc clears it
       const ruler = await page.evaluate(async () => {
         const h = document.querySelector('#tl .ruler .h:not(.cur)'); if (!h) return 'none';
         h.click(); await new Promise(r => setTimeout(r, 80));

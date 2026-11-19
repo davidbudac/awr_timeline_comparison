@@ -55,9 +55,9 @@ awr_trend.sql            -- driver: prologue (CSS + client libs), SPOOL, section
 sql/
 ├── defaults.sql         -- canonical DEFINEs for the substitution vars
 ├── _style.sql           -- embedded CSS (emitted once; ALSO @@-included by the fleet chrome)
-├── 00_params.sql        -- top bar, rail, view switch + chrome JS, AWR_WIN, the Activity
-│                        --   charts' skeleton (#activity, top of every view), verdict hero,
-│                        --   Timeline skeleton (#timeline / #tl)
+├── 00_params.sql        -- top bar, rail, view switch + chrome JS, AWR_WIN, verdict hero,
+│                        --   the Activity charts' skeleton (#activity, every view; under the
+│                        --   verdict in Summary), Timeline skeleton (#timeline / #tl)
 ├── 01_windows.sql       -- aligned windows, snap pairs, restart guard
 ├── 02_load_profile.sql  -- SYSSTAT deltas (per template)
 ├── 03_sysmetric.sql     -- SYSMETRIC_SUMMARY averages (per template)
@@ -787,9 +787,10 @@ designs) and the server's env whitelist.
 - **Demo**: `gen_demo_report.py` writes `demo_busy_db.html` (classic),
   `demo_busy_db_quiet.html`, `demo_busy_db_dashboard.html` (`--design=`;
   `--check` covers all three). **verify_report.js** reads
-  `window.AWR_DESIGN`: dashboard skips the rail checks, lets the verdict
-  sit above Activity in Summary, runs the Activity interaction checks with
-  both charts shown, and its section 7 checks the KPI cards, the table
+  `window.AWR_DESIGN`: dashboard skips the rail checks, checks that the
+  compact Activity mode and `#ax-more` stay off (block 2b; every design
+  lets the verdict sit above Activity in Summary), runs the Activity
+  interaction checks with both charts shown, and its section 7 checks the KPI cards, the table
   (one lead row per card, rows = the Moved count, trends), row expansion,
   the tabs + a jump into Normal, the Activity tabs (x labels + flags on
   the one chart shown), and the palette (Ctrl+K, search + Enter lands,
