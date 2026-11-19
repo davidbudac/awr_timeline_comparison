@@ -1463,6 +1463,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ashx .axr{font-size:12px;border:1px solid var(--line-2);background:var(--panel);border-radius:6px;padding:2px 10px;cursor:pointer;color:var(--ink-2);line-height:20px}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axr:hover{color:var(--ink);border-color:var(--ink-3)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axr[hidden]{display:none}');
+    -- Summary: the Activity charts open compact (js_timeline section 6 sets
+    -- #activity.ax-cmp): the by-event chart and the help line fold away
+    -- until "Show by wait event" (#ax-more, shown only in Summary)
+    DBMS_OUTPUT.PUT_LINE('body:not(.vs) #activity .axm{display:none}');
+    DBMS_OUTPUT.PUT_LINE('body.vs #activity.ax-cmp #ax-ev,body.vs #activity.ax-cmp .axn2{display:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axlg{display:flex;flex-wrap:wrap;gap:0 2px;margin:0;flex:1;min-width:0}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axc{display:inline-flex;align-items:center;gap:6px;border:0;background:none;border-radius:6px;padding:1px 6px;font:inherit;font-size:12px;color:var(--ink-2);cursor:pointer;line-height:18px}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axc:hover{background:var(--hov);color:var(--ink)}');

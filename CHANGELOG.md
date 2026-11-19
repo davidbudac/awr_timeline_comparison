@@ -137,6 +137,13 @@ release bumps `awr_version`).
   Other rail links keep their status dot but no longer count table rows;
   section headers still count their own rows. In Summary, J / K step
   through the large cards.
+- **Summary view: the verdict first, the Activity charts compact.** The
+  one-sentence verdict now opens the Summary view; the Activity charts
+  follow it as one 170-px chart by wait class, and *Show by wait event*
+  brings back the second chart (remembered in this browser). Timeline and
+  All sections are unchanged: the charts are still their first section.
+  The dashboard design is unchanged (it already led with the verdict and
+  shows one chart at a time).
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

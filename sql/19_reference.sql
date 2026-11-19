@@ -63,7 +63,7 @@ BEGIN
         || ' y="0" width="2.2" height="44"/><rect class="gd-w" x="49.3" y="0" width="2.2" height="44"/><rect class="gd-w" x="60.5" y="0" width="2.2" height="44"/><rect class="gd-w" x="71.7" y="0" width="2.2"'
         || ' height="44"/><rect class="gd-w" x="82.9" y="0" width="2.2" height="44"/><rect class="gd-w" x="94.1" y="0" width="2.2" height="44"/><rect class="gd-w" x="105.3" y="0" width="2.2" height="44"/><rect'
         || ' class="gd-w" x="116.5" y="0" width="2.2" height="44"/><rect class="gd-w" x="127.7" y="0" width="2.2" height="44"/><rect class="gd-wc" x="138.9" y="0" width="3" height="44"/></svg></div><div'
-        || ' class="gx2"><h3>Full-span activity</h3><p>Top of every view: active sessions over the whole span as stacked areas, hourly (or the shorter cadence), by wait class and by wait event (the 14'
+        || ' class="gx2"><h3>Full-span activity</h3><p>Under the verdict in Summary (compact: by wait class; Show by wait event adds the second chart), at the top of Timeline and All sections: active sessions over the whole span as stacked areas, hourly (or the shorter cadence), by wait class and by wait event (the 14'
         || ' largest, the rest as Other events); zoomed to 6 hours or less, the compared windows minute by minute. <span class="g2">Stripes = compared windows (Current indigo, pinned amber, skipped grey). Hover for each series&rsquo; AAS, drag across either chart to zoom both,'
         || ' double-click to reset; a legend item hides its series, a stripe pins its window. Hover a class or event to highlight it: from the legend it is drawn from zero, its own axis;'
         || ' a class lights its events below. Click its band (or Shift+click the legend) to keep it, Esc clears.</span></p></div></div>');
@@ -247,8 +247,8 @@ BEGIN
         || ' with no capture; only the SQL Monitor max elapsed is scored. <b>Configuration</b>: every changed parameter as a step line.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Evidence library</dt><dd>Summary view: every other section as one row with a one-line status and its counts; open a row to read the section in place.'
         || ' All sections shows every section in full.</dd>');
-    DBMS_OUTPUT.PUT_LINE('<dt>ASH timeline</dt><dd><code>dba_hist_active_sess_history</code> over the full span, one scan: hourly (or the cadence) in All sections; at the top of'
-        || ' every view (Activity, whole span) on the same grid (coarser only past 10000 buckets), by wait class and by wait event (the 14 events with the most samples, ties by name,'
+    DBMS_OUTPUT.PUT_LINE('<dt>ASH timeline</dt><dd><code>dba_hist_active_sess_history</code> over the full span, one scan: hourly (or the cadence) in All sections; in the Activity charts (under'
+        || ' the verdict in Summary, at the top of the other views) on the same grid (coarser only past 10000 buckets), by wait class and by wait event (the 14 events with the most samples, ties by name,'
         || ' the rest summed as Other events), plus each compared window&rsquo;s own values (samples &divide; 360 &divide; window hours; overlapping windows each count a shared sample)'
         || ' and a 1-minute series inside the compared windows (samples &divide; 6, each minute once; at most 40000 minutes, the most recent windows first), drawn when zoomed'
         || ' to 6 hours or less.'

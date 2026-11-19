@@ -39,6 +39,9 @@
 -- toggles that restack and rescale, drag-to-zoom with a minimum span
 -- (zooms both), Reset / double-click, compared windows shaded -- Current
 -- indigo, pinned amber, skipped grey -- click / Enter on one pins it.
+-- In the Summary view the charts open compact (#activity.ax-cmp: the
+-- by-class chart only, 96-px plot; #ax-more toggles, localStorage awr-ax;
+-- off in the dashboard design, whose tabs show one chart at a time).
 -- v1.6.1 series highlight: a legend entry hovered / focused (or kept by a
 -- click on its band, Shift+click) is drawn from zero on its own y axis,
 -- the rest faded; a class lights its events (AWR_DATA.ashe.ecls) and an
@@ -317,7 +320,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var wg=row.closest(''.wg'');wg.parentNode.insertBefore(ul,wg);');
     DBMS_OUTPUT.PUT_LINE('  wg.title=''Foreground active sessions (ASH, a sampled estimate of DB time) per compared window, stacked by wait class; Current ''+tot.toFixed(2)+'' AAS in ASH. The Current value is the DB time headline.'';');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('/* ---- 6. Activity, whole span (section#activity, top of every view): one');
+    DBMS_OUTPUT.PUT_LINE('/* ---- 6. Activity, whole span (section#activity, first in Timeline / All');
+    DBMS_OUTPUT.PUT_LINE('   sections, under the verdict in Summary, compact there): one');
     DBMS_OUTPUT.PUT_LINE('   chart factory, two instances over one time axis -- by wait class');
     DBMS_OUTPUT.PUT_LINE('   (AWR_DATA.ashx) and by wait event (AWR_DATA.ashe).  Linked: a zoom on');
     DBMS_OUTPUT.PUT_LINE('   either zooms both, the hover crosshair is mirrored, the pinned window');
@@ -333,6 +337,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('   Shift+click / Shift+Enter on a legend entry; the same again, a click');
     DBMS_OUTPUT.PUT_LINE('   off the stack or Esc clears it (the next Esc unpins the window). */');
     DBMS_OUTPUT.PUT_LINE('var AX=null,AE=null,CH=[],SP=null,DRAG=null,cvs=null;');
+    DBMS_OUTPUT.PUT_LINE('/* Summary opens the charts compact (SP.cmp): the by-class chart only, a');
+    DBMS_OUTPUT.PUT_LINE('   shorter plot with its own date labels; #ax-more shows the by-event chart.');
+    DBMS_OUTPUT.PUT_LINE('   The reader''s choice is kept in localStorage awr-ax, written on a click. */');
+    DBMS_OUTPUT.PUT_LINE('function cmp(){return !!(SP&&SP.cmp)&&doc.body.classList.contains(''vs'');}');
+    DBMS_OUTPUT.PUT_LINE('function axMore(b){b.setAttribute(''aria-expanded'',String(!SP.cmp));b.textContent=SP.cmp?''Show by wait event'':''Hide by wait event'';}');
     DBMS_OUTPUT.PUT_LINE('/* the highlight: HS sticky, HT passing (legend hover / focus, or soft =');
     DBMS_OUTPUT.PUT_LINE('   the plot hover), each {c: chart, k: series}; HT wins while it lasts */');
     DBMS_OUTPUT.PUT_LINE('var HS=null,HT=null;');
@@ -465,6 +474,20 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    ca.xmap=AX.classes.map(function(cn){var o=[];AE.ecls.forEach(function(x,e){if(x===cn)o.push(e);});return o;});');
     DBMS_OUTPUT.PUT_LINE('    ce.xmap=AE.ecls.map(function(x){var i=x==null?-1:AX.classes.indexOf(x);return i<0?[]:[i];});');
     DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  /* the dashboard design shows one chart at a time with its own tabs');
+    DBMS_OUTPUT.PUT_LINE('     (js_design.js activityTabs): no compact mode there */');
+    DBMS_OUTPUT.PUT_LINE('  var sec=doc.getElementById(''activity''),mb=doc.getElementById(''ax-more''),sv=null,dash=window.AWR_DESIGN===''dashboard'';');
+    DBMS_OUTPUT.PUT_LINE('  try{sv=localStorage.getItem(''awr-ax'');}catch(e){}');
+    DBMS_OUTPUT.PUT_LINE('  SP.cmp=CH.length===2&&sv!==''full''&&!dash;');
+    DBMS_OUTPUT.PUT_LINE('  if(sec)sec.classList.toggle(''ax-cmp'',SP.cmp);');
+    DBMS_OUTPUT.PUT_LINE('  if(mb&&CH.length===2&&!dash){');
+    DBMS_OUTPUT.PUT_LINE('    mb.hidden=false;axMore(mb);');
+    DBMS_OUTPUT.PUT_LINE('    mb.addEventListener(''click'',function(){');
+    DBMS_OUTPUT.PUT_LINE('      SP.cmp=!SP.cmp;if(sec)sec.classList.toggle(''ax-cmp'',SP.cmp);axMore(mb);');
+    DBMS_OUTPUT.PUT_LINE('      try{localStorage.setItem(''awr-ax'',SP.cmp?''compact'':''full'');}catch(e){}');
+    DBMS_OUTPUT.PUT_LINE('      drawAll(true);');
+    DBMS_OUTPUT.PUT_LINE('    });');
+    DBMS_OUTPUT.PUT_LINE('  }');
     DBMS_OUTPUT.PUT_LINE('  if(SP.reset)SP.reset.addEventListener(''click'',spReset);');
     DBMS_OUTPUT.PUT_LINE('  doc.addEventListener(''mousemove'',function(e){');
     DBMS_OUTPUT.PUT_LINE('    var dg=DRAG;if(!dg)return;');
@@ -541,9 +564,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('     last one (both on one chart when a design shows a single chart) */');
     DBMS_OUTPUT.PUT_LINE('  var vis=CH.filter(function(x){return shown(x.plot);}),lay;c.flags=vis[0]===c;c.xl=vis[vis.length-1]===c;lay=(c.flags?1:0)+(c.xl?2:0);');
     DBMS_OUTPUT.PUT_LINE('  var Wd=Math.max(480,c.plot.clientWidth),d0=SP.dom[0],d1=SP.dom[1];');
-    DBMS_OUTPUT.PUT_LINE('  if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk)return;c.w=Wd;c.pw=PW;c.lay=lay;');
+    DBMS_OUTPUT.PUT_LINE('  if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk&&c.g.cm===cmp())return;c.w=Wd;c.pw=PW;c.lay=lay;');
     DBMS_OUTPUT.PUT_LINE('  var mks=W.markers?W.markers():[],P=c.P;');
-    DBMS_OUTPUT.PUT_LINE('  var top=c.flags&&mks.length?46:22,ph=150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;');
+    DBMS_OUTPUT.PUT_LINE('  var cm=cmp();');
+    DBMS_OUTPUT.PUT_LINE('  var top=c.flags&&mks.length?46:22,ph=cm?96:150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;');
     DBMS_OUTPUT.PUT_LINE('  c.svg.setAttribute(''viewBox'',''0 0 ''+Wd+'' ''+H);c.svg.setAttribute(''height'',H);');
     DBMS_OUTPUT.PUT_LINE('  var X=function(t){return padL+pw*(t-d0)/(d1-d0);};');
     DBMS_OUTPUT.PUT_LINE('  /* stacked areas: one point per bucket at its midpoint, straight lines');
@@ -650,7 +674,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('      +esc((w.o===0?''Current window, '':offTxt(w)+'' window, '')+w.t+(w.o===0?'''':''. Pin it''))+''"/>'';');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  c.svg.innerHTML=s;');
-    DBMS_OUTPUT.PUT_LINE('  c.g={X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,hk:c.hk};');
+    DBMS_OUTPUT.PUT_LINE('  c.g={X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,hk:c.hk,cm:cm};');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function tAt(c,cx){var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*c.g.W/r.width;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}');
     DBMS_OUTPUT.PUT_LINE('function bucketAt(t){var j=Math.floor((t-SP.t0)/SP.bh);return j>=0&&j<SP.T.length&&t<SP.T1[j]?j:-1;}');

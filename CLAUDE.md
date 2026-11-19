@@ -286,7 +286,8 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
   nothing hidden; `#timeline` shows only its header + `p.tl-nojs` note (the
   grid is built client-side); every number is still in the tables.
 - **Assignment:** EVERY view = `section#activity` (00, `vw in-s in-t
-  in-a`, the first section after `<main>`, above the verdict; see
+  in-a`, emitted right after the verdict hero: first in Timeline / All
+  sections, under the verdict in Summary, where it opens compact; see
   "Activity, whole span" below). Summary = verdict hero `#verdict` (00), hero strip
   `#overview` (08), finding cards (07 `div.cards.vw.in-s`), `#s-changes`
   (plan / config cards, hidden until filled), `#s-normal`, the evidence
@@ -484,11 +485,12 @@ the stripe `.on` on both Activity charts; Esc, Current or the gutter's
 every view; before the charts moved to the top, leaving the Timeline
 unpinned). Separate from the X2 `th[data-w]` highlight (`.hl` + `awr:window`).
 
-### Activity, whole span (`section#activity`, top of every view)
+### Activity, whole span (`section#activity`, every view; under the verdict in Summary)
 
 The bird's-eye ASH view (owner request, v1.6.0): `section#activity.vw.in-s
-.in-t.in-a.ashtop` is emitted by 00 right after `AWR_WIN`, before the
-verdict hero, so it is the first section in every view (and with JS off).
+.in-t.in-a.ashtop` is emitted by 00 right after the verdict hero (plan
+023): the first section in Timeline and All sections (the verdict is
+Summary-only), the second in Summary and with JS off.
 Skeleton (static, lifted verbatim by the demo twin): h2 "Activity, whole
 span" + `.h2sub`, `p.ax-nojs` (hidden under `body.js-wg`), `div#ashx.ashx
 [hidden]` › `.axh` (`#ax-range`, the stripe key `.axk`, `#ax-reset`),
@@ -496,7 +498,16 @@ span" + `.h2sub`, `p.ax-nojs` (hidden under `body.js-wg`), `div#ashx.ashx
 h3 + its own legend `.axlg`, then `.axp` › `svg.axsvg` + `.axbr` brush),
 `p.axn2`. The chart ids are `ax-cls` / `ax-ev`; everything inside is
 addressed by class (the old single-chart `#tl-ash` / `#ax-svg` / `#ax-lg`
-/ `#ax-plot` ids are gone).
+/ `#ax-plot` ids are gone). **Compact in Summary** (plan 023): `SP.cmp` /
+`#activity.ax-cmp` hide `#ax-ev` and `.axn2` under `body.vs`, the class
+chart draws a 96-px plot (it is then the last chart shown, so `draw()`
+gives it the date labels); `button#ax-more` (`.axr.axm`, unhidden only
+with two charts) toggles it and stores `localStorage awr-ax` = `full` /
+`compact` on a click only; off in the dashboard design
+(`window.AWR_DESIGN === 'dashboard'`: its `.axseg` tabs show one chart
+at a time); `css_design.css` re-shows `.axn2` inside the open "How to
+read" popover; the demo twin lifts the skeleton from `<section
+id="activity"` to the line ending `</div></section>`.
 
 **Payloads** (09, the SAME `DBA_HIST_ACTIVE_SESS_HISTORY` scan as 09's
 ECharts chart; it groups by bucket, class, **event**, `j_lo..j_hi` = every
@@ -770,7 +781,9 @@ designs) and the server's env whitelist.
   Summary order:
   `body.d-dash.vs` puts `#activity` at order 5 and `#findings` at 6, so
   the verdict + KPI cards lead (original mock C; Timeline / All keep
-  Activity first); `#overview` hides (its numbers are the DB time KPI).
+  Activity first); `#overview` hides (its numbers are the DB time KPI)
+  (the classic / quiet Summary also leads with the verdict since plan 023,
+  by DOM order; the compact Activity mode is off in the dashboard).
 - **Demo**: `gen_demo_report.py` writes `demo_busy_db.html` (classic),
   `demo_busy_db_quiet.html`, `demo_busy_db_dashboard.html` (`--design=`;
   `--check` covers all three). **verify_report.js** reads
@@ -829,8 +842,9 @@ check 25; see the gotcha).
 `awr_trend.sql` includes the sections in **DOM** order (00, 10, 08, 09, 07,
 27, 20, 28, 01, 26, 16, 25, 13, 02, 03, 04, 22, 05, 24, 06, 21, 11, 18, 23,
 14, 15, 12, 19, 17; each visualization section 20-28 right after the section
-it extends) = the JS-off stacking; 00 emits `#activity` first (before the verdict), and with the
-default `order:3` it stays first in every view. Views reorder visually: Summary via the library's `--os`
+it extends) = the JS-off stacking; 00 emits the verdict hero, then `#activity` (plan
+023); with the default `order:3` the charts are the first section in
+Timeline / All sections and follow the verdict in Summary. Views reorder visually: Summary via the library's `--os`
 (`order:calc(10 + var(--os))`), All sections via `_style.sql`'s "All
 sections order" block keyed by section id (Findings, Load, Metrics, FG
 waits, BG waits, Top SQL, Top SQL ASH, SQL Monitor, Segment, File,

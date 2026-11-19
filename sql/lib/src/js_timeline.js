@@ -264,7 +264,8 @@ function activity(){
   var wg=row.closest('.wg');wg.parentNode.insertBefore(ul,wg);
   wg.title='Foreground active sessions (ASH, a sampled estimate of DB time) per compared window, stacked by wait class; Current '+tot.toFixed(2)+' AAS in ASH. The Current value is the DB time headline.';
 }
-/* ---- 6. Activity, whole span (section#activity, top of every view): one
+/* ---- 6. Activity, whole span (section#activity, first in Timeline / All
+   sections, under the verdict in Summary, compact there): one
    chart factory, two instances over one time axis -- by wait class
    (AWR_DATA.ashx) and by wait event (AWR_DATA.ashe).  Linked: a zoom on
    either zooms both, the hover crosshair is mirrored, the pinned window
@@ -280,6 +281,11 @@ function activity(){
    Shift+click / Shift+Enter on a legend entry; the same again, a click
    off the stack or Esc clears it (the next Esc unpins the window). */
 var AX=null,AE=null,CH=[],SP=null,DRAG=null,cvs=null;
+/* Summary opens the charts compact (SP.cmp): the by-class chart only, a
+   shorter plot with its own date labels; #ax-more shows the by-event chart.
+   The reader's choice is kept in localStorage awr-ax, written on a click. */
+function cmp(){return !!(SP&&SP.cmp)&&doc.body.classList.contains('vs');}
+function axMore(b){b.setAttribute('aria-expanded',String(!SP.cmp));b.textContent=SP.cmp?'Show by wait event':'Hide by wait event';}
 /* the highlight: HS sticky, HT passing (legend hover / focus, or soft =
    the plot hover), each {c: chart, k: series}; HT wins while it lasts */
 var HS=null,HT=null;
@@ -412,6 +418,20 @@ function spInit(){
     ca.xmap=AX.classes.map(function(cn){var o=[];AE.ecls.forEach(function(x,e){if(x===cn)o.push(e);});return o;});
     ce.xmap=AE.ecls.map(function(x){var i=x==null?-1:AX.classes.indexOf(x);return i<0?[]:[i];});
   }
+  /* the dashboard design shows one chart at a time with its own tabs
+     (js_design.js activityTabs): no compact mode there */
+  var sec=doc.getElementById('activity'),mb=doc.getElementById('ax-more'),sv=null,dash=window.AWR_DESIGN==='dashboard';
+  try{sv=localStorage.getItem('awr-ax');}catch(e){}
+  SP.cmp=CH.length===2&&sv!=='full'&&!dash;
+  if(sec)sec.classList.toggle('ax-cmp',SP.cmp);
+  if(mb&&CH.length===2&&!dash){
+    mb.hidden=false;axMore(mb);
+    mb.addEventListener('click',function(){
+      SP.cmp=!SP.cmp;if(sec)sec.classList.toggle('ax-cmp',SP.cmp);axMore(mb);
+      try{localStorage.setItem('awr-ax',SP.cmp?'compact':'full');}catch(e){}
+      drawAll(true);
+    });
+  }
   if(SP.reset)SP.reset.addEventListener('click',spReset);
   doc.addEventListener('mousemove',function(e){
     var dg=DRAG;if(!dg)return;
@@ -488,9 +508,10 @@ function draw(c,force){
      last one (both on one chart when a design shows a single chart) */
   var vis=CH.filter(function(x){return shown(x.plot);}),lay;c.flags=vis[0]===c;c.xl=vis[vis.length-1]===c;lay=(c.flags?1:0)+(c.xl?2:0);
   var Wd=Math.max(480,c.plot.clientWidth),d0=SP.dom[0],d1=SP.dom[1];
-  if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk)return;c.w=Wd;c.pw=PW;c.lay=lay;
+  if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk&&c.g.cm===cmp())return;c.w=Wd;c.pw=PW;c.lay=lay;
   var mks=W.markers?W.markers():[],P=c.P;
-  var top=c.flags&&mks.length?46:22,ph=150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;
+  var cm=cmp();
+  var top=c.flags&&mks.length?46:22,ph=cm?96:150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;
   c.svg.setAttribute('viewBox','0 0 '+Wd+' '+H);c.svg.setAttribute('height',H);
   var X=function(t){return padL+pw*(t-d0)/(d1-d0);};
   /* stacked areas: one point per bucket at its midpoint, straight lines
@@ -597,7 +618,7 @@ function draw(c,force){
       +esc((w.o===0?'Current window, ':offTxt(w)+' window, ')+w.t+(w.o===0?'':'. Pin it'))+'"/>';
   });
   c.svg.innerHTML=s;
-  c.g={X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,hk:c.hk};
+  c.g={X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,hk:c.hk,cm:cm};
 }
 function tAt(c,cx){var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*c.g.W/r.width;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}
 function bucketAt(t){var j=Math.floor((t-SP.t0)/SP.bh);return j>=0&&j<SP.T.length&&t<SP.T1[j]?j:-1;}

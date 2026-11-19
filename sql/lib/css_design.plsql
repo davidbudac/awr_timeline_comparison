@@ -196,6 +196,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ashx.howable .axh{position:relative}');
     DBMS_OUTPUT.PUT_LINE('.ashx.howable .axn2{display:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx.howable.howopen .axn2{display:block;position:absolute;z-index:25;right:0;max-width:440px;margin-top:8px;padding:12px 14px;font-size:12.5px;line-height:1.5;color:var(--ink-soft);background:var(--panel);border:1px solid var(--hairline);border-radius:10px;box-shadow:0 8px 24px oklch(0 0 0 / 12%)}');
+    DBMS_OUTPUT.PUT_LINE('/* plan 023: the compact Summary hides .axn2 (sql/_style.sql); the open popover shows it */');
+    DBMS_OUTPUT.PUT_LINE('body.vs #activity.ax-cmp #ashx.howable.howopen .axn2{display:block}');
     DBMS_OUTPUT.PUT_LINE('.axhow{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12px;color:var(--muted);background:none;border:0;border-radius:6px;padding:2px 6px;cursor:pointer}');
     DBMS_OUTPUT.PUT_LINE('.axhow:hover,.axhow[aria-expanded="true"]{color:var(--ink);background:var(--hov)}');
     DBMS_OUTPUT.PUT_LINE('.axhow i{display:inline-grid;place-items:center;width:14px;height:14px;border-radius:50%;border:1px solid currentColor;font-style:normal;font-size:9.5px;font-weight:600;line-height:1}');

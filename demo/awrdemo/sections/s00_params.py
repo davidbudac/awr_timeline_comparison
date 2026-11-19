@@ -463,11 +463,13 @@ def emit(w) -> str:
     o.extend(_literal_slice(L, i_nav + 1, i_main))
     # ---- AWR_WIN + the verdict hero (hand-ported) ----------------------
     put('<script>window.AWR_WIN=' + _win_json(w) + ';</script>')
-    # ---- the Activity charts' skeleton (literal in the SQL: lifted) ----
-    i_act = next(i for i in range(len(L)) if L[i][0].startswith('<section id="activity"'))
-    i_ver = next(i for i in range(i_act, len(L)) if L[i][0].startswith('<section id="verdict"'))
-    o.extend(_literal_slice(L, i_act, i_ver - 1))
     o.extend(_hero(w, st))
+    # ---- the Activity charts' skeleton (literal in the SQL: lifted) ----
+    # emitted right after the verdict hero (plan 023): from its <section>
+    # to the PUT_LINE that closes it ("...</div></section>")
+    i_act = next(i for i in range(len(L)) if L[i][0].startswith('<section id="activity"'))
+    i_end = next(i for i in range(i_act, len(L)) if L[i][0].endswith('</div></section>'))
+    o.extend(_literal_slice(L, i_act, i_end))
     # ---- the Timeline skeleton (hand-ported) ---------------------------
     o.extend(_timeline(w))
 

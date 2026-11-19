@@ -26,8 +26,11 @@
  *   - every a.ent (entity link, v1.6.0) has a target, and clicking each
  *     one visible in Summary switches view as needed and brings its
  *     target (row, card, section) into the viewport;
- *   - the Activity charts (section#activity, v1.6.0): at the top of every
- *     view, above the verdict, both drawn (by wait class, by wait event);
+ *   - the Activity charts (section#activity, v1.6.0): the first section in
+ *     Timeline / All sections, right under the verdict in Summary (compact
+ *     there: one chart; "Show by wait event" brings back the second,
+ *     remembered in awr-ax; the dashboard design keeps its own tabs
+ *     instead), both drawn elsewhere (by wait class, by wait event);
  *     on each chart: hover crosshair + tooltip (mirrored on the other),
  *     legend toggle + restore (restack / rescale), brush zoom (zooms both),
  *     the 1-minute detail (payload vs ashx.win, zoom into Current -> 1-min)
@@ -132,7 +135,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
   // ---- 1. load in the default view: inventory + link integrity --------
   {
     const { page, errors } = await openPage('', 'light');
-    await page.evaluate(() => { try { localStorage.removeItem('awr-view'); localStorage.removeItem('awr-theme'); } catch (e) {} });
+    await page.evaluate(() => { try { localStorage.removeItem('awr-view'); localStorage.removeItem('awr-theme'); localStorage.removeItem('awr-ax'); } catch (e) {} });
     await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(1200);
     const info = await page.evaluate(() => {
       const sections = [...document.querySelectorAll('main > section, body > section')].map(s => s.id);
@@ -207,17 +210,24 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
           act: (() => {
             const a = document.getElementById('activity');
             if (!vis(a)) return 'hidden';
-            // the dashboard's Summary puts the verdict (and the KPI cards) above it
-            const dashS = document.body.classList.contains('d-dash') && document.body.classList.contains('vs');
-            const secs = [...document.querySelectorAll('main > section')].filter(x => x !== a && vis(x) && !(dashS && x.id === 'verdict'));
+            // Summary puts the verdict above it (plan 023; the dashboard by its CSS order, with its KPI cards)
+            const summary = cls === 'vs';
+            const secs = [...document.querySelectorAll('main > section')].filter(x => x !== a && vis(x) && !(summary && x.id === 'verdict'));
             const top = a.getBoundingClientRect().top;
             const above = secs.filter(x => x.getBoundingClientRect().top < top).map(x => x.id);
             if (above.length) return 'below ' + above.slice(0, 3).join(',');
             const has = !!(window.AWR_DATA && AWR_DATA.ashx && AWR_DATA.ashx.classes && AWR_DATA.ashx.classes.length);
-            // every chart shown is drawn (the dashboard shows one at a time)
+            const two = !!(window.AWR_DATA && AWR_DATA.ashe && AWR_DATA.ashe.classes && AWR_DATA.ashe.classes.length);
+            // every chart shown is drawn (the dashboard shows one at a time; Summary opens compact)
             const c1 = vis(document.querySelector('#ax-cls .axp')), c2 = vis(document.querySelector('#ax-ev .axp'));
             const n1 = document.querySelectorAll('#ax-cls .axsvg path.xa').length, n2 = document.querySelectorAll('#ax-ev .axsvg path.xa').length;
             if (has && (!(c1 || c2) || (c1 && !n1) || (c2 && !n2))) return 'not drawn (' + n1 + '/' + n2 + ')';
+            // compact in Summary (plan 023), except in the dashboard design (its tabs show one chart)
+            if (summary && has && two && window.AWR_DESIGN !== 'dashboard') {
+              if (!a.classList.contains('ax-cmp') || c2) return 'not compact in Summary';
+              const h = +document.querySelector('#ax-cls .axsvg').getAttribute('height');
+              if (!(h > 0 && h <= 175)) return 'compact chart ' + h + ' px high';
+            }
             if (!has && !vis(document.getElementById('ax-empty'))) return 'no data and no empty note';
             return 'ok';
           })(),
@@ -248,6 +258,43 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
   }
   if (!(counts.all > counts.summary && counts.summary > counts.timeline)) {
     fail('view sizes: expected all > summary > timeline, got ' + JSON.stringify(counts));
+  }
+
+  // ---- 2b. Summary: the Activity charts open compact; "Show by wait
+  // event" shows the second chart and is remembered (awr-ax) -- plan 023
+  // (the dashboard design keeps its own Activity tabs: #ax-more stays hidden)
+  {
+    const { page, errors } = await openPage('#view=summary', 'light');
+    const has2 = await page.evaluate(() => !!(window.AWR_DATA && AWR_DATA.ashe && AWR_DATA.ashe.classes && AWR_DATA.ashe.classes.length));
+    if (has2 && DESIGN === 'dashboard') {
+      const off = await page.evaluate(() => { const b = document.getElementById('ax-more'); return (!b || b.hidden) && !document.getElementById('activity').classList.contains('ax-cmp'); });
+      console.log('activity compact (Summary): ' + (off ? 'off in the dashboard, ok' : 'FAIL on in the dashboard'));
+      if (!off) fail('activity: compact mode / #ax-more must stay off in the dashboard design');
+    } else if (has2) {
+      const st = () => page.evaluate(() => {
+        const vis = el => !!el && el.getClientRects().length > 0;
+        const b = document.getElementById('ax-more');
+        let saved = null; try { saved = localStorage.getItem('awr-ax'); } catch (e) {}
+        return { cmp: document.getElementById('activity').classList.contains('ax-cmp'), ev: vis(document.getElementById('ax-ev')),
+                 evDrawn: document.querySelectorAll('#ax-ev .axsvg path.xa').length, btn: b && vis(b) ? b.textContent : null,
+                 exp: b ? b.getAttribute('aria-expanded') : null, saved };
+      });
+      const s0 = await st();
+      await page.click('#ax-more'); await page.waitForTimeout(250);
+      const s1 = await st();
+      await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(1200);
+      const s2 = await st();
+      await page.click('#ax-more'); await page.waitForTimeout(250);
+      const s3 = await st();
+      const ok = s0.cmp && !s0.ev && s0.btn === 'Show by wait event' && s0.exp === 'false'
+        && !s1.cmp && s1.ev && s1.evDrawn > 0 && s1.saved === 'full' && s1.exp === 'true'
+        && !s2.cmp && s2.ev && s3.cmp && !s3.ev && s3.saved === 'compact';
+      console.log('activity compact (Summary): ' + (ok ? 'ok' : 'FAIL ' + JSON.stringify([s0, s1, s2, s3])));
+      if (!ok) fail('activity: Summary compact / Show by wait event ' + JSON.stringify([s0, s1, s2, s3]));
+      await page.evaluate(() => { try { localStorage.removeItem('awr-ax'); } catch (e) {} });
+    }
+    if (errors.length) fail('activity compact: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
   }
 
   // ---- 3. interactions: the switch, a cross-view jump, tabs / sort / expander

@@ -1310,44 +1310,6 @@ BEGIN
     END;
 
     -- =========================================================
-    -- v1.6.0 Activity, whole span: the bird's-eye view at the top of EVERY
-    -- view (vw in-s in-t in-a), above the verdict.  Two stacked inline-SVG
-    -- charts over one time axis -- active sessions by wait class
-    -- (AWR_DATA.ashx) and by wait event (AWR_DATA.ashe, the top 14 + Other
-    -- events), both payloads from 09's one ASH scan -- drawn by
-    -- sql/lib/js_timeline.plsql (one chart factory, two instances; zoom,
-    -- hover crosshair and the pinned window are linked).  Skeleton only:
-    -- the panel stays hidden until the script runs; JS off shows only the
-    -- ax-nojs note (ASH is not scored, every scored number is in the
-    -- tables).  No ASH rows = the calm #ax-empty note.
-    -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('<section id="activity" class="vw in-s in-t in-a ashtop" aria-labelledby="activity-h">'
-        || '<h2 id="activity-h">Activity, whole span<small class="h2sub">ASH active sessions across every '
-        || 'compared window, by wait class and by wait event</small></h2>'
-        || '<p class="ax-nojs">These charts are drawn by the page script, so they need JavaScript. ASH is not '
-        || 'scored: every scored number is in the tables below.</p>');
-    DBMS_OUTPUT.PUT_LINE('<div class="ashx" id="ashx" role="group" aria-label="Active sessions over the whole span" hidden>'
-        || '<div class="axh"><span class="axs" id="ax-range"></span>'
-        || '<span class="axk" aria-hidden="true"><span><i class="kw"></i>compared window</span>'
-        || '<span><i class="kw cur"></i>Current</span><span><i class="kw pin"></i>pinned</span></span>'
-        || '<button type="button" class="axr" id="ax-reset" hidden>Reset zoom</button></div>'
-        || '<p class="axe" id="ax-empty" hidden>No ASH samples in DBA_HIST_ACTIVE_SESS_HISTORY across the compared span.</p>');
-    DBMS_OUTPUT.PUT_LINE('<div class="axch" id="ax-cls"><div class="axct"><h3>By wait class</h3>'
-        || '<div class="axlg" role="group" aria-label="Wait classes: click to show or hide"></div></div>'
-        || '<div class="axp"><svg class="axsvg" role="img" aria-label="Active sessions stacked by wait class over the '
-        || 'whole compared span, the compared windows shaded and release markers drawn. Drag to zoom."></svg>'
-        || '<div class="axbr" hidden></div></div></div>');
-    DBMS_OUTPUT.PUT_LINE('<div class="axch" id="ax-ev"><div class="axct"><h3>By wait event</h3>'
-        || '<div class="axlg" role="group" aria-label="Wait events: click to show or hide"></div></div>'
-        || '<div class="axp"><svg class="axsvg" role="img" aria-label="Active sessions stacked by wait event (the 14 '
-        || 'largest, the rest as Other events) over the same span. Drag to zoom."></svg>'
-        || '<div class="axbr" hidden></div></div></div>');
-    DBMS_OUTPUT.PUT_LINE('<p class="axn2">Hover for the values; drag across either chart to zoom both '
-        || '(6 hours or less shows the compared windows minute by minute), double-click to reset. Click a shaded window to pin it: the Timeline grid compares against it. '
-        || 'Hover a wait class or event to highlight it (a class also lights its events): from the legend it is drawn from zero with the y axis fitted to it, '
-        || 'so its shape over time reads directly. Click its band, or Shift+click the legend entry, to keep it; Esc clears.</p>'
-        || '</div></section>');
-    -- =========================================================
     -- v1.6.0 Summary view: the verdict hero.  One rule-based sentence
     -- from the finding cards (the first two, in card order: the loudest
     -- card, then DB time when it is flagged), the counts as quiet pills,
@@ -1428,6 +1390,52 @@ BEGIN
             || '</p>');
     END IF;
     DBMS_OUTPUT.PUT_LINE('</section>');
+    -- =========================================================
+    -- v1.6.0 Activity, whole span, emitted right AFTER the verdict hero:
+    -- in Summary the answer comes first and the charts follow, compact
+    -- (by wait class only, a button brings back the second chart; see
+    -- js_timeline section 6); the verdict is Summary-only, so in Timeline
+    -- and All sections these charts are the first section.  With JS off
+    -- the DOM order shows the verdict, then the ax-nojs note.  (The
+    -- dashboard design orders its Summary by CSS, css_design.css, and
+    -- shows one chart at a time with its own tabs: no compact mode
+    -- there.)  Two stacked inline-SVG charts over one time axis -- active
+    -- sessions by wait class
+    -- (AWR_DATA.ashx) and by wait event (AWR_DATA.ashe, the top 14 + Other
+    -- events), both payloads from 09's one ASH scan -- drawn by
+    -- sql/lib/js_timeline.plsql (one chart factory, two instances; zoom,
+    -- hover crosshair and the pinned window are linked).  Skeleton only:
+    -- the panel stays hidden until the script runs; JS off shows only the
+    -- ax-nojs note (ASH is not scored, every scored number is in the
+    -- tables).  No ASH rows = the calm #ax-empty note.
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('<section id="activity" class="vw in-s in-t in-a ashtop" aria-labelledby="activity-h">'
+        || '<h2 id="activity-h">Activity, whole span<small class="h2sub">ASH active sessions across every '
+        || 'compared window, by wait class and by wait event</small></h2>'
+        || '<p class="ax-nojs">These charts are drawn by the page script, so they need JavaScript. ASH is not '
+        || 'scored: every scored number is in the tables below.</p>');
+    DBMS_OUTPUT.PUT_LINE('<div class="ashx" id="ashx" role="group" aria-label="Active sessions over the whole span" hidden>'
+        || '<div class="axh"><span class="axs" id="ax-range"></span>'
+        || '<span class="axk" aria-hidden="true"><span><i class="kw"></i>compared window</span>'
+        || '<span><i class="kw cur"></i>Current</span><span><i class="kw pin"></i>pinned</span></span>'
+        || '<button type="button" class="axr axm" id="ax-more" aria-controls="ax-ev" aria-expanded="false" hidden>Show by wait event</button>'
+        || '<button type="button" class="axr" id="ax-reset" hidden>Reset zoom</button></div>'
+        || '<p class="axe" id="ax-empty" hidden>No ASH samples in DBA_HIST_ACTIVE_SESS_HISTORY across the compared span.</p>');
+    DBMS_OUTPUT.PUT_LINE('<div class="axch" id="ax-cls"><div class="axct"><h3>By wait class</h3>'
+        || '<div class="axlg" role="group" aria-label="Wait classes: click to show or hide"></div></div>'
+        || '<div class="axp"><svg class="axsvg" role="img" aria-label="Active sessions stacked by wait class over the '
+        || 'whole compared span, the compared windows shaded and release markers drawn. Drag to zoom."></svg>'
+        || '<div class="axbr" hidden></div></div></div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="axch" id="ax-ev"><div class="axct"><h3>By wait event</h3>'
+        || '<div class="axlg" role="group" aria-label="Wait events: click to show or hide"></div></div>'
+        || '<div class="axp"><svg class="axsvg" role="img" aria-label="Active sessions stacked by wait event (the 14 '
+        || 'largest, the rest as Other events) over the same span. Drag to zoom."></svg>'
+        || '<div class="axbr" hidden></div></div></div>');
+    DBMS_OUTPUT.PUT_LINE('<p class="axn2">Hover for the values; drag across either chart to zoom both '
+        || '(6 hours or less shows the compared windows minute by minute), double-click to reset. Click a shaded window to pin it: the Timeline grid compares against it. '
+        || 'Hover a wait class or event to highlight it (a class also lights its events): from the legend it is drawn from zero with the y axis fitted to it, '
+        || 'so its shape over time reads directly. Click its band, or Shift+click the legend entry, to keep it; Esc clears.</p>'
+        || '</div></section>');
     -- =========================================================
     -- v1.6.0 Timeline view (Mock D): the skeleton only.  The aligned
     -- window grid (#tl; the whole-span ASH charts moved to the top of
