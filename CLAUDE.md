@@ -80,6 +80,15 @@ sql/
 ├── 18_sqlmon.sql        -- SQL Monitor summaries + plan-change card (template-INDEP, always on)
 ├── 19_reference.sql     -- "Reading the charts" guide (#guide) + About/method notes (#about)
 ├── 17_narrative.sql     -- verdict pieces (likely source, pills, notes), relocated by JS; runs last
+├── 20_load_response.sql -- viz: load vs response time scatter (SYSMETRIC, every interval of the span)
+├── 21_volume_cost.sql   -- viz: executions vs time per execution, per statement / wait event
+├── 22_wait_histogram.sql-- viz: wait latency histograms (DBA_HIST_EVENT_HISTOGRAM, optional grant)
+├── 23_plan_flame.sql    -- viz: plan shape old vs new (ASH per plan line + DBA_HIST_SQL_PLAN, optional grant)
+├── 24_blocking.sql      -- viz: blocked time per window + who-blocked-whom trees (ASH)
+├── 25_onset.sql         -- viz: onset finder (span series vs seasonal normal + CUSUM); also Timeline
+├── 26_window_similarity.sql -- viz: window similarity matrix + drop-a-window what-if
+├── 27_instance_map.sql  -- viz: the findings on a schematic of the instance
+├── 28_release_delta.sql -- viz: before / after a release marker (split computed in the page)
 └── lib/                 -- @@-included fragments (see conventions)
     ├── windows_cte.sql       -- run_params → … → valid_windows CTE chain
     ├── day_profile_cte.sql   -- dp_params → … → dp_scored (shared by 16 + fleet 06)
@@ -122,6 +131,11 @@ sql/
     ├── js_markers.plsql      -- inits AWR_MARKERS + AWR_markLine()
     ├── marker.sql / markers_inline.sql / no_markers.sql -- marker emitters
     ├── no_sqlmon.sql         -- stub @@-included instead of 18 when sqlmon=N
+    ├── viz_head.sql          -- <head>: the stylesheets of sections 20-28 (css_<base>.plsql)
+    ├── css_<base>.plsql / js_<base>.plsql -- GENERATED (src/css_<base>.css, src/js_<base>.js): one pair
+    │                         --   per visualization section (loadresp, volcost, waithist, planflame,
+    │                         --   blocking, onset, winsim, instmap, reldelta)
+    ├── loadresp_cte.sql / onset_cte.sql -- private CTEs of sections 20 / 25
     ├── debug_log.sql         -- per-section progress markers (no spool pollution)
     └── templates/<name>/     -- comprehensive (default) / simple / dev (+ fleet/, fleet-owned)
         ├── sysstat_load_targets.sql
@@ -393,8 +407,9 @@ renders as one collapsible row: chevron + `span.lt` title + one-line status
 Top SQL 1 (`lopen` in markup), SQL Monitor 2 (opens on an error / DOP
 downgrade on a Current top-N statement), Foreground waits 3 (open), Day
 profile 4, Segment I/O 5, File I/O 6, Load profile 7, System metrics 8,
-Parameters 9. All-only: 01, 05, 09, 10, 11, 13 ("+ 6 more in All
-sections"). Row text: `lib_ls(id, html)` (`band_glyph.plsql`, twin
+Parameters 9, then the visualization sections 10-18 (20 Load vs response
+time, 21, 22, 23, 24, 25, 26, 27, 28; see "Visualization sections").
+All-only: 01, 05, 09, 10, 11, 13 ("+ 6 more in All sections"). Row text: `lib_ls(id, html)` (`band_glyph.plsql`, twin
 `helpers.lib_ls`) emits `<script>if(window.AWR_ls)AWR_ls("id","html")</script>`;
 `window.AWR_ls` is an early 00 script (before `<main>`); 16 inlines the same
 script. A row with no `.ls` shows its `.h2sub` instead. Chrome V2
@@ -791,8 +806,9 @@ check 25; see the gotcha).
 ### Section order (v1.6.0)
 
 `awr_trend.sql` includes the sections in **DOM** order (00, 10, 08, 09, 07,
-01, 16, 13, 02, 03, 04, 05, 06, 11, 18, 14, 15, 12, 19, 17) = the JS-off
-stacking; 00 emits `#activity` first (before the verdict), and with the
+27, 20, 28, 01, 26, 16, 25, 13, 02, 03, 04, 22, 05, 24, 06, 21, 11, 18, 23,
+14, 15, 12, 19, 17; each visualization section 20-28 right after the section
+it extends) = the JS-off stacking; 00 emits `#activity` first (before the verdict), and with the
 default `order:3` it stays first in every view. Views reorder visually: Summary via the library's `--os`
 (`order:calc(10 + var(--os))`), All sections via `_style.sql`'s "All
 sections order" block keyed by section id (Findings, Load, Metrics, FG
@@ -1119,7 +1135,8 @@ if a busy DB ever makes it slow.
 **Opt-out (`sqlmon`, env `SQLMON=N`).** The driver resolves `~sqlmon_on`
 (`'N'` only for a falsy form, else `'Y'`) and `~sqlmon_include` =
 `sql/18_sqlmon.sql` or the stub `sql/lib/no_sqlmon.sql` (only the two
-`AWR-SECTION` markers, so the 20/20 pair count holds); 00 drops the rail
+`AWR-SECTION` markers, so the pair count holds: 29 pairs since sections
+20-28, 20 before); 00 drops the rail
 link, 17 wraps its R6-R9 scans in `IF '~sqlmon_on' = 'Y'` (body not
 re-indented), 19's About meta line says "SQL Monitor skipped". 06's MON
 xlinks are hidden by the chrome (missing target). `sqlmon=Y` output is
@@ -1723,8 +1740,11 @@ the demo.
   day / month name `TO_CHAR` without `NLS_DATE_LANGUAGE` (28), `off_label`
   missing / after `wingrid` (29), `anchor_id('fl'|'pa', ...)` outside
   `anchor_id.plsql` (30), a comparison with `''` (31: `<> ''` /
-  `!= ''` is never TRUE), and a `border-left` / inset shadow on a rail
-  link state (32). No DB needed; add a check when a new
+  `!= ''` is never TRUE), a `border-left` / inset shadow on a rail
+  link state (32), a `viz_head.sql` include that does not exist or a stale
+  fleet co-anomaly script (34), and a static read of an optional-grant view
+  (35: `DBA_HIST_EVENT_HISTOGRAM` / `DBA_HIST_SQL_PLAN` outside dynamic
+  SQL). No DB needed; add a check when a new
   gotcha bites. A `finding` inside a `| while read` loop must go through
   `finding` (it records to a flag file; a subshell `fail=1` is lost).
 - **Test DB: dbmint** (Oracle 19c CDB1, `connect / as sysdba`). The host name
@@ -1905,5 +1925,12 @@ the demo.
   `sql/lib/templates/fleet/*`.
 - Don't end an inline `--` comment with `;` inside a top-level SQL statement
   (it terminates the SELECT → ORA-00936; harmless only inside PL/SQL blocks).
+- Don't read `DBA_HIST_EVENT_HISTOGRAM` / `DBA_HIST_SQL_PLAN` (or any view
+  the README's required grant list lacks) with static SQL: dynamic SQL in a
+  handler for ORA-00942 / ORA-01031, or the whole report aborts for an
+  analyst user (lint 35).
+- Don't let a visualization section (20-28) add a finding, a count or a
+  severity of its own, or score with anything but `policy_bucket()`; 27 and
+  26 must agree with section 07.
 - Don't add ECharts (or any external JS/CSS) to the fleet report — it is
   inline-SVG-sparkline-only and offline-complete by design.

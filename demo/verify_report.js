@@ -35,6 +35,11 @@
  *     (ruler aria-pressed, gutter "vs <date>", amber stripe on both
  *     charts); Current unpinning + flashing, Enter / Esc; "Other events"
  *     in the event legend (required for the demo, which has > 14 events);
+ *   - the visualization sections (20-28): each present once, drawn (or
+ *     a note) in All sections and in its opened Summary row, a table of
+ *     its numbers, inside its box at 1440 and 390 px; the instance map
+ *     agrees with the finding cards; the window-similarity what-if's JS
+ *     rule gives the PL/SQL buckets (skipped on an older report);
  *   - the series highlight (v1.6.1): ashe.ecls present; a class legend
  *     hover re-bases that class (band on the axis, the rest faded, the
  *     note) and its events in the event chart; an event lights its class
@@ -992,6 +997,88 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     }
     console.log('design ' + DESIGN + ': ' + JSON.stringify(dz));
     if (errors.length) fail('design: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 8. the visualization sections (20-28): each one is there once,
+  // draws (or says why not) in All sections and in an opened library row,
+  // keeps its numbers in a table, stays inside the page at phone width;
+  // the instance map agrees with the finding cards.  A report from before
+  // these sections (none of the ids present) skips the block.
+  {
+    const VIZ = ['instance-map', 'load-response', 'release-delta', 'win-sim', 'onset', 'wait-hist', 'blocking', 'volume-cost', 'plan-flame'];
+    const { page, errors } = await openPage('#view=all', 'light');
+    const have = await page.evaluate(ids => ids.filter(id => document.querySelectorAll('[id="' + id + '"]').length), VIZ);
+    if (have.length) {
+      const probe = () => page.evaluate(ids => {
+        const vis = el => !!el && el.getClientRects().length > 0;
+        const out = {};
+        ids.forEach(id => {
+          const n = document.querySelectorAll('[id="' + id + '"]').length;
+          const s = document.getElementById(id);
+          if (n !== 1 || !s) { out[id] = 'FAIL ' + n + ' elements'; return; }
+          const drawn = [...s.querySelectorAll('svg, canvas')].filter(g => vis(g) && g.getBoundingClientRect().width > 40
+            && (g.tagName.toLowerCase() === 'canvas' || g.childElementCount > 2)).length;
+          const note = [...s.querySelectorAll('p.note')].filter(vis).length;
+          const html = [...s.querySelectorAll('[class]')].filter(e => vis(e) && e.children.length > 3).length;
+          const tables = s.querySelectorAll('table').length;
+          const wide = s.scrollWidth > s.clientWidth + 2;
+          const body = [...s.children].filter(c => c.tagName !== 'H2' && vis(c)).length;
+          out[id] = (!vis(s) ? 'FAIL hidden' : !body ? 'FAIL empty' : (!drawn && !note && !html) ? 'FAIL nothing drawn and no note'
+            : (!tables && !note) ? 'FAIL no table of the numbers' : wide ? 'FAIL wider than its box' : 'ok')
+            + ' (' + drawn + ' drawn, ' + tables + ' tables' + (note ? ', note' : '') + ')';
+        });
+        return out;
+      }, have);
+      const all = await probe();
+      console.log('viz sections, All sections: ' + JSON.stringify(all));
+      VIZ.forEach(id => { if (!all[id]) fail('viz: section #' + id + ' missing'); else if (/^FAIL/.test(all[id])) fail('viz (All sections) #' + id + ': ' + all[id]); });
+      // Summary: every row opened by a click on its h2 draws too
+      await page.evaluate(() => window.AWR_setView('summary', false)); await page.waitForTimeout(300);
+      await page.evaluate(async ids => {
+        for (const id of ids) {
+          const s = document.getElementById(id);
+          if (s && s.classList.contains('lib') && !s.classList.contains('lopen')) s.querySelector('h2').click();
+        }
+        await new Promise(r => setTimeout(r, 900));
+      }, have);
+      const sm = await probe();
+      console.log('viz sections, Summary rows opened: ' + JSON.stringify(sm));
+      have.forEach(id => { if (/^FAIL/.test(sm[id])) fail('viz (Summary, row opened) #' + id + ': ' + sm[id]); });
+      // the instance map never disagrees with the cards: a flagged area
+      // links to a card that exists, and every card is behind some area
+      const im = await page.evaluate(() => {
+        const s = document.getElementById('instance-map');
+        if (!s) return 'none';
+        const areas = [...s.querySelectorAll('[data-sev]')];
+        const flagged = areas.filter(a => /large|moderate/.test(a.getAttribute('data-sev')));
+        const behind = {};
+        areas.forEach(a => (a.getAttribute('data-cards') || '').split(/[ ,]+/).filter(Boolean).forEach(c => { behind[c] = 1; }));
+        const cards = [...document.querySelectorAll('#findings article.fc:not(.chg)')].map(c => c.id);
+        const lost = cards.filter(c => !behind[c]);
+        const dead = flagged.filter(a => { const h = (a.getAttribute('href') || a.getAttribute('xlink:href') || '').replace('#', ''); return !h || !document.getElementById(h); }).length;
+        if (!areas.length) return 'ok (not measured)';
+        return (lost.length || dead) ? 'FAIL cards without an area: ' + lost.join(',') + '; flagged areas without a card: ' + dead
+          : 'ok (' + flagged.length + ' flagged areas, ' + cards.length + ' cards)';
+      });
+      console.log('viz instance map vs cards: ' + im);
+      if (/^FAIL/.test(im)) fail('viz: instance map ' + im);
+      // the window-similarity what-if re-scores with the report's own rule
+      const ws = await page.evaluate(() => {
+        const api = window.AWR_WINSIM;
+        if (!api || typeof api.selfCheck !== 'function') return 'none';
+        try { const r = api.selfCheck(); return (r && r.bad && r.bad.length) ? 'FAIL ' + r.bad.length + ' of ' + r.n + ' buckets differ: ' + r.bad.slice(0, 3).join('; ') : 'ok (' + (r ? r.n : 0) + ' metrics)'; }
+        catch (e) { return 'FAIL ' + e.message; }
+      });
+      console.log('viz window similarity, JS rule vs PL/SQL buckets: ' + ws);
+      if (/^FAIL/.test(ws)) fail('viz: window similarity ' + ws);
+      // phone width: no section pushes the page sideways
+      await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(500);
+      const ph = await page.evaluate(ids => ids.filter(id => { const s = document.getElementById(id); return s && s.getBoundingClientRect().width > 0 && s.scrollWidth > s.clientWidth + 2; }), have);
+      console.log('viz sections at 390 px: ' + (ph.length ? 'FAIL ' + ph.join(', ') : 'ok'));
+      if (ph.length) fail('viz: wider than its box at 390 px: ' + ph.join(', '));
+      if (errors.length) fail('viz: ' + errors.slice(0, 5).join(' | '));
+    } else console.log('viz sections: none in this report (older report), skipped');
     await page.close();
   }
 
