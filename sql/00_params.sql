@@ -682,7 +682,9 @@ BEGIN
     --   H1  the uniform section header: crit / warn counts (span.meta)
     --       appended to every section h2
     --   C1  .tabs[data-tabs] / .tabpanel switching (+ ECharts resize)
-    --   C2  crit/warn count pills on the rail links, J / K jumping
+    --   C2  large / moderate finding-card pills on the rail's Findings
+    --       link (v1.7: a finding is a card), J / K jumping (the large
+    --       cards in Summary, large table rows elsewhere)
     --   C4  copy buttons: .copy-btn, per-table CSV / MD toolbars,
     --       the h2 permalink anchor
     --   X2  window highlight: click a th[data-w] or a masthead

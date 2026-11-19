@@ -67,8 +67,9 @@
  *     AWR_WAIT_COLORS; v1.7 one count: the rail's Findings pills add up
  *     to the finding cards, no other rail link has a count pill, no
  *     "metrics moved" verdict pill, the Summary Findings header counts
- *     the cards, J in Summary flashes a large card, the card sub-links'
- *     text / data-label carry no share (CSS ::after only);
+ *     the cards, J in Summary flashes a large card (when there is one),
+ *     the card sub-links' text / data-label carry no share (CSS ::after
+ *     only);
  *   - the design (window.AWR_DESIGN, design=quiet|dashboard; none =
  *     classic): quiet and dashboard -- "How to read" opens / closes the
  *     Activity help, a table's copy menu holds CSV + Markdown; dashboard --
@@ -887,11 +888,14 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       out.pillMoved = [...document.querySelectorAll('#pills li')].some(li => /metrics? moved/.test(li.textContent));
       const fm = document.querySelector('#findings-heading .meta.in-s');
       out.findMeta = fm ? (fm.textContent.match(/\d+/g) || []).reduce((s, x) => s + +x, 0) + '/' + cards.length : 'none';
-      // J in Summary lands on a large card
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true }));
-      await wait(200);
-      const fl1 = document.querySelector('#findings article.fc.flash:not(.chg)');
-      out.jk = fl1 ? (fl1.classList.contains('f-large') ? 'ok' : 'FAIL not large') : 'FAIL no card flashed';
+      // J in Summary lands on a large card (a report with no large card --
+      // a quiet window, only moderate findings -- walks table rows instead)
+      if (document.querySelector('#findings article.fc.f-large:not(.chg)')) {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true }));
+        await wait(200);
+        const fl1 = document.querySelector('#findings article.fc.flash:not(.chg)');
+        out.jk = fl1 ? (fl1.classList.contains('f-large') ? 'ok' : 'FAIL not large') : 'FAIL no card flashed';
+      } else out.jk = 'none (no large card)';
       // the rail sub-link names stay clean (the share is CSS ::after only)
       out.subNames = [...document.querySelectorAll('nav.toc a.sub')].every(a => !/%/.test(a.textContent) && !/%/.test(a.getAttribute('data-label') || ''));
       // All sections: every library section shows in full, row state or not

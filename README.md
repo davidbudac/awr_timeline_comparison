@@ -397,8 +397,10 @@ window).
 1. **Verdict** — one sentence built from the findings ("DB time up 80%,
    mostly wait: physical I/O", or "Nothing moved beyond its normal range"),
    a **Likely source** line (the plan change, new SQL, or the segment the
-   reads landed on) and count pills (findings, metrics moved, plan change,
-   parameters that differ, skipped windows, metrics normal).
+   reads landed on) and count pills (findings, with their large /
+   moderate split; plan change, parameters that differ, skipped windows,
+   metrics normal). A finding is a card: the pill, the Findings header and
+   the rail count the same cards.
 2. **DB time per window** — one bar per compared window, the Current one
    last and in the accent colour, with its normal range, Δ vs the prior
    mean and the band glyph (below).
@@ -482,8 +484,10 @@ and a table of its numbers. They explain; none of them adds a finding.
 The **rail** on the left follows the view: Summary lists the verdict, one
 link per finding card and the library; Timeline lists its lanes; the rest
 of the links dim when their section is not in the current view, with a
-"+ N more in All sections" line. Each link carries a live status dot and
-crit / warn counts; `J` / `K` jump between findings; the row filter
+"+ N more in All sections" line. Each link carries a live status dot; the
+Findings link also counts the large / moderate finding cards, and each
+card's link shows its share of the DB-time rise; `J` / `K` jump between
+large findings (the cards in Summary); the row filter
 (`⌘K` / `Ctrl+K`, `Esc` to clear) narrows every table to matching rows.
 
 The sun/moon button in the top bar toggles **dark mode**. The first load
