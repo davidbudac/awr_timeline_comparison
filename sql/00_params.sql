@@ -1103,6 +1103,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('/* reveal(el): open what hides el inside its view -- a tab, folded tail rows, <details>, a folded Timeline lane */');
     DBMS_OUTPUT.PUT_LINE('function reveal(el){');
     DBMS_OUTPUT.PUT_LINE('  if(window.AWR_TL&&AWR_TL.reveal) AWR_TL.reveal(el);');
+    DBMS_OUTPUT.PUT_LINE('  var fc=closest(el,"article.fc.fold"); if(fc&&window.AWR_fcOpen) window.AWR_fcOpen(fc);');
     DBMS_OUTPUT.PUT_LINE('  var ls=closest(el,"main > section.lib"); if(ls&&curView()==="summary"&&!ls.classList.contains("lopen")) libOpen(ls,true);');
     DBMS_OUTPUT.PUT_LINE('  var tp=closest(el,".tabpanel");');
     DBMS_OUTPUT.PUT_LINE('  if(tp&&!tp.classList.contains("on")){ var t=doc.querySelector(".tabs[data-tabs=\""+tp.getAttribute("data-tabs")+"\"] [data-t=\""+tp.getAttribute("data-t")+"\"]"); if(t) t.click(); }');

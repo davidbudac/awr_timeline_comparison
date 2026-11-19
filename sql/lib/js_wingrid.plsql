@@ -90,12 +90,16 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  W.markers().forEach(function(m){$$(''.c[data-w="''+m.o+''"],.h[data-w="''+m.o+''"]'',wg).forEach(function(c){c.classList.add("mk");});});');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* release flags on the column boundaries: full label, else the short one,');
-    DBMS_OUTPUT.PUT_LINE('   in two tiers, left- or right-anchored, never overlapping */');
+    DBMS_OUTPUT.PUT_LINE('   in two tiers, left- or right-anchored, never overlapping.  ".qf" (quiet');
+    DBMS_OUTPUT.PUT_LINE('   flags, the card charts): only the marker on the Current window''s left');
+    DBMS_OUTPUT.PUT_LINE('   edge is labelled; the others keep their column line (markCols). */');
     DBMS_OUTPUT.PUT_LINE('function layoutFlags(wg){');
+    DBMS_OUTPUT.PUT_LINE('  var quiet=wg.classList.contains("qf");');
     DBMS_OUTPUT.PUT_LINE('  $$(".flags",wg).forEach(function(fl){');
     DBMS_OUTPUT.PUT_LINE('    if(!shown(fl))return;fl.innerHTML="";');
     DBMS_OUTPUT.PUT_LINE('    var base=fl.getBoundingClientRect().left,width=fl.clientWidth,TH=17,tiers=[[],[]],narrow=width<520;');
     DBMS_OUTPUT.PUT_LINE('    W.markers().forEach(function(m){');
+    DBMS_OUTPUT.PUT_LINE('      if(quiet&&m.o!==0)return;');
     DBMS_OUTPUT.PUT_LINE('      var ref=$$(''[data-w="''+m.o+''"]'',wg).filter(function(e){return !e.closest(".flags");})[0];if(!ref)return;');
     DBMS_OUTPUT.PUT_LINE('      var x=ref.getBoundingClientRect().left-base,labels=narrow?[m.s]:[m.l,m.s],cands=[];');
     DBMS_OUTPUT.PUT_LINE('      labels.forEach(function(l){cands.push([l,0]);});labels.forEach(function(l){cands.push([l,1]);});');

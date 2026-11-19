@@ -126,6 +126,7 @@ DECLARE
     v_dbt        PLS_INTEGER;
     v_cpu        PLS_INTEGER;
     v_meta       VARCHAR2(4000);
+    v_open_g     VARCHAR2(64);   -- plan 025: the one card that starts open (Summary)
     v_parts      part_t;
     v_ncl        PLS_INTEGER := 0;   -- large finding cards (v1.7: a finding is a card)
     v_ncm        PLS_INTEGER := 0;   -- moderate finding cards
@@ -366,6 +367,21 @@ DECLARE
         END IF;
     END emit_domain_table;
 
+    -- the card headline after the metric name: "5.4x normal", "up 79.7%,
+    -- mostly wait" (the DB time lead adds where the extra time went).
+    -- Shared by the card's h3 and its triage row (plan 025).
+    FUNCTION head_txt(r finding_rec) RETURN VARCHAR2 IS
+        v_split VARCHAR2(1);
+    BEGIN
+        IF r.metric_name = 'DB time' AND v_dbt IS NOT NULL AND v_cpu IS NOT NULL THEN
+            v_split := time_split(v_findings(v_dbt).cur_val, v_findings(v_dbt).prior_mean,
+                                  v_findings(v_cpu).cur_val, v_findings(v_cpu).prior_mean);
+        END IF;
+        RETURN move_txt(r.cur_val, r.prior_mean, r.change_bucket)
+            || CASE v_split WHEN 'W' THEN ', all of it wait' WHEN 'w' THEN ', mostly wait'
+                            WHEN 'c' THEN ', mostly CPU' WHEN 'm' THEN ', CPU and wait alike' END;
+    END head_txt;
+
     -- One finding card (Summary view): kicker + band, headline, Current and
     -- normal range, the window chart, evidence rows, the related-metrics
     -- fold and the footer links.  p_pos = 1 is the lead card (bigger).
@@ -460,7 +476,8 @@ DECLARE
         DBMS_OUTPUT.PUT_LINE('<article class="panel fc f-' || v_sev
             || CASE WHEN p_pos = 1 THEN ' lead' WHEN v_sev = 'moderate' THEN ' slim' END
             || '" id="' || v_id || '" aria-labelledby="' || v_id || '-h"'
-            || ' data-impact="' || imp_tok(v_imp) || '" data-share="' || v_shr || '">'
+            || ' data-impact="' || imp_tok(v_imp) || '" data-share="' || v_shr || '"'
+            || CASE WHEN p_g <> v_open_g THEN ' data-fold="Y"' END || '>'
             || '<header class="fc-h"><div class="fc-k"><span class="sv" title="'
             || DBMS_XMLGEN.CONVERT(card_label(p_g)) || '"><i class="dotk ' || v_sev
             || '" aria-hidden="true"></i>' || INITCAP(v_sev) || '</span>'
@@ -470,21 +487,19 @@ DECLARE
                     || CASE WHEN p_g = 'DBTIME' THEN ' above normal'
                             WHEN v_shr IS NOT NULL THEN ' &middot; ' || v_shr || '% of the DB-time rise' END
                     || '</span>' END
-            || '</div>'
+            || '<span class="fc-sum">' || fv(r.cur_val * v_s, v_u) || ' &middot; normal '
+            || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u) || '</span>'
+            || '<span class="fc-tags"></span></div>'
             || '<div class="fc-band" title="z ' || band_ztxt(r.z_score) || ' against the prior normal">'
             || band_span(r.z_score, v_sev, 'lg', 'N', 10) || band_axis || '</div></header>');
         DBMS_OUTPUT.PUT_LINE('<h3 id="' || v_id || '-h">' || f_ent(r) || ' '
-            || move_txt(r.cur_val, r.prior_mean, v_sev)
-            || CASE WHEN r.metric_name = 'DB time' THEN
-                   CASE v_split WHEN 'W' THEN ', all of it wait' WHEN 'w' THEN ', mostly wait'
-                                WHEN 'c' THEN ', mostly CPU' WHEN 'm' THEN ', CPU and wait alike' END END
-            || '</h3>');
+            || head_txt(r) || '</h3>');
         DBMS_OUTPUT.PUT_LINE('<div class="fc-b"><div class="fc-main">'
             || '<div class="big"><span class="v">' || fv_num(r.cur_val * v_s, v_u) || '</span>'
             || '<span class="u">' || fv_unit(r.cur_val * v_s, v_u) || '</span>'
             || '<span class="nrm" title="prior mean ' || fv(r.prior_mean * v_s, v_u) || '">normal '
             || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u) || '</span></div>');
-        DBMS_OUTPUT.PUT_LINE('<div class="wg bare allv"' || wg_attr || '>' || wg_flags(TRUE)
+        DBMS_OUTPUT.PUT_LINE('<div class="wg bare hov qf"' || wg_attr || '>' || wg_flags(TRUE)
             || wg_bars(r.wv, v_s, r.prior_mean, r.prior_sd, v_sev) || wg_dates(TRUE) || '</div></div>');
         DBMS_OUTPUT.PUT_LINE('<dl class="ev">' || v_ev || '</dl></div>');
         IF v_nrel + v_ntw > 0 THEN
@@ -504,6 +519,30 @@ DECLARE
             || find_id(r.metric_domain, r.metric_name) || '">Timeline &rarr;</a>'
             || '<span class="evl">' || v_links || '</span></footer></article>');
     END emit_card;
+
+    -- One row of the Summary triage list (plan 025): severity, card name
+    -- (a link to the card), the headline, Current value and normal range,
+    -- an empty impact cell that the inline script after the cards fills
+    -- from the card's data-impact / data-share (plan 020), the lead
+    -- metric's windows as a micro strip (js_microstrip), and the empty
+    -- span.tri-tags that plan 027 fills.
+    PROCEDURE emit_tri_row(p_g VARCHAR2) IS
+        r    finding_rec  := v_findings(v_glead(p_g));
+        v_s  NUMBER       := metric_scale(r.metric_domain, r.metric_name);
+        v_u  VARCHAR2(20) := metric_unit(r.metric_domain, r.metric_name);
+        v_id VARCHAR2(80) := card_id(p_g);
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE('<div class="tri-row" role="listitem" data-card="' || v_id || '">'
+            || '<span class="tri-f"><i class="dotk ' || r.change_bucket || '" aria-hidden="true"></i>'
+            || '<a class="tri-go" href="#' || v_id || '">' || DBMS_XMLGEN.CONVERT(card_label(p_g)) || '</a>'
+            || '<span class="tri-m">' || f_label(r) || ' ' || head_txt(r) || '</span>'
+            || '<span class="tri-tags"></span></span>'
+            || '<span class="tri-nv"><b>' || fv(r.cur_val * v_s, v_u) || '</b><small>normal '
+            || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u) || '</small></span>'
+            || '<span class="tri-imp"></span>'
+            || '<span class="tri-spark" data-spark="' || wg_csv(r.wv, v_s)
+            || '" data-spark-title="' || f_label(r) || '"></span></div>');
+    END emit_tri_row;
 
     -- v1.6.0 Timeline: the "Headline and load" lane -- the headline
     -- metrics in Mock D's order, then every other flagged canonical load /
@@ -882,6 +921,18 @@ BEGIN
             EXIT;
         END IF;
     END LOOP;
+    -- plan 025: in the Summary view every card but one starts folded; the
+    -- open one is the first card that is not DB time (the verdict and its
+    -- DB-time breakdown already say what DB time did), else the only card
+    FOR k IN 1 .. v_order.COUNT LOOP
+        IF v_order(k) <> 'DBTIME' THEN
+            v_open_g := v_order(k);
+            EXIT;
+        END IF;
+    END LOOP;
+    IF v_open_g IS NULL AND v_order.COUNT > 0 THEN
+        v_open_g := v_order(1);
+    END IF;
 
     --
     -- Card evidence: the top 2 foreground events (by Current time waited
@@ -1142,6 +1193,14 @@ BEGIN
         || '</small></h2>');
 
     IF v_order.COUNT > 0 THEN
+        -- plan 025: the triage list (Summary): every finding on one screen
+        DBMS_OUTPUT.PUT_LINE('<div id="triage" class="panel tri vw in-s" role="list" aria-label="Findings in card order">'
+            || '<div class="tri-hd" aria-hidden="true"><span>Finding</span><span>Now &middot; normal</span>'
+            || '<span>Share of the DB-time rise</span><span>' || TO_CHAR(v_weeks_back + 1) || ' windows</span></div>');
+        FOR k IN 1 .. v_order.COUNT LOOP
+            emit_tri_row(v_order(k));
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('</div>');
         DBMS_OUTPUT.PUT_LINE('<div class="cards vw in-s">');
         FOR k IN 1 .. v_order.COUNT LOOP
             emit_card(v_order(k), k);
@@ -1166,6 +1225,19 @@ BEGIN
                 || 'if(c[2]){a.setAttribute("data-shr",c[2]+"%");a.title=c[1]+": "+c[2]+"% of the DB-time rise";}'
                 || 'n.parentNode.insertBefore(a,n.nextSibling);n=a;});})();</script>');
         END;
+        -- plan 025: fill the triage list's impact cells from each card's
+        -- data-impact / data-share (plan 020), make a row click open its
+        -- card, and fold every card that carries data-fold (Summary; with
+        -- JavaScript off nothing is folded).  window.AWR_fcOpen(card) is
+        -- what the chrome's reveal() calls for a link into a folded card.
+        DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,tri=d.getElementById("triage");');
+        DBMS_OUTPUT.PUT_LINE('function n2(v){var a=Math.abs(v);return (v<0?"-":"+")+(a>=10?a.toFixed(1):a>=1?a.toFixed(2):a.toFixed(3));}');
+        DBMS_OUTPUT.PUT_LINE('if(tri)tri.querySelectorAll(".tri-row[data-card]").forEach(function(r){var id=r.getAttribute("data-card"),c=d.getElementById(id),x=r.querySelector(".tri-imp");if(!c||!x)return;var im=c.getAttribute("data-impact"),sh=c.getAttribute("data-share");if(im===null||im===""){x.innerHTML="<small>no time measure</small>";return;}var v=+im,s=(sh===null||sh==="")?null:+sh,tot=id==="f-dbtime",w=tot?100:Math.max(0,Math.min(100,s||0));x.innerHTML="<i class=\"tri-bar\"><i style=\"width:"+w+"%\"></i></i><small><b>"+n2(v)+" AAS</b> "+(tot?"total":(s===null?"":s+"%"))+"</small>";});');
+        DBMS_OUTPUT.PUT_LINE('if(tri)tri.addEventListener("click",function(ev){var r=ev.target.closest(".tri-row");if(!r||ev.target.closest("a"))return;var a=r.querySelector("a.tri-go");if(a)a.click();});');
+        DBMS_OUTPUT.PUT_LINE('function setF(c,on){c.classList.toggle("fold",on);var b=c.querySelector(".fc-tg");if(b){b.setAttribute("aria-expanded",on?"false":"true");b.textContent=on?"Show card":"Fold";}if(!on&&window.AWR_WG)setTimeout(function(){AWR_WG.render(c);},20);}');
+        DBMS_OUTPUT.PUT_LINE('window.AWR_fcOpen=function(c){if(c&&c.classList.contains("fold"))setF(c,false);};');
+        DBMS_OUTPUT.PUT_LINE('d.querySelectorAll("#findings .cards > article.fc[data-fold]").forEach(function(c){var k=c.querySelector(".fc-h .fc-k");if(!k)return;var b=d.createElement("button");b.type="button";b.className="fc-tg";k.appendChild(b);b.addEventListener("click",function(ev){ev.stopPropagation();setF(c,!c.classList.contains("fold"));});c.addEventListener("click",function(ev){if(c.classList.contains("fold")&&!ev.target.closest("a,button"))setF(c,false);});setF(c,true);});');
+        DBMS_OUTPUT.PUT_LINE('})();</script>');
     ELSE
         DBMS_OUTPUT.PUT_LINE('<div class="panel calm vw in-s"><p class="calm-empty">'
             || CASE WHEN v_normal = 0

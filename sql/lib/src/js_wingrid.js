@@ -56,12 +56,16 @@ function markCols(wg){
   W.markers().forEach(function(m){$$('.c[data-w="'+m.o+'"],.h[data-w="'+m.o+'"]',wg).forEach(function(c){c.classList.add("mk");});});
 }
 /* release flags on the column boundaries: full label, else the short one,
-   in two tiers, left- or right-anchored, never overlapping */
+   in two tiers, left- or right-anchored, never overlapping.  ".qf" (quiet
+   flags, the card charts): only the marker on the Current window's left
+   edge is labelled; the others keep their column line (markCols). */
 function layoutFlags(wg){
+  var quiet=wg.classList.contains("qf");
   $$(".flags",wg).forEach(function(fl){
     if(!shown(fl))return;fl.innerHTML="";
     var base=fl.getBoundingClientRect().left,width=fl.clientWidth,TH=17,tiers=[[],[]],narrow=width<520;
     W.markers().forEach(function(m){
+      if(quiet&&m.o!==0)return;
       var ref=$$('[data-w="'+m.o+'"]',wg).filter(function(e){return !e.closest(".flags");})[0];if(!ref)return;
       var x=ref.getBoundingClientRect().left-base,labels=narrow?[m.s]:[m.l,m.s],cands=[];
       labels.forEach(function(l){cands.push([l,0]);});labels.forEach(function(l){cands.push([l,1]);});

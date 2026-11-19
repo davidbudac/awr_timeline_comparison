@@ -256,7 +256,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('body.d-dash.vs main > #findings{order:6}');
     DBMS_OUTPUT.PUT_LINE('body.d-dash.vs main > #s-changes{order:7}');
     DBMS_OUTPUT.PUT_LINE('body.d-dash.vs main > #s-normal{order:8}');
-    DBMS_OUTPUT.PUT_LINE('body.d-dash.vs main > #overview,body.d-dash.vs #findings > .cards{display:none}');
+    DBMS_OUTPUT.PUT_LINE('body.d-dash.vs main > #overview,body.d-dash.vs #findings > .cards,body.d-dash.vs #findings > #triage{display:none}');
     DBMS_OUTPUT.PUT_LINE('body.d-dash section.hero{padding-top:var(--s5)}');
     DBMS_OUTPUT.PUT_LINE('body.d-dash .hero .verdict{font-size:22px;line-height:1.32;letter-spacing:-.015em;max-width:none}');
     DBMS_OUTPUT.PUT_LINE('body.d-dash .hero .verdict.quiet{font-size:21px}');

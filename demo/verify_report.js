@@ -75,7 +75,9 @@
  *     "metrics moved" verdict pill, the Summary Findings header counts
  *     the cards, J in Summary flashes a large card (when there is one),
  *     the card sub-links' text / data-label carry no share (CSS ::after
- *     only);
+ *     only); plan 025: the triage list (one row per card), all but one
+ *     card folded, a row click opens its card, card charts show prior
+ *     values on hover only and one release label;
  *   - the design (window.AWR_DESIGN, design=quiet|dashboard; none =
  *     classic): quiet and dashboard -- "How to read" opens / closes the
  *     Activity help, a table's copy menu holds CSV + Markdown; dashboard --
@@ -982,6 +984,32 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       const cards = [...document.querySelectorAll('#findings article.fc:not(.chg)')];
       out.subs = subs.length + '/' + cards.length;
       out.subsOk = subs.length === cards.length && subs.every((a, i) => a.getAttribute('href') === '#' + cards[i].id);
+      // plan 025: the triage list (one row per card, in card order, with a
+      // micro strip and a filled impact cell), every card but one folded, a
+      // row click opens its card, quiet card charts.  The dashboard design
+      // has its own findings table: there #triage is hidden and no card is
+      // folded (js_design opens each card it moves into a row).
+      const dash = document.body.classList.contains('d-dash');
+      const tri = document.getElementById('triage');
+      const trows = tri ? [...tri.querySelectorAll('.tri-row[data-card]')] : [];
+      out.triage = trows.length + '/' + cards.length + (dash ? ' (dashboard)' : '');
+      out.triageOk = trows.length === cards.length
+        && trows.every((r, i) => r.getAttribute('data-card') === cards[i].id
+          && (dash || (r.querySelector('.tri-spark svg.mw') && r.querySelector('.tri-imp').textContent.trim() !== '')))
+        && (dash ? !vis(tri) : !!tri && vis(tri));
+      const folded = cards.filter(c => c.classList.contains('fold'));
+      out.folded = folded.length;
+      out.foldOk = dash ? folded.length === 0 : (cards.length < 2 || folded.length === cards.length - 1);
+      if (folded.length && !dash) {
+        const fr = trows.find(r => r.getAttribute('data-card') === folded[0].id);
+        if (fr) fr.click();
+        await wait(350);
+        out.unfold = !folded[0].classList.contains('fold') && vis(folded[0].querySelector('.fc-b')) ? 'ok' : 'FAIL ' + folded[0].id;
+      } else out.unfold = 'none';
+      const open = cards.find(c => !c.classList.contains('fold'));
+      const pv = open ? open.querySelector('.wg .c:not(.cur) .v:not(.nil)') : null;
+      out.quietV = !pv || getComputedStyle(pv).opacity === '0';
+      out.quietFlags = cards.every(c => c.querySelectorAll('.wg.qf .flags .flag').length <= 1);
       // v1.7: cards ordered by impact; chip; Summary z capped at 10
       // (#findings article.fc:not(.chg): the dashboard moves the cards into
       // its findings table, and the plan / config cards carry .chg)
@@ -1048,6 +1076,11 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (/^FAIL/.test(p4.toggle)) fail('evidence library row toggle ' + p4.toggle);
     if (/^FAIL/.test(p4.reveal)) fail('evidence library reveal ' + p4.reveal);
     if (!p4.subsOk) fail('rail card sub-links ' + p4.subs);
+    if (!p4.triageOk) fail('triage list: ' + p4.triage + ' rows (expected one per card, in card order, micro strip + impact cell)');
+    if (!p4.foldOk) fail('folded cards: ' + p4.folded + ' start folded (expected all but one)');
+    if (/^FAIL/.test(p4.unfold)) fail('a triage row click did not open its card: ' + p4.unfold);
+    if (!p4.quietV) fail('card chart: a prior value is visible without hover');
+    if (!p4.quietFlags) fail('card charts: more than one release label on a card');
     const [rf, rc] = p4.railFind.split('/');
     if (rf !== rc) fail('rail Findings pills count ' + rf + ', cards ' + rc);
     if (p4.railOther) fail('rail: ' + p4.railOther + ' count pill(s) outside the Findings link');

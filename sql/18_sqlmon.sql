@@ -900,7 +900,7 @@ BEGIN
                                               ELSE 's max elapsed (SQL Monitor)' END || '</span>'
                 || '<span class="nrm" title="prior mean ' || fmt_num(v_e_mu) || ' s">normal '
                 || fv_range(v_e_mu, v_e_sd, 's') || '</span></div>');
-            DBMS_OUTPUT.PUT_LINE('<div class="wg bare allv"' || wg_attr || '>' || wg_flags(TRUE)
+            DBMS_OUTPUT.PUT_LINE('<div class="wg bare hov qf"' || wg_attr || '>' || wg_flags(TRUE)
                 || wg_bars(v_pairs, 1, v_e_mu, v_e_sd, NULL));
             DBMS_OUTPUT.PUT_LINE('<div class="r p" data-name="Plan hash" role="row">' || v_cells || '</div>'
                 || wg_dates(TRUE) || '</div></div>');

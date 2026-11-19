@@ -273,6 +273,8 @@ function findTable(){
   var hd=mk("div","dfh",tbl);hd.setAttribute("aria-hidden","true");
   hd.innerHTML='<span></span><span>Severity</span><span>Metric</span><span class="dcur">Current</span><span class="dnr">Normal</span><span class="dbd">vs normal</span><span class="ddl">\u0394</span><span class="dtr">Trend</span>';
   cards.forEach(function(card){
+    /* plan 025: a card folded by 07's script opens: the row is the fold */
+    if(window.AWR_fcOpen)AWR_fcOpen(card);
     var fam=famOf(card),det=detailOf(card),sev=sevOf(card),lead=$("h3 a.ent",card);
     var tl=det?doc.getElementById("tl-"+det.id):null;
     var unit=txt($(".big .u",card)),nrm=txt($(".big .nrm",card)).replace(/^normal\s+/,"");

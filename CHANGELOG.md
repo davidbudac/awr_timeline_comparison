@@ -151,6 +151,13 @@ release bumps `awr_version`).
   highlight and pin work as before, zoom stays in Full span. Full span
   stays the default; the reader's choice is remembered. Works in all three
   designs, next to the dashboard's chart tabs.
+- **Findings at a glance.** The Summary view lists every finding in one
+  triage list (value, normal range, share of the DB-time rise, 13-window
+  strip) above the cards; every card but the most important one starts
+  folded (a click, a link or the list opens it); card charts print prior
+  values on hover only and name only the release right before the
+  Current window. The dashboard design keeps its own findings table (no
+  list there, every card open inside its row).
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

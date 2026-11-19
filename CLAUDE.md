@@ -342,10 +342,23 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
 |---|---|---|
 | Verdict hero `section#verdict.vw.in-s.hero` | 00 | one rule-based h1 sentence (no free prose), `p#because-slot` "Likely source:" (17 fills), `ul#pills` (17 inserts before `li.pl-normal`), `ul#narrative-slot.hnotes` (17), `p.snapnote` (target_end snapped), `#att-slot` (07 fills: DB-time breakdown, `.att-h` / `.att-bar` / `.att-lg`, parts coloured from `AWR_WAIT_COLORS` via `--c`) |
 | Hero strip `section#overview` | 08 | DB time (AAS) per window on the window component, `#hero-dbt`; replaced the six v1.5 headline tiles |
+| Triage list `#triage` | 07 | one `div.tri-row[data-card]` per card, in card order; impact cell filled by 07's inline script from the card's `data-impact` / `data-share` (plan 020); empty `span.tri-tags` (plan 027) |
 | Finding cards `#findings div.cards` | 07 | one `article.fc` per card group (below); header band glyph, big value, window bars, ≤4 evidence rows, related-metrics fold, footer `a.jump[data-tl]` "Timeline →" |
 | `section#s-changes[hidden]` | 07 (`#changes-slot`) | 18's plan cards then 12's config card move in and unhide it |
 | `section#s-normal` | 07 | "Checked and normal" `.ngrid` (≤18 `.nr`), "Moved, too small to matter", "Improved" |
 | Evidence library `#s-lib` + `section.lib` | 07 heading, sections | see below |
+
+**Folded cards (plan 025):** every card but the first one that is not DB
+time (the verdict and its DB-time breakdown carry DB time; DB time alone
+stays open) carries `data-fold="Y"`. 07's inline script after the cards
+folds them (`.fold`, a `button.fc-tg` "Show card" / "Fold" in the
+kicker; a click on a folded card that is not a link opens it) and fills
+the triage list's impact cells; `window.AWR_fcOpen(card)` opens one and
+the chrome's `reveal()` calls it, so every link, rail sub-link or hash
+into a folded card (or anything inside it) opens it first. The kicker
+carries `span.fc-sum` (Current value and normal range, shown only while
+folded) and the empty `span.fc-tags` (plan 027). JS off: nothing folds,
+the impact cells stay empty.
 
 v1.5.0's `header.report` masthead, verdict banner, all-movers list, windows
 strip + full-span DB-time chart, `.narr` "What changed" block, six
@@ -662,8 +675,12 @@ data-mu data-sd data-sev]`, `.c[data-w]` ×(N+1)) › `wg_dates`. Columns are
 key, so the X2 highlight lights `.wg` cells). Values in as offset-keyed pairs
 `'k:v;k:v'` (`LISTAGG(week_offset||':'||wg_tok(v), ';')`); a skipped window
 has no pair → `.v.nil`. Modifiers: `.fit` (18 px columns), `.bare` (no label
-/ gutter), `.allv` (every value printed), `.hov`, `.tight` (auto, columns
-< 42 px). Step rows (12, plan card) are hand-built `.r.p` rows (`i.st.lo|hi`,
+/ gutter), `.allv` (every value printed), `.hov`, `.qf` (quiet flags: only
+the marker on the Current window's left edge is labelled, the others keep
+their column line; finding and plan-change cards), `.tight` (auto, columns
+< 42 px). The card charts (07 finding cards, 18 plan-change card) are
+`bare hov qf` since plan 025 (priors on hover), no longer `allv`; 12's
+configuration card and 08's hero strip keep theirs. Step rows (12, plan card) are hand-built `.r.p` rows (`i.st.lo|hi`,
 `i.nd`, `span.pv`). `wg_date/wg_off/wg_title/wg_keep/wg_start/wg_end`.
 **Window metadata:** 00 emits `window.AWR_WIN = {np, w:[{o, d, l, s, e, t,
 v}]}` oldest first — read it, don't recompute. **Client** (`window.AWR_WG`):
@@ -794,7 +811,10 @@ designs) and the server's env whitelist.
   micro strip, else (past 91 windows, where it draws nothing) the
   design's own mini bars; nothing moved -> 07's "No finding" note goes
   into the Moved tab; Normal = `#s-normal` moved in; Improved
-  = its `.note.improved`) + `aside.dside` (`#s-changes` moved in, plus
+  = its `.note.improved`; `findTable()` calls `window.AWR_fcOpen(card)`
+  on every card it moves into a row -- the row is the fold -- and
+  `css_design.css` hides 07's `#triage` list, plan 025) + `aside.dside`
+  (`#s-changes` moved in, plus
   the releases from `AWR_WG.markers()`; a card body inside the grid
   scrolls on its own, so a 169-column plan card never widens the page).
   Summary order:

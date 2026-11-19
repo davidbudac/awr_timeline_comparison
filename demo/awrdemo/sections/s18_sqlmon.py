@@ -233,7 +233,7 @@ def _plan_card(w, put, c):
         + '<span class="u">' + ("s elapsed" if src == "sqlstat" else "s max elapsed (SQL Monitor)") + "</span>"
         + '<span class="nrm" title="prior mean ' + fmt_num(e_mu) + ' s">normal '
         + H.fv_range(e_mu, e_sd, "s") + "</span></div>")
-    put('<div class="wg bare allv"' + H.wg_attr(w) + ">" + H.wg_flags(True)
+    put('<div class="wg bare hov qf"' + H.wg_attr(w) + ">" + H.wg_flags(True)
         + H.wg_bars(w, pairs, 1, e_mu, e_sd, None))
     put('<div class="r p" data-name="Plan hash" role="row">' + cells + "</div>"
         + H.wg_dates(w, True) + "</div></div>")

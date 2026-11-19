@@ -9,7 +9,7 @@
 --
 -- Markup contract (the client half is sql/lib/js_wingrid.plsql, the CSS
 -- is the ".wg" block in sql/_style.sql):
---   <div class="wg [bare] [fit] [allv] [hov]" data-wg style="--np:N">
+--   <div class="wg [bare] [fit] [allv] [hov] [qf]" data-wg style="--np:N">
 --     [ruler]  <div class="ruler"><div class="rin"> corner | .flags | .h x
 --              (N+1) | .gh </div></div>                    (wg_ruler_put)
 --     [flags]  <div class="r fr ..."><div class="flags"></div></div>  (wg_flags)
@@ -19,6 +19,7 @@
 --   </div>
 --   N = weeks_back (prior windows); every column carries data-w = its
 --   week_offset (0 = Current), the report-wide window key (X2 highlight).
+--   "qf" = quiet flags: only the marker before Current is labelled (card charts).
 --   "bare" = no label / gutter columns (card charts).  data-v is the
 --   positional CSV of the row's values, OLDEST first, '' for a window
 --   with no value; data-mu / data-sd are the prior mean / sd in the same

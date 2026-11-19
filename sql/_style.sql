@@ -1386,6 +1386,34 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.fc .whereln{margin:0 0 4px;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:help}');
     DBMS_OUTPUT.PUT_LINE('.fc .wg.bare .r.p .pv{max-width:none} .fc .wg.bare .r.p .c.cur .pv{left:auto;right:2px}');
     DBMS_OUTPUT.PUT_LINE('.fc .cfg-more{margin:0;padding:var(--s2) 0 0;font-size:12.5px;color:var(--muted)}');
+    -- plan 025: the Summary triage list (07, #triage), folded finding cards
+    -- (.fc.fold, toggled by 07's inline script) and quiet card charts (.wg.qf)
+    DBMS_OUTPUT.PUT_LINE('#triage{padding:var(--s2) 0;margin:0 0 var(--s5)}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-hd,#triage .tri-row{display:grid;grid-template-columns:minmax(0,1fr) 180px 176px 96px;gap:4px var(--s5);align-items:center;padding:8px var(--s6)}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-hd{font-size:12px;color:var(--muted);border-bottom:1px solid var(--line-soft)}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-row{border-top:1px solid var(--line-soft);cursor:pointer}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-hd + .tri-row{border-top:0}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-row:hover{background:var(--hov)}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-f{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-go{font-weight:600;color:var(--ink);text-decoration:none}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-go:hover{text-decoration:underline}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-m{color:var(--ink-soft);font-size:13.5px}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-tags{display:flex;flex-wrap:wrap;gap:4px;flex-basis:100%} #triage .tri-tags:empty{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-nv{display:flex;flex-direction:column;line-height:1.35;font-size:13px;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-nv small{color:var(--muted);font-size:12px}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-imp{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-imp b{color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-bar{display:block;height:6px;border-radius:3px;background:var(--track)}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-bar > i{display:block;height:100%;border-radius:3px;background:var(--mean)}');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 900px){#triage .tri-hd{display:none}#triage .tri-row{grid-template-columns:minmax(0,1fr) 140px}#triage .tri-imp,#triage .tri-spark{display:none}}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-sum{font-weight:400;color:var(--ink-soft)} .fc:not(.fold) .fc-sum{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-tags{display:inline-flex;flex-wrap:wrap;gap:4px} .fc .fc-tags:empty{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-tg{font:inherit;font-size:12px;color:var(--ink-soft);background:var(--panel);border:1px solid var(--hairline);border-radius:6px;padding:1px 8px;cursor:pointer}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-tg:hover{color:var(--ink);border-color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.fc.fold{padding-bottom:var(--s4);cursor:pointer}');
+    DBMS_OUTPUT.PUT_LINE('.fc.fold > .fc-b,.fc.fold > .rel,.fc.fold > .fc-f,.fc.fold .fc-band .bd-ax{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.fc.fold h3,.fc.lead.fold h3,.fc.slim.fold h3{font-size:16px;margin-top:4px}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare.qf .fr.t2{height:22px}');
     -- checked and normal
     DBMS_OUTPUT.PUT_LINE('.calm{padding:var(--s2) var(--s6)}');
     DBMS_OUTPUT.PUT_LINE('.ngrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:32px}');

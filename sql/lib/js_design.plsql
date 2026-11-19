@@ -290,6 +290,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var hd=mk("div","dfh",tbl);hd.setAttribute("aria-hidden","true");');
     DBMS_OUTPUT.PUT_LINE('  hd.innerHTML=''<span></span><span>Severity</span><span>Metric</span><span class="dcur">Current</span><span class="dnr">Normal</span><span class="dbd">vs normal</span><span class="ddl">\u0394</span><span class="dtr">Trend</span>'';');
     DBMS_OUTPUT.PUT_LINE('  cards.forEach(function(card){');
+    DBMS_OUTPUT.PUT_LINE('    /* plan 025: a card folded by 07''s script opens: the row is the fold */');
+    DBMS_OUTPUT.PUT_LINE('    if(window.AWR_fcOpen)AWR_fcOpen(card);');
     DBMS_OUTPUT.PUT_LINE('    var fam=famOf(card),det=detailOf(card),sev=sevOf(card),lead=$("h3 a.ent",card);');
     DBMS_OUTPUT.PUT_LINE('    var tl=det?doc.getElementById("tl-"+det.id):null;');
     DBMS_OUTPUT.PUT_LINE('    var unit=txt($(".big .u",card)),nrm=txt($(".big .nrm",card)).replace(/^normal\s+/,"");');

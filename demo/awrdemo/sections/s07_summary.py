@@ -9,6 +9,7 @@ tables.  Mirrors the PL/SQL block top to bottom.
 """
 from __future__ import annotations
 
+from .. import chrome
 from .. import helpers as h
 
 # sql/lib/templates/comprehensive/sysstat_load_targets.sql (27 stats)
@@ -240,6 +241,16 @@ def _nr_row(f) -> str:
 _SPLIT_CARD = {"W": ", all of it wait", "w": ", mostly wait", "c": ", mostly CPU", "m": ", CPU and wait alike"}
 
 
+def _head_txt(r, dbt, cpu) -> str:
+    """07_summary.sql head_txt (plan 025): the card headline after the
+    metric name; the DB time lead adds where the extra time went.  Shared
+    by the card's h3 and its triage row."""
+    split = None
+    if r.name == "DB time" and dbt is not None and cpu is not None:
+        split = h.time_split(dbt.cur, dbt.mu, cpu.cur, cpu.mu)
+    return h.move_txt(r.cur, r.mu, r.bucket) + _SPLIT_CARD.get(split, "")
+
+
 def _g_shr(imp, g):
     """07_summary.sql g_shr: a card's share of the DB-time rise, integer
     percent; None when the card added no time, DB time did not rise, or
@@ -250,7 +261,7 @@ def _g_shr(imp, g):
     return None
 
 
-def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp):
+def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g):
     r = lead[g]
     # impact chip (v1.7): the card's share of the DB-time rise, left out
     # past 100% (background wait time rose more than DB time)
@@ -319,7 +330,8 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp):
                + (" lead" if pos == 1 else " slim" if sev == "moderate" else "")
                + '" id="' + cid + '" aria-labelledby="' + cid + '-h"'
                + ' data-impact="' + h.imp_tok(v_imp) + '" data-share="'
-               + ("" if v_shr is None else str(v_shr)) + '">'
+               + ("" if v_shr is None else str(v_shr)) + '"'
+               + (' data-fold="Y"' if g != open_g else '') + '>'
                '<header class="fc-h"><div class="fc-k"><span class="sv" title="'
                + h.esc(h.card_label(g)) + '"><i class="dotk ' + sev
                + '" aria-hidden="true"></i>' + sev.capitalize() + '</span>'
@@ -330,17 +342,18 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp):
                      else " &middot; " + str(v_shr) + "% of the DB-time rise" if v_shr is not None
                      else "")
                   + '</span>' if v_imp is not None and v_imp > 0 else '')
-               + '</div>'
+               + '<span class="fc-sum">' + h.fv(h._mul(r.cur, s), u) + ' &middot; normal '
+               + h.fv_range(h._mul(r.mu, s), h._mul(r.sd, s), u) + '</span>'
+               '<span class="fc-tags"></span></div>'
                '<div class="fc-band" title="z ' + h.band_ztxt(r.z) + ' against the prior normal">'
                + h.band_span(r.z, sev, "lg", "N", 10) + _AXIS + '</div></header>')
-    out.append('<h3 id="' + cid + '-h">' + _f_ent(r) + ' ' + h.move_txt(r.cur, r.mu, sev)
-               + (_SPLIT_CARD.get(split, "") if r.name == "DB time" else "") + '</h3>')
+    out.append('<h3 id="' + cid + '-h">' + _f_ent(r) + ' ' + _head_txt(r, dbt, cpu) + '</h3>')
     out.append('<div class="fc-b"><div class="fc-main">'
                '<div class="big"><span class="v">' + h.fv_num(h._mul(r.cur, s), u) + '</span>'
                '<span class="u">' + h.fv_unit(h._mul(r.cur, s), u) + '</span>'
                '<span class="nrm" title="prior mean ' + h.fv(h._mul(r.mu, s), u) + '">normal '
                + h.fv_range(h._mul(r.mu, s), h._mul(r.sd, s), u) + '</span></div>')
-    out.append('<div class="wg bare allv"' + h.wg_attr(w) + '>' + h.wg_flags(True)
+    out.append('<div class="wg bare hov qf"' + h.wg_attr(w) + '>' + h.wg_flags(True)
                + h.wg_bars(w, r.vals, s, r.mu, r.sd, sev) + h.wg_dates(w, True) + '</div></div>')
     out.append('<dl class="ev">' + ev + '</dl></div>')
     if nrel + ntw > 0:
@@ -355,6 +368,24 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp):
         out.append('</tbody></table></div></details>')
     out.append('<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-' + _find_id(r)
                + '">Timeline &rarr;</a><span class="evl">' + links + '</span></footer></article>')
+
+
+def _tri_row(w, g, r, dbt, cpu) -> str:
+    """07_summary.sql emit_tri_row (plan 025): one row of the Summary
+    triage list; the impact cell is filled by the inline script."""
+    s, u = h.metric_scale(r.domain, r.name), h.metric_unit(r.domain, r.name)
+    cid = h.card_id(g)
+    lab = h.esc(h.metric_label(r.domain, r.name))
+    return ('<div class="tri-row" role="listitem" data-card="' + cid + '">'
+            '<span class="tri-f"><i class="dotk ' + r.bucket + '" aria-hidden="true"></i>'
+            '<a class="tri-go" href="#' + cid + '">' + h.esc(h.card_label(g)) + '</a>'
+            '<span class="tri-m">' + lab + ' ' + _head_txt(r, dbt, cpu) + '</span>'
+            '<span class="tri-tags"></span></span>'
+            '<span class="tri-nv"><b>' + h.fv(h._mul(r.cur, s), u) + '</b><small>normal '
+            + h.fv_range(h._mul(r.mu, s), h._mul(r.sd, s), u) + '</small></span>'
+            '<span class="tri-imp"></span>'
+            '<span class="tri-spark" data-spark="' + h.wg_csv(w, r.vals, s)
+            + '" data-spark-title="' + lab + '"></span></div>')
 
 
 def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
@@ -490,6 +521,9 @@ def emit(w) -> str:
         if f.domain == "WAIT":
             flagcls.add(f.name[len("Wait class: "):] if f.name.startswith("Wait class: ") else f.name)
     order = h.card_order({g: (gsev[g], gz[g], imp.get(g)) for g in lead})
+    # plan 025: every card but one starts folded in Summary; the open one is
+    # the first card that is not DB time, else the only card
+    open_g = next((g for g in order if g != "DBTIME"), order[0] if order else None)
     evs = _events(w) if flagcls else []
     ordered = _table_order(findings)
     _att(out, findings, order, lead, gsev, dbt, imp)
@@ -526,9 +560,16 @@ def emit(w) -> str:
                + '</span><span class="vw in-a">Every scored metric against its prior windows; one table per domain</span>'
                '</small></h2>')
     if nc:
+        # plan 025: the triage list (Summary): every finding on one screen
+        out.append('<div id="triage" class="panel tri vw in-s" role="list" aria-label="Findings in card order">'
+                   '<div class="tri-hd" aria-hidden="true"><span>Finding</span><span>Now &middot; normal</span>'
+                   '<span>Share of the DB-time rise</span><span>' + str(w.weeks_back + 1) + ' windows</span></div>')
+        for g in order:
+            out.append(_tri_row(w, g, lead[g], dbt, cpu))
+        out.append('</div>')
         out.append('<div class="cards vw in-s">')
         for k, g in enumerate(order, 1):
-            _card(w, out, g, k, lead, ordered, evs, flagcls, dbt, cpu, imp)
+            _card(w, out, g, k, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g)
         out.append('</div>')
         # v1.7: each card's share of the DB-time rise rides on data-shr (CSS ::after)
         js = ",".join('["' + h.card_id(g) + '","' + h.card_label(g).replace('"', '').replace('<', '') + '","'
@@ -539,6 +580,13 @@ def emit(w) -> str:
                    'a.className="sub";a.href="#"+c[0];a.setAttribute("data-nodot","");a.textContent=c[1];'
                    'if(c[2]){a.setAttribute("data-shr",c[2]+"%");a.title=c[1]+": "+c[2]+"% of the DB-time rise";}'
                    'n.parentNode.insertBefore(a,n.nextSibling);n=a;});})();</script>')
+        # plan 025: the impact cells, row clicks and folding, lifted verbatim
+        L = chrome.put_lines(chrome.sql_path("sql/07_summary.sql"))
+        i = next(k for k, (t, _) in enumerate(L)
+                 if t.startswith('<script>(function(){var d=document,tri=d.getElementById("triage");'))
+        j = next(k for k in range(i, len(L)) if L[k][0] == '})();</script>')
+        assert all(ok for _, ok in L[i:j + 1])
+        out.extend(t for t, _ in L[i:j + 1])
     else:
         out.append('<div class="panel calm vw in-s"><p class="calm-empty">'
                    + ('Nothing could be scored: a metric needs at least 3 valid prior windows.' if normal == 0
