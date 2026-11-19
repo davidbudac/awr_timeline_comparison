@@ -1,0 +1,74 @@
+/* css_reldelta: styles of section 28_release_delta (Before and after a release).
+   Every selector starts with #release-delta; colours are the report's tokens
+   (status: --crit-dot worse, --imp better, --warn-dot changed, --ink-4 inside). */
+#release-delta .rd-app[hidden],#release-delta .rd-body[hidden],#release-delta .rd-more[hidden],#release-delta .rd-why[hidden]{display:none}
+#release-delta .rd-pick{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:6px 0 4px}
+#release-delta .rd-pl{font-size:12px;font-weight:600;color:var(--ink-2)}
+#release-delta .rd-mks{display:inline-flex;flex-wrap:wrap;gap:6px}
+#release-delta .rd-mb{font:inherit;font-size:12px;line-height:1.3;padding:3px 10px;border-radius:999px;border:1px solid var(--hairline);background:var(--panel);color:var(--ink);cursor:pointer}
+#release-delta .rd-mb:hover{border-color:var(--acc)}
+#release-delta .rd-mb[aria-pressed="true"]{background:var(--acc-soft);border-color:var(--acc);color:var(--acc-ink);font-weight:600}
+#release-delta .rd-mb small{font-size:11px;font-weight:400;color:var(--ink-3);margin-left:6px}
+#release-delta .rd-none{font-size:12px;color:var(--ink-3)}
+#release-delta .rd-bl{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:var(--ink-3);min-width:0;max-width:100%}
+#release-delta .rd-sel{font:inherit;font-size:12px;max-width:100%;min-width:0;padding:2px 4px;border:1px solid var(--hairline);border-radius:6px;background:var(--panel);color:var(--ink)}
+#release-delta .rd-skip,#release-delta .rd-side,#release-delta .rd-why{font-size:12px;color:var(--ink-3);margin:4px 0;line-height:1.5}
+#release-delta .rd-skip b,#release-delta .rd-side b{color:var(--ink-2);font-weight:600}
+#release-delta .rd-why{color:var(--ink-2);max-width:72ch}
+#release-delta .rd-why code{font-size:11.5px;overflow-wrap:anywhere}
+#release-delta .rd-body{container-type:inline-size;margin-top:6px}
+#release-delta .rd-lg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--ink-3);margin:6px 0 8px}
+#release-delta .rd-lg span{display:inline-flex;align-items:center;gap:5px}
+#release-delta .rd-lg .k{display:inline-block;width:9px;height:9px;border-radius:50%;background:currentColor}
+#release-delta .rd-lg .k.s-worse{color:var(--crit-dot)}
+#release-delta .rd-lg .k.s-better{color:var(--imp)}
+#release-delta .rd-lg .k.s-changed{color:var(--warn-dot)}
+#release-delta .rd-lg .k.s-inside{color:var(--ink-4)}
+#release-delta .rd-lg .kb{display:inline-block;width:18px;height:9px;border-radius:3px;background:var(--zone2)}
+#release-delta .rd-lg .kh{display:inline-block;width:9px;height:9px;border-radius:50%;border:2px solid var(--ink-3);box-sizing:border-box}
+#release-delta .rd-lg .kt{display:inline-block;width:2px;height:11px;background:var(--ink-3)}
+#release-delta .rd-r{display:grid;grid-template-columns:minmax(0,13rem) minmax(0,1fr) 7.5rem;align-items:center;column-gap:10px;min-height:26px;border-top:1px solid var(--line)}
+#release-delta .rd-r:not(.rd-ax):hover{background:var(--hov)}
+#release-delta .rd-ax{border-top:0;min-height:20px}
+#release-delta .rd-lab{font-size:12.5px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+#release-delta .rd-r.fl .rd-lab{font-weight:600}
+#release-delta .rd-ax .rd-lab,#release-delta .rd-ax .rd-w{font-size:11px;color:var(--ink-3);font-weight:400}
+#release-delta .rd-st{position:relative;display:block;height:26px;color:var(--ink-4)}
+#release-delta .rd-ax .rd-st{height:20px}
+#release-delta .rd-sc{position:absolute;left:56px;right:56px;top:0;bottom:0}
+#release-delta .rd-sc em{position:absolute;top:3px;transform:translateX(-50%);font-style:normal;font-size:10.5px;color:var(--ink-3);white-space:nowrap;font-variant-numeric:tabular-nums}
+#release-delta .rd-g{position:absolute;top:0;bottom:0;width:1px;background:var(--line)}
+#release-delta .rd-g.z{background:var(--tick)}
+#release-delta .rd-band{position:absolute;top:6px;bottom:6px;border-radius:3px;background:var(--zone2)}
+#release-delta .rd-stem{position:absolute;top:50%;height:2.5px;margin-top:-1.25px;border-radius:2px;background:currentColor}
+#release-delta .rd-tk{position:absolute;top:7px;bottom:7px;width:2px;margin-left:-1px;border-radius:1px;background:currentColor;opacity:.6}
+#release-delta .rd-dot{position:absolute;top:50%;width:11px;height:11px;margin:-5.5px 0 0 -5.5px;border-radius:50%;background:currentColor;box-shadow:0 0 0 2px var(--panel);box-sizing:border-box}
+#release-delta .rd-dot.hol{background:var(--panel);border:2.5px solid currentColor}
+#release-delta .rd-dot.clip{border-radius:2px 50% 50% 2px}
+#release-delta .rd-dot.clip.neg{border-radius:50% 2px 2px 50%}
+#release-delta .rd-val{position:absolute;top:50%;transform:translate(8px,-50%);font-size:11.5px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+#release-delta .rd-val.neg{transform:translate(calc(-100% - 8px),-50%)}
+#release-delta .rd-r.s-inside .rd-val,#release-delta .rd-r.s-small .rd-val{font-weight:400;color:var(--ink-3)}
+#release-delta .rd-r.s-small .rd-st{color:var(--ink-3)}
+#release-delta .rd-r.s-worse .rd-st,#release-delta .rd-r.s-worse .rd-w{color:var(--crit-dot)}
+#release-delta .rd-r.s-better .rd-st,#release-delta .rd-r.s-better .rd-w{color:var(--imp)}
+#release-delta .rd-r.s-changed .rd-st,#release-delta .rd-r.s-changed .rd-w{color:var(--warn-dot)}
+#release-delta .rd-w{font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#release-delta .rd-r.fl .rd-w{font-weight:600}
+#release-delta .rd-more{margin-top:6px}
+#release-delta .rd-more > summary,#release-delta .rd-tf > summary,#release-delta .rd-all > summary{cursor:pointer;font-size:12.5px;color:var(--ink-2);padding:4px 0}
+#release-delta .rd-na{font-size:12px}
+#release-delta .rd-reads{font-size:13px;line-height:1.5;margin:10px 0 6px;color:var(--ink);max-width:90ch}
+#release-delta .rd-tf,#release-delta .rd-all{margin-top:6px}
+#release-delta .tblwrap{overflow-x:auto;max-width:100%}
+#release-delta tr.rd-worse td:last-child{color:var(--crit-dot);font-weight:600}
+#release-delta tr.rd-better td:last-child{color:var(--imp);font-weight:600}
+#release-delta tr.rd-changed td:last-child{color:var(--warn-dot);font-weight:600}
+@container (max-width:620px){
+#release-delta .rd-r{grid-template-columns:minmax(0,1fr) auto;padding:3px 0 0}
+#release-delta .rd-lab{text-align:left;grid-column:1;grid-row:1}
+#release-delta .rd-w{grid-column:2;grid-row:1}
+#release-delta .rd-st{grid-column:1 / -1;grid-row:2}
+#release-delta .rd-sc{left:46px;right:46px}
+#release-delta .rd-ax .rd-lab{white-space:normal}
+}

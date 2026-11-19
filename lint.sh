@@ -567,6 +567,38 @@ for f in sql/lib/no_design.sql sql/lib/design_head.sql sql/lib/design_tail.sql \
     [ -f "$f" ] || finding design-include "$f" "missing: awr_trend.sql's design_head / design_tail chain includes it"
 done
 
+# ----------------------------------------------------------------------
+# 34. The visualization sections (20-28) and the fleet co-anomaly grid
+#     ship generated stylesheets / scripts.  sql/lib/viz_head.sql must
+#     include only files that exist (a missing one aborts the run), and the
+#     fleet's generated pair must match its source
+#     (sql/fleet/src/fleet_js2plsql.sh, the fleet-owned copy of js2plsql).
+# ----------------------------------------------------------------------
+while IFS= read -r inc; do
+    f=${inc#@@}
+    [ -f "$f" ] || finding viz-include "sql/lib/viz_head.sql" "includes $f, which does not exist"
+done < <(grep -E '^@@' sql/lib/viz_head.sql 2>/dev/null)
+if [ -f sql/fleet/src/fleet_js2plsql.sh ]; then
+    if ! sh sql/fleet/src/fleet_js2plsql.sh --check >/dev/null 2>"${TMPDIR:-/tmp}/lint_fleetjs.$$"; then
+        while IFS= read -r l; do
+            finding generated-fleet-js "sql/fleet/src/fleet_js2plsql.sh" "$l"
+        done < "${TMPDIR:-/tmp}/lint_fleetjs.$$"
+    fi
+    rm -f "${TMPDIR:-/tmp}/lint_fleetjs.$$"
+fi
+
+# ----------------------------------------------------------------------
+# 35. Optional grants.  DBA_HIST_EVENT_HISTOGRAM (22) and DBA_HIST_SQL_PLAN
+#     (23) are not in the README's required grant list, so a section may
+#     read them only through dynamic SQL inside a handler for ORA-00942 /
+#     ORA-01031: a static FROM would abort the whole report (WHENEVER
+#     SQLERROR EXIT) for an analyst user without the grant.  A dynamic
+#     statement sits in a string literal, so its line carries a quote.
+# ----------------------------------------------------------------------
+while IFS= read -r line; do
+    finding optional-grant-static "${line%%:*}:$(printf '%s' "$line" | cut -d: -f2)" "static read of an optional-grant view -- use dynamic SQL and catch ORA-00942 / ORA-01031"
+done < <(grep -n -i -E '(from|join)[[:space:]]+dba_hist_(event_histogram|sql_plan)\b' sql/[0-9][0-9]_*.sql sql/lib/*.sql 2>/dev/null | grep -v "'" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*--')
+
 [ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then
     echo "lint: clean ($(sql_files | wc -l | tr -d ' ') files checked)"

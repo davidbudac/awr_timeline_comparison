@@ -1,0 +1,473 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AWR visualization ideas</title>
+<style>
+:root{
+  --ink:var(--foreground,#12161d);
+  --ink2:var(--muted-foreground,#5d6672);
+  --surf:var(--background,#ffffff);
+  --n1:color-mix(in srgb,var(--ink) 9%,transparent);
+  --n2:color-mix(in srgb,var(--ink) 20%,transparent);
+  --n3:color-mix(in srgb,var(--ink) 45%,transparent);
+  --cur:#7c6cf0; --bad:#e5484d; --warn:#e09b1c; --good:#12a594;
+  --cpu:#3FB344; --uio:#4A90D9;
+  --sans:var(--font-sans,system-ui,-apple-system,"Segoe UI",sans-serif);
+  --mono:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,monospace);
+}
+body{font-family:var(--sans);color:var(--ink);margin:0;font-size:13px;line-height:1.45}
+h2{font-size:15px;margin:0 0 2px;font-weight:650}
+.grp{margin:0 0 14px}
+.grp p{margin:0;color:var(--ink2);font-size:12px}
+.idea{border-top:1px solid var(--n2);padding:14px 0 18px}
+.idea header{display:flex;gap:8px;align-items:baseline}
+.idea h3{font-size:14px;margin:0;font-weight:650}
+.num{font:600 11px var(--mono);color:var(--cur);border:1px solid var(--cur);border-radius:999px;padding:1px 7px}
+.q{margin:4px 0 8px;color:var(--ink2)}
+.lg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--ink2);margin:0 0 6px;align-items:center}
+.lg i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.lg i.sq{border-radius:2px}
+.lg i.ring{background:var(--surf);border:1.6px solid var(--ink);box-sizing:border-box}
+.lg i.dash{width:16px;height:0;border-top:2px dashed var(--n3);border-radius:0;vertical-align:3px}
+.lg i.bandk{width:16px;border-radius:2px;background:var(--n2)}
+.plot{overflow-x:auto}
+.plot svg{display:block}
+.rd{margin:8px 0 0;font-size:12.5px}
+.rd b{font-weight:650}
+.two{display:flex;gap:24px;flex-wrap:wrap}
+.two>div{flex:1 1 320px;min-width:300px}
+.two h4{margin:0 0 2px;font-size:12.5px;font-weight:650}
+.two .sub{margin:0 0 4px;font-size:11.5px;color:var(--ink2)}
+.seg{display:inline-flex;border:1px solid var(--n2);border-radius:8px;overflow:hidden;margin-left:auto}
+.seg button,.chips button{font:inherit;font-size:11.5px;color:var(--ink2);background:none;border:0;padding:3px 10px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--n1);color:var(--ink);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin:4px 0 10px}
+.chips button{border:1px solid var(--n2);border-radius:999px;padding:2px 9px;font-family:var(--mono)}
+.chips button[aria-pressed=true]{background:var(--n1);color:var(--ink);border-color:var(--n3)}
+.chips button[aria-pressed=false]{text-decoration:line-through;opacity:.6}
+.wi{display:grid;grid-template-columns:minmax(0,1fr) 110px max-content;gap:8px 12px;align-items:center;font-size:12px}
+.wi .hd{font-size:11px;color:var(--ink2)}
+.wi .nm b{font-weight:600;display:block}
+.wi .nm span,.wi .was{color:var(--ink2);font-size:11px}
+.wi .z{white-space:nowrap}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+.t{font:11px var(--sans);fill:var(--ink)}
+.t.m{fill:var(--ink2)} .t.b{font-weight:650} .t.mono{font-family:var(--mono)}
+.t.big{font-size:12px} .t.onc{fill:#10141a}
+.g{stroke:var(--n1)} .ax{stroke:var(--n3)}
+.band{fill:var(--n1)} .norm{stroke:var(--n3);stroke-dasharray:5 4;fill:none;stroke-width:1.5}
+.cloud{fill:var(--n2)}
+.prior{fill:var(--surf);stroke:var(--ink);stroke-width:1.6}
+.curd{fill:var(--cur);stroke:var(--surf);stroke-width:2}
+[data-tip]{cursor:default}
+#tip{position:absolute;z-index:9;pointer-events:none;background:var(--popover,var(--surf));color:var(--popover-foreground,var(--ink));
+  border:1px solid var(--n2);border-radius:6px;padding:6px 9px;font-size:11.5px;line-height:1.4;white-space:pre-line;
+  box-shadow:0 4px 14px rgba(0,0,0,.18);max-width:280px;display:none}
+</style></head>
+<body data-show="all">
+
+<div class="grp" data-g="A"><h2>First questions on any incident</h2>
+<p>Mock data, one story: Current = Mon 14 Sep 09:00&ndash;10:00 vs 8 prior Mondays. Release 4.2 (Tue 8 Sep) flipped statement 7hq2m4x9kd1ba to full scans.</p></div>
+
+<section class="idea" data-idea="1" data-g="A">
+<header><span class="num">1</span><h3>More load, or something broken?</h3></header>
+<p class="q">Every hour in the span as a dot: how busy it was vs how much each call cost.</p>
+<div class="lg"><span><i style="background:var(--cur)"></i>Current window</span><span><i class="ring"></i>8 prior Mondays 09:00</span><span><i style="background:var(--n3)"></i>every other hour in the span (336)</span><span><i class="dash"></i>normal for that load</span><span><i class="bandk"></i>&plusmn;2&sigma;</span></div>
+<div class="plot" id="p1"></div>
+<p class="rd"><b>Reads as:</b> load is the same as every other Monday (about 900 calls/s), but each call costs 2.4&times; more. Not a traffic problem.</p>
+</section>
+
+<section class="idea" data-idea="2" data-g="A">
+<header><span class="num">2</span><h3>&ldquo;Ran more often&rdquo; vs &ldquo;each run got slower&rdquo;</h3>
+<span class="seg" id="seg2"><button aria-pressed="true" data-k="sql">Top SQL</button><button aria-pressed="false" data-k="ev">Wait events</button></span></header>
+<p class="q">Current vs the prior mean, per statement. Right = called more. Up = slower per call. Diagonals = same total time.</p>
+<div class="lg"><span><i style="background:var(--bad)"></i>more DB time than normal</span><span><i style="background:var(--good)"></i>less</span><span><i style="background:var(--n3)"></i>about the same</span><span>bubble size = change in DB time</span></div>
+<div class="plot" id="p2"></div>
+<p class="rd"><b>Reads as:</b> 7hq2m4x9kd1ba runs as often as before but each run is 5.8&times; slower (database side). 3fz8c0gt5n2pw is as fast as before but called 3&times; more (application side).</p>
+</section>
+
+<div class="grp" data-g="B"><h2>Shapes the averages hide</h2>
+<p>Three views built on AWR data the toolkit does not read yet: wait-time histograms, plan steps and blocking sessions from ASH.</p></div>
+
+<section class="idea" data-idea="3" data-g="B">
+<header><span class="num">3</span><h3>Wait latency distributions</h3></header>
+<p class="q">Two events whose average rose by the same 60%, for different reasons.</p>
+<div class="lg"><span><i class="sq" style="background:var(--n2)"></i>prior windows (mean share of waits)</span><span><i class="sq" style="background:none;border-top:2px solid var(--cur);border-radius:0;height:0;width:14px;vertical-align:3px"></i>Current window</span></div>
+<div class="two">
+<div><h4>db file sequential read</h4><p class="sub">average 5.1 &rarr; 8.3 ms</p><div class="plot" id="p3a"></div></div>
+<div><h4>log file sync</h4><p class="sub">average 2.9 &rarr; 4.8 ms</p><div class="plot" id="p3b"></div></div>
+</div>
+<p class="rd"><b>Reads as:</b> left, most reads are as fast as ever and a new slow tail appeared (one device or one hot object). Right, every commit got slower (the redo device as a whole).</p>
+</section>
+
+<section class="idea" data-idea="4" data-g="B">
+<header><span class="num">4</span><h3>Plan flame graph, old plan vs new</h3></header>
+<p class="q">Statement 7hq2m4x9kd1ba. Width = ASH samples in that plan step and everything under it, both plans on the same scale.</p>
+<div class="lg"><span><i class="sq" style="background:var(--uio)"></i>User I/O in the step itself</span><span><i class="sq" style="background:var(--cpu)"></i>CPU in the step itself</span><span><i class="sq" style="background:var(--n1);border:1px solid var(--n2);box-sizing:border-box"></i>time in the steps below</span></div>
+<div class="plot" id="p4"></div>
+<p class="rd"><b>Reads as:</b> the new plan spends three quarters of its time reading ORDERS in full; the old plan reached the same rows through an index in a seventh of the time.</p>
+</section>
+
+<section class="idea" data-idea="5" data-g="B">
+<header><span class="num">5</span><h3>Blocking graph</h3></header>
+<p class="q">Who was waiting on whom in the Current window (a separate lock-contention example).</p>
+<div class="lg"><span><i class="sq" style="background:var(--bad);opacity:.5;width:18px"></i>samples blocked, Current</span><span><i class="sq" style="background:var(--ink);height:3px;width:18px;vertical-align:2px"></i>typical prior window</span><span>arrow points from holder to waiter</span></div>
+<div class="plot" id="p5"></div>
+<p class="rd"><b>Reads as:</b> one batch job holding rows in ACCOUNTS is behind 314 blocked samples across three services. The statistics job blocks about as much as it always does.</p>
+</section>
+
+<div class="grp" data-g="C"><h2>Blind spots in the method</h2>
+<p>Comparing the same hour across weeks sees only a few slots, and trusts every prior window equally.</p></div>
+
+<section class="idea" data-idea="6" data-g="C">
+<header><span class="num">6</span><h3>Finding when it started</h3></header>
+<p class="q">Top: physical reads per second, hourly, against what is normal for that hour of the week. Bottom: the running sum of the excess (CUSUM), which leaves zero where the shift begins.</p>
+<div class="lg"><span><i class="sq" style="background:var(--ink);height:2px;width:16px;vertical-align:3px"></i>observed</span><span><i class="bandk"></i>normal for that hour of the week</span><span><i class="sq" style="background:var(--cur);width:4px"></i>the three compared windows</span><span><i class="sq" style="background:var(--bad);height:2px;width:16px;vertical-align:3px"></i>detected start</span></div>
+<div class="plot" id="p6"></div>
+<p class="rd"><b>Reads as:</b> the weekly comparison only knows &ldquo;normal on 7 Sep, high on 14 Sep&rdquo;. The hourly series puts the start at Tue 8 Sep 14:00, half an hour after Release 4.2 and at the plan flip.</p>
+</section>
+
+<section class="idea" data-idea="7" data-g="C">
+<header><span class="num">7</span><h3>Is the baseline itself sound? Drop a window and rescore</h3></header>
+<p class="q">Left: how alike the windows are (darker = more different). Right: click a window to take it out of the baseline; the scores update.</p>
+<div class="two">
+<div style="flex:0 0 262px;min-width:262px"><div class="plot" id="p7m"></div></div>
+<div><div class="chips" id="chips7"></div><div class="wi" id="wi7"></div></div>
+</div>
+<p class="rd"><b>Reads as:</b> the Monday five weeks back was a public holiday. Left in, it widens the normal range so far that a real rise scores &ldquo;typical&rdquo;. Taken out, the rise is flagged and the unchanged metric stays unflagged.</p>
+</section>
+
+<div class="grp" data-g="D"><h2>Other audiences</h2>
+<p>For developers, managers, incident calls and whoever runs the fleet.</p></div>
+
+<section class="idea" data-idea="8" data-g="D">
+<header><span class="num">8</span><h3>Instance diagram coloured by findings</h3></header>
+<p class="q">The existing scores placed on a picture of the instance. Arrow width = how far the rate is above normal.</p>
+<div class="lg"><span><i style="background:var(--bad)"></i>large</span><span><i style="background:var(--warn)"></i>moderate</span><span><i class="ring" style="border-color:var(--n3)"></i>normal</span></div>
+<div class="plot" id="p8"></div>
+<p class="rd"><b>Reads as:</b> the trouble is on the read path from the datafiles. CPU, parsing, redo and the network are normal.</p>
+</section>
+
+<section class="idea" data-idea="9" data-g="D">
+<header><span class="num">9</span><h3>Before and after a release</h3></header>
+<p class="q">Each metric: 8 same-hour windows before Release 4.2 vs 5 after. The grey band is how much it varied week to week before.</p>
+<div class="lg"><span><i style="background:var(--bad)"></i>&#9650; worse</span><span><i style="background:var(--good)"></i>&#9660; better</span><span><i style="background:var(--n3)"></i>inside its usual variation</span><span><i class="bandk"></i>usual week-to-week variation (&plusmn;2&sigma;)</span></div>
+<div class="plot" id="p9"></div>
+<p class="rd"><b>Reads as:</b> the release moved I/O and response time well outside their usual range, cut hard parses, and left load, CPU, redo and network where they were.</p>
+</section>
+
+<section class="idea" data-idea="10" data-g="D">
+<header><span class="num">10</span><h3>Fleet: which problems hit many databases at once</h3></header>
+<p class="q">14 databases &times; 48 hours. Each cell = how unusual that hour was for that database. Bars on top count the databases that are unusual in the same hour.</p>
+<div class="lg"><span>how unusual:</span><span><i class="sq" style="background:var(--n1)"></i>normal</span><span><i class="sq" style="background:color-mix(in srgb,var(--cur) 45%,transparent)"></i>raised</span><span><i class="sq" style="background:var(--cur)"></i>far out</span></div>
+<div class="plot" id="p10"></div>
+<p class="rd"><b>Reads as:</b> at Tue 02:00 all nine databases on storage array SAN-A are unusual together, which points at the array. The shop_prod episode on Monday morning is that database alone.</p>
+</section>
+
+<div id="tip"></div>
+<script>
+(function(){
+var NS='http://www.w3.org/2000/svg';
+function el(t,a,p,txt){var e=document.createElementNS(NS,t);for(var k in a)e.setAttribute(k,a[k]);if(txt!=null)e.textContent=txt;if(p)p.appendChild(e);return e;}
+function mk(id,W,H){var h=document.getElementById(id);if(!h)return null;h.textContent='';return el('svg',{width:W,height:H,viewBox:'0 0 '+W+' '+H},h);}
+function tx(p,x,y,s,c,a){return el('text',{x:x,y:y,'class':'t'+(c?' '+c:''),'text-anchor':a||'start'},p,s);}
+function rng(s){return function(){s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
+function gs(r){return Math.sqrt(-2*Math.log(r()+1e-12))*Math.cos(6.2831853*r());}
+function tip(e,s){e.setAttribute('data-tip',s);return e;}
+function f1(v){return (Math.round(v*10)/10).toFixed(1);}
+function arrowHead(p,x,y,dx,dy,sz,style){var n=Math.sqrt(dx*dx+dy*dy);dx/=n;dy/=n;var px=-dy,py=dx;
+  return el('polygon',{points:[x,y,x-dx*sz+px*sz*.55,y-dy*sz+py*sz*.55,x-dx*sz-px*sz*.55,y-dy*sz-py*sz*.55].join(' '),style:style},p);}
+
+/* show only the requested ideas */
+var show=document.body.getAttribute('data-show');
+if(show!=='all'){var want=show.split(','),gs_={};
+  [].forEach.call(document.querySelectorAll('.idea'),function(s){if(want.indexOf(s.getAttribute('data-idea'))<0)s.remove();else gs_[s.getAttribute('data-g')]=1;});
+  [].forEach.call(document.querySelectorAll('.grp'),function(g){if(!gs_[g.getAttribute('data-g')])g.remove();});}
+
+/* 1 ---------------------------------------------------------------- */
+function c1(){var W=704,H=340,L=40,R=14,T=24,B=38,s=mk('p1',W,H);if(!s)return;var r=rng(11),i,v;
+  var X=function(v){return L+(W-L-R)*v/1400},Y=function(v){return H-B-(H-T-B)*v/14};
+  var f=function(x){return 3.2+2.2e-6*x*x},sd=function(x){return .28+.00035*x};
+  for(v=0;v<=14;v+=2){el('line',{x1:L,x2:W-R,y1:Y(v),y2:Y(v),'class':v?'g':'ax'},s);tx(s,L-8,Y(v)+4,v,'m','end');}
+  for(v=0;v<=1400;v+=200)tx(s,X(v),H-B+16,v,'m','middle');
+  tx(s,4,12,'DB time per call (ms)','m');tx(s,W-R,H-4,'User calls per second','m','end');
+  var up='',dn='',ln='';
+  for(v=0;v<=1400;v+=50){up+=(v?'L':'M')+X(v)+' '+Y(f(v)+2*sd(v));ln+=(v?'L':'M')+X(v)+' '+Y(f(v));}
+  for(v=1400;v>=0;v-=50)dn+='L'+X(v)+' '+Y(Math.max(0,f(v)-2*sd(v)));
+  el('path',{d:up+dn+'Z','class':'band'},s);el('path',{d:ln,'class':'norm'},s);
+  for(i=0;i<336;i++){var x=110+1250*Math.pow(r(),.85),y=f(x)+gs(r)*sd(x);el('circle',{cx:X(x),cy:Y(y),r:2.2,'class':'cloud'},s);}
+  tx(s,X(1392),Y(1.7),'just busier = further right along the dashed curve','m','end');
+  var d=['7 Sep','31 Aug','24 Aug','17 Aug','10 Aug','3 Aug','27 Jul','20 Jul'];
+  for(i=0;i<8;i++){var px=880+gs(r)*38,py=f(px)+gs(r)*.32;
+    tip(el('circle',{cx:X(px),cy:Y(py),r:5,'class':'prior'},s),'Mon '+d[i]+' 09:00\n'+Math.round(px)+' calls/s · '+f1(py)+' ms per call');}
+  var cx=910,cy=11.9;
+  el('line',{x1:X(cx),x2:X(cx),y1:Y(f(cx))-9,y2:Y(cy)+13,style:'stroke:var(--cur);stroke-width:1.5'},s);
+  arrowHead(s,X(cx),Y(cy)+9,0,-1,7,'fill:var(--cur)');
+  tip(el('circle',{cx:X(cx),cy:Y(cy),r:7,'class':'curd'},s),'Current: Mon 14 Sep 09:00\n910 calls/s · 11.9 ms per call\nnormal at this load: '+f1(f(cx))+' ms');
+  tx(s,X(cx)+14,Y(cy)+4,'Current: 11.9 ms per call','b big');
+  tx(s,X(cx)+14,Y(cy)+19,'2.4× the normal '+f1(f(cx))+' ms at this load','m');
+}
+
+/* 2 ---------------------------------------------------------------- */
+var D2={sql:[
+  ['7hq2m4x9kd1ba',1.02,5.8,1.9,'plan flip after Release 4.2'],['3fz8c0gt5n2pw',3.1,.97,.62,'called 3× more'],
+  ['b2k9d7xw1q8ur',1.9,1.7,.45,'both'],['9a4s6m2hh0tzc',.5,.93,-.22,'runs half as often'],
+  ['c81nq0yp3dd4f',1.05,1.08,.05],['0mv5t2ka9wx7h',.94,1.02,-.02],['fx3j7b1rr6p0e',1.1,.9,0],['4k0zzq8m1nn2s',.88,1.12,-.01],
+  ['aw7y2c5vg9d3k',1.15,1.0,.04],['5tt9p1x0bb8ma',.97,.86,-.05],['d6r2h4s8jj1qz',1.0,1.2,.06],['8n3w6f0cc2y5u',1.22,.95,.05],
+  ['1p7m9k3ee4t6x',.82,.98,-.04],['g5b0v8z2aa7rl',1.04,.93,-.01]],
+ ev:[
+  ['db file scattered read',6.2,1.1,1.25,'full scans that were not there before'],['db file sequential read',1.05,1.63,.52,'same count, each read slower'],
+  ['direct path read temp',2.6,1.2,.2,''],['log file sync',1.0,1.06,.01],['SQL*Net more data to client',1.08,.97,.01],
+  ['enq: TX - row lock contention',.6,.8,-.08,'fewer and shorter'],['latch: cache buffers chains',1.3,1.1,.03],['library cache: mutex X',.9,1.05,0],
+  ['log file parallel write',1.0,1.04,.01],['read by other session',2.1,1.5,.11,'']]};
+function c2(k){var W=704,H=402,L=52,R=16,T=26,B=44,s=mk('p2',W,H);if(!s)return;var i;
+  var X=function(v){return L+(W-L-R)*(v+2)/5},Y=function(v){return H-B-(H-T-B)*(v+2)/5};
+  var lb={'-2':'×¼','-1':'×½','0':'same','1':'×2','2':'×4','3':'×8'};
+  for(i=-2;i<=3;i++){el('line',{x1:X(i),x2:X(i),y1:T,y2:H-B,'class':i?'g':'ax'},s);el('line',{x1:L,x2:W-R,y1:Y(i),y2:Y(i),'class':i?'g':'ax'},s);
+    tx(s,X(i),H-B+16,lb[i],'m','middle');tx(s,L-8,Y(i)+4,lb[i],'m','end');}
+  var ang=Math.atan2((H-T-B)/5,(W-L-R)/5)*180/Math.PI;
+  [[-1,'half the total time'],[0,'same total time'],[1,'2× total time'],[2,'4× total time'],[3,'']].forEach(function(c){
+    var x0=Math.max(-2,c[0]-3),x1=Math.min(3,c[0]+2);
+    el('line',{x1:X(x0),y1:Y(c[0]-x0),x2:X(x1),y2:Y(c[0]-x1),style:'stroke:var(--n2);stroke-dasharray:3 4'+(c[0]?'':';stroke:var(--n3)')},s);
+    var lx=x1-.1,g=el('g',{transform:'translate('+X(lx)+','+Y(c[0]-lx)+') rotate('+ang+')'},s);if(c[1])tx(g,-4,-5,c[1],'m','end');});
+  tx(s,W-R,H-4,(k==='sql'?'Executions':'Number of waits')+' vs normal → more often = application side','m','end');
+  tx(s,4,11,(k==='sql'?'Time per run':'Time per wait')+' vs normal ↑ slower each time = plan / database side','m');
+  var d=D2[k].slice().sort(function(a,b){return Math.abs(b[3])-Math.abs(a[3]);}),mx=Math.abs(d[0][3]);
+  d.forEach(function(p){var x=Math.log(p[1])/Math.LN2,y=Math.log(p[2])/Math.LN2,r=4+17*Math.sqrt(Math.abs(p[3])/mx);
+    var col=p[3]>.08?'var(--bad)':p[3]<-.08?'var(--good)':'var(--n3)';
+    tip(el('circle',{cx:X(x),cy:Y(y),r:r,style:'fill:'+col+';fill-opacity:.78;stroke:var(--surf);stroke-width:2'},s),
+      p[0]+'\n'+(k==='sql'?'executions':'waits')+' ×'+p[1]+' · time per '+(k==='sql'?'run':'wait')+' ×'+p[2]+'\nDB time '+(p[3]>=0?'+':'−')+Math.abs(p[3]).toFixed(2)+' AAS');
+    if(p[4]!=null&&Math.abs(p[3])>.07){var right=x<1.6&&x>-.5,ax=X(x)+(right?r+6:-r-6);
+      tx(s,ax,Y(y)-(p[4]?2:-4),p[0],'b'+(k==='sql'?' mono':''),right?'start':'end');if(p[4])tx(s,ax,Y(y)+12,p[4],'m',right?'start':'end');}});
+}
+
+/* 3 ---------------------------------------------------------------- */
+function c3(id,pr,cu,an){var W=336,H=232,L=30,R=6,T=30,B=40,s=mk(id,W,H);if(!s)return;var i,bw=(W-L-R)/9;
+  var Y=function(v){return H-B-(H-T-B)*v/40},lb=['1','2','4','8','16','32','64','128','128+'];
+  for(i=0;i<=40;i+=10){el('line',{x1:L,x2:W-R,y1:Y(i),y2:Y(i),'class':i?'g':'ax'},s);tx(s,L-6,Y(i)+4,i+'%','m','end');}
+  var d='';
+  for(i=0;i<9;i++){var x=L+i*bw;
+    if(pr[i]>0)el('path',{d:'M'+(x+3)+' '+Y(0)+'V'+(Y(pr[i])+3)+'q0 -3 3 -3H'+(x+bw-6)+'q3 0 3 3V'+Y(0)+'Z',style:'fill:var(--n2)'},s);
+    d+=(i?'L':'M')+(x+1)+' '+Y(cu[i])+'L'+(x+bw-1)+' '+Y(cu[i]);
+    tx(s,x+bw/2,H-B+15,lb[i],'m','middle');
+    tip(el('rect',{x:x,y:T,width:bw,height:H-T-B,style:'fill:transparent'},s),'waits up to '+lb[i]+' ms\nCurrent '+cu[i]+'% · prior mean '+pr[i]+'%');}
+  el('path',{d:d,style:'fill:none;stroke:var(--cur);stroke-width:2.2;stroke-linejoin:round'},s);
+  tx(s,W-R,H-6,'wait time, up to … ms','m','end');tx(s,2,12,'share of waits','m');
+  an(s,function(i){return L+i*bw;},Y,bw);}
+function c3all(){
+  c3('p3a',[6,18,34,26,11,4,1,0,0],[5,16,30,23,10,4,2,6,4],function(s,X,Y,bw){
+    el('path',{d:'M'+(X(7)+2)+' '+(Y(9)+5)+'V'+Y(9)+'H'+(X(9)-2)+'V'+(Y(9)+5),style:'fill:none;stroke:var(--ink);stroke-width:1.2'},s);
+    tx(s,X(9)-2,Y(9)-20,'new slow tail:','b','end');tx(s,X(9)-2,Y(9)-7,'10% of reads over 64 ms','','end');});
+  c3('p3b',[10,30,34,18,6,2,0,0,0],[3,12,30,33,16,5,1,0,0],function(s,X,Y,bw){
+    var x1=X(2)+bw/2,x2=X(3)+bw/2+26,y=Y(37.5);
+    el('line',{x1:x1,x2:x2-6,y1:y,y2:y,style:'stroke:var(--ink);stroke-width:1.2'},s);arrowHead(s,x2,y,1,0,7,'fill:var(--ink)');
+    tx(s,x2+8,y-3,'whole curve moved','b');tx(s,x2+8,y+10,'right, no tail');});
+}
+
+/* 4 ---------------------------------------------------------------- */
+function c4(){var W=704,H=292,s=mk('p4',W,H);if(!s)return;var k=(W-2)/318;
+  var prior={n:'SELECT STATEMENT',c:0,i:0,ch:[{n:'SORT ORDER BY',c:2,i:0,ch:[{n:'NESTED LOOPS',c:3,i:0,ch:[
+     {n:'TABLE ACCESS BY ROWID ORDERS',c:6,i:12},{n:'INDEX UNIQUE SCAN CUST_PK',c:9,i:3},{n:'INDEX RANGE SCAN ORD_CUST_IX',c:4,i:5}]}]}]};
+  var cur={n:'SELECT STATEMENT',c:0,i:0,ch:[{n:'SORT ORDER BY',c:14,i:0,ch:[{n:'HASH JOIN',nw:1,c:18,i:4,ch:[
+     {n:'TABLE ACCESS FULL ORDERS',nw:1,c:32,i:204},{n:'TABLE ACCESS FULL CUSTOMERS',nw:1,c:16,i:30}]}]}]};
+  function tot(n){var t=n.c+n.i;(n.ch||[]).forEach(function(c){t+=tot(c);});n.t=t;return t;}
+  function draw(n,x,y,rh,lab){var w=n.t*k,self=(n.c+n.i)*k,g=el('g',{},s);
+    el('rect',{x:x+1,y:y+1,width:Math.max(1,w-2),height:rh-2,rx:3,style:'fill:var(--n1);stroke:var(--n2)'},g);
+    var sx=x+w-self;
+    if(n.i>0)el('rect',{x:sx+1,y:y+1,width:Math.max(1,n.i*k-2),height:rh-2,rx:3,style:'fill:var(--uio)'},g);
+    if(n.c>0)el('rect',{x:sx+n.i*k+1,y:y+1,width:Math.max(1,n.c*k-2),height:rh-2,rx:3,style:'fill:var(--cpu)'},g);
+    tip(g,n.n+'\n'+n.t+' samples ('+f1(n.t/6)+' min) incl. steps below\nin this step: User I/O '+n.i+' · CPU '+n.c);
+    if(lab){var onc=!n.ch&&n.i*k>w*.5,cw=onc?7.3:6.2,ws=n.n.split(' '),cand=[n.n+' · '+n.t+(n.nw?' · new step':''),n.n+' · '+n.t,n.n,ws[ws.length-1]];
+      for(var q=0;q<cand.length;q++)if(cand[q].length*cw<=w-12){tx(g,x+7,y+rh/2+4,cand[q],onc?'onc b':'');break;}}
+    var cx=x;(n.ch||[]).forEach(function(c){draw(c,cx,y+rh,rh,lab);cx+=c.t*k;});}
+  tot(prior);tot(cur);
+  tx(s,0,12,'Old plan 811755146','b');tx(s,124,12,'typical prior window: 44 samples = 7 min of DB time','m');
+  draw(prior,0,20,22,false);
+  var px=prior.t*k+14;
+  ['SELECT STATEMENT · 44','SORT ORDER BY · 44','NESTED LOOPS · 42',
+   'TABLE ACCESS BY ROWID ORDERS 18  ·  INDEX UNIQUE SCAN CUST_PK 12  ·  INDEX RANGE SCAN ORD_CUST_IX 9'].forEach(function(t,i){
+     el('line',{x1:prior.t*k+2,x2:px-3,y1:31+22*i,y2:31+22*i,'class':'ax'},s);tx(s,px,35+22*i,t,'m');});
+  tx(s,0,142,'New plan 2628649851','b');tx(s,134,142,'Current window: 318 samples = 53 min of DB time','m');
+  draw(cur,0,150,30,true);
+  tx(s,0,H-6,'1 sample = 10 s of one session (AWR keeps one ASH sample in ten)','m');
+}
+
+/* 5 ---------------------------------------------------------------- */
+function c5(){var W=704,H=284,s=mk('p5',W,H);if(!s)return;var nw=196,nh=60;
+  var N={A:[4,56,'BATCH_RECON','UPDATE accounts, uncommitted','root holder, not waiting','root'],
+         C:[254,12,'checkout-svc','UPDATE accounts · TX row lock','blocked 212 · typical 6','bad'],
+         D:[254,100,'refund-svc','UPDATE accounts · TX row lock','blocked 38 · typical 3','bad'],
+         E:[504,12,'payment-svc','SELECT FOR UPDATE · TX row lock','blocked 64 · typical 0','bad'],
+         B:[4,212,'DBMS_STATS job','gather stats ORDERS','root holder, not waiting','rootn'],
+         F:[254,212,'report-api','hard parse · library cache lock','blocked 18 · typical 15','ok']};
+  var E=[['A','C',212,6,1],['A','D',38,3,1],['C','E',64,0,1],['B','F',18,15,0]];
+  function wd(v){return 3+22*v/212;}
+  E.forEach(function(e){var a=N[e[0]],b=N[e[1]],x1=a[0]+nw,y1=a[1]+nh/2,x2=b[0]-9,y2=b[1]+nh/2,mx=(x1+x2)/2;
+    var d='M'+x1+' '+y1+'C'+mx+' '+y1+' '+mx+' '+y2+' '+x2+' '+y2,col=e[4]?'var(--bad)':'var(--n3)';
+    tip(el('path',{d:d,style:'fill:none;stroke:'+col+';stroke-opacity:'+(e[4]?.5:1)+';stroke-width:'+wd(e[2])},s),
+      a[2]+' blocks '+b[2]+'\n'+e[2]+' samples in Current · typical '+e[3]);
+    if(e[3]>0)el('path',{d:d,style:'fill:none;stroke:var(--ink);stroke-width:'+Math.max(1.5,22*e[3]/212)+';pointer-events:none'},s);
+    arrowHead(s,b[0]-1,y2,1,0,Math.max(9,wd(e[2])*.75),'fill:'+(e[4]?'var(--bad)':'var(--n3)'));});
+  for(var k in N){var n=N[k],st=n[5]==='bad'?'fill:color-mix(in srgb,var(--bad) 10%,transparent);stroke:var(--bad);stroke-width:1.5':
+      n[5]==='root'?'fill:var(--n1);stroke:var(--ink);stroke-width:1.8':n[5]==='rootn'?'fill:var(--n1);stroke:var(--n3)':'fill:none;stroke:var(--n3)';
+    el('rect',{x:n[0],y:n[1],width:nw,height:nh,rx:8,style:st},s);
+    tx(s,n[0]+10,n[1]+18,n[2],'b big');tx(s,n[0]+10,n[1]+34,n[3],'m');tx(s,n[0]+10,n[1]+50,(n[5]==='bad'?'▲ ':'')+n[4],n[5]==='bad'?'b':'m');}
+  tx(s,504,116,'314 samples blocked behind','b');tx(s,504,131,'one session of BATCH_RECON','b');tx(s,504,148,'(typical: 9)','m');
+  tx(s,504,236,'no change from normal','m');
+}
+
+/* 6 ---------------------------------------------------------------- */
+function c6(){var W=704,H=372,L=48,R=14,s=mk('p6',W,H);if(!s)return;var r=rng(5),n=346,cp=206,i;
+  var T1=62,B1=222,T2=246,B2=326;
+  var X=function(t){return L+(W-L-R)*t/(n-1)};
+  var sea=[],obs=[],cs=[],S=0,mxS=0;
+  for(i=0;i<n;i++){var h=i%24,dw=Math.floor(i/24)%7,sh=Math.exp(-Math.pow(h-10.5,2)/14)+.8*Math.exp(-Math.pow(h-15.5,2)/9);
+    var v=300+520*sh*(dw>4?.3:1);sea.push(v);var o=v*(1+.07*gs(r))*(i>=cp?1.75:1);obs.push(o);}
+  var onset=0,found=false;
+  for(i=0;i<n;i++){S=Math.max(0,S+obs[i]/sea[i]-1-.2);cs.push(S);if(S===0&&!found)onset=i+1;if(S>3)found=true;if(S>mxS)mxS=S;}
+  var Y1=function(v){return B1-(B1-T1)*v/2000},Y2=function(v){return B2-(B2-T2)*v/(mxS*1.08)};
+  for(i=0;i<=2000;i+=500){el('line',{x1:L,x2:W-R,y1:Y1(i),y2:Y1(i),'class':i?'g':'ax'},s);tx(s,L-6,Y1(i)+4,i?i+'/s':'0','m','end');}
+  el('line',{x1:L,x2:W-R,y1:B2,y2:B2,'class':'ax'},s);tx(s,L-6,B2+4,'0','m','end');
+  var dn=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  for(i=0;i<15;i++){var x=X(i*24);el('line',{x1:x,x2:x,y1:B2,y2:B2+4,'class':'ax'},s);el('line',{x1:x,x2:x,y1:T1,y2:B1,'class':'g'},s);
+    if(i%2===0)tx(s,x,B2+17,dn[i%7]+' '+(i<1?'31 Aug':i),'m',i?'middle':'start');}
+  var up='',lo='',ln='',cl='';
+  for(i=0;i<n;i++){up+=(i?'L':'M')+X(i).toFixed(1)+' '+Y1(sea[i]*1.15).toFixed(1);ln+=(i?'L':'M')+X(i).toFixed(1)+' '+Y1(obs[i]).toFixed(1);cl+=(i?'L':'M')+X(i).toFixed(1)+' '+Y2(cs[i]).toFixed(1);}
+  for(i=n-1;i>=0;i--)lo+='L'+X(i).toFixed(1)+' '+Y1(sea[i]*.85).toFixed(1);
+  el('path',{d:up+lo+'Z',style:'fill:var(--n2)'},s);
+  [[9,'−2w',0],[177,'−1w',0],[345,'Current',1]].forEach(function(w){var x=X(w[0]);
+    el('rect',{x:x-2,y:T1-6,width:4,height:B1-T1+6,style:'fill:var(--cur);opacity:'+(w[2]?.9:.55)},s);
+    tx(s,w[2]?W-R:x,T1-11,w[1]+(w[2]?' Mon 09:00':''),w[2]?'b':'m',w[2]?'end':'middle');});
+  el('path',{d:ln,style:'fill:none;stroke:var(--ink);stroke-width:1.4;stroke-linejoin:round'},s);
+  el('path',{d:cl+'L'+X(n-1)+' '+B2+'L'+X(0)+' '+B2+'Z',style:'fill:color-mix(in srgb,var(--bad) 16%,transparent)'},s);
+  el('path',{d:cl,style:'fill:none;stroke:var(--bad);stroke-width:1.8'},s);
+  tx(s,W-R,B2+34,'September','m','end');tx(s,L+6,T2+12,'Running sum of the excess over normal (CUSUM)','m');
+  var xo=X(onset);
+  el('line',{x1:xo,x2:xo,y1:8,y2:B2,style:'stroke:var(--bad);stroke-width:1.6'},s);
+  tx(s,xo+8,14,'shift began ≈ '+dn[Math.floor(onset/24)%7]+' '+Math.floor(onset/24)+' Sep '+(onset%24)+':00','b big');
+  tx(s,xo-8,14,'⚑ Release 4.2 · Tue 8 Sep 13:30','','end');
+  tx(s,xo-8,29,'◆ plan flip 7hq2m4x9kd1ba · first seen 14:10','','end');
+  tx(s,xo+8,29,'reads 1.75× normal ever since','m');
+  var hit=el('rect',{x:L,y:T1,width:W-L-R,height:B2-T1,style:'fill:transparent'},s),cur=el('line',{y1:T1,y2:B2,style:'stroke:var(--n3);display:none;pointer-events:none'},s);
+  hit.addEventListener('mousemove',function(e){var b=s.getBoundingClientRect(),t=Math.max(0,Math.min(n-1,Math.round((e.clientX-b.left-L)/(W-L-R)*(n-1))));
+    cur.setAttribute('x1',X(t));cur.setAttribute('x2',X(t));cur.style.display='';var dd=Math.floor(t/24);
+    hit.setAttribute('data-tip',dn[dd%7]+' '+(dd<1?'31 Aug':dd+' Sep')+' '+(t%24)+':00\n'+Math.round(obs[t])+' reads/s · normal '+Math.round(sea[t])+'\nCUSUM '+f1(cs[t]));});
+  hit.addEventListener('mouseleave',function(){cur.style.display='none';});
+}
+
+/* 7 ---------------------------------------------------------------- */
+function c7(){var W=262,H=296,s=mk('p7m',W,H);if(!s)return;var r=rng(23),i,j,k;
+  var lab=['−8w','−7w','−6w','−5w','−4w','−3w','−2w','−1w','Cur'],vec=[];
+  for(i=0;i<9;i++){var v=[];for(k=0;k<5;k++)v.push((i===3?.35:1)*(1+.04*gs(r)));if(i===8){v[1]*=1.15;v[4]*=1.2;}vec.push(v);}
+  var c=24,ox=40,oy=34;
+  for(i=0;i<9;i++){tx(s,ox+i*c+c/2,oy-8,lab[i],i===8?'b':'m','middle');tx(s,ox-6,oy+i*c+c/2+4,lab[i],i===8?'b':'m','end');
+    for(j=0;j<9;j++){var d=0;for(k=0;k<5;k++)d+=Math.pow(vec[i][k]-vec[j][k],2);d=Math.sqrt(d);
+      var p=Math.min(100,Math.round(6+d/1.5*94));
+      tip(el('rect',{x:ox+j*c+1,y:oy+i*c+1,width:c-2,height:c-2,rx:3,style:'fill:'+(i===j?'var(--n1)':'color-mix(in srgb,var(--cur) '+p+'%,var(--n1))')},s),
+        lab[i]+' vs '+lab[j]+'\ndistance '+d.toFixed(2)+(i===j?'':d>1?' · very different':d>.2?' · somewhat different':' · alike'));}}
+  el('rect',{x:ox+3*c,y:oy,width:c,height:9*c,rx:4,style:'fill:none;stroke:var(--ink);stroke-width:1.5'},s);
+  tx(s,ox+3*c+c/2,oy+9*c+16,'−5w: public holiday,','b','middle');tx(s,ox+3*c+c/2,oy+9*c+30,'unlike every other window','m','middle');
+  /* what-if */
+  var M=[['Physical reads/s','',[410,395,430,150,420,405,415,400],470,0],['DB time','AAS',[3.1,2.9,3.3,1.1,3.2,3.0,3.1,2.95],3.7,2],['User calls/s','',[900,880,910,310,895,905,890,885],905,0]];
+  var on=[1,1,1,0,1,1,1,1],ch=document.getElementById('chips7'),wi=document.getElementById('wi7');
+  function score(vals,cur,mask){var a=vals.filter(function(_,i){return mask[i];}),n=a.length,m=0,q=0;a.forEach(function(v){m+=v;});m/=n;
+    a.forEach(function(v){q+=(v-m)*(v-m);});var sd=n>1?Math.sqrt(q/(n-1)):0,fl=Math.max(sd,.02*Math.abs(m)),z=(cur-m)/fl;
+    return {m:m,sd:sd,z:z,n:n,b:n<3?'too few windows':Math.abs(z)>3?'large':Math.abs(z)>2?'moderate':'typical'};}
+  function col(b){return b==='large'?'var(--bad)':b==='moderate'?'var(--warn)':'var(--n3)';}
+  function zt(z){return (z>=0?'+':'−')+Math.abs(z).toFixed(1);}
+  function render(){ch.textContent='';wi.textContent='';
+    lab.slice(0,8).forEach(function(l,i){var b=document.createElement('button');b.textContent=l;b.setAttribute('aria-pressed',on[i]?'true':'false');
+      b.title=on[i]?'In the baseline. Click to drop.':'Dropped. Click to put back.';b.onclick=function(){on[i]=on[i]?0:1;render();};ch.appendChild(b);});
+    ['Metric','vs '+on.reduce(function(a,b){return a+b;},0)+' windows','Score'].forEach(function(h){var d=document.createElement('div');d.className='hd';d.textContent=h;wi.appendChild(d);});
+    M.forEach(function(m){var all=score(m[2],m[3],[1,1,1,1,1,1,1,1]),me=score(m[2],m[3],on),fx=m[4];
+      var a=document.createElement('div');a.className='nm';var b1=document.createElement('b');b1.textContent=m[0]+(m[1]?' ('+m[1]+')':'');
+      var sp=document.createElement('span');sp.textContent='Current '+m[3]+', normal '+Math.max(0,me.m-2*me.sd).toFixed(fx)+'–'+(me.m+2*me.sd).toFixed(fx);a.appendChild(b1);a.appendChild(sp);wi.appendChild(a);
+      var g=document.createElement('div');wi.appendChild(g);var sv=el('svg',{width:110,height:20,viewBox:'0 0 110 20'},g),x=function(z){return (Math.max(-4,Math.min(8,z))+4)/12*110;};
+      el('rect',{x:0,y:7,width:110,height:6,rx:3,style:'fill:var(--n1)'},sv);el('rect',{x:x(-2),y:5,width:x(2)-x(-2),height:10,rx:2,style:'fill:var(--n2)'},sv);
+      el('line',{x1:x(0),x2:x(0),y1:3,y2:17,style:'stroke:var(--n3);stroke-width:1.5'},sv);
+      el('circle',{cx:Math.max(5,Math.min(105,x(me.z))),cy:10,r:5,style:'fill:'+col(me.b)+';stroke:var(--surf);stroke-width:1.5'},sv);
+      var z=document.createElement('div');z.className='z';var dt=document.createElement('span');dt.className='dot';dt.style.background=col(me.b);
+      var zb=document.createElement('b');zb.textContent='z '+zt(me.z)+' '+me.b;var was=document.createElement('div');was.className='was';
+      was.textContent='with all 8: z '+zt(all.z)+' '+all.b;z.appendChild(dt);z.appendChild(zb);z.appendChild(was);wi.appendChild(z);});}
+  render();
+}
+
+/* 8 ---------------------------------------------------------------- */
+function c8(){var W=704,H=336,s=mk('p8',W,H);if(!s)return;
+  function node(x,y,w,h,a,b,c,sev){var st=sev==='bad'?'fill:color-mix(in srgb,var(--bad) 13%,transparent);stroke:var(--bad);stroke-width:1.8':
+      sev==='warn'?'fill:color-mix(in srgb,var(--warn) 14%,transparent);stroke:var(--warn);stroke-width:1.8':'fill:var(--surf);stroke:var(--n3)';
+    tip(el('rect',{x:x,y:y,width:w,height:h,rx:8,style:st},s),a+'\n'+b+'\n'+c);
+    tx(s,x+10,y+19,a,'b big');tx(s,x+10,y+35,b,'m');tx(s,x+10,y+51,c,sev==='ok'?'m':'b');}
+  function arr(x1,y1,x2,y2,w,sev){var c=sev==='bad'?'var(--bad)':sev==='warn'?'var(--warn)':'var(--n3)',dx=x2-x1,dy=y2-y1,n=Math.sqrt(dx*dx+dy*dy),hs=Math.max(8,w*1.5);
+    el('line',{x1:x1,y1:y1,x2:x2-dx/n*hs*.8,y2:y2-dy/n*hs*.8,style:'stroke:'+c+';stroke-width:'+w},s);arrowHead(s,x2,y2,dx,dy,hs,'fill:'+c);}
+  el('rect',{x:196,y:106,width:500,height:104,rx:12,style:'fill:var(--n1);stroke:var(--n2);stroke-dasharray:5 4'},s);tx(s,206,124,'SGA','m b');
+  arr(158,48,268,48,2.5,'ok');tx(s,213,40,'SQL*Net','m','middle');tx(s,213,64,'normal','m','middle');
+  arr(355,76,355,104,2.5,'ok');
+  arr(430,262,430,192,11,'bad');tx(s,416,222,'physical reads','b','end');tx(s,416,237,'▲ 2.4× normal · large','b','end');
+  arr(500,190,500,260,2.5,'ok');tx(s,508,222,'DBWR','m');tx(s,508,236,'normal','m');
+  arr(616,190,616,260,2.5,'ok');tx(s,624,222,'LGWR','m');tx(s,624,236,'normal','m');
+  node(8,20,150,56,'Application sessions','user calls 905/s','normal','ok');
+  node(270,20,170,56,'Server processes','CPU 1.1 AAS','normal','ok');
+  node(236,126,140,64,'Shared pool','hard parses 4/s','normal','ok');
+  node(388,126,146,64,'Buffer cache','logical reads 61k/s','▲ +38% · moderate','warn');
+  node(546,126,140,64,'Redo buffer','redo 1.2 MB/s','normal','ok');
+  node(388,262,146,62,'Datafiles','read latency 8.3 ms','▲ 1.6× normal · large','bad');
+  node(546,262,140,62,'Redo logs','log file sync 2.9 ms','normal','ok');
+  tx(s,8,250,'Hot path','b big');tx(s,8,268,'Datafiles → Buffer cache:');tx(s,8,284,'2.4× the reads, and each');tx(s,8,300,'read 1.6× slower.');
+}
+
+/* 9 ---------------------------------------------------------------- */
+function c9(){var W=704,rh=24,D=[['User I/O wait time',210,25],['DB time',142,18],['Physical reads',138,14],['SQL response time',96,15],['Logical reads',38,12],
+   ['CPU used',9,11],['Commit wait (log file sync)',6,14],['Network bytes',4,12],['Executions',2,8],['User calls',1,9],['Redo size',-3,10],['Hard parses',-46,15]];
+  var T=26,H=T+D.length*rh+10,L=178,R=58,s=mk('p9',W,H);if(!s)return;
+  var X=function(v){return L+(W-L-R)*(v+100)/325};
+  [-50,0,50,100,150,200].forEach(function(v){el('line',{x1:X(v),x2:X(v),y1:T-4,y2:H-6,'class':v?'g':'ax'},s);tx(s,X(v),14,(v>0?'+':v<0?'−':'')+Math.abs(v)+'%','m','middle');});
+  tx(s,0,14,'change after Release 4.2','m');
+  D.forEach(function(d,i){var y=T+i*rh+rh/2,out=Math.abs(d[1])>d[2],dirBad=d[1]>0,c=!out?'var(--n3)':dirBad?'var(--bad)':'var(--good)';
+    tx(s,L-10,y+4,d[0],out?'b':'', 'end');
+    el('rect',{x:X(-d[2]),y:y-7,width:X(d[2])-X(-d[2]),height:14,rx:3,style:'fill:var(--n2)'},s);
+    el('line',{x1:X(0),x2:X(d[1]),y1:y,y2:y,style:'stroke:'+c+';stroke-width:2.5;stroke-linecap:round'},s);
+    el('circle',{cx:X(d[1]),cy:y,r:5.5,style:'fill:'+c+';stroke:var(--surf);stroke-width:2'},s);
+    tx(s,(out?X(d[1]):X(d[1]>=0?Math.max(d[1],d[2]):Math.min(d[1],-d[2])))+(d[1]>=0?11:-11),y+4,(out?(dirBad?'▲ ':'▼ '):'')+(d[1]>0?'+':d[1]<0?'−':'')+Math.abs(d[1])+'%',out?'b':'m',d[1]>=0?'start':'end');
+    tip(el('rect',{x:0,y:y-rh/2,width:W,height:rh,style:'fill:transparent'},s),d[0]+'\n'+(d[1]>0?'+':'')+d[1]+'% after the release\nusual variation before: ±'+d[2]+'%'+(out?'':' (inside it)'));});
+}
+
+/* 10 --------------------------------------------------------------- */
+function c10(){var W=704,s,r=rng(41),i,h;
+  var G=[['SAN-A',['erp_prod','erp_rep','crm_prod','billing','dwh','hr_prod','portal','docs','audit']],['SAN-B',['shop_prod','shop_rep','pay_prod','pay_rep','mon']]];
+  var L=110,cw=12,chh=17,top=64,rows=[],y=top;
+  G.forEach(function(g){rows.push({g:g[0],y:y});y+=18;g[1].forEach(function(n){rows.push({n:n,grp:g[0],y:y});y+=chh;});y+=6;});
+  var H=y+22;s=mk('p10',W,H);if(!s)return;var cnt=[];for(h=0;h<48;h++)cnt.push(0);
+  rows.forEach(function(rw){if(rw.g){tx(s,0,rw.y+12,'storage array '+rw.g,'m b');return;}
+    tx(s,L-8,rw.y+chh/2+4,rw.n,'mono','end');
+    for(h=0;h<48;h++){var v=r()*.26;
+      if(rw.grp==='SAN-A'&&(h===26||h===27))v=(h===26?.78:.62)+r()*.22;
+      if(rw.n==='shop_prod'&&h>=9&&h<=13)v=.6+r()*.35;
+      if(rw.n==='dwh'&&(h===22||h===23||h===46||h===47))v=.38+r()*.12;
+      if(v>.55)cnt[h]++;
+      var p=v<.3?0:Math.round((v-.3)/.7*100);
+      tip(el('rect',{x:L+h*cw+.5,y:rw.y+.5,width:cw-1,height:chh-1,rx:2,style:'fill:'+(p?'color-mix(in srgb,var(--cur) '+Math.max(22,p)+'%,transparent)':'var(--n1)')},s),
+        rw.n+' ('+rw.grp+')\n'+(h<24?'Mon ':'Tue ')+(h%24<10?'0':'')+(h%24)+':00 · score '+v.toFixed(2)+(v>.55?' · far out':v>.3?' · raised':' · normal'));}});
+  var by=top-10;el('line',{x1:L,x2:L+48*cw,y1:by,y2:by,'class':'ax'},s);
+  for(h=0;h<48;h++)if(cnt[h])el('rect',{x:L+h*cw+1.5,y:by-cnt[h]*3.6,width:cw-3,height:cnt[h]*3.6,rx:2,style:'fill:'+(cnt[h]>3?'var(--cur)':'var(--n3)')},s);
+  tx(s,L-8,by-2,'DBs unusual','m','end');
+  tx(s,L+26*cw+cw*2+6,by-24,'9 of 14 at Tue 02:00, all on SAN-A','b');
+  tx(s,L+11*cw+cw/2,by-9,'1','m','middle');
+  for(h=0;h<=48;h+=6)if(h<48)tx(s,L+h*cw,H-6,(h%24===0?(h<24?'Mon ':'Tue '):'')+(h%24<10?'0':'')+(h%24)+':00','m');
+}
+
+[c1,function(){c2('sql');},c3all,c4,c5,c6,c7,c8,c9,c10].forEach(function(f){try{f();}catch(e){console.error(e);}});
+var sg=document.getElementById('seg2');
+if(sg)sg.addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;
+  [].forEach.call(sg.children,function(x){x.setAttribute('aria-pressed',x===b?'true':'false');});c2(b.getAttribute('data-k'));});
+
+/* tooltip */
+var T=document.getElementById('tip');
+document.addEventListener('mousemove',function(e){var t=e.target.closest?e.target.closest('[data-tip]'):null;
+  if(!t){T.style.display='none';return;}
+  T.textContent=t.getAttribute('data-tip');T.style.display='block';
+  var w=T.offsetWidth,x=e.pageX+14,y=e.pageY+14,mw=document.documentElement.clientWidth;
+  if(x+w>mw-4)x=Math.max(4,e.pageX-w-14);T.style.left=x+'px';T.style.top=y+'px';});
+document.addEventListener('mouseleave',function(){T.style.display='none';});
+})();
+</script>
+</body></html>

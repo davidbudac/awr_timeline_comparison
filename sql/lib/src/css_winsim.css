@@ -1,0 +1,82 @@
+/* css_winsim: styles of section 26_window_similarity (Window similarity).
+   Every selector starts with #win-sim or a winsim- class; colours from the
+   report's tokens only (the theme toggle and the designs restyle it). */
+#win-sim .winsim-rd{margin:var(--s2) 0 var(--s3);max-width:72em;color:var(--ink-2)}
+#win-sim .winsim-rd b{color:var(--ink)}
+#win-sim .winsim-app[hidden],#win-sim .winsim-nojs[hidden]{display:none}
+#win-sim .winsim-app{display:flex;flex-wrap:wrap;gap:var(--s5);align-items:flex-start;margin:var(--s3) 0 var(--s4)}
+#win-sim .winsim-p1{flex:1 1 380px;min-width:0;max-width:100%}
+#win-sim .winsim-p2{flex:1 1 360px;min-width:0;max-width:100%}
+#win-sim .winsim-app h3{display:block;font-size:13px;margin:0 0 var(--s1)}
+#win-sim .winsim-cap{font-size:12px;color:var(--ink-3);margin:2px 0 var(--s2);max-width:60em}
+#win-sim .winsim-plot{overflow-x:auto;overflow-y:hidden;max-width:100%}
+#win-sim .winsim-mxb{position:relative}
+#win-sim .winsim-mxb .winsim-svg{position:relative;z-index:1}
+#win-sim .winsim-cv{position:absolute;z-index:0}
+#win-sim .winsim-svg{display:block;overflow:visible}
+#win-sim .winsim-c{fill:var(--track)}
+#win-sim .winsim-c.dg{fill:var(--line)}
+#win-sim .winsim-c.sk{fill:transparent}
+#win-sim .winsim-c.dr{opacity:.35}
+#win-sim .winsim-curb{fill:none;stroke:var(--acc);stroke-width:1.5;pointer-events:none}
+#win-sim .winsim-oddb{fill:none;stroke:var(--warn-dot);stroke-width:1.5;stroke-dasharray:3 2;pointer-events:none}
+#win-sim .winsim-ax{font-size:10px;fill:var(--ink-3);font-variant-numeric:tabular-nums}
+#win-sim .winsim-ax.cur{fill:var(--acc-ink);font-weight:600}
+#win-sim .winsim-ax.odd{fill:var(--ink);font-weight:600}
+#win-sim .winsim-ax.dr{text-decoration:line-through;opacity:.6}
+#win-sim .winsim-bars{margin-top:var(--s2)}
+#win-sim .winsim-bar{fill:var(--bar)}
+#win-sim .winsim-bar.cur{fill:var(--acc)}
+#win-sim .winsim-bar.odd{fill:var(--warn-dot)}
+#win-sim .winsim-bar.dr{opacity:.3}
+#win-sim .winsim-base{stroke:var(--ink-4);stroke-width:1}
+#win-sim .winsim-thr{stroke:var(--ink-3);stroke-width:1;stroke-dasharray:4 3}
+#win-sim .winsim-thrl{font-size:10px;fill:var(--ink-3)}
+#win-sim .winsim-oddg{font-size:9px;fill:var(--warn-dot)}
+#win-sim .winsim-skx{font-size:10px;fill:var(--ink-4)}
+#win-sim .winsim-probe{position:absolute;width:0;height:0;overflow:hidden}
+#win-sim .winsim-lg{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;font-size:11px;color:var(--ink-3);margin:0 0 var(--s2)}
+#win-sim .winsim-lg span{display:inline-flex;align-items:center;gap:5px}
+#win-sim .winsim-gr i{display:inline-block;width:84px;height:9px;border-radius:2px}
+#win-sim .winsim-gr em{font-style:normal}
+#win-sim .winsim-sw{display:inline-block;width:11px;height:11px;border-radius:2px;background:var(--track)}
+#win-sim .winsim-sw.cur{background:transparent;box-shadow:inset 0 0 0 1.5px var(--acc)}
+#win-sim .winsim-sw.odd{background:transparent;box-shadow:inset 0 0 0 1.5px var(--warn-dot)}
+#win-sim .winsim-sw.sk{background:transparent;box-shadow:inset 0 0 0 1px var(--hairline)}
+#win-sim .winsim-chips{display:flex;flex-wrap:wrap;gap:6px;max-height:220px;overflow-y:auto;padding:2px}
+#win-sim .winsim-chip{display:inline-flex;flex-direction:column;align-items:flex-start;gap:0;padding:4px 9px;border-radius:7px;border:1px solid var(--hairline);background:var(--panel);color:var(--ink);font:inherit;font-size:12px;line-height:1.25;cursor:pointer}
+#win-sim .winsim-chip small{font-size:10.5px;color:var(--ink-3)}
+#win-sim .winsim-chip[aria-pressed="true"]{background:var(--panel-2,var(--panel));border-color:var(--ink-4)}
+#win-sim .winsim-chip[aria-pressed="false"]{background:transparent;border-style:dashed;color:var(--ink-3)}
+#win-sim .winsim-chip[aria-pressed="false"] b{text-decoration:line-through}
+#win-sim .winsim-chip.odd{border-color:var(--warn-dot)}
+#win-sim .winsim-chip.sk{opacity:.5;cursor:not-allowed}
+#win-sim .winsim-chip:hover:not(:disabled){border-color:var(--ink-3)}
+#win-sim .winsim-chip:focus-visible,#win-sim .winsim-btn:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+#win-sim .winsim-act{display:flex;flex-wrap:wrap;gap:8px;margin:var(--s2) 0}
+#win-sim .winsim-btn{font:inherit;font-size:12px;padding:5px 11px;border-radius:7px;border:1px solid var(--hairline);background:var(--panel);color:var(--ink);cursor:pointer}
+#win-sim .winsim-btn.winsim-sug{border-color:var(--warn-dot)}
+#win-sim .winsim-btn:disabled{opacity:.45;cursor:default}
+#win-sim .winsim-btn[hidden]{display:none}
+#win-sim .winsim-sum{margin:var(--s2) 0;font-size:13px}
+#win-sim .winsim-tw{overflow-x:auto;max-width:100%}
+#win-sim .winsim-b{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+#win-sim .winsim-b i{width:8px;height:8px;border-radius:50%;background:var(--ink-4);flex:none}
+#win-sim .winsim-b.b-large i{background:var(--crit-dot)}
+#win-sim .winsim-b.b-moderate i{background:var(--warn-dot)}
+#win-sim .winsim-b.b-improved i{background:var(--imp)}
+#win-sim .winsim-b.b-typical i{background:transparent;box-shadow:inset 0 0 0 1.5px var(--ink-4)}
+#win-sim .winsim-b.b-skip i{background:transparent;box-shadow:inset 0 0 0 1px var(--ink-4)}
+#win-sim .winsim-b.b-noted i{background:transparent;box-shadow:inset 0 0 0 1.5px var(--ink-3)}
+#win-sim .winsim-odd{color:var(--ink);font-weight:600;white-space:nowrap}
+#win-sim .winsim-tbl td:first-child,#win-sim .winsim-tbl td:nth-child(2),#win-sim .winsim-mt th{white-space:nowrap}
+#win-sim tr.winsim-fl td:first-child{box-shadow:inset 2px 0 0 var(--warn-dot)}
+#win-sim .winsim-ct td:first-child{min-width:9em}
+#win-sim .winsim-mt td,#win-sim .winsim-mt th{font-size:11px;padding:2px 6px}
+#win-sim .winsim-full{margin:var(--s2) 0}
+#win-sim tr.twin td{color:var(--ink-3)}
+.winsim-tip{position:fixed;z-index:100;pointer-events:none;background:var(--ink);color:var(--panel);font-size:12px;line-height:1.45;padding:6px 10px;border-radius:6px;max-width:320px;box-shadow:0 4px 14px rgba(0,0,0,.25);font-variant-numeric:tabular-nums}
+.winsim-tip[hidden]{display:none}
+.winsim-tip .tm{opacity:.72}
+.winsim-tip .tr2{display:flex;align-items:center;gap:10px;justify-content:space-between}
+#win-sim .winsim-tbl td:nth-child(5){min-width:18em}

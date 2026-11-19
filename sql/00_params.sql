@@ -496,17 +496,27 @@ BEGIN
         || '<a href="#lane-config" data-nodot>Configuration</a>'
         -- The All sections view's order (_style.sql "All sections order"):
         -- load and waits, SQL, storage and config, then the whole span.
+        -- the visualization sections (20-28) sit next to the section they
+        -- extend; the three "first question" ones lead, right after Findings
+        || '<b>Diagnosis</b>'
+        || '<a href="#instance-map" data-nodot>Instance map</a>'
+        || '<a href="#load-response" data-nodot>Load vs response time</a>'
+        || '<a href="#release-delta" data-nodot>Before / after release</a>'
         || '<b>Workload</b>'
         || '<a href="#load">Load profile</a>'
         || '<a href="#metrics">Metrics</a>'
         || '<a href="#waits-fg">Waits &mdash; foreground</a>'
+        || '<a href="#wait-hist" data-nodot>Wait latency</a>'
         || '<a href="#waits-bg">Waits &mdash; background</a>'
+        || '<a href="#blocking" data-nodot>Blocking</a>'
         || '<b>SQL</b>'
         || '<a href="#topsql">Top SQL</a>'
+        || '<a href="#volume-cost" data-nodot>Volume vs unit cost</a>'
         || '<a href="#topsql-ash">Top SQL &mdash; ASH</a>'
         -- SQL Monitor link only when section 18 runs (sqlmon not 'N').
         || CASE WHEN '~sqlmon_on' = 'Y'
                 THEN '<a href="#sqlmon">SQL Monitor</a>' ELSE '' END
+        || '<a href="#plan-flame" data-nodot>Plan shape</a>'
         || '<b>Storage &amp; config</b>'
         || '<a href="#segment-io">Segment I/O</a>'
         || '<a href="#file-io">File I/O</a>'
@@ -514,8 +524,10 @@ BEGIN
         || '<b>Whole span</b>'
         || '<a href="#ash-timeline">ASH timeline</a>'
         || '<a href="#db-time-summary">DB time</a>'
+        || '<a href="#onset" data-nodot>Onset</a>'
         || '<a href="#utilization">Utilization</a>'
         || '<a href="#windows">Windows</a>'
+        || '<a href="#win-sim" data-nodot>Window similarity</a>'
         -- Day profile link only when the section exists (profile_days > 0);
         -- '' otherwise keeps the nav byte-identical.
         || CASE WHEN ~profile_days > 0

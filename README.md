@@ -65,6 +65,10 @@ GRANT SELECT ON DBA_HIST_PARAMETER           TO <user>;
 GRANT SELECT ON DBA_HIST_REPORTS             TO <user>;
 GRANT SELECT ON V_$DATABASE                  TO <user>;
 GRANT SELECT ON V_$INSTANCE                  TO <user>;
+-- Optional: without them the report still runs, and the section shows a
+-- one-line "needs SELECT on ..." note instead of its chart.
+GRANT SELECT ON DBA_HIST_EVENT_HISTOGRAM     TO <user>;  -- Wait latency histograms
+GRANT SELECT ON DBA_HIST_SQL_PLAN            TO <user>;  -- Plan shape (plan trees)
 -- Only if you use side/create_weekly_baselines.sql (optional, writes baselines):
 GRANT EXECUTE ON DBMS_WORKLOAD_REPOSITORY    TO <user>;
 ```
@@ -453,6 +457,26 @@ snap ids, skipped windows and why) and the Day profile.
 - **SQL Monitor** — persisted SQL Monitor executions per statement, with a
   Plan hash column, errors and DOP downgrades.
 
+### Diagnostic views
+
+Nine views answer the questions the tables leave open. Each is a row of the
+Summary's evidence library (one-line answer; open it in place) and a full
+section in All sections, next to the table it extends. All are inline SVG /
+HTML, so they work offline; each carries a computed **Reads as:** sentence
+and a table of its numbers. They explain; none of them adds a finding.
+
+| View | The question it answers |
+|---|---|
+| **Instance map** | *Where* in the database is the problem? The findings on a picture of the instance (network, CPU, locks, parse, buffer cache, writers, datafiles, redo, temp); click an area for its finding card. |
+| **Load vs response time** | More load, or something broken? Every snapshot interval as load against response time, with the normal curve for that load. |
+| **Before and after a release** | What moved across a release marker (or any window boundary you pick), against each metric's usual variation. |
+| **Wait latency histograms** | Did every wait get a little slower, or did a slow tail appear? The shape behind each top wait's average. Optional grant: `DBA_HIST_EVENT_HISTOGRAM`. |
+| **Blocking** | Who held the sessions that waited, how many were stuck behind each holder, and is this much blocking normal for this hour? |
+| **Volume vs unit cost** | For each statement / wait event that costs more: did it run more often (application) or did each run get slower (database)? |
+| **Plan shape, old vs new** | Where inside a changed plan the time goes: old and new plan as icicle charts, per plan line from ASH. Optional grant: `DBA_HIST_SQL_PLAN`. |
+| **Onset** | *When* did it start? The whole span against its seasonal normal, with a change-point scan that dates the shift and names the nearest release. Also in the Timeline view. |
+| **Window similarity** | Are the prior windows a fair picture of normal? A window-by-window similarity matrix, and a what-if that re-scores the report without a window you drop. |
+
 ### The navigation rail & dark mode
 
 The **rail** on the left follows the view: Summary lists the verdict, one
@@ -541,6 +565,16 @@ command to drill into that database. A toolbar above the table lets you
 filter by name, sort by score/name/AAS/errors-first, show only crit/warn+
 rows, and expand or collapse every row at once — all client-side, no
 re-run.
+
+Above the table, **Abnormal at the same time** lines the databases up on
+one time axis: one row per database, one column per time bucket, each cell
+that database's ASH activity against its own normal. The bars on top count
+how many databases were far out at once, and one line names the biggest
+shared episode ("01:00-05:00: 6 of 11 databases abnormal at once") — the
+sign of a cause they share (storage, network, a host, a batch window)
+rather than several separate problems. Click a cell to open that database's
+row, a bar to pick out the databases involved. Computed in the page from
+the ASH payloads; it changes no score and no row order.
 
 ```bash
 ./run_awr_fleet.sh fleet.conf                          # defaults (AUTO, 1h, 4 back)
@@ -699,6 +733,11 @@ SQL> @side/create_weekly_baselines.sql
 │   ├── 17_narrative.sql             -- verdict pieces: likely source, pills, notes (runs last)
 │   ├── 18_sqlmon.sql                -- SQL Monitor summaries (+ plan-change card)
 │   ├── 19_reference.sql             -- "Reading the charts" guide + About this report
+│   ├── 20_load_response.sql .. 28_release_delta.sql
+│   │                                -- the diagnostic views: load vs response time (20), volume vs
+│   │                                --   unit cost (21), wait latency histograms (22), plan shape (23),
+│   │                                --   blocking (24), onset (25), window similarity (26), instance
+│   │                                --   map (27), before / after a release (28)
 │   ├── fleet/                       -- fleet-report sections (spooled by awr_fleet_extract.sql)
 │   │   ├── 00_fleet_chrome.sql      -- shared page head/CSS/JS + inline-SVG renderers
 │   │   ├── 01_row.sql               -- summary row + detail scaffold + ASH bands
@@ -709,6 +748,7 @@ SQL> @side/create_weekly_baselines.sql
 │   │   ├── 06_day_profile.sql       -- Day profile heatmap band (FLEET_PROFILE_DAYS > 0)
 │   │   ├── 06b_sqlmon.sql           -- always-on SQL Monitor summary band (informational)
 │   │   ├── 07_close.sql             -- drill-down command + OK sentinel
+│   │   ├── js_fleet_coanom.plsql    -- co-anomaly grid (generated from sql/fleet/src/)
 │   │   └── defaults.sql             -- fleet-only default DEFINEs
 │   └── lib/                         -- shared @@-included fragments (CTEs, JS, helpers)
 │       ├── day_profile_cte.sql      -- hour-of-day x N-day matrix (shared by 16 + fleet 06)

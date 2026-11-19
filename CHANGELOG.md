@@ -10,6 +10,58 @@ entry here. Dates are release dates.
 Changes on `main` since 1.6.1 (the footer still says v1.6.1 until the next
 release bumps `awr_version`).
 
+- **Nine diagnostic views (sections 20-28)**, each a row of the Summary's
+  evidence library and a full section in All sections, placed next to the
+  table it extends; inline SVG / HTML (they work offline and in all three
+  designs), each with a computed "Reads as:" sentence and a table of its
+  numbers. They explain; none adds a finding or changes a score.
+  - **Instance map** (27): the findings drawn on a schematic of the
+    instance -- each area (network, CPU, locks, parse, buffer cache,
+    writers, datafiles, redo, temp, other) coloured by the worst score
+    behind it and linked to its finding card; same scoring as the cards, so
+    the two never disagree.
+  - **Load vs response time** (20): every snapshot interval as load
+    against response time, with the normal curve for that load, the prior
+    windows and Current; says whether Current is "more load" or "each call
+    slower".
+  - **Before and after a release** (28): splits the compared windows at a
+    release marker or any window boundary and shows, per metric, the after
+    mean against the before mean and its usual variation.
+  - **Wait latency histograms** (22): the shape behind each top wait's
+    average, Current against the prior windows' normal shape, by count or
+    by time, with a plain verdict per event (slow tail, shifted, tail gone,
+    volume only).
+  - **Blocking** (24): blocked ASH time per window (unscored) and the
+    Current window's who-blocked-whom trees, each blocked sample followed
+    to its final holder.
+  - **Volume vs unit cost** (21): each top statement and foreground wait
+    event on a log-log plane of executions vs normal and time per execution
+    vs normal, with equal-total-time diagonals, so a cost rise reads as
+    "runs more often" (application) or "each run slower" (database).
+  - **Plan shape, old vs new** (23): icicle charts of where a changed plan
+    spends its time, per plan line from ASH, old and new plan on one scale,
+    with full plan tables.
+  - **Onset** (25, also in the Timeline view): every snapshot interval of
+    the span against its seasonal normal, with a re-baselining CUSUM that
+    dates when the current shift began and names the nearest release
+    marker.
+  - **Window similarity** (26): how alike the compared windows are over
+    every metric, the odd ones out, and a what-if that re-scores the report
+    in the page without the prior windows you drop.
+  - Two views read AWR views outside the required grant list,
+    `DBA_HIST_EVENT_HISTOGRAM` (22) and `DBA_HIST_SQL_PLAN` (23). Both
+    grants are **optional**: the read is dynamic SQL, and without the grant
+    the section shows a one-line note instead of aborting the run (lint 35).
+  - Plumbing: one generated stylesheet + script per view
+    (`sql/lib/src/css_<name>.css`, `js_<name>.js`, `tools/js2plsql.sh`);
+    the stylesheets load in `<head>` through `sql/lib/viz_head.sql`. "Reading
+    the charts" and "About this report" gained an item / a note per view.
+- **Fleet: "Abnormal at the same time" co-anomaly grid** above the console
+  table -- every database's ASH activity scored against its own normal on
+  one time axis, with a per-bucket count of databases far out together and
+  a one-line summary naming the biggest shared episode. Computed in the
+  page from the existing ASH payloads: no extract change, no scoring, sort
+  or exit-code change.
 - **Report designs: `DESIGN=classic|quiet|dashboard`.** Env var `DESIGN`
   (wrapper) / DEFINE `design` (SQL\*Plus), default `classic`; the shell
   and web configurators ask for it and the fleet's detail reports take
