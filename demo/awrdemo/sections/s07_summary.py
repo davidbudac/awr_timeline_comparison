@@ -357,7 +357,7 @@ def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
     dd = imp.get("DBTIME")
     if not (order and dd is not None and dbt is not None):
         return
-    parts, pos = [], 0.0
+    parts, pos, neg = [], 0.0, 0.0
     for f in findings:                      # heat_pos order, like the PL/SQL loop
         if f.cur is None or f.mu is None:
             continue
@@ -371,6 +371,8 @@ def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
         parts.append({"lab": lab, "d": d, "grp": grp, "aid": aid})
         if d > 0:
             pos += d
+        elif d < 0:
+            neg -= d
     parts.sort(key=lambda p: -p["d"])       # stable = the insertion sort's strict >
     if dd > 0:
         base = max(dd, pos)
@@ -379,18 +381,21 @@ def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
             d = p["d"]
             if d > 0 and d >= 0.01 * base:
                 fl = p["grp"] in lead
-                pct = int(h.ora_round(d / dd * 100, 0))
+                # the share, left out past 100% like the cards' impact chip
+                pct = int(h.ora_round(d / dd * 100, 0)) if d <= dd * 1.005 else None
                 lab = h.esc(p["lab"])
                 bar += ('<i class="att-s' + ('' if fl else ' nf') + '" data-wc="' + lab
                         + '" style="flex-grow:' + h.imp_tok(d) + '" title="'
-                        + lab + ': +' + h.fmt_num(d) + ' AAS, ' + str(pct) + '% of the DB-time rise'
+                        + lab + ': +' + h.fmt_num(d) + ' AAS'
+                        + (', ' + str(pct) + '% of the DB-time rise' if pct is not None else '')
                         + ('' if fl else ', inside its normal range') + '">'
                         + ('<span>' + lab + ' +' + h.fmt_num(d) + '</span>' if d >= 0.18 * base else '')
                         + '</i>')
                 lg += ('<li><i class="sw' + ('' if fl else ' nf') + '" data-wc="' + lab + '" aria-hidden="true"></i>'
                        + h.ent(lab, p["aid"], "card" if fl else "metric")
-                       + ' <b>+' + h.fmt_num(d) + '</b> <span class="sh">'
-                       + ('&lt;1' if pct < 1 else str(pct)) + '%</span>'
+                       + ' <b>+' + h.fmt_num(d) + '</b>'
+                       + ((' <span class="sh">' + ('&lt;1' if pct < 1 else str(pct)) + '%</span>')
+                          if pct is not None else '')
                        + ((' <span class="st"><i class="dotk '
                            + ('large' if gsev[p["grp"]] == 2 else 'moderate')
                            + '" aria-hidden="true"></i>finding</span>') if fl
@@ -407,8 +412,9 @@ def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
         rest = dd - pos
         if rest > 0.01 * dd:
             bar += ('<i class="att-s att-rest" style="flex-grow:' + h.imp_tok(rest)
-                    + '" title="Not in the parts above (classes that fell, or waits outside this'
-                    + ' template&#39;s event list): +' + h.fmt_num(rest) + ' AAS"></i>')
+                    + '" title="Not in the parts above (DB time that no wait class records, such as'
+                    + ' waiting for a CPU, or waits outside this template&#39;s event list): +'
+                    + h.fmt_num(rest) + ' AAS"></i>')
         # the largest drops: the parts are sorted largest first, so walk backwards
         fell, nfell = "", 0
         for p in reversed(parts):
@@ -420,8 +426,10 @@ def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
         note = ""
         if fell:
             note += 'Fell: ' + fell + ' AAS. '
-        if pos > dd * 1.005:
-            note += ('The parts add up to ' + h.imp_txt(pos) + ', more than the DB-time'
+        # falls offset rises; only an excess left after them is background time
+        if pos - neg > dd * 1.005:
+            note += ('The parts add up to ' + h.imp_txt(pos - neg)
+                     + (' net of the falls' if neg > 0 else '') + ', more than the DB-time'
                      ' rise: wait-class time also counts background sessions, DB time does not.')
         out.append('<div id="att-src" hidden><div class="att-h"><b>Where the extra DB time went</b>'
                    '<span>DB time ' + h.fmt_num(dbt.mu * 0.01) + ' &rarr; '

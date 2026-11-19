@@ -957,6 +957,7 @@ BEGIN
         v_dd    NUMBER := g_imp('DBTIME');
         v_p     part_rec;
         v_pos   NUMBER := 0;      -- sum of the parts that rose
+        v_neg   NUMBER := 0;      -- sum of the parts that fell (as a positive number)
         v_base  NUMBER;           -- the bar's 100%: GREATEST(rise, sum of parts)
         v_small NUMBER := 0;      -- parts under 1% of the base, merged
         v_nsm   PLS_INTEGER := 0;
@@ -989,7 +990,9 @@ BEGIN
                     k := k - 1;
                 END LOOP;
                 v_parts(k + 1) := v_p;
-                IF v_p.d > 0 THEN v_pos := v_pos + v_p.d; END IF;
+                IF v_p.d > 0 THEN v_pos := v_pos + v_p.d;
+                ELSIF v_p.d < 0 THEN v_neg := v_neg - v_p.d;
+                END IF;
             END IF;
         END LOOP;
 
@@ -999,12 +1002,13 @@ BEGIN
                 v_p := v_parts(k2);
                 IF v_p.d > 0 AND v_p.d >= 0.01 * v_base THEN
                     v_fl  := v_glead.EXISTS(v_p.grp);
-                    v_pct := ROUND(v_p.d / v_dd * 100);
+                    -- the share, left out past 100% like the cards' impact chip
+                    v_pct := CASE WHEN v_p.d <= v_dd * 1.005 THEN ROUND(v_p.d / v_dd * 100) END;
                     v_bar := v_bar || '<i class="att-s' || CASE WHEN NOT v_fl THEN ' nf' END
                         || '" data-wc="' || DBMS_XMLGEN.CONVERT(v_p.lab)
                         || '" style="flex-grow:' || imp_tok(v_p.d) || '" title="'
-                        || DBMS_XMLGEN.CONVERT(v_p.lab) || ': +' || fmt_num(v_p.d) || ' AAS, '
-                        || v_pct || '% of the DB-time rise'
+                        || DBMS_XMLGEN.CONVERT(v_p.lab) || ': +' || fmt_num(v_p.d) || ' AAS'
+                        || CASE WHEN v_pct IS NOT NULL THEN ', ' || v_pct || '% of the DB-time rise' END
                         || CASE WHEN NOT v_fl THEN ', inside its normal range' END || '">'
                         || CASE WHEN v_p.d >= 0.18 * v_base
                                 THEN '<span>' || DBMS_XMLGEN.CONVERT(v_p.lab) || ' +' || fmt_num(v_p.d) || '</span>' END
@@ -1012,8 +1016,9 @@ BEGIN
                     v_lg := v_lg || '<li><i class="sw' || CASE WHEN NOT v_fl THEN ' nf' END
                         || '" data-wc="' || DBMS_XMLGEN.CONVERT(v_p.lab) || '" aria-hidden="true"></i>'
                         || ent(DBMS_XMLGEN.CONVERT(v_p.lab), v_p.aid, CASE WHEN v_fl THEN 'card' ELSE 'metric' END)
-                        || ' <b>+' || fmt_num(v_p.d) || '</b> <span class="sh">'
-                        || CASE WHEN v_pct < 1 THEN '&lt;1' ELSE TO_CHAR(v_pct) END || '%</span>'
+                        || ' <b>+' || fmt_num(v_p.d) || '</b>'
+                        || CASE WHEN v_pct IS NOT NULL THEN ' <span class="sh">'
+                                || CASE WHEN v_pct < 1 THEN '&lt;1' ELSE TO_CHAR(v_pct) END || '%</span>' END
                         || CASE WHEN v_fl
                                 THEN ' <span class="st"><i class="dotk '
                                      || CASE WHEN v_gsev(v_p.grp) = 2 THEN 'large' ELSE 'moderate' END
@@ -1035,8 +1040,9 @@ BEGIN
             v_rest := v_dd - v_pos;
             IF v_rest > 0.01 * v_dd THEN
                 v_bar := v_bar || '<i class="att-s att-rest" style="flex-grow:' || imp_tok(v_rest)
-                    || '" title="Not in the parts above (classes that fell, or waits outside this'
-                    || ' template&#39;s event list): +' || fmt_num(v_rest) || ' AAS"></i>';
+                    || '" title="Not in the parts above (DB time that no wait class records, such as'
+                    || ' waiting for a CPU, or waits outside this template&#39;s event list): +'
+                    || fmt_num(v_rest) || ' AAS"></i>';
             END IF;
             -- the largest drops: the parts are sorted largest first, so walk backwards
             FOR k2 IN REVERSE 1 .. v_parts.COUNT LOOP
@@ -1050,8 +1056,10 @@ BEGIN
             IF v_fell IS NOT NULL THEN
                 v_note := v_note || 'Fell: ' || v_fell || ' AAS. ';
             END IF;
-            IF v_pos > v_dd * 1.005 THEN
-                v_note := v_note || 'The parts add up to ' || imp_txt(v_pos) || ', more than the DB-time'
+            -- falls offset rises; only an excess left after them is background time
+            IF v_pos - v_neg > v_dd * 1.005 THEN
+                v_note := v_note || 'The parts add up to ' || imp_txt(v_pos - v_neg)
+                    || CASE WHEN v_neg > 0 THEN ' net of the falls' END || ', more than the DB-time'
                     || ' rise: wait-class time also counts background sessions, DB time does not.';
             END IF;
             DBMS_OUTPUT.PUT_LINE('<div id="att-src" hidden><div class="att-h"><b>Where the extra DB time went</b>'
