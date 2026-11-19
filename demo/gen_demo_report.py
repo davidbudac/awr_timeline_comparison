@@ -50,22 +50,36 @@ SECTIONS = [
     ("s08_overview", "08_overview"),
     ("s09_ash_timeline", "09_ash_timeline"),
     ("s07_summary", "07_summary"),
+    ("s27_instance_map", "27_instance_map"),
+    ("s20_load_response", "20_load_response"),
+    ("s28_release_delta", "28_release_delta"),
     ("s01_windows", "01_windows"),
+    ("s26_window_similarity", "26_window_similarity"),
     ("s16_day_profile", "16_day_profile"),
+    ("s25_onset", "25_onset"),
     ("s13_utilization", "13_utilization"),
     ("s02_load_profile", "02_load_profile"),
     ("s03_sysmetric", "03_sysmetric"),
     ("s04_waits_fg", "04_waits_fg"),
+    ("s22_wait_histogram", "22_wait_histogram"),
     ("s05_waits_bg", "05_waits_bg"),
+    ("s24_blocking", "24_blocking"),
     ("s06_top_sql", "06_top_sql"),
+    ("s21_volume_cost", "21_volume_cost"),
     ("s11_top_sql_ash_breakdown", "11_top_sql_ash_breakdown"),
     ("s18_sqlmon", "18_sqlmon"),
+    ("s23_plan_flame", "23_plan_flame"),
     ("s14_segment_io", "14_segment_io"),
     ("s15_file_io", "15_file_io"),
     ("s12_param_changes", "12_param_changes"),
     ("s19_reference", "19_reference"),
     ("s17_narrative", "17_narrative"),
 ]
+
+
+# sql/lib/viz_head.sql's @@ order: the stylesheets of sections 20-28
+VIZ_CSS = ("loadresp", "volcost", "waithist", "planflame", "blocking",
+           "onset", "winsim", "instmap", "reldelta")
 
 
 def marker(tag: str, which: str) -> str:
@@ -80,6 +94,9 @@ def prologue(w, echarts_src: str, design: str = "classic") -> str:
     out.append('<meta name="viewport" content="width=device-width, initial-scale=1">')
     out.append("<title>AWR Timeline Comparison &mdash; run " + w.run_id + "</title>")
     out.append(chrome.style_block())
+    # sql/lib/viz_head.sql: one stylesheet per visualization section (20-28)
+    for base in VIZ_CSS:
+        out.append(chrome.lib_script("css_" + base + ".plsql"))
     if design != "classic":
         # sql/lib/design_head.sql: the fonts, then the design stylesheet
         out.append(chrome.lib_script("css_fonts.plsql"))

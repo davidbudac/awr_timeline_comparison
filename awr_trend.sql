@@ -576,6 +576,9 @@ END;
 /
 
 @@sql/_style.sql
+-- The stylesheets of the visualization sections (20-28), before the
+-- design's so quiet / dashboard can override them.
+@@sql/lib/viz_head.sql
 -- The design's fonts + stylesheet (quiet / dashboard); the no-op stub for
 -- classic, so a classic report is byte-identical to before the option.
 @@~design_head
@@ -666,12 +669,27 @@ DEFINE _dbg_msg = 'section 09 ash_timeline (ASH stacked-area; often the slowest)
 DEFINE _dbg_msg = 'section 07 summary (z-score findings + heatmap)'
 @@sql/lib/debug_log.sql
 @@sql/07_summary.sql
+DEFINE _dbg_msg = 'section 27 instance map'
+@@sql/lib/debug_log.sql
+@@sql/27_instance_map.sql
+DEFINE _dbg_msg = 'section 20 load vs response time'
+@@sql/lib/debug_log.sql
+@@sql/20_load_response.sql
+DEFINE _dbg_msg = 'section 28 before / after release'
+@@sql/lib/debug_log.sql
+@@sql/28_release_delta.sql
 DEFINE _dbg_msg = 'section 01 windows (aligned begin/end snap pairs)'
 @@sql/lib/debug_log.sql
 @@sql/01_windows.sql
+DEFINE _dbg_msg = 'section 26 window similarity'
+@@sql/lib/debug_log.sql
+@@sql/26_window_similarity.sql
 DEFINE _dbg_msg = 'section 16 day_profile (hour-of-day vs N prior days; skipped when profile_days=0)'
 @@sql/lib/debug_log.sql
 @@sql/16_day_profile.sql
+DEFINE _dbg_msg = 'section 25 onset'
+@@sql/lib/debug_log.sql
+@@sql/25_onset.sql
 DEFINE _dbg_msg = 'section 13 utilization (application usage profile)'
 @@sql/lib/debug_log.sql
 @@sql/13_utilization.sql
@@ -684,18 +702,30 @@ DEFINE _dbg_msg = 'section 03 sysmetric (SYSMETRIC_SUMMARY averages)'
 DEFINE _dbg_msg = 'section 04 waits_fg (foreground waits)'
 @@sql/lib/debug_log.sql
 @@sql/04_waits_fg.sql
+DEFINE _dbg_msg = 'section 22 wait latency histograms'
+@@sql/lib/debug_log.sql
+@@sql/22_wait_histogram.sql
 DEFINE _dbg_msg = 'section 05 waits_bg (background waits)'
 @@sql/lib/debug_log.sql
 @@sql/05_waits_bg.sql
+DEFINE _dbg_msg = 'section 24 blocking'
+@@sql/lib/debug_log.sql
+@@sql/24_blocking.sql
 DEFINE _dbg_msg = 'section 06 top_sql (Top-N SQL ranked 5 ways + regression)'
 @@sql/lib/debug_log.sql
 @@sql/06_top_sql.sql
+DEFINE _dbg_msg = 'section 21 volume vs unit cost'
+@@sql/lib/debug_log.sql
+@@sql/21_volume_cost.sql
 DEFINE _dbg_msg = 'section 11 top_sql_ash_breakdown (per-SQL ASH; one cursor per pool)'
 @@sql/lib/debug_log.sql
 @@sql/11_top_sql_ash_breakdown.sql
 DEFINE _dbg_msg = 'section 18 sqlmon (SQL Monitor summaries from DBA_HIST_REPORTS; skipped when sqlmon=N)'
 @@sql/lib/debug_log.sql
 @@~sqlmon_include
+DEFINE _dbg_msg = 'section 23 plan shape (ASH plan lines)'
+@@sql/lib/debug_log.sql
+@@sql/23_plan_flame.sql
 DEFINE _dbg_msg = 'section 14 segment_io (top segments by I/O per window)'
 @@sql/lib/debug_log.sql
 @@sql/14_segment_io.sql

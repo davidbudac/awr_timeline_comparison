@@ -309,8 +309,15 @@ BEGIN
         || ' body.va main > #file-io { order:14; } body.va main > #param-changes { order:15; }'
         || ' body.va main > #ash-timeline { order:16; } body.va main > #db-time-summary { order:17; }'
         || ' body.va main > #utilization { order:18; } body.va main > #windows { order:19; }'
-        || ' body.va main > #day-profile { order:20; }'
-        || ' body.va main > .view-note, body.va main > #guide, body.va main > #about { order:30; }'
+        || ' body.va main > #day-profile { order:20; }');
+    -- The visualization sections (20-28) take the order of the section
+    -- they extend and follow it in the DOM, so each shows right after it.
+    DBMS_OUTPUT.PUT_LINE('body.va main > #instance-map, body.va main > #load-response,'
+        || ' body.va main > #release-delta { order:5; }'
+        || ' body.va main > #wait-hist { order:8; } body.va main > #blocking { order:9; }'
+        || ' body.va main > #volume-cost { order:10; } body.va main > #plan-flame { order:12; }'
+        || ' body.va main > #onset { order:17; } body.va main > #win-sim { order:19; }');
+    DBMS_OUTPUT.PUT_LINE('body.va main > .view-note, body.va main > #guide, body.va main > #about { order:30; }'
         || ' body.va footer.report { order:40; }');
     -- rail sub-links: one per finding card, under Findings (07)
     DBMS_OUTPUT.PUT_LINE('nav.toc a.sub { padding-left:28px; font-size:12.5px; color:var(--muted); }');
