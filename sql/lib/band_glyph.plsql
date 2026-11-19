@@ -44,13 +44,14 @@
         RETURN (p_cur - p_mu) / v_den;
     END band_z;
 
-    -- z as display text: one decimal, sigma suffix, clamped beyond 99.
-    FUNCTION band_ztxt(p_z NUMBER) RETURN VARCHAR2 IS
+    -- z as display text: one decimal, sigma suffix, clamped beyond p_cap
+    -- (99 = every table, 10 = the Summary view's glyphs, v1.7).
+    FUNCTION band_ztxt(p_z NUMBER, p_cap NUMBER DEFAULT 99) RETURN VARCHAR2 IS
     BEGIN
         RETURN CASE
             WHEN p_z IS NULL THEN '&mdash;'
-            WHEN p_z > 99    THEN '&gt;+99&sigma;'
-            WHEN p_z < -99   THEN '&lt;&minus;99&sigma;'
+            WHEN p_z > p_cap    THEN '&gt;+' || TO_CHAR(p_cap) || '&sigma;'
+            WHEN p_z < -p_cap   THEN '&lt;&minus;' || TO_CHAR(p_cap) || '&sigma;'
             WHEN ROUND(p_z, 1) < 0 THEN '&minus;' || TO_CHAR(ABS(p_z), 'FM99990D0',
                                        'NLS_NUMERIC_CHARACTERS=''.,''') || '&sigma;'
             ELSE '+' || TO_CHAR(ABS(p_z), 'FM99990D0',
@@ -70,10 +71,13 @@
     -- The glyph.  p_size: NULL (table cell) | 'sm' | 'lg'.  p_twin 'Y' fades
     -- the dot (a non-canonical twin row).  A NULL bucket = unscored: the dot
     -- is drawn hollow wherever z puts it.
+    -- p_zcap: the |z| past which the printed z reads '>+cap' (99 = tables,
+    -- 10 = Summary view)
     FUNCTION band_span(p_z      NUMBER,
                        p_bucket VARCHAR2,
                        p_size   VARCHAR2 DEFAULT NULL,
-                       p_twin   VARCHAR2 DEFAULT 'N') RETURN VARCHAR2 IS
+                       p_twin   VARCHAR2 DEFAULT 'N',
+                       p_zcap   NUMBER   DEFAULT 99) RETURN VARCHAR2 IS
         v_sz  VARCHAR2(8) := CASE WHEN p_size IS NOT NULL THEN ' ' || p_size END;
         v_x   NUMBER;
         v_pin VARCHAR2(4) := '';
@@ -96,11 +100,11 @@
         IF v_x > 1 THEN
             v_x := 1;
             v_pin := ' po';
-            v_ov := '<b class="ov">' || band_ztxt(p_z) || '</b>';
+            v_ov := '<b class="ov">' || band_ztxt(p_z, p_zcap) || '</b>';
         ELSIF v_x < 0 THEN
             v_x := 0;
             v_pin := ' pu';
-            v_ov := '<b class="ov">' || band_ztxt(p_z) || '</b>';
+            v_ov := '<b class="ov">' || band_ztxt(p_z, p_zcap) || '</b>';
         END IF;
         v_lab := CASE p_bucket WHEN 'large'    THEN 'large finding'
                                WHEN 'moderate' THEN 'moderate finding'
@@ -111,7 +115,7 @@
         RETURN '<span class="bd ' || band_sev(p_bucket) || v_sz || v_pin
             || CASE WHEN p_twin = 'Y' THEN ' twn' END
             || '" style="--x:' || TO_CHAR(v_x, 'FM0D000', 'NLS_NUMERIC_CHARACTERS=''.,''')
-            || '" role="img" aria-label="' || v_lab || ', z ' || band_ztxt(p_z) || '">'
+            || '" role="img" aria-label="' || v_lab || ', z ' || band_ztxt(p_z, p_zcap) || '">'
             || '<i></i>' || v_ov || '</span>';
     END band_span;
 

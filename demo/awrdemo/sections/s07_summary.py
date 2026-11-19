@@ -221,7 +221,7 @@ def _ev_row(dt, ident, txt, de, cur, mu, sd, bucket) -> str:
     return ('<div class="evr"><dt>' + dt + '</dt><dd><span class="id' + (" txt" if txt else "") + '">'
             + ident + '</span><span class="de">' + h.nbu(de) + '</span></dd>'
             '<div class="m">' + h.delta_span(cur, mu, bucket)
-            + h.band_span(h.band_z(cur, mu, sd), bucket, "sm") + '</div></div>')
+            + h.band_span(h.band_z(cur, mu, sd), bucket, "sm", "N", 10) + '</div></div>')
 
 
 def _f_ent(f) -> str:
@@ -232,7 +232,7 @@ def _nr_row(f) -> str:
     s, u = h.metric_scale(f.domain, f.name), h.metric_unit(f.domain, f.name)
     return ('<div class="nr"><div class="l" title="' + h.esc(f.name) + '">' + _f_ent(f)
             + '<small>normal ' + h.fv_range(h._mul(f.mu, s), h._mul(f.sd, s), u) + '</small></div>'
-            + h.band_span(f.z, f.bucket, "sm", "Y" if f.canonical == "N" else "N")
+            + h.band_span(f.z, f.bucket, "sm", "Y" if f.canonical == "N" else "N", 10)
             + '<div class="vv">' + h.fv(h._mul(f.cur, s), u)
             + '<small>' + h.delta_span(f.cur, f.mu, f.bucket) + '</small></div></div>')
 
@@ -240,8 +240,14 @@ def _nr_row(f) -> str:
 _SPLIT_CARD = {"W": ", all of it wait", "w": ", mostly wait", "c": ", mostly CPU", "m": ", CPU and wait alike"}
 
 
-def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu):
+def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp):
     r = lead[g]
+    # impact chip (v1.7): the card's share of the DB-time rise, left out
+    # past 100% (background wait time rose more than DB time)
+    v_imp, v_dd, v_shr = imp.get(g), imp.get("DBTIME"), None
+    if (v_imp is not None and v_dd is not None and v_imp > 0 and v_dd > 0
+            and v_imp <= v_dd * 1.005):
+        v_shr = int(h.ora_round(v_imp / v_dd * 100, 0))
     s, u = h.metric_scale(r.domain, r.name), h.metric_unit(r.domain, r.name)
     cid = h.card_id(g)
     sev = r.bucket
@@ -303,12 +309,22 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu):
         links = '<a href="#load">Load profile</a>'
     out.append('<article class="panel fc f-' + sev
                + (" lead" if pos == 1 else " slim" if sev == "moderate" else "")
-               + '" id="' + cid + '" aria-labelledby="' + cid + '-h">'
+               + '" id="' + cid + '" aria-labelledby="' + cid + '-h"'
+               + ' data-impact="' + h.imp_tok(v_imp) + '" data-share="'
+               + ("" if v_shr is None else str(v_shr)) + '">'
                '<header class="fc-h"><div class="fc-k"><span class="sv" title="'
                + h.esc(h.card_label(g)) + '"><i class="dotk ' + sev
-               + '" aria-hidden="true"></i>' + sev.capitalize() + '</span></div>'
+               + '" aria-hidden="true"></i>' + sev.capitalize() + '</span>'
+               + ('<span class="fc-imp" title="Time added: Current minus the prior'
+                  ' mean of this card&#39;s time measure (DB time, DB CPU or its wait class),'
+                  ' in average active sessions">' + h.imp_txt(v_imp)
+                  + (" above normal" if g == "DBTIME"
+                     else " &middot; " + str(v_shr) + "% of the DB-time rise" if v_shr is not None
+                     else "")
+                  + '</span>' if v_imp is not None and v_imp > 0 else '')
+               + '</div>'
                '<div class="fc-band" title="z ' + h.band_ztxt(r.z) + ' against the prior normal">'
-               + h.band_span(r.z, sev, "lg") + _AXIS + '</div></header>')
+               + h.band_span(r.z, sev, "lg", "N", 10) + _AXIS + '</div></header>')
     out.append('<h3 id="' + cid + '-h">' + _f_ent(r) + ' ' + h.move_txt(r.cur, r.mu, sev)
                + (_SPLIT_CARD.get(split, "") if r.name == "DB time" else "") + '</h3>')
     out.append('<div class="fc-b"><div class="fc-main">'
@@ -345,8 +361,12 @@ def emit(w) -> str:
     normal = sum(1 for f in canon if f.bucket in ("typical", "improved", "noted", "flat baseline"))
     dbt = next((f for f in findings if f.domain == "LOAD" and f.name == "DB time"), None)
     cpu = next((f for f in findings if f.domain == "LOAD" and f.name == "DB CPU"), None)
-    lead, gsev, gz, flagcls = {}, {}, {}, set()
+    lead, gsev, gz, flagcls, imp = {}, {}, {}, set(), {}
     for f in findings:                      # heat_pos order, like the PL/SQL pass
+        # impact (v1.7, helpers.impact_group): every row, flagged or not
+        ig = h.impact_group(f.domain, f.name, f.family)
+        if ig and f.cur is not None and f.mu is not None:
+            imp[ig] = (f.cur - f.mu) * h.metric_scale(f.domain, f.name)
         if f.canonical != "Y" or f.bucket not in _MOVED:
             continue
         g = f.grp
@@ -359,7 +379,7 @@ def emit(w) -> str:
         gz[g] = max(gz[g], f.az)
         if f.domain == "WAIT":
             flagcls.add(f.name[len("Wait class: "):] if f.name.startswith("Wait class: ") else f.name)
-    order = h.card_order({g: (gsev[g], gz[g]) for g in lead})
+    order = h.card_order({g: (gsev[g], gz[g], imp.get(g)) for g in lead})
     evs = _events(w) if flagcls else []
     ordered = _table_order(findings)
 
@@ -388,7 +408,7 @@ def emit(w) -> str:
     if nc:
         out.append('<div class="cards vw in-s">')
         for k, g in enumerate(order, 1):
-            _card(w, out, g, k, lead, ordered, evs, flagcls, dbt, cpu)
+            _card(w, out, g, k, lead, ordered, evs, flagcls, dbt, cpu, imp)
         out.append('</div>')
         js = ",".join('["' + h.card_id(g) + '","' + h.card_label(g).replace('"', '').replace('<', '') + '"]'
                       for g in order)

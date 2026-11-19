@@ -195,6 +195,7 @@ body.js-wg .wg.allv .c:not(.cur) .v:not(.nil){opacity:0}
 .fc.f-large .fc-k .sv{color:var(--crit);background:color-mix(in oklch,var(--crit) 9%,transparent);border-color:color-mix(in oklch,var(--crit) 22%,transparent)}
 .fc.f-moderate .fc-k .sv{color:var(--warn);background:color-mix(in oklch,var(--warn-dot) 13%,transparent);border-color:color-mix(in oklch,var(--warn-dot) 30%,transparent)}
 .fc-k .sv > .dotk,.fc-k .sv > i{display:none}
+.fc-k .fc-imp{height:22px;padding:0 8px;border-radius:6px;border:1px solid var(--hairline);background:none;font-size:12px;font-weight:500;color:var(--ink)}
 .fc h3{font-size:17px;letter-spacing:-.012em}
 .fc.lead h3{font-size:20px}
 .fc .big .v{font-size:30px;letter-spacing:-.025em}

@@ -164,7 +164,7 @@ def _literal_slice(L, i, j):
 def _verdict_state(w, scored):
     """The PL/SQL single pass + card order: counts and the card groups."""
     st = dict(n_moved=0, n_impr=0, n_normal=0, n_usable=0, max_n=0, dbt=None, cpu=None)
-    lead, gsev, gz = {}, {}, {}
+    lead, gsev, gz, imp = {}, {}, {}, {}
     for i, r in enumerate(scored):
         if (r["n"] or 0) > st["max_n"]:
             st["max_n"] = r["n"]
@@ -172,6 +172,10 @@ def _verdict_state(w, scored):
             st["dbt"] = r
         elif r["domain"] == "LOAD" and r["name"] == "DB CPU":
             st["cpu"] = r
+        # impact (v1.7, helpers.impact_group): every row, flagged or not
+        ig = h.impact_group(r["domain"], r["name"], r["family"])
+        if ig and r["cur"] is not None and r["mu"] is not None:
+            imp[ig] = (r["cur"] - r["mu"]) * h.metric_scale(r["domain"], r["name"])
         if r["z"] is not None:
             st["n_usable"] += 1
         if r["canonical"] != "Y":
@@ -192,7 +196,7 @@ def _verdict_state(w, scored):
             st["n_normal"] += 1
             if r["bucket"] == "improved":
                 st["n_impr"] += 1
-    st["order"] = h.card_order({g: (gsev[g], gz[g]) for g in lead})
+    st["order"] = h.card_order({g: (gsev[g], gz[g], imp.get(g)) for g in lead})
     st["lead"] = lead
     return st
 

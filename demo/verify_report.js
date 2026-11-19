@@ -61,6 +61,8 @@
  *     opens / shuts on a click and opens for a jump into it; one rail
  *     sub-link per finding card; All sections shows every library section
  *     in full; the Trend cells are micro strips (svg.mw), no line left;
+ *     v1.7: cards ordered by data-impact, chip present, Summary z capped
+ *     at 10;
  *   - the design (window.AWR_DESIGN, design=quiet|dashboard; none =
  *     classic): quiet and dashboard -- "How to read" opens / closes the
  *     Activity help, a table's copy menu holds CSV + Markdown; dashboard --
@@ -849,6 +851,21 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       const cards = [...document.querySelectorAll('#findings article.fc:not(.chg)')];
       out.subs = subs.length + '/' + cards.length;
       out.subsOk = subs.length === cards.length && subs.every((a, i) => a.getAttribute('href') === '#' + cards[i].id);
+      // v1.7: cards ordered by impact; chip; Summary z capped at 10
+      // (#findings article.fc:not(.chg): the dashboard moves the cards into
+      // its findings table, and the plan / config cards carry .chg)
+      const fc = [...document.querySelectorAll('#findings article.fc:not(.chg)')];
+      const imp = fc.filter(c => c.id !== 'f-dbtime').map(c => parseFloat(c.getAttribute('data-impact')))
+        .filter(v => v > 0);
+      out.impOrder = imp.every((v, i) => i === 0 || imp[i - 1] >= v);
+      out.impAttrs = fc.every(c => c.hasAttribute('data-impact') && c.hasAttribute('data-share'));
+      out.impChips = fc.filter(c => parseFloat(c.getAttribute('data-impact')) > 0).every(c => c.querySelector('.fc-k .fc-imp'));
+      // the related-metrics fold (details.rel) is a table and keeps the exact z
+      out.zcap = [...document.querySelectorAll('#findings article.fc .fc-h .bd .ov, #findings article.fc dl.ev .bd .ov, '
+        + '#changes-slot article.fc .fc-h .bd .ov, #changes-slot dl.ev .bd .ov, #s-normal .nr .bd .ov, #overview .bd .ov, '
+        + '.dft .drow .dbd .bd .ov')]
+        .map(b => b.textContent).filter(t => /\u03c3/.test(t) && !/^[<>]/.test(t))
+        .filter(t => Math.abs(parseFloat(t.replace('\u2212', '-'))) > 10);
       // All sections: every library section shows in full, row state or not
       window.AWR_setView('all', false); await wait(250);
       out.allFull = libs.filter(x => { const t = x.querySelector('table, .chart-wrap'); return t && !vis(t); }).map(x => x.id);
@@ -860,6 +877,10 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       return out;
     });
     console.log('phase 4', JSON.stringify(p4));
+    if (!p4.impAttrs) fail('finding cards: data-impact / data-share missing');
+    if (!p4.impOrder) fail('finding cards: not ordered by impact');
+    if (!p4.impChips) fail('finding cards: impact chip missing');
+    if (p4.zcap.length) fail('Summary glyphs print z past 10: ' + p4.zcap.join(', '));
     if (!p4.planOk) fail('plan-change card incomplete or not in #changes-slot');
     if (!p4.lib || p4.libVisible !== p4.lib) fail('evidence library: ' + p4.libVisible + '/' + p4.lib + ' rows visible in Summary');
     if (p4.libNoLs.length) fail('evidence library rows without a one-line status: ' + p4.libNoLs.join(', '));

@@ -80,6 +80,8 @@ DECLARE
     v_gsev       seen_t;        -- group -> 2 large / 1 moderate
     TYPE gz_t    IS TABLE OF NUMBER INDEX BY VARCHAR2(64);
     v_gz         gz_t;          -- group -> largest |z| of any member
+    v_gimp       gz_t;          -- card group -> impact (AAS), as in 07
+    v_ig         VARCHAR2(64);
     TYPE ord_t   IS TABLE OF VARCHAR2(64) INDEX BY PLS_INTEGER;
     v_order      ord_t;
     v_g          VARCHAR2(64);
@@ -97,6 +99,13 @@ DECLARE
     @@sql/lib/finding_cards.plsql
     @@sql/lib/off_label.plsql
     @@sql/lib/wingrid.plsql
+
+    -- a card's impact (AAS its time measure added above its prior mean), NULL when none
+    FUNCTION g_imp(p_g VARCHAR2) RETURN NUMBER IS
+    BEGIN
+        IF v_gimp.EXISTS(p_g) THEN RETURN v_gimp(p_g); END IF;
+        RETURN NULL;
+    END g_imp;
 BEGIN
     --
     -- Recompute LOAD / METRIC / WAIT z-scores. Same query shape as
@@ -291,6 +300,12 @@ BEGIN
         ELSIF v_scored(i).metric_domain = 'LOAD' AND v_scored(i).metric_name = 'DB CPU' THEN
             v_cpu := i;
         END IF;
+        -- impact (v1.7, sql/lib/finding_cards.plsql impact_group)
+        v_ig := impact_group(v_scored(i).metric_domain, v_scored(i).metric_name, v_scored(i).family);
+        IF v_ig IS NOT NULL AND v_scored(i).cur_val IS NOT NULL AND v_scored(i).prior_mean IS NOT NULL THEN
+            v_gimp(v_ig) := (v_scored(i).cur_val - v_scored(i).prior_mean)
+                            * metric_scale(v_scored(i).metric_domain, v_scored(i).metric_name);
+        END IF;
         IF v_scored(i).z_score IS NOT NULL THEN
             v_n_usable := v_n_usable + 1;
         END IF;
@@ -321,13 +336,14 @@ BEGIN
         END IF;
     END LOOP;
 
-    -- Card order (same two steps as 07): large before moderate, then the
-    -- loudest |z| (insertion sort); then a flagged DB time card moves up
-    -- to second place.
+    -- Card order (07_summary.sql's cards apply the same two steps):
+    -- cards whose time measure rose, by the AAS added; then DB time; then
+    -- the rest, large before moderate and by |z| (insertion sort); then a
+    -- flagged DB time card moves up to second place.
     v_g := v_glead.FIRST;
     WHILE v_g IS NOT NULL LOOP
         v_j := v_order.COUNT;
-        WHILE v_j >= 1 AND card_before(v_gsev(v_g), v_gz(v_g), v_gsev(v_order(v_j)), v_gz(v_order(v_j))) LOOP
+        WHILE v_j >= 1 AND card_before_imp(v_g, v_gsev(v_g), v_gz(v_g), g_imp(v_g), v_order(v_j), v_gsev(v_order(v_j)), v_gz(v_order(v_j)), g_imp(v_order(v_j))) LOOP
             v_order(v_j + 1) := v_order(v_j);
             v_j := v_j - 1;
         END LOOP;

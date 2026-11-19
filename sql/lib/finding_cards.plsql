@@ -29,6 +29,10 @@
 -- wait classes are seconds waited per second = AAS.  Scoring always runs
 -- on the stored value (the band and z are scale-free).
 --
+-- Impact (v1.7): impact_group() / card_tier() / card_before_imp() -- cards
+-- are ordered by the AAS their time measure added above its prior mean,
+-- see the comment above impact_group().
+--
 -- Include inside a DECLARE block AFTER sql/lib/fmt_num.plsql.  Declares
 -- only functions (no TYPE).
 --
@@ -66,6 +70,7 @@
             WHEN p_group = 'COMMIT' THEN 'Commit'
             WHEN p_group = 'PARSE'  THEN 'Parsing'
             WHEN p_group = 'WRITE'  THEN 'Writes and redo'
+            WHEN p_group = 'CPU'    THEN 'CPU'
             WHEN p_group LIKE 'WAIT:%' THEN SUBSTR(p_group, 6) || ' waits'
             WHEN p_group LIKE 'OTHER:%' THEN SUBSTR(p_group, 7)
             ELSE INITCAP(REPLACE(p_group, '_', ' ')) END;
@@ -305,3 +310,66 @@
         IF p_sev_a <> p_sev_b THEN RETURN p_sev_a > p_sev_b; END IF;
         RETURN NVL(p_z_a, 0) > NVL(p_z_b, 0);
     END card_before;
+
+    -- Impact (v1.7): each card has at most one TIME MEASURE, a metric in
+    -- seconds per second (= average active sessions, AAS):
+    --   DBTIME -> LOAD 'DB time' (the total the others are shares of)
+    --   CPU    -> LOAD 'DB CPU'
+    --   IO / NET / COMMIT / WRITE / WAIT:<c> -> its wait class row
+    --          ('Wait class: <class>', family 'WAIT:<class>')
+    -- The card's impact = (Current - prior mean) of that row x
+    -- metric_scale() = AAS added above normal.  impact_group() names the
+    -- card a row is the time measure of (NULL: none).  A card without a
+    -- time measure (PARSE, OTHER:...) has no impact.  The wait-class times
+    -- come from DBA_HIST_SYSTEM_EVENT and include background sessions.
+    FUNCTION impact_group(p_domain VARCHAR2, p_name VARCHAR2, p_family VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        IF p_domain = 'LOAD' AND p_name = 'DB time' THEN RETURN 'DBTIME'; END IF;
+        IF p_domain = 'LOAD' AND p_name = 'DB CPU'  THEN RETURN 'CPU'; END IF;
+        IF p_domain = 'WAIT' AND p_name LIKE 'Wait class: %' THEN
+            RETURN card_group(p_family);
+        END IF;
+        RETURN NULL;
+    END impact_group;
+
+    -- card order, v1.7 (replaces card_before as the sort key; card_before is
+    -- kept as the tie-break):  tier 1 = every card whose time measure ROSE
+    -- (impact > 0), largest impact first; tier 2 = the DB time card (the
+    -- total those impacts are shares of); tier 3 = every other card (no
+    -- time measure, or it did not rise), large before moderate, then |z|.
+    -- The caller then still moves a flagged DB time card up to second
+    -- place, so the verdict keeps "<biggest contributor>; DB time ...".
+    -- 00 (verdict) and 07 (cards) apply the same two steps.
+    FUNCTION card_tier(p_group VARCHAR2, p_imp NUMBER) RETURN PLS_INTEGER IS
+    BEGIN
+        IF p_group = 'DBTIME' THEN RETURN 2; END IF;
+        IF p_imp > 0 THEN RETURN 1; END IF;   -- NULL > 0 is not true: tier 3
+        RETURN 3;
+    END card_tier;
+
+    FUNCTION card_before_imp(p_g_a VARCHAR2, p_sev_a PLS_INTEGER, p_z_a NUMBER, p_imp_a NUMBER,
+                             p_g_b VARCHAR2, p_sev_b PLS_INTEGER, p_z_b NUMBER, p_imp_b NUMBER)
+                             RETURN BOOLEAN IS
+        v_ta PLS_INTEGER := card_tier(p_g_a, p_imp_a);
+        v_tb PLS_INTEGER := card_tier(p_g_b, p_imp_b);
+    BEGIN
+        IF v_ta <> v_tb THEN RETURN v_ta < v_tb; END IF;
+        IF v_ta = 1 AND ROUND(p_imp_a, 6) <> ROUND(p_imp_b, 6) THEN
+            RETURN p_imp_a > p_imp_b;
+        END IF;
+        RETURN card_before(p_sev_a, p_z_a, p_sev_b, p_z_b);
+    END card_before_imp;
+
+    -- an impact as a data-attribute token: '.' decimal, 3 decimals
+    -- ("6.315", "-0.050"); '' when NULL
+    FUNCTION imp_tok(p_v NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        IF p_v IS NULL THEN RETURN ''; END IF;
+        RETURN TO_CHAR(ROUND(p_v, 3), 'FM9999999990D000', 'NLS_NUMERIC_CHARACTERS=''.,''');
+    END imp_tok;
+
+    -- an impact for reading: "+6.315&nbsp;AAS" (callers print it only when > 0)
+    FUNCTION imp_txt(p_v NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN '+' || fmt_num(p_v) || '&nbsp;AAS';
+    END imp_txt;

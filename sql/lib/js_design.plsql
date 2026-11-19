@@ -241,6 +241,18 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  v.parentNode.insertBefore(row,v.nextSibling);');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* ---- 7. dashboard: the findings as one expandable table, What changed beside it */');
+    DBMS_OUTPUT.PUT_LINE('/* plan 020: the Summary view prints z only up to 10 sigma (band_ztxt''s');
+    DBMS_OUTPUT.PUT_LINE('   p_cap); the findings table clones its bands from the All-sections');
+    DBMS_OUTPUT.PUT_LINE('   tables, which keep the exact z, so cap the clone''s pinned text */');
+    DBMS_OUTPUT.PUT_LINE('function capz(bd){');
+    DBMS_OUTPUT.PUT_LINE('  var b=bd&&$(".ov",bd);if(!b)return bd;');
+    DBMS_OUTPUT.PUT_LINE('  var M=String.fromCharCode(8722),S=String.fromCharCode(963),t=txt(b);');
+    DBMS_OUTPUT.PUT_LINE('  var z=parseFloat(t.replace(/^[<>]/,"").replace(M,"-"));');
+    DBMS_OUTPUT.PUT_LINE('  if(isNaN(z)||Math.abs(z)<=10)return bd;');
+    DBMS_OUTPUT.PUT_LINE('  var c=z>0?">+10"+S:"<"+M+"10"+S,al=bd.getAttribute("aria-label");');
+    DBMS_OUTPUT.PUT_LINE('  if(al)bd.setAttribute("aria-label",al.split(t).join(c));');
+    DBMS_OUTPUT.PUT_LINE('  b.textContent=c;return bd;');
+    DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function drow(o){');
     DBMS_OUTPUT.PUT_LINE('  var d=mk("details","drow"+(o.sev?" s-"+o.sev:"")+(o.lead?" lead":""));');
     DBMS_OUTPUT.PUT_LINE('  if(o.key){d.setAttribute("data-row",o.key);var rid="dr-"+o.key,k=2;while(doc.getElementById(rid))rid="dr-"+o.key+"-"+(k++);d.id=rid;}');
@@ -248,7 +260,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  s.innerHTML=''<span class="dch" aria-hidden="true"></span><span class="dsev"><i aria-hidden="true"></i>''+sevWord(o.sev)+''</span>''');
     DBMS_OUTPUT.PUT_LINE('    +''<span class="dnm"><b>''+esc(o.name)+''</b><small>''+esc(o.fam)+''</small></span><span class="dcur">''+esc(o.cur)+''</span>''');
     DBMS_OUTPUT.PUT_LINE('    +''<span class="dnr">''+esc(o.nrm)+''</span><span class="dbd"></span><span class="ddl"></span><span class="dtr"></span>'';');
-    DBMS_OUTPUT.PUT_LINE('  if(o.band)$(".dbd",s).appendChild(o.band);');
+    DBMS_OUTPUT.PUT_LINE('  if(o.band)$(".dbd",s).appendChild(capz(o.band));');
     DBMS_OUTPUT.PUT_LINE('  if(o.delta)$(".ddl",s).appendChild(o.delta);');
     DBMS_OUTPUT.PUT_LINE('  if(o.data){var tc=$(".dtr",s),ms=null;');
     DBMS_OUTPUT.PUT_LINE('    if(window.AWR_microStrip){try{ms=AWR_microStrip(o.data.v.map(function(x){return x==null?"":x;}).join(","),o.name);}catch(e){ms=null;}}');

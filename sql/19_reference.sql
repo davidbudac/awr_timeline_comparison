@@ -227,12 +227,15 @@ BEGIN
         || ' the begin and end snapshot are the same, the instance restarted inside it, it straddles a DBID change, or its nearest snapshot is more than 15 minutes off the window edge.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>DB time</dt><dd>DB CPU (<code>dba_hist_sys_time_model</code>, foreground) plus non-idle wait time (<code>dba_hist_system_event</code>, <b>all sessions incl. background</b>) per snapshot interval,'
         || ' stacked by wait class, from the earliest compared window to Current. Not a strict foreground DB-time profile. A snapshot pair across an instance restart is a gap.</dd>');
-    DBMS_OUTPUT.PUT_LINE('<dt>Verdict</dt><dd>One sentence from the first two finding cards (the loudest card, then DB time when it is flagged): the lead metric and its move, &times;n at twice the mean'
+    DBMS_OUTPUT.PUT_LINE('<dt>Verdict</dt><dd>One sentence from the first two finding cards (the card that added the most DB time, then DB time when it is flagged): the lead metric and its move, &times;n at twice the mean'
         || ' or more, else a percentage. For DB time, where the extra time went: CPU vs wait from DB CPU against DB time. <b>Likely source</b>: a statement that ran with a new plan in the'
         || ' Current window, else a newcomer in the top SQL by physical reads, else a statement first seen this window, else the segment the extra reads land on. Fixed phrases, no free text.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Finding cards</dt><dd>One card per metric family of the scoring policy (<code>sql/lib/metric_policy.plsql</code>); families that tell one story share a card:'
         || ' Physical I/O (physical and logical reads, long table scans, User I/O waits), DB time (DB time, the CPU / wait ratio, response time), Network (Network waits, SQL*Net bytes), Commit'
-        || ' (Commit waits, commits), Parsing, Writes and redo. A card is led by its loudest large, else moderate, metric of the card&rsquo;s main family. Twins are folded under'
+        || ' (Commit waits, commits), Parsing, Writes and redo. A card is led by its loudest large, else moderate, metric of the card&rsquo;s main family.'
+        || ' Cards are ordered by the time they added: the rise of the card&rsquo;s time measure (DB time, DB CPU or its wait class) above its prior mean, in'
+        || ' average active sessions, largest first; cards without a time measure follow, large before moderate. The printed z of a band in the Summary view'
+        || ' stops at &gt;+10&sigma;; tables show the exact value. Twins are folded under'
         || ' <b>related metrics</b> and never counted.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>DB time strip</dt><dd><code>DBA_HIST_SYSSTAT</code> DB time per compared window, divided by 100 (centiseconds per second = average active sessions); release markers sit'
         || ' on the boundary between the two windows they fall between.</dd>');

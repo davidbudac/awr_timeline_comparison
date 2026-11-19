@@ -114,7 +114,7 @@ BEGIN
         -- a pinned band (|z| past its -4 / +8 scale) prints its own z
         || CASE WHEN v_z IS NOT NULL AND v_z BETWEEN -4 AND 8
                 THEN '<span class="z">z ' || band_ztxt(v_z) || '</span>' END
-        || '</div>' || band_span(v_z, v_bucket, 'sm') || '</div>';
+        || '</div>' || band_span(v_z, v_bucket, 'sm', 'N', 10) || '</div>';
 
     DBMS_OUTPUT.PUT_LINE('<section id="overview" class="vw in-s strip-sec" aria-label="DB time per compared window">');
     DBMS_OUTPUT.PUT_LINE('<div class="panel strip" id="s-strip"><div class="wg fit hov"' || wg_attr

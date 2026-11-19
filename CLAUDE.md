@@ -356,8 +356,20 @@ COMMIT (`f-commit`: WAIT:Commit, COMMIT) · PARSE (PARSE, HARD_PARSE,
 CURSORS) · WRITE (WRITE_IO, REDO, WAIT:System I/O) · any other family is its
 own card (`WAIT:<c>` → "<c> waits", `f-wait-<c>`). Lead (`lead_better`):
 large before moderate → member of `card_primary`'s family → larger |z| →
-shorter label. Order (`card_before`): large before moderate, then max |z|;
-a flagged DB time card moves to 2nd. **00 (verdict) and 07 (cards) both
+shorter label. Order (`card_before_imp`, v1.7, plan 020): tier 1 = cards
+whose time measure rose (impact > 0), largest impact first; tier 2 =
+DBTIME; tier 3 = the rest by `card_before` (large before moderate, then
+max |z|); then a flagged DB time card moves to 2nd. Impact
+(`impact_group`): the card's time measure — DB time, DB CPU, or its
+wait-class row — Current minus prior mean, ×`metric_scale` = AAS;
+`article.fc[data-impact]` (3-decimal token, '' = none) and
+`[data-share]` (integer % of the DB-time rise, '' when DB time did not
+rise or the share passes 100) are a contract for later Summary features;
+a chip `.fc-k .fc-imp` shows it. A flagged DB CPU card is its own card
+`CPU` (label "CPU"). Summary-only band glyphs (07's card header,
+evidence and normal rows, 08's strip, 18's plan card) pass `p_zcap =>
+10` (printed z stops at ">+10σ"; tables and Timeline gutters keep the
+exact z). **00 (verdict) and 07 (cards) both
 order cards — keep them in lockstep** (twin `helpers.card_order`). "N
 findings" = number of cards; "metrics moved" = canonical large+moderate
 rows. Units (`metric_unit/scale`): DB time / DB CPU / CPU used → AAS
@@ -632,10 +644,11 @@ at}`, short labels "Release 4.2" → "R 4.2"), `markerAt(o)`, `sizeRow`,
 
 Replaces the v1.4 `data-dev` heat tint and the old Change / z / %Δ columns
 in every scored table. `band_z(cur, mu, sd)` (z over max(sd, 2%·|mu|), the
-policy's floor) · `band_ztxt` · `band_sev(bucket)` → `s-large|s-moderate|
-s-improved|s-typical` · `band_span(z, bucket, size, twin)` → `<span class="bd
+policy's floor) · `band_ztxt(z, cap)` (cap 99 default, 10 in Summary) ·
+`band_sev(bucket)` → `s-large|s-moderate|
+s-improved|s-typical` · `band_span(z, bucket, size, twin, zcap)` → `<span class="bd
 s-…" style="--x:…">` on an axis −4σ…+8σ (x = (z+4)/12; past the ends the dot
-pins `po|pu` and prints z; `flat baseline` hatched `.s-flat`; NULL z /
+pins `po|pu` and prints z, clamped past `zcap`; `flat baseline` hatched `.s-flat`; NULL z /
 insufficient / n/a faded `.na`; bucket NULL = unscored hollow dot) ·
 `delta_span(cur, mu, bucket, plain)` = THE Δ rule (`▲ ×n` when cur/mu ≥ 2,
 else `▲/▼ p.p%`) · `range_txt(mu, sd)` (mu ± 2sd, floored at 0) ·
@@ -738,7 +751,9 @@ designs) and the server's env whitelist.
   each card holds the MOVED `article.fc` (so `#f-<group>` and every link
   into it open the row via reveal's `<details>` rule), then each
   non-twin crit / warn row of the card's related table, its bars drawn
-  from `#tl-<detail id>` data-v; each row `id="dr-<card id | detail id>"`
+  from `#tl-<detail id>` data-v; the findings table's band cells are
+  capped at 10 sigma like the cards (`capz`, plan 020); each row
+  `id="dr-<card id | detail id>"`
   (the palette lists them by display name); the Trend cell is the shared
   micro strip, else (past 91 windows, where it draws nothing) the
   design's own mini bars; nothing moved -> 07's "No finding" note goes
@@ -1640,7 +1655,7 @@ collection tagged via `ROW_NUMBER()`; the finding cards, "checked and normal",
 the Timeline metric / wait rows and the detail tables all walk that one
 collection — don't reintroduce a second recompute cursor just for a different
 ORDER BY. The verdict (00) and the cards (07) must order cards identically
-(`card_before`).
+(`card_before_imp`).
 
 ### Debug logging
 `sql/lib/debug_log.sql` emits one timestamped progress marker per section to

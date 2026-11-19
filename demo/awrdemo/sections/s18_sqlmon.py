@@ -121,7 +121,7 @@ def _pc_ev(dt, idt, de, cur, mu, sd, bucket, plain, band="Y"):
             + '</span><span class="de">' + H.nbu(de) + '</span></dd>'
             + '<div class="m"' + (' title="Ranked, not scored"' if plain == "Y" else "") + '>'
             + H.delta_span(cur, mu, bucket, plain)
-            + (H.band_span(H.band_z(cur, mu, sd), bucket, "sm") if band == "Y" else "")
+            + (H.band_span(H.band_z(cur, mu, sd), bucket, "sm", "N", 10) if band == "Y" else "")
             + '</div></div>')
 
 
@@ -214,7 +214,7 @@ def _plan_card(w, put, c):
         + '<header class="fc-h"><div class="fc-k"><span class="sv" title="SQL Monitor, #'
         + str(c["rnk"]) + ' by Current-window max elapsed"><b class="gk">&#9670;</b>Plan change</span></div>'
         + '<div class="fc-band" title="SQL Monitor max elapsed, z ' + H.band_ztxt(z)
-        + ' against the prior normal">' + H.band_span(z, b, "lg")
+        + ' against the prior normal">' + H.band_span(z, b, "lg", "N", 10)
         + '<span class="bd-ax" aria-hidden="true"><em style="--x:.167">&minus;2</em>'
         + '<em style="--x:.333">0</em><em style="--x:.500">+2</em>'
         + '<em style="--x:.583">+3</em><em class="end" style="--x:1">+8&sigma;</em></span>'

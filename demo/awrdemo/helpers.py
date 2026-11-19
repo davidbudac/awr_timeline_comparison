@@ -274,13 +274,13 @@ def band_z(cur, mu, sd):
     return None if den == 0 else (cur - mu) / den
 
 
-def band_ztxt(z) -> str:
+def band_ztxt(z, cap=99) -> str:
     if z is None:
         return "&mdash;"
-    if z > 99:
-        return "&gt;+99&sigma;"
-    if z < -99:
-        return "&lt;&minus;99&sigma;"
+    if z > cap:
+        return "&gt;+" + str(cap) + "&sigma;"
+    if z < -cap:
+        return "&lt;&minus;" + str(cap) + "&sigma;"
     if ora_round(z, 1) < 0:
         return "&minus;" + to_char_fixed(abs(z), 1) + "&sigma;"
     return "+" + to_char_fixed(abs(z), 1) + "&sigma;"
@@ -295,7 +295,7 @@ _BAND_LAB = {"large": "large finding", "moderate": "moderate finding", "improved
              "noted": "noted", "typical": "normal"}
 
 
-def band_span(z, bucket, size=None, twin="N") -> str:
+def band_span(z, bucket, size=None, twin="N", zcap=99) -> str:
     sz = (" " + size) if size else ""
     if bucket == "flat baseline":
         return ('<span class="bd s-flat' + sz + '" role="img"'
@@ -309,13 +309,13 @@ def band_span(z, bucket, size=None, twin="N") -> str:
     x = (z + 4) / 12
     pin, ov = "", ""
     if x > 1:
-        x, pin, ov = 1, " po", '<b class="ov">' + band_ztxt(z) + '</b>'
+        x, pin, ov = 1, " po", '<b class="ov">' + band_ztxt(z, zcap) + '</b>'
     elif x < 0:
-        x, pin, ov = 0, " pu", '<b class="ov">' + band_ztxt(z) + '</b>'
+        x, pin, ov = 0, " pu", '<b class="ov">' + band_ztxt(z, zcap) + '</b>'
     lab = _BAND_LAB.get(bucket, "not scored")
     return ('<span class="bd ' + band_sev(bucket) + sz + pin + (" twn" if twin == "Y" else "")
             + '" style="--x:' + to_char_fixed(x, 3) + '" role="img" aria-label="' + lab
-            + ', z ' + band_ztxt(z) + '"><i></i>' + ov + '</span>')
+            + ', z ' + band_ztxt(z, zcap) + '"><i></i>' + ov + '</span>')
 
 
 def delta_span(cur, mu, bucket, plain="N") -> str:
@@ -709,7 +709,7 @@ def card_primary(group: str) -> str:
 
 def card_label(group: str) -> str:
     fixed = {"IO": "Physical I/O", "DBTIME": "DB time", "NET": "Network", "COMMIT": "Commit",
-             "PARSE": "Parsing", "WRITE": "Writes and redo"}
+             "PARSE": "Parsing", "WRITE": "Writes and redo", "CPU": "CPU"}
     if group in fixed:
         return fixed[group]
     if group.startswith("WAIT:"):
@@ -882,14 +882,51 @@ def card_before(sev_a, z_a, sev_b, z_b) -> bool:
     return (z_a or 0) > (z_b or 0)
 
 
+def impact_group(domain, name, family):
+    if domain == "LOAD" and name == "DB time":
+        return "DBTIME"
+    if domain == "LOAD" and name == "DB CPU":
+        return "CPU"
+    if domain == "WAIT" and name.startswith("Wait class: "):
+        return card_group(family)
+    return None
+
+
+def card_tier(group, imp) -> int:
+    if group == "DBTIME":
+        return 2
+    return 1 if (imp is not None and imp > 0) else 3
+
+
+def card_before_imp(g_a, sev_a, z_a, imp_a, g_b, sev_b, z_b, imp_b) -> bool:
+    ta, tb = card_tier(g_a, imp_a), card_tier(g_b, imp_b)
+    if ta != tb:
+        return ta < tb
+    if ta == 1 and ora_round(imp_a, 6) != ora_round(imp_b, 6):
+        return imp_a > imp_b
+    return card_before(sev_a, z_a, sev_b, z_b)
+
+
+def imp_tok(v) -> str:
+    return "" if v is None else to_char_fixed(ora_round(v, 3), 3)
+
+
+def imp_txt(v) -> str:
+    return "+" + fmt_num(v) + "&nbsp;AAS"
+
+
 def card_order(groups: dict) -> list:
-    """groups: {group: (sev, maxz)} in PL/SQL associative-array key order
-    (sorted keys) -> the card order (insertion sort on card_before, then a
-    flagged DBTIME card moves up to second place)."""
+    """groups: {group: (sev, maxz, imp)} in PL/SQL associative-array key
+    order (sorted keys) -> the card order (insertion sort on
+    card_before_imp: cards whose time measure rose, by the AAS added, then
+    DBTIME, then the rest by card_before; then a flagged DBTIME card moves
+    up to second place)."""
     order = []
     for g in sorted(groups):
         j = len(order)
-        while j >= 1 and card_before(groups[g][0], groups[g][1], groups[order[j - 1]][0], groups[order[j - 1]][1]):
+        while j >= 1 and card_before_imp(g, groups[g][0], groups[g][1], groups[g][2],
+                                         order[j - 1], groups[order[j - 1]][0],
+                                         groups[order[j - 1]][1], groups[order[j - 1]][2]):
             j -= 1
         order.insert(j, g)
     if "DBTIME" in order[2:]:

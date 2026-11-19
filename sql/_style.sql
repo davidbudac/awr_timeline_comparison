@@ -1311,6 +1311,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.fc-k{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;font-size:13px;color:var(--muted);padding-top:4px}');
     DBMS_OUTPUT.PUT_LINE('.fc-k .sv{display:inline-flex;align-items:center;gap:8px;color:var(--ink);font-weight:600}');
     DBMS_OUTPUT.PUT_LINE('.fc-k .gk{font-style:normal;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.fc-k .fc-imp{display:inline-flex;align-items:center;padding:1px 10px;border-radius:999px;background:var(--chip-bg);color:var(--ink);font-size:12.5px;font-weight:600;white-space:nowrap}');
     DBMS_OUTPUT.PUT_LINE('.fc-band{width:280px}');
     DBMS_OUTPUT.PUT_LINE('.fc-band .bd-ax{min-width:0}');
     DBMS_OUTPUT.PUT_LINE('.fc h3{font-size:19px;line-height:1.3;font-weight:600;letter-spacing:-.01em;margin:8px 0 0;padding:0;border:0;text-transform:none;color:var(--ink)}');

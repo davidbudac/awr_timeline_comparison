@@ -759,7 +759,7 @@ BEGIN
                     || '</span></dd>'
                     || '<div class="m"' || CASE WHEN p_plain = 'Y' THEN ' title="Ranked, not scored"' END || '>'
                     || delta_span(p_cur, p_mu, p_bucket, p_plain)
-                    || CASE WHEN p_band = 'Y' THEN band_span(band_z(p_cur, p_mu, p_sd), p_bucket, 'sm') END
+                    || CASE WHEN p_band = 'Y' THEN band_span(band_z(p_cur, p_mu, p_sd), p_bucket, 'sm', 'N', 10) END
                     || '</div></div>';
             END pc_ev;
         BEGIN
@@ -879,7 +879,7 @@ BEGIN
                 || '<header class="fc-h"><div class="fc-k"><span class="sv" title="SQL Monitor, #'
                 || v_pc(c).rnk || ' by Current-window max elapsed"><b class="gk">&#9670;</b>Plan change</span></div>'
                 || '<div class="fc-band" title="SQL Monitor max elapsed, z ' || band_ztxt(v_z)
-                || ' against the prior normal">' || band_span(v_z, v_b, 'lg')
+                || ' against the prior normal">' || band_span(v_z, v_b, 'lg', 'N', 10)
                 || '<span class="bd-ax" aria-hidden="true"><em style="--x:.167">&minus;2</em>'
                 || '<em style="--x:.333">0</em><em style="--x:.500">+2</em>'
                 || '<em style="--x:.583">+3</em><em class="end" style="--x:1">+8&sigma;</em></span>'

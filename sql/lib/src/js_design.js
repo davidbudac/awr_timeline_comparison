@@ -224,6 +224,18 @@ function kpis(){
 }
 
 /* ---- 7. dashboard: the findings as one expandable table, What changed beside it */
+/* plan 020: the Summary view prints z only up to 10 sigma (band_ztxt's
+   p_cap); the findings table clones its bands from the All-sections
+   tables, which keep the exact z, so cap the clone's pinned text */
+function capz(bd){
+  var b=bd&&$(".ov",bd);if(!b)return bd;
+  var M=String.fromCharCode(8722),S=String.fromCharCode(963),t=txt(b);
+  var z=parseFloat(t.replace(/^[<>]/,"").replace(M,"-"));
+  if(isNaN(z)||Math.abs(z)<=10)return bd;
+  var c=z>0?">+10"+S:"<"+M+"10"+S,al=bd.getAttribute("aria-label");
+  if(al)bd.setAttribute("aria-label",al.split(t).join(c));
+  b.textContent=c;return bd;
+}
 function drow(o){
   var d=mk("details","drow"+(o.sev?" s-"+o.sev:"")+(o.lead?" lead":""));
   if(o.key){d.setAttribute("data-row",o.key);var rid="dr-"+o.key,k=2;while(doc.getElementById(rid))rid="dr-"+o.key+"-"+(k++);d.id=rid;}
@@ -231,7 +243,7 @@ function drow(o){
   s.innerHTML='<span class="dch" aria-hidden="true"></span><span class="dsev"><i aria-hidden="true"></i>'+sevWord(o.sev)+'</span>'
     +'<span class="dnm"><b>'+esc(o.name)+'</b><small>'+esc(o.fam)+'</small></span><span class="dcur">'+esc(o.cur)+'</span>'
     +'<span class="dnr">'+esc(o.nrm)+'</span><span class="dbd"></span><span class="ddl"></span><span class="dtr"></span>';
-  if(o.band)$(".dbd",s).appendChild(o.band);
+  if(o.band)$(".dbd",s).appendChild(capz(o.band));
   if(o.delta)$(".ddl",s).appendChild(o.delta);
   if(o.data){var tc=$(".dtr",s),ms=null;
     if(window.AWR_microStrip){try{ms=AWR_microStrip(o.data.v.map(function(x){return x==null?"":x;}).join(","),o.name);}catch(e){ms=null;}}

@@ -31,8 +31,10 @@
 -- Card order and lead (shared with the verdict in 00_params.sql through
 -- sql/lib/finding_cards.plsql): a card is led by its loudest large (else
 -- moderate) member of the card's primary family, else of any family;
--- cards are ordered large before moderate, then by the largest |z| of any
--- member, and a flagged DB time card moves up to second place.
+-- cards whose time measure rose come first, by the AAS added (impact,
+-- v1.7); then DB time; then the rest, large before moderate and by the
+-- largest |z| of any member; then a flagged DB time card moves up to
+-- second place.
 --
 -- Implementation note: the unified LOAD/METRIC/WAIT recompute is
 -- BULK COLLECTed exactly once into a PL/SQL collection; every view below
@@ -106,6 +108,8 @@ DECLARE
     v_glead      fam_idx_t;
     v_gsev       fam_idx_t;
     v_gz         gz_t;
+    v_gimp       gz_t;          -- card group -> impact, AAS added above normal (v1.7)
+    v_ig         VARCHAR2(64);
     v_order      ord_t;
     v_g          VARCHAR2(64);
     v_tmp        VARCHAR2(64);
@@ -132,6 +136,13 @@ DECLARE
     BEGIN
         RETURN finding_anchor(p_dom, p_name);
     END find_id;
+
+    -- a card's impact (AAS its time measure added above its prior mean), NULL when none
+    FUNCTION g_imp(p_g VARCHAR2) RETURN NUMBER IS
+    BEGIN
+        IF v_gimp.EXISTS(p_g) THEN RETURN v_gimp(p_g); END IF;
+        RETURN NULL;
+    END g_imp;
 
     FUNCTION src_link(p_dom VARCHAR2, p_name VARCHAR2) RETURN VARCHAR2 IS
     BEGIN
@@ -219,7 +230,7 @@ DECLARE
             || CASE WHEN p_txt THEN ' txt' END || '">' || p_id || '</span>'
             || '<span class="de">' || nbu(p_de) || '</span></dd>'
             || '<div class="m">' || delta_span(p_cur, p_mu, p_bucket)
-            || band_span(band_z(p_cur, p_mu, p_sd), p_bucket, 'sm') || '</div></div>';
+            || band_span(band_z(p_cur, p_mu, p_sd), p_bucket, 'sm', 'N', 10) || '</div></div>';
     END ev_row;
 
     -- the band glyph's axis under a card's large band
@@ -238,7 +249,7 @@ DECLARE
         RETURN '<div class="nr"><div class="l" title="' || DBMS_XMLGEN.CONVERT(r.metric_name) || '">'
             || f_ent(r) || '<small>normal ' || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u)
             || '</small></div>'
-            || band_span(r.z_score, r.change_bucket, 'sm', CASE WHEN r.canonical = 'N' THEN 'Y' ELSE 'N' END)
+            || band_span(r.z_score, r.change_bucket, 'sm', CASE WHEN r.canonical = 'N' THEN 'Y' ELSE 'N' END, 10)
             || '<div class="vv">' || fv(r.cur_val * v_s, v_u)
             || '<small>' || delta_span(r.cur_val, r.prior_mean, r.change_bucket) || '</small></div></div>';
     END nr_row;
@@ -352,7 +363,15 @@ DECLARE
         v_ms    NUMBER;
         v_mu    VARCHAR2(20);
         v_eb    VARCHAR2(40);
+        v_imp   NUMBER := g_imp(p_g);
+        v_dd    NUMBER := g_imp('DBTIME');
+        v_shr   NUMBER;
     BEGIN
+        -- impact chip (v1.7): the card's share of the DB-time rise, left out
+        -- past 100% (background wait time rose more than DB time)
+        IF v_imp > 0 AND v_dd > 0 AND v_imp <= v_dd * 1.005 THEN
+            v_shr := ROUND(v_imp / v_dd * 100);
+        END IF;
         IF p_g = 'DBTIME' AND v_dbt IS NOT NULL AND v_cpu IS NOT NULL THEN
             v_split := time_split(v_findings(v_dbt).cur_val, v_findings(v_dbt).prior_mean,
                                   v_findings(v_cpu).cur_val, v_findings(v_cpu).prior_mean);
@@ -419,12 +438,20 @@ DECLARE
 
         DBMS_OUTPUT.PUT_LINE('<article class="panel fc f-' || v_sev
             || CASE WHEN p_pos = 1 THEN ' lead' WHEN v_sev = 'moderate' THEN ' slim' END
-            || '" id="' || v_id || '" aria-labelledby="' || v_id || '-h">'
+            || '" id="' || v_id || '" aria-labelledby="' || v_id || '-h"'
+            || ' data-impact="' || imp_tok(v_imp) || '" data-share="' || v_shr || '">'
             || '<header class="fc-h"><div class="fc-k"><span class="sv" title="'
             || DBMS_XMLGEN.CONVERT(card_label(p_g)) || '"><i class="dotk ' || v_sev
-            || '" aria-hidden="true"></i>' || INITCAP(v_sev) || '</span></div>'
+            || '" aria-hidden="true"></i>' || INITCAP(v_sev) || '</span>'
+            || CASE WHEN v_imp > 0 THEN '<span class="fc-imp" title="Time added: Current minus the prior'
+                    || ' mean of this card&#39;s time measure (DB time, DB CPU or its wait class),'
+                    || ' in average active sessions">' || imp_txt(v_imp)
+                    || CASE WHEN p_g = 'DBTIME' THEN ' above normal'
+                            WHEN v_shr IS NOT NULL THEN ' &middot; ' || v_shr || '% of the DB-time rise' END
+                    || '</span>' END
+            || '</div>'
             || '<div class="fc-band" title="z ' || band_ztxt(r.z_score) || ' against the prior normal">'
-            || band_span(r.z_score, v_sev, 'lg') || band_axis || '</div></header>');
+            || band_span(r.z_score, v_sev, 'lg', 'N', 10) || band_axis || '</div></header>');
         DBMS_OUTPUT.PUT_LINE('<h3 id="' || v_id || '-h">' || f_ent(r) || ' '
             || move_txt(r.cur_val, r.prior_mean, v_sev)
             || CASE WHEN r.metric_name = 'DB time' THEN
@@ -760,6 +787,11 @@ BEGIN
         v_total := v_total + 1;
         IF f.metric_domain = 'LOAD' AND f.metric_name = 'DB time' THEN v_dbt := i; END IF;
         IF f.metric_domain = 'LOAD' AND f.metric_name = 'DB CPU'  THEN v_cpu := i; END IF;
+        -- impact (v1.7, sql/lib/finding_cards.plsql impact_group)
+        v_ig := impact_group(f.metric_domain, f.metric_name, f.family);
+        IF v_ig IS NOT NULL AND f.cur_val IS NOT NULL AND f.prior_mean IS NOT NULL THEN
+            v_gimp(v_ig) := (f.cur_val - f.prior_mean) * metric_scale(f.metric_domain, f.metric_name);
+        END IF;
         IF f.change_bucket IN ('large', 'moderate', 'improved', 'noted') THEN
             IF f.canonical = 'N' THEN
                 v_folded := v_folded + 1;
@@ -808,12 +840,13 @@ BEGIN
     END LOOP;
 
     -- Card order (00_params.sql's verdict applies the same two steps):
-    -- large before moderate, then the loudest |z|; then a flagged DB time
+    -- cards whose time measure rose, by the AAS added; then DB time; then
+    -- the rest, large before moderate and by |z|; then a flagged DB time
     -- card moves up to second place.
     v_g := v_glead.FIRST;
     WHILE v_g IS NOT NULL LOOP
         j := v_order.COUNT;
-        WHILE j >= 1 AND card_before(v_gsev(v_g), v_gz(v_g), v_gsev(v_order(j)), v_gz(v_order(j))) LOOP
+        WHILE j >= 1 AND card_before_imp(v_g, v_gsev(v_g), v_gz(v_g), g_imp(v_g), v_order(j), v_gsev(v_order(j)), v_gz(v_order(j)), g_imp(v_order(j))) LOOP
             v_order(j + 1) := v_order(j);
             j := j - 1;
         END LOOP;
