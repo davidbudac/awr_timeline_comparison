@@ -64,7 +64,11 @@
  *     v1.7: cards ordered by data-impact, chip present, Summary z capped
  *     at 10; the DB-time breakdown under the verdict (#att-slot) shown
  *     (required for the demo), #att-src gone, every part coloured from
- *     AWR_WAIT_COLORS;
+ *     AWR_WAIT_COLORS; v1.7 one count: the rail's Findings pills add up
+ *     to the finding cards, no other rail link has a count pill, no
+ *     "metrics moved" verdict pill, the Summary Findings header counts
+ *     the cards, J in Summary flashes a large card, the card sub-links'
+ *     text / data-label carry no share (CSS ::after only);
  *   - the design (window.AWR_DESIGN, design=quiet|dashboard; none =
  *     classic): quiet and dashboard -- "How to read" opens / closes the
  *     Activity help, a table's copy menu holds CSV + Markdown; dashboard --
@@ -876,6 +880,20 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         .map(b => b.textContent).filter(t => /\u03c3/.test(t))
         // a capped text reads >+10 / <-10 (= 10, passes); an uncapped >+99 fails
         .filter(t => Math.abs(parseFloat(t.replace(/^[<>]/, '').replace('\u2212', '-'))) > 10);
+      // v1.7 one count: the rail's Findings pills count the cards; no other rail link counts rows
+      const fl = document.querySelector('nav.toc a[href="#findings"]');
+      out.railFind = (fl ? [...fl.querySelectorAll('.cnt')].reduce((s, x) => s + (parseInt(x.textContent, 10) || 0), 0) : -1) + '/' + cards.length;
+      out.railOther = [...document.querySelectorAll('nav.toc a .cnt')].filter(x => x.closest('a') !== fl).length;
+      out.pillMoved = [...document.querySelectorAll('#pills li')].some(li => /metrics? moved/.test(li.textContent));
+      const fm = document.querySelector('#findings-heading .meta.in-s');
+      out.findMeta = fm ? (fm.textContent.match(/\d+/g) || []).reduce((s, x) => s + +x, 0) + '/' + cards.length : 'none';
+      // J in Summary lands on a large card
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true }));
+      await wait(200);
+      const fl1 = document.querySelector('#findings article.fc.flash:not(.chg)');
+      out.jk = fl1 ? (fl1.classList.contains('f-large') ? 'ok' : 'FAIL not large') : 'FAIL no card flashed';
+      // the rail sub-link names stay clean (the share is CSS ::after only)
+      out.subNames = [...document.querySelectorAll('nav.toc a.sub')].every(a => !/%/.test(a.textContent) && !/%/.test(a.getAttribute('data-label') || ''));
       // All sections: every library section shows in full, row state or not
       window.AWR_setView('all', false); await wait(250);
       out.allFull = libs.filter(x => { const t = x.querySelector('table, .chart-wrap'); return t && !vis(t); }).map(x => x.id);
@@ -902,6 +920,13 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (/^FAIL/.test(p4.toggle)) fail('evidence library row toggle ' + p4.toggle);
     if (/^FAIL/.test(p4.reveal)) fail('evidence library reveal ' + p4.reveal);
     if (!p4.subsOk) fail('rail card sub-links ' + p4.subs);
+    const [rf, rc] = p4.railFind.split('/');
+    if (rf !== rc) fail('rail Findings pills count ' + rf + ', cards ' + rc);
+    if (p4.railOther) fail('rail: ' + p4.railOther + ' count pill(s) outside the Findings link');
+    if (p4.pillMoved) fail('verdict: a "metrics moved" pill is back');
+    if (p4.findMeta !== 'none' && p4.findMeta.split('/')[0] !== p4.findMeta.split('/')[1]) fail('Findings header (Summary) does not count the cards: ' + p4.findMeta);
+    if (/^FAIL/.test(p4.jk)) fail('J in Summary: ' + p4.jk);
+    if (!p4.subNames) fail('rail card sub-link text / data-label carries the share');
     if (p4.allFull.length) fail('All sections: library sections not shown in full: ' + p4.allFull.join(', '));
     if ((!p4.strips && p4.nwin <= 91) || p4.lines) fail('micro strips: ' + p4.strips + ' svg.mw, ' + p4.lines + ' line sparklines left');
     if (errors.length) fail('phase 4: ' + errors.slice(0, 5).join(' | '));

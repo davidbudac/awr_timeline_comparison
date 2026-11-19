@@ -198,6 +198,7 @@ def _verdict_state(w, scored):
                 st["n_impr"] += 1
     st["order"] = h.card_order({g: (gsev[g], gz[g], imp.get(g)) for g in lead})
     st["lead"] = lead
+    st["gsev"] = gsev
     return st
 
 
@@ -249,11 +250,17 @@ def _hero(w, st) -> list[str]:
         put('<h1 class="verdict">' + v + '.</h1>')
     put('<p class="because" id="because-slot" hidden></p>')
     put('<div class="att" id="att-slot" hidden></div>')
-    nm, nn, ni = st["n_moved"], st["n_normal"], st["n_impr"]
+    nn, ni = st["n_normal"], st["n_impr"]
+    # v1.7 one count: a finding is a card (00_params.sql v_ncl / v_ncm)
+    ncl = sum(1 for g in order if st["gsev"][g] == 2)
+    ncm = len(order) - ncl
     put('<ul class="pills" id="pills" aria-label="Counts">'
-        + (('<li><a href="#findings"><b>' + str(len(order)) + '</b> finding' + ('' if len(order) == 1 else 's')
-            + '</a></li><li><a href="#findings"><b>' + str(nm) + '</b> metric' + ('' if nm == 1 else 's')
-            + ' moved</a></li>') if order else '')
+        + (('<li class="pl-find"><a href="#findings"><b>' + str(len(order)) + '</b> finding'
+            + ('' if len(order) == 1 else 's')
+            + '<span class="pl-sev">'
+            + ('<i class="dotk large" aria-hidden="true"></i>' + str(ncl) + ' large' if ncl > 0 else '')
+            + ('<i class="dotk moderate" aria-hidden="true"></i>' + str(ncm) + ' moderate' if ncm > 0 else '')
+            + '</span></a></li>') if order else '')
         + '<li class="pl-normal"><a href="#s-normal"><b>' + str(nn) + '</b> metric' + ('' if nn == 1 else 's')
         + ' normal</a></li>'
         + ('<li><a href="#s-normal"><b>' + str(ni) + '</b> improved</a></li>' if ni > 0 else '')

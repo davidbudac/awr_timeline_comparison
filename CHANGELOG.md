@@ -130,6 +130,13 @@ release bumps `awr_version`).
   above the prior mean, largest first), solid when the part is behind a
   finding, hatched when it grew but stayed normal, with the classes that
   fell named under it. Same numbers as the finding cards' impact.
+- **One finding count.** A finding is a card everywhere it is counted:
+  the verdict pill (with its large / moderate split; the "metrics moved"
+  pill is gone), the Findings header in Summary and the rail's Findings
+  link (whose card sub-links show each card's share of the DB-time rise).
+  Other rail links keep their status dot but no longer count table rows;
+  section headers still count their own rows. In Summary, J / K step
+  through the large cards.
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

@@ -127,6 +127,8 @@ DECLARE
     v_cpu        PLS_INTEGER;
     v_meta       VARCHAR2(4000);
     v_parts      part_t;
+    v_ncl        PLS_INTEGER := 0;   -- large finding cards (v1.7: a finding is a card)
+    v_ncm        PLS_INTEGER := 0;   -- moderate finding cards
 
     @@sql/lib/metric_policy.plsql
     @@sql/lib/is_essential.plsql
@@ -153,6 +155,18 @@ DECLARE
         IF v_gimp.EXISTS(p_g) THEN RETURN v_gimp(p_g); END IF;
         RETURN NULL;
     END g_imp;
+
+    -- a card's share of the DB-time rise, integer percent; NULL when the
+    -- card added no time, DB time did not rise, or the share passes 100
+    FUNCTION g_shr(p_g VARCHAR2) RETURN NUMBER IS
+        v_i NUMBER := g_imp(p_g);
+        v_d NUMBER := g_imp('DBTIME');
+    BEGIN
+        IF v_i > 0 AND v_d > 0 AND v_i <= v_d * 1.005 THEN
+            RETURN ROUND(v_i / v_d * 100);
+        END IF;
+        RETURN NULL;
+    END g_shr;
 
     FUNCTION src_link(p_dom VARCHAR2, p_name VARCHAR2) RETURN VARCHAR2 IS
     BEGIN
@@ -374,14 +388,11 @@ DECLARE
         v_mu    VARCHAR2(20);
         v_eb    VARCHAR2(40);
         v_imp   NUMBER := g_imp(p_g);
-        v_dd    NUMBER := g_imp('DBTIME');
         v_shr   NUMBER;
     BEGIN
         -- impact chip (v1.7): the card's share of the DB-time rise, left out
         -- past 100% (background wait time rose more than DB time)
-        IF v_imp > 0 AND v_dd > 0 AND v_imp <= v_dd * 1.005 THEN
-            v_shr := ROUND(v_imp / v_dd * 100);
-        END IF;
+        v_shr := g_shr(p_g);
         IF p_g = 'DBTIME' AND v_dbt IS NOT NULL AND v_cpu IS NOT NULL THEN
             v_split := time_split(v_findings(v_dbt).cur_val, v_findings(v_dbt).prior_mean,
                                   v_findings(v_cpu).cur_val, v_findings(v_cpu).prior_mean);
@@ -1086,11 +1097,15 @@ BEGIN
 
     --
     -- Section header: title, a one-line subtitle per view, the counts.
-    -- Counts are canonical rows only; folded twins get their own muted
-    -- count.  The "N findings" = cards (card groups of families), the same
-    -- number the verdict pills show.
+    -- Counts: in Summary the finding CARDS by severity (the verdict pill
+    -- and the rail count the same cards); in All sections the canonical
+    -- flagged ROWS of the detail tables, folded twins apart.
     --
-    v_meta := '<span class="meta">'
+    v_ncl := 0; v_ncm := 0;
+    FOR k IN 1 .. v_order.COUNT LOOP
+        IF v_gsev(v_order(k)) = 2 THEN v_ncl := v_ncl + 1; ELSE v_ncm := v_ncm + 1; END IF;
+    END LOOP;
+    v_meta := '<span class="meta' || CASE WHEN v_order.COUNT > 0 THEN ' vw in-a' END || '">'
         || CASE WHEN v_crit > 0 THEN '<span><i class="dotk large"></i>' || v_crit || ' large</span>' END
         || CASE WHEN v_warn > 0 THEN '<span><i class="dotk moderate"></i>' || v_warn || ' moderate</span>' END
         || '<span><i class="dotk typical"></i>' || v_normal || ' normal</span>'
@@ -1111,12 +1126,17 @@ BEGIN
                      || CASE WHEN v_order.COUNT = 1 THEN '' ELSE 's' END || '</span>'
                      || '<span class="vw in-a">Findings</span>'
                 ELSE 'Findings' END
+        || CASE WHEN v_order.COUNT > 0
+                THEN '<span class="meta vw in-s" title="finding cards by severity">'
+                     || CASE WHEN v_ncl > 0 THEN '<span><i class="dotk large"></i>' || v_ncl || ' large</span>' END
+                     || CASE WHEN v_ncm > 0 THEN '<span><i class="dotk moderate"></i>' || v_ncm || ' moderate</span>' END
+                     || '</span>' END
         || v_meta
         || '<small class="h2sub"><span class="vw in-s">'
         || CASE WHEN v_order.COUNT > 0
-                THEN (v_crit + v_warn) || ' metric' || CASE WHEN v_crit + v_warn = 1 THEN '' ELSE 's' END
-                     || ' moved, in ' || v_order.COUNT || ' famil'
-                     || CASE WHEN v_order.COUNT = 1 THEN 'y' ELSE 'ies' END
+                THEN 'From ' || (v_crit + v_warn) || ' flagged metric'
+                     || CASE WHEN v_crit + v_warn = 1 THEN '' ELSE 's' END
+                     || '; ordered by the DB time each card added'
                 ELSE 'Every scored metric against its prior windows' END
         || '</span><span class="vw in-a">Every scored metric against its prior windows; one table per domain</span>'
         || '</small></h2>');
@@ -1134,11 +1154,16 @@ BEGIN
         BEGIN
             FOR k IN 1 .. v_order.COUNT LOOP
                 v_js := v_js || CASE WHEN k > 1 THEN ',' END || '["' || card_id(v_order(k)) || '","'
-                    || REPLACE(REPLACE(card_label(v_order(k)), '"', ''), '<', '') || '"]';
+                    || REPLACE(REPLACE(card_label(v_order(k)), '"', ''), '<', '') || '","'
+                    || CASE WHEN v_order(k) <> 'DBTIME' THEN TO_CHAR(g_shr(v_order(k))) END || '"]';
             END LOOP;
+            -- v1.7: each card's share of the DB-time rise rides on data-shr,
+            -- drawn by CSS ::after -- never a child element: the link's
+            -- text names the card (00's data-label, the dashboard design)
             DBMS_OUTPUT.PUT_LINE('<script>(function(){var n=document.querySelector(''nav.toc a[href="#findings"]'');'
                 || 'if(!n)return;[' || v_js || '].forEach(function(c){var a=document.createElement("a");'
                 || 'a.className="sub";a.href="#"+c[0];a.setAttribute("data-nodot","");a.textContent=c[1];'
+                || 'if(c[2]){a.setAttribute("data-shr",c[2]+"%");a.title=c[1]+": "+c[2]+"% of the DB-time rise";}'
                 || 'n.parentNode.insertBefore(a,n.nextSibling);n=a;});})();</script>');
         END;
     ELSE

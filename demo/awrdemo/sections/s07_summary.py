@@ -240,14 +240,22 @@ def _nr_row(f) -> str:
 _SPLIT_CARD = {"W": ", all of it wait", "w": ", mostly wait", "c": ", mostly CPU", "m": ", CPU and wait alike"}
 
 
+def _g_shr(imp, g):
+    """07_summary.sql g_shr: a card's share of the DB-time rise, integer
+    percent; None when the card added no time, DB time did not rise, or
+    the share passes 100."""
+    v_i, v_d = imp.get(g), imp.get("DBTIME")
+    if v_i is not None and v_d is not None and v_i > 0 and v_d > 0 and v_i <= v_d * 1.005:
+        return int(h.ora_round(v_i / v_d * 100, 0))
+    return None
+
+
 def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp):
     r = lead[g]
     # impact chip (v1.7): the card's share of the DB-time rise, left out
     # past 100% (background wait time rose more than DB time)
-    v_imp, v_dd, v_shr = imp.get(g), imp.get("DBTIME"), None
-    if (v_imp is not None and v_dd is not None and v_imp > 0 and v_dd > 0
-            and v_imp <= v_dd * 1.005):
-        v_shr = int(h.ora_round(v_imp / v_dd * 100, 0))
+    v_imp = imp.get(g)
+    v_shr = _g_shr(imp, g)
     s, u = h.metric_scale(r.domain, r.name), h.metric_unit(r.domain, r.name)
     cid = h.card_id(g)
     sev = r.bucket
@@ -486,7 +494,13 @@ def emit(w) -> str:
     ordered = _table_order(findings)
     _att(out, findings, order, lead, gsev, dbt, imp)
 
-    meta = ('<span class="meta">'
+    # Counts: in Summary the finding CARDS by severity (the verdict pill and
+    # the rail count the same cards); in All sections the canonical flagged
+    # ROWS of the detail tables, folded twins apart.
+    nc = len(order)
+    ncl = sum(1 for g in order if gsev[g] == 2)
+    ncm = nc - ncl
+    meta = ('<span class="meta' + (' vw in-a' if nc else '') + '">'
             + ('<span><i class="dotk large"></i>' + str(crit) + ' large</span>' if crit > 0 else '')
             + ('<span><i class="dotk moderate"></i>' + str(warn) + ' moderate</span>' if warn > 0 else '')
             + '<span><i class="dotk typical"></i>' + str(normal) + ' normal</span>'
@@ -497,14 +511,17 @@ def emit(w) -> str:
             + ('<span title="flagged twins of a counted row (SYSMETRIC rate of a SYSSTAT counter, '
                'CPU half of the CPU/wait ratio)">' + str(folded) + ' folded</span>' if folded > 0 else '')
             + '</span>')
-    nc = len(order)
     out.append('<section id="findings" class="vw in-s in-a sumsec"><h2 id="findings-heading">'
                + (('<span class="vw in-s">' + str(nc) + ' finding' + ('' if nc == 1 else 's') + '</span>'
                    '<span class="vw in-a">Findings</span>') if nc else 'Findings')
+               + (('<span class="meta vw in-s" title="finding cards by severity">'
+                   + ('<span><i class="dotk large"></i>' + str(ncl) + ' large</span>' if ncl > 0 else '')
+                   + ('<span><i class="dotk moderate"></i>' + str(ncm) + ' moderate</span>' if ncm > 0 else '')
+                   + '</span>') if nc else '')
                + meta
                + '<small class="h2sub"><span class="vw in-s">'
-               + ((str(crit + warn) + ' metric' + ('' if crit + warn == 1 else 's') + ' moved, in '
-                   + str(nc) + ' famil' + ('y' if nc == 1 else 'ies')) if nc
+               + (('From ' + str(crit + warn) + ' flagged metric' + ('' if crit + warn == 1 else 's')
+                   + '; ordered by the DB time each card added') if nc
                   else 'Every scored metric against its prior windows')
                + '</span><span class="vw in-a">Every scored metric against its prior windows; one table per domain</span>'
                '</small></h2>')
@@ -513,11 +530,14 @@ def emit(w) -> str:
         for k, g in enumerate(order, 1):
             _card(w, out, g, k, lead, ordered, evs, flagcls, dbt, cpu, imp)
         out.append('</div>')
-        js = ",".join('["' + h.card_id(g) + '","' + h.card_label(g).replace('"', '').replace('<', '') + '"]'
+        # v1.7: each card's share of the DB-time rise rides on data-shr (CSS ::after)
+        js = ",".join('["' + h.card_id(g) + '","' + h.card_label(g).replace('"', '').replace('<', '') + '","'
+                      + ("" if g == "DBTIME" or _g_shr(imp, g) is None else str(_g_shr(imp, g))) + '"]'
                       for g in order)
         out.append('<script>(function(){var n=document.querySelector(\'nav.toc a[href="#findings"]\');'
                    'if(!n)return;[' + js + '].forEach(function(c){var a=document.createElement("a");'
                    'a.className="sub";a.href="#"+c[0];a.setAttribute("data-nodot","");a.textContent=c[1];'
+                   'if(c[2]){a.setAttribute("data-shr",c[2]+"%");a.title=c[1]+": "+c[2]+"% of the DB-time rise";}'
                    'n.parentNode.insertBefore(a,n.nextSibling);n=a;});})();</script>')
     else:
         out.append('<div class="panel calm vw in-s"><p class="calm-empty">'

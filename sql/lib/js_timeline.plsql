@@ -160,7 +160,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    var b=$(''.lt2'',lane);');
     DBMS_OUTPUT.PUT_LINE('    if(b)b.addEventListener(''click'',function(){var open=lane.classList.toggle(''closed'')===false;b.setAttribute(''aria-expanded'',String(open));if(open&&W.render)W.render(lane);});');
     DBMS_OUTPUT.PUT_LINE('    var rl=doc.querySelector(''nav.toc a[href="#''+lane.id+''"]'');');
-    DBMS_OUTPUT.PUT_LINE('    if(rl){rl.hidden=lane.hidden;if(n[0]){var p=mk(''span'',''cnt c'',rl);p.textContent=n[0];}if(n[1]){var q=mk(''span'',''cnt w'',rl);q.textContent=n[1];}}');
+    DBMS_OUTPUT.PUT_LINE('    if(rl)rl.hidden=lane.hidden;');
     DBMS_OUTPUT.PUT_LINE('    var jn=$(''.jumpnav a[href="#''+lane.id+''"]'',tl);if(jn)jn.hidden=lane.hidden;');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  var h2=$(''#timeline > h2'');');

@@ -320,10 +320,13 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
   (Activity, whole span → `#activity`, never dimmed), Summary
   (Verdict, Findings + one `a.sub` per card inserted by 07's inline script,
   What changed around it, Checked and normal, Evidence library), Timeline
-  (the lane links, hidden when a lane is empty; pills from row `data-sev`),
+  (the lane links, hidden when a lane is empty),
   Workload, SQL, Storage & config, Whole span, Reference (`#guide`,
-  `#about`). The v1.4 row filter, status dots, count pills, J/K and the
-  scrollspy are kept. A link's state (hover, `.on`) shows through its
+  `#about`). The v1.4 row filter, status dots, count pills on the Findings
+  link only (cards), J/K (cards in Summary) and the scrollspy are kept; a
+  card sub-link's share of the DB-time rise is `data-shr` + CSS `::after`,
+  never a child element (the rail text names the card in the dashboard).
+  A link's state (hover, `.on`) shows through its
   background and font weight only — no `border-left` / inset
   `box-shadow` (it drew a crescent on the rounded pill; lint check 32,
   verify_report's `railMarker`).
@@ -370,9 +373,11 @@ a chip `.fc-k .fc-imp` shows it. A flagged DB CPU card is its own card
 evidence and normal rows, 08's strip, 18's plan card) pass `p_zcap =>
 10` (printed z stops at ">+10σ"; tables and Timeline gutters keep the
 exact z). **00 (verdict) and 07 (cards) both
-order cards — keep them in lockstep** (twin `helpers.card_order`). "N
-findings" = number of cards; "metrics moved" = canonical large+moderate
-rows. Units (`metric_unit/scale`): DB time / DB CPU / CPU used → AAS
+order cards — keep them in lockstep** (twin `helpers.card_order`). One
+count: a finding is a card — the verdict pill (`li.pl-find`), the Summary
+Findings header (`.meta.in-s`) and the rail's Findings pills (`cardCounts`
+in 00's chrome) count cards; the All sections Findings header and every
+section header count their own rows. Units (`metric_unit/scale`): DB time / DB CPU / CPU used → AAS
 (×0.01), SQL Service Response Time → ms/call (×10), waits → AAS, bytes →
 B/s auto-scaled; scoring always runs on the stored value. DB time card
 evidence starts with DB CPU and the top 2 events of every flagged wait
@@ -469,7 +474,7 @@ only the Current value is printed, JS fills priors from `data-v`.
 **Client — `js_timeline.plsql`** (`window.AWR_TL`): `take()` moves template
 content into its lane (`data-after` → under that row), `reveal(el)`;
 DOMContentLoaded: `#tip` tooltip, wait swatches from `AWR_WAIT_COLORS`, lane
-meta counts / folds / "+ Show N more" / rail pills, skipped windows struck
+meta counts / folds / "+ Show N more", skipped windows struck
 through in the ruler, prior values filled, the activity rows + DB time
 card, the Activity charts, `AWR_WG.render(#tl)`. **Pin:** `AWR_WG.pin(o)` /
 `pinned()` — `body[data-pw]`, `.pc` on `#tl [data-w=o]`, ruler buttons
@@ -857,7 +862,7 @@ JS and `_style.sql`; all degrade to "show everything" with JS off:
   CSV/MD toolbars auto-inject above any table with ≥ 4 rows.
 - **`data-nosort` / `data-nocount` / `data-notools`** — table opt-outs
   (sort parser handles `,` `%` `▲` `▼` `−` `×` and k/M/G — keep in sync with
-  `fmt_num.plsql`; `data-nocount` keeps rows out of the rail pills, e.g. the
+  `fmt_num.plsql`; `data-nocount` keeps rows out of the section-header counts, e.g. the
   cards' related-metrics tables).
 - **`.chip`** — shared pill styling (rank chips, window chips).
 - **Number formatting (T7, `fmt_num.plsql`)** — `fmt_num` ~4 significant
@@ -1101,7 +1106,7 @@ max sev of the areas listing it). Hidden `div.im-src[data-c]` per area is
 cloned into the one `div.im-pop` popover by js_instmap (hover / focus; Esc in
 the capture phase only while open; a click on a flagged box -> `AWR_goTo(card,
 true, true)`). Payload `AWR_DATA.instmap = {areas, measured, comps:[{k, sev,
-cards}]}`. Table `data-nocount` (07's rows already feed the rail pills). < 3
+cards}]}`. Table `data-nocount` (07's rows already feed the section-header counts). < 3
 valid prior windows: query skipped, all "not measured" + note. Twin
 `s27_instance_map.py` reuses `s07_summary.compute_findings`. Unexercised: the
 improved state, RAC, multi-DBID.
@@ -1307,8 +1312,8 @@ verify_report fails on it). Links in the what-if are PL/SQL `ent()` HTML
 (`lk`). Matrix: SVG up to 60 windows, a canvas past that (colours resolved
 through a probe element, redrawn on `awr:theme`). Own tooltip `.winsim-tip`
 (js_timeline's document mouseover hides `#tip`). The per-window table is
-`data-nocount` (its flagged rows are `winsim-fl`, not `warn`, so no rail
-pill). Section time on dbmint: 0.8 s for 8 windows, 1.8 s for 168.
+`data-nocount` (its flagged rows are `winsim-fl`, not `warn`, so no
+section-header count). Section time on dbmint: 0.8 s for 8 windows, 1.8 s for 168.
 Unexercised: RAC, multi-DBID, non-comprehensive templates.
 
 ### `echarts` var (offline / self-contained)

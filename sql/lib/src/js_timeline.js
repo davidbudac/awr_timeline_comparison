@@ -107,7 +107,7 @@ function lanes(){
     var b=$('.lt2',lane);
     if(b)b.addEventListener('click',function(){var open=lane.classList.toggle('closed')===false;b.setAttribute('aria-expanded',String(open));if(open&&W.render)W.render(lane);});
     var rl=doc.querySelector('nav.toc a[href="#'+lane.id+'"]');
-    if(rl){rl.hidden=lane.hidden;if(n[0]){var p=mk('span','cnt c',rl);p.textContent=n[0];}if(n[1]){var q=mk('span','cnt w',rl);q.textContent=n[1];}}
+    if(rl)rl.hidden=lane.hidden;
     var jn=$('.jumpnav a[href="#'+lane.id+'"]',tl);if(jn)jn.hidden=lane.hidden;
   });
   var h2=$('#timeline > h2');

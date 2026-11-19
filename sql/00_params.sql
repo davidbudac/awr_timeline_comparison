@@ -66,7 +66,7 @@ DECLARE
     TYPE seen_t  IS TABLE OF PLS_INTEGER INDEX BY VARCHAR2(64);
 
     v_scored     mover_t;
-    v_n_moved    PLS_INTEGER := 0;   -- canonical large / moderate rows
+    v_n_moved    PLS_INTEGER := 0;   -- canonical large / moderate rows (no longer printed: a finding is a card, v1.7)
     v_n_impr     PLS_INTEGER := 0;   -- canonical improved
     v_n_normal   PLS_INTEGER := 0;   -- canonical rows scored and not flagged
     v_n_usable   PLS_INTEGER := 0;
@@ -89,6 +89,8 @@ DECLARE
     v_j          PLS_INTEGER;
     v_dbt        PLS_INTEGER;   -- index of the LOAD 'DB time' row
     v_cpu        PLS_INTEGER;   -- index of the LOAD 'DB CPU' row
+    v_ncl        PLS_INTEGER := 0;   -- large finding cards (v1.7: a finding is a card)
+    v_ncm        PLS_INTEGER := 0;   -- moderate finding cards
     v_verdict    VARCHAR2(32767);
     v_win_json   VARCHAR2(32767);   -- window validity flags, |k=Y|k=N|...
     -- Subprogram includes go LAST: PL/SQL forbids a variable / TYPE
@@ -357,6 +359,9 @@ BEGIN
             END LOOP;
             EXIT;
         END IF;
+    END LOOP;
+    FOR k IN 1 .. v_order.COUNT LOOP
+        IF v_gsev(v_order(k)) = 2 THEN v_ncl := v_ncl + 1; ELSE v_ncm := v_ncm + 1; END IF;
     END LOOP;
 
     -- The compared windows' validity ('|k=Y|k=N|...') for window.AWR_WIN
@@ -942,7 +947,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  dimRail();');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('if(fi) fi.addEventListener("input",applyFilter);');
-    DBMS_OUTPUT.PUT_LINE('/* ---- C2 + H1: per-section large / moderate row counts, on the rail links and in the section header ---- */');
+    DBMS_OUTPUT.PUT_LINE('/* ---- C2 + H1: large / moderate counts -- finding cards on the rail''s Findings link, rows in each section header ---- */');
     DBMS_OUTPUT.PUT_LINE('function isCrit(tr){ return tr.classList.contains("crit")||!!tr.querySelector(".badge.crit, td.c-band .bd.s-large"); }');
     DBMS_OUTPUT.PUT_LINE('function isWarn(tr){ return tr.classList.contains("warn")||!!tr.querySelector(".badge.warn, td.c-band .bd.s-moderate"); }');
     DBMS_OUTPUT.PUT_LINE('function secCounts(sec){');
@@ -954,15 +959,25 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  return [c,w];');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('if(nav){');
-    DBMS_OUTPUT.PUT_LINE('  nav.querySelectorAll("a[href^=\"#\"]").forEach(function(a){');
-    DBMS_OUTPUT.PUT_LINE('    var id=a.getAttribute("href").slice(1);');
-    DBMS_OUTPUT.PUT_LINE('    if(id==="overview"||a.hasAttribute("data-nodot")) return;');
-    DBMS_OUTPUT.PUT_LINE('    var sec=doc.getElementById(id); if(!sec) return;');
-    DBMS_OUTPUT.PUT_LINE('    var n=secCounts(sec);');
-    DBMS_OUTPUT.PUT_LINE('    if(n[0]){ var p=doc.createElement("span"); p.className="cnt c"; p.textContent=n[0]; a.appendChild(p); }');
-    DBMS_OUTPUT.PUT_LINE('    if(n[1]){ var q=doc.createElement("span"); q.className="cnt w"; q.textContent=n[1]; a.appendChild(q); }');
+    -- v1.7: one count -- a finding is a card.  Only the rail's Findings
+    -- link carries count pills (large / moderate cards); every other link
+    -- keeps its status dot only, and each section header keeps its own row
+    -- counts (the h2 loop below).
+    DBMS_OUTPUT.PUT_LINE('/* v1.7 one count: a finding is a card; the rail counts cards on the Findings link only */');
+    DBMS_OUTPUT.PUT_LINE('function cardCounts(sec){');
+    DBMS_OUTPUT.PUT_LINE('  var c=0,w=0;');
+    DBMS_OUTPUT.PUT_LINE('  sec.querySelectorAll("article.fc:not(.chg)").forEach(function(a){');
+    DBMS_OUTPUT.PUT_LINE('    if(a.classList.contains("f-large")) c++; else if(a.classList.contains("f-moderate")) w++;');
     DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return [c,w];');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('if(nav){');
+    DBMS_OUTPUT.PUT_LINE('  var fa=nav.querySelector("a[href=\"#findings\"]"), fsec=doc.getElementById("findings");');
+    DBMS_OUTPUT.PUT_LINE('  if(fa&&fsec){');
+    DBMS_OUTPUT.PUT_LINE('    var n=cardCounts(fsec);');
+    DBMS_OUTPUT.PUT_LINE('    if(n[0]){ var p=doc.createElement("span"); p.className="cnt c"; p.textContent=n[0]; p.title=n[0]+" large finding card"+(n[0]>1?"s":""); fa.appendChild(p); }');
+    DBMS_OUTPUT.PUT_LINE('    if(n[1]){ var q=doc.createElement("span"); q.className="cnt w"; q.textContent=n[1]; q.title=n[1]+" moderate finding card"+(n[1]>1?"s":""); fa.appendChild(q); }');
+    DBMS_OUTPUT.PUT_LINE('  }');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("main > section > h2").forEach(function(h2){');
     DBMS_OUTPUT.PUT_LINE('  var sec=h2.parentNode; if(sec.id==="overview"||sec.id==="guide"||h2.querySelector(".meta")) return;');
@@ -977,6 +992,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var jIdx=-1;');
     DBMS_OUTPUT.PUT_LINE('function findingRows(){');
     DBMS_OUTPUT.PUT_LINE('  var out=[];');
+    -- v1.7: in Summary J / K step through the large finding CARDS (in the
+    -- dashboard design they sit in closed details.drow rows; goTo reveals)
+    DBMS_OUTPUT.PUT_LINE('  if(curView()==="summary"){');
+    DBMS_OUTPUT.PUT_LINE('    doc.querySelectorAll("#findings article.fc.f-large:not(.chg)").forEach(function(a){ out.push(a); });');
+    DBMS_OUTPUT.PUT_LINE('    if(out.length) return out;');
+    DBMS_OUTPUT.PUT_LINE('  }');
     DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("section tbody tr").forEach(function(tr){');
     DBMS_OUTPUT.PUT_LINE('    if(tr.hidden||tr.offsetParent===null) return;');
     DBMS_OUTPUT.PUT_LINE('    if(tr.classList.contains("twin")||tr.classList.contains("member")) return;');
@@ -988,6 +1009,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var list=findingRows(); if(!list.length) return;');
     DBMS_OUTPUT.PUT_LINE('  jIdx=(jIdx+d+list.length*2)%list.length;');
     DBMS_OUTPUT.PUT_LINE('  var tr=list[jIdx];');
+    DBMS_OUTPUT.PUT_LINE('  if(tr.tagName!=="TR"){ goTo(tr,true,false); return; }');
     DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("tr.jump-hi").forEach(function(x){x.classList.remove("jump-hi");});');
     DBMS_OUTPUT.PUT_LINE('  tr.scrollIntoView({block:"center"});');
     DBMS_OUTPUT.PUT_LINE('  tr.classList.add("jump-hi");');
@@ -1380,10 +1402,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<div class="att" id="att-slot" hidden></div>');
     DBMS_OUTPUT.PUT_LINE('<ul class="pills" id="pills" aria-label="Counts">'
         || CASE WHEN v_order.COUNT > 0
-                THEN '<li><a href="#findings"><b>' || v_order.COUNT || '</b> finding'
-                     || CASE WHEN v_order.COUNT = 1 THEN '' ELSE 's' END || '</a></li>'
-                     || '<li><a href="#findings"><b>' || v_n_moved || '</b> metric'
-                     || CASE WHEN v_n_moved = 1 THEN '' ELSE 's' END || ' moved</a></li>' END
+                THEN '<li class="pl-find"><a href="#findings"><b>' || v_order.COUNT || '</b> finding'
+                     || CASE WHEN v_order.COUNT = 1 THEN '' ELSE 's' END
+                     || '<span class="pl-sev">'
+                     || CASE WHEN v_ncl > 0 THEN '<i class="dotk large" aria-hidden="true"></i>' || v_ncl || ' large' END
+                     || CASE WHEN v_ncm > 0 THEN '<i class="dotk moderate" aria-hidden="true"></i>' || v_ncm || ' moderate' END
+                     || '</span></a></li>' END
         || '<li class="pl-normal"><a href="#s-normal"><b>' || v_n_normal || '</b> metric'
         || CASE WHEN v_n_normal = 1 THEN '' ELSE 's' END || ' normal</a></li>'
         || CASE WHEN v_n_impr > 0

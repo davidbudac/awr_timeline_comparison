@@ -321,6 +321,7 @@ BEGIN
         || ' body.va footer.report { order:40; }');
     -- rail sub-links: one per finding card, under Findings (07)
     DBMS_OUTPUT.PUT_LINE('nav.toc a.sub { padding-left:28px; font-size:12.5px; color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a.sub[data-shr]::after { content:attr(data-shr); margin-left:auto; padding-left:8px; font-size:11.5px; color:var(--muted); font-variant-numeric:tabular-nums; }');
     -- Timeline view placeholder (phase 3 of the redesign fills it).
 
     -- =========================================================
@@ -1194,6 +1195,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.hero .pills a,.hero .pills span.pl{display:inline-flex;align-items:center;gap:8px;padding:4px 12px;border:1px solid var(--hairline);border-radius:999px;background:var(--panel);color:var(--ink-soft);font-size:13px;text-decoration:none;line-height:20px}');
     DBMS_OUTPUT.PUT_LINE('.hero .pills a:hover{border-color:var(--muted);color:var(--ink)}');
     DBMS_OUTPUT.PUT_LINE('.hero .pills b{color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.hero .pills .pl-sev{display:inline-flex;align-items:center;gap:5px;margin-left:6px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .pills .pl-sev .dotk{width:8px;height:8px;margin-left:4px}');
     DBMS_OUTPUT.PUT_LINE('.hero .hnotes{list-style:none;margin:var(--s4) 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13.5px;color:var(--ink-soft);max-width:80em}');
     DBMS_OUTPUT.PUT_LINE('.hero .hnotes li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}');
     DBMS_OUTPUT.PUT_LINE('.hero .hnotes .hl{font-weight:600;color:var(--ink)}');
