@@ -1462,6 +1462,47 @@ FALLBACK_CHROME
         printf '</div>\n'   # .legends
         printf '</div>\n'   # .masthead
 
+        # ---- co-anomaly grid (#coanom): DBs x time buckets on one absolute
+        # time axis, so a problem several databases share (storage, network,
+        # a host, a batch window) lines up as a column.  Markup skeleton +
+        # the row order only; the cells are derived client-side by
+        # sql/fleet/js_fleet_coanom.plsql (in the chrome) from the
+        # window.FLEET_ASH payloads every fragment already carries -- no
+        # extract change, no FLEET-COUNTS, no score / sort / exit-code
+        # impact, and an older workdir re-assembled with --assemble keeps
+        # working (an older chrome without the renderer just leaves the
+        # one-line note).  Rows = the table's order: error rows (conf
+        # order) then OK rows score-desc.  Aliases match
+        # ^[A-Za-z0-9_.-]{1,30}$ (parse_conf), safe in a JS string as is.
+        printf '<div class="coanom" id="coanom" role="region" aria-labelledby="ca-h">\n'
+        printf '<h2 id="ca-h">Abnormal at the same time<small>one row per database, one column per time bucket; a column lit in several rows points at a shared cause</small></h2>\n'
+        if [[ "$n_ok" -gt 0 ]]; then
+            printf '<p class="ca-nojs">This grid is drawn in the browser from each database&#39;s ASH payload and needs JavaScript; the table below is unaffected.</p>\n'
+        else
+            printf '<p class="ca-nojs">No database returned data, so there is nothing to line up in time.</p>\n'
+        fi
+        printf '<p class="ca-sum"></p>\n'
+        printf '<div class="ca-filt" hidden><span class="ca-ft"></span><button type="button" class="ca-clear">Show all databases</button></div>\n'
+        printf '<div class="ca-lg"><span>how unusual for that database:</span>'
+        printf '<span><i class="ca-sw n"></i>normal</span><span><i class="ca-sw r"></i>raised (z 2&ndash;3)</span>'
+        printf '<span><i class="ca-sw f"></i>far out (z 3&ndash;6)</span><span><i class="ca-sw x"></i>extreme (z &ge; 6)</span>'
+        printf '<span><i class="ca-sw na"></i>no data</span><span><i class="ca-sw hl"></i>shared bucket</span></div>\n'
+        printf '<div class="ca-body"></div>\n'
+        printf '<p class="ca-meta"></p>\n'
+        printf '<div id="ca-live" class="ca-live" aria-live="polite"></div>\n'
+        printf '<script>window.FLEET_COANOM={rows:['
+        local casep='' caal
+        for i in "${!A_ALIAS[@]}"; do
+            caal="${A_ALIAS[$i]}"
+            [[ "${IS_ERR[$caal]}" == 1 ]] || continue
+            printf '%s["%s",1]' "$casep" "$caal"; casep=','
+        done
+        for caal in "${sorted_ok[@]}"; do
+            printf '%s["%s",0]' "$casep" "$caal"; casep=','
+        done
+        printf ']};</script>\n'
+        printf '</div>\n'   # #coanom
+
         # ---- F1 toolbar: filter / sort / show / expand-collapse ----
         # Pure markup here -- all behavior is wired client-side in
         # js_fleet_charts.plsql's wireToolbar() against these ids/data-*
