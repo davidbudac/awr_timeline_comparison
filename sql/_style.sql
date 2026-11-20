@@ -1424,12 +1424,15 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.fc .fc-k .xpl{font-size:12px;font-weight:500;color:var(--ink-soft);padding:1px 8px;border:1px solid var(--hairline);border-radius:10px}');
     DBMS_OUTPUT.PUT_LINE('.fc .fc-k .xpl a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}');
     -- plan 033: a card's "What this usually means" line and read-only next
-    -- query (sql/lib/finding_hints.plsql); hidden on a folded card (025)
-    DBMS_OUTPUT.PUT_LINE('.fc .fc-hint{margin:var(--s4) 0 0;padding:var(--s3) 0 0;border-top:1px solid var(--line-soft);font-size:13.5px;line-height:1.5;color:var(--ink-soft)}');
+    -- query (sql/lib/finding_hints.plsql); hidden on a folded card (025).
+    -- Its bottom padding keeps the query box off the footer rule; the
+    -- related-metrics fold right after it then needs no top margin.
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-hint{margin:var(--s4) 0 0;padding:var(--s3) 0 var(--s4);border-top:1px solid var(--line-soft);font-size:13.5px;line-height:1.5;color:var(--ink-soft)}');
     DBMS_OUTPUT.PUT_LINE('.fc .fc-hint p{margin:0;max-width:110ch}');
     DBMS_OUTPUT.PUT_LINE('.fc .fc-hint b{color:var(--ink);font-weight:600}');
     DBMS_OUTPUT.PUT_LINE('.fc .fc-hint .fc-next{margin:var(--s3) 0 var(--s2);font-size:12.5px;color:var(--muted)}');
     DBMS_OUTPUT.PUT_LINE('.fc .fc-hint pre.sql{margin:0}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-hint + details.rel{margin-top:0}');
     DBMS_OUTPUT.PUT_LINE('.fc .fc-hint p a{color:inherit;text-decoration:underline dotted;text-underline-offset:2px}');
     DBMS_OUTPUT.PUT_LINE('.fc.fold > .fc-hint{display:none}');
     -- checked and normal
