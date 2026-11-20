@@ -653,14 +653,19 @@ function bands(c,pts,ord,on,Y){
    whole label and no placed label is in the way.  The thickest bands win,
    at most LMAX a chart; with a strong highlight only the highlighted series.
    groups = [{pts, x0, x1}]: one for Full span, one per panel side by side
-   (a label never crosses a panel edge).  Drawn inside the plot clip, above
-   bands and stripes, pointer-events none. */
+   (a label never crosses a panel edge); only points inside [x0, x1] are
+   candidates (zoomed, pts run a couple of buckets past the plot).  nb =
+   the highlight note's box [x0, y0, x1, y1] (or null): no label covers it.
+   Drawn inside the plot clip, above bands and stripes, pointer-events none. */
 var LBH=13,LMAX=6,LW=160;
 function edgeAt(pts,ys,x){
   for(var j=1;j<pts.length;j++)if(pts[j][0]>=x){var a=pts[j-1][0],b=pts[j][0],f=b>a?(x-a)/(b-a):0;return ys[j-1]+(ys[j]-ys[j-1])*f;}
   return ys[ys.length-1];
 }
-function dlab(c,groups,ord,on,Y,reb){
+/* the highlight note's box for dlab (the note is 600 weight and Geist in the
+   quiet / dashboard designs, tw() measures the 400 system stack: 1.2x) */
+function noteBox(hl,padL,top){return hl&&hl.note?[padL+6,top+3,padL+6+tw(hl.note)*1.2,top+16]:null;}
+function dlab(c,groups,ord,on,Y,reb,nb){
   if(!c.lab)return '';
   var cand=[],placed=[],s='';
   groups.forEach(function(G){
@@ -670,7 +675,7 @@ function dlab(c,groups,ord,on,Y,reb){
       var hi=lo.map(function(l,j){return l+(rV(c,k,pts[j][1])||0);});
       if(!reb||(on&&on[k])){
         var yl=lo.map(Y),yh=hi.map(Y),best=-1,bt=0;
-        for(var j=0;j<np;j++){var t=yl[j]-yh[j];if(t>bt){bt=t;best=j;}}
+        for(var j=0;j<np;j++){var t=yl[j]-yh[j];if(pts[j][0]>=G.x0&&pts[j][0]<=G.x1&&t>bt){bt=t;best=j;}}
         if(best>=0&&bt>=LBH)cand.push({k:k,G:G,yl:yl,yh:yh,j:best,t:bt});
       }
       lo=hi;
@@ -680,7 +685,7 @@ function dlab(c,groups,ord,on,Y,reb){
   cand.forEach(function(C){
     if(placed.length>=LMAX)return;
     var nm=c.P.classes[C.k],txt=nm,w=tw(txt)+6;
-    if(w>LW){while(txt.length>4&&tw(txt+'...')+6>LW)txt=txt.slice(0,-1);txt+='...';w=tw(txt)+6;}
+    if(w>LW){while(txt.length>4&&tw(txt+'...')+6>LW)txt=txt.slice(0,-1);txt=txt.replace(/\s+$/,'')+'...';w=tw(txt)+6;}
     var pts=C.G.pts,x=pts[C.j][0],xa=x-w/2,xb=x+w/2;
     if(xa<C.G.x0){xa=C.G.x0;xb=xa+w;}
     if(xb>C.G.x1){xb=C.G.x1;xa=xb-w;}
@@ -689,7 +694,7 @@ function dlab(c,groups,ord,on,Y,reb){
     for(var j=0;j<pts.length;j++){var px=pts[j][0];if(px<xa||px>xb)continue;top=Math.max(top,C.yh[j]);bot=Math.min(bot,C.yl[j]);}
     if(bot-top<LBH)return;
     var yc=(top+bot)/2,box=[xa,yc-LBH/2,xb,yc+LBH/2];
-    if(placed.some(function(p){return box[0]<p[2]+2&&box[2]>p[0]-2&&box[1]<p[3]+2&&box[3]>p[1]-2;}))return;
+    if(placed.concat(nb?[nb]:[]).some(function(p){return box[0]<p[2]+2&&box[2]>p[0]-2&&box[1]<p[3]+2&&box[3]>p[1]-2;}))return;
     placed.push(box);
     s+='<text class="xdl" x="'+((xa+xb)/2).toFixed(1)+'" y="'+(yc+4).toFixed(1)+'" text-anchor="middle">'+esc(txt)+'</text>';
   });
@@ -790,7 +795,7 @@ function drawWin(c,o){
   s+='<rect class="xbk" x="0" y="'+top+'" width="0" height="'+ph+'" visibility="hidden"/>';
   hit.forEach(function(r){s+='<rect class="xwc'+r[3]+'" x="'+r[1].toFixed(1)+'" y="'+(top-5)+'" width="'+r[2].toFixed(1)+'" height="4" rx="1"/>';});
   /* the direct labels, each inside its panel (dlab) */
-  s+=dlab(c,pan.map(function(p){return {pts:p.pts,x0:p.x0,x1:p.x0+p.w};}),ord,on,Y,reb);
+  s+=dlab(c,pan.map(function(p){return {pts:p.pts,x0:p.x0,x1:p.x0+p.w};}),ord,on,Y,reb,noteBox(hl,padL,top));
   /* close the group and the x axis line: as draw */
   s+='</g><line class="ax" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+(top+ph)+'" y2="'+(top+ph)+'"/>';
   /* window labels under the lower chart: every st-th panel counted from the Current one */
@@ -854,7 +859,7 @@ function draw(c,force){
     hit.push([i,x,w]);
   });
   /* the largest bands named on the chart (dlab), above the stripes */
-  s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb);
+  s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb,noteBox(hl,padL,top));
   s+='</g><line class="ax" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+(top+ph)+'" y2="'+(top+ph)+'"/>';
   /* x ticks: the smallest interval that leaves about 88 px per label, counted from
      midnight of the Current window's day (weekly ticks land on its weekday);

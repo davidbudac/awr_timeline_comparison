@@ -719,14 +719,19 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('   whole label and no placed label is in the way.  The thickest bands win,');
     DBMS_OUTPUT.PUT_LINE('   at most LMAX a chart; with a strong highlight only the highlighted series.');
     DBMS_OUTPUT.PUT_LINE('   groups = [{pts, x0, x1}]: one for Full span, one per panel side by side');
-    DBMS_OUTPUT.PUT_LINE('   (a label never crosses a panel edge).  Drawn inside the plot clip, above');
-    DBMS_OUTPUT.PUT_LINE('   bands and stripes, pointer-events none. */');
+    DBMS_OUTPUT.PUT_LINE('   (a label never crosses a panel edge); only points inside [x0, x1] are');
+    DBMS_OUTPUT.PUT_LINE('   candidates (zoomed, pts run a couple of buckets past the plot).  nb =');
+    DBMS_OUTPUT.PUT_LINE('   the highlight note''s box [x0, y0, x1, y1] (or null): no label covers it.');
+    DBMS_OUTPUT.PUT_LINE('   Drawn inside the plot clip, above bands and stripes, pointer-events none. */');
     DBMS_OUTPUT.PUT_LINE('var LBH=13,LMAX=6,LW=160;');
     DBMS_OUTPUT.PUT_LINE('function edgeAt(pts,ys,x){');
     DBMS_OUTPUT.PUT_LINE('  for(var j=1;j<pts.length;j++)if(pts[j][0]>=x){var a=pts[j-1][0],b=pts[j][0],f=b>a?(x-a)/(b-a):0;return ys[j-1]+(ys[j]-ys[j-1])*f;}');
     DBMS_OUTPUT.PUT_LINE('  return ys[ys.length-1];');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('function dlab(c,groups,ord,on,Y,reb){');
+    DBMS_OUTPUT.PUT_LINE('/* the highlight note''s box for dlab (the note is 600 weight and Geist in the');
+    DBMS_OUTPUT.PUT_LINE('   quiet / dashboard designs, tw() measures the 400 system stack: 1.2x) */');
+    DBMS_OUTPUT.PUT_LINE('function noteBox(hl,padL,top){return hl&&hl.note?[padL+6,top+3,padL+6+tw(hl.note)*1.2,top+16]:null;}');
+    DBMS_OUTPUT.PUT_LINE('function dlab(c,groups,ord,on,Y,reb,nb){');
     DBMS_OUTPUT.PUT_LINE('  if(!c.lab)return '''';');
     DBMS_OUTPUT.PUT_LINE('  var cand=[],placed=[],s='''';');
     DBMS_OUTPUT.PUT_LINE('  groups.forEach(function(G){');
@@ -736,7 +741,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('      var hi=lo.map(function(l,j){return l+(rV(c,k,pts[j][1])||0);});');
     DBMS_OUTPUT.PUT_LINE('      if(!reb||(on&&on[k])){');
     DBMS_OUTPUT.PUT_LINE('        var yl=lo.map(Y),yh=hi.map(Y),best=-1,bt=0;');
-    DBMS_OUTPUT.PUT_LINE('        for(var j=0;j<np;j++){var t=yl[j]-yh[j];if(t>bt){bt=t;best=j;}}');
+    DBMS_OUTPUT.PUT_LINE('        for(var j=0;j<np;j++){var t=yl[j]-yh[j];if(pts[j][0]>=G.x0&&pts[j][0]<=G.x1&&t>bt){bt=t;best=j;}}');
     DBMS_OUTPUT.PUT_LINE('        if(best>=0&&bt>=LBH)cand.push({k:k,G:G,yl:yl,yh:yh,j:best,t:bt});');
     DBMS_OUTPUT.PUT_LINE('      }');
     DBMS_OUTPUT.PUT_LINE('      lo=hi;');
@@ -746,7 +751,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  cand.forEach(function(C){');
     DBMS_OUTPUT.PUT_LINE('    if(placed.length>=LMAX)return;');
     DBMS_OUTPUT.PUT_LINE('    var nm=c.P.classes[C.k],txt=nm,w=tw(txt)+6;');
-    DBMS_OUTPUT.PUT_LINE('    if(w>LW){while(txt.length>4&&tw(txt+''...'')+6>LW)txt=txt.slice(0,-1);txt+=''...'';w=tw(txt)+6;}');
+    DBMS_OUTPUT.PUT_LINE('    if(w>LW){while(txt.length>4&&tw(txt+''...'')+6>LW)txt=txt.slice(0,-1);txt=txt.replace(/\s+$/,'''')+''...'';w=tw(txt)+6;}');
     DBMS_OUTPUT.PUT_LINE('    var pts=C.G.pts,x=pts[C.j][0],xa=x-w/2,xb=x+w/2;');
     DBMS_OUTPUT.PUT_LINE('    if(xa<C.G.x0){xa=C.G.x0;xb=xa+w;}');
     DBMS_OUTPUT.PUT_LINE('    if(xb>C.G.x1){xb=C.G.x1;xa=xb-w;}');
@@ -755,7 +760,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    for(var j=0;j<pts.length;j++){var px=pts[j][0];if(px<xa||px>xb)continue;top=Math.max(top,C.yh[j]);bot=Math.min(bot,C.yl[j]);}');
     DBMS_OUTPUT.PUT_LINE('    if(bot-top<LBH)return;');
     DBMS_OUTPUT.PUT_LINE('    var yc=(top+bot)/2,box=[xa,yc-LBH/2,xb,yc+LBH/2];');
-    DBMS_OUTPUT.PUT_LINE('    if(placed.some(function(p){return box[0]<p[2]+2&&box[2]>p[0]-2&&box[1]<p[3]+2&&box[3]>p[1]-2;}))return;');
+    DBMS_OUTPUT.PUT_LINE('    if(placed.concat(nb?[nb]:[]).some(function(p){return box[0]<p[2]+2&&box[2]>p[0]-2&&box[1]<p[3]+2&&box[3]>p[1]-2;}))return;');
     DBMS_OUTPUT.PUT_LINE('    placed.push(box);');
     DBMS_OUTPUT.PUT_LINE('    s+=''<text class="xdl" x="''+((xa+xb)/2).toFixed(1)+''" y="''+(yc+4).toFixed(1)+''" text-anchor="middle">''+esc(txt)+''</text>'';');
     DBMS_OUTPUT.PUT_LINE('  });');
@@ -856,7 +861,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  s+=''<rect class="xbk" x="0" y="''+top+''" width="0" height="''+ph+''" visibility="hidden"/>'';');
     DBMS_OUTPUT.PUT_LINE('  hit.forEach(function(r){s+=''<rect class="xwc''+r[3]+''" x="''+r[1].toFixed(1)+''" y="''+(top-5)+''" width="''+r[2].toFixed(1)+''" height="4" rx="1"/>'';});');
     DBMS_OUTPUT.PUT_LINE('  /* the direct labels, each inside its panel (dlab) */');
-    DBMS_OUTPUT.PUT_LINE('  s+=dlab(c,pan.map(function(p){return {pts:p.pts,x0:p.x0,x1:p.x0+p.w};}),ord,on,Y,reb);');
+    DBMS_OUTPUT.PUT_LINE('  s+=dlab(c,pan.map(function(p){return {pts:p.pts,x0:p.x0,x1:p.x0+p.w};}),ord,on,Y,reb,noteBox(hl,padL,top));');
     DBMS_OUTPUT.PUT_LINE('  /* close the group and the x axis line: as draw */');
     DBMS_OUTPUT.PUT_LINE('  s+=''</g><line class="ax" x1="''+padL+''" x2="''+(Wd-padR)+''" y1="''+(top+ph)+''" y2="''+(top+ph)+''"/>'';');
     DBMS_OUTPUT.PUT_LINE('  /* window labels under the lower chart: every st-th panel counted from the Current one */');
@@ -920,7 +925,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    hit.push([i,x,w]);');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  /* the largest bands named on the chart (dlab), above the stripes */');
-    DBMS_OUTPUT.PUT_LINE('  s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb);');
+    DBMS_OUTPUT.PUT_LINE('  s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb,noteBox(hl,padL,top));');
     DBMS_OUTPUT.PUT_LINE('  s+=''</g><line class="ax" x1="''+padL+''" x2="''+(Wd-padR)+''" y1="''+(top+ph)+''" y2="''+(top+ph)+''"/>'';');
     DBMS_OUTPUT.PUT_LINE('  /* x ticks: the smallest interval that leaves about 88 px per label, counted from');
     DBMS_OUTPUT.PUT_LINE('     midnight of the Current window''s day (weekly ticks land on its weekday);');

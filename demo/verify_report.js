@@ -54,7 +54,7 @@
  *     markers, the switch remembered in awr-axlayout;
  *   - direct labels on the Activity bands (plan 036): name a series, inside
  *     the plot, no overlap, at most 6, gone when the series is hidden;
- *     inside one panel side by side;
+ *     inside one panel side by side; never over the highlight note;
  *   - the Day profile metric picker (v1.6.1, profile_days > 0; required
  *     for the demo): one role=tab button per stat with its indicator, a
  *     click / arrows / Home / End switch the line chart;
@@ -700,7 +700,10 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
             const ax = s.querySelector('line.ax'), y0 = ax ? +ax.getAttribute('y1') : NaN;
             const bands = [...s.querySelectorAll('path.xah')];
             const onAxis = bands.length > 0 && bands.some(b => { const m = /([\d.]+) ([\d.]+)Z$/.exec(b.getAttribute('d')); return m && Math.abs(+m[2] - y0) < 0.6; });
-            return { fd: !!s.querySelector('g.xfd'), n: bands.length, onAxis, note: !!s.querySelector('text.xhn'),
+            // plan 036 review: a band label never covers the highlight note
+            const nt = s.querySelector('text.xhn'), nb = nt && nt.getBoundingClientRect();
+            const xov = nb ? [...s.querySelectorAll('text.xdl')].filter(t => { const b = t.getBoundingClientRect(); return b.left < nb.right && nb.left < b.right && b.top < nb.bottom && nb.top < b.bottom; }).length : 0;
+            return { fd: !!s.querySelector('g.xfd'), n: bands.length, onAxis, note: !!s.querySelector('text.xhn'), xov,
                      lit: document.querySelectorAll('#' + id + ' .axlg .axc.hl').length,
                      y: [...s.querySelectorAll('text.at')].map(t => t.textContent).join('|') };
           };
@@ -720,6 +723,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
           && (!ecls || !best || (s1.e.fd && s1.e.n === best && s1.e.onAxis && s1.e.lit === best));
         hl.cls = okC ? 'ok (' + cls[ci] + ' -> ' + best + ' events' + (s1.c.y !== s0.c.y ? ', axis fitted' : '') + ')' : 'FAIL ' + JSON.stringify(s1);
         if (!/^ok/.test(hl.cls)) fail('activity: class legend highlight ' + hl.cls);
+        if (s1.c.xov || s1.e.xov) fail('activity: a band label covers the highlight note (class legend hover)');
         // an event lights its class, in place (no note, not re-based)
         const ei = ecls ? ecls.findIndex(x => x && x !== 'CPU' && cls.includes(x)) : -1;
         if (ei >= 0) {
@@ -727,6 +731,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
           const s2 = await state();
           hl.ev = (s2.e.fd && s2.e.n === 1 && s2.e.onAxis && s2.e.note && s2.c.n === 1 && !s2.c.note && s2.c.lit === 1) ? 'ok (' + ecls[ei] + ' lit)' : 'FAIL ' + JSON.stringify(s2);
           if (!/^ok/.test(hl.ev)) fail('activity: event legend highlight ' + hl.ev);
+          if (s2.c.xov || s2.e.xov) fail('activity: a band label covers the highlight note (event legend hover)');
         }
         await page.mouse.move(10, 10); await page.waitForTimeout(120);
         const s3 = await state();
