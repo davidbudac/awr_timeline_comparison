@@ -80,6 +80,10 @@ code{font-size:.92em}
 .seg button{border-radius:7px;font-weight:500;color:var(--muted);padding:3px 11px}
 .seg button[aria-pressed="true"]{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px oklch(0 0 0 / 8%),0 0 0 1px var(--hairline)}
 .topbar .theme-icon-btn{border-color:var(--hairline);box-shadow:0 1px 2px oklch(0 0 0 / 4%)}
+.topbar .sum-btn{border-color:var(--hairline);box-shadow:0 1px 2px oklch(0 0 0 / 4%);color:var(--muted)}
+.topbar .sum-btn:hover{color:var(--ink)}
+#sum-pop{border-color:var(--hairline);border-radius:10px;box-shadow:0 8px 24px oklch(0 0 0 / 12%)}
+#sum-pop textarea{border-color:var(--hairline);font-family:var(--mono)}
 nav.toc{background:var(--panel-2);border-right-color:var(--hairline);padding:16px 12px 14px}
 nav.toc .rail-brand{border-bottom:0;padding:2px 8px 10px;margin-bottom:4px}
 nav.toc .rail-brand span{font-size:13px;font-weight:600;letter-spacing:-.01em;text-transform:none}

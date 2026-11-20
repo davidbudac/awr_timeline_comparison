@@ -1056,6 +1056,20 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.topbar .theme-icon-btn .icon-sun{display:none}');
     DBMS_OUTPUT.PUT_LINE('body.dark .topbar .theme-icon-btn .icon-sun{display:block}');
     DBMS_OUTPUT.PUT_LINE('body.dark .topbar .theme-icon-btn .icon-moon{display:none}');
+    -- plan 034: Copy summary (button + its popover), single-DB top bar only
+    DBMS_OUTPUT.PUT_LINE('.topbar .sum-btn{flex:none;height:32px;border:1px solid var(--rule);border-radius:8px;background:var(--panel);'
+        || 'font:inherit;font-size:13px;color:var(--ink-soft);padding:0 12px;cursor:pointer;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .sum-btn:hover{color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('#sum-pop{position:absolute;right:32px;top:calc(100% + 6px);width:min(560px,calc(100vw - 48px));z-index:30;'
+        || 'background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:10px 12px;box-shadow:0 8px 28px rgba(0,0,0,.18)}');
+    DBMS_OUTPUT.PUT_LINE('#sum-pop[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#sum-pop p{display:flex;justify-content:space-between;align-items:center;margin:0 0 6px;font-size:12px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('#sum-pop .sum-x{border:0;background:none;font-size:18px;line-height:1;color:var(--muted);cursor:pointer}');
+    DBMS_OUTPUT.PUT_LINE('#sum-pop textarea{width:100%;box-sizing:border-box;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;'
+        || 'color:var(--ink);background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:8px;resize:vertical}');
+    -- at 980 px and below the top bar is position:static (the media rule
+    -- below), so the popover can not anchor to it: pin it to the viewport
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px){#sum-pop{position:fixed;top:12px;right:12px;left:12px;width:auto}}');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 1180px){.topbar .db span{display:none}}');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px){.topbar{order:1;position:static;margin:0 -20px;padding:8px 20px;flex-wrap:wrap}}');
     -- The band glyph (sql/lib/band_glyph.plsql): one span, one --x, zones and ticks drawn as gradients
@@ -1704,6 +1718,7 @@ BEGIN
         || ' .tbl-tools, .copy-btn, .permalink, .expander, .tag,'
         || ' .view-note, .next-finding, .windows-hint, .topbar,'
         || ' .theme-icon-btn { display:none !important; }'
+        || ' .topbar .sum-btn, #sum-pop { display:none; }'
         || ' tr[data-tail="Y"] { display:table-row !important; }'
         || ' .tblwrap.scroll { overflow:visible; box-shadow:none; }'
         || ' .tblwrap.scroll tr > :first-child { position:static; }'

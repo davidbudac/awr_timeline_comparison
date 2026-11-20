@@ -1037,6 +1037,19 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
               && c.previousElementSibling.id === c.getAttribute('data-explains'))) && vis(c)
         && c.querySelector('.wg .r.bars') && c.querySelector('.wg .r.p .pv')
         && c.querySelector('a.ent[href^="#sm-"]') && c.querySelector('a.jump[data-tl]'));
+      // plan 034: Copy summary builds Markdown from the verdict and the cards
+      const sbtn = document.getElementById('sum-btn');
+      if (sbtn && !sbtn.hidden) {
+        sbtn.click(); await wait(150);
+        const ta = document.querySelector('#sum-pop textarea');
+        const md = ta ? ta.value : '';
+        const h1 = (document.querySelector('#verdict h1') || {}).textContent || '';
+        const nCards = document.querySelectorAll('#findings article.fc:not(.chg)').length;
+        const nLines = (md.match(/^\d+\. \[/gm) || []).length;
+        out.sumOk = md.indexOf(h1.replace(/\s+/g, ' ').trim()) >= 0 && nLines === nCards && !/undefined|null|NaN/.test(md);
+        document.querySelector('#sum-pop .sum-x').click(); await wait(60);
+        out.sumClosed = document.getElementById('sum-pop').hidden;
+      } else out.sumOk = out.sumClosed = false;
       // plan 030: durations on the plan card, AAS on Timeline event rows
       out.durOk = [...document.querySelectorAll('article.fc[id^="f-plan-"] .big .v')]
         .every(v => /^-?\d+(\.\d)? (ms|s|m|h|d)( \d+ (s|m|h))?$/.test(v.textContent.trim()));
@@ -1227,6 +1240,8 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (!p4.impChips) fail('finding cards: impact chip missing');
     if (p4.zcap.length) fail('Summary glyphs print z past 10: ' + p4.zcap.join(', '));
     if (!p4.planOk) fail('plan-change card incomplete, or neither in #changes-slot nor right under the card it explains');
+    if (!p4.sumOk) fail('Copy summary: Markdown missing the verdict, a card line, or contains undefined/null');
+    if (!p4.sumClosed) fail('Copy summary: the popover did not close');
     if (!p4.durOk) fail('plan card: elapsed not shown as a duration');
     if (!p4.aasOk) fail('Timeline: a wait-event row is not in AAS');
     if (!p4.smOrder) fail('SQL Monitor table: flagged statements not first, or a detail row lost its statement');

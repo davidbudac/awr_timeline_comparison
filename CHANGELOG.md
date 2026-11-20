@@ -196,6 +196,10 @@ release bumps `awr_version`).
   the Current window's DBID and snapshot range (or `DBMS_XPLAN.DISPLAY_AWR`
   for both plans). The rules are one table in
   `sql/lib/finding_hints.plsql`.
+- **Copy summary.** A top-bar button copies the verdict, the likely
+  source, each finding (value, normal range, share of the DB-time rise
+  when known) and what changed around it as Markdown, and shows the text
+  in a popover.
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

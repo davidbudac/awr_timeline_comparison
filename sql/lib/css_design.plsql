@@ -99,6 +99,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.seg button{border-radius:7px;font-weight:500;color:var(--muted);padding:3px 11px}');
     DBMS_OUTPUT.PUT_LINE('.seg button[aria-pressed="true"]{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px oklch(0 0 0 / 8%),0 0 0 1px var(--hairline)}');
     DBMS_OUTPUT.PUT_LINE('.topbar .theme-icon-btn{border-color:var(--hairline);box-shadow:0 1px 2px oklch(0 0 0 / 4%)}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .sum-btn{border-color:var(--hairline);box-shadow:0 1px 2px oklch(0 0 0 / 4%);color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .sum-btn:hover{color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('#sum-pop{border-color:var(--hairline);border-radius:10px;box-shadow:0 8px 24px oklch(0 0 0 / 12%)}');
+    DBMS_OUTPUT.PUT_LINE('#sum-pop textarea{border-color:var(--hairline);font-family:var(--mono)}');
     DBMS_OUTPUT.PUT_LINE('nav.toc{background:var(--panel-2);border-right-color:var(--hairline);padding:16px 12px 14px}');
     DBMS_OUTPUT.PUT_LINE('nav.toc .rail-brand{border-bottom:0;padding:2px 8px 10px;margin-bottom:4px}');
     DBMS_OUTPUT.PUT_LINE('nav.toc .rail-brand span{font-size:13px;font-weight:600;letter-spacing:-.01em;text-transform:none}');

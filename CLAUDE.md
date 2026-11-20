@@ -1020,6 +1020,17 @@ JS and `_style.sql`; all degrade to "show everything" with JS off:
   `fmt_num.plsql`; `data-nocount` keeps rows out of the section-header counts, e.g. the
   cards' related-metrics tables).
 - **`.chip`** — shared pill styling (rank chips, window chips).
+- **`#sum-btn` / `#sum-pop`** (plan 034) — Copy summary: built at click
+  time from `#topbar`, `#verdict h1`, `#because-slot`, `#narrative-slot`,
+  `#findings article.fc:not(.chg)` (`.fc-k .sv`, `h3`, `.big .v/.u/.nrm`,
+  `data-impact` / `data-share`), the plan card that explains a card
+  (`#findings article.fc.chg[data-explains]`, plan 026) plus
+  `#changes-slot > article.fc`, and `footer.report`. Renaming any of these
+  hooks breaks the summary; verify_report's `sumOk` catches it. Works in
+  every design (the dashboard moves the cards; the selector does not
+  depend on `.cards`); quiet / dashboard style it in `css_design.css`.
+  The button ships `hidden` (JS off: no button); Escape in the popover is
+  stopped at its textarea, so it never unpins a window.
 - **Number formatting (T7, `fmt_num.plsql`)** — `fmt_num` ~4 significant
   digits with k/M/G ≥ 1e4/1e6/1e9, full precision in `title`; `fmt_int`
   for counts; `fmt_dur(sec, short)` for Summary-view durations (plan card;

@@ -435,6 +435,11 @@ BEGIN
         || '<button type="button" data-v="all" aria-pressed="false"'
         || ' title="Every section and every scored row">All sections</button>'
         || '</div>'
+        -- S1: Copy summary (plan 034); hidden until the chrome script runs,
+        -- it does nothing with JavaScript off
+        || '<button type="button" id="sum-btn" class="sum-btn" hidden'
+        || ' aria-haspopup="dialog" aria-expanded="false"'
+        || ' title="Copy the verdict and the findings as Markdown, for a ticket or a chat">Copy summary</button>'
         -- Dark mode toggle: flips body.dark, which (via _style.sql) swaps
         -- every color token to the dark palette.  Both icons ship inline;
         -- CSS shows only the one for the mode you would switch TO.
@@ -814,6 +819,61 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  c.querySelectorAll(".copy-btn").forEach(function(x){x.parentNode.removeChild(x);});');
     DBMS_OUTPUT.PUT_LINE('  copyText((c.textContent||"").replace(/^\s+|\s+$/g,""),b,"Copied");');
     DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('/* ---- S1: Copy summary (top bar): the answer as Markdown ---- */');
+    DBMS_OUTPUT.PUT_LINE('var sb=doc.getElementById("sum-btn"), sp=null;');
+    DBMS_OUTPUT.PUT_LINE('function tx(el){return el?(el.textContent||"").replace(/\s+/g," ").trim():"";}');
+    DBMS_OUTPUT.PUT_LINE('function sumMD(){');
+    DBMS_OUTPUT.PUT_LINE('  var L=[], q=function(s,r){return (r||doc).querySelector(s);};');
+    DBMS_OUTPUT.PUT_LINE('  var db=tx(q("#topbar .db b")), dx=tx(q("#topbar .db span")), wn=tx(q("#topbar .win b")), ws=tx(q("#topbar .win > span:not(.cchip)"));');
+    DBMS_OUTPUT.PUT_LINE('  L.push("**"+db+"**"+(dx?" ("+dx+")":""));');
+    DBMS_OUTPUT.PUT_LINE('  L.push("Current window: "+wn+(ws?", "+ws:""));');
+    DBMS_OUTPUT.PUT_LINE('  L.push(""); L.push("**Verdict:** "+tx(q("#verdict h1")));');
+    DBMS_OUTPUT.PUT_LINE('  var bc=q("#because-slot"); if(bc&&!bc.hidden&&tx(bc)) L.push(tx(bc));');
+    DBMS_OUTPUT.PUT_LINE('  var ns=q("#narrative-slot"); if(ns&&!ns.hidden) ns.querySelectorAll("li").forEach(function(li){ if(tx(li)) L.push("- "+tx(li)); });');
+    DBMS_OUTPUT.PUT_LINE('  var cs=doc.querySelectorAll("#findings article.fc:not(.chg)");');
+    DBMS_OUTPUT.PUT_LINE('  if(cs.length){ L.push(""); L.push("**Findings ("+cs.length+")**"); }');
+    DBMS_OUTPUT.PUT_LINE('  cs.forEach(function(c,i){');
+    DBMS_OUTPUT.PUT_LINE('    var b=q(".fc-main .big",c), v=b?tx(q(".v",b))+" "+tx(q(".u",b)):"", n=b?tx(q(".nrm",b)):"";');
+    DBMS_OUTPUT.PUT_LINE('    var im=c.getAttribute("data-impact"), sh=c.getAttribute("data-share");');
+    DBMS_OUTPUT.PUT_LINE('    L.push((i+1)+". ["+tx(q(".fc-k .sv",c))+"] "+tx(q("h3",c))+(v.trim()?": "+v.trim():"")+(n?", "+n:"")');
+    DBMS_OUTPUT.PUT_LINE('      +(im?" (+"+im+" AAS"+(sh?", "+sh+"% of the DB-time rise":"")+")":""));');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    -- (plan 026 moves the plan card that explains a finding card right under
+    -- that card, with data-explains; the dashboard moves it back into the slot)
+    DBMS_OUTPUT.PUT_LINE('  var ch=doc.querySelectorAll("#findings article.fc.chg[data-explains]:not([hidden]), #changes-slot > article.fc:not([hidden])");');
+    DBMS_OUTPUT.PUT_LINE('  if(ch.length){ L.push(""); L.push("**What changed around it**"); }');
+    DBMS_OUTPUT.PUT_LINE('  ch.forEach(function(c){');
+    DBMS_OUTPUT.PUT_LINE('    var b=q(".fc-main .big",c), t=q("p.takeaway",c);');
+    DBMS_OUTPUT.PUT_LINE('    L.push("- "+tx(q(".fc-k .sv",c))+": "+tx(q("h3",c))+(b?": "+tx(q(".v",b))+" "+tx(q(".u",b))+", "+tx(q(".nrm",b)):"")+(t?". "+tx(t):""));');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  var ft=tx(q("footer.report")), vm=/v(\d[0-9.]*)/.exec(ft), rm=/run (\d+)/.exec(ft);');
+    DBMS_OUTPUT.PUT_LINE('  L.push(""); L.push("_From the awr_trend report"+(vm?" v"+vm[1]:"")+(rm?", run "+rm[1]:"")+"; AWR data, read-only._");');
+    DBMS_OUTPUT.PUT_LINE('  return L.join("\n");');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function sumClose(){ if(sp){ sp.hidden=true; } if(sb){ sb.setAttribute("aria-expanded","false"); } }');
+    DBMS_OUTPUT.PUT_LINE('if(sb){');
+    DBMS_OUTPUT.PUT_LINE('  sb.hidden=false;');
+    DBMS_OUTPUT.PUT_LINE('  sb.addEventListener("click",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('    ev.stopPropagation();');
+    DBMS_OUTPUT.PUT_LINE('    if(sp&&!sp.hidden){ sumClose(); return; }');
+    DBMS_OUTPUT.PUT_LINE('    var s=sumMD();');
+    DBMS_OUTPUT.PUT_LINE('    if(!sp){');
+    DBMS_OUTPUT.PUT_LINE('      sp=doc.createElement("div"); sp.id="sum-pop"; sp.setAttribute("role","dialog"); sp.setAttribute("aria-label","Summary as Markdown");');
+    DBMS_OUTPUT.PUT_LINE('      sp.innerHTML="<p><span class=\"sum-st\"></span><button type=\"button\" class=\"sum-x\" aria-label=\"Close\">&times;</button></p><textarea readonly rows=\"14\"></textarea>";');
+    DBMS_OUTPUT.PUT_LINE('      sb.parentNode.appendChild(sp);');
+    DBMS_OUTPUT.PUT_LINE('      sp.querySelector(".sum-x").addEventListener("click",sumClose);');
+    DBMS_OUTPUT.PUT_LINE('      sp.addEventListener("click",function(e){ e.stopPropagation(); });');
+    DBMS_OUTPUT.PUT_LINE('      sp.querySelector("textarea").addEventListener("keydown",function(e){ if(e.key==="Escape"){ e.stopPropagation(); sumClose(); sb.focus(); } });');
+    DBMS_OUTPUT.PUT_LINE('      doc.addEventListener("click",function(){ if(sp&&!sp.hidden) sumClose(); });');
+    DBMS_OUTPUT.PUT_LINE('    }');
+    DBMS_OUTPUT.PUT_LINE('    var ta=sp.querySelector("textarea"), st=sp.querySelector(".sum-st");');
+    DBMS_OUTPUT.PUT_LINE('    ta.value=s; sp.hidden=false; sb.setAttribute("aria-expanded","true");');
+    DBMS_OUTPUT.PUT_LINE('    st.textContent="Copying...";');
+    DBMS_OUTPUT.PUT_LINE('    var done=function(ok){ st.textContent=ok?"Copied to the clipboard.":"Select the text below and copy it."; ta.focus(); ta.select(); };');
+    DBMS_OUTPUT.PUT_LINE('    try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(s).then(function(){done(true);},function(){paste(s);done(false);}); return; } }catch(e){}');
+    DBMS_OUTPUT.PUT_LINE('    paste(s); done(false);');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* ---- T1: long-tail expanders ---- */');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){');
     DBMS_OUTPUT.PUT_LINE('  var e=closest(ev.target,".expander"); if(!e) return;');

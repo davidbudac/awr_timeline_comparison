@@ -271,6 +271,14 @@ nav.toc .rail-cur, nav.toc .rail-menu-btn { display:none; }
 .topbar .theme-icon-btn .icon-sun{display:none}
 body.dark .topbar .theme-icon-btn .icon-sun{display:block}
 body.dark .topbar .theme-icon-btn .icon-moon{display:none}
+.topbar .sum-btn{flex:none;height:32px;border:1px solid var(--rule);border-radius:8px;background:var(--panel);font:inherit;font-size:13px;color:var(--ink-soft);padding:0 12px;cursor:pointer;white-space:nowrap}
+.topbar .sum-btn:hover{color:var(--ink)}
+#sum-pop{position:absolute;right:32px;top:calc(100% + 6px);width:min(560px,calc(100vw - 48px));z-index:30;background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:10px 12px;box-shadow:0 8px 28px rgba(0,0,0,.18)}
+#sum-pop[hidden]{display:none}
+#sum-pop p{display:flex;justify-content:space-between;align-items:center;margin:0 0 6px;font-size:12px;color:var(--muted)}
+#sum-pop .sum-x{border:0;background:none;font-size:18px;line-height:1;color:var(--muted);cursor:pointer}
+#sum-pop textarea{width:100%;box-sizing:border-box;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;color:var(--ink);background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:8px;resize:vertical}
+@media (max-width: 980px){#sum-pop{position:fixed;top:12px;right:12px;left:12px;width:auto}}
 @media (max-width: 1180px){.topbar .db span{display:none}}
 @media (max-width: 980px){.topbar{order:1;position:static;margin:0 -20px;padding:8px 20px;flex-wrap:wrap}}
 .bd{--x:.3333;position:relative;display:block;height:18px;min-width:120px}
@@ -815,7 +823,7 @@ body.vs #activity.ax-cmp #ax-ev,body.vs #activity.ax-cmp .axn2{display:none}
 body[data-pw] #tl .g .d1{color:var(--ink-2)}
 body[data-pw] #tl .g .z{display:none}
 @media (prefers-reduced-motion: reduce){#tl .r.flash::after,#tl .c.colflash,#tl .h.colflash{animation:none}}
-@media print { nav.toc { display:none; position:static; } body { max-width:none; padding:0 0 24px; background:#fff; } section { border:0; padding:12px 0; break-before:page; } main > section:first-of-type, body > section:first-of-type { break-before:auto; } header.report { border:0; padding-top:0; } .chart-wrap { break-inside:avoid; } h2 { break-after:avoid; position:static; padding-top:0;   background:transparent; } section table thead th { position:static; } .tbl-tools, .copy-btn, .permalink, .expander, .tag, .view-note, .next-finding, .windows-hint, .topbar, .theme-icon-btn { display:none !important; } tr[data-tail="Y"] { display:table-row !important; } .tblwrap.scroll { overflow:visible; box-shadow:none; } .tblwrap.scroll tr > :first-child { position:static; } }
+@media print { nav.toc { display:none; position:static; } body { max-width:none; padding:0 0 24px; background:#fff; } section { border:0; padding:12px 0; break-before:page; } main > section:first-of-type, body > section:first-of-type { break-before:auto; } header.report { border:0; padding-top:0; } .chart-wrap { break-inside:avoid; } h2 { break-after:avoid; position:static; padding-top:0;   background:transparent; } section table thead th { position:static; } .tbl-tools, .copy-btn, .permalink, .expander, .tag, .view-note, .next-finding, .windows-hint, .topbar, .theme-icon-btn { display:none !important; } .topbar .sum-btn, #sum-pop { display:none; } tr[data-tail="Y"] { display:table-row !important; } .tblwrap.scroll { overflow:visible; box-shadow:none; } .tblwrap.scroll tr > :first-child { position:static; } }
 </style>
 <style>
 /* css_loadresp: styles of section 20 (Load vs response time).  Every
@@ -2715,7 +2723,7 @@ doc.addEventListener('DOMContentLoaded',function(){
 <script>(function(){var v="all",h=location.hash||"",m,i;try{var s=localStorage.getItem("awr-view");if(s==="timeline"||s==="all")v=s;}catch(e){}m=/view=(summary|timeline|all)/.exec(h);if(m)v=m[1];else{i=h.indexOf("!v=");if(i>=0&&h.slice(i+3).split("&")[0].split(",").indexOf("f")>=0)v="all";}document.body.classList.add({summary:"vs",timeline:"vt",all:"va"}[v]);document.body.setAttribute("data-view",v);})();</script>
 <script>window.AWR_ls=function(id,h){var s=document.getElementById(id),t=s&&s.querySelector("h2");if(!t)return;var e=t.querySelector(".ls");if(!e){e=document.createElement("span");e.className="ls";t.insertBefore(e,t.querySelector(".h2sub,.meta"));}e.innerHTML=h;};</script>
 <a class="skip" href="#main-start">Skip to report</a>
-<div class="topbar" id="topbar"><div class="db"><b>ORCLPRD</b><span>prd-ora-01.corp.example &middot; 19.0.0.0.0 &middot; DBID 1483726519</span></div><div class="win"><span class="cchip">Current</span><b>Thu 10 Sep, 09:00&ndash;10:00</b><span>vs 12 prior windows, every 1w</span></div><span class="sp"></span><div class="seg" role="group" aria-label="View"><button type="button" data-v="summary" aria-pressed="false" title="The answer: verdict, finding cards, what changed, checked and normal">Summary</button><button type="button" data-v="timeline" aria-pressed="false" title="The compared windows side by side">Timeline</button><button type="button" data-v="all" aria-pressed="true" title="Every section and every scored row">All sections</button></div><button type="button" id="theme-toggle" class="theme-icon-btn" aria-pressed="false" aria-label="Toggle dark mode" title="Switch between light and dark color theme"><svg class="icon-sun" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="icon-moon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5a8.5 8.5 0 1 0 11.2 11.2z" fill="currentColor"/></svg></button></div>
+<div class="topbar" id="topbar"><div class="db"><b>ORCLPRD</b><span>prd-ora-01.corp.example &middot; 19.0.0.0.0 &middot; DBID 1483726519</span></div><div class="win"><span class="cchip">Current</span><b>Thu 10 Sep, 09:00&ndash;10:00</b><span>vs 12 prior windows, every 1w</span></div><span class="sp"></span><div class="seg" role="group" aria-label="View"><button type="button" data-v="summary" aria-pressed="false" title="The answer: verdict, finding cards, what changed, checked and normal">Summary</button><button type="button" data-v="timeline" aria-pressed="false" title="The compared windows side by side">Timeline</button><button type="button" data-v="all" aria-pressed="true" title="Every section and every scored row">All sections</button></div><button type="button" id="sum-btn" class="sum-btn" hidden aria-haspopup="dialog" aria-expanded="false" title="Copy the verdict and the findings as Markdown, for a ticket or a chat">Copy summary</button><button type="button" id="theme-toggle" class="theme-icon-btn" aria-pressed="false" aria-label="Toggle dark mode" title="Switch between light and dark color theme"><svg class="icon-sun" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><svg class="icon-moon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M20.5 14.7A8.5 8.5 0 0 1 9.3 3.5a8.5 8.5 0 1 0 11.2 11.2z" fill="currentColor"/></svg></button></div>
 <nav class="toc"><div class="rail-brand"><span>AWR &middot; Timeline comparison</span></div><span class="rail-cur"></span><button type="button" class="rail-menu-btn" id="rail-menu-btn" aria-expanded="false" aria-label="Show section list">&#9776;</button><div class="rail-filter"><input type="text" id="row-filter" autocomplete="off" placeholder="Filter rows&#8230;" aria-label="Filter table rows across the report"><span class="kbd">&#8984;K</span></div><div class="rail-list"><b>Overview</b><a href="#activity" data-nodot>Activity, whole span</a><b>Summary</b><a href="#verdict" data-nodot>Verdict</a><a href="#findings">Findings</a><a href="#s-changes" data-nodot hidden>What changed around it</a><a href="#s-normal" data-nodot>Checked and normal</a><a href="#s-lib" data-nodot>Evidence library</a><b>Timeline</b><a href="#lane-activity" data-nodot>Activity</a><a href="#lane-metrics">Headline and load</a><a href="#lane-waits">Waits</a><a href="#lane-objects" data-nodot>Where the reads land</a><a href="#lane-sql">SQL</a><a href="#lane-config" data-nodot>Configuration</a><b>Diagnosis</b><a href="#instance-map" data-nodot>Instance map</a><a href="#load-response" data-nodot>Load vs response time</a><a href="#release-delta" data-nodot>Before / after release</a><b>Workload</b><a href="#load">Load profile</a><a href="#metrics">Metrics</a><a href="#waits-fg">Waits &mdash; foreground</a><a href="#wait-hist" data-nodot>Wait latency</a><a href="#waits-bg">Waits &mdash; background</a><a href="#blocking" data-nodot>Blocking</a><b>SQL</b><a href="#topsql">Top SQL</a><a href="#volume-cost" data-nodot>Volume vs unit cost</a><a href="#topsql-ash">Top SQL &mdash; ASH</a><a href="#sqlmon">SQL Monitor</a><a href="#plan-flame" data-nodot>Plan shape</a><b>Storage &amp; config</b><a href="#segment-io">Segment I/O</a><a href="#file-io">File I/O</a><a href="#param-changes">Parameters</a><b>Whole span</b><a href="#ash-timeline">ASH timeline</a><a href="#db-time-summary">DB time</a><a href="#onset" data-nodot>Onset</a><a href="#utilization">Utilization</a><a href="#windows">Windows</a><a href="#win-sim" data-nodot>Window similarity</a><a href="#day-profile">Day profile</a><b id="rail-ref">Reference</b><a href="#guide" data-nodot>Reading the charts</a><a href="#about" data-nodot>About this report</a></div><div class="rail-foot"><button type="button" class="view-btn" id="view-btn" aria-expanded="false" aria-controls="view-panel" title="Report view options">View &#9662;</button><div class="view-panel" id="view-panel"><button type="button" id="next-finding" class="next-finding" title="Jump to the next large (critical) finding"><span>&darr; next large finding</span><span class="keys">J K</span></button></div></div></nav>
 <script>(function(){
 var btn=document.getElementById("theme-toggle"); if(!btn) return;
@@ -2885,6 +2893,59 @@ doc.addEventListener("click",function(ev){
   c.querySelectorAll(".copy-btn").forEach(function(x){x.parentNode.removeChild(x);});
   copyText((c.textContent||"").replace(/^\s+|\s+$/g,""),b,"Copied");
 });
+/* ---- S1: Copy summary (top bar): the answer as Markdown ---- */
+var sb=doc.getElementById("sum-btn"), sp=null;
+function tx(el){return el?(el.textContent||"").replace(/\s+/g," ").trim():"";}
+function sumMD(){
+  var L=[], q=function(s,r){return (r||doc).querySelector(s);};
+  var db=tx(q("#topbar .db b")), dx=tx(q("#topbar .db span")), wn=tx(q("#topbar .win b")), ws=tx(q("#topbar .win > span:not(.cchip)"));
+  L.push("**"+db+"**"+(dx?" ("+dx+")":""));
+  L.push("Current window: "+wn+(ws?", "+ws:""));
+  L.push(""); L.push("**Verdict:** "+tx(q("#verdict h1")));
+  var bc=q("#because-slot"); if(bc&&!bc.hidden&&tx(bc)) L.push(tx(bc));
+  var ns=q("#narrative-slot"); if(ns&&!ns.hidden) ns.querySelectorAll("li").forEach(function(li){ if(tx(li)) L.push("- "+tx(li)); });
+  var cs=doc.querySelectorAll("#findings article.fc:not(.chg)");
+  if(cs.length){ L.push(""); L.push("**Findings ("+cs.length+")**"); }
+  cs.forEach(function(c,i){
+    var b=q(".fc-main .big",c), v=b?tx(q(".v",b))+" "+tx(q(".u",b)):"", n=b?tx(q(".nrm",b)):"";
+    var im=c.getAttribute("data-impact"), sh=c.getAttribute("data-share");
+    L.push((i+1)+". ["+tx(q(".fc-k .sv",c))+"] "+tx(q("h3",c))+(v.trim()?": "+v.trim():"")+(n?", "+n:"")
+      +(im?" (+"+im+" AAS"+(sh?", "+sh+"% of the DB-time rise":"")+")":""));
+  });
+  var ch=doc.querySelectorAll("#findings article.fc.chg[data-explains]:not([hidden]), #changes-slot > article.fc:not([hidden])");
+  if(ch.length){ L.push(""); L.push("**What changed around it**"); }
+  ch.forEach(function(c){
+    var b=q(".fc-main .big",c), t=q("p.takeaway",c);
+    L.push("- "+tx(q(".fc-k .sv",c))+": "+tx(q("h3",c))+(b?": "+tx(q(".v",b))+" "+tx(q(".u",b))+", "+tx(q(".nrm",b)):"")+(t?". "+tx(t):""));
+  });
+  var ft=tx(q("footer.report")), vm=/v(\d[0-9.]*)/.exec(ft), rm=/run (\d+)/.exec(ft);
+  L.push(""); L.push("_From the awr_trend report"+(vm?" v"+vm[1]:"")+(rm?", run "+rm[1]:"")+"; AWR data, read-only._");
+  return L.join("\n");
+}
+function sumClose(){ if(sp){ sp.hidden=true; } if(sb){ sb.setAttribute("aria-expanded","false"); } }
+if(sb){
+  sb.hidden=false;
+  sb.addEventListener("click",function(ev){
+    ev.stopPropagation();
+    if(sp&&!sp.hidden){ sumClose(); return; }
+    var s=sumMD();
+    if(!sp){
+      sp=doc.createElement("div"); sp.id="sum-pop"; sp.setAttribute("role","dialog"); sp.setAttribute("aria-label","Summary as Markdown");
+      sp.innerHTML="<p><span class=\"sum-st\"></span><button type=\"button\" class=\"sum-x\" aria-label=\"Close\">&times;</button></p><textarea readonly rows=\"14\"></textarea>";
+      sb.parentNode.appendChild(sp);
+      sp.querySelector(".sum-x").addEventListener("click",sumClose);
+      sp.addEventListener("click",function(e){ e.stopPropagation(); });
+      sp.querySelector("textarea").addEventListener("keydown",function(e){ if(e.key==="Escape"){ e.stopPropagation(); sumClose(); sb.focus(); } });
+      doc.addEventListener("click",function(){ if(sp&&!sp.hidden) sumClose(); });
+    }
+    var ta=sp.querySelector("textarea"), st=sp.querySelector(".sum-st");
+    ta.value=s; sp.hidden=false; sb.setAttribute("aria-expanded","true");
+    st.textContent="Copying...";
+    var done=function(ok){ st.textContent=ok?"Copied to the clipboard.":"Select the text below and copy it."; ta.focus(); ta.select(); };
+    try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(s).then(function(){done(true);},function(){paste(s);done(false);}); return; } }catch(e){}
+    paste(s); done(false);
+  });
+}
 /* ---- T1: long-tail expanders ---- */
 doc.addEventListener("click",function(ev){
   var e=closest(ev.target,".expander"); if(!e) return;
