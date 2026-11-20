@@ -589,12 +589,16 @@ BEGIN
     -- plan 035: charts are drawn when they come near the viewport, so a
     -- window highlighted before that must still be applied at init
     DBMS_OUTPUT.PUT_LINE('var hiNow=null; document.addEventListener("awr:window",function(e){hiNow=e.detail?e.detail.w:null;});');
+    -- plan 035 review: a chart first drawn by beforeprint must skip the
+    -- initial animation, or the page prints its first, empty frame
+    DBMS_OUTPUT.PUT_LINE('var noAnim=false;');
     DBMS_OUTPUT.PUT_LINE('function initChart(c){');
     DBMS_OUTPUT.PUT_LINE('  var el=document.getElementById(c.id); if(!el||el.getAttribute("data-init")) return; el.setAttribute("data-init","1");');
     DBMS_OUTPUT.PUT_LINE('  var c0=getComputedStyle(document.body),fg=c0.getPropertyValue("--fg").trim()||"#333",mu=c0.getPropertyValue("--muted").trim()||"#888",gr=c0.getPropertyValue("--border").trim()||"#e0e0e0";');
     DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el);');
     DBMS_OUTPUT.PUT_LINE('  var markAreaData=buildMarkAreas(hiNow);');
     DBMS_OUTPUT.PUT_LINE('  chart.setOption({');
+    DBMS_OUTPUT.PUT_LINE('    animation:!noAnim,');
     DBMS_OUTPUT.PUT_LINE('    aria:{enabled:true,decal:{show:true}},');
     DBMS_OUTPUT.PUT_LINE('    tooltip:{trigger:"axis",axisPointer:{type:"line"},');
     DBMS_OUTPUT.PUT_LINE('      valueFormatter:function(v){return v==null?"\u2014":(+v).toFixed(2);}},');
@@ -634,7 +638,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('function soon(){if(tmr||!pend.length)return;tmr=setTimeout(function(){tmr=null;check();},120);}');
     DBMS_OUTPUT.PUT_LINE('window.addEventListener("scroll",soon,{passive:true});window.addEventListener("resize",soon);window.addEventListener("load",soon);');
     DBMS_OUTPUT.PUT_LINE('document.addEventListener("awr:view",soon);document.addEventListener("click",soon,true);');
-    DBMS_OUTPUT.PUT_LINE('window.addEventListener("beforeprint",function(){pend.forEach(initChart);pend=[];});');
+    DBMS_OUTPUT.PUT_LINE('window.addEventListener("beforeprint",function(){var a=pend;pend=[];noAnim=true;try{a.forEach(function(c){initChart(c);});}finally{noAnim=false;}});');
     DBMS_OUTPUT.PUT_LINE('check();');
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');

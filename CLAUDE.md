@@ -1735,7 +1735,9 @@ listener; their JS re-renders on `awr:view` / resize only. **Section 11 register
 single outer listener would capture only the last chart). Since plan 035 that loop is `initChart(c)`, called on
 demand (throttled scroll / resize / `awr:view` / click / `load` /
 `beforeprint`, never IntersectionObserver); `hiNow` carries the
-`awr:window` slot to charts drawn later. New charts must add an
+`awr:window` slot to charts drawn later, and `noAnim` draws the
+`beforeprint` ones without the initial animation (else the print gets
+its first, empty frame). New charts must add an
 `awr:theme` listener or they'll ignore a live toggle. Wait-class series colors
 are theme-independent (kept in parity with `js_wait_colors.plsql`), so only
 axis/legend/fill colors need re-applying. Verify headlessly by stubbing

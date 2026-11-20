@@ -53020,12 +53020,14 @@ var lastCat=(d.hours&&d.hours.length)?d.hours[d.hours.length-1]:null;
 function buildMarkAreas(hiSlot){return (d.windows||[]).map(function(w){var valid=w[3]!=="0";var isCur=w[2]==="current";var hi=(hiSlot!=null)&&((hiSlot===0&&isCur)||("w-"+hiSlot===w[2]));var a={xAxis:w[0],name:w[2],itemStyle:{color:valid?(isCur?bandCurrent:bandColor):bandSkip,opacity:hi?1:(hiSlot!=null?0.35:1),borderColor:hi?fg:null,borderWidth:hi?1.5:0}};if(!valid){a.label={show:true,position:"insideTop",color:mu,fontSize:9,formatter:"skipped",distance:1};}var end=w[1];if(lastCat!==null&&d.hours.indexOf(end)<0)end=lastCat;return [a,{xAxis:end}];});}
 var showSlider=(d.hours||[]).length>24;
 var hiNow=null; document.addEventListener("awr:window",function(e){hiNow=e.detail?e.detail.w:null;});
+var noAnim=false;
 function initChart(c){
   var el=document.getElementById(c.id); if(!el||el.getAttribute("data-init")) return; el.setAttribute("data-init","1");
   var c0=getComputedStyle(document.body),fg=c0.getPropertyValue("--fg").trim()||"#333",mu=c0.getPropertyValue("--muted").trim()||"#888",gr=c0.getPropertyValue("--border").trim()||"#e0e0e0";
   var chart=echarts.init(el);
   var markAreaData=buildMarkAreas(hiNow);
   chart.setOption({
+    animation:!noAnim,
     aria:{enabled:true,decal:{show:true}},
     tooltip:{trigger:"axis",axisPointer:{type:"line"},
       valueFormatter:function(v){return v==null?"\u2014":(+v).toFixed(2);}},
@@ -53056,7 +53058,7 @@ function check(){pend=pend.filter(function(c){var el=document.getElementById(c.i
 function soon(){if(tmr||!pend.length)return;tmr=setTimeout(function(){tmr=null;check();},120);}
 window.addEventListener("scroll",soon,{passive:true});window.addEventListener("resize",soon);window.addEventListener("load",soon);
 document.addEventListener("awr:view",soon);document.addEventListener("click",soon,true);
-window.addEventListener("beforeprint",function(){pend.forEach(initChart);pend=[];});
+window.addEventListener("beforeprint",function(){var a=pend;pend=[];noAnim=true;try{a.forEach(function(c){initChart(c);});}finally{noAnim=false;}});
 check();
 })();
 </script>
