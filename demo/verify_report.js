@@ -1045,7 +1045,9 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         const all = [...waits.querySelectorAll('.lrows > .r.bars')], aas = all.every(r => r.getAttribute('data-unit') === 'AAS');
         const nums = s => String(s || '').split(',').map(x => x === '' ? null : +x);
         const ev = all.filter(r => !/^tl-fr-w-/.test(r.id));
-        const k = ev.map(r => window.AWR_WG.changeKey(nums(r.getAttribute('data-v')), +r.getAttribute('data-mu'), +r.getAttribute('data-sd'), aas));
+        // an empty data-mu / data-sd is "no prior mean" (null, sorted last), not 0
+        const num1 = s => (s == null || s === '') ? null : +s;
+        const k = ev.map(r => window.AWR_WG.changeKey(nums(r.getAttribute('data-v')), num1(r.getAttribute('data-mu')), num1(r.getAttribute('data-sd')), aas));
         out.sorted = k.every((x, i) => i === 0 || x == null || k[i - 1] == null || k[i - 1] >= x) ? 'ok' : 'FAIL ' + JSON.stringify(k);
         const fe = all.findIndex(r => !/^tl-fr-w-/.test(r.id));
         out.classesFirst = fe < 0 || all.slice(fe).every(r => !/^tl-fr-w-/.test(r.id));
