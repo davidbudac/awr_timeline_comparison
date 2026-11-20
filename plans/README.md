@@ -85,19 +85,19 @@ What the re-check added to the plans:
 
 | Plan | Title | Item # | Priority | Effort | Risk | Depends on | Status |
 |------|-------|--------|----------|--------|------|------------|--------|
-| [020](020-rank-finding-cards-by-impact.md) | Finding cards are ranked by the DB time they added; Summary shows z capped at 10 sigma | 1, 19 | P1 | M | MED | — | DONE (`91671ce`); DB run pending (owner) |
+| [020](020-rank-finding-cards-by-impact.md) | Finding cards are ranked by the DB time they added; Summary shows z capped at 10 sigma | 1, 19 | P1 | M | MED | — | DONE (`91671ce`; follow-ups in fix group G4); DB run pending (owner) |
 | [021](021-db-time-breakdown-in-verdict.md) | The verdict shows where the extra DB time went (DB CPU + wait classes) | 2 | P1 | M | LOW-MED | 020 | DONE (`dc8dbff`); DB run pending (owner) |
 | [022](022-one-finding-count.md) | One finding count everywhere: a finding is a card | 3 | P2 | S-M | LOW | 020 | DONE (`3db73d5`); DB run pending (owner) |
 | [023](023-verdict-first-compact-activity.md) | Summary: the verdict comes first, the Activity charts open compact | 4 | P1 | M | LOW | — | DONE (`ecb0be3`, option A); DB run pending (owner) |
 | [024](024-activity-windows-side-by-side.md) | Activity charts: "Windows side by side" mode | 5 | P2 | L | MED | 023 | DONE (`862ae3f`, default Full span; review leftovers in fix group G3); DB run pending (owner) |
-| [025](025-findings-triage-list-and-folded-cards.md) | Findings triage list, folded secondary cards, quieter card charts | 6 | P1 | M | MED | 020 | DONE (`e3f8cad`); DB run pending (owner) |
-| [026](026-cause-next-to-effect-io-card.md) | The Physical I/O card names its top statement; the plan card that explains it sits under it | 7 | P2 | M | MED | after 025 | DONE (`3fbaad0`, dashboard: side column); DB run pending (owner) |
-| [027](027-pattern-tags-on-findings.md) | Pattern tags: spike / step / trend / after a release | 8 | P2 | M | LOW | 025 (soft) | DONE (`aafbc38`); DB run pending (owner) |
+| [025](025-findings-triage-list-and-folded-cards.md) | Findings triage list, folded secondary cards, quieter card charts | 6 | P1 | M | MED | 020 | DONE (`e3f8cad`; follow-ups in fix group G4); DB run pending (owner) |
+| [026](026-cause-next-to-effect-io-card.md) | The Physical I/O card names its top statement; the plan card that explains it sits under it | 7 | P2 | M | MED | after 025 | DONE (`3fbaad0`, dashboard: side column; follow-ups in fix group G4); DB run pending (owner) |
+| [027](027-pattern-tags-on-findings.md) | Pattern tags: spike / step / trend / after a release | 8 | P2 | M | LOW | 025 (soft) | DONE (`aafbc38`; follow-ups in fix group G4); DB run pending (owner) |
 | [028](028-baseline-switch-on-finding-cards.md) | Baseline switch on finding cards (as scored / robust / since last release), display only | 9 | P3 | M | LOW | — | DROPPED (owner 2026-11-19: sections 26 / 28 cover it) |
 | [029](029-sort-by-change.md) | Sort by change: SQL Monitor shows flagged statements first; Top SQL opens on "Biggest change" | 10 | P2 | M | LOW / MED | — | DONE (`ade6cb5`, `3fb20a6`, tab kept); DB run pending (owner) |
 | [030](030-human-units.md) | Human units: durations as "7 h 45 m"; Timeline wait-event rows in AAS | 12 | P2 | S-M | LOW | — | DONE (`251ff52`, `edccdff`); DB run pending (owner) |
 | [031](031-timeline-rows-scale-filter-sort.md) | Timeline rows show normal variation; flagged-only filter; sort by change | 11 | P2 | M | LOW-MED | 030 (soft) | DONE (`920b5a7`); DB run pending (owner) |
-| [032](032-fold-checked-and-normal.md) | "Checked and normal" folds to one line in Summary | 13 | P3 | S | LOW | 025 | DONE (`7edb20a`); DB run pending (owner) |
+| [032](032-fold-checked-and-normal.md) | "Checked and normal" folds to one line in Summary | 13 | P3 | S | LOW | 025 | DONE (`7edb20a`; follow-ups in fix group G4); DB run pending (owner) |
 | [033](033-finding-hints-and-next-step-queries.md) | Hints ("what this usually means") and copyable read-only next queries | 14 | P3 | M | LOW-MED | 026 (soft) | DONE (`0971059`); DB run pending (owner) |
 | [034](034-copy-summary-button.md) | "Copy summary" button (Markdown for a ticket or chat) | 15 | P3 | S-M | LOW | 020 (soft) | DONE (`bf288c3`); DB run pending (owner) |
 | [035](035-section11-charts-on-demand.md) | Section 11 draws its per-SQL charts on demand | 16 | P3 | S | LOW | — | DONE (`dcec914`); DB run pending (owner) |
@@ -259,6 +259,14 @@ these supersede the 2026-11-19 answers where they overlap):
   then a "+n" flag whose tooltip lists the rest); no empty flag band when
   every marker is cropped away; the focus stays on a stripe / cap pinned
   with Enter. Done in fix group G3.
+- 020 / 025 / 026 / 027 / 032 (follow-ups, owner approved fixing): the
+  dashboard's findings rows show the card's impact chip; the triage
+  list's strip draws past 91 windows (one silhouette); print opens the
+  folded cards and "Checked and normal" (restored after); the plan card
+  under a folded I/O card folds with it; pattern chips are keyboard
+  reachable with their sentence shown on focus; no "spike: Current only"
+  next to a step the same way (a jump after a marker stays); the classic
+  config card's "and N more" link is styled. Done in fix group G4.
 
 
 Each plan records its default, so an executor never waits on these. Decide
