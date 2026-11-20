@@ -981,9 +981,13 @@ designs) and the server's env whitelist.
   = its `.note.improved`; `findTable()` calls `window.AWR_fcOpen(card)`
   on every card it moves into a row -- the row is the fold -- and
   `css_design.css` hides 07's `#triage` list, plan 025;
-  the lead row of each card shows a copy of the card's `.fc-tags` in its
-  `.dnm` cell, `.fc-tags.dtags` after the `<small>` the palette reads,
-  plan 027) + `aside.dside`
+  the lead row of each card shows, in a `span.dmeta` line of its `.dnm`
+  cell after the `<small>` the palette reads, the card's impact chip
+  `span.dimp` (G4: the row hides the card's header, where `.fc-imp`
+  lives; `impChip()` builds it from `data-impact` / `data-share` like the
+  triage list -- only a rise, "+x AAS · s%", DB time "above normal", the
+  card chip's text + explanation as its title; verify_report block 7) and
+  a copy of the card's `.fc-tags` (`.fc-tags.dtags`, plan 027)) + `aside.dside`
   (`#s-changes` moved in, plus
   the releases from `AWR_WG.markers()`; a card body inside the grid
   scrolls on its own, so a 169-column plan card never widens the page).

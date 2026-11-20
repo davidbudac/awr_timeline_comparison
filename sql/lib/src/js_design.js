@@ -256,6 +256,18 @@ function drow(o){
     d.addEventListener("toggle",function(){if(d.open)draw();});d._draw=function(){if(d.open)draw();};}
   return d;
 }
+/* plan 020 follow-up (G4): the card's impact as a chip in its lead row --
+   the row hides the card's header, where the .fc-imp chip lives.  From
+   data-impact / data-share like the triage list; only a rise, as on the card */
+function impChip(card){
+  var im=card.getAttribute("data-impact"),sh=card.getAttribute("data-share");
+  if(im===null||im===""||!(+im>0))return null;
+  var v=+im,a=Math.abs(v),s=(sh===null||sh==="")?null:+sh,ch=$(".fc-k .fc-imp",card);
+  var c=mk("span","dimp");
+  c.textContent="+"+(a>=10?a.toFixed(1):a>=1?a.toFixed(2):a.toFixed(3))+" AAS"+(card.id==="f-dbtime"?" above normal":s===null?"":MID+(s<1?"<1":s)+"%");
+  c.title=ch?txt(ch)+". "+(ch.getAttribute("title")||""):"Time added, in average active sessions";
+  return c;
+}
 function findTable(){
   var fs=$("#findings");if(!fs)return null;
   /* the cards, or (nothing moved) 07's "No finding" note */
@@ -282,8 +294,11 @@ function findTable(){
     var lrow=drow({lead:true,key:card.id,sev:sev,name:lead?txt(lead):fam,fam:fam,cur:(txt($(".big .v",card))+(/^[\/%]/.test(unit)?"":" ")+unit).trim(),nrm:nrm,
       band:cl(det&&$("td.c-band .bd",det))||cl($(".fc-band .bd",card)),delta:cl(det&&$("td.c-d .d",det))||cl($("h3 .d",card)),data:rowData(tl||$(".wg .r.bars",card)),body:card});
     tbl.appendChild(lrow);
-    /* plan 027: the card's pattern tags (js_wingrid tagCards ran before) on the row */
-    var ptg=$(".fc-tags",card);if(ptg&&ptg.children.length){var pcl=ptg.cloneNode(true);pcl.className="fc-tags dtags";$(".dnm",lrow).appendChild(pcl);}
+    /* the card's impact chip (G4) and, plan 027, its pattern tags (js_wingrid
+       tagCards ran before) on one line under the name */
+    var imp=impChip(card),ptg=$(".fc-tags",card),ptn=ptg&&ptg.children.length;
+    if(imp||ptn){var mt=mk("span","dmeta",$(".dnm",lrow));if(imp)mt.appendChild(imp);
+      if(ptn){var pcl=ptg.cloneNode(true);pcl.className="fc-tags dtags";mt.appendChild(pcl);}}
     moved++;
     $$(".rel tbody tr",card).forEach(function(tr){
       if(tr.classList.contains("twin")||!(tr.classList.contains("crit")||tr.classList.contains("warn")))return;

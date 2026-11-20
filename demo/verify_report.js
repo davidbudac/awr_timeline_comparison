@@ -108,7 +108,8 @@
  *     no rail (its checks are skipped), the Summary puts the verdict and
  *     the KPI cards above Activity, one KPI per finding card + DB time
  *     with bars, every finding card inside a row of the findings table
- *     (count = the Moved tab), a row opens to its bars / its card, the
+ *     (count = the Moved tab), each lead row shows its card's impact
+ *     chip (.dimp; required on the demo), a row opens to its bars / its card, the
  *     Normal tab shows #s-normal and a jump into it switches the tab, the
  *     Activity tabs show one chart (x labels + release flags on it) or
  *     both, Ctrl+K opens the palette (not the row filter), a search +
@@ -1617,6 +1618,12 @@ const LABEL_BAND = () => {
           dbtCard: !!document.getElementById('f-dbtime'), hero: !!document.getElementById('hero-dbt'),
           inRows: cards.filter(c => c.parentElement.closest('details.drow.lead')).length, rows: rows.length, tabN: tab ? +tab.textContent : 0,
           trends: rows.filter(r => r.querySelector('.dtr svg')).length,
+          // the card's impact chip on its lead row (the row hides the card's header)
+          imps: rows.filter(r => r.classList.contains('lead')).map(r => {
+            const c = r.querySelector('article.fc'), im = c ? parseFloat(c.getAttribute('data-impact')) : NaN;
+            const ch = r.querySelector(':scope > summary .dnm .dimp');
+            return im > 0 ? (vis(ch) && /^\+[0-9.]+ AAS/.test(ch.textContent) && !!ch.title ? 'y' : 'FAIL ' + (c && c.id)) : (ch ? 'FAIL ' + (c && c.id) : 'n');
+          }),
           order: top('verdict') < top('activity') && document.querySelector('.dkpis').getBoundingClientRect().top < top('activity') && top('activity') < top('findings') };
       });
       dz.layout = lay;
@@ -1625,6 +1632,8 @@ const LABEL_BAND = () => {
       if (lay.kpis !== nk || lay.kpiBars !== lay.kpis) fail('dashboard: KPI cards ' + lay.kpis + ' (expected ' + nk + '), ' + lay.kpiBars + ' with bars');
       if (lay.inRows !== lay.cards || lay.rows !== lay.tabN || lay.trends !== lay.rows) fail('dashboard: findings table ' + JSON.stringify(lay));
       if (!lay.order) fail('dashboard: Summary order (verdict, KPI cards, Activity, findings)');
+      if (lay.imps.some(x => /^FAIL/.test(x))) fail('dashboard: impact chip on the lead rows ' + lay.imps.join(','));
+      if (/demo_busy_db_dashboard\.html$/.test(file) && !lay.imps.includes('y')) fail('dashboard demo: no lead row shows its impact chip');
       // rows open: a lead row shows its card, another row draws its bars
       dz.rows = await page.evaluate(async () => {
         const vis = el => !!el && el.getClientRects().length > 0;
