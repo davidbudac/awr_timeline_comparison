@@ -586,10 +586,14 @@ BEGIN
     -- C3: hide the slider dataZoom when there are few enough buckets to
     -- read directly (shared bucket grid, same for every per-SQL chart).
     DBMS_OUTPUT.PUT_LINE('var showSlider=(d.hours||[]).length>24;');
-    DBMS_OUTPUT.PUT_LINE('(d.charts||[]).forEach(function(c){');
-    DBMS_OUTPUT.PUT_LINE('  var el=document.getElementById(c.id); if(!el) return;');
+    -- plan 035: charts are drawn when they come near the viewport, so a
+    -- window highlighted before that must still be applied at init
+    DBMS_OUTPUT.PUT_LINE('var hiNow=null; document.addEventListener("awr:window",function(e){hiNow=e.detail?e.detail.w:null;});');
+    DBMS_OUTPUT.PUT_LINE('function initChart(c){');
+    DBMS_OUTPUT.PUT_LINE('  var el=document.getElementById(c.id); if(!el||el.getAttribute("data-init")) return; el.setAttribute("data-init","1");');
+    DBMS_OUTPUT.PUT_LINE('  var c0=getComputedStyle(document.body),fg=c0.getPropertyValue("--fg").trim()||"#333",mu=c0.getPropertyValue("--muted").trim()||"#888",gr=c0.getPropertyValue("--border").trim()||"#e0e0e0";');
     DBMS_OUTPUT.PUT_LINE('  var chart=echarts.init(el);');
-    DBMS_OUTPUT.PUT_LINE('  var markAreaData=buildMarkAreas(null);');
+    DBMS_OUTPUT.PUT_LINE('  var markAreaData=buildMarkAreas(hiNow);');
     DBMS_OUTPUT.PUT_LINE('  chart.setOption({');
     DBMS_OUTPUT.PUT_LINE('    aria:{enabled:true,decal:{show:true}},');
     DBMS_OUTPUT.PUT_LINE('    tooltip:{trigger:"axis",axisPointer:{type:"line"},');
@@ -618,7 +622,20 @@ BEGIN
     -- X2: registered per-chart inside this forEach (one outer listener would
     -- only capture the last chart's `chart`/`markAreaData` closure).
     DBMS_OUTPUT.PUT_LINE('  document.addEventListener("awr:window",function(e){var w=e.detail?e.detail.w:null;chart.setOption({series:[{markArea:{data:buildMarkAreas(w)}}]});});');
-    DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('}');
+    -- On demand: a chart is drawn once its card is visible (its view is
+    -- shown) and within 600px of the viewport.  A throttled scroll /
+    -- resize check, not an intersection observer (embedded webviews
+    -- throttle it, see 00_params.sql's scrollspy note); also on a view switch, any
+    -- click (details, tabs, links), page load and before printing.
+    DBMS_OUTPUT.PUT_LINE('var pend=(d.charts||[]).slice(), tmr=null;');
+    DBMS_OUTPUT.PUT_LINE('function near(el){if(!el||el.offsetParent===null)return false;var r=el.getBoundingClientRect(),h=window.innerHeight||800;return r.bottom>-600&&r.top<h+600;}');
+    DBMS_OUTPUT.PUT_LINE('function check(){pend=pend.filter(function(c){var el=document.getElementById(c.id);if(!el)return false;if(near(el)){initChart(c);return false;}return true;});}');
+    DBMS_OUTPUT.PUT_LINE('function soon(){if(tmr||!pend.length)return;tmr=setTimeout(function(){tmr=null;check();},120);}');
+    DBMS_OUTPUT.PUT_LINE('window.addEventListener("scroll",soon,{passive:true});window.addEventListener("resize",soon);window.addEventListener("load",soon);');
+    DBMS_OUTPUT.PUT_LINE('document.addEventListener("awr:view",soon);document.addEventListener("click",soon,true);');
+    DBMS_OUTPUT.PUT_LINE('window.addEventListener("beforeprint",function(){pend.forEach(initChart);pend=[];});');
+    DBMS_OUTPUT.PUT_LINE('check();');
     DBMS_OUTPUT.PUT_LINE('})();');
     DBMS_OUTPUT.PUT_LINE('</script>');
 

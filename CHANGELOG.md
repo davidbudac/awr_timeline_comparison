@@ -200,6 +200,10 @@ release bumps `awr_version`).
   source, each finding (value, normal range, share of the DB-time rise
   when known) and what changed around it as Markdown, and shows the text
   in a popover.
+- **Faster load and view switch.** Section 11 (Top SQL activity) draws
+  each per-SQL chart when it comes into view instead of all at page load
+  (about 0.3 s less ECharts work at load and half the first switch to All
+  sections on the demo).
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

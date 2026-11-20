@@ -1249,6 +1249,18 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       // All sections: every library section shows in full, row state or not
       window.AWR_setView('all', false); await wait(250);
       out.allFull = libs.filter(x => { const t = x.querySelector('table, .chart-wrap'); return t && !vis(t); }).map(x => x.id);
+      // plan 035: section 11's charts are drawn on demand
+      const a11 = [...document.querySelectorAll('#topsql-ash .chart-ash-sql')];
+      if (window.echarts && a11.length > 2) {
+        window.scrollTo(0, 0); await wait(300);
+        const last = a11[a11.length - 1];
+        if (last.getBoundingClientRect().top > innerHeight + 700) {
+          const before = echarts.getInstanceByDom(last) ? 1 : 0;
+          last.scrollIntoView({ block: 'center' }); await wait(500);
+          const after = echarts.getInstanceByDom(last) ? 1 : 0;
+          out.lazy11 = (before === 0 && after === 1) ? 'ok' : 'FAIL before=' + before + ' after=' + after;
+        } else out.lazy11 = 'skipped (too close)';
+      } else out.lazy11 = 'skipped (' + (window.echarts ? a11.length + ' charts' : 'no ECharts') + ')';
       out.strips = document.querySelectorAll('td.trend svg.mw').length;
       out.lines = document.querySelectorAll('td.trend svg.spark').length;
       // js_microstrip draws nothing past 91 windows (no pixel per bar left)
@@ -1311,6 +1323,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (/^FAIL/.test(p4.jk)) fail('J in Summary: ' + p4.jk);
     if (!p4.subNames) fail('rail card sub-link text / data-label carries the share');
     if (p4.allFull.length) fail('All sections: library sections not shown in full: ' + p4.allFull.join(', '));
+    if (/^FAIL/.test(p4.lazy11)) fail('section 11 lazy charts ' + p4.lazy11);
     if ((!p4.strips && p4.nwin <= 91) || p4.lines) fail('micro strips: ' + p4.strips + ' svg.mw, ' + p4.lines + ' line sparklines left');
     if (errors.length) fail('phase 4: ' + errors.slice(0, 5).join(' | '));
     if (shots) {

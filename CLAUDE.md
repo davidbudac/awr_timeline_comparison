@@ -1732,7 +1732,10 @@ v1.6.0 SVG/CSS components (band, micro strip, window grid, Timeline, full-span
 ASH chart) read CSS variables at paint time, so they follow the theme without a
 listener; their JS re-renders on `awr:view` / resize only. **Section 11 registers the listener
 *inside* its per-chart `forEach`** so each chart binds its own instance (a
-single outer listener would capture only the last chart). New charts must add an
+single outer listener would capture only the last chart). Since plan 035 that loop is `initChart(c)`, called on
+demand (throttled scroll / resize / `awr:view` / click / `load` /
+`beforeprint`, never IntersectionObserver); `hiNow` carries the
+`awr:window` slot to charts drawn later. New charts must add an
 `awr:theme` listener or they'll ignore a live toggle. Wait-class series colors
 are theme-independent (kept in parity with `js_wait_colors.plsql`), so only
 axis/legend/fill colors need re-applying. Verify headlessly by stubbing
