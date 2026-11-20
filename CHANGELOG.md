@@ -170,6 +170,10 @@ release bumps `awr_version`).
   only", "high for 3 windows", "rising across 12 windows"), computed in the
   browser from the card's per-window values and the release markers. A
   hint only: severities, order and counts are unchanged.
+- **Sorted by change.** SQL Monitor's per-statement table lists large,
+  then moderate findings first (JS; the selection of statements is
+  unchanged). Top SQL opens on a new *Biggest change* tab: Current-window
+  total elapsed minus the prior-window mean, from the same SQLSTAT read.
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

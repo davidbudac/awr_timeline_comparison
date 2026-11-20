@@ -3,6 +3,8 @@
 -- Top-N SQL per window from DBA_HIST_SQLSTAT using the pre-computed *_DELTA
 -- columns.  Ranks the same SQLs five times: by elapsed_time_delta,
 -- cpu_time_delta, buffer_gets_delta, disk_reads_delta, executions_delta.
+-- Plus two change rankings over the same read: per-exec regression and
+-- "Biggest change" (Current total elapsed minus the prior-window mean).
 -- Joins DBA_HIST_SQLTEXT for a short text snippet.  Read-only: no scratch
 -- table.
 --
@@ -103,6 +105,8 @@ DECLARE
     v_tl_gw            NUMBER;
     v_tl_gl            VARCHAR2(400);
     v_ls               VARCHAR2(2000);    -- the evidence library's row text
+    v_panel_on         BOOLEAN := FALSE;  -- the first emitted tabpanel is the open one
+    v_chg_seen         BOOLEAN := FALSE;  -- the CHANGE dimension had rows
 
     @@sql/lib/nth_csv.plsql
     @@sql/lib/is_oracle_schema.plsql
@@ -118,12 +122,14 @@ BEGIN
         || '<small class="h2sub">Top ' || v_top_n
         || ' statements per ranking and window; ranked, not scored</small></h2>');
 
-    -- C1: one tab group for the six per-dimension blocks below (each
+    -- C1: one tab group for the seven per-dimension blocks below (each
     -- wrapped in a matching .tabpanel as its <h3> is emitted). Dim codes
     -- and order are hardcoded here to match the `dims` CTE inside the
     -- cursor below -- they are static, not derived per-DB.
     DBMS_OUTPUT.PUT_LINE('<div class="tabs" data-tabs="topsql" role="tablist" aria-label="Top SQL ranking dimension">'
-        || '<button type="button" role="tab" aria-selected="true" class="on" data-t="ELAPSED" id="tab-topsql-ELAPSED">Elapsed time</button>'
+        || '<button type="button" role="tab" aria-selected="true" class="on" data-t="CHANGE" id="tab-topsql-CHANGE"'
+        || ' title="Current window total elapsed minus the prior-window mean">Biggest change</button>'
+        || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="ELAPSED" id="tab-topsql-ELAPSED">Elapsed time</button>'
         || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="CPU" id="tab-topsql-CPU">CPU time</button>'
         || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="GETS" id="tab-topsql-GETS">Buffer gets</button>'
         || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="PREADS" id="tab-topsql-PREADS">Physical reads</button>'
@@ -215,9 +221,9 @@ BEGIN
             FROM   agg
         ),
         --
-        -- Δ elapsed-per-exec ranking: single global ROW_NUMBER (NOT
+        -- Delta elapsed-per-exec ranking: single global ROW_NUMBER (NOT
         -- partitioned by window) over the regression delta. Catches
-        -- "got slower per call" — invisible to total-elapsed rankings
+        -- "got slower per call" -- invisible to total-elapsed rankings
         -- when execution count drops.
         --
         -- Filters:
@@ -245,6 +251,31 @@ BEGIN
               AND n_prior_pe >= 1
               AND cur_pe   > prior_pe
               AND cur_execs >= 3
+        ),
+        --
+        -- Biggest change: the Current window's total elapsed minus the mean
+        -- over the prior VALID windows (a valid window in which AWR kept no
+        -- row for the statement counts as 0; a skipped window is not a
+        -- window here at all).  Regressions only.  Same agg as every other
+        -- dimension: no extra DBA_HIST_SQLSTAT read.
+        --
+        n_prior_valid AS (
+            SELECT COUNT(DISTINCT week_offset) AS n
+            FROM   valid_windows
+            WHERE  week_offset > 0
+        ),
+        chg_ranked AS (
+            SELECT sql_id, cur_ela, prior_mean,
+                   ROW_NUMBER() OVER (ORDER BY cur_ela - prior_mean DESC, sql_id) AS r_chg
+            FROM (
+                SELECT a.sql_id,
+                       SUM(CASE WHEN a.week_offset = 0 THEN a.elapsed_time_delta_us END) AS cur_ela,
+                       NVL(SUM(CASE WHEN a.week_offset > 0 THEN a.elapsed_time_delta_us END), 0)
+                           / NULLIF((SELECT n FROM n_prior_valid), 0) AS prior_mean
+                FROM   agg a
+                GROUP BY a.sql_id
+            )
+            WHERE  cur_ela > prior_mean
         ),
         picked AS (
             SELECT 'ELAPSED' AS dim, week_offset, sql_id, plan_hash_value,
@@ -279,6 +310,15 @@ BEGIN
             JOIN   delta_ranked dr ON dr.sql_id = pe.sql_id
             WHERE  dr.r_delta <= (SELECT top_n FROM run_params)
               AND  pe.per_exec_us IS NOT NULL
+            UNION ALL
+            -- CHANGE: per-window total elapsed for the top-N statements by
+            -- the change above, rnk only at week_offset 0 (like PEREXEC)
+            SELECT 'CHANGE' AS dim, a.week_offset, a.sql_id, a.plan_hash_value,
+                   a.elapsed_time_delta_us AS metric_value,
+                   CASE WHEN a.week_offset = 0 THEN cr.r_chg END AS rnk
+            FROM   agg a
+            JOIN   chg_ranked cr ON cr.sql_id = a.sql_id
+            WHERE  cr.r_chg <= (SELECT top_n FROM run_params)
         ),
         dims AS (
             SELECT 'ELAPSED' code, 1 ord, 'By elapsed time'         label, 's'      unit, 1e6 divs FROM dual UNION ALL
@@ -286,7 +326,8 @@ BEGIN
             SELECT 'GETS',     3,     'By buffer gets',                    'gets',       1        FROM dual UNION ALL
             SELECT 'PREADS',   4,     'By physical reads',                 'reads',      1        FROM dual UNION ALL
             SELECT 'EXEC',     5,     'By executions',                     'exec',       1        FROM dual UNION ALL
-            SELECT 'PEREXEC',  6,     'By per-exec regression',            's/exec',     1e6      FROM dual
+            SELECT 'PEREXEC',  6,     'By per-exec regression',            's/exec',     1e6      FROM dual UNION ALL
+            SELECT 'CHANGE',   0,     'By change in elapsed time (Current vs the prior mean)', 's', 1e6 FROM dual
         ),
         all_weeks AS (
             SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1
@@ -353,11 +394,13 @@ BEGIN
                ps.sql_id, ps.cur_val, ps.cur_rnk, ps.cur_phv,
                ps.week_vals, ps.week_rnks, ps.week_phvs,
                ts.sql_text_short,
-               ss.parsing_schema
+               ss.parsing_schema,
+               ch.prior_mean AS chg_mu_us
         FROM   dims d
         JOIN   per_sql ps ON ps.dim = d.code
         LEFT JOIN text_snips ts ON ts.sql_id = ps.sql_id
         LEFT JOIN sql_sys   ss ON ss.sql_id = ps.sql_id
+        LEFT JOIN chg_ranked ch ON d.code = 'CHANGE' AND ch.sql_id = ps.sql_id
         ORDER BY d.ord,
             CASE WHEN ps.cur_rnk IS NULL THEN 1 ELSE 0 END,
             ps.cur_rnk NULLS LAST,
@@ -378,9 +421,11 @@ BEGIN
 
             -- C1: open this dim's tabpanel (first one starts visible).
             DBMS_OUTPUT.PUT_LINE('<div class="tabpanel'
-                || CASE WHEN s.dim = 'ELAPSED' THEN ' on' ELSE '' END
+                || CASE WHEN NOT v_panel_on THEN ' on' ELSE '' END
                 || '" data-tabs="topsql" data-t="' || s.dim || '" role="tabpanel"'
                 || ' aria-labelledby="tab-topsql-' || s.dim || '">');
+            v_panel_on := TRUE;
+            IF s.dim = 'CHANGE' THEN v_chg_seen := TRUE; END IF;
             DBMS_OUTPUT.PUT_LINE('<h3>' || s.dim_label || '</h3>');
             DBMS_OUTPUT.PUT_LINE('<div class="topsql-toggle" data-topsql-target="' || s.dim || '">'
                 || '<span>Break down by:</span>'
@@ -503,7 +548,12 @@ BEGIN
                 || fmt_num(s.cur_val/s.dim_div)
             || CASE WHEN s.cur_rnk IS NOT NULL
                     THEN ' <span class="badge info">#' || s.cur_rnk || '</span>' ELSE '' END
-            || '</b></td>';
+            || '</b>'
+            || CASE WHEN s.dim = 'CHANGE' THEN ' '
+                    || CASE WHEN NVL(s.chg_mu_us, 0) = 0
+                            THEN '<span class="d s-plain" title="no row in any prior valid window">new</span>'
+                            ELSE delta_span(s.cur_val, s.chg_mu_us, NULL, 'Y') END END
+            || '</td>';
 
         FOR k IN 1 .. v_weeks_back LOOP
             v_val_s := nth_csv(s.week_vals, k + 1);
@@ -586,6 +636,16 @@ BEGIN
 
     IF v_cur_dim IS NOT NULL THEN
         DBMS_OUTPUT.PUT_LINE('</tbody></table></details></div>');
+    END IF;
+    IF NOT v_chg_seen THEN
+        -- no statement got slower (or no prior valid window): drop the
+        -- empty tab (removed, not hidden: the chrome's Home / arrow keys
+        -- and a shared #...!tab=CHANGE link click every [data-t] of the
+        -- bar) and select the tab of the panel that is open
+        DBMS_OUTPUT.PUT_LINE('<script>(function(){var c=document.getElementById("tab-topsql-CHANGE"),'
+            || 'p=document.querySelector(".tabpanel.on[data-tabs=topsql]");if(!c)return;c.parentNode.removeChild(c);'
+            || 'if(!p)return;var b=document.getElementById("tab-topsql-"+p.getAttribute("data-t"));'
+            || 'if(b){b.classList.add("on");b.setAttribute("aria-selected","true");b.removeAttribute("tabindex");}})();</script>');
     END IF;
     FOR i IN 1 .. v_tl_n LOOP
         DBMS_OUTPUT.PUT_LINE(CASE WHEN i = 1 THEN tl_open('sql') END || v_tl(i)

@@ -960,6 +960,13 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
               && c.previousElementSibling.id === c.getAttribute('data-explains'))) && vis(c)
         && c.querySelector('.wg .r.bars') && c.querySelector('.wg .r.p .pv')
         && c.querySelector('a.ent[href^="#sm-"]') && c.querySelector('a.jump[data-tl]'));
+      // plan 029: SQL Monitor lists flagged statements first; Top SQL opens on Biggest change
+      const sk = [...document.querySelectorAll('#sqlmon-pool > tbody > tr[data-sk]')].map(r => +r.getAttribute('data-sk'));
+      out.smOrder = sk.every((k, i) => i === 0 || sk[i - 1] <= k) &&
+        [...document.querySelectorAll('#sqlmon-pool > tbody > tr[data-sk]')].every(r => (r.nextElementSibling || {}).className === 'sqlmon-detail');
+      const t0 = document.querySelector('.tabs[data-tabs="topsql"] [data-t]:not([hidden])');
+      const tp = t0 && document.querySelector('.tabpanel.on[data-tabs="topsql"]');
+      out.topsqlTab = !!(t0 && tp && t0.classList.contains('on') && t0.getAttribute('data-t') === tp.getAttribute('data-t'));
       // the evidence library: every row has its one-line status, one first /
       // one last edge, a closed row opens and shuts on a click
       const libs = [...document.querySelectorAll('main > section.lib')];
@@ -1114,6 +1121,8 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (!p4.impChips) fail('finding cards: impact chip missing');
     if (p4.zcap.length) fail('Summary glyphs print z past 10: ' + p4.zcap.join(', '));
     if (!p4.planOk) fail('plan-change card incomplete, or neither in #changes-slot nor right under the card it explains');
+    if (!p4.smOrder) fail('SQL Monitor table: flagged statements not first, or a detail row lost its statement');
+    if (!p4.topsqlTab) fail('Top SQL: the selected tab and the open panel disagree');
     if (p4.ioSql === false && /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) fail('demo: the Physical I/O card has no SQL evidence row');
     if (!p4.explainsOk) fail('an explaining plan-change card is not right under its card (dashboard: not in #changes-slot) or lacks its chip');
     if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && p4.explains !== 1) fail('demo: expected the plan card of 7k2m9dx4qp1zb to explain the Physical I/O card, got ' + p4.explains);

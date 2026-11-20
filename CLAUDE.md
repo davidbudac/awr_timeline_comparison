@@ -962,8 +962,9 @@ JS and `_style.sql`; all degrade to "show everything" with JS off:
   `th[data-w]` toggles `.hl` (amber) on every element sharing that offset and
   dispatches `awr:window` (chart sections mark the window). Not the Timeline
   pin.
-- **`.tabs[data-tabs]` / `.tabpanel[data-tabs][data-t]`** — Top SQL's five
-  ranking dimensions; panels holding ECharts resize on activation.
+- **`.tabs[data-tabs]` / `.tabpanel[data-tabs][data-t]`** — Top SQL's
+  ranking dimensions (Biggest change first; the first emitted panel is
+  `on`); panels holding ECharts resize on activation.
 - **`.copy-btn[data-copy]`** — copies the selected element's text; inline
   by default, absolutely positioned only inside `pre`/`.codewrap`. `.tbl-tools`
   CSV/MD toolbars auto-inject above any table with ≥ 4 rows.
@@ -1538,7 +1539,11 @@ and drill line survive. `key3` is parsed with `DEFAULT NULL ON CONVERSION
 ERROR`: `DBA_HIST_REPORTS` holds other components (`perf`, ...) whose key3 is
 not a date, and Oracle may evaluate the `TO_DATE` before the
 `component_name` filter. The pool table is `data-nosort data-notools`
-(each statement row is paired with a detail row right below it). Cost: the
+(each statement row is paired with a detail row right below it).
+`tr[data-sk]` (0 large, 1 moderate, 2 rest) on top-N rows; an inline
+script after the table moves each statement row with its detail row so
+flagged ones come first — the loop and `rnk` stay in Current max elapsed
+order. Cost: the
 section plus R6-R9 scan `dba_hist_reports` (with `XMLTYPE` parsing) seven
 times over the span — fine at thousands of rows, worth a single BULK COLLECT
 if a busy DB ever makes it slow.
