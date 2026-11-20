@@ -129,7 +129,8 @@ function lanes(){
    hides the rows of the scored lanes that are not large / moderate
    (folded ones included); "Biggest change first" sorts the scored lanes
    (waits: by added AAS when every row is in AAS, else by z; headline and
-   load: by z), wait-class rows staying above the events.  A viewer's
+   load: by z; a row new in Current ranks by its Current value, see
+   AWR_WG.changeKey), wait-class rows staying above the events.  A viewer's
    choice, saved on a click only (localStorage awr-tl-rows /
    awr-tl-order), like awr-view.  Counts, pills and ids never change. */
 var TLF={rows:'all',order:'report'};
@@ -152,12 +153,12 @@ function setRows(v,save,boot){
 }
 function setOrder(v,save,boot){
   var tl=doc.getElementById('tl');if(!tl)return;TLF.order=v;
-  var notes=[];
+  var notes=[],valid=wins().map(function(w){return w.v!=='N';});
   scoredLanes().forEach(function(lane){
     var rows=laneRows(lane),box=$('.lrows',lane);if(!rows.length||!box)return;
     rows.forEach(function(r,i){if(!r.hasAttribute('data-ord'))r.setAttribute('data-ord',String(i));});
     var aas=rows.every(function(r){return r.getAttribute('data-unit')==='AAS';});
-    var key=function(r){return W.changeKey(nums(r.getAttribute('data-v')),num(r.getAttribute('data-mu')),num(r.getAttribute('data-sd')),aas);};
+    var key=function(r){return W.changeKey(nums(r.getAttribute('data-v')),num(r.getAttribute('data-mu')),num(r.getAttribute('data-sd')),aas,valid);};
     var grp=function(r){return /^tl-fr-w-/.test(r.id)?0:1;},ord=function(r){return +r.getAttribute('data-ord');};
     rows.sort(v==='change'?function(a,b){var g=grp(a)-grp(b);if(g)return g;var ka=key(a),kb=key(b);
       if(ka==null&&kb!=null)return 1;if(kb==null&&ka!=null)return -1;if(ka!==kb&&ka!=null)return kb-ka;return ord(a)-ord(b);}

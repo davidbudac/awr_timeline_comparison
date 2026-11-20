@@ -1691,9 +1691,20 @@ W.rowScale=function(vals,zTop,tl){
 };
 /* how much a Timeline row changed (plan 031): Current minus the prior mean
    when aas (every row of the lane is in AAS, so the numbers add up), else
-   |z| with sigma floored at 2% of the mean; null when it cannot be told */
-W.changeKey=function(vals,mu,sd,aas){
-  var c=vals.length?vals[vals.length-1]:null;if(c==null||mu==null)return null;
+   |z| with sigma floored at 2% of the mean; null when it cannot be told.
+   A row new in the Current window has no prior mean (data-mu empty):
+   in an AAS lane its VALID prior windows without a value count as 0 for
+   this sort only (owner decision 2026-11-20), so the key is Current
+   minus the mean of the valid priors; valid[i] false = a skipped window,
+   which stays unknown (never 0).  No valid prior window, no valid array
+   of the row's length, or a z lane: null (sorted last), as before. */
+W.changeKey=function(vals,mu,sd,aas,valid){
+  var n=vals.length,c=n?vals[n-1]:null;if(c==null)return null;
+  if(mu==null){
+    if(!aas||!valid||valid.length!==n)return null;
+    var s=0,k=0;for(var i=0;i<n-1;i++)if(valid[i]!==false){s+=vals[i]==null?0:vals[i];k++;}
+    return k?c-s/k:null;
+  }
   if(aas)return c-mu;
   var den=Math.max(sd||0,0.02*Math.abs(mu));return den>0?Math.abs((c-mu)/den):null;
 };
@@ -1940,7 +1951,8 @@ function lanes(){
    hides the rows of the scored lanes that are not large / moderate
    (folded ones included); "Biggest change first" sorts the scored lanes
    (waits: by added AAS when every row is in AAS, else by z; headline and
-   load: by z), wait-class rows staying above the events.  A viewer's
+   load: by z; a row new in Current ranks by its Current value, see
+   AWR_WG.changeKey), wait-class rows staying above the events.  A viewer's
    choice, saved on a click only (localStorage awr-tl-rows /
    awr-tl-order), like awr-view.  Counts, pills and ids never change. */
 var TLF={rows:'all',order:'report'};
@@ -1963,12 +1975,12 @@ function setRows(v,save,boot){
 }
 function setOrder(v,save,boot){
   var tl=doc.getElementById('tl');if(!tl)return;TLF.order=v;
-  var notes=[];
+  var notes=[],valid=wins().map(function(w){return w.v!=='N';});
   scoredLanes().forEach(function(lane){
     var rows=laneRows(lane),box=$('.lrows',lane);if(!rows.length||!box)return;
     rows.forEach(function(r,i){if(!r.hasAttribute('data-ord'))r.setAttribute('data-ord',String(i));});
     var aas=rows.every(function(r){return r.getAttribute('data-unit')==='AAS';});
-    var key=function(r){return W.changeKey(nums(r.getAttribute('data-v')),num(r.getAttribute('data-mu')),num(r.getAttribute('data-sd')),aas);};
+    var key=function(r){return W.changeKey(nums(r.getAttribute('data-v')),num(r.getAttribute('data-mu')),num(r.getAttribute('data-sd')),aas,valid);};
     var grp=function(r){return /^tl-fr-w-/.test(r.id)?0:1;},ord=function(r){return +r.getAttribute('data-ord');};
     rows.sort(v==='change'?function(a,b){var g=grp(a)-grp(b);if(g)return g;var ka=key(a),kb=key(b);
       if(ka==null&&kb!=null)return 1;if(kb==null&&ka!=null)return -1;if(ka!==kb&&ka!=null)return kb-ka;return ord(a)-ord(b);}

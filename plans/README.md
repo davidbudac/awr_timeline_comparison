@@ -237,6 +237,12 @@ these supersede the 2026-11-19 answers where they overlap):
   with the cards without a time measure (large before moderate, then |z|).
   The chip still shows a smaller rise; only the order changes. Done in
   fix group G1.
+- 031: in the Timeline's **Biggest change first** order, a row new in the
+  Current window (no prior mean) ranks by its **Current value**: in an AAS
+  lane its valid prior windows without a value count as 0 for the sort
+  only; skipped windows stay unknown, a row with no valid prior window
+  still sorts last. Scoring, counts and the gutter are unchanged. Done in
+  fix group G2.
 
 
 Each plan records its default, so an executor never waits on these. Decide

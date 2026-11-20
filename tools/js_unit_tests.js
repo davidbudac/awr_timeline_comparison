@@ -111,6 +111,27 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
     assert.strictEqual(W.changeKey([0, 0, 0, 1], 0, 0, false), null);
     assert.strictEqual(W.changeKey([1, 2, 3, 4], null, null, false), null);
   });
+  /* owner decision 2026-11-20: a row new in the Current window (no prior
+     mean) in an AAS lane ranks by its Current value -- its valid prior
+     windows count as 0 for the sort, skipped ones stay unknown */
+  test('changeKey: a new row in an AAS lane', () => {
+    const V = [true, true, true, true, true, true, true, true, true];
+    const ARCH = [null, null, null, null, null, null, null, null, 8.598742];
+    assert.strictEqual(W.changeKey(ARCH, null, null, true, V), 8.598742);
+    // some skipped: left out of the mean, never 0
+    assert.strictEqual(W.changeKey([null, 3, null, 6], null, null, true, [false, true, true, true]), 4.5);
+    assert.strictEqual(W.changeKey([null, null, null, 6], null, null, true, [false, true, false, true]), 6);
+    // no valid prior window: unknown (sorted last)
+    assert.strictEqual(W.changeKey([null, null, null, 8.6], null, null, true, [false, false, false, true]), null);
+    assert.strictEqual(W.changeKey([8.6], null, null, true, [true]), null);
+    // no Current value, no validity of the row's length, a z lane: as before
+    assert.strictEqual(W.changeKey([null, null, null, null], null, null, true, [true, true, true, true]), null);
+    assert.strictEqual(W.changeKey(ARCH, null, null, true), null);
+    assert.strictEqual(W.changeKey(ARCH, null, null, true, [true, true]), null);
+    assert.strictEqual(W.changeKey(ARCH, null, null, false, V), null);
+    // a known prior mean keeps Current minus the mean
+    assert.strictEqual(W.changeKey([null, 1, 1, 4], 1, 0, true, [false, true, true, true]), 3);
+  });
 }
 
 console.log(passed + ' tests passed');

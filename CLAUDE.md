@@ -563,7 +563,12 @@ the design script moves those) holds "Rows: All / Flagged only"
 `data-kind="scored"` lanes, folded ones included; `.lane.nofl` shows its
 `.r.nfl` note "No large or moderate row here") and "Order: Report order /
 Biggest change first" (`AWR_WG.changeKey`: added AAS when every row of the
-lane has `data-unit="AAS"`, else |z|; wait-class rows `tl-fr-w-*` stay
+lane has `data-unit="AAS"`, else |z|; a row with no prior mean -- empty
+`data-mu`, new in the Current window -- in an AAS lane ranks by Current
+minus the mean of its VALID prior windows, a missing value there counting
+0 for the sort only (owner decision 2026-11-20: a new event is often the
+story of the hour); skipped windows stay unknown, no valid prior window or
+a z lane sorts it last; wait-class rows `tl-fr-w-*` stay
 above the events; the lane is unfolded while sorted, `data-ord` keeps the
 report order). Defaults are today's behaviour; choices are saved on click
 only (localStorage `awr-tl-rows`, `awr-tl-order`); `AWR_TL.reveal` switches

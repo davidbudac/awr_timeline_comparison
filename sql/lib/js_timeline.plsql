@@ -195,7 +195,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('   hides the rows of the scored lanes that are not large / moderate');
     DBMS_OUTPUT.PUT_LINE('   (folded ones included); "Biggest change first" sorts the scored lanes');
     DBMS_OUTPUT.PUT_LINE('   (waits: by added AAS when every row is in AAS, else by z; headline and');
-    DBMS_OUTPUT.PUT_LINE('   load: by z), wait-class rows staying above the events.  A viewer''s');
+    DBMS_OUTPUT.PUT_LINE('   load: by z; a row new in Current ranks by its Current value, see');
+    DBMS_OUTPUT.PUT_LINE('   AWR_WG.changeKey), wait-class rows staying above the events.  A viewer''s');
     DBMS_OUTPUT.PUT_LINE('   choice, saved on a click only (localStorage awr-tl-rows /');
     DBMS_OUTPUT.PUT_LINE('   awr-tl-order), like awr-view.  Counts, pills and ids never change. */');
     DBMS_OUTPUT.PUT_LINE('var TLF={rows:''all'',order:''report''};');
@@ -218,12 +219,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function setOrder(v,save,boot){');
     DBMS_OUTPUT.PUT_LINE('  var tl=doc.getElementById(''tl'');if(!tl)return;TLF.order=v;');
-    DBMS_OUTPUT.PUT_LINE('  var notes=[];');
+    DBMS_OUTPUT.PUT_LINE('  var notes=[],valid=wins().map(function(w){return w.v!==''N'';});');
     DBMS_OUTPUT.PUT_LINE('  scoredLanes().forEach(function(lane){');
     DBMS_OUTPUT.PUT_LINE('    var rows=laneRows(lane),box=$(''.lrows'',lane);if(!rows.length||!box)return;');
     DBMS_OUTPUT.PUT_LINE('    rows.forEach(function(r,i){if(!r.hasAttribute(''data-ord''))r.setAttribute(''data-ord'',String(i));});');
     DBMS_OUTPUT.PUT_LINE('    var aas=rows.every(function(r){return r.getAttribute(''data-unit'')===''AAS'';});');
-    DBMS_OUTPUT.PUT_LINE('    var key=function(r){return W.changeKey(nums(r.getAttribute(''data-v'')),num(r.getAttribute(''data-mu'')),num(r.getAttribute(''data-sd'')),aas);};');
+    DBMS_OUTPUT.PUT_LINE('    var key=function(r){return W.changeKey(nums(r.getAttribute(''data-v'')),num(r.getAttribute(''data-mu'')),num(r.getAttribute(''data-sd'')),aas,valid);};');
     DBMS_OUTPUT.PUT_LINE('    var grp=function(r){return /^tl-fr-w-/.test(r.id)?0:1;},ord=function(r){return +r.getAttribute(''data-ord'');};');
     DBMS_OUTPUT.PUT_LINE('    rows.sort(v===''change''?function(a,b){var g=grp(a)-grp(b);if(g)return g;var ka=key(a),kb=key(b);');
     DBMS_OUTPUT.PUT_LINE('      if(ka==null&&kb!=null)return 1;if(kb==null&&ka!=null)return -1;if(ka!==kb&&ka!=null)return kb-ka;return ord(a)-ord(b);}');

@@ -139,9 +139,20 @@ W.rowScale=function(vals,zTop,tl){
 };
 /* how much a Timeline row changed (plan 031): Current minus the prior mean
    when aas (every row of the lane is in AAS, so the numbers add up), else
-   |z| with sigma floored at 2% of the mean; null when it cannot be told */
-W.changeKey=function(vals,mu,sd,aas){
-  var c=vals.length?vals[vals.length-1]:null;if(c==null||mu==null)return null;
+   |z| with sigma floored at 2% of the mean; null when it cannot be told.
+   A row new in the Current window has no prior mean (data-mu empty):
+   in an AAS lane its VALID prior windows without a value count as 0 for
+   this sort only (owner decision 2026-11-20), so the key is Current
+   minus the mean of the valid priors; valid[i] false = a skipped window,
+   which stays unknown (never 0).  No valid prior window, no valid array
+   of the row's length, or a z lane: null (sorted last), as before. */
+W.changeKey=function(vals,mu,sd,aas,valid){
+  var n=vals.length,c=n?vals[n-1]:null;if(c==null)return null;
+  if(mu==null){
+    if(!aas||!valid||valid.length!==n)return null;
+    var s=0,k=0;for(var i=0;i<n-1;i++)if(valid[i]!==false){s+=vals[i]==null?0:vals[i];k++;}
+    return k?c-s/k:null;
+  }
   if(aas)return c-mu;
   var den=Math.max(sd||0,0.02*Math.abs(mu));return den>0?Math.abs((c-mu)/den):null;
 };

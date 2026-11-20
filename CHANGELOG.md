@@ -197,7 +197,10 @@ release bumps `awr_version`).
   scales to the prior windows and draws the Current bar cut, with its value
   above it. A toolbar above the grid shows only flagged rows or sorts the
   headline and wait lanes by the size of their change (added AAS for
-  waits); both are remembered per browser.
+  waits; an event new in the Current window, with no prior mean, ranks by
+  its Current value -- on a test-DB hour "log file switch (archiving
+  needed)", 8.6 AAS and the story of that hour, had sorted last; skipped
+  windows never count as 0); both are remembered per browser.
 - **"Checked and normal" in one line.** In the Summary view the normal /
   too small / improved metrics fold into one summary line (counts) that
   opens in place; it stays open when the report has no finding.

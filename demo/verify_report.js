@@ -1046,10 +1046,37 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         const all = [...waits.querySelectorAll('.lrows > .r.bars')], aas = all.every(r => r.getAttribute('data-unit') === 'AAS');
         const nums = s => String(s || '').split(',').map(x => x === '' ? null : +x);
         const ev = all.filter(r => !/^tl-fr-w-/.test(r.id));
-        // an empty data-mu / data-sd is "no prior mean" (null, sorted last), not 0
+        // the sort key, computed here, not by the report's changeKey:
+        // Current minus the prior mean in an AAS lane, else |z| (sigma
+        // floored at 2% of the mean).  An empty data-mu / data-sd is "no
+        // prior mean", not 0: in an AAS lane such a row (new in Current)
+        // ranks by Current minus the mean of its VALID prior windows, a
+        // missing value there counting 0 and a skipped window left out
+        // (owner decision 2026-11-20); no valid prior window or a z lane:
+        // null, sorted last.
         const num1 = s => (s == null || s === '') ? null : +s;
-        const k = ev.map(r => window.AWR_WG.changeKey(nums(r.getAttribute('data-v')), num1(r.getAttribute('data-mu')), num1(r.getAttribute('data-sd')), aas));
-        out.sorted = k.every((x, i) => i === 0 || x == null || k[i - 1] == null || k[i - 1] >= x) ? 'ok' : 'FAIL ' + JSON.stringify(k);
+        const valid = ((window.AWR_WIN || {}).w || []).map(w => w.v !== 'N');
+        const key = r => {
+          const v = nums(r.getAttribute('data-v')), n = v.length, c = n ? v[n - 1] : null;
+          const mu = num1(r.getAttribute('data-mu')), sd = num1(r.getAttribute('data-sd'));
+          if (c == null) return null;
+          if (mu == null) {
+            if (!aas || valid.length !== n) return null;
+            const p = []; for (let i = 0; i < n - 1; i++) if (valid[i]) p.push(v[i] == null ? 0 : v[i]);
+            return p.length ? c - p.reduce((s, x) => s + x, 0) / p.length : null;
+          }
+          if (aas) return c - mu;
+          const den = Math.max(sd || 0, 0.02 * Math.abs(mu));
+          return den > 0 ? Math.abs((c - mu) / den) : null;
+        };
+        const k = ev.map(key);
+        const k2 = ev.map(r => window.AWR_WG.changeKey(nums(r.getAttribute('data-v')), num1(r.getAttribute('data-mu')), num1(r.getAttribute('data-sd')), aas, valid));
+        const same = (a, b) => (a == null && b == null) || (a != null && b != null && Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a)));
+        const n0 = k.findIndex(x => x == null), known = n0 < 0 ? k : k.slice(0, n0);
+        out.sorted = !k.every((x, i) => same(x, k2[i])) ? 'FAIL key: page ' + JSON.stringify(k2) + ' vs ' + JSON.stringify(k)
+          : known.every((x, i) => i === 0 || known[i - 1] >= x) && (n0 < 0 || k.slice(n0).every(x => x == null)) ? 'ok'
+          : 'FAIL ' + JSON.stringify(k);
+        out.newRows = ev.filter(r => num1(r.getAttribute('data-mu')) == null && key(r) != null).map(r => r.id);
         const fe = all.findIndex(r => !/^tl-fr-w-/.test(r.id));
         out.classesFirst = fe < 0 || all.slice(fe).every(r => !/^tl-fr-w-/.test(r.id));
         document.querySelector('#tl-tools button[data-tlo="report"]').click(); await wait(80);
