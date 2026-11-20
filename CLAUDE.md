@@ -347,7 +347,7 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
 | Triage list `#triage` | 07 | one `div.tri-row[data-card]` per card, in card order; impact cell filled by 07's inline script from the card's `data-impact` / `data-share` (plan 020); empty `span.tri-tags` (plan 027) |
 | Finding cards `#findings div.cards` | 07 | one `article.fc` per card group (below); header band glyph, big value, window bars, ≤4 evidence rows, related-metrics fold, footer `a.jump[data-tl]` "Timeline →" |
 | `section#s-changes[hidden]` | 07 (`#changes-slot`) | 18's plan cards then 12's config card move in and unhide it |
-| `section#s-normal` | 07 | "Checked and normal" `.ngrid` (≤18 `.nr`), "Moved, too small to matter", "Improved" |
+| `section#s-normal` | 07 | "Checked and normal" `.ngrid` (≤18 `.nr`), "Moved, too small to matter", "Improved"; body folded in `details.calm-fold` (summary line: the three counts; closed when there is a finding card); `reveal()` opens it for `#s-normal` (plan 032) |
 | Evidence library `#s-lib` + `section.lib` | 07 heading, sections | see below |
 
 **Folded cards (plan 025):** every card but the first one that is not DB
@@ -873,7 +873,9 @@ designs) and the server's env whitelist.
   (the palette lists them by display name); the Trend cell is the shared
   micro strip, else (past 91 windows, where it draws nothing) the
   design's own mini bars; nothing moved -> 07's "No finding" note goes
-  into the Moved tab; Normal = `#s-normal` moved in; Improved
+  into the Moved tab; Normal = `#s-normal` moved in (`findTable()`
+  opens its `details.calm-fold` and `css_design.css` hides the fold's
+  summary line: the tab is the fold, plan 032); Improved
   = its `.note.improved`; `findTable()` calls `window.AWR_fcOpen(card)`
   on every card it moves into a row -- the row is the fold -- and
   `css_design.css` hides 07's `#triage` list, plan 025;

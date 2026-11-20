@@ -310,6 +310,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.tabs.dtabs .n{color:var(--muted);font-weight:400;margin-left:2px}');
     DBMS_OUTPUT.PUT_LINE('.dpanel #s-normal{margin:0;padding:0}');
     DBMS_OUTPUT.PUT_LINE('.dpanel #s-normal > h2{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.dpanel #s-normal .calm-fold > summary{display:none}');
     DBMS_OUTPUT.PUT_LINE('.dpanel #s-normal .calm{padding:var(--s2) 0;border:0}');
     DBMS_OUTPUT.PUT_LINE('.dpanel #s-normal .ngrid{grid-template-columns:repeat(2,minmax(0,1fr))}');
     DBMS_OUTPUT.PUT_LINE('.dpanel .note.improved{border:0;padding:var(--s2) 0}');

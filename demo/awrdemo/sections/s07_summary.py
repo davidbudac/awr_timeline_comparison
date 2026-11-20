@@ -611,6 +611,27 @@ def emit(w) -> str:
                    'Nothing could be scored as normal: a metric needs at least 3 valid prior windows.'
                    '</p></div>')
     else:
+        # plan 032: count the three groups first, so the folded summary line
+        # can name them; they add up to `normal`
+        cg = cs = ci = 0
+        for f in ordered:
+            if f.canonical != "Y":
+                continue
+            if (f.bucket == "typical" and f.az <= 2) or f.bucket == "flat baseline":
+                cg += 1
+            elif (f.bucket == "typical" and f.az > 2) or f.bucket == "noted":
+                cs += 1
+            elif f.bucket == "improved":
+                ci += 1
+        # plan 032: the body folds to one line in the Summary view; open when
+        # there is no finding card (then this section is the story)
+        out.append('<details class="calm-fold"' + (' open' if nc == 0 else '') + '>'
+                   '<summary class="calm-sum"><span><b>' + str(cg) + '</b> metric'
+                   + ('' if cg == 1 else 's') + ' within the normal range</span>'
+                   '<span>&middot; <b>' + str(cs) + '</b> moved too little to matter</span>'
+                   '<span>&middot; '
+                   + ('nothing improved materially' if ci == 0 else '<b>' + str(ci) + '</b> improved')
+                   + '</span></summary>')
         out.append('<div class="panel calm"><div class="ngrid">')
         grid, more, first = 0, 0, None
         for pas in (1, 2):
@@ -654,6 +675,7 @@ def emit(w) -> str:
                    + ('<p>Nothing moved materially in the good direction.</p>' if ni == 0 else imp)
                    + ('<p class="calm-more">and ' + str(ni - 6) + ' more</p>' if ni > 6 else '')
                    + '</div></div>')
+        out.append('</details>')
     out.append('</section>')
     out.append('<section id="s-lib" class="vw in-s vhead"><h2>Evidence library'
                '<small class="h2sub">Every other section, one line each; open a row to read it here</small></h2></section>')

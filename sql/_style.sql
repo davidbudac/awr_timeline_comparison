@@ -1442,6 +1442,14 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.calm-more{margin:var(--s3) 0 0;font-size:12.5px;color:var(--muted)}');
     DBMS_OUTPUT.PUT_LINE('.calm-more a{color:var(--ink-soft);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}');
     DBMS_OUTPUT.PUT_LINE('.calm-empty{margin:0;padding:var(--s4) 0;font-size:14px;color:var(--ink-soft)}');
+    -- plan 032: "Checked and normal" folded to one summary line (07)
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold > summary{list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:var(--s4) var(--s6);background:var(--panel);border:1px solid var(--hairline);border-radius:10px;font-size:14px;color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold > summary::-webkit-details-marker{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold > summary::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .15s;margin:0 6px 0 2px}');
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold[open] > summary::before{transform:rotate(45deg)}');
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold > summary:hover{color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold > summary b{color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold[open] > summary{margin-bottom:var(--s4)}');
     DBMS_OUTPUT.PUT_LINE('.ent-x{font:inherit}');
     DBMS_OUTPUT.PUT_LINE('nav.toc a[hidden]{display:none}');
     DBMS_OUTPUT.PUT_LINE('.dotk.typical{border:1.5px solid var(--muted)} .dotk.improved{border:2px solid var(--imp)}');

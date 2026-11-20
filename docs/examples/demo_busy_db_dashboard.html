@@ -611,6 +611,13 @@ body.js-wg .wg:not(.allv) .c:not(.cur) .v:not(.nil){opacity:0}
 .calm-more{margin:var(--s3) 0 0;font-size:12.5px;color:var(--muted)}
 .calm-more a{color:var(--ink-soft);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}
 .calm-empty{margin:0;padding:var(--s4) 0;font-size:14px;color:var(--ink-soft)}
+#s-normal .calm-fold > summary{list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:var(--s4) var(--s6);background:var(--panel);border:1px solid var(--hairline);border-radius:10px;font-size:14px;color:var(--ink-soft)}
+#s-normal .calm-fold > summary::-webkit-details-marker{display:none}
+#s-normal .calm-fold > summary::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .15s;margin:0 6px 0 2px}
+#s-normal .calm-fold[open] > summary::before{transform:rotate(45deg)}
+#s-normal .calm-fold > summary:hover{color:var(--ink)}
+#s-normal .calm-fold > summary b{color:var(--ink);font-weight:600}
+#s-normal .calm-fold[open] > summary{margin-bottom:var(--s4)}
 .ent-x{font:inherit}
 nav.toc a[hidden]{display:none}
 .dotk.typical{border:1.5px solid var(--muted)} .dotk.improved{border:2px solid var(--imp)}
@@ -1692,6 +1699,7 @@ body.d-dash .ashx .seg.axlayout button{line-height:20px}
 .tabs.dtabs .n{color:var(--muted);font-weight:400;margin-left:2px}
 .dpanel #s-normal{margin:0;padding:0}
 .dpanel #s-normal > h2{display:none}
+.dpanel #s-normal .calm-fold > summary{display:none}
 .dpanel #s-normal .calm{padding:var(--s2) 0;border:0}
 .dpanel #s-normal .ngrid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .dpanel .note.improved{border:0;padding:var(--s2) 0}
@@ -3566,6 +3574,7 @@ function reveal(el){
   var dt=closest(el,"details"); while(dt){ dt.open=true; dt=dt.parentNode?closest(dt.parentNode,"details"):null; }
   if(el.tagName==="DETAILS") el.open=true;
   if(el.id==="about"){ var ab=el.querySelector("details"); if(ab) ab.open=true; }
+  if(el.id==="s-normal"){ var cf=el.querySelector("details.calm-fold"); if(cf) cf.open=true; }
   if(el.hidden&&el.tagName==="TR") el.hidden=false;
   if(el.classList.contains("sql-row")&&window.AWR_openSqlRow) window.AWR_openSqlRow(el);
 }
@@ -4337,6 +4346,7 @@ d.querySelectorAll("#findings .cards > article.fc[data-fold]").forEach(function(
 </section>
 <section id="s-changes" class="vw in-s sumsec" hidden><h2>What changed around it<small class="h2sub">Plan and configuration changes under the release flags</small></h2><div class="cards" id="changes-slot"></div></section>
 <section id="s-normal" class="vw in-s sumsec"><h2>Checked and normal<span class="meta"><span><i class="dotk typical"></i>30 normal</span></span><small class="h2sub">Every other scored metric, against the same prior windows</small></h2>
+<details class="calm-fold"><summary class="calm-sum"><span><b>25</b> metrics within the normal range</span><span>&middot; <b>5</b> moved too little to matter</span><span>&middot; nothing improved materially</span></summary>
 <div class="panel calm"><div class="ngrid">
 <div class="nr"><div class="l" title="DB CPU"><a class="ent" href="#fr-l-db-cpu" data-ent="metric">DB CPU</a><small>normal 5.270&ndash;9.182 AAS</small></div><span class="bd s-typical sm" style="--x:0.449" role="img" aria-label="normal, z +1.4&sigma;"><i></i></span><div class="vv">8.584 AAS<small><span class="d s-typical">&#9650; 18.8%</span></small></div></div>
 <div class="nr"><div class="l" title="Host CPU Utilization (%)"><a class="ent" href="#fr-m-host-cpu-utilization" data-ent="metric">Host CPU</a><small>normal 46.18&ndash;76.01 %</small></div><span class="bd s-typical sm" style="--x:0.449" role="img" aria-label="normal, z +1.4&sigma;"><i></i></span><div class="vv">71.45 %<small><span class="d s-typical">&#9650; 16.9%</span></small></div></div>
@@ -4359,6 +4369,7 @@ d.querySelectorAll("#findings .cards > article.fc[data-fold]").forEach(function(
 </div><p class="calm-more">and 7 more normal rows in the <a href="#findings-load">Findings tables</a> (All sections).</p></div>
 <div class="calm-notes"><div class="panel note"><h3 title="Past a z threshold but under the metric's materiality floor (sql/lib/metric_policy.plsql), or an informational counter">Moved, too small to matter</h3><div class="nr"><div class="l" title="Average Synchronous Single-Block Read Latency"><a class="ent" href="#fr-m-average-synchronous-single-block-read-latency" data-ent="metric">Single-block read latency</a><small>normal 0.4509&ndash;0.5122 ms</small></div><span class="bd s-typical sm" style="--x:0.993" role="img" aria-label="normal, z +7.9&sigma;"><i></i></span><div class="vv">0.603 ms<small><span class="d s-typical">&#9650; 25.2%</span></small></div></div><div class="nr"><div class="l" title="Wait class: Scheduler"><a class="ent" href="#fr-w-wait-class-scheduler" data-ent="metric">Scheduler waits</a><small>normal 0.02265&ndash;0.05121 AAS</small></div><span class="bd s-typical sm" style="--x:0.674" role="img" aria-label="normal, z +4.1&sigma;"><i></i></span><div class="vv">0.06615 AAS<small><span class="d s-typical">&#9650; 79.1%</span></small></div></div><div class="nr"><div class="l" title="Wait class: System I/O"><a class="ent" href="#fr-w-wait-class-system-i-o" data-ent="metric">System I/O waits</a><small>normal 0.03146&ndash;0.07943 AAS</small></div><span class="bd s-typical sm" style="--x:0.629" role="img" aria-label="normal, z +3.5&sigma;"><i></i></span><div class="vv">0.09801 AAS<small><span class="d s-typical">&#9650; 76.8%</span></small></div></div><div class="nr"><div class="l" title="Wait class: Other"><a class="ent" href="#fr-w-wait-class-other" data-ent="metric">Other waits</a><small>normal 0.0468&ndash;0.08754 AAS</small></div><span class="bd s-typical sm" style="--x:0.594" role="img" aria-label="normal, z +3.1&sigma;"><i></i></span><div class="vv">0.09899 AAS<small><span class="d s-typical">&#9650; 47.4%</span></small></div></div><div class="nr"><div class="l" title="Wait class: Configuration"><a class="ent" href="#fr-w-wait-class-configuration" data-ent="metric">Configuration waits</a><small>normal 0.02587&ndash;0.0597 AAS</small></div><span class="bd s-typical sm" style="--x:0.562" role="img" aria-label="normal, z +2.7&sigma;"><i></i></span><div class="vv">0.06598 AAS<small><span class="d s-typical">&#9650; 54.2%</span></small></div></div></div>
 <div class="panel note improved"><h3 title="A material move in the good direction: not a finding, not counted">Improved: none material</h3><p>Nothing moved materially in the good direction.</p></div></div>
+</details>
 </section>
 <section id="s-lib" class="vw in-s vhead"><h2>Evidence library<small class="h2sub">Every other section, one line each; open a row to read it here</small></h2></section>
 <template class="tl-src" data-lane="lane-metrics"><div class="r bars" id="tl-fr-l-db-time" data-v="10.11082,9.923581,12.7444,10.02478,10.24647,10.33014,10.12147,10.22807,13.06626,13.26175,12.76245,13.08074,20.35463" data-mu="11.32508" data-sd="1.473402" data-sev="large" data-name="DB time" data-unit="AAS" role="row"><div class="l" role="rowheader" title="DB time"><span class="nm"><a class="ent" href="#fr-l-db-time" data-ent="metric">DB time</a></span><span class="sub">AAS</span></div><div class="c" data-w="12"></div><div class="c" data-w="11"></div><div class="c" data-w="10"></div><div class="c" data-w="9"></div><div class="c" data-w="8"></div><div class="c" data-w="7"></div><div class="c" data-w="6"></div><div class="c" data-w="5"></div><div class="c" data-w="4"></div><div class="c" data-w="3"></div><div class="c" data-w="2"></div><div class="c" data-w="1"></div><div class="c cur" data-w="0"><span class="v">20.35</span></div><div class="g" role="cell"><div class="gl1"><span class="d d1 s-large">&#9650; 79.7%</span><span class="z">z +6.1&sigma;</span></div><span class="bd s-large sm" style="--x:0.844" role="img" aria-label="large finding, z +6.1&sigma;"><i></i></span></div></div>
@@ -54244,7 +54255,9 @@ function findTable(){
   var pM=tab("moved","Moved",moved,true);
   if(moved)pM.appendChild(tbl);else if(calm)pM.appendChild(calm);else{var no=mk("p","dempty",pM);no.textContent="No scored metric moved beyond its normal range.";}
   var sn=$("#s-normal"),imp=sn&&$(".panel.note.improved",sn);
-  if(sn){var nn=(txt($("h2 .meta",sn)).match(/\d+/)||[null])[0];var pN=tab("normal","Normal",nn,false);pN.appendChild(sn);}
+  if(sn){var nn=(txt($("h2 .meta",sn)).match(/\d+/)||[null])[0];var pN=tab("normal","Normal",nn,false);pN.appendChild(sn);
+    /* plan 032: the tab is the fold, so the folded body opens */
+    var cf=$("details.calm-fold",sn);if(cf)cf.open=true;}
   if(imp){var pI=tab("improved","Improved",$$(".nr",imp).length,false);pI.appendChild(imp);}
   /* What changed around it: the plan / config cards + the releases */
   var side=mk("aside","dside",grid);side.setAttribute("aria-label","What changed around it");

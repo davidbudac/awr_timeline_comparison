@@ -1280,6 +1280,9 @@ BEGIN
         v_imp   VARCHAR2(32767);
         v_ni    PLS_INTEGER := 0;
         v_first VARCHAR2(16);
+        v_cg    PLS_INTEGER := 0;   -- plan 032: rows in the calm grid (typical |z| <= 2, flat)
+        v_cs    PLS_INTEGER := 0;   -- plan 032: moved, too small to matter (typical |z| > 2, noted)
+        v_ci    PLS_INTEGER := 0;   -- plan 032: improved
     BEGIN
         DBMS_OUTPUT.PUT_LINE('<section id="s-normal" class="vw in-s sumsec"><h2>Checked and normal'
             || '<span class="meta"><span><i class="dotk typical"></i>' || v_normal || ' normal</span></span>'
@@ -1289,6 +1292,33 @@ BEGIN
                 || 'Nothing could be scored as normal: a metric needs at least 3 valid prior windows.'
                 || '</p></div>');
         ELSE
+            -- plan 032: count the three groups first, so the folded summary
+            -- line can name them; they add up to v_normal
+            FOR p IN 1 .. v_table_idx.COUNT LOOP
+                f := v_findings(v_table_idx(p));
+                IF f.canonical = 'Y' THEN
+                    IF (f.change_bucket = 'typical' AND ABS(NVL(f.z_score, 0)) <= 2)
+                       OR f.change_bucket = 'flat baseline' THEN
+                        v_cg := v_cg + 1;
+                    ELSIF (f.change_bucket = 'typical' AND ABS(NVL(f.z_score, 0)) > 2)
+                          OR f.change_bucket = 'noted' THEN
+                        v_cs := v_cs + 1;
+                    ELSIF f.change_bucket = 'improved' THEN
+                        v_ci := v_ci + 1;
+                    END IF;
+                END IF;
+            END LOOP;
+            -- plan 032: the body folds to one line in the Summary view; open
+            -- when there is no finding card (then this section is the story)
+            DBMS_OUTPUT.PUT_LINE('<details class="calm-fold"'
+                || CASE WHEN v_order.COUNT = 0 THEN ' open' END || '>'
+                || '<summary class="calm-sum"><span><b>' || v_cg || '</b> metric'
+                || CASE WHEN v_cg = 1 THEN '' ELSE 's' END || ' within the normal range</span>'
+                || '<span>&middot; <b>' || v_cs || '</b> moved too little to matter</span>'
+                || '<span>&middot; '
+                || CASE WHEN v_ci = 0 THEN 'nothing improved materially'
+                        ELSE '<b>' || v_ci || '</b> improved' END
+                || '</span></summary>');
             DBMS_OUTPUT.PUT_LINE('<div class="panel calm"><div class="ngrid">');
             -- the calm grid: typical within 2 sigma (loudest first), then flat baselines
             FOR pass IN 1 .. 2 LOOP
@@ -1341,6 +1371,7 @@ BEGIN
                         ELSE v_imp END
                 || CASE WHEN v_ni > 6 THEN '<p class="calm-more">and ' || (v_ni - 6) || ' more</p>' END
                 || '</div></div>');
+            DBMS_OUTPUT.PUT_LINE('</details>');
         END IF;
         DBMS_OUTPUT.PUT_LINE('</section>');
     END;

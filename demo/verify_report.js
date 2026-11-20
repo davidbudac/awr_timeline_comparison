@@ -84,7 +84,8 @@
  *     values on hover only and one release label; plan 026: the Physical
  *     I/O card's SQL row; a plan-change card that explains a card sits
  *     right under it (dashboard: in What changed around it, beside the
- *     findings);
+ *     findings); plan 032: Checked and normal starts folded (one line) and
+ *     a jump to it opens it; in the dashboard its Normal tab shows it open;
  *   - pattern tags (plan 027): every chip has text and a title, none on a
  *     plan / config card, a triage row and a dashboard findings row show
  *     their card's chips, the demo Physical I/O card reads "jump after
@@ -1181,6 +1182,16 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         const b = [...r.querySelectorAll(':scope > summary .dtags .ptag')].map(t => t.textContent).join('|');
         return a !== b;
       }).map(r => r.id);
+      // plan 032: "Checked and normal" folds to one summary line; a jump to
+      // #s-normal (pill, rail) opens it.  The dashboard design shows it in
+      // its Normal tab with the fold open (js_design).
+      const sn = document.getElementById('s-normal'), cf = sn ? sn.querySelector('details.calm-fold') : null;
+      out.calm = !sn ? 'none' : !cf ? 'nofold' : (cf.open ? 'open' : 'closed');
+      if (cf && !cf.open) {
+        window.AWR_goTo(sn, false, false); await wait(250);
+        out.calmReveal = cf.open && vis(sn.querySelector('.ngrid')) ? 'ok' : 'FAIL';
+        cf.open = false;
+      } else out.calmReveal = 'skip';
       // All sections: every library section shows in full, row state or not
       window.AWR_setView('all', false); await wait(250);
       out.allFull = libs.filter(x => { const t = x.querySelector('table, .chart-wrap'); return t && !vis(t); }).map(x => x.id);
@@ -1226,6 +1237,9 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (/^FAIL/.test(p4.unfold)) fail('a triage row click did not open its card: ' + p4.unfold);
     if (!p4.quietV) fail('card chart: a prior value is visible without hover');
     if (!p4.quietFlags) fail('card charts: more than one release label on a card');
+    if (/demo_busy_db(_quiet)?\.html$/.test(file) && p4.calm !== 'closed') fail('demo: "Checked and normal" should start folded, got ' + p4.calm);
+    if (/demo_busy_db_dashboard\.html$/.test(file) && p4.calm !== 'open') fail('dashboard demo: the Normal tab should show "Checked and normal" open, got ' + p4.calm);
+    if (p4.calmReveal === 'FAIL') fail('a jump to #s-normal did not open its fold');
     const [rf, rc] = p4.railFind.split('/');
     if (rf !== rc) fail('rail Findings pills count ' + rf + ', cards ' + rc);
     if (p4.railOther) fail('rail: ' + p4.railOther + ' count pill(s) outside the Findings link');

@@ -319,7 +319,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var pM=tab("moved","Moved",moved,true);');
     DBMS_OUTPUT.PUT_LINE('  if(moved)pM.appendChild(tbl);else if(calm)pM.appendChild(calm);else{var no=mk("p","dempty",pM);no.textContent="No scored metric moved beyond its normal range.";}');
     DBMS_OUTPUT.PUT_LINE('  var sn=$("#s-normal"),imp=sn&&$(".panel.note.improved",sn);');
-    DBMS_OUTPUT.PUT_LINE('  if(sn){var nn=(txt($("h2 .meta",sn)).match(/\d+/)||[null])[0];var pN=tab("normal","Normal",nn,false);pN.appendChild(sn);}');
+    DBMS_OUTPUT.PUT_LINE('  if(sn){var nn=(txt($("h2 .meta",sn)).match(/\d+/)||[null])[0];var pN=tab("normal","Normal",nn,false);pN.appendChild(sn);');
+    DBMS_OUTPUT.PUT_LINE('    /* plan 032: the tab is the fold, so the folded body opens */');
+    DBMS_OUTPUT.PUT_LINE('    var cf=$("details.calm-fold",sn);if(cf)cf.open=true;}');
     DBMS_OUTPUT.PUT_LINE('  if(imp){var pI=tab("improved","Improved",$$(".nr",imp).length,false);pI.appendChild(imp);}');
     DBMS_OUTPUT.PUT_LINE('  /* What changed around it: the plan / config cards + the releases */');
     DBMS_OUTPUT.PUT_LINE('  var side=mk("aside","dside",grid);side.setAttribute("aria-label","What changed around it");');

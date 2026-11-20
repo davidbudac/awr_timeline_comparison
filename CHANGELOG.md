@@ -186,6 +186,9 @@ release bumps `awr_version`).
   above it. A toolbar above the grid shows only flagged rows or sorts the
   headline and wait lanes by the size of their change (added AAS for
   waits); both are remembered per browser.
+- **"Checked and normal" in one line.** In the Summary view the normal /
+  too small / improved metrics fold into one summary line (counts) that
+  opens in place; it stays open when the report has no finding.
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

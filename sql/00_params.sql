@@ -1113,6 +1113,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var dt=closest(el,"details"); while(dt){ dt.open=true; dt=dt.parentNode?closest(dt.parentNode,"details"):null; }');
     DBMS_OUTPUT.PUT_LINE('  if(el.tagName==="DETAILS") el.open=true;');
     DBMS_OUTPUT.PUT_LINE('  if(el.id==="about"){ var ab=el.querySelector("details"); if(ab) ab.open=true; }');
+    DBMS_OUTPUT.PUT_LINE('  if(el.id==="s-normal"){ var cf=el.querySelector("details.calm-fold"); if(cf) cf.open=true; }');
     DBMS_OUTPUT.PUT_LINE('  if(el.hidden&&el.tagName==="TR") el.hidden=false;');
     DBMS_OUTPUT.PUT_LINE('  if(el.classList.contains("sql-row")&&window.AWR_openSqlRow) window.AWR_openSqlRow(el);');
     DBMS_OUTPUT.PUT_LINE('}');

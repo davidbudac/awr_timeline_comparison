@@ -302,7 +302,9 @@ function findTable(){
   var pM=tab("moved","Moved",moved,true);
   if(moved)pM.appendChild(tbl);else if(calm)pM.appendChild(calm);else{var no=mk("p","dempty",pM);no.textContent="No scored metric moved beyond its normal range.";}
   var sn=$("#s-normal"),imp=sn&&$(".panel.note.improved",sn);
-  if(sn){var nn=(txt($("h2 .meta",sn)).match(/\d+/)||[null])[0];var pN=tab("normal","Normal",nn,false);pN.appendChild(sn);}
+  if(sn){var nn=(txt($("h2 .meta",sn)).match(/\d+/)||[null])[0];var pN=tab("normal","Normal",nn,false);pN.appendChild(sn);
+    /* plan 032: the tab is the fold, so the folded body opens */
+    var cf=$("details.calm-fold",sn);if(cf)cf.open=true;}
   if(imp){var pI=tab("improved","Improved",$$(".nr",imp).length,false);pI.appendChild(imp);}
   /* What changed around it: the plan / config cards + the releases */
   var side=mk("aside","dside",grid);side.setAttribute("aria-label","What changed around it");

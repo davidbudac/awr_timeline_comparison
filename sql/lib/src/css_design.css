@@ -305,6 +305,7 @@ body.d-dash .ashx .seg.axlayout button{line-height:20px}
 .tabs.dtabs .n{color:var(--muted);font-weight:400;margin-left:2px}
 .dpanel #s-normal{margin:0;padding:0}
 .dpanel #s-normal > h2{display:none}
+.dpanel #s-normal .calm-fold > summary{display:none}
 .dpanel #s-normal .calm{padding:var(--s2) 0;border:0}
 .dpanel #s-normal .ngrid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .dpanel .note.improved{border:0;padding:var(--s2) 0}
