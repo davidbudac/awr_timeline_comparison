@@ -1407,6 +1407,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.fc .whereln{margin:0 0 4px;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:help}');
     DBMS_OUTPUT.PUT_LINE('.fc .wg.bare .r.p .pv{max-width:none} .fc .wg.bare .r.p .c.cur .pv{left:auto;right:2px}');
     DBMS_OUTPUT.PUT_LINE('.fc .cfg-more{margin:0;padding:var(--s2) 0 0;font-size:12.5px;color:var(--muted)}');
+    -- its "Parameters" link: no global link colour, so without this rule it
+    -- was the browser's default blue (unreadable in dark); tokens follow the theme
+    DBMS_OUTPUT.PUT_LINE('.fc .cfg-more a{color:var(--ink-soft);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .cfg-more a:hover{color:var(--ink)}');
     -- plan 025: the Summary triage list (07, #triage), folded finding cards
     -- (.fc.fold, toggled by 07's inline script) and quiet card charts (.wg.qf)
     DBMS_OUTPUT.PUT_LINE('#triage{padding:var(--s2) 0;margin:0 0 var(--s5)}');

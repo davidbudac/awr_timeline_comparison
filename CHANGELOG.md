@@ -286,6 +286,10 @@ release bumps `awr_version`).
   JSON escape `\u003c`, which the browser decodes back, so displayed names
   are unchanged. The Top SQL, Segment I/O and File I/O chart tooltips
   HTML-escape series names.
+- **The configuration card's "and N more in Parameters" link is styled in
+  the classic design too** (with more than 8 changed parameters it was
+  left in the browser's default blue, unreadable in dark mode; quiet and
+  dashboard already styled it).
 
 ### Wrappers and fleet
 - **Fractional `step` / `win_hours` no longer crash the bash side.** A
