@@ -201,6 +201,8 @@
     -- one bars row: every window's value as a grey column (Current in the
     -- accent), the prior normal zone behind them and a severity dot on the
     -- Current bar (drawn client-side from data-v / data-mu / data-sd).
+    -- p_fmt 'dur': the values are seconds, labelled with fmt_dur's short
+    -- form (data-v stays raw).
     FUNCTION wg_bars(p_pairs VARCHAR2,
                      p_scale NUMBER,
                      p_mu    NUMBER,
@@ -209,7 +211,8 @@
                      p_lab   VARCHAR2 DEFAULT NULL,
                      p_gut   VARCHAR2 DEFAULT NULL,
                      p_id    VARCHAR2 DEFAULT NULL,
-                     p_cls   VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
+                     p_cls   VARCHAR2 DEFAULT NULL,
+                     p_fmt   VARCHAR2 DEFAULT NULL) RETURN VARCHAR2 IS
         v_out VARCHAR2(32767);
         v_v   NUMBER;
     BEGIN
@@ -226,7 +229,9 @@
                 || '" data-w="' || k || '">'
                 || CASE WHEN v_v IS NULL
                         THEN '<span class="v nil" aria-label="no value">&ndash;</span>'
-                        ELSE '<span class="v">' || fmt_num(v_v) || '</span>' END
+                        ELSE '<span class="v">'
+                             || CASE WHEN p_fmt = 'dur' THEN fmt_dur(v_v, 'Y') ELSE fmt_num(v_v) END
+                             || '</span>' END
                 || '</div>';
         END LOOP;
         RETURN v_out || p_gut || '</div>';

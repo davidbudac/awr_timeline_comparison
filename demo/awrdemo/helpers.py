@@ -148,6 +148,45 @@ def fmt_int(p: float | None) -> str:
     return to_char_fixed(ora_round(p, 0), 0, group=True)
 
 
+def fmt_dur(p, short="N") -> str:
+    """sql/lib/fmt_num.plsql fmt_dur: seconds as words of time."""
+    if p is None:
+        return "&mdash;"
+    if p == 0:
+        return "0 s"
+    sign = "-" if p < 0 else ""
+    a = abs(p)
+    ms = a * 1000
+    d1 = lambda x: to_char_fixed(ora_round(x, 1), 1)
+    i0 = lambda x: str(int(ora_round(x, 0)))
+    if ora_round(ms, 0) < 1000:
+        if ms >= 9.95:
+            return sign + i0(ms) + " ms"
+        if ora_round(ms, 1) == 0:
+            return sign + "<0.1 ms"
+        return sign + d1(ms) + " ms"
+    if ora_round(a, 1) < 60:
+        return sign + d1(a) + " s"
+    if short == "Y":
+        if ora_round(a / 60, 0) < 60:
+            return sign + i0(a / 60) + " m"
+        h_ = a / 3600
+        if ora_round(h_, 1) < 10:
+            return sign + d1(h_) + " h"
+        if ora_round(h_, 0) < 48:
+            return sign + i0(h_) + " h"
+        d_ = a / 86400
+        return sign + (d1(d_) if ora_round(d_, 1) < 10 else i0(d_)) + " d"
+    r = int(ora_round(a, 0))
+    if r < 3600:
+        return sign + str(r // 60) + " m" + ((" " + str(r % 60) + " s") if r % 60 else "")
+    r = int(ora_round(a / 60, 0))
+    if r < 2880:
+        return sign + str(r // 60) + " h" + ((" " + str(r % 60) + " m") if r % 60 else "")
+    r = int(ora_round(a / 3600, 0))
+    return sign + str(r // 24) + " d" + ((" " + str(r % 24) + " h") if r % 24 else "")
+
+
 # ---------------------------------------------------------------------
 # sql/lib/score_cells.plsql  (+ the raw z / bucket math sections reuse)
 # ---------------------------------------------------------------------
@@ -809,6 +848,8 @@ def fv_unit(v, unit) -> str:
 def fv(v, unit) -> str:
     if v is None:
         return "&mdash;"
+    if unit == "dur":
+        return fmt_dur(v)
     u = fv_unit(v, unit)
     return fv_num(v, unit) + ("" if not u else u if u.startswith("/") else " " + u)
 
@@ -819,6 +860,8 @@ def fv_range(mu, sd, unit) -> str:
     den = max(sd, 0.02 * abs(mu))
     hi = mu + 2 * den
     lo = max(0, mu - 2 * den)
+    if unit == "dur":
+        return fmt_dur(lo) + "&ndash;" + fmt_dur(hi)
     if unit == "B/s":
         a = abs(hi)
         div = 1e9 if a >= 1e9 else 1e6 if a >= 1e6 else 1e3 if a >= 1e3 else 1
@@ -1065,7 +1108,7 @@ def wg_ruler_put(w, pre, corner: str, gh: str, btn: str = "N", post=None) -> str
     return wg_lines(parts)
 
 
-def wg_bars(w, vals, scale, mu, sd, sev, lab="", gut="", rid=None, cls=None) -> str:
+def wg_bars(w, vals, scale, mu, sd, sev, lab="", gut="", rid=None, cls=None, fmt=None) -> str:
     v = _wg_vals(vals)
     out = ('<div class="r bars' + ((" " + cls) if cls else "") + '"'
            + ((' id="' + rid + '"') if rid else "")
@@ -1077,7 +1120,8 @@ def wg_bars(w, vals, scale, mu, sd, sev, lab="", gut="", rid=None, cls=None) -> 
         x = _mul(v.get(k), scale)
         out += ('<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k) + '">'
                 + ('<span class="v nil" aria-label="no value">&ndash;</span>' if x is None
-                   else '<span class="v">' + fmt_num(x) + '</span>') + '</div>')
+                   else '<span class="v">' + (fmt_dur(x, "Y") if fmt == "dur" else fmt_num(x))
+                   + '</span>') + '</div>')
     return out + (gut or "") + '</div>'
 
 

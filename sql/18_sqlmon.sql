@@ -878,12 +878,12 @@ BEGIN
                     v_g_cur, v_g_mu, NULL, NULL, 'Y', 'N');
             END IF;
             v_ev := v_ev || pc_ev(ent('SQL Monitor', anchor_id('sm', v_id), 'sql'),
-                'max ' || fmt_num(v_pc(c).cur_val) || ' s',
-                'normal ' || fmt_num(v_pc(c).mu) || ' s',
+                'max ' || fmt_dur(v_pc(c).cur_val),
+                'normal ' || fmt_dur(v_pc(c).mu),
                 v_pc(c).cur_val, v_pc(c).mu, v_pc(c).sd, v_b, 'N');
             IF v_src = 'sqlstat' AND v_c_mu IS NOT NULL THEN
-                v_ev := v_ev || pc_ev('CPU', fmt_num(v_c_cur) || ' s',
-                    'normal ' || fmt_num(v_c_mu) || ' s'
+                v_ev := v_ev || pc_ev('CPU', fmt_dur(v_c_cur),
+                    'normal ' || fmt_dur(v_c_mu)
                     || CASE WHEN v_e_mu IS NOT NULL AND v_e_cur > v_e_mu
                                  AND NVL(v_c_cur, 0) - v_c_mu <= 0.1 * (v_e_cur - v_e_mu)
                             THEN '; the rise is wait' END,
@@ -911,13 +911,13 @@ BEGIN
                 || TO_CHAR(v_pc(c).cur_ph) || '">'
                 || DBMS_XMLGEN.CONVERT(NVL(v_pc(c).usr, '?')) || ' &middot; '
                 || DBMS_XMLGEN.CONVERT(NVL(v_pc(c).modl, '?')) || '</p>'
-                || '<div class="big"><span class="v">' || fmt_num(v_e_cur) || '</span>'
-                || '<span class="u">' || CASE WHEN v_src = 'sqlstat' THEN 's elapsed'
-                                              ELSE 's max elapsed (SQL Monitor)' END || '</span>'
-                || '<span class="nrm" title="prior mean ' || fmt_num(v_e_mu) || ' s">normal '
-                || fv_range(v_e_mu, v_e_sd, 's') || '</span></div>');
+                || '<div class="big"><span class="v">' || fmt_dur(v_e_cur) || '</span>'
+                || '<span class="u">' || CASE WHEN v_src = 'sqlstat' THEN 'elapsed'
+                                              ELSE 'max elapsed (SQL Monitor)' END || '</span>'
+                || '<span class="nrm" title="prior mean ' || fmt_dur(v_e_mu) || '">normal '
+                || fv_range(v_e_mu, v_e_sd, 'dur') || '</span></div>');
             DBMS_OUTPUT.PUT_LINE('<div class="wg bare hov qf"' || wg_attr || '>' || wg_flags(TRUE)
-                || wg_bars(v_pairs, 1, v_e_mu, v_e_sd, NULL));
+                || wg_bars(v_pairs, 1, v_e_mu, v_e_sd, NULL, p_fmt => 'dur'));
             DBMS_OUTPUT.PUT_LINE('<div class="r p" data-name="Plan hash" role="row">' || v_cells || '</div>'
                 || wg_dates(TRUE) || '</div></div>');
             DBMS_OUTPUT.PUT_LINE('<dl class="ev">' || v_ev || '</dl></div>'

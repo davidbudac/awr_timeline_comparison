@@ -188,6 +188,7 @@
         v_u VARCHAR2(20) := fv_unit(p_v, p_unit);
     BEGIN
         IF p_v IS NULL THEN RETURN '&mdash;'; END IF;
+        IF p_unit = 'dur' THEN RETURN fmt_dur(p_v); END IF;
         RETURN fv_num(p_v, p_unit)
             || CASE WHEN v_u IS NULL THEN ''
                     WHEN SUBSTR(v_u, 1, 1) = '/' THEN v_u
@@ -202,6 +203,9 @@
         IF p_mu IS NULL OR p_sd IS NULL THEN RETURN '&mdash;'; END IF;
         v_den := GREATEST(p_sd, 0.02 * ABS(p_mu));
         v_hi  := p_mu + 2 * v_den;
+        IF p_unit = 'dur' THEN
+            RETURN fmt_dur(GREATEST(0, p_mu - 2 * v_den)) || '&ndash;' || fmt_dur(v_hi);
+        END IF;
         IF p_unit = 'B/s' THEN
             -- both ends in the unit of the upper one: "2.8-4.5 MB/s"
             RETURN fmt_num(GREATEST(0, p_mu - 2 * v_den)

@@ -201,13 +201,13 @@ def _plan_card(w, put, c):
                      (fmt_num(t_cur) + " ms, was " + fmt_num(t_mu) + " ms"),
                      g_cur, g_mu, None, None, "Y", "N")
     ev += _pc_ev(H.ent("SQL Monitor", H.anchor_id("sm", sid), "sql"),
-                 "max " + fmt_num(c["cur_val"]) + " s", "normal " + fmt_num(c["mu"]) + " s",
+                 "max " + H.fmt_dur(c["cur_val"]), "normal " + H.fmt_dur(c["mu"]),
                  c["cur_val"], c["mu"], c["sd"], b, "N")
     if src == "sqlstat" and c_mu is not None:
         wait = (e_mu is not None and e_cur > e_mu
                 and (c_cur or 0) - c_mu <= 0.1 * (e_cur - e_mu))
-        ev += _pc_ev("CPU", fmt_num(c_cur) + " s",
-                     "normal " + fmt_num(c_mu) + " s" + ("; the rise is wait" if wait else ""),
+        ev += _pc_ev("CPU", H.fmt_dur(c_cur),
+                     "normal " + H.fmt_dur(c_mu) + ("; the rise is wait" if wait else ""),
                      c_cur, c_mu, c_sd, None, "Y")
 
     put('<article class="panel fc chg" id="' + cid + '" aria-labelledby="' + cid + '-h" hidden>'
@@ -229,12 +229,12 @@ def _plan_card(w, put, c):
         + '<p class="whereln" title="plan ' + str(c["prior_ph"]) + ' &rarr; ' + str(c["cur_ph"]) + '">'
         + esc(c["usr"] if c["usr"] is not None else "?") + " &middot; "
         + esc(c["modl"] if c["modl"] is not None else "?") + "</p>"
-        + '<div class="big"><span class="v">' + fmt_num(e_cur) + "</span>"
-        + '<span class="u">' + ("s elapsed" if src == "sqlstat" else "s max elapsed (SQL Monitor)") + "</span>"
-        + '<span class="nrm" title="prior mean ' + fmt_num(e_mu) + ' s">normal '
-        + H.fv_range(e_mu, e_sd, "s") + "</span></div>")
+        + '<div class="big"><span class="v">' + H.fmt_dur(e_cur) + "</span>"
+        + '<span class="u">' + ("elapsed" if src == "sqlstat" else "max elapsed (SQL Monitor)") + "</span>"
+        + '<span class="nrm" title="prior mean ' + H.fmt_dur(e_mu) + '">normal '
+        + H.fv_range(e_mu, e_sd, "dur") + "</span></div>")
     put('<div class="wg bare hov qf"' + H.wg_attr(w) + ">" + H.wg_flags(True)
-        + H.wg_bars(w, pairs, 1, e_mu, e_sd, None))
+        + H.wg_bars(w, pairs, 1, e_mu, e_sd, None, fmt="dur"))
     put('<div class="r p" data-name="Plan hash" role="row">' + cells + "</div>"
         + H.wg_dates(w, True) + "</div></div>")
     put('<dl class="ev">' + ev + "</dl></div>"
