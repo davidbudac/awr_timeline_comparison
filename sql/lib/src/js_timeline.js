@@ -790,26 +790,60 @@ function dlab(c,groups,ord,on,Y,reb,nb){
     .map(function(L){return '<text class="xdl" x="'+L.x.toFixed(1)+'" y="'+(L.y+4).toFixed(1)+'" text-anchor="middle">'+esc(L.txt)+'</text>';}).join('');
 }
 /* the release markers of list [{x: px, m: marker}]: a line through the plot
-   on every chart shown, the flags (two tiers) on the chart with c.flags */
+   on every chart shown, the flags (two tiers) on the chart with c.flags.
+   Markers less than 1 px apart (side by side: every marker of one gap)
+   form a group: as many as fit get a flag of their own, the last flag
+   shown names the rest ("Release 4.2 +2", its tooltip lists them); a
+   group with no room left for a flag keeps its line, whose tooltip names
+   every marker of the group */
 function flagSvg(c,list,top,ph,Wd,padL,padR){
-  var s='',tiers=[[],[]];
-  list.forEach(function(it){
-    var x=it.x,m=it.m;if(x<padL||x>Wd-padR)return;
-    if(!c.flags){s+='<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+top+'" y2="'+(top+ph)+'"><title>'+esc(m.l+', '+m.t)+'</title></line>';return;}
-    [m.l,m.s].some(function(lb){
-      var w=tw(lb)+12,x0=x+w>Wd-padR?x-w:x,end=x0!==x;
-      for(var L=0;L<2;L++){
-        if(tiers[L].some(function(r){return x0<r[1]+6&&x0+w>r[0]-6;}))continue;
-        tiers[L].push([x0,x0+w]);var y=2+L*19;
-        s+='<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+(y+16)+'" y2="'+(top+ph)+'"/><line class="cf" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+y+'" y2="'+(y+16)+'"/>'
-          +'<rect class="cfh" x="'+(end?x0:x+1).toFixed(1)+'" y="'+y+'" width="'+(w-1)+'" height="16" rx="2"/>'
-          +'<text class="cft" x="'+(end?x-6:x+6).toFixed(1)+'" y="'+(y+12)+'" text-anchor="'+(end?'end':'start')+'"><title>'+esc(m.l+', '+m.t)+'</title>'+esc(lb)+'</text>';
-        return true;
+  var s='',tiers=[[],[]],G=[];
+  list.filter(function(it){return it.x>=padL&&it.x<=Wd-padR;}).sort(function(a,b){return a.x-b.x;}).forEach(function(it){
+    var g=G[G.length-1];if(g&&it.x-g.x<1)g.ms.push(it.m);else G.push({x:it.x,ms:[it.m]});
+  });
+  var tt=function(ms){return ms.map(function(m){return m.l+', '+m.t;}).join('\n');};
+  var line=function(x,ms){return '<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+top+'" y2="'+(top+ph)+'"><title>'+esc(tt(ms))+'</title></line>';};
+  G.forEach(function(g){
+    var x=g.x,ms=g.ms,n=ms.length,j,i;
+    if(!c.flags){s+=line(x,ms);return;}
+    /* j flags: the first j - 1 markers alone, the j-th with the rest */
+    for(j=n;j>=1;j--){
+      var tr=tiers.map(function(t){return t.slice();}),out='',f='';
+      for(i=0;i<j&&f!=null;i++){
+        var more=i===j-1?ms.slice(j):[],sx=more.length?' +'+more.length:'';
+        f=flag1(tr,x,[ms[i].l+sx,ms[i].s+sx],tt([ms[i]].concat(more)),top,ph,Wd,padR);
+        if(f!=null)out+=f;
       }
-      return false;
-    });
+      if(f!=null){tiers=tr;s+=out;return;}
+    }
+    s+=line(x,ms);
   });
   return s;
+}
+/* one flag at x on the first tier with room for one of the labels labs
+   (else null); tiers takes its extent */
+function flag1(tiers,x,labs,title,top,ph,Wd,padR){
+  var r=null;
+  labs.some(function(lb){
+    var w=tw(lb)+12,x0=x+w>Wd-padR?x-w:x,end=x0!==x;
+    for(var L=0;L<2;L++){
+      if(tiers[L].some(function(q){return x0<q[1]+6&&x0+w>q[0]-6;}))continue;
+      tiers[L].push([x0,x0+w]);var y=2+L*19;
+      r='<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+(y+16)+'" y2="'+(top+ph)+'"/><line class="cf" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+y+'" y2="'+(y+16)+'"/>'
+        +'<rect class="cfh" x="'+(end?x0:x+1).toFixed(1)+'" y="'+y+'" width="'+(w-1)+'" height="16" rx="2"/>'
+        +'<text class="cft" x="'+(end?x-6:x+6).toFixed(1)+'" y="'+(y+12)+'" text-anchor="'+(end?'end':'start')+'"><title>'+esc(title)+'</title>'+esc(lb)+'</text>';
+      return true;
+    }
+    return false;
+  });
+  return r;
+}
+/* replace chart c's SVG; a focused window stripe / cap keeps the focus
+   (Enter on it pins the window, which redraws both charts) */
+function setSvg(c,s){
+  var a=doc.activeElement,fi=a&&a!==c.svg&&c.svg.contains(a)&&a.getAttribute&&a.getAttribute('class')==='xwh'?a.getAttribute('data-i'):null;
+  c.svg.innerHTML=s;
+  if(fi!=null){var e=$('.xwh[data-i="'+fi+'"]',c.svg);if(e)try{e.focus({preventScroll:true});}catch(x){e.focus();}}
 }
 /* ---- "Windows side by side" (SP.mode 'win'): each compared window as its
    own panel on one shared y axis, oldest left, Current last.  A panel is
@@ -901,7 +935,7 @@ function drawWin(c,o){
   hit.forEach(function(r){var wi=ws[r[0]];
     s+='<rect class="xwh" data-i="'+r[0]+'" data-w="'+wi.o+'" x="'+r[1].toFixed(1)+'" y="'+(top-6)+'" width="'+r[2].toFixed(1)+'" height="10" tabindex="0" role="button" aria-label="'
       +esc((wi.o===0?'Current window, ':offTxt(wi)+' window, ')+wi.t+(wi.o===0?'':'. Pin it'))+'"/>';});
-  c.svg.innerHTML=s;
+  setSvg(c,s);
   c.g={mode:'win',pan:pan,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:SP.dom[0],d1:SP.dom[1],ymax:ymax,ord:ord,hk:c.hk,cm:o.cm};
 }
 function draw(c,force){
@@ -912,8 +946,13 @@ function draw(c,force){
   var Wd=Math.max(480,c.plot.clientWidth),d0=SP.dom[0],d1=SP.dom[1];
   if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk&&c.g.cm===cmp()&&(c.g.mode||'span')===SP.mode)return;c.w=Wd;c.pw=PW;c.lay=lay;
   var mks=W.markers?W.markers():[],P=c.P;
-  var cm=cmp();
-  var top=c.flags&&mks.length?46:22,ph=cm?96:150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;
+  var cm=cmp(),padL=40,padR=14,pw=Wd-padL-padR,n=SP.win.length;
+  /* the flag band only while a marker is in view: Full span = every marker
+     (W.markers() all lie inside the span; kept while zoomed, so a brush
+     never moves the charts), side by side = a marker in the gap before a
+     panel shown (the most recent winFit(pw) windows) */
+  var mkv=SP.mode==='win'?mks.filter(function(m){var ib=idxOf(m.o);return ib>=0&&ib>=n-Math.min(n,winFit(pw));}):mks;
+  var top=c.flags&&mkv.length?46:22,ph=cm?96:150,bot=c.xl?26:8,H=top+ph+bot;
   c.svg.setAttribute('viewBox','0 0 '+Wd+' '+H);c.svg.setAttribute('height',H);
   var X=function(t){return padL+pw*(t-d0)/(d1-d0);};
   if(SP.mode==='win'){drawWin(c,{Wd:Wd,top:top,ph:ph,padL:padL,padR:padR,pw:pw,xl:c.xl,cm:cm,mks:mks});return;}
@@ -974,7 +1013,7 @@ function draw(c,force){
     s+='<rect class="xwh" data-i="'+i+'" data-w="'+w.o+'" x="'+hx.toFixed(1)+'" y="'+(top-6)+'" width="'+hw.toFixed(1)+'" height="'+hh+'" tabindex="0" role="button" aria-label="'
       +esc((w.o===0?'Current window, ':offTxt(w)+' window, ')+w.t+(w.o===0?'':'. Pin it'))+'"/>';
   });
-  c.svg.innerHTML=s;
+  setSvg(c,s);
   c.g={mode:'span',X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,hk:c.hk,cm:cm};
 }
 function tAt(c,cx){var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*c.g.W/r.width;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}

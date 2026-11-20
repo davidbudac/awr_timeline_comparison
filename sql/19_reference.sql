@@ -114,7 +114,7 @@ BEGIN
         || ' y="18" width="150" height="24"/><line class="gd-cl" x1="30" x2="30" y1="18" y2="42"/><line class="gd-cl" x1="60" x2="60" y1="18" y2="42"/><line class="gd-cl" x1="90" x2="90" y1="18" y2="42"/><line'
         || ' class="gd-cl" x1="120" x2="120" y1="18" y2="42"/><line class="gd-mk" x1="60" x2="60" y1="2" y2="42"/><rect class="gd-flg" x="60" y="2" width="44" height="12" rx="2"/><text class="gd-t" x="64"'
         || ' y="11">Release</text></svg></div><div class="gx2"><h3>Release marker</h3><p>A release or patch, on the boundary between the two windows it fell between. <span class="g2">Its line runs down every'
-        || ' chart.</span></p></div></div>');
+        || ' chart. On the Activity charts, markers at one spot get a flag each while there is room, then one &ldquo;+n&rdquo; flag whose tooltip lists the rest.</span></p></div></div>');
     DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="Step line: value changes between two windows"><path class="gd-st" d="M0'
         || ' 32H86V14H150"/><line class="gd-str" x1="86" x2="86" y1="32" y2="14"/><circle class="gd-nd" cx="86" cy="14" r="3.5"/><text class="gd-t m" x="4" y="28">FALSE</text><text class="gd-t m b" x="92"'
         || ' y="10">TRUE</text></svg></div><div class="gx2"><h3>Step line</h3><p>Parameters and plan hashes step where the value changed. <span class="g2">Dot = the change; labels = old and new'

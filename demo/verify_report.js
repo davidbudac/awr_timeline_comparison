@@ -51,7 +51,10 @@
  *     unpinning; a click on a band keeps it, the same click clears it;
  *   - the Activity charts' Windows side by side mode (plan 024): one panel
  *     per window, hover / crosshair, no zoom, cap click pins, legend,
- *     markers, the switch remembered in awr-axlayout;
+ *     markers, the switch remembered in awr-axlayout; Enter on a focused
+ *     stripe / cap keeps the focus through the redraw (both layouts); the
+ *     flag band only while a flag is drawn side by side; three markers in
+ *     one gap all named (a "+n" flag lists the rest, block 5d);
  *   - direct labels on the Activity bands (plan 036, fitted per band): name
  *     a series, inside the plot and inside the band they name, no overlap,
  *     at most 6, gone when the series is hidden; inside one panel side by
@@ -670,15 +673,18 @@ const LABEL_BAND = () => {
         }, id);
         tl['unpin_' + k] = unpin;
         if (/^FAIL/.test(unpin)) fail('activity ' + k + ': Current unpin ' + unpin);
-        // keyboard: Enter on a focused stripe pins, Esc clears
+        // keyboard: Enter on a focused stripe pins, Esc clears; the focus
+        // stays on that stripe through both redraws (G3: it was lost)
         const kb = await page.evaluate((id) => {
           const hs = [...document.querySelectorAll('#' + id + ' .axsvg .xwh')].filter(x => x.getAttribute('data-w') !== '0');
           if (!hs.length) return 'none';
-          const hwin = hs[0]; hwin.focus();
+          const hwin = hs[0], di = hwin.getAttribute('data-i'); hwin.focus();
+          const kept = () => { const a = document.activeElement; return !!a && a.getAttribute('class') === 'xwh' && a.getAttribute('data-i') === di && !!a.closest('#' + id); };
           hwin.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-          const pinned = document.body.getAttribute('data-pw') === hwin.getAttribute('data-w');
-          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-          return pinned && !document.body.hasAttribute('data-pw') ? 'ok' : 'FAIL';
+          const pinned = document.body.getAttribute('data-pw') === hwin.getAttribute('data-w'), f1 = kept();
+          document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          const f2 = kept();
+          return pinned && !document.body.hasAttribute('data-pw') ? (f1 && f2 ? 'ok' : 'FAIL focus lost ' + JSON.stringify([f1, f2])) : 'FAIL';
         }, id);
         tl['keys_' + k] = kb;
         if (/^FAIL/.test(kb)) fail('activity ' + k + ': Enter / Esc ' + kb);
@@ -954,6 +960,14 @@ const LABEL_BAND = () => {
       });
       if (/FAIL/.test(sb.labels)) fail('side by side: labels ' + sb.labels);
       if (isDemo && !/\(([1-6])\/([1-6])\)/.test(sb.labels)) fail('side by side: the demo must label at least one band on each chart: ' + sb.labels);
+      // the flag band (G3): the flags chart reserves it only while a flag is
+      // drawn (markers all cropped away: no empty band)
+      sb.flagBand = await page.evaluate(() => {
+        const s = [...document.querySelectorAll('.ashx .axsvg')].find(x => x.getClientRects().length); if (!s) return 'none';
+        const y = +s.querySelector('rect.xw.xpn').getAttribute('y'), f = s.querySelectorAll('text.cft').length;
+        return (y > 22) === (f > 0) ? 'ok (' + f + ' flags, top ' + y + ')' : 'FAIL ' + f + ' flags, top ' + y;
+      });
+      if (/^FAIL/.test(sb.flagBand)) fail('side by side: flag band ' + sb.flagBand);
       const cp = await page.evaluate(() => { const c = document.querySelector('#ax-cls .axsvg .xw.xpn.cur').getBoundingClientRect(); return { x: c.left + c.width / 2, y: c.top + c.height * 0.6 }; });
       await page.mouse.move(cp.x, cp.y); await page.waitForTimeout(150);
       sb.hover = await page.evaluate(() => {
@@ -990,6 +1004,20 @@ const LABEL_BAND = () => {
       if (sb.legend !== 'ok') fail('side by side: legend toggle ' + sb.legend);
       sb.markers = await page.evaluate(() => (window.AWR_MARKERS || []).length ? document.querySelectorAll('#ax-cls .axsvg .cfl').length : -1);
       if (sb.markers === 0) fail('side by side: release markers missing');
+      // keyboard (G3): Enter on a focused cap pins and the focus stays on
+      // that cap through the redraw; Esc unpins, the focus stays (last: the
+      // pin scrolls the page smoothly to the Timeline grid)
+      sb.keys = await (async () => {
+        const di = await page.evaluate(() => { const h = [...document.querySelectorAll('#ax-cls .axsvg .xwh')].find(x => x.getAttribute('data-w') !== '0'); if (!h) return null; h.focus(); return { i: h.getAttribute('data-i'), w: h.getAttribute('data-w') }; });
+        if (!di) return 'none';
+        const kept = () => page.evaluate((i) => { const a = document.activeElement; return !!a && a.getAttribute('class') === 'xwh' && a.getAttribute('data-i') === i && !!a.closest('#ax-cls'); }, di.i);
+        await page.keyboard.press('Enter'); await page.waitForTimeout(150);
+        const p1 = await page.evaluate((w) => document.body.getAttribute('data-pw') === w, di.w), f1 = await kept();
+        await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+        const p2 = await page.evaluate(() => !document.body.hasAttribute('data-pw')), f2 = await kept();
+        return p1 && f1 && p2 && f2 ? 'ok' : 'FAIL ' + JSON.stringify({ pinned: p1, focus: f1, unpinned: p2, focus2: f2 });
+      })();
+      if (/^FAIL/.test(sb.keys)) fail('side by side: keyboard pin / focus ' + sb.keys);
       await page.click('#activity .axlayout [data-m="span"]'); await page.waitForTimeout(200);
       const s1 = await page.evaluate(() => { let v = null; try { v = localStorage.getItem('awr-axlayout'); } catch (e) {} return { v, r: document.getElementById('ax-range').textContent, n: document.querySelectorAll('#ax-cls .axsvg .xw.xpn').length }; });
       await page.click('#activity .axlayout [data-m="win"]'); await page.waitForTimeout(200);
@@ -1001,6 +1029,60 @@ const LABEL_BAND = () => {
     }
     console.log('side by side', JSON.stringify(sb));
     if (errors.length) fail('side by side: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 5d. markers sharing a gap (G3): two extra markers are injected one
+  // and two minutes after the report's first one (so three share one gap
+  // side by side, and one spot in Full span); in both layouts every marker
+  // is named on the flags chart (a flag of its own, or the tooltip of a
+  // "+n" flag, or a line's tooltip), no two flags overlap, and on the demo
+  // the gap carries a "+n" flag. Before G3 the third lost its flag.
+  {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: 'light' });
+    const errors = [];
+    page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+    page.on('console', m => { if (m.type() === 'error') errors.push('console.error: ' + m.text()); });
+    await page.addInitScript(() => {
+      const a = []; let added = false;
+      a.push = function (...ms) {
+        for (const m of ms) {
+          Array.prototype.push.call(this, m);
+          if (!added && m && /^\d{4}-\d\d-\d\d \d\d:\d\d$/.test(String(m.t))) {
+            added = true;
+            const d = Date.parse(m.t.replace(' ', 'T') + ':00Z'), f = k => new Date(d + k * 60000).toISOString().slice(0, 16).replace('T', ' ');
+            Array.prototype.push.call(this, { t: f(1), label: 'Extra marker A' }, { t: f(2), label: 'Extra marker B' });
+          }
+        }
+        return this.length;
+      };
+      window.AWR_MARKERS = a;
+    });
+    await page.goto('file://' + file + '#view=timeline', { waitUntil: 'load' }); await page.waitForTimeout(1200);
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file), mg = {};
+    if (DESIGN === 'dashboard') { await page.evaluate(() => window.AWR_axMode && window.AWR_axMode('both')); await page.waitForTimeout(250); }
+    const named = () => page.evaluate(() => {
+      const ms = (window.AWR_WG && AWR_WG.markers ? AWR_WG.markers() : []);
+      if (!ms.some(m => m.l === 'Extra marker B')) return 'skipped';
+      const s = [...document.querySelectorAll('.ashx .axsvg')].find(x => x.getClientRects().length); if (!s) return 'none';
+      const txt = [...s.querySelectorAll('text.cft')].map(t => t.textContent).join('\n') + '\n' + [...s.querySelectorAll('title')].map(t => t.textContent).join('\n');
+      const miss = ms.filter(m => txt.indexOf(m.l) < 0).map(m => m.l);
+      const R = [...s.querySelectorAll('rect.cfh')].map(r => r.getBoundingClientRect());
+      let ov = 0; for (let i = 0; i < R.length; i++) for (let j = i + 1; j < R.length; j++) if (R[i].left < R[j].right && R[j].left < R[i].right && R[i].top < R[j].bottom && R[j].top < R[i].bottom) ov++;
+      const plus = [...s.querySelectorAll('text.cft')].filter(t => / \+\d+$/.test(t.lastChild ? t.lastChild.textContent : '')).length;
+      return (miss.length || ov ? 'FAIL missing ' + JSON.stringify(miss) + ' overlap ' + ov : 'ok') + ' (' + ms.length + ' markers, ' + R.length + ' flags, ' + plus + ' +n)';
+    });
+    for (const m of ['win', 'span']) {
+      const can = await page.evaluate((m) => { if (!window.AWR_TL || !AWR_TL.axLayout) return false; if (m === 'win' && !document.querySelector('#activity .axlayout:not([hidden])')) return false; AWR_TL.axLayout(m, false); return true; }, m);
+      if (!can) { mg[m] = 'unavailable'; continue; }
+      await page.waitForTimeout(250);
+      mg[m] = await named();
+      if (/^FAIL/.test(mg[m])) fail('markers sharing a gap (' + m + '): ' + mg[m]);
+      if (isDemo && !/ [1-9]\d* \+n\)$/.test(mg[m])) fail('markers sharing a gap (' + m + '): the demo must show a "+n" flag: ' + mg[m]);
+    }
+    await page.evaluate(() => { try { localStorage.removeItem('awr-axlayout'); } catch (e) {} });
+    console.log('markers sharing a gap', JSON.stringify(mg));
+    if (errors.length) fail('markers sharing a gap: ' + errors.slice(0, 5).join(' | '));
     await page.close();
   }
 

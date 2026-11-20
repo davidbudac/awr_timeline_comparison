@@ -56,7 +56,10 @@
 -- Direct labels (dlab -> fitLabels, fitted per band): each series is named
 -- once, inside its band, on its thickest stretch as wide as the label
 -- (at least LBH 10 px; shorter cuts when the name fits nowhere), at most 6
--- a chart.
+-- a chart.  Release flags (flagSvg): markers at one spot (side by side: one
+-- gap) share a group, a "+n" flag names the rest; side by side the flag
+-- band is reserved only while a marker is in view.  setSvg keeps the focus
+-- on a window stripe / cap through a redraw.
 -- v1.6.1 series highlight: a legend entry hovered / focused (or kept by a
 -- click on its band, Shift+click) is drawn from zero on its own y axis,
 -- the rest faded; a class lights its events (AWR_DATA.ashe.ecls) and an
@@ -861,26 +864,60 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    .map(function(L){return ''<text class="xdl" x="''+L.x.toFixed(1)+''" y="''+(L.y+4).toFixed(1)+''" text-anchor="middle">''+esc(L.txt)+''</text>'';}).join('''');');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* the release markers of list [{x: px, m: marker}]: a line through the plot');
-    DBMS_OUTPUT.PUT_LINE('   on every chart shown, the flags (two tiers) on the chart with c.flags */');
+    DBMS_OUTPUT.PUT_LINE('   on every chart shown, the flags (two tiers) on the chart with c.flags.');
+    DBMS_OUTPUT.PUT_LINE('   Markers less than 1 px apart (side by side: every marker of one gap)');
+    DBMS_OUTPUT.PUT_LINE('   form a group: as many as fit get a flag of their own, the last flag');
+    DBMS_OUTPUT.PUT_LINE('   shown names the rest ("Release 4.2 +2", its tooltip lists them); a');
+    DBMS_OUTPUT.PUT_LINE('   group with no room left for a flag keeps its line, whose tooltip names');
+    DBMS_OUTPUT.PUT_LINE('   every marker of the group */');
     DBMS_OUTPUT.PUT_LINE('function flagSvg(c,list,top,ph,Wd,padL,padR){');
-    DBMS_OUTPUT.PUT_LINE('  var s='''',tiers=[[],[]];');
-    DBMS_OUTPUT.PUT_LINE('  list.forEach(function(it){');
-    DBMS_OUTPUT.PUT_LINE('    var x=it.x,m=it.m;if(x<padL||x>Wd-padR)return;');
-    DBMS_OUTPUT.PUT_LINE('    if(!c.flags){s+=''<line class="cfl" x1="''+x.toFixed(1)+''" x2="''+x.toFixed(1)+''" y1="''+top+''" y2="''+(top+ph)+''"><title>''+esc(m.l+'', ''+m.t)+''</title></line>'';return;}');
-    DBMS_OUTPUT.PUT_LINE('    [m.l,m.s].some(function(lb){');
-    DBMS_OUTPUT.PUT_LINE('      var w=tw(lb)+12,x0=x+w>Wd-padR?x-w:x,end=x0!==x;');
-    DBMS_OUTPUT.PUT_LINE('      for(var L=0;L<2;L++){');
-    DBMS_OUTPUT.PUT_LINE('        if(tiers[L].some(function(r){return x0<r[1]+6&&x0+w>r[0]-6;}))continue;');
-    DBMS_OUTPUT.PUT_LINE('        tiers[L].push([x0,x0+w]);var y=2+L*19;');
-    DBMS_OUTPUT.PUT_LINE('        s+=''<line class="cfl" x1="''+x.toFixed(1)+''" x2="''+x.toFixed(1)+''" y1="''+(y+16)+''" y2="''+(top+ph)+''"/><line class="cf" x1="''+x.toFixed(1)+''" x2="''+x.toFixed(1)+''" y1="''+y+''" y2="''+(y+16)+''"/>''');
-    DBMS_OUTPUT.PUT_LINE('          +''<rect class="cfh" x="''+(end?x0:x+1).toFixed(1)+''" y="''+y+''" width="''+(w-1)+''" height="16" rx="2"/>''');
-    DBMS_OUTPUT.PUT_LINE('          +''<text class="cft" x="''+(end?x-6:x+6).toFixed(1)+''" y="''+(y+12)+''" text-anchor="''+(end?''end'':''start'')+''"><title>''+esc(m.l+'', ''+m.t)+''</title>''+esc(lb)+''</text>'';');
-    DBMS_OUTPUT.PUT_LINE('        return true;');
+    DBMS_OUTPUT.PUT_LINE('  var s='''',tiers=[[],[]],G=[];');
+    DBMS_OUTPUT.PUT_LINE('  list.filter(function(it){return it.x>=padL&&it.x<=Wd-padR;}).sort(function(a,b){return a.x-b.x;}).forEach(function(it){');
+    DBMS_OUTPUT.PUT_LINE('    var g=G[G.length-1];if(g&&it.x-g.x<1)g.ms.push(it.m);else G.push({x:it.x,ms:[it.m]});');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  var tt=function(ms){return ms.map(function(m){return m.l+'', ''+m.t;}).join(''\n'');};');
+    DBMS_OUTPUT.PUT_LINE('  var line=function(x,ms){return ''<line class="cfl" x1="''+x.toFixed(1)+''" x2="''+x.toFixed(1)+''" y1="''+top+''" y2="''+(top+ph)+''"><title>''+esc(tt(ms))+''</title></line>'';};');
+    DBMS_OUTPUT.PUT_LINE('  G.forEach(function(g){');
+    DBMS_OUTPUT.PUT_LINE('    var x=g.x,ms=g.ms,n=ms.length,j,i;');
+    DBMS_OUTPUT.PUT_LINE('    if(!c.flags){s+=line(x,ms);return;}');
+    DBMS_OUTPUT.PUT_LINE('    /* j flags: the first j - 1 markers alone, the j-th with the rest */');
+    DBMS_OUTPUT.PUT_LINE('    for(j=n;j>=1;j--){');
+    DBMS_OUTPUT.PUT_LINE('      var tr=tiers.map(function(t){return t.slice();}),out='''',f='''';');
+    DBMS_OUTPUT.PUT_LINE('      for(i=0;i<j&&f!=null;i++){');
+    DBMS_OUTPUT.PUT_LINE('        var more=i===j-1?ms.slice(j):[],sx=more.length?'' +''+more.length:'''';');
+    DBMS_OUTPUT.PUT_LINE('        f=flag1(tr,x,[ms[i].l+sx,ms[i].s+sx],tt([ms[i]].concat(more)),top,ph,Wd,padR);');
+    DBMS_OUTPUT.PUT_LINE('        if(f!=null)out+=f;');
     DBMS_OUTPUT.PUT_LINE('      }');
-    DBMS_OUTPUT.PUT_LINE('      return false;');
-    DBMS_OUTPUT.PUT_LINE('    });');
+    DBMS_OUTPUT.PUT_LINE('      if(f!=null){tiers=tr;s+=out;return;}');
+    DBMS_OUTPUT.PUT_LINE('    }');
+    DBMS_OUTPUT.PUT_LINE('    s+=line(x,ms);');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  return s;');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* one flag at x on the first tier with room for one of the labels labs');
+    DBMS_OUTPUT.PUT_LINE('   (else null); tiers takes its extent */');
+    DBMS_OUTPUT.PUT_LINE('function flag1(tiers,x,labs,title,top,ph,Wd,padR){');
+    DBMS_OUTPUT.PUT_LINE('  var r=null;');
+    DBMS_OUTPUT.PUT_LINE('  labs.some(function(lb){');
+    DBMS_OUTPUT.PUT_LINE('    var w=tw(lb)+12,x0=x+w>Wd-padR?x-w:x,end=x0!==x;');
+    DBMS_OUTPUT.PUT_LINE('    for(var L=0;L<2;L++){');
+    DBMS_OUTPUT.PUT_LINE('      if(tiers[L].some(function(q){return x0<q[1]+6&&x0+w>q[0]-6;}))continue;');
+    DBMS_OUTPUT.PUT_LINE('      tiers[L].push([x0,x0+w]);var y=2+L*19;');
+    DBMS_OUTPUT.PUT_LINE('      r=''<line class="cfl" x1="''+x.toFixed(1)+''" x2="''+x.toFixed(1)+''" y1="''+(y+16)+''" y2="''+(top+ph)+''"/><line class="cf" x1="''+x.toFixed(1)+''" x2="''+x.toFixed(1)+''" y1="''+y+''" y2="''+(y+16)+''"/>''');
+    DBMS_OUTPUT.PUT_LINE('        +''<rect class="cfh" x="''+(end?x0:x+1).toFixed(1)+''" y="''+y+''" width="''+(w-1)+''" height="16" rx="2"/>''');
+    DBMS_OUTPUT.PUT_LINE('        +''<text class="cft" x="''+(end?x-6:x+6).toFixed(1)+''" y="''+(y+12)+''" text-anchor="''+(end?''end'':''start'')+''"><title>''+esc(title)+''</title>''+esc(lb)+''</text>'';');
+    DBMS_OUTPUT.PUT_LINE('      return true;');
+    DBMS_OUTPUT.PUT_LINE('    }');
+    DBMS_OUTPUT.PUT_LINE('    return false;');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return r;');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* replace chart c''s SVG; a focused window stripe / cap keeps the focus');
+    DBMS_OUTPUT.PUT_LINE('   (Enter on it pins the window, which redraws both charts) */');
+    DBMS_OUTPUT.PUT_LINE('function setSvg(c,s){');
+    DBMS_OUTPUT.PUT_LINE('  var a=doc.activeElement,fi=a&&a!==c.svg&&c.svg.contains(a)&&a.getAttribute&&a.getAttribute(''class'')===''xwh''?a.getAttribute(''data-i''):null;');
+    DBMS_OUTPUT.PUT_LINE('  c.svg.innerHTML=s;');
+    DBMS_OUTPUT.PUT_LINE('  if(fi!=null){var e=$(''.xwh[data-i="''+fi+''"]'',c.svg);if(e)try{e.focus({preventScroll:true});}catch(x){e.focus();}}');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* ---- "Windows side by side" (SP.mode ''win''): each compared window as its');
     DBMS_OUTPUT.PUT_LINE('   own panel on one shared y axis, oldest left, Current last.  A panel is');
@@ -972,7 +1009,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  hit.forEach(function(r){var wi=ws[r[0]];');
     DBMS_OUTPUT.PUT_LINE('    s+=''<rect class="xwh" data-i="''+r[0]+''" data-w="''+wi.o+''" x="''+r[1].toFixed(1)+''" y="''+(top-6)+''" width="''+r[2].toFixed(1)+''" height="10" tabindex="0" role="button" aria-label="''');
     DBMS_OUTPUT.PUT_LINE('      +esc((wi.o===0?''Current window, '':offTxt(wi)+'' window, '')+wi.t+(wi.o===0?'''':''. Pin it''))+''"/>'';});');
-    DBMS_OUTPUT.PUT_LINE('  c.svg.innerHTML=s;');
+    DBMS_OUTPUT.PUT_LINE('  setSvg(c,s);');
     DBMS_OUTPUT.PUT_LINE('  c.g={mode:''win'',pan:pan,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:SP.dom[0],d1:SP.dom[1],ymax:ymax,ord:ord,hk:c.hk,cm:o.cm};');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function draw(c,force){');
@@ -983,8 +1020,13 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var Wd=Math.max(480,c.plot.clientWidth),d0=SP.dom[0],d1=SP.dom[1];');
     DBMS_OUTPUT.PUT_LINE('  if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk&&c.g.cm===cmp()&&(c.g.mode||''span'')===SP.mode)return;c.w=Wd;c.pw=PW;c.lay=lay;');
     DBMS_OUTPUT.PUT_LINE('  var mks=W.markers?W.markers():[],P=c.P;');
-    DBMS_OUTPUT.PUT_LINE('  var cm=cmp();');
-    DBMS_OUTPUT.PUT_LINE('  var top=c.flags&&mks.length?46:22,ph=cm?96:150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;');
+    DBMS_OUTPUT.PUT_LINE('  var cm=cmp(),padL=40,padR=14,pw=Wd-padL-padR,n=SP.win.length;');
+    DBMS_OUTPUT.PUT_LINE('  /* the flag band only while a marker is in view: Full span = every marker');
+    DBMS_OUTPUT.PUT_LINE('     (W.markers() all lie inside the span; kept while zoomed, so a brush');
+    DBMS_OUTPUT.PUT_LINE('     never moves the charts), side by side = a marker in the gap before a');
+    DBMS_OUTPUT.PUT_LINE('     panel shown (the most recent winFit(pw) windows) */');
+    DBMS_OUTPUT.PUT_LINE('  var mkv=SP.mode===''win''?mks.filter(function(m){var ib=idxOf(m.o);return ib>=0&&ib>=n-Math.min(n,winFit(pw));}):mks;');
+    DBMS_OUTPUT.PUT_LINE('  var top=c.flags&&mkv.length?46:22,ph=cm?96:150,bot=c.xl?26:8,H=top+ph+bot;');
     DBMS_OUTPUT.PUT_LINE('  c.svg.setAttribute(''viewBox'',''0 0 ''+Wd+'' ''+H);c.svg.setAttribute(''height'',H);');
     DBMS_OUTPUT.PUT_LINE('  var X=function(t){return padL+pw*(t-d0)/(d1-d0);};');
     DBMS_OUTPUT.PUT_LINE('  if(SP.mode===''win''){drawWin(c,{Wd:Wd,top:top,ph:ph,padL:padL,padR:padR,pw:pw,xl:c.xl,cm:cm,mks:mks});return;}');
@@ -1045,7 +1087,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    s+=''<rect class="xwh" data-i="''+i+''" data-w="''+w.o+''" x="''+hx.toFixed(1)+''" y="''+(top-6)+''" width="''+hw.toFixed(1)+''" height="''+hh+''" tabindex="0" role="button" aria-label="''');
     DBMS_OUTPUT.PUT_LINE('      +esc((w.o===0?''Current window, '':offTxt(w)+'' window, '')+w.t+(w.o===0?'''':''. Pin it''))+''"/>'';');
     DBMS_OUTPUT.PUT_LINE('  });');
-    DBMS_OUTPUT.PUT_LINE('  c.svg.innerHTML=s;');
+    DBMS_OUTPUT.PUT_LINE('  setSvg(c,s);');
     DBMS_OUTPUT.PUT_LINE('  c.g={mode:''span'',X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,hk:c.hk,cm:cm};');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function tAt(c,cx){var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*c.g.W/r.width;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}');

@@ -162,7 +162,13 @@ release bumps `awr_version`).
   and highlighted, release markers between the panels; hover, legend,
   highlight and pin work as before, zoom stays in Full span. Full span
   stays the default; the reader's choice is remembered. Works in all three
-  designs, next to the dashboard's chart tabs.
+  designs, next to the dashboard's chart tabs. Markers sharing a gap (or
+  one spot in Full span) each get a flag while there is room, then one
+  "+n" flag whose tooltip lists the rest (a third marker used to lose its
+  flag, and a marker with no room left now keeps its line); the flag band
+  is left out when every marker is in a window cropped away; Enter on a
+  focused window stripe or cap keeps the focus there after the pin
+  redraws the charts (both layouts).
 - **Findings at a glance.** The Summary view lists every finding in one
   triage list (value, normal range, share of the DB-time rise, per-window
   strip) above the cards; every card but the most important one starts

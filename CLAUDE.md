@@ -738,7 +738,19 @@ the most recent `winFit(pw)` panels. Labels / flags follow `c.xl` /
 `c.flags` (the last / first chart SHOWN), so it works with one chart
 hidden (compact Summary, the dashboard's tabs). Not to be confused with
 the dashboard's `window.AWR_axMode` (which chart is shown). The
-`js_timeline.plsql` header lists these functions.
+`js_timeline.plsql` header lists these functions. Release flags
+(`flagSvg` + `flag1`, both layouts; G3 follow-up): markers less than 1 px
+apart form a group (side by side: every marker of one gap) -- as many as
+fit get a flag of their own (two tiers), the last flag shown reads
+"<label> +n" and its `<title>` lists the rest (one per line); a group
+with no room left keeps a `cfl` line whose title names every marker (the
+flags chart used to draw nothing for it). The flag band (`top` 46 vs 22)
+is reserved side by side only while a marker sits in the gap before a
+panel SHOWN (the most recent `winFit(pw)`); Full span keeps it for every
+marker of the span, also while zoomed, so a brush never moves the charts.
+`setSvg(c, s)` replaces a chart's SVG in both layouts and gives the focus
+back to the same `.xwh` (`data-i`) when one had it (Enter on a stripe /
+cap pins, which redraws).
 
 **Direct labels (plan 036; fitted per band, owner decision 2026-11-20)**:
 `dlab(c, groups, ord, on, Y, reb, nb)` after the bands, inside the plot
@@ -772,7 +784,9 @@ verify_report: `bandLabels` (block 5: names, overlap, inside the plot and
 inside the band they name via `elementsFromPoint` -- `LABEL_BAND`; the
 demo labels both charts) / `labelHide`, the note check in the highlight
 `state()` (`xov`), `sb.labels` (block 5c: inside one panel and its band;
-the demo labels both charts side by side too).
+the demo labels both charts side by side too), `sb.flagBand` /
+`sb.keys` (5c) and block 5d (two markers injected after the first one:
+every marker named, no flag overlap, a "+n" flag on the demo).
 
 ### Window component (`sql/lib/wingrid.plsql` + `js_wingrid.plsql`)
 

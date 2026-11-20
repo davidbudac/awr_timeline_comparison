@@ -2612,26 +2612,60 @@ function dlab(c,groups,ord,on,Y,reb,nb){
     .map(function(L){return '<text class="xdl" x="'+L.x.toFixed(1)+'" y="'+(L.y+4).toFixed(1)+'" text-anchor="middle">'+esc(L.txt)+'</text>';}).join('');
 }
 /* the release markers of list [{x: px, m: marker}]: a line through the plot
-   on every chart shown, the flags (two tiers) on the chart with c.flags */
+   on every chart shown, the flags (two tiers) on the chart with c.flags.
+   Markers less than 1 px apart (side by side: every marker of one gap)
+   form a group: as many as fit get a flag of their own, the last flag
+   shown names the rest ("Release 4.2 +2", its tooltip lists them); a
+   group with no room left for a flag keeps its line, whose tooltip names
+   every marker of the group */
 function flagSvg(c,list,top,ph,Wd,padL,padR){
-  var s='',tiers=[[],[]];
-  list.forEach(function(it){
-    var x=it.x,m=it.m;if(x<padL||x>Wd-padR)return;
-    if(!c.flags){s+='<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+top+'" y2="'+(top+ph)+'"><title>'+esc(m.l+', '+m.t)+'</title></line>';return;}
-    [m.l,m.s].some(function(lb){
-      var w=tw(lb)+12,x0=x+w>Wd-padR?x-w:x,end=x0!==x;
-      for(var L=0;L<2;L++){
-        if(tiers[L].some(function(r){return x0<r[1]+6&&x0+w>r[0]-6;}))continue;
-        tiers[L].push([x0,x0+w]);var y=2+L*19;
-        s+='<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+(y+16)+'" y2="'+(top+ph)+'"/><line class="cf" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+y+'" y2="'+(y+16)+'"/>'
-          +'<rect class="cfh" x="'+(end?x0:x+1).toFixed(1)+'" y="'+y+'" width="'+(w-1)+'" height="16" rx="2"/>'
-          +'<text class="cft" x="'+(end?x-6:x+6).toFixed(1)+'" y="'+(y+12)+'" text-anchor="'+(end?'end':'start')+'"><title>'+esc(m.l+', '+m.t)+'</title>'+esc(lb)+'</text>';
-        return true;
+  var s='',tiers=[[],[]],G=[];
+  list.filter(function(it){return it.x>=padL&&it.x<=Wd-padR;}).sort(function(a,b){return a.x-b.x;}).forEach(function(it){
+    var g=G[G.length-1];if(g&&it.x-g.x<1)g.ms.push(it.m);else G.push({x:it.x,ms:[it.m]});
+  });
+  var tt=function(ms){return ms.map(function(m){return m.l+', '+m.t;}).join('\n');};
+  var line=function(x,ms){return '<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+top+'" y2="'+(top+ph)+'"><title>'+esc(tt(ms))+'</title></line>';};
+  G.forEach(function(g){
+    var x=g.x,ms=g.ms,n=ms.length,j,i;
+    if(!c.flags){s+=line(x,ms);return;}
+    /* j flags: the first j - 1 markers alone, the j-th with the rest */
+    for(j=n;j>=1;j--){
+      var tr=tiers.map(function(t){return t.slice();}),out='',f='';
+      for(i=0;i<j&&f!=null;i++){
+        var more=i===j-1?ms.slice(j):[],sx=more.length?' +'+more.length:'';
+        f=flag1(tr,x,[ms[i].l+sx,ms[i].s+sx],tt([ms[i]].concat(more)),top,ph,Wd,padR);
+        if(f!=null)out+=f;
       }
-      return false;
-    });
+      if(f!=null){tiers=tr;s+=out;return;}
+    }
+    s+=line(x,ms);
   });
   return s;
+}
+/* one flag at x on the first tier with room for one of the labels labs
+   (else null); tiers takes its extent */
+function flag1(tiers,x,labs,title,top,ph,Wd,padR){
+  var r=null;
+  labs.some(function(lb){
+    var w=tw(lb)+12,x0=x+w>Wd-padR?x-w:x,end=x0!==x;
+    for(var L=0;L<2;L++){
+      if(tiers[L].some(function(q){return x0<q[1]+6&&x0+w>q[0]-6;}))continue;
+      tiers[L].push([x0,x0+w]);var y=2+L*19;
+      r='<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+(y+16)+'" y2="'+(top+ph)+'"/><line class="cf" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+y+'" y2="'+(y+16)+'"/>'
+        +'<rect class="cfh" x="'+(end?x0:x+1).toFixed(1)+'" y="'+y+'" width="'+(w-1)+'" height="16" rx="2"/>'
+        +'<text class="cft" x="'+(end?x-6:x+6).toFixed(1)+'" y="'+(y+12)+'" text-anchor="'+(end?'end':'start')+'"><title>'+esc(title)+'</title>'+esc(lb)+'</text>';
+      return true;
+    }
+    return false;
+  });
+  return r;
+}
+/* replace chart c's SVG; a focused window stripe / cap keeps the focus
+   (Enter on it pins the window, which redraws both charts) */
+function setSvg(c,s){
+  var a=doc.activeElement,fi=a&&a!==c.svg&&c.svg.contains(a)&&a.getAttribute&&a.getAttribute('class')==='xwh'?a.getAttribute('data-i'):null;
+  c.svg.innerHTML=s;
+  if(fi!=null){var e=$('.xwh[data-i="'+fi+'"]',c.svg);if(e)try{e.focus({preventScroll:true});}catch(x){e.focus();}}
 }
 /* ---- "Windows side by side" (SP.mode 'win'): each compared window as its
    own panel on one shared y axis, oldest left, Current last.  A panel is
@@ -2723,7 +2757,7 @@ function drawWin(c,o){
   hit.forEach(function(r){var wi=ws[r[0]];
     s+='<rect class="xwh" data-i="'+r[0]+'" data-w="'+wi.o+'" x="'+r[1].toFixed(1)+'" y="'+(top-6)+'" width="'+r[2].toFixed(1)+'" height="10" tabindex="0" role="button" aria-label="'
       +esc((wi.o===0?'Current window, ':offTxt(wi)+' window, ')+wi.t+(wi.o===0?'':'. Pin it'))+'"/>';});
-  c.svg.innerHTML=s;
+  setSvg(c,s);
   c.g={mode:'win',pan:pan,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:SP.dom[0],d1:SP.dom[1],ymax:ymax,ord:ord,hk:c.hk,cm:o.cm};
 }
 function draw(c,force){
@@ -2734,8 +2768,13 @@ function draw(c,force){
   var Wd=Math.max(480,c.plot.clientWidth),d0=SP.dom[0],d1=SP.dom[1];
   if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk&&c.g.cm===cmp()&&(c.g.mode||'span')===SP.mode)return;c.w=Wd;c.pw=PW;c.lay=lay;
   var mks=W.markers?W.markers():[],P=c.P;
-  var cm=cmp();
-  var top=c.flags&&mks.length?46:22,ph=cm?96:150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;
+  var cm=cmp(),padL=40,padR=14,pw=Wd-padL-padR,n=SP.win.length;
+  /* the flag band only while a marker is in view: Full span = every marker
+     (W.markers() all lie inside the span; kept while zoomed, so a brush
+     never moves the charts), side by side = a marker in the gap before a
+     panel shown (the most recent winFit(pw) windows) */
+  var mkv=SP.mode==='win'?mks.filter(function(m){var ib=idxOf(m.o);return ib>=0&&ib>=n-Math.min(n,winFit(pw));}):mks;
+  var top=c.flags&&mkv.length?46:22,ph=cm?96:150,bot=c.xl?26:8,H=top+ph+bot;
   c.svg.setAttribute('viewBox','0 0 '+Wd+' '+H);c.svg.setAttribute('height',H);
   var X=function(t){return padL+pw*(t-d0)/(d1-d0);};
   if(SP.mode==='win'){drawWin(c,{Wd:Wd,top:top,ph:ph,padL:padL,padR:padR,pw:pw,xl:c.xl,cm:cm,mks:mks});return;}
@@ -2796,7 +2835,7 @@ function draw(c,force){
     s+='<rect class="xwh" data-i="'+i+'" data-w="'+w.o+'" x="'+hx.toFixed(1)+'" y="'+(top-6)+'" width="'+hw.toFixed(1)+'" height="'+hh+'" tabindex="0" role="button" aria-label="'
       +esc((w.o===0?'Current window, ':offTxt(w)+' window, ')+w.t+(w.o===0?'':'. Pin it'))+'"/>';
   });
-  c.svg.innerHTML=s;
+  setSvg(c,s);
   c.g={mode:'span',X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,hk:c.hk,cm:cm};
 }
 function tAt(c,cx){var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*c.g.W/r.width;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}
@@ -53725,7 +53764,7 @@ Object.keys(AWR_DATA.fileIo.dims).forEach(function(dim){
 <div class="gi"><div class="gv"><svg class="gd" width="152" height="44" viewBox="0 0 152 44" role="img" aria-label="One stacked column per compared window"><rect class="gd-cbg" x="130.4" y="0" width="15.8" height="44"/><rect x="2.0" y="30.6" width="8.4" height="11.4" fill="#3FB344"/><rect x="2.0" y="26.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="2.0" y="23.6" width="8.4" height="2.4" fill="#E89B40"/><rect x="12.8" y="29.6" width="8.4" height="12.4" fill="#3FB344"/><rect x="12.8" y="25.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="12.8" y="22.6" width="8.4" height="2.4" fill="#E89B40"/><rect x="23.6" y="28.6" width="8.4" height="13.4" fill="#3FB344"/><rect x="23.6" y="24.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="23.6" y="21.6" width="8.4" height="2.4" fill="#E89B40"/><rect x="34.4" y="30.6" width="8.4" height="11.4" fill="#3FB344"/><rect x="34.4" y="26.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="34.4" y="23.6" width="8.4" height="2.4" fill="#E89B40"/><rect x="45.2" y="29.6" width="8.4" height="12.4" fill="#3FB344"/><rect x="45.2" y="25.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="45.2" y="22.6" width="8.4" height="2.4" fill="#E89B40"/><rect x="56.0" y="28.6" width="8.4" height="13.4" fill="#3FB344"/><rect x="56.0" y="24.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="56.0" y="21.6" width="8.4" height="2.4" fill="#E89B40"/><rect x="66.8" y="30.6" width="8.4" height="11.4" fill="#3FB344"/><rect x="66.8" y="26.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="66.8" y="23.6" width="8.4" height="2.4" fill="#E89B40"/><rect x="77.6" y="29.6" width="8.4" height="12.4" fill="#3FB344"/><rect x="77.6" y="25.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="77.6" y="22.6" width="8.4" height="2.4" fill="#E89B40"/><rect x="88.4" y="28.6" width="8.4" height="13.4" fill="#3FB344"/><rect x="88.4" y="24.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="88.4" y="21.6" width="8.4" height="2.4" fill="#E89B40"/><rect x="99.2" y="30.6" width="8.4" height="11.4" fill="#3FB344"/><rect x="99.2" y="26.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="99.2" y="23.6" width="8.4" height="2.4" fill="#E89B40"/><rect x="110.0" y="29.6" width="8.4" height="12.4" fill="#3FB344"/><rect x="110.0" y="25.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="110.0" y="22.6" width="8.4" height="2.4" fill="#E89B40"/><rect x="120.8" y="28.6" width="8.4" height="13.4" fill="#3FB344"/><rect x="120.8" y="24.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="120.8" y="21.6" width="8.4" height="2.4" fill="#E89B40"/><rect x="131.6" y="30.6" width="13.4" height="11.4" fill="#3FB344"/><rect x="131.6" y="14.6" width="13.4" height="15.4" fill="#4A90D9"/><rect x="131.6" y="11.6" width="13.4" height="2.4" fill="#E89B40"/></svg></div><div class="gx2"><h3>Activity per window</h3><p>Timeline Activity lane (all sessions) and the DB time card (foreground sessions only, ASH&rsquo;s estimate of DB time): one stacked column per compared window, same wait classes. <span class="g2">Current labels its two largest classes.</span></p></div></div>
 <div class="gi"><div class="gv"><svg class="gd" width="152" height="44" viewBox="0 0 152 44" role="img" aria-label="Stacked area of active sessions by wait class"><path d="M0.0 28.8 L3.2 27.0 L6.5 25.4 L9.7 24.2 L12.9 23.5 L16.2 23.3 L19.4 23.8 L22.6 24.8 L25.9 26.3 L29.1 28.0 L32.3 29.8 L35.6 31.6 L38.8 33.0 L42.0 33.9 L45.3 34.3 L48.5 34.1 L51.7 33.3 L55.0 32.0 L58.2 30.3 L61.4 28.5 L64.7 26.7 L67.9 25.2 L71.1 24.0 L74.4 23.4 L77.6 23.4 L80.9 23.9 L84.1 25.0 L87.3 26.5 L90.6 28.3 L93.8 30.1 L97.0 31.8 L100.3 33.1 L103.5 34.0 L106.7 34.3 L110.0 34.0 L113.2 33.1 L116.4 31.8 L119.7 30.1 L122.9 28.2 L126.1 26.5 L129.4 25.0 L132.6 23.9 L135.8 23.4 L139.1 23.4 L142.3 24.1 L145.5 25.2 L148.8 26.8 L152.0 28.6 L152.0 42.0 L148.8 42.0 L145.5 42.0 L142.3 42.0 L139.1 42.0 L135.8 42.0 L132.6 42.0 L129.4 42.0 L126.1 42.0 L122.9 42.0 L119.7 42.0 L116.4 42.0 L113.2 42.0 L110.0 42.0 L106.7 42.0 L103.5 42.0 L100.3 42.0 L97.0 42.0 L93.8 42.0 L90.6 42.0 L87.3 42.0 L84.1 42.0 L80.9 42.0 L77.6 42.0 L74.4 42.0 L71.1 42.0 L67.9 42.0 L64.7 42.0 L61.4 42.0 L58.2 42.0 L55.0 42.0 L51.7 42.0 L48.5 42.0 L45.3 42.0 L42.0 42.0 L38.8 42.0 L35.6 42.0 L32.3 42.0 L29.1 42.0 L25.9 42.0 L22.6 42.0 L19.4 42.0 L16.2 42.0 L12.9 42.0 L9.7 42.0 L6.5 42.0 L3.2 42.0 L0.0 42.0Z" fill="#3FB344" class="gd-ar"/><path d="M0.0 20.0 L3.2 17.8 L6.5 16.3 L9.7 15.7 L12.9 16.0 L16.2 17.1 L19.4 18.7 L22.6 20.5 L25.9 22.3 L29.1 23.9 L32.3 25.0 L35.6 25.7 L38.8 25.9 L42.0 25.8 L45.3 25.4 L48.5 24.8 L51.7 24.3 L55.0 23.7 L58.2 23.1 L61.4 22.5 L64.7 21.8 L67.9 21.0 L71.1 20.1 L74.4 19.2 L77.6 18.4 L80.9 17.9 L84.1 17.8 L87.3 18.2 L90.6 19.3 L93.8 20.9 L97.0 22.9 L100.3 25.0 L103.5 27.0 L106.7 28.5 L110.0 29.2 L113.2 29.0 L116.4 27.8 L119.7 25.7 L122.9 23.1 L126.1 20.2 L129.4 17.5 L132.6 4.4 L135.8 3.3 L139.1 3.2 L142.3 4.2 L145.5 6.3 L148.8 9.0 L152.0 11.9 L152.0 28.6 L148.8 26.8 L145.5 25.2 L142.3 24.1 L139.1 23.4 L135.8 23.4 L132.6 23.9 L129.4 25.0 L126.1 26.5 L122.9 28.2 L119.7 30.1 L116.4 31.8 L113.2 33.1 L110.0 34.0 L106.7 34.3 L103.5 34.0 L100.3 33.1 L97.0 31.8 L93.8 30.1 L90.6 28.3 L87.3 26.5 L84.1 25.0 L80.9 23.9 L77.6 23.4 L74.4 23.4 L71.1 24.0 L67.9 25.2 L64.7 26.7 L61.4 28.5 L58.2 30.3 L55.0 32.0 L51.7 33.3 L48.5 34.1 L45.3 34.3 L42.0 33.9 L38.8 33.0 L35.6 31.6 L32.3 29.8 L29.1 28.0 L25.9 26.3 L22.6 24.8 L19.4 23.8 L16.2 23.3 L12.9 23.5 L9.7 24.2 L6.5 25.4 L3.2 27.0 L0.0 28.8Z" fill="#4A90D9" class="gd-ar"/><path d="M0.0 16.5 L3.2 13.5 L6.5 11.6 L9.7 10.9 L12.9 11.6 L16.2 13.3 L19.4 15.6 L22.6 18.1 L25.9 20.1 L29.1 21.5 L32.3 22.0 L35.6 21.9 L38.8 21.5 L42.0 21.0 L45.3 20.6 L48.5 20.6 L51.7 20.7 L55.0 20.9 L58.2 20.8 L61.4 20.3 L64.7 19.2 L67.9 17.7 L71.1 16.1 L74.4 14.6 L77.6 13.5 L80.9 13.2 L84.1 13.7 L87.3 14.9 L90.6 16.7 L93.8 18.6 L97.0 20.6 L100.3 22.3 L103.5 23.5 L106.7 24.2 L110.0 24.5 L113.2 24.1 L116.4 23.3 L119.7 21.9 L122.9 20.0 L126.1 17.8 L129.4 15.3 L132.6 2.0 L135.8 0.3 L139.1 -0.5 L142.3 -0.2 L145.5 1.5 L148.8 4.2 L152.0 7.6 L152.0 11.9 L148.8 9.0 L145.5 6.3 L142.3 4.2 L139.1 3.2 L135.8 3.3 L132.6 4.4 L129.4 17.5 L126.1 20.2 L122.9 23.1 L119.7 25.7 L116.4 27.8 L113.2 29.0 L110.0 29.2 L106.7 28.5 L103.5 27.0 L100.3 25.0 L97.0 22.9 L93.8 20.9 L90.6 19.3 L87.3 18.2 L84.1 17.8 L80.9 17.9 L77.6 18.4 L74.4 19.2 L71.1 20.1 L67.9 21.0 L64.7 21.8 L61.4 22.5 L58.2 23.1 L55.0 23.7 L51.7 24.3 L48.5 24.8 L45.3 25.4 L42.0 25.8 L38.8 25.9 L35.6 25.7 L32.3 25.0 L29.1 23.9 L25.9 22.3 L22.6 20.5 L19.4 18.7 L16.2 17.1 L12.9 16.0 L9.7 15.7 L6.5 16.3 L3.2 17.8 L0.0 20.0Z" fill="#E89B40" class="gd-ar"/><circle class="gd-dp" cx="6.0" cy="10.6" r="2.2"/><circle class="gd-dp" cx="17.2" cy="12.3" r="2.2"/><circle class="gd-dp" cx="28.4" cy="20.5" r="2.2"/><circle class="gd-dp" cx="39.6" cy="20.5" r="2.2"/><circle class="gd-dp" cx="50.8" cy="19.7" r="2.2"/><circle class="gd-dp" cx="62.0" cy="19.3" r="2.2"/><circle class="gd-dp" cx="73.2" cy="13.6" r="2.2"/><circle class="gd-dp" cx="84.4" cy="12.7" r="2.2"/><circle class="gd-dp" cx="95.6" cy="19.6" r="2.2"/><circle class="gd-dp" cx="106.8" cy="23.2" r="2.2"/><circle class="gd-dp" cx="118.0" cy="22.3" r="2.2"/><circle class="gd-dp" cx="129.2" cy="14.3" r="2.2"/><circle class="gd-dc" cx="140.4" cy="-1.5" r="3"/></svg></div><div class="gx2"><h3>Span chart</h3><p>All sections: active sessions by wait class across the whole span. <span class="g2">Compared windows shaded, Current in indigo.</span></p></div></div>
 <div class="gi"><div class="gv"><svg class="mw" width="92" height="22" viewBox="0 0 92 22" role="img" aria-label="Thirteen-bar micro strip"><rect class="z2" x="0" y="11" width="92" height="6" rx="1"/><rect class="b" x="0.0" y="13" width="5.2" height="8" rx="1"/><rect class="b" x="6.8" y="14" width="5.2" height="7" rx="1"/><rect class="b" x="13.6" y="12" width="5.2" height="9" rx="1"/><rect class="b" x="20.4" y="13" width="5.2" height="8" rx="1"/><rect class="b" x="27.2" y="14" width="5.2" height="7" rx="1"/><rect class="b" x="34.0" y="13" width="5.2" height="8" rx="1"/><rect class="b" x="40.8" y="13" width="5.2" height="8" rx="1"/><rect class="b" x="47.6" y="14" width="5.2" height="7" rx="1"/><rect class="b" x="54.4" y="12" width="5.2" height="9" rx="1"/><rect class="b" x="61.2" y="13" width="5.2" height="8" rx="1"/><rect class="b" x="68.0" y="13" width="5.2" height="8" rx="1"/><rect class="b" x="74.8" y="12" width="5.2" height="9" rx="1"/><rect class="b cur" x="81.6" y="2" width="8.3" height="19" rx="1"/></svg></div><div class="gx2"><h3>Trend</h3><p>A table row&rsquo;s windows as bars from zero, oldest left: shaded = normal range, indigo = Current. <span class="g2">Hover a strip for the last four values and the normal range.</span></p></div></div>
-<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="A release flag on the boundary between two windows"><rect class="gd-cell" x="0" y="18" width="150" height="24"/><line class="gd-cl" x1="30" x2="30" y1="18" y2="42"/><line class="gd-cl" x1="60" x2="60" y1="18" y2="42"/><line class="gd-cl" x1="90" x2="90" y1="18" y2="42"/><line class="gd-cl" x1="120" x2="120" y1="18" y2="42"/><line class="gd-mk" x1="60" x2="60" y1="2" y2="42"/><rect class="gd-flg" x="60" y="2" width="44" height="12" rx="2"/><text class="gd-t" x="64" y="11">Release</text></svg></div><div class="gx2"><h3>Release marker</h3><p>A release or patch, on the boundary between the two windows it fell between. <span class="g2">Its line runs down every chart.</span></p></div></div>
+<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="A release flag on the boundary between two windows"><rect class="gd-cell" x="0" y="18" width="150" height="24"/><line class="gd-cl" x1="30" x2="30" y1="18" y2="42"/><line class="gd-cl" x1="60" x2="60" y1="18" y2="42"/><line class="gd-cl" x1="90" x2="90" y1="18" y2="42"/><line class="gd-cl" x1="120" x2="120" y1="18" y2="42"/><line class="gd-mk" x1="60" x2="60" y1="2" y2="42"/><rect class="gd-flg" x="60" y="2" width="44" height="12" rx="2"/><text class="gd-t" x="64" y="11">Release</text></svg></div><div class="gx2"><h3>Release marker</h3><p>A release or patch, on the boundary between the two windows it fell between. <span class="g2">Its line runs down every chart. On the Activity charts, markers at one spot get a flag each while there is room, then one &ldquo;+n&rdquo; flag whose tooltip lists the rest.</span></p></div></div>
 <div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="Step line: value changes between two windows"><path class="gd-st" d="M0 32H86V14H150"/><line class="gd-str" x1="86" x2="86" y1="32" y2="14"/><circle class="gd-nd" cx="86" cy="14" r="3.5"/><text class="gd-t m" x="4" y="28">FALSE</text><text class="gd-t m b" x="92" y="10">TRUE</text></svg></div><div class="gx2"><h3>Step line</h3><p>Parameters and plan hashes step where the value changed. <span class="g2">Dot = the change; labels = old and new value.</span></p></div></div>
 <div class="gi"><div class="gv"><span class="gd-gl"><span><b>&#9670;</b> plan changed</span><span><b>&#10010;</b> first seen</span><span><b>&#9661;</b> DOP downgrade</span></span></div><div class="gx2"><h3>Glyphs</h3><p>Drawn in the window where it happened.</p></div></div>
 <div class="gi"><div class="gv"><svg class="gd" width="152" height="44" viewBox="0 0 152 44" role="img" aria-label="Day profile heatmap: stats by hour, signed z"><rect x="2.0" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.90"/><rect x="8.2" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.90"/><rect x="14.4" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.80"/><rect x="20.6" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.90"/><rect x="26.8" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.80"/><rect x="33.0" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.70"/><rect x="39.2" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.60"/><rect x="45.4" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.50"/><rect x="51.6" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.35"/><rect x="57.8" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.30"/><rect x="64.0" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.20"/><rect x="70.2" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.20"/><rect x="76.4" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.15"/><rect x="82.6" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.10"/><rect x="88.8" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.10"/><rect x="95.0" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.15"/><rect x="101.2" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.20"/><rect x="107.4" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.20"/><rect x="113.6" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.25"/><rect x="119.8" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.20"/><rect x="126.0" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.30"/><rect x="132.2" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.25"/><rect x="138.4" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.30"/><rect x="144.6" y="6" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.35"/><rect x="2.0" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.12"/><rect x="8.2" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.10"/><rect x="14.4" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.09"/><rect x="20.6" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.10"/><rect x="26.8" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.07"/><rect x="33.0" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.09"/><rect x="39.2" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.07"/><rect x="45.4" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.07"/><rect x="51.6" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.06"/><rect x="57.8" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.06"/><rect x="64.0" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.06"/><rect x="70.2" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.06"/><rect x="76.4" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.07"/><rect x="82.6" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.07"/><rect x="88.8" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.10"/><rect x="95.0" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.12"/><rect x="101.2" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.17"/><rect x="107.4" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.21"/><rect x="113.6" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.24"/><rect x="119.8" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.28"/><rect x="126.0" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.32"/><rect x="132.2" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.28"/><rect x="138.4" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.32"/><rect x="144.6" y="22" width="5.6" height="14" style="fill:var(--crit-dot);fill-opacity:0.32"/><rect x="82.6" y="22" width="5.6" height="14" style="fill:var(--acc);fill-opacity:.45"/></svg></div><div class="gx2"><h3>Day profile</h3><p>Last 24 h by hour vs the same hour on the prior days, one row per stat: red above, blue below (signed z). <span class="g2">A triangle marks a flagged hour; the line chart below it plots one stat: pick it with its button (the dot and counts say how unusual its day is), a row label, or the arrow keys.</span></p></div></div>

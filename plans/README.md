@@ -89,7 +89,7 @@ What the re-check added to the plans:
 | [021](021-db-time-breakdown-in-verdict.md) | The verdict shows where the extra DB time went (DB CPU + wait classes) | 2 | P1 | M | LOW-MED | 020 | DONE (`dc8dbff`); DB run pending (owner) |
 | [022](022-one-finding-count.md) | One finding count everywhere: a finding is a card | 3 | P2 | S-M | LOW | 020 | DONE (`3db73d5`); DB run pending (owner) |
 | [023](023-verdict-first-compact-activity.md) | Summary: the verdict comes first, the Activity charts open compact | 4 | P1 | M | LOW | — | DONE (`ecb0be3`, option A); DB run pending (owner) |
-| [024](024-activity-windows-side-by-side.md) | Activity charts: "Windows side by side" mode | 5 | P2 | L | MED | 023 | DONE (`862ae3f`, default Full span); DB run pending (owner) |
+| [024](024-activity-windows-side-by-side.md) | Activity charts: "Windows side by side" mode | 5 | P2 | L | MED | 023 | DONE (`862ae3f`, default Full span; review leftovers in fix group G3); DB run pending (owner) |
 | [025](025-findings-triage-list-and-folded-cards.md) | Findings triage list, folded secondary cards, quieter card charts | 6 | P1 | M | MED | 020 | DONE (`e3f8cad`); DB run pending (owner) |
 | [026](026-cause-next-to-effect-io-card.md) | The Physical I/O card names its top statement; the plan card that explains it sits under it | 7 | P2 | M | MED | after 025 | DONE (`3fbaad0`, dashboard: side column); DB run pending (owner) |
 | [027](027-pattern-tags-on-findings.md) | Pattern tags: spike / step / trend / after a release | 8 | P2 | M | LOW | 025 (soft) | DONE (`aafbc38`); DB run pending (owner) |
@@ -254,6 +254,11 @@ these supersede the 2026-11-19 answers where they overlap):
   px at the single thickest point; shorter cuts of a long name when only
   they fit), thickest first, at most six a chart, both charts, both
   layouts. Done in fix group G3.
+- 024 (review leftovers, owner approved fixing): side by side, more than
+  two markers in one gap all get named (a flag each while there is room,
+  then a "+n" flag whose tooltip lists the rest); no empty flag band when
+  every marker is cropped away; the focus stays on a stripe / cap pinned
+  with Enter. Done in fix group G3.
 
 
 Each plan records its default, so an executor never waits on these. Decide
