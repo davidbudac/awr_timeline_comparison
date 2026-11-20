@@ -227,6 +227,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.fc .cfg-more a{color:var(--ink-soft);text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:3px}');
     DBMS_OUTPUT.PUT_LINE('/* ==== 10. normal grid, notes, library rows, guide ==== */');
     DBMS_OUTPUT.PUT_LINE('.calm-notes .note{border-color:var(--hairline)}');
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold > summary{border-radius:var(--radius)}');
     DBMS_OUTPUT.PUT_LINE('.nr{border-bottom-color:var(--line-soft)}');
     DBMS_OUTPUT.PUT_LINE('body.vs main > section.lib > h2{font-size:14px;font-weight:500}');
     DBMS_OUTPUT.PUT_LINE('body.vs main > section.lib.lopen > h2{border-bottom-color:var(--line-soft)}');
