@@ -207,6 +207,9 @@ release bumps `awr_version`).
 - **Activity charts name their largest bands.** Up to six series per
   chart are labelled on the widest part of their band (never overlapping,
   inside one panel in Windows side by side); the legend stays.
+- **SQL Monitor scatter is readable.** Smaller marks (size by log2 of the
+  DOP), Current-window points solid and outlined, the rest faded; the
+  x-axis spans the whole compared span.
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

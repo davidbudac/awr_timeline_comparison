@@ -554,8 +554,9 @@ def emit(w) -> str:
     put("<h3>Execution scatter (full compared span)</h3>")
     put('<p style="font-size:11px;color:var(--muted);margin:-4px 0 8px 0">'
         "Every captured execution, x = start time, y = elapsed (log scale). "
-        "Diamond = error, triangle = a plan different from that sql_id's most "
-        "common plan, size &prop; requested DOP. Colored series are the top "
+        "Points in the Current window are solid and outlined, the rest faded; "
+        "diamond = error, triangle = a plan different from that sql_id's most "
+        "common plan (both always solid); size grows with the requested DOP. Colored series are the top "
         + str(top_n) + " statements by Current-window max elapsed; grey = everything else.</p>")
     put('<div class="chart-wrap chart-medium" id="sqlmon-scatter"></div>')
 

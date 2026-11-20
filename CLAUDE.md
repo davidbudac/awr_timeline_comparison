@@ -1591,7 +1591,14 @@ tiny parallel-execution noise (SQL Monitor's capture policy always persists
 parallel statements) while never hiding a real regression. The **execution
 scatter** chart plots every captured execution in the full span regardless
 of the floor (capped at the 3,000 most recent) — the floor only shapes the
-summary table and its Current-window-max-elapsed ranking.
+summary table and its Current-window-max-elapsed ranking. Its marks (plan
+037): size `4 + 2 log2(DOP)`, at most 12 px; points in the Current window,
+errors and plan changes solid with a theme-independent dark outline, the
+rest faded (grey "Other" fainter and drawn underneath); the x-axis is
+pinned to `spanStart..spanEnd`, so a window without captures shows as an
+empty band. `series[0]` carries the window `markArea` (the `awr:window`
+listener addresses it by index); verify_report's phase 4 `scatter` check
+reads the mark size and the axis range.
 
 **Sampling caveats** (stated in the section's own caption, and see the
 design doc): only completed, expensive-enough, or parallel executions are

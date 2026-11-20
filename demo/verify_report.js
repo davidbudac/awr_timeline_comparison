@@ -1088,6 +1088,18 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
               && c.previousElementSibling.id === c.getAttribute('data-explains'))) && vis(c)
         && c.querySelector('.wg .r.bars') && c.querySelector('.wg .r.p .pv')
         && c.querySelector('a.ent[href^="#sm-"]') && c.querySelector('a.jump[data-tl]'));
+      // plan 037: scatter marks <= 12 px, x-axis = the compared span
+      {
+        const sc = window.echarts && document.getElementById('sqlmon-scatter');
+        const si = sc && echarts.getInstanceByDom(sc);
+        if (si) {
+          const o = si.getOption(), s0 = o.series[0], d = window.AWR_DATA.sqlmon;
+          const big = typeof s0.symbolSize === 'function' ? s0.symbolSize(null, { data: { dop: 64 } }) : s0.symbolSize;
+          const ts = s => Date.parse(String(s).replace(' ', 'T'));
+          out.scatter = (big <= 12 && o.xAxis[0].min === ts(d.spanStart) && o.xAxis[0].max === ts(d.spanEnd))
+            ? 'ok' : 'FAIL size=' + big + ' x=' + o.xAxis[0].min + '..' + o.xAxis[0].max;
+        } else out.scatter = sc ? 'FAIL no ECharts instance on #sqlmon-scatter' : 'skipped';
+      }
       // plan 034: Copy summary builds Markdown from the verdict and the cards
       const sbtn = document.getElementById('sum-btn');
       if (sbtn && !sbtn.hidden) {
@@ -1328,6 +1340,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (!p4.impChips) fail('finding cards: impact chip missing');
     if (p4.zcap.length) fail('Summary glyphs print z past 10: ' + p4.zcap.join(', '));
     if (!p4.planOk) fail('plan-change card incomplete, or neither in #changes-slot nor right under the card it explains');
+    if (/^FAIL/.test(p4.scatter)) fail('SQL Monitor scatter ' + p4.scatter);
     if (!p4.sumOk) fail('Copy summary: Markdown missing the verdict, a card line, or contains undefined/null');
     if (!p4.sumClosed) fail('Copy summary: the popover did not close');
     if (!p4.sumEsc) fail('Copy summary: Escape on the close button did not close the popover, or it unpinned the window');

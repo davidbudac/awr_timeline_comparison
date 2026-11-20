@@ -943,8 +943,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<h3>Execution scatter (full compared span)</h3>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:11px;color:var(--muted);margin:-4px 0 8px 0">'
         || 'Every captured execution, x = start time, y = elapsed (log scale). '
-        || 'Diamond = error, triangle = a plan different from that sql_id''s most '
-        || 'common plan, size &prop; requested DOP. Colored series are the top '
+        || 'Points in the Current window are solid and outlined, the rest faded; '
+        || 'diamond = error, triangle = a plan different from that sql_id''s most '
+        || 'common plan (both always solid); size grows with the requested DOP. Colored series are the top '
         || v_top_n || ' statements by Current-window max elapsed; grey = everything else.</p>');
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-medium" id="sqlmon-scatter"></div>');
 
@@ -1140,8 +1141,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
     DBMS_OUTPUT.PUT_LINE('var palette=["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1","#84cc16","#f97316","#0ea5e9"];');
     DBMS_OUTPUT.PUT_LINE('function ts(s){return Date.parse(String(s).replace(" ","T"));}');
-    DBMS_OUTPUT.PUT_LINE('function sizeOf(dop){return Math.max(5,Math.min(18,5+2*(dop||1)));}');
+    DBMS_OUTPUT.PUT_LINE('function sizeOf(dop){var n=Math.max(1,dop||1);return Math.min(12,4+2*Math.log(n)/Math.LN2);}');
     DBMS_OUTPUT.PUT_LINE('function symOf(pt){return pt.st==="DONE (ERROR)"?"diamond":(pt.pm==="Y"?"triangle":"circle");}');
+    DBMS_OUTPUT.PUT_LINE('var cw=(d.windows||[]).filter(function(w){return w[2]==="current";})[0],c0=cw?ts(cw[0]):null,c1=cw?ts(cw[1]):null;');
+    DBMS_OUTPUT.PUT_LINE('function inCur(t){return c0!==null&&t>=c0&&t<c1;}');
     DBMS_OUTPUT.PUT_LINE('var groups={}; (d.points||[]).forEach(function(pt){');
     DBMS_OUTPUT.PUT_LINE('  var key=(d.topIds||[]).indexOf(pt.id)>=0?pt.id:"Other";');
     DBMS_OUTPUT.PUT_LINE('  (groups[key]=groups[key]||[]).push(pt);');
@@ -1158,7 +1161,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  tooltip:{trigger:"item",formatter:function(p){var pt=p.data;return "<b>"+pt.id+"</b><br/>"+pt.t+"<br/>elapsed: "+(+pt.e).toFixed(2)+" s<br/>status: "+pt.st+"<br/>plan_hash: "+pt.ph+"<br/>DOP req: "+pt.dop;}},');
     DBMS_OUTPUT.PUT_LINE('  legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},');
     DBMS_OUTPUT.PUT_LINE('  grid:{left:56,right:20,top:16,bottom:44,containLabel:true},');
-    DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"time",axisLabel:{color:mu,fontSize:10}},');
+    DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"time",min:ts(d.spanStart),max:ts(d.spanEnd),axisLabel:{color:mu,fontSize:10}},');
     DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"log",name:"elapsed (s)",nameTextStyle:{color:mu,fontSize:10},axisLabel:{color:mu},splitLine:{lineStyle:{color:gr}}},');
     DBMS_OUTPUT.PUT_LINE('  dataZoom:[{type:"inside"},{type:"slider",bottom:22,height:14,textStyle:{color:mu,fontSize:9}}],');
     DBMS_OUTPUT.PUT_LINE('  series:names.map(function(name,i){');
@@ -1167,9 +1170,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    var s={name:name,type:"scatter",');
     DBMS_OUTPUT.PUT_LINE('      symbolSize:function(v,p){return sizeOf(p.data.dop);},');
     DBMS_OUTPUT.PUT_LINE('      symbol:function(v,p){return p&&p.data?symOf(p.data):"circle";},');
-    DBMS_OUTPUT.PUT_LINE('      itemStyle:{color:color,opacity:name==="Other"?0.35:0.85},');
-    DBMS_OUTPUT.PUT_LINE('      emphasis:{focus:"series"},');
-    DBMS_OUTPUT.PUT_LINE('      data:pts.map(function(pt){return Object.assign({value:[ts(pt.t),+pt.e]},pt);})};');
+    DBMS_OUTPUT.PUT_LINE('      itemStyle:{color:color,opacity:name==="Other"?0.2:0.45},z:name==="Other"?1:2,');
+    DBMS_OUTPUT.PUT_LINE('      emphasis:{focus:"series"},blur:{itemStyle:{opacity:0.06}},');
+    DBMS_OUTPUT.PUT_LINE('      data:pts.map(function(pt){var t=ts(pt.t),o=Object.assign({value:[t,+pt.e]},pt),cur=inCur(t);'
+        || 'if(cur||pt.st==="DONE (ERROR)"||pt.pm==="Y")o.itemStyle={opacity:1,borderColor:"rgba(0,0,0,0.55)",borderWidth:cur?1:0.6};return o;})};');
     DBMS_OUTPUT.PUT_LINE('    if(i===0){');
     DBMS_OUTPUT.PUT_LINE('      s.markArea={silent:true,data:buildMarkAreas(null)};');
     DBMS_OUTPUT.PUT_LINE('      var ml=markersLine(); if(ml) s.markLine=ml;');
