@@ -81,9 +81,22 @@ DECLARE
     v_share      NUMBER;
     v_cell       VARCHAR2(40);
     v_moved      PLS_INTEGER := 0;    -- Table A rows scored large / moderate (library row text)
-    -- the nominal window length: the Timeline's event rows are in AAS
-    -- (seconds waited / window seconds), like 07's wait-class rows
-    v_win_s      NUMBER := ~win_hours * 3600;
+    -- The Timeline's event rows are in AAS per window: that window's
+    -- seconds waited / its REAL snapshot span (valid_windows dur_sec, MAX
+    -- over the instances), the divisor of 07's wait-class rows, so an
+    -- event row never reads above its own class row when a span is longer
+    -- than win_hours (dbmint: 3846 s, the event read 8.60 AAS against its
+    -- class card's 8.06).  v_span: week_offset -> span (s), valid windows
+    -- only; v_aas: one row's prior AAS values.
+    TYPE t_num_tab IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
+    v_span       t_num_tab;
+    v_aas        t_num_tab;
+    v_tl_csv     VARCHAR2(32767);
+    v_a          NUMBER;
+    v_a_n        PLS_INTEGER;
+    v_a_mu       NUMBER;
+    v_a_sd       NUMBER;
+    v_k          PLS_INTEGER;
 
     -- include order: metric_policy first (lint 14 / 16), then fmt_num ->
     -- band_glyph -> score_cells (lint 13 / 17).
@@ -462,23 +475,76 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('</tbody></table>');
 
     -- v1.6.0 Timeline: the "Waits" lane's event rows, from the same
-    -- collection as Table A, in AAS (seconds waited per window / the
-    -- nominal window length; the bucket is scored on seconds exactly like
-    -- the table, and z / Delta do not change with a constant scale), in
-    -- its order; rows past the 10th fold under "+ Show N more events" (at
-    -- most 16).  Id tl-we-<event>, the label links to the Table A row
-    -- (sql/lib/timeline.plsql).
+    -- collection as Table A, in its order; rows past the 10th fold under
+    -- "+ Show N more events" (at most 16).  Id tl-we-<event>, the label
+    -- links to the Table A row (sql/lib/timeline.plsql).
+    -- Values: AAS per window = the window's seconds waited (Table A's
+    -- per-window slots, so a skipped window stays an empty slot) / that
+    -- window's real span (v_span, below), as 07's wait-class rows; data-mu
+    -- / data-sd = AVG / STDDEV (sample; 0 for one value) of the prior
+    -- windows' AAS values, so the normal zone and the sort agree with the
+    -- bars.  The severity (data-sev) and the gutter's Delta / z / band are
+    -- Table A's, scored on seconds: the gutter always agrees with the
+    -- severity dot and with the table row the label links to.  When the
+    -- windows' spans differ (a snapshot late at an edge), that Delta / z
+    -- can differ by a few % from one computed on the AAS bars; with equal
+    -- spans the two are identical.
+    IF NVL(v_evts.COUNT, 0) > 0 THEN
+        FOR r_sp IN (
+            WITH
+            @@sql/lib/windows_cte.sql
+            SELECT week_offset, MAX(dur_sec) AS dur_sec
+            FROM   valid_windows
+            GROUP BY week_offset
+        ) LOOP
+            v_span(r_sp.week_offset) := r_sp.dur_sec;
+        END LOOP;
+    END IF;
     FOR i IN 1 .. LEAST(NVL(v_evts.COUNT, 0), 16) LOOP
         v_share := CASE WHEN v_tot_cur_us > 0 THEN v_evts(i).cur_us / v_tot_cur_us END;
         v_cell  := score_bucket(v_evts(i).cur_us / 1e6, v_evts(i).mu_us / 1e6, v_evts(i).sd_us / 1e6, v_evts(i).n_us,
                                 v_share, 'WAIT', v_evts(i).event_name, v_evts(i).wait_class, v_shift);
+        -- the row's AAS CSV, oldest first (tl_csv's slots), and the prior
+        -- windows' mean / sample sd
+        v_tl_csv := NULL;
+        v_aas.DELETE;
+        v_a_n  := 0;
+        v_a_mu := 0;
+        FOR k IN REVERSE 0 .. v_weeks_back LOOP
+            v_a := tl_val(v_evts(i).spark_vals, k);
+            IF v_a IS NOT NULL AND v_span.EXISTS(k) THEN
+                v_a := CASE WHEN v_span(k) > 0 THEN v_a / v_span(k) END;
+            ELSE
+                v_a := NULL;
+            END IF;
+            v_tl_csv := v_tl_csv || CASE WHEN k < v_weeks_back THEN ',' END || wg_tok(v_a);
+            IF k > 0 AND v_a IS NOT NULL THEN
+                v_aas(k) := v_a;
+                v_a_n    := v_a_n + 1;
+                v_a_mu   := v_a_mu + v_a;
+            END IF;
+        END LOOP;
+        IF v_a_n = 0 THEN
+            v_a_mu := NULL;
+            v_a_sd := NULL;
+        ELSE
+            v_a_mu := v_a_mu / v_a_n;
+            v_a_sd := 0;
+            IF v_a_n > 1 THEN
+                v_k := v_aas.FIRST;
+                WHILE v_k IS NOT NULL LOOP
+                    v_a_sd := v_a_sd + (v_aas(v_k) - v_a_mu) * (v_aas(v_k) - v_a_mu);
+                    v_k    := v_aas.NEXT(v_k);
+                END LOOP;
+                v_a_sd := SQRT(v_a_sd / (v_a_n - 1));
+            END IF;
+        END IF;
         DBMS_OUTPUT.PUT_LINE(CASE WHEN i = 1 THEN tl_open('waits') END
-            || tl_bars(tl_csv(v_evts(i).spark_vals, 'N', v_win_s),
-                       v_evts(i).mu_us / 1e6 / v_win_s, v_evts(i).sd_us / 1e6 / v_win_s, v_cell,
+            || tl_bars(v_tl_csv, v_a_mu, v_a_sd, v_cell,
                        tl_lab(ent(DBMS_XMLGEN.CONVERT(v_evts(i).event_name), anchor_uniq(anchor_id('we', v_evts(i).event_name), v_evts(i).event_name, v_seen_we), 'event'),
                               DBMS_XMLGEN.CONVERT(v_evts(i).wait_class) || ', AAS', NULL, v_evts(i).wait_class),
-                       tl_gut(v_evts(i).cur_us / 1e6 / v_win_s, v_evts(i).mu_us / 1e6 / v_win_s,
-                              v_evts(i).sd_us / 1e6 / v_win_s, v_cell),
+                       tl_gut(v_evts(i).cur_us / 1e6, v_evts(i).mu_us / 1e6,
+                              v_evts(i).sd_us / 1e6, v_cell),
                        'tl-' || anchor_uniq(anchor_id('we', v_evts(i).event_name), v_evts(i).event_name, v_seen_we),
                        'w' || CASE WHEN i > 10 THEN ' more' END,
                        DBMS_XMLGEN.CONVERT(v_evts(i).event_name), 'AAS')

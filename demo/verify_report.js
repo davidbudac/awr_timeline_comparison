@@ -1172,6 +1172,22 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       out.durOk = [...document.querySelectorAll('article.fc[id^="f-plan-"] .big .v')]
         .every(v => /^-?\d+(\.\d)? (ms|s|m|h|d)( \d+ (s|m|h))?$/.test(v.textContent.trim()));
       out.aasOk = [...document.querySelectorAll('[id^="tl-we-"]')].every(r => r.getAttribute('data-unit') === 'AAS');
+      // dbmint follow-up: an event row never reads above its own wait-class
+      // row in any window -- both are AAS over that window's real snapshot
+      // span, and the class sums its events (same view, same wait list)
+      {
+        const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        const nv = s => String(s || '').split(',').map(x => x === '' ? null : +x);
+        out.evOverClass = [...document.querySelectorAll('[id^="tl-we-"]')].filter(r => {
+          const sw = r.querySelector('.sw[data-wc]');
+          const cr = sw && document.getElementById('tl-fr-w-wait-class-' + slug(sw.getAttribute('data-wc')));
+          if (!cr) return false;
+          const a = nv(r.getAttribute('data-v')), b = nv(cr.getAttribute('data-v'));
+          return a.some((x, i) => x != null && b[i] != null && x > b[i] * (1 + 1e-5) + 1e-6);
+        }).map(r => r.id);
+        out.evClassPairs = [...document.querySelectorAll('[id^="tl-we-"] .sw[data-wc]')]
+          .filter(sw => document.getElementById('tl-fr-w-wait-class-' + slug(sw.getAttribute('data-wc')))).length;
+      }
       // plan 029: SQL Monitor lists flagged statements first; Top SQL opens on Biggest change
       const sk = [...document.querySelectorAll('#sqlmon-pool > tbody > tr[data-sk]')].map(r => +r.getAttribute('data-sk'));
       out.smOrder = sk.every((k, i) => i === 0 || sk[i - 1] <= k) &&
@@ -1388,6 +1404,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (!p4.sumOnTop) fail('Copy summary: something paints over the popover in the Timeline view');
     if (!p4.durOk) fail('plan card: elapsed not shown as a duration');
     if (!p4.aasOk) fail('Timeline: a wait-event row is not in AAS');
+    if (p4.evOverClass.length) fail('Timeline: wait-event row(s) above their own wait-class row: ' + p4.evOverClass.join(', '));
     if (!p4.smOrder) fail('SQL Monitor table: flagged statements not first, or a detail row lost its statement');
     if (!p4.topsqlTab) fail('Top SQL: the selected tab and the open panel disagree');
     if (p4.ioSql === false && /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) fail('demo: the Physical I/O card has no SQL evidence row');

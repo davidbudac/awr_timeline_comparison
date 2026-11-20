@@ -259,8 +259,8 @@ BEGIN
         || ' ON CPU is <b>CPU</b> in both; Idle excluded. Compared windows shaded. ASH is not scored. Each event carries its wait class from the same scan, so'
         || ' highlighting a class lights its events (and an event its class); a highlighted series is re-stacked from zero on its own y axis, the others faded above it.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Timeline</dt><dd>One column per compared window, one row per metric, from the same values and scoring as the tables: the headline and every flagged load / metric'
-        || ' row, flagged wait classes and the top foreground events (both in AAS; an event row is its seconds waited divided by the window length, so its z and &Delta; match the'
-        || ' table), the top segments and datafile by reads, the top statements by elapsed (SQL Monitor rows for a plan change or a DOP'
+        || ' row, flagged wait classes and the top foreground events (both in AAS; an event row is each window&rsquo;s seconds waited divided by that window&rsquo;s snapshot span, as for the classes;'
+        || ' its severity, z and &Delta; are the table&rsquo;s), the top segments and datafile by reads, the top statements by elapsed (SQL Monitor rows for a plan change or a DOP'
         || ' downgrade), changed parameters. Statement, segment and file rows are ranked, not scored: a plain ratio against the mean of the prior windows they made the top list in.'
         || ' Needs JavaScript; every number is also in All sections.</dd>');
     IF ~profile_days > 0 THEN

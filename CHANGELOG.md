@@ -190,7 +190,10 @@ release bumps `awr_version`).
   notes state both orders.
 - **Durations and AAS.** The plan-change card shows elapsed time as words
   of time (7 h 45 m, not 27.92 k s); Timeline wait-event rows are in AAS
-  like the wait classes (seconds waited ÷ the window length). Tables keep
+  like the wait classes (each window's seconds waited ÷ its real snapshot
+  span, the class rows' divisor: with the nominal length a 3846-s window
+  showed an event at 8.60 AAS above its own class card's 8.06). Their
+  severity and the Δ / z beside them stay the table's. Tables keep
   seconds.
 - **Timeline rows show what normal looked like.** A row whose Current
   value is far above its prior windows no longer squashes them: the grid

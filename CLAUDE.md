@@ -515,7 +515,7 @@ too). Lanes (`div.lane#lane-<x>[data-kind]`, rows in `.lrows`):
 |---|---|---|---|
 | activity | ash | 09: one stacked `.r.ash` row | `tl-ash-timeline` |
 | metrics | scored | 07: 11 headline metrics (`hl_rank`) + every other flagged **canonical** LOAD/METRIC row (twins stay in the tables) | `tl-fr-<l\|m>-<name>` |
-| waits | scored | 07 flagged wait classes; 04 Table A's first 16 events (past 10 `.more`, "+ Show N more"), event rows in AAS (seconds ÷ `win_hours`·3600) | `tl-fr-w-wait-class-<c>`, `tl-we-<event>` |
+| waits | scored | 07 flagged wait classes; 04 Table A's first 16 events (past 10 `.more`, "+ Show N more"), event rows in AAS per window (its seconds ÷ ITS real span, `MAX(dur_sec)` of `valid_windows`, as 07's class rows; `data-mu` / `data-sd` from the prior windows' AAS); `data-sev` and the gutter Δ / z / band stay Table A's (scored on seconds), so they match the dot and the linked row and can differ by a few % from the AAS bars when a span is off nominal | `tl-fr-w-wait-class-<c>`, `tl-we-<event>` |
 | objects | ranked | 14 top 2 segments by physical reads; 15 top 1 datafile by MB read | `tl-sg-…`, `tl-fl-…` |
 | sql | sql | 06 first 6 by elapsed (◆ plan flip on Current, ✚ first-seen window); 18 up to 3 SQL Monitor rows (plan change / DOP downgrade), `data-after` = the 06 row | `tl-sq-elapsed-<id>`, `tl-sm-<id>` |
 | config | config | 12 every changed parameter (≤20) as step rows, cells `data-pv` | `tl-pa-<param>` |
