@@ -52,6 +52,9 @@
  *   - the Activity charts' Windows side by side mode (plan 024): one panel
  *     per window, hover / crosshair, no zoom, cap click pins, legend,
  *     markers, the switch remembered in awr-axlayout;
+ *   - direct labels on the Activity bands (plan 036): name a series, inside
+ *     the plot, no overlap, at most 6, gone when the series is hidden;
+ *     inside one panel side by side;
  *   - the Day profile metric picker (v1.6.1, profile_days > 0; required
  *     for the demo): one role=tab button per stat with its indicator, a
  *     click / arrows / Home / End switch the line chart;
@@ -651,6 +654,38 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         tl['keys_' + k] = kb;
         if (/^FAIL/.test(kb)) fail('activity ' + k + ': Enter / Esc ' + kb);
       }
+      // direct labels (plan 036): each label names a series, sits inside the
+      // plot, no two overlap, at most 6 a chart; hiding the first labelled
+      // series removes its label, showing it again restores it (key
+      // bandLabels: tl.labels holds the grid label links above)
+      tl.bandLabels = await page.evaluate(() => {
+        const out = [];
+        for (const [id, key] of [['ax-cls', 'ashx'], ['ax-ev', 'ashe']]) {
+          const s = document.querySelector('#' + id + ' .axsvg'); if (!s || !s.getClientRects().length) continue;
+          const names = ((window.AWR_DATA || {})[key] || {}).classes || [];
+          const L = [...s.querySelectorAll('text.xdl')], ax = s.querySelector('line.ax').getBoundingClientRect();
+          const bad = L.filter(t => { const n = t.textContent; return !names.some(x => x === n || (n.endsWith('...') && x.startsWith(n.slice(0, -3)))); }).length;
+          const B = L.map(t => t.getBoundingClientRect());
+          let ov = 0; for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) if (B[i].left < B[j].right && B[j].left < B[i].right && B[i].top < B[j].bottom && B[j].top < B[i].bottom) ov++;
+          const outside = B.filter(b => b.left < ax.left - 1 || b.right > ax.right + 1 || b.bottom > ax.top + 1).length;
+          out.push(id + ' ' + L.length + (bad || ov || outside || L.length > 6 ? ' FAIL bad=' + bad + ' overlap=' + ov + ' outside=' + outside : ''));
+        }
+        return out.join('; ');
+      });
+      if (/FAIL/.test(tl.bandLabels)) fail('activity: direct labels ' + tl.bandLabels);
+      if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && !/ax-cls [1-6]; ax-ev [1-6]$/.test(tl.bandLabels)) fail('activity: the demo must label at least one band on each chart: ' + tl.bandLabels);
+      {
+        const first = await page.evaluate(() => { const t = document.querySelector('#ax-ev .axsvg text.xdl'); if (!t) return null; const nm = t.textContent; const i = AWR_DATA.ashe.classes.indexOf(nm); return i < 0 ? null : { nm, i }; });
+        if (first) {
+          const has = () => page.evaluate((nm) => [...document.querySelectorAll('#ax-ev .axsvg text.xdl')].some(t => t.textContent === nm), first.nm);
+          await page.click('#ax-ev .axlg .axc[data-c="' + first.i + '"]'); await page.waitForTimeout(150);
+          const gone = !(await has());
+          await page.click('#ax-ev .axlg .axc[data-c="' + first.i + '"]'); await page.mouse.move(2, 2); await page.waitForTimeout(200);
+          const back = await has();
+          tl.labelHide = gone && back ? 'ok' : 'FAIL ' + JSON.stringify([first.nm, gone, back]);
+          if (tl.labelHide !== 'ok') fail('activity: hiding a labelled series ' + tl.labelHide);
+        }
+      }
       // v1.6.1 series highlight: a legend hover re-bases the series (drawn
       // from zero: its band's lower edge on the axis) and fades the rest; a
       // class lights its events (ashe.ecls) in the event chart, re-based
@@ -867,6 +902,17 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         return out.join('; ') + '; range "' + r + '"' + (/side by side/.test(r) && document.getElementById('ax-reset').hidden ? '' : ' FAIL');
       });
       if (/FAIL/.test(sb.panels)) fail('side by side: ' + sb.panels);
+      // direct labels (plan 036): each one inside one panel (1 px slack)
+      sb.labels = await page.evaluate(() => {
+        let n = 0, bad = 0;
+        for (const id of ['ax-cls', 'ax-ev']) {
+          const s = document.querySelector('#' + id + ' .axsvg'); if (!s || !s.getClientRects().length) continue;
+          const P = [...s.querySelectorAll('rect.xw.xpn')].map(r => r.getBoundingClientRect());
+          for (const t of s.querySelectorAll('text.xdl')) { n++; const b = t.getBoundingClientRect(); if (!P.some(p => b.left >= p.left - 1 && b.right <= p.right + 1)) bad++; }
+        }
+        return n + ' labels' + (bad ? ' FAIL ' + bad + ' cross a panel edge' : '');
+      });
+      if (/FAIL/.test(sb.labels)) fail('side by side: a label crosses a panel edge (' + sb.labels + ')');
       const cp = await page.evaluate(() => { const c = document.querySelector('#ax-cls .axsvg .xw.xpn.cur').getBoundingClientRect(); return { x: c.left + c.width / 2, y: c.top + c.height * 0.6 }; });
       await page.mouse.move(cp.x, cp.y); await page.waitForTimeout(150);
       sb.hover = await page.evaluate(() => {

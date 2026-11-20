@@ -469,9 +469,9 @@ function spInit(){
       reset:doc.getElementById('ax-reset'),range:doc.getElementById('ax-range'),sel:null,F:null,rk:null,rv:null,mode:'span',wk:0,wf:0};
   SP.F=fineInit(AX.fine);
   CH=[];
-  mkChart(doc.getElementById('ax-cls'),AX,AX.classes.map(wcol),{flags:true,noun:'classes',what:'wait class'});
+  mkChart(doc.getElementById('ax-cls'),AX,AX.classes.map(wcol),{flags:true,noun:'classes',what:'wait class',labels:true});
   var ev=doc.getElementById('ax-ev');
-  if(okPay(AE,n))mkChart(ev,AE,evColors(AE.classes),{noun:'events',what:'wait event'});
+  if(okPay(AE,n))mkChart(ev,AE,evColors(AE.classes),{noun:'events',what:'wait event',labels:true});
   else if(ev)ev.hidden=true;
   /* the detail only when every chart has it */
   CH.forEach(function(c){c.FV=fineVals(c.P);});
@@ -538,7 +538,7 @@ function mkChart(root,P,cols,opt){
   if(!root)return null;
   var c={root:root,P:P,cols:cols,svg:$('.axsvg',root),plot:$('.axp',root),br:$('.axbr',root),
          vis:P.classes.map(function(){return true;}),flags:!!opt.flags,noun:opt.noun,what:opt.what,xl:false,g:null,w:0,uid:root.id,
-         lg:$('.axlg',root),hl:null,hk:'',peer:null,xmap:null};
+         lg:$('.axlg',root),hl:null,hk:'',peer:null,xmap:null,lab:opt.labels!==false};
   var lg=c.lg;
   if(lg){lg.innerHTML=P.classes.map(function(nm,k){return '<button type="button" class="axc" data-c="'+k+'" aria-pressed="true" title="'+esc(nm)+': hover to highlight, click to show or hide, Shift+click to keep it highlighted"><i class="sw" style="--sw:'+cols[k]+'" aria-hidden="true"></i>'+esc(nm)+'</button>';}).join('');
     /* hover / keyboard focus highlights; a click hides / shows; Shift+click
@@ -647,6 +647,54 @@ function bands(c,pts,ord,on,Y){
   });
   return {fills:fills,edges:edges,hf:hf,he:he};
 }
+/* direct labels (plan 036): each shown series is a candidate at the point
+   where its band is thickest; a label (its name, at most LW px wide, cut
+   with "...") goes there when the band stays at least LBH px thick under the
+   whole label and no placed label is in the way.  The thickest bands win,
+   at most LMAX a chart; with a strong highlight only the highlighted series.
+   groups = [{pts, x0, x1}]: one for Full span, one per panel side by side
+   (a label never crosses a panel edge).  Drawn inside the plot clip, above
+   bands and stripes, pointer-events none. */
+var LBH=13,LMAX=6,LW=160;
+function edgeAt(pts,ys,x){
+  for(var j=1;j<pts.length;j++)if(pts[j][0]>=x){var a=pts[j-1][0],b=pts[j][0],f=b>a?(x-a)/(b-a):0;return ys[j-1]+(ys[j]-ys[j-1])*f;}
+  return ys[ys.length-1];
+}
+function dlab(c,groups,ord,on,Y,reb){
+  if(!c.lab)return '';
+  var cand=[],placed=[],s='';
+  groups.forEach(function(G){
+    var pts=G.pts,np=pts.length;if(np<2)return;
+    var lo=pts.map(function(){return 0;});
+    ord.forEach(function(k){
+      var hi=lo.map(function(l,j){return l+(rV(c,k,pts[j][1])||0);});
+      if(!reb||(on&&on[k])){
+        var yl=lo.map(Y),yh=hi.map(Y),best=-1,bt=0;
+        for(var j=0;j<np;j++){var t=yl[j]-yh[j];if(t>bt){bt=t;best=j;}}
+        if(best>=0&&bt>=LBH)cand.push({k:k,G:G,yl:yl,yh:yh,j:best,t:bt});
+      }
+      lo=hi;
+    });
+  });
+  cand.sort(function(a,b){return b.t-a.t;});
+  cand.forEach(function(C){
+    if(placed.length>=LMAX)return;
+    var nm=c.P.classes[C.k],txt=nm,w=tw(txt)+6;
+    if(w>LW){while(txt.length>4&&tw(txt+'...')+6>LW)txt=txt.slice(0,-1);txt+='...';w=tw(txt)+6;}
+    var pts=C.G.pts,x=pts[C.j][0],xa=x-w/2,xb=x+w/2;
+    if(xa<C.G.x0){xa=C.G.x0;xb=xa+w;}
+    if(xb>C.G.x1){xb=C.G.x1;xa=xb-w;}
+    if(xa<C.G.x0)return;
+    var top=Math.max(edgeAt(pts,C.yh,xa),edgeAt(pts,C.yh,xb)),bot=Math.min(edgeAt(pts,C.yl,xa),edgeAt(pts,C.yl,xb));
+    for(var j=0;j<pts.length;j++){var px=pts[j][0];if(px<xa||px>xb)continue;top=Math.max(top,C.yh[j]);bot=Math.min(bot,C.yl[j]);}
+    if(bot-top<LBH)return;
+    var yc=(top+bot)/2,box=[xa,yc-LBH/2,xb,yc+LBH/2];
+    if(placed.some(function(p){return box[0]<p[2]+2&&box[2]>p[0]-2&&box[1]<p[3]+2&&box[3]>p[1]-2;}))return;
+    placed.push(box);
+    s+='<text class="xdl" x="'+((xa+xb)/2).toFixed(1)+'" y="'+(yc+4).toFixed(1)+'" text-anchor="middle">'+esc(txt)+'</text>';
+  });
+  return s;
+}
 /* the release markers of list [{x: px, m: marker}]: a line through the plot
    on every chart shown, the flags (two tiers) on the chart with c.flags */
 function flagSvg(c,list,top,ph,Wd,padL,padR){
@@ -741,6 +789,8 @@ function drawWin(c,o){
   /* the hidden bucket band: as draw; the caps */
   s+='<rect class="xbk" x="0" y="'+top+'" width="0" height="'+ph+'" visibility="hidden"/>';
   hit.forEach(function(r){s+='<rect class="xwc'+r[3]+'" x="'+r[1].toFixed(1)+'" y="'+(top-5)+'" width="'+r[2].toFixed(1)+'" height="4" rx="1"/>';});
+  /* the direct labels, each inside its panel (dlab) */
+  s+=dlab(c,pan.map(function(p){return {pts:p.pts,x0:p.x0,x1:p.x0+p.w};}),ord,on,Y,reb);
   /* close the group and the x axis line: as draw */
   s+='</g><line class="ax" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+(top+ph)+'" y2="'+(top+ph)+'"/>';
   /* window labels under the lower chart: every st-th panel counted from the Current one */
@@ -803,6 +853,8 @@ function draw(c,force){
     s+='<rect class="xw'+cls+'" x="'+x.toFixed(1)+'" y="'+top+'" width="'+w.toFixed(1)+'" height="'+ph+'"/><rect class="xwc'+cls+'" x="'+x.toFixed(1)+'" y="'+(top-5)+'" width="'+w.toFixed(1)+'" height="4" rx="1"/>';
     hit.push([i,x,w]);
   });
+  /* the largest bands named on the chart (dlab), above the stripes */
+  s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb);
   s+='</g><line class="ax" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+(top+ph)+'" y2="'+(top+ph)+'"/>';
   /* x ticks: the smallest interval that leaves about 88 px per label, counted from
      midnight of the Current window's day (weekly ticks land on its weekday);

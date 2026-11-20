@@ -1591,6 +1591,7 @@ BEGIN
     -- top edge, the fitted-axis note, the legend entry lit and the rest dimmed
     DBMS_OUTPUT.PUT_LINE('.ashx .xeh{stroke-width:1.8}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xhn{font:600 11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xdl{font:11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axc.hl{background:var(--hov);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line-2)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axlg.hlon .axc:not(.hl){opacity:.55}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axlg.hlon .axc:not(.hl):hover,.ashx .axlg.hlon .axc:not(.hl):focus-visible{opacity:1}');

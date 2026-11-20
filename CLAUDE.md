@@ -719,6 +719,19 @@ hidden (compact Summary, the dashboard's tabs). Not to be confused with
 the dashboard's `window.AWR_axMode` (which chart is shown). The
 `js_timeline.plsql` header lists these functions.
 
+**Direct labels (plan 036)**: `dlab(c, groups, ord, on, Y, reb)` after
+the bands, inside the plot clip (both `draw` and `drawWin`; groups = one
+`{pts, x0, x1}` for Full span, one per panel side by side, so a label
+never crosses a panel edge); `text.xdl` (CSS halo like `.xhn`, normal
+weight so `tw()` is exact, `pointer-events:none`), thickest bands first,
+band at least `LBH` 13 px under the whole label, at most `LMAX` 6, names
+cut at `LW` 160 px with ASCII `...`; with a strong highlight only the
+highlighted series; per chart `mkChart(..., {labels})` (both on, owner
+decision). `dlab` stacks `ord` from zero exactly like `bands()`: keep them
+in lockstep. Keep `.xdl` out of `css_design.css`'s Geist font rule
+(`tw()` measures the system stack). verify_report: `bandLabels` /
+`labelHide` (block 5), `sb.labels` (block 5c).
+
 ### Window component (`sql/lib/wingrid.plsql` + `js_wingrid.plsql`)
 
 The ONE per-window bar grid — hero strip (08), finding / plan / config

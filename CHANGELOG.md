@@ -204,6 +204,9 @@ release bumps `awr_version`).
   each per-SQL chart when it comes into view instead of all at page load
   (about 0.3 s less ECharts work at load and half the first switch to All
   sections on the demo).
+- **Activity charts name their largest bands.** Up to six series per
+  chart are labelled on the widest part of their band (never overlapping,
+  inside one panel in Windows side by side); the legend stays.
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

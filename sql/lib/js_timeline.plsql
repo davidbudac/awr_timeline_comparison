@@ -51,6 +51,7 @@
 -- shared y axis, 1-minute data where it covers the window; caps pin; no zoom
 -- (drawWin, wSlice, panAt / wRefAt; shared with draw: hlOrd, colPts,
 -- bands, flagSvg).
+-- Direct labels (dlab): the widest bands are named on the chart, at most 6 a chart.
 -- v1.6.1 series highlight: a legend entry hovered / focused (or kept by a
 -- click on its band, Shift+click) is drawn from zero on its own y axis,
 -- the rest faded; a class lights its events (AWR_DATA.ashe.ecls) and an
@@ -534,9 +535,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('      reset:doc.getElementById(''ax-reset''),range:doc.getElementById(''ax-range''),sel:null,F:null,rk:null,rv:null,mode:''span'',wk:0,wf:0};');
     DBMS_OUTPUT.PUT_LINE('  SP.F=fineInit(AX.fine);');
     DBMS_OUTPUT.PUT_LINE('  CH=[];');
-    DBMS_OUTPUT.PUT_LINE('  mkChart(doc.getElementById(''ax-cls''),AX,AX.classes.map(wcol),{flags:true,noun:''classes'',what:''wait class''});');
+    DBMS_OUTPUT.PUT_LINE('  mkChart(doc.getElementById(''ax-cls''),AX,AX.classes.map(wcol),{flags:true,noun:''classes'',what:''wait class'',labels:true});');
     DBMS_OUTPUT.PUT_LINE('  var ev=doc.getElementById(''ax-ev'');');
-    DBMS_OUTPUT.PUT_LINE('  if(okPay(AE,n))mkChart(ev,AE,evColors(AE.classes),{noun:''events'',what:''wait event''});');
+    DBMS_OUTPUT.PUT_LINE('  if(okPay(AE,n))mkChart(ev,AE,evColors(AE.classes),{noun:''events'',what:''wait event'',labels:true});');
     DBMS_OUTPUT.PUT_LINE('  else if(ev)ev.hidden=true;');
     DBMS_OUTPUT.PUT_LINE('  /* the detail only when every chart has it */');
     DBMS_OUTPUT.PUT_LINE('  CH.forEach(function(c){c.FV=fineVals(c.P);});');
@@ -603,7 +604,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  if(!root)return null;');
     DBMS_OUTPUT.PUT_LINE('  var c={root:root,P:P,cols:cols,svg:$(''.axsvg'',root),plot:$(''.axp'',root),br:$(''.axbr'',root),');
     DBMS_OUTPUT.PUT_LINE('         vis:P.classes.map(function(){return true;}),flags:!!opt.flags,noun:opt.noun,what:opt.what,xl:false,g:null,w:0,uid:root.id,');
-    DBMS_OUTPUT.PUT_LINE('         lg:$(''.axlg'',root),hl:null,hk:'''',peer:null,xmap:null};');
+    DBMS_OUTPUT.PUT_LINE('         lg:$(''.axlg'',root),hl:null,hk:'''',peer:null,xmap:null,lab:opt.labels!==false};');
     DBMS_OUTPUT.PUT_LINE('  var lg=c.lg;');
     DBMS_OUTPUT.PUT_LINE('  if(lg){lg.innerHTML=P.classes.map(function(nm,k){return ''<button type="button" class="axc" data-c="''+k+''" aria-pressed="true" title="''+esc(nm)+'': hover to highlight, click to show or hide, Shift+click to keep it highlighted"><i class="sw" style="--sw:''+cols[k]+''" aria-hidden="true"></i>''+esc(nm)+''</button>'';}).join('''');');
     DBMS_OUTPUT.PUT_LINE('    /* hover / keyboard focus highlights; a click hides / shows; Shift+click');
@@ -712,6 +713,54 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  return {fills:fills,edges:edges,hf:hf,he:he};');
     DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* direct labels (plan 036): each shown series is a candidate at the point');
+    DBMS_OUTPUT.PUT_LINE('   where its band is thickest; a label (its name, at most LW px wide, cut');
+    DBMS_OUTPUT.PUT_LINE('   with "...") goes there when the band stays at least LBH px thick under the');
+    DBMS_OUTPUT.PUT_LINE('   whole label and no placed label is in the way.  The thickest bands win,');
+    DBMS_OUTPUT.PUT_LINE('   at most LMAX a chart; with a strong highlight only the highlighted series.');
+    DBMS_OUTPUT.PUT_LINE('   groups = [{pts, x0, x1}]: one for Full span, one per panel side by side');
+    DBMS_OUTPUT.PUT_LINE('   (a label never crosses a panel edge).  Drawn inside the plot clip, above');
+    DBMS_OUTPUT.PUT_LINE('   bands and stripes, pointer-events none. */');
+    DBMS_OUTPUT.PUT_LINE('var LBH=13,LMAX=6,LW=160;');
+    DBMS_OUTPUT.PUT_LINE('function edgeAt(pts,ys,x){');
+    DBMS_OUTPUT.PUT_LINE('  for(var j=1;j<pts.length;j++)if(pts[j][0]>=x){var a=pts[j-1][0],b=pts[j][0],f=b>a?(x-a)/(b-a):0;return ys[j-1]+(ys[j]-ys[j-1])*f;}');
+    DBMS_OUTPUT.PUT_LINE('  return ys[ys.length-1];');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function dlab(c,groups,ord,on,Y,reb){');
+    DBMS_OUTPUT.PUT_LINE('  if(!c.lab)return '''';');
+    DBMS_OUTPUT.PUT_LINE('  var cand=[],placed=[],s='''';');
+    DBMS_OUTPUT.PUT_LINE('  groups.forEach(function(G){');
+    DBMS_OUTPUT.PUT_LINE('    var pts=G.pts,np=pts.length;if(np<2)return;');
+    DBMS_OUTPUT.PUT_LINE('    var lo=pts.map(function(){return 0;});');
+    DBMS_OUTPUT.PUT_LINE('    ord.forEach(function(k){');
+    DBMS_OUTPUT.PUT_LINE('      var hi=lo.map(function(l,j){return l+(rV(c,k,pts[j][1])||0);});');
+    DBMS_OUTPUT.PUT_LINE('      if(!reb||(on&&on[k])){');
+    DBMS_OUTPUT.PUT_LINE('        var yl=lo.map(Y),yh=hi.map(Y),best=-1,bt=0;');
+    DBMS_OUTPUT.PUT_LINE('        for(var j=0;j<np;j++){var t=yl[j]-yh[j];if(t>bt){bt=t;best=j;}}');
+    DBMS_OUTPUT.PUT_LINE('        if(best>=0&&bt>=LBH)cand.push({k:k,G:G,yl:yl,yh:yh,j:best,t:bt});');
+    DBMS_OUTPUT.PUT_LINE('      }');
+    DBMS_OUTPUT.PUT_LINE('      lo=hi;');
+    DBMS_OUTPUT.PUT_LINE('    });');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  cand.sort(function(a,b){return b.t-a.t;});');
+    DBMS_OUTPUT.PUT_LINE('  cand.forEach(function(C){');
+    DBMS_OUTPUT.PUT_LINE('    if(placed.length>=LMAX)return;');
+    DBMS_OUTPUT.PUT_LINE('    var nm=c.P.classes[C.k],txt=nm,w=tw(txt)+6;');
+    DBMS_OUTPUT.PUT_LINE('    if(w>LW){while(txt.length>4&&tw(txt+''...'')+6>LW)txt=txt.slice(0,-1);txt+=''...'';w=tw(txt)+6;}');
+    DBMS_OUTPUT.PUT_LINE('    var pts=C.G.pts,x=pts[C.j][0],xa=x-w/2,xb=x+w/2;');
+    DBMS_OUTPUT.PUT_LINE('    if(xa<C.G.x0){xa=C.G.x0;xb=xa+w;}');
+    DBMS_OUTPUT.PUT_LINE('    if(xb>C.G.x1){xb=C.G.x1;xa=xb-w;}');
+    DBMS_OUTPUT.PUT_LINE('    if(xa<C.G.x0)return;');
+    DBMS_OUTPUT.PUT_LINE('    var top=Math.max(edgeAt(pts,C.yh,xa),edgeAt(pts,C.yh,xb)),bot=Math.min(edgeAt(pts,C.yl,xa),edgeAt(pts,C.yl,xb));');
+    DBMS_OUTPUT.PUT_LINE('    for(var j=0;j<pts.length;j++){var px=pts[j][0];if(px<xa||px>xb)continue;top=Math.max(top,C.yh[j]);bot=Math.min(bot,C.yl[j]);}');
+    DBMS_OUTPUT.PUT_LINE('    if(bot-top<LBH)return;');
+    DBMS_OUTPUT.PUT_LINE('    var yc=(top+bot)/2,box=[xa,yc-LBH/2,xb,yc+LBH/2];');
+    DBMS_OUTPUT.PUT_LINE('    if(placed.some(function(p){return box[0]<p[2]+2&&box[2]>p[0]-2&&box[1]<p[3]+2&&box[3]>p[1]-2;}))return;');
+    DBMS_OUTPUT.PUT_LINE('    placed.push(box);');
+    DBMS_OUTPUT.PUT_LINE('    s+=''<text class="xdl" x="''+((xa+xb)/2).toFixed(1)+''" y="''+(yc+4).toFixed(1)+''" text-anchor="middle">''+esc(txt)+''</text>'';');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return s;');
+    DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* the release markers of list [{x: px, m: marker}]: a line through the plot');
     DBMS_OUTPUT.PUT_LINE('   on every chart shown, the flags (two tiers) on the chart with c.flags */');
     DBMS_OUTPUT.PUT_LINE('function flagSvg(c,list,top,ph,Wd,padL,padR){');
@@ -806,6 +855,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  /* the hidden bucket band: as draw; the caps */');
     DBMS_OUTPUT.PUT_LINE('  s+=''<rect class="xbk" x="0" y="''+top+''" width="0" height="''+ph+''" visibility="hidden"/>'';');
     DBMS_OUTPUT.PUT_LINE('  hit.forEach(function(r){s+=''<rect class="xwc''+r[3]+''" x="''+r[1].toFixed(1)+''" y="''+(top-5)+''" width="''+r[2].toFixed(1)+''" height="4" rx="1"/>'';});');
+    DBMS_OUTPUT.PUT_LINE('  /* the direct labels, each inside its panel (dlab) */');
+    DBMS_OUTPUT.PUT_LINE('  s+=dlab(c,pan.map(function(p){return {pts:p.pts,x0:p.x0,x1:p.x0+p.w};}),ord,on,Y,reb);');
     DBMS_OUTPUT.PUT_LINE('  /* close the group and the x axis line: as draw */');
     DBMS_OUTPUT.PUT_LINE('  s+=''</g><line class="ax" x1="''+padL+''" x2="''+(Wd-padR)+''" y1="''+(top+ph)+''" y2="''+(top+ph)+''"/>'';');
     DBMS_OUTPUT.PUT_LINE('  /* window labels under the lower chart: every st-th panel counted from the Current one */');
@@ -868,6 +919,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    s+=''<rect class="xw''+cls+''" x="''+x.toFixed(1)+''" y="''+top+''" width="''+w.toFixed(1)+''" height="''+ph+''"/><rect class="xwc''+cls+''" x="''+x.toFixed(1)+''" y="''+(top-5)+''" width="''+w.toFixed(1)+''" height="4" rx="1"/>'';');
     DBMS_OUTPUT.PUT_LINE('    hit.push([i,x,w]);');
     DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  /* the largest bands named on the chart (dlab), above the stripes */');
+    DBMS_OUTPUT.PUT_LINE('  s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb);');
     DBMS_OUTPUT.PUT_LINE('  s+=''</g><line class="ax" x1="''+padL+''" x2="''+(Wd-padR)+''" y1="''+(top+ph)+''" y2="''+(top+ph)+''"/>'';');
     DBMS_OUTPUT.PUT_LINE('  /* x ticks: the smallest interval that leaves about 88 px per label, counted from');
     DBMS_OUTPUT.PUT_LINE('     midnight of the Current window''s day (weekly ticks land on its weekday);');
