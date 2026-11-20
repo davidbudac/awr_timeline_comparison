@@ -152,7 +152,7 @@ release bumps `awr_version`).
   stays the default; the reader's choice is remembered. Works in all three
   designs, next to the dashboard's chart tabs.
 - **Findings at a glance.** The Summary view lists every finding in one
-  triage list (value, normal range, share of the DB-time rise, 13-window
+  triage list (value, normal range, share of the DB-time rise, per-window
   strip) above the cards; every card but the most important one starts
   folded (a click, a link or the list opens it); card charts print prior
   values on hover only and name only the release right before the

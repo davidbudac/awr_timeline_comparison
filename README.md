@@ -360,8 +360,10 @@ even `gzip` is missing.
 ## Read the report
 
 A sticky **top bar** names the database and the **Current** window ("vs N
-prior windows, every 1w") and carries the view switch and the dark-mode
-toggle. The report has three views of the same numbers:
+prior windows, every 1w") and carries the view switch, **Copy summary**
+(the verdict, the findings and what changed around them as Markdown, for
+a ticket or a chat) and the dark-mode toggle. The report has three views
+of the same numbers:
 
 - **Summary** (the default) — the answer first.
 - **Timeline** — every compared window side by side, oldest first.
@@ -393,7 +395,10 @@ highlight; the same again or **Esc** clears it (the next Esc unpins the
 window). In Summary the charts open compact: the by-class chart only, a
 shorter plot; **Show by wait event** brings back the second chart, and
 the choice is remembered in this browser (the dashboard design keeps its
-own chart tabs instead).
+own chart tabs instead). **Windows side by side** (a switch above the
+charts; *Full span* is the default) draws the compared windows as
+adjacent panels on one y axis, the Current one last. The largest bands
+are named on the chart.
 
 ### Summary
 
@@ -403,7 +408,9 @@ own chart tabs instead).
    reads landed on) and count pills (findings, with their large /
    moderate split; plan change, parameters that differ, skipped windows,
    metrics normal). A finding is a card: the pill, the Findings header and
-   the rail count the same cards.
+   the rail count the same cards. Under it, a bar shows **where the extra
+   DB time went**: DB CPU and each wait class above its prior mean, solid
+   when a finding is behind it, hatched when it grew but stayed normal.
 2. **DB time per window** — one bar per compared window, the Current one
    last and in the accent colour, with its normal range, Δ vs the prior
    mean and the band glyph (below).
@@ -412,13 +419,22 @@ own chart tabs instead).
    class): the lead metric's value and normal range, its per-window bars,
    up to four evidence rows (the event, segment, file or statement behind
    it, each a link to its table row), the related metrics that moved with
-   it, and a "Timeline →" link.
+   it, and a "Timeline →" link. The cards are ranked by the DB time they
+   added (a chip shows it in AAS and as a share of the DB-time rise). A
+   **triage list** above them puts every finding on one line; every card
+   but the most important one starts folded (a click, a link or the list
+   opens it). A card may carry up to two **pattern tags** (spike, step,
+   trend, jump after a release) and a hedged *What this usually means*
+   line with a copyable read-only next query.
 4. **What changed around it** — a card per **plan change** (elapsed per
    window, the plan-hash step line, per-execution / SQL Monitor / CPU
    evidence) and a **configuration** card (parameters that step between
-   windows), placed under the release markers they follow.
+   windows), placed under the release markers they follow. The plan
+   change of the statement behind the Physical I/O card moves right under
+   that card.
 5. **Checked and normal** — the metrics that stayed in range, the ones
-   that moved too little to matter, and the ones that improved.
+   that moved too little to matter, and the ones that improved, folded to
+   one line of counts (open when there is no finding).
 6. **Evidence library** — every other section as one line with its
    status ("4 of 14 events moved", "none differ"); click a line to open the
    section in place. Top SQL and Foreground waits open by default.
@@ -440,16 +456,22 @@ flagged metrics, waits, the segments / files the reads land on, Top SQL
 (◆ plan change, ✚ first seen) and SQL Monitor, and parameter step lines.
 Click a date in the ruler (or a window stripe in either Activity chart) to
 **pin** that window: every Δ in the grid is re-based against it; `Esc` or
-the Current column clears the pin (switching views keeps it). The Day profile (with `profile_days > 0`) follows.
+the Current column clears the pin (switching views keeps it). Wait-event
+rows are in AAS, like the wait classes. A row whose Current value is far
+above its prior windows is drawn cut, so the prior windows stay readable;
+a toolbar above the grid shows only the flagged rows or orders the
+headline and wait lanes by the size of their change. The Day profile
+(with `profile_days > 0`) follows.
 
 ### All sections
 
 Every section, full size: Findings (one table per domain with the band
 columns), Load profile, System metrics, Foreground / Background waits, Top
-SQL (five rankings as tabs + bump chart + the per-SQL pool), Top SQL ASH
-cards, SQL Monitor, Segment I/O, File I/O, Parameter changes, the hourly
-ASH timeline, DB time over the span, Utilization, Windows (begin / end
-snap ids, skipped windows and why) and the Day profile.
+SQL (seven rankings as tabs, *Biggest change* first, + bump chart + the
+per-SQL pool), Top SQL ASH cards, SQL Monitor, Segment I/O, File I/O,
+Parameter changes, the hourly ASH timeline, DB time over the span,
+Utilization, Windows (begin / end snap ids, skipped windows and why) and
+the Day profile.
 
 - **Windows** — restart, a DBID change, a missing snapshot or one more
   than 15 min off the window edge SKIPS a window; it is excluded from the

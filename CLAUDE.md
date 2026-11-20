@@ -63,7 +63,7 @@ sql/
 ├── 03_sysmetric.sql     -- SYSMETRIC_SUMMARY averages (per template)
 ├── 04_waits_fg.sql      -- foreground waits + wait-class rollup (per template)
 ├── 05_waits_bg.sql      -- background waits (BG_EVENT_SUMMARY, per template)
-├── 06_top_sql.sql       -- Top-N SQL ranked 5 ways + per-dim bump chart (ranked, not scored)
+├── 06_top_sql.sql       -- Top-N SQL ranked 7 ways (Biggest change first) + per-dim bump chart (ranked, not scored)
 │                        --   (break down by SQL_ID / schema / module / action)
 ├── 07_summary.sql       -- scored findings: Summary finding cards + per-domain tables,
 │                        --   #s-changes slot, #s-normal, #s-lib heading
@@ -834,8 +834,8 @@ first (lint 16). Placement: 02/03/13 (13 unscored: bucket NULL + plain Δ),
   `anchor_id('fl'|'pa', ...)` outside `anchor_id.plsql`.
 - Row ids: 07 `fr-<l|m|w>-<name>` (detail tables); 04 `we-<event>` /
   `wa-<event>` / `wc-<class>`; 05 `be-` / `ba-`; 06 `sq-<dim>-<sql_id>` per
-  ranking table (`sq-elapsed-`, `sq-cpu-`, `sq-gets-`, `sq-preads-`,
-  `sq-exec-`; in a tab + `<details>`, reveal handles both) and pool
+  ranking table (`sq-change-`, `sq-elapsed-`, `sq-cpu-`, `sq-gets-`,
+  `sq-preads-`, `sq-exec-`, `sq-perexec-`; in a tab + `<details>`, reveal handles both) and pool
   `sql-<sql_id>`; 18 `sm-<sql_id>`; 14 `sg-<owner.object[.partition]>` / 15
   `fl-<parent dir>-<file name>` on the FIRST row that segment / file gets (a
   slug collision gets `-<n>`); 12 `pa-<parameter>` (`pa--<_hidden>`); 02
