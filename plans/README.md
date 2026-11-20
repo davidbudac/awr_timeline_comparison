@@ -99,7 +99,7 @@ What the re-check added to the plans:
 | [032](032-fold-checked-and-normal.md) | "Checked and normal" folds to one line in Summary | 13 | P3 | S | LOW | 025 | DONE (`7edb20a`); DB run pending (owner) |
 | [033](033-finding-hints-and-next-step-queries.md) | Hints ("what this usually means") and copyable read-only next queries | 14 | P3 | M | LOW-MED | 026 (soft) | DONE (`0971059`); DB run pending (owner) |
 | [034](034-copy-summary-button.md) | "Copy summary" button (Markdown for a ticket or chat) | 15 | P3 | S-M | LOW | 020 (soft) | DONE (`bf288c3`); DB run pending (owner) |
-| [035](035-section11-charts-on-demand.md) | Section 11 draws its per-SQL charts on demand | 16 | P3 | S | LOW | — | TODO |
+| [035](035-section11-charts-on-demand.md) | Section 11 draws its per-SQL charts on demand | 16 | P3 | S | LOW | — | DONE (`dcec914`); DB run pending (owner) |
 | [036](036-activity-direct-band-labels.md) | The Activity charts name their largest bands | 17 | P3 | M | LOW | 024 | TODO |
 | [037](037-sqlmon-scatter-readable.md) | SQL Monitor execution scatter readable at 3,000 points | 18 | P3 | S-M | LOW (step 5 MED) | — | TODO |
 
