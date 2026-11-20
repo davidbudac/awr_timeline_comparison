@@ -86,6 +86,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('         skipped window makes the splits around it equal: the one with a');
     DBMS_OUTPUT.PUT_LINE('         marker wins, else the later)');
     DBMS_OUTPUT.PUT_LINE('     {k:"trend", dir, n}  the n prior windows follow a line better than a step');
+    DBMS_OUTPUT.PUT_LINE('   A step on Current''s side (same dir) drops a "spike": the windows right');
+    DBMS_OUTPUT.PUT_LINE('   before Current already sit at the step''s new level, so "Current only"');
+    DBMS_OUTPUT.PUT_LINE('   would mislead (a "jump" names its marker and stays).');
     DBMS_OUTPUT.PUT_LINE('   dir = 1 up, -1 down.  Thresholds in W.PAT.  Tags never change a');
     DBMS_OUTPUT.PUT_LINE('   severity, an order or a count. */');
     DBMS_OUTPUT.PUT_LINE('W.PAT={MIN_PRIOR:4,STEP_L:3,STEP_R:2,STEP_PAIR:0.9,STEP_REL:0.10,STEP_SEP:2,TREND_MIN:6,TREND_R2:0.6,TREND_REL:0.10};');
@@ -128,6 +131,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  }');
     DBMS_OUTPUT.PUT_LINE('  if(tr&&(!best||tr.rss<=best.rss))out.push({k:"trend",dir:tr.dir,n:tr.n});');
     DBMS_OUTPUT.PUT_LINE('  else if(best)out.push({k:"step",dir:best.dir,at:best.at,m:best.m});');
+    DBMS_OUTPUT.PUT_LINE('  if(out.length===2&&out[0].k==="spike"&&out[1].k==="step"&&out[1].dir===out[0].dir)out.shift();');
     DBMS_OUTPUT.PUT_LINE('  return out;');
     DBMS_OUTPUT.PUT_LINE('};');
     DBMS_OUTPUT.PUT_LINE('/* a tag''s words: text (on the chip) and title (the hover) */');

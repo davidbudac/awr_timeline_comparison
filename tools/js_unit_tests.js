@@ -40,7 +40,14 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
               4850.898, 5072.253, 4809.715, 4868.913, 22240.52];
   test('demo physical reads: jump after 4.2, step at 4.1', () =>
     assert.strictEqual(tags(PR, ALL, MARKS), 'jump+[Release 4.2] step+@8[Release 4.1]'));
-  test('no markers: spike + step', () => assert.strictEqual(tags(PR, ALL, []), 'spike+ step+@8'));
+  /* dbmint follow-up: a step on Current's side explains the spike, so no
+     "Current only" (a jump names its marker and stays, above) */
+  test('no markers: the step explains the spike', () => assert.strictEqual(tags(PR, ALL, []), 'step+@8'));
+  test('test DB: two high windows before Current, step not spike', () =>
+    assert.strictEqual(tags([0.1882, 0.1869, 0.1903, 0.2073, 2.9832, 0.3781, 3.2446, 4.4893, 6.4895],
+      new Array(9).fill(true), []), 'step+@6'));
+  test('spike against a step the other way stays', () =>
+    assert.strictEqual(tags([200, 205, 198, 202, 201, 199, 203, 200, 150, 148, 152, 149, 260], ALL, []), 'spike+ step-@8'));
   const SK = PR.slice(); SK[3] = null; SK[9] = null;
   const SKV = ALL.slice(); SKV[3] = false; SKV[9] = false;
   test('skipped windows are unknown, not absent', () =>
@@ -53,8 +60,8 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
     assert.strictEqual(tags([300, 290, 280, 270, 260, 250, 240, 230, 220, 210, 200, 190, 185], ALL, []), 'trend-#12'));
   test('run of 2 + step', () =>
     assert.strictEqual(tags([100, 101, 99, 100, 102, 98, 100, 101, 99, 100, 150, 160, 170], ALL, []), 'run+#2 step+@10'));
-  test('drop + step down', () =>
-    assert.strictEqual(tags([200, 205, 198, 202, 201, 199, 203, 200, 150, 148, 152, 149, 100], ALL, []), 'spike- step-@8'));
+  test('drop + step down: the step explains it', () =>
+    assert.strictEqual(tags([200, 205, 198, 202, 201, 199, 203, 200, 150, 148, 152, 149, 100], ALL, []), 'step-@8'));
   test('just below the floored band: dip', () =>
     assert.strictEqual(tags([100, 101, 99, 100, 102, 98, 100, 101, 99, 100, 100, 101, 96], ALL, []), 'spike-'));
   test('fewer than 4 valid priors: nothing', () =>

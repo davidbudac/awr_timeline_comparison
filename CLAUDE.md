@@ -839,7 +839,13 @@ the splits around it equal, and the one with a marker wins, else the
 later); a trend needs at least 6 valid windows, R squared >= 0.6 and a
 total rise of at least 10 % of the mean, and wins over a step only when a
 straight line fits at least as well (smaller or equal residual sum of
-squares). `tagCards()` (on
+squares). A step in the same direction as a "spike" / "dip" drops it: the
+windows right before Current already sit at the step's new level, so
+"Current only" misleads (dbmint follow-up: a card read "spike: Current
+only" + "step up on 08:00" with the two windows before Current high); a
+"jump" / "drop after <marker>" stays (it names its marker; the demo's I/O
+card keeps "jump after Release 4.2" + "step up at Release 4.1"), and a
+step the other way keeps the spike. `tagCards()` (on
 DOMContentLoaded, after `render`) fills `.fc-tags` in every `#findings
 article.fc:not(.chg)` header and the card's `#triage .tri-tags` (plan 025's
 containers) with `span.ptag.p-<kind>[.p-rel][title]` chips, from the

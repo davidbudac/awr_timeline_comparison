@@ -1597,6 +1597,9 @@ W.markerAt=function(o){var r=null;W.markers().forEach(function(m){if(m.o===o)r=m
          skipped window makes the splits around it equal: the one with a
          marker wins, else the later)
      {k:"trend", dir, n}  the n prior windows follow a line better than a step
+   A step on Current's side (same dir) drops a "spike": the windows right
+   before Current already sit at the step's new level, so "Current only"
+   would mislead (a "jump" names its marker and stays).
    dir = 1 up, -1 down.  Thresholds in W.PAT.  Tags never change a
    severity, an order or a count. */
 W.PAT={MIN_PRIOR:4,STEP_L:3,STEP_R:2,STEP_PAIR:0.9,STEP_REL:0.10,STEP_SEP:2,TREND_MIN:6,TREND_R2:0.6,TREND_REL:0.10};
@@ -1639,6 +1642,7 @@ W.patterns=function(vals,valid,mu,sd,marks){
   }
   if(tr&&(!best||tr.rss<=best.rss))out.push({k:"trend",dir:tr.dir,n:tr.n});
   else if(best)out.push({k:"step",dir:best.dir,at:best.at,m:best.m});
+  if(out.length===2&&out[0].k==="spike"&&out[1].k==="step"&&out[1].dir===out[0].dir)out.shift();
   return out;
 };
 /* a tag's words: text (on the chip) and title (the hover) */

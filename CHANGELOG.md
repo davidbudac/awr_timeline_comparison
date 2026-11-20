@@ -187,7 +187,10 @@ release bumps `awr_version`).
   ("jump after Release 4.2", "step up at Release 4.1", "spike: Current
   only", "high for 3 windows", "rising across 12 windows"), computed in the
   browser from the card's per-window values and the release markers. A
-  hint only: severities, order and counts are unchanged.
+  hint only: severities, order and counts are unchanged. A spike is not
+  tagged "Current only" when a step the same way explains it (on a
+  test-DB card the two windows before Current were already high: it read
+  "spike: Current only" and "step up on 08:00"; now just the step).
 - **Sorted by change.** SQL Monitor's per-statement table lists large,
   then moderate findings first (JS; the selection of statements is
   unchanged). Top SQL opens on a new *Biggest change* tab: Current-window
