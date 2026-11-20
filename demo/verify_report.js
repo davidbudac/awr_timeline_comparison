@@ -823,8 +823,11 @@ const LABEL_BAND = () => {
         const bandPt = () => page.evaluate(() => { const s = document.querySelector('#ax-cls .axsvg'), r = s.getBoundingClientRect(), ax = s.querySelector('line.ax'), sc = r.width / s.viewBox.baseVal.width;
           const y = r.top + (+ax.getAttribute('y1') - 1.5) * sc;
           for (let f = 0.3; f < 0.97; f += 0.005) {
-            const es = document.elementsFromPoint(r.left + r.width * f, y);
-            if (es.length && !es[0].matches('rect.xwh') && es.some(e => e.matches('path.xa'))) return { x: r.left + r.width * f, y };
+            // the first hit below any stripe body / label must be a band fill:
+            // a band edge (path.xe) on top means the stack is about zero there,
+            // so the click is off the stack (weekly report on the test DB)
+            const es = document.elementsFromPoint(r.left + r.width * f, y), i = es.findIndex(e => !e.matches('rect.xw, rect.xwc, text.xdl'));
+            if (i >= 0 && es[i].matches('path.xa')) return { x: r.left + r.width * f, y };
           }
           return null; });
         let px = await bandPt(), zoomed = false, s8 = null, s9 = null;
@@ -1047,7 +1050,15 @@ const LABEL_BAND = () => {
       const n2 = await nx();
       sb.legend = n1 === n0 - caps && n2 === n0 ? 'ok' : 'FAIL ' + [n0, n1, n2, caps].join('/');
       if (sb.legend !== 'ok') fail('side by side: legend toggle ' + sb.legend);
-      sb.markers = await page.evaluate(() => (window.AWR_MARKERS || []).length ? document.querySelectorAll('#ax-cls .axsvg .cfl').length : -1);
+      // a marker is drawn side by side only in the gap before a SHOWN panel
+      // (G3): -1 = no marker in the span, -2 = every marker's panel cropped
+      sb.markers = await page.evaluate(() => {
+        const ms = window.AWR_WG && AWR_WG.markers ? AWR_WG.markers() : [];
+        if (!ms.length) return -1;
+        const shown = new Set([...document.querySelectorAll('#ax-cls .axsvg .xwh')].map(h => h.getAttribute('data-w')));
+        if (!ms.some(m => shown.has(String(m.o)))) return -2;
+        return document.querySelectorAll('#ax-cls .axsvg .cfl').length;
+      });
       if (sb.markers === 0) fail('side by side: release markers missing');
       // keyboard (G3): Enter on a focused cap pins and the focus stays on
       // that cap through the redraw; Esc unpins, the focus stays (last: the
@@ -1106,22 +1117,26 @@ const LABEL_BAND = () => {
     await page.goto('file://' + file + '#view=timeline', { waitUntil: 'load' }); await page.waitForTimeout(1200);
     const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file), mg = {};
     if (DESIGN === 'dashboard') { await page.evaluate(() => window.AWR_axMode && window.AWR_axMode('both')); await page.waitForTimeout(250); }
-    const named = () => page.evaluate(() => {
-      const ms = (window.AWR_WG && AWR_WG.markers ? AWR_WG.markers() : []);
-      if (!ms.some(m => m.l === 'Extra marker B')) return 'skipped';
+    const named = (mode) => page.evaluate((mode) => {
+      const all = (window.AWR_WG && AWR_WG.markers ? AWR_WG.markers() : []);
+      if (!all.some(m => m.l === 'Extra marker B')) return 'skipped';
       const s = [...document.querySelectorAll('.ashx .axsvg')].find(x => x.getClientRects().length); if (!s) return 'none';
+      // side by side names only the markers in the gap before a shown panel
+      const shown = new Set([...s.querySelectorAll('.xwh')].map(h => h.getAttribute('data-w')));
+      const ms = mode === 'win' ? all.filter(m => shown.has(String(m.o))) : all;
+      const crop = ms.length < all.length ? (all.length - ms.length) + ' cropped, ' : '';
       const txt = [...s.querySelectorAll('text.cft')].map(t => t.textContent).join('\n') + '\n' + [...s.querySelectorAll('title')].map(t => t.textContent).join('\n');
       const miss = ms.filter(m => txt.indexOf(m.l) < 0).map(m => m.l);
       const R = [...s.querySelectorAll('rect.cfh')].map(r => r.getBoundingClientRect());
       let ov = 0; for (let i = 0; i < R.length; i++) for (let j = i + 1; j < R.length; j++) if (R[i].left < R[j].right && R[j].left < R[i].right && R[i].top < R[j].bottom && R[j].top < R[i].bottom) ov++;
       const plus = [...s.querySelectorAll('text.cft')].filter(t => / \+\d+$/.test(t.lastChild ? t.lastChild.textContent : '')).length;
-      return (miss.length || ov ? 'FAIL missing ' + JSON.stringify(miss) + ' overlap ' + ov : 'ok') + ' (' + ms.length + ' markers, ' + R.length + ' flags, ' + plus + ' +n)';
-    });
+      return (miss.length || ov ? 'FAIL missing ' + JSON.stringify(miss) + ' overlap ' + ov : 'ok') + ' (' + crop + ms.length + ' markers, ' + R.length + ' flags, ' + plus + ' +n)';
+    }, mode);
     for (const m of ['win', 'span']) {
       const can = await page.evaluate((m) => { if (!window.AWR_TL || !AWR_TL.axLayout) return false; if (m === 'win' && !document.querySelector('#activity .axlayout:not([hidden])')) return false; AWR_TL.axLayout(m, false); return true; }, m);
       if (!can) { mg[m] = 'unavailable'; continue; }
       await page.waitForTimeout(250);
-      mg[m] = await named();
+      mg[m] = await named(m);
       if (/^FAIL/.test(mg[m])) fail('markers sharing a gap (' + m + '): ' + mg[m]);
       if (isDemo && !/ [1-9]\d* \+n\)$/.test(mg[m])) fail('markers sharing a gap (' + m + '): the demo must show a "+n" flag: ' + mg[m]);
     }
