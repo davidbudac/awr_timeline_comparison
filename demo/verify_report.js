@@ -48,7 +48,10 @@
  *     note) and its events in the event chart; an event lights its class
  *     in place; nothing left on after the pointer leaves; keyboard focus;
  *     Shift+click sticky, the tooltip leads with it, Esc clears it before
- *     unpinning; a click on a band keeps it, the same click clears it;
+ *     unpinning; a click on a band keeps it, the same click clears it
+ *     (at a band point under no stripe's hit area: zoomed into the busiest
+ *     window first when the stripes tile the span, e.g. 169 hourly
+ *     windows; the demo needs no zoom);
  *   - the Activity charts' Windows side by side mode (plan 024): one panel
  *     per window, hover / crosshair, no zoom, cap click pins, legend,
  *     markers, the switch remembered in awr-axlayout; Enter on a focused
@@ -807,19 +810,51 @@ const LABEL_BAND = () => {
         hl.sticky = (s4.c.n === 1 && tipLead && s5.c.n === 1 && s5.c.note && !s6.c.fd && pw6 && !pw7) ? 'ok (tooltip leads, Esc clears it, then unpins)'
           : 'FAIL ' + JSON.stringify([s4.c.n, tipLead, s5.c.n, s6.c.fd, pw6, pw7]);
         if (!/^ok/.test(hl.sticky)) fail('activity: sticky highlight / Esc ' + hl.sticky);
-        // a click on the bottom band keeps it; the same click clears it
-        const px = await page.evaluate(() => { const s = document.querySelector('#ax-cls .axsvg'), r = s.getBoundingClientRect(), ax = s.querySelector('line.ax'), sc = r.width / s.viewBox.baseVal.width;
+        // a click on the bottom band keeps it; the same click clears it.  The
+        // point is a band under no window stripe's hit area: a stripe narrower
+        // than 24 px is hit-tested on its full height (a click there pins the
+        // window), a wider one on its cap only (its faded body may lie over the
+        // band: the click still reaches it).  When the compared windows tile
+        // the span (169 hourly windows: every x is a stripe) the chart is first
+        // zoomed into the busiest window and its neighbours, where the stripes
+        // are wide -- the designed way to reach the buckets under dense
+        // stripes.  The demo's stripes leave a band point without zooming
+        // (required).
+        const bandPt = () => page.evaluate(() => { const s = document.querySelector('#ax-cls .axsvg'), r = s.getBoundingClientRect(), ax = s.querySelector('line.ax'), sc = r.width / s.viewBox.baseVal.width;
           const y = r.top + (+ax.getAttribute('y1') - 1.5) * sc;
-          for (let f = 0.3; f < 0.97; f += 0.005) { const e = document.elementFromPoint(r.left + r.width * f, y); if (e && e.matches('path.xa')) return { x: r.left + r.width * f, y }; }
-          return { x: r.left + r.width * 0.5, y }; });
-        await page.mouse.click(px.x, px.y); await page.waitForTimeout(150);
-        await page.mouse.move(10, 10); await page.waitForTimeout(100);
-        const s8 = await state();
-        await page.mouse.click(px.x, px.y); await page.waitForTimeout(150);
-        await page.mouse.move(10, 10); await page.waitForTimeout(100);
-        const s9 = await state();
-        hl.click = (s8.c.n === 1 && s8.c.onAxis && !s9.c.fd) ? 'ok' : 'FAIL ' + JSON.stringify([s8.c, s9.c.fd]);
+          for (let f = 0.3; f < 0.97; f += 0.005) {
+            const es = document.elementsFromPoint(r.left + r.width * f, y);
+            if (es.length && !es[0].matches('rect.xwh') && es.some(e => e.matches('path.xa'))) return { x: r.left + r.width * f, y };
+          }
+          return null; });
+        let px = await bandPt(), zoomed = false, s8 = null, s9 = null;
+        if (!px) {
+          const zx = await page.evaluate(() => { const W = (AWR_DATA.ashx || {}).win || [], n = W.length ? W[0].length : 0; let bi = -1, bv = -1;
+            for (let i = 0; i < n; i++) { let t = 0; W.forEach(a => { t += +a[i] || 0; }); if (t > bv) { bv = t; bi = i; } }
+            const h = document.querySelector('#ax-cls .axsvg .xwh[data-i="' + bi + '"]'); if (!h) return null;
+            const r = h.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+          if (zx) {
+            await page.mouse.move(zx.x - 16, zx.y);
+            await page.mouse.down(); await page.mouse.move(zx.x + 16, zx.y, { steps: 6 }); await page.mouse.up();
+          }
+          await page.waitForTimeout(200); await page.mouse.move(10, 10); await page.waitForTimeout(100);
+          zoomed = await page.evaluate(() => !document.getElementById('ax-reset').hidden);
+          if (zoomed) px = await bandPt();
+        }
+        if (px) {
+          await page.mouse.click(px.x, px.y); await page.waitForTimeout(150);
+          await page.mouse.move(10, 10); await page.waitForTimeout(100);
+          s8 = await state();
+          await page.mouse.click(px.x, px.y); await page.waitForTimeout(150);
+          await page.mouse.move(10, 10); await page.waitForTimeout(100);
+          s9 = await state();
+        }
+        hl.click = !px ? 'FAIL no band point off the window stripes' + (zoomed ? ' (not even zoomed in)' : ' (zoom failed)')
+          : (s8.c.n === 1 && s8.c.onAxis && !s9.c.fd) ? 'ok' + (zoomed ? ' (zoomed in: the window stripes tile the span)' : '')
+          : 'FAIL ' + JSON.stringify([s8.c, s9.c.fd]) + (zoomed ? ' (zoomed in)' : '');
         if (!/^ok/.test(hl.click)) fail('activity: click-to-keep highlight ' + hl.click);
+        if (zoomed && /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) fail('activity: the demo must leave a band point off the window stripes without zooming');
+        if (zoomed) { await page.click('#ax-reset'); await page.waitForTimeout(150); }
         tl.highlight = hl;
         if (shots) {
           await page.evaluate(() => window.scrollTo(0, 0));

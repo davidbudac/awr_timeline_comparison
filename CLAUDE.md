@@ -695,7 +695,13 @@ says "1-min detail" (or "... in the compared windows, hourly
 elsewhere"), and `spZoom`'s minimum drops from `SP.min` to `FMIN` (30
 min) when the brushed range touches a segment. A wide window stripe
 (> 24 px) is hit-tested on its cap only (`.xw.wd` fades its fill), so the
-plot inside a zoomed window hovers / brushes minute by minute. Fine data
+plot inside a zoomed window hovers / brushes minute by minute; a narrower
+one on its whole height (a 12-px hit rect), so when the windows tile the
+span (more than about 42 contiguous windows on a 1440-px page, e.g. 168
+hourly ones) every x of the un-zoomed plot is a stripe: hover shows the
+window's tooltip, a click pins it, and bucket hover, the soft highlight
+and click-to-keep need a brush zoom first (by design; verify_report
+zooms there). Fine data
 is used only when EVERY chart decodes it (length = the segments'
 minutes), else both stay coarse. One time axis: x
 labels only on the lower chart (tick marks on both), ticks counted from
@@ -2335,7 +2341,10 @@ headless smoke test (bundled Chromium, else system Chrome): 0 console errors in
 visible `a.ent` clicked through, view switch / persistence / rail dimming,
 Timeline lanes + `data-tl` jumps + label links + chart hover / legend / zoom /
 reset / pin / Esc, the series highlight (legend hover re-base, class ->
-events, event -> class, focus, sticky, Esc order, click to keep), the Day
+events, event -> class, focus, sticky, Esc order, click to keep -- at a
+band point under no stripe's hit area: when the windows tile the span, as
+169 hourly ones do, every x is a full-height stripe, so it zooms into the
+busiest window first; the demo must not need the zoom), the Day
 profile picker (click / arrows / Home / End; required for the demo), plan
 cards, library rows, rail sub-links, All sections completeness (`allFull`:
 each library section's first chart or table holding a data row is visible),

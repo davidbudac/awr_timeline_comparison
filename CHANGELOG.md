@@ -397,6 +397,14 @@ release bumps `awr_version`).
   a split, so every marker-less test-DB report failed (on `main` too). A
   new check wants that note and the Current-vs-all-priors table, which
   shows every number either way; the demo must open on a split.
+- **`demo/verify_report.js`: the click-to-keep highlight check on dense
+  windows.** It clicks a band under no window stripe's hit area. With 169
+  hourly windows the stripes tile the span and a stripe narrower than 24 px
+  takes clicks on its full height (a click there pins that window, as
+  designed), so the old fallback clicked a stripe and failed (on `main`
+  too); the check now zooms into the busiest window first, where the
+  stripes are wide and take clicks on their caps only. The demo must not
+  need the zoom.
 
 ## 1.6.1 — 2026-09-27
 
