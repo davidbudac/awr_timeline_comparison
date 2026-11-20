@@ -26,6 +26,8 @@
 --                 (persist: the reader clicked, localStorage awr-axlayout).
 --   fitLabels(groups, cands, o)  the Activity band-label fitter, pure
 --                 (tested by tools/js_unit_tests.js).
+--   labelAlts(alts, names, k)  drops a label cut whose stem also starts
+--                 another series' name (pure, unit-tested).
 -- and on window.AWR_WG:
 --   pin(o)        pin window offset o (0 / null / the pinned one = unpin):
 --                 its grid column tints amber, every gutter Delta compares
@@ -55,7 +57,8 @@
 -- bands, flagSvg).
 -- Direct labels (dlab -> fitLabels, fitted per band): each series is named
 -- once, inside its band, on its thickest stretch as wide as the label
--- (at least LBH 10 px; shorter cuts when the name fits nowhere), at most 6
+-- (at least LBH 10 px; shorter cuts when the name fits nowhere, never one
+-- that another series' name starts with too), at most 6
 -- a chart.  Release flags (flagSvg): markers at one spot (side by side: one
 -- gap) share a group, a "+n" flag names the rest; side by side the flag
 -- band is reserved only while a marker is in view.  setSvg keeps the focus
@@ -846,6 +849,18 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  return (LC[nm]=out);');
     DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* the texts alts of series k (lcuts) without a cut ("...") whose stem');
+    DBMS_OUTPUT.PUT_LINE('   also starts another series'' name in names (the chart''s series): such');
+    DBMS_OUTPUT.PUT_LINE('   a label is ambiguous ("log file s..." reads as log file sync as well as');
+    DBMS_OUTPUT.PUT_LINE('   log file switch); pure, AWR_TL.labelAlts */');
+    DBMS_OUTPUT.PUT_LINE('function labelAlts(alts,names,k){');
+    DBMS_OUTPUT.PUT_LINE('  return alts.filter(function(a){');
+    DBMS_OUTPUT.PUT_LINE('    if(a.txt===names[k]||a.txt.slice(-3)!==''...'')return true;');
+    DBMS_OUTPUT.PUT_LINE('    var p=a.txt.slice(0,-3);');
+    DBMS_OUTPUT.PUT_LINE('    return !names.some(function(x,q){return q!==k&&x.indexOf(p)===0;});');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('TL.labelAlts=labelAlts;');
     DBMS_OUTPUT.PUT_LINE('/* the highlight note''s box for dlab (the note is 600 weight and Geist in the');
     DBMS_OUTPUT.PUT_LINE('   quiet / dashboard designs, tw() measures the 400 system stack: 1.2x) */');
     DBMS_OUTPUT.PUT_LINE('function noteBox(hl,padL,top){return hl&&hl.note?[padL+6,top+3,padL+6+tw(hl.note)*1.2,top+16]:null;}');
@@ -858,7 +873,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  ord.forEach(function(k){');
     DBMS_OUTPUT.PUT_LINE('    var yl=[],yh=[];');
     DBMS_OUTPUT.PUT_LINE('    G.forEach(function(g,gi){var hi=lo[gi].map(function(l,j){return l+(rV(c,k,g.pts[j][1])||0);});yl.push(lo[gi].map(Y));yh.push(hi.map(Y));lo[gi]=hi;});');
-    DBMS_OUTPUT.PUT_LINE('    if(!reb||(on&&on[k]))cands.push({k:k,alts:lcuts(c.P.classes[k]),yl:yl,yh:yh});');
+    DBMS_OUTPUT.PUT_LINE('    if(!reb||(on&&on[k]))cands.push({k:k,alts:labelAlts(lcuts(c.P.classes[k]),c.P.classes,k),yl:yl,yh:yh});');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  return fitLabels(G.map(function(g){return {xs:g.pts.map(function(p){return p[0];}),x0:g.x0,x1:g.x1};}),cands,{min:LBH,max:LMAX,th:LTH,y1:Y(0),avoid:nb?[nb]:[]})');
     DBMS_OUTPUT.PUT_LINE('    .map(function(L){return ''<text class="xdl" x="''+L.x.toFixed(1)+''" y="''+(L.y+4).toFixed(1)+''" text-anchor="middle">''+esc(L.txt)+''</text>'';}).join('''');');
@@ -1060,7 +1075,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    s+=''<rect class="xw''+cls+''" x="''+x.toFixed(1)+''" y="''+top+''" width="''+w.toFixed(1)+''" height="''+ph+''"/><rect class="xwc''+cls+''" x="''+x.toFixed(1)+''" y="''+(top-5)+''" width="''+w.toFixed(1)+''" height="4" rx="1"/>'';');
     DBMS_OUTPUT.PUT_LINE('    hit.push([i,x,w]);');
     DBMS_OUTPUT.PUT_LINE('  });');
-    DBMS_OUTPUT.PUT_LINE('  /* the largest bands named on the chart (dlab), above the stripes */');
+    DBMS_OUTPUT.PUT_LINE('  /* the bands named on the chart (dlab), above the stripes */');
     DBMS_OUTPUT.PUT_LINE('  s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb,noteBox(hl,padL,top));');
     DBMS_OUTPUT.PUT_LINE('  s+=''</g><line class="ax" x1="''+padL+''" x2="''+(Wd-padR)+''" y1="''+(top+ph)+''" y2="''+(top+ph)+''"/>'';');
     DBMS_OUTPUT.PUT_LINE('  /* x ticks: the smallest interval that leaves about 88 px per label, counted from');

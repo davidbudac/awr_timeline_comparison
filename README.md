@@ -397,8 +397,8 @@ shorter plot; **Show by wait event** brings back the second chart, and
 the choice is remembered in this browser (the dashboard design keeps its
 own chart tabs instead). **Windows side by side** (a switch above the
 charts; *Full span* is the default) draws the compared windows as
-adjacent panels on one y axis, the Current one last. The largest bands
-are named on the chart.
+adjacent panels on one y axis, the Current one last. A band carries its
+name where it is thick enough over the name's width (up to six a chart).
 
 ### Summary
 

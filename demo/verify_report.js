@@ -147,7 +147,8 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
 // not inside the band they name: at three points along the label (both
 // ends and the middle) the topmost band under it must be its series (the
 // bands paint top of the stack first, each from the axis up, so the
-// topmost one at a point is the band holding it)
+// topmost one at a point is the band holding it); a cut name ("...") whose
+// stem starts two series is ambiguous and counts too (G3 review)
 const LABEL_BAND = () => {
   window.__awrLabelBand = (id, key) => {
     const s = document.querySelector('#' + id + ' .axsvg'); if (!s || !s.getClientRects().length) return 0;
@@ -155,7 +156,8 @@ const LABEL_BAND = () => {
     let bad = 0;
     s.scrollIntoView({ block: 'center' });
     for (const t of s.querySelectorAll('text.xdl')) {
-      const n = t.textContent, k = names.findIndex(x => x === n || (n.endsWith('...') && x.startsWith(n.slice(0, -3))));
+      const n = t.textContent, ex = names.indexOf(n), pm = names.map((x, q) => n.endsWith('...') && x.startsWith(n.slice(0, -3)) ? q : -1).filter(q => q >= 0);
+      const k = ex >= 0 ? ex : pm.length === 1 ? pm[0] : -1;
       const sw = document.querySelector('#' + id + ' .axlg .axc[data-c="' + k + '"] .sw');
       const col = sw ? sw.style.getPropertyValue('--sw').trim() : '';
       const b = t.getBoundingClientRect(), y = b.top + b.height * 0.55;

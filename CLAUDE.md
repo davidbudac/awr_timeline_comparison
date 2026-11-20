@@ -771,7 +771,10 @@ best thickness (biggest bands first), at most `LMAX` 6. A name is cut at
 `LW` 160 px with ASCII `...`; when no stretch fits it, shorter cuts
 (`LCUT` 120 / 90 / 64 px, at least 6 characters) are tried
 (`lcuts`, cached per name; "log file switch (archiving ne..." on the
-test DB's busy hour). Before this the label went at the single thickest
+test DB's busy hour). A cut whose stem also starts another series of the
+chart is dropped (`labelAlts`, pure, unit-tested; G3 review: the test
+DB's 15-min report read "log file s..." with both log file switch events
+in the chart, a DBA reads log file sync). Before this the label went at the single thickest
 POINT and needed 13 px under the whole label, so on real (spiky) data it
 almost never fit the event chart. `text.xdl` (CSS halo like `.xhn`,
 normal weight so `tw()` is exact, `pointer-events:none`); with a strong
@@ -781,8 +784,8 @@ highlight only the highlighted series; per chart `mkChart(..., {labels})`
 Geist font rule (`tw()` measures the system stack). Cost: about 1-2 ms
 more per chart redraw (a thin band is rejected on its thickest column).
 verify_report: `bandLabels` (block 5: names, overlap, inside the plot and
-inside the band they name via `elementsFromPoint` -- `LABEL_BAND`; the
-demo labels both charts) / `labelHide`, the note check in the highlight
+inside the band they name via `elementsFromPoint` -- `LABEL_BAND`, which
+also fails an ambiguous cut; the demo labels both charts) / `labelHide`, the note check in the highlight
 `state()` (`xov`), `sb.labels` (block 5c: inside one panel and its band;
 the demo labels both charts side by side too), `sb.flagBand` /
 `sb.keys` (5c) and block 5d (two markers injected after the first one:

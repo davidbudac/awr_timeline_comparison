@@ -772,6 +772,18 @@ function lcuts(nm){
   });
   return (LC[nm]=out);
 }
+/* the texts alts of series k (lcuts) without a cut ("...") whose stem
+   also starts another series' name in names (the chart's series): such
+   a label is ambiguous ("log file s..." reads as log file sync as well as
+   log file switch); pure, AWR_TL.labelAlts */
+function labelAlts(alts,names,k){
+  return alts.filter(function(a){
+    if(a.txt===names[k]||a.txt.slice(-3)!=='...')return true;
+    var p=a.txt.slice(0,-3);
+    return !names.some(function(x,q){return q!==k&&x.indexOf(p)===0;});
+  });
+}
+TL.labelAlts=labelAlts;
 /* the highlight note's box for dlab (the note is 600 weight and Geist in the
    quiet / dashboard designs, tw() measures the 400 system stack: 1.2x) */
 function noteBox(hl,padL,top){return hl&&hl.note?[padL+6,top+3,padL+6+tw(hl.note)*1.2,top+16]:null;}
@@ -784,7 +796,7 @@ function dlab(c,groups,ord,on,Y,reb,nb){
   ord.forEach(function(k){
     var yl=[],yh=[];
     G.forEach(function(g,gi){var hi=lo[gi].map(function(l,j){return l+(rV(c,k,g.pts[j][1])||0);});yl.push(lo[gi].map(Y));yh.push(hi.map(Y));lo[gi]=hi;});
-    if(!reb||(on&&on[k]))cands.push({k:k,alts:lcuts(c.P.classes[k]),yl:yl,yh:yh});
+    if(!reb||(on&&on[k]))cands.push({k:k,alts:labelAlts(lcuts(c.P.classes[k]),c.P.classes,k),yl:yl,yh:yh});
   });
   return fitLabels(G.map(function(g){return {xs:g.pts.map(function(p){return p[0];}),x0:g.x0,x1:g.x1};}),cands,{min:LBH,max:LMAX,th:LTH,y1:Y(0),avoid:nb?[nb]:[]})
     .map(function(L){return '<text class="xdl" x="'+L.x.toFixed(1)+'" y="'+(L.y+4).toFixed(1)+'" text-anchor="middle">'+esc(L.txt)+'</text>';}).join('');
@@ -986,7 +998,7 @@ function draw(c,force){
     s+='<rect class="xw'+cls+'" x="'+x.toFixed(1)+'" y="'+top+'" width="'+w.toFixed(1)+'" height="'+ph+'"/><rect class="xwc'+cls+'" x="'+x.toFixed(1)+'" y="'+(top-5)+'" width="'+w.toFixed(1)+'" height="4" rx="1"/>';
     hit.push([i,x,w]);
   });
-  /* the largest bands named on the chart (dlab), above the stripes */
+  /* the bands named on the chart (dlab), above the stripes */
   s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb,noteBox(hl,padL,top));
   s+='</g><line class="ax" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+(top+ph)+'" y2="'+(top+ph)+'"/>';
   /* x ticks: the smallest interval that leaves about 88 px per label, counted from

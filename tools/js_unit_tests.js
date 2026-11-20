@@ -207,6 +207,16 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
     const r = run([{ b: band(x => 190), alts: one(40) }], { y1: 200 });
     assert.strictEqual(r[0].y, 194);
   });
+  test('labelAlts: a cut whose stem starts another series is dropped', () => {
+    const L = load('js_timeline').AWR_TL.labelAlts;
+    const names = ['log file switch (archiving needed)', 'log file sync', 'log file switch (checkpoint incomplete)', 'CPU'];
+    const alts = [{ txt: 'log file switch (archiving ne...', w: 160 }, { txt: 'log file switch (a...', w: 110 },
+                  { txt: 'log file swit...', w: 80 }, { txt: 'log file s...', w: 60 }];
+    assert.deepStrictEqual(L(alts, names, 0).map(a => a.txt), ['log file switch (archiving ne...', 'log file switch (a...']);
+    // an uncut name is always kept, even when it starts another name
+    assert.deepStrictEqual(L([{ txt: 'log file sync', w: 70 }], ['log file sync', 'log file sync: SCN ordering'], 0).map(a => a.txt), ['log file sync']);
+    assert.deepStrictEqual(L([{ txt: 'CPU', w: 24 }], names, 3).map(a => a.txt), ['CPU']);
+  });
   test('no data past the points: no stretch there', () => {
     // points only over x 0..60, the group spans 0..200
     const r = run([{ b: band(x => 150, 60), alts: one(80) }]);

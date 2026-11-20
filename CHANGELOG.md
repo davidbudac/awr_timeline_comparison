@@ -231,7 +231,8 @@ release bumps `awr_version`).
 - **Activity charts name their bands.** Each series is labelled once,
   inside its own band, on the stretch where the band is thickest over the
   label's width (at least 10 px; a long event name is cut shorter, with
-  "...", when only a shorter piece fits), the thickest bands first, up to
+  "...", when only a shorter piece fits and that piece names no other
+  series of the chart), the thickest bands first, up to
   six per chart, never overlapping, inside one panel in Windows side by
   side; the legend stays. Fitted per band after the test DB showed labels
   on the class chart only: the first version took the band's single
