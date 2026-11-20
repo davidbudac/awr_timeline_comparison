@@ -1820,7 +1820,8 @@ real delta span can exceed the nominal window; `valid_windows.dur_sec` therefore
 uses `(end_snap.end_ts − begin_snap.end_ts)` (threaded via `begin_end_ts` /
 `end_end_ts`), and the 15-min guard above rejects grids too far off to compare.
 `dur_sec` is **per-instance** (each instance's snaps jitter independently), so
-the per-sec consumers (00/02/07/08) sum the cross-instance delta and divide by
+the per-sec consumers (00/02/07/08, and 04's Timeline event rows through one
+`MAX(dur_sec)` per `week_offset`) sum the cross-instance delta and divide by
 `MAX(dur_sec)` with `dur_sec` **out of the second-level GROUP BY** — grouping on
 it would split a RAC week into partial rows. Single-instance is byte-identical
 (one constant `dur_sec` → `MAX` is a no-op and the narrower GROUP BY is

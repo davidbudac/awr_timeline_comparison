@@ -243,6 +243,12 @@ these supersede the 2026-11-19 answers where they overlap):
   only; skipped windows stay unknown, a row with no valid prior window
   still sorts last. Scoring, counts and the gutter are unchanged. Done in
   fix group G2.
+- 030 (from the same run, replaces the plan default above): Timeline
+  wait-event rows divide each window's seconds by **that window's real
+  snapshot span** (`MAX(dur_sec)`, 07's divisor), not the nominal length:
+  a 3846-s window showed an event at 8.60 AAS above its own class card's
+  8.06. The severity and the gutter's z / Delta stay Table A's. Done in
+  fix group G2.
 
 
 Each plan records its default, so an executor never waits on these. Decide
@@ -301,7 +307,7 @@ before running a plan to change its default.
     change, while 21 plots only the Current top statements.
 - **030, AAS denominator for event rows.** The plan divides by the nominal
   window length, which keeps 04's z exact. 07 divides by the actual
-  snapshot span.
+  snapshot span. Settled 2026-11-20: the real span (above).
 - **031, defaults.** Flagged-only and biggest-change-first. The plan keeps
   today's defaults.
 - **033**
