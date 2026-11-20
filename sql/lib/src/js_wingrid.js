@@ -111,7 +111,9 @@ function winIdx(){
   return {valid:valid,dates:dates,marks:marks};
 }
 /* every finding card (07) gets its tags in its header; plan 025's triage
-   row for the card gets the same chips */
+   row for the card gets the same chips.  A chip is focusable (G4): name =
+   its text (aria-label, role note), description = its sentence (title),
+   shown on keyboard focus in the shared div#ptip (ptipOn below) */
 function tagCards(){
   var X=winIdx();if(!X.valid.length)return;
   $$("#findings article.fc:not(.chg)").forEach(function(card){
@@ -120,13 +122,34 @@ function tagCards(){
     var a=function(n){var v=row.getAttribute(n+"0");return num(v!=null?v:row.getAttribute(n));};
     var tags=W.patterns(vals,X.valid,a("data-mu"),a("data-sd"),X.marks);if(!tags.length)return;
     var html=tags.map(function(t){var p=W.patternText(t,X.dates);
-      return '<span class="ptag p-'+t.k+(t.m?' p-rel':'')+'" title="'+esc(p.title)+'">'+esc(p.text)+'</span>';}).join("");
+      return '<span class="ptag p-'+t.k+(t.m?' p-rel':'')+'" tabindex="0" role="note" aria-label="'+esc(p.text)+'" title="'+esc(p.title)+'">'+esc(p.text)+'</span>';}).join("");
     var box=card.querySelector(".fc-tags");
     if(!box){var k=card.querySelector(".fc-h .fc-k");if(!k)return;box=mk("span","fc-tags",k);}
     box.innerHTML=html;
     $$('#triage .tri-row[data-card="'+card.id+'"] .tri-tags').forEach(function(t){t.innerHTML=html;});
   });
 }
+/* a chip's sentence on keyboard focus (the title shows on hover only):
+   one shared div#ptip under the chip, in page coordinates (no hide on
+   scroll), aria-hidden (the title is already the description).  Not on a
+   mouse click; Esc hides it but is never stopped, so Esc still clears a
+   highlight / unpins a window as before.  Works for the copies the triage
+   list and the dashboard rows carry (delegated). */
+var ptip=null,ptr=false;
+function ptipOff(){if(ptip)ptip.hidden=true;}
+function ptipOn(t){
+  if(!ptip){ptip=mk("div","",doc.body);ptip.id="ptip";ptip.setAttribute("aria-hidden","true");ptip.hidden=true;}
+  ptip.textContent=t.getAttribute("title")||"";if(!ptip.textContent){ptipOff();return;}
+  ptip.hidden=false;
+  var r=t.getBoundingClientRect(),op=(ptip.offsetParent||doc.body).getBoundingClientRect(),vw=doc.documentElement.clientWidth;
+  var x=Math.max(8,Math.min(r.left,vw-ptip.offsetWidth-8));
+  ptip.style.left=(x-op.left)+"px";ptip.style.top=(r.bottom+6-op.top)+"px";
+}
+doc.addEventListener("mousedown",function(){ptr=true;setTimeout(function(){ptr=false;},0);},true);
+doc.addEventListener("focusin",function(ev){var t=ev.target;if(t&&t.classList&&t.classList.contains("ptag")&&!ptr)ptipOn(t);else ptipOff();});
+doc.addEventListener("focusout",function(ev){var t=ev.target;if(t&&t.classList&&t.classList.contains("ptag"))ptipOff();});
+doc.addEventListener("keydown",function(ev){if(ev.key==="Escape"||ev.key==="Esc")ptipOff();});
+window.addEventListener("resize",ptipOff);
 /* the vertical scale of one bars row (plan 031).  Outside the Timeline
    grid (tl false) the old rule: the tallest value or the top of the normal
    zone.  In the Timeline grid the prior windows set it: when the Current

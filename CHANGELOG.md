@@ -193,7 +193,9 @@ release bumps `awr_version`).
   ("jump after Release 4.2", "step up at Release 4.1", "spike: Current
   only", "high for 3 windows", "rising across 12 windows"), computed in the
   browser from the card's per-window values and the release markers. A
-  hint only: severities, order and counts are unchanged. A spike is not
+  hint only: severities, order and counts are unchanged. Each tag is
+  reachable with the keyboard: Tab to it and its explanation shows under
+  it (screen readers read it as the tag's description). A spike is not
   tagged "Current only" when a step the same way explains it (on a
   test-DB card the two windows before Current were already high: it read
   "spike: Current only" and "step up on 08:00"; now just the step).

@@ -100,7 +100,9 @@
  *     plan 033: card hints (rule id, line, copyable read-only query with
  *     no unfilled placeholder; the plan card keeps its footer links; the
  *     dashboard side column does not overflow);
- *   - pattern tags (plan 027): every chip has text and a title, none on a
+ *   - pattern tags (plan 027): every chip has text and a title, is
+ *     focusable and named by its text, keyboard focus shows its sentence
+ *     (#ptip) and Esc hides it without swallowing the unpin (G4); none on a
  *     plan / config card, a triage row and a dashboard findings row show
  *     their card's chips, the demo Physical I/O card reads "jump after
  *     Release 4.2" + "step up at Release 4.1";
@@ -1588,6 +1590,32 @@ const LABEL_BAND = () => {
     if (p4.allFull.length) fail('All sections: library sections not shown in full: ' + p4.allFull.join(', '));
     if (/^FAIL/.test(p4.lazy11)) fail('section 11 lazy charts ' + p4.lazy11);
     if ((!p4.strips && p4.nwin <= 91) || p4.lines) fail('micro strips: ' + p4.strips + ' svg.mw, ' + p4.lines + ' line sparklines left');
+    // G4: pattern chips are focusable (tabindex 0, named by their text, the
+    // sentence as title); keyboard focus shows the sentence in #ptip under
+    // the chip; Esc hides it and is not swallowed (a pinned window unpins)
+    const tagKb = await page.evaluate(async () => {
+      const vis = el => !!el && el.getClientRects().length > 0;
+      const all = [...document.querySelectorAll('.ptag')];
+      const bad = all.filter(t => t.getAttribute('tabindex') !== '0' || t.getAttribute('aria-label') !== t.textContent || !t.title).length;
+      const c = all.find(vis);
+      if (!c) return { n: all.length, bad, tip: 'none' };
+      const w = (window.AWR_WIN && AWR_WIN.w) || [];
+      if (w.length > 1 && window.AWR_WG && AWR_WG.pin) AWR_WG.pin(w[0].o);
+      c.focus(); await new Promise(r => setTimeout(r, 80));
+      const p = document.getElementById('ptip'), r = c.getBoundingClientRect(), q = p && p.getBoundingClientRect();
+      const ok = vis(p) && p.textContent === c.title && q.top >= r.bottom && q.top - r.bottom < 20;
+      return { n: all.length, bad, tip: ok ? 'ok' : 'FAIL ' + JSON.stringify([!!p, p && p.textContent, r.bottom, q && q.top]), pinned: document.body.hasAttribute('data-pw') };
+    });
+    if (tagKb.tip !== 'none') { await page.keyboard.press('Escape'); await page.waitForTimeout(150); }
+    tagKb.esc = tagKb.tip === 'none' ? 'none' : await page.evaluate(() => {
+      const p = document.getElementById('ptip');
+      return (!p || p.hidden) ? (document.body.hasAttribute('data-pw') ? 'FAIL still pinned' : 'ok') : 'FAIL tip shown';
+    });
+    console.log('pattern chips (keyboard): ' + JSON.stringify(tagKb));
+    if (tagKb.bad) fail('pattern tags: ' + tagKb.bad + ' chip(s) not focusable / unnamed / without a title');
+    if (/^FAIL/.test(tagKb.tip)) fail('pattern tags: keyboard focus does not show the sentence: ' + tagKb.tip);
+    if (tagKb.pinned && /^FAIL/.test(tagKb.esc)) fail('pattern tags: Esc on a focused chip ' + tagKb.esc);
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && tagKb.tip !== 'ok') fail('demo: no pattern chip to focus');
     if (errors.length) fail('phase 4: ' + errors.slice(0, 5).join(' | '));
     if (shots) {
       const pc = await page.$('#s-changes');

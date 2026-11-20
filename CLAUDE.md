@@ -868,6 +868,14 @@ js_timeline turns the DB time card's row into `.r.ash`), `data-mu0`-or-
 the markers from `AWR_WG.markers()`. Tags are a hint: they never change a
 severity, the card order or a count. Section 25 (Onset) is not their data
 source (fixed metrics on the continuous series; the tags compare periods).
+Keyboard (G4): every chip is `tabindex="0" role="note"`, named by its
+text (`aria-label`) and described by its sentence (`title`); a keyboard
+focus (not a mouse click: `ptr`, set on mousedown) shows the sentence in
+one shared `div#ptip` (aria-hidden, absolutely positioned under the chip,
+styled next to the `.ptag` rules in `_style.sql`, hidden in print), hidden
+on blur, resize and Esc -- the Esc listener never stops the event, so Esc
+still clears a highlight / unpins a window. The triage and dashboard
+copies are clones, so they carry it too; verify_report phase 4 `tagKb`.
 
 ### Band glyph (`sql/lib/band_glyph.plsql`, twin `helpers.py`)
 

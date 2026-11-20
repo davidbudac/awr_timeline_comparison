@@ -1438,6 +1438,10 @@ BEGIN
     -- (the .fc-tags / .tri-tags containers are styled by plan 025 above)
     DBMS_OUTPUT.PUT_LINE('.fc .ptag,#triage .ptag{display:inline-block;font-size:11.5px;font-weight:400;line-height:18px;padding:0 8px;border:1px solid var(--line-2);border-radius:9px;color:var(--ink-2);background:var(--panel);white-space:nowrap;cursor:help}');
     DBMS_OUTPUT.PUT_LINE('.fc .ptag.p-rel,#triage .ptag.p-rel{border-color:var(--acc);color:var(--acc-ink)}');
+    -- a chip's sentence on keyboard focus (js_wingrid ptipOn; the title
+    -- covers hover), the look of the shared #tip
+    DBMS_OUTPUT.PUT_LINE('#ptip{position:absolute;z-index:100;pointer-events:none;max-width:300px;background:var(--ink);color:var(--panel);font-size:12px;line-height:1.45;padding:6px 10px;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.25)}');
+    DBMS_OUTPUT.PUT_LINE('#ptip[hidden]{display:none}');
     DBMS_OUTPUT.PUT_LINE('.fc .fc-tg{font:inherit;font-size:12px;color:var(--ink-soft);background:var(--panel);border:1px solid var(--hairline);border-radius:6px;padding:1px 8px;cursor:pointer}');
     DBMS_OUTPUT.PUT_LINE('.fc .fc-tg:hover{color:var(--ink);border-color:var(--muted)}');
     DBMS_OUTPUT.PUT_LINE('.fc.fold{padding-bottom:var(--s4);cursor:pointer}');
@@ -1733,7 +1737,7 @@ BEGIN
         || ' .tbl-tools, .copy-btn, .permalink, .expander, .tag,'
         || ' .view-note, .next-finding, .windows-hint, .topbar,'
         || ' .theme-icon-btn { display:none !important; }'
-        || ' .topbar .sum-btn, #sum-pop, .fc .fc-tg { display:none; }'
+        || ' .topbar .sum-btn, #sum-pop, .fc .fc-tg, #ptip { display:none; }'
         || ' #s-normal details.calm-fold::details-content { content-visibility:visible; display:block; }'
         || ' tr[data-tail="Y"] { display:table-row !important; }'
         || ' .tblwrap.scroll { overflow:visible; box-shadow:none; }'
