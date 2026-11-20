@@ -369,7 +369,7 @@ BEGIN
     END LOOP;
 
     -- Card order (07_summary.sql's cards apply the same two steps):
-    -- cards whose time measure rose, by the AAS added; then DB time; then
+    -- cards whose time measure rose by 0.01 AAS or more, by the AAS added; then DB time; then
     -- the rest, large before moderate and by |z| (insertion sort); then a
     -- flagged DB time card moves up to second place.
     v_g := v_glead.FIRST;

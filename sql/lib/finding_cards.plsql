@@ -32,7 +32,8 @@
 -- Impact (v1.7): impact_group() / time_added() / card_tier() /
 -- card_before_imp() -- cards are ordered by the AAS their time measure
 -- added above its prior mean (foreground sessions only, owner decision
--- 2026-11-20), see the comment above impact_group().
+-- 2026-11-20; a card needs at least 0.01 AAS to rank by it), see the
+-- comments above impact_group() and card_tier().
 --
 -- Include inside a DECLARE block AFTER sql/lib/fmt_num.plsql.  Declares
 -- only functions (no TYPE).
@@ -357,16 +358,20 @@
 
     -- card order, v1.7 (replaces card_before as the sort key; card_before is
     -- kept as the tie-break):  tier 1 = every card whose time measure ROSE
-    -- (impact > 0), largest impact first; tier 2 = the DB time card (the
-    -- total those impacts are shares of); tier 3 = every other card (no
-    -- time measure, or it did not rise), large before moderate, then |z|.
+    -- by at least 0.01 AAS (owner decision 2026-11-20: a smaller rise is
+    -- noise next to DB time and must not outrank a louder card), largest
+    -- impact first; tier 2 = the DB time card (the total those impacts are
+    -- shares of); tier 3 = every other card (no time measure, or it rose
+    -- by less than 0.01 AAS, or fell), large before moderate, then |z|.
+    -- The floor only orders: the chip still shows any impact above 0.
     -- The caller then still moves a flagged DB time card up to second
     -- place, so the verdict keeps "<biggest contributor>; DB time ...".
     -- 00 (verdict) and 07 (cards) apply the same two steps.
     FUNCTION card_tier(p_group VARCHAR2, p_imp NUMBER) RETURN PLS_INTEGER IS
     BEGIN
         IF p_group = 'DBTIME' THEN RETURN 2; END IF;
-        IF p_imp > 0 THEN RETURN 1; END IF;   -- NULL > 0 is not true: tier 3
+        -- NULL >= 0.01 is not true: tier 3
+        IF ROUND(p_imp, 6) >= 0.01 THEN RETURN 1; END IF;
         RETURN 3;
     END card_tier;
 

@@ -74,7 +74,8 @@
  *     opens / shuts on a click and opens for a jump into it; one rail
  *     sub-link per finding card; All sections shows every library section
  *     in full; the Trend cells are micro strips (svg.mw), no line left;
- *     v1.7: cards ordered by data-impact, chip present, Summary z capped
+ *     v1.7: cards ordered by data-impact (rises of 0.01 AAS or more
+ *     first, largest first), chip present, Summary z capped
  *     at 10; the DB-time breakdown under the verdict (#att-slot) shown
  *     (required for the demo), #att-src gone, every part coloured from
  *     AWR_WAIT_COLORS; v1.7 one count: the rail's Findings pills add up
@@ -1233,9 +1234,18 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       // (#findings article.fc:not(.chg): the dashboard moves the cards into
       // its findings table, and the plan / config cards carry .chg)
       const fc = [...document.querySelectorAll('#findings article.fc:not(.chg)')];
-      const imp = fc.filter(c => c.id !== 'f-dbtime').map(c => parseFloat(c.getAttribute('data-impact')))
-        .filter(v => v > 0);
-      out.impOrder = imp.every((v, i) => i === 0 || imp[i - 1] >= v);
+      // tier 1 = a rise of at least 0.01 AAS (owner decision 2026-11-20):
+      // those cards lead (DB time aside), largest first; a smaller rise,
+      // none or a fall follows with the cards without a time measure
+      const imp = fc.filter(c => c.id !== 'f-dbtime').map(c => {
+        const a = c.getAttribute('data-impact');
+        return a === null || a === '' ? null : parseFloat(a);
+      });
+      const t1 = v => v !== null && v >= 0.01;
+      const nt1 = imp.findIndex(v => !t1(v));
+      const imp1 = imp.filter(t1);
+      out.impOrder = imp.every((v, i) => !t1(v) || nt1 < 0 || i < nt1)
+        && imp1.every((v, i) => i === 0 || imp1[i - 1] >= v);
       out.impAttrs = fc.every(c => c.hasAttribute('data-impact') && c.hasAttribute('data-share'));
       out.impChips = fc.filter(c => parseFloat(c.getAttribute('data-impact')) > 0).every(c => c.querySelector('.fc-k .fc-imp'));
       // v1.7: the DB-time breakdown under the verdict

@@ -232,6 +232,11 @@ these supersede the 2026-11-19 answers where they overlap):
   (`time_waited_micro_fg`), like DB time; replaces "all sessions" above.
   Scoring is unchanged: the wait-class rows stay all sessions. Done in
   fix group G1.
+- 020: card impact ranking has a **0.01 AAS floor**: tier 1 ("this card
+  added DB time") needs a rise of at least 0.01 AAS; a smaller rise ranks
+  with the cards without a time measure (large before moderate, then |z|).
+  The chip still shows a smaller rise; only the order changes. Done in
+  fix group G1.
 
 
 Each plan records its default, so an executor never waits on these. Decide

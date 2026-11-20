@@ -1003,9 +1003,11 @@ def time_added(domain, name, cur, mu, fg_d):
 
 
 def card_tier(group, imp) -> int:
+    """finding_cards.plsql card_tier: tier 1 needs a rise of at least 0.01
+    AAS (owner decision 2026-11-20); smaller, none or a fall -> tier 3."""
     if group == "DBTIME":
         return 2
-    return 1 if (imp is not None and imp > 0) else 3
+    return 1 if (imp is not None and ora_round(imp, 6) >= 0.01) else 3
 
 
 def card_before_imp(g_a, sev_a, z_a, imp_a, g_b, sev_b, z_b, imp_b) -> bool:
@@ -1028,9 +1030,9 @@ def imp_txt(v) -> str:
 def card_order(groups: dict) -> list:
     """groups: {group: (sev, maxz, imp)} in PL/SQL associative-array key
     order (sorted keys) -> the card order (insertion sort on
-    card_before_imp: cards whose time measure rose, by the AAS added, then
-    DBTIME, then the rest by card_before; then a flagged DBTIME card moves
-    up to second place)."""
+    card_before_imp: cards whose time measure rose by at least 0.01 AAS, by
+    the AAS added, then DBTIME, then the rest by card_before; then a flagged
+    DBTIME card moves up to second place)."""
     order = []
     for g in sorted(groups):
         j = len(order)

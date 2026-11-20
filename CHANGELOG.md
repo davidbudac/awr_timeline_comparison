@@ -121,8 +121,10 @@ release bumps `awr_version`).
 - **Finding cards are ranked by the DB time they added.** Each card's time
   measure (DB time, DB CPU or its wait class) above its prior mean, in AAS,
   orders the cards and shows as a chip ("+6.313 AAS · 70% of the
-  DB-time rise"); cards without a time measure follow, large before
-  moderate. DB time stays second. The verdict follows the same order. A
+  DB-time rise"); a card ranks by it only from 0.01 AAS up, so a rise of
+  +0.001 AAS no longer outranks a louder card: smaller rises, falls and
+  cards without a time measure follow, large before moderate (the chip
+  still shows a small rise). DB time stays second. The verdict follows the same order. A
   wait class's time added counts foreground sessions only
   (`time_waited_micro_fg`), like DB time: on a test-DB hour, Configuration
   waits (archiver / log switch, mostly background) had ranked first with

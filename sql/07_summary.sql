@@ -31,7 +31,7 @@
 -- Card order and lead (shared with the verdict in 00_params.sql through
 -- sql/lib/finding_cards.plsql): a card is led by its loudest large (else
 -- moderate) member of the card's primary family, else of any family;
--- cards whose time measure rose come first, by the AAS added (impact,
+-- cards whose time measure rose by 0.01 AAS or more come first, by the AAS added (impact,
 -- v1.7; a wait class counts its foreground time only, read from the same
 -- DBA_HIST_SYSTEM_EVENT rows as its all-session class row); then DB time;
 -- then the rest, large before moderate and by the largest |z| of any
@@ -1012,7 +1012,7 @@ BEGIN
     END LOOP;
 
     -- Card order (00_params.sql's verdict applies the same two steps):
-    -- cards whose time measure rose, by the AAS added; then DB time; then
+    -- cards whose time measure rose by 0.01 AAS or more, by the AAS added; then DB time; then
     -- the rest, large before moderate and by |z|; then a flagged DB time
     -- card moves up to second place.
     v_g := v_glead.FIRST;

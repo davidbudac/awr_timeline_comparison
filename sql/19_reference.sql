@@ -236,7 +236,8 @@ BEGIN
         || ' Physical I/O (physical and logical reads, long table scans, User I/O waits), DB time (DB time, the CPU / wait ratio, response time), Network (Network waits, SQL*Net bytes), Commit'
         || ' (Commit waits, commits), Parsing, Writes and redo. A card is led by its loudest large, else moderate, metric of the card&rsquo;s main family.'
         || ' Cards are ordered by the time they added: the rise of the card&rsquo;s time measure (DB time, DB CPU or the foreground wait time of its wait class) above its prior mean, in'
-        || ' average active sessions, largest first; cards without a time measure follow, large before moderate. A wait class is scored on all sessions, background included;'
+        || ' average active sessions, largest first; cards whose time measure rose by less than 0.01 average active sessions, fell, or that have none follow, large before moderate'
+        || ' (the chip still shows a smaller rise). A wait class is scored on all sessions, background included;'
         || ' only the time it added counts foreground sessions, like DB time. The printed z of a band in the Summary view'
         || ' stops at &gt;+10&sigma;; tables show the exact value. Twins are folded under'
         || ' <b>related metrics</b> and never counted.</dd>');

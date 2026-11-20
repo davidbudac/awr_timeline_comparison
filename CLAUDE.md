@@ -402,9 +402,13 @@ CURSORS) · WRITE (WRITE_IO, REDO, WAIT:System I/O) · any other family is its
 own card (`WAIT:<c>` → "<c> waits", `f-wait-<c>`). Lead (`lead_better`):
 large before moderate → member of `card_primary`'s family → larger |z| →
 shorter label. Order (`card_before_imp`, v1.7, plan 020): tier 1 = cards
-whose time measure rose (impact > 0), largest impact first; tier 2 =
-DBTIME; tier 3 = the rest by `card_before` (large before moderate, then
-max |z|); then a flagged DB time card moves to 2nd. Impact
+whose time measure rose by at least 0.01 AAS (`card_tier`, owner decision
+2026-11-20; `ROUND(imp, 6) >= 0.01`, twin `helpers.card_tier`), largest
+impact first; tier 2 = DBTIME; tier 3 = the rest — a smaller rise, a
+fall, no time measure — by `card_before` (large before moderate, then
+max |z|); then a flagged DB time card moves to 2nd. The floor only
+orders: the chip still shows any impact above 0 (verify_report's
+`impOrder` encodes the tiers). Impact
 (`impact_group` + `time_added`): the card's time measure — DB time or DB
 CPU (time model), Current minus prior mean ×`metric_scale` = AAS, or its
 wait class's FOREGROUND wait time (owner decision 2026-11-20:
