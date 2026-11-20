@@ -94,7 +94,7 @@ What the re-check added to the plans:
 | [027](027-pattern-tags-on-findings.md) | Pattern tags: spike / step / trend / after a release | 8 | P2 | M | LOW | 025 (soft) | DONE (`aafbc38`); DB run pending (owner) |
 | [028](028-baseline-switch-on-finding-cards.md) | Baseline switch on finding cards (as scored / robust / since last release), display only | 9 | P3 | M | LOW | — | DROPPED (owner 2026-11-19: sections 26 / 28 cover it) |
 | [029](029-sort-by-change.md) | Sort by change: SQL Monitor shows flagged statements first; Top SQL opens on "Biggest change" | 10 | P2 | M | LOW / MED | — | DONE (`ade6cb5`, `3fb20a6`, tab kept); DB run pending (owner) |
-| [030](030-human-units.md) | Human units: durations as "7 h 45 m"; Timeline wait-event rows in AAS | 12 | P2 | S-M | LOW | — | TODO |
+| [030](030-human-units.md) | Human units: durations as "7 h 45 m"; Timeline wait-event rows in AAS | 12 | P2 | S-M | LOW | — | DONE (`251ff52`, `edccdff`); DB run pending (owner) |
 | [031](031-timeline-rows-scale-filter-sort.md) | Timeline rows show normal variation; flagged-only filter; sort by change | 11 | P2 | M | LOW-MED | 030 (soft) | TODO |
 | [032](032-fold-checked-and-normal.md) | "Checked and normal" folds to one line in Summary | 13 | P3 | S | LOW | 025 | TODO |
 | [033](033-finding-hints-and-next-step-queries.md) | Hints ("what this usually means") and copyable read-only next queries | 14 | P3 | M | LOW-MED | 026 (soft) | TODO |
