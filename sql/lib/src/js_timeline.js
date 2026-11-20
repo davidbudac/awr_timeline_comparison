@@ -143,14 +143,14 @@ function toolSync(note){
   $$('#tl-tools button[data-tlo]').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-tlo')===TLF.order));});
   if(note!=null){var n=$('#tl-tools .tlt-n');if(n)n.innerHTML=note;}
 }
-function setRows(v,save){
+function setRows(v,save,boot){
   var tl=doc.getElementById('tl');if(!tl)return;TLF.rows=v;
   tl.classList.toggle('flagonly',v==='flagged');
   scoredLanes().forEach(function(l){l.classList.toggle('nofl',!laneRows(l).some(flagged));});
   toolSync();if(save)lsSet('awr-tl-rows',v);
-  if(W.render)W.render(tl);
+  if(!boot&&W.render)W.render(tl);
 }
-function setOrder(v,save){
+function setOrder(v,save,boot){
   var tl=doc.getElementById('tl');if(!tl)return;TLF.order=v;
   var notes=[];
   scoredLanes().forEach(function(lane){
@@ -171,7 +171,7 @@ function setOrder(v,save){
     if(nf)box.appendChild(nf);
   });
   toolSync(notes.join('; '));if(save)lsSet('awr-tl-order',v);
-  if(W.render)W.render(tl);
+  if(!boot&&W.render)W.render(tl);
 }
 function tools(){
   var tl=doc.getElementById('tl');if(!tl||!scoredLanes().length||doc.getElementById('tl-tools'))return;
@@ -183,8 +183,9 @@ function tools(){
   tl.parentNode.insertBefore(t,tl);
   t.addEventListener('click',function(ev){var b=ev.target&&ev.target.closest?ev.target.closest('button'):null;if(!b)return;
     if(b.hasAttribute('data-tlf'))setRows(b.getAttribute('data-tlf'),true);else if(b.hasAttribute('data-tlo'))setOrder(b.getAttribute('data-tlo'),true);});
+  /* boot: no render here, the DOMContentLoaded block renders #tl next */
   var r=lsGet('awr-tl-rows'),o=lsGet('awr-tl-order');
-  setRows(r==='flagged'?'flagged':'all',false);setOrder(o==='change'?'change':'report',false);
+  setRows(r==='flagged'?'flagged':'all',false,true);setOrder(o==='change'?'change':'report',false,true);
 }
 /* ---- 3. pin a window: its column tints, the gutter compares against it */
 var PW=null;

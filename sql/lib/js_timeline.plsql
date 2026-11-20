@@ -208,14 +208,14 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  $$(''#tl-tools button[data-tlo]'').forEach(function(b){b.setAttribute(''aria-pressed'',String(b.getAttribute(''data-tlo'')===TLF.order));});');
     DBMS_OUTPUT.PUT_LINE('  if(note!=null){var n=$(''#tl-tools .tlt-n'');if(n)n.innerHTML=note;}');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('function setRows(v,save){');
+    DBMS_OUTPUT.PUT_LINE('function setRows(v,save,boot){');
     DBMS_OUTPUT.PUT_LINE('  var tl=doc.getElementById(''tl'');if(!tl)return;TLF.rows=v;');
     DBMS_OUTPUT.PUT_LINE('  tl.classList.toggle(''flagonly'',v===''flagged'');');
     DBMS_OUTPUT.PUT_LINE('  scoredLanes().forEach(function(l){l.classList.toggle(''nofl'',!laneRows(l).some(flagged));});');
     DBMS_OUTPUT.PUT_LINE('  toolSync();if(save)lsSet(''awr-tl-rows'',v);');
-    DBMS_OUTPUT.PUT_LINE('  if(W.render)W.render(tl);');
+    DBMS_OUTPUT.PUT_LINE('  if(!boot&&W.render)W.render(tl);');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('function setOrder(v,save){');
+    DBMS_OUTPUT.PUT_LINE('function setOrder(v,save,boot){');
     DBMS_OUTPUT.PUT_LINE('  var tl=doc.getElementById(''tl'');if(!tl)return;TLF.order=v;');
     DBMS_OUTPUT.PUT_LINE('  var notes=[];');
     DBMS_OUTPUT.PUT_LINE('  scoredLanes().forEach(function(lane){');
@@ -236,7 +236,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    if(nf)box.appendChild(nf);');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  toolSync(notes.join(''; ''));if(save)lsSet(''awr-tl-order'',v);');
-    DBMS_OUTPUT.PUT_LINE('  if(W.render)W.render(tl);');
+    DBMS_OUTPUT.PUT_LINE('  if(!boot&&W.render)W.render(tl);');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function tools(){');
     DBMS_OUTPUT.PUT_LINE('  var tl=doc.getElementById(''tl'');if(!tl||!scoredLanes().length||doc.getElementById(''tl-tools''))return;');
@@ -248,8 +248,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  tl.parentNode.insertBefore(t,tl);');
     DBMS_OUTPUT.PUT_LINE('  t.addEventListener(''click'',function(ev){var b=ev.target&&ev.target.closest?ev.target.closest(''button''):null;if(!b)return;');
     DBMS_OUTPUT.PUT_LINE('    if(b.hasAttribute(''data-tlf''))setRows(b.getAttribute(''data-tlf''),true);else if(b.hasAttribute(''data-tlo''))setOrder(b.getAttribute(''data-tlo''),true);});');
+    DBMS_OUTPUT.PUT_LINE('  /* boot: no render here, the DOMContentLoaded block renders #tl next */');
     DBMS_OUTPUT.PUT_LINE('  var r=lsGet(''awr-tl-rows''),o=lsGet(''awr-tl-order'');');
-    DBMS_OUTPUT.PUT_LINE('  setRows(r===''flagged''?''flagged'':''all'',false);setOrder(o===''change''?''change'':''report'',false);');
+    DBMS_OUTPUT.PUT_LINE('  setRows(r===''flagged''?''flagged'':''all'',false,true);setOrder(o===''change''?''change'':''report'',false,true);');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* ---- 3. pin a window: its column tints, the gutter compares against it */');
     DBMS_OUTPUT.PUT_LINE('var PW=null;');
