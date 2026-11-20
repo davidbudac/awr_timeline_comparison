@@ -389,6 +389,14 @@ release bumps `awr_version`).
   the committed demo report or policy page is stale. CI ("Checks",
   formerly "Lint SQL sources") runs exactly this on every push to `main`
   and every pull request, not only when SQL files change.
+- **`demo/verify_report.js` passes a report without release markers.**
+  Its "All sections shows every library section in full" check looks at
+  each section's first chart or table that holds a data row: section 28's
+  split table stays empty, hidden with the rest of the split view behind
+  its "why" note, until a release marker or a picked window boundary gives
+  a split, so every marker-less test-DB report failed (on `main` too). A
+  new check wants that note and the Current-vs-all-priors table, which
+  shows every number either way; the demo must open on a split.
 
 ## 1.6.1 — 2026-09-27
 

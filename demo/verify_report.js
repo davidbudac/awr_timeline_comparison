@@ -78,7 +78,10 @@
  *     library row (section.lib) shows in Summary with its one-line status,
  *     opens / shuts on a click and opens for a jump into it; one rail
  *     sub-link per finding card; All sections shows every library section
- *     in full; the Trend cells are micro strips (svg.mw), no line left;
+ *     in full (its first chart / table holding a number; section 28 with
+ *     no release marker shows its reason note and its all-priors table
+ *     instead of the empty split view; the demo opens on a split); the
+ *     Trend cells are micro strips (svg.mw), no line left;
  *     v1.7: cards ordered by data-impact (rises of 0.01 AAS or more
  *     first, largest first), chip present, Summary z capped
  *     at 10; the DB-time breakdown under the verdict (#att-slot) shown
@@ -1492,9 +1495,22 @@ const LABEL_BAND = () => {
       // dashboard design: the plan card's query never widens the side column
       const side = document.querySelector('aside.dside');
       out.hintSide = side ? side.scrollWidth <= side.clientWidth + 1 : true;
-      // All sections: every library section shows in full, row state or not
+      // All sections: every library section shows in full, row state or not:
+      // its first chart or table that holds a number (a table without a data
+      // row holds none: section 28's split table stays empty, hidden with
+      // the rest of the split view, until a release marker or a boundary
+      // gives a split; its Current-vs-all-priors table shows every number)
       window.AWR_setView('all', false); await wait(250);
-      out.allFull = libs.filter(x => { const t = x.querySelector('table, .chart-wrap'); return t && !vis(t); }).map(x => x.id);
+      const hasNum = t => !t.matches('table') || [...t.rows].some(r => r.querySelector('td'));
+      out.allFull = libs.filter(x => { const t = [...x.querySelectorAll('table, .chart-wrap')].find(hasNum); return t && !vis(t); }).map(x => x.id);
+      // section 28 with no usable split (no release marker): the reason note
+      // shows instead of the split view, and the all-priors table is there
+      {
+        const rd = document.getElementById('release-delta'), app = rd && rd.querySelector('.rd-app');
+        const why = app && app.querySelector('.rd-why'), tall = rd && rd.querySelector('table.rd-tall');
+        out.rdSplit = !app || !vis(app) ? 'none' : vis(app.querySelector('.rd-body')) ? 'split'
+          : (vis(why) && why.textContent.trim() && tall && vis(tall) && hasNum(tall)) ? 'no split (reason note, all-priors table)' : 'FAIL';
+      }
       // plan 035: section 11's charts are drawn on demand
       const a11 = [...document.querySelectorAll('#topsql-ash .chart-ash-sql')];
       if (window.echarts && a11.length > 2) {
@@ -1588,6 +1604,8 @@ const LABEL_BAND = () => {
     if (/^FAIL/.test(p4.jk)) fail('J in Summary: ' + p4.jk);
     if (!p4.subNames) fail('rail card sub-link text / data-label carries the share');
     if (p4.allFull.length) fail('All sections: library sections not shown in full: ' + p4.allFull.join(', '));
+    if (p4.rdSplit === 'FAIL') fail('release-delta: no split shown, but no reason note or no all-priors table');
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && p4.rdSplit !== 'split') fail('demo: release-delta should open on a split at its release marker, got ' + p4.rdSplit);
     if (/^FAIL/.test(p4.lazy11)) fail('section 11 lazy charts ' + p4.lazy11);
     if ((!p4.strips && p4.nwin <= 91) || p4.lines) fail('micro strips: ' + p4.strips + ' svg.mw, ' + p4.lines + ' line sparklines left');
     // G4: pattern chips are focusable (tabindex 0, named by their text, the

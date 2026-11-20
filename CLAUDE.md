@@ -1444,7 +1444,13 @@ after wait total); status worse / better / changed (ANY, INFO) / small /
 inside. Rows are HTML/CSS (left in %), no SVG and no width needed; axis
 symmetric, clamp at +-400% ("> x5"). Library row upgraded via `AWR_ls`; the
 split table `table.rd-tbl[data-nocount]` (tbody replaced per split, chrome
-sort works). JS off: `p.rd-nojs` + `table.rd-tall`. Never call anything a
+sort works). No usable split (no release marker and no boundary picked:
+every marker-less real-DB report) hides `.rd-body` -- legend, charts and the
+still-empty split table -- and shows `p.rd-why` instead; `details.rd-all`
+(`table.rd-tall`, Current vs all priors) shows in every case, so no number
+is hidden (verify_report's `allFull` skips a table without a data row, its
+`rdSplit` wants the note + that table, the demo a split). JS off:
+`p.rd-nojs` + `table.rd-tall`. Never call anything a
 finding or use large / moderate. Links are built as `a.className="ent"` only
 when the target id exists (lint 21 scans the generated plsql for the literal).
 Unexercised: RAC, multi-DBID, a before mean of 0, a marker inside Current on a
@@ -2331,7 +2337,8 @@ Timeline lanes + `data-tl` jumps + label links + chart hover / legend / zoom /
 reset / pin / Esc, the series highlight (legend hover re-base, class ->
 events, event -> class, focus, sticky, Esc order, click to keep), the Day
 profile picker (click / arrows / Home / End; required for the demo), plan
-cards, library rows, rail sub-links, All sections completeness (`allFull`),
+cards, library rows, rail sub-links, All sections completeness (`allFull`:
+each library section's first chart or table holding a data row is visible),
 micro strips. The legend / highlight steps park the pointer BELOW the chart
 (x 2), never above it: above the event chart is the class legend, and a
 hovered legend entry re-scales the chart. ~3 min per report; **one instance at a
