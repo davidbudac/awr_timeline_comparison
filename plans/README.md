@@ -101,7 +101,7 @@ What the re-check added to the plans:
 | [034](034-copy-summary-button.md) | "Copy summary" button (Markdown for a ticket or chat) | 15 | P3 | S-M | LOW | 020 (soft) | DONE (`bf288c3`); DB run pending (owner) |
 | [035](035-section11-charts-on-demand.md) | Section 11 draws its per-SQL charts on demand | 16 | P3 | S | LOW | — | DONE (`dcec914`); DB run pending (owner) |
 | [036](036-activity-direct-band-labels.md) | The Activity charts name their largest bands | 17 | P3 | M | LOW | 024 | DONE (`13abec7`); DB run pending (owner) |
-| [037](037-sqlmon-scatter-readable.md) | SQL Monitor execution scatter readable at 3,000 points | 18 | P3 | S-M | LOW (step 5 MED) | — | TODO |
+| [037](037-sqlmon-scatter-readable.md) | SQL Monitor execution scatter readable at 3,000 points | 18 | P3 | S-M | LOW (step 5 MED) | — | DONE (`b0ff616`, step 5 `84d3927`); DB run pending (owner) |
 
 **Execution order**: the numbers are the execution order, and every
 dependency points backwards.
