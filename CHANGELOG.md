@@ -209,7 +209,10 @@ release bumps `awr_version`).
   inside one panel in Windows side by side); the legend stays.
 - **SQL Monitor scatter is readable.** Smaller marks (size by log2 of the
   DOP), Current-window points solid and outlined, the rest faded; the
-  x-axis spans the whole compared span.
+  x-axis spans the whole compared span. Under the 3,000-point cap the
+  executions inside a compared window are kept first, then the most
+  recent, so every compared window shows its executions (the demo kept
+  points in only 3 of its 13 windows).
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

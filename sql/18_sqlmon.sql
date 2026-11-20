@@ -38,8 +38,9 @@
 -- on a lightly-loaded instance while never hiding a real regression. The
 -- caption states the raw captured-execution count vs. the count actually
 -- shown. The execution SCATTER chart plots every captured execution in the
--- full span regardless of the floor (capped at 3,000 most-recent points) --
--- the floor only shapes the summary table and its ranking.
+-- full span regardless of the floor (capped at 3,000 points,
+-- compared-window executions first) -- the floor only shapes the summary
+-- table and its ranking.
 --
 -- Window attribution: an execution is attributed to a compared window by
 -- its parsed sql_exec_start (key3) falling in [win_start_ts, win_end_ts) of
@@ -1034,7 +1035,8 @@ BEGIN
     END LOOP;
     v_top_ids_json := v_top_ids_json || ']';
 
-    -- Points: every captured execution, capped to the most recent 3000.
+    -- Points: every captured execution, capped to 3000 -- those starting
+    -- inside a compared window first, then the most recent.
     DBMS_LOB.CREATETEMPORARY(v_points_clob, TRUE);
     FOR p IN (
         -- ONE scan of dba_hist_reports: the per-sql_id mode plan (the
@@ -1050,11 +1052,11 @@ BEGIN
                    CASE WHEN be.mode_plan IS NOT NULL AND be.plan_hash <> 0
                              AND be.plan_hash <> be.mode_plan
                         THEN 'Y' ELSE 'N' END AS plan_mismatch,
-                   ROW_NUMBER() OVER (ORDER BY be.exec_start DESC) AS rn_recent,
+                   ROW_NUMBER() OVER (ORDER BY be.in_win DESC, be.exec_start DESC) AS rn_recent,
                    COUNT(*) OVER () AS n_total
             FROM (
                 SELECT b.sql_id, b.exec_start, b.elapsed_us, b.status,
-                       b.plan_hash, b.px_req,
+                       b.plan_hash, b.px_req, b.in_win,
                        MAX(CASE WHEN b.plan_hash <> 0 THEN b.plan_hash END)
                            KEEP (DENSE_RANK FIRST
                                  ORDER BY CASE WHEN b.plan_hash <> 0 THEN b.plan_cnt END DESC NULLS LAST,
@@ -1068,6 +1070,16 @@ BEGIN
                                TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') AS exec_start,
                                x.status, x.plan_hash, x.px_req,
                                NVL(x.elapsed_us, 0) AS elapsed_us
+                               -- 1 when the execution starts inside a compared
+                               -- window (nominal grid: windows_cte.sql's rule).
+                               -- Half a second off the distance makes the test
+                               -- [start, end) like the windows, and keeps NUMBER
+                               -- rounding of the day fractions off the edge
+                               , CASE WHEN MOD(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
+                                               - TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS')
+                                               - 0.5/86400,
+                                               (~step_hours/24)) < (~win_hours/24)
+                                      THEN 1 ELSE 0 END AS in_win
                         FROM   dba_hist_reports r,
                                XMLTABLE('/report_repository_summary/sql'
                                    PASSING XMLTYPE(r.report_summary)
@@ -1129,7 +1141,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('var el0=document.getElementById("sqlmon-scatter");');
         DBMS_OUTPUT.PUT_LINE('if(el0){var note=document.createElement("p");'
             || 'note.style.cssText="font-size:11px;color:var(--muted);margin:-2px 0 6px;font-style:italic";'
-            || 'note.textContent="Capped to the most recent 3,000 of "+AWR_DATA.sqlmon.totalRaw+" captured executions.";'
+            || 'note.textContent="Capped to 3,000 of "+AWR_DATA.sqlmon.totalRaw+" captured executions: those in the compared windows first, then the most recent.";'
             || 'el0.parentNode.insertBefore(note, el0);}');
     END IF;
     DBMS_OUTPUT.PUT_LINE('if(!window.echarts) return;');

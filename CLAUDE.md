@@ -1590,9 +1590,16 @@ floor). This keeps a lightly-loaded instance's table from being dominated by
 tiny parallel-execution noise (SQL Monitor's capture policy always persists
 parallel statements) while never hiding a real regression. The **execution
 scatter** chart plots every captured execution in the full span regardless
-of the floor (capped at the 3,000 most recent) — the floor only shapes the
-summary table and its Current-window-max-elapsed ranking. Its marks (plan
-037): size `4 + 2 log2(DOP)`, at most 12 px; points in the Current window,
+of the floor — the floor only shapes the summary table and its
+Current-window-max-elapsed ranking. It is capped at 3,000 points: the
+executions that start inside a compared window first, then the most
+recent (plan 037; `in_win` in the one `DBA_HIST_REPORTS` scan, computed
+arithmetically from the nominal window grid -- `MOD(target_end - start -
+0.5 s, step) < win`, the half second making it `[start, end)` and keeping
+NUMBER rounding off the edge -- never a join to `windows_rollup` or a
+second read; the twin's `in_win` is the same rule), so every compared
+window keeps its points (the demo: 10 of 13 windows were empty under
+"most recent only"). Its marks: size `4 + 2 log2(DOP)`, at most 12 px; points in the Current window,
 errors and plan changes solid with a theme-independent dark outline, the
 rest faded (grey "Other" fainter and drawn underneath); the x-axis is
 pinned to `spanStart..spanEnd`, so a window without captures shows as an

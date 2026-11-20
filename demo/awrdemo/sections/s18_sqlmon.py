@@ -12,6 +12,7 @@ Data: w.monexecs() plays DBA_HIST_REPORTS' report_summary XMLTABLE rows.
 """
 from __future__ import annotations
 
+from datetime import timedelta
 from statistics import median
 
 from .. import chrome
@@ -591,7 +592,16 @@ def emit(w) -> str:
             mode_plan[sid] = min(cnt, key=lambda ph: (-cnt[ph], ph))
 
     points_total = len(execs)
-    recent = sorted(execs, key=lambda m: (m.exec_start, m.report_id), reverse=True)[:SCATTER_CAP]
+    # the cap keeps executions that start inside a compared window first
+    # (nominal grid, half a second off the distance = [start, end), as the
+    # SQL's in_win), then the most recent
+    g_end = w.target_end
+    g_step = timedelta(hours=w.step_hours)
+    g_win = timedelta(hours=w.win_hours)
+
+    def in_win(m):
+        return 1 if (g_end - m.exec_start - timedelta(seconds=0.5)) % g_step < g_win else 0
+    recent = sorted(execs, key=lambda m: (in_win(m), m.exec_start, m.report_id), reverse=True)[:SCATTER_CAP]
     recent.sort(key=lambda m: (m.exec_start, m.report_id))
     pts = []
     for m in recent:
