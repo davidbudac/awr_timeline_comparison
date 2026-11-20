@@ -422,7 +422,7 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g,
                   ' mean of this card&#39;s time measure (DB time, DB CPU or the foreground time of its'
                   ' wait class), in average active sessions">' + h.imp_txt(v_imp)
                   + (" above normal" if g == "DBTIME"
-                     else " &middot; " + str(v_shr) + "% of the DB-time rise" if v_shr is not None
+                     else " &middot; " + ("&lt;1" if v_shr < 1 else str(v_shr)) + "% of the DB-time rise" if v_shr is not None
                      else "")
                   + '</span>' if v_imp is not None and v_imp > 0 else '')
                + '<span class="fc-sum">' + h.fv(h._mul(r.cur, s), u) + ' &middot; normal '
@@ -676,7 +676,7 @@ def emit(w) -> str:
         out.append('<script>(function(){var n=document.querySelector(\'nav.toc a[href="#findings"]\');'
                    'if(!n)return;[' + js + '].forEach(function(c){var a=document.createElement("a");'
                    'a.className="sub";a.href="#"+c[0];a.setAttribute("data-nodot","");a.textContent=c[1];'
-                   'if(c[2]){a.setAttribute("data-shr",c[2]+"%");a.title=c[1]+": "+c[2]+"% of the DB-time rise";}'
+                   'if(c[2]){var p=(c[2]==="0"?"<1":c[2])+"%";a.setAttribute("data-shr",p);a.title=c[1]+": "+p+" of the DB-time rise";}'
                    'n.parentNode.insertBefore(a,n.nextSibling);n=a;});})();</script>')
         # plan 025: the impact cells, row clicks and folding, lifted verbatim
         L = chrome.put_lines(chrome.sql_path("sql/07_summary.sql"))

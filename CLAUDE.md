@@ -422,7 +422,9 @@ rail shares and Copy summary all read the same impact;
 `article.fc[data-impact]` (3-decimal token, '' = none) and
 `[data-share]` (integer % of the DB-time rise, '' when DB time did not
 rise or the share passes 100) are a contract for later Summary features;
-a chip `.fc-k .fc-imp` shows it. A flagged DB CPU card is its own card
+a chip `.fc-k .fc-imp` shows it (only a rise; a share that rounds to 0
+reads "<1%" on the chip, the rail, the triage list and Copy summary,
+which also prints only a rise). A flagged DB CPU card is its own card
 `CPU` (label "CPU"). Summary-only band glyphs (07's card header,
 evidence and normal rows, 08's strip, 18's plan card) pass `p_zcap =>
 10` (printed z stops at ">+10σ"; tables and Timeline gutters keep the

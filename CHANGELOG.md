@@ -124,7 +124,8 @@ release bumps `awr_version`).
   DB-time rise"); a card ranks by it only from 0.01 AAS up, so a rise of
   +0.001 AAS no longer outranks a louder card: smaller rises, falls and
   cards without a time measure follow, large before moderate (the chip
-  still shows a small rise). DB time stays second. The verdict follows the same order. A
+  still shows a small rise; a share under 0.5% reads "<1%", here and on
+  the rail, the triage list and Copy summary). DB time stays second. The verdict follows the same order. A
   wait class's time added counts foreground sessions only
   (`time_waited_micro_fg`), like DB time: on a test-DB hour, Configuration
   waits (archiver / log switch, mostly background) had ranked first with

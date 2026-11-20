@@ -868,7 +868,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    var b=q(".fc-main .big",c), v=vu(b), n=b?tx(q(".nrm",b)):"";');
     DBMS_OUTPUT.PUT_LINE('    var im=c.getAttribute("data-impact"), sh=c.getAttribute("data-share");');
     DBMS_OUTPUT.PUT_LINE('    L.push((i+1)+". ["+tx(q(".fc-k .sv",c))+"] "+tx(q("h3",c))+(v?": "+v:"")+(n?", "+n:"")');
-    DBMS_OUTPUT.PUT_LINE('      +(im?" (+"+im+" AAS"+(sh?", "+sh+"% of the DB-time rise":"")+")":""));');
+    DBMS_OUTPUT.PUT_LINE('      +(im&&+im>0?" (+"+im+" AAS"+(sh?", "+(sh==="0"?"<1":sh)+"% of the DB-time rise":"")+")":""));');
     DBMS_OUTPUT.PUT_LINE('  });');
     -- (plan 026 moves the plan card that explains a finding card right under
     -- that card, with data-explains; the dashboard moves it back into the slot)

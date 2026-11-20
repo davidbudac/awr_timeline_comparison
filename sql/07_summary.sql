@@ -558,7 +558,9 @@ DECLARE
                     || ' mean of this card&#39;s time measure (DB time, DB CPU or the foreground time of its'
                     || ' wait class), in average active sessions">' || imp_txt(v_imp)
                     || CASE WHEN p_g = 'DBTIME' THEN ' above normal'
-                            WHEN v_shr IS NOT NULL THEN ' &middot; ' || v_shr || '% of the DB-time rise' END
+                            WHEN v_shr IS NOT NULL THEN ' &middot; '
+                                 || CASE WHEN v_shr < 1 THEN '&lt;1' ELSE TO_CHAR(v_shr) END
+                                 || '% of the DB-time rise' END
                     || '</span>' END
             || '<span class="fc-sum">' || fv(r.cur_val * v_s, v_u) || ' &middot; normal '
             || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u) || '</span>'
@@ -1356,7 +1358,7 @@ BEGIN
             DBMS_OUTPUT.PUT_LINE('<script>(function(){var n=document.querySelector(''nav.toc a[href="#findings"]'');'
                 || 'if(!n)return;[' || v_js || '].forEach(function(c){var a=document.createElement("a");'
                 || 'a.className="sub";a.href="#"+c[0];a.setAttribute("data-nodot","");a.textContent=c[1];'
-                || 'if(c[2]){a.setAttribute("data-shr",c[2]+"%");a.title=c[1]+": "+c[2]+"% of the DB-time rise";}'
+                || 'if(c[2]){var p=(c[2]==="0"?"<1":c[2])+"%";a.setAttribute("data-shr",p);a.title=c[1]+": "+p+" of the DB-time rise";}'
                 || 'n.parentNode.insertBefore(a,n.nextSibling);n=a;});})();</script>');
         END;
         -- plan 025: fill the triage list's impact cells from each card's
@@ -1366,7 +1368,7 @@ BEGIN
         -- what the chrome's reveal() calls for a link into a folded card.
         DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,tri=d.getElementById("triage");');
         DBMS_OUTPUT.PUT_LINE('function n2(v){var a=Math.abs(v);return (v<0?"-":"+")+(a>=10?a.toFixed(1):a>=1?a.toFixed(2):a.toFixed(3));}');
-        DBMS_OUTPUT.PUT_LINE('if(tri)tri.querySelectorAll(".tri-row[data-card]").forEach(function(r){var id=r.getAttribute("data-card"),c=d.getElementById(id),x=r.querySelector(".tri-imp");if(!c||!x)return;var im=c.getAttribute("data-impact"),sh=c.getAttribute("data-share");if(im===null||im===""){x.innerHTML="<small>no time measure</small>";return;}var v=+im,s=(sh===null||sh==="")?null:+sh,tot=id==="f-dbtime",w=tot?100:Math.max(0,Math.min(100,s||0));x.innerHTML="<i class=\"tri-bar\"><i style=\"width:"+w+"%\"></i></i><small><b>"+n2(v)+" AAS</b> "+(tot?"total":(s===null?"":s+"%"))+"</small>";});');
+        DBMS_OUTPUT.PUT_LINE('if(tri)tri.querySelectorAll(".tri-row[data-card]").forEach(function(r){var id=r.getAttribute("data-card"),c=d.getElementById(id),x=r.querySelector(".tri-imp");if(!c||!x)return;var im=c.getAttribute("data-impact"),sh=c.getAttribute("data-share");if(im===null||im===""){x.innerHTML="<small>no time measure</small>";return;}var v=+im,s=(sh===null||sh==="")?null:+sh,tot=id==="f-dbtime",w=tot?100:Math.max(0,Math.min(100,s||0));x.innerHTML="<i class=\"tri-bar\"><i style=\"width:"+w+"%\"></i></i><small><b>"+n2(v)+" AAS</b> "+(tot?"total":(s===null?"":(s<1?"&lt;1":s)+"%"))+"</small>";});');
         DBMS_OUTPUT.PUT_LINE('if(tri)tri.addEventListener("click",function(ev){var r=ev.target.closest(".tri-row");if(!r||ev.target.closest("a"))return;var a=r.querySelector("a.tri-go");if(a)a.click();});');
         DBMS_OUTPUT.PUT_LINE('function setF(c,on){c.classList.toggle("fold",on);var b=c.querySelector(".fc-tg");if(b){b.setAttribute("aria-expanded",on?"false":"true");b.textContent=on?"Show card":"Fold";}if(!on&&window.AWR_WG)setTimeout(function(){AWR_WG.render(c);},20);}');
         DBMS_OUTPUT.PUT_LINE('window.AWR_fcOpen=function(c){if(c&&c.classList.contains("fold"))setF(c,false);};');

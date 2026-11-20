@@ -1237,10 +1237,12 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       // tier 1 = a rise of at least 0.01 AAS (owner decision 2026-11-20):
       // those cards lead (DB time aside), largest first; a smaller rise,
       // none or a fall follows with the cards without a time measure
+      // (a "0.010" token is left out: the token rounds to 3 decimals, the
+      // floor to 6, so such a card may sit in either tier)
       const imp = fc.filter(c => c.id !== 'f-dbtime').map(c => {
         const a = c.getAttribute('data-impact');
         return a === null || a === '' ? null : parseFloat(a);
-      });
+      }).filter(v => v !== 0.01);
       const t1 = v => v !== null && v >= 0.01;
       const nt1 = imp.findIndex(v => !t1(v));
       const imp1 = imp.filter(t1);
