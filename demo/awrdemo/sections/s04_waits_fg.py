@@ -47,18 +47,23 @@ def emit(w) -> str:
     # ---- v1.6.0 Timeline: the Waits lane's event rows (Table A's order,
     # rows past the 10th fold, at most 16)
     nt = min(len(rows), 16)
+    win_s = w.win_hours * 3600                     # v_win_s: event rows in AAS
+
+    def aas(v):
+        return None if v is None else v / win_s
+
     for i, r in enumerate(rows[:16], start=1):
         share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
         b = h.policy_bucket("WAIT", r["event_name"], r["wait_class"], C._s(r["cur_us"]),
                             C._s(r["mu_us"]), C._s(r["sd_us"]), r["n_us"], share, shift)
         L.append((h.tl_open("waits") if i == 1 else "")
-                 + h.tl_bars(w, h.tl_csv(w, r["spark_vals"]), C._s(r["mu_us"]), C._s(r["sd_us"]), b,
+                 + h.tl_bars(w, h.tl_csv(w, r["spark_vals"], "N", win_s), aas(C._s(r["mu_us"])), aas(C._s(r["sd_us"])), b,
                              h.tl_lab(h.ent(h.esc(r["event_name"]), h.anchor_uniq(h.anchor_id("we", r["event_name"]), r["event_name"], seen_we), "event"),
-                                      h.esc(r["wait_class"]), None, r["wait_class"]),
-                             h.tl_gut(C._s(r["cur_us"]), C._s(r["mu_us"]), C._s(r["sd_us"]), b),
+                                      h.esc(r["wait_class"]) + ", AAS", None, r["wait_class"]),
+                             h.tl_gut(aas(C._s(r["cur_us"])), aas(C._s(r["mu_us"])), aas(C._s(r["sd_us"])), b),
                              "tl-" + h.anchor_uniq(h.anchor_id("we", r["event_name"]), r["event_name"], seen_we),
                              "w" + (" more" if i > 10 else ""),
-                             h.esc(r["event_name"]), "s waited")
+                             h.esc(r["event_name"]), "AAS")
                  + (h.tl_close() if i == nt else ""))
     moved = 0
     for r in rows:

@@ -176,6 +176,10 @@ release bumps `awr_version`).
   total elapsed minus the prior-window mean, from the same SQLSTAT read.
   A shared link keeps the chosen tab (Elapsed time included); the About
   notes state both orders.
+- **Durations and AAS.** The plan-change card shows elapsed time as words
+  of time (7 h 45 m, not 27.92 k s); Timeline wait-event rows are in AAS
+  like the wait classes (seconds waited ÷ the window length). Tables keep
+  seconds.
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

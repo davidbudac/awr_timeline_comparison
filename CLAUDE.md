@@ -475,7 +475,7 @@ too). Lanes (`div.lane#lane-<x>[data-kind]`, rows in `.lrows`):
 |---|---|---|---|
 | activity | ash | 09: one stacked `.r.ash` row | `tl-ash-timeline` |
 | metrics | scored | 07: 11 headline metrics (`hl_rank`) + every other flagged **canonical** LOAD/METRIC row (twins stay in the tables) | `tl-fr-<l\|m>-<name>` |
-| waits | scored | 07 flagged wait classes; 04 Table A's first 16 events (past 10 `.more`, "+ Show N more") | `tl-fr-w-wait-class-<c>`, `tl-we-<event>` |
+| waits | scored | 07 flagged wait classes; 04 Table A's first 16 events (past 10 `.more`, "+ Show N more"), event rows in AAS (seconds ÷ `win_hours`·3600) | `tl-fr-w-wait-class-<c>`, `tl-we-<event>` |
 | objects | ranked | 14 top 2 segments by physical reads; 15 top 1 datafile by MB read | `tl-sg-…`, `tl-fl-…` |
 | sql | sql | 06 first 6 by elapsed (◆ plan flip on Current, ✚ first-seen window); 18 up to 3 SQL Monitor rows (plan change / DOP downgrade), `data-after` = the 06 row | `tl-sq-elapsed-<id>`, `tl-sm-<id>` |
 | config | config | 12 every changed parameter (≤20) as step rows, cells `data-pv` | `tl-pa-<param>` |
@@ -977,8 +977,10 @@ JS and `_style.sql`; all degrade to "show everything" with JS off:
 - **`.chip`** — shared pill styling (rank chips, window chips).
 - **Number formatting (T7, `fmt_num.plsql`)** — `fmt_num` ~4 significant
   digits with k/M/G ≥ 1e4/1e6/1e9, full precision in `title`; `fmt_int`
-  for counts. Never inside `data-spark` / `data-v` / `AWR_DATA` JSON (raw
-  numbers under the NLS pin).
+  for counts; `fmt_dur(sec, short)` for Summary-view durations (plan card;
+  `fv` / `fv_range` unit `'dur'`; `wg_bars(..., p_fmt => 'dur')`), never in
+  tables or payloads. Never inside `data-spark` / `data-v` / `AWR_DATA`
+  JSON (raw numbers under the NLS pin).
 - Retired: `td[data-dev]` heat tint (v1.6.0, band glyph), `section
   [data-normal]` / `.full-only` / triage mode / Essential rows / Application
   only (v1.5.0–1.6.0), `.badge.sig` (now a `span.imm` note), 07's movers

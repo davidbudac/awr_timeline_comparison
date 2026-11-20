@@ -81,6 +81,9 @@ DECLARE
     v_share      NUMBER;
     v_cell       VARCHAR2(40);
     v_moved      PLS_INTEGER := 0;    -- Table A rows scored large / moderate (library row text)
+    -- the nominal window length: the Timeline's event rows are in AAS
+    -- (seconds waited / window seconds), like 07's wait-class rows
+    v_win_s      NUMBER := ~win_hours * 3600;
 
     -- include order: metric_policy first (lint 14 / 16), then fmt_num ->
     -- band_glyph -> score_cells (lint 13 / 17).
@@ -459,22 +462,26 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('</tbody></table>');
 
     -- v1.6.0 Timeline: the "Waits" lane's event rows, from the same
-    -- collection as Table A (seconds waited per window, scored exactly like
-    -- the table), in its order; rows past the 10th fold under "+ Show N
-    -- more events" (at most 16).  Id tl-we-<event>, the label links to the
-    -- Table A row (sql/lib/timeline.plsql).
+    -- collection as Table A, in AAS (seconds waited per window / the
+    -- nominal window length; the bucket is scored on seconds exactly like
+    -- the table, and z / Delta do not change with a constant scale), in
+    -- its order; rows past the 10th fold under "+ Show N more events" (at
+    -- most 16).  Id tl-we-<event>, the label links to the Table A row
+    -- (sql/lib/timeline.plsql).
     FOR i IN 1 .. LEAST(NVL(v_evts.COUNT, 0), 16) LOOP
         v_share := CASE WHEN v_tot_cur_us > 0 THEN v_evts(i).cur_us / v_tot_cur_us END;
         v_cell  := score_bucket(v_evts(i).cur_us / 1e6, v_evts(i).mu_us / 1e6, v_evts(i).sd_us / 1e6, v_evts(i).n_us,
                                 v_share, 'WAIT', v_evts(i).event_name, v_evts(i).wait_class, v_shift);
         DBMS_OUTPUT.PUT_LINE(CASE WHEN i = 1 THEN tl_open('waits') END
-            || tl_bars(tl_csv(v_evts(i).spark_vals), v_evts(i).mu_us / 1e6, v_evts(i).sd_us / 1e6, v_cell,
+            || tl_bars(tl_csv(v_evts(i).spark_vals, 'N', v_win_s),
+                       v_evts(i).mu_us / 1e6 / v_win_s, v_evts(i).sd_us / 1e6 / v_win_s, v_cell,
                        tl_lab(ent(DBMS_XMLGEN.CONVERT(v_evts(i).event_name), anchor_uniq(anchor_id('we', v_evts(i).event_name), v_evts(i).event_name, v_seen_we), 'event'),
-                              DBMS_XMLGEN.CONVERT(v_evts(i).wait_class), NULL, v_evts(i).wait_class),
-                       tl_gut(v_evts(i).cur_us / 1e6, v_evts(i).mu_us / 1e6, v_evts(i).sd_us / 1e6, v_cell),
+                              DBMS_XMLGEN.CONVERT(v_evts(i).wait_class) || ', AAS', NULL, v_evts(i).wait_class),
+                       tl_gut(v_evts(i).cur_us / 1e6 / v_win_s, v_evts(i).mu_us / 1e6 / v_win_s,
+                              v_evts(i).sd_us / 1e6 / v_win_s, v_cell),
                        'tl-' || anchor_uniq(anchor_id('we', v_evts(i).event_name), v_evts(i).event_name, v_seen_we),
                        'w' || CASE WHEN i > 10 THEN ' more' END,
-                       DBMS_XMLGEN.CONVERT(v_evts(i).event_name), 's waited')
+                       DBMS_XMLGEN.CONVERT(v_evts(i).event_name), 'AAS')
             || CASE WHEN i = LEAST(v_evts.COUNT, 16) THEN tl_close END);
     END LOOP;
 

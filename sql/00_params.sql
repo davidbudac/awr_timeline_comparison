@@ -1504,7 +1504,7 @@ BEGIN
                 '<div class="gbody" id="tl-body"><div class="gin" id="tl-in">');
         DBMS_OUTPUT.PUT_LINE(lane_h('activity', 'Activity', 'ash', NULL, 'ASH, not scored'));
         DBMS_OUTPUT.PUT_LINE(lane_h('metrics', 'Headline and load', 'scored'));
-        DBMS_OUTPUT.PUT_LINE(lane_h('waits', 'Waits', 'scored', 'wait classes in AAS, events in seconds waited', NULL, 'events'));
+        DBMS_OUTPUT.PUT_LINE(lane_h('waits', 'Waits', 'scored', 'wait classes and events in AAS', NULL, 'events'));
         DBMS_OUTPUT.PUT_LINE(lane_h('objects', 'Where the reads land', 'ranked', NULL, 'ranked, not scored'));
         DBMS_OUTPUT.PUT_LINE(lane_h('sql', 'SQL', 'sql', 'elapsed s; a dash = not in the top ' || ~top_n));
         DBMS_OUTPUT.PUT_LINE(lane_h('config', 'Configuration', 'config'));

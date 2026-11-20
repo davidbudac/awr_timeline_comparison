@@ -314,7 +314,7 @@ def _timeline(w) -> list[str]:
                         'Y', '<div class="gbody" id="tl-body"><div class="gin" id="tl-in">'))
     o.append(lane_h('activity', 'Activity', 'ash', None, 'ASH, not scored'))
     o.append(lane_h('metrics', 'Headline and load', 'scored'))
-    o.append(lane_h('waits', 'Waits', 'scored', 'wait classes in AAS, events in seconds waited', None, 'events'))
+    o.append(lane_h('waits', 'Waits', 'scored', 'wait classes and events in AAS', None, 'events'))
     o.append(lane_h('objects', 'Where the reads land', 'ranked', None, 'ranked, not scored'))
     o.append(lane_h('sql', 'SQL', 'sql', 'elapsed s; a dash = not in the top ' + str(w.top_n)))
     o.append(lane_h('config', 'Configuration', 'config'))
