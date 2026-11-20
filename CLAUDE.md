@@ -370,7 +370,8 @@ that explains it (`data-explains` = its id), which keeps its own toggle
 `beforeprint` handler opens every `article.fc.fold` and a closed
 `#s-normal details.calm-fold` (rendering the cards' grids synchronously:
 no timer runs before the print layout), `afterprint` folds back exactly
-those; `_style.sql`'s print block hides `.fc-tg` and, for JS off, shows the
+those (and reopens a card that was open but got folded by the cascade
+from the card it explains); `_style.sql`'s print block hides `.fc-tg` and, for JS off, shows the
 closed fold's body through `::details-content`; the dashboard opens its
 closed lead rows (`printRows()` in js_design) and prints every findings tab
 (`css_design.css`, `@media print`). verify_report phase 4 `print`.

@@ -1372,7 +1372,8 @@ BEGIN
         -- unfolds the foldable card right after it that explains it
         -- (data-explains = its id), which keeps its own toggle.  Print
         -- (G4): beforeprint opens every folded card and the closed "Checked
-        -- and normal" fold, afterprint folds back exactly those.
+        -- and normal" fold, afterprint folds back exactly those (and reopens
+        -- a card that was open but folded with the card it explains).
         DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,tri=d.getElementById("triage");');
         DBMS_OUTPUT.PUT_LINE('function n2(v){var a=Math.abs(v);return (v<0?"-":"+")+(a>=10?a.toFixed(1):a>=1?a.toFixed(2):a.toFixed(3));}');
         DBMS_OUTPUT.PUT_LINE('if(tri)tri.querySelectorAll(".tri-row[data-card]").forEach(function(r){var id=r.getAttribute("data-card"),c=d.getElementById(id),x=r.querySelector(".tri-imp");if(!c||!x)return;var im=c.getAttribute("data-impact"),sh=c.getAttribute("data-share");if(im===null||im===""){x.innerHTML="<small>no time measure</small>";return;}var v=+im,s=(sh===null||sh==="")?null:+sh,tot=id==="f-dbtime",w=tot?100:Math.max(0,Math.min(100,s||0));x.innerHTML="<i class=\"tri-bar\"><i style=\"width:"+w+"%\"></i></i><small><b>"+n2(v)+" AAS</b> "+(tot?"total":(s===null?"":(s<1?"&lt;1":s)+"%"))+"</small>";});');
@@ -1383,8 +1384,8 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('window.AWR_fcOpen=function(c){if(c&&c.classList.contains("fold"))setF(c,false);};');
         DBMS_OUTPUT.PUT_LINE('window.AWR_fcFold=function(c){if(c&&mkF(c))setF(c,true);};');
         DBMS_OUTPUT.PUT_LINE('d.querySelectorAll("#findings .cards > article.fc[data-fold]").forEach(function(c){if(mkF(c))setF(c,true);});');
-        DBMS_OUTPUT.PUT_LINE('var pr=null;window.addEventListener("beforeprint",function(){if(pr)return;var cf=d.querySelector("#s-normal details.calm-fold");pr={c:[].slice.call(d.querySelectorAll("article.fc.fold")),n:cf&&!cf.open?cf:null};pr.c.forEach(function(c){setF(c,false);});if(pr.n)pr.n.open=true;if(window.AWR_WG)pr.c.forEach(function(c){AWR_WG.render(c);});});');
-        DBMS_OUTPUT.PUT_LINE('window.addEventListener("afterprint",function(){if(!pr)return;pr.c.forEach(function(c){setF(c,true);});if(pr.n)pr.n.open=false;pr=null;});');
+        DBMS_OUTPUT.PUT_LINE('var pr=null;window.addEventListener("beforeprint",function(){if(pr)return;var cf=d.querySelector("#s-normal details.calm-fold");pr={c:[].slice.call(d.querySelectorAll("article.fc.fold")),o:[].slice.call(d.querySelectorAll("article.fc:not(.fold)")),n:cf&&!cf.open?cf:null};pr.c.forEach(function(c){setF(c,false);});if(pr.n)pr.n.open=true;if(window.AWR_WG)pr.c.forEach(function(c){AWR_WG.render(c);});});');
+        DBMS_OUTPUT.PUT_LINE('window.addEventListener("afterprint",function(){if(!pr)return;pr.c.forEach(function(c){setF(c,true);});pr.o.forEach(function(c){if(c.classList.contains("fold"))setF(c,false);});if(pr.n)pr.n.open=false;pr=null;});');
         DBMS_OUTPUT.PUT_LINE('})();</script>');
     ELSE
         DBMS_OUTPUT.PUT_LINE('<div class="panel calm vw in-s"><p class="calm-empty">'
