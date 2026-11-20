@@ -1029,8 +1029,14 @@ JS and `_style.sql`; all degrade to "show everything" with JS off:
   hooks breaks the summary; verify_report's `sumOk` catches it. Works in
   every design (the dashboard moves the cards; the selector does not
   depend on `.cards`); quiet / dashboard style it in `css_design.css`.
-  The button ships `hidden` (JS off: no button); Escape in the popover is
-  stopped at its textarea, so it never unpins a window.
+  The button ships `hidden` (JS off: no button); Escape anywhere in the
+  popover (it has tabindex -1) is stopped there, so it never unpins a
+  window. While open the top bar carries `.sum-open` (z-index 40; relative
+  at 980 px and below, where the popover hangs under the static bar): the
+  Timeline's sticky ruler and the narrow rail bar painted over it.
+  `position:fixed` cannot pin it: the bar's backdrop-filter makes the bar
+  the containing block of fixed descendants. verify_report: `sumEsc`,
+  `sumOnTop`.
 - **Number formatting (T7, `fmt_num.plsql`)** — `fmt_num` ~4 significant
   digits with k/M/G ≥ 1e4/1e6/1e9, full precision in `title`; `fmt_int`
   for counts; `fmt_dur(sec, short)` for Summary-view durations (plan card;

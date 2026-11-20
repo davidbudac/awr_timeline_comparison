@@ -1049,7 +1049,32 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         out.sumOk = md.indexOf(h1.replace(/\s+/g, ' ').trim()) >= 0 && nLines === nCards && !/undefined|null|NaN/.test(md);
         document.querySelector('#sum-pop .sum-x').click(); await wait(60);
         out.sumClosed = document.getElementById('sum-pop').hidden;
-      } else out.sumOk = out.sumClosed = false;
+        // plan 034 review: Escape on the close button closes the popover,
+        // gives focus back to the button and keeps a pinned window
+        const pw = ((window.AWR_WIN && AWR_WIN.w) || []).filter(w => w.o !== 0 && w.v === 'Y').map(w => String(w.o))[0];
+        if (pw !== undefined && window.AWR_WG && AWR_WG.pin) AWR_WG.pin(+pw);
+        sbtn.click(); await wait(150);
+        const sx = document.querySelector('#sum-pop .sum-x'); sx.focus();
+        sx.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await wait(60);
+        out.sumEsc = document.getElementById('sum-pop').hidden && document.activeElement === sbtn
+          && !document.getElementById('topbar').classList.contains('sum-open')
+          && (pw === undefined || document.body.getAttribute('data-pw') === pw);
+        if (pw !== undefined) AWR_WG.pin(null);
+        // ... and nothing paints over it in the Timeline view (the sticky ruler did)
+        if (window.AWR_setView && document.getElementById('tl')) {
+          AWR_setView('timeline', false); await wait(300);
+          const tl = document.getElementById('tl');
+          window.scrollTo(0, tl.getBoundingClientRect().top + window.scrollY + 300); await wait(200);
+          sbtn.click(); await wait(150);
+          const pop = document.getElementById('sum-pop');
+          out.sumOnTop = [pop.querySelector('.sum-x'), pop.querySelector('textarea')].every(el => {
+            const r = el.getBoundingClientRect(), h = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(8, r.height / 2));
+            return !!h && pop.contains(h);
+          });
+          pop.querySelector('.sum-x').click(); await wait(60);
+          AWR_setView('summary', false); window.scrollTo(0, 0); await wait(300);
+        } else out.sumOnTop = true;
+      } else out.sumOk = out.sumClosed = out.sumEsc = out.sumOnTop = false;
       // plan 030: durations on the plan card, AAS on Timeline event rows
       out.durOk = [...document.querySelectorAll('article.fc[id^="f-plan-"] .big .v')]
         .every(v => /^-?\d+(\.\d)? (ms|s|m|h|d)( \d+ (s|m|h))?$/.test(v.textContent.trim()));
@@ -1242,6 +1267,8 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (!p4.planOk) fail('plan-change card incomplete, or neither in #changes-slot nor right under the card it explains');
     if (!p4.sumOk) fail('Copy summary: Markdown missing the verdict, a card line, or contains undefined/null');
     if (!p4.sumClosed) fail('Copy summary: the popover did not close');
+    if (!p4.sumEsc) fail('Copy summary: Escape on the close button did not close the popover, or it unpinned the window');
+    if (!p4.sumOnTop) fail('Copy summary: something paints over the popover in the Timeline view');
     if (!p4.durOk) fail('plan card: elapsed not shown as a duration');
     if (!p4.aasOk) fail('Timeline: a wait-event row is not in AAS');
     if (!p4.smOrder) fail('SQL Monitor table: flagged statements not first, or a detail row lost its statement');

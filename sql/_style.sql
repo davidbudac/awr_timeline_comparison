@@ -1067,9 +1067,16 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('#sum-pop .sum-x{border:0;background:none;font-size:18px;line-height:1;color:var(--muted);cursor:pointer}');
     DBMS_OUTPUT.PUT_LINE('#sum-pop textarea{width:100%;box-sizing:border-box;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;'
         || 'color:var(--ink);background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:8px;resize:vertical}');
-    -- at 980 px and below the top bar is position:static (the media rule
-    -- below), so the popover can not anchor to it: pin it to the viewport
-    DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px){#sum-pop{position:fixed;top:12px;right:12px;left:12px;width:auto}}');
+    -- While the popover is open (.sum-open, set by the chrome script) the top
+    -- bar's stacking context (z-index 20) is lifted above the Timeline's
+    -- sticky ruler (30) and the narrow rail bar (30-33), which painted over it.
+    -- At 980 px and below the top bar is position:static (the media rule
+    -- below) and scrolls with the page: the open bar turns relative so the
+    -- popover hangs right under it, full width.  position:fixed would not
+    -- pin it to the viewport: the bar's backdrop-filter makes the bar the
+    -- containing block of fixed descendants too.
+    DBMS_OUTPUT.PUT_LINE('.topbar.sum-open{z-index:40}');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px){.topbar.sum-open{position:relative} #sum-pop{right:12px;left:12px;width:auto}}');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 1180px){.topbar .db span{display:none}}');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px){.topbar{order:1;position:static;margin:0 -20px;padding:8px 20px;flex-wrap:wrap}}');
     -- The band glyph (sql/lib/band_glyph.plsql): one span, one --x, zones and ticks drawn as gradients

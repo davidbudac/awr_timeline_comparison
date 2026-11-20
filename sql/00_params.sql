@@ -822,6 +822,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('/* ---- S1: Copy summary (top bar): the answer as Markdown ---- */');
     DBMS_OUTPUT.PUT_LINE('var sb=doc.getElementById("sum-btn"), sp=null;');
     DBMS_OUTPUT.PUT_LINE('function tx(el){return el?(el.textContent||"").replace(/\s+/g," ").trim():"";}');
+    -- value + unit of a card's .big ("22.24 k/s", "20.35 AAS"), as the card reads
+    DBMS_OUTPUT.PUT_LINE('function vu(b){ if(!b) return ""; var v=tx(b.querySelector(".v")), u=tx(b.querySelector(".u")); return (v+(u?(u.charAt(0)==="/"?"":" ")+u:"")).trim(); }');
     DBMS_OUTPUT.PUT_LINE('function sumMD(){');
     DBMS_OUTPUT.PUT_LINE('  var L=[], q=function(s,r){return (r||doc).querySelector(s);};');
     DBMS_OUTPUT.PUT_LINE('  var db=tx(q("#topbar .db b")), dx=tx(q("#topbar .db span")), wn=tx(q("#topbar .win b")), ws=tx(q("#topbar .win > span:not(.cchip)"));');
@@ -833,9 +835,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var cs=doc.querySelectorAll("#findings article.fc:not(.chg)");');
     DBMS_OUTPUT.PUT_LINE('  if(cs.length){ L.push(""); L.push("**Findings ("+cs.length+")**"); }');
     DBMS_OUTPUT.PUT_LINE('  cs.forEach(function(c,i){');
-    DBMS_OUTPUT.PUT_LINE('    var b=q(".fc-main .big",c), v=b?tx(q(".v",b))+" "+tx(q(".u",b)):"", n=b?tx(q(".nrm",b)):"";');
+    DBMS_OUTPUT.PUT_LINE('    var b=q(".fc-main .big",c), v=vu(b), n=b?tx(q(".nrm",b)):"";');
     DBMS_OUTPUT.PUT_LINE('    var im=c.getAttribute("data-impact"), sh=c.getAttribute("data-share");');
-    DBMS_OUTPUT.PUT_LINE('    L.push((i+1)+". ["+tx(q(".fc-k .sv",c))+"] "+tx(q("h3",c))+(v.trim()?": "+v.trim():"")+(n?", "+n:"")');
+    DBMS_OUTPUT.PUT_LINE('    L.push((i+1)+". ["+tx(q(".fc-k .sv",c))+"] "+tx(q("h3",c))+(v?": "+v:"")+(n?", "+n:"")');
     DBMS_OUTPUT.PUT_LINE('      +(im?" (+"+im+" AAS"+(sh?", "+sh+"% of the DB-time rise":"")+")":""));');
     DBMS_OUTPUT.PUT_LINE('  });');
     -- (plan 026 moves the plan card that explains a finding card right under
@@ -843,14 +845,17 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var ch=doc.querySelectorAll("#findings article.fc.chg[data-explains]:not([hidden]), #changes-slot > article.fc:not([hidden])");');
     DBMS_OUTPUT.PUT_LINE('  if(ch.length){ L.push(""); L.push("**What changed around it**"); }');
     DBMS_OUTPUT.PUT_LINE('  ch.forEach(function(c){');
-    DBMS_OUTPUT.PUT_LINE('    var b=q(".fc-main .big",c), t=q("p.takeaway",c);');
-    DBMS_OUTPUT.PUT_LINE('    L.push("- "+tx(q(".fc-k .sv",c))+": "+tx(q("h3",c))+(b?": "+tx(q(".v",b))+" "+tx(q(".u",b))+", "+tx(q(".nrm",b)):"")+(t?". "+tx(t):""));');
+    -- (the kind word without its glyph: "Plan change", "Configuration")
+    DBMS_OUTPUT.PUT_LINE('    var b=q(".fc-main .big",c), t=q("p.takeaway",c), v=vu(b), n=b?tx(q(".nrm",b)):"", k=tx(q(".fc-k .sv",c)).replace(/^\W+/,"");');
+    DBMS_OUTPUT.PUT_LINE('    L.push("- "+(k?k+": ":"")+tx(q("h3",c))+(v?": "+v:"")+(n?", "+n:"")+(t?". "+tx(t):""));');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  var ft=tx(q("footer.report")), vm=/v(\d[0-9.]*)/.exec(ft), rm=/run (\d+)/.exec(ft);');
     DBMS_OUTPUT.PUT_LINE('  L.push(""); L.push("_From the awr_trend report"+(vm?" v"+vm[1]:"")+(rm?", run "+rm[1]:"")+"; AWR data, read-only._");');
     DBMS_OUTPUT.PUT_LINE('  return L.join("\n");');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('function sumClose(){ if(sp){ sp.hidden=true; } if(sb){ sb.setAttribute("aria-expanded","false"); } }');
+    -- sum-open lifts the top bar above the Timeline ruler and the narrow rail
+    -- bar while the popover is open (_style.sql)
+    DBMS_OUTPUT.PUT_LINE('function sumClose(){ if(sp){ sp.hidden=true; } if(sb){ sb.setAttribute("aria-expanded","false"); sb.parentNode.classList.remove("sum-open"); } }');
     DBMS_OUTPUT.PUT_LINE('if(sb){');
     DBMS_OUTPUT.PUT_LINE('  sb.hidden=false;');
     DBMS_OUTPUT.PUT_LINE('  sb.addEventListener("click",function(ev){');
@@ -858,18 +863,21 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    if(sp&&!sp.hidden){ sumClose(); return; }');
     DBMS_OUTPUT.PUT_LINE('    var s=sumMD();');
     DBMS_OUTPUT.PUT_LINE('    if(!sp){');
-    DBMS_OUTPUT.PUT_LINE('      sp=doc.createElement("div"); sp.id="sum-pop"; sp.setAttribute("role","dialog"); sp.setAttribute("aria-label","Summary as Markdown");');
+    DBMS_OUTPUT.PUT_LINE('      sp=doc.createElement("div"); sp.id="sum-pop"; sp.tabIndex=-1; sp.setAttribute("role","dialog"); sp.setAttribute("aria-label","Summary as Markdown");');
     DBMS_OUTPUT.PUT_LINE('      sp.innerHTML="<p><span class=\"sum-st\"></span><button type=\"button\" class=\"sum-x\" aria-label=\"Close\">&times;</button></p><textarea readonly rows=\"14\"></textarea>";');
     DBMS_OUTPUT.PUT_LINE('      sb.parentNode.appendChild(sp);');
     DBMS_OUTPUT.PUT_LINE('      sp.querySelector(".sum-x").addEventListener("click",sumClose);');
     DBMS_OUTPUT.PUT_LINE('      sp.addEventListener("click",function(e){ e.stopPropagation(); });');
-    DBMS_OUTPUT.PUT_LINE('      sp.querySelector("textarea").addEventListener("keydown",function(e){ if(e.key==="Escape"){ e.stopPropagation(); sumClose(); sb.focus(); } });');
+    -- Escape anywhere in the popover (textarea, close button, or the popover
+    -- itself after a click on its text: tabindex -1) closes it and goes no
+    -- further, so it never unpins a window or clears a highlight
+    DBMS_OUTPUT.PUT_LINE('      sp.addEventListener("keydown",function(e){ if(e.key==="Escape"){ e.stopPropagation(); sumClose(); sb.focus(); } });');
     DBMS_OUTPUT.PUT_LINE('      doc.addEventListener("click",function(){ if(sp&&!sp.hidden) sumClose(); });');
     DBMS_OUTPUT.PUT_LINE('    }');
     DBMS_OUTPUT.PUT_LINE('    var ta=sp.querySelector("textarea"), st=sp.querySelector(".sum-st");');
-    DBMS_OUTPUT.PUT_LINE('    ta.value=s; sp.hidden=false; sb.setAttribute("aria-expanded","true");');
+    DBMS_OUTPUT.PUT_LINE('    ta.value=s; sp.hidden=false; sb.setAttribute("aria-expanded","true"); sb.parentNode.classList.add("sum-open");');
     DBMS_OUTPUT.PUT_LINE('    st.textContent="Copying...";');
-    DBMS_OUTPUT.PUT_LINE('    var done=function(ok){ st.textContent=ok?"Copied to the clipboard.":"Select the text below and copy it."; ta.focus(); ta.select(); };');
+    DBMS_OUTPUT.PUT_LINE('    var done=function(ok){ if(sp.hidden) return; st.textContent=ok?"Copied to the clipboard.":"Select the text below and copy it."; ta.focus(); ta.select(); };');
     DBMS_OUTPUT.PUT_LINE('    try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(s).then(function(){done(true);},function(){paste(s);done(false);}); return; } }catch(e){}');
     DBMS_OUTPUT.PUT_LINE('    paste(s); done(false);');
     DBMS_OUTPUT.PUT_LINE('  });');

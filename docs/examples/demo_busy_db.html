@@ -278,7 +278,8 @@ body.dark .topbar .theme-icon-btn .icon-moon{display:none}
 #sum-pop p{display:flex;justify-content:space-between;align-items:center;margin:0 0 6px;font-size:12px;color:var(--muted)}
 #sum-pop .sum-x{border:0;background:none;font-size:18px;line-height:1;color:var(--muted);cursor:pointer}
 #sum-pop textarea{width:100%;box-sizing:border-box;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;color:var(--ink);background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:8px;resize:vertical}
-@media (max-width: 980px){#sum-pop{position:fixed;top:12px;right:12px;left:12px;width:auto}}
+.topbar.sum-open{z-index:40}
+@media (max-width: 980px){.topbar.sum-open{position:relative} #sum-pop{right:12px;left:12px;width:auto}}
 @media (max-width: 1180px){.topbar .db span{display:none}}
 @media (max-width: 980px){.topbar{order:1;position:static;margin:0 -20px;padding:8px 20px;flex-wrap:wrap}}
 .bd{--x:.3333;position:relative;display:block;height:18px;min-width:120px}
@@ -2896,6 +2897,7 @@ doc.addEventListener("click",function(ev){
 /* ---- S1: Copy summary (top bar): the answer as Markdown ---- */
 var sb=doc.getElementById("sum-btn"), sp=null;
 function tx(el){return el?(el.textContent||"").replace(/\s+/g," ").trim():"";}
+function vu(b){ if(!b) return ""; var v=tx(b.querySelector(".v")), u=tx(b.querySelector(".u")); return (v+(u?(u.charAt(0)==="/"?"":" ")+u:"")).trim(); }
 function sumMD(){
   var L=[], q=function(s,r){return (r||doc).querySelector(s);};
   var db=tx(q("#topbar .db b")), dx=tx(q("#topbar .db span")), wn=tx(q("#topbar .win b")), ws=tx(q("#topbar .win > span:not(.cchip)"));
@@ -2907,22 +2909,22 @@ function sumMD(){
   var cs=doc.querySelectorAll("#findings article.fc:not(.chg)");
   if(cs.length){ L.push(""); L.push("**Findings ("+cs.length+")**"); }
   cs.forEach(function(c,i){
-    var b=q(".fc-main .big",c), v=b?tx(q(".v",b))+" "+tx(q(".u",b)):"", n=b?tx(q(".nrm",b)):"";
+    var b=q(".fc-main .big",c), v=vu(b), n=b?tx(q(".nrm",b)):"";
     var im=c.getAttribute("data-impact"), sh=c.getAttribute("data-share");
-    L.push((i+1)+". ["+tx(q(".fc-k .sv",c))+"] "+tx(q("h3",c))+(v.trim()?": "+v.trim():"")+(n?", "+n:"")
+    L.push((i+1)+". ["+tx(q(".fc-k .sv",c))+"] "+tx(q("h3",c))+(v?": "+v:"")+(n?", "+n:"")
       +(im?" (+"+im+" AAS"+(sh?", "+sh+"% of the DB-time rise":"")+")":""));
   });
   var ch=doc.querySelectorAll("#findings article.fc.chg[data-explains]:not([hidden]), #changes-slot > article.fc:not([hidden])");
   if(ch.length){ L.push(""); L.push("**What changed around it**"); }
   ch.forEach(function(c){
-    var b=q(".fc-main .big",c), t=q("p.takeaway",c);
-    L.push("- "+tx(q(".fc-k .sv",c))+": "+tx(q("h3",c))+(b?": "+tx(q(".v",b))+" "+tx(q(".u",b))+", "+tx(q(".nrm",b)):"")+(t?". "+tx(t):""));
+    var b=q(".fc-main .big",c), t=q("p.takeaway",c), v=vu(b), n=b?tx(q(".nrm",b)):"", k=tx(q(".fc-k .sv",c)).replace(/^\W+/,"");
+    L.push("- "+(k?k+": ":"")+tx(q("h3",c))+(v?": "+v:"")+(n?", "+n:"")+(t?". "+tx(t):""));
   });
   var ft=tx(q("footer.report")), vm=/v(\d[0-9.]*)/.exec(ft), rm=/run (\d+)/.exec(ft);
   L.push(""); L.push("_From the awr_trend report"+(vm?" v"+vm[1]:"")+(rm?", run "+rm[1]:"")+"; AWR data, read-only._");
   return L.join("\n");
 }
-function sumClose(){ if(sp){ sp.hidden=true; } if(sb){ sb.setAttribute("aria-expanded","false"); } }
+function sumClose(){ if(sp){ sp.hidden=true; } if(sb){ sb.setAttribute("aria-expanded","false"); sb.parentNode.classList.remove("sum-open"); } }
 if(sb){
   sb.hidden=false;
   sb.addEventListener("click",function(ev){
@@ -2930,18 +2932,18 @@ if(sb){
     if(sp&&!sp.hidden){ sumClose(); return; }
     var s=sumMD();
     if(!sp){
-      sp=doc.createElement("div"); sp.id="sum-pop"; sp.setAttribute("role","dialog"); sp.setAttribute("aria-label","Summary as Markdown");
+      sp=doc.createElement("div"); sp.id="sum-pop"; sp.tabIndex=-1; sp.setAttribute("role","dialog"); sp.setAttribute("aria-label","Summary as Markdown");
       sp.innerHTML="<p><span class=\"sum-st\"></span><button type=\"button\" class=\"sum-x\" aria-label=\"Close\">&times;</button></p><textarea readonly rows=\"14\"></textarea>";
       sb.parentNode.appendChild(sp);
       sp.querySelector(".sum-x").addEventListener("click",sumClose);
       sp.addEventListener("click",function(e){ e.stopPropagation(); });
-      sp.querySelector("textarea").addEventListener("keydown",function(e){ if(e.key==="Escape"){ e.stopPropagation(); sumClose(); sb.focus(); } });
+      sp.addEventListener("keydown",function(e){ if(e.key==="Escape"){ e.stopPropagation(); sumClose(); sb.focus(); } });
       doc.addEventListener("click",function(){ if(sp&&!sp.hidden) sumClose(); });
     }
     var ta=sp.querySelector("textarea"), st=sp.querySelector(".sum-st");
-    ta.value=s; sp.hidden=false; sb.setAttribute("aria-expanded","true");
+    ta.value=s; sp.hidden=false; sb.setAttribute("aria-expanded","true"); sb.parentNode.classList.add("sum-open");
     st.textContent="Copying...";
-    var done=function(ok){ st.textContent=ok?"Copied to the clipboard.":"Select the text below and copy it."; ta.focus(); ta.select(); };
+    var done=function(ok){ if(sp.hidden) return; st.textContent=ok?"Copied to the clipboard.":"Select the text below and copy it."; ta.focus(); ta.select(); };
     try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(s).then(function(){done(true);},function(){paste(s);done(false);}); return; } }catch(e){}
     paste(s); done(false);
   });
