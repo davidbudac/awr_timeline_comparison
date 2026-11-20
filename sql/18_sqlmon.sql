@@ -1171,7 +1171,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('function buildMarkAreas(hiSlot){return (d.windows||[]).map(function(w){var valid=w[3]!=="0";var hi=(hiSlot!=null)&&((hiSlot===0&&w[2]==="current")||("w-"+hiSlot===w[2]));var a={xAxis:ts(w[0]),itemStyle:{color:valid?(w[2]==="current"?"rgba(37,99,235,0.22)":"rgba(37,99,235,0.10)"):"rgba(148,163,175,0.12)",opacity:hi?1:(hiSlot!=null?0.35:1),borderColor:hi?fg:null,borderWidth:hi?1.5:0}};if(!valid){a.label={show:true,position:"insideTop",color:mu,fontSize:9,formatter:"skipped",distance:1};}return [a,{xAxis:ts(w[1])}];});}');
     DBMS_OUTPUT.PUT_LINE('chart.setOption({');
     DBMS_OUTPUT.PUT_LINE('  tooltip:{trigger:"item",formatter:function(p){var pt=p.data;return "<b>"+pt.id+"</b><br/>"+pt.t+"<br/>elapsed: "+(+pt.e).toFixed(2)+" s<br/>status: "+pt.st+"<br/>plan_hash: "+pt.ph+"<br/>DOP req: "+pt.dop;}},');
-    DBMS_OUTPUT.PUT_LINE('  legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},');
+    -- legend chips opaque: the faded series opacity (0.45, Other 0.2)
+    -- would otherwise carry over to the legend icons
+    DBMS_OUTPUT.PUT_LINE('  legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6,itemStyle:{opacity:1}},');
     DBMS_OUTPUT.PUT_LINE('  grid:{left:56,right:20,top:16,bottom:44,containLabel:true},');
     DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"time",min:ts(d.spanStart),max:ts(d.spanEnd),axisLabel:{color:mu,fontSize:10}},');
     DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"log",name:"elapsed (s)",nameTextStyle:{color:mu,fontSize:10},axisLabel:{color:mu},splitLine:{lineStyle:{color:gr}}},');

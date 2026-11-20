@@ -1601,7 +1601,8 @@ second read; the twin's `in_win` is the same rule), so every compared
 window keeps its points (the demo: 10 of 13 windows were empty under
 "most recent only"). Its marks: size `4 + 2 log2(DOP)`, at most 12 px; points in the Current window,
 errors and plan changes solid with a theme-independent dark outline, the
-rest faded (grey "Other" fainter and drawn underneath); the x-axis is
+rest faded (grey "Other" fainter and drawn underneath; the legend
+chips stay opaque, `legend.itemStyle.opacity` 1); the x-axis is
 pinned to `spanStart..spanEnd`, so a window without captures shows as an
 empty band. `series[0]` carries the window `markArea` (the `awr:window`
 listener addresses it by index); verify_report's phase 4 `scatter` check
