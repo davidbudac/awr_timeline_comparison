@@ -1366,14 +1366,21 @@ BEGIN
         -- data-impact / data-share (plan 020), make a row click open its
         -- card, and fold every card that carries data-fold (Summary; with
         -- JavaScript off nothing is folded).  window.AWR_fcOpen(card) is
-        -- what the chrome's reveal() calls for a link into a folded card.
+        -- what the chrome's reveal() calls for a link into a folded card;
+        -- window.AWR_fcFold(card) makes any card foldable and folds it (17's
+        -- plan card under a folded I/O card, plan 026).  A card folds and
+        -- unfolds the foldable card right after it that explains it
+        -- (data-explains = its id), which keeps its own toggle.
         DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,tri=d.getElementById("triage");');
         DBMS_OUTPUT.PUT_LINE('function n2(v){var a=Math.abs(v);return (v<0?"-":"+")+(a>=10?a.toFixed(1):a>=1?a.toFixed(2):a.toFixed(3));}');
         DBMS_OUTPUT.PUT_LINE('if(tri)tri.querySelectorAll(".tri-row[data-card]").forEach(function(r){var id=r.getAttribute("data-card"),c=d.getElementById(id),x=r.querySelector(".tri-imp");if(!c||!x)return;var im=c.getAttribute("data-impact"),sh=c.getAttribute("data-share");if(im===null||im===""){x.innerHTML="<small>no time measure</small>";return;}var v=+im,s=(sh===null||sh==="")?null:+sh,tot=id==="f-dbtime",w=tot?100:Math.max(0,Math.min(100,s||0));x.innerHTML="<i class=\"tri-bar\"><i style=\"width:"+w+"%\"></i></i><small><b>"+n2(v)+" AAS</b> "+(tot?"total":(s===null?"":(s<1?"&lt;1":s)+"%"))+"</small>";});');
         DBMS_OUTPUT.PUT_LINE('if(tri)tri.addEventListener("click",function(ev){var r=ev.target.closest(".tri-row");if(!r||ev.target.closest("a"))return;var a=r.querySelector("a.tri-go");if(a)a.click();});');
-        DBMS_OUTPUT.PUT_LINE('function setF(c,on){c.classList.toggle("fold",on);var b=c.querySelector(".fc-tg");if(b){b.setAttribute("aria-expanded",on?"false":"true");b.textContent=on?"Show card":"Fold";}if(!on&&window.AWR_WG)setTimeout(function(){AWR_WG.render(c);},20);}');
+        DBMS_OUTPUT.PUT_LINE('function setF(c,on){c.classList.toggle("fold",on);var b=c.querySelector(".fc-tg");if(b){b.setAttribute("aria-expanded",on?"false":"true");b.textContent=on?"Show card":"Fold";}if(!on&&window.AWR_WG)setTimeout(function(){AWR_WG.render(c);},20);'
+            || 'var x=c.nextElementSibling;if(x&&c.id&&x.__fc&&x.getAttribute("data-explains")===c.id&&x.classList.contains("fold")!==on)setF(x,on);}');
+        DBMS_OUTPUT.PUT_LINE('function mkF(c){if(c.__fc)return true;var k=c.querySelector(".fc-h .fc-k");if(!k)return false;c.__fc=1;var b=d.createElement("button");b.type="button";b.className="fc-tg";k.appendChild(b);b.addEventListener("click",function(ev){ev.stopPropagation();setF(c,!c.classList.contains("fold"));});c.addEventListener("click",function(ev){if(c.classList.contains("fold")&&!ev.target.closest("a,button"))setF(c,false);});return true;}');
         DBMS_OUTPUT.PUT_LINE('window.AWR_fcOpen=function(c){if(c&&c.classList.contains("fold"))setF(c,false);};');
-        DBMS_OUTPUT.PUT_LINE('d.querySelectorAll("#findings .cards > article.fc[data-fold]").forEach(function(c){var k=c.querySelector(".fc-h .fc-k");if(!k)return;var b=d.createElement("button");b.type="button";b.className="fc-tg";k.appendChild(b);b.addEventListener("click",function(ev){ev.stopPropagation();setF(c,!c.classList.contains("fold"));});c.addEventListener("click",function(ev){if(c.classList.contains("fold")&&!ev.target.closest("a,button"))setF(c,false);});setF(c,true);});');
+        DBMS_OUTPUT.PUT_LINE('window.AWR_fcFold=function(c){if(c&&mkF(c))setF(c,true);};');
+        DBMS_OUTPUT.PUT_LINE('d.querySelectorAll("#findings .cards > article.fc[data-fold]").forEach(function(c){if(mkF(c))setF(c,true);});');
         DBMS_OUTPUT.PUT_LINE('})();</script>');
     ELSE
         DBMS_OUTPUT.PUT_LINE('<div class="panel calm vw in-s"><p class="calm-empty">'

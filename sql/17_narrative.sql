@@ -1176,7 +1176,9 @@ BEGIN
             DBMS_OUTPUT.PUT_LINE('<div data-ev-for="f-io">' || v_ev_io || '</div>');
         END IF;
         -- plan 026: the plan-change card of the I/O card's top statement (if
-        -- section 18 drew one) moves right under the I/O card
+        -- section 18 drew one) moves right under the I/O card; when plan 025
+        -- folded the I/O card, the plan card folds too (07's AWR_fcFold) and
+        -- opens with it
         IF v_tq_id IS NOT NULL THEN
             DBMS_OUTPUT.PUT_LINE('<span data-explains-src="f-plan-' || v_tq_id || '" data-for="f-io"></span>');
         END IF;
@@ -1191,7 +1193,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll(".notes-src > li").forEach(function(li){var u=li.getAttribute("data-dup");if(u&&d.getElementById(u))return;if(ns){ns.appendChild(li);ns.hidden=false;}});');
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-vx-src]").forEach(function(x){var t=d.querySelector(''.vx[data-vx="''+x.getAttribute("data-vx-src")+''"]'');if(t){t.innerHTML=x.innerHTML;t.hidden=false;}});');
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-ev-for]").forEach(function(x){var c=d.getElementById(x.getAttribute("data-ev-for")),dl=c?c.querySelector("dl.ev"):null;if(!dl)return;var f=dl.firstChild;while(x.firstChild)dl.insertBefore(x.firstChild,f);});');
-        DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-explains-src]").forEach(function(x){var p=d.getElementById(x.getAttribute("data-explains-src")),c=d.getElementById(x.getAttribute("data-for"));if(!p||!c||!c.parentNode||p===c)return;c.parentNode.insertBefore(p,c.nextSibling);p.hidden=false;p.setAttribute("data-explains",c.id);var k=p.querySelector(".fc-k"),sv=c.querySelector(".fc-k .sv"),lb=(sv&&sv.getAttribute("title"))||"the card above";if(k&&!k.querySelector(".xpl")){var s=d.createElement("span");s.className="xpl";s.appendChild(d.createTextNode("explains "));var a=d.createElement("a");a.href="#"+c.id;a.textContent=lb;s.appendChild(a);s.insertAdjacentHTML("beforeend","<i class=\"xu\" aria-hidden=\"true\"> &uarr;</i>");k.appendChild(s);}var sl=d.getElementById("changes-slot"),sc=d.getElementById("s-changes");if(sl&&sc&&!sl.children.length)sc.hidden=true;});');
+        DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-explains-src]").forEach(function(x){var p=d.getElementById(x.getAttribute("data-explains-src")),c=d.getElementById(x.getAttribute("data-for"));if(!p||!c||!c.parentNode||p===c)return;c.parentNode.insertBefore(p,c.nextSibling);p.hidden=false;p.setAttribute("data-explains",c.id);var k=p.querySelector(".fc-k"),sv=c.querySelector(".fc-k .sv"),lb=(sv&&sv.getAttribute("title"))||"the card above";if(k&&!k.querySelector(".xpl")){var s=d.createElement("span");s.className="xpl";s.appendChild(d.createTextNode("explains "));var a=d.createElement("a");a.href="#"+c.id;a.textContent=lb;s.appendChild(a);s.insertAdjacentHTML("beforeend","<i class=\"xu\" aria-hidden=\"true\"> &uarr;</i>");k.appendChild(s);}if(c.classList.contains("fold")&&window.AWR_fcFold)AWR_fcFold(p);var sl=d.getElementById("changes-slot"),sc=d.getElementById("s-changes");if(sl&&sc&&!sl.children.length)sc.hidden=true;});');
         DBMS_OUTPUT.PUT_LINE('src.parentNode.removeChild(src);})();</script>');
     END IF;
 END;

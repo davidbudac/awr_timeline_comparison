@@ -355,7 +355,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('function explainsBack(){');
     DBMS_OUTPUT.PUT_LINE('  var sl=$("#changes-slot"),sc=$("#s-changes");if(!sl)return;');
     DBMS_OUTPUT.PUT_LINE('  var ex=$$("#findings article.fc[data-explains]");if(!ex.length)return;');
-    DBMS_OUTPUT.PUT_LINE('  ex.reverse().forEach(function(p){sl.insertBefore(p,sl.firstChild);});');
+    DBMS_OUTPUT.PUT_LINE('  /* 17 folds it with a folded card (G4): the side column shows it open, no toggle */');
+    DBMS_OUTPUT.PUT_LINE('  ex.reverse().forEach(function(p){sl.insertBefore(p,sl.firstChild);if(window.AWR_fcOpen)AWR_fcOpen(p);var tg=$(".fc-tg",p);if(tg)tg.parentNode.removeChild(tg);});');
     DBMS_OUTPUT.PUT_LINE('  if(sc&&sc.hidden){sc.hidden=false;var rl=$(''nav.toc a[href="#s-changes"]'');if(rl)rl.hidden=false;}');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function dashboard(){');

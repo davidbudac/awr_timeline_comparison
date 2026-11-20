@@ -362,7 +362,11 @@ the chrome's `reveal()` calls it, so every link, rail sub-link or hash
 into a folded card (or anything inside it) opens it first. The kicker
 carries `span.fc-sum` (Current value and normal range, shown only while
 folded) and the empty `span.fc-tags` (plan 027). JS off: nothing folds,
-the impact cells stay empty.
+the impact cells stay empty. `window.AWR_fcFold(card)` makes any card
+foldable (`mkF`: the toggle + click-to-open, once, `c.__fc`) and folds it;
+a card's `setF` also folds / unfolds the foldable card right after it
+that explains it (`data-explains` = its id), which keeps its own toggle
+(17's plan card under a folded I/O card, G4).
 
 **Card hints (plan 033):** a finding card may carry, right after its
 evidence list (`div.fc-b`), `div.fc-hint[data-hint="<rule>"]`: one hedged
@@ -460,7 +464,9 @@ them. JS off → the block stays hidden (every fact is also in its section).
 17 also moves the plan-change card of the I/O card's top statement (by
 Current physical reads) right after `#f-io` (`data-explains="f-io"`, a
 `span.xpl` "explains Physical I/O ↑" chip in its `.fc-k`, the arrow in
-`i.xu`; plan 026) and re-hides `#s-changes` when that empties it; anything
+`i.xu`; plan 026; when 025 folded the I/O card, 17 folds the plan card
+too through `AWR_fcFold`, and it opens with the I/O card or on its own
+toggle -- G4) and re-hides `#s-changes` when that empties it; anything
 counting finding cards in the DOM must exclude `.chg` (plan-change /
 configuration cards). R1's I/O card evidence: the top statement by
 Current physical reads, any statement (row "SQL": blocks vs its mean over
@@ -994,7 +1000,8 @@ designs) and the server's env whitelist.
   Before the KPI cards and the findings table are built, `explainsBack()`
   returns a plan card that 17 moved under the card it explains
   (`article.fc[data-explains]`) to `#changes-slot` (the side column, chip
-  kept, its `i.xu` arrow hidden) and unhides `#s-changes` + its rail link
+  kept, its `i.xu` arrow hidden; opened with `AWR_fcOpen` and its `.fc-tg`
+  toggle removed when 17 had folded it, G4) and unhides `#s-changes` + its rail link
   if 17 had re-hidden them; `kpis()` / `findTable()` select
   `article.fc:not(.chg)` (plan 026).
   Summary order:

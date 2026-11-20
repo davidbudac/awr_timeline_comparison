@@ -92,8 +92,8 @@
  *     card folded, a row click opens its card, card charts show prior
  *     values on hover only and one release label; plan 026: the Physical
  *     I/O card's SQL row; a plan-change card that explains a card sits
- *     right under it (dashboard: in What changed around it, beside the
- *     findings); plan 032: Checked and normal starts folded (one line) and
+ *     right under it, folded exactly when that card is (dashboard: in
+ *     What changed around it, beside the findings, open); plan 032: Checked and normal starts folded (one line) and
  *     a jump to it opens it; in the dashboard its Normal tab shows it open;
  *     plan 033: card hints (rule id, line, copyable read-only query with
  *     no unfilled placeholder; the plan card keeps its footer links; the
@@ -1390,6 +1390,9 @@ const LABEL_BAND = () => {
       out.explainsOk = ex.every(p => (dashX ? !!p.closest('#changes-slot')
           : p.previousElementSibling && p.previousElementSibling.id === p.getAttribute('data-explains'))
         && p.querySelector('.fc-k .xpl a[href="#' + p.getAttribute('data-explains') + '"]'));
+      // G4: it is folded exactly when the card it explains is (dashboard: open, no toggle)
+      out.explainsFold = ex.every(p => { const c = document.getElementById(p.getAttribute('data-explains'));
+        return dashX ? !p.classList.contains('fold') && !p.querySelector('.fc-tg') : !!c && c.classList.contains('fold') === p.classList.contains('fold'); });
       const sl = document.getElementById('changes-slot'), sc = document.getElementById('s-changes');
       out.changesOk = !sl || !sc || (sl.children.length > 0) === !sc.hidden;
       // v1.7: cards ordered by impact; chip; Summary z capped at 10
@@ -1528,6 +1531,7 @@ const LABEL_BAND = () => {
     if (!p4.topsqlTab) fail('Top SQL: the selected tab and the open panel disagree');
     if (p4.ioSql === false && /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) fail('demo: the Physical I/O card has no SQL evidence row');
     if (!p4.explainsOk) fail('an explaining plan-change card is not right under its card (dashboard: not in #changes-slot) or lacks its chip');
+    if (!p4.explainsFold) fail('an explaining plan-change card is not folded with the card it explains (dashboard: folded or with a toggle)');
     if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && p4.explains !== 1) fail('demo: expected the plan card of 7k2m9dx4qp1zb to explain the Physical I/O card, got ' + p4.explains);
     if (!p4.changesOk) fail('"What changed around it" visible while empty, or hidden while it holds a card');
     if (!p4.lib || p4.libVisible !== p4.lib) fail('evidence library: ' + p4.libVisible + '/' + p4.lib + ' rows visible in Summary');
