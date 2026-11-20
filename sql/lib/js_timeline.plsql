@@ -33,6 +33,9 @@
 --   pinned()      the pinned offset or null.
 -- At DOMContentLoaded: lane counts / fold / "+ Show N more", the prior
 -- values of every grid row (from data-v; shown on hover or pin), the
+-- #tl-tools (plan 031): Rows All / Flagged only, Order Report / Biggest
+-- change first, saved on click as awr-tl-rows / awr-tl-order; #tl.flagonly,
+-- .lane.nofl, .r.nfl; then the
 -- stacked activity columns (Activity lane, and the DB time card chart of
 -- the Summary view), then the two Activity charts -- ONE chart factory
 -- (mkChart / draw), two instances sharing one time axis (x labels on the
@@ -124,6 +127,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('/* open whatever hides a Timeline row: a closed lane, the folded rows */');
     DBMS_OUTPUT.PUT_LINE('TL.reveal=function(el){');
     DBMS_OUTPUT.PUT_LINE('  var lane=el&&el.closest?el.closest(''#tl .lane''):null;if(!lane)return;');
+    DBMS_OUTPUT.PUT_LINE('  if(lane.getAttribute(''data-kind'')===''scored''&&el.classList.contains(''bars'')&&!flagged(el)&&lane.closest(''#tl.flagonly''))setRows(''all'',false);');
     DBMS_OUTPUT.PUT_LINE('  if(lane.classList.contains(''closed'')){lane.classList.remove(''closed'');var b=$(''.lt2'',lane);if(b)b.setAttribute(''aria-expanded'',''true'');}');
     DBMS_OUTPUT.PUT_LINE('  if(el.classList.contains(''more''))showMore(lane);');
     DBMS_OUTPUT.PUT_LINE('  setTimeout(function(){if(W.render)W.render(lane);},0);');
@@ -185,6 +189,67 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('      c.insertAdjacentHTML(''afterbegin'',x==null?''<span class="v nil" aria-label="no value">\u2013</span>'':''<span class="v">''+fmtNum(x)+''</span>'');');
     DBMS_OUTPUT.PUT_LINE('    });');
     DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* ---- 2b. the row toolbar (plan 031), above the grid: "Flagged only"');
+    DBMS_OUTPUT.PUT_LINE('   hides the rows of the scored lanes that are not large / moderate');
+    DBMS_OUTPUT.PUT_LINE('   (folded ones included); "Biggest change first" sorts the scored lanes');
+    DBMS_OUTPUT.PUT_LINE('   (waits: by added AAS when every row is in AAS, else by z; headline and');
+    DBMS_OUTPUT.PUT_LINE('   load: by z), wait-class rows staying above the events.  A viewer''s');
+    DBMS_OUTPUT.PUT_LINE('   choice, saved on a click only (localStorage awr-tl-rows /');
+    DBMS_OUTPUT.PUT_LINE('   awr-tl-order), like awr-view.  Counts, pills and ids never change. */');
+    DBMS_OUTPUT.PUT_LINE('var TLF={rows:''all'',order:''report''};');
+    DBMS_OUTPUT.PUT_LINE('function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}');
+    DBMS_OUTPUT.PUT_LINE('function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}');
+    DBMS_OUTPUT.PUT_LINE('function scoredLanes(){return $$(''#tl .lane[data-kind="scored"]'');}');
+    DBMS_OUTPUT.PUT_LINE('function laneRows(lane){return $$(''.lrows > .r.bars'',lane);}');
+    DBMS_OUTPUT.PUT_LINE('function flagged(r){var s=r.getAttribute(''data-sev'');return s===''large''||s===''moderate'';}');
+    DBMS_OUTPUT.PUT_LINE('function toolSync(note){');
+    DBMS_OUTPUT.PUT_LINE('  $$(''#tl-tools button[data-tlf]'').forEach(function(b){b.setAttribute(''aria-pressed'',String(b.getAttribute(''data-tlf'')===TLF.rows));});');
+    DBMS_OUTPUT.PUT_LINE('  $$(''#tl-tools button[data-tlo]'').forEach(function(b){b.setAttribute(''aria-pressed'',String(b.getAttribute(''data-tlo'')===TLF.order));});');
+    DBMS_OUTPUT.PUT_LINE('  if(note!=null){var n=$(''#tl-tools .tlt-n'');if(n)n.innerHTML=note;}');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function setRows(v,save){');
+    DBMS_OUTPUT.PUT_LINE('  var tl=doc.getElementById(''tl'');if(!tl)return;TLF.rows=v;');
+    DBMS_OUTPUT.PUT_LINE('  tl.classList.toggle(''flagonly'',v===''flagged'');');
+    DBMS_OUTPUT.PUT_LINE('  scoredLanes().forEach(function(l){l.classList.toggle(''nofl'',!laneRows(l).some(flagged));});');
+    DBMS_OUTPUT.PUT_LINE('  toolSync();if(save)lsSet(''awr-tl-rows'',v);');
+    DBMS_OUTPUT.PUT_LINE('  if(W.render)W.render(tl);');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function setOrder(v,save){');
+    DBMS_OUTPUT.PUT_LINE('  var tl=doc.getElementById(''tl'');if(!tl)return;TLF.order=v;');
+    DBMS_OUTPUT.PUT_LINE('  var notes=[];');
+    DBMS_OUTPUT.PUT_LINE('  scoredLanes().forEach(function(lane){');
+    DBMS_OUTPUT.PUT_LINE('    var rows=laneRows(lane),box=$(''.lrows'',lane);if(!rows.length||!box)return;');
+    DBMS_OUTPUT.PUT_LINE('    rows.forEach(function(r,i){if(!r.hasAttribute(''data-ord''))r.setAttribute(''data-ord'',String(i));});');
+    DBMS_OUTPUT.PUT_LINE('    var aas=rows.every(function(r){return r.getAttribute(''data-unit'')===''AAS'';});');
+    DBMS_OUTPUT.PUT_LINE('    var key=function(r){return W.changeKey(nums(r.getAttribute(''data-v'')),num(r.getAttribute(''data-mu'')),num(r.getAttribute(''data-sd'')),aas);};');
+    DBMS_OUTPUT.PUT_LINE('    var grp=function(r){return /^tl-fr-w-/.test(r.id)?0:1;},ord=function(r){return +r.getAttribute(''data-ord'');};');
+    DBMS_OUTPUT.PUT_LINE('    rows.sort(v===''change''?function(a,b){var g=grp(a)-grp(b);if(g)return g;var ka=key(a),kb=key(b);');
+    DBMS_OUTPUT.PUT_LINE('      if(ka==null&&kb!=null)return 1;if(kb==null&&ka!=null)return -1;if(ka!==kb&&ka!=null)return kb-ka;return ord(a)-ord(b);}');
+    DBMS_OUTPUT.PUT_LINE('      :function(a,b){return ord(a)-ord(b);});');
+    DBMS_OUTPUT.PUT_LINE('    rows.forEach(function(r){box.appendChild(r);});');
+    DBMS_OUTPUT.PUT_LINE('    var x=$(''.r.xpr'',lane),m=$(''.lrows > .r.more'',lane),nf=$(''.r.nfl'',lane),xb=$(''.xpb'',lane);');
+    DBMS_OUTPUT.PUT_LINE('    if(v===''change''){if(m&&!lane.classList.contains(''showmore'')){lane.setAttribute(''data-autoshow'',''1'');showMore(lane);}');
+    DBMS_OUTPUT.PUT_LINE('      notes.push(esc(($(''.lti'',lane)||{}).textContent||lane.id)+'': by ''+(aas?''added AAS'':''size of the move (z)''));}');
+    DBMS_OUTPUT.PUT_LINE('    else{if(lane.hasAttribute(''data-autoshow'')){lane.removeAttribute(''data-autoshow'');lane.classList.remove(''showmore'');if(xb)xb.setAttribute(''aria-expanded'',''false'');}');
+    DBMS_OUTPUT.PUT_LINE('      if(x&&m)box.insertBefore(x,m);}');
+    DBMS_OUTPUT.PUT_LINE('    if(nf)box.appendChild(nf);');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  toolSync(notes.join(''; ''));if(save)lsSet(''awr-tl-order'',v);');
+    DBMS_OUTPUT.PUT_LINE('  if(W.render)W.render(tl);');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('function tools(){');
+    DBMS_OUTPUT.PUT_LINE('  var tl=doc.getElementById(''tl'');if(!tl||!scoredLanes().length||doc.getElementById(''tl-tools''))return;');
+    DBMS_OUTPUT.PUT_LINE('  scoredLanes().forEach(function(lane){var box=$(''.lrows'',lane);if(!box)return;var nf=mk(''div'',''r nfl'',box);nf.setAttribute(''role'',''row'');nf.innerHTML=''<div class="l" role="rowheader">No large or moderate row here</div>'';});');
+    DBMS_OUTPUT.PUT_LINE('  var t=mk(''div'',''tl-tools'');t.id=''tl-tools'';t.setAttribute(''role'',''toolbar'');t.setAttribute(''aria-label'',''Timeline rows'');');
+    DBMS_OUTPUT.PUT_LINE('  t.innerHTML=''<span class="tlt-g" role="group" aria-label="Rows"><span class="tlt-l">Rows</span><button type="button" data-tlf="all">All</button><button type="button" data-tlf="flagged">Flagged only</button></span>''');
+    DBMS_OUTPUT.PUT_LINE('    +''<span class="tlt-g" role="group" aria-label="Order"><span class="tlt-l">Order</span><button type="button" data-tlo="report">Report order</button><button type="button" data-tlo="change">Biggest change first</button></span>''');
+    DBMS_OUTPUT.PUT_LINE('    +''<span class="tlt-n"></span>'';');
+    DBMS_OUTPUT.PUT_LINE('  tl.parentNode.insertBefore(t,tl);');
+    DBMS_OUTPUT.PUT_LINE('  t.addEventListener(''click'',function(ev){var b=ev.target&&ev.target.closest?ev.target.closest(''button''):null;if(!b)return;');
+    DBMS_OUTPUT.PUT_LINE('    if(b.hasAttribute(''data-tlf''))setRows(b.getAttribute(''data-tlf''),true);else if(b.hasAttribute(''data-tlo''))setOrder(b.getAttribute(''data-tlo''),true);});');
+    DBMS_OUTPUT.PUT_LINE('  var r=lsGet(''awr-tl-rows''),o=lsGet(''awr-tl-order'');');
+    DBMS_OUTPUT.PUT_LINE('  setRows(r===''flagged''?''flagged'':''all'',false);setOrder(o===''change''?''change'':''report'',false);');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* ---- 3. pin a window: its column tints, the gutter compares against it */');
     DBMS_OUTPUT.PUT_LINE('var PW=null;');
@@ -264,7 +329,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var v=nums(row.getAttribute(''data-v''))[i];');
     DBMS_OUTPUT.PUT_LINE('  if(v==null)return head+''<span class="tm">''+(row.classList.contains(''q'')||row.classList.contains(''o'')?''not in the top list in this window'':''no value in this window'')+''</span>'';');
     DBMS_OUTPUT.PUT_LINE('  var g=$(''.glf'',cell);');
-    DBMS_OUTPUT.PUT_LINE('  return head+''<b>''+fmtNum(v)+''</b> ''+esc(row.getAttribute(''data-unit'')||'''')+(g?''<br>''+esc(g.title):'''');');
+    DBMS_OUTPUT.PUT_LINE('  return head+''<b>''+fmtNum(v)+''</b> ''+esc(row.getAttribute(''data-unit'')||'''')+(g?''<br>''+esc(g.title):'''')');
+    DBMS_OUTPUT.PUT_LINE('    +($(''i.b.brk'',cell)?''<br><span class="tm">bar cut: more than 1.5&times; the tallest prior window</span>'':'''');');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener(''mouseover'',function(e){');
     DBMS_OUTPUT.PUT_LINE('  var t=e.target;if(!t||!t.closest||!tip)return;');
@@ -897,6 +963,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  $$(''.sw[data-wc]'').forEach(function(s){s.style.setProperty(''--sw'',wcol(s.getAttribute(''data-wc'')));});');
     DBMS_OUTPUT.PUT_LINE('  AX=(window.AWR_DATA||{}).ashx||null;');
     DBMS_OUTPUT.PUT_LINE('  lanes();');
+    DBMS_OUTPUT.PUT_LINE('  tools();');
     DBMS_OUTPUT.PUT_LINE('  activity();');
     DBMS_OUTPUT.PUT_LINE('  spInit();');
     DBMS_OUTPUT.PUT_LINE('  var b=doc.getElementById(''tl-body'');if(b)b.addEventListener(''scroll'',sync,{passive:true});');

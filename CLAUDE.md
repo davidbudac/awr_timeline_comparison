@@ -512,6 +512,25 @@ the stripe `.on` on both Activity charts; Esc, Current or the gutter's
 every view; before the charts moved to the top, leaving the Timeline
 unpinned). Separate from the X2 `th[data-w]` highlight (`.hl` + `awr:window`).
 
+**Row scale, filter and order (plan 031).** In `#tl` a bars row is scaled
+to its prior windows (`AWR_WG.rowScale`): a Current value above 1.5 x the
+tallest prior value / zone top is drawn as a full-height broken bar
+(`i.b.brk`, tooltip "bar cut"); every other row, and every row outside
+`#tl` (hero strip, cards, 24's strip), keeps the old scale. `#tl-tools`
+above the grid (`js_timeline` `tools()`, never `tbl-tools` / `tool-btn`:
+the design script moves those) holds "Rows: All / Flagged only"
+(`#tl.flagonly` hides the non-large / non-moderate rows of the two
+`data-kind="scored"` lanes, folded ones included; `.lane.nofl` shows its
+`.r.nfl` note "No large or moderate row here") and "Order: Report order /
+Biggest change first" (`AWR_WG.changeKey`: added AAS when every row of the
+lane has `data-unit="AAS"`, else |z|; wait-class rows `tl-fr-w-*` stay
+above the events; the lane is unfolded while sorted, `data-ord` keeps the
+report order). Defaults are today's behaviour; choices are saved on click
+only (localStorage `awr-tl-rows`, `awr-tl-order`); `AWR_TL.reveal` switches
+the filter off (unsaved) for a jump to a hidden row. Counts, pills and ids
+never change. Unit-tested in `tools/js_unit_tests.js`, verify_report block
+5d.
+
 ### Activity, whole span (`section#activity`, every view; under the verdict in Summary)
 
 The bird's-eye ASH view (owner request, v1.6.0): `section#activity.vw.in-s

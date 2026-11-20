@@ -61,6 +61,10 @@
  *     every "Timeline ->" (data-tl) target exists and a click lands on it,
  *     every grid label (a.ent) resolves; ruler pin (it survives a view
  *     switch), grid tooltip;
+ *   - the Timeline rows (plan 031): broken Current bars only in #tl, the
+ *     priors under one at least 30 % of its height, Flagged only / All / a
+ *     jump to a hidden row, Biggest change first (wait classes first,
+ *     sorted) and Report order restoring the ids' order;
  *   - phase 4 (v1.6.0): every plan-change card sits in "What changed
  *     around it" with its bars, plan step line and links; every evidence
  *     library row (section.lib) shows in Summary with its one-line status,
@@ -945,6 +949,71 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (/demo_busy_db\.html$/.test(file) && dp === 'none') fail('day profile picker: the demo must have it');
     if (shots && /^ok/.test(dp)) { const el = await page.$('#day-profile'); await el.scrollIntoViewIfNeeded(); await page.waitForTimeout(200); await el.screenshot({ path: path.join(shots, 'day-profile.png') }); }
     if (errors.length) fail('day profile: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 5d. plan 031: Timeline rows scale to the prior windows (broken
+  // Current bar), the Rows / Order toolbar, a jump to a filtered row
+  {
+    const { page, errors } = await openPage('#view=timeline', 'light');
+    const t31 = await page.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const vis = el => !!el && el.getClientRects().length > 0;
+      const out = {};
+      if (!document.getElementById('tl-tools')) return { err: 'no #tl-tools' };
+      out.brk = document.querySelectorAll('#tl i.b.brk').length;
+      out.brkOutside = document.querySelectorAll('i.b.brk').length - out.brk;
+      out.lowPrior = [...document.querySelectorAll('#tl i.b.brk')].filter(b => {
+        const row = b.closest('.r'), cur = parseFloat(b.style.height);
+        const pri = Math.max(0, ...[...row.querySelectorAll(':scope > .c:not(.cur) i.b')].map(x => parseFloat(x.style.height)));
+        return pri < 0.3 * cur;
+      }).map(b => b.closest('.r').id);
+      const lanes = () => [...document.querySelectorAll('#tl .lane[data-kind="scored"]')].filter(l => !l.hidden);
+      const shown = () => lanes().map(l => [...l.querySelectorAll('.lrows > .r.bars')].filter(vis).length).join(',');
+      const before = shown();
+      document.querySelector('#tl-tools button[data-tlf="flagged"]').click(); await wait(80);
+      out.unflaggedShown = lanes().flatMap(l => [...l.querySelectorAll('.lrows > .r.bars')].filter(vis))
+        .filter(r => !/^(large|moderate)$/.test(r.getAttribute('data-sev') || '')).map(r => r.id);
+      out.flaggedHidden = lanes().flatMap(l => [...l.querySelectorAll('.lrows > .r.bars')].filter(r => !vis(r)))
+        .filter(r => /^(large|moderate)$/.test(r.getAttribute('data-sev') || '')).map(r => r.id);
+      const typ = document.querySelector('#tl .lane[data-kind="scored"] .lrows > .r.bars[data-sev="typical"]');
+      if (typ) { window.AWR_goTo(typ, true, false); await wait(300);
+        out.reveal = vis(typ) && !document.getElementById('tl').classList.contains('flagonly') ? 'ok' : 'FAIL ' + typ.id; } else out.reveal = 'none';
+      document.querySelector('#tl-tools button[data-tlf="all"]').click(); await wait(80);
+      out.restored = shown() === before ? 'ok' : 'FAIL ' + before + ' -> ' + shown();
+      const waits = document.getElementById('lane-waits');
+      if (waits && !waits.hidden) {
+        const ids = () => [...waits.querySelectorAll('.lrows > .r.bars')].map(r => r.id).join(' ');
+        const orig = ids();
+        document.querySelector('#tl-tools button[data-tlo="change"]').click(); await wait(80);
+        out.note = (document.querySelector('#tl-tools .tlt-n') || {}).textContent || '';
+        const all = [...waits.querySelectorAll('.lrows > .r.bars')], aas = all.every(r => r.getAttribute('data-unit') === 'AAS');
+        const nums = s => String(s || '').split(',').map(x => x === '' ? null : +x);
+        const ev = all.filter(r => !/^tl-fr-w-/.test(r.id));
+        const k = ev.map(r => window.AWR_WG.changeKey(nums(r.getAttribute('data-v')), +r.getAttribute('data-mu'), +r.getAttribute('data-sd'), aas));
+        out.sorted = k.every((x, i) => i === 0 || x == null || k[i - 1] == null || k[i - 1] >= x) ? 'ok' : 'FAIL ' + JSON.stringify(k);
+        const fe = all.findIndex(r => !/^tl-fr-w-/.test(r.id));
+        out.classesFirst = fe < 0 || all.slice(fe).every(r => !/^tl-fr-w-/.test(r.id));
+        document.querySelector('#tl-tools button[data-tlo="report"]').click(); await wait(80);
+        out.order = ids() === orig ? 'ok' : 'FAIL order not restored';
+      } else out.order = 'none';
+      try { localStorage.removeItem('awr-tl-rows'); localStorage.removeItem('awr-tl-order'); } catch (e) { /* ignore */ }
+      return out;
+    });
+    console.log('timeline rows (031)', JSON.stringify(t31));
+    if (t31.err) fail('timeline rows: ' + t31.err);
+    else {
+      if (t31.brkOutside) fail('timeline rows: ' + t31.brkOutside + ' broken bar(s) outside the Timeline grid');
+      if (t31.lowPrior.length) fail('timeline rows: priors still squashed under a broken bar: ' + t31.lowPrior.join(', '));
+      if (t31.unflaggedShown.length) fail('timeline rows: Flagged only shows ' + t31.unflaggedShown.join(', '));
+      if (t31.flaggedHidden.length) fail('timeline rows: Flagged only hides flagged ' + t31.flaggedHidden.join(', '));
+      if (/^FAIL/.test(t31.reveal)) fail('timeline rows: jump to a filtered row ' + t31.reveal);
+      if (/^FAIL/.test(t31.restored)) fail('timeline rows: All did not restore ' + t31.restored);
+      if (/^FAIL/.test(t31.sorted || '') || t31.classesFirst === false) fail('timeline rows: Biggest change first ' + t31.sorted);
+      if (/^FAIL/.test(t31.order)) fail('timeline rows: ' + t31.order);
+      if (/demo_busy_db\.html$/.test(file) && t31.brk < 5) fail('timeline rows: the demo should draw broken Current bars (got ' + t31.brk + ')');
+    }
+    if (errors.length) fail('timeline rows: ' + errors.slice(0, 5).join(' | '));
     await page.close();
   }
 

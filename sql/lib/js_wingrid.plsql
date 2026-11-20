@@ -16,6 +16,9 @@
 --   markerAt(o)   the marker on window o's left boundary (or null)
 --   sizeRow(row)  draw one .r.bars row from data-v / data-mu / data-sd /
 --                 data-sev (bars, normal zone, mean line, severity dot)
+--   rowScale(vals, zTop, tl) / changeKey(vals, mu, sd, aas): the bar scale
+--                 (Timeline rows: Current past 1.5 x the prior top is drawn
+--                 broken, class brk) and a row's change (plan 031)
 --   render(scope) size every bars row, mark the marker columns and lay out
 --                 the flags of every [data-wg] under scope
 --   fit(wg) / refit()   re-measure (tight labels, flag layout) after a
@@ -161,6 +164,28 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    $$(''#triage .tri-row[data-card="''+card.id+''"] .tri-tags'').forEach(function(t){t.innerHTML=html;});');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* the vertical scale of one bars row (plan 031).  Outside the Timeline');
+    DBMS_OUTPUT.PUT_LINE('   grid (tl false) the old rule: the tallest value or the top of the normal');
+    DBMS_OUTPUT.PUT_LINE('   zone.  In the Timeline grid the prior windows set it: when the Current');
+    DBMS_OUTPUT.PUT_LINE('   value is more than 1.5 x the tallest prior value (or the zone top), the');
+    DBMS_OUTPUT.PUT_LINE('   scale stops at 1.5 x that top and the Current bar is drawn broken (brk),');
+    DBMS_OUTPUT.PUT_LINE('   so the prior bars keep up to two thirds of the row height. */');
+    DBMS_OUTPUT.PUT_LINE('W.rowScale=function(vals,zTop,tl){');
+    DBMS_OUTPUT.PUT_LINE('  var n=vals.length,have=vals.filter(function(v){return v!=null;}),max=Math.max.apply(null,have.concat(zTop!=null?[zTop]:[]).concat([0]));');
+    DBMS_OUTPUT.PUT_LINE('  if(!(max>0))max=1;');
+    DBMS_OUTPUT.PUT_LINE('  if(!tl||n<2)return {max:max,brk:false};');
+    DBMS_OUTPUT.PUT_LINE('  var pr=vals.slice(0,n-1).filter(function(v){return v!=null;}),top=Math.max.apply(null,pr.concat(zTop!=null?[zTop]:[]).concat([0])),c=vals[n-1];');
+    DBMS_OUTPUT.PUT_LINE('  if(top>0&&c!=null&&c>1.5*top)return {max:1.5*top,brk:true};');
+    DBMS_OUTPUT.PUT_LINE('  return {max:max,brk:false};');
+    DBMS_OUTPUT.PUT_LINE('};');
+    DBMS_OUTPUT.PUT_LINE('/* how much a Timeline row changed (plan 031): Current minus the prior mean');
+    DBMS_OUTPUT.PUT_LINE('   when aas (every row of the lane is in AAS, so the numbers add up), else');
+    DBMS_OUTPUT.PUT_LINE('   |z| with sigma floored at 2% of the mean; null when it cannot be told */');
+    DBMS_OUTPUT.PUT_LINE('W.changeKey=function(vals,mu,sd,aas){');
+    DBMS_OUTPUT.PUT_LINE('  var c=vals.length?vals[vals.length-1]:null;if(c==null||mu==null)return null;');
+    DBMS_OUTPUT.PUT_LINE('  if(aas)return c-mu;');
+    DBMS_OUTPUT.PUT_LINE('  var den=Math.max(sd||0,0.02*Math.abs(mu));return den>0?Math.abs((c-mu)/den):null;');
+    DBMS_OUTPUT.PUT_LINE('};');
     DBMS_OUTPUT.PUT_LINE('/* one bars row: grey prior columns, the Current one in the accent, the');
     DBMS_OUTPUT.PUT_LINE('   prior normal zone (mean +- 1 / 2 floored sigma; in the Timeline grid');
     DBMS_OUTPUT.PUT_LINE('   #tl only behind the Current bar) and a severity dot */');
@@ -168,8 +193,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var cells=$$(":scope > .c",row);if(!cells.length)return;');
     DBMS_OUTPUT.PUT_LINE('  var vals=nums(row.getAttribute("data-v")),mu=num(row.getAttribute("data-mu")),sd=num(row.getAttribute("data-sd")),sev=row.getAttribute("data-sev")||"";');
     DBMS_OUTPUT.PUT_LINE('  var z=null;if(mu!=null){var d=Math.max(sd||0,0.02*Math.abs(mu));z=[Math.max(0,mu-2*d),mu+2*d,Math.max(0,mu-d),mu+d,mu];}');
-    DBMS_OUTPUT.PUT_LINE('  var have=vals.filter(function(v){return v!=null;}),max=Math.max.apply(null,have.concat(z?[z[1]]:[]).concat([0]));if(!(max>0))max=1;');
     DBMS_OUTPUT.PUT_LINE('  var bh=cssNum(row,"--bh",24),bb=cssNum(row,"--bb",4),bare=!!row.closest(".wg.bare"),tl=!!row.closest("#tl");');
+    DBMS_OUTPUT.PUT_LINE('  var sc=W.rowScale(vals,z?z[1]:null,tl),max=sc.max;');
     DBMS_OUTPUT.PUT_LINE('  var y=function(v){return Math.max(0,v)/max*bh;};');
     DBMS_OUTPUT.PUT_LINE('  cells.forEach(function(c,k){');
     DBMS_OUTPUT.PUT_LINE('    $$(":scope > i",c).forEach(function(x){c.removeChild(x);});');
@@ -178,7 +203,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('      var mn=mk("i","mn",c);mn.style.bottom=(bb+y(z[4]))+"px";}');
     DBMS_OUTPUT.PUT_LINE('    if(bare)mk("i","base",c);');
     DBMS_OUTPUT.PUT_LINE('    var v=vals[k];if(v==null)return;');
-    DBMS_OUTPUT.PUT_LINE('    var h=Math.max(1.5,y(v)),b=mk("i","b",c);b.style.height=h+"px";');
+    DBMS_OUTPUT.PUT_LINE('    var brk=sc.brk&&c.classList.contains("cur"),h=brk?bh:Math.max(1.5,y(v)),b=mk("i",brk?"b brk":"b",c);b.style.height=h+"px";');
     DBMS_OUTPUT.PUT_LINE('    if(c.classList.contains("cur")&&(sev==="large"||sev==="moderate")){var s=mk("i","sd s-"+sev,c);s.style.bottom=(bb+h)+"px";}');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('}');

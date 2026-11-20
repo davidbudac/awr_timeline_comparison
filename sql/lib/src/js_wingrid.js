@@ -123,6 +123,28 @@ function tagCards(){
     $$('#triage .tri-row[data-card="'+card.id+'"] .tri-tags').forEach(function(t){t.innerHTML=html;});
   });
 }
+/* the vertical scale of one bars row (plan 031).  Outside the Timeline
+   grid (tl false) the old rule: the tallest value or the top of the normal
+   zone.  In the Timeline grid the prior windows set it: when the Current
+   value is more than 1.5 x the tallest prior value (or the zone top), the
+   scale stops at 1.5 x that top and the Current bar is drawn broken (brk),
+   so the prior bars keep up to two thirds of the row height. */
+W.rowScale=function(vals,zTop,tl){
+  var n=vals.length,have=vals.filter(function(v){return v!=null;}),max=Math.max.apply(null,have.concat(zTop!=null?[zTop]:[]).concat([0]));
+  if(!(max>0))max=1;
+  if(!tl||n<2)return {max:max,brk:false};
+  var pr=vals.slice(0,n-1).filter(function(v){return v!=null;}),top=Math.max.apply(null,pr.concat(zTop!=null?[zTop]:[]).concat([0])),c=vals[n-1];
+  if(top>0&&c!=null&&c>1.5*top)return {max:1.5*top,brk:true};
+  return {max:max,brk:false};
+};
+/* how much a Timeline row changed (plan 031): Current minus the prior mean
+   when aas (every row of the lane is in AAS, so the numbers add up), else
+   |z| with sigma floored at 2% of the mean; null when it cannot be told */
+W.changeKey=function(vals,mu,sd,aas){
+  var c=vals.length?vals[vals.length-1]:null;if(c==null||mu==null)return null;
+  if(aas)return c-mu;
+  var den=Math.max(sd||0,0.02*Math.abs(mu));return den>0?Math.abs((c-mu)/den):null;
+};
 /* one bars row: grey prior columns, the Current one in the accent, the
    prior normal zone (mean +- 1 / 2 floored sigma; in the Timeline grid
    #tl only behind the Current bar) and a severity dot */
@@ -130,8 +152,8 @@ function sizeRow(row){
   var cells=$$(":scope > .c",row);if(!cells.length)return;
   var vals=nums(row.getAttribute("data-v")),mu=num(row.getAttribute("data-mu")),sd=num(row.getAttribute("data-sd")),sev=row.getAttribute("data-sev")||"";
   var z=null;if(mu!=null){var d=Math.max(sd||0,0.02*Math.abs(mu));z=[Math.max(0,mu-2*d),mu+2*d,Math.max(0,mu-d),mu+d,mu];}
-  var have=vals.filter(function(v){return v!=null;}),max=Math.max.apply(null,have.concat(z?[z[1]]:[]).concat([0]));if(!(max>0))max=1;
   var bh=cssNum(row,"--bh",24),bb=cssNum(row,"--bb",4),bare=!!row.closest(".wg.bare"),tl=!!row.closest("#tl");
+  var sc=W.rowScale(vals,z?z[1]:null,tl),max=sc.max;
   var y=function(v){return Math.max(0,v)/max*bh;};
   cells.forEach(function(c,k){
     $$(":scope > i",c).forEach(function(x){c.removeChild(x);});
@@ -140,7 +162,7 @@ function sizeRow(row){
       var mn=mk("i","mn",c);mn.style.bottom=(bb+y(z[4]))+"px";}
     if(bare)mk("i","base",c);
     var v=vals[k];if(v==null)return;
-    var h=Math.max(1.5,y(v)),b=mk("i","b",c);b.style.height=h+"px";
+    var brk=sc.brk&&c.classList.contains("cur"),h=brk?bh:Math.max(1.5,y(v)),b=mk("i",brk?"b brk":"b",c);b.style.height=h+"px";
     if(c.classList.contains("cur")&&(sev==="large"||sev==="moderate")){var s=mk("i","sd s-"+sev,c);s.style.bottom=(bb+h)+"px";}
   });
 }

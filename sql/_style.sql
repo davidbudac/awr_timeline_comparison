@@ -1596,6 +1596,22 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('#tl .lane.showmore .r.more{display:grid}');
     DBMS_OUTPUT.PUT_LINE('#tl .lane.showmore .r.xpr{display:none}');
     DBMS_OUTPUT.PUT_LINE('#tl .r.xpr .l{padding:8px 16px}');
+    -- plan 031: the Timeline row toolbar (js_timeline tools), the
+    -- flagged-only filter of the scored lanes and the broken Current bar
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;margin:0 0 var(--s3);font-size:12.5px;color:var(--ink-3)}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-tools .tlt-g{display:inline-flex;align-items:center;gap:4px}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-tools .tlt-l{margin-right:4px}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-tools button{font:inherit;font-size:12px;line-height:18px;padding:2px 10px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink-2);cursor:pointer}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-tools button[aria-pressed="true"]{background:var(--chip-bg);color:var(--ink);font-weight:600;border-color:var(--ink-4)}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-tools button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-tools .tlt-n{font-size:12px;color:var(--ink-4)}');
+    DBMS_OUTPUT.PUT_LINE('#tl.flagonly .lane[data-kind="scored"] .lrows > .r.bars:not([data-sev="large"]):not([data-sev="moderate"]){display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl.flagonly .lane[data-kind="scored"] .lrows > .r.more[data-sev="large"],#tl.flagonly .lane[data-kind="scored"] .lrows > .r.more[data-sev="moderate"]{display:grid}');
+    DBMS_OUTPUT.PUT_LINE('#tl.flagonly .lane[data-kind="scored"] .r.xpr{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.nfl{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl.flagonly .lane.nofl .r.nfl{display:grid}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.nfl .l{padding:10px 16px;font-size:12.5px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('#tl i.b.brk::after{content:"";position:absolute;left:-3px;right:-3px;top:6px;height:3px;background:var(--panel);transform:skewY(-20deg)}');
     DBMS_OUTPUT.PUT_LINE('#tl .xpb{border:0;background:none;padding:0;font:inherit;color:var(--ink-2);font-size:12.5px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--line-2);text-align:left}');
     DBMS_OUTPUT.PUT_LINE('#tl .lane[hidden]{display:none}');
     DBMS_OUTPUT.PUT_LINE('#tl .lane{scroll-margin-top:calc(var(--navh,0px) + 96px)}');

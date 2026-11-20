@@ -84,4 +84,33 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
   });
 }
 
+/* ---- plan 031: W.rowScale / W.changeKey (js_wingrid) ---- */
+{
+  const W = load('js_wingrid').AWR_WG;
+  const eq = (a, b) => assert.deepStrictEqual(a, b);
+  test('rowScale outside the Timeline: the old rule', () => {
+    eq(W.rowScale([1, 2, 3, 10], 4, false), { max: 10, brk: false });
+    eq(W.rowScale([0, 0, 0, 0], null, false), { max: 1, brk: false });
+  });
+  test('rowScale in the Timeline: Current past 1.5 x the prior top is cut', () => {
+    eq(W.rowScale([1, 2, 3, 10], 4, true), { max: 6, brk: true });
+    eq(W.rowScale([1, 2, 3, 5], 4, true), { max: 5, brk: false });
+    eq(W.rowScale([1, 2, 3, null], 4, true), { max: 4, brk: false });
+    eq(W.rowScale([null, null, null, 5], null, true), { max: 5, brk: false });
+    eq(W.rowScale([0, 0, 0, 0], null, true), { max: 1, brk: false });
+    const r = W.rowScale([3837.399, 3767.106, 3890.696, 3773.923, 3866.55, 3526.601, 3687.419, 3767.599,
+                          4850.898, 5072.253, 4809.715, 4868.913, 22240.52], 5283.51, true);
+    assert.ok(r.brk && Math.abs(r.max - 7925.265) < 0.01, JSON.stringify(r));
+  });
+  test('changeKey: added AAS or |z|', () => {
+    assert.strictEqual(W.changeKey([1, 1, 1, 4], 1, 0.1, true), 3);
+    assert.ok(Math.abs(W.changeKey([1, 1, 1, 4], 1, 0.1, false) - 30) < 1e-9);
+    assert.strictEqual(W.changeKey([10, 10, 10, 5], 10, 1, true), -5);
+    assert.strictEqual(W.changeKey([10, 10, 10, 5], 10, 1, false), 5);
+    assert.strictEqual(W.changeKey([1, 1, 1, null], 1, 0.1, true), null);
+    assert.strictEqual(W.changeKey([0, 0, 0, 1], 0, 0, false), null);
+    assert.strictEqual(W.changeKey([1, 2, 3, 4], null, null, false), null);
+  });
+}
+
 console.log(passed + ' tests passed');

@@ -180,6 +180,12 @@ release bumps `awr_version`).
   of time (7 h 45 m, not 27.92 k s); Timeline wait-event rows are in AAS
   like the wait classes (seconds waited ÷ the window length). Tables keep
   seconds.
+- **Timeline rows show what normal looked like.** A row whose Current
+  value is far above its prior windows no longer squashes them: the grid
+  scales to the prior windows and draws the Current bar cut, with its value
+  above it. A toolbar above the grid shows only flagged rows or sorts the
+  headline and wait lanes by the size of their change (added AAS for
+  waits); both are remembered per browser.
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in
