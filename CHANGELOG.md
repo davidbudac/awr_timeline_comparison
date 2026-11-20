@@ -222,9 +222,15 @@ release bumps `awr_version`).
   each per-SQL chart when it comes into view instead of all at page load
   (about 0.3 s less ECharts work at load and half the first switch to All
   sections on the demo).
-- **Activity charts name their largest bands.** Up to six series per
-  chart are labelled on the widest part of their band (never overlapping,
-  inside one panel in Windows side by side); the legend stays.
+- **Activity charts name their bands.** Each series is labelled once,
+  inside its own band, on the stretch where the band is thickest over the
+  label's width (at least 10 px; a long event name is cut shorter, with
+  "...", when only a shorter piece fits), the thickest bands first, up to
+  six per chart, never overlapping, inside one panel in Windows side by
+  side; the legend stays. Fitted per band after the test DB showed labels
+  on the class chart only: the first version took the band's single
+  thickest point and needed 13 px under the whole label there, which a
+  spiky event band never offered.
 - **SQL Monitor scatter is readable.** Smaller marks (size by log2 of the
   DOP), Current-window points solid and outlined, the rest faded; the
   x-axis spans the whole compared span. Under the 3,000-point cap the

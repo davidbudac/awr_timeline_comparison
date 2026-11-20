@@ -24,6 +24,8 @@
 --                 el (called by the chrome's reveal() before a goTo).
 --   axLayout(m, persist)  'win' = windows side by side, 'span' = full span
 --                 (persist: the reader clicked, localStorage awr-axlayout).
+--   fitLabels(groups, cands, o)  the Activity band-label fitter, pure
+--                 (tested by tools/js_unit_tests.js).
 -- and on window.AWR_WG:
 --   pin(o)        pin window offset o (0 / null / the pinned one = unpin):
 --                 its grid column tints amber, every gutter Delta compares
@@ -51,7 +53,10 @@
 -- shared y axis, 1-minute data where it covers the window; caps pin; no zoom
 -- (drawWin, wSlice, panAt / wRefAt; shared with draw: hlOrd, colPts,
 -- bands, flagSvg).
--- Direct labels (dlab): the widest bands are named on the chart, at most 6 a chart.
+-- Direct labels (dlab -> fitLabels, fitted per band): each series is named
+-- once, inside its band, on its thickest stretch as wide as the label
+-- (at least LBH 10 px; shorter cuts when the name fits nowhere), at most 6
+-- a chart.
 -- v1.6.1 series highlight: a legend entry hovered / focused (or kept by a
 -- click on its band, Shift+click) is drawn from zero on its own y axis,
 -- the rest faded; a class lights its events (AWR_DATA.ashe.ecls) and an
@@ -714,58 +719,146 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  return {fills:fills,edges:edges,hf:hf,he:he};');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('/* direct labels (plan 036): each shown series is a candidate at the point');
-    DBMS_OUTPUT.PUT_LINE('   where its band is thickest; a label (its name, at most LW px wide, cut');
-    DBMS_OUTPUT.PUT_LINE('   with "...") goes there when the band stays at least LBH px thick under the');
-    DBMS_OUTPUT.PUT_LINE('   whole label and no placed label is in the way.  The thickest bands win,');
-    DBMS_OUTPUT.PUT_LINE('   at most LMAX a chart; with a strong highlight only the highlighted series.');
-    DBMS_OUTPUT.PUT_LINE('   groups = [{pts, x0, x1}]: one for Full span, one per panel side by side');
-    DBMS_OUTPUT.PUT_LINE('   (a label never crosses a panel edge); only points inside [x0, x1] are');
-    DBMS_OUTPUT.PUT_LINE('   candidates (zoomed, pts run a couple of buckets past the plot).  nb =');
-    DBMS_OUTPUT.PUT_LINE('   the highlight note''s box [x0, y0, x1, y1] (or null): no label covers it.');
-    DBMS_OUTPUT.PUT_LINE('   Drawn inside the plot clip, above bands and stripes, pointer-events none. */');
-    DBMS_OUTPUT.PUT_LINE('var LBH=13,LMAX=6,LW=160;');
-    DBMS_OUTPUT.PUT_LINE('function edgeAt(pts,ys,x){');
-    DBMS_OUTPUT.PUT_LINE('  for(var j=1;j<pts.length;j++)if(pts[j][0]>=x){var a=pts[j-1][0],b=pts[j][0],f=b>a?(x-a)/(b-a):0;return ys[j-1]+(ys[j]-ys[j-1])*f;}');
-    DBMS_OUTPUT.PUT_LINE('  return ys[ys.length-1];');
+    DBMS_OUTPUT.PUT_LINE('/* direct labels (plan 036; fitted per band, owner decision 2026-11-20):');
+    DBMS_OUTPUT.PUT_LINE('   each shown series is named once a chart, inside its own band, where the');
+    DBMS_OUTPUT.PUT_LINE('   band is thickest over a stretch as wide as the label.  A stretch = a');
+    DBMS_OUTPUT.PUT_LINE('   window of whole pixel columns as wide as the label, inside one group');
+    DBMS_OUTPUT.PUT_LINE('   (one for Full span, one per panel side by side, so a label never');
+    DBMS_OUTPUT.PUT_LINE('   crosses a panel edge); its thickness = the lowest point of the band''s');
+    DBMS_OUTPUT.PUT_LINE('   lower edge minus the highest point of its upper edge over the window,');
+    DBMS_OUTPUT.PUT_LINE('   i.e. the tallest clear box of that width.  A label needs LBH px; the');
+    DBMS_OUTPUT.PUT_LINE('   series go thickest first, at most LMAX a chart, each to its thickest');
+    DBMS_OUTPUT.PUT_LINE('   stretch clear of the labels placed so far and of the highlight note');
+    DBMS_OUTPUT.PUT_LINE('   (equal thickness: the middle of the run).  A name is cut at LW px with');
+    DBMS_OUTPUT.PUT_LINE('   "..."; when that fits nowhere, shorter cuts (LCUT px, at least 6');
+    DBMS_OUTPUT.PUT_LINE('   characters) are tried.  With a strong highlight only the highlighted');
+    DBMS_OUTPUT.PUT_LINE('   series.  Drawn inside the plot clip, above bands and stripes,');
+    DBMS_OUTPUT.PUT_LINE('   pointer-events none. */');
+    DBMS_OUTPUT.PUT_LINE('var LBH=10,LMAX=6,LW=160,LTH=12,LCUT=[120,90,64];');
+    DBMS_OUTPUT.PUT_LINE('/* per whole pixel column i of [x0, x0 + n): the lowest (big false) or the');
+    DBMS_OUTPUT.PUT_LINE('   highest (big true) y of the polyline xs / ys (x increasing) over the');
+    DBMS_OUTPUT.PUT_LINE('   column; a column the line does not cover gets -1e9 / 1e9, so no stretch');
+    DBMS_OUTPUT.PUT_LINE('   over it is thick enough */');
+    DBMS_OUTPUT.PUT_LINE('function colExt(xs,ys,x0,n,big){');
+    DBMS_OUTPUT.PUT_LINE('  var out=[],np=xs.length,j=0,k=0,i,q,e,l,vl,vr;');
+    DBMS_OUTPUT.PUT_LINE('  var at=function(x){');
+    DBMS_OUTPUT.PUT_LINE('    if(!np||x<xs[0]||x>xs[np-1])return NaN;');
+    DBMS_OUTPUT.PUT_LINE('    if(np<2)return ys[0];');
+    DBMS_OUTPUT.PUT_LINE('    while(j<np-2&&xs[j+1]<x)j++;');
+    DBMS_OUTPUT.PUT_LINE('    var a=xs[j],b=xs[j+1];');
+    DBMS_OUTPUT.PUT_LINE('    return b>a?ys[j]+(ys[j+1]-ys[j])*(x-a)/(b-a):(big?Math.max(ys[j],ys[j+1]):Math.min(ys[j],ys[j+1]));');
+    DBMS_OUTPUT.PUT_LINE('  };');
+    DBMS_OUTPUT.PUT_LINE('  for(i=0;i<n;i++){');
+    DBMS_OUTPUT.PUT_LINE('    l=x0+i;vl=at(l);vr=at(l+1);');
+    DBMS_OUTPUT.PUT_LINE('    if(isNaN(vl)||isNaN(vr)){out.push(big?1e9:-1e9);continue;}');
+    DBMS_OUTPUT.PUT_LINE('    e=big?Math.max(vl,vr):Math.min(vl,vr);');
+    DBMS_OUTPUT.PUT_LINE('    while(k<np&&xs[k]<=l)k++;');
+    DBMS_OUTPUT.PUT_LINE('    for(q=k;q<np&&xs[q]<l+1;q++)e=big?Math.max(e,ys[q]):Math.min(e,ys[q]);');
+    DBMS_OUTPUT.PUT_LINE('    out.push(e);');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  return out;');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* the lowest (big false) / highest (big true) of a[s .. s + m - 1] for');
+    DBMS_OUTPUT.PUT_LINE('   s = 0 .. a.length - m (a deque of candidate indexes) */');
+    DBMS_OUTPUT.PUT_LINE('function slideExt(a,m,big){');
+    DBMS_OUTPUT.PUT_LINE('  var out=[],dq=[],h=0,i;');
+    DBMS_OUTPUT.PUT_LINE('  for(i=0;i<a.length;i++){');
+    DBMS_OUTPUT.PUT_LINE('    while(dq.length>h&&(big?a[dq[dq.length-1]]<=a[i]:a[dq[dq.length-1]]>=a[i]))dq.pop();');
+    DBMS_OUTPUT.PUT_LINE('    dq.push(i);');
+    DBMS_OUTPUT.PUT_LINE('    if(dq[h]<=i-m)h++;');
+    DBMS_OUTPUT.PUT_LINE('    if(i>=m-1)out.push(a[dq[h]]);');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  return out;');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* the stretches of one series for a label w px wide, from its per-group');
+    DBMS_OUTPUT.PUT_LINE('   column extremes ext: per group {g, m (columns), x0, lo / hi (the clear');
+    DBMS_OUTPUT.PUT_LINE('   box''s bottom / top per start), tq (its thickness rounded down to');
+    DBMS_OUTPUT.PUT_LINE('   0.5 px)}; best = the largest tq anywhere */');
+    DBMS_OUTPUT.PUT_LINE('function stretches(groups,ext,w){');
+    DBMS_OUTPUT.PUT_LINE('  var m=Math.ceil(w-1e-6),R=[],best=-Infinity;');
+    DBMS_OUTPUT.PUT_LINE('  ext.forEach(function(E,gi){');
+    DBMS_OUTPUT.PUT_LINE('    if(!E||m<1||m>E.n)return;');
+    DBMS_OUTPUT.PUT_LINE('    var lo=slideExt(E.lo,m,false),hi=slideExt(E.hi,m,true),tq=[],s;');
+    DBMS_OUTPUT.PUT_LINE('    for(s=0;s<lo.length;s++){tq.push(Math.floor((lo[s]-hi[s])*2)/2);if(tq[s]>best)best=tq[s];}');
+    DBMS_OUTPUT.PUT_LINE('    R.push({g:gi,m:m,x0:groups[gi].x0,lo:lo,hi:hi,tq:tq});');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return {best:best,R:R};');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* the starts of stretches S at least mn thick, best first: thicker, then');
+    DBMS_OUTPUT.PUT_LINE('   nearer the middle of their run of equal thickness ({t, x / y: the clear');
+    DBMS_OUTPUT.PUT_LINE('   box''s centre}) */');
+    DBMS_OUTPUT.PUT_LINE('function spos(S,mn){');
+    DBMS_OUTPUT.PUT_LINE('  var pos=[];');
+    DBMS_OUTPUT.PUT_LINE('  S.R.forEach(function(r){');
+    DBMS_OUTPUT.PUT_LINE('    var tq=r.tq,ns=tq.length,a,b,s;');
+    DBMS_OUTPUT.PUT_LINE('    for(a=0;a<ns;a=b+1){');
+    DBMS_OUTPUT.PUT_LINE('      for(b=a;b+1<ns&&tq[b+1]===tq[a];)b++;');
+    DBMS_OUTPUT.PUT_LINE('      if(tq[a]>=mn)for(s=a;s<=b;s++)pos.push({t:tq[s],d:Math.abs(s-(a+b)/2),g:r.g,s:s,x:r.x0+s+r.m/2,y:(r.lo[s]+r.hi[s])/2});');
+    DBMS_OUTPUT.PUT_LINE('    }');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return pos.sort(function(p,q){return q.t-p.t||p.d-q.d||p.g-q.g||p.s-q.s;});');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* the label fitter (pure; AWR_TL.fitLabels for tools/js_unit_tests.js).');
+    DBMS_OUTPUT.PUT_LINE('   groups [{xs, x0, x1}]: the points'' x (increasing) and the group''s plot');
+    DBMS_OUTPUT.PUT_LINE('   range; cands [{k, alts: [{txt, w}] longest first, yl / yh: per group,');
+    DBMS_OUTPUT.PUT_LINE('   the band''s lower / upper edge y at each point}] in stacking order;');
+    DBMS_OUTPUT.PUT_LINE('   o {min: thickness, max: labels, th: text box height, y1: the axis (a');
+    DBMS_OUTPUT.PUT_LINE('   label''s box stays above it), avoid: [[x0, y0, x1, y1]]}.');
+    DBMS_OUTPUT.PUT_LINE('   Returns [{k, txt, x, y, w, t}], x / y = the label''s centre. */');
+    DBMS_OUTPUT.PUT_LINE('function fitLabels(groups,cands,o){');
+    DBMS_OUTPUT.PUT_LINE('  var out=[],boxes=(o.avoid||[]).slice(),th=o.th||12,L=[];');
+    DBMS_OUTPUT.PUT_LINE('  cands.forEach(function(C,ci){');
+    DBMS_OUTPUT.PUT_LINE('    var ext=groups.map(function(G,gi){var n=Math.floor(G.x1-G.x0+1e-6);return n>0?{n:n,lo:colExt(G.xs,C.yl[gi],G.x0,n,false),hi:colExt(G.xs,C.yh[gi],G.x0,n,true)}:null;}),ub=-Infinity;');
+    DBMS_OUTPUT.PUT_LINE('    /* no single column thick enough: no stretch is (the common thin band) */');
+    DBMS_OUTPUT.PUT_LINE('    ext.forEach(function(E){if(E)for(var i=0;i<E.n;i++)if(E.lo[i]-E.hi[i]>ub)ub=E.lo[i]-E.hi[i];});');
+    DBMS_OUTPUT.PUT_LINE('    if(ub<o.min)return;');
+    DBMS_OUTPUT.PUT_LINE('    for(var a=0;a<C.alts.length;a++){var S=stretches(groups,ext,C.alts[a].w);if(S.best>=o.min){L.push({C:C,ci:ci,ext:ext,a:a,S:S});break;}}');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  L.sort(function(p,q){return q.S.best-p.S.best||p.ci-q.ci;});');
+    DBMS_OUTPUT.PUT_LINE('  L.forEach(function(it){');
+    DBMS_OUTPUT.PUT_LINE('    if(out.length>=o.max)return;');
+    DBMS_OUTPUT.PUT_LINE('    for(var a=it.a;a<it.C.alts.length;a++){');
+    DBMS_OUTPUT.PUT_LINE('      var w=it.C.alts[a].w,P=spos(a===it.a?it.S:stretches(groups,it.ext,w),o.min);');
+    DBMS_OUTPUT.PUT_LINE('      for(var i=0;i<P.length;i++){');
+    DBMS_OUTPUT.PUT_LINE('        var p=P[i],y=o.y1!=null?Math.min(p.y,o.y1-th/2):p.y,box=[p.x-w/2,y-th/2,p.x+w/2,y+th/2];');
+    DBMS_OUTPUT.PUT_LINE('        if(boxes.some(function(b){return box[0]<b[2]+2&&box[2]>b[0]-2&&box[1]<b[3]+2&&box[3]>b[1]-2;}))continue;');
+    DBMS_OUTPUT.PUT_LINE('        boxes.push(box);out.push({k:it.C.k,txt:it.C.alts[a].txt,x:p.x,y:y,w:w,t:p.t});return;');
+    DBMS_OUTPUT.PUT_LINE('      }');
+    DBMS_OUTPUT.PUT_LINE('    }');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return out;');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('TL.fitLabels=fitLabels;');
+    DBMS_OUTPUT.PUT_LINE('/* a series name''s label texts, longest first ({txt, w}: cut at LW, then');
+    DBMS_OUTPUT.PUT_LINE('   at each LCUT width while at least 6 characters stay; cached per name) */');
+    DBMS_OUTPUT.PUT_LINE('var LC=Object.create(null);');
+    DBMS_OUTPUT.PUT_LINE('function lcuts(nm){');
+    DBMS_OUTPUT.PUT_LINE('  if(LC[nm])return LC[nm];');
+    DBMS_OUTPUT.PUT_LINE('  var out=[];');
+    DBMS_OUTPUT.PUT_LINE('  [LW].concat(LCUT).forEach(function(mw,q){');
+    DBMS_OUTPUT.PUT_LINE('    var t=nm,w;');
+    DBMS_OUTPUT.PUT_LINE('    if(tw(t)+6>mw){while(t.length>(q?6:4)&&tw(t+''...'')+6>mw)t=t.slice(0,-1);t=t.replace(/\s+$/,'''')+''...'';}');
+    DBMS_OUTPUT.PUT_LINE('    w=tw(t)+6;');
+    DBMS_OUTPUT.PUT_LINE('    if((!out.length||out[out.length-1].txt!==t)&&(!q||w<=mw))out.push({txt:t,w:w});');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return (LC[nm]=out);');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* the highlight note''s box for dlab (the note is 600 weight and Geist in the');
     DBMS_OUTPUT.PUT_LINE('   quiet / dashboard designs, tw() measures the 400 system stack: 1.2x) */');
     DBMS_OUTPUT.PUT_LINE('function noteBox(hl,padL,top){return hl&&hl.note?[padL+6,top+3,padL+6+tw(hl.note)*1.2,top+16]:null;}');
+    DBMS_OUTPUT.PUT_LINE('/* the labels of chart c: groups [{pts, x0, x1}] (colPts points), series');
+    DBMS_OUTPUT.PUT_LINE('   order ord stacked from zero exactly as bands() does, y by Y, nb = the');
+    DBMS_OUTPUT.PUT_LINE('   highlight note''s box (or null) */');
     DBMS_OUTPUT.PUT_LINE('function dlab(c,groups,ord,on,Y,reb,nb){');
     DBMS_OUTPUT.PUT_LINE('  if(!c.lab)return '''';');
-    DBMS_OUTPUT.PUT_LINE('  var cand=[],placed=[],s='''';');
-    DBMS_OUTPUT.PUT_LINE('  groups.forEach(function(G){');
-    DBMS_OUTPUT.PUT_LINE('    var pts=G.pts,np=pts.length;if(np<2)return;');
-    DBMS_OUTPUT.PUT_LINE('    var lo=pts.map(function(){return 0;});');
-    DBMS_OUTPUT.PUT_LINE('    ord.forEach(function(k){');
-    DBMS_OUTPUT.PUT_LINE('      var hi=lo.map(function(l,j){return l+(rV(c,k,pts[j][1])||0);});');
-    DBMS_OUTPUT.PUT_LINE('      if(!reb||(on&&on[k])){');
-    DBMS_OUTPUT.PUT_LINE('        var yl=lo.map(Y),yh=hi.map(Y),best=-1,bt=0;');
-    DBMS_OUTPUT.PUT_LINE('        for(var j=0;j<np;j++){var t=yl[j]-yh[j];if(pts[j][0]>=G.x0&&pts[j][0]<=G.x1&&t>bt){bt=t;best=j;}}');
-    DBMS_OUTPUT.PUT_LINE('        if(best>=0&&bt>=LBH)cand.push({k:k,G:G,yl:yl,yh:yh,j:best,t:bt});');
-    DBMS_OUTPUT.PUT_LINE('      }');
-    DBMS_OUTPUT.PUT_LINE('      lo=hi;');
-    DBMS_OUTPUT.PUT_LINE('    });');
+    DBMS_OUTPUT.PUT_LINE('  var G=groups.filter(function(g){return g.pts.length>=2;}),lo=G.map(function(g){return g.pts.map(function(){return 0;});}),cands=[];');
+    DBMS_OUTPUT.PUT_LINE('  ord.forEach(function(k){');
+    DBMS_OUTPUT.PUT_LINE('    var yl=[],yh=[];');
+    DBMS_OUTPUT.PUT_LINE('    G.forEach(function(g,gi){var hi=lo[gi].map(function(l,j){return l+(rV(c,k,g.pts[j][1])||0);});yl.push(lo[gi].map(Y));yh.push(hi.map(Y));lo[gi]=hi;});');
+    DBMS_OUTPUT.PUT_LINE('    if(!reb||(on&&on[k]))cands.push({k:k,alts:lcuts(c.P.classes[k]),yl:yl,yh:yh});');
     DBMS_OUTPUT.PUT_LINE('  });');
-    DBMS_OUTPUT.PUT_LINE('  cand.sort(function(a,b){return b.t-a.t;});');
-    DBMS_OUTPUT.PUT_LINE('  cand.forEach(function(C){');
-    DBMS_OUTPUT.PUT_LINE('    if(placed.length>=LMAX)return;');
-    DBMS_OUTPUT.PUT_LINE('    var nm=c.P.classes[C.k],txt=nm,w=tw(txt)+6;');
-    DBMS_OUTPUT.PUT_LINE('    if(w>LW){while(txt.length>4&&tw(txt+''...'')+6>LW)txt=txt.slice(0,-1);txt=txt.replace(/\s+$/,'''')+''...'';w=tw(txt)+6;}');
-    DBMS_OUTPUT.PUT_LINE('    var pts=C.G.pts,x=pts[C.j][0],xa=x-w/2,xb=x+w/2;');
-    DBMS_OUTPUT.PUT_LINE('    if(xa<C.G.x0){xa=C.G.x0;xb=xa+w;}');
-    DBMS_OUTPUT.PUT_LINE('    if(xb>C.G.x1){xb=C.G.x1;xa=xb-w;}');
-    DBMS_OUTPUT.PUT_LINE('    if(xa<C.G.x0)return;');
-    DBMS_OUTPUT.PUT_LINE('    var top=Math.max(edgeAt(pts,C.yh,xa),edgeAt(pts,C.yh,xb)),bot=Math.min(edgeAt(pts,C.yl,xa),edgeAt(pts,C.yl,xb));');
-    DBMS_OUTPUT.PUT_LINE('    for(var j=0;j<pts.length;j++){var px=pts[j][0];if(px<xa||px>xb)continue;top=Math.max(top,C.yh[j]);bot=Math.min(bot,C.yl[j]);}');
-    DBMS_OUTPUT.PUT_LINE('    if(bot-top<LBH)return;');
-    DBMS_OUTPUT.PUT_LINE('    var yc=(top+bot)/2,box=[xa,yc-LBH/2,xb,yc+LBH/2];');
-    DBMS_OUTPUT.PUT_LINE('    if(placed.concat(nb?[nb]:[]).some(function(p){return box[0]<p[2]+2&&box[2]>p[0]-2&&box[1]<p[3]+2&&box[3]>p[1]-2;}))return;');
-    DBMS_OUTPUT.PUT_LINE('    placed.push(box);');
-    DBMS_OUTPUT.PUT_LINE('    s+=''<text class="xdl" x="''+((xa+xb)/2).toFixed(1)+''" y="''+(yc+4).toFixed(1)+''" text-anchor="middle">''+esc(txt)+''</text>'';');
-    DBMS_OUTPUT.PUT_LINE('  });');
-    DBMS_OUTPUT.PUT_LINE('  return s;');
+    DBMS_OUTPUT.PUT_LINE('  return fitLabels(G.map(function(g){return {xs:g.pts.map(function(p){return p[0];}),x0:g.x0,x1:g.x1};}),cands,{min:LBH,max:LMAX,th:LTH,y1:Y(0),avoid:nb?[nb]:[]})');
+    DBMS_OUTPUT.PUT_LINE('    .map(function(L){return ''<text class="xdl" x="''+L.x.toFixed(1)+''" y="''+(L.y+4).toFixed(1)+''" text-anchor="middle">''+esc(L.txt)+''</text>'';}).join('''');');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* the release markers of list [{x: px, m: marker}]: a line through the plot');
     DBMS_OUTPUT.PUT_LINE('   on every chart shown, the flags (two tiers) on the chart with c.flags */');

@@ -52,9 +52,11 @@
  *   - the Activity charts' Windows side by side mode (plan 024): one panel
  *     per window, hover / crosshair, no zoom, cap click pins, legend,
  *     markers, the switch remembered in awr-axlayout;
- *   - direct labels on the Activity bands (plan 036): name a series, inside
- *     the plot, no overlap, at most 6, gone when the series is hidden;
- *     inside one panel side by side; never over the highlight note;
+ *   - direct labels on the Activity bands (plan 036, fitted per band): name
+ *     a series, inside the plot and inside the band they name, no overlap,
+ *     at most 6, gone when the series is hidden; inside one panel side by
+ *     side; never over the highlight note; the demo labels both charts in
+ *     both layouts;
  *   - the Day profile metric picker (v1.6.1, profile_days > 0; required
  *     for the demo): one role=tab button per stat with its indicator, a
  *     click / arrows / Home / End switch the line chart;
@@ -136,6 +138,32 @@ async function launch() {
 }
 
 const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
+
+// plan 036 (fitted per band): defines window.__awrLabelBand(id, key) in the
+// page = the number of band labels of chart #id (payload AWR_DATA[key])
+// not inside the band they name: at three points along the label (both
+// ends and the middle) the topmost band under it must be its series (the
+// bands paint top of the stack first, each from the axis up, so the
+// topmost one at a point is the band holding it)
+const LABEL_BAND = () => {
+  window.__awrLabelBand = (id, key) => {
+    const s = document.querySelector('#' + id + ' .axsvg'); if (!s || !s.getClientRects().length) return 0;
+    const names = ((window.AWR_DATA || {})[key] || {}).classes || [];
+    let bad = 0;
+    s.scrollIntoView({ block: 'center' });
+    for (const t of s.querySelectorAll('text.xdl')) {
+      const n = t.textContent, k = names.findIndex(x => x === n || (n.endsWith('...') && x.startsWith(n.slice(0, -3))));
+      const sw = document.querySelector('#' + id + ' .axlg .axc[data-c="' + k + '"] .sw');
+      const col = sw ? sw.style.getPropertyValue('--sw').trim() : '';
+      const b = t.getBoundingClientRect(), y = b.top + b.height * 0.55;
+      if (!col || [b.left + 4, (b.left + b.right) / 2, b.right - 4].some(x => {
+        const p = document.elementsFromPoint(x, y).find(e => e.matches && e.matches('path.xa'));
+        return !p || p.getAttribute('fill') !== col;
+      })) bad++;
+    }
+    return bad;
+  };
+};
 
 (async () => {
   const file = path.resolve(process.argv[2] || 'docs/examples/demo_busy_db.html');
@@ -659,6 +687,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       // plot, no two overlap, at most 6 a chart; hiding the first labelled
       // series removes its label, showing it again restores it (key
       // bandLabels: tl.labels holds the grid label links above)
+      await page.evaluate(LABEL_BAND);
       tl.bandLabels = await page.evaluate(() => {
         const out = [];
         for (const [id, key] of [['ax-cls', 'ashx'], ['ax-ev', 'ashe']]) {
@@ -669,7 +698,8 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
           const B = L.map(t => t.getBoundingClientRect());
           let ov = 0; for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) if (B[i].left < B[j].right && B[j].left < B[i].right && B[i].top < B[j].bottom && B[j].top < B[i].bottom) ov++;
           const outside = B.filter(b => b.left < ax.left - 1 || b.right > ax.right + 1 || b.bottom > ax.top + 1).length;
-          out.push(id + ' ' + L.length + (bad || ov || outside || L.length > 6 ? ' FAIL bad=' + bad + ' overlap=' + ov + ' outside=' + outside : ''));
+          const band = window.__awrLabelBand(id, key);
+          out.push(id + ' ' + L.length + (bad || ov || outside || band || L.length > 6 ? ' FAIL bad=' + bad + ' overlap=' + ov + ' outside=' + outside + ' offband=' + band : ''));
         }
         return out.join('; ');
       });
@@ -909,16 +939,21 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       });
       if (/FAIL/.test(sb.panels)) fail('side by side: ' + sb.panels);
       // direct labels (plan 036): each one inside one panel (1 px slack)
+      // and inside the band it names; the demo labels both charts
+      await page.evaluate(LABEL_BAND);
       sb.labels = await page.evaluate(() => {
-        let n = 0, bad = 0;
-        for (const id of ['ax-cls', 'ax-ev']) {
+        let n = 0, bad = 0, off = 0; const per = [];
+        for (const [id, key] of [['ax-cls', 'ashx'], ['ax-ev', 'ashe']]) {
           const s = document.querySelector('#' + id + ' .axsvg'); if (!s || !s.getClientRects().length) continue;
-          const P = [...s.querySelectorAll('rect.xw.xpn')].map(r => r.getBoundingClientRect());
-          for (const t of s.querySelectorAll('text.xdl')) { n++; const b = t.getBoundingClientRect(); if (!P.some(p => b.left >= p.left - 1 && b.right <= p.right + 1)) bad++; }
+          off += window.__awrLabelBand(id, key);
+          const P = [...s.querySelectorAll('rect.xw.xpn')].map(r => r.getBoundingClientRect()), L = s.querySelectorAll('text.xdl');
+          per.push(L.length);
+          for (const t of L) { n++; const b = t.getBoundingClientRect(); if (!P.some(p => b.left >= p.left - 1 && b.right <= p.right + 1)) bad++; }
         }
-        return n + ' labels' + (bad ? ' FAIL ' + bad + ' cross a panel edge' : '');
+        return n + ' labels (' + per.join('/') + ')' + (bad ? ' FAIL ' + bad + ' cross a panel edge' : '') + (off ? ' FAIL ' + off + ' outside their band' : '');
       });
-      if (/FAIL/.test(sb.labels)) fail('side by side: a label crosses a panel edge (' + sb.labels + ')');
+      if (/FAIL/.test(sb.labels)) fail('side by side: labels ' + sb.labels);
+      if (isDemo && !/\(([1-6])\/([1-6])\)/.test(sb.labels)) fail('side by side: the demo must label at least one band on each chart: ' + sb.labels);
       const cp = await page.evaluate(() => { const c = document.querySelector('#ax-cls .axsvg .xw.xpn.cur').getBoundingClientRect(); return { x: c.left + c.width / 2, y: c.top + c.height * 0.6 }; });
       await page.mouse.move(cp.x, cp.y); await page.waitForTimeout(150);
       sb.hover = await page.evaluate(() => {

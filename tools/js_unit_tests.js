@@ -134,4 +134,86 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
   });
 }
 
+/* ---- plan 036 / owner decision 2026-11-20: AWR_TL.fitLabels (js_timeline),
+   the Activity band labels fitted per band ---- */
+{
+  const F = load('js_timeline').AWR_TL.fitLabels;
+  // a band over x 0..200 (a point every 2 px): lower edge y = 200, upper
+  // edge from top(x); thickness = 200 - top(x)
+  const band = (top, x1) => { const xs = [], yl = [], yh = []; for (let x = 0; x <= (x1 || 200); x += 2) { xs.push(x); yl.push(200); yh.push(top(x)); } return { xs, yl, yh }; };
+  const run = (bands, o, groups) => {
+    const G = groups || [{ x0: 0, x1: 200 }];
+    const xs = bands[0].b.xs;
+    return F(G.map(g => ({ xs, x0: g.x0, x1: g.x1 })),
+      bands.map((B, k) => ({ k, alts: B.alts, yl: G.map(() => B.b.yl), yh: G.map(() => B.b.yh) })),
+      Object.assign({ min: 10, max: 6, th: 12 }, o || {}));
+  };
+  const one = (w, txt) => [{ txt: txt || 'x', w }];
+  test('flat band: centred in the run, thickness as the box', () => {
+    const r = run([{ b: band(x => 180), alts: one(60) }]);
+    assert.strictEqual(r.length, 1);
+    assert.strictEqual(r[0].x, 100); assert.strictEqual(r[0].y, 190); assert.strictEqual(r[0].t, 20);
+  });
+  test('the thickest stretch as wide as the label, not the thickest point', () => {
+    // a 4-px spike 100 px thick at x 30, a 30-px plateau 40 px thick at 140..170
+    const r = run([{ b: band(x => (x >= 30 && x <= 32) ? 100 : (x >= 140 && x <= 170 ? 160 : 188)), alts: one(24) }]);
+    assert.strictEqual(r.length, 1);
+    assert.ok(r[0].x > 140 && r[0].x < 170 && r[0].t >= 30, JSON.stringify(r));
+  });
+  test('too thin anywhere: no label (and LBH is 10, not 13)', () => {
+    assert.strictEqual(run([{ b: band(x => 191), alts: one(40) }]).length, 0);
+    assert.strictEqual(run([{ b: band(x => 190), alts: one(40) }]).length, 1);
+  });
+  test('a shorter cut when the full name fits nowhere', () => {
+    const b = band(x => (x >= 100 && x <= 150) ? 150 : 195);
+    const r = run([{ b, alts: [{ txt: 'long name', w: 120 }, { txt: 'lo...', w: 40 }] }]);
+    assert.strictEqual(r.length, 1); assert.strictEqual(r[0].txt, 'lo...');
+    assert.ok(r[0].x - 20 >= 100 && r[0].x + 20 <= 150, JSON.stringify(r));
+  });
+  test('thickest band first; the next one moves clear of it or is left out', () => {
+    // two series stacked: k0 at the bottom (200..170), k1 above it (170..130)
+    const xs = [], A = { yl: [], yh: [] }, B = { yl: [], yh: [] };
+    for (let x = 0; x <= 200; x += 2) { xs.push(x); A.yl.push(200); A.yh.push(170); B.yl.push(170); B.yh.push(130); }
+    const r = F([{ xs, x0: 0, x1: 200 }], [{ k: 0, alts: one(60), yl: [A.yl], yh: [A.yh] }, { k: 1, alts: one(60), yl: [B.yl], yh: [B.yh] }], { min: 10, max: 6, th: 12 });
+    assert.deepStrictEqual(r.map(l => l.k), [1, 0]);
+    // one 12-px row shared by every candidate: the first takes the middle,
+    // the next ones the nearest free places (2 px apart), then none is left
+    const C = { yl: [], yh: [] }; for (let x = 0; x <= 200; x += 2) { C.yl.push(200); C.yh.push(188); }
+    const r2 = F([{ xs, x0: 0, x1: 200 }], [0, 1, 2, 3].map(k => ({ k, alts: one(60), yl: [C.yl], yh: [C.yh] })), { min: 10, max: 6, th: 12 });
+    assert.deepStrictEqual(r2.map(l => l.x), [100, 38, 162]);
+    assert.strictEqual(F([{ xs, x0: 0, x1: 200 }], [0, 1].map(k => ({ k, alts: one(80), yl: [C.yl], yh: [C.yh] })), { min: 10, max: 6, th: 12 }).length, 1);
+  });
+  test('at most max labels', () => {
+    const xs = [], S = [];
+    for (let x = 0; x <= 200; x += 2) xs.push(x);
+    for (let k = 0; k < 8; k++) S.push({ k, alts: one(30), yl: [xs.map(() => 200 - 20 * k)], yh: [xs.map(() => 180 - 20 * k)] });
+    assert.strictEqual(F([{ xs, x0: 0, x1: 200 }], S, { min: 10, max: 6, th: 12 }).length, 6);
+  });
+  test('a label stays inside one group (panel)', () => {
+    const b = band(x => 150);
+    const G = [{ x0: 0, x1: 50 }, { x0: 56, x1: 106 }];
+    const r = run([{ b, alts: one(40) }], {}, G);
+    assert.strictEqual(r.length, 1);
+    assert.ok(G.some(g => r[0].x - 20 >= g.x0 && r[0].x + 20 <= g.x1), JSON.stringify(r));
+    assert.strictEqual(run([{ b, alts: one(60) }], {}, G).length, 0);
+  });
+  test('clear of the avoid box (the highlight note)', () => {
+    const r = run([{ b: band(x => 150), alts: one(60) }], { avoid: [[0, 140, 200, 200]] });
+    assert.strictEqual(r.length, 0);
+    const r2 = run([{ b: band(x => 150), alts: one(60) }], { avoid: [[0, 140, 120, 200]] });
+    assert.strictEqual(r2.length, 1); assert.ok(r2[0].x - 30 >= 122, JSON.stringify(r2));
+  });
+  test('the box stays above the axis (y1)', () => {
+    const r = run([{ b: band(x => 190), alts: one(40) }], { y1: 200 });
+    assert.strictEqual(r[0].y, 194);
+  });
+  test('no data past the points: no stretch there', () => {
+    // points only over x 0..60, the group spans 0..200
+    const r = run([{ b: band(x => 150, 60), alts: one(80) }]);
+    assert.strictEqual(r.length, 0);
+    const r2 = run([{ b: band(x => 150, 60), alts: one(50) }]);
+    assert.strictEqual(r2.length, 1); assert.ok(r2[0].x + 25 <= 60, JSON.stringify(r2));
+  });
+}
+
 console.log(passed + ' tests passed');

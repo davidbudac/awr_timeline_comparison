@@ -740,20 +740,39 @@ hidden (compact Summary, the dashboard's tabs). Not to be confused with
 the dashboard's `window.AWR_axMode` (which chart is shown). The
 `js_timeline.plsql` header lists these functions.
 
-**Direct labels (plan 036)**: `dlab(c, groups, ord, on, Y, reb, nb)` after
-the bands, inside the plot clip (both `draw` and `drawWin`; groups = one
-`{pts, x0, x1}` for Full span, one per panel side by side, so a label
-never crosses a panel edge; only points inside `[x0, x1]` are candidates;
-`nb` = `noteBox()`, the highlight note's box, which no label covers);
-`text.xdl` (CSS halo like `.xhn`, normal weight so `tw()` is exact,
-`pointer-events:none`), thickest bands first, band at least `LBH` 13 px
-under the whole label, at most `LMAX` 6, names cut at `LW` 160 px with
-ASCII `...`; with a strong highlight only the highlighted series; per
-chart `mkChart(..., {labels})` (both on, owner decision). `dlab` stacks
-`ord` from zero exactly like `bands()`: keep them in lockstep. Keep
-`.xdl` out of `css_design.css`'s Geist font rule (`tw()` measures the
-system stack). verify_report: `bandLabels` / `labelHide` (block 5), the
-note check in the highlight `state()` (`xov`), `sb.labels` (block 5c).
+**Direct labels (plan 036; fitted per band, owner decision 2026-11-20)**:
+`dlab(c, groups, ord, on, Y, reb, nb)` after the bands, inside the plot
+clip (both `draw` and `drawWin`; groups = one `{pts, x0, x1}` for Full
+span, one per panel side by side; `nb` = `noteBox()`, the highlight
+note's box, which no label covers) builds per series the band's lower /
+upper edge and calls the pure `fitLabels(groups, cands, o)`
+(`AWR_TL.fitLabels`, unit-tested in `tools/js_unit_tests.js`): per group
+the edges are reduced to whole pixel columns (`colExt`: the lowest lower
+edge / highest upper edge over each column, no data = never thick), a
+sliding window as wide as the label (`slideExt`, a deque) gives each
+start's clear box (`stretches`; thickness rounded down to 0.5 px), and
+each series takes its thickest stretch (equal thickness: the middle of
+the run, `spos`) at least `LBH` 10 px thick, clear of the labels placed
+so far (text box `LTH` 12 px, 2 px apart) and kept above the axis. One
+label per series per chart, inside one panel; series ranked by their
+best thickness (biggest bands first), at most `LMAX` 6. A name is cut at
+`LW` 160 px with ASCII `...`; when no stretch fits it, shorter cuts
+(`LCUT` 120 / 90 / 64 px, at least 6 characters) are tried
+(`lcuts`, cached per name; "log file switch (archiving ne..." on the
+test DB's busy hour). Before this the label went at the single thickest
+POINT and needed 13 px under the whole label, so on real (spiky) data it
+almost never fit the event chart. `text.xdl` (CSS halo like `.xhn`,
+normal weight so `tw()` is exact, `pointer-events:none`); with a strong
+highlight only the highlighted series; per chart `mkChart(..., {labels})`
+(both on, owner decision). `dlab` stacks `ord` from zero exactly like
+`bands()`: keep them in lockstep. Keep `.xdl` out of `css_design.css`'s
+Geist font rule (`tw()` measures the system stack). Cost: about 1-2 ms
+more per chart redraw (a thin band is rejected on its thickest column).
+verify_report: `bandLabels` (block 5: names, overlap, inside the plot and
+inside the band they name via `elementsFromPoint` -- `LABEL_BAND`; the
+demo labels both charts) / `labelHide`, the note check in the highlight
+`state()` (`xov`), `sb.labels` (block 5c: inside one panel and its band;
+the demo labels both charts side by side too).
 
 ### Window component (`sql/lib/wingrid.plsql` + `js_wingrid.plsql`)
 

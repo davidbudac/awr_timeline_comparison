@@ -101,7 +101,7 @@ What the re-check added to the plans:
 | [033](033-finding-hints-and-next-step-queries.md) | Hints ("what this usually means") and copyable read-only next queries | 14 | P3 | M | LOW-MED | 026 (soft) | DONE (`0971059`); DB run pending (owner) |
 | [034](034-copy-summary-button.md) | "Copy summary" button (Markdown for a ticket or chat) | 15 | P3 | S-M | LOW | 020 (soft) | DONE (`bf288c3`); DB run pending (owner) |
 | [035](035-section11-charts-on-demand.md) | Section 11 draws its per-SQL charts on demand | 16 | P3 | S | LOW | — | DONE (`dcec914`); DB run pending (owner) |
-| [036](036-activity-direct-band-labels.md) | The Activity charts name their largest bands | 17 | P3 | M | LOW | 024 | DONE (`13abec7`); DB run pending (owner) |
+| [036](036-activity-direct-band-labels.md) | The Activity charts name their largest bands | 17 | P3 | M | LOW | 024 | DONE (`13abec7`; fitted per band in fix group G3, owner 2026-11-20); DB run pending (owner) |
 | [037](037-sqlmon-scatter-readable.md) | SQL Monitor execution scatter readable at 3,000 points | 18 | P3 | S-M | LOW (step 5 MED) | — | DONE (`b0ff616`, step 5 `84d3927`); DB run pending (owner) |
 
 **Execution order**: the numbers are the execution order, and every
@@ -249,6 +249,11 @@ these supersede the 2026-11-19 answers where they overlap):
   a 3846-s window showed an event at 8.60 AAS above its own class card's
   8.06. The severity and the gutter's z / Delta stay Table A's. Done in
   fix group G2.
+- 036: Activity band labels are **fitted per band**: each series once, on
+  its thickest stretch as wide as its label (at least 10 px thick, was 13
+  px at the single thickest point; shorter cuts of a long name when only
+  they fit), thickest first, at most six a chart, both charts, both
+  layouts. Done in fix group G3.
 
 
 Each plan records its default, so an executor never waits on these. Decide
