@@ -1543,8 +1543,12 @@ const LABEL_BAND = () => {
       {
         const rd = document.getElementById('release-delta'), app = rd && rd.querySelector('.rd-app');
         const why = app && app.querySelector('.rd-why'), tall = rd && rd.querySelector('table.rd-tall');
-        out.rdSplit = !app || !vis(app) ? 'none' : vis(app.querySelector('.rd-body')) ? 'split'
-          : (vis(why) && why.textContent.trim() && tall && vis(tall) && hasNum(tall)) ? 'no split (reason note, all-priors table)' : 'FAIL';
+        // (the section emits .rd-app only with a payload and 3+ valid
+        // windows, where the script always shows it: still hidden = it bailed)
+        out.rdSplit = !app ? 'none' : !vis(app) ? 'FAIL: the split view never showed (script bailed out)'
+          : vis(app.querySelector('.rd-body')) ? 'split'
+          : (vis(why) && why.textContent.trim() && tall && vis(tall) && hasNum(tall)) ? 'no split (reason note, all-priors table)'
+          : 'FAIL: no split shown, but no reason note or no all-priors table';
       }
       // plan 035: section 11's charts are drawn on demand
       const a11 = [...document.querySelectorAll('#topsql-ash .chart-ash-sql')];
@@ -1639,7 +1643,7 @@ const LABEL_BAND = () => {
     if (/^FAIL/.test(p4.jk)) fail('J in Summary: ' + p4.jk);
     if (!p4.subNames) fail('rail card sub-link text / data-label carries the share');
     if (p4.allFull.length) fail('All sections: library sections not shown in full: ' + p4.allFull.join(', '));
-    if (p4.rdSplit === 'FAIL') fail('release-delta: no split shown, but no reason note or no all-priors table');
+    if (/^FAIL/.test(p4.rdSplit)) fail('release-delta: ' + p4.rdSplit);
     if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && p4.rdSplit !== 'split') fail('demo: release-delta should open on a split at its release marker, got ' + p4.rdSplit);
     if (/^FAIL/.test(p4.lazy11)) fail('section 11 lazy charts ' + p4.lazy11);
     if ((!p4.strips && p4.nwin <= 91) || p4.lines) fail('micro strips: ' + p4.strips + ' svg.mw, ' + p4.lines + ' line sparklines left');

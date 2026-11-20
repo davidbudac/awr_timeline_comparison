@@ -696,7 +696,7 @@ elsewhere"), and `spZoom`'s minimum drops from `SP.min` to `FMIN` (30
 min) when the brushed range touches a segment. A wide window stripe
 (> 24 px) is hit-tested on its cap only (`.xw.wd` fades its fill), so the
 plot inside a zoomed window hovers / brushes minute by minute; a narrower
-one on its whole height (a 12-px hit rect), so when the windows tile the
+one on its whole height (a hit rect at least 12 px wide), so when the windows tile the
 span (more than about 42 contiguous windows on a 1440-px page, e.g. 168
 hourly ones) every x of the un-zoomed plot is a stripe: hover shows the
 window's tooltip, a click pins it, and bucket hover, the soft highlight
@@ -1455,7 +1455,7 @@ every marker-less real-DB report) hides `.rd-body` -- legend, charts and the
 still-empty split table -- and shows `p.rd-why` instead; `details.rd-all`
 (`table.rd-tall`, Current vs all priors) shows in every case, so no number
 is hidden (verify_report's `allFull` skips a table without a data row, its
-`rdSplit` wants the note + that table, the demo a split). JS off:
+`rdSplit` wants `.rd-app` shown, then the note + that table, the demo a split). JS off:
 `p.rd-nojs` + `table.rd-tall`. Never call anything a
 finding or use large / moderate. Links are built as `a.className="ent"` only
 when the target id exists (lint 21 scans the generated plsql for the literal).
