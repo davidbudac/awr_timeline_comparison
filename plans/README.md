@@ -267,6 +267,14 @@ these supersede the 2026-11-19 answers where they overlap):
   reachable with their sentence shown on focus; no "spike: Current only"
   next to a step the same way (a jump after a marker stays); the classic
   config card's "and N more" link is styled. Done in fix group G4.
+- verify_report false positives (pre-existing on `main`, seen on every
+  test-DB report of the same run): "All sections" no longer fails section
+  28 when there is no release marker (its split table is empty and hidden
+  by design behind the reason note; the all-priors table shows every
+  number), and the click-to-keep highlight check zooms into the busiest
+  window when the window stripes tile the span (168 hourly windows: every
+  x is a stripe, a click there pins as designed). Test changes only, the
+  report is unchanged. Done in fix group G5.
 
 
 Each plan records its default, so an executor never waits on these. Decide
