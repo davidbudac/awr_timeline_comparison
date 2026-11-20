@@ -24,6 +24,9 @@
 --            instance, else nothing
 --   #SQLID#  #PH1#  #PH2#   the plan card's sql_id and the two plan hashes
 --   #NL#: a line break (never put a space right before it)
+-- PLAN passes DISPLAY_AWR the plan's con_id (from DBA_HIST_SQLSTAT, 0 ->
+-- NULL): from a CDB root the 3-argument call finds only plans captured in
+-- the root and returns no rows for a PDB's statement (dbmint 2026-11-20).
 -- A rule without a query has no WHEN line in hint_sql (it returns NULL).
 --
 -- To add a rule: one WHEN line in hint_text, optionally one in hint_sql,
@@ -59,7 +62,7 @@
             WHEN 'HARD_PARSE' THEN 'SELECT force_matching_signature, COUNT(DISTINCT sql_id) AS sql_ids,#NL#       SUM(executions_delta) AS execs, MIN(sql_id) AS one_sql_id#NL#FROM   dba_hist_sqlstat#NL#WHERE  dbid = #DBID# AND snap_id BETWEEN #B# AND #E##INST##NL#AND    force_matching_signature <> 0#NL#GROUP  BY force_matching_signature#NL#HAVING COUNT(DISTINCT sql_id) > 5#NL#ORDER  BY sql_ids DESC#NL#FETCH  FIRST 10 ROWS ONLY;'
             WHEN 'DBTIME_CPU' THEN 'SELECT sql_id, ROUND(SUM(cpu_time_delta) / 1e6, 1) AS cpu_s,#NL#       SUM(executions_delta) AS execs#NL#FROM   dba_hist_sqlstat#NL#WHERE  dbid = #DBID# AND snap_id BETWEEN #B# AND #E##INST##NL#GROUP  BY sql_id#NL#ORDER  BY cpu_s DESC#NL#FETCH  FIRST 10 ROWS ONLY;'
             WHEN 'ROW_LOCK' THEN 'SELECT blocking_inst_id, blocking_session, sql_id, COUNT(*) AS samples#NL#FROM   dba_hist_active_sess_history#NL#WHERE  dbid = #DBID# AND snap_id BETWEEN #B# AND #E##INST##NL#AND    event = ''enq: TX - row lock contention''#NL#GROUP  BY blocking_inst_id, blocking_session, sql_id#NL#ORDER  BY samples DESC#NL#FETCH  FIRST 10 ROWS ONLY;'
-            WHEN 'PLAN' THEN 'SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY_AWR(''#SQLID#'', #PH1#, #DBID#));#NL#SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY_AWR(''#SQLID#'', #PH2#, #DBID#));'
+            WHEN 'PLAN' THEN 'SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY_AWR(''#SQLID#'', #PH1#, #DBID#, ''TYPICAL'',#NL#       (SELECT NULLIF(MIN(con_id), 0) FROM dba_hist_sqlstat#NL#        WHERE  dbid = #DBID# AND sql_id = ''#SQLID#'' AND plan_hash_value = #PH1#)));#NL#SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY_AWR(''#SQLID#'', #PH2#, #DBID#, ''TYPICAL'',#NL#       (SELECT NULLIF(MIN(con_id), 0) FROM dba_hist_sqlstat#NL#        WHERE  dbid = #DBID# AND sql_id = ''#SQLID#'' AND plan_hash_value = #PH2#)));'
         END;
     END hint_sql;
 

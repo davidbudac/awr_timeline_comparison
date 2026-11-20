@@ -375,7 +375,9 @@ moderate row above its prior mean; `ev_up` = the same for one of the top 2
 events per class in `v_evs`): `IO_SCANS`, `IO_SINGLE`, `COMMIT_LAT`,
 `NET_PAYLOAD`, `HARD_PARSE`, `DBTIME_CPU`, `ROW_LOCK` (links `#blocking`,
 always emitted by 24). 18's plan card always carries `PLAN`
-(`DBMS_XPLAN.DISPLAY_AWR` of both plan hashes; needs the optional
+(`DBMS_XPLAN.DISPLAY_AWR` of both plan hashes, each passing the plan's
+`con_id` from `DBA_HIST_SQLSTAT` -- from a CDB root the 3-argument call
+returns no rows for a statement captured in a PDB; needs the optional
 `DBA_HIST_SQL_PLAN` grant when the reader runs it), between its evidence
 and its footer (23 adds "Plan shape" to the footer's `span.evl`). The
 texts and queries are ONE table in `sql/lib/finding_hints.plsql`; every
