@@ -122,14 +122,23 @@ release bumps `awr_version`).
   measure (DB time, DB CPU or its wait class) above its prior mean, in AAS,
   orders the cards and shows as a chip ("+6.313 AAS · 70% of the
   DB-time rise"); cards without a time measure follow, large before
-  moderate. DB time stays second. The verdict follows the same order. Band
+  moderate. DB time stays second. The verdict follows the same order. A
+  wait class's time added counts foreground sessions only
+  (`time_waited_micro_fg`), like DB time: on a test-DB hour, Configuration
+  waits (archiver / log switch, mostly background) had ranked first with
+  +8.06 AAS of all-session time against a DB-time rise of +3.43 AAS. The
+  wait-class rows themselves, their scores and which cards exist are
+  unchanged (all sessions). Band
   glyphs in the Summary view print z only up to ">+10 sigma"; tables keep
   the exact z. A flagged DB CPU card is labelled "CPU" (was "Cpu").
 - **The verdict shows where the extra DB time went.** A bar under the
-  verdict splits the DB-time rise into DB CPU and each wait class (AAS
-  above the prior mean, largest first), solid when the part is behind a
-  finding, hatched when it grew but stayed normal, with the classes that
-  fell named under it. Same numbers as the finding cards' impact.
+  verdict splits the DB-time rise into DB CPU and each wait class's
+  foreground wait time (AAS above the prior mean, largest first), solid
+  when the part is behind a finding, hatched when it grew but stayed
+  normal, with the classes that fell named under it. Same numbers as the
+  finding cards' impact, so the parts roughly add up to the rise; a note
+  names the gap only when they pass it by more than 2% (time model and
+  wait interface are kept separately).
 - **One finding count.** A finding is a card everywhere it is counted:
   the verdict pill (with its large / moderate split; the "metrics moved"
   pill is gone), the Findings header in Summary and the rail's Findings

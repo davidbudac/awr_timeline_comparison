@@ -344,7 +344,7 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
 
 | Piece | Emitter | Notes |
 |---|---|---|
-| Verdict hero `section#verdict.vw.in-s.hero` | 00 | one rule-based h1 sentence (no free prose), `p#because-slot` "Likely source:" (17 fills), `ul#pills` (17 inserts before `li.pl-normal`), `ul#narrative-slot.hnotes` (17), `p.snapnote` (target_end snapped), `#att-slot` (07 fills: DB-time breakdown, `.att-h` / `.att-bar` / `.att-lg`, parts coloured from `AWR_WAIT_COLORS` via `--c`) |
+| Verdict hero `section#verdict.vw.in-s.hero` | 00 | one rule-based h1 sentence (no free prose), `p#because-slot` "Likely source:" (17 fills), `ul#pills` (17 inserts before `li.pl-normal`), `ul#narrative-slot.hnotes` (17), `p.snapnote` (target_end snapped), `#att-slot` (07 fills: DB-time breakdown = DB CPU + each class's foreground wait time, the cards' impact; `.att-h` / `.att-bar` / `.att-lg`, parts coloured from `AWR_WAIT_COLORS` via `--c`; a hatched rest when the parts fall short, a note when they pass the rise by more than 2 %) |
 | Hero strip `section#overview` | 08 | DB time (AAS) per window on the window component, `#hero-dbt`; replaced the six v1.5 headline tiles |
 | Triage list `#triage` | 07 | one `div.tri-row[data-card]` per card, in card order; impact cell filled by 07's inline script from the card's `data-impact` / `data-share` (plan 020); empty `span.tri-tags` (plan 027) |
 | Finding cards `#findings div.cards` | 07 | one `article.fc` per card group (below); header band glyph, big value, window bars, ≤4 evidence rows, an optional hint `div.fc-hint[data-hint]` (plan 033, below), related-metrics fold, footer `a.jump[data-tl]` "Timeline →" |
@@ -405,8 +405,16 @@ shorter label. Order (`card_before_imp`, v1.7, plan 020): tier 1 = cards
 whose time measure rose (impact > 0), largest impact first; tier 2 =
 DBTIME; tier 3 = the rest by `card_before` (large before moderate, then
 max |z|); then a flagged DB time card moves to 2nd. Impact
-(`impact_group`): the card's time measure — DB time, DB CPU, or its
-wait-class row — Current minus prior mean, ×`metric_scale` = AAS;
+(`impact_group` + `time_added`): the card's time measure — DB time or DB
+CPU (time model), Current minus prior mean ×`metric_scale` = AAS, or its
+wait class's FOREGROUND wait time (owner decision 2026-11-20:
+`time_waited_micro_fg` from the same `DBA_HIST_SYSTEM_EVENT` rows as the
+class row, CTEs `wait_fg_rows` / `wait_fg` in BOTH 00 and 07, carried as
+`fg_d` on the collected row) — so a mostly-background class (archiver,
+log switch) no longer outranks the whole DB-time rise. Never scored: the
+`Wait class: X` rows, their z / bucket and which cards exist stay all
+sessions. 021's breakdown (its parts and "Fell:"), the triage list, the
+rail shares and Copy summary all read the same impact;
 `article.fc[data-impact]` (3-decimal token, '' = none) and
 `[data-share]` (integer % of the DB-time rise, '' when DB time did not
 rise or the share passes 100) are a contract for later Summary features;

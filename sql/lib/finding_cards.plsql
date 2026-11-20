@@ -29,9 +29,10 @@
 -- wait classes are seconds waited per second = AAS.  Scoring always runs
 -- on the stored value (the band and z are scale-free).
 --
--- Impact (v1.7): impact_group() / card_tier() / card_before_imp() -- cards
--- are ordered by the AAS their time measure added above its prior mean,
--- see the comment above impact_group().
+-- Impact (v1.7): impact_group() / time_added() / card_tier() /
+-- card_before_imp() -- cards are ordered by the AAS their time measure
+-- added above its prior mean (foreground sessions only, owner decision
+-- 2026-11-20), see the comment above impact_group().
 --
 -- Include inside a DECLARE block AFTER sql/lib/fmt_num.plsql.  Declares
 -- only functions (no TYPE).
@@ -324,8 +325,13 @@
     -- The card's impact = (Current - prior mean) of that row x
     -- metric_scale() = AAS added above normal.  impact_group() names the
     -- card a row is the time measure of (NULL: none).  A card without a
-    -- time measure (PARSE, OTHER:...) has no impact.  The wait-class times
-    -- come from DBA_HIST_SYSTEM_EVENT and include background sessions.
+    -- time measure (PARSE, OTHER:...) has no impact.  Impact counts
+    -- FOREGROUND sessions only, like DB time (owner decision 2026-11-20):
+    -- DB time / DB CPU come from the time model; a wait class's impact is
+    -- its time_waited_micro_fg (DBA_HIST_SYSTEM_EVENT, same windows,
+    -- template wait list and Idle exclusion as the class row), which the
+    -- caller passes in as p_fg_d to time_added().  The class row itself --
+    -- its value, z, bucket and the cards that exist -- stays ALL sessions.
     FUNCTION impact_group(p_domain VARCHAR2, p_name VARCHAR2, p_family VARCHAR2) RETURN VARCHAR2 IS
     BEGIN
         IF p_domain = 'LOAD' AND p_name = 'DB time' THEN RETURN 'DBTIME'; END IF;
@@ -335,6 +341,19 @@
         END IF;
         RETURN NULL;
     END impact_group;
+
+    -- the AAS a time-measure row added above its prior mean: DB time / DB
+    -- CPU (Current - prior mean) x metric_scale(); a wait-class row its
+    -- foreground delta p_fg_d (Current - prior mean of the class's
+    -- time_waited_micro_fg per second, already in AAS).  NULL: no impact.
+    -- 00 (verdict), 07 (cards, the DB-time breakdown) call it the same way.
+    FUNCTION time_added(p_domain VARCHAR2, p_name VARCHAR2, p_cur NUMBER, p_mu NUMBER,
+                        p_fg_d NUMBER) RETURN NUMBER IS
+    BEGIN
+        IF p_domain = 'WAIT' THEN RETURN p_fg_d; END IF;
+        IF p_cur IS NULL OR p_mu IS NULL THEN RETURN NULL; END IF;
+        RETURN (p_cur - p_mu) * metric_scale(p_domain, p_name);
+    END time_added;
 
     -- card order, v1.7 (replaces card_before as the sort key; card_before is
     -- kept as the tie-break):  tier 1 = every card whose time measure ROSE

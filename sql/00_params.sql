@@ -60,7 +60,8 @@ DECLARE
         family        VARCHAR2(64),
         canonical     VARCHAR2(1),
         prior_sd      NUMBER,
-        shr         NUMBER
+        shr         NUMBER,
+        fg_d          NUMBER     -- wait-class rows: foreground Current - prior mean, AAS (impact)
     );
     TYPE mover_t IS TABLE OF mover_rec INDEX BY PLS_INTEGER;
     TYPE seen_t  IS TABLE OF PLS_INTEGER INDEX BY VARCHAR2(64);
@@ -182,6 +183,7 @@ BEGIN
                se.wait_class,
                se.snap_id,
                se.time_waited_micro,
+               se.time_waited_micro_fg,
                se.instance_number,
                w.begin_snap_id, w.end_snap_id
         FROM   valid_windows w
@@ -196,7 +198,9 @@ BEGIN
     wait_bounds AS (
         SELECT week_offset, dur_sec, wait_class, instance_number,
                SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro END) AS beg_us,
-               SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us
+               SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us,
+               SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro_fg END) AS beg_fg,
+               SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro_fg END) AS end_fg
         FROM   wait_pairs
         GROUP BY week_offset, dur_sec, wait_class, instance_number
     ),
@@ -211,6 +215,26 @@ BEGIN
                END AS metric_value
         FROM   wait_bounds
         GROUP BY week_offset, wait_class
+    ),
+    -- v1.7 impact (owner decision 2026-11-20): the class rows' FOREGROUND
+    -- time (time_waited_micro_fg), Current minus the prior mean in AAS --
+    -- the cards' order only, never scored.  Same CTEs as 07_summary.sql's
+    -- wait_fg_rows / wait_fg, so the verdict and the cards rank alike.
+    wait_fg_rows AS (
+        SELECT week_offset, wait_class,
+               CASE WHEN MAX(dur_sec) > 0
+                    THEN SUM(NVL(end_fg, 0) - NVL(beg_fg, 0)) / MAX(dur_sec) / 1e6
+               END AS fg_value
+        FROM   wait_bounds
+        GROUP BY week_offset, wait_class
+    ),
+    wait_fg AS (
+        SELECT 'Wait class: ' || wait_class AS metric_name,
+               MAX(CASE WHEN week_offset = 0 THEN fg_value END)
+             - AVG(CASE WHEN week_offset > 0 THEN fg_value END) AS fg_d
+        FROM   wait_fg_rows
+        WHERE  fg_value IS NOT NULL
+        GROUP BY wait_class
     ),
     unified AS (
         SELECT * FROM load_rows   WHERE metric_value IS NOT NULL
@@ -265,14 +289,17 @@ BEGIN
         FROM   measured
         WHERE  cur_val IS NOT NULL OR mu IS NOT NULL
     )
-    SELECT metric_domain, metric_name, z_score, pct_delta, n_prior,
-           change_bucket, cur_val, prior_mean,
+    SELECT s.metric_domain, s.metric_name, s.z_score, s.pct_delta, s.n_prior,
+           s.change_bucket, s.cur_val, s.prior_mean,
            CAST(NULL AS VARCHAR2(64)) AS family,
            CAST(NULL AS VARCHAR2(1))  AS canonical,
-           prior_sd, shr
+           s.prior_sd, s.shr, g.fg_d
     BULK COLLECT INTO v_scored
-    FROM   scored
-    ORDER  BY ABS(NVL(z_score, 0)) DESC, metric_name;
+    FROM   scored s
+    LEFT JOIN wait_fg g
+           ON s.metric_domain = 'WAIT'
+          AND g.metric_name = s.metric_name
+    ORDER  BY ABS(NVL(s.z_score, 0)) DESC, s.metric_name;
 
     -- Single pass: per-metric policy (family / canonical) and the change
     -- bucket per row; counts (canonical rows only: large / moderate =
@@ -302,11 +329,14 @@ BEGIN
         ELSIF v_scored(i).metric_domain = 'LOAD' AND v_scored(i).metric_name = 'DB CPU' THEN
             v_cpu := i;
         END IF;
-        -- impact (v1.7, sql/lib/finding_cards.plsql impact_group)
+        -- impact (v1.7, sql/lib/finding_cards.plsql impact_group / time_added;
+        -- a wait class counts its foreground time only, as in 07)
         v_ig := impact_group(v_scored(i).metric_domain, v_scored(i).metric_name, v_scored(i).family);
-        IF v_ig IS NOT NULL AND v_scored(i).cur_val IS NOT NULL AND v_scored(i).prior_mean IS NOT NULL THEN
-            v_gimp(v_ig) := (v_scored(i).cur_val - v_scored(i).prior_mean)
-                            * metric_scale(v_scored(i).metric_domain, v_scored(i).metric_name);
+        IF v_ig IS NOT NULL
+           AND time_added(v_scored(i).metric_domain, v_scored(i).metric_name, v_scored(i).cur_val,
+                          v_scored(i).prior_mean, v_scored(i).fg_d) IS NOT NULL THEN
+            v_gimp(v_ig) := time_added(v_scored(i).metric_domain, v_scored(i).metric_name,
+                                       v_scored(i).cur_val, v_scored(i).prior_mean, v_scored(i).fg_d);
         END IF;
         IF v_scored(i).z_score IS NOT NULL THEN
             v_n_usable := v_n_usable + 1;

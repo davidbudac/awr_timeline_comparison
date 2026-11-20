@@ -92,12 +92,40 @@ def _window_values(w):
     return out
 
 
+def _fg_wait_deltas(w):
+    """wait_fg_rows / wait_fg (v1.7 impact, owner decision 2026-11-20): per
+    wait class, Current minus the prior mean of the FOREGROUND time waited
+    per second, AAS; the card order only, never scored.  The model's
+    SYSTEM_EVENT waits (fg_waits) are foreground only, so its
+    time_waited_micro_fg equals time_waited_micro.  Same as s07's copy."""
+    by_cls = {}
+    for win in w.valid_windows:
+        m = w.window_metrics(win)
+        if m is None:
+            continue
+        per = {}
+        for ev, (wc, cnt, us) in m.fg_waits.items():
+            if wc is None or wc == "Idle":
+                continue
+            per[wc] = per.get(wc, 0.0) + us
+        for wc, us in per.items():
+            if m.dur_sec > 0:
+                by_cls.setdefault(wc, {})[win.week_offset] = us / m.dur_sec / 1e6
+    out = {}
+    for wc, vals in by_cls.items():
+        cur = vals.get(0)
+        mu = mean_sd([v for k, v in vals.items() if k > 0])[0]
+        out["Wait class: " + wc] = (cur - mu) if (cur is not None and mu is not None) else None
+    return out
+
+
 def scored_rows(w):
     """The PL/SQL v_scored collection, ORDER BY ABS(NVL(z,0)) DESC, name:
     dicts with domain / name / z / pct / n / bucket / family / canonical /
     cur / mu / sd (bucket from the per-metric policy for every row)."""
     rows = []
     allv = _window_values(w)
+    fg = _fg_wait_deltas(w)
     wait_tot = sum(v.get(0, 0.0) for (d, _n), v in allv.items() if d == "WAIT")
     for (dom, name), vals in allv.items():
         cur = vals.get(0)
@@ -120,7 +148,7 @@ def scored_rows(w):
         bucket = policy_bucket(dom, name, None, cur, mu, sd, n, share)
         rows.append(dict(domain=dom, name=name, z=z, pct=pct, n=n, bucket=bucket,
                          family=finding_family(dom, name), canonical=is_canonical(dom, name),
-                         cur=cur, mu=mu, sd=sd))
+                         cur=cur, mu=mu, sd=sd, fg_d=fg.get(name) if dom == "WAIT" else None))
     rows.sort(key=lambda r: (-abs(r["z"] or 0.0), r["name"]))
     return rows
 
@@ -172,10 +200,11 @@ def _verdict_state(w, scored):
             st["dbt"] = r
         elif r["domain"] == "LOAD" and r["name"] == "DB CPU":
             st["cpu"] = r
-        # impact (v1.7, helpers.impact_group): every row, flagged or not
+        # impact (v1.7, helpers.impact_group / time_added): every row,
+        # flagged or not; a wait class counts its foreground time only
         ig = h.impact_group(r["domain"], r["name"], r["family"])
-        if ig and r["cur"] is not None and r["mu"] is not None:
-            imp[ig] = (r["cur"] - r["mu"]) * h.metric_scale(r["domain"], r["name"])
+        if ig and h.time_added(r["domain"], r["name"], r["cur"], r["mu"], r["fg_d"]) is not None:
+            imp[ig] = h.time_added(r["domain"], r["name"], r["cur"], r["mu"], r["fg_d"])
         if r["z"] is not None:
             st["n_usable"] += 1
         if r["canonical"] != "Y":

@@ -48,10 +48,12 @@ _MOVED = ("large", "moderate")
 
 class Finding:
     __slots__ = ("domain", "name", "cur", "mu", "sd", "n", "z", "pct", "bucket",
-                 "family", "canonical", "dir", "vals", "grp")
+                 "family", "canonical", "dir", "vals", "grp", "fg_d")
 
-    def __init__(self, domain, name, cur, mu, sd, n, share=None, vals=None):
+    def __init__(self, domain, name, cur, mu, sd, n, share=None, vals=None, fg_d=None):
         self.domain, self.name = domain, name
+        # wait-class rows: foreground Current - prior mean, AAS (the impact)
+        self.fg_d = fg_d
         self.vals = vals or {}
         self.cur, self.mu, self.sd, self.n = cur, mu, sd, n
         self.z, self.pct = h.z_and_pct(cur, mu, sd)
@@ -105,9 +107,38 @@ def _unified_rows(w):
     return rows
 
 
+def _fg_wait_deltas(w) -> dict:
+    """wait_fg_rows / wait_fg: per wait class, Current minus the prior mean
+    of the FOREGROUND time waited per second (time_waited_micro_fg), AAS --
+    the cards' impact (owner decision 2026-11-20), never scored.  The
+    model's SYSTEM_EVENT waits (fg_waits) are foreground only, so its
+    time_waited_micro_fg equals time_waited_micro: the per-window sums are
+    the class rows' own, from the same windows."""
+    by_cls: dict[str, dict[int, float]] = {}
+    for win in w.valid_windows:
+        m = w.window_metrics(win)
+        if m is None:
+            continue
+        per_class: dict[str, float] = {}
+        for _ev, (wc, _n, us) in m.fg_waits.items():
+            if wc == "Idle":
+                continue
+            per_class[wc] = per_class.get(wc, 0.0) + us
+        for wc, us in per_class.items():
+            if m.dur_sec > 0:
+                by_cls.setdefault(wc, {})[win.week_offset] = us / m.dur_sec / 1e6
+    out = {}
+    for wc, by_off in by_cls.items():
+        cur = by_off.get(0)
+        mu = h.mean_sd([v for k, v in by_off.items() if k > 0])[0]
+        out["Wait class: " + wc] = (cur - mu) if (cur is not None and mu is not None) else None
+    return out
+
+
 def compute_findings(w) -> list[Finding]:
     """The BULK COLLECT, in heat_pos order (domain, |z| DESC, name)."""
     rows = _unified_rows(w)
+    fg = _fg_wait_deltas(w)
     # wait_total: the Current window's total non-idle wait across classes
     wait_tot = sum(v.get(0, 0.0) for (d, _n), v in rows.items() if d == "WAIT")
     out = []
@@ -118,7 +149,8 @@ def compute_findings(w) -> list[Finding]:
         if cur is None and mu is None:
             continue
         share = (cur / wait_tot) if (dom == "WAIT" and wait_tot > 0 and cur is not None) else None
-        out.append(Finding(dom, name, cur, mu, sd, n, share, by_off))
+        out.append(Finding(dom, name, cur, mu, sd, n, share, by_off,
+                           fg.get(name) if dom == "WAIT" else None))
     out.sort(key=lambda f: (f.domain, -f.az, f.name))
     return out
 
@@ -315,7 +347,7 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g,
           findings=(), cw=None):
     r = lead[g]
     # impact chip (v1.7): the card's share of the DB-time rise, left out
-    # past 100% (background wait time rose more than DB time)
+    # past 100% (a part is measured apart from DB time and can pass it)
     v_imp = imp.get(g)
     v_shr = _g_shr(imp, g)
     s, u = h.metric_scale(r.domain, r.name), h.metric_unit(r.domain, r.name)
@@ -387,8 +419,8 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g,
                + h.esc(h.card_label(g)) + '"><i class="dotk ' + sev
                + '" aria-hidden="true"></i>' + sev.capitalize() + '</span>'
                + ('<span class="fc-imp" title="Time added: Current minus the prior'
-                  ' mean of this card&#39;s time measure (DB time, DB CPU or its wait class),'
-                  ' in average active sessions">' + h.imp_txt(v_imp)
+                  ' mean of this card&#39;s time measure (DB time, DB CPU or the foreground time of its'
+                  ' wait class), in average active sessions">' + h.imp_txt(v_imp)
                   + (" above normal" if g == "DBTIME"
                      else " &middot; " + str(v_shr) + "% of the DB-time rise" if v_shr is not None
                      else "")
@@ -447,7 +479,8 @@ def _tri_row(w, g, r, dbt, cpu) -> str:
 
 def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
     """v1.7 "Where the extra DB time went" (plan 021): the DB-time rise split
-    into DB CPU and the wait classes (the cards' impact), largest first;
+    into DB CPU and the wait classes' foreground time (the cards' impact),
+    largest first;
     printed hidden and moved into 00's #att-slot.  Twin of 07's nested block
     before the section header."""
     dd = imp.get("DBTIME")
@@ -455,13 +488,13 @@ def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
         return
     parts, pos, neg = [], 0.0, 0.0
     for f in findings:                      # heat_pos order, like the PL/SQL loop
-        if f.cur is None or f.mu is None:
-            continue
         if not (f.domain == "WAIT" or (f.domain == "LOAD" and f.name == "DB CPU")):
+            continue
+        d = h.time_added(f.domain, f.name, f.cur, f.mu, f.fg_d)
+        if d is None:
             continue
         lab = "CPU" if f.domain == "LOAD" else (
             f.name[len("Wait class: "):] if f.name.startswith("Wait class: ") else f.name)
-        d = (f.cur - f.mu) * h.metric_scale(f.domain, f.name)
         grp = h.impact_group(f.domain, f.name, f.family)
         aid = h.card_id(grp) if grp in lead else _find_id(f)
         parts.append({"lab": lab, "d": d, "grp": grp, "aid": aid})
@@ -522,11 +555,14 @@ def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
         note = ""
         if fell:
             note += 'Fell: ' + fell + ' AAS. '
-        # falls offset rises; only an excess left after them is background time
-        if pos - neg > dd * 1.005:
+        # falls offset rises.  The parts are foreground time like DB time, so
+        # they roughly add up to the rise; an excess past 2% of it is the gap
+        # between two separately kept counters, never background time
+        if pos - neg > dd * 1.02:
             note += ('The parts add up to ' + h.imp_txt(pos - neg)
                      + (' net of the falls' if neg > 0 else '') + ', more than the DB-time'
-                     ' rise: wait-class time also counts background sessions, DB time does not.')
+                     ' rise: DB time comes from the time model, the parts from the wait interface'
+                     ' and DB CPU, which Oracle keeps separately, so they need not add up exactly.')
         out.append('<div id="att-src" hidden><div class="att-h"><b>Where the extra DB time went</b>'
                    '<span>DB time ' + h.fmt_num(dbt.mu * 0.01) + ' &rarr; '
                    + h.fmt_num(dbt.cur * 0.01) + ' AAS, <b>' + h.imp_txt(dd) + '</b></span></div>')
@@ -561,10 +597,11 @@ def emit(w) -> str:
     cpu = next((f for f in findings if f.domain == "LOAD" and f.name == "DB CPU"), None)
     lead, gsev, gz, flagcls, imp = {}, {}, {}, set(), {}
     for f in findings:                      # heat_pos order, like the PL/SQL pass
-        # impact (v1.7, helpers.impact_group): every row, flagged or not
+        # impact (v1.7, helpers.impact_group / time_added): every row,
+        # flagged or not; a wait class counts its foreground time only
         ig = h.impact_group(f.domain, f.name, f.family)
-        if ig and f.cur is not None and f.mu is not None:
-            imp[ig] = (f.cur - f.mu) * h.metric_scale(f.domain, f.name)
+        if ig and h.time_added(f.domain, f.name, f.cur, f.mu, f.fg_d) is not None:
+            imp[ig] = h.time_added(f.domain, f.name, f.cur, f.mu, f.fg_d)
         if f.canonical != "Y" or f.bucket not in _MOVED:
             continue
         g = f.grp

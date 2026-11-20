@@ -32,9 +32,10 @@
 -- sql/lib/finding_cards.plsql): a card is led by its loudest large (else
 -- moderate) member of the card's primary family, else of any family;
 -- cards whose time measure rose come first, by the AAS added (impact,
--- v1.7); then DB time; then the rest, large before moderate and by the
--- largest |z| of any member; then a flagged DB time card moves up to
--- second place.
+-- v1.7; a wait class counts its foreground time only, read from the same
+-- DBA_HIST_SYSTEM_EVENT rows as its all-session class row); then DB time;
+-- then the rest, large before moderate and by the largest |z| of any
+-- member; then a flagged DB time card moves up to second place.
 --
 -- Implementation note: the unified LOAD/METRIC/WAIT recompute is
 -- BULK COLLECTed exactly once into a PL/SQL collection; every view below
@@ -68,7 +69,8 @@ DECLARE
         dir            VARCHAR2(4),
         shr            NUMBER,
         wv             VARCHAR2(4000),
-        grp            VARCHAR2(64)
+        grp            VARCHAR2(64),
+        fg_d           NUMBER         -- wait-class rows: foreground Current - prior mean, AAS (impact)
     );
     TYPE findings_t  IS TABLE OF finding_rec INDEX BY PLS_INTEGER;
     TYPE idx_t       IS TABLE OF PLS_INTEGER INDEX BY PLS_INTEGER;
@@ -478,7 +480,7 @@ DECLARE
         v_shr   NUMBER;
     BEGIN
         -- impact chip (v1.7): the card's share of the DB-time rise, left out
-        -- past 100% (background wait time rose more than DB time)
+        -- past 100% (a part is measured apart from DB time and can pass it)
         v_shr := g_shr(p_g);
         IF p_g = 'DBTIME' AND v_dbt IS NOT NULL AND v_cpu IS NOT NULL THEN
             v_split := time_split(v_findings(v_dbt).cur_val, v_findings(v_dbt).prior_mean,
@@ -553,8 +555,8 @@ DECLARE
             || DBMS_XMLGEN.CONVERT(card_label(p_g)) || '"><i class="dotk ' || v_sev
             || '" aria-hidden="true"></i>' || INITCAP(v_sev) || '</span>'
             || CASE WHEN v_imp > 0 THEN '<span class="fc-imp" title="Time added: Current minus the prior'
-                    || ' mean of this card&#39;s time measure (DB time, DB CPU or its wait class),'
-                    || ' in average active sessions">' || imp_txt(v_imp)
+                    || ' mean of this card&#39;s time measure (DB time, DB CPU or the foreground time of its'
+                    || ' wait class), in average active sessions">' || imp_txt(v_imp)
                     || CASE WHEN p_g = 'DBTIME' THEN ' above normal'
                             WHEN v_shr IS NOT NULL THEN ' &middot; ' || v_shr || '% of the DB-time rise' END
                     || '</span>' END
@@ -776,6 +778,7 @@ BEGIN
                se.event_name,
                se.snap_id,
                se.time_waited_micro,
+               se.time_waited_micro_fg,
                se.instance_number,
                w.begin_snap_id, w.end_snap_id
         FROM   valid_windows w
@@ -790,7 +793,9 @@ BEGIN
     wait_bounds AS (
         SELECT week_offset, dur_sec, wait_class, event_name, instance_number,
                SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro END) AS beg_us,
-               SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us
+               SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us,
+               SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro_fg END) AS beg_fg,
+               SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro_fg END) AS end_fg
         FROM   wait_pairs
         GROUP BY week_offset, dur_sec, wait_class, event_name, instance_number
     ),
@@ -805,6 +810,29 @@ BEGIN
                END AS metric_value
         FROM   wait_bounds
         GROUP BY week_offset, wait_class
+    ),
+    -- v1.7 impact (owner decision 2026-11-20): the same class rows,
+    -- FOREGROUND sessions only (time_waited_micro_fg, the wait time inside
+    -- DB time), Current minus the prior mean in AAS.  Never scored: the
+    -- class rows above stay all sessions; this feeds only the cards' impact
+    -- and the DB-time breakdown (finding_cards.plsql time_added).  Same
+    -- windows (the same wait_bounds rows), template wait list and Idle
+    -- exclusion; 00_params.sql computes it the same way.
+    wait_fg_rows AS (
+        SELECT week_offset, wait_class,
+               CASE WHEN MAX(dur_sec) > 0
+                    THEN SUM(NVL(end_fg, 0) - NVL(beg_fg, 0)) / MAX(dur_sec) / 1e6
+               END AS fg_value
+        FROM   wait_bounds
+        GROUP BY week_offset, wait_class
+    ),
+    wait_fg AS (
+        SELECT 'Wait class: ' || wait_class AS metric_name,
+               MAX(CASE WHEN week_offset = 0 THEN fg_value END)
+             - AVG(CASE WHEN week_offset > 0 THEN fg_value END) AS fg_d
+        FROM   wait_fg_rows
+        WHERE  fg_value IS NOT NULL
+        GROUP BY wait_class
     ),
     unified AS (
         SELECT * FROM load_rows   WHERE metric_value IS NOT NULL
@@ -879,20 +907,24 @@ BEGIN
                             metric_name) AS heat_pos
         FROM   scored
     )
-    SELECT metric_domain, metric_name,
-           cur_val, prior_mean, prior_sd, n_prior,
-           z_score, pct_delta, change_bucket,
-           heat_pos,
+    SELECT r.metric_domain, r.metric_name,
+           r.cur_val, r.prior_mean, r.prior_sd, r.n_prior,
+           r.z_score, r.pct_delta, r.change_bucket,
+           r.heat_pos,
            -- family / canonical / dir are filled in by the PL/SQL pass below
            CAST(NULL AS VARCHAR2(64)) AS family,
            CAST(NULL AS VARCHAR2(1))  AS canonical,
            CAST(NULL AS VARCHAR2(4))  AS dir,
-           shr,
-           pairs                      AS wv,
-           CAST(NULL AS VARCHAR2(64)) AS grp
+           r.shr,
+           r.pairs                    AS wv,
+           CAST(NULL AS VARCHAR2(64)) AS grp,
+           g.fg_d
     BULK COLLECT INTO v_findings
-    FROM   ranked
-    ORDER  BY heat_pos;
+    FROM   ranked r
+    LEFT JOIN wait_fg g
+           ON r.metric_domain = 'WAIT'
+          AND g.metric_name = r.metric_name
+    ORDER  BY r.heat_pos;
 
 
     --
@@ -925,10 +957,12 @@ BEGIN
         v_total := v_total + 1;
         IF f.metric_domain = 'LOAD' AND f.metric_name = 'DB time' THEN v_dbt := i; END IF;
         IF f.metric_domain = 'LOAD' AND f.metric_name = 'DB CPU'  THEN v_cpu := i; END IF;
-        -- impact (v1.7, sql/lib/finding_cards.plsql impact_group)
+        -- impact (v1.7, sql/lib/finding_cards.plsql impact_group / time_added;
+        -- a wait class counts its foreground time only)
         v_ig := impact_group(f.metric_domain, f.metric_name, f.family);
-        IF v_ig IS NOT NULL AND f.cur_val IS NOT NULL AND f.prior_mean IS NOT NULL THEN
-            v_gimp(v_ig) := (f.cur_val - f.prior_mean) * metric_scale(f.metric_domain, f.metric_name);
+        IF v_ig IS NOT NULL
+           AND time_added(f.metric_domain, f.metric_name, f.cur_val, f.prior_mean, f.fg_d) IS NOT NULL THEN
+            v_gimp(v_ig) := time_added(f.metric_domain, f.metric_name, f.cur_val, f.prior_mean, f.fg_d);
         END IF;
         IF f.change_bucket IN ('large', 'moderate', 'improved', 'noted') THEN
             IF f.canonical = 'N' THEN
@@ -1085,9 +1119,10 @@ BEGIN
 
     --
     -- v1.7: "Where the extra DB time went" (plan 021).  The DB-time rise
-    -- split into DB CPU and the wait classes -- the same numbers as the
-    -- cards' impact (impact_group, sql/lib/finding_cards.plsql), largest
-    -- first.  Solid = the part's card is a finding; hatched = it grew but
+    -- split into DB CPU and the wait classes' FOREGROUND time -- the same
+    -- numbers as the cards' impact (impact_group / time_added,
+    -- sql/lib/finding_cards.plsql), largest first.  Solid = the part's
+    -- card is a finding; hatched = it grew but
     -- stayed inside its normal range.  Printed hidden and moved into 00's
     -- #att-slot by the script below (JavaScript off: it stays hidden; every
     -- number is in the Wait classes table and the DB CPU row).  Only when
@@ -1115,12 +1150,12 @@ BEGIN
         -- the parts, largest rise first (insertion sort, stable)
         FOR i IN 1 .. v_findings.COUNT LOOP
             f := v_findings(i);
-            IF f.cur_val IS NOT NULL AND f.prior_mean IS NOT NULL
-               AND (f.metric_domain = 'WAIT'
-                    OR (f.metric_domain = 'LOAD' AND f.metric_name = 'DB CPU')) THEN
+            IF (f.metric_domain = 'WAIT'
+                OR (f.metric_domain = 'LOAD' AND f.metric_name = 'DB CPU'))
+               AND time_added(f.metric_domain, f.metric_name, f.cur_val, f.prior_mean, f.fg_d) IS NOT NULL THEN
                 v_p.lab := CASE WHEN f.metric_domain = 'LOAD' THEN 'CPU'
                                 ELSE REGEXP_REPLACE(f.metric_name, '^Wait class: ', '') END;
-                v_p.d   := (f.cur_val - f.prior_mean) * metric_scale(f.metric_domain, f.metric_name);
+                v_p.d   := time_added(f.metric_domain, f.metric_name, f.cur_val, f.prior_mean, f.fg_d);
                 v_p.grp := impact_group(f.metric_domain, f.metric_name, f.family);
                 v_p.aid := CASE WHEN v_glead.EXISTS(v_p.grp) THEN card_id(v_p.grp)
                                 ELSE find_id(f.metric_domain, f.metric_name) END;
@@ -1196,11 +1231,15 @@ BEGIN
             IF v_fell IS NOT NULL THEN
                 v_note := v_note || 'Fell: ' || v_fell || ' AAS. ';
             END IF;
-            -- falls offset rises; only an excess left after them is background time
-            IF v_pos - v_neg > v_dd * 1.005 THEN
+            -- falls offset rises.  The parts are foreground time like DB time,
+            -- so they roughly add up to the rise; an excess past 2% of it is
+            -- the gap between two separately kept counters (a shortfall is
+            -- the hatched rest above), never background time
+            IF v_pos - v_neg > v_dd * 1.02 THEN
                 v_note := v_note || 'The parts add up to ' || imp_txt(v_pos - v_neg)
                     || CASE WHEN v_neg > 0 THEN ' net of the falls' END || ', more than the DB-time'
-                    || ' rise: wait-class time also counts background sessions, DB time does not.';
+                    || ' rise: DB time comes from the time model, the parts from the wait interface'
+                    || ' and DB CPU, which Oracle keeps separately, so they need not add up exactly.';
             END IF;
             DBMS_OUTPUT.PUT_LINE('<div id="att-src" hidden><div class="att-h"><b>Where the extra DB time went</b>'
                 || '<span>DB time ' || fmt_num(v_findings(v_dbt).prior_mean * 0.01) || ' &rarr; '

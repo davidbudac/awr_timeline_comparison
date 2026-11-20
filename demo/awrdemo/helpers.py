@@ -991,6 +991,17 @@ def impact_group(domain, name, family):
     return None
 
 
+def time_added(domain, name, cur, mu, fg_d):
+    """finding_cards.plsql time_added: the AAS a time-measure row added above
+    its prior mean -- DB time / DB CPU (cur - mu) x metric_scale; a wait-class
+    row its FOREGROUND delta fg_d (owner decision 2026-11-20)."""
+    if domain == "WAIT":
+        return fg_d
+    if cur is None or mu is None:
+        return None
+    return (cur - mu) * metric_scale(domain, name)
+
+
 def card_tier(group, imp) -> int:
     if group == "DBTIME":
         return 2

@@ -230,12 +230,14 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<dt>Verdict</dt><dd>One sentence from the first two finding cards (the card that added the most DB time, then DB time when it is flagged): the lead metric and its move, &times;n at twice the mean'
         || ' or more, else a percentage. For DB time, where the extra time went: CPU vs wait from DB CPU against DB time. <b>Likely source</b>: a statement that ran with a new plan in the'
         || ' Current window, else a newcomer in the top SQL by physical reads, else a statement first seen this window, else the segment the extra reads land on. Fixed phrases, no free text.'
-        || ' <b>Where the extra DB time went</b>: the DB-time rise split into DB CPU and each wait class (Current minus prior mean, average active sessions), largest first; solid = behind a finding, hatched = grew but stayed inside its normal range. Wait-class time counts background sessions too, so the parts can add up to slightly more than the rise.</dd>');
+        || ' <b>Where the extra DB time went</b>: the DB-time rise split into DB CPU and the foreground wait time of each wait class (<code>time_waited_micro_fg</code>; Current minus prior mean, average active sessions), largest first; solid = behind a finding, hatched = grew but stayed inside its normal range.'
+        || ' Like DB time the parts count foreground sessions only, so they roughly add up to the rise: DB time that no wait class records (such as waiting for a CPU) is the unlabelled rest, and DB time (time model) and the parts (wait interface) are kept apart by Oracle, so they never match to the digit.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Finding cards</dt><dd>One card per metric family of the scoring policy (<code>sql/lib/metric_policy.plsql</code>); families that tell one story share a card:'
         || ' Physical I/O (physical and logical reads, long table scans, User I/O waits), DB time (DB time, the CPU / wait ratio, response time), Network (Network waits, SQL*Net bytes), Commit'
         || ' (Commit waits, commits), Parsing, Writes and redo. A card is led by its loudest large, else moderate, metric of the card&rsquo;s main family.'
-        || ' Cards are ordered by the time they added: the rise of the card&rsquo;s time measure (DB time, DB CPU or its wait class) above its prior mean, in'
-        || ' average active sessions, largest first; cards without a time measure follow, large before moderate. The printed z of a band in the Summary view'
+        || ' Cards are ordered by the time they added: the rise of the card&rsquo;s time measure (DB time, DB CPU or the foreground wait time of its wait class) above its prior mean, in'
+        || ' average active sessions, largest first; cards without a time measure follow, large before moderate. A wait class is scored on all sessions, background included;'
+        || ' only the time it added counts foreground sessions, like DB time. The printed z of a band in the Summary view'
         || ' stops at &gt;+10&sigma;; tables show the exact value. Twins are folded under'
         || ' <b>related metrics</b> and never counted.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>DB time strip</dt><dd><code>DBA_HIST_SYSSTAT</code> DB time per compared window, divided by 100 (centiseconds per second = average active sessions); release markers sit'

@@ -204,7 +204,8 @@ files:
 **Decided 2026-11-19** (the owner answered; executors follow these, the
 notes below keep the original trade-offs):
 
-- 020: impact counts wait time of **all sessions** (plan default).
+- 020: impact counts wait time of **all sessions** (plan default;
+  superseded 2026-11-20: foreground only, below).
 - 023: **option A**, verdict first in every design (plan default).
 - 024: default layout **Full span** (`AXDEF='span'`, plan edited);
   skipped windows drawn greyed with their data (plan default).
@@ -223,6 +224,14 @@ notes below keep the original trade-offs):
   Timeline gutters, 021 data source, 022 rail pills and the dashboard's
   "Moved N", 025 which card stays open, 030 AAS denominator, 024's two
   switches in the dashboard, 037 step 5 timing and the deferred box plot.
+
+**Decided 2026-11-20** (after the dbmint run of the round-2 branch;
+these supersede the 2026-11-19 answers where they overlap):
+
+- 020 / 021: card impact counts **foreground sessions only**
+  (`time_waited_micro_fg`), like DB time; replaces "all sessions" above.
+  Scoring is unchanged: the wait-class rows stay all sessions. Done in
+  fix group G1.
 
 
 Each plan records its default, so an executor never waits on these. Decide
