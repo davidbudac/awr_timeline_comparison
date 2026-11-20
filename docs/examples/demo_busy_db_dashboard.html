@@ -1902,11 +1902,16 @@ function wlab(k,n){
 }
 /* one 13-bar micro strip: every window as a grey bar from zero, Current last,
    wider and in the accent; the prior normal zone (mean +- 2 sigma, sigma
-   floored at 2% of the mean like the band) shaded behind the bars */
-function strip(raw,title){
+   floored at 2% of the mean like the band) shaded behind the bars.
+   Past about 45 windows a bar would be narrower than a pixel (past 91 there
+   is no room at all): the strip draws nothing, unless opt.dense (an element
+   with data-spark-dense, the Summary triage list): then the prior windows
+   are one gapless silhouette (one path, a slot each) and Current a 3-px bar
+   at the right end, so a 168-window report still shows its trend. */
+function strip(raw,title,opt){
   var v=String(raw||"").split(",").map(num), n=v.length;
-  var W=92,H=22,gap=n>20?1:2,cw=(W-gap*n)/(n+0.6);
-  if(!n||cw<=0)return "";
+  var W=92,H=22,gap=n>20?1:2,cw=(W-gap*n)/(n+0.6),dense=!!(opt&&opt.dense)&&n>2&&cw<1;
+  if(!n||(cw<=0&&!dense))return "";
   var pr=v.slice(0,n-1).filter(function(x){return x!=null;}), mu=null, sd=null, lo=null, hi=null;
   if(pr.length){
     mu=pr.reduce(function(a,b){return a+b;},0)/pr.length;
@@ -1919,22 +1924,30 @@ function strip(raw,title){
   function Y(x){return H-1-(H-3)*Math.max(0,x)/max;}
   var s="<svg class=\"mw\" width=\""+W+"\" height=\""+H+"\" viewBox=\"0 0 "+W+" "+H+"\" aria-hidden=\"true\">";
   if(hi!=null)s+="<rect class=\"z2\" x=\"0\" y=\""+Y(hi).toFixed(1)+"\" width=\""+W+"\" height=\""+Math.max(1,Y(lo)-Y(hi)).toFixed(1)+"\" rx=\"1\"/>";
-  var x=0;
-  v.forEach(function(val,k){
-    var cur=k===n-1, w=cur?cw*1.6:cw;
-    if(val!=null){var y=Y(val);s+="<rect class=\"b"+(cur?" cur":"")+"\" x=\""+x.toFixed(1)+"\" y=\""+y.toFixed(1)+"\" width=\""+w.toFixed(1)+"\" height=\""+Math.max(1,H-1-y).toFixed(1)+"\" rx=\"1\"/>";}
-    x+=w+gap;
-  });
+  if(dense){
+    var CW=3,sl=(W-CW-1)/(n-1),d="";
+    for(var k=0;k<n-1;k++){if(v[k]==null)continue;var y=Y(v[k]);
+      d+="M"+(k*sl).toFixed(2)+" "+(H-1)+"V"+y.toFixed(1)+"H"+((k+1)*sl).toFixed(2)+"V"+(H-1)+"Z";}
+    if(d)s+="<path class=\"b\" d=\""+d+"\"/>";
+    if(v[n-1]!=null){var yc=Y(v[n-1]);s+="<rect class=\"b cur\" x=\""+(W-CW)+"\" y=\""+yc.toFixed(1)+"\" width=\""+CW+"\" height=\""+Math.max(1,H-1-yc).toFixed(1)+"\" rx=\"1\"/>";}
+  }else{
+    var x=0;
+    v.forEach(function(val,k){
+      var cur=k===n-1, w=cur?cw*1.6:cw;
+      if(val!=null){var y=Y(val);s+="<rect class=\"b"+(cur?" cur":"")+"\" x=\""+x.toFixed(1)+"\" y=\""+y.toFixed(1)+"\" width=\""+w.toFixed(1)+"\" height=\""+Math.max(1,H-1-y).toFixed(1)+"\" rx=\"1\"/>";}
+      x+=w+gap;
+    });
+  }
   s+="</svg>";
   var tip=[];
   for(var k=Math.max(0,n-4);k<n;k++)tip.push(wlab(k,n)+" "+fmt(v[k]));
-  return {svg:s,title:(title?title+": ":"")+tip.join(", ")+(mu!=null?"; normal "+fmt(lo)+"\u2013"+fmt(hi):"")};
+  return {svg:s,title:(title?title+": ":"")+tip.join(", ")+(mu!=null?"; normal "+fmt(lo)+"\u2013"+fmt(hi):"")+(dense?"; all "+n+" windows":"")};
 }
 window.AWR_microStrip=strip;
 function render(){
   doc.querySelectorAll("[data-spark]").forEach(function(el){
     if(el.__sparked)return;
-    var r=strip(el.getAttribute("data-spark"),el.getAttribute("data-spark-title")||"");
+    var r=strip(el.getAttribute("data-spark"),el.getAttribute("data-spark-title")||"",{dense:el.hasAttribute("data-spark-dense")});
     el.__sparked=true;
     if(!r)return;
     el.innerHTML=r.svg; el.title=r.title;
@@ -4517,10 +4530,10 @@ document.addEventListener("awr:window",function(e){var w=e.detail?e.detail.w:nul
 <script>(function(){var d=document,s=d.getElementById("att-src"),t=d.getElementById("att-slot"),c=window.AWR_WAIT_COLORS||{};if(!s)return;s.querySelectorAll("[data-wc]").forEach(function(e){var k=e.getAttribute("data-wc");if(c[k])e.style.setProperty("--c",c[k]);});if(t){while(s.firstChild)t.appendChild(s.firstChild);t.hidden=false;}s.parentNode.removeChild(s);})();</script>
 <section id="findings" class="vw in-s in-a sumsec"><h2 id="findings-heading"><span class="vw in-s">4 findings</span><span class="vw in-a">Findings</span><span class="meta vw in-s" title="finding cards by severity"><span><i class="dotk large"></i>3 large</span><span><i class="dotk moderate"></i>1 moderate</span></span><span class="meta vw in-a"><span><i class="dotk large"></i>10 large</span><span><i class="dotk moderate"></i>1 moderate</span><span><i class="dotk typical"></i>30 normal</span><span title="flagged twins of a counted row (SYSMETRIC rate of a SYSSTAT counter, CPU half of the CPU/wait ratio)">5 folded</span></span><small class="h2sub"><span class="vw in-s">From 11 flagged metrics; ordered by the DB time each card added</span><span class="vw in-a">Every scored metric against its prior windows; one table per domain</span></small></h2>
 <div id="triage" class="panel tri vw in-s" role="list" aria-label="Findings in card order"><div class="tri-hd" aria-hidden="true"><span>Finding</span><span>Now &middot; normal</span><span>Share of the DB-time rise</span><span>13 windows</span></div>
-<div class="tri-row" role="listitem" data-card="f-io"><span class="tri-f"><i class="dotk large" aria-hidden="true"></i><a class="tri-go" href="#f-io">Physical I/O</a><span class="tri-m">Physical reads <span class="d s-large">5.4&times;</span> normal</span><span class="tri-tags"></span></span><span class="tri-nv"><b>22.24 k/s</b><small>normal 3,003&ndash;5,284/s</small></span><span class="tri-imp"></span><span class="tri-spark" data-spark="3837.399,3767.106,3890.696,3773.923,3866.55,3526.601,3687.419,3767.599,4850.898,5072.253,4809.715,4868.913,22240.52" data-spark-title="Physical reads"></span></div>
-<div class="tri-row" role="listitem" data-card="f-dbtime"><span class="tri-f"><i class="dotk large" aria-hidden="true"></i><a class="tri-go" href="#f-dbtime">DB time</a><span class="tri-m">DB time up <span class="d s-large">79.7%</span>, mostly wait</span><span class="tri-tags"></span></span><span class="tri-nv"><b>20.35 AAS</b><small>normal 8.378&ndash;14.27 AAS</small></span><span class="tri-imp"></span><span class="tri-spark" data-spark="10.11082,9.923581,12.7444,10.02478,10.24647,10.33014,10.12147,10.22807,13.06626,13.26175,12.76245,13.08074,20.35463" data-spark-title="DB time"></span></div>
-<div class="tri-row" role="listitem" data-card="f-net"><span class="tri-f"><i class="dotk large" aria-hidden="true"></i><a class="tri-go" href="#f-net">Network</a><span class="tri-m">Network waits <span class="d s-large">5.2&times;</span> normal</span><span class="tri-tags"></span></span><span class="tri-nv"><b>1.175 AAS</b><small>normal 0.1947&ndash;0.2602 AAS</small></span><span class="tri-imp"></span><span class="tri-spark" data-spark=".2142496,.2106001,.2392929,.2141425,.2194696,.2261299,.2118405,.2083393,.2442078,.2518146,.2406159,.2486671,1.175072" data-spark-title="Network waits"></span></div>
-<div class="tri-row" role="listitem" data-card="f-commit"><span class="tri-f"><i class="dotk moderate" aria-hidden="true"></i><a class="tri-go" href="#f-commit">Commit</a><span class="tri-m">Commit waits up <span class="d s-moderate">22.5%</span></span><span class="tri-tags"></span></span><span class="tri-nv"><b>0.8687 AAS</b><small>normal 0.5696&ndash;0.8484 AAS</small></span><span class="tri-imp"></span><span class="tri-spark" data-spark=".6889074,.6203851,.758739,.6659674,.6797862,.6271019,.6969379,.6273308,.829866,.7550053,.7754948,.7821235,.8686635" data-spark-title="Commit waits"></span></div>
+<div class="tri-row" role="listitem" data-card="f-io"><span class="tri-f"><i class="dotk large" aria-hidden="true"></i><a class="tri-go" href="#f-io">Physical I/O</a><span class="tri-m">Physical reads <span class="d s-large">5.4&times;</span> normal</span><span class="tri-tags"></span></span><span class="tri-nv"><b>22.24 k/s</b><small>normal 3,003&ndash;5,284/s</small></span><span class="tri-imp"></span><span class="tri-spark" data-spark-dense data-spark="3837.399,3767.106,3890.696,3773.923,3866.55,3526.601,3687.419,3767.599,4850.898,5072.253,4809.715,4868.913,22240.52" data-spark-title="Physical reads"></span></div>
+<div class="tri-row" role="listitem" data-card="f-dbtime"><span class="tri-f"><i class="dotk large" aria-hidden="true"></i><a class="tri-go" href="#f-dbtime">DB time</a><span class="tri-m">DB time up <span class="d s-large">79.7%</span>, mostly wait</span><span class="tri-tags"></span></span><span class="tri-nv"><b>20.35 AAS</b><small>normal 8.378&ndash;14.27 AAS</small></span><span class="tri-imp"></span><span class="tri-spark" data-spark-dense data-spark="10.11082,9.923581,12.7444,10.02478,10.24647,10.33014,10.12147,10.22807,13.06626,13.26175,12.76245,13.08074,20.35463" data-spark-title="DB time"></span></div>
+<div class="tri-row" role="listitem" data-card="f-net"><span class="tri-f"><i class="dotk large" aria-hidden="true"></i><a class="tri-go" href="#f-net">Network</a><span class="tri-m">Network waits <span class="d s-large">5.2&times;</span> normal</span><span class="tri-tags"></span></span><span class="tri-nv"><b>1.175 AAS</b><small>normal 0.1947&ndash;0.2602 AAS</small></span><span class="tri-imp"></span><span class="tri-spark" data-spark-dense data-spark=".2142496,.2106001,.2392929,.2141425,.2194696,.2261299,.2118405,.2083393,.2442078,.2518146,.2406159,.2486671,1.175072" data-spark-title="Network waits"></span></div>
+<div class="tri-row" role="listitem" data-card="f-commit"><span class="tri-f"><i class="dotk moderate" aria-hidden="true"></i><a class="tri-go" href="#f-commit">Commit</a><span class="tri-m">Commit waits up <span class="d s-moderate">22.5%</span></span><span class="tri-tags"></span></span><span class="tri-nv"><b>0.8687 AAS</b><small>normal 0.5696&ndash;0.8484 AAS</small></span><span class="tri-imp"></span><span class="tri-spark" data-spark-dense data-spark=".6889074,.6203851,.758739,.6659674,.6797862,.6271019,.6969379,.6273308,.829866,.7550053,.7754948,.7821235,.8686635" data-spark-title="Commit waits"></span></div>
 </div>
 <div class="cards vw in-s">
 <article class="panel fc f-large lead" id="f-io" aria-labelledby="f-io-h" data-impact="6.313" data-share="70"><header class="fc-h"><div class="fc-k"><span class="sv" title="Physical I/O"><i class="dotk large" aria-hidden="true"></i>Large</span><span class="fc-imp" title="Time added: Current minus the prior mean of this card&#39;s time measure (DB time, DB CPU or the foreground time of its wait class), in average active sessions">+6.313&nbsp;AAS &middot; 70% of the DB-time rise</span><span class="fc-sum">22.24 k/s &middot; normal 3,003&ndash;5,284/s</span><span class="fc-tags"></span></div><div class="fc-band" title="z +31.7&sigma; against the prior normal"><span class="bd s-large lg po" style="--x:1.000" role="img" aria-label="large finding, z &gt;+10&sigma;"><i></i><b class="ov">&gt;+10&sigma;</b></span><span class="bd-ax" aria-hidden="true"><em style="--x:.167">&minus;2</em><em style="--x:.333">0</em><em style="--x:.500">+2</em><em style="--x:.583">+3</em><em class="end" style="--x:1">+8&sigma;</em></span></div></header>

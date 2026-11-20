@@ -172,7 +172,10 @@ release bumps `awr_version`).
 - **Findings at a glance.** The Summary view lists every finding in one
   triage list (value, normal range, share of the DB-time rise, per-window
   strip) above the cards; every card but the most important one starts
-  folded (a click, a link or the list opens it); card charts print prior
+  folded (a click, a link or the list opens it; the list's strip shows
+  every window as one silhouette past about 45 windows, where the bars
+  would be under a pixel wide and the 168-window test report showed none);
+  card charts print prior
   values on hover only and name only the release right before the
   Current window. The dashboard design keeps its own findings table (no
   list there, every card open inside its row).

@@ -9,6 +9,10 @@
 -- normal zone (mean +- 2 sigma of the prior values in the CSV, sigma
 -- floored at 2% of the mean like the band glyph) shaded behind the bars.
 -- The cell title lists the last four windows and the normal range.
+-- Past about 45 windows a bar is under a pixel wide (past 91 there is no
+-- room): the strip draws nothing there, except in an element carrying
+-- data-spark-dense (07's Summary triage list), which draws the prior
+-- windows as one gapless silhouette and Current as a 3-px bar.
 -- Emitters and their positional CSV are unchanged (LISTAGG ORDER BY
 -- week_offset DESC, one slot per window, '' = no value, Current last);
 -- the mean and sd come from the CSV's own prior slots, which hold exactly
@@ -18,7 +22,7 @@
 --
 -- Replaces sql/lib/js_sparkline.plsql in the single-DB driver only; the
 -- fleet report keeps js_sparkline (its row / headline sparklines).
--- Exposes window.AWR_microStrip(csv, title) -> {svg, title} and
+-- Exposes window.AWR_microStrip(csv, title[, {dense}]) -> {svg, title} and
 -- window.__awrRenderSparks() (rescan, same name as js_sparkline's).
 --
 -- No literal tilde below (SET DEFINE tilde).  GENERATED: the body below
@@ -49,11 +53,16 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* one 13-bar micro strip: every window as a grey bar from zero, Current last,');
     DBMS_OUTPUT.PUT_LINE('   wider and in the accent; the prior normal zone (mean +- 2 sigma, sigma');
-    DBMS_OUTPUT.PUT_LINE('   floored at 2% of the mean like the band) shaded behind the bars */');
-    DBMS_OUTPUT.PUT_LINE('function strip(raw,title){');
+    DBMS_OUTPUT.PUT_LINE('   floored at 2% of the mean like the band) shaded behind the bars.');
+    DBMS_OUTPUT.PUT_LINE('   Past about 45 windows a bar would be narrower than a pixel (past 91 there');
+    DBMS_OUTPUT.PUT_LINE('   is no room at all): the strip draws nothing, unless opt.dense (an element');
+    DBMS_OUTPUT.PUT_LINE('   with data-spark-dense, the Summary triage list): then the prior windows');
+    DBMS_OUTPUT.PUT_LINE('   are one gapless silhouette (one path, a slot each) and Current a 3-px bar');
+    DBMS_OUTPUT.PUT_LINE('   at the right end, so a 168-window report still shows its trend. */');
+    DBMS_OUTPUT.PUT_LINE('function strip(raw,title,opt){');
     DBMS_OUTPUT.PUT_LINE('  var v=String(raw||"").split(",").map(num), n=v.length;');
-    DBMS_OUTPUT.PUT_LINE('  var W=92,H=22,gap=n>20?1:2,cw=(W-gap*n)/(n+0.6);');
-    DBMS_OUTPUT.PUT_LINE('  if(!n||cw<=0)return "";');
+    DBMS_OUTPUT.PUT_LINE('  var W=92,H=22,gap=n>20?1:2,cw=(W-gap*n)/(n+0.6),dense=!!(opt&&opt.dense)&&n>2&&cw<1;');
+    DBMS_OUTPUT.PUT_LINE('  if(!n||(cw<=0&&!dense))return "";');
     DBMS_OUTPUT.PUT_LINE('  var pr=v.slice(0,n-1).filter(function(x){return x!=null;}), mu=null, sd=null, lo=null, hi=null;');
     DBMS_OUTPUT.PUT_LINE('  if(pr.length){');
     DBMS_OUTPUT.PUT_LINE('    mu=pr.reduce(function(a,b){return a+b;},0)/pr.length;');
@@ -66,22 +75,30 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  function Y(x){return H-1-(H-3)*Math.max(0,x)/max;}');
     DBMS_OUTPUT.PUT_LINE('  var s="<svg class=\"mw\" width=\""+W+"\" height=\""+H+"\" viewBox=\"0 0 "+W+" "+H+"\" aria-hidden=\"true\">";');
     DBMS_OUTPUT.PUT_LINE('  if(hi!=null)s+="<rect class=\"z2\" x=\"0\" y=\""+Y(hi).toFixed(1)+"\" width=\""+W+"\" height=\""+Math.max(1,Y(lo)-Y(hi)).toFixed(1)+"\" rx=\"1\"/>";');
-    DBMS_OUTPUT.PUT_LINE('  var x=0;');
-    DBMS_OUTPUT.PUT_LINE('  v.forEach(function(val,k){');
-    DBMS_OUTPUT.PUT_LINE('    var cur=k===n-1, w=cur?cw*1.6:cw;');
-    DBMS_OUTPUT.PUT_LINE('    if(val!=null){var y=Y(val);s+="<rect class=\"b"+(cur?" cur":"")+"\" x=\""+x.toFixed(1)+"\" y=\""+y.toFixed(1)+"\" width=\""+w.toFixed(1)+"\" height=\""+Math.max(1,H-1-y).toFixed(1)+"\" rx=\"1\"/>";}');
-    DBMS_OUTPUT.PUT_LINE('    x+=w+gap;');
-    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  if(dense){');
+    DBMS_OUTPUT.PUT_LINE('    var CW=3,sl=(W-CW-1)/(n-1),d="";');
+    DBMS_OUTPUT.PUT_LINE('    for(var k=0;k<n-1;k++){if(v[k]==null)continue;var y=Y(v[k]);');
+    DBMS_OUTPUT.PUT_LINE('      d+="M"+(k*sl).toFixed(2)+" "+(H-1)+"V"+y.toFixed(1)+"H"+((k+1)*sl).toFixed(2)+"V"+(H-1)+"Z";}');
+    DBMS_OUTPUT.PUT_LINE('    if(d)s+="<path class=\"b\" d=\""+d+"\"/>";');
+    DBMS_OUTPUT.PUT_LINE('    if(v[n-1]!=null){var yc=Y(v[n-1]);s+="<rect class=\"b cur\" x=\""+(W-CW)+"\" y=\""+yc.toFixed(1)+"\" width=\""+CW+"\" height=\""+Math.max(1,H-1-yc).toFixed(1)+"\" rx=\"1\"/>";}');
+    DBMS_OUTPUT.PUT_LINE('  }else{');
+    DBMS_OUTPUT.PUT_LINE('    var x=0;');
+    DBMS_OUTPUT.PUT_LINE('    v.forEach(function(val,k){');
+    DBMS_OUTPUT.PUT_LINE('      var cur=k===n-1, w=cur?cw*1.6:cw;');
+    DBMS_OUTPUT.PUT_LINE('      if(val!=null){var y=Y(val);s+="<rect class=\"b"+(cur?" cur":"")+"\" x=\""+x.toFixed(1)+"\" y=\""+y.toFixed(1)+"\" width=\""+w.toFixed(1)+"\" height=\""+Math.max(1,H-1-y).toFixed(1)+"\" rx=\"1\"/>";}');
+    DBMS_OUTPUT.PUT_LINE('      x+=w+gap;');
+    DBMS_OUTPUT.PUT_LINE('    });');
+    DBMS_OUTPUT.PUT_LINE('  }');
     DBMS_OUTPUT.PUT_LINE('  s+="</svg>";');
     DBMS_OUTPUT.PUT_LINE('  var tip=[];');
     DBMS_OUTPUT.PUT_LINE('  for(var k=Math.max(0,n-4);k<n;k++)tip.push(wlab(k,n)+" "+fmt(v[k]));');
-    DBMS_OUTPUT.PUT_LINE('  return {svg:s,title:(title?title+": ":"")+tip.join(", ")+(mu!=null?"; normal "+fmt(lo)+"\u2013"+fmt(hi):"")};');
+    DBMS_OUTPUT.PUT_LINE('  return {svg:s,title:(title?title+": ":"")+tip.join(", ")+(mu!=null?"; normal "+fmt(lo)+"\u2013"+fmt(hi):"")+(dense?"; all "+n+" windows":"")};');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('window.AWR_microStrip=strip;');
     DBMS_OUTPUT.PUT_LINE('function render(){');
     DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("[data-spark]").forEach(function(el){');
     DBMS_OUTPUT.PUT_LINE('    if(el.__sparked)return;');
-    DBMS_OUTPUT.PUT_LINE('    var r=strip(el.getAttribute("data-spark"),el.getAttribute("data-spark-title")||"");');
+    DBMS_OUTPUT.PUT_LINE('    var r=strip(el.getAttribute("data-spark"),el.getAttribute("data-spark-title")||"",{dense:el.hasAttribute("data-spark-dense")});');
     DBMS_OUTPUT.PUT_LINE('    el.__sparked=true;');
     DBMS_OUTPUT.PUT_LINE('    if(!r)return;');
     DBMS_OUTPUT.PUT_LINE('    el.innerHTML=r.svg; el.title=r.title;');

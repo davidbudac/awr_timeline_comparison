@@ -233,4 +233,37 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
   });
 }
 
+/* ---- G4 (plan 025 follow-up): the micro strip's dense mode (js_microstrip) ---- */
+{
+  const strip = load('js_microstrip').AWR_microStrip;
+  const csv = n => Array.from({ length: n }, (_, i) => (i === n - 1 ? 30 : 10 + (i % 24))).join(',');
+  const count = (s, re) => (s.match(re) || []).length;
+  test('13 windows: one bar each, dense or not', () => {
+    const a = strip(csv(13), 'x'), b = strip(csv(13), 'x', { dense: true });
+    assert.strictEqual(a.svg, b.svg);
+    assert.strictEqual(count(a.svg, /<rect class="b/g), 13);
+  });
+  test('past 91 windows: nothing, unless dense', () => {
+    assert.strictEqual(strip(csv(168), 'x'), '');
+    const r = strip(csv(168), 'x', { dense: true });
+    assert.strictEqual(count(r.svg, /<path class="b"/g), 1);
+    assert.strictEqual(count(r.svg, /M[0-9.]+ 21V/g), 167);
+    assert.strictEqual(count(r.svg, /<rect class="b cur" x="89"/g), 1);
+    assert.ok(/; all 168 windows$/.test(r.title), r.title);
+    // the silhouette ends left of the Current bar
+    const xs = r.svg.match(/H([0-9.]+)V21Z/g).map(t => +t.slice(1, -4));
+    assert.ok(Math.max(...xs) <= 88.0001, String(Math.max(...xs)));
+  });
+  test('dense: an empty window leaves a gap, an empty Current no bar', () => {
+    const v = csv(100).split(','); v[5] = ''; v[99] = '';
+    const r = strip(v.join(','), '', { dense: true });
+    assert.strictEqual(count(r.svg, /M[0-9.]+ 21V/g), 98);
+    assert.strictEqual(count(r.svg, /class="b cur"/g), 0);
+  });
+  test('60 windows: sub-pixel bars become dense only on request', () => {
+    assert.strictEqual(count(strip(csv(60), '').svg, /<rect class="b/g), 60);
+    assert.strictEqual(count(strip(csv(60), '', { dense: true }).svg, /<path class="b"/g), 1);
+  });
+}
+
 console.log(passed + ' tests passed');

@@ -346,7 +346,7 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
 |---|---|---|
 | Verdict hero `section#verdict.vw.in-s.hero` | 00 | one rule-based h1 sentence (no free prose), `p#because-slot` "Likely source:" (17 fills), `ul#pills` (17 inserts before `li.pl-normal`), `ul#narrative-slot.hnotes` (17), `p.snapnote` (target_end snapped), `#att-slot` (07 fills: DB-time breakdown = DB CPU + each class's foreground wait time, the cards' impact; `.att-h` / `.att-bar` / `.att-lg`, parts coloured from `AWR_WAIT_COLORS` via `--c`; a hatched rest when the parts fall short, a note when they pass the rise by more than 2 %) |
 | Hero strip `section#overview` | 08 | DB time (AAS) per window on the window component, `#hero-dbt`; replaced the six v1.5 headline tiles |
-| Triage list `#triage` | 07 | one `div.tri-row[data-card]` per card, in card order; impact cell filled by 07's inline script from the card's `data-impact` / `data-share` (plan 020); empty `span.tri-tags` (plan 027) |
+| Triage list `#triage` | 07 | one `div.tri-row[data-card]` per card, in card order; impact cell filled by 07's inline script from the card's `data-impact` / `data-share` (plan 020); empty `span.tri-tags` (plan 027); `span.tri-spark[data-spark-dense]` (a trend at any window count, see Micro strips) |
 | Finding cards `#findings div.cards` | 07 | one `article.fc` per card group (below); header band glyph, big value, window bars, ≤4 evidence rows, an optional hint `div.fc-hint[data-hint]` (plan 033, below), related-metrics fold, footer `a.jump[data-tl]` "Timeline →" |
 | `section#s-changes[hidden]` | 07 (`#changes-slot`) | 18's plan cards then 12's config card move in and unhide it |
 | `section#s-normal` | 07 | "Checked and normal" `.ngrid` (≤18 `.nr`), "Moved, too small to matter", "Improved"; body folded in `details.calm-fold` (summary line: the three counts; closed when there is a finding card); `reveal()` opens it for `#s-normal` (plan 032) |
@@ -1020,7 +1020,12 @@ Renders every `[data-spark]` cell (attribute contract unchanged, no emitter
 changed) as the mock's 13-bar strip `svg.mw`: bars from zero, Current last
 (1.6× wide, accent), normal zone mean ± 2σ (σ floored at 2% of |mean|) from
 the CSV's own prior slots, title = last four windows + range (labels from
-`AWR_WIN`). `window.__awrRenderSparks` kept. It replaced `js_sparkline.plsql`
+`AWR_WIN`). A bar under a pixel wide (past about 45 windows; past 91 the
+strip has no room at all) draws nothing, except in an element carrying
+`data-spark-dense` (07's triage list `.tri-spark`, G4 follow-up): the prior
+windows as one gapless silhouette (`path.b`) and Current a 3-px bar, title
+"...; all N windows" (`AWR_microStrip(csv, title, {dense})`; the dashboard's
+Trend cell keeps its own mini bars fallback). `window.__awrRenderSparks` kept. It replaced `js_sparkline.plsql`
 in the single-DB prologue (and the demo); **js_sparkline is fleet-only now**
 (`00_fleet_chrome.sql`) — don't delete it.
 

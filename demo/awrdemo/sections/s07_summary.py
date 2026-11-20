@@ -473,7 +473,7 @@ def _tri_row(w, g, r, dbt, cpu) -> str:
             '<span class="tri-nv"><b>' + h.fv(h._mul(r.cur, s), u) + '</b><small>normal '
             + h.fv_range(h._mul(r.mu, s), h._mul(r.sd, s), u) + '</small></span>'
             '<span class="tri-imp"></span>'
-            '<span class="tri-spark" data-spark="' + h.wg_csv(w, r.vals, s)
+            '<span class="tri-spark" data-spark-dense data-spark="' + h.wg_csv(w, r.vals, s)
             + '" data-spark-title="' + lab + '"></span></div>')
 
 

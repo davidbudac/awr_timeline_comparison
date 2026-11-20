@@ -606,8 +606,9 @@ DECLARE
     -- (a link to the card), the headline, Current value and normal range,
     -- an empty impact cell that the inline script after the cards fills
     -- from the card's data-impact / data-share (plan 020), the lead
-    -- metric's windows as a micro strip (js_microstrip), and the empty
-    -- span.tri-tags that plan 027 fills.
+    -- metric's windows as a micro strip (js_microstrip; data-spark-dense:
+    -- past about 45 windows one gapless silhouette instead of nothing), and
+    -- the empty span.tri-tags that plan 027 fills.
     PROCEDURE emit_tri_row(p_g VARCHAR2) IS
         r    finding_rec  := v_findings(v_glead(p_g));
         v_s  NUMBER       := metric_scale(r.metric_domain, r.metric_name);
@@ -622,7 +623,7 @@ DECLARE
             || '<span class="tri-nv"><b>' || fv(r.cur_val * v_s, v_u) || '</b><small>normal '
             || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u) || '</small></span>'
             || '<span class="tri-imp"></span>'
-            || '<span class="tri-spark" data-spark="' || wg_csv(r.wv, v_s)
+            || '<span class="tri-spark" data-spark-dense data-spark="' || wg_csv(r.wv, v_s)
             || '" data-spark-title="' || f_label(r) || '"></span></div>');
     END emit_tri_row;
 
