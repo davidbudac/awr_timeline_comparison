@@ -358,9 +358,13 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         const t = document.querySelector('.tabs:not(.dtabs) [data-t]:nth-child(2)');
         const g = t.closest('.tabs').getAttribute('data-tabs');
         const p = document.querySelector(`.tabpanel[data-tabs="${g}"][data-t="${t.getAttribute('data-t')}"]`);
-        return p && getComputedStyle(p).display !== 'none' ? 'ok' : 'FAIL';
+        if (!p || getComputedStyle(p).display === 'none') return 'FAIL';
+        // plan 029 review: a non-default Top SQL tab is kept in the hash
+        // (a shared link reopens on it, not on the first tab)
+        if (g === 'topsql' && !new RegExp('[!&]tab=' + t.getAttribute('data-t') + '(&|$)').test(location.hash)) return 'FAIL (hash ' + location.hash + ')';
+        return 'ok';
       });
-      if (toggles.tabs !== 'ok') fail('tabs');
+      if (toggles.tabs !== 'ok') fail('tabs: ' + toggles.tabs);
     } else toggles.tabs = 'none';
     const th = await page.$('table:not([data-nosort]) thead th.num:not(.c-band)');
     if (th) { await th.click(); await page.waitForTimeout(200); toggles.sort = 'clicked'; }
@@ -966,7 +970,9 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         [...document.querySelectorAll('#sqlmon-pool > tbody > tr[data-sk]')].every(r => (r.nextElementSibling || {}).className === 'sqlmon-detail');
       const t0 = document.querySelector('.tabs[data-tabs="topsql"] [data-t]:not([hidden])');
       const tp = t0 && document.querySelector('.tabpanel.on[data-tabs="topsql"]');
-      out.topsqlTab = !!(t0 && tp && t0.classList.contains('on') && t0.getAttribute('data-t') === tp.getAttribute('data-t'));
+      // (a report without any Top SQL row has no panel at all: nothing to agree on)
+      out.topsqlTab = !document.querySelector('.tabpanel[data-tabs="topsql"]') ||
+        !!(t0 && tp && t0.classList.contains('on') && t0.getAttribute('data-t') === tp.getAttribute('data-t'));
       // the evidence library: every row has its one-line status, one first /
       // one last edge, a closed row opens and shuts on a click
       const libs = [...document.querySelectorAll('main > section.lib')];

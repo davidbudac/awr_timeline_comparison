@@ -1187,8 +1187,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('/* ---- P3: shareable view state in the hash (#anchor!v=f&tab=CPU&w=3) ---- */');
     DBMS_OUTPUT.PUT_LINE('function stateStr(){');
     DBMS_OUTPUT.PUT_LINE('  var parts=[];');
-    DBMS_OUTPUT.PUT_LINE('  var tab=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t].on");');
-    DBMS_OUTPUT.PUT_LINE('  if(tab&&tab.getAttribute("data-t")!=="ELAPSED") parts.push("tab="+tab.getAttribute("data-t"));');
+    -- the default Top SQL tab is the bar's first one (Biggest change, or
+    -- Elapsed time when 06 dropped the empty change tab): any other tab
+    -- goes into the hash, so a shared link reopens on it
+    DBMS_OUTPUT.PUT_LINE('  var tab=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t].on"), tab0=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t]");');
+    DBMS_OUTPUT.PUT_LINE('  if(tab&&tab!==tab0) parts.push("tab="+tab.getAttribute("data-t"));');
     DBMS_OUTPUT.PUT_LINE('  if(curW!==null&&curW!==undefined) parts.push("w="+curW);');
     DBMS_OUTPUT.PUT_LINE('  return parts.join("&");');
     DBMS_OUTPUT.PUT_LINE('}');

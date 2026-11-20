@@ -174,6 +174,8 @@ release bumps `awr_version`).
   then moderate findings first (JS; the selection of statements is
   unchanged). Top SQL opens on a new *Biggest change* tab: Current-window
   total elapsed minus the prior-window mean, from the same SQLSTAT read.
+  A shared link keeps the chosen tab (Elapsed time included); the About
+  notes state both orders.
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

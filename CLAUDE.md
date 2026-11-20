@@ -964,7 +964,9 @@ JS and `_style.sql`; all degrade to "show everything" with JS off:
   pin.
 - **`.tabs[data-tabs]` / `.tabpanel[data-tabs][data-t]`** — Top SQL's
   ranking dimensions (Biggest change first; the first emitted panel is
-  `on`); panels holding ECharts resize on activation.
+  `on`; the hash's `tab=` names any tab but the bar's first, so never
+  compare against a literal default); panels holding ECharts resize on
+  activation.
 - **`.copy-btn[data-copy]`** — copies the selected element's text; inline
   by default, absolutely positioned only inside `pre`/`.codewrap`. `.tbl-tools`
   CSV/MD toolbars auto-inject above any table with ≥ 4 rows.

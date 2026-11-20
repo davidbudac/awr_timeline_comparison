@@ -274,12 +274,16 @@ BEGIN
         || ' (ms = time waited &divide; total waits); the chart stacks wait-class time per window. When five or more flagged events moved together within a narrow band, the table notes one <b>table-wide'
         || ' shift</b> and demotes large rows to moderate.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Top SQL</dt><dd>Top ~top_n statements per ranking and window from <code>DBA_HIST_SQLSTAT</code> <code>*_DELTA</code> columns; ranked, not scored. The bump chart draws one line per statement'
-        || ' across the windows; <b>Break down by</b> re-aggregates by parsing schema, module or action.</dd>');
+        || ' across the windows; <b>Break down by</b> re-aggregates by parsing schema, module or action.'
+        || ' <b>Biggest change</b>, the first tab, ranks statements by Current-window total elapsed minus the mean over the prior valid windows'
+        || ' (a valid window without an AWR row for the statement counts as 0; regressions only; the tab is left out when nothing got slower);'
+        || ' the &Delta; next to the Current value compares the two, <i>new</i> when the mean is 0.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Top SQL ASH</dt><dd>For each statement in the Top SQL pool: ASH samples per bucket split by wait event (top 7 per statement, the rest as <b>Other</b>; <b>CPU</b> = ON CPU). Statements with fewer'
         || ' than 5 samples are placeholders.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>SQL Monitor</dt><dd>Executions persisted by SQL Monitor (<code>DBA_HIST_REPORTS</code>, <code>component_name=&#39;sqlmonitor&#39;</code>), summaries only. Only completed, expensive-enough or'
         || ' parallel executions are persisted, so a statement&rsquo;s absence does not mean it ran fast and row counts are not execution rates. An execution still running at the report end has no row yet. Rows'
-        || ' are attributed to a window by execution <i>start</i> time. The table is scored on max elapsed time (rule above); the scatter plots every captured execution.</dd>');
+        || ' are attributed to a window by execution <i>start</i> time. The table is scored on max elapsed time (rule above); the scatter plots every captured execution.'
+        || ' The table lists large, then moderate rows first, each group by Current max elapsed (JavaScript off: by Current max elapsed only).</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Segment and file I/O</dt><dd>Segments: <code>DBA_HIST_SEG_STAT</code> <code>*_DELTA</code> joined to <code>DBA_HIST_SEG_STAT_OBJ</code>; reads and writes in blocks, requests in I/O calls. Files:'
         || ' <code>DBA_HIST_FILESTATXS</code> / <code>DBA_HIST_TEMPSTATXS</code> deltas, blocks scaled to MB by block size; the file-type view is <code>DBA_HIST_IOSTAT_FILETYPE</code> (all database I/O, so its'
         || ' totals differ). Ranked, not scored; the type rollups cover <b>all</b> segments and files.</dd>');
