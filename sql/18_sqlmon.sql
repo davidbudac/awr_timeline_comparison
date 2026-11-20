@@ -149,6 +149,7 @@ DECLARE
     @@sql/lib/off_label.plsql
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
+    @@sql/lib/finding_hints.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="sqlmon" class="vw in-s in-a lib" style="--os:2"><h2>SQL Monitor'
         || '<small class="h2sub">Captured executions per statement; a sample, not every execution</small></h2>');
@@ -920,8 +921,13 @@ BEGIN
                 || wg_bars(v_pairs, 1, v_e_mu, v_e_sd, NULL, p_fmt => 'dur'));
             DBMS_OUTPUT.PUT_LINE('<div class="r p" data-name="Plan hash" role="row">' || v_cells || '</div>'
                 || wg_dates(TRUE) || '</div></div>');
-            DBMS_OUTPUT.PUT_LINE('<dl class="ev">' || v_ev || '</dl></div>'
-                || '<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
+            DBMS_OUTPUT.PUT_LINE('<dl class="ev">' || v_ev || '</dl></div>');
+            -- plan 033: what a plan change usually means, and both plans
+            DBMS_OUTPUT.PUT_LINE(hint_block('PLAN', v_cid,
+                CASE WHEN v_pc(c).prior_ph IS NOT NULL AND v_pc(c).cur_ph IS NOT NULL
+                     THEN hint_fill(hint_sql('PLAN'), ~dbid, NULL, NULL, 0, v_id,
+                                    v_pc(c).prior_ph, v_pc(c).cur_ph) END));
+            DBMS_OUTPUT.PUT_LINE('<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
                 || anchor_id('sm', v_id) || '">Timeline &rarr;</a>'
                 || '<span class="evl"><a href="#topsql">Top SQL</a><a href="#sqlmon">SQL Monitor</a></span>'
                 || '</footer></article>');

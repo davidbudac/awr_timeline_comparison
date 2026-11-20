@@ -261,7 +261,58 @@ def _g_shr(imp, g):
     return None
 
 
-def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g):
+def _f_up(findings, dom, name) -> bool:
+    """07_summary.sql f_up (plan 033): a scored row moved up AND is a
+    finding (large / moderate)."""
+    for f in findings:
+        if f.domain == dom and f.name == name:
+            return (f.bucket in ("large", "moderate") and f.cur is not None and f.mu is not None
+                    and f.cur > f.mu)
+    return False
+
+
+def _ev_up(evs, event) -> bool:
+    """07_summary.sql ev_up (plan 033): one of the card evidence events
+    (the top 2 of a class) moved up and is a finding by the wait policy."""
+    for e in evs:
+        if e["event"] == event:
+            b = h.policy_bucket("WAIT", e["event"], e["wclass"], e["cur"], e["mu"], e["sd"], e["n"], e["shr"])
+            if b in ("large", "moderate") and e["cur"] > (e["mu"] if e["mu"] is not None else 0):
+                return True
+    return False
+
+
+def _pick_hint(g, findings, evs, dbt, cpu):
+    """07_summary.sql pick_hint (plan 033): which rule of
+    sql/lib/finding_hints.plsql a card gets (None = none)."""
+    if g == "IO":
+        if (_f_up(findings, "LOAD", "table scans (long tables)") or _ev_up(evs, "db file scattered read")
+                or _ev_up(evs, "direct path read")):
+            return "IO_SCANS"
+        if _ev_up(evs, "db file sequential read"):
+            return "IO_SINGLE"
+    elif g == "COMMIT":
+        if _ev_up(evs, "log file sync") and not _f_up(findings, "LOAD", "user commits"):
+            return "COMMIT_LAT"
+    elif g == "NET":
+        if (_ev_up(evs, "SQL*Net more data to client")
+                or _f_up(findings, "LOAD", "bytes sent via SQL*Net to client")):
+            return "NET_PAYLOAD"
+    elif g == "PARSE":
+        if _f_up(findings, "LOAD", "parse count (hard)"):
+            return "HARD_PARSE"
+    elif g == "DBTIME":
+        if dbt is not None and cpu is not None:
+            if h.time_split(dbt.cur, dbt.mu, cpu.cur, cpu.mu) in ("c", "m"):
+                return "DBTIME_CPU"
+    elif g == "WAIT:Application":
+        if _ev_up(evs, "enq: TX - row lock contention"):
+            return "ROW_LOCK"
+    return None
+
+
+def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g,
+          findings=(), cw=None):
     r = lead[g]
     # impact chip (v1.7): the card's share of the DB-time rise, left out
     # past 100% (background wait time rose more than DB time)
@@ -356,6 +407,12 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g):
     out.append('<div class="wg bare hov qf"' + h.wg_attr(w) + '>' + h.wg_flags(True)
                + h.wg_bars(w, r.vals, s, r.mu, r.sd, sev) + h.wg_dates(w, True) + '</div></div>')
     out.append('<dl class="ev">' + ev + '</dl></div>')
+    # plan 033: what this usually means, and a read-only next query
+    rule = _pick_hint(g, findings, evs, dbt, cpu)
+    if rule is not None:
+        sql = (h.hint_fill(h.HINT_SQL.get(rule), cw[0], cw[1], cw[2], w.inst_num)
+               if cw is not None and cw[1] is not None else None)
+        out.append(h.hint_block(rule, cid, sql))
     if nrel + ntw > 0:
         out.append('<details class="rel"><summary>'
                    + (str(nrel) + ' related metric' + ('' if nrel == 1 else 's') if nrel > 0 else '')
@@ -567,9 +624,13 @@ def emit(w) -> str:
         for g in order:
             out.append(_tri_row(w, g, lead[g], dbt, cpu))
         out.append('</div>')
+        # plan 033: the Current window's DBID and snapshot range, for the
+        # cards' read-only "Next step" queries (None when it is not valid)
+        cwin = next((x for x in w.valid_windows if x.week_offset == 0), None)
+        cw = (cwin.dbid, cwin.begin_snap_id, cwin.end_snap_id) if cwin is not None else None
         out.append('<div class="cards vw in-s">')
         for k, g in enumerate(order, 1):
-            _card(w, out, g, k, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g)
+            _card(w, out, g, k, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g, findings, cw)
         out.append('</div>')
         # v1.7: each card's share of the DB-time rise rides on data-shr (CSS ::after)
         js = ",".join('["' + h.card_id(g) + '","' + h.card_label(g).replace('"', '').replace('<', '') + '","'

@@ -126,6 +126,9 @@ DECLARE
     v_dbt        PLS_INTEGER;
     v_cpu        PLS_INTEGER;
     v_meta       VARCHAR2(4000);
+    v_cw_dbid    NUMBER;   -- plan 033: the Current window's DBID and snapshot range,
+    v_cw_b       NUMBER;   --   for the cards' read-only "Next step" queries
+    v_cw_e       NUMBER;
     v_open_g     VARCHAR2(64);   -- plan 025: the one card that starts open (Summary)
     v_parts      part_t;
     v_ncl        PLS_INTEGER := 0;   -- large finding cards (v1.7: a finding is a card)
@@ -140,6 +143,7 @@ DECLARE
     @@sql/lib/off_label.plsql
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
+    @@sql/lib/finding_hints.plsql
 
     -- Entity anchors (v1.6.0): the id of THIS finding's row is
     -- finding_anchor(domain, name) = fr-<l|m|w>-<name> (sql/lib/anchor_id
@@ -367,6 +371,72 @@ DECLARE
         END IF;
     END emit_domain_table;
 
+    -- plan 033: a scored row moved up AND is a finding (large / moderate)
+    FUNCTION f_up(p_dom VARCHAR2, p_name VARCHAR2) RETURN BOOLEAN IS
+    BEGIN
+        FOR i IN 1 .. v_findings.COUNT LOOP
+            IF v_findings(i).metric_domain = p_dom AND v_findings(i).metric_name = p_name THEN
+                IF v_findings(i).change_bucket IN ('large', 'moderate')
+                   AND v_findings(i).cur_val > v_findings(i).prior_mean THEN
+                    RETURN TRUE;
+                END IF;
+                RETURN FALSE;
+            END IF;
+        END LOOP;
+        RETURN FALSE;
+    END f_up;
+
+    -- plan 033: one of the card evidence events (the top 2 of a class,
+    -- v_evs) moved up and is a finding by the wait policy
+    FUNCTION ev_up(p_event VARCHAR2) RETURN BOOLEAN IS
+        v_b VARCHAR2(40);
+    BEGIN
+        FOR e IN 1 .. v_evs.COUNT LOOP
+            IF v_evs(e).event = p_event THEN
+                v_b := policy_bucket('WAIT', v_evs(e).event, v_evs(e).wclass, v_evs(e).cur_val,
+                                     v_evs(e).mu, v_evs(e).sd, v_evs(e).n, v_evs(e).shr);
+                IF v_b IN ('large', 'moderate') AND v_evs(e).cur_val > NVL(v_evs(e).mu, 0) THEN
+                    RETURN TRUE;
+                END IF;
+            END IF;
+        END LOOP;
+        RETURN FALSE;
+    END ev_up;
+
+    -- plan 033: which rule of sql/lib/finding_hints.plsql a card gets
+    -- (NULL = none); the table of rules is in that file's header
+    FUNCTION pick_hint(p_g VARCHAR2) RETURN VARCHAR2 IS
+        v_split VARCHAR2(1);
+    BEGIN
+        IF p_g = 'IO' THEN
+            IF f_up('LOAD', 'table scans (long tables)') OR ev_up('db file scattered read')
+               OR ev_up('direct path read') THEN
+                RETURN 'IO_SCANS';
+            END IF;
+            IF ev_up('db file sequential read') THEN RETURN 'IO_SINGLE'; END IF;
+        ELSIF p_g = 'COMMIT' THEN
+            IF ev_up('log file sync') AND NOT f_up('LOAD', 'user commits') THEN
+                RETURN 'COMMIT_LAT';
+            END IF;
+        ELSIF p_g = 'NET' THEN
+            IF ev_up('SQL*Net more data to client')
+               OR f_up('LOAD', 'bytes sent via SQL*Net to client') THEN
+                RETURN 'NET_PAYLOAD';
+            END IF;
+        ELSIF p_g = 'PARSE' THEN
+            IF f_up('LOAD', 'parse count (hard)') THEN RETURN 'HARD_PARSE'; END IF;
+        ELSIF p_g = 'DBTIME' THEN
+            IF v_dbt IS NOT NULL AND v_cpu IS NOT NULL THEN
+                v_split := time_split(v_findings(v_dbt).cur_val, v_findings(v_dbt).prior_mean,
+                                      v_findings(v_cpu).cur_val, v_findings(v_cpu).prior_mean);
+                IF v_split IN ('c', 'm') THEN RETURN 'DBTIME_CPU'; END IF;
+            END IF;
+        ELSIF p_g = 'WAIT:Application' THEN
+            IF ev_up('enq: TX - row lock contention') THEN RETURN 'ROW_LOCK'; END IF;
+        END IF;
+        RETURN NULL;
+    END pick_hint;
+
     -- the card headline after the metric name: "5.4x normal", "up 79.7%,
     -- mostly wait" (the DB time lead adds where the extra time went).
     -- Shared by the card's h3 and its triage row (plan 025).
@@ -403,6 +473,7 @@ DECLARE
         v_ms    NUMBER;
         v_mu    VARCHAR2(20);
         v_eb    VARCHAR2(40);
+        v_rule  VARCHAR2(20);
         v_imp   NUMBER := g_imp(p_g);
         v_shr   NUMBER;
     BEGIN
@@ -502,6 +573,13 @@ DECLARE
         DBMS_OUTPUT.PUT_LINE('<div class="wg bare hov qf"' || wg_attr || '>' || wg_flags(TRUE)
             || wg_bars(r.wv, v_s, r.prior_mean, r.prior_sd, v_sev) || wg_dates(TRUE) || '</div></div>');
         DBMS_OUTPUT.PUT_LINE('<dl class="ev">' || v_ev || '</dl></div>');
+        -- plan 033: what this usually means, and a read-only next query
+        v_rule := pick_hint(p_g);
+        IF v_rule IS NOT NULL THEN
+            DBMS_OUTPUT.PUT_LINE(hint_block(v_rule, v_id,
+                CASE WHEN v_cw_b IS NOT NULL
+                     THEN hint_fill(hint_sql(v_rule), v_cw_dbid, v_cw_b, v_cw_e, ~inst_num) END));
+        END IF;
         IF v_nrel + v_ntw > 0 THEN
             DBMS_OUTPUT.PUT_LINE('<details class="rel"><summary>'
                 || CASE WHEN v_nrel > 0 THEN v_nrel || ' related metric' || CASE WHEN v_nrel = 1 THEN '' ELSE 's' END END
@@ -1191,6 +1269,23 @@ BEGIN
                 ELSE 'Every scored metric against its prior windows' END
         || '</span><span class="vw in-a">Every scored metric against its prior windows; one table per domain</span>'
         || '</small></h2>');
+
+    -- plan 033: the Current window's DBID and snapshot range, for the
+    -- cards' read-only "Next step" queries (one row: MIN / MAX over the
+    -- instances; all NULL when the Current window is not valid)
+    IF v_order.COUNT > 0 THEN
+        FOR cw IN (
+            WITH
+            @@sql/lib/windows_cte.sql
+            SELECT MIN(dbid) AS dbid, MIN(begin_snap_id) AS b, MAX(end_snap_id) AS e
+            FROM   valid_windows
+            WHERE  week_offset = 0
+        ) LOOP
+            v_cw_dbid := cw.dbid;
+            v_cw_b    := cw.b;
+            v_cw_e    := cw.e;
+        END LOOP;
+    END IF;
 
     IF v_order.COUNT > 0 THEN
         -- plan 025: the triage list (Summary): every finding on one screen

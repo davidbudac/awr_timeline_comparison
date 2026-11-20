@@ -189,6 +189,13 @@ release bumps `awr_version`).
 - **"Checked and normal" in one line.** In the Summary view the normal /
   too small / improved metrics fold into one summary line (counts) that
   opens in place; it stays open when the report has no finding.
+- **What a finding usually means.** Finding and plan-change cards carry
+  one hedged, rule-based line (full scans, single-block reads, commit
+  latency, result size, hard parses, CPU, row locks, plan change) and,
+  where useful, a copyable read-only query for the next step, filled with
+  the Current window's DBID and snapshot range (or `DBMS_XPLAN.DISPLAY_AWR`
+  for both plans). The rules are one table in
+  `sql/lib/finding_hints.plsql`.
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

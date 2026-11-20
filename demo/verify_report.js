@@ -86,6 +86,9 @@
  *     right under it (dashboard: in What changed around it, beside the
  *     findings); plan 032: Checked and normal starts folded (one line) and
  *     a jump to it opens it; in the dashboard its Normal tab shows it open;
+ *     plan 033: card hints (rule id, line, copyable read-only query with
+ *     no unfilled placeholder; the plan card keeps its footer links; the
+ *     dashboard side column does not overflow);
  *   - pattern tags (plan 027): every chip has text and a title, none on a
  *     plan / config card, a triage row and a dashboard findings row show
  *     their card's chips, the demo Physical I/O card reads "jump after
@@ -1192,6 +1195,19 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         out.calmReveal = cf.open && vis(sn.querySelector('.ngrid')) ? 'ok' : 'FAIL';
         cf.open = false;
       } else out.calmReveal = 'skip';
+      // plan 033: rule-based hints; a next-step query is a copyable SELECT
+      const hints = [...document.querySelectorAll('article.fc .fc-hint[data-hint]')];
+      out.hints = hints.map(x => x.closest('article.fc').id + ':' + x.getAttribute('data-hint')).join(',');
+      out.hintsOk = hints.every(x => {
+        const pre = x.querySelector('pre.sql'), btn = x.querySelector('.copy-btn[data-copy]');
+        return x.querySelector('p b') && (!pre || (btn && document.querySelector(btn.getAttribute('data-copy')) === pre
+          && /^SELECT /.test(pre.textContent) && !/#[A-Z0-9]+#/.test(pre.textContent)));
+      });
+      // the plan card keeps section 23's "Plan shape" link in its footer
+      out.hintPfl = [...document.querySelectorAll('article.fc.chg[id^="f-plan-"]')].every(c => c.querySelector('.fc-f .evl a[href="#topsql"]'));
+      // dashboard design: the plan card's query never widens the side column
+      const side = document.querySelector('aside.dside');
+      out.hintSide = side ? side.scrollWidth <= side.clientWidth + 1 : true;
       // All sections: every library section shows in full, row state or not
       window.AWR_setView('all', false); await wait(250);
       out.allFull = libs.filter(x => { const t = x.querySelector('table, .chart-wrap'); return t && !vis(t); }).map(x => x.id);
@@ -1226,6 +1242,11 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (/^FAIL/.test(p4.toggle)) fail('evidence library row toggle ' + p4.toggle);
     if (/^FAIL/.test(p4.reveal)) fail('evidence library reveal ' + p4.reveal);
     if (!p4.subsOk) fail('rail card sub-links ' + p4.subs);
+    if (!p4.hintsOk) fail('card hints: a hint without its line, or a next-step query not copyable / with an unfilled placeholder: ' + p4.hints);
+    if (!p4.hintPfl) fail('card hints: a plan card lost its footer links (section 23 adds "Plan shape" there)');
+    if (!p4.hintSide) fail('card hints: the dashboard side column is wider than its box');
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && !/f-io:IO_SCANS/.test(p4.hints)) fail('demo: the Physical I/O card should carry the IO_SCANS hint, got ' + p4.hints);
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && !/f-plan-[a-z0-9]+:PLAN/.test(p4.hints)) fail('demo: the plan-change card should carry the PLAN hint, got ' + p4.hints);
     if (p4.tagNoTitle) fail('pattern tags: ' + p4.tagNoTitle + ' chip(s) without text / title');
     if (p4.tagChg) fail('pattern tags: ' + p4.tagChg + ' chip(s) on a plan / config card');
     if (p4.tagTri.length) fail('pattern tags: triage row differs from its card: ' + p4.tagTri.join(', '));

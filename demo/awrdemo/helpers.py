@@ -493,6 +493,62 @@ def _load_policy():
 _POLICY = _load_policy()
 
 
+# ---------------------------------------------------------------------
+# sql/lib/finding_hints.plsql (plan 033) -- the two tables are parsed from
+# the SQL include itself, like the metric policy above.
+# ---------------------------------------------------------------------
+
+_HINTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                           "sql", "lib", "finding_hints.plsql")
+_HINT_RE = re.compile(r"WHEN\s+'([A-Z0-9_]+)'\s+THEN\s+'((?:[^']|'')*)'")
+
+
+def _load_hints():
+    text, sql, cur = {}, {}, None
+    with open(_HINTS_PATH, encoding="utf-8") as fh:
+        for line in fh:
+            if "FUNCTION hint_text" in line:
+                cur = text
+            elif "FUNCTION hint_sql" in line:
+                cur = sql
+            elif "FUNCTION " in line:
+                cur = None
+            if cur is None:
+                continue
+            m = _HINT_RE.search(line)
+            if m:
+                cur[m.group(1)] = m.group(2).replace("''", "'")
+    return text, sql
+
+
+HINT_TEXT, HINT_SQL = _load_hints()
+
+
+def hint_fill(tpl, dbid, begin, end, inst, sqlid=None, ph1=None, ph2=None):
+    """hint_fill() of sql/lib/finding_hints.plsql."""
+    if tpl is None:
+        return None
+    s = lambda v: "" if v is None else str(v)
+    v = tpl.replace("#INST#", " AND instance_number = " + str(inst) if inst and inst > 0 else "")
+    v = v.replace("#SQLID#", s(sqlid)).replace("#PH1#", s(ph1)).replace("#PH2#", s(ph2))
+    v = v.replace("#DBID#", s(dbid)).replace("#B0#", s(begin))
+    v = v.replace("#B#", s(None if begin is None else begin + 1)).replace("#E#", s(end))
+    return v.replace("#NL#", "\n")
+
+
+def hint_block(rule, key, sql) -> str:
+    """hint_block() of sql/lib/finding_hints.plsql."""
+    if rule is None or rule not in HINT_TEXT:
+        return ""
+    return ('<div class="fc-hint" data-hint="' + rule + '"><p><b>What this usually means.</b> '
+            + HINT_TEXT[rule] + '</p>'
+            + (('<p class="fc-next">Next step (read-only):</p>'
+                '<div class="codewrap" style="position:relative">'
+                '<button type="button" class="copy-btn" data-copy="#hq-' + key + '">Copy</button>'
+                '<pre id="hq-' + key + '" class="sql">' + esc(sql) + '</pre></div>') if sql else '')
+            + '</div>')
+
+
 def metric_policy(domain, name, cls=None):
     """(family, canonical, dir, min_pct, min_abs) -- metric_policy()."""
     if domain == "WAIT":

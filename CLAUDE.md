@@ -108,6 +108,8 @@ sql/
     ├── off_label.plsql       -- off_label(k): "-1w" / "-36h" offset label for any window count
     ├── finding_cards.plsql   -- v1.6.0 Summary vocabulary: card_group/label/id, metric_label/
     │                         --   unit/scale, fv*, time_split, move_txt, ent(), lead/card order
+    ├── finding_hints.plsql   -- plan 033: hint_text / hint_sql rule tables + hint_fill / hint_block (07, 18);
+    │                         --   one-line WHEN rows parsed by helpers.py
     ├── wingrid.plsql         -- v1.6.0 window component markup (wg_*): ruler, flags, bars, dates
     │                         --   + wg_buf line buffer (many windows); include off_label first
     ├── timeline.plsql        -- v1.6.0 Timeline lane rows (tl_*): tl_open/tl_close, tl_bars, tl_gut
@@ -345,7 +347,7 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
 | Verdict hero `section#verdict.vw.in-s.hero` | 00 | one rule-based h1 sentence (no free prose), `p#because-slot` "Likely source:" (17 fills), `ul#pills` (17 inserts before `li.pl-normal`), `ul#narrative-slot.hnotes` (17), `p.snapnote` (target_end snapped), `#att-slot` (07 fills: DB-time breakdown, `.att-h` / `.att-bar` / `.att-lg`, parts coloured from `AWR_WAIT_COLORS` via `--c`) |
 | Hero strip `section#overview` | 08 | DB time (AAS) per window on the window component, `#hero-dbt`; replaced the six v1.5 headline tiles |
 | Triage list `#triage` | 07 | one `div.tri-row[data-card]` per card, in card order; impact cell filled by 07's inline script from the card's `data-impact` / `data-share` (plan 020); empty `span.tri-tags` (plan 027) |
-| Finding cards `#findings div.cards` | 07 | one `article.fc` per card group (below); header band glyph, big value, window bars, ≤4 evidence rows, related-metrics fold, footer `a.jump[data-tl]` "Timeline →" |
+| Finding cards `#findings div.cards` | 07 | one `article.fc` per card group (below); header band glyph, big value, window bars, ≤4 evidence rows, an optional hint `div.fc-hint[data-hint]` (plan 033, below), related-metrics fold, footer `a.jump[data-tl]` "Timeline →" |
 | `section#s-changes[hidden]` | 07 (`#changes-slot`) | 18's plan cards then 12's config card move in and unhide it |
 | `section#s-normal` | 07 | "Checked and normal" `.ngrid` (≤18 `.nr`), "Moved, too small to matter", "Improved"; body folded in `details.calm-fold` (summary line: the three counts; closed when there is a finding card); `reveal()` opens it for `#s-normal` (plan 032) |
 | Evidence library `#s-lib` + `section.lib` | 07 heading, sections | see below |
@@ -361,6 +363,28 @@ into a folded card (or anything inside it) opens it first. The kicker
 carries `span.fc-sum` (Current value and normal range, shown only while
 folded) and the empty `span.fc-tags` (plan 027). JS off: nothing folds,
 the impact cells stay empty.
+
+**Card hints (plan 033):** a finding card may carry, right after its
+evidence list (`div.fc-b`), `div.fc-hint[data-hint="<rule>"]`: one hedged
+"What this usually means." line and, when the rule has a query and the
+Current window is valid, a copyable read-only "Next step" SELECT
+(`.codewrap` + `.copy-btn[data-copy="#hq-<card id>"]` + `pre.sql`) filled
+with the Current window's DBID and snapshot range. 07's `pick_hint(p_g)`
+picks the rule from the rows it already scored (`f_up` = a large /
+moderate row above its prior mean; `ev_up` = the same for one of the top 2
+events per class in `v_evs`): `IO_SCANS`, `IO_SINGLE`, `COMMIT_LAT`,
+`NET_PAYLOAD`, `HARD_PARSE`, `DBTIME_CPU`, `ROW_LOCK` (links `#blocking`,
+always emitted by 24). 18's plan card always carries `PLAN`
+(`DBMS_XPLAN.DISPLAY_AWR` of both plan hashes; needs the optional
+`DBA_HIST_SQL_PLAN` grant when the reader runs it), between its evidence
+and its footer (23 adds "Plan shape" to the footer's `span.evl`). The
+texts and queries are ONE table in `sql/lib/finding_hints.plsql`; every
+`WHEN` line is one source line because `helpers.py` parses them
+(`HINT_TEXT` / `HINT_SQL`), and no code line has a space before `#NL#`
+(SQL*Plus trims trailing spaces). Hidden on a folded card
+(`.fc.fold > .fc-hint`). To add a rule: one `WHEN` line in `hint_text`,
+optionally one in `hint_sql`, one condition in 07's `pick_hint()` and in
+the twin's `_pick_hint` (`s07_summary.py`), then regenerate the demo.
 
 v1.5.0's `header.report` masthead, verdict banner, all-movers list, windows
 strip + full-span DB-time chart, `.narr` "What changed" block, six
