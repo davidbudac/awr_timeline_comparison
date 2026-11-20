@@ -344,6 +344,14 @@ function explainsBack(){
   if(sc&&sc.hidden){sc.hidden=false;var rl=$('nav.toc a[href="#s-changes"]');if(rl)rl.hidden=false;}
 }
 
+/* G4: print shows every finding card -- the closed lead rows open for
+   print and shut again after (css_design.css shows every findings tab) */
+function printRows(){
+  var op=null;
+  window.addEventListener("beforeprint",function(){if(op)return;op=$$("details.drow.lead:not([open])");
+    op.forEach(function(d){d.open=true;if(window.AWR_WG)AWR_WG.render(d);});});
+  window.addEventListener("afterprint",function(){if(!op)return;op.forEach(function(d){d.open=false;});op=null;});
+}
 function dashboard(){
   var bd=doc.body;
   palette();
@@ -351,6 +359,7 @@ function dashboard(){
   explainsBack();
   kpis();
   findTable();
+  printRows();
   bd.classList.add("d-dash");
   var rt=null;
   window.addEventListener("resize",function(){if(rt)clearTimeout(rt);rt=setTimeout(function(){$$("details.drow[open]").forEach(function(d){if(d._draw)d._draw();});},150);});

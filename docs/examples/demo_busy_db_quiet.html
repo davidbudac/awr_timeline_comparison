@@ -827,7 +827,7 @@ body.vs #activity.ax-cmp #ax-ev,body.vs #activity.ax-cmp .axn2{display:none}
 body[data-pw] #tl .g .d1{color:var(--ink-2)}
 body[data-pw] #tl .g .z{display:none}
 @media (prefers-reduced-motion: reduce){#tl .r.flash::after,#tl .c.colflash,#tl .h.colflash{animation:none}}
-@media print { nav.toc { display:none; position:static; } body { max-width:none; padding:0 0 24px; background:#fff; } section { border:0; padding:12px 0; break-before:page; } main > section:first-of-type, body > section:first-of-type { break-before:auto; } header.report { border:0; padding-top:0; } .chart-wrap { break-inside:avoid; } h2 { break-after:avoid; position:static; padding-top:0;   background:transparent; } section table thead th { position:static; } .tbl-tools, .copy-btn, .permalink, .expander, .tag, .view-note, .next-finding, .windows-hint, .topbar, .theme-icon-btn { display:none !important; } .topbar .sum-btn, #sum-pop { display:none; } tr[data-tail="Y"] { display:table-row !important; } .tblwrap.scroll { overflow:visible; box-shadow:none; } .tblwrap.scroll tr > :first-child { position:static; } }
+@media print { nav.toc { display:none; position:static; } body { max-width:none; padding:0 0 24px; background:#fff; } section { border:0; padding:12px 0; break-before:page; } main > section:first-of-type, body > section:first-of-type { break-before:auto; } header.report { border:0; padding-top:0; } .chart-wrap { break-inside:avoid; } h2 { break-after:avoid; position:static; padding-top:0;   background:transparent; } section table thead th { position:static; } .tbl-tools, .copy-btn, .permalink, .expander, .tag, .view-note, .next-finding, .windows-hint, .topbar, .theme-icon-btn { display:none !important; } .topbar .sum-btn, #sum-pop, .fc .fc-tg { display:none; } #s-normal details.calm-fold::details-content { content-visibility:visible; display:block; } tr[data-tail="Y"] { display:table-row !important; } .tblwrap.scroll { overflow:visible; box-shadow:none; } .tblwrap.scroll tr > :first-child { position:static; } }
 </style>
 <style>
 /* css_loadresp: styles of section 20 (Load vs response time).  Every
@@ -1731,6 +1731,7 @@ body.d-dash .ashx .seg.axlayout button{line-height:20px}
 .dpanel #s-normal .calm{padding:var(--s2) 0;border:0}
 .dpanel #s-normal .ngrid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .dpanel .note.improved{border:0;padding:var(--s2) 0}
+@media print{body.d-dash .tabs.dtabs{display:none}body.d-dash .dmain > .tabpanel.dpanel{display:block}body.d-dash .dpanel #s-normal > h2{display:block}}
 .dempty{color:var(--muted);font-size:13.5px;margin:var(--s3) 0}
 .dpanel > .panel.calm{border:0;padding:var(--s2) 0;background:none}
 .dft{--dcols:18px 92px minmax(150px,1fr) 104px 116px 138px 76px 92px;font-size:13px}
@@ -4602,6 +4603,8 @@ function mkF(c){if(c.__fc)return true;var k=c.querySelector(".fc-h .fc-k");if(!k
 window.AWR_fcOpen=function(c){if(c&&c.classList.contains("fold"))setF(c,false);};
 window.AWR_fcFold=function(c){if(c&&mkF(c))setF(c,true);};
 d.querySelectorAll("#findings .cards > article.fc[data-fold]").forEach(function(c){if(mkF(c))setF(c,true);});
+var pr=null;window.addEventListener("beforeprint",function(){if(pr)return;var cf=d.querySelector("#s-normal details.calm-fold");pr={c:[].slice.call(d.querySelectorAll("article.fc.fold")),n:cf&&!cf.open?cf:null};pr.c.forEach(function(c){setF(c,false);});if(pr.n)pr.n.open=true;if(window.AWR_WG)pr.c.forEach(function(c){AWR_WG.render(c);});});
+window.addEventListener("afterprint",function(){if(!pr)return;pr.c.forEach(function(c){setF(c,true);});if(pr.n)pr.n.open=false;pr=null;});
 })();</script>
 <h3 class="vw in-a">Load profile</h3>
 <table id="findings-load" class="vw in-a"><thead><tr><th>Metric</th><th class="num cur-col">Current</th><th class="num c-rng" title="prior mean &plusmn; 2&sigma;, in the row&#39;s own unit">Normal range</th><th class="c-band" title="Current, in &sigma; from the prior mean. Shaded = normal (&plusmn;1&sigma;, &plusmn;2&sigma;); ticks at &plusmn;2&sigma; and &plusmn;3&sigma;.">vs normal, in &sigma;<span class="bd-ax" aria-hidden="true"><em style="--x:.167">&minus;2</em><em style="--x:.333">0</em><em style="--x:.500">+2</em><em style="--x:.583">+3</em><em class="end" style="--x:1">+8&sigma;</em></span></th><th class="num c-z">z</th><th class="num c-d">&Delta; vs mean</th><th class="num">Prior mean</th><th class="num">Prior sd</th><th class="num">n</th></tr></thead><tbody>
@@ -54647,6 +54650,14 @@ function explainsBack(){
   ex.reverse().forEach(function(p){sl.insertBefore(p,sl.firstChild);if(window.AWR_fcOpen)AWR_fcOpen(p);var tg=$(".fc-tg",p);if(tg)tg.parentNode.removeChild(tg);});
   if(sc&&sc.hidden){sc.hidden=false;var rl=$('nav.toc a[href="#s-changes"]');if(rl)rl.hidden=false;}
 }
+/* G4: print shows every finding card -- the closed lead rows open for
+   print and shut again after (css_design.css shows every findings tab) */
+function printRows(){
+  var op=null;
+  window.addEventListener("beforeprint",function(){if(op)return;op=$$("details.drow.lead:not([open])");
+    op.forEach(function(d){d.open=true;if(window.AWR_WG)AWR_WG.render(d);});});
+  window.addEventListener("afterprint",function(){if(!op)return;op.forEach(function(d){d.open=false;});op=null;});
+}
 function dashboard(){
   var bd=doc.body;
   palette();
@@ -54654,6 +54665,7 @@ function dashboard(){
   explainsBack();
   kpis();
   findTable();
+  printRows();
   bd.classList.add("d-dash");
   var rt=null;
   window.addEventListener("resize",function(){if(rt)clearTimeout(rt);rt=setTimeout(function(){$$("details.drow[open]").forEach(function(d){if(d._draw)d._draw();});},150);});

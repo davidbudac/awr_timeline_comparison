@@ -366,7 +366,14 @@ the impact cells stay empty. `window.AWR_fcFold(card)` makes any card
 foldable (`mkF`: the toggle + click-to-open, once, `c.__fc`) and folds it;
 a card's `setF` also folds / unfolds the foldable card right after it
 that explains it (`data-explains` = its id), which keeps its own toggle
-(17's plan card under a folded I/O card, G4).
+(17's plan card under a folded I/O card, G4). Print (G4): 07's
+`beforeprint` handler opens every `article.fc.fold` and a closed
+`#s-normal details.calm-fold` (rendering the cards' grids synchronously:
+no timer runs before the print layout), `afterprint` folds back exactly
+those; `_style.sql`'s print block hides `.fc-tg` and, for JS off, shows the
+closed fold's body through `::details-content`; the dashboard opens its
+closed lead rows (`printRows()` in js_design) and prints every findings tab
+(`css_design.css`, `@media print`). verify_report phase 4 `print`.
 
 **Card hints (plan 033):** a finding card may carry, right after its
 evidence list (`div.fc-b`), `div.fc-hint[data-hint="<rule>"]`: one hedged

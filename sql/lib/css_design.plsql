@@ -322,6 +322,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.dpanel #s-normal .calm{padding:var(--s2) 0;border:0}');
     DBMS_OUTPUT.PUT_LINE('.dpanel #s-normal .ngrid{grid-template-columns:repeat(2,minmax(0,1fr))}');
     DBMS_OUTPUT.PUT_LINE('.dpanel .note.improved{border:0;padding:var(--s2) 0}');
+    DBMS_OUTPUT.PUT_LINE('@media print{body.d-dash .tabs.dtabs{display:none}body.d-dash .dmain > .tabpanel.dpanel{display:block}body.d-dash .dpanel #s-normal > h2{display:block}}');
     DBMS_OUTPUT.PUT_LINE('.dempty{color:var(--muted);font-size:13.5px;margin:var(--s3) 0}');
     DBMS_OUTPUT.PUT_LINE('.dpanel > .panel.calm{border:0;padding:var(--s2) 0;background:none}');
     DBMS_OUTPUT.PUT_LINE('.dft{--dcols:18px 92px minmax(150px,1fr) 104px 116px 138px 76px 92px;font-size:13px}');

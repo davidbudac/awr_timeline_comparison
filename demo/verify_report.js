@@ -95,6 +95,8 @@
  *     right under it, folded exactly when that card is (dashboard: in
  *     What changed around it, beside the findings, open); plan 032: Checked and normal starts folded (one line) and
  *     a jump to it opens it; in the dashboard its Normal tab shows it open;
+ *     G4: beforeprint opens every folded card, that fold and (dashboard)
+ *     every lead row, afterprint restores the screen state;
  *     plan 033: card hints (rule id, line, copyable read-only query with
  *     no unfilled placeholder; the plan card keeps its footer links; the
  *     dashboard side column does not overflow);
@@ -1503,6 +1505,21 @@ const LABEL_BAND = () => {
           out.lazy11 = (before === 0 && after === 1) ? 'ok' : 'FAIL before=' + before + ' after=' + after;
         } else out.lazy11 = 'skipped (too close)';
       } else out.lazy11 = 'skipped (' + (window.echarts ? a11.length + ' charts' : 'no ECharts') + ')';
+      // G4: print opens every folded card, the closed "Checked and normal"
+      // fold and (dashboard) every closed lead row; afterprint restores them
+      {
+        const st = () => ({ f: [...document.querySelectorAll('article.fc.fold')].map(c => c.id).join(','),
+          n: (document.querySelector('#s-normal details.calm-fold') || {}).open,
+          r: [...document.querySelectorAll('details.drow.lead')].map(d => d.open ? 1 : 0).join('') });
+        const b0 = st();
+        window.dispatchEvent(new Event('beforeprint'));
+        const b1 = st();
+        window.dispatchEvent(new Event('afterprint'));
+        const b2 = st();
+        const open1 = b1.f === '' && b1.n !== false && !/0/.test(b1.r);
+        out.print = open1 && JSON.stringify(b0) === JSON.stringify(b2) ? 'ok' : 'FAIL ' + JSON.stringify([b0, b1, b2]);
+        await wait(80);
+      }
       out.strips = document.querySelectorAll('td.trend svg.mw').length;
       out.lines = document.querySelectorAll('td.trend svg.spark').length;
       // js_microstrip draws nothing past 91 windows (no pixel per bar left)
@@ -1531,6 +1548,7 @@ const LABEL_BAND = () => {
     if (!p4.topsqlTab) fail('Top SQL: the selected tab and the open panel disagree');
     if (p4.ioSql === false && /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) fail('demo: the Physical I/O card has no SQL evidence row');
     if (!p4.explainsOk) fail('an explaining plan-change card is not right under its card (dashboard: not in #changes-slot) or lacks its chip');
+    if (!/^ok/.test(p4.print)) fail('print: folded cards / Checked and normal / dashboard rows not opened for print or not restored after: ' + p4.print);
     if (!p4.explainsFold) fail('an explaining plan-change card is not folded with the card it explains (dashboard: folded or with a toggle)');
     if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && p4.explains !== 1) fail('demo: expected the plan card of 7k2m9dx4qp1zb to explain the Physical I/O card, got ' + p4.explains);
     if (!p4.changesOk) fail('"What changed around it" visible while empty, or hidden while it holds a card');

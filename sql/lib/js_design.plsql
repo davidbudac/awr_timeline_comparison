@@ -359,6 +359,14 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  ex.reverse().forEach(function(p){sl.insertBefore(p,sl.firstChild);if(window.AWR_fcOpen)AWR_fcOpen(p);var tg=$(".fc-tg",p);if(tg)tg.parentNode.removeChild(tg);});');
     DBMS_OUTPUT.PUT_LINE('  if(sc&&sc.hidden){sc.hidden=false;var rl=$(''nav.toc a[href="#s-changes"]'');if(rl)rl.hidden=false;}');
     DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* G4: print shows every finding card -- the closed lead rows open for');
+    DBMS_OUTPUT.PUT_LINE('   print and shut again after (css_design.css shows every findings tab) */');
+    DBMS_OUTPUT.PUT_LINE('function printRows(){');
+    DBMS_OUTPUT.PUT_LINE('  var op=null;');
+    DBMS_OUTPUT.PUT_LINE('  window.addEventListener("beforeprint",function(){if(op)return;op=$$("details.drow.lead:not([open])");');
+    DBMS_OUTPUT.PUT_LINE('    op.forEach(function(d){d.open=true;if(window.AWR_WG)AWR_WG.render(d);});});');
+    DBMS_OUTPUT.PUT_LINE('  window.addEventListener("afterprint",function(){if(!op)return;op.forEach(function(d){d.open=false;});op=null;});');
+    DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function dashboard(){');
     DBMS_OUTPUT.PUT_LINE('  var bd=doc.body;');
     DBMS_OUTPUT.PUT_LINE('  palette();');
@@ -366,6 +374,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  explainsBack();');
     DBMS_OUTPUT.PUT_LINE('  kpis();');
     DBMS_OUTPUT.PUT_LINE('  findTable();');
+    DBMS_OUTPUT.PUT_LINE('  printRows();');
     DBMS_OUTPUT.PUT_LINE('  bd.classList.add("d-dash");');
     DBMS_OUTPUT.PUT_LINE('  var rt=null;');
     DBMS_OUTPUT.PUT_LINE('  window.addEventListener("resize",function(){if(rt)clearTimeout(rt);rt=setTimeout(function(){$$("details.drow[open]").forEach(function(d){if(d._draw)d._draw();});},150);});');

@@ -222,6 +222,12 @@ release bumps `awr_version`).
 - **"Checked and normal" in one line.** In the Summary view the normal /
   too small / improved metrics fold into one summary line (counts) that
   opens in place; it stays open when the report has no finding.
+- **Printing shows everything folded.** A printed (or saved as PDF)
+  report shows the folded finding cards, the plan card folded with them
+  and the "Checked and normal" grid open (with JS off too, where the
+  browser supports it), and the dashboard design every findings row's
+  card and its Normal / Improved tabs; the screen state comes back after
+  printing.
 - **What a finding usually means.** Finding and plan-change cards carry
   one hedged, rule-based line (full scans, single-block reads, commit
   latency, result size, hard parses, CPU, row locks, plan change) and,

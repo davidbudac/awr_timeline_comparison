@@ -1716,7 +1716,10 @@ BEGIN
     -- the light tokens declared on :root -- nothing to force here.  What
     -- does need undoing: the sticky headers, every interactive affordance,
     -- and the two collapse mechanisms (long-tail rows and the methodology
-    -- disclosure) whose content must be on the printed page.
+    -- disclosure) whose content must be on the printed page.  Folded
+    -- finding cards and the "Checked and normal" fold open for print in
+    -- 07's beforeprint handler (restored on afterprint); with JS off the
+    -- fold's body still prints where ::details-content is supported.
     DBMS_OUTPUT.PUT_LINE('@media print {'
         || ' nav.toc { display:none; position:static; }'
         || ' body { max-width:none; padding:0 0 24px; background:#fff; }'
@@ -1730,7 +1733,8 @@ BEGIN
         || ' .tbl-tools, .copy-btn, .permalink, .expander, .tag,'
         || ' .view-note, .next-finding, .windows-hint, .topbar,'
         || ' .theme-icon-btn { display:none !important; }'
-        || ' .topbar .sum-btn, #sum-pop { display:none; }'
+        || ' .topbar .sum-btn, #sum-pop, .fc .fc-tg { display:none; }'
+        || ' #s-normal details.calm-fold::details-content { content-visibility:visible; display:block; }'
         || ' tr[data-tail="Y"] { display:table-row !important; }'
         || ' .tblwrap.scroll { overflow:visible; box-shadow:none; }'
         || ' .tblwrap.scroll tr > :first-child { position:static; }'
