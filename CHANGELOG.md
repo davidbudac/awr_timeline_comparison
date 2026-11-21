@@ -284,7 +284,7 @@ release bumps `awr_version`).
   reads one row per window and streams the header and rows a cell at a
   time; output for the usual window counts is byte-identical. Other
   sections still stop the report near 210 windows (window-label lists in
-  14, 15 and 18, the finding cards' window grids in 07); see CLAUDE.md.
+  14, 15 and 18, the window grids of 07 / 08); see CLAUDE.md.
 - **A changed parameter's window list no longer overflows.** The verdict's
   configuration note lists the prior windows in which a changed parameter
   differs from the Current window; with many compared windows that list

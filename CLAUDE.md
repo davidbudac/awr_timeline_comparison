@@ -1309,9 +1309,9 @@ left padding and a lower specificity).
   32500 cap and "first n of m" note). **The rest of the report still stops
   near 210 windows** (pre-existing, not fixed): the ISO window-label
   `LISTAGG`s of 14 / 15 / 18 (19 B a window: 4000 at about 210), the
-  hourly label `LISTAGG`s of 04 / 05 (15 B: about 266), 07's card window
-  grids (`wg_bars` returns one VARCHAR2: about 145 B a window on dbmint,
-  32767 at about 226) and the per-row value `LISTAGG`s of 02 / 03 / 04 /
+  hourly label `LISTAGG`s of 04 / 05 (15 B: about 266), the window grids
+  `wg_bars` returns as one VARCHAR2 (08's strip, 07's cards, 18 / 24:
+  about 145 B a window on dbmint, 32767 at about 226) and the per-row value `LISTAGG`s of 02 / 03 / 04 /
   05 / 07 / 13 / 14 / 15 / 18 (6-24 B a window, data-dependent: 4000 at
   about 250 windows on the busy demo, 450-650 on dbmint's 168-hourly
   run). Lifting that is its own change (06's pattern, plus streaming

@@ -294,8 +294,9 @@ findings as confirmed by the owner's agent):
 - 029 / 06 (the reviews' abort risk past 4000 bytes): section 06 is now
   safe for any window count (no per-window LISTAGG, rows streamed). The rest of the
   report still stops near 210 windows (window-label LISTAGGs of 14 / 15 /
-  18, 07's card window grids, the value-CSV LISTAGGs of 02-05 / 07 / 13-15
-  / 18; CLAUDE.md, "Per-window strings"). Not fixed here: its own change.
+  18, the `wg_bars` window grids of 07 / 08, the value-CSV LISTAGGs of
+  02-05 / 07 / 13-15 / 18; CLAUDE.md, "Per-window strings"). Not fixed
+  here: its own change.
 
 
 Each plan records its default, so an executor never waits on these. Decide
