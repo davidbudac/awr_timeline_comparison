@@ -241,7 +241,18 @@ release bumps `awr_version`).
   where useful, a copyable read-only query for the next step, filled with
   the Current window's DBID and snapshot range (or `DBMS_XPLAN.DISPLAY_AWR`
   for both plans). The rules are one table in
-  `sql/lib/finding_hints.plsql`.
+  `sql/lib/finding_hints.plsql`. A line says only what its rule checked:
+  the commit-latency line needs the log file sync time *per commit* to
+  have risen at least 1.5x (it fired on a demo card where commits rose
+  17.7% and each commit waited 4% longer), the CPU line needs CPU to have
+  taken at least 60% of the DB-time rise (the headline's "mostly CPU"),
+  the full-scan line reads "or" between its three signals. The queries
+  are bounded like the report: only the instances valid for the Current
+  window (RAC, an instance restarted inside it), ASH cut to the window's
+  start and end like the Blocking view (an end snapshot up to 15 minutes
+  late no longer adds lock samples from outside Current), and each plan
+  looked up under the DBID and container that captured it (a
+  pre-migration plan, one PDB of several).
 - **Copy summary.** A top-bar button copies the verdict, the likely
   source, each finding (value, normal range, share of the DB-time rise
   when known) and what changed around it as Markdown, and shows the text

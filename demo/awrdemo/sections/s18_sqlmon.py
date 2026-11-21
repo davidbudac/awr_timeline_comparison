@@ -241,7 +241,8 @@ def _plan_card(w, put, c):
     put('<dl class="ev">' + ev + "</dl></div>")
     # plan 033: what a plan change usually means, and both plans
     put(H.hint_block("PLAN", cid,
-                     H.hint_fill(H.HINT_SQL["PLAN"], w.dbid, None, None, 0, sid, c["prior_ph"], c["cur_ph"])
+                     H.hint_fill(H.HINT_SQL["PLAN"], w.dbid, None, None, 0, sid, c["prior_ph"], c["cur_ph"],
+                                 dbids=w.dbid_list)
                      if c["prior_ph"] is not None and c["cur_ph"] is not None else None))
     put('<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
         + H.anchor_id("sm", sid) + '">Timeline &rarr;</a>'

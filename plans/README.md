@@ -297,6 +297,28 @@ findings as confirmed by the owner's agent):
   18, the `wg_bars` window grids of 07 / 08, the value-CSV LISTAGGs of
   02-05 / 07 / 13-15 / 18; CLAUDE.md, "Per-window strings"). Not fixed
   here: its own change.
+- 033 (fix group R2; resolves the open question on the DBTIME_CPU /
+  IO_SCANS trigger looseness): a hint says only what its rule checks.
+  `COMMIT_LAT` fires when log file sync is flagged up AND its time per
+  commit (wait AAS / user commits per second) is at least **1.5x** the
+  prior windows' (ratio of the means); it no longer looks at whether
+  user commits was flagged. Its sentence reads "rose faster than the
+  commit rate: each commit waited at least 1.5 times as long". The demo
+  loses it (commits +17.7%, each commit 4% longer). `DBTIME_CPU` fires
+  only on `time_split` 'c' (CPU took 60% of the rise or more, the
+  headline's "mostly CPU"); 'm' ("CPU and wait alike") gets no hint.
+  `IO_SCANS` keeps its OR trigger and its sentence now reads "or":
+  "Rising scattered or direct-path read waits, or more long-table
+  scans, usually mean more full scans".
+- 033 (R2): the next-step queries are bounded like the report. On RAC
+  with `inst_num` 0, when the report skipped an instance for the Current
+  window, `#INST#` lists the valid ones (`instance_number IN (...)`);
+  single-instance and all-valid output is unchanged. `ROW_LOCK` cuts ASH
+  to the nominal window (`sample_time` in `[start, end)`, TIMESTAMP
+  literals) over snapshots begin .. end + 1, like section 24. `PLAN`
+  takes each plan's DBID and `con_id` from one `DBA_HIST_SQL_PLAN` row
+  (DBIDs of the report, latest id-0 TIMESTAMP, then the lowest dbid /
+  con_dbid: section 23's rule), not the primary DBID and `MIN(con_id)`.
 
 
 Each plan records its default, so an executor never waits on these. Decide
@@ -358,11 +380,6 @@ before running a plan to change its default.
   snapshot span. Settled 2026-11-20: the real span (above).
 - **031, defaults.** Flagged-only and biggest-change-first. The plan keeps
   today's defaults.
-- **033**
-  - Approve the eight hint sentences.
-  - New: the `ROW_LOCK` sentence links to `#blocking` (section 24).
-  - New: should the `PLAN` sentence say that the `DISPLAY_AWR` query
-    needs the optional `DBA_HIST_SQL_PLAN` grant?
 - **036.** Labels on both charts (the plan) or on the by-event chart only.
 - **024 in the dashboard (new).** The Activity header then has two
   switches side by side: 024's layout switch and the dashboard's chart

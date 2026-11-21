@@ -131,6 +131,9 @@ DECLARE
     v_cw_dbid    NUMBER;   -- plan 033: the Current window's DBID and snapshot range,
     v_cw_b       NUMBER;   --   for the cards' read-only "Next step" queries
     v_cw_e       NUMBER;
+    v_cw_t0      VARCHAR2(19);    -- its nominal start / end (ASH queries: sample_time)
+    v_cw_t1      VARCHAR2(19);
+    v_cw_inst    VARCHAR2(4000);  -- its valid instances, only when one was skipped (RAC)
     v_open_g     VARCHAR2(64);   -- plan 025: the one card that starts open (Summary)
     v_parts      part_t;
     v_ncl        PLS_INTEGER := 0;   -- large finding cards (v1.7: a finding is a card)
@@ -406,8 +409,35 @@ DECLARE
         RETURN FALSE;
     END ev_up;
 
+    -- review follow-up R2: COMMIT_LAT claims each commit waited longer, so
+    -- it checks exactly that: log file sync flagged up AND its time per
+    -- commit (wait AAS / user commits per second) at least 1.5x the prior
+    -- windows' (mean wait / mean commit rate, the ratio of the means)
+    FUNCTION commit_lat_up RETURN BOOLEAN IS
+    BEGIN
+        IF NOT ev_up('log file sync') THEN RETURN FALSE; END IF;
+        FOR i IN 1 .. v_findings.COUNT LOOP
+            IF v_findings(i).metric_domain = 'LOAD' AND v_findings(i).metric_name = 'user commits' THEN
+                FOR e IN 1 .. v_evs.COUNT LOOP
+                    IF v_evs(e).event = 'log file sync' AND v_evs(e).mu IS NOT NULL
+                       AND v_findings(i).cur_val > 0 AND v_findings(i).prior_mean > 0
+                       AND v_evs(e).cur_val / v_findings(i).cur_val
+                           >= 1.5 * v_evs(e).mu / v_findings(i).prior_mean THEN
+                        RETURN TRUE;
+                    END IF;
+                END LOOP;
+                RETURN FALSE;
+            END IF;
+        END LOOP;
+        RETURN FALSE;
+    END commit_lat_up;
+
     -- plan 033: which rule of sql/lib/finding_hints.plsql a card gets
-    -- (NULL = none); the table of rules is in that file's header
+    -- (NULL = none); the table of rules is in that file's header.  A rule
+    -- fires only on what its sentence claims (review follow-up R2):
+    -- IO_SCANS on any one of its signals (the sentence says "or"),
+    -- COMMIT_LAT on the time per commit, DBTIME_CPU only when CPU took at
+    -- least 60% of the rise (time_split 'c', the headline's "mostly CPU")
     FUNCTION pick_hint(p_g VARCHAR2) RETURN VARCHAR2 IS
         v_split VARCHAR2(1);
     BEGIN
@@ -418,9 +448,7 @@ DECLARE
             END IF;
             IF ev_up('db file sequential read') THEN RETURN 'IO_SINGLE'; END IF;
         ELSIF p_g = 'COMMIT' THEN
-            IF ev_up('log file sync') AND NOT f_up('LOAD', 'user commits') THEN
-                RETURN 'COMMIT_LAT';
-            END IF;
+            IF commit_lat_up THEN RETURN 'COMMIT_LAT'; END IF;
         ELSIF p_g = 'NET' THEN
             IF ev_up('SQL*Net more data to client')
                OR f_up('LOAD', 'bytes sent via SQL*Net to client') THEN
@@ -432,7 +460,7 @@ DECLARE
             IF v_dbt IS NOT NULL AND v_cpu IS NOT NULL THEN
                 v_split := time_split(v_findings(v_dbt).cur_val, v_findings(v_dbt).prior_mean,
                                       v_findings(v_cpu).cur_val, v_findings(v_cpu).prior_mean);
-                IF v_split IN ('c', 'm') THEN RETURN 'DBTIME_CPU'; END IF;
+                IF v_split = 'c' THEN RETURN 'DBTIME_CPU'; END IF;
             END IF;
         ELSIF p_g = 'WAIT:Application' THEN
             IF ev_up('enq: TX - row lock contention') THEN RETURN 'ROW_LOCK'; END IF;
@@ -583,7 +611,8 @@ DECLARE
         IF v_rule IS NOT NULL THEN
             DBMS_OUTPUT.PUT_LINE(hint_block(v_rule, v_id,
                 CASE WHEN v_cw_b IS NOT NULL
-                     THEN hint_fill(hint_sql(v_rule), v_cw_dbid, v_cw_b, v_cw_e, ~inst_num) END));
+                     THEN hint_fill(hint_sql(v_rule), v_cw_dbid, v_cw_b, v_cw_e, ~inst_num,
+                                    p_insts => v_cw_inst, p_t0 => v_cw_t0, p_t1 => v_cw_t1) END));
         END IF;
         IF v_nrel + v_ntw > 0 THEN
             DBMS_OUTPUT.PUT_LINE('<details class="rel"><summary>'
@@ -1319,20 +1348,36 @@ BEGIN
         || '</span><span class="vw in-a">Every scored metric against its prior windows; one table per domain</span>'
         || '</small></h2>');
 
-    -- plan 033: the Current window's DBID and snapshot range, for the
-    -- cards' read-only "Next step" queries (one row: MIN / MAX over the
-    -- instances; all NULL when the Current window is not valid)
+    -- plan 033: the Current window's DBID, snapshot range and nominal
+    -- start / end, for the cards' read-only "Next step" queries (one row:
+    -- MIN / MAX over its VALID instances; all NULL when it is not valid).
+    -- When the report skipped an instance for it (RAC, a restart inside
+    -- it), the queries keep to the valid ones (v_cw_inst), like the report.
     IF v_order.COUNT > 0 THEN
         FOR cw IN (
             WITH
             @@sql/lib/windows_cte.sql
-            SELECT MIN(dbid) AS dbid, MIN(begin_snap_id) AS b, MAX(end_snap_id) AS e
-            FROM   valid_windows
+            SELECT MIN(CASE WHEN valid_flag = 'Y' THEN dbid END)          AS dbid,
+                   MIN(CASE WHEN valid_flag = 'Y' THEN begin_snap_id END) AS b,
+                   MAX(CASE WHEN valid_flag = 'Y' THEN end_snap_id END)   AS e,
+                   TO_CHAR(MIN(CASE WHEN valid_flag = 'Y' THEN win_start_ts END),
+                           'YYYY-MM-DD HH24:MI:SS') AS t0,
+                   TO_CHAR(MAX(CASE WHEN valid_flag = 'Y' THEN win_end_ts END),
+                           'YYYY-MM-DD HH24:MI:SS') AS t1,
+                   COUNT(CASE WHEN valid_flag = 'N' AND instance_number IS NOT NULL THEN 1 END) AS n_skip,
+                   LISTAGG(CASE WHEN valid_flag = 'Y' THEN TO_CHAR(instance_number) END, ', ')
+                       WITHIN GROUP (ORDER BY instance_number) AS insts
+            FROM   windows
             WHERE  week_offset = 0
         ) LOOP
             v_cw_dbid := cw.dbid;
             v_cw_b    := cw.b;
             v_cw_e    := cw.e;
+            v_cw_t0   := cw.t0;
+            v_cw_t1   := cw.t1;
+            IF cw.n_skip > 0 AND cw.b IS NOT NULL THEN
+                v_cw_inst := cw.insts;
+            END IF;
         END LOOP;
     END IF;
 

@@ -524,12 +524,18 @@ def _load_hints():
 HINT_TEXT, HINT_SQL = _load_hints()
 
 
-def hint_fill(tpl, dbid, begin, end, inst, sqlid=None, ph1=None, ph2=None):
-    """hint_fill() of sql/lib/finding_hints.plsql."""
+def hint_fill(tpl, dbid, begin, end, inst, sqlid=None, ph1=None, ph2=None,
+              insts=None, t0=None, t1=None, dbids=None):
+    """hint_fill() of sql/lib/finding_hints.plsql (t0 / t1: the Current
+    window's nominal start / end as 'YYYY-MM-DD HH:MM:SS'; insts: its valid
+    instances when one was skipped, never in the single-instance model)."""
     if tpl is None:
         return None
     s = lambda v: "" if v is None else str(v)
-    v = tpl.replace("#INST#", " AND instance_number = " + str(inst) if inst and inst > 0 else "")
+    v = tpl.replace("#INST#", " AND instance_number IN (" + insts + ")" if insts
+                    else " AND instance_number = " + str(inst) if inst and inst > 0 else "")
+    v = v.replace("#T0#", "TIMESTAMP '" + s(t0) + "'").replace("#T1#", "TIMESTAMP '" + s(t1) + "'")
+    v = v.replace("#DBIDS#", s(dbids))
     v = v.replace("#SQLID#", s(sqlid)).replace("#PH1#", s(ph1)).replace("#PH2#", s(ph2))
     v = v.replace("#DBID#", s(dbid)).replace("#B0#", s(begin))
     v = v.replace("#B#", s(None if begin is None else begin + 1)).replace("#E#", s(end))

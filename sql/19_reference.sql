@@ -240,7 +240,9 @@ BEGIN
         || ' (the chip still shows a smaller rise). A wait class is scored on all sessions, background included;'
         || ' only the time it added counts foreground sessions, like DB time. The printed z of a band in the Summary view'
         || ' stops at &gt;+10&sigma;; tables show the exact value. Twins are folded under'
-        || ' <b>related metrics</b> and never counted.</dd>');
+        || ' <b>related metrics</b> and never counted. A card may add one rule-based line on what such a change usually means, only when its rule&rsquo;s test held'
+        || ' (<code>sql/lib/finding_hints.plsql</code>), and a copyable read-only query bounded like the report: the Current window&rsquo;s snapshots, its valid'
+        || ' instances, ASH cut to its start and end.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>DB time strip</dt><dd><code>DBA_HIST_SYSSTAT</code> DB time per compared window, divided by 100 (centiseconds per second = average active sessions); release markers sit'
         || ' on the boundary between the two windows they fall between.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Checked and normal</dt><dd>Every other scored metric: the normal ones, loudest first; <b>moved, too small to matter</b> = past |z| 2 but under the metric&rsquo;s'

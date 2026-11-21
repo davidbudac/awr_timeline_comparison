@@ -927,7 +927,7 @@ BEGIN
             DBMS_OUTPUT.PUT_LINE(hint_block('PLAN', v_cid,
                 CASE WHEN v_pc(c).prior_ph IS NOT NULL AND v_pc(c).cur_ph IS NOT NULL
                      THEN hint_fill(hint_sql('PLAN'), ~dbid, NULL, NULL, 0, v_id,
-                                    v_pc(c).prior_ph, v_pc(c).cur_ph) END));
+                                    v_pc(c).prior_ph, v_pc(c).cur_ph, p_dbids => '~dbid_list') END));
             DBMS_OUTPUT.PUT_LINE('<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
                 || anchor_id('sm', v_id) || '">Timeline &rarr;</a>'
                 || '<span class="evl"><a href="#topsql">Top SQL</a><a href="#sqlmon">SQL Monitor</a></span>'

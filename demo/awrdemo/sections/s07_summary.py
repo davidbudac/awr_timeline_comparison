@@ -315,9 +315,27 @@ def _ev_up(evs, event) -> bool:
     return False
 
 
+def _commit_lat_up(findings, evs) -> bool:
+    """07_summary.sql commit_lat_up (review follow-up R2): log file sync
+    flagged up AND its time per commit (wait AAS / user commits per second)
+    at least 1.5x the prior windows' (mean wait / mean commit rate)."""
+    if not _ev_up(evs, "log file sync"):
+        return False
+    for f in findings:
+        if f.domain == "LOAD" and f.name == "user commits":
+            for e in evs:
+                if (e["event"] == "log file sync" and e["mu"] is not None
+                        and f.cur is not None and f.cur > 0 and f.mu is not None and f.mu > 0
+                        and e["cur"] / f.cur >= 1.5 * e["mu"] / f.mu):
+                    return True
+            return False
+    return False
+
+
 def _pick_hint(g, findings, evs, dbt, cpu):
     """07_summary.sql pick_hint (plan 033): which rule of
-    sql/lib/finding_hints.plsql a card gets (None = none)."""
+    sql/lib/finding_hints.plsql a card gets (None = none); a rule fires
+    only on what its sentence claims (review follow-up R2)."""
     if g == "IO":
         if (_f_up(findings, "LOAD", "table scans (long tables)") or _ev_up(evs, "db file scattered read")
                 or _ev_up(evs, "direct path read")):
@@ -325,7 +343,7 @@ def _pick_hint(g, findings, evs, dbt, cpu):
         if _ev_up(evs, "db file sequential read"):
             return "IO_SINGLE"
     elif g == "COMMIT":
-        if _ev_up(evs, "log file sync") and not _f_up(findings, "LOAD", "user commits"):
+        if _commit_lat_up(findings, evs):
             return "COMMIT_LAT"
     elif g == "NET":
         if (_ev_up(evs, "SQL*Net more data to client")
@@ -336,7 +354,7 @@ def _pick_hint(g, findings, evs, dbt, cpu):
             return "HARD_PARSE"
     elif g == "DBTIME":
         if dbt is not None and cpu is not None:
-            if h.time_split(dbt.cur, dbt.mu, cpu.cur, cpu.mu) in ("c", "m"):
+            if h.time_split(dbt.cur, dbt.mu, cpu.cur, cpu.mu) == "c":
                 return "DBTIME_CPU"
     elif g == "WAIT:Application":
         if _ev_up(evs, "enq: TX - row lock contention"):
@@ -443,7 +461,8 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g,
     # plan 033: what this usually means, and a read-only next query
     rule = _pick_hint(g, findings, evs, dbt, cpu)
     if rule is not None:
-        sql = (h.hint_fill(h.HINT_SQL.get(rule), cw[0], cw[1], cw[2], w.inst_num)
+        sql = (h.hint_fill(h.HINT_SQL.get(rule), cw[0], cw[1], cw[2], w.inst_num,
+                           t0=cw[3], t1=cw[4])
                if cw is not None and cw[1] is not None else None)
         out.append(h.hint_block(rule, cid, sql))
     if nrel + ntw > 0:
@@ -665,10 +684,14 @@ def emit(w) -> str:
         for g in order:
             out.append(_tri_row(w, g, lead[g], dbt, cpu))
         out.append('</div>')
-        # plan 033: the Current window's DBID and snapshot range, for the
-        # cards' read-only "Next step" queries (None when it is not valid)
+        # plan 033: the Current window's DBID, snapshot range and nominal
+        # start / end, for the cards' read-only "Next step" queries (None
+        # when it is not valid; the model is single-instance, so 07's
+        # valid-instance list never applies)
         cwin = next((x for x in w.valid_windows if x.week_offset == 0), None)
-        cw = (cwin.dbid, cwin.begin_snap_id, cwin.end_snap_id) if cwin is not None else None
+        cw = ((cwin.dbid, cwin.begin_snap_id, cwin.end_snap_id,
+               cwin.win_start_ts.strftime("%Y-%m-%d %H:%M:%S"), cwin.win_end_ts.strftime("%Y-%m-%d %H:%M:%S"))
+              if cwin is not None else None)
         out.append('<div class="cards vw in-s">')
         for k, g in enumerate(order, 1):
             _card(w, out, g, k, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g, findings, cw)

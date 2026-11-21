@@ -104,7 +104,9 @@
  *     G4: beforeprint opens every folded card, that fold and (dashboard)
  *     every lead row, afterprint restores the screen state;
  *     plan 033: card hints (rule id, line, copyable read-only query with
- *     no unfilled placeholder; the plan card keeps its footer links; the
+ *     no unfilled placeholder; R2: a rule with a query in
+ *     sql/lib/finding_hints.plsql shows it, every query is read-only
+ *     "SELECT ... ;" statements; the plan card keeps its footer links; the
  *     dashboard side column does not overflow);
  *   - pattern tags (plan 027): every chip has text and a title, is
  *     focusable and named by its text, keyboard focus shows its sentence
@@ -152,6 +154,19 @@ async function launch() {
 }
 
 const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
+
+// plan 033 / review follow-up R2: the hint rules that have a "Next step"
+// query, read from the hint_sql table of sql/lib/finding_hints.plsql (one
+// WHEN line per rule, like demo/awrdemo/helpers.py); null when the file is
+// not there (the check then only looks at the queries it finds)
+const HINT_SQL_RULES = (() => {
+  try {
+    const t = fs.readFileSync(path.join(__dirname, '..', 'sql', 'lib', 'finding_hints.plsql'), 'utf8');
+    const a = t.indexOf('FUNCTION hint_sql'), b = t.indexOf('FUNCTION', a + 10);
+    if (a < 0) return null;
+    return [...t.slice(a, b < 0 ? undefined : b).matchAll(/WHEN\s+'([A-Z0-9_]+)'\s+THEN\s+'/g)].map(m => m[1]);
+  } catch (e) { return null; }
+})();
 
 // plan 036 (fitted per band): defines window.__awrLabelBand(id, key) in the
 // page = the number of band labels of chart #id (payload AWR_DATA[key])
@@ -1283,7 +1298,7 @@ const LABEL_BAND = () => {
   // the rail's card sub-links and the table micro strips.
   {
     const { page, errors } = await openPage('#view=summary', 'light');
-    const p4 = await page.evaluate(async () => {
+    const p4 = await page.evaluate(async (HQ) => {
       const vis = el => !!el && el.getClientRects().length > 0;
       const wait = ms => new Promise(r => setTimeout(r, ms));
       const out = {};
@@ -1534,14 +1549,28 @@ const LABEL_BAND = () => {
         out.calmReveal = cf.open && vis(sn.querySelector('.ngrid')) ? 'ok' : 'FAIL';
         cf.open = false;
       } else out.calmReveal = 'skip';
-      // plan 033: rule-based hints; a next-step query is a copyable SELECT
+      // plan 033: rule-based hints; a next-step query is a copyable SELECT.
+      // Review follow-up R2: a rule with a query in finding_hints.plsql
+      // (HQ) shows it, a rule without one shows none; a query has no
+      // placeholder left and is one or more read-only "SELECT ... ;"
+      // statements (string literals left out of the keyword test: the
+      // ROW_LOCK query names "row lock contention")
+      const roSql = t => {
+        const u = t.replace(/'(?:[^']|'')*'/g, "''"), st = u.split(';').map(x => x.trim());
+        return st.length > 1 && st.pop() === '' && st.every(x => /^SELECT\s/i.test(x))
+          && !/\b(INSERT|UPDATE|DELETE|MERGE|UPSERT|ALTER|CREATE|DROP|GRANT|REVOKE|TRUNCATE|RENAME|COMMENT|BEGIN|DECLARE|EXEC|EXECUTE|CALL|COMMIT|ROLLBACK|LOCK)\b/i.test(u);
+      };
       const hints = [...document.querySelectorAll('article.fc .fc-hint[data-hint]')];
       out.hints = hints.map(x => x.closest('article.fc').id + ':' + x.getAttribute('data-hint')).join(',');
-      out.hintsOk = hints.every(x => {
-        const pre = x.querySelector('pre.sql'), btn = x.querySelector('.copy-btn[data-copy]');
-        return x.querySelector('p b') && (!pre || (btn && document.querySelector(btn.getAttribute('data-copy')) === pre
-          && /^SELECT /.test(pre.textContent) && !/#[A-Z0-9]+#/.test(pre.textContent)));
-      });
+      out.hintBad = hints.filter(x => {
+        const pre = x.querySelector('pre.sql'), btn = x.querySelector('.copy-btn[data-copy]'), r = x.getAttribute('data-hint');
+        if (!x.querySelector('p b')) return true;
+        if (HQ && (HQ.indexOf(r) >= 0) !== !!pre) return true;
+        return !!pre && !(btn && document.querySelector(btn.getAttribute('data-copy')) === pre
+          && !/#[A-Z0-9]+#/.test(pre.textContent) && roSql(pre.textContent));
+      }).map(x => x.closest('article.fc').id + ':' + x.getAttribute('data-hint'));
+      out.hintsOk = out.hintBad.length === 0;
+      out.hintRules = HQ ? HQ.length : 'n/a';
       // the plan card keeps section 23's "Plan shape" link in its footer
       out.hintPfl = [...document.querySelectorAll('article.fc.chg[id^="f-plan-"]')].every(c => c.querySelector('.fc-f .evl a[href="#topsql"]'));
       // dashboard design: the plan card's query never widens the side column
@@ -1600,7 +1629,7 @@ const LABEL_BAND = () => {
       out.nwin = (window.AWR_WIN && window.AWR_WIN.w) ? window.AWR_WIN.w.length : 0;
       window.AWR_setView('summary', false);
       return out;
-    });
+    }, HINT_SQL_RULES);
     console.log('phase 4', JSON.stringify(p4));
     if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && !p4.att) fail('DB-time breakdown: not shown under the verdict');
     if (!p4.attSrcGone) fail('DB-time breakdown: #att-src left in the page');
@@ -1633,7 +1662,7 @@ const LABEL_BAND = () => {
     if (/^FAIL/.test(p4.toggle)) fail('evidence library row toggle ' + p4.toggle);
     if (/^FAIL/.test(p4.reveal)) fail('evidence library reveal ' + p4.reveal);
     if (!p4.subsOk) fail('rail card sub-links ' + p4.subs);
-    if (!p4.hintsOk) fail('card hints: a hint without its line, or a next-step query not copyable / with an unfilled placeholder: ' + p4.hints);
+    if (!p4.hintsOk) fail('card hints: a hint without its line, a rule with a query that shows none (or the reverse), or a next-step query not copyable / with an unfilled placeholder / not read-only SELECTs: ' + p4.hintBad.join(', '));
     if (!p4.hintPfl) fail('card hints: a plan card lost its footer links (section 23 adds "Plan shape" there)');
     if (!p4.hintSide) fail('card hints: the dashboard side column is wider than its box');
     if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && !/f-io:IO_SCANS/.test(p4.hints)) fail('demo: the Physical I/O card should carry the IO_SCANS hint, got ' + p4.hints);

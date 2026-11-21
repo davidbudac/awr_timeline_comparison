@@ -381,17 +381,35 @@ evidence list (`div.fc-b`), `div.fc-hint[data-hint="<rule>"]`: one hedged
 "What this usually means." line and, when the rule has a query and the
 Current window is valid, a copyable read-only "Next step" SELECT
 (`.codewrap` + `.copy-btn[data-copy="#hq-<card id>"]` + `pre.sql`) filled
-with the Current window's DBID and snapshot range. 07's `pick_hint(p_g)`
+with the Current window's DBID and snapshot range, bounded like the
+report (review follow-up R2): `#INST#` keeps to the Current window's
+VALID instances when the report skipped one for it (RAC, `inst_num` 0, a
+restart inside it: ` AND instance_number IN (1, 3)`; else ` = n` or
+nothing, so single-instance output is unchanged), and the ASH query
+(`ROW_LOCK`) is cut to the nominal window `[#T0#, #T1#)` (TIMESTAMP
+literals) over snapshots begin .. end + 1, like 24. 07's `pick_hint(p_g)`
 picks the rule from the rows it already scored (`f_up` = a large /
 moderate row above its prior mean; `ev_up` = the same for one of the top 2
-events per class in `v_evs`): `IO_SCANS`, `IO_SINGLE`, `COMMIT_LAT`,
-`NET_PAYLOAD`, `HARD_PARSE`, `DBTIME_CPU`, `ROW_LOCK` (links `#blocking`,
-always emitted by 24). 18's plan card always carries `PLAN`
-(`DBMS_XPLAN.DISPLAY_AWR` of both plan hashes, each passing the plan's
-`con_id` from `DBA_HIST_SQLSTAT` -- from a CDB root the 3-argument call
-returns no rows for a statement captured in a PDB; needs the optional
-`DBA_HIST_SQL_PLAN` grant when the reader runs it), between its evidence
-and its footer (23 adds "Plan shape" to the footer's `span.evl`). The
+events per class in `v_evs`), and a rule fires only on what its sentence
+claims (R2): `IO_SCANS` (any one of long-table scans, scattered read,
+direct path read; the sentence says "or"), `IO_SINGLE`, `COMMIT_LAT`
+(`commit_lat_up`: log file sync flagged up AND its time per commit, the
+wait's AAS / user commits per second, at least 1.5x the prior windows'
+ratio of the means), `NET_PAYLOAD`, `HARD_PARSE`, `DBTIME_CPU` (only
+`time_split` `'c'`, the headline's "mostly CPU"; `'m'`, "CPU and wait
+alike", gets no hint), `ROW_LOCK` (links `#blocking`, always emitted by
+24). 18's plan card always carries `PLAN` (`DBMS_XPLAN.DISPLAY_AWR` of
+both plan hashes; each plan's DBID and `con_id` come together from ONE
+`DBA_HIST_SQL_PLAN` row over the report's DBIDs, `#DBIDS#`: the latest
+id-0 TIMESTAMP, then the lowest dbid / con_dbid, section 23's rule -- a
+pre-migration plan keeps its old DBID, one PDB of several its own
+container; from a CDB root the 3-argument call returns no rows for a
+statement captured in a PDB; needs the optional `DBA_HIST_SQL_PLAN` grant
+when the reader runs it), between its evidence and its footer (23 adds
+"Plan shape" to the footer's `span.evl`). verify_report reads the rules
+that have a query from `hint_sql` and fails when one shows none (or the
+reverse), on a `#...#` left, or on anything but read-only `SELECT ... ;`
+statements. The
 texts and queries are ONE table in `sql/lib/finding_hints.plsql`; every
 `WHEN` line is one source line because `helpers.py` parses them
 (`HINT_TEXT` / `HINT_SQL`), and no code line has a space before `#NL#`
