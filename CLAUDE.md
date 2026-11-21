@@ -55,15 +55,15 @@ awr_trend.sql            -- driver: prologue (CSS + client libs), SPOOL, section
 sql/
 ├── defaults.sql         -- canonical DEFINEs for the substitution vars
 ├── _style.sql           -- embedded CSS (emitted once; ALSO @@-included by the fleet chrome)
-├── 00_params.sql        -- top bar, rail, view switch + chrome JS, AWR_WIN, the Activity
-│                        --   charts' skeleton (#activity, top of every view), verdict hero,
-│                        --   Timeline skeleton (#timeline / #tl)
+├── 00_params.sql        -- top bar, rail, view switch + chrome JS, AWR_WIN, verdict hero,
+│                        --   the Activity charts' skeleton (#activity, every view; under the
+│                        --   verdict in Summary), Timeline skeleton (#timeline / #tl)
 ├── 01_windows.sql       -- aligned windows, snap pairs, restart guard
 ├── 02_load_profile.sql  -- SYSSTAT deltas (per template)
 ├── 03_sysmetric.sql     -- SYSMETRIC_SUMMARY averages (per template)
 ├── 04_waits_fg.sql      -- foreground waits + wait-class rollup (per template)
 ├── 05_waits_bg.sql      -- background waits (BG_EVENT_SUMMARY, per template)
-├── 06_top_sql.sql       -- Top-N SQL ranked 5 ways + per-dim bump chart (ranked, not scored)
+├── 06_top_sql.sql       -- Top-N SQL ranked 7 ways (Biggest change first) + per-dim bump chart (ranked, not scored)
 │                        --   (break down by SQL_ID / schema / module / action)
 ├── 07_summary.sql       -- scored findings: Summary finding cards + per-domain tables,
 │                        --   #s-changes slot, #s-normal, #s-lib heading
@@ -108,6 +108,8 @@ sql/
     ├── off_label.plsql       -- off_label(k): "-1w" / "-36h" offset label for any window count
     ├── finding_cards.plsql   -- v1.6.0 Summary vocabulary: card_group/label/id, metric_label/
     │                         --   unit/scale, fv*, time_split, move_txt, ent(), lead/card order
+    ├── finding_hints.plsql   -- plan 033: hint_text / hint_sql rule tables + hint_fill / hint_block (07, 18);
+    │                         --   one-line WHEN rows parsed by helpers.py
     ├── wingrid.plsql         -- v1.6.0 window component markup (wg_*): ruler, flags, bars, dates
     │                         --   + wg_buf line buffer (many windows); include off_label first
     ├── timeline.plsql        -- v1.6.0 Timeline lane rows (tl_*): tl_open/tl_close, tl_bars, tl_gut
@@ -143,6 +145,7 @@ sql/
         └── wait_event_targets.sql  -- single '*' row = "no filter" sentinel
 tools/js2plsql.sh                   -- dev-time generator for the js_* / css_design .plsql bodies (lint check 24)
 tools/fonts2plsql.sh                -- dev-time generator for sql/lib/css_fonts.plsql (lint check 33)
+tools/js_unit_tests.js              -- node unit tests of the client scripts' pure helpers (check.sh)
 side/create_weekly_baselines.sql    -- optional baselines (the only writer)
 run_awr_fleet.sh, awr_fleet_extract.sql, sql/fleet/ -- fleet report (see that section)
 server/                             -- optional scheduler web app (see that section)
@@ -286,7 +289,8 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
   nothing hidden; `#timeline` shows only its header + `p.tl-nojs` note (the
   grid is built client-side); every number is still in the tables.
 - **Assignment:** EVERY view = `section#activity` (00, `vw in-s in-t
-  in-a`, the first section after `<main>`, above the verdict; see
+  in-a`, emitted right after the verdict hero: first in Timeline / All
+  sections, under the verdict in Summary, where it opens compact; see
   "Activity, whole span" below). Summary = verdict hero `#verdict` (00), hero strip
   `#overview` (08), finding cards (07 `div.cards.vw.in-s`), `#s-changes`
   (plan / config cards, hidden until filled), `#s-normal`, the evidence
@@ -303,7 +307,8 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
   **`awr:view`** `{detail:{view}}` (replaced `awr:mode`;
   `window.AWR_setMode(det)` is a compat shim). `inView(el, v)` / `viewOf(el)`
   walk every `.vw` ancestor. `reveal(el)` — `AWR_TL.reveal` first (folded
-  Timeline lane / "+ Show N more"), opens a closed library row, clicks the
+  Timeline lane / "+ Show N more"), opens a folded finding card
+  (`window.AWR_fcOpen`, plan 025), opens a closed library row, clicks the
   tab of a hidden `.tabpanel`, opens the `[data-tail]` expander, every
   ancestor `<details>`, un-hides a filtered `tr`, `AWR_openSqlRow` for a 06
   `tr.sql-row`. `goTo(el, flash, persist)` / `window.AWR_goTo` — switch view,
@@ -320,10 +325,13 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
   (Activity, whole span → `#activity`, never dimmed), Summary
   (Verdict, Findings + one `a.sub` per card inserted by 07's inline script,
   What changed around it, Checked and normal, Evidence library), Timeline
-  (the lane links, hidden when a lane is empty; pills from row `data-sev`),
+  (the lane links, hidden when a lane is empty),
   Workload, SQL, Storage & config, Whole span, Reference (`#guide`,
-  `#about`). The v1.4 row filter, status dots, count pills, J/K and the
-  scrollspy are kept. A link's state (hover, `.on`) shows through its
+  `#about`). The v1.4 row filter, status dots, count pills on the Findings
+  link only (cards), J/K (cards in Summary) and the scrollspy are kept; a
+  card sub-link's share of the DB-time rise is `data-shr` + CSS `::after`,
+  never a child element (the rail text names the card in the dashboard).
+  A link's state (hover, `.on`) shows through its
   background and font weight only — no `border-left` / inset
   `box-shadow` (it drew a crescent on the rounded pill; lint check 32,
   verify_report's `railMarker`).
@@ -336,12 +344,80 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
 
 | Piece | Emitter | Notes |
 |---|---|---|
-| Verdict hero `section#verdict.vw.in-s.hero` | 00 | one rule-based h1 sentence (no free prose), `p#because-slot` "Likely source:" (17 fills), `ul#pills` (17 inserts before `li.pl-normal`), `ul#narrative-slot.hnotes` (17), `p.snapnote` (target_end snapped) |
+| Verdict hero `section#verdict.vw.in-s.hero` | 00 | one rule-based h1 sentence (no free prose), `p#because-slot` "Likely source:" (17 fills), `ul#pills` (17 inserts before `li.pl-normal`), `ul#narrative-slot.hnotes` (17), `p.snapnote` (target_end snapped), `#att-slot` (07 fills: DB-time breakdown = DB CPU + each class's foreground wait time, the cards' impact; `.att-h` / `.att-bar` / `.att-lg`, parts coloured from `AWR_WAIT_COLORS` via `--c`; a part needs `imp_on` (the cards' 0.01 AAS floor) and 1 % of the bar, smaller rises go into "+ n smaller"; a hatched rest = the rise less the parts' NET sum (rises minus falls), drawn past 1 % of the rise, the bar's base GREATEST(rise + falls, rises); a note when the net passes the rise by more than 2 %; a share is `LEAST(100, ...)`, kept up to 100.5 %, both here and in `g_shr`) |
 | Hero strip `section#overview` | 08 | DB time (AAS) per window on the window component, `#hero-dbt`; replaced the six v1.5 headline tiles |
-| Finding cards `#findings div.cards` | 07 | one `article.fc` per card group (below); header band glyph, big value, window bars, ≤4 evidence rows, related-metrics fold, footer `a.jump[data-tl]` "Timeline →" |
+| Triage list `#triage` | 07 | one `div.tri-row[data-card]` per card, in card order; impact cell filled by 07's inline script from the card's `data-impact` / `data-share` (plan 020); empty `span.tri-tags` (plan 027); `span.tri-spark[data-spark-dense]` (a trend at any window count, see Micro strips) |
+| Finding cards `#findings div.cards` | 07 | one `article.fc` per card group (below); header band glyph, big value, window bars, ≤4 evidence rows, an optional hint `div.fc-hint[data-hint]` (plan 033, below), related-metrics fold, footer `a.jump[data-tl]` "Timeline →" |
 | `section#s-changes[hidden]` | 07 (`#changes-slot`) | 18's plan cards then 12's config card move in and unhide it |
-| `section#s-normal` | 07 | "Checked and normal" `.ngrid` (≤18 `.nr`), "Moved, too small to matter", "Improved" |
+| `section#s-normal` | 07 | "Checked and normal" `.ngrid` (≤18 `.nr`), "Moved, too small to matter", "Improved"; body folded in `details.calm-fold` (summary line: the three counts; closed when there is a finding card); `reveal()` opens it for `#s-normal` (plan 032) |
 | Evidence library `#s-lib` + `section.lib` | 07 heading, sections | see below |
+
+**Folded cards (plan 025):** every card but the first one that is not DB
+time (the verdict and its DB-time breakdown carry DB time; DB time alone
+stays open) carries `data-fold="Y"`. 07's inline script after the cards
+folds them (`.fold`, a `button.fc-tg` "Show card" / "Fold" in the
+kicker; a click on a folded card that is not a link opens it) and fills
+the triage list's impact cells; `window.AWR_fcOpen(card)` opens one and
+the chrome's `reveal()` calls it, so every link, rail sub-link or hash
+into a folded card (or anything inside it) opens it first. The kicker
+carries `span.fc-sum` (Current value and normal range, shown only while
+folded) and the empty `span.fc-tags` (plan 027). JS off: nothing folds,
+the impact cells stay empty. `window.AWR_fcFold(card)` makes any card
+foldable (`mkF`: the toggle + click-to-open, once, `c.__fc`) and folds it;
+a card's `setF` also folds / unfolds the foldable card right after it
+that explains it (`data-explains` = its id), which keeps its own toggle
+(17's plan card under a folded I/O card, G4). Print (G4): 07's
+`beforeprint` handler opens every `article.fc.fold` and a closed
+`#s-normal details.calm-fold` (rendering the cards' grids synchronously:
+no timer runs before the print layout), `afterprint` folds back exactly
+those (and reopens a card that was open but got folded by the cascade
+from the card it explains); `_style.sql`'s print block hides `.fc-tg` and, for JS off, shows the
+closed fold's body through `::details-content`; the dashboard opens its
+closed lead rows (`printRows()` in js_design) and prints every findings tab
+(`css_design.css`, `@media print`). verify_report phase 4 `print`.
+
+**Card hints (plan 033):** a finding card may carry, right after its
+evidence list (`div.fc-b`), `div.fc-hint[data-hint="<rule>"]`: one hedged
+"What this usually means." line and, when the rule has a query and the
+Current window is valid, a copyable read-only "Next step" SELECT
+(`.codewrap` + `.copy-btn[data-copy="#hq-<card id>"]` + `pre.sql`) filled
+with the Current window's DBID and snapshot range, bounded like the
+report (review follow-up R2): `#INST#` keeps to the Current window's
+VALID instances when the report skipped one for it (RAC, `inst_num` 0, a
+restart inside it: ` AND instance_number IN (1, 3)`; else ` = n` or
+nothing, so single-instance output is unchanged), and the ASH query
+(`ROW_LOCK`) is cut to the nominal window `[#T0#, #T1#)` (TIMESTAMP
+literals) over snapshots begin .. end + 1, like 24. 07's `pick_hint(p_g)`
+picks the rule from the rows it already scored (`f_up` = a large /
+moderate row above its prior mean; `ev_up` = the same for one of the top 2
+events per class in `v_evs`), and a rule fires only on what its sentence
+claims (R2): `IO_SCANS` (any one of long-table scans, scattered read,
+direct path read; the sentence says "or"), `IO_SINGLE` (db file sequential
+read time flagged up; the sentence says "more of them or slower ones"), `COMMIT_LAT`
+(`commit_lat_up`: log file sync flagged up AND its time per commit, the
+wait's AAS / user commits per second, at least 1.5x the prior windows'
+ratio of the means), `NET_PAYLOAD`, `HARD_PARSE`, `DBTIME_CPU` (only
+`time_split` `'c'`, the headline's "mostly CPU"; `'m'`, "CPU and wait
+alike", gets no hint), `ROW_LOCK` (links `#blocking`, always emitted by
+24). 18's plan card always carries `PLAN` (`DBMS_XPLAN.DISPLAY_AWR` of
+both plan hashes; each plan's DBID and `con_id` come together from ONE
+`DBA_HIST_SQL_PLAN` row over the report's DBIDs, `#DBIDS#`: the latest
+id-0 TIMESTAMP, then the lowest dbid / con_dbid, section 23's rule -- a
+pre-migration plan keeps its old DBID, one PDB of several its own
+container; from a CDB root the 3-argument call returns no rows for a
+statement captured in a PDB; needs the optional `DBA_HIST_SQL_PLAN` grant
+when the reader runs it), between its evidence and its footer (23 adds
+"Plan shape" to the footer's `span.evl`). verify_report reads the rules
+that have a query from `hint_sql` and fails when one shows none (or the
+reverse), on a `#...#` left, or on anything but read-only `SELECT ... ;`
+statements. The
+texts and queries are ONE table in `sql/lib/finding_hints.plsql`; every
+`WHEN` line is one source line because `helpers.py` parses them
+(`HINT_TEXT` / `HINT_SQL`), and no code line has a space before `#NL#`
+(SQL*Plus trims trailing spaces). Hidden on a folded card
+(`.fc.fold > .fc-hint`). To add a rule: one `WHEN` line in `hint_text`,
+optionally one in `hint_sql`, one condition in 07's `pick_hint()` and in
+the twin's `_pick_hint` (`s07_summary.py`), then regenerate the demo.
 
 v1.5.0's `header.report` masthead, verdict banner, all-movers list, windows
 strip + full-span DB-time chart, `.narr` "What changed" block, six
@@ -356,11 +432,44 @@ COMMIT (`f-commit`: WAIT:Commit, COMMIT) · PARSE (PARSE, HARD_PARSE,
 CURSORS) · WRITE (WRITE_IO, REDO, WAIT:System I/O) · any other family is its
 own card (`WAIT:<c>` → "<c> waits", `f-wait-<c>`). Lead (`lead_better`):
 large before moderate → member of `card_primary`'s family → larger |z| →
-shorter label. Order (`card_before`): large before moderate, then max |z|;
-a flagged DB time card moves to 2nd. **00 (verdict) and 07 (cards) both
-order cards — keep them in lockstep** (twin `helpers.card_order`). "N
-findings" = number of cards; "metrics moved" = canonical large+moderate
-rows. Units (`metric_unit/scale`): DB time / DB CPU / CPU used → AAS
+shorter label. Order (`card_before_imp`, v1.7, plan 020): tier 1 = cards
+whose time measure rose by at least 0.01 AAS (`card_tier`, owner decision
+2026-11-20; `imp_on`: `ROUND(imp, 3) >= 0.01`, the token's rounding,
+twin `helpers.imp_on` / `card_tier`), largest
+impact first; tier 2 = DBTIME; tier 3 = the rest — a smaller rise, a
+fall, no time measure — by `card_before` (large before moderate, then
+max |z|); then a flagged DB time card moves to 2nd. The same floor
+hides the chip and the share (owner decision 2026-11-21: no chip, no
+`data-share`, no rail %, "under 0.01 AAS" in the triage list, nothing
+in Copy summary or the dashboard's `.dimp`; verify_report's `impOrder`
+encodes the tiers, `impChips` the chip rule, `lowImp` a flagged card
+under the floor -- required on the demo, whose background-only Queueing
+waits card is one). Impact
+(`impact_group` + `time_added`): the card's time measure — DB time or DB
+CPU (time model), Current minus prior mean ×`metric_scale` = AAS, or its
+wait class's FOREGROUND wait time (owner decision 2026-11-20:
+`time_waited_micro_fg` from the same `DBA_HIST_SYSTEM_EVENT` rows as the
+class row, CTEs `wait_fg_rows` / `wait_fg` in BOTH 00 and 07, carried as
+`fg_d` on the collected row) — so a mostly-background class (archiver,
+log switch) no longer outranks the whole DB-time rise. Never scored: the
+`Wait class: X` rows, their z / bucket and which cards exist stay all
+sessions. 021's breakdown (its parts and "Fell:"), the triage list, the
+rail shares and Copy summary all read the same impact;
+`article.fc[data-impact]` (3-decimal token, '' = none) and
+`[data-share]` (integer % of the DB-time rise, '' below the 0.01 AAS
+floor, when DB time did not rise or the share passes 100) are a
+contract for later Summary features; a chip `.fc-k .fc-imp` shows it
+(only a rise of 0.01 AAS or more; a share that rounds to 0 reads "<1%"
+on the chip, the rail, the triage list and Copy summary). A flagged DB CPU card is its own card
+`CPU` (label "CPU"). Summary-only band glyphs (07's card header,
+evidence and normal rows, 08's strip, 18's plan card) pass `p_zcap =>
+10` (printed z stops at ">+10σ"; tables and Timeline gutters keep the
+exact z). **00 (verdict) and 07 (cards) both
+order cards — keep them in lockstep** (twin `helpers.card_order`). One
+count: a finding is a card — the verdict pill (`li.pl-find`), the Summary
+Findings header (`.meta.in-s`) and the rail's Findings pills (`cardCounts`
+in 00's chrome) count cards; the All sections Findings header and every
+section header count their own rows. Units (`metric_unit/scale`): DB time / DB CPU / CPU used → AAS
 (×0.01), SQL Service Response Time → ms/call (×10), waits → AAS, bytes →
 B/s auto-scaled; scoring always runs on the stored value. DB time card
 evidence starts with DB CPU and the top 2 events of every flagged wait
@@ -377,12 +486,35 @@ elapsed, not "more than one plan in the span" (review #6).
 that fills a slot owned by an earlier section emits its block hidden and a
 one-line inline `<script>` moves it while the page parses. Slots:
 `#changes-slot` (07; 18 plan cards `f-plan-<sql_id>` first, then 12's
-`#f-config`, as the driver runs 18 before 12), `#because-slot` / `#pills` /
+`#f-config`, as the driver runs 18 before 12), `#att-slot` (07, the
+DB-time breakdown under the verdict), `#because-slot` / `#pills` /
 `#narrative-slot` / verdict `.vx[data-vx="io"]` / I/O card evidence
 `[data-ev-for]` (17, which runs last). These scripts run BEFORE any
 DOMContentLoaded handler (ent unwrap, chrome), so they must not depend on
 them. JS off → the block stays hidden (every fact is also in its section).
 17 with nothing to say emits only its two `AWR-SECTION` markers.
+17 also moves the plan-change card of the I/O card's top statement (by
+Current physical reads) right after `#f-io` (`data-explains="f-io"`, a
+`span.xpl` "explains Physical I/O ↑" chip in its `.fc-k`, the arrow in
+`i.xu`; plan 026; when 025 folded the I/O card, 17 folds the plan card
+too through `AWR_fcFold`, and it opens with the I/O card or on its own
+toggle -- G4) and re-hides `#s-changes` when that empties it; anything
+counting finding cards in the DOM must exclude `.chg` (plan-change /
+configuration cards). R1's I/O card evidence: the top statement by
+Current physical reads, any statement (row "SQL": blocks vs its mean over
+the prior windows it ran in, gets per execution then and now, an
+`ent()` "new plan A → B" link to `#f-plan-<id>` when its plan changed),
+plus the newcomer (top-N by reads, in no prior top-N) as "New SQL" when
+it is a different statement; the likely-source line and R1's note still
+use the newcomer only. 17 picks A / B from SQLSTAT (prior most executed,
+Current most blocks read), 18 from SQL Monitor (prior most frequent
+capture, Current slowest), so they can differ: 18's card carries the
+transition it shows (`data-ph0` / `data-ph1` = prior / Current plan
+hash), 17's `data-explains-src` carries the one it cites (emitted only
+when it cites one), and the relocation script moves the card, adds the
+chip and keeps the link only when the two agree; otherwise the card stays
+in `#changes-slot` and the link becomes `span.ent-x` (review follow-up
+R2; verify_report `explainsPh` / `planLinkPh`).
 
 **Plan-change card** (18, twin `s18._plan_card`): one per statement whose
 Plan hash column fires (`plan_changed='Y'`) with a Current execution and
@@ -429,7 +561,7 @@ too). Lanes (`div.lane#lane-<x>[data-kind]`, rows in `.lrows`):
 |---|---|---|---|
 | activity | ash | 09: one stacked `.r.ash` row | `tl-ash-timeline` |
 | metrics | scored | 07: 11 headline metrics (`hl_rank`) + every other flagged **canonical** LOAD/METRIC row (twins stay in the tables) | `tl-fr-<l\|m>-<name>` |
-| waits | scored | 07 flagged wait classes; 04 Table A's first 16 events (past 10 `.more`, "+ Show N more") | `tl-fr-w-wait-class-<c>`, `tl-we-<event>` |
+| waits | scored | 07 flagged wait classes; 04 Table A's first 16 events (past 10 `.more`, "+ Show N more"), event rows in AAS per window (its seconds ÷ ITS real span, `MAX(dur_sec)` of `valid_windows`, as 07's class rows; `data-mu` / `data-sd` from the prior windows' AAS); `data-sev` and the gutter Δ / z / band stay Table A's (scored on seconds), so they match the dot and the linked row and can differ by a few % from the AAS bars when a span is off nominal | `tl-fr-w-wait-class-<c>`, `tl-we-<event>` |
 | objects | ranked | 14 top 2 segments by physical reads; 15 top 1 datafile by MB read | `tl-sg-…`, `tl-fl-…` |
 | sql | sql | 06 first 6 by elapsed (◆ plan flip on Current, ✚ first-seen window); 18 up to 3 SQL Monitor rows (plan change / DOP downgrade), `data-after` = the 06 row | `tl-sq-elapsed-<id>`, `tl-sm-<id>` |
 | config | config | 12 every changed parameter (≤20) as step rows, cells `data-pv` | `tl-pa-<param>` |
@@ -456,7 +588,7 @@ only the Current value is printed, JS fills priors from `data-v`.
 **Client — `js_timeline.plsql`** (`window.AWR_TL`): `take()` moves template
 content into its lane (`data-after` → under that row), `reveal(el)`;
 DOMContentLoaded: `#tip` tooltip, wait swatches from `AWR_WAIT_COLORS`, lane
-meta counts / folds / "+ Show N more" / rail pills, skipped windows struck
+meta counts / folds / "+ Show N more", skipped windows struck
 through in the ruler, prior values filled, the activity rows + DB time
 card, the Activity charts, `AWR_WG.render(#tl)`. **Pin:** `AWR_WG.pin(o)` /
 `pinned()` — `body[data-pw]`, `.pc` on `#tl [data-w=o]`, ruler buttons
@@ -466,11 +598,36 @@ the stripe `.on` on both Activity charts; Esc, Current or the gutter's
 every view; before the charts moved to the top, leaving the Timeline
 unpinned). Separate from the X2 `th[data-w]` highlight (`.hl` + `awr:window`).
 
-### Activity, whole span (`section#activity`, top of every view)
+**Row scale, filter and order (plan 031).** In `#tl` a bars row is scaled
+to its prior windows (`AWR_WG.rowScale`): a Current value above 1.5 x the
+tallest prior value / zone top is drawn as a full-height broken bar
+(`i.b.brk`, tooltip "bar cut"); every other row, and every row outside
+`#tl` (hero strip, cards, 24's strip), keeps the old scale. `#tl-tools`
+above the grid (`js_timeline` `tools()`, never `tbl-tools` / `tool-btn`:
+the design script moves those) holds "Rows: All / Flagged only"
+(`#tl.flagonly` hides the non-large / non-moderate rows of the two
+`data-kind="scored"` lanes, folded ones included; `.lane.nofl` shows its
+`.r.nfl` note "No large or moderate row here") and "Order: Report order /
+Biggest change first" (`AWR_WG.changeKey`: added AAS when every row of the
+lane has `data-unit="AAS"`, else |z|; a row with no prior mean -- empty
+`data-mu`, new in the Current window -- in an AAS lane ranks by Current
+minus the mean of its VALID prior windows, a missing value there counting
+0 for the sort only (owner decision 2026-11-20: a new event is often the
+story of the hour); skipped windows stay unknown, no valid prior window or
+a z lane sorts it last; wait-class rows `tl-fr-w-*` stay
+above the events; the lane is unfolded while sorted, `data-ord` keeps the
+report order). Defaults are today's behaviour; choices are saved on click
+only (localStorage `awr-tl-rows`, `awr-tl-order`); `AWR_TL.reveal` switches
+the filter off (unsaved) for a jump to a hidden row. Counts, pills and ids
+never change. Unit-tested in `tools/js_unit_tests.js`, verify_report block
+5d.
+
+### Activity, whole span (`section#activity`, every view; under the verdict in Summary)
 
 The bird's-eye ASH view (owner request, v1.6.0): `section#activity.vw.in-s
-.in-t.in-a.ashtop` is emitted by 00 right after `AWR_WIN`, before the
-verdict hero, so it is the first section in every view (and with JS off).
+.in-t.in-a.ashtop` is emitted by 00 right after the verdict hero (plan
+023): the first section in Timeline and All sections (the verdict is
+Summary-only), the second in Summary and with JS off.
 Skeleton (static, lifted verbatim by the demo twin): h2 "Activity, whole
 span" + `.h2sub`, `p.ax-nojs` (hidden under `body.js-wg`), `div#ashx.ashx
 [hidden]` › `.axh` (`#ax-range`, the stripe key `.axk`, `#ax-reset`),
@@ -478,7 +635,16 @@ span" + `.h2sub`, `p.ax-nojs` (hidden under `body.js-wg`), `div#ashx.ashx
 h3 + its own legend `.axlg`, then `.axp` › `svg.axsvg` + `.axbr` brush),
 `p.axn2`. The chart ids are `ax-cls` / `ax-ev`; everything inside is
 addressed by class (the old single-chart `#tl-ash` / `#ax-svg` / `#ax-lg`
-/ `#ax-plot` ids are gone).
+/ `#ax-plot` ids are gone). **Compact in Summary** (plan 023): `SP.cmp` /
+`#activity.ax-cmp` hide `#ax-ev` and `.axn2` under `body.vs`, the class
+chart draws a 96-px plot (it is then the last chart shown, so `draw()`
+gives it the date labels); `button#ax-more` (`.axr.axm`, unhidden only
+with two charts) toggles it and stores `localStorage awr-ax` = `full` /
+`compact` on a click only; off in the dashboard design
+(`window.AWR_DESIGN === 'dashboard'`: its `.axseg` tabs show one chart
+at a time); `css_design.css` re-shows `.axn2` inside the open "How to
+read" popover; the demo twin lifts the skeleton from `<section
+id="activity"` to the line ending `</div></section>`.
 
 **Payloads** (09, the SAME `DBA_HIST_ACTIVE_SESS_HISTORY` scan as 09's
 ECharts chart; it groups by bucket, class, **event**, `j_lo..j_hi` = every
@@ -561,7 +727,13 @@ says "1-min detail" (or "... in the compared windows, hourly
 elsewhere"), and `spZoom`'s minimum drops from `SP.min` to `FMIN` (30
 min) when the brushed range touches a segment. A wide window stripe
 (> 24 px) is hit-tested on its cap only (`.xw.wd` fades its fill), so the
-plot inside a zoomed window hovers / brushes minute by minute. Fine data
+plot inside a zoomed window hovers / brushes minute by minute; a narrower
+one on its whole height (a hit rect at least 12 px wide), so when the windows tile the
+span (more than about 42 contiguous windows on a 1440-px page, e.g. 168
+hourly ones) every x of the un-zoomed plot is a stripe: hover shows the
+window's tooltip, a click pins it, and bucket hover, the soft highlight
+and click-to-keep need a brush zoom first (by design; verify_report
+zooms there). Fine data
 is used only when EVERY chart decodes it (length = the segments'
 minutes), else both stay coarse. One time axis: x
 labels only on the lower chart (tick marks on both), ticks counted from
@@ -587,7 +759,23 @@ their overlap does not darken; the highlighted ones as `path.xa.xah` bands
 from zero, y axis fitted to it", "· Esc clears" when sticky). **Soft**
 (the band under the pointer in the plot, `seriesAt()`) = in place, not
 re-stacked (a re-base would slide the band away from the pointer and
-flicker); off while one is sticky. Cross-chart via `c.peer` / `c.xmap`
+flicker); off while one is sticky. **Pointer mapping (review follow-up
+R3):** every client -> SVG conversion (`seriesAt`, `tAt`, `panAt`, the
+brush) goes through the SVG's screen CTM (`toSvg` / `toCli`): narrower
+than 480 px the viewBox stays 480 wide (`Wd = max(480, width)`), so the
+fixed-height SVG scales it down and centres it vertically
+(preserveAspectRatio) -- clientY x W / width missed that letterbox (38 px
+at 390 px) and the hover lit nothing or the wrong band. `seriesAt` then
+picks the band as DRAWN at the pointer (`stackAt(pts, ord, vk, sx, v)`,
+pure, `AWR_TL.stackAt`, unit-tested: the two path points around x,
+linearly mixed, `c.g.pts` / the panel's `pts`), not the stack of the
+bucket under x: the band paths join bucket midpoints with straight lines
+and, zoomed out, keep each pixel column's busiest bucket, so on spiky
+data the old pick named a band above or below the one under the pointer
+(also at 1440 px). Hover, click-to-keep and the soft highlight follow it;
+the tooltip still reads the exact bucket. verify_report block 5e (390 px:
+a hover at points well inside a band lights that band, both charts, both
+layouts; the brush covers the plot). Cross-chart via `c.peer` / `c.xmap`
 (built from `ashe.ecls` in `spInit`): a class highlights its events in the
 event chart (strong when the class is), an event its class in the class
 chart, lightly (in place, the rest at .35). Sticky: a click on a band
@@ -603,6 +791,84 @@ leads with the highlighted rows (`.thlb` / `.thl`, share of the total
 pointer and flicker). CSS in `_style.sql` next to the other `.ashx` rules.
 Without a highlight `draw` emits exactly the pre-1.6.1 SVG.
 
+**Windows side by side (plan 024)**: `SP.mode` `'win'` / `'span'`,
+`span.seg.axlayout` in `.axh` (hidden when fewer than 2 windows or panels
+would be narrower than `AXMP`), `AWR_TL.axLayout(m, persist)`, localStorage
+`awr-axlayout` written on a click only, default `AXDEF` (`'span'`; `'win'`
+would apply the fit rule). `drawWin` draws one panel per window
+(`rect.xw.xpn` + `cur` / `on` / `sk` under the bands, caps `.xwc`, hit
+`.xwh` on the caps only, labels `text.xpl` on the lower chart) from
+`wSlice(i)`: the 1-minute refs when `fineCov` covers the whole window,
+else `bRange`; `colPts` / `bands` / `flagSvg` / `hlOrd` are shared with
+Full span (`draw`); `c.g.mode`, `c.g.pan`; `panAt` / `wRefAt` /
+`cross(c,t,r,q)` map the pointer; no brush, no Reset. Too many windows:
+the most recent `winFit(pw)` panels. Labels / flags follow `c.xl` /
+`c.flags` (the last / first chart SHOWN), so it works with one chart
+hidden (compact Summary, the dashboard's tabs). Not to be confused with
+the dashboard's `window.AWR_axMode` (which chart is shown). The
+`js_timeline.plsql` header lists these functions. Release flags
+(`flagSvg` + `flag1`, both layouts; G3 follow-up): markers less than 1 px
+apart form a group (side by side: every marker of one gap) -- as many as
+fit get a flag of their own (two tiers), the last flag shown reads
+"<label> +n" and its `<title>` lists the rest (one per line); a group
+with no room left keeps a `cfl` line whose title names every marker (the
+flags chart used to draw nothing for it). The flag band (`top` 46 vs 22)
+is reserved side by side only while a marker sits in the gap before a
+panel SHOWN (the most recent `winFit(pw)`); Full span keeps it for every
+marker of the span, also while zoomed, so a brush never moves the charts.
+One flag's place is `flagPos(tiers, x, ws, lo, hi)` (pure, `AWR_TL.flagPos`,
+unit-tested; `flag1` measures the labels and draws): the long label, then
+the short one, each left-anchored at the marker or flipped to end there
+when it would pass the plot's right edge, and only while it then stays
+right of the SVG's left edge (review follow-up R3: a long label flipped
+left near the left edge sat mostly outside the SVG and the short one was
+never tried); no label fits -> the group keeps its line and tooltip.
+verify_report 5d fails a flag box outside its SVG. The dashboard's KPI
+bars (`js_design` `wbars`) apply the same left-edge test to their flipped
+short labels.
+`setSvg(c, s)` replaces a chart's SVG in both layouts and gives the focus
+back to the same `.xwh` (`data-i`) when one had it (Enter on a stripe /
+cap pins, which redraws).
+
+**Direct labels (plan 036; fitted per band, owner decision 2026-11-20)**:
+`dlab(c, groups, ord, on, Y, reb, nb)` after the bands, inside the plot
+clip (both `draw` and `drawWin`; groups = one `{pts, x0, x1}` for Full
+span, one per panel side by side; `nb` = `noteBox()`, the highlight
+note's box, which no label covers) builds per series the band's lower /
+upper edge and calls the pure `fitLabels(groups, cands, o)`
+(`AWR_TL.fitLabels`, unit-tested in `tools/js_unit_tests.js`): per group
+the edges are reduced to whole pixel columns (`colExt`: the lowest lower
+edge / highest upper edge over each column, no data = never thick), a
+sliding window as wide as the label (`slideExt`, a deque) gives each
+start's clear box (`stretches`; thickness rounded down to 0.5 px), and
+each series takes its thickest stretch (equal thickness: the middle of
+the run, `spos`) at least `LBH` 10 px thick, clear of the labels placed
+so far (text box `LTH` 12 px, 2 px apart) and kept above the axis. One
+label per series per chart, inside one panel; series ranked by their
+best thickness (biggest bands first), at most `LMAX` 6. A name is cut at
+`LW` 160 px with ASCII `...`; when no stretch fits it, shorter cuts
+(`LCUT` 120 / 90 / 64 px, at least 6 characters) are tried
+(`lcuts`, cached per name; "log file switch (archiving ne..." on the
+test DB's busy hour). A cut whose stem also starts another series of the
+chart is dropped (`labelAlts`, pure, unit-tested; G3 review: the test
+DB's 15-min report read "log file s..." with both log file switch events
+in the chart, a DBA reads log file sync). Before this the label went at the single thickest
+POINT and needed 13 px under the whole label, so on real (spiky) data it
+almost never fit the event chart. `text.xdl` (CSS halo like `.xhn`,
+normal weight so `tw()` is exact, `pointer-events:none`); with a strong
+highlight only the highlighted series; per chart `mkChart(..., {labels})`
+(both on, owner decision). `dlab` stacks `ord` from zero exactly like
+`bands()`: keep them in lockstep. Keep `.xdl` out of `css_design.css`'s
+Geist font rule (`tw()` measures the system stack). Cost: about 1-2 ms
+more per chart redraw (a thin band is rejected on its thickest column).
+verify_report: `bandLabels` (block 5: names, overlap, inside the plot and
+inside the band they name via `elementsFromPoint` -- `LABEL_BAND`, which
+also fails an ambiguous cut; the demo labels both charts) / `labelHide`, the note check in the highlight
+`state()` (`xov`), `sb.labels` (block 5c: inside one panel and its band;
+the demo labels both charts side by side too), `sb.flagBand` /
+`sb.keys` (5c) and block 5d (two markers injected after the first one:
+every marker named, no flag overlap, a "+n" flag on the demo).
+
 ### Window component (`sql/lib/wingrid.plsql` + `js_wingrid.plsql`)
 
 The ONE per-window bar grid — hero strip (08), finding / plan / config
@@ -616,26 +882,86 @@ data-mu data-sd data-sev]`, `.c[data-w]` ×(N+1)) › `wg_dates`. Columns are
 key, so the X2 highlight lights `.wg` cells). Values in as offset-keyed pairs
 `'k:v;k:v'` (`LISTAGG(week_offset||':'||wg_tok(v), ';')`); a skipped window
 has no pair → `.v.nil`. Modifiers: `.fit` (18 px columns), `.bare` (no label
-/ gutter), `.allv` (every value printed), `.hov`, `.tight` (auto, columns
-< 42 px). Step rows (12, plan card) are hand-built `.r.p` rows (`i.st.lo|hi`,
+/ gutter), `.allv` (every value printed), `.hov`, `.qf` (quiet flags: only
+the marker on the Current window's left edge is labelled, the others keep
+their column line; finding and plan-change cards), `.tight` (auto, columns
+< 42 px). The card charts (07 finding cards, 18 plan-change card) are
+`bare hov qf` since plan 025 (priors on hover), no longer `allv`; 12's
+configuration card and 08's hero strip keep theirs. Step rows (12, plan card) are hand-built `.r.p` rows (`i.st.lo|hi`,
 `i.nd`, `span.pv`). `wg_date/wg_off/wg_title/wg_keep/wg_start/wg_end`.
 **Window metadata:** 00 emits `window.AWR_WIN = {np, w:[{o, d, l, s, e, t,
 v}]}` oldest first — read it, don't recompute. **Client** (`window.AWR_WG`):
 `markers()` maps `AWR_MARKERS` to window boundaries (`{o, after, l, s, t,
-at}`, short labels "Release 4.2" → "R 4.2"), `markerAt(o)`, `sizeRow`,
+at, inw}`, short labels "Release 4.2" → "R 4.2"; `inw` = the marker falls
+INSIDE window o, after its start -- only the Current window can hold one;
+its flag still sits on that left edge), `markerAt(o, edge)` (`edge`: only a
+marker at or before window o's start), `sizeRow`,
 `render(scope)` (call after building / revealing grid DOM), `fit`, `refit`
 (auto on DOMContentLoaded, resize, `awr:view`, a `<details>` toggle), `pin`.
 `[data-mk-at="o"]` slots get the marker on that boundary (`data-mk-pre`,
-`data-mk-icon`). `body.js-wg` hides prior values until hover.
+`data-mk-icon`); a slot with `data-mk-pre` (" after ": 17's likely-source
+line, 18's plan card, 20's sentence, also `js_loadresp`'s re-fill) claims
+the change came after the marker, so it takes only one at or before window
+o's start (`markerAt(o, true)`): a marker inside the Current window leaves
+it hidden (review follow-up R3); the icon slots (12) take either.
+`body.js-wg` hides prior values until hover.
+
+**Pattern tags (plan 027).** `AWR_WG.patterns(vals, valid, mu, sd,
+marks)` / `patternText(tag, dates)` / `PAT` (the thresholds) are pure and
+unit-tested in `tools/js_unit_tests.js`. At most two tags per row, the
+Current one first. Nothing is tagged with fewer than 4 valid prior windows
+or no Current value. Current outside the band (prior mean +/- 2 sigma,
+sigma floored at 2 % of the mean -- the band `sizeRow` and the band glyph
+draw) is a run ("high / low for N windows") when the window just before
+it is outside on the same side too (a skipped window ends the run), else
+"spike" / "dip" ("jump" / "drop after <marker>" when a release marker
+falls at or before the Current window's start, AWR_WIN `s`; one inside
+Current, `inw`, may follow the change: a plain spike / dip whose sentence
+says the marker falls inside the Current window -- review follow-up R3,
+the 09:55 release in a 09:00-10:00 window) -- but only when no valid prior window is
+outside on that side, so "Current only" holds (a recurring spike gets no
+Current tag). A step needs at least 3 valid windows before and 2 after
+the split, at least 90 % of the after / before pairs on the same side, a
+mean shift of at least 10 % and more than 2 x the larger side's floored
+sigma ("step up at <marker>" or "... on <date>"; a skipped window makes
+the splits around it equal, and the one with a marker wins, else the
+later); a trend needs at least 6 valid windows, R squared >= 0.6 and a
+total rise of at least 10 % of the mean, and wins over a step only when a
+straight line fits at least as well (smaller or equal residual sum of
+squares). A step in the same direction as a "spike" / "dip" drops it: the
+windows right before Current already sit at the step's new level, so
+"Current only" misleads (dbmint follow-up: a card read "spike: Current
+only" + "step up on 08:00" with the two windows before Current high); a
+"jump" / "drop after <marker>" stays (it names its marker; the demo's I/O
+card keeps "jump after Release 4.2" + "step up at Release 4.1"), and a
+step the other way keeps the spike. `tagCards()` (on
+DOMContentLoaded, after `render`) fills `.fc-tags` in every `#findings
+article.fc:not(.chg)` header and the card's `#triage .tri-tags` (plan 025's
+containers) with `span.ptag.p-<kind>[.p-rel][title]` chips, from the
+card's `.fc-main .wg .r[data-v]` row (`.r[data-v]`, not `.r.bars`:
+js_timeline turns the DB time card's row into `.r.ash`), `data-mu0`-or-
+`data-mu` / `data-sd`, the windows' validity and dates from `AWR_WIN` and
+the markers from `AWR_WG.markers()`. Tags are a hint: they never change a
+severity, the card order or a count. Section 25 (Onset) is not their data
+source (fixed metrics on the continuous series; the tags compare periods).
+Keyboard (G4): every chip is `tabindex="0" role="note"`, named by its
+text (`aria-label`) and described by its sentence (`title`); a keyboard
+focus (not a mouse click: `ptr`, set on mousedown) shows the sentence in
+one shared `div#ptip` (aria-hidden, absolutely positioned under the chip,
+styled next to the `.ptag` rules in `_style.sql`, hidden in print), hidden
+on blur, resize and Esc -- the Esc listener never stops the event, so Esc
+still clears a highlight / unpins a window. The triage and dashboard
+copies are clones, so they carry it too; verify_report phase 4 `tagKb`.
 
 ### Band glyph (`sql/lib/band_glyph.plsql`, twin `helpers.py`)
 
 Replaces the v1.4 `data-dev` heat tint and the old Change / z / %Δ columns
 in every scored table. `band_z(cur, mu, sd)` (z over max(sd, 2%·|mu|), the
-policy's floor) · `band_ztxt` · `band_sev(bucket)` → `s-large|s-moderate|
-s-improved|s-typical` · `band_span(z, bucket, size, twin)` → `<span class="bd
+policy's floor) · `band_ztxt(z, cap)` (cap 99 default, 10 in Summary) ·
+`band_sev(bucket)` → `s-large|s-moderate|
+s-improved|s-typical` · `band_span(z, bucket, size, twin, zcap)` → `<span class="bd
 s-…" style="--x:…">` on an axis −4σ…+8σ (x = (z+4)/12; past the ends the dot
-pins `po|pu` and prints z; `flat baseline` hatched `.s-flat`; NULL z /
+pins `po|pu` and prints z, clamped past `zcap`; `flat baseline` hatched `.s-flat`; NULL z /
 insufficient / n/a faded `.na`; bucket NULL = unscored hollow dot) ·
 `delta_span(cur, mu, bucket, plain)` = THE Δ rule (`▲ ×n` when cur/mu ≥ 2,
 else `▲/▼ p.p%`) · `range_txt(mu, sd)` (mu ± 2sd, floored at 0) ·
@@ -668,8 +994,8 @@ first (lint 16). Placement: 02/03/13 (13 unscored: bucket NULL + plain Δ),
   `anchor_id('fl'|'pa', ...)` outside `anchor_id.plsql`.
 - Row ids: 07 `fr-<l|m|w>-<name>` (detail tables); 04 `we-<event>` /
   `wa-<event>` / `wc-<class>`; 05 `be-` / `ba-`; 06 `sq-<dim>-<sql_id>` per
-  ranking table (`sq-elapsed-`, `sq-cpu-`, `sq-gets-`, `sq-preads-`,
-  `sq-exec-`; in a tab + `<details>`, reveal handles both) and pool
+  ranking table (`sq-change-`, `sq-elapsed-`, `sq-cpu-`, `sq-gets-`,
+  `sq-preads-`, `sq-exec-`, `sq-perexec-`; in a tab + `<details>`, reveal handles both) and pool
   `sql-<sql_id>`; 18 `sm-<sql_id>`; 14 `sg-<owner.object[.partition]>` / 15
   `fl-<parent dir>-<file name>` on the FIRST row that segment / file gets (a
   slug collision gets `-<n>`); 12 `pa-<parameter>` (`pa--<_hidden>`); 02
@@ -730,7 +1056,9 @@ designs) and the server's env whitelist.
   `#row-filter`; Esc stops propagation so it never unpins); Activity
   `.axseg` (cls / ev / both: `#ashx.ax-cls-only|ax-ev-only`, then
   `AWR_TL.redraw()` -- js_timeline puts the flags on the first chart
-  shown and the x labels on the last); `.dkpis` after `#verdict` (DB time
+  shown and the x labels on the last; plan 024's layout switch
+  `.seg.axlayout` sits in the same `.axh` row; `css_design.css` gives it
+  the `.axseg` look); `.dkpis` after `#verdict` (DB time
   from `#hero-dbt` + one per finding card, bars from the card's / Timeline
   row's `data-v`); in `#findings` a `.dgrid` = `.dmain` (chrome-style
   `.tabs[data-tabs="dfind"]` Moved / Normal / Improved, so `reveal()`
@@ -738,24 +1066,48 @@ designs) and the server's env whitelist.
   each card holds the MOVED `article.fc` (so `#f-<group>` and every link
   into it open the row via reveal's `<details>` rule), then each
   non-twin crit / warn row of the card's related table, its bars drawn
-  from `#tl-<detail id>` data-v; each row `id="dr-<card id | detail id>"`
+  from `#tl-<detail id>` data-v; the findings table's band cells are
+  capped at 10 sigma like the cards (`capz`, plan 020); each row
+  `id="dr-<card id | detail id>"`
   (the palette lists them by display name); the Trend cell is the shared
   micro strip, else (past 91 windows, where it draws nothing) the
   design's own mini bars; nothing moved -> 07's "No finding" note goes
-  into the Moved tab; Normal = `#s-normal` moved in; Improved
-  = its `.note.improved`) + `aside.dside` (`#s-changes` moved in, plus
+  into the Moved tab; Normal = `#s-normal` moved in (`findTable()`
+  opens its `details.calm-fold` and `css_design.css` hides the fold's
+  summary line: the tab is the fold, plan 032); Improved
+  = its `.note.improved`; `findTable()` calls `window.AWR_fcOpen(card)`
+  on every card it moves into a row -- the row is the fold -- and
+  `css_design.css` hides 07's `#triage` list, plan 025;
+  the lead row of each card shows, in a `span.dmeta` line of its `.dnm`
+  cell after the `<small>` the palette reads, the card's impact chip
+  `span.dimp` (G4: the row hides the card's header, where `.fc-imp`
+  lives; `impChip()` builds it from `data-impact` / `data-share` like the
+  triage list -- only a rise, "+x AAS · s%", DB time "above normal", the
+  card chip's text + explanation as its title; verify_report block 7) and
+  a copy of the card's `.fc-tags` (`.fc-tags.dtags`, plan 027)) + `aside.dside`
+  (`#s-changes` moved in, plus
   the releases from `AWR_WG.markers()`; a card body inside the grid
   scrolls on its own, so a 169-column plan card never widens the page).
+  Before the KPI cards and the findings table are built, `explainsBack()`
+  returns a plan card that 17 moved under the card it explains
+  (`article.fc[data-explains]`) to `#changes-slot` (the side column, chip
+  kept, its `i.xu` arrow hidden; opened with `AWR_fcOpen` and its `.fc-tg`
+  toggle removed when 17 had folded it, G4) and unhides `#s-changes` + its rail link
+  if 17 had re-hidden them; `kpis()` / `findTable()` select
+  `article.fc:not(.chg)` (plan 026).
   Summary order:
   `body.d-dash.vs` puts `#activity` at order 5 and `#findings` at 6, so
   the verdict + KPI cards lead (original mock C; Timeline / All keep
-  Activity first); `#overview` hides (its numbers are the DB time KPI).
+  Activity first); `#overview` hides (its numbers are the DB time KPI)
+  (the classic / quiet Summary also leads with the verdict since plan 023,
+  by DOM order; the compact Activity mode is off in the dashboard).
 - **Demo**: `gen_demo_report.py` writes `demo_busy_db.html` (classic),
   `demo_busy_db_quiet.html`, `demo_busy_db_dashboard.html` (`--design=`;
   `--check` covers all three). **verify_report.js** reads
-  `window.AWR_DESIGN`: dashboard skips the rail checks, lets the verdict
-  sit above Activity in Summary, runs the Activity interaction checks with
-  both charts shown, and its section 7 checks the KPI cards, the table
+  `window.AWR_DESIGN`: dashboard skips the rail checks, checks that the
+  compact Activity mode and `#ax-more` stay off (block 2b; every design
+  lets the verdict sit above Activity in Summary), runs the Activity
+  interaction checks with both charts shown, and its section 7 checks the KPI cards, the table
   (one lead row per card, rows = the Moved count, trends), row expansion,
   the tabs + a jump into Normal, the Activity tabs (x labels + flags on
   the one chart shown), and the palette (Ctrl+K, search + Enter lands,
@@ -770,7 +1122,12 @@ Renders every `[data-spark]` cell (attribute contract unchanged, no emitter
 changed) as the mock's 13-bar strip `svg.mw`: bars from zero, Current last
 (1.6× wide, accent), normal zone mean ± 2σ (σ floored at 2% of |mean|) from
 the CSV's own prior slots, title = last four windows + range (labels from
-`AWR_WIN`). `window.__awrRenderSparks` kept. It replaced `js_sparkline.plsql`
+`AWR_WIN`). A bar under a pixel wide (past about 45 windows; past 91 the
+strip has no room at all) draws nothing, except in an element carrying
+`data-spark-dense` (07's triage list `.tri-spark`, G4 follow-up): the prior
+windows as one gapless silhouette (`path.b`) and Current a 3-px bar, title
+"...; all N windows" (`AWR_microStrip(csv, title, {dense})`; the dashboard's
+Trend cell keeps its own mini bars fallback). `window.__awrRenderSparks` kept. It replaced `js_sparkline.plsql`
 in the single-DB prologue (and the demo); **js_sparkline is fleet-only now**
 (`00_fleet_chrome.sql`) — don't delete it.
 
@@ -808,8 +1165,9 @@ check 25; see the gotcha).
 `awr_trend.sql` includes the sections in **DOM** order (00, 10, 08, 09, 07,
 27, 20, 28, 01, 26, 16, 25, 13, 02, 03, 04, 22, 05, 24, 06, 21, 11, 18, 23,
 14, 15, 12, 19, 17; each visualization section 20-28 right after the section
-it extends) = the JS-off stacking; 00 emits `#activity` first (before the verdict), and with the
-default `order:3` it stays first in every view. Views reorder visually: Summary via the library's `--os`
+it extends) = the JS-off stacking; 00 emits the verdict hero, then `#activity` (plan
+023); with the default `order:3` the charts are the first section in
+Timeline / All sections and follow the verdict in Summary. Views reorder visually: Summary via the library's `--os`
 (`order:calc(10 + var(--os))`), All sections via `_style.sql`'s "All
 sections order" block keyed by section id (Findings, Load, Metrics, FG
 waits, BG waits, Top SQL, Top SQL ASH, SQL Monitor, Segment, File,
@@ -834,20 +1192,42 @@ JS and `_style.sql`; all degrade to "show everything" with JS off:
   `th[data-w]` toggles `.hl` (amber) on every element sharing that offset and
   dispatches `awr:window` (chart sections mark the window). Not the Timeline
   pin.
-- **`.tabs[data-tabs]` / `.tabpanel[data-tabs][data-t]`** — Top SQL's five
-  ranking dimensions; panels holding ECharts resize on activation.
+- **`.tabs[data-tabs]` / `.tabpanel[data-tabs][data-t]`** — Top SQL's
+  ranking dimensions (Biggest change first; the first emitted panel is
+  `on`; the hash's `tab=` names any tab but the bar's first, so never
+  compare against a literal default); panels holding ECharts resize on
+  activation.
 - **`.copy-btn[data-copy]`** — copies the selected element's text; inline
   by default, absolutely positioned only inside `pre`/`.codewrap`. `.tbl-tools`
   CSV/MD toolbars auto-inject above any table with ≥ 4 rows.
 - **`data-nosort` / `data-nocount` / `data-notools`** — table opt-outs
   (sort parser handles `,` `%` `▲` `▼` `−` `×` and k/M/G — keep in sync with
-  `fmt_num.plsql`; `data-nocount` keeps rows out of the rail pills, e.g. the
+  `fmt_num.plsql`; `data-nocount` keeps rows out of the section-header counts, e.g. the
   cards' related-metrics tables).
 - **`.chip`** — shared pill styling (rank chips, window chips).
+- **`#sum-btn` / `#sum-pop`** (plan 034) — Copy summary: built at click
+  time from `#topbar`, `#verdict h1`, `#because-slot`, `#narrative-slot`,
+  `#findings article.fc:not(.chg)` (`.fc-k .sv`, `h3`, `.big .v/.u/.nrm`,
+  `data-impact` / `data-share`), the plan card that explains a card
+  (`#findings article.fc.chg[data-explains]`, plan 026) plus
+  `#changes-slot > article.fc`, and `footer.report`. Renaming any of these
+  hooks breaks the summary; verify_report's `sumOk` catches it. Works in
+  every design (the dashboard moves the cards; the selector does not
+  depend on `.cards`); quiet / dashboard style it in `css_design.css`.
+  The button ships `hidden` (JS off: no button); Escape anywhere in the
+  popover (it has tabindex -1) is stopped there, so it never unpins a
+  window. While open the top bar carries `.sum-open` (z-index 40; relative
+  at 980 px and below, where the popover hangs under the static bar): the
+  Timeline's sticky ruler and the narrow rail bar painted over it.
+  `position:fixed` cannot pin it: the bar's backdrop-filter makes the bar
+  the containing block of fixed descendants. verify_report: `sumEsc`,
+  `sumOnTop`.
 - **Number formatting (T7, `fmt_num.plsql`)** — `fmt_num` ~4 significant
   digits with k/M/G ≥ 1e4/1e6/1e9, full precision in `title`; `fmt_int`
-  for counts. Never inside `data-spark` / `data-v` / `AWR_DATA` JSON (raw
-  numbers under the NLS pin).
+  for counts; `fmt_dur(sec, short)` for Summary-view durations (plan card;
+  `fv` / `fv_range` unit `'dur'`; `wg_bars(..., p_fmt => 'dur')`), never in
+  tables or payloads. Never inside `data-spark` / `data-v` / `AWR_DATA`
+  JSON (raw numbers under the NLS pin).
 - Retired: `td[data-dev]` heat tint (v1.6.0, band glyph), `section
   [data-normal]` / `.full-only` / triage mode / Essential rows / Application
   only (v1.5.0–1.6.0), `.badge.sig` (now a `span.imm` note), 07's movers
@@ -978,7 +1358,30 @@ left padding and a lower specificity).
   the old 16-entry `offset_labels` DEFINE is gone (a DEFINE caps at 240
   chars). Check with the demo: `demo/awrdemo/model.py`'s WEEKS_BACK /
   STEP_HOURS / WIN_HOURS can be patched from a scratch script and no output
-  line may pass 32767 bytes (tested: 168 hourly, 52 weekly, 2 h every 1 h).
+  line may pass 32767 bytes (tested: 168 hourly, 52 weekly, 2 h every 1 h;
+  past about 100 days also move SNAP_FIRST back, or the old windows are
+  skipped and every string stays short).
+  **06 has no per-window `LISTAGG` any more** (v1.7 review): its
+  per-statement CSVs (`week_vals` / `week_rnks` / `week_phvs`, up to 25 B
+  a window) and its two window-label lists (15-19 B) passed 4000 near 200
+  windows, sooner since Biggest change (a value in every window the
+  statement ran). Its cursors return one row per (dim, statement or group,
+  window) with the statement's values as analytics; the loop keeps each
+  window's tokens in collections keyed by week_offset (`v_wv` / `v_wr` /
+  `v_wp`) and renders on the last window (`CONTINUE WHEN`); the header and
+  detail rows go through `wg_buf` one cell at a time; the label lists are
+  built in a loop. Demo at 365 daily windows: the old CSV would have been
+  6953 B, every 06 line is now under 32767 (the chart JSON keeps its
+  32500 cap and "first n of m" note). **The rest of the report still stops
+  near 210 windows** (pre-existing, not fixed): the ISO window-label
+  `LISTAGG`s of 14 / 15 / 18 (19 B a window: 4000 at about 210), the
+  hourly label `LISTAGG`s of 04 / 05 (15 B: about 266), the window grids
+  `wg_bars` returns as one VARCHAR2 (08's strip, 07's cards, 18 / 24:
+  about 145 B a window on dbmint, 32767 at about 226) and the per-row value `LISTAGG`s of 02 / 03 / 04 /
+  05 / 07 / 13 / 14 / 15 / 18 (6-24 B a window, data-dependent: 4000 at
+  about 250 windows on the busy demo, 450-650 on dbmint's 168-hourly
+  run). Lifting that is its own change (06's pattern, plus streaming
+  `wg_bars`).
 - **Overlapping windows (win_hours > step_hours)** share samples: 09 counts
   an ASH sample toward EVERY window containing it (`j_lo..j_hi`), else each
   window held only `step` hours but was divided by `win_hours` (review #4).
@@ -1085,7 +1488,7 @@ max sev of the areas listing it). Hidden `div.im-src[data-c]` per area is
 cloned into the one `div.im-pop` popover by js_instmap (hover / focus; Esc in
 the capture phase only while open; a click on a flagged box -> `AWR_goTo(card,
 true, true)`). Payload `AWR_DATA.instmap = {areas, measured, comps:[{k, sev,
-cards}]}`. Table `data-nocount` (07's rows already feed the rail pills). < 3
+cards}]}`. Table `data-nocount` (07's rows already feed the section-header counts). < 3
 valid prior windows: query skipped, all "not measured" + note. Twin
 `s27_instance_map.py` reuses `s07_summary.compute_findings`. Unexercised: the
 improved state, RAC, multi-DBID.
@@ -1139,7 +1542,13 @@ after wait total); status worse / better / changed (ANY, INFO) / small /
 inside. Rows are HTML/CSS (left in %), no SVG and no width needed; axis
 symmetric, clamp at +-400% ("> x5"). Library row upgraded via `AWR_ls`; the
 split table `table.rd-tbl[data-nocount]` (tbody replaced per split, chrome
-sort works). JS off: `p.rd-nojs` + `table.rd-tall`. Never call anything a
+sort works). No usable split (no release marker and no boundary picked:
+every marker-less real-DB report) hides `.rd-body` -- legend, charts and the
+still-empty split table -- and shows `p.rd-why` instead; `details.rd-all`
+(`table.rd-tall`, Current vs all priors) shows in every case, so no number
+is hidden (verify_report's `allFull` skips a table without a data row, its
+`rdSplit` wants `.rd-app` shown, then the note + that table, the demo a split). JS off:
+`p.rd-nojs` + `table.rd-tall`. Never call anything a
 finding or use large / moderate. Links are built as `a.className="ent"` only
 when the target id exists (lint 21 scans the generated plsql for the literal).
 Unexercised: RAC, multi-DBID, a before mean of 0, a marker inside Current on a
@@ -1291,8 +1700,8 @@ verify_report fails on it). Links in the what-if are PL/SQL `ent()` HTML
 (`lk`). Matrix: SVG up to 60 windows, a canvas past that (colours resolved
 through a probe element, redrawn on `awr:theme`). Own tooltip `.winsim-tip`
 (js_timeline's document mouseover hides `#tip`). The per-window table is
-`data-nocount` (its flagged rows are `winsim-fl`, not `warn`, so no rail
-pill). Section time on dbmint: 0.8 s for 8 windows, 1.8 s for 168.
+`data-nocount` (its flagged rows are `winsim-fl`, not `warn`, so no
+section-header count). Section time on dbmint: 0.8 s for 8 windows, 1.8 s for 168.
 Unexercised: RAC, multi-DBID, non-comprehensive templates.
 
 ### `echarts` var (offline / self-contained)
@@ -1380,8 +1789,29 @@ floor). This keeps a lightly-loaded instance's table from being dominated by
 tiny parallel-execution noise (SQL Monitor's capture policy always persists
 parallel statements) while never hiding a real regression. The **execution
 scatter** chart plots every captured execution in the full span regardless
-of the floor (capped at the 3,000 most recent) — the floor only shapes the
-summary table and its Current-window-max-elapsed ranking.
+of the floor — the floor only shapes the summary table and its
+Current-window-max-elapsed ranking. It is capped at 3,000 points: the
+executions that start inside a compared window first, then the most
+recent (plan 037; `in_win` in the one `DBA_HIST_REPORTS` scan, computed
+arithmetically from the nominal window grid -- `MOD(target_end - start -
+0.5 s, step) < win`, the half second making it `[start, end)` and keeping
+NUMBER rounding off the edge -- never a join to `windows_rollup` or a
+second read; the twin's `in_win` is the same rule), so every compared
+window keeps its points (the demo: 10 of 13 windows were empty under
+"most recent only"). Its marks: size `4 + 2 log2(DOP)`, at most 12 px; points in the Current window,
+errors and plan changes solid with a theme-independent dark outline, the
+rest faded (grey "Other" fainter and drawn underneath; the legend
+chips stay opaque, `legend.itemStyle.opacity` 1); the x-axis is
+pinned to `spanStart..spanEnd`, so a window without captures shows as an
+empty band. `series[0]` carries the window `markArea` (the `awr:window`
+listener addresses it by index); verify_report's phase 4 `scatter` check
+reads the mark size and the axis range. Every time in the chart (points,
+windows, markers, the axis bounds) is the DB's wall clock read as UTC
+(`ts()` appends `Z`, like the Activity charts' `PT`) and the option sets
+`useUTC: true`, so the axis and the zoom slider print that wall clock in
+any browser zone (review follow-up R3: a browser-local parse put the
+Current styling and the bounds an hour off across a DST change in the
+reader's zone; a normal day's labels are unchanged).
 
 **Sampling caveats** (stated in the section's own caption, and see the
 design doc): only completed, expensive-enough, or parallel executions are
@@ -1410,7 +1840,11 @@ and drill line survive. `key3` is parsed with `DEFAULT NULL ON CONVERSION
 ERROR`: `DBA_HIST_REPORTS` holds other components (`perf`, ...) whose key3 is
 not a date, and Oracle may evaluate the `TO_DATE` before the
 `component_name` filter. The pool table is `data-nosort data-notools`
-(each statement row is paired with a detail row right below it). Cost: the
+(each statement row is paired with a detail row right below it).
+`tr[data-sk]` (0 large, 1 moderate, 2 rest) on top-N rows; an inline
+script after the table moves each statement row with its detail row so
+flagged ones come first — the loop and `rnk` stay in Current max elapsed
+order. Cost: the
 section plus R6-R9 scan `dba_hist_reports` (with `XMLTYPE` parsing) seven
 times over the span — fine at thousands of rows, worth a single BULK COLLECT
 if a busy DB ever makes it slow.
@@ -1510,6 +1944,7 @@ separate slice. Per-row CSVs via `LISTAGG(... ORDER BY week_offset DESC)`
 `Number()` parses under any NLS. The micro strip floors σ at 2% of |mean| (the
 policy's floor), the fleet sparkline has a 2% flatness floor (midline instead of
 magnified noise). Sections that re-grid one column per week
+(06 excepted: one cursor row per window, see the per-window gotcha)
 parse the CSV with `nth_csv` (INSTR-based, preserves empty tokens; `@@`-included
 just before `BEGIN`). These CSVs are **positional** (slot k = kth week in the
 ORDER BY) and LISTAGG drops NULL measures *and their delimiter*, so a nullable
@@ -1533,7 +1968,12 @@ v1.6.0 SVG/CSS components (band, micro strip, window grid, Timeline, full-span
 ASH chart) read CSS variables at paint time, so they follow the theme without a
 listener; their JS re-renders on `awr:view` / resize only. **Section 11 registers the listener
 *inside* its per-chart `forEach`** so each chart binds its own instance (a
-single outer listener would capture only the last chart). New charts must add an
+single outer listener would capture only the last chart). Since plan 035 that loop is `initChart(c)`, called on
+demand (throttled scroll / resize / `awr:view` / click / `load` /
+`beforeprint`, never IntersectionObserver); `hiNow` carries the
+`awr:window` slot to charts drawn later, and `noAnim` draws the
+`beforeprint` ones without the initial animation (else the print gets
+its first, empty frame). New charts must add an
 `awr:theme` listener or they'll ignore a live toggle. Wait-class series colors
 are theme-independent (kept in parity with `js_wait_colors.plsql`), so only
 axis/legend/fill colors need re-applying. Verify headlessly by stubbing
@@ -1565,7 +2005,8 @@ real delta span can exceed the nominal window; `valid_windows.dur_sec` therefore
 uses `(end_snap.end_ts − begin_snap.end_ts)` (threaded via `begin_end_ts` /
 `end_end_ts`), and the 15-min guard above rejects grids too far off to compare.
 `dur_sec` is **per-instance** (each instance's snaps jitter independently), so
-the per-sec consumers (00/02/07/08) sum the cross-instance delta and divide by
+the per-sec consumers (00/02/07/08, and 04's Timeline event rows through one
+`MAX(dur_sec)` per `week_offset`) sum the cross-instance delta and divide by
 `MAX(dur_sec)` with `dur_sec` **out of the second-level GROUP BY** — grouping on
 it would split a RAC week into partial rows. Single-instance is byte-identical
 (one constant `dur_sec` → `MAX` is a no-op and the narrower GROUP BY is
@@ -1640,7 +2081,7 @@ collection tagged via `ROW_NUMBER()`; the finding cards, "checked and normal",
 the Timeline metric / wait rows and the detail tables all walk that one
 collection — don't reintroduce a second recompute cursor just for a different
 ORDER BY. The verdict (00) and the cards (07) must order cards identically
-(`card_before`).
+(`card_before_imp`).
 
 ### Debug logging
 `sql/lib/debug_log.sql` emits one timestamped progress marker per section to
@@ -1989,7 +2430,16 @@ each `demo/awrdemo/sections/sNN_*.py` is a hand-ported twin of `sql/NN_*.sql`
 PL/SQL lib: band glyph, anchors, card vocabulary, `wg_*`, `tl_*`, `lib_ls`).
 s09's `fine` payloads are SYNTHETIC (seeded minute profiles spread each
 hour's samples by largest remainder, so window sums stay exact) and its SQL
-lines are sliced by anchor, not index. **When a section's markup/JS changes,
+lines are sliced by anchor, not index. Waits: a twin of a
+`DBA_HIST_SYSTEM_EVENT` read uses `m.sys_waits` (all sessions) and, for the
+`*_fg` columns, `m.sys_waits_fg`; `m.fg_waits` alone holds only the
+foreground events. The model's one background-only wait class (Queueing,
+`model.SYSEVENT_BG`: a GoldenGate capture waiting for its stalled extract
+from 08:35 on the Current day, review follow-up R4) is the demo's case of
+the impact split -- its card is flagged on all-session time while its
+foreground impact is 0 (no chip, after the tier-1 cards, "under 0.01 AAS",
+no breakdown part); its stall event has no prior window, so 05's
+table-wide shift note survives. **When a section's markup/JS changes,
 re-port its twin in the same commit and regenerate**; generation is deterministic (two runs, same md5), and identical across Python 3.12-3.14 because `helpers.mean_sd` (and the model's physical-reads total) use `math.fsum` (the built-in `sum()` of floats differs by an ulp between versions, which once reordered tied rows in CI).
 `tools/check.sh` (CI) fails when either generated page is stale
 (`gen_demo_report.py --check`, `gen_policy_doc.py --check`). `NODE_PATH=<any
@@ -1999,9 +2449,13 @@ headless smoke test (bundled Chromium, else system Chrome): 0 console errors in
 visible `a.ent` clicked through, view switch / persistence / rail dimming,
 Timeline lanes + `data-tl` jumps + label links + chart hover / legend / zoom /
 reset / pin / Esc, the series highlight (legend hover re-base, class ->
-events, event -> class, focus, sticky, Esc order, click to keep), the Day
+events, event -> class, focus, sticky, Esc order, click to keep -- at a
+band point under no stripe's hit area: when the windows tile the span, as
+169 hourly ones do, every x is a full-height stripe, so it zooms into the
+busiest window first; the demo must not need the zoom), the Day
 profile picker (click / arrows / Home / End; required for the demo), plan
-cards, library rows, rail sub-links, All sections completeness (`allFull`),
+cards, library rows, rail sub-links, All sections completeness (`allFull`:
+each library section's first chart or table holding a data row is visible),
 micro strips. The legend / highlight steps park the pointer BELOW the chart
 (x 2), never above it: above the event chart is the class legend, and a
 hovered legend entry re-scales the chart. ~3 min per report; **one instance at a
@@ -2018,9 +2472,11 @@ the demo.
 
 - **`./tools/check.sh` is the one command** (CI runs exactly this on every
   push to `main` and every PR): `./lint.sh`, `bash -n` on every tracked
-  `*.sh`, a strict parse of every tracked `*.py` (a `SyntaxWarning` fails)
-  and the server unit tests (`python3 -m unittest discover -s server/tests
-  -t .`). No DB needed, about 5 s.
+  `*.sh`, a strict parse of every tracked `*.py` (a `SyntaxWarning` fails),
+  the server unit tests (`python3 -m unittest discover -s server/tests
+  -t .`) and the client JS unit tests (`node tools/js_unit_tests.js`: the
+  pure helpers of `sql/lib/src/*.js` under a stub window / document;
+  skipped without node). No DB needed, about 5 s.
 - **`./lint.sh` first** (also runs in CI): grep-based checks that encode the
   footguns below — bad `@@` include paths, flat template-target includes,
   stray `~word` substitutions (the tilde gotcha), `dbid = ~dbid` equality,

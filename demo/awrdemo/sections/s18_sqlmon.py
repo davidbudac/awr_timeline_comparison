@@ -12,6 +12,7 @@ Data: w.monexecs() plays DBA_HIST_REPORTS' report_summary XMLTABLE rows.
 """
 from __future__ import annotations
 
+from datetime import timedelta
 from statistics import median
 
 from .. import chrome
@@ -121,7 +122,7 @@ def _pc_ev(dt, idt, de, cur, mu, sd, bucket, plain, band="Y"):
             + '</span><span class="de">' + H.nbu(de) + '</span></dd>'
             + '<div class="m"' + (' title="Ranked, not scored"' if plain == "Y" else "") + '>'
             + H.delta_span(cur, mu, bucket, plain)
-            + (H.band_span(H.band_z(cur, mu, sd), bucket, "sm") if band == "Y" else "")
+            + (H.band_span(H.band_z(cur, mu, sd), bucket, "sm", "N", 10) if band == "Y" else "")
             + '</div></div>')
 
 
@@ -201,20 +202,23 @@ def _plan_card(w, put, c):
                      (fmt_num(t_cur) + " ms, was " + fmt_num(t_mu) + " ms"),
                      g_cur, g_mu, None, None, "Y", "N")
     ev += _pc_ev(H.ent("SQL Monitor", H.anchor_id("sm", sid), "sql"),
-                 "max " + fmt_num(c["cur_val"]) + " s", "normal " + fmt_num(c["mu"]) + " s",
+                 "max " + H.fmt_dur(c["cur_val"]), "normal " + H.fmt_dur(c["mu"]),
                  c["cur_val"], c["mu"], c["sd"], b, "N")
     if src == "sqlstat" and c_mu is not None:
         wait = (e_mu is not None and e_cur > e_mu
                 and (c_cur or 0) - c_mu <= 0.1 * (e_cur - e_mu))
-        ev += _pc_ev("CPU", fmt_num(c_cur) + " s",
-                     "normal " + fmt_num(c_mu) + " s" + ("; the rise is wait" if wait else ""),
+        ev += _pc_ev("CPU", H.fmt_dur(c_cur),
+                     "normal " + H.fmt_dur(c_mu) + ("; the rise is wait" if wait else ""),
                      c_cur, c_mu, c_sd, None, "Y")
 
-    put('<article class="panel fc chg" id="' + cid + '" aria-labelledby="' + cid + '-h" hidden>'
+    # data-ph0 / data-ph1 = the transition this card shows (17 links and
+    # moves it under the I/O card only when it cites the same)
+    put('<article class="panel fc chg" id="' + cid + '" data-ph0="' + str(c["prior_ph"])
+        + '" data-ph1="' + str(c["cur_ph"]) + '" aria-labelledby="' + cid + '-h" hidden>'
         + '<header class="fc-h"><div class="fc-k"><span class="sv" title="SQL Monitor, #'
         + str(c["rnk"]) + ' by Current-window max elapsed"><b class="gk">&#9670;</b>Plan change</span></div>'
         + '<div class="fc-band" title="SQL Monitor max elapsed, z ' + H.band_ztxt(z)
-        + ' against the prior normal">' + H.band_span(z, b, "lg")
+        + ' against the prior normal">' + H.band_span(z, b, "lg", "N", 10)
         + '<span class="bd-ax" aria-hidden="true"><em style="--x:.167">&minus;2</em>'
         + '<em style="--x:.333">0</em><em style="--x:.500">+2</em>'
         + '<em style="--x:.583">+3</em><em class="end" style="--x:1">+8&sigma;</em></span>'
@@ -229,16 +233,21 @@ def _plan_card(w, put, c):
         + '<p class="whereln" title="plan ' + str(c["prior_ph"]) + ' &rarr; ' + str(c["cur_ph"]) + '">'
         + esc(c["usr"] if c["usr"] is not None else "?") + " &middot; "
         + esc(c["modl"] if c["modl"] is not None else "?") + "</p>"
-        + '<div class="big"><span class="v">' + fmt_num(e_cur) + "</span>"
-        + '<span class="u">' + ("s elapsed" if src == "sqlstat" else "s max elapsed (SQL Monitor)") + "</span>"
-        + '<span class="nrm" title="prior mean ' + fmt_num(e_mu) + ' s">normal '
-        + H.fv_range(e_mu, e_sd, "s") + "</span></div>")
-    put('<div class="wg bare allv"' + H.wg_attr(w) + ">" + H.wg_flags(True)
-        + H.wg_bars(w, pairs, 1, e_mu, e_sd, None))
+        + '<div class="big"><span class="v">' + H.fmt_dur(e_cur) + "</span>"
+        + '<span class="u">' + ("elapsed" if src == "sqlstat" else "max elapsed (SQL Monitor)") + "</span>"
+        + '<span class="nrm" title="prior mean ' + H.fmt_dur(e_mu) + '">normal '
+        + H.fv_range(e_mu, e_sd, "dur") + "</span></div>")
+    put('<div class="wg bare hov qf"' + H.wg_attr(w) + ">" + H.wg_flags(True)
+        + H.wg_bars(w, pairs, 1, e_mu, e_sd, None, fmt="dur"))
     put('<div class="r p" data-name="Plan hash" role="row">' + cells + "</div>"
         + H.wg_dates(w, True) + "</div></div>")
-    put('<dl class="ev">' + ev + "</dl></div>"
-        + '<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
+    put('<dl class="ev">' + ev + "</dl></div>")
+    # plan 033: what a plan change usually means, and both plans
+    put(H.hint_block("PLAN", cid,
+                     H.hint_fill(H.HINT_SQL["PLAN"], w.dbid, None, None, 0, sid, c["prior_ph"], c["cur_ph"],
+                                 dbids=w.dbid_list)
+                     if c["prior_ph"] is not None and c["cur_ph"] is not None else None))
+    put('<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
         + H.anchor_id("sm", sid) + '">Timeline &rarr;</a>'
         + '<span class="evl"><a href="#topsql">Top SQL</a><a href="#sqlmon">SQL Monitor</a></span>'
         + "</footer></article>")
@@ -435,7 +444,12 @@ def emit(w) -> str:
             tail_cnt += 1
             if p["cur_val"] is None:
                 nocur_cnt += 1
-        put('<tr id="sm-' + sid + '" data-sys="' + sysflag + '"' + tail + ">"
+        # display order (client-side, the script after the table): flagged
+        # statements first; the loop stays in rnk order (twin of 18's v_sk)
+        sk = {"large": "0", "moderate": "1"}.get(
+            H.policy_bucket("SQL", None, None, p["cur_val"], p["mu"], p["sd"], p["n_prior"]), "2")
+        put('<tr id="sm-' + sid + '" data-sys="' + sysflag + '"'
+            + (tail if tail else ' data-sk="' + sk + '"') + ">"
             + '<td class="mono">' + sid
             + ' <a class="xlink" href="#sql-' + sid + '" title="This SQL in the Top SQL pool">&#8599; Top SQL</a></td>'
             + "<td>" + esc(st["last_username"] if st["last_username"] is not None else "?")
@@ -516,6 +530,8 @@ def emit(w) -> str:
 
     if ranked:
         put("</tbody></table>")
+        put(next(t for t, _ in chrome.put_lines(chrome.sql_path(SQL_FILE))
+                 if t.startswith('<script>(function(){var t=document.getElementById("sqlmon-pool")')))
         if tail_cnt > 0:
             noun = "more statements" + (" (" + str(nocur_cnt) + " without a Current-window execution)"
                                         if nocur_cnt > 0 else "")
@@ -543,8 +559,9 @@ def emit(w) -> str:
     put("<h3>Execution scatter (full compared span)</h3>")
     put('<p style="font-size:11px;color:var(--muted);margin:-4px 0 8px 0">'
         "Every captured execution, x = start time, y = elapsed (log scale). "
-        "Diamond = error, triangle = a plan different from that sql_id's most "
-        "common plan, size &prop; requested DOP. Colored series are the top "
+        "Points in the Current window are solid and outlined, the rest faded; "
+        "diamond = error, triangle = a plan different from that sql_id's most "
+        "common plan (both always solid); size grows with the requested DOP. Colored series are the top "
         + str(top_n) + " statements by Current-window max elapsed; grey = everything else.</p>")
     put('<div class="chart-wrap chart-medium" id="sqlmon-scatter"></div>')
 
@@ -579,7 +596,16 @@ def emit(w) -> str:
             mode_plan[sid] = min(cnt, key=lambda ph: (-cnt[ph], ph))
 
     points_total = len(execs)
-    recent = sorted(execs, key=lambda m: (m.exec_start, m.report_id), reverse=True)[:SCATTER_CAP]
+    # the cap keeps executions that start inside a compared window first
+    # (nominal grid, half a second off the distance = [start, end), as the
+    # SQL's in_win), then the most recent
+    g_end = w.target_end
+    g_step = timedelta(hours=w.step_hours)
+    g_win = timedelta(hours=w.win_hours)
+
+    def in_win(m):
+        return 1 if (g_end - m.exec_start - timedelta(seconds=0.5)) % g_step < g_win else 0
+    recent = sorted(execs, key=lambda m: (in_win(m), m.exec_start, m.report_id), reverse=True)[:SCATTER_CAP]
     recent.sort(key=lambda m: (m.exec_start, m.report_id))
     pts = []
     for m in recent:

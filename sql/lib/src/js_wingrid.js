@@ -16,7 +16,10 @@ function shortLbl(l){var w=String(l).split(/\s+/),d=w.filter(function(x){return 
   return (w[0].length<=3&&w[0]===w[0].toUpperCase()?w[0]:w[0].charAt(0).toUpperCase())+" "+d.join(" ");}
 /* markers on window boundaries: a marker that falls after the start of one
    compared window and before the start of the next sits on the left edge
-   of the later one (o = its week_offset); inside Current -> on Current */
+   of the later one (o = its week_offset); inside Current -> on Current,
+   with inw = true: it falls INSIDE window o, after its start (only the
+   Current window can hold one), so its flag sits on that edge but nothing
+   may say that window's change came after it (review follow-up R3) */
 var MK=null;
 W.markers=function(){
   if(MK)return MK;MK=[];
@@ -25,11 +28,169 @@ W.markers=function(){
   ms.forEach(function(m){
     var t=String(m.t||""),lab=String(m.label||"");if(!t||t<=w[0].s||t>w[n-1].e)return;
     var i=1;while(i<n-1&&t>w[i].s)i++;
-    MK.push({o:w[i].o,after:w[i-1].o,l:lab,s:shortLbl(lab),t:dayTxt(t),at:t});
+    MK.push({o:w[i].o,after:w[i-1].o,l:lab,s:shortLbl(lab),t:dayTxt(t),at:t,inw:t>w[i].s});
   });
   return MK;
 };
-W.markerAt=function(o){var r=null;W.markers().forEach(function(m){if(m.o===o)r=m;});return r;};
+/* the (last) marker on window o's left edge; edge = only one at or before
+   the window's start (a text that says the change came "after" it) */
+W.markerAt=function(o,edge){var r=null;W.markers().forEach(function(m){if(m.o===o&&!(edge&&m.inw))r=m;});return r;};
+/* ---- pattern tags (plan 027): the shape of one row's per-window values,
+   as a hint.  Pure: vals oldest first (null = no value), valid[i] false = a
+   skipped window, mu / sd = the row's prior mean / sd (data-mu / data-sd),
+   marks = [{i: column index whose LEFT edge carries a marker, l: label,
+   inw: true when it falls inside that window instead, after its start}].
+   At most two tags, the Current one first:
+     {k:"jump"|"spike", dir, m[, d]}  only Current is outside mean +- 2
+         floored sigma on that side: no valid prior window is (else no
+         Current tag; "jump" when a marker sits at or before Current's
+         start, m = label; a marker inside Current makes no "after" claim:
+         a plain spike, d = its label for the sentence)
+     {k:"run", dir, n}  Current and the n-1 windows right before it are all
+         outside on the same side (a skipped window ends the run)
+     {k:"step", dir, at, m}  the prior windows from index at on sit apart
+         from the ones before (m = the marker on that edge, else null; a
+         skipped window makes the splits around it equal: the one with a
+         marker wins, else the later)
+     {k:"trend", dir, n}  the n prior windows follow a line better than a step
+   A step on Current's side (same dir) drops a "spike": the windows right
+   before Current already sit at the step's new level, so "Current only"
+   would mislead (a "jump" names its marker and stays).
+   dir = 1 up, -1 down.  Thresholds in W.PAT.  Tags never change a
+   severity, an order or a count. */
+W.PAT={MIN_PRIOR:4,STEP_L:3,STEP_R:2,STEP_PAIR:0.9,STEP_REL:0.10,STEP_SEP:2,TREND_MIN:6,TREND_R2:0.6,TREND_REL:0.10};
+function avg(a){var s=0;for(var i=0;i<a.length;i++)s+=a[i];return s/a.length;}
+function sdev(a){if(a.length<2)return 0;var m=avg(a),s=0;for(var i=0;i<a.length;i++)s+=(a[i]-m)*(a[i]-m);return Math.sqrt(s/(a.length-1));}
+function sqs(a){var m=avg(a),s=0;for(var i=0;i<a.length;i++)s+=(a[i]-m)*(a[i]-m);return s;}
+W.patterns=function(vals,valid,mu,sd,marks){
+  var P=W.PAT,n=vals.length,c=vals[n-1],out=[],pi=[],i;
+  if(c==null||mu==null||n<2)return out;
+  for(i=0;i<n-1;i++)if(vals[i]!=null&&valid[i]!==false)pi.push(i);
+  if(pi.length<P.MIN_PRIOR)return out;
+  var mkAt=function(x,inw){for(var k=0;k<(marks||[]).length;k++)if(marks[k].i===x&&!marks[k].inw===!inw)return marks[k].l;return null;};
+  var den=Math.max(sd||0,0.02*Math.abs(mu)),hi=mu+2*den,lo=mu-2*den,dir=c>hi?1:c<lo?-1:0;
+  if(dir){
+    var run=0;
+    for(i=n-2;i>=0;i--){var v=vals[i];if(v==null||valid[i]===false)break;if((dir>0&&v>hi)||(dir<0&&v<lo))run++;else break;}
+    if(run>=1)out.push({k:"run",dir:dir,n:run+1});
+    else if(!pi.some(function(x){return dir>0?vals[x]>hi:vals[x]<lo;})){var lm=mkAt(n-1),ct={k:lm?"jump":"spike",dir:dir,m:lm},dm=lm?null:mkAt(n-1,true);if(dm)ct.d=dm;out.push(ct);}
+  }
+  var best=null,s;
+  for(s=1;s<n-1;s++){
+    var L=[],R=[];pi.forEach(function(x){(x<s?L:R).push(vals[x]);});
+    if(L.length<P.STEP_L||R.length<P.STEP_R)continue;
+    var mL=avg(L),mR=avg(R);if(mL===0)continue;
+    var d=mR>mL?1:-1,pairs=0;
+    R.forEach(function(r){L.forEach(function(l){if(d>0?r>l:r<l)pairs++;});});
+    var gap=Math.abs(mR-mL),fl=Math.max(sdev(L),sdev(R),0.02*Math.abs(mL)),sc=gap/fl;
+    if(pairs/(L.length*R.length)<P.STEP_PAIR||gap/Math.abs(mL)<P.STEP_REL||gap<=P.STEP_SEP*fl)continue;
+    var sm=mkAt(s);
+    if(!best||sc>best.sc||(sc===best.sc&&(sm&&!best.m||!sm===!best.m&&s>best.at)))best={dir:d,at:s,m:sm,sc:sc,rss:sqs(L)+sqs(R)};
+  }
+  var tr=null;
+  if(pi.length>=P.TREND_MIN){
+    var ys=pi.map(function(x){return vals[x];}),mx=avg(pi),my=avg(ys),sxx=0,sxy=0,syy=0;
+    pi.forEach(function(x,k){sxx+=(x-mx)*(x-mx);sxy+=(x-mx)*(ys[k]-my);syy+=(ys[k]-my)*(ys[k]-my);});
+    if(sxx>0&&syy>0&&my!==0){
+      var b=sxy/sxx,r2=sxy*sxy/(sxx*syy),rss=syy-sxy*sxy/sxx,rise=Math.abs(b*(pi[pi.length-1]-pi[0]));
+      if(r2>=P.TREND_R2&&rise>=P.TREND_REL*Math.abs(my))tr={dir:b>0?1:-1,n:pi.length,rss:rss};
+    }
+  }
+  if(tr&&(!best||tr.rss<=best.rss))out.push({k:"trend",dir:tr.dir,n:tr.n});
+  else if(best)out.push({k:"step",dir:best.dir,at:best.at,m:best.m});
+  if(out.length===2&&out[0].k==="spike"&&out[1].k==="step"&&out[1].dir===out[0].dir)out.shift();
+  return out;
+};
+/* a tag's words: text (on the chip) and title (the hover) */
+W.patternText=function(t,dates){
+  var up=t.dir>0,dt=function(i){return (dates&&dates[i])||"?";},lab=function(l){l=String(l);return l.length>24?l.slice(0,23)+"...":l;};
+  if(t.k==="jump")return {text:(up?"jump":"drop")+" after "+lab(t.m),title:"Only the Current window is outside the normal range of the prior windows; the marker "+t.m+" sits right before it."};
+  if(t.k==="spike")return {text:(up?"spike":"dip")+": Current only",title:"Only the Current window is outside the normal range of the prior windows."+(t.d?" The marker "+t.d+" falls inside the Current window: it may have come after the change.":"")};
+  if(t.k==="run")return {text:(up?"high":"low")+" for "+t.n+" windows",title:"The Current window and the "+(t.n-1)+" before it are all "+(up?"above":"below")+" the normal range."};
+  if(t.k==="step")return {text:"step "+(up?"up":"down")+(t.m?" at "+lab(t.m):" on "+dt(t.at)),title:"The prior windows from "+dt(t.at)+" on sit "+(up?"above":"below")+" the ones before"+(t.m?" (marker "+t.m+")":"")+": the normal range mixes two levels."};
+  return {text:(up?"rising":"falling")+" across "+t.n+" windows",title:"The prior windows follow a steady "+(up?"rise":"fall")+": the normal range is a moving target."};
+};
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];});}
+/* the compared windows as column indices: validity, dates, marker columns */
+function winIdx(){
+  var w=(window.AWR_WIN&&window.AWR_WIN.w)||[],valid=[],dates=[],ix={};
+  w.forEach(function(x,i){valid.push(x.v!=="N");dates.push(x.d);ix[x.o]=i;});
+  var marks=W.markers().map(function(m){return {i:ix[m.o],l:m.l,inw:!!m.inw};}).filter(function(m){return m.i!=null;});
+  return {valid:valid,dates:dates,marks:marks};
+}
+/* every finding card (07) gets its tags in its header; plan 025's triage
+   row for the card gets the same chips.  A chip is focusable (G4): name =
+   its text (aria-label, role note), description = its sentence (title),
+   shown on keyboard focus in the shared div#ptip (ptipOn below) */
+function tagCards(){
+  var X=winIdx();if(!X.valid.length)return;
+  $$("#findings article.fc:not(.chg)").forEach(function(card){
+    var row=card.querySelector(".fc-main .wg .r[data-v]");if(!row)return;
+    var vals=nums(row.getAttribute("data-v"));if(vals.length!==X.valid.length)return;
+    var a=function(n){var v=row.getAttribute(n+"0");return num(v!=null?v:row.getAttribute(n));};
+    var tags=W.patterns(vals,X.valid,a("data-mu"),a("data-sd"),X.marks);if(!tags.length)return;
+    var html=tags.map(function(t){var p=W.patternText(t,X.dates);
+      return '<span class="ptag p-'+t.k+(t.m?' p-rel':'')+'" tabindex="0" role="note" aria-label="'+esc(p.text)+'" title="'+esc(p.title)+'">'+esc(p.text)+'</span>';}).join("");
+    var box=card.querySelector(".fc-tags");
+    if(!box){var k=card.querySelector(".fc-h .fc-k");if(!k)return;box=mk("span","fc-tags",k);}
+    box.innerHTML=html;
+    $$('#triage .tri-row[data-card="'+card.id+'"] .tri-tags').forEach(function(t){t.innerHTML=html;});
+  });
+}
+/* a chip's sentence on keyboard focus (the title shows on hover only):
+   one shared div#ptip under the chip, in page coordinates (no hide on
+   scroll), aria-hidden (the title is already the description).  Not on a
+   mouse click; Esc hides it but is never stopped, so Esc still clears a
+   highlight / unpins a window as before.  Works for the copies the triage
+   list and the dashboard rows carry (delegated). */
+var ptip=null,ptr=false;
+function ptipOff(){if(ptip)ptip.hidden=true;}
+function ptipOn(t){
+  if(!ptip){ptip=mk("div","",doc.body);ptip.id="ptip";ptip.setAttribute("aria-hidden","true");ptip.hidden=true;}
+  ptip.textContent=t.getAttribute("title")||"";if(!ptip.textContent){ptipOff();return;}
+  ptip.hidden=false;
+  var r=t.getBoundingClientRect(),op=(ptip.offsetParent||doc.body).getBoundingClientRect(),vw=doc.documentElement.clientWidth;
+  var x=Math.max(8,Math.min(r.left,vw-ptip.offsetWidth-8));
+  ptip.style.left=(x-op.left)+"px";ptip.style.top=(r.bottom+6-op.top)+"px";
+}
+doc.addEventListener("mousedown",function(){ptr=true;setTimeout(function(){ptr=false;},0);},true);
+doc.addEventListener("focusin",function(ev){var t=ev.target;if(t&&t.classList&&t.classList.contains("ptag")&&!ptr)ptipOn(t);else ptipOff();});
+doc.addEventListener("focusout",function(ev){var t=ev.target;if(t&&t.classList&&t.classList.contains("ptag"))ptipOff();});
+doc.addEventListener("keydown",function(ev){if(ev.key==="Escape"||ev.key==="Esc")ptipOff();});
+window.addEventListener("resize",ptipOff);
+/* the vertical scale of one bars row (plan 031).  Outside the Timeline
+   grid (tl false) the old rule: the tallest value or the top of the normal
+   zone.  In the Timeline grid the prior windows set it: when the Current
+   value is more than 1.5 x the tallest prior value (or the zone top), the
+   scale stops at 1.5 x that top and the Current bar is drawn broken (brk),
+   so the prior bars keep up to two thirds of the row height. */
+W.rowScale=function(vals,zTop,tl){
+  var n=vals.length,have=vals.filter(function(v){return v!=null;}),max=Math.max.apply(null,have.concat(zTop!=null?[zTop]:[]).concat([0]));
+  if(!(max>0))max=1;
+  if(!tl||n<2)return {max:max,brk:false};
+  var pr=vals.slice(0,n-1).filter(function(v){return v!=null;}),top=Math.max.apply(null,pr.concat(zTop!=null?[zTop]:[]).concat([0])),c=vals[n-1];
+  if(top>0&&c!=null&&c>1.5*top)return {max:1.5*top,brk:true};
+  return {max:max,brk:false};
+};
+/* how much a Timeline row changed (plan 031): Current minus the prior mean
+   when aas (every row of the lane is in AAS, so the numbers add up), else
+   |z| with sigma floored at 2% of the mean; null when it cannot be told.
+   A row new in the Current window has no prior mean (data-mu empty):
+   in an AAS lane its VALID prior windows without a value count as 0 for
+   this sort only (owner decision 2026-11-20), so the key is Current
+   minus the mean of the valid priors; valid[i] false = a skipped window,
+   which stays unknown (never 0).  No valid prior window, no valid array
+   of the row's length, or a z lane: null (sorted last), as before. */
+W.changeKey=function(vals,mu,sd,aas,valid){
+  var n=vals.length,c=n?vals[n-1]:null;if(c==null)return null;
+  if(mu==null){
+    if(!aas||!valid||valid.length!==n)return null;
+    var s=0,k=0;for(var i=0;i<n-1;i++)if(valid[i]!==false){s+=vals[i]==null?0:vals[i];k++;}
+    return k?c-s/k:null;
+  }
+  if(aas)return c-mu;
+  var den=Math.max(sd||0,0.02*Math.abs(mu));return den>0?Math.abs((c-mu)/den):null;
+};
 /* one bars row: grey prior columns, the Current one in the accent, the
    prior normal zone (mean +- 1 / 2 floored sigma; in the Timeline grid
    #tl only behind the Current bar) and a severity dot */
@@ -37,8 +198,8 @@ function sizeRow(row){
   var cells=$$(":scope > .c",row);if(!cells.length)return;
   var vals=nums(row.getAttribute("data-v")),mu=num(row.getAttribute("data-mu")),sd=num(row.getAttribute("data-sd")),sev=row.getAttribute("data-sev")||"";
   var z=null;if(mu!=null){var d=Math.max(sd||0,0.02*Math.abs(mu));z=[Math.max(0,mu-2*d),mu+2*d,Math.max(0,mu-d),mu+d,mu];}
-  var have=vals.filter(function(v){return v!=null;}),max=Math.max.apply(null,have.concat(z?[z[1]]:[]).concat([0]));if(!(max>0))max=1;
   var bh=cssNum(row,"--bh",24),bb=cssNum(row,"--bb",4),bare=!!row.closest(".wg.bare"),tl=!!row.closest("#tl");
+  var sc=W.rowScale(vals,z?z[1]:null,tl),max=sc.max;
   var y=function(v){return Math.max(0,v)/max*bh;};
   cells.forEach(function(c,k){
     $$(":scope > i",c).forEach(function(x){c.removeChild(x);});
@@ -47,7 +208,7 @@ function sizeRow(row){
       var mn=mk("i","mn",c);mn.style.bottom=(bb+y(z[4]))+"px";}
     if(bare)mk("i","base",c);
     var v=vals[k];if(v==null)return;
-    var h=Math.max(1.5,y(v)),b=mk("i","b",c);b.style.height=h+"px";
+    var brk=sc.brk&&c.classList.contains("cur"),h=brk?bh:Math.max(1.5,y(v)),b=mk("i",brk?"b brk":"b",c);b.style.height=h+"px";
     if(c.classList.contains("cur")&&(sev==="large"||sev==="moderate")){var s=mk("i","sd s-"+sev,c);s.style.bottom=(bb+h)+"px";}
   });
 }
@@ -56,12 +217,16 @@ function markCols(wg){
   W.markers().forEach(function(m){$$('.c[data-w="'+m.o+'"],.h[data-w="'+m.o+'"]',wg).forEach(function(c){c.classList.add("mk");});});
 }
 /* release flags on the column boundaries: full label, else the short one,
-   in two tiers, left- or right-anchored, never overlapping */
+   in two tiers, left- or right-anchored, never overlapping.  ".qf" (quiet
+   flags, the card charts): only the marker on the Current window's left
+   edge is labelled; the others keep their column line (markCols). */
 function layoutFlags(wg){
+  var quiet=wg.classList.contains("qf");
   $$(".flags",wg).forEach(function(fl){
     if(!shown(fl))return;fl.innerHTML="";
     var base=fl.getBoundingClientRect().left,width=fl.clientWidth,TH=17,tiers=[[],[]],narrow=width<520;
     W.markers().forEach(function(m){
+      if(quiet&&m.o!==0)return;
       var ref=$$('[data-w="'+m.o+'"]',wg).filter(function(e){return !e.closest(".flags");})[0];if(!ref)return;
       var x=ref.getBoundingClientRect().left-base,labels=narrow?[m.s]:[m.l,m.s],cands=[];
       labels.forEach(function(l){cands.push([l,0]);});labels.forEach(function(l){cands.push([l,1]);});
@@ -94,10 +259,13 @@ W.render=function(scope){
 };
 function refit(){$$("[data-wg]").forEach(fit);}
 W.refit=refit;
-/* marker text slots: <span data-mk-at="o" [data-mk-pre=" after "] [data-mk-icon]> */
+/* marker text slots: <span data-mk-at="o" [data-mk-pre=" after "] [data-mk-icon]>;
+   a slot with a data-mk-pre (" after ") says the change came after the
+   marker, so it takes only one at or before window o's start (never one
+   inside the Current window: the slot stays hidden) */
 function fillMk(){
   $$("[data-mk-at]").forEach(function(el){
-    var m=W.markerAt(+el.getAttribute("data-mk-at"));if(!m)return;
+    var m=W.markerAt(+el.getAttribute("data-mk-at"),el.hasAttribute("data-mk-pre"));if(!m)return;
     el.innerHTML="";
     if(el.hasAttribute("data-mk-icon"))mk("i","kf",el);
     el.appendChild(doc.createTextNode((el.getAttribute("data-mk-pre")||"")+m.l+(el.hasAttribute("data-mk-icon")?"":" ("+m.t+")")));
@@ -134,5 +302,5 @@ var rt=null;
 window.addEventListener("resize",function(){if(rt)clearTimeout(rt);rt=setTimeout(refit,120);});
 doc.addEventListener("awr:view",function(){setTimeout(refit,40);});
 doc.addEventListener("toggle",function(ev){var t=ev.target;if(t&&t.querySelector&&t.querySelector("[data-wg]"))setTimeout(function(){W.render(t);},20);},true);
-doc.addEventListener("DOMContentLoaded",function(){unwrap();fillMk();W.render(doc);setTimeout(refit,300);});
+doc.addEventListener("DOMContentLoaded",function(){unwrap();fillMk();W.render(doc);tagCards();setTimeout(refit,300);});
 })();

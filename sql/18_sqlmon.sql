@@ -38,8 +38,9 @@
 -- on a lightly-loaded instance while never hiding a real regression. The
 -- caption states the raw captured-execution count vs. the count actually
 -- shown. The execution SCATTER chart plots every captured execution in the
--- full span regardless of the floor (capped at 3,000 most-recent points) --
--- the floor only shapes the summary table and its ranking.
+-- full span regardless of the floor (capped at 3,000 points,
+-- compared-window executions first) -- the floor only shapes the summary
+-- table and its ranking.
 --
 -- Window attribution: an execution is attributed to a compared window by
 -- its parsed sql_exec_start (key3) falling in [win_start_ts, win_end_ts) of
@@ -95,6 +96,7 @@ DECLARE
     v_row         VARCHAR2(32767);
     v_flags       VARCHAR2(400);
     v_plancell    VARCHAR2(400);
+    v_sk          VARCHAR2(1);       -- display order key: 0 large, 1 moderate, 2 rest
 
     v_windows_json    VARCHAR2(32767);
     v_weeks_iso_json  VARCHAR2(4000);
@@ -148,6 +150,7 @@ DECLARE
     @@sql/lib/off_label.plsql
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
+    @@sql/lib/finding_hints.plsql
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="sqlmon" class="vw in-s in-a lib" style="--os:2"><h2>SQL Monitor'
         || '<small class="h2sub">Captured executions per statement; a sample, not every execution</small></h2>');
@@ -519,10 +522,17 @@ BEGIN
             ELSE '&mdash;'
         END;
 
+        -- display order (client-side, below): flagged statements first.
+        -- The loop itself stays in rnk order -- plan cards, Timeline rows
+        -- and the tail all depend on it.
+        v_sk := CASE score_bucket(s.cur_val, s.mu, s.sd, s.n_prior)
+                     WHEN 'large' THEN '0' WHEN 'moderate' THEN '1' ELSE '2' END;
+
         -- entity anchor sm-<sql_id> (sql/lib/anchor_id.plsql's rule; a
         -- sql_id is already lower-case [0-9a-z], so the slug is the id)
         v_row := '<tr id="sm-' || s.sql_id || '" data-sys="' || is_oracle_schema(s.last_username) || '"'
-            || CASE WHEN s.rnk > v_top_n OR s.cur_val IS NULL THEN ' data-tail="Y" hidden' ELSE '' END
+            || CASE WHEN s.rnk > v_top_n OR s.cur_val IS NULL THEN ' data-tail="Y" hidden'
+                    ELSE ' data-sk="' || v_sk || '"' END
             || '>'
             || '<td class="mono">' || s.sql_id
             || ' <a class="xlink" href="#sql-' || s.sql_id
@@ -649,6 +659,14 @@ BEGIN
 
     IF v_any_row THEN
         DBMS_OUTPUT.PUT_LINE('</tbody></table>');
+        -- Flagged statements first (large, moderate, then the rest; each
+        -- group in rnk order).  Runs while the page parses; with JS off the
+        -- table stays in rnk order (Current-window max elapsed).
+        DBMS_OUTPUT.PUT_LINE('<script>(function(){var t=document.getElementById("sqlmon-pool");'
+            || 'if(!t||!t.tBodies.length)return;var b=t.tBodies[0],tail=b.querySelector("tr[data-tail]"),'
+            || 'ps=[].slice.call(b.querySelectorAll("tr[data-sk]")).map(function(r,i){return {r:r,d:r.nextElementSibling,k:+r.getAttribute("data-sk"),i:i};});'
+            || 'ps.sort(function(x,y){return x.k-y.k||x.i-y.i;});'
+            || 'ps.forEach(function(p){b.insertBefore(p.r,tail);if(p.d&&p.d.classList.contains("sqlmon-detail"))b.insertBefore(p.d,tail);});})();</script>');
         IF v_tail_cnt > 0 THEN
             DBMS_OUTPUT.PUT_LINE('<span class="expander" data-for="sqlmon-pool" data-n="'
                 || v_tail_cnt || '" data-noun="more statements'
@@ -759,7 +777,7 @@ BEGIN
                     || '</span></dd>'
                     || '<div class="m"' || CASE WHEN p_plain = 'Y' THEN ' title="Ranked, not scored"' END || '>'
                     || delta_span(p_cur, p_mu, p_bucket, p_plain)
-                    || CASE WHEN p_band = 'Y' THEN band_span(band_z(p_cur, p_mu, p_sd), p_bucket, 'sm') END
+                    || CASE WHEN p_band = 'Y' THEN band_span(band_z(p_cur, p_mu, p_sd), p_bucket, 'sm', 'N', 10) END
                     || '</div></div>';
             END pc_ev;
         BEGIN
@@ -862,24 +880,27 @@ BEGIN
                     v_g_cur, v_g_mu, NULL, NULL, 'Y', 'N');
             END IF;
             v_ev := v_ev || pc_ev(ent('SQL Monitor', anchor_id('sm', v_id), 'sql'),
-                'max ' || fmt_num(v_pc(c).cur_val) || ' s',
-                'normal ' || fmt_num(v_pc(c).mu) || ' s',
+                'max ' || fmt_dur(v_pc(c).cur_val),
+                'normal ' || fmt_dur(v_pc(c).mu),
                 v_pc(c).cur_val, v_pc(c).mu, v_pc(c).sd, v_b, 'N');
             IF v_src = 'sqlstat' AND v_c_mu IS NOT NULL THEN
-                v_ev := v_ev || pc_ev('CPU', fmt_num(v_c_cur) || ' s',
-                    'normal ' || fmt_num(v_c_mu) || ' s'
+                v_ev := v_ev || pc_ev('CPU', fmt_dur(v_c_cur),
+                    'normal ' || fmt_dur(v_c_mu)
                     || CASE WHEN v_e_mu IS NOT NULL AND v_e_cur > v_e_mu
                                  AND NVL(v_c_cur, 0) - v_c_mu <= 0.1 * (v_e_cur - v_e_mu)
                             THEN '; the rise is wait' END,
                     v_c_cur, v_c_mu, v_c_sd, NULL, 'Y');
             END IF;
 
+            -- data-ph0 / data-ph1 = the transition this card shows: 17 links
+            -- and moves it under the I/O card only when it cites the same
             DBMS_OUTPUT.PUT_LINE('<article class="panel fc chg" id="' || v_cid
+                || '" data-ph0="' || TO_CHAR(v_pc(c).prior_ph) || '" data-ph1="' || TO_CHAR(v_pc(c).cur_ph)
                 || '" aria-labelledby="' || v_cid || '-h" hidden>'
                 || '<header class="fc-h"><div class="fc-k"><span class="sv" title="SQL Monitor, #'
                 || v_pc(c).rnk || ' by Current-window max elapsed"><b class="gk">&#9670;</b>Plan change</span></div>'
                 || '<div class="fc-band" title="SQL Monitor max elapsed, z ' || band_ztxt(v_z)
-                || ' against the prior normal">' || band_span(v_z, v_b, 'lg')
+                || ' against the prior normal">' || band_span(v_z, v_b, 'lg', 'N', 10)
                 || '<span class="bd-ax" aria-hidden="true"><em style="--x:.167">&minus;2</em>'
                 || '<em style="--x:.333">0</em><em style="--x:.500">+2</em>'
                 || '<em style="--x:.583">+3</em><em class="end" style="--x:1">+8&sigma;</em></span>'
@@ -895,17 +916,22 @@ BEGIN
                 || TO_CHAR(v_pc(c).cur_ph) || '">'
                 || DBMS_XMLGEN.CONVERT(NVL(v_pc(c).usr, '?')) || ' &middot; '
                 || DBMS_XMLGEN.CONVERT(NVL(v_pc(c).modl, '?')) || '</p>'
-                || '<div class="big"><span class="v">' || fmt_num(v_e_cur) || '</span>'
-                || '<span class="u">' || CASE WHEN v_src = 'sqlstat' THEN 's elapsed'
-                                              ELSE 's max elapsed (SQL Monitor)' END || '</span>'
-                || '<span class="nrm" title="prior mean ' || fmt_num(v_e_mu) || ' s">normal '
-                || fv_range(v_e_mu, v_e_sd, 's') || '</span></div>');
-            DBMS_OUTPUT.PUT_LINE('<div class="wg bare allv"' || wg_attr || '>' || wg_flags(TRUE)
-                || wg_bars(v_pairs, 1, v_e_mu, v_e_sd, NULL));
+                || '<div class="big"><span class="v">' || fmt_dur(v_e_cur) || '</span>'
+                || '<span class="u">' || CASE WHEN v_src = 'sqlstat' THEN 'elapsed'
+                                              ELSE 'max elapsed (SQL Monitor)' END || '</span>'
+                || '<span class="nrm" title="prior mean ' || fmt_dur(v_e_mu) || '">normal '
+                || fv_range(v_e_mu, v_e_sd, 'dur') || '</span></div>');
+            DBMS_OUTPUT.PUT_LINE('<div class="wg bare hov qf"' || wg_attr || '>' || wg_flags(TRUE)
+                || wg_bars(v_pairs, 1, v_e_mu, v_e_sd, NULL, p_fmt => 'dur'));
             DBMS_OUTPUT.PUT_LINE('<div class="r p" data-name="Plan hash" role="row">' || v_cells || '</div>'
                 || wg_dates(TRUE) || '</div></div>');
-            DBMS_OUTPUT.PUT_LINE('<dl class="ev">' || v_ev || '</dl></div>'
-                || '<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
+            DBMS_OUTPUT.PUT_LINE('<dl class="ev">' || v_ev || '</dl></div>');
+            -- plan 033: what a plan change usually means, and both plans
+            DBMS_OUTPUT.PUT_LINE(hint_block('PLAN', v_cid,
+                CASE WHEN v_pc(c).prior_ph IS NOT NULL AND v_pc(c).cur_ph IS NOT NULL
+                     THEN hint_fill(hint_sql('PLAN'), ~dbid, NULL, NULL, 0, v_id,
+                                    v_pc(c).prior_ph, v_pc(c).cur_ph, p_dbids => '~dbid_list') END));
+            DBMS_OUTPUT.PUT_LINE('<footer class="fc-f"><a class="jump" href="#timeline" data-tl="tl-'
                 || anchor_id('sm', v_id) || '">Timeline &rarr;</a>'
                 || '<span class="evl"><a href="#topsql">Top SQL</a><a href="#sqlmon">SQL Monitor</a></span>'
                 || '</footer></article>');
@@ -921,8 +947,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<h3>Execution scatter (full compared span)</h3>');
     DBMS_OUTPUT.PUT_LINE('<p style="font-size:11px;color:var(--muted);margin:-4px 0 8px 0">'
         || 'Every captured execution, x = start time, y = elapsed (log scale). '
-        || 'Diamond = error, triangle = a plan different from that sql_id''s most '
-        || 'common plan, size &prop; requested DOP. Colored series are the top '
+        || 'Points in the Current window are solid and outlined, the rest faded; '
+        || 'diamond = error, triangle = a plan different from that sql_id''s most '
+        || 'common plan (both always solid); size grows with the requested DOP. Colored series are the top '
         || v_top_n || ' statements by Current-window max elapsed; grey = everything else.</p>');
     DBMS_OUTPUT.PUT_LINE('<div class="chart-wrap chart-medium" id="sqlmon-scatter"></div>');
 
@@ -1011,7 +1038,8 @@ BEGIN
     END LOOP;
     v_top_ids_json := v_top_ids_json || ']';
 
-    -- Points: every captured execution, capped to the most recent 3000.
+    -- Points: every captured execution, capped to 3000 -- those starting
+    -- inside a compared window first, then the most recent.
     DBMS_LOB.CREATETEMPORARY(v_points_clob, TRUE);
     FOR p IN (
         -- ONE scan of dba_hist_reports: the per-sql_id mode plan (the
@@ -1027,11 +1055,11 @@ BEGIN
                    CASE WHEN be.mode_plan IS NOT NULL AND be.plan_hash <> 0
                              AND be.plan_hash <> be.mode_plan
                         THEN 'Y' ELSE 'N' END AS plan_mismatch,
-                   ROW_NUMBER() OVER (ORDER BY be.exec_start DESC) AS rn_recent,
+                   ROW_NUMBER() OVER (ORDER BY be.in_win DESC, be.exec_start DESC) AS rn_recent,
                    COUNT(*) OVER () AS n_total
             FROM (
                 SELECT b.sql_id, b.exec_start, b.elapsed_us, b.status,
-                       b.plan_hash, b.px_req,
+                       b.plan_hash, b.px_req, b.in_win,
                        MAX(CASE WHEN b.plan_hash <> 0 THEN b.plan_hash END)
                            KEEP (DENSE_RANK FIRST
                                  ORDER BY CASE WHEN b.plan_hash <> 0 THEN b.plan_cnt END DESC NULLS LAST,
@@ -1045,6 +1073,16 @@ BEGIN
                                TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS') AS exec_start,
                                x.status, x.plan_hash, x.px_req,
                                NVL(x.elapsed_us, 0) AS elapsed_us
+                               -- 1 when the execution starts inside a compared
+                               -- window (nominal grid: windows_cte.sql's rule).
+                               -- Half a second off the distance makes the test
+                               -- [start, end) like the windows, and keeps NUMBER
+                               -- rounding of the day fractions off the edge
+                               , CASE WHEN MOD(TO_DATE('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS')
+                                               - TO_DATE(r.key3 DEFAULT NULL ON CONVERSION ERROR, 'MM:DD:YYYY HH24:MI:SS')
+                                               - 0.5/86400,
+                                               (~step_hours/24)) < (~win_hours/24)
+                                      THEN 1 ELSE 0 END AS in_win
                         FROM   dba_hist_reports r,
                                XMLTABLE('/report_repository_summary/sql'
                                    PASSING XMLTYPE(r.report_summary)
@@ -1106,7 +1144,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('var el0=document.getElementById("sqlmon-scatter");');
         DBMS_OUTPUT.PUT_LINE('if(el0){var note=document.createElement("p");'
             || 'note.style.cssText="font-size:11px;color:var(--muted);margin:-2px 0 6px;font-style:italic";'
-            || 'note.textContent="Capped to the most recent 3,000 of "+AWR_DATA.sqlmon.totalRaw+" captured executions.";'
+            || 'note.textContent="Capped to 3,000 of "+AWR_DATA.sqlmon.totalRaw+" captured executions: those in the compared windows first, then the most recent.";'
             || 'el0.parentNode.insertBefore(note, el0);}');
     END IF;
     DBMS_OUTPUT.PUT_LINE('if(!window.echarts) return;');
@@ -1117,9 +1155,17 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
     DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
     DBMS_OUTPUT.PUT_LINE('var palette=["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1","#84cc16","#f97316","#0ea5e9"];');
-    DBMS_OUTPUT.PUT_LINE('function ts(s){return Date.parse(String(s).replace(" ","T"));}');
-    DBMS_OUTPUT.PUT_LINE('function sizeOf(dop){return Math.max(5,Math.min(18,5+2*(dop||1)));}');
+    -- Every time in this chart (points, windows, markers, axis bounds) is
+    -- the DB's wall clock, read as UTC on purpose (the Activity charts' PT
+    -- does the same): a browser-local parse breaks on a DST boundary in
+    -- the reader's zone (02:50 and 03:50 one instant in Europe/Berlin).
+    -- useUTC below makes the axis and the zoom slider print that same wall
+    -- clock, so a normal day's labels read as before.
+    DBMS_OUTPUT.PUT_LINE('function ts(s){return Date.parse(String(s).replace(" ","T")+"Z");}');
+    DBMS_OUTPUT.PUT_LINE('function sizeOf(dop){var n=Math.max(1,dop||1);return Math.min(12,4+2*Math.log(n)/Math.LN2);}');
     DBMS_OUTPUT.PUT_LINE('function symOf(pt){return pt.st==="DONE (ERROR)"?"diamond":(pt.pm==="Y"?"triangle":"circle");}');
+    DBMS_OUTPUT.PUT_LINE('var cw=(d.windows||[]).filter(function(w){return w[2]==="current";})[0],c0=cw?ts(cw[0]):null,c1=cw?ts(cw[1]):null;');
+    DBMS_OUTPUT.PUT_LINE('function inCur(t){return c0!==null&&t>=c0&&t<c1;}');
     DBMS_OUTPUT.PUT_LINE('var groups={}; (d.points||[]).forEach(function(pt){');
     DBMS_OUTPUT.PUT_LINE('  var key=(d.topIds||[]).indexOf(pt.id)>=0?pt.id:"Other";');
     DBMS_OUTPUT.PUT_LINE('  (groups[key]=groups[key]||[]).push(pt);');
@@ -1133,10 +1179,13 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
     DBMS_OUTPUT.PUT_LINE('function buildMarkAreas(hiSlot){return (d.windows||[]).map(function(w){var valid=w[3]!=="0";var hi=(hiSlot!=null)&&((hiSlot===0&&w[2]==="current")||("w-"+hiSlot===w[2]));var a={xAxis:ts(w[0]),itemStyle:{color:valid?(w[2]==="current"?"rgba(37,99,235,0.22)":"rgba(37,99,235,0.10)"):"rgba(148,163,175,0.12)",opacity:hi?1:(hiSlot!=null?0.35:1),borderColor:hi?fg:null,borderWidth:hi?1.5:0}};if(!valid){a.label={show:true,position:"insideTop",color:mu,fontSize:9,formatter:"skipped",distance:1};}return [a,{xAxis:ts(w[1])}];});}');
     DBMS_OUTPUT.PUT_LINE('chart.setOption({');
+    DBMS_OUTPUT.PUT_LINE('  useUTC:true,');
     DBMS_OUTPUT.PUT_LINE('  tooltip:{trigger:"item",formatter:function(p){var pt=p.data;return "<b>"+pt.id+"</b><br/>"+pt.t+"<br/>elapsed: "+(+pt.e).toFixed(2)+" s<br/>status: "+pt.st+"<br/>plan_hash: "+pt.ph+"<br/>DOP req: "+pt.dop;}},');
-    DBMS_OUTPUT.PUT_LINE('  legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6},');
+    -- legend chips opaque: the faded series opacity (0.45, Other 0.2)
+    -- would otherwise carry over to the legend icons
+    DBMS_OUTPUT.PUT_LINE('  legend:{type:"scroll",bottom:0,textStyle:{color:fg,fontSize:11},itemWidth:10,itemHeight:6,itemStyle:{opacity:1}},');
     DBMS_OUTPUT.PUT_LINE('  grid:{left:56,right:20,top:16,bottom:44,containLabel:true},');
-    DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"time",axisLabel:{color:mu,fontSize:10}},');
+    DBMS_OUTPUT.PUT_LINE('  xAxis:{type:"time",min:ts(d.spanStart),max:ts(d.spanEnd),axisLabel:{color:mu,fontSize:10}},');
     DBMS_OUTPUT.PUT_LINE('  yAxis:{type:"log",name:"elapsed (s)",nameTextStyle:{color:mu,fontSize:10},axisLabel:{color:mu},splitLine:{lineStyle:{color:gr}}},');
     DBMS_OUTPUT.PUT_LINE('  dataZoom:[{type:"inside"},{type:"slider",bottom:22,height:14,textStyle:{color:mu,fontSize:9}}],');
     DBMS_OUTPUT.PUT_LINE('  series:names.map(function(name,i){');
@@ -1145,9 +1194,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    var s={name:name,type:"scatter",');
     DBMS_OUTPUT.PUT_LINE('      symbolSize:function(v,p){return sizeOf(p.data.dop);},');
     DBMS_OUTPUT.PUT_LINE('      symbol:function(v,p){return p&&p.data?symOf(p.data):"circle";},');
-    DBMS_OUTPUT.PUT_LINE('      itemStyle:{color:color,opacity:name==="Other"?0.35:0.85},');
-    DBMS_OUTPUT.PUT_LINE('      emphasis:{focus:"series"},');
-    DBMS_OUTPUT.PUT_LINE('      data:pts.map(function(pt){return Object.assign({value:[ts(pt.t),+pt.e]},pt);})};');
+    DBMS_OUTPUT.PUT_LINE('      itemStyle:{color:color,opacity:name==="Other"?0.2:0.45},z:name==="Other"?1:2,');
+    DBMS_OUTPUT.PUT_LINE('      emphasis:{focus:"series"},blur:{itemStyle:{opacity:0.06}},');
+    DBMS_OUTPUT.PUT_LINE('      data:pts.map(function(pt){var t=ts(pt.t),o=Object.assign({value:[t,+pt.e]},pt),cur=inCur(t);'
+        || 'if(cur||pt.st==="DONE (ERROR)"||pt.pm==="Y")o.itemStyle={opacity:1,borderColor:"rgba(0,0,0,0.55)",borderWidth:cur?1:0.6};return o;})};');
     DBMS_OUTPUT.PUT_LINE('    if(i===0){');
     DBMS_OUTPUT.PUT_LINE('      s.markArea={silent:true,data:buildMarkAreas(null)};');
     DBMS_OUTPUT.PUT_LINE('      var ml=markersLine(); if(ml) s.markLine=ml;');

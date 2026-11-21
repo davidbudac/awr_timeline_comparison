@@ -31,8 +31,11 @@
 -- Card order and lead (shared with the verdict in 00_params.sql through
 -- sql/lib/finding_cards.plsql): a card is led by its loudest large (else
 -- moderate) member of the card's primary family, else of any family;
--- cards are ordered large before moderate, then by the largest |z| of any
--- member, and a flagged DB time card moves up to second place.
+-- cards whose time measure rose by 0.01 AAS or more come first, by the AAS added (impact,
+-- v1.7; a wait class counts its foreground time only, read from the same
+-- DBA_HIST_SYSTEM_EVENT rows as its all-session class row); then DB time;
+-- then the rest, large before moderate and by the largest |z| of any
+-- member; then a flagged DB time card moves up to second place.
 --
 -- Implementation note: the unified LOAD/METRIC/WAIT recompute is
 -- BULK COLLECTed exactly once into a PL/SQL collection; every view below
@@ -66,14 +69,15 @@ DECLARE
         dir            VARCHAR2(4),
         shr            NUMBER,
         wv             VARCHAR2(4000),
-        grp            VARCHAR2(64)
+        grp            VARCHAR2(64),
+        fg_d           NUMBER         -- wait-class rows: foreground Current - prior mean, AAS (impact)
     );
     TYPE findings_t  IS TABLE OF finding_rec INDEX BY PLS_INTEGER;
     TYPE idx_t       IS TABLE OF PLS_INTEGER INDEX BY PLS_INTEGER;
     TYPE fam_idx_t   IS TABLE OF PLS_INTEGER INDEX BY VARCHAR2(64);
     TYPE gz_t        IS TABLE OF NUMBER INDEX BY VARCHAR2(64);
     TYPE ord_t       IS TABLE OF VARCHAR2(64) INDEX BY PLS_INTEGER;
-    -- one foreground event of a flagged wait class (card evidence)
+    -- one event of a flagged wait class (card evidence, all sessions)
     TYPE ev_rec IS RECORD (
         wclass  VARCHAR2(64),
         event   VARCHAR2(128),
@@ -84,6 +88,15 @@ DECLARE
         shr     NUMBER
     );
     TYPE ev_t IS TABLE OF ev_rec INDEX BY PLS_INTEGER;
+    -- v1.7 "Where the extra DB time went" (plan 021): one part per wait
+    -- class and one for DB CPU, in AAS above the prior mean
+    TYPE part_rec IS RECORD (
+        lab VARCHAR2(64),     -- 'CPU' or the wait class name
+        d   NUMBER,           -- Current - prior mean, AAS (may be negative)
+        grp VARCHAR2(64),     -- the card group this part is the time measure of
+        aid VARCHAR2(200)     -- link target: the card, else the detail row
+    );
+    TYPE part_t IS TABLE OF part_rec INDEX BY PLS_INTEGER;
 
     v_findings   findings_t;
     v_table_idx  idx_t;
@@ -106,6 +119,8 @@ DECLARE
     v_glead      fam_idx_t;
     v_gsev       fam_idx_t;
     v_gz         gz_t;
+    v_gimp       gz_t;          -- card group -> impact, AAS added above normal (v1.7)
+    v_ig         VARCHAR2(64);
     v_order      ord_t;
     v_g          VARCHAR2(64);
     v_tmp        VARCHAR2(64);
@@ -113,6 +128,16 @@ DECLARE
     v_dbt        PLS_INTEGER;
     v_cpu        PLS_INTEGER;
     v_meta       VARCHAR2(4000);
+    v_cw_dbid    NUMBER;   -- plan 033: the Current window's DBID and snapshot range,
+    v_cw_b       NUMBER;   --   for the cards' read-only "Next step" queries
+    v_cw_e       NUMBER;
+    v_cw_t0      VARCHAR2(19);    -- its nominal start / end (ASH queries: sample_time)
+    v_cw_t1      VARCHAR2(19);
+    v_cw_inst    VARCHAR2(4000);  -- its valid instances, only when one was skipped (RAC)
+    v_open_g     VARCHAR2(64);   -- plan 025: the one card that starts open (Summary)
+    v_parts      part_t;
+    v_ncl        PLS_INTEGER := 0;   -- large finding cards (v1.7: a finding is a card)
+    v_ncm        PLS_INTEGER := 0;   -- moderate finding cards
 
     @@sql/lib/metric_policy.plsql
     @@sql/lib/is_essential.plsql
@@ -123,6 +148,7 @@ DECLARE
     @@sql/lib/off_label.plsql
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
+    @@sql/lib/finding_hints.plsql
 
     -- Entity anchors (v1.6.0): the id of THIS finding's row is
     -- finding_anchor(domain, name) = fr-<l|m|w>-<name> (sql/lib/anchor_id
@@ -132,6 +158,26 @@ DECLARE
     BEGIN
         RETURN finding_anchor(p_dom, p_name);
     END find_id;
+
+    -- a card's impact (AAS its time measure added above its prior mean), NULL when none
+    FUNCTION g_imp(p_g VARCHAR2) RETURN NUMBER IS
+    BEGIN
+        IF v_gimp.EXISTS(p_g) THEN RETURN v_gimp(p_g); END IF;
+        RETURN NULL;
+    END g_imp;
+
+    -- a card's share of the DB-time rise, integer percent; NULL when the
+    -- card added less than 0.01 AAS (imp_on), DB time did not rise, or the
+    -- share passes 100 (up to 100.5% is kept, shown as 100: never "101%")
+    FUNCTION g_shr(p_g VARCHAR2) RETURN NUMBER IS
+        v_i NUMBER := g_imp(p_g);
+        v_d NUMBER := g_imp('DBTIME');
+    BEGIN
+        IF imp_on(v_i) AND v_d > 0 AND v_i <= v_d * 1.005 THEN
+            RETURN LEAST(100, ROUND(v_i / v_d * 100));
+        END IF;
+        RETURN NULL;
+    END g_shr;
 
     FUNCTION src_link(p_dom VARCHAR2, p_name VARCHAR2) RETURN VARCHAR2 IS
     BEGIN
@@ -219,7 +265,7 @@ DECLARE
             || CASE WHEN p_txt THEN ' txt' END || '">' || p_id || '</span>'
             || '<span class="de">' || nbu(p_de) || '</span></dd>'
             || '<div class="m">' || delta_span(p_cur, p_mu, p_bucket)
-            || band_span(band_z(p_cur, p_mu, p_sd), p_bucket, 'sm') || '</div></div>';
+            || band_span(band_z(p_cur, p_mu, p_sd), p_bucket, 'sm', 'N', 10) || '</div></div>';
     END ev_row;
 
     -- the band glyph's axis under a card's large band
@@ -238,7 +284,7 @@ DECLARE
         RETURN '<div class="nr"><div class="l" title="' || DBMS_XMLGEN.CONVERT(r.metric_name) || '">'
             || f_ent(r) || '<small>normal ' || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u)
             || '</small></div>'
-            || band_span(r.z_score, r.change_bucket, 'sm', CASE WHEN r.canonical = 'N' THEN 'Y' ELSE 'N' END)
+            || band_span(r.z_score, r.change_bucket, 'sm', CASE WHEN r.canonical = 'N' THEN 'Y' ELSE 'N' END, 10)
             || '<div class="vv">' || fv(r.cur_val * v_s, v_u)
             || '<small>' || delta_span(r.cur_val, r.prior_mean, r.change_bucket) || '</small></div></div>';
     END nr_row;
@@ -331,6 +377,112 @@ DECLARE
         END IF;
     END emit_domain_table;
 
+    -- plan 033: a scored row moved up AND is a finding (large / moderate)
+    FUNCTION f_up(p_dom VARCHAR2, p_name VARCHAR2) RETURN BOOLEAN IS
+    BEGIN
+        FOR i IN 1 .. v_findings.COUNT LOOP
+            IF v_findings(i).metric_domain = p_dom AND v_findings(i).metric_name = p_name THEN
+                IF v_findings(i).change_bucket IN ('large', 'moderate')
+                   AND v_findings(i).cur_val > v_findings(i).prior_mean THEN
+                    RETURN TRUE;
+                END IF;
+                RETURN FALSE;
+            END IF;
+        END LOOP;
+        RETURN FALSE;
+    END f_up;
+
+    -- plan 033: one of the card evidence events (the top 2 of a class,
+    -- v_evs) moved up and is a finding by the wait policy
+    FUNCTION ev_up(p_event VARCHAR2) RETURN BOOLEAN IS
+        v_b VARCHAR2(40);
+    BEGIN
+        FOR e IN 1 .. v_evs.COUNT LOOP
+            IF v_evs(e).event = p_event THEN
+                v_b := policy_bucket('WAIT', v_evs(e).event, v_evs(e).wclass, v_evs(e).cur_val,
+                                     v_evs(e).mu, v_evs(e).sd, v_evs(e).n, v_evs(e).shr);
+                IF v_b IN ('large', 'moderate') AND v_evs(e).cur_val > NVL(v_evs(e).mu, 0) THEN
+                    RETURN TRUE;
+                END IF;
+            END IF;
+        END LOOP;
+        RETURN FALSE;
+    END ev_up;
+
+    -- review follow-up R2: COMMIT_LAT claims each commit waited longer, so
+    -- it checks exactly that: log file sync flagged up AND its time per
+    -- commit (wait AAS / user commits per second) at least 1.5x the prior
+    -- windows' (mean wait / mean commit rate, the ratio of the means)
+    FUNCTION commit_lat_up RETURN BOOLEAN IS
+    BEGIN
+        IF NOT ev_up('log file sync') THEN RETURN FALSE; END IF;
+        FOR i IN 1 .. v_findings.COUNT LOOP
+            IF v_findings(i).metric_domain = 'LOAD' AND v_findings(i).metric_name = 'user commits' THEN
+                FOR e IN 1 .. v_evs.COUNT LOOP
+                    IF v_evs(e).event = 'log file sync' AND v_evs(e).mu IS NOT NULL
+                       AND v_findings(i).cur_val > 0 AND v_findings(i).prior_mean > 0
+                       AND v_evs(e).cur_val / v_findings(i).cur_val
+                           >= 1.5 * v_evs(e).mu / v_findings(i).prior_mean THEN
+                        RETURN TRUE;
+                    END IF;
+                END LOOP;
+                RETURN FALSE;
+            END IF;
+        END LOOP;
+        RETURN FALSE;
+    END commit_lat_up;
+
+    -- plan 033: which rule of sql/lib/finding_hints.plsql a card gets
+    -- (NULL = none); the table of rules is in that file's header.  A rule
+    -- fires only on what its sentence claims (review follow-up R2):
+    -- IO_SCANS on any one of its signals (the sentence says "or"),
+    -- COMMIT_LAT on the time per commit, DBTIME_CPU only when CPU took at
+    -- least 60% of the rise (time_split 'c', the headline's "mostly CPU")
+    FUNCTION pick_hint(p_g VARCHAR2) RETURN VARCHAR2 IS
+        v_split VARCHAR2(1);
+    BEGIN
+        IF p_g = 'IO' THEN
+            IF f_up('LOAD', 'table scans (long tables)') OR ev_up('db file scattered read')
+               OR ev_up('direct path read') THEN
+                RETURN 'IO_SCANS';
+            END IF;
+            IF ev_up('db file sequential read') THEN RETURN 'IO_SINGLE'; END IF;
+        ELSIF p_g = 'COMMIT' THEN
+            IF commit_lat_up THEN RETURN 'COMMIT_LAT'; END IF;
+        ELSIF p_g = 'NET' THEN
+            IF ev_up('SQL*Net more data to client')
+               OR f_up('LOAD', 'bytes sent via SQL*Net to client') THEN
+                RETURN 'NET_PAYLOAD';
+            END IF;
+        ELSIF p_g = 'PARSE' THEN
+            IF f_up('LOAD', 'parse count (hard)') THEN RETURN 'HARD_PARSE'; END IF;
+        ELSIF p_g = 'DBTIME' THEN
+            IF v_dbt IS NOT NULL AND v_cpu IS NOT NULL THEN
+                v_split := time_split(v_findings(v_dbt).cur_val, v_findings(v_dbt).prior_mean,
+                                      v_findings(v_cpu).cur_val, v_findings(v_cpu).prior_mean);
+                IF v_split = 'c' THEN RETURN 'DBTIME_CPU'; END IF;
+            END IF;
+        ELSIF p_g = 'WAIT:Application' THEN
+            IF ev_up('enq: TX - row lock contention') THEN RETURN 'ROW_LOCK'; END IF;
+        END IF;
+        RETURN NULL;
+    END pick_hint;
+
+    -- the card headline after the metric name: "5.4x normal", "up 79.7%,
+    -- mostly wait" (the DB time lead adds where the extra time went).
+    -- Shared by the card's h3 and its triage row (plan 025).
+    FUNCTION head_txt(r finding_rec) RETURN VARCHAR2 IS
+        v_split VARCHAR2(1);
+    BEGIN
+        IF r.metric_name = 'DB time' AND v_dbt IS NOT NULL AND v_cpu IS NOT NULL THEN
+            v_split := time_split(v_findings(v_dbt).cur_val, v_findings(v_dbt).prior_mean,
+                                  v_findings(v_cpu).cur_val, v_findings(v_cpu).prior_mean);
+        END IF;
+        RETURN move_txt(r.cur_val, r.prior_mean, r.change_bucket)
+            || CASE v_split WHEN 'W' THEN ', all of it wait' WHEN 'w' THEN ', mostly wait'
+                            WHEN 'c' THEN ', mostly CPU' WHEN 'm' THEN ', CPU and wait alike' END;
+    END head_txt;
+
     -- One finding card (Summary view): kicker + band, headline, Current and
     -- normal range, the window chart, evidence rows, the related-metrics
     -- fold and the footer links.  p_pos = 1 is the lead card (bigger).
@@ -352,7 +504,13 @@ DECLARE
         v_ms    NUMBER;
         v_mu    VARCHAR2(20);
         v_eb    VARCHAR2(40);
+        v_rule  VARCHAR2(20);
+        v_imp   NUMBER := g_imp(p_g);
+        v_shr   NUMBER;
     BEGIN
+        -- impact chip (v1.7): the card's share of the DB-time rise, left out
+        -- past 100% (a part is measured apart from DB time and can pass it)
+        v_shr := g_shr(p_g);
         IF p_g = 'DBTIME' AND v_dbt IS NOT NULL AND v_cpu IS NOT NULL THEN
             v_split := time_split(v_findings(v_dbt).cur_val, v_findings(v_dbt).prior_mean,
                                   v_findings(v_cpu).cur_val, v_findings(v_cpu).prior_mean);
@@ -419,26 +577,43 @@ DECLARE
 
         DBMS_OUTPUT.PUT_LINE('<article class="panel fc f-' || v_sev
             || CASE WHEN p_pos = 1 THEN ' lead' WHEN v_sev = 'moderate' THEN ' slim' END
-            || '" id="' || v_id || '" aria-labelledby="' || v_id || '-h">'
+            || '" id="' || v_id || '" aria-labelledby="' || v_id || '-h"'
+            || ' data-impact="' || imp_tok(v_imp) || '" data-share="' || v_shr || '"'
+            || CASE WHEN p_g <> v_open_g THEN ' data-fold="Y"' END || '>'
             || '<header class="fc-h"><div class="fc-k"><span class="sv" title="'
             || DBMS_XMLGEN.CONVERT(card_label(p_g)) || '"><i class="dotk ' || v_sev
-            || '" aria-hidden="true"></i>' || INITCAP(v_sev) || '</span></div>'
+            || '" aria-hidden="true"></i>' || INITCAP(v_sev) || '</span>'
+            || CASE WHEN imp_on(v_imp) THEN '<span class="fc-imp" title="Time added: Current minus the prior'
+                    || ' mean of this card&#39;s time measure (DB time, DB CPU or the foreground time of its'
+                    || ' wait class), in average active sessions">' || imp_txt(v_imp)
+                    || CASE WHEN p_g = 'DBTIME' THEN ' above normal'
+                            WHEN v_shr IS NOT NULL THEN ' &middot; '
+                                 || CASE WHEN v_shr < 1 THEN '&lt;1' ELSE TO_CHAR(v_shr) END
+                                 || '% of the DB-time rise' END
+                    || '</span>' END
+            || '<span class="fc-sum">' || fv(r.cur_val * v_s, v_u) || ' &middot; normal '
+            || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u) || '</span>'
+            || '<span class="fc-tags"></span></div>'
             || '<div class="fc-band" title="z ' || band_ztxt(r.z_score) || ' against the prior normal">'
-            || band_span(r.z_score, v_sev, 'lg') || band_axis || '</div></header>');
+            || band_span(r.z_score, v_sev, 'lg', 'N', 10) || band_axis || '</div></header>');
         DBMS_OUTPUT.PUT_LINE('<h3 id="' || v_id || '-h">' || f_ent(r) || ' '
-            || move_txt(r.cur_val, r.prior_mean, v_sev)
-            || CASE WHEN r.metric_name = 'DB time' THEN
-                   CASE v_split WHEN 'W' THEN ', all of it wait' WHEN 'w' THEN ', mostly wait'
-                                WHEN 'c' THEN ', mostly CPU' WHEN 'm' THEN ', CPU and wait alike' END END
-            || '</h3>');
+            || head_txt(r) || '</h3>');
         DBMS_OUTPUT.PUT_LINE('<div class="fc-b"><div class="fc-main">'
             || '<div class="big"><span class="v">' || fv_num(r.cur_val * v_s, v_u) || '</span>'
             || '<span class="u">' || fv_unit(r.cur_val * v_s, v_u) || '</span>'
             || '<span class="nrm" title="prior mean ' || fv(r.prior_mean * v_s, v_u) || '">normal '
             || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u) || '</span></div>');
-        DBMS_OUTPUT.PUT_LINE('<div class="wg bare allv"' || wg_attr || '>' || wg_flags(TRUE)
+        DBMS_OUTPUT.PUT_LINE('<div class="wg bare hov qf"' || wg_attr || '>' || wg_flags(TRUE)
             || wg_bars(r.wv, v_s, r.prior_mean, r.prior_sd, v_sev) || wg_dates(TRUE) || '</div></div>');
         DBMS_OUTPUT.PUT_LINE('<dl class="ev">' || v_ev || '</dl></div>');
+        -- plan 033: what this usually means, and a read-only next query
+        v_rule := pick_hint(p_g);
+        IF v_rule IS NOT NULL THEN
+            DBMS_OUTPUT.PUT_LINE(hint_block(v_rule, v_id,
+                CASE WHEN v_cw_b IS NOT NULL
+                     THEN hint_fill(hint_sql(v_rule), v_cw_dbid, v_cw_b, v_cw_e, ~inst_num,
+                                    p_insts => v_cw_inst, p_t0 => v_cw_t0, p_t1 => v_cw_t1) END));
+        END IF;
         IF v_nrel + v_ntw > 0 THEN
             DBMS_OUTPUT.PUT_LINE('<details class="rel"><summary>'
                 || CASE WHEN v_nrel > 0 THEN v_nrel || ' related metric' || CASE WHEN v_nrel = 1 THEN '' ELSE 's' END END
@@ -456,6 +631,31 @@ DECLARE
             || find_id(r.metric_domain, r.metric_name) || '">Timeline &rarr;</a>'
             || '<span class="evl">' || v_links || '</span></footer></article>');
     END emit_card;
+
+    -- One row of the Summary triage list (plan 025): severity, card name
+    -- (a link to the card), the headline, Current value and normal range,
+    -- an empty impact cell that the inline script after the cards fills
+    -- from the card's data-impact / data-share (plan 020), the lead
+    -- metric's windows as a micro strip (js_microstrip; data-spark-dense:
+    -- past about 45 windows one gapless silhouette instead of nothing), and
+    -- the empty span.tri-tags that plan 027 fills.
+    PROCEDURE emit_tri_row(p_g VARCHAR2) IS
+        r    finding_rec  := v_findings(v_glead(p_g));
+        v_s  NUMBER       := metric_scale(r.metric_domain, r.metric_name);
+        v_u  VARCHAR2(20) := metric_unit(r.metric_domain, r.metric_name);
+        v_id VARCHAR2(80) := card_id(p_g);
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE('<div class="tri-row" role="listitem" data-card="' || v_id || '">'
+            || '<span class="tri-f"><i class="dotk ' || r.change_bucket || '" aria-hidden="true"></i>'
+            || '<a class="tri-go" href="#' || v_id || '">' || DBMS_XMLGEN.CONVERT(card_label(p_g)) || '</a>'
+            || '<span class="tri-m">' || f_label(r) || ' ' || head_txt(r) || '</span>'
+            || '<span class="tri-tags"></span></span>'
+            || '<span class="tri-nv"><b>' || fv(r.cur_val * v_s, v_u) || '</b><small>normal '
+            || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u) || '</small></span>'
+            || '<span class="tri-imp"></span>'
+            || '<span class="tri-spark" data-spark-dense data-spark="' || wg_csv(r.wv, v_s)
+            || '" data-spark-title="' || f_label(r) || '"></span></div>');
+    END emit_tri_row;
 
     -- v1.6.0 Timeline: the "Headline and load" lane -- the headline
     -- metrics in Mock D's order, then every other flagged canonical load /
@@ -611,6 +811,7 @@ BEGIN
                se.event_name,
                se.snap_id,
                se.time_waited_micro,
+               se.time_waited_micro_fg,
                se.instance_number,
                w.begin_snap_id, w.end_snap_id
         FROM   valid_windows w
@@ -625,7 +826,9 @@ BEGIN
     wait_bounds AS (
         SELECT week_offset, dur_sec, wait_class, event_name, instance_number,
                SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro END) AS beg_us,
-               SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us
+               SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us,
+               SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro_fg END) AS beg_fg,
+               SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro_fg END) AS end_fg
         FROM   wait_pairs
         GROUP BY week_offset, dur_sec, wait_class, event_name, instance_number
     ),
@@ -640,6 +843,29 @@ BEGIN
                END AS metric_value
         FROM   wait_bounds
         GROUP BY week_offset, wait_class
+    ),
+    -- v1.7 impact (owner decision 2026-11-20): the same class rows,
+    -- FOREGROUND sessions only (time_waited_micro_fg, the wait time inside
+    -- DB time), Current minus the prior mean in AAS.  Never scored: the
+    -- class rows above stay all sessions; this feeds only the cards' impact
+    -- and the DB-time breakdown (finding_cards.plsql time_added).  Same
+    -- windows (the same wait_bounds rows), template wait list and Idle
+    -- exclusion; 00_params.sql computes it the same way.
+    wait_fg_rows AS (
+        SELECT week_offset, wait_class,
+               CASE WHEN MAX(dur_sec) > 0
+                    THEN SUM(NVL(end_fg, 0) - NVL(beg_fg, 0)) / MAX(dur_sec) / 1e6
+               END AS fg_value
+        FROM   wait_bounds
+        GROUP BY week_offset, wait_class
+    ),
+    wait_fg AS (
+        SELECT 'Wait class: ' || wait_class AS metric_name,
+               MAX(CASE WHEN week_offset = 0 THEN fg_value END)
+             - AVG(CASE WHEN week_offset > 0 THEN fg_value END) AS fg_d
+        FROM   wait_fg_rows
+        WHERE  fg_value IS NOT NULL
+        GROUP BY wait_class
     ),
     unified AS (
         SELECT * FROM load_rows   WHERE metric_value IS NOT NULL
@@ -714,20 +940,24 @@ BEGIN
                             metric_name) AS heat_pos
         FROM   scored
     )
-    SELECT metric_domain, metric_name,
-           cur_val, prior_mean, prior_sd, n_prior,
-           z_score, pct_delta, change_bucket,
-           heat_pos,
+    SELECT r.metric_domain, r.metric_name,
+           r.cur_val, r.prior_mean, r.prior_sd, r.n_prior,
+           r.z_score, r.pct_delta, r.change_bucket,
+           r.heat_pos,
            -- family / canonical / dir are filled in by the PL/SQL pass below
            CAST(NULL AS VARCHAR2(64)) AS family,
            CAST(NULL AS VARCHAR2(1))  AS canonical,
            CAST(NULL AS VARCHAR2(4))  AS dir,
-           shr,
-           pairs                      AS wv,
-           CAST(NULL AS VARCHAR2(64)) AS grp
+           r.shr,
+           r.pairs                    AS wv,
+           CAST(NULL AS VARCHAR2(64)) AS grp,
+           g.fg_d
     BULK COLLECT INTO v_findings
-    FROM   ranked
-    ORDER  BY heat_pos;
+    FROM   ranked r
+    LEFT JOIN wait_fg g
+           ON r.metric_domain = 'WAIT'
+          AND g.metric_name = r.metric_name
+    ORDER  BY r.heat_pos;
 
 
     --
@@ -760,6 +990,13 @@ BEGIN
         v_total := v_total + 1;
         IF f.metric_domain = 'LOAD' AND f.metric_name = 'DB time' THEN v_dbt := i; END IF;
         IF f.metric_domain = 'LOAD' AND f.metric_name = 'DB CPU'  THEN v_cpu := i; END IF;
+        -- impact (v1.7, sql/lib/finding_cards.plsql impact_group / time_added;
+        -- a wait class counts its foreground time only)
+        v_ig := impact_group(f.metric_domain, f.metric_name, f.family);
+        IF v_ig IS NOT NULL
+           AND time_added(f.metric_domain, f.metric_name, f.cur_val, f.prior_mean, f.fg_d) IS NOT NULL THEN
+            v_gimp(v_ig) := time_added(f.metric_domain, f.metric_name, f.cur_val, f.prior_mean, f.fg_d);
+        END IF;
         IF f.change_bucket IN ('large', 'moderate', 'improved', 'noted') THEN
             IF f.canonical = 'N' THEN
                 v_folded := v_folded + 1;
@@ -808,12 +1045,13 @@ BEGIN
     END LOOP;
 
     -- Card order (00_params.sql's verdict applies the same two steps):
-    -- large before moderate, then the loudest |z|; then a flagged DB time
+    -- cards whose time measure rose by 0.01 AAS or more, by the AAS added; then DB time; then
+    -- the rest, large before moderate and by |z|; then a flagged DB time
     -- card moves up to second place.
     v_g := v_glead.FIRST;
     WHILE v_g IS NOT NULL LOOP
         j := v_order.COUNT;
-        WHILE j >= 1 AND card_before(v_gsev(v_g), v_gz(v_g), v_gsev(v_order(j)), v_gz(v_order(j))) LOOP
+        WHILE j >= 1 AND card_before_imp(v_g, v_gsev(v_g), v_gz(v_g), g_imp(v_g), v_order(j), v_gsev(v_order(j)), v_gz(v_order(j)), g_imp(v_order(j))) LOOP
             v_order(j + 1) := v_order(j);
             j := j - 1;
         END LOOP;
@@ -828,13 +1066,25 @@ BEGIN
             EXIT;
         END IF;
     END LOOP;
+    -- plan 025: in the Summary view every card but one starts folded; the
+    -- open one is the first card that is not DB time (the verdict and its
+    -- DB-time breakdown already say what DB time did), else the only card
+    FOR k IN 1 .. v_order.COUNT LOOP
+        IF v_order(k) <> 'DBTIME' THEN
+            v_open_g := v_order(k);
+            EXIT;
+        END IF;
+    END LOOP;
+    IF v_open_g IS NULL AND v_order.COUNT > 0 THEN
+        v_open_g := v_order(1);
+    END IF;
 
     --
-    -- Card evidence: the top 2 foreground events (by Current time waited
-    -- per second) of every wait class, with their prior mean / sd / n and
-    -- share of the Current wait -- one bounded scan, only when a wait
-    -- class is flagged.  Same pairs -> bounds -> deltas shape and template
-    -- filter as 04.
+    -- Card evidence: the top 2 events (by Current time waited per second,
+    -- all sessions like the class rows) of every wait class, with their
+    -- prior mean / sd / n and share of the Current wait -- one bounded
+    -- scan, only when a wait class is flagged.  Same pairs -> bounds ->
+    -- deltas shape and template filter as 04.
     --
     IF v_wait_flag THEN
         WITH
@@ -901,12 +1151,171 @@ BEGIN
     END IF;
 
     --
-    -- Section header: title, a one-line subtitle per view, the counts.
-    -- Counts are canonical rows only; folded twins get their own muted
-    -- count.  The "N findings" = cards (card groups of families), the same
-    -- number the verdict pills show.
+    -- v1.7: "Where the extra DB time went" (plan 021).  The DB-time rise
+    -- split into DB CPU and the wait classes' FOREGROUND time -- the same
+    -- numbers as the cards' impact (impact_group / time_added,
+    -- sql/lib/finding_cards.plsql), largest first.  Solid = the part's
+    -- card is a finding; hatched = it grew but
+    -- stayed inside its normal range.  Printed hidden and moved into 00's
+    -- #att-slot by the script below (JavaScript off: it stays hidden; every
+    -- number is in the Wait classes table and the DB CPU row).  Only when
+    -- there is at least one finding card.
     --
-    v_meta := '<span class="meta">'
+    DECLARE
+        v_dd    NUMBER := g_imp('DBTIME');
+        v_p     part_rec;
+        v_pos   NUMBER := 0;      -- sum of the parts that rose
+        v_neg   NUMBER := 0;      -- sum of the parts that fell (as a positive number)
+        v_base  NUMBER;           -- the bar's 100%: the rises plus the rest, GREATEST(rise + falls, rises)
+        v_small NUMBER := 0;      -- parts under 1% of the base, merged
+        v_nsm   PLS_INTEGER := 0;
+        v_rest  NUMBER;
+        v_pct   NUMBER;
+        v_fl    BOOLEAN;
+        v_bar   VARCHAR2(32767);
+        v_lg    VARCHAR2(32767);
+        v_fell  VARCHAR2(4000);
+        v_nfell PLS_INTEGER := 0;
+        v_note  VARCHAR2(4000);
+        k       PLS_INTEGER;
+    BEGIN
+      IF v_order.COUNT > 0 AND v_dd IS NOT NULL AND v_dbt IS NOT NULL THEN
+        -- the parts, largest rise first (insertion sort, stable)
+        FOR i IN 1 .. v_findings.COUNT LOOP
+            f := v_findings(i);
+            IF (f.metric_domain = 'WAIT'
+                OR (f.metric_domain = 'LOAD' AND f.metric_name = 'DB CPU'))
+               AND time_added(f.metric_domain, f.metric_name, f.cur_val, f.prior_mean, f.fg_d) IS NOT NULL THEN
+                v_p.lab := CASE WHEN f.metric_domain = 'LOAD' THEN 'CPU'
+                                ELSE REGEXP_REPLACE(f.metric_name, '^Wait class: ', '') END;
+                v_p.d   := time_added(f.metric_domain, f.metric_name, f.cur_val, f.prior_mean, f.fg_d);
+                v_p.grp := impact_group(f.metric_domain, f.metric_name, f.family);
+                v_p.aid := CASE WHEN v_glead.EXISTS(v_p.grp) THEN card_id(v_p.grp)
+                                ELSE find_id(f.metric_domain, f.metric_name) END;
+                k := v_parts.COUNT;
+                WHILE k >= 1 AND v_p.d > v_parts(k).d LOOP
+                    v_parts(k + 1) := v_parts(k);
+                    k := k - 1;
+                END LOOP;
+                v_parts(k + 1) := v_p;
+                IF v_p.d > 0 THEN v_pos := v_pos + v_p.d;
+                ELSIF v_p.d < 0 THEN v_neg := v_neg - v_p.d;
+                END IF;
+            END IF;
+        END LOOP;
+
+        IF v_dd > 0 THEN
+            -- the rest is what the parts, falls netted, leave of the rise:
+            -- v_dd - (v_pos - v_neg); the bar draws the rises and that rest
+            v_base := GREATEST(v_dd + v_neg, v_pos);
+            FOR k2 IN 1 .. v_parts.COUNT LOOP
+                v_p := v_parts(k2);
+                -- a part needs the cards' 0.01 AAS floor (imp_on, owner
+                -- decision 2026-11-21) and 1% of the bar; a smaller rise
+                -- goes into "+ n smaller"
+                IF imp_on(v_p.d) AND v_p.d >= 0.01 * v_base THEN
+                    v_fl  := v_glead.EXISTS(v_p.grp);
+                    -- the share, left out past 100% like the cards' impact chip
+                    v_pct := CASE WHEN v_p.d <= v_dd * 1.005 THEN LEAST(100, ROUND(v_p.d / v_dd * 100)) END;
+                    v_bar := v_bar || '<i class="att-s' || CASE WHEN NOT v_fl THEN ' nf' END
+                        || '" data-wc="' || DBMS_XMLGEN.CONVERT(v_p.lab)
+                        || '" style="flex-grow:' || imp_tok(v_p.d) || '" title="'
+                        || DBMS_XMLGEN.CONVERT(v_p.lab) || ': +' || fmt_num(v_p.d) || ' AAS'
+                        || CASE WHEN v_pct IS NOT NULL THEN ', ' || v_pct || '% of the DB-time rise' END
+                        || CASE WHEN NOT v_fl THEN ', inside its normal range' END || '">'
+                        || CASE WHEN v_p.d >= 0.18 * v_base
+                                THEN '<span>' || DBMS_XMLGEN.CONVERT(v_p.lab) || ' +' || fmt_num(v_p.d) || '</span>' END
+                        || '</i>';
+                    v_lg := v_lg || '<li><i class="sw' || CASE WHEN NOT v_fl THEN ' nf' END
+                        || '" data-wc="' || DBMS_XMLGEN.CONVERT(v_p.lab) || '" aria-hidden="true"></i>'
+                        || ent(DBMS_XMLGEN.CONVERT(v_p.lab), v_p.aid, CASE WHEN v_fl THEN 'card' ELSE 'metric' END)
+                        || ' <b>+' || fmt_num(v_p.d) || '</b>'
+                        || CASE WHEN v_pct IS NOT NULL THEN ' <span class="sh">'
+                                || CASE WHEN v_pct < 1 THEN '&lt;1' ELSE TO_CHAR(v_pct) END || '%</span>' END
+                        || CASE WHEN v_fl
+                                THEN ' <span class="st"><i class="dotk '
+                                     || CASE WHEN v_gsev(v_p.grp) = 2 THEN 'large' ELSE 'moderate' END
+                                     || '" aria-hidden="true"></i>finding</span>'
+                                ELSE ' <span class="st nf">inside normal</span>' END
+                        || '</li>';
+                ELSIF v_p.d > 0 THEN
+                    v_small := v_small + v_p.d;
+                    v_nsm   := v_nsm + 1;
+                END IF;
+            END LOOP;
+            IF v_nsm > 0 THEN
+                v_bar := v_bar || '<i class="att-s att-small" style="flex-grow:' || imp_tok(v_small)
+                    || '" title="' || v_nsm || ' smaller part' || CASE WHEN v_nsm > 1 THEN 's' END
+                    || ': +' || fmt_num(v_small) || ' AAS"></i>';
+                v_lg := v_lg || '<li class="att-more">+ ' || v_nsm || ' smaller ('
+                    || fmt_num(v_small) || ' AAS)</li>';
+            END IF;
+            -- a fall offsets a rise: with DB time +10, CPU +8 and Commit -5
+            -- the parts net to +3, so 7 is unexplained (not 10 - 8 = 2)
+            v_rest := v_dd - (v_pos - v_neg);
+            IF v_rest > 0.01 * v_dd THEN
+                v_bar := v_bar || '<i class="att-s att-rest" style="flex-grow:' || imp_tok(v_rest)
+                    || '" title="Not in the parts above'
+                    || CASE WHEN v_neg > 0 THEN ', net of the falls' END
+                    || ' (DB time that no wait class records, such as'
+                    || ' waiting for a CPU, or waits outside this template&#39;s event list): +'
+                    || fmt_num(v_rest) || ' AAS"></i>';
+            END IF;
+            -- the largest drops: the parts are sorted largest first, so walk backwards
+            FOR k2 IN REVERSE 1 .. v_parts.COUNT LOOP
+                EXIT WHEN v_parts(k2).d >= 0 OR v_nfell >= 3;
+                IF -v_parts(k2).d >= 0.01 * v_dd THEN
+                    v_fell := v_fell || CASE WHEN v_nfell > 0 THEN ', ' END
+                        || DBMS_XMLGEN.CONVERT(v_parts(k2).lab) || ' &minus;' || fmt_num(-v_parts(k2).d);
+                    v_nfell := v_nfell + 1;
+                END IF;
+            END LOOP;
+            IF v_fell IS NOT NULL THEN
+                v_note := v_note || 'Fell: ' || v_fell || ' AAS. ';
+            END IF;
+            -- falls offset rises.  The parts are foreground time like DB time,
+            -- so they roughly add up to the rise; an excess past 2% of it is
+            -- the gap between two separately kept counters (a shortfall is
+            -- the hatched rest above), never background time
+            IF v_pos - v_neg > v_dd * 1.02 THEN
+                v_note := v_note || 'The parts add up to ' || imp_txt(v_pos - v_neg)
+                    || CASE WHEN v_neg > 0 THEN ' net of the falls' END || ', more than the DB-time'
+                    || ' rise: DB time comes from the time model, the parts from the wait interface'
+                    || ' and DB CPU, which Oracle keeps separately, so they need not add up exactly.';
+            END IF;
+            DBMS_OUTPUT.PUT_LINE('<div id="att-src" hidden><div class="att-h"><b>Where the extra DB time went</b>'
+                || '<span>DB time ' || fmt_num(v_findings(v_dbt).prior_mean * 0.01) || ' &rarr; '
+                || fmt_num(v_findings(v_dbt).cur_val * 0.01) || ' AAS, <b>' || imp_txt(v_dd) || '</b></span></div>');
+            DBMS_OUTPUT.PUT_LINE('<div class="att-bar" role="img" aria-label="The DB-time rise by wait class and CPU,'
+                || ' largest part first">' || v_bar || '</div>');
+            DBMS_OUTPUT.PUT_LINE('<ul class="att-lg">' || v_lg || '</ul>'
+                || CASE WHEN v_note IS NOT NULL THEN '<p class="att-n">' || RTRIM(v_note) || '</p>' END
+                || '</div>');
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('<div id="att-src" hidden><p class="att-n"><b>DB time</b> did not rise: '
+                || fmt_num(v_findings(v_dbt).cur_val * 0.01) || ' AAS, against a prior mean of '
+                || fmt_num(v_findings(v_dbt).prior_mean * 0.01) || ' AAS.</p></div>');
+        END IF;
+        DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,s=d.getElementById("att-src"),'
+            || 't=d.getElementById("att-slot"),c=window.AWR_WAIT_COLORS||{};if(!s)return;'
+            || 's.querySelectorAll("[data-wc]").forEach(function(e){var k=e.getAttribute("data-wc");'
+            || 'if(c[k])e.style.setProperty("--c",c[k]);});'
+            || 'if(t){while(s.firstChild)t.appendChild(s.firstChild);t.hidden=false;}'
+            || 's.parentNode.removeChild(s);})();</script>');
+      END IF;
+    END;
+
+    --
+    -- Section header: title, a one-line subtitle per view, the counts.
+    -- Counts: in Summary the finding CARDS by severity (the verdict pill
+    -- and the rail count the same cards); in All sections the canonical
+    -- flagged ROWS of the detail tables, folded twins apart.
+    --
+    v_ncl := 0; v_ncm := 0;
+    FOR k IN 1 .. v_order.COUNT LOOP
+        IF v_gsev(v_order(k)) = 2 THEN v_ncl := v_ncl + 1; ELSE v_ncm := v_ncm + 1; END IF;
+    END LOOP;
+    v_meta := '<span class="meta' || CASE WHEN v_order.COUNT > 0 THEN ' vw in-a' END || '">'
         || CASE WHEN v_crit > 0 THEN '<span><i class="dotk large"></i>' || v_crit || ' large</span>' END
         || CASE WHEN v_warn > 0 THEN '<span><i class="dotk moderate"></i>' || v_warn || ' moderate</span>' END
         || '<span><i class="dotk typical"></i>' || v_normal || ' normal</span>'
@@ -927,17 +1336,63 @@ BEGIN
                      || CASE WHEN v_order.COUNT = 1 THEN '' ELSE 's' END || '</span>'
                      || '<span class="vw in-a">Findings</span>'
                 ELSE 'Findings' END
+        || CASE WHEN v_order.COUNT > 0
+                THEN '<span class="meta vw in-s" title="finding cards by severity">'
+                     || CASE WHEN v_ncl > 0 THEN '<span><i class="dotk large"></i>' || v_ncl || ' large</span>' END
+                     || CASE WHEN v_ncm > 0 THEN '<span><i class="dotk moderate"></i>' || v_ncm || ' moderate</span>' END
+                     || '</span>' END
         || v_meta
         || '<small class="h2sub"><span class="vw in-s">'
         || CASE WHEN v_order.COUNT > 0
-                THEN (v_crit + v_warn) || ' metric' || CASE WHEN v_crit + v_warn = 1 THEN '' ELSE 's' END
-                     || ' moved, in ' || v_order.COUNT || ' famil'
-                     || CASE WHEN v_order.COUNT = 1 THEN 'y' ELSE 'ies' END
+                THEN 'From ' || (v_crit + v_warn) || ' flagged metric'
+                     || CASE WHEN v_crit + v_warn = 1 THEN '' ELSE 's' END
+                     || '; ordered by the DB time each card added'
                 ELSE 'Every scored metric against its prior windows' END
         || '</span><span class="vw in-a">Every scored metric against its prior windows; one table per domain</span>'
         || '</small></h2>');
 
+    -- plan 033: the Current window's DBID, snapshot range and nominal
+    -- start / end, for the cards' read-only "Next step" queries (one row:
+    -- MIN / MAX over its VALID instances; all NULL when it is not valid).
+    -- When the report skipped an instance for it (RAC, a restart inside
+    -- it), the queries keep to the valid ones (v_cw_inst), like the report.
     IF v_order.COUNT > 0 THEN
+        FOR cw IN (
+            WITH
+            @@sql/lib/windows_cte.sql
+            SELECT MIN(CASE WHEN valid_flag = 'Y' THEN dbid END)          AS dbid,
+                   MIN(CASE WHEN valid_flag = 'Y' THEN begin_snap_id END) AS b,
+                   MAX(CASE WHEN valid_flag = 'Y' THEN end_snap_id END)   AS e,
+                   TO_CHAR(MIN(CASE WHEN valid_flag = 'Y' THEN win_start_ts END),
+                           'YYYY-MM-DD HH24:MI:SS') AS t0,
+                   TO_CHAR(MAX(CASE WHEN valid_flag = 'Y' THEN win_end_ts END),
+                           'YYYY-MM-DD HH24:MI:SS') AS t1,
+                   COUNT(CASE WHEN valid_flag = 'N' AND instance_number IS NOT NULL THEN 1 END) AS n_skip,
+                   LISTAGG(CASE WHEN valid_flag = 'Y' THEN TO_CHAR(instance_number) END, ', ')
+                       WITHIN GROUP (ORDER BY instance_number) AS insts
+            FROM   windows
+            WHERE  week_offset = 0
+        ) LOOP
+            v_cw_dbid := cw.dbid;
+            v_cw_b    := cw.b;
+            v_cw_e    := cw.e;
+            v_cw_t0   := cw.t0;
+            v_cw_t1   := cw.t1;
+            IF cw.n_skip > 0 AND cw.b IS NOT NULL THEN
+                v_cw_inst := cw.insts;
+            END IF;
+        END LOOP;
+    END IF;
+
+    IF v_order.COUNT > 0 THEN
+        -- plan 025: the triage list (Summary): every finding on one screen
+        DBMS_OUTPUT.PUT_LINE('<div id="triage" class="panel tri vw in-s" role="list" aria-label="Findings in card order">'
+            || '<div class="tri-hd" aria-hidden="true"><span>Finding</span><span>Now &middot; normal</span>'
+            || '<span>Share of the DB-time rise</span><span>' || TO_CHAR(v_weeks_back + 1) || ' windows</span></div>');
+        FOR k IN 1 .. v_order.COUNT LOOP
+            emit_tri_row(v_order(k));
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('</div>');
         DBMS_OUTPUT.PUT_LINE('<div class="cards vw in-s">');
         FOR k IN 1 .. v_order.COUNT LOOP
             emit_card(v_order(k), k);
@@ -950,13 +1405,43 @@ BEGIN
         BEGIN
             FOR k IN 1 .. v_order.COUNT LOOP
                 v_js := v_js || CASE WHEN k > 1 THEN ',' END || '["' || card_id(v_order(k)) || '","'
-                    || REPLACE(REPLACE(card_label(v_order(k)), '"', ''), '<', '') || '"]';
+                    || REPLACE(REPLACE(card_label(v_order(k)), '"', ''), '<', '') || '","'
+                    || CASE WHEN v_order(k) <> 'DBTIME' THEN TO_CHAR(g_shr(v_order(k))) END || '"]';
             END LOOP;
+            -- v1.7: each card's share of the DB-time rise rides on data-shr,
+            -- drawn by CSS ::after -- never a child element: the link's
+            -- text names the card (00's data-label, the dashboard design)
             DBMS_OUTPUT.PUT_LINE('<script>(function(){var n=document.querySelector(''nav.toc a[href="#findings"]'');'
                 || 'if(!n)return;[' || v_js || '].forEach(function(c){var a=document.createElement("a");'
                 || 'a.className="sub";a.href="#"+c[0];a.setAttribute("data-nodot","");a.textContent=c[1];'
+                || 'if(c[2]){var p=(c[2]==="0"?"<1":c[2])+"%";a.setAttribute("data-shr",p);a.title=c[1]+": "+p+" of the DB-time rise";}'
                 || 'n.parentNode.insertBefore(a,n.nextSibling);n=a;});})();</script>');
         END;
+        -- plan 025: fill the triage list's impact cells from each card's
+        -- data-impact / data-share (plan 020), make a row click open its
+        -- card, and fold every card that carries data-fold (Summary; with
+        -- JavaScript off nothing is folded).  window.AWR_fcOpen(card) is
+        -- what the chrome's reveal() calls for a link into a folded card;
+        -- window.AWR_fcFold(card) makes any card foldable and folds it (17's
+        -- plan card under a folded I/O card, plan 026).  A card folds and
+        -- unfolds the foldable card right after it that explains it
+        -- (data-explains = its id), which keeps its own toggle.  Print
+        -- (G4): beforeprint opens every folded card and the closed "Checked
+        -- and normal" fold, afterprint folds back exactly those (and reopens
+        -- a card that was open but folded with the card it explains).
+        DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,tri=d.getElementById("triage");');
+        DBMS_OUTPUT.PUT_LINE('function n2(v){var a=Math.abs(v);return (v<0?"-":"+")+(a>=10?a.toFixed(1):a>=1?a.toFixed(2):a.toFixed(3));}');
+        DBMS_OUTPUT.PUT_LINE('if(tri)tri.querySelectorAll(".tri-row[data-card]").forEach(function(r){var id=r.getAttribute("data-card"),c=d.getElementById(id),x=r.querySelector(".tri-imp");if(!c||!x)return;var im=c.getAttribute("data-impact"),sh=c.getAttribute("data-share");if(im===null||im===""){x.innerHTML="<small>no time measure</small>";return;}if(Math.abs(+im)<0.01){x.innerHTML="<small>under 0.01 AAS</small>";return;}var v=+im,s=(sh===null||sh==="")?null:+sh,tot=id==="f-dbtime",w=tot?100:Math.max(0,Math.min(100,s||0));x.innerHTML="<i class=\"tri-bar\"><i style=\"width:"+w+"%\"></i></i><small><b>"+n2(v)+" AAS</b> "+(tot?"total":(s===null?"":(s<1?"&lt;1":s)+"%"))+"</small>";});');
+        DBMS_OUTPUT.PUT_LINE('if(tri)tri.addEventListener("click",function(ev){var r=ev.target.closest(".tri-row");if(!r||ev.target.closest("a"))return;var a=r.querySelector("a.tri-go");if(a)a.click();});');
+        DBMS_OUTPUT.PUT_LINE('function setF(c,on){c.classList.toggle("fold",on);var b=c.querySelector(".fc-tg");if(b){b.setAttribute("aria-expanded",on?"false":"true");b.textContent=on?"Show card":"Fold";}if(!on&&window.AWR_WG)setTimeout(function(){AWR_WG.render(c);},20);'
+            || 'var x=c.nextElementSibling;if(x&&c.id&&x.__fc&&x.getAttribute("data-explains")===c.id&&x.classList.contains("fold")!==on)setF(x,on);}');
+        DBMS_OUTPUT.PUT_LINE('function mkF(c){if(c.__fc)return true;var k=c.querySelector(".fc-h .fc-k");if(!k)return false;c.__fc=1;var b=d.createElement("button");b.type="button";b.className="fc-tg";k.appendChild(b);b.addEventListener("click",function(ev){ev.stopPropagation();setF(c,!c.classList.contains("fold"));});c.addEventListener("click",function(ev){if(c.classList.contains("fold")&&!ev.target.closest("a,button"))setF(c,false);});return true;}');
+        DBMS_OUTPUT.PUT_LINE('window.AWR_fcOpen=function(c){if(c&&c.classList.contains("fold"))setF(c,false);};');
+        DBMS_OUTPUT.PUT_LINE('window.AWR_fcFold=function(c){if(c&&mkF(c))setF(c,true);};');
+        DBMS_OUTPUT.PUT_LINE('d.querySelectorAll("#findings .cards > article.fc[data-fold]").forEach(function(c){if(mkF(c))setF(c,true);});');
+        DBMS_OUTPUT.PUT_LINE('var pr=null;window.addEventListener("beforeprint",function(){if(pr)return;var cf=d.querySelector("#s-normal details.calm-fold");pr={c:[].slice.call(d.querySelectorAll("article.fc.fold")),o:[].slice.call(d.querySelectorAll("article.fc:not(.fold)")),n:cf&&!cf.open?cf:null};pr.c.forEach(function(c){setF(c,false);});if(pr.n)pr.n.open=true;if(window.AWR_WG)pr.c.forEach(function(c){AWR_WG.render(c);});});');
+        DBMS_OUTPUT.PUT_LINE('window.addEventListener("afterprint",function(){if(!pr)return;pr.c.forEach(function(c){setF(c,true);});pr.o.forEach(function(c){if(c.classList.contains("fold"))setF(c,false);});if(pr.n)pr.n.open=false;pr=null;});');
+        DBMS_OUTPUT.PUT_LINE('})();</script>');
     ELSE
         DBMS_OUTPUT.PUT_LINE('<div class="panel calm vw in-s"><p class="calm-empty">'
             || CASE WHEN v_normal = 0
@@ -999,6 +1484,9 @@ BEGIN
         v_imp   VARCHAR2(32767);
         v_ni    PLS_INTEGER := 0;
         v_first VARCHAR2(16);
+        v_cg    PLS_INTEGER := 0;   -- plan 032: rows in the calm grid (typical |z| <= 2, flat)
+        v_cs    PLS_INTEGER := 0;   -- plan 032: moved, too small to matter (typical |z| > 2, noted)
+        v_ci    PLS_INTEGER := 0;   -- plan 032: improved
     BEGIN
         DBMS_OUTPUT.PUT_LINE('<section id="s-normal" class="vw in-s sumsec"><h2>Checked and normal'
             || '<span class="meta"><span><i class="dotk typical"></i>' || v_normal || ' normal</span></span>'
@@ -1008,6 +1496,33 @@ BEGIN
                 || 'Nothing could be scored as normal: a metric needs at least 3 valid prior windows.'
                 || '</p></div>');
         ELSE
+            -- plan 032: count the three groups first, so the folded summary
+            -- line can name them; they add up to v_normal
+            FOR p IN 1 .. v_table_idx.COUNT LOOP
+                f := v_findings(v_table_idx(p));
+                IF f.canonical = 'Y' THEN
+                    IF (f.change_bucket = 'typical' AND ABS(NVL(f.z_score, 0)) <= 2)
+                       OR f.change_bucket = 'flat baseline' THEN
+                        v_cg := v_cg + 1;
+                    ELSIF (f.change_bucket = 'typical' AND ABS(NVL(f.z_score, 0)) > 2)
+                          OR f.change_bucket = 'noted' THEN
+                        v_cs := v_cs + 1;
+                    ELSIF f.change_bucket = 'improved' THEN
+                        v_ci := v_ci + 1;
+                    END IF;
+                END IF;
+            END LOOP;
+            -- plan 032: the body folds to one line in the Summary view; open
+            -- when there is no finding card (then this section is the story)
+            DBMS_OUTPUT.PUT_LINE('<details class="calm-fold"'
+                || CASE WHEN v_order.COUNT = 0 THEN ' open' END || '>'
+                || '<summary class="calm-sum"><span><b>' || v_cg || '</b> metric'
+                || CASE WHEN v_cg = 1 THEN '' ELSE 's' END || ' within the normal range</span>'
+                || '<span>&middot; <b>' || v_cs || '</b> moved too little to matter</span>'
+                || '<span>&middot; '
+                || CASE WHEN v_ci = 0 THEN 'nothing improved materially'
+                        ELSE '<b>' || v_ci || '</b> improved' END
+                || '</span></summary>');
             DBMS_OUTPUT.PUT_LINE('<div class="panel calm"><div class="ngrid">');
             -- the calm grid: typical within 2 sigma (loudest first), then flat baselines
             FOR pass IN 1 .. 2 LOOP
@@ -1060,6 +1575,7 @@ BEGIN
                         ELSE v_imp END
                 || CASE WHEN v_ni > 6 THEN '<p class="calm-more">and ' || (v_ni - 6) || ' more</p>' END
                 || '</div></div>');
+            DBMS_OUTPUT.PUT_LINE('</details>');
         END IF;
         DBMS_OUTPUT.PUT_LINE('</section>');
     END;

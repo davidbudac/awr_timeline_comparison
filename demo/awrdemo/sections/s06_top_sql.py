@@ -1,6 +1,6 @@
 """
 Twin of sql/06_top_sql.sql -- Top-N SQL per window ranked five ways (+ the
-PEREXEC regression dimension), per-dim detail tables, the SQL pool table
+PEREXEC regression and the CHANGE "Biggest change" dimensions), per-dim detail tables, the SQL pool table
 with paired detail rows, the AWR_DATA.topSql / AWR_DATA.sqlDetails JSON
 payloads, and every inline <script> of the original (lifted verbatim).
 
@@ -33,6 +33,7 @@ _DIMS = [
     ("PREADS", 4, "By physical reads", "reads", 1),
     ("EXEC", 5, "By executions", "exec", 1),
     ("PEREXEC", 6, "By per-exec regression", "s/exec", 1e6),
+    ("CHANGE", 0, "By change in elapsed time (Current vs the prior mean)", "s", 1e6),
 ]
 _RANK_DIMS = ("ELAPSED", "CPU", "GETS", "PREADS", "EXEC")
 _METRIC_OF = {"ELAPSED": "ela", "CPU": "cpu", "GETS": "gets", "PREADS": "reads", "EXEC": "execs"}
@@ -96,7 +97,9 @@ def _rank(rows: dict, key: str, name_of=lambda k: k) -> dict:
 
 
 def _picked(w, agg):
-    """picked CTE: {(dim, sql_id, week_offset): (metric_value, rnk, phv)}."""
+    """picked CTE: ({(dim, sql_id, week_offset): (metric_value, rnk, phv)},
+    {sql_id: (prior mean elapsed, prior valid windows with a row)} of the
+    CHANGE dimension (chg_ranked))."""
     top_n = w.top_n
     picked = {}
     for off, rows in agg.items():
@@ -127,7 +130,29 @@ def _picked(w, agg):
         rd = r_delta.get(sid)
         if rd is not None and rd <= top_n and pe is not None:
             picked[("PEREXEC", sid, off)] = (pe, rd if off == 0 else None, agg[off][sid]["phv"])
-    return picked
+    # n_prior_valid / chg_ranked: Current total elapsed minus the mean over
+    # the prior VALID windows (agg holds valid windows only, an empty one
+    # included; a statement without a row there counts as 0)
+    priors = [o for o in agg if o > 0]
+    chg = []
+    chg_mu = {}
+    for sid, r in agg.get(0, {}).items():
+        if not priors:
+            break
+        prior_mean = sum(agg[o][sid]["ela"] for o in priors if sid in agg[o]) / len(priors)
+        if r["ela"] > prior_mean:
+            chg.append((sid, r["ela"] - prior_mean))
+            # (prior mean, n_prior_rows = prior valid windows with a row)
+            chg_mu[sid] = (prior_mean, sum(1 for o in priors if sid in agg[o]))
+    chg.sort(key=lambda t: (-t[1], t[0]))
+    for i, (sid, _) in enumerate(chg, start=1):
+        if i > top_n:
+            break
+        for off, rows in agg.items():
+            if sid in rows:
+                picked[("CHANGE", sid, off)] = (rows[sid]["ela"], i if off == 0 else None,
+                                                rows[sid]["phv"])
+    return picked, chg_mu
 
 
 def _per_sql(w, picked):
@@ -238,7 +263,9 @@ def emit(w) -> str:
         '<small class="h2sub">Top ' + str(top_n)
         + ' statements per ranking and window; ranked, not scored</small></h2>')
     put('<div class="tabs" data-tabs="topsql" role="tablist" aria-label="Top SQL ranking dimension">'
-        '<button type="button" role="tab" aria-selected="true" class="on" data-t="ELAPSED" id="tab-topsql-ELAPSED">Elapsed time</button>'
+        '<button type="button" role="tab" aria-selected="true" class="on" data-t="CHANGE" id="tab-topsql-CHANGE"'
+        ' title="Current window total elapsed minus the prior-window mean">Biggest change</button>'
+        '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="ELAPSED" id="tab-topsql-ELAPSED">Elapsed time</button>'
         '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="CPU" id="tab-topsql-CPU">CPU time</button>'
         '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="GETS" id="tab-topsql-GETS">Buffer gets</button>'
         '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="PREADS" id="tab-topsql-PREADS">Physical reads</button>'
@@ -253,7 +280,7 @@ def emit(w) -> str:
     weeks_iso_json = "[" + ",".join('"' + ts_min(d) + '"' for d in wdates) + "]"
 
     agg = _agg(w)
-    picked = _picked(w, agg)
+    picked, chg_mu = _picked(w, agg)
     rows = _per_sql(w, picked)
 
     dim_label, dim_unit, dim_div = {}, {}, {}
@@ -279,7 +306,8 @@ def emit(w) -> str:
             dim_sqls_json[dim] = None
             dim_sqls_kept[dim] = 0
             dim_sqls_total[dim] = 0
-            put('<div class="tabpanel' + (" on" if dim == "ELAPSED" else "")
+            # the first emitted tabpanel is the open one
+            put('<div class="tabpanel' + (" on" if len(dim_seen) == 1 else "")
                 + '" data-tabs="topsql" data-t="' + dim + '" role="tabpanel"'
                 + ' aria-labelledby="tab-topsql-' + dim + '">')
             put("<h3>" + dim_label[dim] + "</h3>")
@@ -293,13 +321,15 @@ def emit(w) -> str:
             put('<div class="chart-wrap chart-medium" id="topsql-chart-' + dim + '"></div>')
             put("<details>")
             put("<summary>Detail table</summary>")
-            header = ('<thead><tr><th>SQL ID</th><th class="num" title="plan_hash_value of the Current window&#39;s execution plan">Plan hash (Current)</th>'
-                      '<th class="num" data-w="0">Current (' + dim_unit[dim] + ")</th>")
+            # one th per window through wg_buf (h.wg_lines)
+            header = ['<table id="topsql-detail-' + cur_dim + '">'
+                      '<thead><tr><th>SQL ID</th><th class="num" title="plan_hash_value of the Current window&#39;s execution plan">Plan hash (Current)</th>'
+                      '<th class="num" data-w="0">Current (' + dim_unit[dim] + ")</th>"]
             for k in range(1, weeks_back + 1):
-                header += ('<th class="num" data-w="' + str(k) + '">&minus;'
-                           + w.offset_labels[k - 1] + "</th>")
-            header += "<th>SQL</th></tr></thead>"
-            put('<table id="topsql-detail-' + cur_dim + '">' + header + "<tbody>")
+                header.append('<th class="num" data-w="' + str(k) + '">&minus;'
+                              + w.offset_labels[k - 1] + "</th>")
+            header.append("<th>SQL</th></tr></thead><tbody>")
+            put(h.wg_lines(header))
 
         sid = s["sql_id"]
         div = dim_div[dim]
@@ -350,24 +380,34 @@ def emit(w) -> str:
                + fmt_num(cur_scaled)
                + (' <span class="badge info">#' + str(s["cur_rnk"]) + "</span>"
                   if s["cur_rnk"] is not None else "")
-               + "</b></td>")
+               + "</b>")
+        if dim == "CHANGE":
+            mu, n_prior = chg_mu.get(sid, (None, 0))
+            if not n_prior:
+                row += ' <span class="d s-plain" title="no row in any prior valid window">new</span>'
+            elif not mu:
+                row += ' <span class="d s-plain" title="0 s elapsed in every prior valid window">from 0</span>'
+            else:
+                row += " " + h.delta_span(cur_val, mu, None, "Y")
+        row += "</td>"
+        # the prior windows' cells, one wg_buf piece each (h.wg_lines)
+        parts = [row]
         for k in range(1, weeks_back + 1):
             v, r, p = s["vals"][k], s["rnks"][k], s["phvs"][k]
             if v is None:
-                row += '<td class="num" data-w="' + str(k) + '">&mdash;'
+                cell = '<td class="num" data-w="' + str(k) + '">&mdash;'
             else:
-                row += '<td class="num" data-w="' + str(k) + '">' + fmt_num(v / div)
+                cell = '<td class="num" data-w="' + str(k) + '">' + fmt_num(v / div)
             if r is not None:
-                row += ' <span class="badge skip">#' + str(r) + "</span>"
+                cell += ' <span class="badge skip">#' + str(r) + "</span>"
             if p is not None and cur_phv is not None and p != cur_phv:
-                row += (' <span class="badge warn" title="Plan changed. Prior PHV '
-                        + str(p) + '">plan&#8593;</span>')
-            row += "</td>"
+                cell += (' <span class="badge warn" title="Plan changed. Prior PHV '
+                         + str(p) + '">plan&#8593;</span>')
+            parts.append(cell + "</td>")
         text_short = (w.sql_by_id[sid].text or "")[:401]
-        row += ('<td class="mono sqltext">' + esc(text_short[:400])
-                + ("&hellip;" if len(text_short) > 400 else "") + "</td>")
-        row += "</tr>"
-        put(row)
+        parts.append('<td class="mono sqltext">' + esc(text_short[:400])
+                     + ("&hellip;" if len(text_short) > 400 else "") + "</td></tr>")
+        put(h.wg_lines(parts))
         # v1.6.0 Timeline: the SQL lane (first six of the elapsed ranking)
         if dim == "ELAPSED" and len(tl_rows) < 6:
             csv = h.tl_csv(w, _chart_vals(s["vals"], div))
@@ -405,6 +445,11 @@ def emit(w) -> str:
                 "tl-" + anchor_id("sq-elapsed", sid), "q", sid, "s elapsed", gw, gl))
     if cur_dim is not None:
         put("</tbody></table></details></div>")
+    if "CHANGE" not in dim_seen:
+        # no statement got slower (or no prior valid window): the script
+        # that drops the empty tab, lifted from the SQL
+        put(next(t for t, _ in L
+                 if t.startswith('<script>(function(){var c=document.getElementById("tab-topsql-CHANGE")')))
     for i, r in enumerate(tl_rows, start=1):
         put((h.tl_open("sql") if i == 1 else "") + r + (h.tl_close() if i == len(tl_rows) else ""))
 
@@ -432,8 +477,8 @@ def emit(w) -> str:
     # AWR_DATA.topSql + bump-chart script ------------------------------
     if dim_seen:
         put("<script>(function(){")
-        put("AWR_DATA.topSql={weeks:" + weeks_json + ",weeksIso:" + weeks_iso_json
-            + ",topN:" + str(top_n) + ",dims:{")
+        put(h.wg_lines(["AWR_DATA.topSql={weeks:", weeks_json, ",weeksIso:", weeks_iso_json,
+                        ",topN:" + str(top_n) + ",dims:{"]))
         # PL/SQL INDEX BY VARCHAR2 iterates in key order
         for i, dim in enumerate(sorted(dim_seen)):
             if i:

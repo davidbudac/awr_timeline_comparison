@@ -60,13 +60,14 @@ DECLARE
         family        VARCHAR2(64),
         canonical     VARCHAR2(1),
         prior_sd      NUMBER,
-        shr         NUMBER
+        shr         NUMBER,
+        fg_d          NUMBER     -- wait-class rows: foreground Current - prior mean, AAS (impact)
     );
     TYPE mover_t IS TABLE OF mover_rec INDEX BY PLS_INTEGER;
     TYPE seen_t  IS TABLE OF PLS_INTEGER INDEX BY VARCHAR2(64);
 
     v_scored     mover_t;
-    v_n_moved    PLS_INTEGER := 0;   -- canonical large / moderate rows
+    v_n_moved    PLS_INTEGER := 0;   -- canonical large / moderate rows (no longer printed: a finding is a card, v1.7)
     v_n_impr     PLS_INTEGER := 0;   -- canonical improved
     v_n_normal   PLS_INTEGER := 0;   -- canonical rows scored and not flagged
     v_n_usable   PLS_INTEGER := 0;
@@ -80,6 +81,8 @@ DECLARE
     v_gsev       seen_t;        -- group -> 2 large / 1 moderate
     TYPE gz_t    IS TABLE OF NUMBER INDEX BY VARCHAR2(64);
     v_gz         gz_t;          -- group -> largest |z| of any member
+    v_gimp       gz_t;          -- card group -> impact (AAS), as in 07
+    v_ig         VARCHAR2(64);
     TYPE ord_t   IS TABLE OF VARCHAR2(64) INDEX BY PLS_INTEGER;
     v_order      ord_t;
     v_g          VARCHAR2(64);
@@ -87,6 +90,8 @@ DECLARE
     v_j          PLS_INTEGER;
     v_dbt        PLS_INTEGER;   -- index of the LOAD 'DB time' row
     v_cpu        PLS_INTEGER;   -- index of the LOAD 'DB CPU' row
+    v_ncl        PLS_INTEGER := 0;   -- large finding cards (v1.7: a finding is a card)
+    v_ncm        PLS_INTEGER := 0;   -- moderate finding cards
     v_verdict    VARCHAR2(32767);
     v_win_json   VARCHAR2(32767);   -- window validity flags, |k=Y|k=N|...
     -- Subprogram includes go LAST: PL/SQL forbids a variable / TYPE
@@ -97,6 +102,13 @@ DECLARE
     @@sql/lib/finding_cards.plsql
     @@sql/lib/off_label.plsql
     @@sql/lib/wingrid.plsql
+
+    -- a card's impact (AAS its time measure added above its prior mean), NULL when none
+    FUNCTION g_imp(p_g VARCHAR2) RETURN NUMBER IS
+    BEGIN
+        IF v_gimp.EXISTS(p_g) THEN RETURN v_gimp(p_g); END IF;
+        RETURN NULL;
+    END g_imp;
 BEGIN
     --
     -- Recompute LOAD / METRIC / WAIT z-scores. Same query shape as
@@ -171,6 +183,7 @@ BEGIN
                se.wait_class,
                se.snap_id,
                se.time_waited_micro,
+               se.time_waited_micro_fg,
                se.instance_number,
                w.begin_snap_id, w.end_snap_id
         FROM   valid_windows w
@@ -185,7 +198,9 @@ BEGIN
     wait_bounds AS (
         SELECT week_offset, dur_sec, wait_class, instance_number,
                SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro END) AS beg_us,
-               SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us
+               SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro END) AS end_us,
+               SUM(CASE WHEN snap_id = begin_snap_id THEN time_waited_micro_fg END) AS beg_fg,
+               SUM(CASE WHEN snap_id = end_snap_id   THEN time_waited_micro_fg END) AS end_fg
         FROM   wait_pairs
         GROUP BY week_offset, dur_sec, wait_class, instance_number
     ),
@@ -200,6 +215,26 @@ BEGIN
                END AS metric_value
         FROM   wait_bounds
         GROUP BY week_offset, wait_class
+    ),
+    -- v1.7 impact (owner decision 2026-11-20): the class rows' FOREGROUND
+    -- time (time_waited_micro_fg), Current minus the prior mean in AAS --
+    -- the cards' order only, never scored.  Same CTEs as 07_summary.sql's
+    -- wait_fg_rows / wait_fg, so the verdict and the cards rank alike.
+    wait_fg_rows AS (
+        SELECT week_offset, wait_class,
+               CASE WHEN MAX(dur_sec) > 0
+                    THEN SUM(NVL(end_fg, 0) - NVL(beg_fg, 0)) / MAX(dur_sec) / 1e6
+               END AS fg_value
+        FROM   wait_bounds
+        GROUP BY week_offset, wait_class
+    ),
+    wait_fg AS (
+        SELECT 'Wait class: ' || wait_class AS metric_name,
+               MAX(CASE WHEN week_offset = 0 THEN fg_value END)
+             - AVG(CASE WHEN week_offset > 0 THEN fg_value END) AS fg_d
+        FROM   wait_fg_rows
+        WHERE  fg_value IS NOT NULL
+        GROUP BY wait_class
     ),
     unified AS (
         SELECT * FROM load_rows   WHERE metric_value IS NOT NULL
@@ -254,14 +289,17 @@ BEGIN
         FROM   measured
         WHERE  cur_val IS NOT NULL OR mu IS NOT NULL
     )
-    SELECT metric_domain, metric_name, z_score, pct_delta, n_prior,
-           change_bucket, cur_val, prior_mean,
+    SELECT s.metric_domain, s.metric_name, s.z_score, s.pct_delta, s.n_prior,
+           s.change_bucket, s.cur_val, s.prior_mean,
            CAST(NULL AS VARCHAR2(64)) AS family,
            CAST(NULL AS VARCHAR2(1))  AS canonical,
-           prior_sd, shr
+           s.prior_sd, s.shr, g.fg_d
     BULK COLLECT INTO v_scored
-    FROM   scored
-    ORDER  BY ABS(NVL(z_score, 0)) DESC, metric_name;
+    FROM   scored s
+    LEFT JOIN wait_fg g
+           ON s.metric_domain = 'WAIT'
+          AND g.metric_name = s.metric_name
+    ORDER  BY ABS(NVL(s.z_score, 0)) DESC, s.metric_name;
 
     -- Single pass: per-metric policy (family / canonical) and the change
     -- bucket per row; counts (canonical rows only: large / moderate =
@@ -290,6 +328,15 @@ BEGIN
             v_dbt := i;
         ELSIF v_scored(i).metric_domain = 'LOAD' AND v_scored(i).metric_name = 'DB CPU' THEN
             v_cpu := i;
+        END IF;
+        -- impact (v1.7, sql/lib/finding_cards.plsql impact_group / time_added;
+        -- a wait class counts its foreground time only, as in 07)
+        v_ig := impact_group(v_scored(i).metric_domain, v_scored(i).metric_name, v_scored(i).family);
+        IF v_ig IS NOT NULL
+           AND time_added(v_scored(i).metric_domain, v_scored(i).metric_name, v_scored(i).cur_val,
+                          v_scored(i).prior_mean, v_scored(i).fg_d) IS NOT NULL THEN
+            v_gimp(v_ig) := time_added(v_scored(i).metric_domain, v_scored(i).metric_name,
+                                       v_scored(i).cur_val, v_scored(i).prior_mean, v_scored(i).fg_d);
         END IF;
         IF v_scored(i).z_score IS NOT NULL THEN
             v_n_usable := v_n_usable + 1;
@@ -321,13 +368,14 @@ BEGIN
         END IF;
     END LOOP;
 
-    -- Card order (same two steps as 07): large before moderate, then the
-    -- loudest |z| (insertion sort); then a flagged DB time card moves up
-    -- to second place.
+    -- Card order (07_summary.sql's cards apply the same two steps):
+    -- cards whose time measure rose by 0.01 AAS or more, by the AAS added; then DB time; then
+    -- the rest, large before moderate and by |z| (insertion sort); then a
+    -- flagged DB time card moves up to second place.
     v_g := v_glead.FIRST;
     WHILE v_g IS NOT NULL LOOP
         v_j := v_order.COUNT;
-        WHILE v_j >= 1 AND card_before(v_gsev(v_g), v_gz(v_g), v_gsev(v_order(v_j)), v_gz(v_order(v_j))) LOOP
+        WHILE v_j >= 1 AND card_before_imp(v_g, v_gsev(v_g), v_gz(v_g), g_imp(v_g), v_order(v_j), v_gsev(v_order(v_j)), v_gz(v_order(v_j)), g_imp(v_order(v_j))) LOOP
             v_order(v_j + 1) := v_order(v_j);
             v_j := v_j - 1;
         END LOOP;
@@ -341,6 +389,9 @@ BEGIN
             END LOOP;
             EXIT;
         END IF;
+    END LOOP;
+    FOR k IN 1 .. v_order.COUNT LOOP
+        IF v_gsev(v_order(k)) = 2 THEN v_ncl := v_ncl + 1; ELSE v_ncm := v_ncm + 1; END IF;
     END LOOP;
 
     -- The compared windows' validity ('|k=Y|k=N|...') for window.AWR_WIN
@@ -414,6 +465,11 @@ BEGIN
         || '<button type="button" data-v="all" aria-pressed="false"'
         || ' title="Every section and every scored row">All sections</button>'
         || '</div>'
+        -- S1: Copy summary (plan 034); hidden until the chrome script runs,
+        -- it does nothing with JavaScript off
+        || '<button type="button" id="sum-btn" class="sum-btn" hidden'
+        || ' aria-haspopup="dialog" aria-expanded="false"'
+        || ' title="Copy the verdict and the findings as Markdown, for a ticket or a chat">Copy summary</button>'
         -- Dark mode toggle: flips body.dark, which (via _style.sql) swaps
         -- every color token to the dark palette.  Both icons ship inline;
         -- CSS shows only the one for the mode you would switch TO.
@@ -470,7 +526,8 @@ BEGIN
         -- them (nav.toc a / nav.toc b, the rail JS)
         -- is a descendant match, so desktop rendering is unchanged.
         || '<div class="rail-list">'
-        -- v1.6.0: the Activity charts sit at the top of every view
+        -- v1.6.0: the Activity charts (first in Timeline / All sections,
+        -- under the verdict in Summary since plan 023)
         || '<b>Overview</b>'
         || '<a href="#activity" data-nodot>Activity, whole span</a>'
         -- v1.6.0 Summary view: the verdict hero, the finding cards, what
@@ -661,7 +718,9 @@ BEGIN
     --   H1  the uniform section header: crit / warn counts (span.meta)
     --       appended to every section h2
     --   C1  .tabs[data-tabs] / .tabpanel switching (+ ECharts resize)
-    --   C2  crit/warn count pills on the rail links, J / K jumping
+    --   C2  large / moderate finding-card pills on the rail's Findings
+    --       link (v1.7: a finding is a card), J / K jumping (the large
+    --       cards in Summary, large table rows elsewhere)
     --   C4  copy buttons: .copy-btn, per-table CSV / MD toolbars,
     --       the h2 permalink anchor
     --   X2  window highlight: click a th[data-w] or a masthead
@@ -790,6 +849,69 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  c.querySelectorAll(".copy-btn").forEach(function(x){x.parentNode.removeChild(x);});');
     DBMS_OUTPUT.PUT_LINE('  copyText((c.textContent||"").replace(/^\s+|\s+$/g,""),b,"Copied");');
     DBMS_OUTPUT.PUT_LINE('});');
+    DBMS_OUTPUT.PUT_LINE('/* ---- S1: Copy summary (top bar): the answer as Markdown ---- */');
+    DBMS_OUTPUT.PUT_LINE('var sb=doc.getElementById("sum-btn"), sp=null;');
+    DBMS_OUTPUT.PUT_LINE('function tx(el){return el?(el.textContent||"").replace(/\s+/g," ").trim():"";}');
+    -- value + unit of a card's .big ("22.24 k/s", "20.35 AAS"), as the card reads
+    DBMS_OUTPUT.PUT_LINE('function vu(b){ if(!b) return ""; var v=tx(b.querySelector(".v")), u=tx(b.querySelector(".u")); return (v+(u?(u.charAt(0)==="/"?"":" ")+u:"")).trim(); }');
+    DBMS_OUTPUT.PUT_LINE('function sumMD(){');
+    DBMS_OUTPUT.PUT_LINE('  var L=[], q=function(s,r){return (r||doc).querySelector(s);};');
+    DBMS_OUTPUT.PUT_LINE('  var db=tx(q("#topbar .db b")), dx=tx(q("#topbar .db span")), wn=tx(q("#topbar .win b")), ws=tx(q("#topbar .win > span:not(.cchip)"));');
+    DBMS_OUTPUT.PUT_LINE('  L.push("**"+db+"**"+(dx?" ("+dx+")":""));');
+    DBMS_OUTPUT.PUT_LINE('  L.push("Current window: "+wn+(ws?", "+ws:""));');
+    DBMS_OUTPUT.PUT_LINE('  L.push(""); L.push("**Verdict:** "+tx(q("#verdict h1")));');
+    DBMS_OUTPUT.PUT_LINE('  var bc=q("#because-slot"); if(bc&&!bc.hidden&&tx(bc)) L.push(tx(bc));');
+    DBMS_OUTPUT.PUT_LINE('  var ns=q("#narrative-slot"); if(ns&&!ns.hidden) ns.querySelectorAll("li").forEach(function(li){ if(tx(li)) L.push("- "+tx(li)); });');
+    DBMS_OUTPUT.PUT_LINE('  var cs=doc.querySelectorAll("#findings article.fc:not(.chg)");');
+    DBMS_OUTPUT.PUT_LINE('  if(cs.length){ L.push(""); L.push("**Findings ("+cs.length+")**"); }');
+    DBMS_OUTPUT.PUT_LINE('  cs.forEach(function(c,i){');
+    DBMS_OUTPUT.PUT_LINE('    var b=q(".fc-main .big",c), v=vu(b), n=b?tx(q(".nrm",b)):"";');
+    DBMS_OUTPUT.PUT_LINE('    var im=c.getAttribute("data-impact"), sh=c.getAttribute("data-share");');
+    DBMS_OUTPUT.PUT_LINE('    L.push((i+1)+". ["+tx(q(".fc-k .sv",c))+"] "+tx(q("h3",c))+(v?": "+v:"")+(n?", "+n:"")');
+    DBMS_OUTPUT.PUT_LINE('      +(im&&+im>=0.01?" (+"+im+" AAS"+(sh?", "+(sh==="0"?"<1":sh)+"% of the DB-time rise":"")+")":""));');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    -- (plan 026 moves the plan card that explains a finding card right under
+    -- that card, with data-explains; the dashboard moves it back into the slot)
+    DBMS_OUTPUT.PUT_LINE('  var ch=doc.querySelectorAll("#findings article.fc.chg[data-explains]:not([hidden]), #changes-slot > article.fc:not([hidden])");');
+    DBMS_OUTPUT.PUT_LINE('  if(ch.length){ L.push(""); L.push("**What changed around it**"); }');
+    DBMS_OUTPUT.PUT_LINE('  ch.forEach(function(c){');
+    -- (the kind word without its glyph: "Plan change", "Configuration")
+    DBMS_OUTPUT.PUT_LINE('    var b=q(".fc-main .big",c), t=q("p.takeaway",c), v=vu(b), n=b?tx(q(".nrm",b)):"", k=tx(q(".fc-k .sv",c)).replace(/^\W+/,"");');
+    DBMS_OUTPUT.PUT_LINE('    L.push("- "+(k?k+": ":"")+tx(q("h3",c))+(v?": "+v:"")+(n?", "+n:"")+(t?". "+tx(t):""));');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  var ft=tx(q("footer.report")), vm=/v(\d[0-9.]*)/.exec(ft), rm=/run (\d+)/.exec(ft);');
+    DBMS_OUTPUT.PUT_LINE('  L.push(""); L.push("_From the awr_trend report"+(vm?" v"+vm[1]:"")+(rm?", run "+rm[1]:"")+"; AWR data, read-only._");');
+    DBMS_OUTPUT.PUT_LINE('  return L.join("\n");');
+    DBMS_OUTPUT.PUT_LINE('}');
+    -- sum-open lifts the top bar above the Timeline ruler and the narrow rail
+    -- bar while the popover is open (_style.sql)
+    DBMS_OUTPUT.PUT_LINE('function sumClose(){ if(sp){ sp.hidden=true; } if(sb){ sb.setAttribute("aria-expanded","false"); sb.parentNode.classList.remove("sum-open"); } }');
+    DBMS_OUTPUT.PUT_LINE('if(sb){');
+    DBMS_OUTPUT.PUT_LINE('  sb.hidden=false;');
+    DBMS_OUTPUT.PUT_LINE('  sb.addEventListener("click",function(ev){');
+    DBMS_OUTPUT.PUT_LINE('    ev.stopPropagation();');
+    DBMS_OUTPUT.PUT_LINE('    if(sp&&!sp.hidden){ sumClose(); return; }');
+    DBMS_OUTPUT.PUT_LINE('    var s=sumMD();');
+    DBMS_OUTPUT.PUT_LINE('    if(!sp){');
+    DBMS_OUTPUT.PUT_LINE('      sp=doc.createElement("div"); sp.id="sum-pop"; sp.tabIndex=-1; sp.setAttribute("role","dialog"); sp.setAttribute("aria-label","Summary as Markdown");');
+    DBMS_OUTPUT.PUT_LINE('      sp.innerHTML="<p><span class=\"sum-st\"></span><button type=\"button\" class=\"sum-x\" aria-label=\"Close\">&times;</button></p><textarea readonly rows=\"14\"></textarea>";');
+    DBMS_OUTPUT.PUT_LINE('      sb.parentNode.appendChild(sp);');
+    DBMS_OUTPUT.PUT_LINE('      sp.querySelector(".sum-x").addEventListener("click",sumClose);');
+    DBMS_OUTPUT.PUT_LINE('      sp.addEventListener("click",function(e){ e.stopPropagation(); });');
+    -- Escape anywhere in the popover (textarea, close button, or the popover
+    -- itself after a click on its text: tabindex -1) closes it and goes no
+    -- further, so it never unpins a window or clears a highlight
+    DBMS_OUTPUT.PUT_LINE('      sp.addEventListener("keydown",function(e){ if(e.key==="Escape"){ e.stopPropagation(); sumClose(); sb.focus(); } });');
+    DBMS_OUTPUT.PUT_LINE('      doc.addEventListener("click",function(){ if(sp&&!sp.hidden) sumClose(); });');
+    DBMS_OUTPUT.PUT_LINE('    }');
+    DBMS_OUTPUT.PUT_LINE('    var ta=sp.querySelector("textarea"), st=sp.querySelector(".sum-st");');
+    DBMS_OUTPUT.PUT_LINE('    ta.value=s; sp.hidden=false; sb.setAttribute("aria-expanded","true"); sb.parentNode.classList.add("sum-open");');
+    DBMS_OUTPUT.PUT_LINE('    st.textContent="Copying...";');
+    DBMS_OUTPUT.PUT_LINE('    var done=function(ok){ if(sp.hidden) return; st.textContent=ok?"Copied to the clipboard.":"Select the text below and copy it."; ta.focus(); ta.select(); };');
+    DBMS_OUTPUT.PUT_LINE('    try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(s).then(function(){done(true);},function(){paste(s);done(false);}); return; } }catch(e){}');
+    DBMS_OUTPUT.PUT_LINE('    paste(s); done(false);');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* ---- T1: long-tail expanders ---- */');
     DBMS_OUTPUT.PUT_LINE('doc.addEventListener("click",function(ev){');
     DBMS_OUTPUT.PUT_LINE('  var e=closest(ev.target,".expander"); if(!e) return;');
@@ -926,7 +1048,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  dimRail();');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('if(fi) fi.addEventListener("input",applyFilter);');
-    DBMS_OUTPUT.PUT_LINE('/* ---- C2 + H1: per-section large / moderate row counts, on the rail links and in the section header ---- */');
+    DBMS_OUTPUT.PUT_LINE('/* ---- C2 + H1: large / moderate counts -- finding cards on the rail''s Findings link, rows in each section header ---- */');
     DBMS_OUTPUT.PUT_LINE('function isCrit(tr){ return tr.classList.contains("crit")||!!tr.querySelector(".badge.crit, td.c-band .bd.s-large"); }');
     DBMS_OUTPUT.PUT_LINE('function isWarn(tr){ return tr.classList.contains("warn")||!!tr.querySelector(".badge.warn, td.c-band .bd.s-moderate"); }');
     DBMS_OUTPUT.PUT_LINE('function secCounts(sec){');
@@ -938,15 +1060,25 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  return [c,w];');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('if(nav){');
-    DBMS_OUTPUT.PUT_LINE('  nav.querySelectorAll("a[href^=\"#\"]").forEach(function(a){');
-    DBMS_OUTPUT.PUT_LINE('    var id=a.getAttribute("href").slice(1);');
-    DBMS_OUTPUT.PUT_LINE('    if(id==="overview"||a.hasAttribute("data-nodot")) return;');
-    DBMS_OUTPUT.PUT_LINE('    var sec=doc.getElementById(id); if(!sec) return;');
-    DBMS_OUTPUT.PUT_LINE('    var n=secCounts(sec);');
-    DBMS_OUTPUT.PUT_LINE('    if(n[0]){ var p=doc.createElement("span"); p.className="cnt c"; p.textContent=n[0]; a.appendChild(p); }');
-    DBMS_OUTPUT.PUT_LINE('    if(n[1]){ var q=doc.createElement("span"); q.className="cnt w"; q.textContent=n[1]; a.appendChild(q); }');
+    -- v1.7: one count -- a finding is a card.  Only the rail's Findings
+    -- link carries count pills (large / moderate cards); every other link
+    -- keeps its status dot only, and each section header keeps its own row
+    -- counts (the h2 loop below).
+    DBMS_OUTPUT.PUT_LINE('/* v1.7 one count: a finding is a card; the rail counts cards on the Findings link only */');
+    DBMS_OUTPUT.PUT_LINE('function cardCounts(sec){');
+    DBMS_OUTPUT.PUT_LINE('  var c=0,w=0;');
+    DBMS_OUTPUT.PUT_LINE('  sec.querySelectorAll("article.fc:not(.chg)").forEach(function(a){');
+    DBMS_OUTPUT.PUT_LINE('    if(a.classList.contains("f-large")) c++; else if(a.classList.contains("f-moderate")) w++;');
     DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return [c,w];');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('if(nav){');
+    DBMS_OUTPUT.PUT_LINE('  var fa=nav.querySelector("a[href=\"#findings\"]"), fsec=doc.getElementById("findings");');
+    DBMS_OUTPUT.PUT_LINE('  if(fa&&fsec){');
+    DBMS_OUTPUT.PUT_LINE('    var n=cardCounts(fsec);');
+    DBMS_OUTPUT.PUT_LINE('    if(n[0]){ var p=doc.createElement("span"); p.className="cnt c"; p.textContent=n[0]; p.title=n[0]+" large finding card"+(n[0]>1?"s":""); fa.appendChild(p); }');
+    DBMS_OUTPUT.PUT_LINE('    if(n[1]){ var q=doc.createElement("span"); q.className="cnt w"; q.textContent=n[1]; q.title=n[1]+" moderate finding card"+(n[1]>1?"s":""); fa.appendChild(q); }');
+    DBMS_OUTPUT.PUT_LINE('  }');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("main > section > h2").forEach(function(h2){');
     DBMS_OUTPUT.PUT_LINE('  var sec=h2.parentNode; if(sec.id==="overview"||sec.id==="guide"||h2.querySelector(".meta")) return;');
@@ -961,6 +1093,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var jIdx=-1;');
     DBMS_OUTPUT.PUT_LINE('function findingRows(){');
     DBMS_OUTPUT.PUT_LINE('  var out=[];');
+    -- v1.7: in Summary J / K step through the large finding CARDS (in the
+    -- dashboard design they sit in closed details.drow rows; goTo reveals)
+    DBMS_OUTPUT.PUT_LINE('  if(curView()==="summary"){');
+    DBMS_OUTPUT.PUT_LINE('    doc.querySelectorAll("#findings article.fc.f-large:not(.chg)").forEach(function(a){ out.push(a); });');
+    DBMS_OUTPUT.PUT_LINE('    if(out.length) return out;');
+    DBMS_OUTPUT.PUT_LINE('  }');
     DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("section tbody tr").forEach(function(tr){');
     DBMS_OUTPUT.PUT_LINE('    if(tr.hidden||tr.offsetParent===null) return;');
     DBMS_OUTPUT.PUT_LINE('    if(tr.classList.contains("twin")||tr.classList.contains("member")) return;');
@@ -972,6 +1110,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var list=findingRows(); if(!list.length) return;');
     DBMS_OUTPUT.PUT_LINE('  jIdx=(jIdx+d+list.length*2)%list.length;');
     DBMS_OUTPUT.PUT_LINE('  var tr=list[jIdx];');
+    DBMS_OUTPUT.PUT_LINE('  if(tr.tagName!=="TR"){ goTo(tr,true,false); return; }');
     DBMS_OUTPUT.PUT_LINE('  doc.querySelectorAll("tr.jump-hi").forEach(function(x){x.classList.remove("jump-hi");});');
     DBMS_OUTPUT.PUT_LINE('  tr.scrollIntoView({block:"center"});');
     DBMS_OUTPUT.PUT_LINE('  tr.classList.add("jump-hi");');
@@ -1062,6 +1201,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('/* reveal(el): open what hides el inside its view -- a tab, folded tail rows, <details>, a folded Timeline lane */');
     DBMS_OUTPUT.PUT_LINE('function reveal(el){');
     DBMS_OUTPUT.PUT_LINE('  if(window.AWR_TL&&AWR_TL.reveal) AWR_TL.reveal(el);');
+    DBMS_OUTPUT.PUT_LINE('  var fc=closest(el,"article.fc.fold"); if(fc&&window.AWR_fcOpen) window.AWR_fcOpen(fc);');
     DBMS_OUTPUT.PUT_LINE('  var ls=closest(el,"main > section.lib"); if(ls&&curView()==="summary"&&!ls.classList.contains("lopen")) libOpen(ls,true);');
     DBMS_OUTPUT.PUT_LINE('  var tp=closest(el,".tabpanel");');
     DBMS_OUTPUT.PUT_LINE('  if(tp&&!tp.classList.contains("on")){ var t=doc.querySelector(".tabs[data-tabs=\""+tp.getAttribute("data-tabs")+"\"] [data-t=\""+tp.getAttribute("data-t")+"\"]"); if(t) t.click(); }');
@@ -1071,6 +1211,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  var dt=closest(el,"details"); while(dt){ dt.open=true; dt=dt.parentNode?closest(dt.parentNode,"details"):null; }');
     DBMS_OUTPUT.PUT_LINE('  if(el.tagName==="DETAILS") el.open=true;');
     DBMS_OUTPUT.PUT_LINE('  if(el.id==="about"){ var ab=el.querySelector("details"); if(ab) ab.open=true; }');
+    DBMS_OUTPUT.PUT_LINE('  if(el.id==="s-normal"){ var cf=el.querySelector("details.calm-fold"); if(cf) cf.open=true; }');
     DBMS_OUTPUT.PUT_LINE('  if(el.hidden&&el.tagName==="TR") el.hidden=false;');
     DBMS_OUTPUT.PUT_LINE('  if(el.classList.contains("sql-row")&&window.AWR_openSqlRow) window.AWR_openSqlRow(el);');
     DBMS_OUTPUT.PUT_LINE('}');
@@ -1145,8 +1286,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('/* ---- P3: shareable view state in the hash (#anchor!v=f&tab=CPU&w=3) ---- */');
     DBMS_OUTPUT.PUT_LINE('function stateStr(){');
     DBMS_OUTPUT.PUT_LINE('  var parts=[];');
-    DBMS_OUTPUT.PUT_LINE('  var tab=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t].on");');
-    DBMS_OUTPUT.PUT_LINE('  if(tab&&tab.getAttribute("data-t")!=="ELAPSED") parts.push("tab="+tab.getAttribute("data-t"));');
+    -- the default Top SQL tab is the bar's first one (Biggest change, or
+    -- Elapsed time when 06 dropped the empty change tab): any other tab
+    -- goes into the hash, so a shared link reopens on it
+    DBMS_OUTPUT.PUT_LINE('  var tab=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t].on"), tab0=doc.querySelector(".tabs[data-tabs=\"topsql\"] [data-t]");');
+    DBMS_OUTPUT.PUT_LINE('  if(tab&&tab!==tab0) parts.push("tab="+tab.getAttribute("data-t"));');
     DBMS_OUTPUT.PUT_LINE('  if(curW!==null&&curW!==undefined) parts.push("w="+curW);');
     DBMS_OUTPUT.PUT_LINE('  return parts.join("&");');
     DBMS_OUTPUT.PUT_LINE('}');
@@ -1270,44 +1414,6 @@ BEGIN
     END;
 
     -- =========================================================
-    -- v1.6.0 Activity, whole span: the bird's-eye view at the top of EVERY
-    -- view (vw in-s in-t in-a), above the verdict.  Two stacked inline-SVG
-    -- charts over one time axis -- active sessions by wait class
-    -- (AWR_DATA.ashx) and by wait event (AWR_DATA.ashe, the top 14 + Other
-    -- events), both payloads from 09's one ASH scan -- drawn by
-    -- sql/lib/js_timeline.plsql (one chart factory, two instances; zoom,
-    -- hover crosshair and the pinned window are linked).  Skeleton only:
-    -- the panel stays hidden until the script runs; JS off shows only the
-    -- ax-nojs note (ASH is not scored, every scored number is in the
-    -- tables).  No ASH rows = the calm #ax-empty note.
-    -- =========================================================
-    DBMS_OUTPUT.PUT_LINE('<section id="activity" class="vw in-s in-t in-a ashtop" aria-labelledby="activity-h">'
-        || '<h2 id="activity-h">Activity, whole span<small class="h2sub">ASH active sessions across every '
-        || 'compared window, by wait class and by wait event</small></h2>'
-        || '<p class="ax-nojs">These charts are drawn by the page script, so they need JavaScript. ASH is not '
-        || 'scored: every scored number is in the tables below.</p>');
-    DBMS_OUTPUT.PUT_LINE('<div class="ashx" id="ashx" role="group" aria-label="Active sessions over the whole span" hidden>'
-        || '<div class="axh"><span class="axs" id="ax-range"></span>'
-        || '<span class="axk" aria-hidden="true"><span><i class="kw"></i>compared window</span>'
-        || '<span><i class="kw cur"></i>Current</span><span><i class="kw pin"></i>pinned</span></span>'
-        || '<button type="button" class="axr" id="ax-reset" hidden>Reset zoom</button></div>'
-        || '<p class="axe" id="ax-empty" hidden>No ASH samples in DBA_HIST_ACTIVE_SESS_HISTORY across the compared span.</p>');
-    DBMS_OUTPUT.PUT_LINE('<div class="axch" id="ax-cls"><div class="axct"><h3>By wait class</h3>'
-        || '<div class="axlg" role="group" aria-label="Wait classes: click to show or hide"></div></div>'
-        || '<div class="axp"><svg class="axsvg" role="img" aria-label="Active sessions stacked by wait class over the '
-        || 'whole compared span, the compared windows shaded and release markers drawn. Drag to zoom."></svg>'
-        || '<div class="axbr" hidden></div></div></div>');
-    DBMS_OUTPUT.PUT_LINE('<div class="axch" id="ax-ev"><div class="axct"><h3>By wait event</h3>'
-        || '<div class="axlg" role="group" aria-label="Wait events: click to show or hide"></div></div>'
-        || '<div class="axp"><svg class="axsvg" role="img" aria-label="Active sessions stacked by wait event (the 14 '
-        || 'largest, the rest as Other events) over the same span. Drag to zoom."></svg>'
-        || '<div class="axbr" hidden></div></div></div>');
-    DBMS_OUTPUT.PUT_LINE('<p class="axn2">Hover for the values; drag across either chart to zoom both '
-        || '(6 hours or less shows the compared windows minute by minute), double-click to reset. Click a shaded window to pin it: the Timeline grid compares against it. '
-        || 'Hover a wait class or event to highlight it (a class also lights its events): from the legend it is drawn from zero with the y axis fitted to it, '
-        || 'so its shape over time reads directly. Click its band, or Shift+click the legend entry, to keep it; Esc clears.</p>'
-        || '</div></section>');
-    -- =========================================================
     -- v1.6.0 Summary view: the verdict hero.  One rule-based sentence
     -- from the finding cards (the first two, in card order: the loudest
     -- card, then DB time when it is flagged), the counts as quiet pills,
@@ -1360,12 +1466,16 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('<h1 class="verdict">' || v_verdict || '.</h1>');
     END IF;
     DBMS_OUTPUT.PUT_LINE('<p class="because" id="because-slot" hidden></p>');
+    -- v1.7: "Where the extra DB time went" -- 07 moves its breakdown in here
+    DBMS_OUTPUT.PUT_LINE('<div class="att" id="att-slot" hidden></div>');
     DBMS_OUTPUT.PUT_LINE('<ul class="pills" id="pills" aria-label="Counts">'
         || CASE WHEN v_order.COUNT > 0
-                THEN '<li><a href="#findings"><b>' || v_order.COUNT || '</b> finding'
-                     || CASE WHEN v_order.COUNT = 1 THEN '' ELSE 's' END || '</a></li>'
-                     || '<li><a href="#findings"><b>' || v_n_moved || '</b> metric'
-                     || CASE WHEN v_n_moved = 1 THEN '' ELSE 's' END || ' moved</a></li>' END
+                THEN '<li class="pl-find"><a href="#findings"><b>' || v_order.COUNT || '</b> finding'
+                     || CASE WHEN v_order.COUNT = 1 THEN '' ELSE 's' END
+                     || '<span class="pl-sev">'
+                     || CASE WHEN v_ncl > 0 THEN '<i class="dotk large" aria-hidden="true"></i>' || v_ncl || ' large' END
+                     || CASE WHEN v_ncm > 0 THEN '<i class="dotk moderate" aria-hidden="true"></i>' || v_ncm || ' moderate' END
+                     || '</span></a></li>' END
         || '<li class="pl-normal"><a href="#s-normal"><b>' || v_n_normal || '</b> metric'
         || CASE WHEN v_n_normal = 1 THEN '' ELSE 's' END || ' normal</a></li>'
         || CASE WHEN v_n_impr > 0
@@ -1384,6 +1494,57 @@ BEGIN
             || '</p>');
     END IF;
     DBMS_OUTPUT.PUT_LINE('</section>');
+    -- =========================================================
+    -- v1.6.0 Activity, whole span, emitted right AFTER the verdict hero:
+    -- in Summary the answer comes first and the charts follow, compact
+    -- (by wait class only, a button brings back the second chart; see
+    -- js_timeline section 6); the verdict is Summary-only, so in Timeline
+    -- and All sections these charts are the first section.  With JS off
+    -- the DOM order shows the verdict, then the ax-nojs note.  (The
+    -- dashboard design orders its Summary by CSS, css_design.css, and
+    -- shows one chart at a time with its own tabs: no compact mode
+    -- there.)  Two stacked inline-SVG charts over one time axis -- active
+    -- sessions by wait class
+    -- (AWR_DATA.ashx) and by wait event (AWR_DATA.ashe, the top 14 + Other
+    -- events), both payloads from 09's one ASH scan -- drawn by
+    -- sql/lib/js_timeline.plsql (one chart factory, two instances; zoom,
+    -- hover crosshair and the pinned window are linked).  Skeleton only:
+    -- the panel stays hidden until the script runs; JS off shows only the
+    -- ax-nojs note (ASH is not scored, every scored number is in the
+    -- tables).  No ASH rows = the calm #ax-empty note.
+    -- =========================================================
+    DBMS_OUTPUT.PUT_LINE('<section id="activity" class="vw in-s in-t in-a ashtop" aria-labelledby="activity-h">'
+        || '<h2 id="activity-h">Activity, whole span<small class="h2sub">ASH active sessions across every '
+        || 'compared window, by wait class and by wait event</small></h2>'
+        || '<p class="ax-nojs">These charts are drawn by the page script, so they need JavaScript. ASH is not '
+        || 'scored: every scored number is in the tables below.</p>');
+    DBMS_OUTPUT.PUT_LINE('<div class="ashx" id="ashx" role="group" aria-label="Active sessions over the whole span" hidden>'
+        || '<div class="axh"><span class="axs" id="ax-range"></span>'
+        || '<span class="seg axlayout" role="group" aria-label="Chart layout" hidden>'
+        || '<button type="button" data-m="win" aria-pressed="false">Windows side by side</button>'
+        || '<button type="button" data-m="span" aria-pressed="true">Full span</button></span>'
+        || '<span class="axk" aria-hidden="true"><span><i class="kw"></i>compared window</span>'
+        || '<span><i class="kw cur"></i>Current</span><span><i class="kw pin"></i>pinned</span></span>'
+        || '<button type="button" class="axr axm" id="ax-more" aria-controls="ax-ev" aria-expanded="false" hidden>Show by wait event</button>'
+        || '<button type="button" class="axr" id="ax-reset" hidden>Reset zoom</button></div>'
+        || '<p class="axe" id="ax-empty" hidden>No ASH samples in DBA_HIST_ACTIVE_SESS_HISTORY across the compared span.</p>');
+    DBMS_OUTPUT.PUT_LINE('<div class="axch" id="ax-cls"><div class="axct"><h3>By wait class</h3>'
+        || '<div class="axlg" role="group" aria-label="Wait classes: click to show or hide"></div></div>'
+        || '<div class="axp"><svg class="axsvg" role="img" aria-label="Active sessions stacked by wait class over the '
+        || 'whole compared span, the compared windows shaded and release markers drawn. Drag to zoom."></svg>'
+        || '<div class="axbr" hidden></div></div></div>');
+    DBMS_OUTPUT.PUT_LINE('<div class="axch" id="ax-ev"><div class="axct"><h3>By wait event</h3>'
+        || '<div class="axlg" role="group" aria-label="Wait events: click to show or hide"></div></div>'
+        || '<div class="axp"><svg class="axsvg" role="img" aria-label="Active sessions stacked by wait event (the 14 '
+        || 'largest, the rest as Other events) over the same span. Drag to zoom."></svg>'
+        || '<div class="axbr" hidden></div></div></div>');
+    DBMS_OUTPUT.PUT_LINE('<p class="axn2">Hover for the values; drag across either chart to zoom both '
+        || '(6 hours or less shows the compared windows minute by minute), double-click to reset. Click a shaded window to pin it: the Timeline grid compares against it. '
+        || 'Windows side by side shows each compared window as its own panel, oldest left, minute by minute where the 1-minute detail covers it; '
+        || 'click a panel&rsquo;s top edge to pin it (Full span zooms). '
+        || 'Hover a wait class or event to highlight it (a class also lights its events): from the legend it is drawn from zero with the y axis fitted to it, '
+        || 'so its shape over time reads directly. Click its band, or Shift+click the legend entry, to keep it; Esc clears.</p>'
+        || '</div></section>');
     -- =========================================================
     -- v1.6.0 Timeline view (Mock D): the skeleton only.  The aligned
     -- window grid (#tl; the whole-span ASH charts moved to the top of
@@ -1442,7 +1603,7 @@ BEGIN
                 '<div class="gbody" id="tl-body"><div class="gin" id="tl-in">');
         DBMS_OUTPUT.PUT_LINE(lane_h('activity', 'Activity', 'ash', NULL, 'ASH, not scored'));
         DBMS_OUTPUT.PUT_LINE(lane_h('metrics', 'Headline and load', 'scored'));
-        DBMS_OUTPUT.PUT_LINE(lane_h('waits', 'Waits', 'scored', 'wait classes in AAS, events in seconds waited', NULL, 'events'));
+        DBMS_OUTPUT.PUT_LINE(lane_h('waits', 'Waits', 'scored', 'wait classes and events in AAS', NULL, 'events'));
         DBMS_OUTPUT.PUT_LINE(lane_h('objects', 'Where the reads land', 'ranked', NULL, 'ranked, not scored'));
         DBMS_OUTPUT.PUT_LINE(lane_h('sql', 'SQL', 'sql', 'elapsed s; a dash = not in the top ' || ~top_n));
         DBMS_OUTPUT.PUT_LINE(lane_h('config', 'Configuration', 'config'));

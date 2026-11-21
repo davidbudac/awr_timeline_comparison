@@ -5,6 +5,7 @@
 #   3. strict Python parse            any SyntaxWarning in a tracked *.py is an error
 #   4. server unit tests              python3 -m unittest (stdlib only)
 #   5. generated docs                 demo report + policy page match their generators
+#   6. client JS unit tests           tools/js_unit_tests.js (skipped without node)
 # Read-only: writes nothing but Python bytecode caches.  Dev/CI tooling only;
 # nothing in the report path may depend on it.
 set -u
@@ -42,6 +43,13 @@ PY
 
 step "server unit tests"
 python3 -m unittest discover -s server/tests -t . || fail=1
+
+step "client JS unit tests (node)"
+if command -v node >/dev/null 2>&1; then
+    node tools/js_unit_tests.js || fail=1
+else
+    echo "node not found: skipped"
+fi
 
 step "generated docs are fresh (demo report, policy page)"
 python3 demo/gen_demo_report.py --check || fail=1

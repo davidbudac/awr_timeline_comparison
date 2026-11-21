@@ -242,7 +242,8 @@ def emit(w) -> str:
             out.append("]}")
         out.append("]}")
     out.append("]};")
-    out.extend(L[25:L.index("</script>", 25) + 1])     # verbatim bootstrap .. </script>
+    i0 = L.index("if(!window.echarts) return;")        # the bootstrap's first line
+    out.extend(L[i0:L.index("</script>", i0) + 1])     # verbatim bootstrap .. </script>
     out.append("</section>")
     out.append("<!-- AWR-SECTION: 11_top_sql_ash_breakdown END -->")
     return "\n".join(out)

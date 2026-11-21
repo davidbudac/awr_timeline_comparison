@@ -9,6 +9,7 @@ tables.  Mirrors the PL/SQL block top to bottom.
 """
 from __future__ import annotations
 
+from .. import chrome
 from .. import helpers as h
 
 # sql/lib/templates/comprehensive/sysstat_load_targets.sql (27 stats)
@@ -47,10 +48,12 @@ _MOVED = ("large", "moderate")
 
 class Finding:
     __slots__ = ("domain", "name", "cur", "mu", "sd", "n", "z", "pct", "bucket",
-                 "family", "canonical", "dir", "vals", "grp")
+                 "family", "canonical", "dir", "vals", "grp", "fg_d")
 
-    def __init__(self, domain, name, cur, mu, sd, n, share=None, vals=None):
+    def __init__(self, domain, name, cur, mu, sd, n, share=None, vals=None, fg_d=None):
         self.domain, self.name = domain, name
+        # wait-class rows: foreground Current - prior mean, AAS (the impact)
+        self.fg_d = fg_d
         self.vals = vals or {}
         self.cur, self.mu, self.sd, self.n = cur, mu, sd, n
         self.z, self.pct = h.z_and_pct(cur, mu, sd)
@@ -94,7 +97,8 @@ def _unified_rows(w):
             if name in m.sysmetric:
                 put("METRIC", name, k, m.sysmetric[name])
         per_class: dict[str, float] = {}
-        for _ev, (wc, _n, us) in m.fg_waits.items():
+        # wait_rows: DBA_HIST_SYSTEM_EVENT, all sessions (time_waited_micro)
+        for _ev, (wc, _n, us) in m.sys_waits.items():
             if wc == "Idle":
                 continue
             per_class[wc] = per_class.get(wc, 0.0) + us
@@ -104,9 +108,39 @@ def _unified_rows(w):
     return rows
 
 
+def _fg_wait_deltas(w) -> dict:
+    """wait_fg_rows / wait_fg: per wait class, Current minus the prior mean
+    of the FOREGROUND time waited per second (time_waited_micro_fg), AAS --
+    the cards' impact (owner decision 2026-11-20), never scored.  The same
+    SYSTEM_EVENT rows as the class rows (m.sys_waits), foreground columns
+    (m.sys_waits_fg): a foreground event's time is all foreground, a
+    background-only one's (model.SYSEVENT_BG, the demo's Queueing class)
+    is 0, so that class scores on its all-session time and adds 0 AAS."""
+    by_cls: dict[str, dict[int, float]] = {}
+    for win in w.valid_windows:
+        m = w.window_metrics(win)
+        if m is None:
+            continue
+        per_class: dict[str, float] = {}
+        for _ev, (wc, _n, us) in m.sys_waits_fg.items():
+            if wc == "Idle":
+                continue
+            per_class[wc] = per_class.get(wc, 0.0) + us
+        for wc, us in per_class.items():
+            if m.dur_sec > 0:
+                by_cls.setdefault(wc, {})[win.week_offset] = us / m.dur_sec / 1e6
+    out = {}
+    for wc, by_off in by_cls.items():
+        cur = by_off.get(0)
+        mu = h.mean_sd([v for k, v in by_off.items() if k > 0])[0]
+        out["Wait class: " + wc] = (cur - mu) if (cur is not None and mu is not None) else None
+    return out
+
+
 def compute_findings(w) -> list[Finding]:
     """The BULK COLLECT, in heat_pos order (domain, |z| DESC, name)."""
     rows = _unified_rows(w)
+    fg = _fg_wait_deltas(w)
     # wait_total: the Current window's total non-idle wait across classes
     wait_tot = sum(v.get(0, 0.0) for (d, _n), v in rows.items() if d == "WAIT")
     out = []
@@ -117,7 +151,8 @@ def compute_findings(w) -> list[Finding]:
         if cur is None and mu is None:
             continue
         share = (cur / wait_tot) if (dom == "WAIT" and wait_tot > 0 and cur is not None) else None
-        out.append(Finding(dom, name, cur, mu, sd, n, share, by_off))
+        out.append(Finding(dom, name, cur, mu, sd, n, share, by_off,
+                           fg.get(name) if dom == "WAIT" else None))
     out.sort(key=lambda f: (f.domain, -f.az, f.name))
     return out
 
@@ -184,14 +219,15 @@ def _emit_domain_table(out: list[str], ordered: list[Finding], dom: str, title: 
 
 
 def _events(w):
-    """The card-evidence scan: top 2 foreground events per wait class by
-    Current time waited per second, with prior mean / sd / n and share."""
+    """The card-evidence scan: top 2 events per wait class by Current time
+    waited per second (DBA_HIST_SYSTEM_EVENT, all sessions), with prior
+    mean / sd / n and share."""
     rows: dict[tuple[str, str], dict[int, float]] = {}
     for win in w.valid_windows:
         m = w.window_metrics(win)
         if m is None or m.dur_sec <= 0:
             continue
-        for ev, (wc, _n, us) in m.fg_waits.items():
+        for ev, (wc, _n, us) in m.sys_waits.items():
             if wc == "Idle":
                 continue
             rows.setdefault((wc, ev), {})[win.week_offset] = us / m.dur_sec / 1e6
@@ -221,7 +257,7 @@ def _ev_row(dt, ident, txt, de, cur, mu, sd, bucket) -> str:
     return ('<div class="evr"><dt>' + dt + '</dt><dd><span class="id' + (" txt" if txt else "") + '">'
             + ident + '</span><span class="de">' + h.nbu(de) + '</span></dd>'
             '<div class="m">' + h.delta_span(cur, mu, bucket)
-            + h.band_span(h.band_z(cur, mu, sd), bucket, "sm") + '</div></div>')
+            + h.band_span(h.band_z(cur, mu, sd), bucket, "sm", "N", 10) + '</div></div>')
 
 
 def _f_ent(f) -> str:
@@ -232,7 +268,7 @@ def _nr_row(f) -> str:
     s, u = h.metric_scale(f.domain, f.name), h.metric_unit(f.domain, f.name)
     return ('<div class="nr"><div class="l" title="' + h.esc(f.name) + '">' + _f_ent(f)
             + '<small>normal ' + h.fv_range(h._mul(f.mu, s), h._mul(f.sd, s), u) + '</small></div>'
-            + h.band_span(f.z, f.bucket, "sm", "Y" if f.canonical == "N" else "N")
+            + h.band_span(f.z, f.bucket, "sm", "Y" if f.canonical == "N" else "N", 10)
             + '<div class="vv">' + h.fv(h._mul(f.cur, s), u)
             + '<small>' + h.delta_span(f.cur, f.mu, f.bucket) + '</small></div></div>')
 
@@ -240,8 +276,102 @@ def _nr_row(f) -> str:
 _SPLIT_CARD = {"W": ", all of it wait", "w": ", mostly wait", "c": ", mostly CPU", "m": ", CPU and wait alike"}
 
 
-def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu):
+def _head_txt(r, dbt, cpu) -> str:
+    """07_summary.sql head_txt (plan 025): the card headline after the
+    metric name; the DB time lead adds where the extra time went.  Shared
+    by the card's h3 and its triage row."""
+    split = None
+    if r.name == "DB time" and dbt is not None and cpu is not None:
+        split = h.time_split(dbt.cur, dbt.mu, cpu.cur, cpu.mu)
+    return h.move_txt(r.cur, r.mu, r.bucket) + _SPLIT_CARD.get(split, "")
+
+
+def _g_shr(imp, g):
+    """07_summary.sql g_shr: a card's share of the DB-time rise, integer
+    percent; None when the card added less than 0.01 AAS (imp_on), DB time
+    did not rise, or the share passes 100 (up to 100.5% is kept, shown as
+    100)."""
+    v_i, v_d = imp.get(g), imp.get("DBTIME")
+    if h.imp_on(v_i) and v_d is not None and v_d > 0 and v_i <= v_d * 1.005:
+        return min(100, int(h.ora_round(v_i / v_d * 100, 0)))
+    return None
+
+
+def _f_up(findings, dom, name) -> bool:
+    """07_summary.sql f_up (plan 033): a scored row moved up AND is a
+    finding (large / moderate)."""
+    for f in findings:
+        if f.domain == dom and f.name == name:
+            return (f.bucket in ("large", "moderate") and f.cur is not None and f.mu is not None
+                    and f.cur > f.mu)
+    return False
+
+
+def _ev_up(evs, event) -> bool:
+    """07_summary.sql ev_up (plan 033): one of the card evidence events
+    (the top 2 of a class) moved up and is a finding by the wait policy."""
+    for e in evs:
+        if e["event"] == event:
+            b = h.policy_bucket("WAIT", e["event"], e["wclass"], e["cur"], e["mu"], e["sd"], e["n"], e["shr"])
+            if b in ("large", "moderate") and e["cur"] > (e["mu"] if e["mu"] is not None else 0):
+                return True
+    return False
+
+
+def _commit_lat_up(findings, evs) -> bool:
+    """07_summary.sql commit_lat_up (review follow-up R2): log file sync
+    flagged up AND its time per commit (wait AAS / user commits per second)
+    at least 1.5x the prior windows' (mean wait / mean commit rate)."""
+    if not _ev_up(evs, "log file sync"):
+        return False
+    for f in findings:
+        if f.domain == "LOAD" and f.name == "user commits":
+            for e in evs:
+                if (e["event"] == "log file sync" and e["mu"] is not None
+                        and f.cur is not None and f.cur > 0 and f.mu is not None and f.mu > 0
+                        and e["cur"] / f.cur >= 1.5 * e["mu"] / f.mu):
+                    return True
+            return False
+    return False
+
+
+def _pick_hint(g, findings, evs, dbt, cpu):
+    """07_summary.sql pick_hint (plan 033): which rule of
+    sql/lib/finding_hints.plsql a card gets (None = none); a rule fires
+    only on what its sentence claims (review follow-up R2)."""
+    if g == "IO":
+        if (_f_up(findings, "LOAD", "table scans (long tables)") or _ev_up(evs, "db file scattered read")
+                or _ev_up(evs, "direct path read")):
+            return "IO_SCANS"
+        if _ev_up(evs, "db file sequential read"):
+            return "IO_SINGLE"
+    elif g == "COMMIT":
+        if _commit_lat_up(findings, evs):
+            return "COMMIT_LAT"
+    elif g == "NET":
+        if (_ev_up(evs, "SQL*Net more data to client")
+                or _f_up(findings, "LOAD", "bytes sent via SQL*Net to client")):
+            return "NET_PAYLOAD"
+    elif g == "PARSE":
+        if _f_up(findings, "LOAD", "parse count (hard)"):
+            return "HARD_PARSE"
+    elif g == "DBTIME":
+        if dbt is not None and cpu is not None:
+            if h.time_split(dbt.cur, dbt.mu, cpu.cur, cpu.mu) == "c":
+                return "DBTIME_CPU"
+    elif g == "WAIT:Application":
+        if _ev_up(evs, "enq: TX - row lock contention"):
+            return "ROW_LOCK"
+    return None
+
+
+def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g,
+          findings=(), cw=None):
     r = lead[g]
+    # impact chip (v1.7): the card's share of the DB-time rise, left out
+    # past 100% (a part is measured apart from DB time and can pass it)
+    v_imp = imp.get(g)
+    v_shr = _g_shr(imp, g)
     s, u = h.metric_scale(r.domain, r.name), h.metric_unit(r.domain, r.name)
     cid = h.card_id(g)
     sev = r.bucket
@@ -303,22 +433,41 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu):
         links = '<a href="#load">Load profile</a>'
     out.append('<article class="panel fc f-' + sev
                + (" lead" if pos == 1 else " slim" if sev == "moderate" else "")
-               + '" id="' + cid + '" aria-labelledby="' + cid + '-h">'
+               + '" id="' + cid + '" aria-labelledby="' + cid + '-h"'
+               + ' data-impact="' + h.imp_tok(v_imp) + '" data-share="'
+               + ("" if v_shr is None else str(v_shr)) + '"'
+               + (' data-fold="Y"' if g != open_g else '') + '>'
                '<header class="fc-h"><div class="fc-k"><span class="sv" title="'
                + h.esc(h.card_label(g)) + '"><i class="dotk ' + sev
-               + '" aria-hidden="true"></i>' + sev.capitalize() + '</span></div>'
+               + '" aria-hidden="true"></i>' + sev.capitalize() + '</span>'
+               + ('<span class="fc-imp" title="Time added: Current minus the prior'
+                  ' mean of this card&#39;s time measure (DB time, DB CPU or the foreground time of its'
+                  ' wait class), in average active sessions">' + h.imp_txt(v_imp)
+                  + (" above normal" if g == "DBTIME"
+                     else " &middot; " + ("&lt;1" if v_shr < 1 else str(v_shr)) + "% of the DB-time rise" if v_shr is not None
+                     else "")
+                  + '</span>' if h.imp_on(v_imp) else '')
+               + '<span class="fc-sum">' + h.fv(h._mul(r.cur, s), u) + ' &middot; normal '
+               + h.fv_range(h._mul(r.mu, s), h._mul(r.sd, s), u) + '</span>'
+               '<span class="fc-tags"></span></div>'
                '<div class="fc-band" title="z ' + h.band_ztxt(r.z) + ' against the prior normal">'
-               + h.band_span(r.z, sev, "lg") + _AXIS + '</div></header>')
-    out.append('<h3 id="' + cid + '-h">' + _f_ent(r) + ' ' + h.move_txt(r.cur, r.mu, sev)
-               + (_SPLIT_CARD.get(split, "") if r.name == "DB time" else "") + '</h3>')
+               + h.band_span(r.z, sev, "lg", "N", 10) + _AXIS + '</div></header>')
+    out.append('<h3 id="' + cid + '-h">' + _f_ent(r) + ' ' + _head_txt(r, dbt, cpu) + '</h3>')
     out.append('<div class="fc-b"><div class="fc-main">'
                '<div class="big"><span class="v">' + h.fv_num(h._mul(r.cur, s), u) + '</span>'
                '<span class="u">' + h.fv_unit(h._mul(r.cur, s), u) + '</span>'
                '<span class="nrm" title="prior mean ' + h.fv(h._mul(r.mu, s), u) + '">normal '
                + h.fv_range(h._mul(r.mu, s), h._mul(r.sd, s), u) + '</span></div>')
-    out.append('<div class="wg bare allv"' + h.wg_attr(w) + '>' + h.wg_flags(True)
+    out.append('<div class="wg bare hov qf"' + h.wg_attr(w) + '>' + h.wg_flags(True)
                + h.wg_bars(w, r.vals, s, r.mu, r.sd, sev) + h.wg_dates(w, True) + '</div></div>')
     out.append('<dl class="ev">' + ev + '</dl></div>')
+    # plan 033: what this usually means, and a read-only next query
+    rule = _pick_hint(g, findings, evs, dbt, cpu)
+    if rule is not None:
+        sql = (h.hint_fill(h.HINT_SQL.get(rule), cw[0], cw[1], cw[2], w.inst_num,
+                           t0=cw[3], t1=cw[4])
+               if cw is not None and cw[1] is not None else None)
+        out.append(h.hint_block(rule, cid, sql))
     if nrel + ntw > 0:
         out.append('<details class="rel"><summary>'
                    + (str(nrel) + ' related metric' + ('' if nrel == 1 else 's') if nrel > 0 else '')
@@ -333,6 +482,133 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu):
                + '">Timeline &rarr;</a><span class="evl">' + links + '</span></footer></article>')
 
 
+def _tri_row(w, g, r, dbt, cpu) -> str:
+    """07_summary.sql emit_tri_row (plan 025): one row of the Summary
+    triage list; the impact cell is filled by the inline script."""
+    s, u = h.metric_scale(r.domain, r.name), h.metric_unit(r.domain, r.name)
+    cid = h.card_id(g)
+    lab = h.esc(h.metric_label(r.domain, r.name))
+    return ('<div class="tri-row" role="listitem" data-card="' + cid + '">'
+            '<span class="tri-f"><i class="dotk ' + r.bucket + '" aria-hidden="true"></i>'
+            '<a class="tri-go" href="#' + cid + '">' + h.esc(h.card_label(g)) + '</a>'
+            '<span class="tri-m">' + lab + ' ' + _head_txt(r, dbt, cpu) + '</span>'
+            '<span class="tri-tags"></span></span>'
+            '<span class="tri-nv"><b>' + h.fv(h._mul(r.cur, s), u) + '</b><small>normal '
+            + h.fv_range(h._mul(r.mu, s), h._mul(r.sd, s), u) + '</small></span>'
+            '<span class="tri-imp"></span>'
+            '<span class="tri-spark" data-spark-dense data-spark="' + h.wg_csv(w, r.vals, s)
+            + '" data-spark-title="' + lab + '"></span></div>')
+
+
+def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
+    """v1.7 "Where the extra DB time went" (plan 021): the DB-time rise split
+    into DB CPU and the wait classes' foreground time (the cards' impact),
+    largest first;
+    printed hidden and moved into 00's #att-slot.  Twin of 07's nested block
+    before the section header."""
+    dd = imp.get("DBTIME")
+    if not (order and dd is not None and dbt is not None):
+        return
+    parts, pos, neg = [], 0.0, 0.0
+    for f in findings:                      # heat_pos order, like the PL/SQL loop
+        if not (f.domain == "WAIT" or (f.domain == "LOAD" and f.name == "DB CPU")):
+            continue
+        d = h.time_added(f.domain, f.name, f.cur, f.mu, f.fg_d)
+        if d is None:
+            continue
+        lab = "CPU" if f.domain == "LOAD" else (
+            f.name[len("Wait class: "):] if f.name.startswith("Wait class: ") else f.name)
+        grp = h.impact_group(f.domain, f.name, f.family)
+        aid = h.card_id(grp) if grp in lead else _find_id(f)
+        parts.append({"lab": lab, "d": d, "grp": grp, "aid": aid})
+        if d > 0:
+            pos += d
+        elif d < 0:
+            neg -= d
+    parts.sort(key=lambda p: -p["d"])       # stable = the insertion sort's strict >
+    if dd > 0:
+        # the bar = the rises plus the rest, the rise the parts (falls
+        # netted) leave unexplained: dd - (pos - neg)
+        base = max(dd + neg, pos)
+        bar, lg, small, nsm = "", "", 0.0, 0
+        for p in parts:
+            d = p["d"]
+            if h.imp_on(d) and d >= 0.01 * base:
+                fl = p["grp"] in lead
+                # the share, left out past 100% like the cards' impact chip
+                pct = min(100, int(h.ora_round(d / dd * 100, 0))) if d <= dd * 1.005 else None
+                lab = h.esc(p["lab"])
+                bar += ('<i class="att-s' + ('' if fl else ' nf') + '" data-wc="' + lab
+                        + '" style="flex-grow:' + h.imp_tok(d) + '" title="'
+                        + lab + ': +' + h.fmt_num(d) + ' AAS'
+                        + (', ' + str(pct) + '% of the DB-time rise' if pct is not None else '')
+                        + ('' if fl else ', inside its normal range') + '">'
+                        + ('<span>' + lab + ' +' + h.fmt_num(d) + '</span>' if d >= 0.18 * base else '')
+                        + '</i>')
+                lg += ('<li><i class="sw' + ('' if fl else ' nf') + '" data-wc="' + lab + '" aria-hidden="true"></i>'
+                       + h.ent(lab, p["aid"], "card" if fl else "metric")
+                       + ' <b>+' + h.fmt_num(d) + '</b>'
+                       + ((' <span class="sh">' + ('&lt;1' if pct < 1 else str(pct)) + '%</span>')
+                          if pct is not None else '')
+                       + ((' <span class="st"><i class="dotk '
+                           + ('large' if gsev[p["grp"]] == 2 else 'moderate')
+                           + '" aria-hidden="true"></i>finding</span>') if fl
+                          else ' <span class="st nf">inside normal</span>')
+                       + '</li>')
+            elif d > 0:
+                small += d
+                nsm += 1
+        if nsm > 0:
+            bar += ('<i class="att-s att-small" style="flex-grow:' + h.imp_tok(small)
+                    + '" title="' + str(nsm) + ' smaller part' + ('s' if nsm > 1 else '')
+                    + ': +' + h.fmt_num(small) + ' AAS"></i>')
+            lg += '<li class="att-more">+ ' + str(nsm) + ' smaller (' + h.fmt_num(small) + ' AAS)</li>'
+        rest = dd - (pos - neg)
+        if rest > 0.01 * dd:
+            bar += ('<i class="att-s att-rest" style="flex-grow:' + h.imp_tok(rest)
+                    + '" title="Not in the parts above' + (', net of the falls' if neg > 0 else '')
+                    + ' (DB time that no wait class records, such as'
+                    + ' waiting for a CPU, or waits outside this template&#39;s event list): +'
+                    + h.fmt_num(rest) + ' AAS"></i>')
+        # the largest drops: the parts are sorted largest first, so walk backwards
+        fell, nfell = "", 0
+        for p in reversed(parts):
+            if p["d"] >= 0 or nfell >= 3:
+                break
+            if -p["d"] >= 0.01 * dd:
+                fell += (', ' if nfell > 0 else '') + h.esc(p["lab"]) + ' &minus;' + h.fmt_num(-p["d"])
+                nfell += 1
+        note = ""
+        if fell:
+            note += 'Fell: ' + fell + ' AAS. '
+        # falls offset rises.  The parts are foreground time like DB time, so
+        # they roughly add up to the rise; an excess past 2% of it is the gap
+        # between two separately kept counters, never background time
+        if pos - neg > dd * 1.02:
+            note += ('The parts add up to ' + h.imp_txt(pos - neg)
+                     + (' net of the falls' if neg > 0 else '') + ', more than the DB-time'
+                     ' rise: DB time comes from the time model, the parts from the wait interface'
+                     ' and DB CPU, which Oracle keeps separately, so they need not add up exactly.')
+        out.append('<div id="att-src" hidden><div class="att-h"><b>Where the extra DB time went</b>'
+                   '<span>DB time ' + h.fmt_num(dbt.mu * 0.01) + ' &rarr; '
+                   + h.fmt_num(dbt.cur * 0.01) + ' AAS, <b>' + h.imp_txt(dd) + '</b></span></div>')
+        out.append('<div class="att-bar" role="img" aria-label="The DB-time rise by wait class and CPU,'
+                   ' largest part first">' + bar + '</div>')
+        out.append('<ul class="att-lg">' + lg + '</ul>'
+                   + ('<p class="att-n">' + note.rstrip(' ') + '</p>' if note else '')
+                   + '</div>')
+    else:
+        out.append('<div id="att-src" hidden><p class="att-n"><b>DB time</b> did not rise: '
+                   + h.fmt_num(dbt.cur * 0.01) + ' AAS, against a prior mean of '
+                   + h.fmt_num(dbt.mu * 0.01) + ' AAS.</p></div>')
+    out.append('<script>(function(){var d=document,s=d.getElementById("att-src"),'
+               't=d.getElementById("att-slot"),c=window.AWR_WAIT_COLORS||{};if(!s)return;'
+               's.querySelectorAll("[data-wc]").forEach(function(e){var k=e.getAttribute("data-wc");'
+               'if(c[k])e.style.setProperty("--c",c[k]);});'
+               'if(t){while(s.firstChild)t.appendChild(s.firstChild);t.hidden=false;}'
+               's.parentNode.removeChild(s);})();</script>')
+
+
 def emit(w) -> str:
     out = ["<!-- AWR-SECTION: 07_summary BEGIN -->"]
     findings = compute_findings(w)
@@ -345,8 +621,13 @@ def emit(w) -> str:
     normal = sum(1 for f in canon if f.bucket in ("typical", "improved", "noted", "flat baseline"))
     dbt = next((f for f in findings if f.domain == "LOAD" and f.name == "DB time"), None)
     cpu = next((f for f in findings if f.domain == "LOAD" and f.name == "DB CPU"), None)
-    lead, gsev, gz, flagcls = {}, {}, {}, set()
+    lead, gsev, gz, flagcls, imp = {}, {}, {}, set(), {}
     for f in findings:                      # heat_pos order, like the PL/SQL pass
+        # impact (v1.7, helpers.impact_group / time_added): every row,
+        # flagged or not; a wait class counts its foreground time only
+        ig = h.impact_group(f.domain, f.name, f.family)
+        if ig and h.time_added(f.domain, f.name, f.cur, f.mu, f.fg_d) is not None:
+            imp[ig] = h.time_added(f.domain, f.name, f.cur, f.mu, f.fg_d)
         if f.canonical != "Y" or f.bucket not in _MOVED:
             continue
         g = f.grp
@@ -359,11 +640,21 @@ def emit(w) -> str:
         gz[g] = max(gz[g], f.az)
         if f.domain == "WAIT":
             flagcls.add(f.name[len("Wait class: "):] if f.name.startswith("Wait class: ") else f.name)
-    order = h.card_order({g: (gsev[g], gz[g]) for g in lead})
+    order = h.card_order({g: (gsev[g], gz[g], imp.get(g)) for g in lead})
+    # plan 025: every card but one starts folded in Summary; the open one is
+    # the first card that is not DB time, else the only card
+    open_g = next((g for g in order if g != "DBTIME"), order[0] if order else None)
     evs = _events(w) if flagcls else []
     ordered = _table_order(findings)
+    _att(out, findings, order, lead, gsev, dbt, imp)
 
-    meta = ('<span class="meta">'
+    # Counts: in Summary the finding CARDS by severity (the verdict pill and
+    # the rail count the same cards); in All sections the canonical flagged
+    # ROWS of the detail tables, folded twins apart.
+    nc = len(order)
+    ncl = sum(1 for g in order if gsev[g] == 2)
+    ncm = nc - ncl
+    meta = ('<span class="meta' + (' vw in-a' if nc else '') + '">'
             + ('<span><i class="dotk large"></i>' + str(crit) + ' large</span>' if crit > 0 else '')
             + ('<span><i class="dotk moderate"></i>' + str(warn) + ' moderate</span>' if warn > 0 else '')
             + '<span><i class="dotk typical"></i>' + str(normal) + ' normal</span>'
@@ -374,28 +665,56 @@ def emit(w) -> str:
             + ('<span title="flagged twins of a counted row (SYSMETRIC rate of a SYSSTAT counter, '
                'CPU half of the CPU/wait ratio)">' + str(folded) + ' folded</span>' if folded > 0 else '')
             + '</span>')
-    nc = len(order)
     out.append('<section id="findings" class="vw in-s in-a sumsec"><h2 id="findings-heading">'
                + (('<span class="vw in-s">' + str(nc) + ' finding' + ('' if nc == 1 else 's') + '</span>'
                    '<span class="vw in-a">Findings</span>') if nc else 'Findings')
+               + (('<span class="meta vw in-s" title="finding cards by severity">'
+                   + ('<span><i class="dotk large"></i>' + str(ncl) + ' large</span>' if ncl > 0 else '')
+                   + ('<span><i class="dotk moderate"></i>' + str(ncm) + ' moderate</span>' if ncm > 0 else '')
+                   + '</span>') if nc else '')
                + meta
                + '<small class="h2sub"><span class="vw in-s">'
-               + ((str(crit + warn) + ' metric' + ('' if crit + warn == 1 else 's') + ' moved, in '
-                   + str(nc) + ' famil' + ('y' if nc == 1 else 'ies')) if nc
+               + (('From ' + str(crit + warn) + ' flagged metric' + ('' if crit + warn == 1 else 's')
+                   + '; ordered by the DB time each card added') if nc
                   else 'Every scored metric against its prior windows')
                + '</span><span class="vw in-a">Every scored metric against its prior windows; one table per domain</span>'
                '</small></h2>')
     if nc:
+        # plan 025: the triage list (Summary): every finding on one screen
+        out.append('<div id="triage" class="panel tri vw in-s" role="list" aria-label="Findings in card order">'
+                   '<div class="tri-hd" aria-hidden="true"><span>Finding</span><span>Now &middot; normal</span>'
+                   '<span>Share of the DB-time rise</span><span>' + str(w.weeks_back + 1) + ' windows</span></div>')
+        for g in order:
+            out.append(_tri_row(w, g, lead[g], dbt, cpu))
+        out.append('</div>')
+        # plan 033: the Current window's DBID, snapshot range and nominal
+        # start / end, for the cards' read-only "Next step" queries (None
+        # when it is not valid; the model is single-instance, so 07's
+        # valid-instance list never applies)
+        cwin = next((x for x in w.valid_windows if x.week_offset == 0), None)
+        cw = ((cwin.dbid, cwin.begin_snap_id, cwin.end_snap_id,
+               cwin.win_start_ts.strftime("%Y-%m-%d %H:%M:%S"), cwin.win_end_ts.strftime("%Y-%m-%d %H:%M:%S"))
+              if cwin is not None else None)
         out.append('<div class="cards vw in-s">')
         for k, g in enumerate(order, 1):
-            _card(w, out, g, k, lead, ordered, evs, flagcls, dbt, cpu)
+            _card(w, out, g, k, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g, findings, cw)
         out.append('</div>')
-        js = ",".join('["' + h.card_id(g) + '","' + h.card_label(g).replace('"', '').replace('<', '') + '"]'
+        # v1.7: each card's share of the DB-time rise rides on data-shr (CSS ::after)
+        js = ",".join('["' + h.card_id(g) + '","' + h.card_label(g).replace('"', '').replace('<', '') + '","'
+                      + ("" if g == "DBTIME" or _g_shr(imp, g) is None else str(_g_shr(imp, g))) + '"]'
                       for g in order)
         out.append('<script>(function(){var n=document.querySelector(\'nav.toc a[href="#findings"]\');'
                    'if(!n)return;[' + js + '].forEach(function(c){var a=document.createElement("a");'
                    'a.className="sub";a.href="#"+c[0];a.setAttribute("data-nodot","");a.textContent=c[1];'
+                   'if(c[2]){var p=(c[2]==="0"?"<1":c[2])+"%";a.setAttribute("data-shr",p);a.title=c[1]+": "+p+" of the DB-time rise";}'
                    'n.parentNode.insertBefore(a,n.nextSibling);n=a;});})();</script>')
+        # plan 025: the impact cells, row clicks and folding, lifted verbatim
+        L = chrome.put_lines(chrome.sql_path("sql/07_summary.sql"))
+        i = next(k for k, (t, _) in enumerate(L)
+                 if t.startswith('<script>(function(){var d=document,tri=d.getElementById("triage");'))
+        j = next(k for k in range(i, len(L)) if L[k][0] == '})();</script>')
+        assert all(ok for _, ok in L[i:j + 1])
+        out.extend(t for t, _ in L[i:j + 1])
     else:
         out.append('<div class="panel calm vw in-s"><p class="calm-empty">'
                    + ('Nothing could be scored: a metric needs at least 3 valid prior windows.' if normal == 0
@@ -420,6 +739,27 @@ def emit(w) -> str:
                    'Nothing could be scored as normal: a metric needs at least 3 valid prior windows.'
                    '</p></div>')
     else:
+        # plan 032: count the three groups first, so the folded summary line
+        # can name them; they add up to `normal`
+        cg = cs = ci = 0
+        for f in ordered:
+            if f.canonical != "Y":
+                continue
+            if (f.bucket == "typical" and f.az <= 2) or f.bucket == "flat baseline":
+                cg += 1
+            elif (f.bucket == "typical" and f.az > 2) or f.bucket == "noted":
+                cs += 1
+            elif f.bucket == "improved":
+                ci += 1
+        # plan 032: the body folds to one line in the Summary view; open when
+        # there is no finding card (then this section is the story)
+        out.append('<details class="calm-fold"' + (' open' if nc == 0 else '') + '>'
+                   '<summary class="calm-sum"><span><b>' + str(cg) + '</b> metric'
+                   + ('' if cg == 1 else 's') + ' within the normal range</span>'
+                   '<span>&middot; <b>' + str(cs) + '</b> moved too little to matter</span>'
+                   '<span>&middot; '
+                   + ('nothing improved materially' if ci == 0 else '<b>' + str(ci) + '</b> improved')
+                   + '</span></summary>')
         out.append('<div class="panel calm"><div class="ngrid">')
         grid, more, first = 0, 0, None
         for pas in (1, 2):
@@ -463,6 +803,7 @@ def emit(w) -> str:
                    + ('<p>Nothing moved materially in the good direction.</p>' if ni == 0 else imp)
                    + ('<p class="calm-more">and ' + str(ni - 6) + ' more</p>' if ni > 6 else '')
                    + '</div></div>')
+        out.append('</details>')
     out.append('</section>')
     out.append('<section id="s-lib" class="vw in-s vhead"><h2>Evidence library'
                '<small class="h2sub">Every other section, one line each; open a row to read it here</small></h2></section>')

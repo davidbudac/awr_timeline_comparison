@@ -63,10 +63,10 @@ BEGIN
         || ' y="0" width="2.2" height="44"/><rect class="gd-w" x="49.3" y="0" width="2.2" height="44"/><rect class="gd-w" x="60.5" y="0" width="2.2" height="44"/><rect class="gd-w" x="71.7" y="0" width="2.2"'
         || ' height="44"/><rect class="gd-w" x="82.9" y="0" width="2.2" height="44"/><rect class="gd-w" x="94.1" y="0" width="2.2" height="44"/><rect class="gd-w" x="105.3" y="0" width="2.2" height="44"/><rect'
         || ' class="gd-w" x="116.5" y="0" width="2.2" height="44"/><rect class="gd-w" x="127.7" y="0" width="2.2" height="44"/><rect class="gd-wc" x="138.9" y="0" width="3" height="44"/></svg></div><div'
-        || ' class="gx2"><h3>Full-span activity</h3><p>Top of every view: active sessions over the whole span as stacked areas, hourly (or the shorter cadence), by wait class and by wait event (the 14'
+        || ' class="gx2"><h3>Full-span activity</h3><p>Under the verdict in Summary (compact: by wait class; Show by wait event adds the second chart), at the top of Timeline and All sections: active sessions over the whole span as stacked areas, hourly (or the shorter cadence), by wait class and by wait event (the 14'
         || ' largest, the rest as Other events); zoomed to 6 hours or less, the compared windows minute by minute. <span class="g2">Stripes = compared windows (Current indigo, pinned amber, skipped grey). Hover for each series&rsquo; AAS, drag across either chart to zoom both,'
         || ' double-click to reset; a legend item hides its series, a stripe pins its window. Hover a class or event to highlight it: from the legend it is drawn from zero, its own axis;'
-        || ' a class lights its events below. Click its band (or Shift+click the legend) to keep it, Esc clears.</span></p></div></div>');
+        || ' a class lights its events below. Click its band (or Shift+click the legend) to keep it, Esc clears. <b>Windows side by side</b>: the compared windows as adjacent panels on one y axis, a panel&rsquo;s top edge pins it. A band carries its name where it is thick enough over the name&rsquo;s width (cut short with ... when only a shorter piece fits).</span></p></div></div>');
     DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="152" height="44" viewBox="0 0 152 44" role="img" aria-label="One stacked column per compared window"><rect class="gd-cbg" x="130.4" y="0"'
         || ' width="15.8" height="44"/><rect x="2.0" y="30.6" width="8.4" height="11.4" fill="#3FB344"/><rect x="2.0" y="26.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="2.0" y="23.6" width="8.4"'
         || ' height="2.4" fill="#E89B40"/><rect x="12.8" y="29.6" width="8.4" height="12.4" fill="#3FB344"/><rect x="12.8" y="25.6" width="8.4" height="3.4" fill="#4A90D9"/><rect x="12.8" y="22.6" width="8.4"'
@@ -114,7 +114,8 @@ BEGIN
         || ' y="18" width="150" height="24"/><line class="gd-cl" x1="30" x2="30" y1="18" y2="42"/><line class="gd-cl" x1="60" x2="60" y1="18" y2="42"/><line class="gd-cl" x1="90" x2="90" y1="18" y2="42"/><line'
         || ' class="gd-cl" x1="120" x2="120" y1="18" y2="42"/><line class="gd-mk" x1="60" x2="60" y1="2" y2="42"/><rect class="gd-flg" x="60" y="2" width="44" height="12" rx="2"/><text class="gd-t" x="64"'
         || ' y="11">Release</text></svg></div><div class="gx2"><h3>Release marker</h3><p>A release or patch, on the boundary between the two windows it fell between. <span class="g2">Its line runs down every'
-        || ' chart.</span></p></div></div>');
+        || ' chart. On the Activity charts, markers at one spot get a flag each while there is room, then one &ldquo;+n&rdquo; flag whose tooltip lists the rest.'
+        || ' One that falls inside the Current window sits on its left edge, and no tag or sentence then says the change came after it.</span></p></div></div>');
     DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="Step line: value changes between two windows"><path class="gd-st" d="M0'
         || ' 32H86V14H150"/><line class="gd-str" x1="86" x2="86" y1="32" y2="14"/><circle class="gd-nd" cx="86" cy="14" r="3.5"/><text class="gd-t m" x="4" y="28">FALSE</text><text class="gd-t m b" x="92"'
         || ' y="10">TRUE</text></svg></div><div class="gx2"><h3>Step line</h3><p>Parameters and plan hashes step where the value changed. <span class="g2">Dot = the change; labels = old and new'
@@ -227,31 +228,44 @@ BEGIN
         || ' the begin and end snapshot are the same, the instance restarted inside it, it straddles a DBID change, or its nearest snapshot is more than 15 minutes off the window edge.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>DB time</dt><dd>DB CPU (<code>dba_hist_sys_time_model</code>, foreground) plus non-idle wait time (<code>dba_hist_system_event</code>, <b>all sessions incl. background</b>) per snapshot interval,'
         || ' stacked by wait class, from the earliest compared window to Current. Not a strict foreground DB-time profile. A snapshot pair across an instance restart is a gap.</dd>');
-    DBMS_OUTPUT.PUT_LINE('<dt>Verdict</dt><dd>One sentence from the first two finding cards (the loudest card, then DB time when it is flagged): the lead metric and its move, &times;n at twice the mean'
+    DBMS_OUTPUT.PUT_LINE('<dt>Verdict</dt><dd>One sentence from the first two finding cards (the card that added the most DB time, then DB time when it is flagged): the lead metric and its move, &times;n at twice the mean'
         || ' or more, else a percentage. For DB time, where the extra time went: CPU vs wait from DB CPU against DB time. <b>Likely source</b>: a statement that ran with a new plan in the'
-        || ' Current window, else a newcomer in the top SQL by physical reads, else a statement first seen this window, else the segment the extra reads land on. Fixed phrases, no free text.</dd>');
+        || ' Current window, else a newcomer in the top SQL by physical reads, else a statement first seen this window, else the segment the extra reads land on. Fixed phrases, no free text.'
+        || ' <b>Where the extra DB time went</b>: the DB-time rise split into DB CPU and the foreground wait time of each wait class (<code>time_waited_micro_fg</code>; Current minus prior mean, average active sessions), largest first; solid = behind a finding, hatched = grew but stayed inside its normal range.'
+        || ' Like DB time the parts count foreground sessions only, so they roughly add up to the rise: DB time that no wait class records (such as waiting for a CPU) is the unlabelled rest (the rise less the parts&rsquo; net sum, so a part that fell offsets one that rose), and DB time (time model) and the parts (wait interface) are kept apart by Oracle, so they never match to the digit.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Finding cards</dt><dd>One card per metric family of the scoring policy (<code>sql/lib/metric_policy.plsql</code>); families that tell one story share a card:'
         || ' Physical I/O (physical and logical reads, long table scans, User I/O waits), DB time (DB time, the CPU / wait ratio, response time), Network (Network waits, SQL*Net bytes), Commit'
-        || ' (Commit waits, commits), Parsing, Writes and redo. A card is led by its loudest large, else moderate, metric of the card&rsquo;s main family. Twins are folded under'
-        || ' <b>related metrics</b> and never counted.</dd>');
+        || ' (Commit waits, commits), Parsing, Writes and redo. A card is led by its loudest large, else moderate, metric of the card&rsquo;s main family.'
+        || ' Cards are ordered by the time they added: the rise of the card&rsquo;s time measure (DB time, DB CPU or the foreground wait time of its wait class) above its prior mean, in'
+        || ' average active sessions, largest first; cards whose time measure rose by less than 0.01 average active sessions, fell, or that have none follow, large before moderate'
+        || ' (the chip still shows a smaller rise). A wait class is scored on all sessions, background included;'
+        || ' only the time it added counts foreground sessions, like DB time. The printed z of a band in the Summary view'
+        || ' stops at &gt;+10&sigma;; tables show the exact value. Twins are folded under'
+        || ' <b>related metrics</b> and never counted. A card may add one rule-based line on what such a change usually means, only when its rule&rsquo;s test held'
+        || ' (<code>sql/lib/finding_hints.plsql</code>), and a copyable read-only query bounded like the report: the Current window&rsquo;s snapshots, its valid'
+        || ' instances, ASH cut to its start and end.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>DB time strip</dt><dd><code>DBA_HIST_SYSSTAT</code> DB time per compared window, divided by 100 (centiseconds per second = average active sessions); release markers sit'
         || ' on the boundary between the two windows they fall between.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Checked and normal</dt><dd>Every other scored metric: the normal ones, loudest first; <b>moved, too small to matter</b> = past |z| 2 but under the metric&rsquo;s'
         || ' materiality floor, or an informational counter; <b>improved</b> = a material move in the good direction. None of them is counted.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>What changed around it</dt><dd><b>Plan change</b>: a statement that ran in the Current window with a plan other than the prior windows&rsquo; most frequent one'
         || ' (SQL Monitor). Its bars are its elapsed seconds per window from <code>DBA_HIST_SQLSTAT</code>; the step line is the most frequent captured plan per window, carried over windows'
-        || ' with no capture; only the SQL Monitor max elapsed is scored. <b>Configuration</b>: every changed parameter as a step line.</dd>');
+        || ' with no capture; only the SQL Monitor max elapsed is scored. It moves under the Physical I/O card (<b>explains</b>) only when that card&rsquo;s top'
+        || ' statement by blocks read changed between the same two plans in <code>DBA_HIST_SQLSTAT</code> (its most executed prior plan, its Current plan reading'
+        || ' the most blocks). <b>Configuration</b>: every changed parameter as a step line.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Evidence library</dt><dd>Summary view: every other section as one row with a one-line status and its counts; open a row to read the section in place.'
         || ' All sections shows every section in full.</dd>');
-    DBMS_OUTPUT.PUT_LINE('<dt>ASH timeline</dt><dd><code>dba_hist_active_sess_history</code> over the full span, one scan: hourly (or the cadence) in All sections; at the top of'
-        || ' every view (Activity, whole span) on the same grid (coarser only past 10000 buckets), by wait class and by wait event (the 14 events with the most samples, ties by name,'
+    DBMS_OUTPUT.PUT_LINE('<dt>ASH timeline</dt><dd><code>dba_hist_active_sess_history</code> over the full span, one scan: hourly (or the cadence) in All sections; in the Activity charts (under'
+        || ' the verdict in Summary, at the top of the other views) on the same grid (coarser only past 10000 buckets), by wait class and by wait event (the 14 events with the most samples, ties by name,'
         || ' the rest summed as Other events), plus each compared window&rsquo;s own values (samples &divide; 360 &divide; window hours; overlapping windows each count a shared sample)'
         || ' and a 1-minute series inside the compared windows (samples &divide; 6, each minute once; at most 40000 minutes, the most recent windows first), drawn when zoomed'
         || ' to 6 hours or less.'
+        || ' <b>Windows side by side</b> draws each compared window as its own panel from the same data: the 1-minute series where it covers the whole window, else the coarse buckets.'
         || ' ON CPU is <b>CPU</b> in both; Idle excluded. Compared windows shaded. ASH is not scored. Each event carries its wait class from the same scan, so'
         || ' highlighting a class lights its events (and an event its class); a highlighted series is re-stacked from zero on its own y axis, the others faded above it.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Timeline</dt><dd>One column per compared window, one row per metric, from the same values and scoring as the tables: the headline and every flagged load / metric'
-        || ' row, flagged wait classes and the top foreground events, the top segments and datafile by reads, the top statements by elapsed (SQL Monitor rows for a plan change or a DOP'
+        || ' row, flagged wait classes and the top foreground events (both in AAS; an event row is each window&rsquo;s seconds waited divided by that window&rsquo;s snapshot span, as for the classes;'
+        || ' its severity, z and &Delta; are the table&rsquo;s), the top segments and datafile by reads, the top statements by elapsed (SQL Monitor rows for a plan change or a DOP'
         || ' downgrade), changed parameters. Statement, segment and file rows are ranked, not scored: a plain ratio against the mean of the prior windows they made the top list in.'
         || ' Needs JavaScript; every number is also in All sections.</dd>');
     IF ~profile_days > 0 THEN
@@ -269,12 +283,17 @@ BEGIN
         || ' (ms = time waited &divide; total waits); the chart stacks wait-class time per window. When five or more flagged events moved together within a narrow band, the table notes one <b>table-wide'
         || ' shift</b> and demotes large rows to moderate.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Top SQL</dt><dd>Top ~top_n statements per ranking and window from <code>DBA_HIST_SQLSTAT</code> <code>*_DELTA</code> columns; ranked, not scored. The bump chart draws one line per statement'
-        || ' across the windows; <b>Break down by</b> re-aggregates by parsing schema, module or action.</dd>');
+        || ' across the windows; <b>Break down by</b> re-aggregates by parsing schema, module or action.'
+        || ' <b>Biggest change</b>, the first tab, ranks statements by Current-window total elapsed minus the mean over the prior valid windows'
+        || ' (a valid window without an AWR row for the statement counts as 0; regressions only; the tab is left out when nothing got slower);'
+        || ' the &Delta; next to the Current value compares the two: <i>new</i> when no prior valid window has a row for the statement,'
+        || ' <i>from 0</i> when its rows there all show 0 s elapsed.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Top SQL ASH</dt><dd>For each statement in the Top SQL pool: ASH samples per bucket split by wait event (top 7 per statement, the rest as <b>Other</b>; <b>CPU</b> = ON CPU). Statements with fewer'
         || ' than 5 samples are placeholders.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>SQL Monitor</dt><dd>Executions persisted by SQL Monitor (<code>DBA_HIST_REPORTS</code>, <code>component_name=&#39;sqlmonitor&#39;</code>), summaries only. Only completed, expensive-enough or'
         || ' parallel executions are persisted, so a statement&rsquo;s absence does not mean it ran fast and row counts are not execution rates. An execution still running at the report end has no row yet. Rows'
-        || ' are attributed to a window by execution <i>start</i> time. The table is scored on max elapsed time (rule above); the scatter plots every captured execution.</dd>');
+        || ' are attributed to a window by execution <i>start</i> time. The table is scored on max elapsed time (rule above); the scatter plots every captured execution.'
+        || ' The table lists large, then moderate rows first, each group by Current max elapsed (JavaScript off: by Current max elapsed only).</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Segment and file I/O</dt><dd>Segments: <code>DBA_HIST_SEG_STAT</code> <code>*_DELTA</code> joined to <code>DBA_HIST_SEG_STAT_OBJ</code>; reads and writes in blocks, requests in I/O calls. Files:'
         || ' <code>DBA_HIST_FILESTATXS</code> / <code>DBA_HIST_TEMPSTATXS</code> deltas, blocks scaled to MB by block size; the file-type view is <code>DBA_HIST_IOSTAT_FILETYPE</code> (all database I/O, so its'
         || ' totals differ). Ranked, not scored; the type rollups cover <b>all</b> segments and files.</dd>');

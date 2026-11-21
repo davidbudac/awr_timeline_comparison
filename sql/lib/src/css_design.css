@@ -80,6 +80,10 @@ code{font-size:.92em}
 .seg button{border-radius:7px;font-weight:500;color:var(--muted);padding:3px 11px}
 .seg button[aria-pressed="true"]{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px oklch(0 0 0 / 8%),0 0 0 1px var(--hairline)}
 .topbar .theme-icon-btn{border-color:var(--hairline);box-shadow:0 1px 2px oklch(0 0 0 / 4%)}
+.topbar .sum-btn{border-color:var(--hairline);box-shadow:0 1px 2px oklch(0 0 0 / 4%);color:var(--muted)}
+.topbar .sum-btn:hover{color:var(--ink)}
+#sum-pop{border-color:var(--hairline);border-radius:10px;box-shadow:0 8px 24px oklch(0 0 0 / 12%)}
+#sum-pop textarea{border-color:var(--hairline);font-family:var(--mono)}
 nav.toc{background:var(--panel-2);border-right-color:var(--hairline);padding:16px 12px 14px}
 nav.toc .rail-brand{border-bottom:0;padding:2px 8px 10px;margin-bottom:4px}
 nav.toc .rail-brand span{font-size:13px;font-weight:600;letter-spacing:-.01em;text-transform:none}
@@ -183,6 +187,8 @@ body.js-wg .wg.allv .c:not(.cur) .v:not(.nil){opacity:0}
 .ashx.howable .axh{position:relative}
 .ashx.howable .axn2{display:none}
 .ashx.howable.howopen .axn2{display:block;position:absolute;z-index:25;right:0;max-width:440px;margin-top:8px;padding:12px 14px;font-size:12.5px;line-height:1.5;color:var(--ink-soft);background:var(--panel);border:1px solid var(--hairline);border-radius:10px;box-shadow:0 8px 24px oklch(0 0 0 / 12%)}
+/* plan 023: the compact Summary hides .axn2 (sql/_style.sql); the open popover shows it */
+body.vs #activity.ax-cmp #ashx.howable.howopen .axn2{display:block}
 .axhow{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12px;color:var(--muted);background:none;border:0;border-radius:6px;padding:2px 6px;cursor:pointer}
 .axhow:hover,.axhow[aria-expanded="true"]{color:var(--ink);background:var(--hov)}
 .axhow i{display:inline-grid;place-items:center;width:14px;height:14px;border-radius:50%;border:1px solid currentColor;font-style:normal;font-size:9.5px;font-weight:600;line-height:1}
@@ -195,6 +201,14 @@ body.js-wg .wg.allv .c:not(.cur) .v:not(.nil){opacity:0}
 .fc.f-large .fc-k .sv{color:var(--crit);background:color-mix(in oklch,var(--crit) 9%,transparent);border-color:color-mix(in oklch,var(--crit) 22%,transparent)}
 .fc.f-moderate .fc-k .sv{color:var(--warn);background:color-mix(in oklch,var(--warn-dot) 13%,transparent);border-color:color-mix(in oklch,var(--warn-dot) 30%,transparent)}
 .fc-k .sv > .dotk,.fc-k .sv > i{display:none}
+.fc .ptag,#triage .ptag{border-color:var(--hairline);border-radius:6px;background:none}
+.drow .dnm .dtags{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.drow .dtags .ptag{display:inline-block;font-size:11px;line-height:16px;padding:0 6px;border:1px solid var(--hairline);border-radius:6px;color:var(--ink-2);white-space:nowrap;cursor:help}
+.drow .dtags .ptag.p-rel{border-color:var(--acc);color:var(--acc-ink)}
+body.d-dash .drow .dnm .dmeta{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:3px}
+body.d-dash .drow .dnm .dmeta .dtags{display:contents}
+body.d-dash .drow .dimp{display:inline-block;font-size:11px;line-height:18px;padding:0 6px;border-radius:6px;background:var(--chip-bg);color:var(--ink);font-weight:500;white-space:nowrap;font-variant-numeric:tabular-nums;cursor:help}
+.fc-k .fc-imp{height:22px;padding:0 8px;border-radius:6px;border:1px solid var(--hairline);background:none;font-size:12px;font-weight:500;color:var(--ink)}
 .fc h3{font-size:17px;letter-spacing:-.012em}
 .fc.lead h3{font-size:20px}
 .fc .big .v{font-size:30px;letter-spacing:-.025em}
@@ -209,6 +223,7 @@ body.js-wg .wg.allv .c:not(.cur) .v:not(.nil){opacity:0}
 
 /* ==== 10. normal grid, notes, library rows, guide ==== */
 .calm-notes .note{border-color:var(--hairline)}
+#s-normal .calm-fold > summary{border-radius:var(--radius)}
 .nr{border-bottom-color:var(--line-soft)}
 body.vs main > section.lib > h2{font-size:14px;font-weight:500}
 body.vs main > section.lib.lopen > h2{border-bottom-color:var(--line-soft)}
@@ -244,7 +259,7 @@ body.d-dash.vs main > #activity{order:5}
 body.d-dash.vs main > #findings{order:6}
 body.d-dash.vs main > #s-changes{order:7}
 body.d-dash.vs main > #s-normal{order:8}
-body.d-dash.vs main > #overview,body.d-dash.vs #findings > .cards{display:none}
+body.d-dash.vs main > #overview,body.d-dash.vs #findings > .cards,body.d-dash.vs #findings > #triage{display:none}
 body.d-dash section.hero{padding-top:var(--s5)}
 body.d-dash .hero .verdict{font-size:22px;line-height:1.32;letter-spacing:-.015em;max-width:none}
 body.d-dash .hero .verdict.quiet{font-size:21px}
@@ -283,6 +298,9 @@ a.dkpi:hover{border-color:var(--rule)}
 /* the Activity card: one chart at a time */
 .ashx .axseg{flex:none}
 .ashx .axseg button{font-size:12px;padding:2px 10px}
+/* plan 024: the layout switch matches the dashboard's chart tabs */
+.ashx .seg.axlayout{flex:none;padding:3px}
+body.d-dash .ashx .seg.axlayout button{line-height:20px}
 .ashx.ax-cls-only #ax-ev,.ashx.ax-ev-only #ax-cls{display:none}
 
 /* the findings grid: the table card + What changed around it */
@@ -295,9 +313,11 @@ a.dkpi:hover{border-color:var(--rule)}
 .tabs.dtabs .n{color:var(--muted);font-weight:400;margin-left:2px}
 .dpanel #s-normal{margin:0;padding:0}
 .dpanel #s-normal > h2{display:none}
+.dpanel #s-normal .calm-fold > summary{display:none}
 .dpanel #s-normal .calm{padding:var(--s2) 0;border:0}
 .dpanel #s-normal .ngrid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .dpanel .note.improved{border:0;padding:var(--s2) 0}
+@media print{body.d-dash .tabs.dtabs{display:none}body.d-dash .dmain > .tabpanel.dpanel{display:block}body.d-dash .dpanel #s-normal > h2{display:block}}
 .dempty{color:var(--muted);font-size:13.5px;margin:var(--s3) 0}
 .dpanel > .panel.calm{border:0;padding:var(--s2) 0;background:none}
 .dft{--dcols:18px 92px minmax(150px,1fr) 104px 116px 138px 76px 92px;font-size:13px}
@@ -353,6 +373,7 @@ a.dkpi:hover{border-color:var(--rule)}
 .dside .fc-h{grid-template-columns:minmax(0,1fr)}
 .dside .fc-band{width:100%}
 .dside .fc h3{font-size:15px}
+.dside .fc-k .xpl .xu{display:none}
 .dside .fc-b{grid-template-columns:minmax(0,1fr);gap:var(--s3)}
 .dside .fc .big .v{font-size:24px}
 .dside .fc .evr{grid-template-columns:72px minmax(0,1fr) 108px}

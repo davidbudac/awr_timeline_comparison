@@ -148,6 +148,45 @@ def fmt_int(p: float | None) -> str:
     return to_char_fixed(ora_round(p, 0), 0, group=True)
 
 
+def fmt_dur(p, short="N") -> str:
+    """sql/lib/fmt_num.plsql fmt_dur: seconds as words of time."""
+    if p is None:
+        return "&mdash;"
+    if p == 0:
+        return "0 s"
+    sign = "-" if p < 0 else ""
+    a = abs(p)
+    ms = a * 1000
+    d1 = lambda x: to_char_fixed(ora_round(x, 1), 1)
+    i0 = lambda x: str(int(ora_round(x, 0)))
+    if ora_round(ms, 0) < 1000:
+        if ms >= 9.95:
+            return sign + i0(ms) + " ms"
+        if ora_round(ms, 1) == 0:
+            return sign + "<0.1 ms"
+        return sign + d1(ms) + " ms"
+    if ora_round(a, 1) < 60:
+        return sign + d1(a) + " s"
+    if short == "Y":
+        if ora_round(a / 60, 0) < 60:
+            return sign + i0(a / 60) + " m"
+        h_ = a / 3600
+        if ora_round(h_, 1) < 10:
+            return sign + d1(h_) + " h"
+        if ora_round(h_, 0) < 48:
+            return sign + i0(h_) + " h"
+        d_ = a / 86400
+        return sign + (d1(d_) if ora_round(d_, 1) < 10 else i0(d_)) + " d"
+    r = int(ora_round(a, 0))
+    if r < 3600:
+        return sign + str(r // 60) + " m" + ((" " + str(r % 60) + " s") if r % 60 else "")
+    r = int(ora_round(a / 60, 0))
+    if r < 2880:
+        return sign + str(r // 60) + " h" + ((" " + str(r % 60) + " m") if r % 60 else "")
+    r = int(ora_round(a / 3600, 0))
+    return sign + str(r // 24) + " d" + ((" " + str(r % 24) + " h") if r % 24 else "")
+
+
 # ---------------------------------------------------------------------
 # sql/lib/score_cells.plsql  (+ the raw z / bucket math sections reuse)
 # ---------------------------------------------------------------------
@@ -274,13 +313,13 @@ def band_z(cur, mu, sd):
     return None if den == 0 else (cur - mu) / den
 
 
-def band_ztxt(z) -> str:
+def band_ztxt(z, cap=99) -> str:
     if z is None:
         return "&mdash;"
-    if z > 99:
-        return "&gt;+99&sigma;"
-    if z < -99:
-        return "&lt;&minus;99&sigma;"
+    if z > cap:
+        return "&gt;+" + str(cap) + "&sigma;"
+    if z < -cap:
+        return "&lt;&minus;" + str(cap) + "&sigma;"
     if ora_round(z, 1) < 0:
         return "&minus;" + to_char_fixed(abs(z), 1) + "&sigma;"
     return "+" + to_char_fixed(abs(z), 1) + "&sigma;"
@@ -295,7 +334,7 @@ _BAND_LAB = {"large": "large finding", "moderate": "moderate finding", "improved
              "noted": "noted", "typical": "normal"}
 
 
-def band_span(z, bucket, size=None, twin="N") -> str:
+def band_span(z, bucket, size=None, twin="N", zcap=99) -> str:
     sz = (" " + size) if size else ""
     if bucket == "flat baseline":
         return ('<span class="bd s-flat' + sz + '" role="img"'
@@ -309,13 +348,13 @@ def band_span(z, bucket, size=None, twin="N") -> str:
     x = (z + 4) / 12
     pin, ov = "", ""
     if x > 1:
-        x, pin, ov = 1, " po", '<b class="ov">' + band_ztxt(z) + '</b>'
+        x, pin, ov = 1, " po", '<b class="ov">' + band_ztxt(z, zcap) + '</b>'
     elif x < 0:
-        x, pin, ov = 0, " pu", '<b class="ov">' + band_ztxt(z) + '</b>'
+        x, pin, ov = 0, " pu", '<b class="ov">' + band_ztxt(z, zcap) + '</b>'
     lab = _BAND_LAB.get(bucket, "not scored")
     return ('<span class="bd ' + band_sev(bucket) + sz + pin + (" twn" if twin == "Y" else "")
             + '" style="--x:' + to_char_fixed(x, 3) + '" role="img" aria-label="' + lab
-            + ', z ' + band_ztxt(z) + '"><i></i>' + ov + '</span>')
+            + ', z ' + band_ztxt(z, zcap) + '"><i></i>' + ov + '</span>')
 
 
 def delta_span(cur, mu, bucket, plain="N") -> str:
@@ -452,6 +491,68 @@ def _load_policy():
 
 
 _POLICY = _load_policy()
+
+
+# ---------------------------------------------------------------------
+# sql/lib/finding_hints.plsql (plan 033) -- the two tables are parsed from
+# the SQL include itself, like the metric policy above.
+# ---------------------------------------------------------------------
+
+_HINTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                           "sql", "lib", "finding_hints.plsql")
+_HINT_RE = re.compile(r"WHEN\s+'([A-Z0-9_]+)'\s+THEN\s+'((?:[^']|'')*)'")
+
+
+def _load_hints():
+    text, sql, cur = {}, {}, None
+    with open(_HINTS_PATH, encoding="utf-8") as fh:
+        for line in fh:
+            if "FUNCTION hint_text" in line:
+                cur = text
+            elif "FUNCTION hint_sql" in line:
+                cur = sql
+            elif "FUNCTION " in line:
+                cur = None
+            if cur is None:
+                continue
+            m = _HINT_RE.search(line)
+            if m:
+                cur[m.group(1)] = m.group(2).replace("''", "'")
+    return text, sql
+
+
+HINT_TEXT, HINT_SQL = _load_hints()
+
+
+def hint_fill(tpl, dbid, begin, end, inst, sqlid=None, ph1=None, ph2=None,
+              insts=None, t0=None, t1=None, dbids=None):
+    """hint_fill() of sql/lib/finding_hints.plsql (t0 / t1: the Current
+    window's nominal start / end as 'YYYY-MM-DD HH:MM:SS'; insts: its valid
+    instances when one was skipped, never in the single-instance model)."""
+    if tpl is None:
+        return None
+    s = lambda v: "" if v is None else str(v)
+    v = tpl.replace("#INST#", " AND instance_number IN (" + insts + ")" if insts
+                    else " AND instance_number = " + str(inst) if inst and inst > 0 else "")
+    v = v.replace("#T0#", "TIMESTAMP '" + s(t0) + "'").replace("#T1#", "TIMESTAMP '" + s(t1) + "'")
+    v = v.replace("#DBIDS#", s(dbids))
+    v = v.replace("#SQLID#", s(sqlid)).replace("#PH1#", s(ph1)).replace("#PH2#", s(ph2))
+    v = v.replace("#DBID#", s(dbid)).replace("#B0#", s(begin))
+    v = v.replace("#B#", s(None if begin is None else begin + 1)).replace("#E#", s(end))
+    return v.replace("#NL#", "\n")
+
+
+def hint_block(rule, key, sql) -> str:
+    """hint_block() of sql/lib/finding_hints.plsql."""
+    if rule is None or rule not in HINT_TEXT:
+        return ""
+    return ('<div class="fc-hint" data-hint="' + rule + '"><p><b>What this usually means.</b> '
+            + HINT_TEXT[rule] + '</p>'
+            + (('<p class="fc-next">Next step (read-only):</p>'
+                '<div class="codewrap" style="position:relative">'
+                '<button type="button" class="copy-btn" data-copy="#hq-' + key + '">Copy</button>'
+                '<pre id="hq-' + key + '" class="sql">' + esc(sql) + '</pre></div>') if sql else '')
+            + '</div>')
 
 
 def metric_policy(domain, name, cls=None):
@@ -709,7 +810,7 @@ def card_primary(group: str) -> str:
 
 def card_label(group: str) -> str:
     fixed = {"IO": "Physical I/O", "DBTIME": "DB time", "NET": "Network", "COMMIT": "Commit",
-             "PARSE": "Parsing", "WRITE": "Writes and redo"}
+             "PARSE": "Parsing", "WRITE": "Writes and redo", "CPU": "CPU"}
     if group in fixed:
         return fixed[group]
     if group.startswith("WAIT:"):
@@ -809,6 +910,8 @@ def fv_unit(v, unit) -> str:
 def fv(v, unit) -> str:
     if v is None:
         return "&mdash;"
+    if unit == "dur":
+        return fmt_dur(v)
     u = fv_unit(v, unit)
     return fv_num(v, unit) + ("" if not u else u if u.startswith("/") else " " + u)
 
@@ -819,6 +922,8 @@ def fv_range(mu, sd, unit) -> str:
     den = max(sd, 0.02 * abs(mu))
     hi = mu + 2 * den
     lo = max(0, mu - 2 * den)
+    if unit == "dur":
+        return fmt_dur(lo) + "&ndash;" + fmt_dur(hi)
     if unit == "B/s":
         a = abs(hi)
         div = 1e9 if a >= 1e9 else 1e6 if a >= 1e6 else 1e3 if a >= 1e3 else 1
@@ -882,14 +987,70 @@ def card_before(sev_a, z_a, sev_b, z_b) -> bool:
     return (z_a or 0) > (z_b or 0)
 
 
+def impact_group(domain, name, family):
+    if domain == "LOAD" and name == "DB time":
+        return "DBTIME"
+    if domain == "LOAD" and name == "DB CPU":
+        return "CPU"
+    if domain == "WAIT" and name.startswith("Wait class: "):
+        return card_group(family)
+    return None
+
+
+def time_added(domain, name, cur, mu, fg_d):
+    """finding_cards.plsql time_added: the AAS a time-measure row added above
+    its prior mean -- DB time / DB CPU (cur - mu) x metric_scale; a wait-class
+    row its FOREGROUND delta fg_d (owner decision 2026-11-20)."""
+    if domain == "WAIT":
+        return fg_d
+    if cur is None or mu is None:
+        return None
+    return (cur - mu) * metric_scale(domain, name)
+
+
+def imp_on(imp) -> bool:
+    """finding_cards.plsql imp_on: the 0.01 AAS floor on the impact rounded
+    like its token (3 decimals); None is below it."""
+    return imp is not None and ora_round(imp, 3) >= 0.01
+
+
+def card_tier(group, imp) -> int:
+    """finding_cards.plsql card_tier: tier 1 needs a rise of at least 0.01
+    AAS (owner decision 2026-11-20); smaller, none or a fall -> tier 3."""
+    if group == "DBTIME":
+        return 2
+    return 1 if imp_on(imp) else 3
+
+
+def card_before_imp(g_a, sev_a, z_a, imp_a, g_b, sev_b, z_b, imp_b) -> bool:
+    ta, tb = card_tier(g_a, imp_a), card_tier(g_b, imp_b)
+    if ta != tb:
+        return ta < tb
+    if ta == 1 and ora_round(imp_a, 6) != ora_round(imp_b, 6):
+        return imp_a > imp_b
+    return card_before(sev_a, z_a, sev_b, z_b)
+
+
+def imp_tok(v) -> str:
+    return "" if v is None else to_char_fixed(ora_round(v, 3), 3)
+
+
+def imp_txt(v) -> str:
+    return "+" + fmt_num(v) + "&nbsp;AAS"
+
+
 def card_order(groups: dict) -> list:
-    """groups: {group: (sev, maxz)} in PL/SQL associative-array key order
-    (sorted keys) -> the card order (insertion sort on card_before, then a
-    flagged DBTIME card moves up to second place)."""
+    """groups: {group: (sev, maxz, imp)} in PL/SQL associative-array key
+    order (sorted keys) -> the card order (insertion sort on
+    card_before_imp: cards whose time measure rose by at least 0.01 AAS, by
+    the AAS added, then DBTIME, then the rest by card_before; then a flagged
+    DBTIME card moves up to second place)."""
     order = []
     for g in sorted(groups):
         j = len(order)
-        while j >= 1 and card_before(groups[g][0], groups[g][1], groups[order[j - 1]][0], groups[order[j - 1]][1]):
+        while j >= 1 and card_before_imp(g, groups[g][0], groups[g][1], groups[g][2],
+                                         order[j - 1], groups[order[j - 1]][0],
+                                         groups[order[j - 1]][1], groups[order[j - 1]][2]):
             j -= 1
         order.insert(j, g)
     if "DBTIME" in order[2:]:
@@ -1028,7 +1189,7 @@ def wg_ruler_put(w, pre, corner: str, gh: str, btn: str = "N", post=None) -> str
     return wg_lines(parts)
 
 
-def wg_bars(w, vals, scale, mu, sd, sev, lab="", gut="", rid=None, cls=None) -> str:
+def wg_bars(w, vals, scale, mu, sd, sev, lab="", gut="", rid=None, cls=None, fmt=None) -> str:
     v = _wg_vals(vals)
     out = ('<div class="r bars' + ((" " + cls) if cls else "") + '"'
            + ((' id="' + rid + '"') if rid else "")
@@ -1040,7 +1201,8 @@ def wg_bars(w, vals, scale, mu, sd, sev, lab="", gut="", rid=None, cls=None) -> 
         x = _mul(v.get(k), scale)
         out += ('<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k) + '">'
                 + ('<span class="v nil" aria-label="no value">&ndash;</span>' if x is None
-                   else '<span class="v">' + fmt_num(x) + '</span>') + '</div>')
+                   else '<span class="v">' + (fmt_dur(x, "Y") if fmt == "dur" else fmt_num(x))
+                   + '</span>') + '</div>')
     return out + (gut or "") + '</div>'
 
 

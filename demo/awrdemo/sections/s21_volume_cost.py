@@ -6,9 +6,10 @@ payload and the two tables.
 
 Data: per VALID window `w.window_metrics(win).sql` (DBA_HIST_SQLSTAT
 *_DELTA sums, rounded to whole numbers the way AWR stores them, as s06 does)
-and `.fg_waits` (DBA_HIST_SYSTEM_EVENT; the model's waits are foreground
-only, so the all-session ranking that picks 04's event set and the
-foreground measures read the same numbers).  Nothing is derived locally.
+and `.sys_waits` / `.sys_waits_fg` (DBA_HIST_SYSTEM_EVENT: the
+all-session ranking that picks 04's event set, then the foreground
+measures; a background-only event has 0 there, so it reads "nothing now").
+Nothing is derived locally.
 """
 from __future__ import annotations
 
@@ -154,9 +155,10 @@ def _sql_items(w, cap, top_n):
 
 
 def _ev_items(w, top_n):
-    deltas = C.window_deltas(w, lambda m: m.fg_waits)
+    alls = C.window_deltas(w, lambda m: m.sys_waits)        # time_waited_micro: 04's ranking
+    deltas = C.window_deltas(w, lambda m: m.sys_waits_fg)   # total_waits_fg, time_waited_micro_fg
     ev04 = set()
-    for d in deltas:
+    for d in alls:
         if not d:
             continue
         pos = {ev: t[2] for ev, t in d.items() if t[2] > 0}

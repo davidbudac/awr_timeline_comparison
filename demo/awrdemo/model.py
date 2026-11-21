@@ -212,6 +212,27 @@ BG_EVENTS = [
     WaitEvent("ASM background timer", "Idle", 0.0, 5000000, True),
 ]
 
+# Background-only waits in DBA_HIST_SYSTEM_EVENT (demo coverage of the
+# v1.7 impact rule, review follow-up R4).  The model's SYSTEM_EVENT is
+# fg_waits: its other background events live in bg_waits
+# (DBA_HIST_BG_EVENT_SUMMARY) only, a simplification older than v1.7.
+# The events of SYSEVENT_BG are in both: in SYSTEM_EVENT their time is all
+# background (time_waited_micro_fg = 0), so they count in the all-session
+# wait-class rows that score the findings but add nothing to DB time or
+# to a card's impact (foreground only, owner decision 2026-11-20).  The
+# GoldenGate integrated capture (a background process) waits briefly under
+# flow control every hour; its extract stalls at 08:35 on the Current day
+# (unmarked) and the capture then waits for it to catch up, an event no
+# prior window has (so it stays out of 05's table-wide shift).  Queueing
+# has no foreground event in the model: its foreground time is 0 in every
+# window.  Kept apart from BG_EVENTS and drawn from their own rng, so no
+# other number of the model moves (but the time model's background elapsed
+# time, which no section reads).
+GG_FLOW = WaitEvent("Streams: flow control", "Queueing", 0.0, 2000, True)
+GG_CAPTURE = WaitEvent("Streams capture: waiting for subscribers to catch up", "Queueing", 0.0, 250000, True)
+GG_STALL_AT = datetime(2026, 9, 10, 8, 35)
+SYSEVENT_BG = (GG_FLOW.name, GG_CAPTURE.name)
+
 WAIT_CLASSES = ["CPU", "Scheduler", "User I/O", "System I/O", "Concurrency",
                 "Application", "Commit", "Configuration", "Administrative",
                 "Network", "Queueing", "Cluster", "Other"]
@@ -650,7 +671,11 @@ class HourMetrics:
       time_model    {'DB time','DB CPU','background elapsed time',
                      'background cpu time'}  microseconds
       fg_waits      {event: (wait_class, total_waits, time_waited_us)}
+                    foreground events (the model's DBA_HIST_SYSTEM_EVENT)
       bg_waits      same, DBA_HIST_BG_EVENT_SUMMARY
+      sys_waits     (property) DBA_HIST_SYSTEM_EVENT all sessions: fg_waits
+                    + the background-only events (SYSEVENT_BG)
+      sys_waits_fg  (property) its foreground columns (0 for SYSEVENT_BG)
       ash_class     {wait_class: samples}  ('CPU' included; Idle excluded)
       ash_events    {(wait_class, event): samples}  ('CPU','CPU') included
       sql           {sql_id: SqlHour}   (DBA_HIST_SQLSTAT *_DELTA)
@@ -677,6 +702,26 @@ class HourMetrics:
     seg: dict
     files: dict
     iostat: dict
+
+    @property
+    def sys_waits(self) -> dict:
+        """DBA_HIST_SYSTEM_EVENT, all sessions (time_waited_micro): the
+        foreground events plus the background-only ones (SYSEVENT_BG)."""
+        d = dict(self.fg_waits)
+        for ev in SYSEVENT_BG:
+            if ev in self.bg_waits:
+                d[ev] = self.bg_waits[ev]
+        return d
+
+    @property
+    def sys_waits_fg(self) -> dict:
+        """The same rows, foreground columns (total_waits_fg,
+        time_waited_micro_fg): 0 for a background-only event."""
+        d = dict(self.fg_waits)
+        for ev in SYSEVENT_BG:
+            if ev in self.bg_waits:
+                d[ev] = (self.bg_waits[ev][0], 0.0, 0.0)
+        return d
 
 
 def _noise(r: random.Random, sd: float = 0.04) -> float:
@@ -876,6 +921,17 @@ def hour(ts: datetime) -> HourMetrics:
             m *= 1 + 0.6 * bf
         us = bg_wait * ev.share * m / tot
         bg[ev.name] = (ev.wait_class, us / (ev.avg_us * _noise(r, 0.035)), us)
+    # background-only (SYSEVENT_BG): flow control every hour; from the
+    # extract's stall on, the capture waits for it (about 0.95 AAS)
+    rq = rng("bgonly", ts)
+    us = 0.010 * inten * _noise(rq, 0.2) * dur * 1e6
+    bg[GG_FLOW.name] = (GG_FLOW.wait_class, us / (GG_FLOW.avg_us * _noise(rq, 0.05)), us)
+    bg_ela += us
+    stall = max(0.0, min(1.0, (ts - GG_STALL_AT).total_seconds() / 3600))
+    if stall > 0:
+        us = 0.95 * stall * dur * 1e6 * _noise(rq, 0.02)
+        bg[GG_CAPTURE.name] = (GG_CAPTURE.wait_class, us / (GG_CAPTURE.avg_us * _noise(rq, 0.05)), us)
+        bg_ela += us
     tm = {"DB time": db_time_us, "DB CPU": db_cpu_us,
           "background elapsed time": bg_ela, "background cpu time": bg_cpu}
 

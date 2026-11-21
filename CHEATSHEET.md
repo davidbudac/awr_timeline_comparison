@@ -285,7 +285,7 @@ SQL
 
 ## Timeline markers (`marker_file`)
 
-Annotate the dated charts (the Activity charts at the top of every view,
+Annotate the dated charts (the Activity charts in every view,
 the Timeline's window ruler, the finding cards' window bars, the ASH timeline, DB-time summary,
 per-SQL ASH cards) with your own milestones — a patch, an index rebuild, a
 stats gather, an incident — so a spike lines up with a known change.

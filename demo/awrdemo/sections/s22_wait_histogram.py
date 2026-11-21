@@ -157,7 +157,7 @@ def emit(w) -> str:
     out = ['<!-- AWR-SECTION: ' + TAG + ' BEGIN -->']
     cap = min(8, w.top_n)
 
-    deltas = C.window_deltas(w, lambda m: m.fg_waits)
+    deltas = C.window_deltas(w, lambda m: m.sys_waits)   # SYSTEM_EVENT, all sessions
     offs = [k for k, d in enumerate(deltas) if d is not None]
     cur_ok = 0 in offs
     n_prior = len([k for k in offs if k > 0])

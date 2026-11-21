@@ -26,8 +26,11 @@
  *   - every a.ent (entity link, v1.6.0) has a target, and clicking each
  *     one visible in Summary switches view as needed and brings its
  *     target (row, card, section) into the viewport;
- *   - the Activity charts (section#activity, v1.6.0): at the top of every
- *     view, above the verdict, both drawn (by wait class, by wait event);
+ *   - the Activity charts (section#activity, v1.6.0): the first section in
+ *     Timeline / All sections, right under the verdict in Summary (compact
+ *     there: one chart; "Show by wait event" brings back the second,
+ *     remembered in awr-ax; the dashboard design keeps its own tabs
+ *     instead), both drawn elsewhere (by wait class, by wait event);
  *     on each chart: hover crosshair + tooltip (mirrored on the other),
  *     legend toggle + restore (restack / rescale), brush zoom (zooms both),
  *     the 1-minute detail (payload vs ashx.win, zoom into Current -> 1-min)
@@ -45,7 +48,26 @@
  *     note) and its events in the event chart; an event lights its class
  *     in place; nothing left on after the pointer leaves; keyboard focus;
  *     Shift+click sticky, the tooltip leads with it, Esc clears it before
- *     unpinning; a click on a band keeps it, the same click clears it;
+ *     unpinning; a click on a band keeps it, the same click clears it
+ *     (at a band point under no stripe's hit area: zoomed into the busiest
+ *     window first when the stripes tile the span, e.g. 169 hourly
+ *     windows; the demo needs no zoom);
+ *   - the Activity charts' Windows side by side mode (plan 024): one panel
+ *     per window, hover / crosshair, no zoom, cap click pins, legend,
+ *     markers, the switch remembered in awr-axlayout; Enter on a focused
+ *     stripe / cap keeps the focus through the redraw (both layouts); the
+ *     flag band only while a flag is drawn side by side; three markers in
+ *     one gap all named (a "+n" flag lists the rest, block 5d), every flag
+ *     inside its SVG;
+ *   - the Activity charts at 390 px (R3, block 5e): the SVG keeps a 480-px
+ *     viewBox there, scaled down and centred vertically, so a hover over a
+ *     band lights exactly that band (soft highlight, both charts, both
+ *     layouts) and the brush covers the plot's height;
+ *   - direct labels on the Activity bands (plan 036, fitted per band): name
+ *     a series, inside the plot and inside the band they name, no overlap,
+ *     at most 6, gone when the series is hidden; inside one panel side by
+ *     side; never over the highlight note; the demo labels both charts in
+ *     both layouts;
  *   - the Day profile metric picker (v1.6.1, profile_days > 0; required
  *     for the demo): one role=tab button per stat with its indicator, a
  *     click / arrows / Home / End switch the line chart;
@@ -55,19 +77,64 @@
  *     every "Timeline ->" (data-tl) target exists and a click lands on it,
  *     every grid label (a.ent) resolves; ruler pin (it survives a view
  *     switch), grid tooltip;
+ *   - the Timeline rows (plan 031): broken Current bars only in #tl, the
+ *     priors under one at least 30 % of its height, Flagged only / All / a
+ *     jump to a hidden row, Biggest change first (wait classes first,
+ *     sorted) and Report order restoring the ids' order;
  *   - phase 4 (v1.6.0): every plan-change card sits in "What changed
  *     around it" with its bars, plan step line and links; every evidence
  *     library row (section.lib) shows in Summary with its one-line status,
  *     opens / shuts on a click and opens for a jump into it; one rail
  *     sub-link per finding card; All sections shows every library section
- *     in full; the Trend cells are micro strips (svg.mw), no line left;
+ *     in full (its first chart / table holding a number; section 28 with
+ *     no release marker shows its reason note and its all-priors table
+ *     instead of the empty split view; the demo opens on a split); the
+ *     Trend cells are micro strips (svg.mw), no line left;
+ *     v1.7: cards ordered by data-impact (rises of 0.01 AAS or more
+ *     first, largest first), chip present, Summary z capped
+ *     at 10; R4: a flagged card whose time measure rose under 0.01 AAS
+ *     (a background-only wait class, scored on all sessions) has no chip
+ *     or share, follows every tier-1 card, reads "under 0.01 AAS" in the
+ *     triage list and is no breakdown part without a rise (required on
+ *     the demo: Queueing waits, impact 0); the DB-time breakdown under the
+ *     verdict (#att-slot) shown
+ *     (required for the demo), #att-src gone, every part coloured from
+ *     AWR_WAIT_COLORS; v1.7 one count: the rail's Findings pills add up
+ *     to the finding cards, no other rail link has a count pill, no
+ *     "metrics moved" verdict pill, the Summary Findings header counts
+ *     the cards, J in Summary flashes a large card (when there is one),
+ *     the card sub-links' text / data-label carry no share (CSS ::after
+ *     only); plan 025: the triage list (one row per card), all but one
+ *     card folded, a row click opens its card, card charts show prior
+ *     values on hover only and one release label; plan 026: the Physical
+ *     I/O card's SQL row; a plan-change card that explains a card sits
+ *     right under it, folded exactly when that card is (dashboard: in
+ *     What changed around it, beside the findings, open); plan 032: Checked and normal starts folded (one line) and
+ *     a jump to it opens it; in the dashboard its Normal tab shows it open;
+ *     G4: beforeprint opens every folded card, that fold and (dashboard)
+ *     every lead row, afterprint restores the screen state;
+ *     plan 033: card hints (rule id, line, copyable read-only query with
+ *     no unfilled placeholder; R2: a rule with a query in
+ *     sql/lib/finding_hints.plsql shows it, every query is read-only
+ *     "SELECT ... ;" statements; the plan card keeps its footer links; the
+ *     dashboard side column does not overflow); R2: a plan card that
+ *     explains a card shows the transition that card cites, and no card
+ *     links a plan card citing another one;
+ *   - pattern tags (plan 027): every chip has text and a title, is
+ *     focusable and named by its text, keyboard focus shows its sentence
+ *     (#ptip) and Esc hides it without swallowing the unpin (G4); none on a
+ *     plan / config card, a triage row and a dashboard findings row show
+ *     their card's chips, the demo Physical I/O card reads "jump after
+ *     Release 4.2" + "step up at Release 4.1";
  *   - the design (window.AWR_DESIGN, design=quiet|dashboard; none =
  *     classic): quiet and dashboard -- "How to read" opens / closes the
  *     Activity help, a table's copy menu holds CSV + Markdown; dashboard --
  *     no rail (its checks are skipped), the Summary puts the verdict and
  *     the KPI cards above Activity, one KPI per finding card + DB time
  *     with bars, every finding card inside a row of the findings table
- *     (count = the Moved tab), a row opens to its bars / its card, the
+ *     (count = the Moved tab), each lead row shows its card's impact
+ *     chip (.dimp; required on the demo, and a lead row without it: the
+ *     background-only card), a row opens to its bars / its card, the
  *     Normal tab shows #s-normal and a jump into it switches the tab, the
  *     Activity tabs show one chart (x labels + release flags on it) or
  *     both, Ctrl+K opens the palette (not the row filter), a search +
@@ -101,6 +168,47 @@ async function launch() {
 
 const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
 
+// plan 033 / review follow-up R2: the hint rules that have a "Next step"
+// query, read from the hint_sql table of sql/lib/finding_hints.plsql (one
+// WHEN line per rule, like demo/awrdemo/helpers.py); null when the file is
+// not there (the check then only looks at the queries it finds)
+const HINT_SQL_RULES = (() => {
+  try {
+    const t = fs.readFileSync(path.join(__dirname, '..', 'sql', 'lib', 'finding_hints.plsql'), 'utf8');
+    const a = t.indexOf('FUNCTION hint_sql'), b = t.indexOf('FUNCTION', a + 10);
+    if (a < 0) return null;
+    return [...t.slice(a, b < 0 ? undefined : b).matchAll(/WHEN\s+'([A-Z0-9_]+)'\s+THEN\s+'/g)].map(m => m[1]);
+  } catch (e) { return null; }
+})();
+
+// plan 036 (fitted per band): defines window.__awrLabelBand(id, key) in the
+// page = the number of band labels of chart #id (payload AWR_DATA[key])
+// not inside the band they name: at three points along the label (both
+// ends and the middle) the topmost band under it must be its series (the
+// bands paint top of the stack first, each from the axis up, so the
+// topmost one at a point is the band holding it); a cut name ("...") whose
+// stem starts two series is ambiguous and counts too (G3 review)
+const LABEL_BAND = () => {
+  window.__awrLabelBand = (id, key) => {
+    const s = document.querySelector('#' + id + ' .axsvg'); if (!s || !s.getClientRects().length) return 0;
+    const names = ((window.AWR_DATA || {})[key] || {}).classes || [];
+    let bad = 0;
+    s.scrollIntoView({ block: 'center' });
+    for (const t of s.querySelectorAll('text.xdl')) {
+      const n = t.textContent, ex = names.indexOf(n), pm = names.map((x, q) => n.endsWith('...') && x.startsWith(n.slice(0, -3)) ? q : -1).filter(q => q >= 0);
+      const k = ex >= 0 ? ex : pm.length === 1 ? pm[0] : -1;
+      const sw = document.querySelector('#' + id + ' .axlg .axc[data-c="' + k + '"] .sw');
+      const col = sw ? sw.style.getPropertyValue('--sw').trim() : '';
+      const b = t.getBoundingClientRect(), y = b.top + b.height * 0.55;
+      if (!col || [b.left + 4, (b.left + b.right) / 2, b.right - 4].some(x => {
+        const p = document.elementsFromPoint(x, y).find(e => e.matches && e.matches('path.xa'));
+        return !p || p.getAttribute('fill') !== col;
+      })) bad++;
+    }
+    return bad;
+  };
+};
+
 (async () => {
   const file = path.resolve(process.argv[2] || 'docs/examples/demo_busy_db.html');
   const shots = process.argv[3] ? path.resolve(process.argv[3]) : null;
@@ -123,7 +231,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
   // ---- 1. load in the default view: inventory + link integrity --------
   {
     const { page, errors } = await openPage('', 'light');
-    await page.evaluate(() => { try { localStorage.removeItem('awr-view'); localStorage.removeItem('awr-theme'); } catch (e) {} });
+    await page.evaluate(() => { try { localStorage.removeItem('awr-view'); localStorage.removeItem('awr-theme'); localStorage.removeItem('awr-ax'); localStorage.removeItem('awr-axlayout'); } catch (e) {} });
     await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(1200);
     const info = await page.evaluate(() => {
       const sections = [...document.querySelectorAll('main > section, body > section')].map(s => s.id);
@@ -198,17 +306,24 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
           act: (() => {
             const a = document.getElementById('activity');
             if (!vis(a)) return 'hidden';
-            // the dashboard's Summary puts the verdict (and the KPI cards) above it
-            const dashS = document.body.classList.contains('d-dash') && document.body.classList.contains('vs');
-            const secs = [...document.querySelectorAll('main > section')].filter(x => x !== a && vis(x) && !(dashS && x.id === 'verdict'));
+            // Summary puts the verdict above it (plan 023; the dashboard by its CSS order, with its KPI cards)
+            const summary = cls === 'vs';
+            const secs = [...document.querySelectorAll('main > section')].filter(x => x !== a && vis(x) && !(summary && x.id === 'verdict'));
             const top = a.getBoundingClientRect().top;
             const above = secs.filter(x => x.getBoundingClientRect().top < top).map(x => x.id);
             if (above.length) return 'below ' + above.slice(0, 3).join(',');
             const has = !!(window.AWR_DATA && AWR_DATA.ashx && AWR_DATA.ashx.classes && AWR_DATA.ashx.classes.length);
-            // every chart shown is drawn (the dashboard shows one at a time)
+            const two = !!(window.AWR_DATA && AWR_DATA.ashe && AWR_DATA.ashe.classes && AWR_DATA.ashe.classes.length);
+            // every chart shown is drawn (the dashboard shows one at a time; Summary opens compact)
             const c1 = vis(document.querySelector('#ax-cls .axp')), c2 = vis(document.querySelector('#ax-ev .axp'));
             const n1 = document.querySelectorAll('#ax-cls .axsvg path.xa').length, n2 = document.querySelectorAll('#ax-ev .axsvg path.xa').length;
             if (has && (!(c1 || c2) || (c1 && !n1) || (c2 && !n2))) return 'not drawn (' + n1 + '/' + n2 + ')';
+            // compact in Summary (plan 023), except in the dashboard design (its tabs show one chart)
+            if (summary && has && two && window.AWR_DESIGN !== 'dashboard') {
+              if (!a.classList.contains('ax-cmp') || c2) return 'not compact in Summary';
+              const h = +document.querySelector('#ax-cls .axsvg').getAttribute('height');
+              if (!(h > 0 && h <= 175)) return 'compact chart ' + h + ' px high';
+            }
             if (!has && !vis(document.getElementById('ax-empty'))) return 'no data and no empty note';
             return 'ok';
           })(),
@@ -239,6 +354,43 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
   }
   if (!(counts.all > counts.summary && counts.summary > counts.timeline)) {
     fail('view sizes: expected all > summary > timeline, got ' + JSON.stringify(counts));
+  }
+
+  // ---- 2b. Summary: the Activity charts open compact; "Show by wait
+  // event" shows the second chart and is remembered (awr-ax) -- plan 023
+  // (the dashboard design keeps its own Activity tabs: #ax-more stays hidden)
+  {
+    const { page, errors } = await openPage('#view=summary', 'light');
+    const has2 = await page.evaluate(() => !!(window.AWR_DATA && AWR_DATA.ashe && AWR_DATA.ashe.classes && AWR_DATA.ashe.classes.length));
+    if (has2 && DESIGN === 'dashboard') {
+      const off = await page.evaluate(() => { const b = document.getElementById('ax-more'); return (!b || b.hidden) && !document.getElementById('activity').classList.contains('ax-cmp'); });
+      console.log('activity compact (Summary): ' + (off ? 'off in the dashboard, ok' : 'FAIL on in the dashboard'));
+      if (!off) fail('activity: compact mode / #ax-more must stay off in the dashboard design');
+    } else if (has2) {
+      const st = () => page.evaluate(() => {
+        const vis = el => !!el && el.getClientRects().length > 0;
+        const b = document.getElementById('ax-more');
+        let saved = null; try { saved = localStorage.getItem('awr-ax'); } catch (e) {}
+        return { cmp: document.getElementById('activity').classList.contains('ax-cmp'), ev: vis(document.getElementById('ax-ev')),
+                 evDrawn: document.querySelectorAll('#ax-ev .axsvg path.xa').length, btn: b && vis(b) ? b.textContent : null,
+                 exp: b ? b.getAttribute('aria-expanded') : null, saved };
+      });
+      const s0 = await st();
+      await page.click('#ax-more'); await page.waitForTimeout(250);
+      const s1 = await st();
+      await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(1200);
+      const s2 = await st();
+      await page.click('#ax-more'); await page.waitForTimeout(250);
+      const s3 = await st();
+      const ok = s0.cmp && !s0.ev && s0.btn === 'Show by wait event' && s0.exp === 'false'
+        && !s1.cmp && s1.ev && s1.evDrawn > 0 && s1.saved === 'full' && s1.exp === 'true'
+        && !s2.cmp && s2.ev && s3.cmp && !s3.ev && s3.saved === 'compact';
+      console.log('activity compact (Summary): ' + (ok ? 'ok' : 'FAIL ' + JSON.stringify([s0, s1, s2, s3])));
+      if (!ok) fail('activity: Summary compact / Show by wait event ' + JSON.stringify([s0, s1, s2, s3]));
+      await page.evaluate(() => { try { localStorage.removeItem('awr-ax'); } catch (e) {} });
+    }
+    if (errors.length) fail('activity compact: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
   }
 
   // ---- 3. interactions: the switch, a cross-view jump, tabs / sort / expander
@@ -290,9 +442,13 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         const t = document.querySelector('.tabs:not(.dtabs) [data-t]:nth-child(2)');
         const g = t.closest('.tabs').getAttribute('data-tabs');
         const p = document.querySelector(`.tabpanel[data-tabs="${g}"][data-t="${t.getAttribute('data-t')}"]`);
-        return p && getComputedStyle(p).display !== 'none' ? 'ok' : 'FAIL';
+        if (!p || getComputedStyle(p).display === 'none') return 'FAIL';
+        // plan 029 review: a non-default Top SQL tab is kept in the hash
+        // (a shared link reopens on it, not on the first tab)
+        if (g === 'topsql' && !new RegExp('[!&]tab=' + t.getAttribute('data-t') + '(&|$)').test(location.hash)) return 'FAIL (hash ' + location.hash + ')';
+        return 'ok';
       });
-      if (toggles.tabs !== 'ok') fail('tabs');
+      if (toggles.tabs !== 'ok') fail('tabs: ' + toggles.tabs);
     } else toggles.tabs = 'none';
     const th = await page.$('table:not([data-nosort]) thead th.num:not(.c-band)');
     if (th) { await th.click(); await page.waitForTimeout(200); toggles.sort = 'clicked'; }
@@ -436,6 +592,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     // the dashboard shows one Activity chart at a time: these checks need both
     if (DESIGN === 'dashboard') { await page.evaluate(() => window.AWR_axMode && window.AWR_axMode('both')); await page.waitForTimeout(250); }
     if (inv.chart && inv.ash) {
+      await page.evaluate(() => { if (window.AWR_TL && AWR_TL.axLayout) AWR_TL.axLayout('span', false); }); await page.waitForTimeout(200);
       const CHS = ['ax-cls', 'ax-ev'];
       const other = await page.evaluate(() => {
         const e = (window.AWR_DATA && AWR_DATA.ashe) || null;
@@ -557,18 +714,55 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         }, id);
         tl['unpin_' + k] = unpin;
         if (/^FAIL/.test(unpin)) fail('activity ' + k + ': Current unpin ' + unpin);
-        // keyboard: Enter on a focused stripe pins, Esc clears
+        // keyboard: Enter on a focused stripe pins, Esc clears; the focus
+        // stays on that stripe through both redraws (G3: it was lost)
         const kb = await page.evaluate((id) => {
           const hs = [...document.querySelectorAll('#' + id + ' .axsvg .xwh')].filter(x => x.getAttribute('data-w') !== '0');
           if (!hs.length) return 'none';
-          const hwin = hs[0]; hwin.focus();
+          const hwin = hs[0], di = hwin.getAttribute('data-i'); hwin.focus();
+          const kept = () => { const a = document.activeElement; return !!a && a.getAttribute('class') === 'xwh' && a.getAttribute('data-i') === di && !!a.closest('#' + id); };
           hwin.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-          const pinned = document.body.getAttribute('data-pw') === hwin.getAttribute('data-w');
-          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-          return pinned && !document.body.hasAttribute('data-pw') ? 'ok' : 'FAIL';
+          const pinned = document.body.getAttribute('data-pw') === hwin.getAttribute('data-w'), f1 = kept();
+          document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          const f2 = kept();
+          return pinned && !document.body.hasAttribute('data-pw') ? (f1 && f2 ? 'ok' : 'FAIL focus lost ' + JSON.stringify([f1, f2])) : 'FAIL';
         }, id);
         tl['keys_' + k] = kb;
         if (/^FAIL/.test(kb)) fail('activity ' + k + ': Enter / Esc ' + kb);
+      }
+      // direct labels (plan 036): each label names a series, sits inside the
+      // plot, no two overlap, at most 6 a chart; hiding the first labelled
+      // series removes its label, showing it again restores it (key
+      // bandLabels: tl.labels holds the grid label links above)
+      await page.evaluate(LABEL_BAND);
+      tl.bandLabels = await page.evaluate(() => {
+        const out = [];
+        for (const [id, key] of [['ax-cls', 'ashx'], ['ax-ev', 'ashe']]) {
+          const s = document.querySelector('#' + id + ' .axsvg'); if (!s || !s.getClientRects().length) continue;
+          const names = ((window.AWR_DATA || {})[key] || {}).classes || [];
+          const L = [...s.querySelectorAll('text.xdl')], ax = s.querySelector('line.ax').getBoundingClientRect();
+          const bad = L.filter(t => { const n = t.textContent; return !names.some(x => x === n || (n.endsWith('...') && x.startsWith(n.slice(0, -3)))); }).length;
+          const B = L.map(t => t.getBoundingClientRect());
+          let ov = 0; for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) if (B[i].left < B[j].right && B[j].left < B[i].right && B[i].top < B[j].bottom && B[j].top < B[i].bottom) ov++;
+          const outside = B.filter(b => b.left < ax.left - 1 || b.right > ax.right + 1 || b.bottom > ax.top + 1).length;
+          const band = window.__awrLabelBand(id, key);
+          out.push(id + ' ' + L.length + (bad || ov || outside || band || L.length > 6 ? ' FAIL bad=' + bad + ' overlap=' + ov + ' outside=' + outside + ' offband=' + band : ''));
+        }
+        return out.join('; ');
+      });
+      if (/FAIL/.test(tl.bandLabels)) fail('activity: direct labels ' + tl.bandLabels);
+      if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && !/ax-cls [1-6]; ax-ev [1-6]$/.test(tl.bandLabels)) fail('activity: the demo must label at least one band on each chart: ' + tl.bandLabels);
+      {
+        const first = await page.evaluate(() => { const t = document.querySelector('#ax-ev .axsvg text.xdl'); if (!t) return null; const nm = t.textContent; const i = AWR_DATA.ashe.classes.indexOf(nm); return i < 0 ? null : { nm, i }; });
+        if (first) {
+          const has = () => page.evaluate((nm) => [...document.querySelectorAll('#ax-ev .axsvg text.xdl')].some(t => t.textContent === nm), first.nm);
+          await page.click('#ax-ev .axlg .axc[data-c="' + first.i + '"]'); await page.waitForTimeout(150);
+          const gone = !(await has());
+          await page.click('#ax-ev .axlg .axc[data-c="' + first.i + '"]'); await page.mouse.move(2, 2); await page.waitForTimeout(200);
+          const back = await has();
+          tl.labelHide = gone && back ? 'ok' : 'FAIL ' + JSON.stringify([first.nm, gone, back]);
+          if (tl.labelHide !== 'ok') fail('activity: hiding a labelled series ' + tl.labelHide);
+        }
       }
       // v1.6.1 series highlight: a legend hover re-bases the series (drawn
       // from zero: its band's lower edge on the axis) and fades the rest; a
@@ -584,7 +778,10 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
             const ax = s.querySelector('line.ax'), y0 = ax ? +ax.getAttribute('y1') : NaN;
             const bands = [...s.querySelectorAll('path.xah')];
             const onAxis = bands.length > 0 && bands.some(b => { const m = /([\d.]+) ([\d.]+)Z$/.exec(b.getAttribute('d')); return m && Math.abs(+m[2] - y0) < 0.6; });
-            return { fd: !!s.querySelector('g.xfd'), n: bands.length, onAxis, note: !!s.querySelector('text.xhn'),
+            // plan 036 review: a band label never covers the highlight note
+            const nt = s.querySelector('text.xhn'), nb = nt && nt.getBoundingClientRect();
+            const xov = nb ? [...s.querySelectorAll('text.xdl')].filter(t => { const b = t.getBoundingClientRect(); return b.left < nb.right && nb.left < b.right && b.top < nb.bottom && nb.top < b.bottom; }).length : 0;
+            return { fd: !!s.querySelector('g.xfd'), n: bands.length, onAxis, note: !!s.querySelector('text.xhn'), xov,
                      lit: document.querySelectorAll('#' + id + ' .axlg .axc.hl').length,
                      y: [...s.querySelectorAll('text.at')].map(t => t.textContent).join('|') };
           };
@@ -604,6 +801,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
           && (!ecls || !best || (s1.e.fd && s1.e.n === best && s1.e.onAxis && s1.e.lit === best));
         hl.cls = okC ? 'ok (' + cls[ci] + ' -> ' + best + ' events' + (s1.c.y !== s0.c.y ? ', axis fitted' : '') + ')' : 'FAIL ' + JSON.stringify(s1);
         if (!/^ok/.test(hl.cls)) fail('activity: class legend highlight ' + hl.cls);
+        if (s1.c.xov || s1.e.xov) fail('activity: a band label covers the highlight note (class legend hover)');
         // an event lights its class, in place (no note, not re-based)
         const ei = ecls ? ecls.findIndex(x => x && x !== 'CPU' && cls.includes(x)) : -1;
         if (ei >= 0) {
@@ -611,6 +809,7 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
           const s2 = await state();
           hl.ev = (s2.e.fd && s2.e.n === 1 && s2.e.onAxis && s2.e.note && s2.c.n === 1 && !s2.c.note && s2.c.lit === 1) ? 'ok (' + ecls[ei] + ' lit)' : 'FAIL ' + JSON.stringify(s2);
           if (!/^ok/.test(hl.ev)) fail('activity: event legend highlight ' + hl.ev);
+          if (s2.c.xov || s2.e.xov) fail('activity: a band label covers the highlight note (event legend hover)');
         }
         await page.mouse.move(10, 10); await page.waitForTimeout(120);
         const s3 = await state();
@@ -639,19 +838,54 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         hl.sticky = (s4.c.n === 1 && tipLead && s5.c.n === 1 && s5.c.note && !s6.c.fd && pw6 && !pw7) ? 'ok (tooltip leads, Esc clears it, then unpins)'
           : 'FAIL ' + JSON.stringify([s4.c.n, tipLead, s5.c.n, s6.c.fd, pw6, pw7]);
         if (!/^ok/.test(hl.sticky)) fail('activity: sticky highlight / Esc ' + hl.sticky);
-        // a click on the bottom band keeps it; the same click clears it
-        const px = await page.evaluate(() => { const s = document.querySelector('#ax-cls .axsvg'), r = s.getBoundingClientRect(), ax = s.querySelector('line.ax'), sc = r.width / s.viewBox.baseVal.width;
+        // a click on the bottom band keeps it; the same click clears it.  The
+        // point is a band under no window stripe's hit area: a stripe narrower
+        // than 24 px is hit-tested on its full height (a click there pins the
+        // window), a wider one on its cap only (its faded body may lie over the
+        // band: the click still reaches it).  When the compared windows tile
+        // the span (169 hourly windows: every x is a stripe) the chart is first
+        // zoomed into the busiest window and its neighbours, where the stripes
+        // are wide -- the designed way to reach the buckets under dense
+        // stripes.  The demo's stripes leave a band point without zooming
+        // (required).
+        const bandPt = () => page.evaluate(() => { const s = document.querySelector('#ax-cls .axsvg'), r = s.getBoundingClientRect(), ax = s.querySelector('line.ax'), sc = r.width / s.viewBox.baseVal.width;
           const y = r.top + (+ax.getAttribute('y1') - 1.5) * sc;
-          for (let f = 0.3; f < 0.97; f += 0.005) { const e = document.elementFromPoint(r.left + r.width * f, y); if (e && e.matches('path.xa')) return { x: r.left + r.width * f, y }; }
-          return { x: r.left + r.width * 0.5, y }; });
-        await page.mouse.click(px.x, px.y); await page.waitForTimeout(150);
-        await page.mouse.move(10, 10); await page.waitForTimeout(100);
-        const s8 = await state();
-        await page.mouse.click(px.x, px.y); await page.waitForTimeout(150);
-        await page.mouse.move(10, 10); await page.waitForTimeout(100);
-        const s9 = await state();
-        hl.click = (s8.c.n === 1 && s8.c.onAxis && !s9.c.fd) ? 'ok' : 'FAIL ' + JSON.stringify([s8.c, s9.c.fd]);
+          for (let f = 0.3; f < 0.97; f += 0.005) {
+            // the first hit below any stripe body / label must be a band fill:
+            // a band edge (path.xe) on top means the stack is about zero there,
+            // so the click is off the stack (weekly report on the test DB)
+            const es = document.elementsFromPoint(r.left + r.width * f, y), i = es.findIndex(e => !e.matches('rect.xw, rect.xwc, text.xdl'));
+            if (i >= 0 && es[i].matches('path.xa')) return { x: r.left + r.width * f, y };
+          }
+          return null; });
+        let px = await bandPt(), zoomed = false, s8 = null, s9 = null;
+        if (!px) {
+          const zx = await page.evaluate(() => { const W = (AWR_DATA.ashx || {}).win || [], n = W.length ? W[0].length : 0; let bi = -1, bv = -1;
+            for (let i = 0; i < n; i++) { let t = 0; W.forEach(a => { t += +a[i] || 0; }); if (t > bv) { bv = t; bi = i; } }
+            const h = document.querySelector('#ax-cls .axsvg .xwh[data-i="' + bi + '"]'); if (!h) return null;
+            const r = h.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+          if (zx) {
+            await page.mouse.move(zx.x - 16, zx.y);
+            await page.mouse.down(); await page.mouse.move(zx.x + 16, zx.y, { steps: 6 }); await page.mouse.up();
+          }
+          await page.waitForTimeout(200); await page.mouse.move(10, 10); await page.waitForTimeout(100);
+          zoomed = await page.evaluate(() => !document.getElementById('ax-reset').hidden);
+          if (zoomed) px = await bandPt();
+        }
+        if (px) {
+          await page.mouse.click(px.x, px.y); await page.waitForTimeout(150);
+          await page.mouse.move(10, 10); await page.waitForTimeout(100);
+          s8 = await state();
+          await page.mouse.click(px.x, px.y); await page.waitForTimeout(150);
+          await page.mouse.move(10, 10); await page.waitForTimeout(100);
+          s9 = await state();
+        }
+        hl.click = !px ? 'FAIL no band point off the window stripes' + (zoomed ? ' (not even zoomed in)' : ' (zoom failed)')
+          : (s8.c.n === 1 && s8.c.onAxis && !s9.c.fd) ? 'ok' + (zoomed ? ' (zoomed in: the window stripes tile the span)' : '')
+          : 'FAIL ' + JSON.stringify([s8.c, s9.c.fd]) + (zoomed ? ' (zoomed in)' : '');
         if (!/^ok/.test(hl.click)) fail('activity: click-to-keep highlight ' + hl.click);
+        if (zoomed && /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) fail('activity: the demo must leave a band point off the window stripes without zooming');
+        if (zoomed) { await page.click('#ax-reset'); await page.waitForTimeout(150); }
         tl.highlight = hl;
         if (shots) {
           await page.evaluate(() => window.scrollTo(0, 0));
@@ -717,8 +951,8 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
         if (/^FAIL/.test(tl.fine_zoom)) fail('activity: zoom into the Current window ' + tl.fine_zoom);
         await page.mouse.move(hv.x, hv.y - 400); await page.click('#ax-reset').catch(() => {}); await page.waitForTimeout(150);
       }
-      // a ruler date pins too; the pin survives a view switch (the charts at
-      // the top of every view show it) and Esc clears it
+      // a ruler date pins too; the pin survives a view switch (the charts in
+      // every view show it) and Esc clears it
       const ruler = await page.evaluate(async () => {
         const h = document.querySelector('#tl .ruler .h:not(.cur)'); if (!h) return 'none';
         h.click(); await new Promise(r => setTimeout(r, 80));
@@ -763,6 +997,264 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     await page.close();
   }
 
+  // ---- 5c. the Activity charts' "Windows side by side" mode (plan 024):
+  // panels = windows, hover + mirrored crosshair, no zoom, cap click pins,
+  // legend toggle per panel, markers in the gaps, the switch remembered
+  {
+    const { page, errors } = await openPage('#view=timeline', 'light');
+    const sb = {};
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file);
+    if (DESIGN === 'dashboard') { await page.evaluate(() => window.AWR_axMode && window.AWR_axMode('both')); await page.waitForTimeout(250); }
+    const can = await page.evaluate(() => !!(window.AWR_TL && AWR_TL.axLayout && document.querySelector('#activity .axlayout:not([hidden])')));
+    if (!can) { sb.mode = 'unavailable'; if (isDemo) fail('side by side: mode switch missing on the demo'); }
+    else {
+      await page.evaluate(() => AWR_TL.axLayout('win', false)); await page.waitForTimeout(250);
+      sb.panels = await page.evaluate(() => {
+        const n = window.AWR_WIN.w.length, out = [];
+        for (const id of ['ax-cls', 'ax-ev']) {
+          const s = document.querySelector('#' + id + ' .axsvg'); if (!s || !s.getClientRects().length) continue;
+          const caps = s.querySelectorAll('.xwh').length, pans = s.querySelectorAll('.xw.xpn').length, cur = s.querySelectorAll('.xw.xpn.cur').length, xa = s.querySelectorAll('path.xa').length;
+          out.push(id + ' ' + caps + '/' + pans + ' panels, cur ' + cur + ', ' + xa + ' paths' + (caps === pans && caps >= 2 && caps <= n && cur === 1 && xa > 0 ? '' : ' FAIL'));
+        }
+        const r = document.getElementById('ax-range').textContent;
+        return out.join('; ') + '; range "' + r + '"' + (/side by side/.test(r) && document.getElementById('ax-reset').hidden ? '' : ' FAIL');
+      });
+      if (/FAIL/.test(sb.panels)) fail('side by side: ' + sb.panels);
+      // direct labels (plan 036): each one inside one panel (1 px slack)
+      // and inside the band it names; the demo labels both charts
+      await page.evaluate(LABEL_BAND);
+      sb.labels = await page.evaluate(() => {
+        let n = 0, bad = 0, off = 0; const per = [];
+        for (const [id, key] of [['ax-cls', 'ashx'], ['ax-ev', 'ashe']]) {
+          const s = document.querySelector('#' + id + ' .axsvg'); if (!s || !s.getClientRects().length) continue;
+          off += window.__awrLabelBand(id, key);
+          const P = [...s.querySelectorAll('rect.xw.xpn')].map(r => r.getBoundingClientRect()), L = s.querySelectorAll('text.xdl');
+          per.push(L.length);
+          for (const t of L) { n++; const b = t.getBoundingClientRect(); if (!P.some(p => b.left >= p.left - 1 && b.right <= p.right + 1)) bad++; }
+        }
+        return n + ' labels (' + per.join('/') + ')' + (bad ? ' FAIL ' + bad + ' cross a panel edge' : '') + (off ? ' FAIL ' + off + ' outside their band' : '');
+      });
+      if (/FAIL/.test(sb.labels)) fail('side by side: labels ' + sb.labels);
+      if (isDemo && !/\(([1-6])\/([1-6])\)/.test(sb.labels)) fail('side by side: the demo must label at least one band on each chart: ' + sb.labels);
+      // the flag band (G3): the flags chart reserves it only while a flag is
+      // drawn (markers all cropped away: no empty band)
+      sb.flagBand = await page.evaluate(() => {
+        const s = [...document.querySelectorAll('.ashx .axsvg')].find(x => x.getClientRects().length); if (!s) return 'none';
+        const y = +s.querySelector('rect.xw.xpn').getAttribute('y'), f = s.querySelectorAll('text.cft').length;
+        return (y > 22) === (f > 0) ? 'ok (' + f + ' flags, top ' + y + ')' : 'FAIL ' + f + ' flags, top ' + y;
+      });
+      if (/^FAIL/.test(sb.flagBand)) fail('side by side: flag band ' + sb.flagBand);
+      const cp = await page.evaluate(() => { const c = document.querySelector('#ax-cls .axsvg .xw.xpn.cur').getBoundingClientRect(); return { x: c.left + c.width / 2, y: c.top + c.height * 0.6 }; });
+      await page.mouse.move(cp.x, cp.y); await page.waitForTimeout(150);
+      sb.hover = await page.evaluate(() => {
+        const t = document.getElementById('tip'); if (!t || t.hidden || !/AAS/.test(t.textContent)) return 'FAIL tooltip';
+        const chs = [...document.querySelectorAll('.ashx .axsvg')].filter(s => s.getClientRects().length).map(s => s.querySelector('.xch'));
+        const on = chs.filter(c => c && c.getAttribute('visibility') === 'visible');
+        if (on.length !== chs.length) return 'FAIL crosshair on ' + on.length + '/' + chs.length;
+        return new Set(on.map(c => c.getAttribute('x1'))).size === 1 ? 'ok' + (/1-min average/.test(t.textContent) ? ' (1-min)' : '') : 'FAIL crosshair x differs';
+      });
+      if (!/^ok/.test(sb.hover)) fail('side by side: hover ' + sb.hover);
+      if (isDemo && !/1-min/.test(sb.hover)) fail('side by side: the demo has 1-minute data for every window');
+      const r0 = await page.evaluate(() => document.getElementById('ax-range').textContent);
+      const bb = await (await page.$('#ax-cls .axsvg')).boundingBox();
+      await page.mouse.move(bb.x + bb.width * 0.3, bb.y + bb.height * 0.6); await page.mouse.down();
+      await page.mouse.move(bb.x + bb.width * 0.7, bb.y + bb.height * 0.6, { steps: 6 }); await page.mouse.up(); await page.waitForTimeout(200);
+      sb.noZoom = await page.evaluate((r0) => document.getElementById('ax-range').textContent === r0 && document.getElementById('ax-reset').hidden ? 'ok' : 'FAIL', r0);
+      if (sb.noZoom !== 'ok') fail('side by side: a drag zoomed');
+      const hw = await page.evaluate(() => { const h = [...document.querySelectorAll('#ax-cls .axsvg .xwh')].find(x => x.getAttribute('data-w') !== '0'); if (!h) return null; const r = h.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: h.getAttribute('data-w') }; });
+      if (hw) {
+        await page.mouse.click(hw.x, hw.y); await page.waitForTimeout(200);
+        const a = await page.evaluate((w) => document.body.getAttribute('data-pw') === w && [...document.querySelectorAll('.ashx .axsvg')].filter(s => s.getClientRects().length).every(s => s.querySelector('.xw.xpn.on')), hw.w);
+        await page.mouse.move(2, bb.y + bb.height + 40);
+        await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+        const b = await page.evaluate(() => !document.body.hasAttribute('data-pw'));
+        sb.pin = a && b ? 'ok' : 'FAIL ' + JSON.stringify([a, b]);
+        if (sb.pin !== 'ok') fail('side by side: panel pin / Esc ' + sb.pin);
+      }
+      const nx = () => page.evaluate(() => document.querySelectorAll('#ax-cls .axsvg path.xa').length);
+      const caps = await page.evaluate(() => document.querySelectorAll('#ax-cls .axsvg .xwh').length);
+      const n0 = await nx(); await page.click('#ax-cls .axlg .axc[data-c="0"]'); await page.waitForTimeout(150);
+      const n1 = await nx(); await page.click('#ax-cls .axlg .axc[data-c="0"]'); await page.mouse.move(2, bb.y + bb.height + 40); await page.waitForTimeout(150);
+      const n2 = await nx();
+      sb.legend = n1 === n0 - caps && n2 === n0 ? 'ok' : 'FAIL ' + [n0, n1, n2, caps].join('/');
+      if (sb.legend !== 'ok') fail('side by side: legend toggle ' + sb.legend);
+      // a marker is drawn side by side only in the gap before a SHOWN panel
+      // (G3): -1 = no marker in the span, -2 = every marker's panel cropped
+      sb.markers = await page.evaluate(() => {
+        const ms = window.AWR_WG && AWR_WG.markers ? AWR_WG.markers() : [];
+        if (!ms.length) return -1;
+        const shown = new Set([...document.querySelectorAll('#ax-cls .axsvg .xwh')].map(h => h.getAttribute('data-w')));
+        if (!ms.some(m => shown.has(String(m.o)))) return -2;
+        return document.querySelectorAll('#ax-cls .axsvg .cfl').length;
+      });
+      if (sb.markers === 0) fail('side by side: release markers missing');
+      // keyboard (G3): Enter on a focused cap pins and the focus stays on
+      // that cap through the redraw; Esc unpins, the focus stays (last: the
+      // pin scrolls the page smoothly to the Timeline grid)
+      sb.keys = await (async () => {
+        const di = await page.evaluate(() => { const h = [...document.querySelectorAll('#ax-cls .axsvg .xwh')].find(x => x.getAttribute('data-w') !== '0'); if (!h) return null; h.focus(); return { i: h.getAttribute('data-i'), w: h.getAttribute('data-w') }; });
+        if (!di) return 'none';
+        const kept = () => page.evaluate((i) => { const a = document.activeElement; return !!a && a.getAttribute('class') === 'xwh' && a.getAttribute('data-i') === i && !!a.closest('#ax-cls'); }, di.i);
+        await page.keyboard.press('Enter'); await page.waitForTimeout(150);
+        const p1 = await page.evaluate((w) => document.body.getAttribute('data-pw') === w, di.w), f1 = await kept();
+        await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+        const p2 = await page.evaluate(() => !document.body.hasAttribute('data-pw')), f2 = await kept();
+        return p1 && f1 && p2 && f2 ? 'ok' : 'FAIL ' + JSON.stringify({ pinned: p1, focus: f1, unpinned: p2, focus2: f2 });
+      })();
+      if (/^FAIL/.test(sb.keys)) fail('side by side: keyboard pin / focus ' + sb.keys);
+      await page.click('#activity .axlayout [data-m="span"]'); await page.waitForTimeout(200);
+      const s1 = await page.evaluate(() => { let v = null; try { v = localStorage.getItem('awr-axlayout'); } catch (e) {} return { v, r: document.getElementById('ax-range').textContent, n: document.querySelectorAll('#ax-cls .axsvg .xw.xpn').length }; });
+      await page.click('#activity .axlayout [data-m="win"]'); await page.waitForTimeout(200);
+      await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(1200);
+      const s2 = await page.evaluate(() => { let v = null; try { v = localStorage.getItem('awr-axlayout'); } catch (e) {} return { v, r: document.getElementById('ax-range').textContent }; });
+      sb.persist = s1.v === 'span' && !/side by side/.test(s1.r) && s1.n === 0 && s2.v === 'win' && /side by side/.test(s2.r) ? 'ok' : 'FAIL ' + JSON.stringify([s1, s2]);
+      if (sb.persist !== 'ok') fail('side by side: switch / persistence ' + sb.persist);
+      await page.evaluate(() => { try { localStorage.removeItem('awr-axlayout'); } catch (e) {} });
+    }
+    console.log('side by side', JSON.stringify(sb));
+    if (errors.length) fail('side by side: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 5d. markers sharing a gap (G3): two extra markers are injected one
+  // and two minutes after the report's first one (so three share one gap
+  // side by side, and one spot in Full span); in both layouts every marker
+  // is named on the flags chart (a flag of its own, or the tooltip of a
+  // "+n" flag, or a line's tooltip), no two flags overlap, and on the demo
+  // the gap carries a "+n" flag. Before G3 the third lost its flag.
+  {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, colorScheme: 'light' });
+    const errors = [];
+    page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+    page.on('console', m => { if (m.type() === 'error') errors.push('console.error: ' + m.text()); });
+    await page.addInitScript(() => {
+      const a = []; let added = false;
+      a.push = function (...ms) {
+        for (const m of ms) {
+          Array.prototype.push.call(this, m);
+          if (!added && m && /^\d{4}-\d\d-\d\d \d\d:\d\d$/.test(String(m.t))) {
+            added = true;
+            const d = Date.parse(m.t.replace(' ', 'T') + ':00Z'), f = k => new Date(d + k * 60000).toISOString().slice(0, 16).replace('T', ' ');
+            Array.prototype.push.call(this, { t: f(1), label: 'Extra marker A' }, { t: f(2), label: 'Extra marker B' });
+          }
+        }
+        return this.length;
+      };
+      window.AWR_MARKERS = a;
+    });
+    await page.goto('file://' + file + '#view=timeline', { waitUntil: 'load' }); await page.waitForTimeout(1200);
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file), mg = {};
+    if (DESIGN === 'dashboard') { await page.evaluate(() => window.AWR_axMode && window.AWR_axMode('both')); await page.waitForTimeout(250); }
+    const named = (mode) => page.evaluate((mode) => {
+      const all = (window.AWR_WG && AWR_WG.markers ? AWR_WG.markers() : []);
+      if (!all.some(m => m.l === 'Extra marker B')) return 'skipped';
+      const s = [...document.querySelectorAll('.ashx .axsvg')].find(x => x.getClientRects().length); if (!s) return 'none';
+      // side by side names only the markers in the gap before a shown panel
+      const shown = new Set([...s.querySelectorAll('.xwh')].map(h => h.getAttribute('data-w')));
+      const ms = mode === 'win' ? all.filter(m => shown.has(String(m.o))) : all;
+      const crop = ms.length < all.length ? (all.length - ms.length) + ' cropped, ' : '';
+      const txt = [...s.querySelectorAll('text.cft')].map(t => t.textContent).join('\n') + '\n' + [...s.querySelectorAll('title')].map(t => t.textContent).join('\n');
+      const miss = ms.filter(m => txt.indexOf(m.l) < 0).map(m => m.l);
+      const R = [...s.querySelectorAll('rect.cfh')].map(r => r.getBoundingClientRect());
+      let ov = 0; for (let i = 0; i < R.length; i++) for (let j = i + 1; j < R.length; j++) if (R[i].left < R[j].right && R[j].left < R[i].right && R[i].top < R[j].bottom && R[j].top < R[i].bottom) ov++;
+      const plus = [...s.querySelectorAll('text.cft')].filter(t => / \+\d+$/.test(t.lastChild ? t.lastChild.textContent : '')).length;
+      // every flag inside the SVG (R3: a long label flipped left of a marker
+      // near the left edge sat mostly outside it)
+      const sb = s.getBoundingClientRect(), out = R.filter(r => r.left < sb.left - 0.5 || r.right > sb.right + 0.5).length;
+      return (miss.length || ov || out ? 'FAIL missing ' + JSON.stringify(miss) + ' overlap ' + ov + ' outside the SVG ' + out : 'ok') + ' (' + crop + ms.length + ' markers, ' + R.length + ' flags, ' + plus + ' +n)';
+    }, mode);
+    for (const m of ['win', 'span']) {
+      const can = await page.evaluate((m) => { if (!window.AWR_TL || !AWR_TL.axLayout) return false; if (m === 'win' && !document.querySelector('#activity .axlayout:not([hidden])')) return false; AWR_TL.axLayout(m, false); return true; }, m);
+      if (!can) { mg[m] = 'unavailable'; continue; }
+      await page.waitForTimeout(250);
+      mg[m] = await named(m);
+      if (/^FAIL/.test(mg[m])) fail('markers sharing a gap (' + m + '): ' + mg[m]);
+      if (isDemo && !/ [1-9]\d* \+n\)$/.test(mg[m])) fail('markers sharing a gap (' + m + '): the demo must show a "+n" flag: ' + mg[m]);
+    }
+    await page.evaluate(() => { try { localStorage.removeItem('awr-axlayout'); } catch (e) {} });
+    console.log('markers sharing a gap', JSON.stringify(mg));
+    if (errors.length) fail('markers sharing a gap: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 5e. the Activity charts at phone width (review follow-up R3): under
+  // 480 px the SVG keeps its 480-px viewBox, scaled down and centred
+  // vertically (preserveAspectRatio), so the pointer maps through the
+  // SVG's screen CTM.  At points well inside one band (the topmost fill
+  // there and 3 px above / below, 1 px aside, under no window stripe's hit area) a hover
+  // must light exactly that band in the legend (the soft highlight follows
+  // the band as drawn), in both charts and both layouts; a brush in Full
+  // span covers the plot's height.  Before R3 the 390-px hover lit nothing
+  // or the wrong band (clientY scaled without the letterbox).
+  {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: 'light' });
+    const errors = [];
+    page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+    page.on('console', m => { if (m.type() === 'error') errors.push('console.error: ' + m.text()); });
+    await page.goto('file://' + file + '#view=timeline', { waitUntil: 'load' }); await page.waitForTimeout(1200);
+    if (DESIGN === 'dashboard') { await page.evaluate(() => window.AWR_axMode && window.AWR_axMode('both')); await page.waitForTimeout(250); }
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file), nw = {};
+    // integer client points (mouse events carry whole pixels)
+    const pts = (id) => page.evaluate((id) => {
+      const s = document.querySelector('#' + id + ' .axsvg'); if (!s || !s.getClientRects().length || !s.getScreenCTM) return null;
+      s.scrollIntoView({ block: 'center' });
+      const r = s.getBoundingClientRect(), m = s.getScreenCTM(), cp = s.querySelector('clipPath rect');
+      if (!m || !cp) return null;
+      const yt = m.d * (+cp.getAttribute('y') + 6) + m.f, yb = m.d * (+cp.getAttribute('y') + +cp.getAttribute('height')) + m.f;
+      const band = (x, y) => { const es = document.elementsFromPoint(x, y), i = es.findIndex(q => !q.matches('rect.xw, rect.xwc, text.xdl, line.xch, rect.xbk')); return i >= 0 && es[i].matches('path.xa') ? es[i] : null; };
+      const out = [], per = {};
+      for (let fy = 0.1; fy < 0.97 && out.length < 10; fy += 0.06) {
+        for (let fx = 0.12; fx < 0.97 && out.length < 10; fx += 0.03) {
+          const x = Math.round(r.left + r.width * fx), y = Math.round(yt + (yb - yt) * fy), a = band(x, y);
+          if (!a || [[0, -3], [0, 3], [-1, 0], [1, 0]].some(d => band(x + d[0], y + d[1]) !== a)) continue;
+          const f = a.getAttribute('fill'); if ((per[f] = (per[f] || 0) + 1) > 2) continue;
+          out.push({ x, y, f });
+        }
+      }
+      return { scale: m.a, off: m.f - r.top, out };
+    }, id);
+    const lit = (id) => page.evaluate((id) => [...document.querySelectorAll('#' + id + ' .axlg .axc.hl .sw')].map(s => s.style.getPropertyValue('--sw').trim()), id);
+    for (const mode of ['span', 'win']) {
+      const can = await page.evaluate((m) => { if (!window.AWR_TL || !AWR_TL.axLayout) return false; if (m === 'win' && !document.querySelector('#activity .axlayout:not([hidden])')) return false; AWR_TL.axLayout(m, false); return true; }, mode);
+      if (!can) { nw[mode] = 'unavailable'; continue; }
+      await page.waitForTimeout(250);
+      for (const id of ['ax-cls', 'ax-ev']) {
+        await pts(id); await page.waitForTimeout(150);
+        const P = await pts(id);
+        if (!P) { nw[mode + ' ' + id] = 'not shown'; continue; }
+        let good = 0; const bad = [];
+        for (const q of P.out) {
+          await page.mouse.move(q.x, q.y); await page.waitForTimeout(100);
+          const l = await lit(id);
+          if (l.length === 1 && l[0] === q.f) good++; else bad.push(q.f + ' lit ' + (l.join(',') || 'nothing'));
+          await page.mouse.move(2, 2); await page.waitForTimeout(50);
+        }
+        nw[mode + ' ' + id] = (bad.length ? 'FAIL ' + bad.slice(0, 3).join('; ') + ' ' : '') + good + '/' + P.out.length + ' points (scale ' + P.scale.toFixed(2) + ', offset ' + P.off.toFixed(1) + ' px)';
+        if (bad.length) fail('Activity at 390 px (' + mode + ', ' + id + '): a hover lit another band: ' + nw[mode + ' ' + id]);
+        if (isDemo && !P.out.length) fail('Activity at 390 px (' + mode + ', ' + id + '): no band point found on the demo');
+      }
+    }
+    // the brush (Full span) covers the plot's height, letterbox included
+    if (nw.span !== 'unavailable') {
+      await page.evaluate(() => AWR_TL.axLayout('span', false)); await page.waitForTimeout(250);
+      const g = await page.evaluate(() => { const s = document.querySelector('#ax-cls .axsvg'); if (!s || !s.getClientRects().length) return null; s.scrollIntoView({ block: 'center' });
+        const r = s.getBoundingClientRect(), m = s.getScreenCTM(), cp = s.querySelector('clipPath rect');
+        return { x: Math.round(r.left + r.width * 0.4), y: Math.round(r.top + r.height / 2), t: m.d * (+cp.getAttribute('y') + 6) + m.f, b: m.d * (+cp.getAttribute('y') + +cp.getAttribute('height')) + m.f }; });
+      if (g) {
+        await page.mouse.move(g.x, g.y); await page.mouse.down(); await page.mouse.move(g.x + 40, g.y, { steps: 5 });
+        const br = await page.evaluate(() => { const b = document.querySelector('#ax-cls .axbr'); if (!b || b.hidden) return null; const r = b.getBoundingClientRect(); return { t: r.top, b: r.bottom }; });
+        await page.mouse.up(); await page.waitForTimeout(200);
+        await page.evaluate(() => { const b = document.getElementById('ax-reset'); if (b && !b.hidden) b.click(); }); await page.waitForTimeout(150);
+        nw.brush = !br ? 'FAIL no brush' : (Math.abs(br.t - g.t) <= 1 && Math.abs(br.b - g.b) <= 1) ? 'ok' : 'FAIL brush ' + br.t.toFixed(1) + '..' + br.b.toFixed(1) + ', plot ' + g.t.toFixed(1) + '..' + g.b.toFixed(1);
+        if (/^FAIL/.test(nw.brush)) fail('Activity at 390 px: ' + nw.brush);
+      }
+    }
+    await page.evaluate(() => { try { localStorage.removeItem('awr-axlayout'); } catch (e) {} });
+    console.log('activity at 390 px', JSON.stringify(nw));
+    if (errors.length) fail('activity at 390 px: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
   // ---- 5b. v1.6.1 Day profile metric picker (profile_days > 0): one button
   // per stat drives the line chart (a click, the arrow keys, Home / End;
   // roving tabindex), each with its severity indicator
@@ -802,20 +1294,198 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     await page.close();
   }
 
+  // ---- 5d. plan 031: Timeline rows scale to the prior windows (broken
+  // Current bar), the Rows / Order toolbar, a jump to a filtered row
+  {
+    const { page, errors } = await openPage('#view=timeline', 'light');
+    const t31 = await page.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const vis = el => !!el && el.getClientRects().length > 0;
+      const out = {};
+      if (!document.getElementById('tl-tools')) return { err: 'no #tl-tools' };
+      out.brk = document.querySelectorAll('#tl i.b.brk').length;
+      out.brkOutside = document.querySelectorAll('i.b.brk').length - out.brk;
+      out.lowPrior = [...document.querySelectorAll('#tl i.b.brk')].filter(b => {
+        const row = b.closest('.r'), cur = parseFloat(b.style.height);
+        const pri = Math.max(0, ...[...row.querySelectorAll(':scope > .c:not(.cur) i.b')].map(x => parseFloat(x.style.height)));
+        return pri < 0.3 * cur;
+      }).map(b => b.closest('.r').id);
+      const lanes = () => [...document.querySelectorAll('#tl .lane[data-kind="scored"]')].filter(l => !l.hidden);
+      const shown = () => lanes().map(l => [...l.querySelectorAll('.lrows > .r.bars')].filter(vis).length).join(',');
+      const before = shown();
+      document.querySelector('#tl-tools button[data-tlf="flagged"]').click(); await wait(80);
+      out.unflaggedShown = lanes().flatMap(l => [...l.querySelectorAll('.lrows > .r.bars')].filter(vis))
+        .filter(r => !/^(large|moderate)$/.test(r.getAttribute('data-sev') || '')).map(r => r.id);
+      out.flaggedHidden = lanes().flatMap(l => [...l.querySelectorAll('.lrows > .r.bars')].filter(r => !vis(r)))
+        .filter(r => /^(large|moderate)$/.test(r.getAttribute('data-sev') || '')).map(r => r.id);
+      const typ = document.querySelector('#tl .lane[data-kind="scored"] .lrows > .r.bars[data-sev="typical"]');
+      if (typ) { window.AWR_goTo(typ, true, false); await wait(300);
+        out.reveal = vis(typ) && !document.getElementById('tl').classList.contains('flagonly') ? 'ok' : 'FAIL ' + typ.id; } else out.reveal = 'none';
+      document.querySelector('#tl-tools button[data-tlf="all"]').click(); await wait(80);
+      out.restored = shown() === before ? 'ok' : 'FAIL ' + before + ' -> ' + shown();
+      const waits = document.getElementById('lane-waits');
+      if (waits && !waits.hidden) {
+        const ids = () => [...waits.querySelectorAll('.lrows > .r.bars')].map(r => r.id).join(' ');
+        const orig = ids();
+        document.querySelector('#tl-tools button[data-tlo="change"]').click(); await wait(80);
+        out.note = (document.querySelector('#tl-tools .tlt-n') || {}).textContent || '';
+        const all = [...waits.querySelectorAll('.lrows > .r.bars')], aas = all.every(r => r.getAttribute('data-unit') === 'AAS');
+        const nums = s => String(s || '').split(',').map(x => x === '' ? null : +x);
+        const ev = all.filter(r => !/^tl-fr-w-/.test(r.id));
+        // the sort key, computed here, not by the report's changeKey:
+        // Current minus the prior mean in an AAS lane, else |z| (sigma
+        // floored at 2% of the mean).  An empty data-mu / data-sd is "no
+        // prior mean", not 0: in an AAS lane such a row (new in Current)
+        // ranks by Current minus the mean of its VALID prior windows, a
+        // missing value there counting 0 and a skipped window left out
+        // (owner decision 2026-11-20); no valid prior window or a z lane:
+        // null, sorted last.
+        const num1 = s => (s == null || s === '') ? null : +s;
+        const valid = ((window.AWR_WIN || {}).w || []).map(w => w.v !== 'N');
+        const key = r => {
+          const v = nums(r.getAttribute('data-v')), n = v.length, c = n ? v[n - 1] : null;
+          const mu = num1(r.getAttribute('data-mu')), sd = num1(r.getAttribute('data-sd'));
+          if (c == null) return null;
+          if (mu == null) {
+            if (!aas || valid.length !== n) return null;
+            const p = []; for (let i = 0; i < n - 1; i++) if (valid[i]) p.push(v[i] == null ? 0 : v[i]);
+            return p.length ? c - p.reduce((s, x) => s + x, 0) / p.length : null;
+          }
+          if (aas) return c - mu;
+          const den = Math.max(sd || 0, 0.02 * Math.abs(mu));
+          return den > 0 ? Math.abs((c - mu) / den) : null;
+        };
+        const k = ev.map(key);
+        const k2 = ev.map(r => window.AWR_WG.changeKey(nums(r.getAttribute('data-v')), num1(r.getAttribute('data-mu')), num1(r.getAttribute('data-sd')), aas, valid));
+        const same = (a, b) => (a == null && b == null) || (a != null && b != null && Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a)));
+        const n0 = k.findIndex(x => x == null), known = n0 < 0 ? k : k.slice(0, n0);
+        out.sorted = !k.every((x, i) => same(x, k2[i])) ? 'FAIL key: page ' + JSON.stringify(k2) + ' vs ' + JSON.stringify(k)
+          : known.every((x, i) => i === 0 || known[i - 1] >= x) && (n0 < 0 || k.slice(n0).every(x => x == null)) ? 'ok'
+          : 'FAIL ' + JSON.stringify(k);
+        out.newRows = ev.filter(r => num1(r.getAttribute('data-mu')) == null && key(r) != null).map(r => r.id);
+        const fe = all.findIndex(r => !/^tl-fr-w-/.test(r.id));
+        out.classesFirst = fe < 0 || all.slice(fe).every(r => !/^tl-fr-w-/.test(r.id));
+        document.querySelector('#tl-tools button[data-tlo="report"]').click(); await wait(80);
+        out.order = ids() === orig ? 'ok' : 'FAIL order not restored';
+      } else out.order = 'none';
+      try { localStorage.removeItem('awr-tl-rows'); localStorage.removeItem('awr-tl-order'); } catch (e) { /* ignore */ }
+      return out;
+    });
+    console.log('timeline rows (031)', JSON.stringify(t31));
+    if (t31.err) fail('timeline rows: ' + t31.err);
+    else {
+      if (t31.brkOutside) fail('timeline rows: ' + t31.brkOutside + ' broken bar(s) outside the Timeline grid');
+      if (t31.lowPrior.length) fail('timeline rows: priors still squashed under a broken bar: ' + t31.lowPrior.join(', '));
+      if (t31.unflaggedShown.length) fail('timeline rows: Flagged only shows ' + t31.unflaggedShown.join(', '));
+      if (t31.flaggedHidden.length) fail('timeline rows: Flagged only hides flagged ' + t31.flaggedHidden.join(', '));
+      if (/^FAIL/.test(t31.reveal)) fail('timeline rows: jump to a filtered row ' + t31.reveal);
+      if (/^FAIL/.test(t31.restored)) fail('timeline rows: All did not restore ' + t31.restored);
+      if (/^FAIL/.test(t31.sorted || '') || t31.classesFirst === false) fail('timeline rows: Biggest change first ' + t31.sorted);
+      if (/^FAIL/.test(t31.order)) fail('timeline rows: ' + t31.order);
+      if (/demo_busy_db\.html$/.test(file) && t31.brk < 5) fail('timeline rows: the demo should draw broken Current bars (got ' + t31.brk + ')');
+    }
+    if (errors.length) fail('timeline rows: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
   // ---- 6. phase 4 (v1.6.0): the plan-change card, the evidence library,
   // the rail's card sub-links and the table micro strips.
   {
     const { page, errors } = await openPage('#view=summary', 'light');
-    const p4 = await page.evaluate(async () => {
+    const p4 = await page.evaluate(async (HQ) => {
       const vis = el => !!el && el.getClientRects().length > 0;
       const wait = ms => new Promise(r => setTimeout(r, ms));
       const out = {};
       // plan-change cards: moved into "What changed around it", bars + step line
       const pcs = [...document.querySelectorAll('article.fc[id^="f-plan-"]')];
       out.planCards = pcs.length;
-      out.planOk = pcs.every(c => c.closest('#changes-slot') && vis(c)
+      out.planOk = pcs.every(c => (c.closest('#changes-slot')
+          || (c.getAttribute('data-explains') && c.previousElementSibling
+              && c.previousElementSibling.id === c.getAttribute('data-explains'))) && vis(c)
         && c.querySelector('.wg .r.bars') && c.querySelector('.wg .r.p .pv')
         && c.querySelector('a.ent[href^="#sm-"]') && c.querySelector('a.jump[data-tl]'));
+      // plan 037: scatter marks <= 12 px, x-axis = the compared span.
+      // R3: its times are the DB's wall clock read as UTC (useUTC on), so
+      // the bounds are the same instant in any browser zone; an older
+      // report (useUTC off) parsed them as local time
+      {
+        const sc = window.echarts && document.getElementById('sqlmon-scatter');
+        const si = sc && echarts.getInstanceByDom(sc);
+        if (si) {
+          const o = si.getOption(), s0 = o.series[0], d = window.AWR_DATA.sqlmon;
+          const big = typeof s0.symbolSize === 'function' ? s0.symbolSize(null, { data: { dop: 64 } }) : s0.symbolSize;
+          const z = o.useUTC === true, ts = s => Date.parse(String(s).replace(' ', 'T') + (z ? 'Z' : ''));
+          out.scatter = (big <= 12 && o.xAxis[0].min === ts(d.spanStart) && o.xAxis[0].max === ts(d.spanEnd))
+            ? 'ok' + (z ? '' : ' (local time: an older report)') : 'FAIL size=' + big + ' x=' + o.xAxis[0].min + '..' + o.xAxis[0].max + (z ? ' (UTC)' : ' (local)');
+        } else out.scatter = sc ? 'FAIL no ECharts instance on #sqlmon-scatter' : 'skipped';
+      }
+      // plan 034: Copy summary builds Markdown from the verdict and the cards
+      const sbtn = document.getElementById('sum-btn');
+      if (sbtn && !sbtn.hidden) {
+        sbtn.click(); await wait(150);
+        const ta = document.querySelector('#sum-pop textarea');
+        const md = ta ? ta.value : '';
+        const h1 = (document.querySelector('#verdict h1') || {}).textContent || '';
+        const nCards = document.querySelectorAll('#findings article.fc:not(.chg)').length;
+        const nLines = (md.match(/^\d+\. \[/gm) || []).length;
+        out.sumOk = md.indexOf(h1.replace(/\s+/g, ' ').trim()) >= 0 && nLines === nCards && !/undefined|null|NaN/.test(md);
+        document.querySelector('#sum-pop .sum-x').click(); await wait(60);
+        out.sumClosed = document.getElementById('sum-pop').hidden;
+        // plan 034 review: Escape on the close button closes the popover,
+        // gives focus back to the button and keeps a pinned window
+        const pw = ((window.AWR_WIN && AWR_WIN.w) || []).filter(w => w.o !== 0 && w.v === 'Y').map(w => String(w.o))[0];
+        if (pw !== undefined && window.AWR_WG && AWR_WG.pin) AWR_WG.pin(+pw);
+        sbtn.click(); await wait(150);
+        const sx = document.querySelector('#sum-pop .sum-x'); sx.focus();
+        sx.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await wait(60);
+        out.sumEsc = document.getElementById('sum-pop').hidden && document.activeElement === sbtn
+          && !document.getElementById('topbar').classList.contains('sum-open')
+          && (pw === undefined || document.body.getAttribute('data-pw') === pw);
+        if (pw !== undefined) AWR_WG.pin(null);
+        // ... and nothing paints over it in the Timeline view (the sticky ruler did)
+        if (window.AWR_setView && document.getElementById('tl')) {
+          AWR_setView('timeline', false); await wait(300);
+          const tl = document.getElementById('tl');
+          window.scrollTo(0, tl.getBoundingClientRect().top + window.scrollY + 300); await wait(200);
+          sbtn.click(); await wait(150);
+          const pop = document.getElementById('sum-pop');
+          out.sumOnTop = [pop.querySelector('.sum-x'), pop.querySelector('textarea')].every(el => {
+            const r = el.getBoundingClientRect(), h = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(8, r.height / 2));
+            return !!h && pop.contains(h);
+          });
+          pop.querySelector('.sum-x').click(); await wait(60);
+          AWR_setView('summary', false); window.scrollTo(0, 0); await wait(300);
+        } else out.sumOnTop = true;
+      } else out.sumOk = out.sumClosed = out.sumEsc = out.sumOnTop = false;
+      // plan 030: durations on the plan card, AAS on Timeline event rows
+      out.durOk = [...document.querySelectorAll('article.fc[id^="f-plan-"] .big .v')]
+        .every(v => /^-?\d+(\.\d)? (ms|s|m|h|d)( \d+ (s|m|h))?$/.test(v.textContent.trim()));
+      out.aasOk = [...document.querySelectorAll('[id^="tl-we-"]')].every(r => r.getAttribute('data-unit') === 'AAS');
+      // dbmint follow-up: an event row never reads above its own wait-class
+      // row in any window -- both are AAS over that window's real snapshot
+      // span, and the class sums its events (same view, same wait list)
+      {
+        const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        const nv = s => String(s || '').split(',').map(x => x === '' ? null : +x);
+        out.evOverClass = [...document.querySelectorAll('[id^="tl-we-"]')].filter(r => {
+          const sw = r.querySelector('.sw[data-wc]');
+          const cr = sw && document.getElementById('tl-fr-w-wait-class-' + slug(sw.getAttribute('data-wc')));
+          if (!cr) return false;
+          const a = nv(r.getAttribute('data-v')), b = nv(cr.getAttribute('data-v'));
+          return a.some((x, i) => x != null && b[i] != null && x > b[i] * (1 + 1e-5) + 1e-6);
+        }).map(r => r.id);
+        out.evClassPairs = [...document.querySelectorAll('[id^="tl-we-"] .sw[data-wc]')]
+          .filter(sw => document.getElementById('tl-fr-w-wait-class-' + slug(sw.getAttribute('data-wc')))).length;
+      }
+      // plan 029: SQL Monitor lists flagged statements first; Top SQL opens on Biggest change
+      const sk = [...document.querySelectorAll('#sqlmon-pool > tbody > tr[data-sk]')].map(r => +r.getAttribute('data-sk'));
+      out.smOrder = sk.every((k, i) => i === 0 || sk[i - 1] <= k) &&
+        [...document.querySelectorAll('#sqlmon-pool > tbody > tr[data-sk]')].every(r => (r.nextElementSibling || {}).className === 'sqlmon-detail');
+      const t0 = document.querySelector('.tabs[data-tabs="topsql"] [data-t]:not([hidden])');
+      const tp = t0 && document.querySelector('.tabpanel.on[data-tabs="topsql"]');
+      // (a report without any Top SQL row has no panel at all: nothing to agree on)
+      out.topsqlTab = !document.querySelector('.tabpanel[data-tabs="topsql"]') ||
+        !!(t0 && tp && t0.classList.contains('on') && t0.getAttribute('data-t') === tp.getAttribute('data-t'));
       // the evidence library: every row has its one-line status, one first /
       // one last edge, a closed row opens and shuts on a click
       const libs = [...document.querySelectorAll('main > section.lib')];
@@ -849,18 +1519,284 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       const cards = [...document.querySelectorAll('#findings article.fc:not(.chg)')];
       out.subs = subs.length + '/' + cards.length;
       out.subsOk = subs.length === cards.length && subs.every((a, i) => a.getAttribute('href') === '#' + cards[i].id);
-      // All sections: every library section shows in full, row state or not
+      // plan 025: the triage list (one row per card, in card order, with a
+      // micro strip and a filled impact cell), every card but one folded, a
+      // row click opens its card, quiet card charts.  The dashboard design
+      // has its own findings table: there #triage is hidden and no card is
+      // folded (js_design opens each card it moves into a row).
+      const dash = document.body.classList.contains('d-dash');
+      const tri = document.getElementById('triage');
+      const trows = tri ? [...tri.querySelectorAll('.tri-row[data-card]')] : [];
+      // no finding card -> 07 emits no list at all; the strip draws at any
+      // window count (data-spark-dense: one silhouette past about 45 windows)
+      out.triage = trows.length + '/' + cards.length + (dash ? ' (dashboard)' : '');
+      out.triageOk = trows.length === cards.length
+        && trows.every((r, i) => r.getAttribute('data-card') === cards[i].id
+          && (dash || (r.querySelector('.tri-spark svg.mw') && r.querySelector('.tri-imp').textContent.trim() !== '')))
+        && (!cards.length ? !tri : dash ? !vis(tri) : !!tri && vis(tri));
+      const folded = cards.filter(c => c.classList.contains('fold'));
+      out.folded = folded.length;
+      out.foldOk = dash ? folded.length === 0 : (cards.length < 2 || folded.length === cards.length - 1);
+      if (folded.length && !dash) {
+        const fr = trows.find(r => r.getAttribute('data-card') === folded[0].id);
+        if (fr) fr.click();
+        await wait(350);
+        out.unfold = !folded[0].classList.contains('fold') && vis(folded[0].querySelector('.fc-b')) ? 'ok' : 'FAIL ' + folded[0].id;
+      } else out.unfold = 'none';
+      const open = cards.find(c => !c.classList.contains('fold'));
+      const pv = open ? open.querySelector('.wg .c:not(.cur) .v:not(.nil)') : null;
+      out.quietV = !pv || getComputedStyle(pv).opacity === '0';
+      out.quietFlags = cards.every(c => c.querySelectorAll('.wg.qf .flags .flag').length <= 1);
+      // plan 026: the I/O card names its top statement by physical reads, and a
+      // plan-change card that explains it sits right under it with its chip.
+      // The dashboard design keeps it in "What changed around it" instead
+      // (a column beside its findings table), chip and all.
+      const dashX = document.body.classList.contains('d-dash');
+      const io = document.getElementById('f-io');
+      out.ioSql = io ? [...io.querySelectorAll('dl.ev .evr > dt')].some(dt => dt.textContent.trim() === 'SQL') : null;
+      const ex = [...document.querySelectorAll('article.fc[data-explains]')];
+      out.explains = ex.length;
+      out.explainsOk = ex.every(p => (dashX ? !!p.closest('#changes-slot')
+          : p.previousElementSibling && p.previousElementSibling.id === p.getAttribute('data-explains'))
+        && p.querySelector('.fc-k .xpl a[href="#' + p.getAttribute('data-explains') + '"]'));
+      // G4: it is folded exactly when the card it explains is (dashboard: open, no toggle)
+      // review follow-up R2: a card that explains cites, through a link to
+      // it, exactly the transition it shows (data-ph0 / data-ph1 = the
+      // plan line's title); and no finding card links a plan card while
+      // citing another transition (17 unwraps such a link)
+      const phOf = p => [p.getAttribute('data-ph0'), p.getAttribute('data-ph1')];
+      const cited = a => { const m = /new plan (\d+)\D+?(\d+)/.exec(a.textContent); return m ? [m[1], m[2]] : null; };
+      out.explainsPh = ex.filter(p => {
+        const c = document.getElementById(p.getAttribute('data-explains')), ph = phOf(p);
+        const wl = p.querySelector('.whereln'), sh = wl ? /plan (\d+)\D+?(\d+)/.exec(wl.getAttribute('title') || '') : null;
+        const ls = c ? [...c.querySelectorAll('a.ent[href="#' + p.id + '"]')] : [];
+        return !ph[0] || !ph[1] || !sh || sh[1] !== ph[0] || sh[2] !== ph[1] || !ls.length
+          || ls.some(a => { const q = cited(a); return !q || q[0] !== ph[0] || q[1] !== ph[1]; });
+      }).map(p => p.id);
+      out.planLinkPh = [...document.querySelectorAll('article.fc:not(.chg) a.ent[href^="#f-plan-"]')].filter(a => {
+        const t = document.getElementById(a.getAttribute('href').slice(1)), q = cited(a);
+        return t && q && (q[0] !== t.getAttribute('data-ph0') || q[1] !== t.getAttribute('data-ph1'));
+      }).map(a => a.closest('article.fc').id + '->' + a.getAttribute('href'));
+      out.explainsFold = ex.every(p => { const c = document.getElementById(p.getAttribute('data-explains'));
+        return dashX ? !p.classList.contains('fold') && !p.querySelector('.fc-tg') : !!c && c.classList.contains('fold') === p.classList.contains('fold'); });
+      const sl = document.getElementById('changes-slot'), sc = document.getElementById('s-changes');
+      out.changesOk = !sl || !sc || (sl.children.length > 0) === !sc.hidden;
+      // v1.7: cards ordered by impact; chip; Summary z capped at 10
+      // (#findings article.fc:not(.chg): the dashboard moves the cards into
+      // its findings table, and the plan / config cards carry .chg)
+      const fc = [...document.querySelectorAll('#findings article.fc:not(.chg)')];
+      // tier 1 = a rise of at least 0.01 AAS (owner decision 2026-11-20):
+      // those cards lead (DB time aside), largest first; a smaller rise,
+      // none or a fall follows with the cards without a time measure (the
+      // floor reads the impact rounded like its 3-decimal token, imp_on)
+      const imp = fc.filter(c => c.id !== 'f-dbtime').map(c => {
+        const a = c.getAttribute('data-impact');
+        return a === null || a === '' ? null : parseFloat(a);
+      });
+      const t1 = v => v !== null && v >= 0.01;
+      const nt1 = imp.findIndex(v => !t1(v));
+      const imp1 = imp.filter(t1);
+      out.impOrder = imp.every((v, i) => !t1(v) || nt1 < 0 || i < nt1)
+        && imp1.every((v, i) => i === 0 || imp1[i - 1] >= v);
+      out.impAttrs = fc.every(c => c.hasAttribute('data-impact') && c.hasAttribute('data-share'));
+      // a chip exactly when the card added 0.01 AAS or more (owner decision
+      // 2026-11-21: a smaller rise shows no chip and no share)
+      out.impChips = fc.every(c => { const v = parseFloat(c.getAttribute('data-impact')), ch = c.querySelector('.fc-k .fc-imp');
+        return v >= 0.01 ? !!ch : !ch && (c.getAttribute('data-share') || '') === ''; });
+      // R4: a flagged card whose time measure rose less than 0.01 AAS (a
+      // background-only wait class: scored on all sessions, its foreground
+      // time flat) has no chip and no share, sits after every tier-1 card,
+      // reads "under 0.01 AAS" in the triage list and is no breakdown part
+      // (required on the demo: its Queueing waits card, impact 0). A part
+      // needs the same 0.01 AAS floor (imp_on), so such a card is at most
+      // inside "+ n smaller".
+      const last1 = fc.reduce((m, c, i) => (c.id !== 'f-dbtime' && t1(parseFloat(c.getAttribute('data-impact')))) ? i : m, -1);
+      const triL = document.getElementById('triage');
+      out.lowImp = fc.filter(c => c.id !== 'f-dbtime' && /\bf-(large|moderate)\b/.test(c.className)
+          && (c.getAttribute('data-impact') || '') !== '' && Math.abs(parseFloat(c.getAttribute('data-impact'))) < 0.01)
+        .map(c => {
+          const bad = [], tr = document.querySelector('#triage .tri-row[data-card="' + c.id + '"] .tri-imp');
+          if (c.querySelector('.fc-k .fc-imp')) bad.push('chip');
+          if ((c.getAttribute('data-share') || '') !== '') bad.push('share');
+          if (fc.indexOf(c) < last1) bad.push('before a tier-1 card');
+          if (triL && !tr) bad.push('no triage row');
+          if (tr && !/^under 0\.01 AAS$/.test(tr.textContent.trim())) bad.push('triage "' + tr.textContent.trim() + '"');
+          const ap = document.querySelector('#att-slot a[href="#' + c.id + '"]'), apv = ap && ap.parentNode.querySelector('b');
+          if (ap) bad.push('a breakdown part');
+          return c.id + (bad.length ? ' FAIL ' + bad.join(', ') : '');
+        });
+      // v1.7: the DB-time breakdown under the verdict
+      const att = document.getElementById('att-slot');
+      out.att = (att && !att.hidden && vis(att)) ? att.querySelectorAll('.att-s').length : 0;
+      out.attSrcGone = !document.getElementById('att-src');
+      const wcs = window.AWR_WAIT_COLORS || {};
+      out.attColors = [...document.querySelectorAll('#att-slot [data-wc]')]
+        .every(e => !wcs[e.getAttribute('data-wc')] || !!e.style.getPropertyValue('--c'));
+      // the related-metrics fold (details.rel) is a table and keeps the exact z
+      out.zcap = [...document.querySelectorAll('#findings article.fc .fc-h .bd .ov, #findings article.fc dl.ev .bd .ov, '
+        + '#changes-slot article.fc .fc-h .bd .ov, #changes-slot dl.ev .bd .ov, #s-normal .nr .bd .ov, #overview .bd .ov, '
+        + '.dft .drow .dbd .bd .ov')]
+        .map(b => b.textContent).filter(t => /\u03c3/.test(t))
+        // a capped text reads >+10 / <-10 (= 10, passes); an uncapped >+99 fails
+        .filter(t => Math.abs(parseFloat(t.replace(/^[<>]/, '').replace('\u2212', '-'))) > 10);
+      // v1.7 one count: the rail's Findings pills count the cards; no other rail link counts rows
+      const fl = document.querySelector('nav.toc a[href="#findings"]');
+      out.railFind = (fl ? [...fl.querySelectorAll('.cnt')].reduce((s, x) => s + (parseInt(x.textContent, 10) || 0), 0) : -1) + '/' + cards.length;
+      out.railOther = [...document.querySelectorAll('nav.toc a .cnt')].filter(x => x.closest('a') !== fl).length;
+      out.pillMoved = [...document.querySelectorAll('#pills li')].some(li => /metrics? moved/.test(li.textContent));
+      const fm = document.querySelector('#findings-heading .meta.in-s');
+      out.findMeta = fm ? (fm.textContent.match(/\d+/g) || []).reduce((s, x) => s + +x, 0) + '/' + cards.length : 'none';
+      // J in Summary lands on a large card (a report with no large card --
+      // a quiet window, only moderate findings -- walks table rows instead)
+      if (document.querySelector('#findings article.fc.f-large:not(.chg)')) {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true }));
+        await wait(200);
+        const fl1 = document.querySelector('#findings article.fc.flash:not(.chg)');
+        out.jk = fl1 ? (fl1.classList.contains('f-large') ? 'ok' : 'FAIL not large') : 'FAIL no card flashed';
+      } else out.jk = 'none (no large card)';
+      // the rail sub-link names stay clean (the share is CSS ::after only)
+      out.subNames = [...document.querySelectorAll('nav.toc a.sub')].every(a => !/%/.test(a.textContent) && !/%/.test(a.getAttribute('data-label') || ''));
+      // plan 027: pattern tags on the finding cards (and the triage rows)
+      const fcs = [...document.querySelectorAll('#findings article.fc:not(.chg)')];
+      out.tagCards = fcs.length;
+      out.tagNoTitle = [...document.querySelectorAll('#findings .ptag')].filter(t => !t.title || !t.textContent).length;
+      out.tagChg = document.querySelectorAll('article.fc.chg .ptag').length;
+      out.tagIo = [...document.querySelectorAll('#f-io .fc-tags .ptag')].map(t => t.textContent).join('|');
+      out.tagTri = [...document.querySelectorAll('#triage .tri-row[data-card]')].filter(r => {
+        const c = document.getElementById(r.getAttribute('data-card'));
+        const a = c ? [...c.querySelectorAll('.fc-tags .ptag')].map(t => t.textContent).join('|') : '';
+        const b = [...r.querySelectorAll('.tri-tags .ptag')].map(t => t.textContent).join('|');
+        return a !== b;
+      }).map(r => r.getAttribute('data-card'));
+      // dashboard design: each lead row shows its card's tags (step 6b)
+      out.tagRows = [...document.querySelectorAll('details.drow.lead')].filter(r => {
+        const c = r.querySelector('article.fc');
+        const a = c ? [...c.querySelectorAll('.fc-tags .ptag')].map(t => t.textContent).join('|') : '';
+        const b = [...r.querySelectorAll(':scope > summary .dtags .ptag')].map(t => t.textContent).join('|');
+        return a !== b;
+      }).map(r => r.id);
+      // plan 032: "Checked and normal" folds to one summary line; a jump to
+      // #s-normal (pill, rail) opens it.  The dashboard design shows it in
+      // its Normal tab with the fold open (js_design).
+      const sn = document.getElementById('s-normal'), cf = sn ? sn.querySelector('details.calm-fold') : null;
+      out.calm = !sn ? 'none' : !cf ? 'nofold' : (cf.open ? 'open' : 'closed');
+      if (cf && !cf.open) {
+        window.AWR_goTo(sn, false, false); await wait(250);
+        out.calmReveal = cf.open && vis(sn.querySelector('.ngrid')) ? 'ok' : 'FAIL';
+        cf.open = false;
+      } else out.calmReveal = 'skip';
+      // plan 033: rule-based hints; a next-step query is a copyable SELECT.
+      // Review follow-up R2: a rule with a query in finding_hints.plsql
+      // (HQ) shows it, a rule without one shows none; a query has no
+      // placeholder left and is one or more read-only "SELECT ... ;"
+      // statements (string literals left out of the keyword test: the
+      // ROW_LOCK query names "row lock contention")
+      const roSql = t => {
+        const u = t.replace(/'(?:[^']|'')*'/g, "''"), st = u.split(';').map(x => x.trim());
+        return st.length > 1 && st.pop() === '' && st.every(x => /^SELECT\s/i.test(x))
+          && !/\b(INSERT|UPDATE|DELETE|MERGE|UPSERT|ALTER|CREATE|DROP|GRANT|REVOKE|TRUNCATE|RENAME|COMMENT|BEGIN|DECLARE|EXEC|EXECUTE|CALL|COMMIT|ROLLBACK|LOCK)\b/i.test(u);
+      };
+      const hints = [...document.querySelectorAll('article.fc .fc-hint[data-hint]')];
+      out.hints = hints.map(x => x.closest('article.fc').id + ':' + x.getAttribute('data-hint')).join(',');
+      out.hintBad = hints.filter(x => {
+        const pre = x.querySelector('pre.sql'), btn = x.querySelector('.copy-btn[data-copy]'), r = x.getAttribute('data-hint');
+        if (!x.querySelector('p b')) return true;
+        if (HQ && (HQ.indexOf(r) >= 0) !== !!pre) return true;
+        return !!pre && !(btn && document.querySelector(btn.getAttribute('data-copy')) === pre
+          && !/#[A-Z0-9]+#/.test(pre.textContent) && roSql(pre.textContent));
+      }).map(x => x.closest('article.fc').id + ':' + x.getAttribute('data-hint'));
+      out.hintsOk = out.hintBad.length === 0;
+      out.hintRules = HQ ? HQ.length : 'n/a';
+      // the plan card keeps section 23's "Plan shape" link in its footer
+      out.hintPfl = [...document.querySelectorAll('article.fc.chg[id^="f-plan-"]')].every(c => c.querySelector('.fc-f .evl a[href="#topsql"]'));
+      // dashboard design: the plan card's query never widens the side column
+      const side = document.querySelector('aside.dside');
+      out.hintSide = side ? side.scrollWidth <= side.clientWidth + 1 : true;
+      // All sections: every library section shows in full, row state or not:
+      // its first chart or table that holds a number (a table without a data
+      // row holds none: section 28's split table stays empty, hidden with
+      // the rest of the split view, until a release marker or a boundary
+      // gives a split; its Current-vs-all-priors table shows every number)
       window.AWR_setView('all', false); await wait(250);
-      out.allFull = libs.filter(x => { const t = x.querySelector('table, .chart-wrap'); return t && !vis(t); }).map(x => x.id);
+      const hasNum = t => !t.matches('table') || [...t.rows].some(r => r.querySelector('td'));
+      out.allFull = libs.filter(x => { const t = [...x.querySelectorAll('table, .chart-wrap')].find(hasNum); return t && !vis(t); }).map(x => x.id);
+      // section 28 with no usable split (no release marker): the reason note
+      // shows instead of the split view, and the all-priors table is there
+      {
+        const rd = document.getElementById('release-delta'), app = rd && rd.querySelector('.rd-app');
+        const why = app && app.querySelector('.rd-why'), tall = rd && rd.querySelector('table.rd-tall');
+        // (the section emits .rd-app only with a payload and 3+ valid
+        // windows, where the script always shows it: still hidden = it bailed)
+        out.rdSplit = !app ? 'none' : !vis(app) ? 'FAIL: the split view never showed (script bailed out)'
+          : vis(app.querySelector('.rd-body')) ? 'split'
+          : (vis(why) && why.textContent.trim() && tall && vis(tall) && hasNum(tall)) ? 'no split (reason note, all-priors table)'
+          : 'FAIL: no split shown, but no reason note or no all-priors table';
+      }
+      // plan 035: section 11's charts are drawn on demand
+      const a11 = [...document.querySelectorAll('#topsql-ash .chart-ash-sql')];
+      if (window.echarts && a11.length > 2) {
+        window.scrollTo(0, 0); await wait(300);
+        const last = a11[a11.length - 1];
+        if (last.getBoundingClientRect().top > innerHeight + 700) {
+          const before = echarts.getInstanceByDom(last) ? 1 : 0;
+          last.scrollIntoView({ block: 'center' }); await wait(500);
+          const after = echarts.getInstanceByDom(last) ? 1 : 0;
+          out.lazy11 = (before === 0 && after === 1) ? 'ok' : 'FAIL before=' + before + ' after=' + after;
+        } else out.lazy11 = 'skipped (too close)';
+      } else out.lazy11 = 'skipped (' + (window.echarts ? a11.length + ' charts' : 'no ECharts') + ')';
+      // G4: print opens every folded card, the closed "Checked and normal"
+      // fold and (dashboard) every closed lead row; afterprint restores them
+      {
+        const st = () => ({ f: [...document.querySelectorAll('article.fc.fold')].map(c => c.id).join(','),
+          n: (document.querySelector('#s-normal details.calm-fold') || {}).open,
+          r: [...document.querySelectorAll('details.drow.lead')].map(d => d.open ? 1 : 0).join('') });
+        const b0 = st();
+        window.dispatchEvent(new Event('beforeprint'));
+        const b1 = st();
+        window.dispatchEvent(new Event('afterprint'));
+        const b2 = st();
+        const open1 = b1.f === '' && b1.n !== false && !/0/.test(b1.r);
+        out.print = open1 && JSON.stringify(b0) === JSON.stringify(b2) ? 'ok' : 'FAIL ' + JSON.stringify([b0, b1, b2]);
+        await wait(80);
+      }
       out.strips = document.querySelectorAll('td.trend svg.mw').length;
       out.lines = document.querySelectorAll('td.trend svg.spark').length;
       // js_microstrip draws nothing past 91 windows (no pixel per bar left)
       out.nwin = (window.AWR_WIN && window.AWR_WIN.w) ? window.AWR_WIN.w.length : 0;
       window.AWR_setView('summary', false);
       return out;
-    });
+    }, HINT_SQL_RULES);
     console.log('phase 4', JSON.stringify(p4));
-    if (!p4.planOk) fail('plan-change card incomplete or not in #changes-slot');
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && !p4.att) fail('DB-time breakdown: not shown under the verdict');
+    if (!p4.attSrcGone) fail('DB-time breakdown: #att-src left in the page');
+    if (!p4.attColors) fail('DB-time breakdown: a part has no wait-class colour');
+    if (!p4.impAttrs) fail('finding cards: data-impact / data-share missing');
+    if (!p4.impOrder) fail('finding cards: not ordered by impact');
+    if (!p4.impChips) fail('finding cards: impact chip missing, or shown below 0.01 AAS');
+    if (p4.lowImp.some(x => / FAIL /.test(x))) fail('finding cards under 0.01 AAS: ' + p4.lowImp.join('; '));
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && !p4.lowImp.includes('f-wait-queueing'))
+      fail('demo: expected the flagged background-only Queueing waits card (impact under 0.01 AAS), got ' + JSON.stringify(p4.lowImp));
+    if (p4.zcap.length) fail('Summary glyphs print z past 10: ' + p4.zcap.join(', '));
+    if (!p4.planOk) fail('plan-change card incomplete, or neither in #changes-slot nor right under the card it explains');
+    if (/^FAIL/.test(p4.scatter)) fail('SQL Monitor scatter ' + p4.scatter);
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && /local time/.test(p4.scatter)) fail('SQL Monitor scatter: the demo must read its times as UTC (useUTC)');
+    if (!p4.sumOk) fail('Copy summary: Markdown missing the verdict, a card line, or contains undefined/null');
+    if (!p4.sumClosed) fail('Copy summary: the popover did not close');
+    if (!p4.sumEsc) fail('Copy summary: Escape on the close button did not close the popover, or it unpinned the window');
+    if (!p4.sumOnTop) fail('Copy summary: something paints over the popover in the Timeline view');
+    if (!p4.durOk) fail('plan card: elapsed not shown as a duration');
+    if (!p4.aasOk) fail('Timeline: a wait-event row is not in AAS');
+    if (p4.evOverClass.length) fail('Timeline: wait-event row(s) above their own wait-class row: ' + p4.evOverClass.join(', '));
+    if (!p4.smOrder) fail('SQL Monitor table: flagged statements not first, or a detail row lost its statement');
+    if (!p4.topsqlTab) fail('Top SQL: the selected tab and the open panel disagree');
+    if (p4.ioSql === false && /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) fail('demo: the Physical I/O card has no SQL evidence row');
+    if (!p4.explainsOk) fail('an explaining plan-change card is not right under its card (dashboard: not in #changes-slot) or lacks its chip');
+    if (!/^ok/.test(p4.print)) fail('print: folded cards / Checked and normal / dashboard rows not opened for print or not restored after: ' + p4.print);
+    if (p4.explainsPh.length) fail('an explaining plan-change card shows another transition than the one its card cites (or has no link to it): ' + p4.explainsPh.join(', '));
+    if (p4.planLinkPh.length) fail('a finding card links a plan-change card while citing another transition: ' + p4.planLinkPh.join(', '));
+    if (!p4.explainsFold) fail('an explaining plan-change card is not folded with the card it explains (dashboard: folded or with a toggle)');
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && p4.explains !== 1) fail('demo: expected the plan card of 7k2m9dx4qp1zb to explain the Physical I/O card, got ' + p4.explains);
+    if (!p4.changesOk) fail('"What changed around it" visible while empty, or hidden while it holds a card');
     if (!p4.lib || p4.libVisible !== p4.lib) fail('evidence library: ' + p4.libVisible + '/' + p4.lib + ' rows visible in Summary');
     if (p4.libNoLs.length) fail('evidence library rows without a one-line status: ' + p4.libNoLs.join(', '));
     if (!p4.libHead) fail('evidence library heading #s-lib not visible');
@@ -868,8 +1804,63 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
     if (/^FAIL/.test(p4.toggle)) fail('evidence library row toggle ' + p4.toggle);
     if (/^FAIL/.test(p4.reveal)) fail('evidence library reveal ' + p4.reveal);
     if (!p4.subsOk) fail('rail card sub-links ' + p4.subs);
+    if (!p4.hintsOk) fail('card hints: a hint without its line, a rule with a query that shows none (or the reverse), or a next-step query not copyable / with an unfilled placeholder / not read-only SELECTs: ' + p4.hintBad.join(', '));
+    if (!p4.hintPfl) fail('card hints: a plan card lost its footer links (section 23 adds "Plan shape" there)');
+    if (!p4.hintSide) fail('card hints: the dashboard side column is wider than its box');
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && !/f-io:IO_SCANS/.test(p4.hints)) fail('demo: the Physical I/O card should carry the IO_SCANS hint, got ' + p4.hints);
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && !/f-plan-[a-z0-9]+:PLAN/.test(p4.hints)) fail('demo: the plan-change card should carry the PLAN hint, got ' + p4.hints);
+    if (p4.tagNoTitle) fail('pattern tags: ' + p4.tagNoTitle + ' chip(s) without text / title');
+    if (p4.tagChg) fail('pattern tags: ' + p4.tagChg + ' chip(s) on a plan / config card');
+    if (p4.tagTri.length) fail('pattern tags: triage row differs from its card: ' + p4.tagTri.join(', '));
+    if (p4.tagRows.length) fail('pattern tags: dashboard row differs from its card: ' + p4.tagRows.join(', '));
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && p4.tagIo !== 'jump after Release 4.2|step up at Release 4.1')
+      fail('pattern tags: the demo Physical I/O card shows "' + p4.tagIo + '"');
+    if (!p4.triageOk) fail('triage list: ' + p4.triage + ' rows (expected one per card, in card order, micro strip + impact cell)');
+    if (!p4.foldOk) fail('folded cards: ' + p4.folded + ' start folded (expected all but one)');
+    if (/^FAIL/.test(p4.unfold)) fail('a triage row click did not open its card: ' + p4.unfold);
+    if (!p4.quietV) fail('card chart: a prior value is visible without hover');
+    if (!p4.quietFlags) fail('card charts: more than one release label on a card');
+    if (/demo_busy_db(_quiet)?\.html$/.test(file) && p4.calm !== 'closed') fail('demo: "Checked and normal" should start folded, got ' + p4.calm);
+    if (/demo_busy_db_dashboard\.html$/.test(file) && p4.calm !== 'open') fail('dashboard demo: the Normal tab should show "Checked and normal" open, got ' + p4.calm);
+    if (p4.calmReveal === 'FAIL') fail('a jump to #s-normal did not open its fold');
+    const [rf, rc] = p4.railFind.split('/');
+    if (rf !== rc) fail('rail Findings pills count ' + rf + ', cards ' + rc);
+    if (p4.railOther) fail('rail: ' + p4.railOther + ' count pill(s) outside the Findings link');
+    if (p4.pillMoved) fail('verdict: a "metrics moved" pill is back');
+    if (p4.findMeta !== 'none' && p4.findMeta.split('/')[0] !== p4.findMeta.split('/')[1]) fail('Findings header (Summary) does not count the cards: ' + p4.findMeta);
+    if (/^FAIL/.test(p4.jk)) fail('J in Summary: ' + p4.jk);
+    if (!p4.subNames) fail('rail card sub-link text / data-label carries the share');
     if (p4.allFull.length) fail('All sections: library sections not shown in full: ' + p4.allFull.join(', '));
+    if (/^FAIL/.test(p4.rdSplit)) fail('release-delta: ' + p4.rdSplit);
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && p4.rdSplit !== 'split') fail('demo: release-delta should open on a split at its release marker, got ' + p4.rdSplit);
+    if (/^FAIL/.test(p4.lazy11)) fail('section 11 lazy charts ' + p4.lazy11);
     if ((!p4.strips && p4.nwin <= 91) || p4.lines) fail('micro strips: ' + p4.strips + ' svg.mw, ' + p4.lines + ' line sparklines left');
+    // G4: pattern chips are focusable (tabindex 0, named by their text, the
+    // sentence as title); keyboard focus shows the sentence in #ptip under
+    // the chip; Esc hides it and is not swallowed (a pinned window unpins)
+    const tagKb = await page.evaluate(async () => {
+      const vis = el => !!el && el.getClientRects().length > 0;
+      const all = [...document.querySelectorAll('.ptag')];
+      const bad = all.filter(t => t.getAttribute('tabindex') !== '0' || t.getAttribute('aria-label') !== t.textContent || !t.title).length;
+      const c = all.find(vis);
+      if (!c) return { n: all.length, bad, tip: 'none' };
+      const w = (window.AWR_WIN && AWR_WIN.w) || [];
+      if (w.length > 1 && window.AWR_WG && AWR_WG.pin) AWR_WG.pin(w[0].o);
+      c.focus(); await new Promise(r => setTimeout(r, 80));
+      const p = document.getElementById('ptip'), r = c.getBoundingClientRect(), q = p && p.getBoundingClientRect();
+      const ok = vis(p) && p.textContent === c.title && q.top >= r.bottom && q.top - r.bottom < 20;
+      return { n: all.length, bad, tip: ok ? 'ok' : 'FAIL ' + JSON.stringify([!!p, p && p.textContent, r.bottom, q && q.top]), pinned: document.body.hasAttribute('data-pw') };
+    });
+    if (tagKb.tip !== 'none') { await page.keyboard.press('Escape'); await page.waitForTimeout(150); }
+    tagKb.esc = tagKb.tip === 'none' ? 'none' : await page.evaluate(() => {
+      const p = document.getElementById('ptip');
+      return (!p || p.hidden) ? (document.body.hasAttribute('data-pw') ? 'FAIL still pinned' : 'ok') : 'FAIL tip shown';
+    });
+    console.log('pattern chips (keyboard): ' + JSON.stringify(tagKb));
+    if (tagKb.bad) fail('pattern tags: ' + tagKb.bad + ' chip(s) not focusable / unnamed / without a title');
+    if (/^FAIL/.test(tagKb.tip)) fail('pattern tags: keyboard focus does not show the sentence: ' + tagKb.tip);
+    if (tagKb.pinned && /^FAIL/.test(tagKb.esc)) fail('pattern tags: Esc on a focused chip ' + tagKb.esc);
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && tagKb.tip !== 'ok') fail('demo: no pattern chip to focus');
     if (errors.length) fail('phase 4: ' + errors.slice(0, 5).join(' | '));
     if (shots) {
       const pc = await page.$('#s-changes');
@@ -922,6 +1913,12 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
           dbtCard: !!document.getElementById('f-dbtime'), hero: !!document.getElementById('hero-dbt'),
           inRows: cards.filter(c => c.parentElement.closest('details.drow.lead')).length, rows: rows.length, tabN: tab ? +tab.textContent : 0,
           trends: rows.filter(r => r.querySelector('.dtr svg')).length,
+          // the card's impact chip on its lead row (the row hides the card's header)
+          imps: rows.filter(r => r.classList.contains('lead')).map(r => {
+            const c = r.querySelector('article.fc'), im = c ? parseFloat(c.getAttribute('data-impact')) : NaN;
+            const ch = r.querySelector(':scope > summary .dnm .dimp');
+            return im >= 0.01 ? (vis(ch) && /^\+[0-9.]+ AAS/.test(ch.textContent) && !!ch.title ? 'y' : 'FAIL ' + (c && c.id)) : (ch ? 'FAIL ' + (c && c.id) : 'n ' + (c && c.id));
+          }),
           order: top('verdict') < top('activity') && document.querySelector('.dkpis').getBoundingClientRect().top < top('activity') && top('activity') < top('findings') };
       });
       dz.layout = lay;
@@ -930,6 +1927,9 @@ const VIEWS = { summary: 'vs', timeline: 'vt', all: 'va' };
       if (lay.kpis !== nk || lay.kpiBars !== lay.kpis) fail('dashboard: KPI cards ' + lay.kpis + ' (expected ' + nk + '), ' + lay.kpiBars + ' with bars');
       if (lay.inRows !== lay.cards || lay.rows !== lay.tabN || lay.trends !== lay.rows) fail('dashboard: findings table ' + JSON.stringify(lay));
       if (!lay.order) fail('dashboard: Summary order (verdict, KPI cards, Activity, findings)');
+      if (lay.imps.some(x => /^FAIL/.test(x))) fail('dashboard: impact chip on the lead rows ' + lay.imps.join(','));
+      if (/demo_busy_db_dashboard\.html$/.test(file) && !lay.imps.includes('y')) fail('dashboard demo: no lead row shows its impact chip');
+      if (/demo_busy_db_dashboard\.html$/.test(file) && !lay.imps.includes('n f-wait-queueing')) fail('dashboard demo: the background-only card\'s lead row (f-wait-queueing) not shown without the chip: ' + lay.imps.join(','));
       // rows open: a lead row shows its card, another row draws its bars
       dz.rows = await page.evaluate(async () => {
         const vis = el => !!el && el.getClientRects().length > 0;

@@ -118,6 +118,191 @@ release bumps `awr_version`).
   followed the old list got `ORA-00942`.
 
 ### Report
+- **Finding cards are ranked by the DB time they added.** Each card's time
+  measure (DB time, DB CPU or its wait class) above its prior mean, in AAS,
+  orders the cards and shows as a chip ("+6.313 AAS · 70% of the
+  DB-time rise"); a card ranks by it only from 0.01 AAS up, so a rise of
+  +0.001 AAS no longer outranks a louder card: smaller rises, falls and
+  cards without a time measure follow, large before moderate (a rise
+  under 0.01 AAS shows no chip and no share either; a share under 0.5%
+  reads "<1%", here and on the rail, the triage list and Copy summary;
+  the dashboard design shows
+  it under the metric name in its findings table, whose rows hide the
+  card's header). DB time stays second. The verdict follows the same order. A
+  wait class's time added counts foreground sessions only
+  (`time_waited_micro_fg`), like DB time: on a test-DB hour, Configuration
+  waits (archiver / log switch, mostly background) had ranked first with
+  +8.06 AAS of all-session time against a DB-time rise of +3.43 AAS. The
+  wait-class rows themselves, their scores and which cards exist are
+  unchanged (all sessions). Band
+  glyphs in the Summary view print z only up to ">+10 sigma"; tables keep
+  the exact z. A flagged DB CPU card is labelled "CPU" (was "Cpu").
+- **The verdict shows where the extra DB time went.** A bar under the
+  verdict splits the DB-time rise into DB CPU and each wait class's
+  foreground wait time (AAS above the prior mean, largest first), solid
+  when the part is behind a finding, hatched when it grew but stayed
+  normal, with the classes that fell named under it. Same numbers as the
+  finding cards' impact, so the parts roughly add up to the rise; a
+  hatched rest shows what they leave of it net of the falls (DB time +10,
+  CPU +8, Commit -5: the rest is 7, not 2), and a note names the gap only
+  when they pass it by more than 2% (time model and wait interface are
+  kept separately). A share never reads above 100%.
+- **One finding count.** A finding is a card everywhere it is counted:
+  the verdict pill (with its large / moderate split; the "metrics moved"
+  pill is gone), the Findings header in Summary and the rail's Findings
+  link (whose card sub-links show each card's share of the DB-time rise).
+  Other rail links keep their status dot but no longer count table rows;
+  section headers still count their own rows. In Summary, J / K step
+  through the large cards.
+- **Summary view: the verdict first, the Activity charts compact.** The
+  one-sentence verdict now opens the Summary view; the Activity charts
+  follow it as one 170-px chart by wait class, and *Show by wait event*
+  brings back the second chart (remembered in this browser). Timeline and
+  All sections are unchanged: the charts are still their first section.
+  The dashboard design is unchanged (it already led with the verdict and
+  shows one chart at a time).
+- **Activity charts: Windows side by side.** A switch above the charts
+  shows the compared windows as adjacent panels on one y axis (minute by
+  minute where the 1-minute data covers the window), the Current one last
+  and highlighted, release markers between the panels; hover, legend,
+  highlight and pin work as before, zoom stays in Full span. Full span
+  stays the default; the reader's choice is remembered. Works in all three
+  designs, next to the dashboard's chart tabs. Markers sharing a gap (or
+  one spot in Full span) each get a flag while there is room, then one
+  "+n" flag whose tooltip lists the rest (a third marker used to lose its
+  flag, and a marker with no room left now keeps its line); the flag band
+  is left out when every marker is in a window cropped away; Enter on a
+  focused window stripe or cap keeps the focus there after the pin
+  redraws the charts (both layouts). Narrower than 480 px (a phone) the
+  pointer maps correctly onto the charts, which scale down there: hover,
+  click and the band highlight used to land about 38 px off vertically
+  at 390 px and light nothing or the wrong band; and the highlighted band
+  is the one drawn under the pointer (on spiky data, at any width, the
+  stack of the exact bucket under the pointer could name the band above
+  or below it). A long release label that does not fit to the right of
+  its marker is drawn to its left only when it stays inside the chart;
+  otherwise the short label ("R 4.3") is tried, then just the line with
+  its tooltip (a long label near the left edge of a narrow chart used to
+  sit mostly outside it, the short label never tried; the dashboard's KPI
+  bars had the same flaw).
+- **Findings at a glance.** The Summary view lists every finding in one
+  triage list (value, normal range, share of the DB-time rise, per-window
+  strip) above the cards; every card but the most important one starts
+  folded (a click, a link or the list opens it; the list's strip shows
+  every window as one silhouette past about 45 windows, where the bars
+  would be under a pixel wide and the 168-window test report showed none);
+  card charts print prior
+  values on hover only and name only the release right before the
+  Current window. The dashboard design keeps its own findings table (no
+  list there, every card open inside its row).
+- **Cause next to effect.** The Physical I/O card names the statement
+  reading the most blocks in the Current window (blocks, gets per
+  execution then and now, its plan change), and that statement's
+  plan-change card moves right under the card with an "explains Physical
+  I/O" chip (folded with the I/O card when that one starts folded, and
+  opening with it; it has its own toggle too) -- only when the card shows
+  the same plan change the I/O card names (the two read different
+  sources: SQLSTAT there, SQL Monitor on the card); otherwise the card
+  stays in "What changed around it" and the I/O card's plan text is not a
+  link. A statement new in the top N by reads keeps its own "New SQL"
+  row when it is not the top one. The dashboard design keeps the plan card
+  in "What changed around it", the column beside its findings table.
+- **Finding cards name the shape of the change.** Up to two tags per card
+  ("jump after Release 4.2", "step up at Release 4.1", "spike: Current
+  only", "high for 3 windows", "rising across 12 windows"), computed in the
+  browser from the card's per-window values and the release markers. A
+  hint only: severities, order and counts are unchanged. Each tag is
+  reachable with the keyboard: Tab to it and its explanation shows under
+  it (screen readers read it as the tag's description). A spike is not
+  tagged "Current only" when a step the same way explains it (on a
+  test-DB card the two windows before Current were already high: it read
+  "spike: Current only" and "step up on 08:00"; now just the step).
+  "Jump after <marker>" names only a marker at or before the start of
+  the Current window: a release inside it (09:55 in a 09:00-10:00 window)
+  may have followed the spike, so the tag reads "spike: Current only" and
+  its explanation says the marker falls inside the window. The same rule
+  holds for every "after <marker>" text (the likely-source line, the
+  plan-change card, Load vs response time); the flag stays on the
+  window's left edge.
+- **Sorted by change.** SQL Monitor's per-statement table lists large,
+  then moderate findings first (JS; the selection of statements is
+  unchanged). Top SQL opens on a new *Biggest change* tab: Current-window
+  total elapsed minus the prior-window mean, from the same SQLSTAT read;
+  its Delta reads *new* only when no prior valid window has a row for the
+  statement, *from 0* when the rows there all show 0 s elapsed.
+  A shared link keeps the chosen tab (Elapsed time included); the About
+  notes state both orders.
+- **Durations and AAS.** The plan-change card shows elapsed time as words
+  of time (7 h 45 m, not 27.92 k s); Timeline wait-event rows are in AAS
+  like the wait classes (each window's seconds waited ÷ its real snapshot
+  span, the class rows' divisor: with the nominal length a 3846-s window
+  showed an event at 8.60 AAS above its own class card's 8.06). Their
+  severity and the Δ / z beside them stay the table's. Tables keep
+  seconds.
+- **Timeline rows show what normal looked like.** A row whose Current
+  value is far above its prior windows no longer squashes them: the grid
+  scales to the prior windows and draws the Current bar cut, with its value
+  above it. A toolbar above the grid shows only flagged rows or sorts the
+  headline and wait lanes by the size of their change (added AAS for
+  waits; an event new in the Current window, with no prior mean, ranks by
+  its Current value -- on a test-DB hour "log file switch (archiving
+  needed)", 8.6 AAS and the story of that hour, had sorted last; skipped
+  windows never count as 0); both are remembered per browser.
+- **"Checked and normal" in one line.** In the Summary view the normal /
+  too small / improved metrics fold into one summary line (counts) that
+  opens in place; it stays open when the report has no finding.
+- **Printing shows everything folded.** A printed (or saved as PDF)
+  report shows the folded finding cards, the plan card folded with them
+  and the "Checked and normal" grid open (with JS off too, where the
+  browser supports it), and the dashboard design every findings row's
+  card and its Normal / Improved tabs; the screen state comes back after
+  printing.
+- **What a finding usually means.** Finding and plan-change cards carry
+  one hedged, rule-based line (full scans, single-block reads, commit
+  latency, result size, hard parses, CPU, row locks, plan change) and,
+  where useful, a copyable read-only query for the next step, filled with
+  the Current window's DBID and snapshot range (or `DBMS_XPLAN.DISPLAY_AWR`
+  for both plans). The rules are one table in
+  `sql/lib/finding_hints.plsql`. A line says only what its rule checked:
+  the commit-latency line needs the log file sync time *per commit* to
+  have risen at least 1.5x (it fired on a demo card where commits rose
+  17.7% and each commit waited 4% longer), the CPU line needs CPU to have
+  taken at least 60% of the DB-time rise (the headline's "mostly CPU"),
+  the full-scan line reads "or" between its three signals. The queries
+  are bounded like the report: only the instances valid for the Current
+  window (RAC, an instance restarted inside it), ASH cut to the window's
+  start and end like the Blocking view (an end snapshot up to 15 minutes
+  late no longer adds lock samples from outside Current), and each plan
+  looked up under the DBID and container that captured it (a
+  pre-migration plan, one PDB of several).
+- **Copy summary.** A top-bar button copies the verdict, the likely
+  source, each finding (value, normal range, share of the DB-time rise
+  when known) and what changed around it as Markdown, and shows the text
+  in a popover.
+- **Faster load and view switch.** Section 11 (Top SQL activity) draws
+  each per-SQL chart when it comes into view instead of all at page load
+  (about 0.3 s less ECharts work at load and half the first switch to All
+  sections on the demo).
+- **Activity charts name their bands.** Each series is labelled once,
+  inside its own band, on the stretch where the band is thickest over the
+  label's width (at least 10 px; a long event name is cut shorter, with
+  "...", when only a shorter piece fits and that piece names no other
+  series of the chart), the thickest bands first, up to
+  six per chart, never overlapping, inside one panel in Windows side by
+  side; the legend stays. Fitted per band after the test DB showed labels
+  on the class chart only: the first version took the band's single
+  thickest point and needed 13 px under the whole label there, which a
+  spiky event band never offered.
+- **SQL Monitor scatter is readable.** Smaller marks (size by log2 of the
+  DOP), Current-window points solid and outlined, the rest faded; the
+  x-axis spans the whole compared span. Under the 3,000-point cap the
+  executions inside a compared window are kept first, then the most
+  recent, so every compared window shows its executions (the demo kept
+  points in only 3 of its 13 windows). Its times are the database's wall
+  clock in any browser time zone: they were read as the reader's local
+  time, so across a daylight-saving change there the Current-window
+  styling and the axis ends were off by an hour (the labels of a normal
+  day are unchanged).
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in
@@ -127,6 +312,16 @@ release bumps `awr_version`).
   time, stopping before the 32767-byte line limit; a cut shows in the
   existing "truncated, N chars total" note. Statements that rendered
   before produce the same output.
+- **Top SQL no longer limits the window count.** Section 06 built each
+  statement's per-window values, ranks and plan hashes, and the window
+  labels, as SQL `LISTAGG` strings, capped at 4000 bytes: near 200
+  compared windows (sooner since *Biggest change*, which has a value in
+  every window a statement ran) the run ended with `ORA-01489`, and a
+  detail row with many plan badges passed the 32767-byte line. It now
+  reads one row per window and streams the header and rows a cell at a
+  time; output for the usual window counts is byte-identical. Other
+  sections still stop the report near 210 windows (window-label lists in
+  14, 15 and 18, the window grids of 07 / 08); see CLAUDE.md.
 - **A changed parameter's window list no longer overflows.** The verdict's
   configuration note lists the prior windows in which a changed parameter
   differs from the Current window; with many compared windows that list
@@ -157,6 +352,10 @@ release bumps `awr_version`).
   JSON escape `\u003c`, which the browser decodes back, so displayed names
   are unchanged. The Top SQL, Segment I/O and File I/O chart tooltips
   HTML-escape series names.
+- **The configuration card's "and N more in Parameters" link is styled in
+  the classic design too** (with more than 8 changed parameters it was
+  left in the browser's default blue, unreadable in dark mode; quiet and
+  dashboard already styled it).
 
 ### Wrappers and fleet
 - **Fractional `step` / `win_hours` no longer crash the bash side.** A
@@ -242,6 +441,38 @@ release bumps `awr_version`).
   the committed demo report or policy page is stale. CI ("Checks",
   formerly "Lint SQL sources") runs exactly this on every push to `main`
   and every pull request, not only when SQL files change.
+- **`demo/verify_report.js` passes a report without release markers.**
+  Its "All sections shows every library section in full" check looks at
+  each section's first chart or table that holds a data row: section 28's
+  split table stays empty, hidden with the rest of the split view behind
+  its "why" note, until a release marker or a picked window boundary gives
+  a split, so every marker-less test-DB report failed (on `main` too). A
+  new check wants that note and the Current-vs-all-priors table, which
+  shows every number either way; the demo must open on a split.
+- **`demo/verify_report.js`: the click-to-keep highlight check on dense
+  windows.** It clicks a band under no window stripe's hit area. With 169
+  hourly windows the stripes tile the span and a stripe narrower than 24 px
+  takes clicks on its full height (a click there pins that window, as
+  designed), so the old fallback clicked a stripe and failed (on `main`
+  too); the check now zooms into the busiest window first, where the
+  stripes are wide and take clicks on their caps only. The demo must not
+  need the zoom.
+- **The demo has a background-only finding.** Its model kept foreground
+  and all-session wait time equal, so only the test DB showed a card
+  scored on all sessions whose impact (foreground time) is nil. Now a
+  GoldenGate extract stalls from 08:35 on the Current day and the
+  integrated capture, a background process, waits for it: the **Queueing
+  waits** card is flagged large, has no impact chip or share, follows the
+  cards that added DB time, reads "under 0.01 AAS" in the triage list and
+  is no part of "Where the extra DB time went". The new events also show
+  in Foreground / Background waits (DBA_HIST_SYSTEM_EVENT is all
+  sessions), the Activity charts, the histograms and the instance map;
+  the other cards' numbers are unchanged. `demo/verify_report.js` checks
+  every flagged card under the 0.01 AAS floor (no chip, no share, after
+  every tier-1 card, the triage text, no breakdown part: a part needs the
+  same 0.01 AAS floor, a smaller rise goes into "+ n smaller"),
+  required on the demo, and on the dashboard demo that card's lead row
+  without the chip.
 
 ## 1.6.1 — 2026-09-27
 

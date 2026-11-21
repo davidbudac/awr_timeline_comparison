@@ -321,6 +321,7 @@ BEGIN
         || ' body.va footer.report { order:40; }');
     -- rail sub-links: one per finding card, under Findings (07)
     DBMS_OUTPUT.PUT_LINE('nav.toc a.sub { padding-left:28px; font-size:12.5px; color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('nav.toc a.sub[data-shr]::after { content:attr(data-shr); margin-left:auto; padding-left:8px; font-size:11.5px; color:var(--muted); font-variant-numeric:tabular-nums; }');
     -- Timeline view placeholder (phase 3 of the redesign fills it).
 
     -- =========================================================
@@ -1055,6 +1056,27 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.topbar .theme-icon-btn .icon-sun{display:none}');
     DBMS_OUTPUT.PUT_LINE('body.dark .topbar .theme-icon-btn .icon-sun{display:block}');
     DBMS_OUTPUT.PUT_LINE('body.dark .topbar .theme-icon-btn .icon-moon{display:none}');
+    -- plan 034: Copy summary (button + its popover), single-DB top bar only
+    DBMS_OUTPUT.PUT_LINE('.topbar .sum-btn{flex:none;height:32px;border:1px solid var(--rule);border-radius:8px;background:var(--panel);'
+        || 'font:inherit;font-size:13px;color:var(--ink-soft);padding:0 12px;cursor:pointer;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .sum-btn:hover{color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('#sum-pop{position:absolute;right:32px;top:calc(100% + 6px);width:min(560px,calc(100vw - 48px));z-index:30;'
+        || 'background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:10px 12px;box-shadow:0 8px 28px rgba(0,0,0,.18)}');
+    DBMS_OUTPUT.PUT_LINE('#sum-pop[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#sum-pop p{display:flex;justify-content:space-between;align-items:center;margin:0 0 6px;font-size:12px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('#sum-pop .sum-x{border:0;background:none;font-size:18px;line-height:1;color:var(--muted);cursor:pointer}');
+    DBMS_OUTPUT.PUT_LINE('#sum-pop textarea{width:100%;box-sizing:border-box;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;'
+        || 'color:var(--ink);background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:8px;resize:vertical}');
+    -- While the popover is open (.sum-open, set by the chrome script) the top
+    -- bar's stacking context (z-index 20) is lifted above the Timeline's
+    -- sticky ruler (30) and the narrow rail bar (30-33), which painted over it.
+    -- At 980 px and below the top bar is position:static (the media rule
+    -- below) and scrolls with the page: the open bar turns relative so the
+    -- popover hangs right under it, full width.  position:fixed would not
+    -- pin it to the viewport: the bar's backdrop-filter makes the bar the
+    -- containing block of fixed descendants too.
+    DBMS_OUTPUT.PUT_LINE('.topbar.sum-open{z-index:40}');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px){.topbar.sum-open{position:relative} #sum-pop{right:12px;left:12px;width:auto}}');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 1180px){.topbar .db span{display:none}}');
     DBMS_OUTPUT.PUT_LINE('@media (max-width: 980px){.topbar{order:1;position:static;margin:0 -20px;padding:8px 20px;flex-wrap:wrap}}');
     -- The band glyph (sql/lib/band_glyph.plsql): one span, one --x, zones and ticks drawn as gradients
@@ -1194,6 +1216,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.hero .pills a,.hero .pills span.pl{display:inline-flex;align-items:center;gap:8px;padding:4px 12px;border:1px solid var(--hairline);border-radius:999px;background:var(--panel);color:var(--ink-soft);font-size:13px;text-decoration:none;line-height:20px}');
     DBMS_OUTPUT.PUT_LINE('.hero .pills a:hover{border-color:var(--muted);color:var(--ink)}');
     DBMS_OUTPUT.PUT_LINE('.hero .pills b{color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.hero .pills .pl-sev{display:inline-flex;align-items:center;gap:5px;margin-left:6px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .pills .pl-sev .dotk{width:8px;height:8px;margin-left:4px}');
     DBMS_OUTPUT.PUT_LINE('.hero .hnotes{list-style:none;margin:var(--s4) 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13.5px;color:var(--ink-soft);max-width:80em}');
     DBMS_OUTPUT.PUT_LINE('.hero .hnotes li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}');
     DBMS_OUTPUT.PUT_LINE('.hero .hnotes .hl{font-weight:600;color:var(--ink)}');
@@ -1201,6 +1225,22 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.hero .hnotes a.go{color:var(--ink-soft);font-size:12.5px;text-decoration:none;border-bottom:1px solid var(--hairline)}');
     DBMS_OUTPUT.PUT_LINE('.hero .hnotes a.go:hover{color:var(--ink);border-color:var(--muted)}');
     DBMS_OUTPUT.PUT_LINE('.hero .snapnote{margin:var(--s3) 0 0;font-size:12.5px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att{margin:var(--s5) 0 0;max-width:60em}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-h{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 16px;font-size:13.5px;color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-h b{color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-bar{display:flex;gap:2px;height:24px;margin:8px 0 8px}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-s{--c:var(--muted);flex-basis:0;min-width:3px;display:flex;align-items:center;overflow:hidden;padding:0 7px;border-radius:3px;background:var(--c);color:#fff;font-size:11.5px;font-weight:600;font-style:normal;white-space:nowrap;text-shadow:0 0 2px rgba(0,0,0,.45)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-s.nf{background:repeating-linear-gradient(135deg,var(--c) 0 4px,transparent 4px 8px);box-shadow:inset 0 0 0 1px var(--c)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-s.nf span{padding:0 4px;border-radius:2px;background:var(--paper);color:var(--ink);text-shadow:none}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-s.att-small,.hero .att-s.att-rest{--c:var(--hairline);color:var(--ink-soft);text-shadow:none}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-lg{display:flex;flex-wrap:wrap;gap:4px 18px;margin:0;padding:0;list-style:none;font-size:12.5px;color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-lg li{display:inline-flex;align-items:center;gap:6px}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-lg .sw{--c:var(--muted);display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--c)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-lg .sw.nf{background:repeating-linear-gradient(135deg,var(--c) 0 3px,transparent 3px 6px);box-shadow:inset 0 0 0 1px var(--c)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-lg b{color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-lg .st{display:inline-flex;align-items:center;gap:5px}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-lg .st.nf,.hero .att-lg .att-more{color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.hero .att-n{margin:6px 0 0;font-size:12.5px;color:var(--muted)}');
     DBMS_OUTPUT.PUT_LINE('section.strip-sec{background:none;border:0;border-radius:0;padding:0;margin:var(--s5) 0 0}');
     DBMS_OUTPUT.PUT_LINE('.strip{overflow:hidden}');
     -- ONE window component (.wg, sql/lib/wingrid.plsql): 13 columns, Current last and wider
@@ -1311,6 +1351,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.fc-k{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;font-size:13px;color:var(--muted);padding-top:4px}');
     DBMS_OUTPUT.PUT_LINE('.fc-k .sv{display:inline-flex;align-items:center;gap:8px;color:var(--ink);font-weight:600}');
     DBMS_OUTPUT.PUT_LINE('.fc-k .gk{font-style:normal;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('.fc-k .fc-imp{display:inline-flex;align-items:center;padding:1px 10px;border-radius:999px;background:var(--chip-bg);color:var(--ink);font-size:12.5px;font-weight:600;white-space:nowrap}');
     DBMS_OUTPUT.PUT_LINE('.fc-band{width:280px}');
     DBMS_OUTPUT.PUT_LINE('.fc-band .bd-ax{min-width:0}');
     DBMS_OUTPUT.PUT_LINE('.fc h3{font-size:19px;line-height:1.3;font-weight:600;letter-spacing:-.01em;margin:8px 0 0;padding:0;border:0;text-transform:none;color:var(--ink)}');
@@ -1366,6 +1407,63 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.fc .whereln{margin:0 0 4px;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:help}');
     DBMS_OUTPUT.PUT_LINE('.fc .wg.bare .r.p .pv{max-width:none} .fc .wg.bare .r.p .c.cur .pv{left:auto;right:2px}');
     DBMS_OUTPUT.PUT_LINE('.fc .cfg-more{margin:0;padding:var(--s2) 0 0;font-size:12.5px;color:var(--muted)}');
+    -- its "Parameters" link: no global link colour, so without this rule it
+    -- was the browser's default blue (unreadable in dark); tokens follow the theme
+    DBMS_OUTPUT.PUT_LINE('.fc .cfg-more a{color:var(--ink-soft);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .cfg-more a:hover{color:var(--ink)}');
+    -- plan 025: the Summary triage list (07, #triage), folded finding cards
+    -- (.fc.fold, toggled by 07's inline script) and quiet card charts (.wg.qf)
+    DBMS_OUTPUT.PUT_LINE('#triage{padding:var(--s2) 0;margin:0 0 var(--s5)}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-hd,#triage .tri-row{display:grid;grid-template-columns:minmax(0,1fr) 180px 176px 96px;gap:4px var(--s5);align-items:center;padding:8px var(--s6)}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-hd{font-size:12px;color:var(--muted);border-bottom:1px solid var(--line-soft)}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-row{border-top:1px solid var(--line-soft);cursor:pointer}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-hd + .tri-row{border-top:0}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-row:hover{background:var(--hov)}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-f{display:flex;flex-wrap:wrap;align-items:center;gap:2px 8px;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-go{font-weight:600;color:var(--ink);text-decoration:none}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-go:hover{text-decoration:underline}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-m{color:var(--ink-soft);font-size:13.5px}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-tags{display:flex;flex-wrap:wrap;gap:4px;flex-basis:100%} #triage .tri-tags:empty{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-nv{display:flex;flex-direction:column;line-height:1.35;font-size:13px;color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-nv small{color:var(--muted);font-size:12px}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-imp{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-imp b{color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-bar{display:block;height:6px;border-radius:3px;background:var(--track)}');
+    DBMS_OUTPUT.PUT_LINE('#triage .tri-bar > i{display:block;height:100%;border-radius:3px;background:var(--mean)}');
+    DBMS_OUTPUT.PUT_LINE('@media (max-width: 900px){#triage .tri-hd{display:none}#triage .tri-row{grid-template-columns:minmax(0,1fr) 140px}#triage .tri-imp,#triage .tri-spark{display:none}}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-sum{font-weight:400;color:var(--ink-soft)} .fc:not(.fold) .fc-sum{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-tags{display:inline-flex;flex-wrap:wrap;gap:4px} .fc .fc-tags:empty{display:none}');
+    -- plan 027: pattern tags (js_wingrid tagCards) in the card header and
+    -- the triage rows (#triage, plan 025); a hint, never a severity colour
+    -- (the .fc-tags / .tri-tags containers are styled by plan 025 above)
+    DBMS_OUTPUT.PUT_LINE('.fc .ptag,#triage .ptag{display:inline-block;font-size:11.5px;font-weight:400;line-height:18px;padding:0 8px;border:1px solid var(--line-2);border-radius:9px;color:var(--ink-2);background:var(--panel);white-space:nowrap;cursor:help}');
+    DBMS_OUTPUT.PUT_LINE('.fc .ptag.p-rel,#triage .ptag.p-rel{border-color:var(--acc);color:var(--acc-ink)}');
+    -- a chip's sentence on keyboard focus (js_wingrid ptipOn; the title
+    -- covers hover), the look of the shared #tip
+    DBMS_OUTPUT.PUT_LINE('#ptip{position:absolute;z-index:100;pointer-events:none;max-width:300px;background:var(--ink);color:var(--panel);font-size:12px;line-height:1.45;padding:6px 10px;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.25)}');
+    DBMS_OUTPUT.PUT_LINE('#ptip[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-tg{font:inherit;font-size:12px;color:var(--ink-soft);background:var(--panel);border:1px solid var(--hairline);border-radius:6px;padding:1px 8px;cursor:pointer}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-tg:hover{color:var(--ink);border-color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.fc.fold{padding-bottom:var(--s4);cursor:pointer}');
+    DBMS_OUTPUT.PUT_LINE('.fc.fold > .fc-b,.fc.fold > .rel,.fc.fold > .fc-f,.fc.fold .fc-band .bd-ax{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.fc.fold h3,.fc.lead.fold h3,.fc.slim.fold h3{font-size:16px;margin-top:4px}');
+    DBMS_OUTPUT.PUT_LINE('.wg.bare.qf .fr.t2{height:22px}');
+    -- plan 026: the "explains <card>" chip on a plan-change card moved under
+    -- the finding card it explains (17's relocation script)
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-k .xpl{font-size:12px;font-weight:500;color:var(--ink-soft);padding:1px 8px;border:1px solid var(--hairline);border-radius:10px}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-k .xpl a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}');
+    -- plan 033: a card's "What this usually means" line and read-only next
+    -- query (sql/lib/finding_hints.plsql); hidden on a folded card (025).
+    -- Its bottom padding keeps the query box off the footer rule; the
+    -- related-metrics fold right after it then needs no top margin.
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-hint{margin:var(--s4) 0 0;padding:var(--s3) 0 var(--s4);border-top:1px solid var(--line-soft);font-size:13.5px;line-height:1.5;color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-hint p{margin:0;max-width:110ch}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-hint b{color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-hint .fc-next{margin:var(--s3) 0 var(--s2);font-size:12.5px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-hint pre.sql{margin:0}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-hint + details.rel{margin-top:0}');
+    DBMS_OUTPUT.PUT_LINE('.fc .fc-hint p a{color:inherit;text-decoration:underline dotted;text-underline-offset:2px}');
+    DBMS_OUTPUT.PUT_LINE('.fc.fold > .fc-hint{display:none}');
     -- checked and normal
     DBMS_OUTPUT.PUT_LINE('.calm{padding:var(--s2) var(--s6)}');
     DBMS_OUTPUT.PUT_LINE('.ngrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:32px}');
@@ -1385,6 +1483,14 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.calm-more{margin:var(--s3) 0 0;font-size:12.5px;color:var(--muted)}');
     DBMS_OUTPUT.PUT_LINE('.calm-more a{color:var(--ink-soft);text-decoration:underline;text-decoration-color:var(--hairline);text-underline-offset:3px}');
     DBMS_OUTPUT.PUT_LINE('.calm-empty{margin:0;padding:var(--s4) 0;font-size:14px;color:var(--ink-soft)}');
+    -- plan 032: "Checked and normal" folded to one summary line (07)
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold > summary{list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:var(--s4) var(--s6);background:var(--panel);border:1px solid var(--hairline);border-radius:10px;font-size:14px;color:var(--ink-soft)}');
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold > summary::-webkit-details-marker{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold > summary::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .15s;margin:0 6px 0 2px}');
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold[open] > summary::before{transform:rotate(45deg)}');
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold > summary:hover{color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold > summary b{color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold[open] > summary{margin-bottom:var(--s4)}');
     DBMS_OUTPUT.PUT_LINE('.ent-x{font:inherit}');
     DBMS_OUTPUT.PUT_LINE('nav.toc a[hidden]{display:none}');
     DBMS_OUTPUT.PUT_LINE('.dotk.typical{border:1.5px solid var(--muted)} .dotk.improved{border:2px solid var(--imp)}');
@@ -1404,7 +1510,7 @@ BEGIN
 
     -- =========================================================
     -- v1.6.0 Timeline view (Mock D): the #timeline section, the Activity
-    -- charts at the top of every view (section#activity .ashx: by wait
+    -- charts in every view (section#activity .ashx: by wait
     -- class and by wait event) and the aligned window grid
     -- (#tl: sticky ruler, lanes of .wg rows, pin / hover / flash), the
     -- stacked activity columns (.r.ash, also the DB time card) and the
@@ -1443,6 +1549,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ashx .axr{font-size:12px;border:1px solid var(--line-2);background:var(--panel);border-radius:6px;padding:2px 10px;cursor:pointer;color:var(--ink-2);line-height:20px}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axr:hover{color:var(--ink);border-color:var(--ink-3)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axr[hidden]{display:none}');
+    -- Summary: the Activity charts open compact (js_timeline section 6 sets
+    -- #activity.ax-cmp): the by-event chart and the help line fold away
+    -- until "Show by wait event" (#ax-more, shown only in Summary)
+    DBMS_OUTPUT.PUT_LINE('body:not(.vs) #activity .axm{display:none}');
+    DBMS_OUTPUT.PUT_LINE('body.vs #activity.ax-cmp #ax-ev,body.vs #activity.ax-cmp .axn2{display:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axlg{display:flex;flex-wrap:wrap;gap:0 2px;margin:0;flex:1;min-width:0}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axc{display:inline-flex;align-items:center;gap:6px;border:0;background:none;border-radius:6px;padding:1px 6px;font:inherit;font-size:12px;color:var(--ink-2);cursor:pointer;line-height:18px}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axc:hover{background:var(--hov);color:var(--ink)}');
@@ -1477,10 +1588,18 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ashx .xwh:focus-visible{outline:none;stroke:var(--acc);stroke-width:2}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xch{stroke:var(--ink);stroke-width:1;opacity:.55;pointer-events:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xbk{fill:var(--ink);opacity:.06;pointer-events:none}');
+    -- "Windows side by side" (js_timeline section 6, SP.mode win): the mode
+    -- switch, the panel backgrounds (rect.xw.xpn, under the bands) and the
+    -- window labels under the lower chart (text.xpl)
+    DBMS_OUTPUT.PUT_LINE('.ashx .seg.axlayout{padding:1px}.ashx .seg.axlayout[hidden]{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .seg.axlayout button{font-size:12px;padding:2px 10px;line-height:18px}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xw.xpn{opacity:.05}.ashx .xw.xpn.cur{opacity:.1}.ashx .xw.xpn.on{opacity:.16}.ashx .xw.xpn.sk{opacity:.03}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xpl.cur{fill:var(--acc-ink);font-weight:600}.ashx .xpl.sk{fill:var(--ink-4);text-decoration:line-through}');
     -- v1.6.1 series highlight (js_timeline section 6): the highlighted band's
     -- top edge, the fitted-axis note, the legend entry lit and the rest dimmed
     DBMS_OUTPUT.PUT_LINE('.ashx .xeh{stroke-width:1.8}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xhn{font:600 11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xdl{font:11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axc.hl{background:var(--hov);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line-2)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axlg.hlon .axc:not(.hl){opacity:.55}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axlg.hlon .axc:not(.hl):hover,.ashx .axlg.hlon .axc:not(.hl):focus-visible{opacity:1}');
@@ -1527,6 +1646,22 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('#tl .lane.showmore .r.more{display:grid}');
     DBMS_OUTPUT.PUT_LINE('#tl .lane.showmore .r.xpr{display:none}');
     DBMS_OUTPUT.PUT_LINE('#tl .r.xpr .l{padding:8px 16px}');
+    -- plan 031: the Timeline row toolbar (js_timeline tools), the
+    -- flagged-only filter of the scored lanes and the broken Current bar
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;margin:0 0 var(--s3);font-size:12.5px;color:var(--ink-3)}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-tools .tlt-g{display:inline-flex;align-items:center;gap:4px}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-tools .tlt-l{margin-right:4px}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-tools button{font:inherit;font-size:12px;line-height:18px;padding:2px 10px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink-2);cursor:pointer}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-tools button[aria-pressed="true"]{background:var(--chip-bg);color:var(--ink);font-weight:600;border-color:var(--ink-4)}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-tools button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}');
+    DBMS_OUTPUT.PUT_LINE('#timeline .tl-tools .tlt-n{font-size:12px;color:var(--ink-4)}');
+    DBMS_OUTPUT.PUT_LINE('#tl.flagonly .lane[data-kind="scored"] .lrows > .r.bars:not([data-sev="large"]):not([data-sev="moderate"]){display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl.flagonly .lane[data-kind="scored"] .lrows > .r.more[data-sev="large"],#tl.flagonly .lane[data-kind="scored"] .lrows > .r.more[data-sev="moderate"]{display:grid}');
+    DBMS_OUTPUT.PUT_LINE('#tl.flagonly .lane[data-kind="scored"] .r.xpr{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.nfl{display:none}');
+    DBMS_OUTPUT.PUT_LINE('#tl.flagonly .lane.nofl .r.nfl{display:grid}');
+    DBMS_OUTPUT.PUT_LINE('#tl .r.nfl .l{padding:10px 16px;font-size:12.5px;color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('#tl i.b.brk::after{content:"";position:absolute;left:-3px;right:-3px;top:6px;height:3px;background:var(--panel);transform:skewY(-20deg)}');
     DBMS_OUTPUT.PUT_LINE('#tl .xpb{border:0;background:none;padding:0;font:inherit;color:var(--ink-2);font-size:12.5px;cursor:pointer;text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--line-2);text-align:left}');
     DBMS_OUTPUT.PUT_LINE('#tl .lane[hidden]{display:none}');
     DBMS_OUTPUT.PUT_LINE('#tl .lane{scroll-margin-top:calc(var(--navh,0px) + 96px)}');
@@ -1585,7 +1720,10 @@ BEGIN
     -- the light tokens declared on :root -- nothing to force here.  What
     -- does need undoing: the sticky headers, every interactive affordance,
     -- and the two collapse mechanisms (long-tail rows and the methodology
-    -- disclosure) whose content must be on the printed page.
+    -- disclosure) whose content must be on the printed page.  Folded
+    -- finding cards and the "Checked and normal" fold open for print in
+    -- 07's beforeprint handler (restored on afterprint); with JS off the
+    -- fold's body still prints where ::details-content is supported.
     DBMS_OUTPUT.PUT_LINE('@media print {'
         || ' nav.toc { display:none; position:static; }'
         || ' body { max-width:none; padding:0 0 24px; background:#fff; }'
@@ -1599,6 +1737,8 @@ BEGIN
         || ' .tbl-tools, .copy-btn, .permalink, .expander, .tag,'
         || ' .view-note, .next-finding, .windows-hint, .topbar,'
         || ' .theme-icon-btn { display:none !important; }'
+        || ' .topbar .sum-btn, #sum-pop, .fc .fc-tg, #ptip { display:none; }'
+        || ' #s-normal details.calm-fold::details-content { content-visibility:visible; display:block; }'
         || ' tr[data-tail="Y"] { display:table-row !important; }'
         || ' .tblwrap.scroll { overflow:visible; box-shadow:none; }'
         || ' .tblwrap.scroll tr > :first-child { position:static; }'

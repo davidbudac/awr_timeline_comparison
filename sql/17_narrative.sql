@@ -22,6 +22,8 @@
 --   ", most of it on SEG"  -> the verdict's .vx[data-vx="io"] clause
 --   Segment / File / SQL   -> evidence rows at the top of the Physical I/O
 --                             card (07, id f-io; data-ev-for)
+--   the I/O card's top statement's plan-change card (18) -> right under
+--                             the I/O card, data-explains="f-io"
 -- With JavaScript disabled the block simply stays hidden -- every number it
 -- quotes is also rendered in the sections it links to.
 --
@@ -102,6 +104,15 @@ DECLARE
     v_sqlid     VARCHAR2(13);
     v_sql_rd    NUMBER;
     v_big_pr    BOOLEAN := FALSE;
+    -- plan 026: the statement reading the most blocks in the Current window
+    -- (any statement, newcomer or not), for the Physical I/O card
+    v_tq_id     VARCHAR2(13);
+    v_tq_cur    NUMBER;   -- blocks read, Current window
+    v_tq_mu     NUMBER;   -- mean blocks read over the prior windows it ran in
+    v_tq_gpe    NUMBER;   -- buffer gets per execution, Current window
+    v_tq_gpe_mu NUMBER;   -- the same over the prior windows (sum of gets / sum of executions)
+    v_tq_ph     NUMBER;   -- its plan in the Current window (the one reading the most blocks)
+    v_tq_ph_mu  NUMBER;   -- its most executed plan over the prior windows
 
     -- v1.6.0 Summary pieces (relocated by the script at the end): pills,
     -- the likely-source line, the I/O card's evidence rows, the verdict's
@@ -494,6 +505,93 @@ BEGIN
             END LOOP;
         END;
 
+        -- plan 026: the statement reading the most blocks in the CURRENT
+        -- window, newcomer or not (the I/O card names it), then its prior
+        -- windows, gets per execution and plans.  Point lookups by sql_id
+        -- over the compared windows, same join as section 06.
+        BEGIN
+            FOR q IN (
+                WITH
+                @@sql/lib/windows_cte.sql
+                SELECT s.sql_id, SUM(NVL(s.disk_reads_delta, 0)) AS disk_reads
+                FROM   valid_windows w
+                JOIN   dba_hist_sqlstat s
+                    ON s.dbid = w.dbid
+                   AND s.snap_id BETWEEN w.begin_snap_id + 1 AND w.end_snap_id
+                   AND s.instance_number = w.instance_number
+                WHERE  w.week_offset = 0
+                GROUP BY s.sql_id
+                HAVING SUM(NVL(s.disk_reads_delta, 0)) > 0
+                ORDER  BY disk_reads DESC, s.sql_id
+                FETCH FIRST 1 ROWS ONLY
+            ) LOOP
+                v_tq_id := q.sql_id;
+            END LOOP;
+        END;
+        IF v_tq_id IS NOT NULL THEN
+            FOR q IN (
+                WITH
+                @@sql/lib/windows_cte.sql
+                ,
+                tq_win AS (
+                    SELECT w.week_offset,
+                           SUM(NVL(s.disk_reads_delta, 0))  AS rd,
+                           SUM(NVL(s.buffer_gets_delta, 0)) AS gets,
+                           SUM(NVL(s.executions_delta, 0))  AS execs
+                    FROM   valid_windows w
+                    JOIN   dba_hist_sqlstat s
+                        ON s.dbid = w.dbid
+                       AND s.snap_id BETWEEN w.begin_snap_id + 1 AND w.end_snap_id
+                       AND s.instance_number = w.instance_number
+                    WHERE  s.sql_id = v_tq_id
+                    GROUP BY w.week_offset
+                )
+                SELECT MAX(CASE WHEN week_offset = 0 THEN rd END) AS cur_rd,
+                       AVG(CASE WHEN week_offset > 0 THEN rd END) AS mu_rd,
+                       MAX(CASE WHEN week_offset = 0 THEN gets END)
+                           / NULLIF(MAX(CASE WHEN week_offset = 0 THEN execs END), 0) AS gpe,
+                       SUM(CASE WHEN week_offset > 0 THEN gets END)
+                           / NULLIF(SUM(CASE WHEN week_offset > 0 THEN execs END), 0) AS gpe_mu
+                FROM   tq_win
+            ) LOOP
+                v_tq_cur    := q.cur_rd;
+                v_tq_mu     := q.mu_rd;
+                v_tq_gpe    := q.gpe;
+                v_tq_gpe_mu := q.gpe_mu;
+            END LOOP;
+            -- its plans: the Current window's (most blocks read) and the
+            -- prior windows' most executed one; two independent scalar
+            -- subqueries FROM dual (an outer aggregate next to a scalar
+            -- subquery raises ORA-00937, see R9 below)
+            FOR q IN (
+                WITH
+                @@sql/lib/windows_cte.sql
+                ,
+                tq_pl AS (
+                    SELECT CASE WHEN w.week_offset = 0 THEN 0 ELSE 1 END AS pri,
+                           s.plan_hash_value AS ph,
+                           SUM(NVL(s.disk_reads_delta, 0)) AS rd,
+                           SUM(NVL(s.executions_delta, 0)) AS execs
+                    FROM   valid_windows w
+                    JOIN   dba_hist_sqlstat s
+                        ON s.dbid = w.dbid
+                       AND s.snap_id BETWEEN w.begin_snap_id + 1 AND w.end_snap_id
+                       AND s.instance_number = w.instance_number
+                    WHERE  s.sql_id = v_tq_id
+                      AND  s.plan_hash_value <> 0
+                    GROUP BY CASE WHEN w.week_offset = 0 THEN 0 ELSE 1 END, s.plan_hash_value
+                )
+                SELECT (SELECT MAX(ph) KEEP (DENSE_RANK FIRST ORDER BY rd DESC)
+                        FROM tq_pl WHERE pri = 0) AS cur_ph,
+                       (SELECT MAX(ph) KEEP (DENSE_RANK FIRST ORDER BY execs DESC)
+                        FROM tq_pl WHERE pri = 1) AS prior_ph
+                FROM   dual
+            ) LOOP
+                v_tq_ph    := q.cur_ph;
+                v_tq_ph_mu := q.prior_ph;
+            END LOOP;
+        END IF;
+
         -- The "why" clause: file (MB read), top segment, a newcomer SQL.
         -- NB: an empty VARCHAR2 IS NULL in Oracle, so every guard is a
         -- plain IS NOT NULL -- `v <> ''''` evaluates to NULL.
@@ -535,8 +633,32 @@ BEGIN
                 || '</span></dd><div class="m" title="Ranked, not scored">'
                 || delta_span(v_file_cur, v_file_mu, NULL, 'Y') || '<span class="ns">not scored</span></div></div>';
         END IF;
-        IF v_sqlid IS NOT NULL THEN
+        -- plan 026: the statement reading the most blocks in the Current
+        -- window -- ranked, not scored: a plain ratio -- with its gets per
+        -- execution and, when its plan changed, a link to the plan card
+        -- (f-plan-<sql_id>, section 18; unwrapped to text when 18 drew none
+        -- or its card shows another transition, see data-explains-src)
+        IF v_tq_id IS NOT NULL THEN
             v_ev_io := v_ev_io || '<div class="evr"><dt>SQL</dt><dd><span class="id">'
+                || ent(v_tq_id, anchor_id('sq-preads', v_tq_id), 'sql') || '</span><span class="de">'
+                || nbu(fmt_num(v_tq_cur) || ' blocks read'
+                       || CASE WHEN v_tq_mu IS NOT NULL THEN ', normal ' || fmt_num(v_tq_mu) END
+                       || CASE WHEN v_tq_gpe IS NOT NULL AND v_tq_gpe_mu IS NOT NULL
+                               THEN '; ' || fmt_num(v_tq_gpe) || ' gets per execution, was '
+                                    || fmt_num(v_tq_gpe_mu) END)
+                || CASE WHEN v_tq_ph IS NOT NULL AND v_tq_ph_mu IS NOT NULL AND v_tq_ph <> v_tq_ph_mu
+                        THEN '; ' || ent('new plan ' || TO_CHAR(v_tq_ph_mu) || ' &rarr; ' || TO_CHAR(v_tq_ph),
+                                         'f-plan-' || v_tq_id, 'sql') END
+                || CASE WHEN v_tq_id = v_sqlid THEN '; new in the top ' || TO_CHAR(v_top_n) END
+                || '</span></dd><div class="m" title="Ranked, not scored">'
+                || CASE WHEN v_tq_mu IS NULL
+                        THEN '<span class="d s-plain">&#10010; new</span>'
+                        ELSE delta_span(v_tq_cur, v_tq_mu, NULL, 'Y') || '<span class="ns">not scored</span>' END
+                || '</div></div>';
+        END IF;
+        -- a newcomer that is not the top statement keeps its own row
+        IF v_sqlid IS NOT NULL AND (v_tq_id IS NULL OR v_sqlid <> v_tq_id) THEN
+            v_ev_io := v_ev_io || '<div class="evr"><dt>New SQL</dt><dd><span class="id">'
                 || ent(v_sqlid, anchor_id('sq-preads', v_sqlid), 'sql') || '</span><span class="de">'
                 || nbu(fmt_num(v_sql_rd) || ' blocks read; new in the top ' || TO_CHAR(v_top_n))
                 || '</span></dd><div class="m"><span class="d s-plain">&#10010; new</span></div></div>';
@@ -1054,6 +1176,19 @@ BEGIN
         IF v_ev_io IS NOT NULL THEN
             DBMS_OUTPUT.PUT_LINE('<div data-ev-for="f-io">' || v_ev_io || '</div>');
         END IF;
+        -- plan 026: the plan-change card of the I/O card's top statement (if
+        -- section 18 drew one) moves right under the I/O card; when plan 025
+        -- folded the I/O card, the plan card folds too (07's AWR_fcFold) and
+        -- opens with it.  Review follow-up R2: only when the card shows the
+        -- transition the I/O card cites (18 picks its plans from SQL Monitor,
+        -- this section from SQLSTAT): the script compares data-ph0 / data-ph1
+        -- with the card's; otherwise the card stays in What changed around
+        -- it and the I/O card's "new plan" text loses its link.
+        IF v_tq_id IS NOT NULL AND v_tq_ph IS NOT NULL AND v_tq_ph_mu IS NOT NULL
+           AND v_tq_ph <> v_tq_ph_mu THEN
+            DBMS_OUTPUT.PUT_LINE('<span data-explains-src="f-plan-' || v_tq_id || '" data-for="f-io" data-ph0="'
+                || TO_CHAR(v_tq_ph_mu) || '" data-ph1="' || TO_CHAR(v_tq_ph) || '"></span>');
+        END IF;
         DBMS_OUTPUT.PUT_LINE('</div>');
         DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,src=d.getElementById("narr-src");if(!src)return;');
         DBMS_OUTPUT.PUT_LINE('var b=d.getElementById("because-slot"),bs=src.querySelector(".because-src");');
@@ -1065,6 +1200,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll(".notes-src > li").forEach(function(li){var u=li.getAttribute("data-dup");if(u&&d.getElementById(u))return;if(ns){ns.appendChild(li);ns.hidden=false;}});');
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-vx-src]").forEach(function(x){var t=d.querySelector(''.vx[data-vx="''+x.getAttribute("data-vx-src")+''"]'');if(t){t.innerHTML=x.innerHTML;t.hidden=false;}});');
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-ev-for]").forEach(function(x){var c=d.getElementById(x.getAttribute("data-ev-for")),dl=c?c.querySelector("dl.ev"):null;if(!dl)return;var f=dl.firstChild;while(x.firstChild)dl.insertBefore(x.firstChild,f);});');
+        DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-explains-src]").forEach(function(x){var p=d.getElementById(x.getAttribute("data-explains-src")),c=d.getElementById(x.getAttribute("data-for"));if(!p||!c||!c.parentNode||p===c)return;if(p.getAttribute("data-ph0")!==x.getAttribute("data-ph0")||p.getAttribute("data-ph1")!==x.getAttribute("data-ph1")){c.querySelectorAll(''a.ent[href="#''+p.id+''"]'').forEach(function(a){var s=d.createElement("span");s.className="ent-x";while(a.firstChild)s.appendChild(a.firstChild);a.parentNode.replaceChild(s,a);});return;}c.parentNode.insertBefore(p,c.nextSibling);p.hidden=false;p.setAttribute("data-explains",c.id);var k=p.querySelector(".fc-k"),sv=c.querySelector(".fc-k .sv"),lb=(sv&&sv.getAttribute("title"))||"the card above";if(k&&!k.querySelector(".xpl")){var s=d.createElement("span");s.className="xpl";s.appendChild(d.createTextNode("explains "));var a=d.createElement("a");a.href="#"+c.id;a.textContent=lb;s.appendChild(a);s.insertAdjacentHTML("beforeend","<i class=\"xu\" aria-hidden=\"true\"> &uarr;</i>");k.appendChild(s);}if(c.classList.contains("fold")&&window.AWR_fcFold)AWR_fcFold(p);var sl=d.getElementById("changes-slot"),sc=d.getElementById("s-changes");if(sl&&sc&&!sl.children.length)sc.hidden=true;});');
         DBMS_OUTPUT.PUT_LINE('src.parentNode.removeChild(src);})();</script>');
     END IF;
 END;

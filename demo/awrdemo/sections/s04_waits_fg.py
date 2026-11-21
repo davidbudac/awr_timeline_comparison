@@ -19,7 +19,9 @@ def emit(w) -> str:
              + ' events by time and by average wait, and the wait classes</small></h2>')
     L.append('<div class="chart-wrap chart-small" id="waits-fg-stack"></div>')
 
-    deltas = C.window_deltas(w, lambda m: m.fg_waits)
+    # DBA_HIST_SYSTEM_EVENT, all sessions (time_waited_micro): its
+    # background-only events too (model.SYSEVENT_BG), as on a real DB
+    deltas = C.window_deltas(w, lambda m: m.sys_waits)
     n_win = len(deltas)
 
     # ---- chart: class_deltas = SUM of every event delta per (week, class);
@@ -46,19 +48,41 @@ def emit(w) -> str:
                           tot, shift, C.shift_note(rows, shift, n_flag, mean_pct, sd_pct), memo=seen_we))
     # ---- v1.6.0 Timeline: the Waits lane's event rows (Table A's order,
     # rows past the 10th fold, at most 16)
+    # Values in AAS per window = the window's seconds / ITS real span
+    # (v_span: MAX(dur_sec) of valid_windows, 07's divisor); data-mu /
+    # data-sd from the prior windows' AAS values (STDDEV: 0 for one value);
+    # the severity and the gutter stay Table A's (seconds).
     nt = min(len(rows), 16)
+    span = {}                                      # v_span: valid windows only
+    for win in w.windows:
+        m = w.window_metrics(win)
+        if m is not None:
+            span[win.week_offset] = m.dur_sec
+
+    def aas_row(csv):
+        toks, prior = [], []
+        for k in range(w.weeks_back, -1, -1):
+            v = h.tl_val(w, csv, k)
+            a = v / span[k] if (v is not None and span.get(k, 0) > 0) else None
+            toks.append(h.wg_tok(a))
+            if k > 0 and a is not None:
+                prior.append(a)
+        mu, sd, n = h.mean_sd(prior)
+        return ",".join(toks), mu, (0.0 if n == 1 else sd)
+
     for i, r in enumerate(rows[:16], start=1):
         share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
         b = h.policy_bucket("WAIT", r["event_name"], r["wait_class"], C._s(r["cur_us"]),
                             C._s(r["mu_us"]), C._s(r["sd_us"]), r["n_us"], share, shift)
+        csv, a_mu, a_sd = aas_row(r["spark_vals"])
         L.append((h.tl_open("waits") if i == 1 else "")
-                 + h.tl_bars(w, h.tl_csv(w, r["spark_vals"]), C._s(r["mu_us"]), C._s(r["sd_us"]), b,
+                 + h.tl_bars(w, csv, a_mu, a_sd, b,
                              h.tl_lab(h.ent(h.esc(r["event_name"]), h.anchor_uniq(h.anchor_id("we", r["event_name"]), r["event_name"], seen_we), "event"),
-                                      h.esc(r["wait_class"]), None, r["wait_class"]),
+                                      h.esc(r["wait_class"]) + ", AAS", None, r["wait_class"]),
                              h.tl_gut(C._s(r["cur_us"]), C._s(r["mu_us"]), C._s(r["sd_us"]), b),
                              "tl-" + h.anchor_uniq(h.anchor_id("we", r["event_name"]), r["event_name"], seen_we),
                              "w" + (" more" if i > 10 else ""),
-                             h.esc(r["event_name"]), "s waited")
+                             h.esc(r["event_name"]), "AAS")
                  + (h.tl_close() if i == nt else ""))
     moved = 0
     for r in rows:

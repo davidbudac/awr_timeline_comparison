@@ -19,11 +19,16 @@ function wlab(k,n){
 }
 /* one 13-bar micro strip: every window as a grey bar from zero, Current last,
    wider and in the accent; the prior normal zone (mean +- 2 sigma, sigma
-   floored at 2% of the mean like the band) shaded behind the bars */
-function strip(raw,title){
+   floored at 2% of the mean like the band) shaded behind the bars.
+   Past about 45 windows a bar would be narrower than a pixel (past 91 there
+   is no room at all): the strip draws nothing, unless opt.dense (an element
+   with data-spark-dense, the Summary triage list): then the prior windows
+   are one gapless silhouette (one path, a slot each) and Current a 3-px bar
+   at the right end, so a 168-window report still shows its trend. */
+function strip(raw,title,opt){
   var v=String(raw||"").split(",").map(num), n=v.length;
-  var W=92,H=22,gap=n>20?1:2,cw=(W-gap*n)/(n+0.6);
-  if(!n||cw<=0)return "";
+  var W=92,H=22,gap=n>20?1:2,cw=(W-gap*n)/(n+0.6),dense=!!(opt&&opt.dense)&&n>2&&cw<1;
+  if(!n||(cw<=0&&!dense))return "";
   var pr=v.slice(0,n-1).filter(function(x){return x!=null;}), mu=null, sd=null, lo=null, hi=null;
   if(pr.length){
     mu=pr.reduce(function(a,b){return a+b;},0)/pr.length;
@@ -36,22 +41,30 @@ function strip(raw,title){
   function Y(x){return H-1-(H-3)*Math.max(0,x)/max;}
   var s="<svg class=\"mw\" width=\""+W+"\" height=\""+H+"\" viewBox=\"0 0 "+W+" "+H+"\" aria-hidden=\"true\">";
   if(hi!=null)s+="<rect class=\"z2\" x=\"0\" y=\""+Y(hi).toFixed(1)+"\" width=\""+W+"\" height=\""+Math.max(1,Y(lo)-Y(hi)).toFixed(1)+"\" rx=\"1\"/>";
-  var x=0;
-  v.forEach(function(val,k){
-    var cur=k===n-1, w=cur?cw*1.6:cw;
-    if(val!=null){var y=Y(val);s+="<rect class=\"b"+(cur?" cur":"")+"\" x=\""+x.toFixed(1)+"\" y=\""+y.toFixed(1)+"\" width=\""+w.toFixed(1)+"\" height=\""+Math.max(1,H-1-y).toFixed(1)+"\" rx=\"1\"/>";}
-    x+=w+gap;
-  });
+  if(dense){
+    var CW=3,sl=(W-CW-1)/(n-1),d="";
+    for(var k=0;k<n-1;k++){if(v[k]==null)continue;var y=Y(v[k]);
+      d+="M"+(k*sl).toFixed(2)+" "+(H-1)+"V"+y.toFixed(1)+"H"+((k+1)*sl).toFixed(2)+"V"+(H-1)+"Z";}
+    if(d)s+="<path class=\"b\" d=\""+d+"\"/>";
+    if(v[n-1]!=null){var yc=Y(v[n-1]);s+="<rect class=\"b cur\" x=\""+(W-CW)+"\" y=\""+yc.toFixed(1)+"\" width=\""+CW+"\" height=\""+Math.max(1,H-1-yc).toFixed(1)+"\" rx=\"1\"/>";}
+  }else{
+    var x=0;
+    v.forEach(function(val,k){
+      var cur=k===n-1, w=cur?cw*1.6:cw;
+      if(val!=null){var y=Y(val);s+="<rect class=\"b"+(cur?" cur":"")+"\" x=\""+x.toFixed(1)+"\" y=\""+y.toFixed(1)+"\" width=\""+w.toFixed(1)+"\" height=\""+Math.max(1,H-1-y).toFixed(1)+"\" rx=\"1\"/>";}
+      x+=w+gap;
+    });
+  }
   s+="</svg>";
   var tip=[];
   for(var k=Math.max(0,n-4);k<n;k++)tip.push(wlab(k,n)+" "+fmt(v[k]));
-  return {svg:s,title:(title?title+": ":"")+tip.join(", ")+(mu!=null?"; normal "+fmt(lo)+"\u2013"+fmt(hi):"")};
+  return {svg:s,title:(title?title+": ":"")+tip.join(", ")+(mu!=null?"; normal "+fmt(lo)+"\u2013"+fmt(hi):"")+(dense?"; all "+n+" windows":"")};
 }
 window.AWR_microStrip=strip;
 function render(){
   doc.querySelectorAll("[data-spark]").forEach(function(el){
     if(el.__sparked)return;
-    var r=strip(el.getAttribute("data-spark"),el.getAttribute("data-spark-title")||"");
+    var r=strip(el.getAttribute("data-spark"),el.getAttribute("data-spark-title")||"",{dense:el.hasAttribute("data-spark-dense")});
     el.__sparked=true;
     if(!r)return;
     el.innerHTML=r.svg; el.title=r.title;

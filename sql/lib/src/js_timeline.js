@@ -62,6 +62,7 @@ TL.take=function(){
 /* open whatever hides a Timeline row: a closed lane, the folded rows */
 TL.reveal=function(el){
   var lane=el&&el.closest?el.closest('#tl .lane'):null;if(!lane)return;
+  if(lane.getAttribute('data-kind')==='scored'&&el.classList.contains('bars')&&!flagged(el)&&lane.closest('#tl.flagonly'))setRows('all',false);
   if(lane.classList.contains('closed')){lane.classList.remove('closed');var b=$('.lt2',lane);if(b)b.setAttribute('aria-expanded','true');}
   if(el.classList.contains('more'))showMore(lane);
   setTimeout(function(){if(W.render)W.render(lane);},0);
@@ -107,7 +108,7 @@ function lanes(){
     var b=$('.lt2',lane);
     if(b)b.addEventListener('click',function(){var open=lane.classList.toggle('closed')===false;b.setAttribute('aria-expanded',String(open));if(open&&W.render)W.render(lane);});
     var rl=doc.querySelector('nav.toc a[href="#'+lane.id+'"]');
-    if(rl){rl.hidden=lane.hidden;if(n[0]){var p=mk('span','cnt c',rl);p.textContent=n[0];}if(n[1]){var q=mk('span','cnt w',rl);q.textContent=n[1];}}
+    if(rl)rl.hidden=lane.hidden;
     var jn=$('.jumpnav a[href="#'+lane.id+'"]',tl);if(jn)jn.hidden=lane.hidden;
   });
   var h2=$('#timeline > h2');
@@ -123,6 +124,69 @@ function lanes(){
       c.insertAdjacentHTML('afterbegin',x==null?'<span class="v nil" aria-label="no value">\u2013</span>':'<span class="v">'+fmtNum(x)+'</span>');
     });
   });
+}
+/* ---- 2b. the row toolbar (plan 031), above the grid: "Flagged only"
+   hides the rows of the scored lanes that are not large / moderate
+   (folded ones included); "Biggest change first" sorts the scored lanes
+   (waits: by added AAS when every row is in AAS, else by z; headline and
+   load: by z; a row new in Current ranks by its Current value, see
+   AWR_WG.changeKey), wait-class rows staying above the events.  A viewer's
+   choice, saved on a click only (localStorage awr-tl-rows /
+   awr-tl-order), like awr-view.  Counts, pills and ids never change. */
+var TLF={rows:'all',order:'report'};
+function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function scoredLanes(){return $$('#tl .lane[data-kind="scored"]');}
+function laneRows(lane){return $$('.lrows > .r.bars',lane);}
+function flagged(r){var s=r.getAttribute('data-sev');return s==='large'||s==='moderate';}
+function toolSync(note){
+  $$('#tl-tools button[data-tlf]').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-tlf')===TLF.rows));});
+  $$('#tl-tools button[data-tlo]').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-tlo')===TLF.order));});
+  if(note!=null){var n=$('#tl-tools .tlt-n');if(n)n.innerHTML=note;}
+}
+function setRows(v,save,boot){
+  var tl=doc.getElementById('tl');if(!tl)return;TLF.rows=v;
+  tl.classList.toggle('flagonly',v==='flagged');
+  scoredLanes().forEach(function(l){l.classList.toggle('nofl',!laneRows(l).some(flagged));});
+  toolSync();if(save)lsSet('awr-tl-rows',v);
+  if(!boot&&W.render)W.render(tl);
+}
+function setOrder(v,save,boot){
+  var tl=doc.getElementById('tl');if(!tl)return;TLF.order=v;
+  var notes=[],valid=wins().map(function(w){return w.v!=='N';});
+  scoredLanes().forEach(function(lane){
+    var rows=laneRows(lane),box=$('.lrows',lane);if(!rows.length||!box)return;
+    rows.forEach(function(r,i){if(!r.hasAttribute('data-ord'))r.setAttribute('data-ord',String(i));});
+    var aas=rows.every(function(r){return r.getAttribute('data-unit')==='AAS';});
+    var key=function(r){return W.changeKey(nums(r.getAttribute('data-v')),num(r.getAttribute('data-mu')),num(r.getAttribute('data-sd')),aas,valid);};
+    var grp=function(r){return /^tl-fr-w-/.test(r.id)?0:1;},ord=function(r){return +r.getAttribute('data-ord');};
+    rows.sort(v==='change'?function(a,b){var g=grp(a)-grp(b);if(g)return g;var ka=key(a),kb=key(b);
+      if(ka==null&&kb!=null)return 1;if(kb==null&&ka!=null)return -1;if(ka!==kb&&ka!=null)return kb-ka;return ord(a)-ord(b);}
+      :function(a,b){return ord(a)-ord(b);});
+    rows.forEach(function(r){box.appendChild(r);});
+    var x=$('.r.xpr',lane),m=$('.lrows > .r.more',lane),nf=$('.r.nfl',lane),xb=$('.xpb',lane);
+    if(v==='change'){if(m&&!lane.classList.contains('showmore')){lane.setAttribute('data-autoshow','1');showMore(lane);}
+      notes.push(esc(($('.lti',lane)||{}).textContent||lane.id)+': by '+(aas?'added AAS':'size of the move (z)'));}
+    else{if(lane.hasAttribute('data-autoshow')){lane.removeAttribute('data-autoshow');lane.classList.remove('showmore');if(xb)xb.setAttribute('aria-expanded','false');}
+      if(x&&m)box.insertBefore(x,m);}
+    if(nf)box.appendChild(nf);
+  });
+  toolSync(notes.join('; '));if(save)lsSet('awr-tl-order',v);
+  if(!boot&&W.render)W.render(tl);
+}
+function tools(){
+  var tl=doc.getElementById('tl');if(!tl||!scoredLanes().length||doc.getElementById('tl-tools'))return;
+  scoredLanes().forEach(function(lane){var box=$('.lrows',lane);if(!box)return;var nf=mk('div','r nfl',box);nf.setAttribute('role','row');nf.innerHTML='<div class="l" role="rowheader">No large or moderate row here</div>';});
+  var t=mk('div','tl-tools');t.id='tl-tools';t.setAttribute('role','toolbar');t.setAttribute('aria-label','Timeline rows');
+  t.innerHTML='<span class="tlt-g" role="group" aria-label="Rows"><span class="tlt-l">Rows</span><button type="button" data-tlf="all">All</button><button type="button" data-tlf="flagged">Flagged only</button></span>'
+    +'<span class="tlt-g" role="group" aria-label="Order"><span class="tlt-l">Order</span><button type="button" data-tlo="report">Report order</button><button type="button" data-tlo="change">Biggest change first</button></span>'
+    +'<span class="tlt-n"></span>';
+  tl.parentNode.insertBefore(t,tl);
+  t.addEventListener('click',function(ev){var b=ev.target&&ev.target.closest?ev.target.closest('button'):null;if(!b)return;
+    if(b.hasAttribute('data-tlf'))setRows(b.getAttribute('data-tlf'),true);else if(b.hasAttribute('data-tlo'))setOrder(b.getAttribute('data-tlo'),true);});
+  /* boot: no render here, the DOMContentLoaded block renders #tl next */
+  var r=lsGet('awr-tl-rows'),o=lsGet('awr-tl-order');
+  setRows(r==='flagged'?'flagged':'all',false,true);setOrder(o==='change'?'change':'report',false,true);
 }
 /* ---- 3. pin a window: its column tints, the gutter compares against it */
 var PW=null;
@@ -164,8 +228,8 @@ doc.addEventListener('click',function(ev){
 /* Esc: the first press clears a highlighted Activity series (hlEsc,
    section 6), the next one the pinned window */
 doc.addEventListener('keydown',function(ev){if(ev.key!=='Escape')return;if(hlEsc())return;if(PW!==null)W.pin(null);});
-/* the pin survives a view switch: the Activity charts that show it are at
-   the top of every view (Esc, Current or the gutter's clear unpin) */
+/* the pin survives a view switch: the Activity charts that show it are in
+   every view (Esc, Current or the gutter's clear unpin) */
 doc.addEventListener('awr:view',function(ev){
   var v=ev.detail&&ev.detail.view;
   setTimeout(function(){drawAll(true);if(v==='timeline'){sync();startAtCurrent();}},50);
@@ -202,7 +266,8 @@ function cellTip(cell){
   var v=nums(row.getAttribute('data-v'))[i];
   if(v==null)return head+'<span class="tm">'+(row.classList.contains('q')||row.classList.contains('o')?'not in the top list in this window':'no value in this window')+'</span>';
   var g=$('.glf',cell);
-  return head+'<b>'+fmtNum(v)+'</b> '+esc(row.getAttribute('data-unit')||'')+(g?'<br>'+esc(g.title):'');
+  return head+'<b>'+fmtNum(v)+'</b> '+esc(row.getAttribute('data-unit')||'')+(g?'<br>'+esc(g.title):'')
+    +($('i.b.brk',cell)?'<br><span class="tm">bar cut: more than 1.5&times; the tallest prior window</span>':'');
 }
 doc.addEventListener('mouseover',function(e){
   var t=e.target;if(!t||!t.closest||!tip)return;
@@ -264,7 +329,8 @@ function activity(){
   var wg=row.closest('.wg');wg.parentNode.insertBefore(ul,wg);
   wg.title='Foreground active sessions (ASH, a sampled estimate of DB time) per compared window, stacked by wait class; Current '+tot.toFixed(2)+' AAS in ASH. The Current value is the DB time headline.';
 }
-/* ---- 6. Activity, whole span (section#activity, top of every view): one
+/* ---- 6. Activity, whole span (section#activity, first in Timeline / All
+   sections, under the verdict in Summary, compact there): one
    chart factory, two instances over one time axis -- by wait class
    (AWR_DATA.ashx) and by wait event (AWR_DATA.ashe).  Linked: a zoom on
    either zooms both, the hover crosshair is mirrored, the pinned window
@@ -280,6 +346,11 @@ function activity(){
    Shift+click / Shift+Enter on a legend entry; the same again, a click
    off the stack or Esc clears it (the next Esc unpins the window). */
 var AX=null,AE=null,CH=[],SP=null,DRAG=null,cvs=null;
+/* Summary opens the charts compact (SP.cmp): the by-class chart only, a
+   shorter plot with its own date labels; #ax-more shows the by-event chart.
+   The reader's choice is kept in localStorage awr-ax, written on a click. */
+function cmp(){return !!(SP&&SP.cmp)&&doc.body.classList.contains('vs');}
+function axMore(b){b.setAttribute('aria-expanded',String(!SP.cmp));b.textContent=SP.cmp?'Show by wait event':'Hide by wait event';}
 /* the highlight: HS sticky, HT passing (legend hover / focus, or soft =
    the plot hover), each {c: chart, k: series}; HT wins while it lasts */
 var HS=null,HT=null;
@@ -310,17 +381,42 @@ function hlApply(){
     if(key!==c.hk){c.hk=key;draw(c,true);}
   });
 }
-/* the series drawn under client point (x, y) on chart c, or -1 (off the
-   stack): the bucket under x, its values stacked in the drawn order */
+/* a client point in chart c's SVG units (its viewBox), and back, through
+   the SVG's screen CTM (review follow-up R3): narrower than 480 px the
+   viewBox stays 480 wide, so the fixed-height SVG scales it down and
+   centres it vertically (preserveAspectRatio): clientY times W / width
+   alone missed that letterbox, and hover, click and the soft highlight
+   picked the wrong band.  Without a CTM (not rendered) the plain scale. */
+function ctm(c,inv){var m=null;try{m=c.svg.getScreenCTM();if(m&&inv)m=m.inverse();}catch(e){m=null;}return m&&isFinite(m.a)&&m.a?m:null;}
+function toSvg(c,cx,cy){var m=ctm(c,true);if(m)return {x:m.a*cx+m.c*cy+m.e,y:m.b*cx+m.d*cy+m.f};
+  var r=c.svg.getBoundingClientRect(),k=c.g.W/r.width;return {x:(cx-r.left)*k,y:(cy-r.top)*k};}
+function toCli(c,x,y){var m=ctm(c,false);if(m)return {x:m.a*x+m.c*y+m.e,y:m.b*x+m.d*y+m.f};
+  var r=c.svg.getBoundingClientRect(),k=r.width/c.g.W;return {x:r.left+x*k,y:r.top+y*k};}
+/* the series whose DRAWN band holds (sx, v), sx in SVG units, v in the
+   chart's value units, or -1 (off the stack): the band paths join the
+   points pts (colPts: [x, ref, ...]) with straight lines, so the stack at
+   sx is the linear mix of the two points around it, in the drawn order
+   ord (zoomed out, a point is its pixel column's busiest bucket, not the
+   bucket under sx: the tooltip reads that one).  vk(k, ref) = series k's
+   value.  Pure: AWR_TL.stackAt, unit-tested (review follow-up R3). */
+function stackAt(pts,ord,vk,sx,v){
+  var n=pts?pts.length:0;if(!n||sx<pts[0][0]||sx>pts[n-1][0]||v<0)return -1;
+  var lo=0,hi=n-1;while(hi-lo>1){var md=(lo+hi)>>1;if(pts[md][0]<=sx)lo=md;else hi=md;}
+  var a=pts[lo],b=pts[hi],f=b[0]>a[0]?(sx-a[0])/(b[0]-a[0]):0,acc=0;
+  for(var q=0;q<ord.length;q++){var k=ord[q],u=(vk(k,a[1])||0)*(1-f)+(vk(k,b[1])||0)*f;if(u<=0)continue;acc+=u;if(v<=acc)return k;}
+  return -1;
+}
+TL.stackAt=stackAt;
+/* the series drawn under client point (x, y) on chart c, or -1: the point
+   in SVG units (toSvg), then the band drawn there (stackAt; side by side
+   the points of the panel under x) */
 function seriesAt(c,x,y){
   if(!c.g||!c.g.ord)return -1;
-  var r=c.svg.getBoundingClientRect(),sy=(y-r.top)*c.g.W/r.width;
-  if(sy<c.g.top||sy>c.g.top+c.g.ph)return -1;
-  var t=tAt(c,x);if(t<c.g.d0||t>c.g.d1)return -1;
-  var ref=refAt(t);if(ref==null)return -1;
-  var v=(c.g.top+c.g.ph-sy)/c.g.ph*c.g.ymax,acc=0;
-  for(var q=0;q<c.g.ord.length;q++){var k=c.g.ord[q],a=rV(c,k,ref)||0;if(a<=0)continue;acc+=a;if(v<=acc)return k;}
-  return -1;
+  var p=toSvg(c,x,y),pts=c.g.pts;
+  if(p.y<c.g.top||p.y>c.g.top+c.g.ph)return -1;
+  if(c.g.mode==='win'){pts=null;c.g.pan.forEach(function(pn){if(p.x>=pn.x0&&p.x<pn.x0+pn.w)pts=pn.pts;});}
+  else if(p.x<c.g.padL||p.x>c.g.W-c.g.padR)return -1;
+  return stackAt(pts,c.g.ord,function(k,r){return rV(c,k,r);},p.x,(c.g.top+c.g.ph-p.y)/c.g.ph*c.g.ymax);
 }
 /* the event palette: 15 categorical hues, the first 13 (all a chart can
    use: 14 events, CPU among them) well apart, readable on both themes, no
@@ -394,12 +490,12 @@ function spInit(){
   for(var i=0;i<n;i++){T.push(t0+i*bh);T1.push(Math.min(t0+(i+1)*bh,end));}
   SP={T:T,T1:T1,t0:t0,bh:bh,full:[t0,end],dom:[t0,end],win:wins().map(function(w){return [PT(w.s),PT(w.e)];}),
       min:Math.max(4*bh,Math.min(6*H1,(end-t0)/4)),bhTxt:AX.bh===1?'hourly':bLab(AX.bh)+' averages',
-      reset:doc.getElementById('ax-reset'),range:doc.getElementById('ax-range'),sel:null,F:null,rk:null,rv:null};
+      reset:doc.getElementById('ax-reset'),range:doc.getElementById('ax-range'),sel:null,F:null,rk:null,rv:null,mode:'span',wk:0,wf:0};
   SP.F=fineInit(AX.fine);
   CH=[];
-  mkChart(doc.getElementById('ax-cls'),AX,AX.classes.map(wcol),{flags:true,noun:'classes',what:'wait class'});
+  mkChart(doc.getElementById('ax-cls'),AX,AX.classes.map(wcol),{flags:true,noun:'classes',what:'wait class',labels:true});
   var ev=doc.getElementById('ax-ev');
-  if(okPay(AE,n))mkChart(ev,AE,evColors(AE.classes),{noun:'events',what:'wait event'});
+  if(okPay(AE,n))mkChart(ev,AE,evColors(AE.classes),{noun:'events',what:'wait event',labels:true});
   else if(ev)ev.hidden=true;
   /* the detail only when every chart has it */
   CH.forEach(function(c){c.FV=fineVals(c.P);});
@@ -412,21 +508,50 @@ function spInit(){
     ca.xmap=AX.classes.map(function(cn){var o=[];AE.ecls.forEach(function(x,e){if(x===cn)o.push(e);});return o;});
     ce.xmap=AE.ecls.map(function(x){var i=x==null?-1:AX.classes.indexOf(x);return i<0?[]:[i];});
   }
+  /* the dashboard design shows one chart at a time with its own tabs
+     (js_design.js activityTabs): no compact mode there */
+  var sec=doc.getElementById('activity'),mb=doc.getElementById('ax-more'),sv=null,dash=window.AWR_DESIGN==='dashboard';
+  try{sv=localStorage.getItem('awr-ax');}catch(e){}
+  SP.cmp=CH.length===2&&sv!=='full'&&!dash;
+  if(sec)sec.classList.toggle('ax-cmp',SP.cmp);
+  if(mb&&CH.length===2&&!dash){
+    mb.hidden=false;axMore(mb);
+    mb.addEventListener('click',function(){
+      SP.cmp=!SP.cmp;if(sec)sec.classList.toggle('ax-cmp',SP.cmp);axMore(mb);
+      try{localStorage.setItem('awr-ax',SP.cmp?'compact':'full');}catch(e){}
+      drawAll(true);
+    });
+  }
+  /* the layout switch (Windows side by side / Full span): shown when at
+     least two windows get a panel AXMP px wide; the reader's last click
+     (localStorage awr-axlayout) wins, else AXDEF (54 = draw's padL + padR) */
+  var mg=$('#activity .axlayout'),sm=null,pw0=CH.length?Math.max(480,CH[0].plot.clientWidth)-54:0;
+  try{sm=localStorage.getItem('awr-axlayout');}catch(e){}
+  if(mg&&SP.win.length>=2&&winFit(pw0)>=2){
+    mg.hidden=false;
+    SP.mode=(sm==='win'||sm==='span')?sm:(AXDEF==='win'&&SP.win.length<=winFit(pw0)?'win':'span');
+    $$('[data-m]',mg).forEach(function(b){
+      b.setAttribute('aria-pressed',String(b.getAttribute('data-m')===SP.mode));
+      b.addEventListener('click',function(){TL.axLayout(b.getAttribute('data-m'),true);});
+    });
+  }
   if(SP.reset)SP.reset.addEventListener('click',spReset);
   doc.addEventListener('mousemove',function(e){
     var dg=DRAG;if(!dg)return;
     if(!dg.moved&&Math.abs(e.clientX-dg.x0)<5)return;
     dg.moved=true;tipOff();hideAll();
-    var c=dg.c,r=c.svg.getBoundingClientRect(),sc=r.width/c.g.W,mn=r.left+c.g.padL*sc,mx=r.left+(c.g.W-c.g.padR)*sc;
+    if(SP.mode==='win')return;
+    var c=dg.c,mn=toCli(c,c.g.padL,0).x,mx=toCli(c,c.g.W-c.g.padR,0).x;
     dg.a=Math.max(mn,Math.min(dg.x0,e.clientX));dg.b=Math.min(mx,Math.max(dg.x0,e.clientX));
-    /* the brush shows on both charts: same width, same x mapping */
-    CH.forEach(function(o){if(!o.g)return;var ro=o.svg.getBoundingClientRect(),so=ro.width/o.g.W;
+    /* the brush shows on both charts: same width, same x mapping; its top
+       and height from the plot's own edges (a letterbox included) */
+    CH.forEach(function(o){if(!o.g)return;var ro=o.svg.getBoundingClientRect(),y0=toCli(o,0,o.g.top).y,y1=toCli(o,0,o.g.top+o.g.ph).y;
       o.br.hidden=false;o.br.style.left=(dg.a-ro.left)+'px';o.br.style.width=Math.max(0,dg.b-dg.a)+'px';
-      o.br.style.top=(o.g.top*so)+'px';o.br.style.height=(o.g.ph*so)+'px';});
+      o.br.style.top=(y0-ro.top)+'px';o.br.style.height=Math.max(0,y1-y0)+'px';});
   });
   doc.addEventListener('mouseup',function(){
     var dg=DRAG;if(!dg)return;DRAG=null;CH.forEach(function(o){o.br.hidden=true;});
-    if(dg.moved){if(dg.b-dg.a>6)spZoom(tAt(dg.c,dg.a),tAt(dg.c,dg.b));return;}
+    if(dg.moved){if(SP.mode!=='win'&&dg.b-dg.a>6)spZoom(tAt(dg.c,dg.a),tAt(dg.c,dg.b));return;}
     if(dg.w!=null){SP.sel={prev:PW,t:Date.now()};spSelect(dg.w);return;}
     /* a click on a band makes its highlight sticky (the same band again,
        or a click off the stack, clears it) */
@@ -438,7 +563,7 @@ function mkChart(root,P,cols,opt){
   if(!root)return null;
   var c={root:root,P:P,cols:cols,svg:$('.axsvg',root),plot:$('.axp',root),br:$('.axbr',root),
          vis:P.classes.map(function(){return true;}),flags:!!opt.flags,noun:opt.noun,what:opt.what,xl:false,g:null,w:0,uid:root.id,
-         lg:$('.axlg',root),hl:null,hk:'',peer:null,xmap:null};
+         lg:$('.axlg',root),hl:null,hk:'',peer:null,xmap:null,lab:opt.labels!==false};
   var lg=c.lg;
   if(lg){lg.innerHTML=P.classes.map(function(nm,k){return '<button type="button" class="axc" data-c="'+k+'" aria-pressed="true" title="'+esc(nm)+': hover to highlight, click to show or hide, Shift+click to keep it highlighted"><i class="sw" style="--sw:'+cols[k]+'" aria-hidden="true"></i>'+esc(nm)+'</button>';}).join('');
     /* hover / keyboard focus highlights; a click hides / shows; Shift+click
@@ -464,10 +589,10 @@ function mkChart(root,P,cols,opt){
        the pin the first press made on a window stripe */
     if(e.detail>=2){if(SP.sel&&Date.now()-SP.sel.t<700)W.pin(SP.sel.prev);SP.sel=null;
       if(SP.hsel&&Date.now()-SP.hsel.t<700){HS=SP.hsel.prev;HT=null;hlApply();}SP.hsel=null;
-      DRAG=null;spReset();return;}
+      DRAG=null;if(SP.mode!=='win')spReset();return;}
     var wh=e.target.closest('.xwh');DRAG={c:c,x0:e.clientX,y0:e.clientY,moved:false,w:wh?+wh.getAttribute('data-i'):null};
   });
-  s.addEventListener('dblclick',spReset);
+  s.addEventListener('dblclick',function(){if(SP.mode!=='win')spReset();});
   s.addEventListener('keydown',function(e){var wh=e.target.closest&&e.target.closest('.xwh');if(wh&&(e.key==='Enter'||e.key===' ')){e.preventDefault();spSelect(+wh.getAttribute('data-i'));}});
   CH.push(c);
   return c;
@@ -475,39 +600,43 @@ function mkChart(root,P,cols,opt){
 function drawAll(force){CH.forEach(function(c){draw(c,force);});spHead();}
 /* redraw both Activity charts now (a design that shows / hides one calls it) */
 TL.redraw=function(){drawAll(true);};
+/* the Activity charts' layout: 'win' (windows side by side) or 'span'
+   (full span); persist = the reader clicked (localStorage awr-axlayout) */
+TL.axLayout=function(m,persist){
+  if(!SP||(m!=='win'&&m!=='span'))return;
+  SP.mode=m;
+  $$('#activity .axlayout [data-m]').forEach(function(b){b.setAttribute('aria-pressed',String(b.getAttribute('data-m')===m));});
+  if(persist){try{localStorage.setItem('awr-axlayout',m);}catch(e){}}
+  hideAll();tipOff();drawAll(true);
+};
 function spHead(){
   if(!SP)return;var d0=SP.dom[0],d1=SP.dom[1],zoomed=d0>SP.full[0]||d1<SP.full[1];
+  if(SP.mode==='win'){
+    if(SP.reset)SP.reset.hidden=true;
+    var n=SP.win.length,K=SP.wk||n,f=SP.wf||0;
+    if(SP.range)SP.range.textContent=(K===n?n+' compared windows side by side':'The '+K+' most recent of '+n+' compared windows side by side (Full span shows all)')
+      +(f===K?', 1-min detail':f>0?', 1-min detail in the '+f+' most recent, '+SP.bhTxt+' in the rest':', '+SP.bhTxt);
+    return;
+  }
   if(SP.reset)SP.reset.hidden=!zoomed;
   var res=SP.bhTxt;
   if(fineOn(d0,d1))res=fineCov(d0,d1)>=d1-d0-1?'1-min detail':'1-min detail in the compared windows, '+SP.bhTxt+' elsewhere';
   if(SP.range)SP.range.textContent=zoomed?fAt(d0)+' to '+fAt(d1)+', zoomed, '+res:fDay(SP.full[0])+' to '+fDay(SP.full[1])+', '+SP.bhTxt;
 }
-function draw(c,force){
-  if(!c||!SP||!shown(c.plot))return;
-  /* the release flags go on the first chart shown, the x labels on the
-     last one (both on one chart when a design shows a single chart) */
-  var vis=CH.filter(function(x){return shown(x.plot);}),lay;c.flags=vis[0]===c;c.xl=vis[vis.length-1]===c;lay=(c.flags?1:0)+(c.xl?2:0);
-  var Wd=Math.max(480,c.plot.clientWidth),d0=SP.dom[0],d1=SP.dom[1];
-  if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk)return;c.w=Wd;c.pw=PW;c.lay=lay;
-  var mks=W.markers?W.markers():[],P=c.P;
-  var top=c.flags&&mks.length?46:22,ph=150,bot=c.xl?26:8,padL=40,padR=14,H=top+ph+bot,pw=Wd-padL-padR;
-  c.svg.setAttribute('viewBox','0 0 '+Wd+' '+H);c.svg.setAttribute('height',H);
-  var X=function(t){return padL+pw*(t-d0)/(d1-d0);};
-  /* stacked areas: one point per bucket at its midpoint, straight lines
-     between them.  While a bucket is at least a pixel wide every bucket is
-     a point; zoomed out further, one point per pixel column at the
-     column's busiest bucket (largest stacked total), so a one-bucket spike
-     still shows; the tooltip always reads the bucket under the cursor.
-     The first / last bucket of the data runs flat out to its edge. */
-  /* the highlight (hlApply): on[k] = series k highlighted and shown; re-based
-     (strong) = the highlighted series stacked first, from zero, the y axis
-     fitted to them and each pixel column keeping THEIR busiest bucket */
-  var hl=c.hl,on=null,i,k,sm,sh,r;
+/* the highlight state and the series drawing order of chart c (re-based:
+   the highlighted series first) */
+function hlOrd(c){
+  var P=c.P,hl=c.hl,on=null,k,ord=[];
   if(hl){on=P.classes.map(function(x,q){return !!hl.set[q]&&c.vis[q];});if(!on.some(Boolean)){hl=null;on=null;}}
-  var reb=!!(hl&&hl.strong),ord=[];
+  var reb=!!(hl&&hl.strong);
   for(k=0;k<P.vals.length;k++)if(c.vis[k]&&(!reb||on[k]))ord.push(k);
   if(reb)for(k=0;k<P.vals.length;k++)if(c.vis[k]&&!on[k])ord.push(k);
-  var R=refs(d0,d1),pts=[],cb=null,mx=0.05,mh=0;
+  return {hl:hl,on:on,reb:reb,ord:ord};
+}
+/* the points drawn for refs R over [d0, d1] mapped by X (see draw) and the
+   largest stacked total mx / highlighted total mh inside [d0, d1] */
+function colPts(c,R,X,d0,d1,reb,on){
+  var P=c.P,pts=[],cb=null,mx=0.05,mh=0,i,k,sm,sh,r;
   for(i=0;i<R.length;i++){r=R[i];sm=0;sh=0;for(k=0;k<P.vals.length;k++)if(c.vis[k]){var vk=rV(c,k,r)||0;sm+=vk;if(reb&&on[k])sh+=vk;}
     var ra=rS(r),rb=rE(r);if(rb>d0&&ra<d1){if(sm>mx)mx=sm;if(sh>mh)mh=sh;}
     var xm=X((ra+rb)/2),col=Math.floor(xm),g=pts[pts.length-1];
@@ -515,21 +644,18 @@ function draw(c,force){
   if(pts.length){var pf=pts[0],pl=pts[pts.length-1];
     if(rS(pf[1])>=d0)pts.unshift([X(rS(pf[1])),pf[1],pf[2],pf[3]]);
     if(rE(pl[1])<=d1)pts.push([X(rE(pl[1])),pl[1],pl[2],pl[3]]);}
-  var yb=reb&&mh>0?Math.max(mh,0.05):mx,step=niceStep(yb,3),ymax=Math.ceil(yb/step-1e-9)*step;
-  var Y=function(v){return top+ph-ph*v/ymax;},clip='axclip-'+c.uid;
-  var s='<defs><clipPath id="'+clip+'"><rect x="'+padL+'" y="'+(top-6)+'" width="'+pw+'" height="'+(ph+6)+'"/></clipPath>'
-    +(reb?'<clipPath id="'+clip+'f"><rect x="'+padL+'" y="'+top+'" width="'+pw+'" height="'+ph+'"/></clipPath>':'')+'</defs>';
-  for(var v=0;v<=ymax+1e-9;v+=step){var dec=step<1?(step<0.1?2:1):0;
-    s+='<line class="gl" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="at" x="'+(padL-6)+'" y="'+(Y(v)+4).toFixed(1)+'" text-anchor="end">'+v.toFixed(dec)+'</text>';}
-  s+='<text class="at" x="'+(padL-6)+'" y="'+(top-10)+'" text-anchor="end">AAS</text><g clip-path="url(#'+clip+')">';
-  /* one fill per series, painted top of the stack first: each fills from
-     the axis up to its own cumulative line and the series below paint over
-     it (no seams); then each band's top edge, a thin darker line.  A point
-     in the middle of a flat run is left out of the path.  Highlighted: the
-     other series paint the same way inside one faded group (the group's
-     opacity applies once, so their overlap does not darken), then each
-     highlighted series as its own band (between its lower and upper line)
-     at full colour with a clear top edge. */
+  return {pts:pts,mx:mx,mh:mh};
+}
+/* the band paths of points pts (colPts) in series order ord, y mapped by Y:
+   one fill per series, painted top of the stack first (the caller reverses
+   fills / edges): each fills from the axis up to its own cumulative line
+   and the series below paint over it (no seams); then each band's top
+   edge, a thin darker line.  A point in the middle of a flat run is left
+   out of the path.  Highlighted: the other series paint the same way inside
+   one faded group (the group's opacity applies once, so their overlap does
+   not darken), then each highlighted series as its own band (hf, between
+   its lower and upper line) at full colour with a clear top edge (he). */
+function bands(c,pts,ord,on,Y){
   var lo=pts.map(function(){return 0;}),np=pts.length,y0=Y(0).toFixed(1),fills=[],edges=[],hf=[],he=[];
   var pl2=function(ys,rev){var o='',j,q;for(q=0;q<np;q++){j=rev?np-1-q:q;if(q>0&&q<np-1&&ys[j]===ys[rev?j+1:j-1]&&ys[j]===ys[rev?j-1:j+1])continue;o+=(o?'L':'')+pts[j][0].toFixed(1)+' '+ys[j];}return o;};
   ord.forEach(function(k){
@@ -544,6 +670,359 @@ function draw(c,force){
     }
     lo=hi;
   });
+  return {fills:fills,edges:edges,hf:hf,he:he};
+}
+/* direct labels (plan 036; fitted per band, owner decision 2026-11-20):
+   each shown series is named once a chart, inside its own band, where the
+   band is thickest over a stretch as wide as the label.  A stretch = a
+   window of whole pixel columns as wide as the label, inside one group
+   (one for Full span, one per panel side by side, so a label never
+   crosses a panel edge); its thickness = the lowest point of the band's
+   lower edge minus the highest point of its upper edge over the window,
+   i.e. the tallest clear box of that width.  A label needs LBH px; the
+   series go thickest first, at most LMAX a chart, each to its thickest
+   stretch clear of the labels placed so far and of the highlight note
+   (equal thickness: the middle of the run).  A name is cut at LW px with
+   "..."; when that fits nowhere, shorter cuts (LCUT px, at least 6
+   characters) are tried.  With a strong highlight only the highlighted
+   series.  Drawn inside the plot clip, above bands and stripes,
+   pointer-events none. */
+var LBH=10,LMAX=6,LW=160,LTH=12,LCUT=[120,90,64];
+/* per whole pixel column i of [x0, x0 + n): the lowest (big false) or the
+   highest (big true) y of the polyline xs / ys (x increasing) over the
+   column; a column the line does not cover gets -1e9 / 1e9, so no stretch
+   over it is thick enough */
+function colExt(xs,ys,x0,n,big){
+  var out=[],np=xs.length,j=0,k=0,i,q,e,l,vl,vr;
+  var at=function(x){
+    if(!np||x<xs[0]||x>xs[np-1])return NaN;
+    if(np<2)return ys[0];
+    while(j<np-2&&xs[j+1]<x)j++;
+    var a=xs[j],b=xs[j+1];
+    return b>a?ys[j]+(ys[j+1]-ys[j])*(x-a)/(b-a):(big?Math.max(ys[j],ys[j+1]):Math.min(ys[j],ys[j+1]));
+  };
+  for(i=0;i<n;i++){
+    l=x0+i;vl=at(l);vr=at(l+1);
+    if(isNaN(vl)||isNaN(vr)){out.push(big?1e9:-1e9);continue;}
+    e=big?Math.max(vl,vr):Math.min(vl,vr);
+    while(k<np&&xs[k]<=l)k++;
+    for(q=k;q<np&&xs[q]<l+1;q++)e=big?Math.max(e,ys[q]):Math.min(e,ys[q]);
+    out.push(e);
+  }
+  return out;
+}
+/* the lowest (big false) / highest (big true) of a[s .. s + m - 1] for
+   s = 0 .. a.length - m (a deque of candidate indexes) */
+function slideExt(a,m,big){
+  var out=[],dq=[],h=0,i;
+  for(i=0;i<a.length;i++){
+    while(dq.length>h&&(big?a[dq[dq.length-1]]<=a[i]:a[dq[dq.length-1]]>=a[i]))dq.pop();
+    dq.push(i);
+    if(dq[h]<=i-m)h++;
+    if(i>=m-1)out.push(a[dq[h]]);
+  }
+  return out;
+}
+/* the stretches of one series for a label w px wide, from its per-group
+   column extremes ext: per group {g, m (columns), x0, lo / hi (the clear
+   box's bottom / top per start), tq (its thickness rounded down to
+   0.5 px)}; best = the largest tq anywhere */
+function stretches(groups,ext,w){
+  var m=Math.ceil(w-1e-6),R=[],best=-Infinity;
+  ext.forEach(function(E,gi){
+    if(!E||m<1||m>E.n)return;
+    var lo=slideExt(E.lo,m,false),hi=slideExt(E.hi,m,true),tq=[],s;
+    for(s=0;s<lo.length;s++){tq.push(Math.floor((lo[s]-hi[s])*2)/2);if(tq[s]>best)best=tq[s];}
+    R.push({g:gi,m:m,x0:groups[gi].x0,lo:lo,hi:hi,tq:tq});
+  });
+  return {best:best,R:R};
+}
+/* the starts of stretches S at least mn thick, best first: thicker, then
+   nearer the middle of their run of equal thickness ({t, x / y: the clear
+   box's centre}) */
+function spos(S,mn){
+  var pos=[];
+  S.R.forEach(function(r){
+    var tq=r.tq,ns=tq.length,a,b,s;
+    for(a=0;a<ns;a=b+1){
+      for(b=a;b+1<ns&&tq[b+1]===tq[a];)b++;
+      if(tq[a]>=mn)for(s=a;s<=b;s++)pos.push({t:tq[s],d:Math.abs(s-(a+b)/2),g:r.g,s:s,x:r.x0+s+r.m/2,y:(r.lo[s]+r.hi[s])/2});
+    }
+  });
+  return pos.sort(function(p,q){return q.t-p.t||p.d-q.d||p.g-q.g||p.s-q.s;});
+}
+/* the label fitter (pure; AWR_TL.fitLabels for tools/js_unit_tests.js).
+   groups [{xs, x0, x1}]: the points' x (increasing) and the group's plot
+   range; cands [{k, alts: [{txt, w}] longest first, yl / yh: per group,
+   the band's lower / upper edge y at each point}] in stacking order;
+   o {min: thickness, max: labels, th: text box height, y1: the axis (a
+   label's box stays above it), avoid: [[x0, y0, x1, y1]]}.
+   Returns [{k, txt, x, y, w, t}], x / y = the label's centre. */
+function fitLabels(groups,cands,o){
+  var out=[],boxes=(o.avoid||[]).slice(),th=o.th||12,L=[];
+  cands.forEach(function(C,ci){
+    var ext=groups.map(function(G,gi){var n=Math.floor(G.x1-G.x0+1e-6);return n>0?{n:n,lo:colExt(G.xs,C.yl[gi],G.x0,n,false),hi:colExt(G.xs,C.yh[gi],G.x0,n,true)}:null;}),ub=-Infinity;
+    /* no single column thick enough: no stretch is (the common thin band) */
+    ext.forEach(function(E){if(E)for(var i=0;i<E.n;i++)if(E.lo[i]-E.hi[i]>ub)ub=E.lo[i]-E.hi[i];});
+    if(ub<o.min)return;
+    for(var a=0;a<C.alts.length;a++){var S=stretches(groups,ext,C.alts[a].w);if(S.best>=o.min){L.push({C:C,ci:ci,ext:ext,a:a,S:S});break;}}
+  });
+  L.sort(function(p,q){return q.S.best-p.S.best||p.ci-q.ci;});
+  L.forEach(function(it){
+    if(out.length>=o.max)return;
+    for(var a=it.a;a<it.C.alts.length;a++){
+      var w=it.C.alts[a].w,P=spos(a===it.a?it.S:stretches(groups,it.ext,w),o.min);
+      for(var i=0;i<P.length;i++){
+        var p=P[i],y=o.y1!=null?Math.min(p.y,o.y1-th/2):p.y,box=[p.x-w/2,y-th/2,p.x+w/2,y+th/2];
+        if(boxes.some(function(b){return box[0]<b[2]+2&&box[2]>b[0]-2&&box[1]<b[3]+2&&box[3]>b[1]-2;}))continue;
+        boxes.push(box);out.push({k:it.C.k,txt:it.C.alts[a].txt,x:p.x,y:y,w:w,t:p.t});return;
+      }
+    }
+  });
+  return out;
+}
+TL.fitLabels=fitLabels;
+/* a series name's label texts, longest first ({txt, w}: cut at LW, then
+   at each LCUT width while at least 6 characters stay; cached per name) */
+var LC=Object.create(null);
+function lcuts(nm){
+  if(LC[nm])return LC[nm];
+  var out=[];
+  [LW].concat(LCUT).forEach(function(mw,q){
+    var t=nm,w;
+    if(tw(t)+6>mw){while(t.length>(q?6:4)&&tw(t+'...')+6>mw)t=t.slice(0,-1);t=t.replace(/\s+$/,'')+'...';}
+    w=tw(t)+6;
+    if((!out.length||out[out.length-1].txt!==t)&&(!q||w<=mw))out.push({txt:t,w:w});
+  });
+  return (LC[nm]=out);
+}
+/* the texts alts of series k (lcuts) without a cut ("...") whose stem
+   also starts another series' name in names (the chart's series): such
+   a label is ambiguous ("log file s..." reads as log file sync as well as
+   log file switch); pure, AWR_TL.labelAlts */
+function labelAlts(alts,names,k){
+  return alts.filter(function(a){
+    if(a.txt===names[k]||a.txt.slice(-3)!=='...')return true;
+    var p=a.txt.slice(0,-3);
+    return !names.some(function(x,q){return q!==k&&x.indexOf(p)===0;});
+  });
+}
+TL.labelAlts=labelAlts;
+/* the highlight note's box for dlab (the note is 600 weight and Geist in the
+   quiet / dashboard designs, tw() measures the 400 system stack: 1.2x) */
+function noteBox(hl,padL,top){return hl&&hl.note?[padL+6,top+3,padL+6+tw(hl.note)*1.2,top+16]:null;}
+/* the labels of chart c: groups [{pts, x0, x1}] (colPts points), series
+   order ord stacked from zero exactly as bands() does, y by Y, nb = the
+   highlight note's box (or null) */
+function dlab(c,groups,ord,on,Y,reb,nb){
+  if(!c.lab)return '';
+  var G=groups.filter(function(g){return g.pts.length>=2;}),lo=G.map(function(g){return g.pts.map(function(){return 0;});}),cands=[];
+  ord.forEach(function(k){
+    var yl=[],yh=[];
+    G.forEach(function(g,gi){var hi=lo[gi].map(function(l,j){return l+(rV(c,k,g.pts[j][1])||0);});yl.push(lo[gi].map(Y));yh.push(hi.map(Y));lo[gi]=hi;});
+    if(!reb||(on&&on[k]))cands.push({k:k,alts:labelAlts(lcuts(c.P.classes[k]),c.P.classes,k),yl:yl,yh:yh});
+  });
+  return fitLabels(G.map(function(g){return {xs:g.pts.map(function(p){return p[0];}),x0:g.x0,x1:g.x1};}),cands,{min:LBH,max:LMAX,th:LTH,y1:Y(0),avoid:nb?[nb]:[]})
+    .map(function(L){return '<text class="xdl" x="'+L.x.toFixed(1)+'" y="'+(L.y+4).toFixed(1)+'" text-anchor="middle">'+esc(L.txt)+'</text>';}).join('');
+}
+/* the release markers of list [{x: px, m: marker}]: a line through the plot
+   on every chart shown, the flags (two tiers) on the chart with c.flags.
+   Markers less than 1 px apart (side by side: every marker of one gap)
+   form a group: as many as fit get a flag of their own, the last flag
+   shown names the rest ("Release 4.2 +2", its tooltip lists them); a
+   group with no room left for a flag keeps its line, whose tooltip names
+   every marker of the group */
+function flagSvg(c,list,top,ph,Wd,padL,padR){
+  var s='',tiers=[[],[]],G=[];
+  list.filter(function(it){return it.x>=padL&&it.x<=Wd-padR;}).sort(function(a,b){return a.x-b.x;}).forEach(function(it){
+    var g=G[G.length-1];if(g&&it.x-g.x<1)g.ms.push(it.m);else G.push({x:it.x,ms:[it.m]});
+  });
+  var tt=function(ms){return ms.map(function(m){return m.l+', '+m.t;}).join('\n');};
+  var line=function(x,ms){return '<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+top+'" y2="'+(top+ph)+'"><title>'+esc(tt(ms))+'</title></line>';};
+  G.forEach(function(g){
+    var x=g.x,ms=g.ms,n=ms.length,j,i;
+    if(!c.flags){s+=line(x,ms);return;}
+    /* j flags: the first j - 1 markers alone, the j-th with the rest */
+    for(j=n;j>=1;j--){
+      var tr=tiers.map(function(t){return t.slice();}),out='',f='';
+      for(i=0;i<j&&f!=null;i++){
+        var more=i===j-1?ms.slice(j):[],sx=more.length?' +'+more.length:'';
+        f=flag1(tr,x,[ms[i].l+sx,ms[i].s+sx],tt([ms[i]].concat(more)),top,ph,Wd,padR);
+        if(f!=null)out+=f;
+      }
+      if(f!=null){tiers=tr;s+=out;return;}
+    }
+    s+=line(x,ms);
+  });
+  return s;
+}
+/* where a flag at x goes: the first label (widths ws, in order: the long
+   label, then the short one) that fits on a free tier, left-anchored at x,
+   or flipped to end at x when that would pass the right edge hi -- and
+   only while the flag then stays right of the left edge lo (review
+   follow-up R3: a long label flipped left near the left edge sat mostly
+   outside the SVG, and the short one was never tried).  {i: label index,
+   L: tier, x0: left edge, end: flipped} with tiers taking its extent, or
+   null: the caller keeps the line and its tooltip.  Pure: AWR_TL.flagPos,
+   unit-tested. */
+function flagPos(tiers,x,ws,lo,hi){
+  for(var i=0;i<ws.length;i++){
+    var w=ws[i],x0=x+w>hi?x-w:x;
+    if(x0<lo)continue;
+    for(var L=0;L<tiers.length;L++){
+      if(tiers[L].some(function(q){return x0<q[1]+6&&x0+w>q[0]-6;}))continue;
+      tiers[L].push([x0,x0+w]);return {i:i,L:L,x0:x0,end:x0!==x};
+    }
+  }
+  return null;
+}
+TL.flagPos=flagPos;
+/* one flag at x for the first of the labels labs that fits (flagPos; the
+   SVG's left edge, 0, to the plot's right edge), else null */
+function flag1(tiers,x,labs,title,top,ph,Wd,padR){
+  var ws=labs.map(function(lb){return tw(lb)+12;}),f=flagPos(tiers,x,ws,0,Wd-padR);if(!f)return null;
+  var lb=labs[f.i],w=ws[f.i],x0=f.x0,end=f.end,y=2+f.L*19;
+  return '<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+(y+16)+'" y2="'+(top+ph)+'"/><line class="cf" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+y+'" y2="'+(y+16)+'"/>'
+    +'<rect class="cfh" x="'+(end?x0:x+1).toFixed(1)+'" y="'+y+'" width="'+(w-1)+'" height="16" rx="2"/>'
+    +'<text class="cft" x="'+(end?x-6:x+6).toFixed(1)+'" y="'+(y+12)+'" text-anchor="'+(end?'end':'start')+'"><title>'+esc(title)+'</title>'+esc(lb)+'</text>';
+}
+/* replace chart c's SVG; a focused window stripe / cap keeps the focus
+   (Enter on it pins the window, which redraws both charts) */
+function setSvg(c,s){
+  var a=doc.activeElement,fi=a&&a!==c.svg&&c.svg.contains(a)&&a.getAttribute&&a.getAttribute('class')==='xwh'?a.getAttribute('data-i'):null;
+  c.svg.innerHTML=s;
+  if(fi!=null){var e=$('.xwh[data-i="'+fi+'"]',c.svg);if(e)try{e.focus({preventScroll:true});}catch(x){e.focus();}}
+}
+/* ---- "Windows side by side" (SP.mode 'win'): each compared window as its
+   own panel on one shared y axis, oldest left, Current last.  A panel is
+   drawn minute by minute when every minute of its window is in the
+   1-minute detail (SP.F), else from the coarse buckets overlapping it.
+   Panels are at least AXMP px wide, AXGAP px apart: when not all windows
+   fit, the most recent that fit (the Current always).  No zoom here; a
+   click on a panel's top edge pins its window.  AXDEF = the mode for a
+   reader who never clicked the switch ('win': side by side when every
+   window fits, else full span). */
+var AXMP=24,AXGAP=6,AXDEF='span';
+function winFit(pw){return Math.max(1,Math.floor((pw+AXGAP)/(AXMP+AXGAP)));}
+/* the refs of window i: its 1-minute buckets when the detail covers it all,
+   else the coarse buckets overlapping it */
+function wSlice(i){
+  var a=SP.win[i][0],b=SP.win[i][1],F=SP.F,out=[],q,g,j,j0,j1;
+  if(F&&fineCov(a,b)>=b-a-1){
+    for(q=0;q<F.S.length;q++){g=F.S[q];if(g[1]<=a||g[0]>=b)continue;
+      j0=Math.max(0,Math.floor((a-g[0])/F.bm));j1=Math.min(Math.round((g[1]-g[0])/F.bm),Math.ceil((b-g[0])/F.bm))-1;
+      for(j=j0;j<=j1;j++)out.push(-1-(g[2]+j));}
+    return {r:out,fine:true};
+  }
+  var br=bRange(a,b);for(j=br[0];j<=br[1];j++)out.push(j);
+  return {r:out,fine:false};
+}
+/* the panel under client x on chart c: {q: panel index, t: time} or null */
+function panAt(c,cx){
+  var g=c.g;if(!g||g.mode!=='win')return null;
+  var x=toSvg(c,cx,0).x;
+  for(var q=0;q<g.pan.length;q++){var p=g.pan[q];if(x>=p.x0&&x<p.x0+p.w)return {q:q,t:p.a+(x-p.x0)/p.w*(p.b-p.a)};}
+  return null;
+}
+/* the ref drawn at time t in panel q (1-minute or coarse, as the panel) */
+function wRefAt(c,q,t){
+  var p=c.g.pan[q];if(!p)return null;
+  if(p.fine){var F=SP.F;for(var k=0;k<F.S.length;k++){var g=F.S[k];if(t>=g[0]&&t<g[1])return -1-(g[2]+Math.floor((t-g[0])/F.bm));}return null;}
+  var j=bucketAt(t);return j<0?null:j;
+}
+/* chart c side by side (draw passes its size; flags / labels follow
+   c.flags / c.xl as in draw) */
+function drawWin(c,o){
+  var Wd=o.Wd,top=o.top,ph=o.ph,padL=o.padL,padR=o.padR,pw=o.pw;
+  var n=SP.win.length,K=Math.min(n,winFit(pw)),w=(pw-AXGAP*(K-1))/K,ws=wins(),cur=ws.length-1;
+  var h=hlOrd(c),hl=h.hl,on=h.on,reb=h.reb,ord=h.ord,pan=[],mx=0.05,mh=0,nf=0,q;
+  for(q=0;q<K;q++){
+    var i=n-K+q,a=SP.win[i][0],b=SP.win[i][1],x0=padL+q*(w+AXGAP),sl=wSlice(i);
+    var X=(function(x0,a,b){return function(t){return x0+w*Math.min(1,Math.max(0,(t-a)/(b-a)));};})(x0,a,b);
+    var cp=colPts(c,sl.r,X,a,b,reb,on);
+    if(cp.mx>mx)mx=cp.mx;if(cp.mh>mh)mh=cp.mh;if(sl.fine)nf++;
+    pan.push({i:i,x0:x0,w:w,a:a,b:b,X:X,fine:sl.fine,pts:cp.pts});
+  }
+  SP.wk=K;SP.wf=nf;
+  /* y scale, clip paths, gridlines, "AAS", open the clipped group: as draw */
+  var yb=reb&&mh>0?Math.max(mh,0.05):mx,step=niceStep(yb,3),ymax=Math.ceil(yb/step-1e-9)*step;
+  var Y=function(v){return top+ph-ph*v/ymax;},clip='axclip-'+c.uid;
+  var s='<defs><clipPath id="'+clip+'"><rect x="'+padL+'" y="'+(top-6)+'" width="'+pw+'" height="'+(ph+6)+'"/></clipPath>'
+    +(reb?'<clipPath id="'+clip+'f"><rect x="'+padL+'" y="'+top+'" width="'+pw+'" height="'+ph+'"/></clipPath>':'')+'</defs>';
+  for(var v=0;v<=ymax+1e-9;v+=step){var dec=step<1?(step<0.1?2:1):0;
+    s+='<line class="gl" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="at" x="'+(padL-6)+'" y="'+(Y(v)+4).toFixed(1)+'" text-anchor="end">'+v.toFixed(dec)+'</text>';}
+  s+='<text class="at" x="'+(padL-6)+'" y="'+(top-10)+'" text-anchor="end">AAS</text><g clip-path="url(#'+clip+')">';
+  /* panel backgrounds under the bands; classes as the stripes' */
+  var hit=[];
+  pan.forEach(function(p){var wi=ws[p.i],cls=(p.i===cur?' cur':'')+(wi.o===PW?' on':'')+(wi.v==='N'?' sk':'');
+    s+='<rect class="xw xpn'+cls+'" x="'+p.x0.toFixed(1)+'" y="'+top+'" width="'+p.w.toFixed(1)+'" height="'+ph+'"/>';
+    hit.push([p.i,p.x0,p.w,cls]);});
+  /* the bands, panel by panel (each panel's fills top of the stack first, as draw) */
+  var F=[],E=[],HF=[],HE=[];
+  pan.forEach(function(p){var B=bands(c,p.pts,ord,on,Y);F=F.concat(B.fills.reverse());E=E.concat(B.edges.reverse());HF=HF.concat(B.hf);HE=HE.concat(B.he);});
+  if(!hl)s+=F.join('')+E.join('');
+  else s+=(reb?'<g clip-path="url(#'+clip+'f)">':'')+'<g class="xfd" opacity="'+(reb&&ymax<mx?Math.min(hl.fade,0.07):hl.fade)+'">'+F.join('')+'</g>'+HF.join('')+HE.join('')+(reb?'</g>':'');
+  /* the hidden bucket band: as draw; the caps */
+  s+='<rect class="xbk" x="0" y="'+top+'" width="0" height="'+ph+'" visibility="hidden"/>';
+  hit.forEach(function(r){s+='<rect class="xwc'+r[3]+'" x="'+r[1].toFixed(1)+'" y="'+(top-5)+'" width="'+r[2].toFixed(1)+'" height="4" rx="1"/>';});
+  /* the direct labels, each inside its panel (dlab) */
+  s+=dlab(c,pan.map(function(p){return {pts:p.pts,x0:p.x0,x1:p.x0+p.w};}),ord,on,Y,reb,noteBox(hl,padL,top));
+  /* close the group and the x axis line: as draw */
+  s+='</g><line class="ax" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+(top+ph)+'" y2="'+(top+ph)+'"/>';
+  /* window labels under the lower chart: every st-th panel counted from the Current one */
+  if(o.xl){var lw=0;pan.forEach(function(p){lw=Math.max(lw,tw(ws[p.i].d));});var st=Math.max(1,Math.ceil((lw+8)/(w+AXGAP)));
+    pan.forEach(function(p,q){if((K-1-q)%st)return;var wi=ws[p.i];
+      s+='<text class="at xpl'+(p.i===cur?' cur':'')+(wi.v==='N'?' sk':'')+'" x="'+(p.x0+p.w/2).toFixed(1)+'" y="'+(top+ph+18)+'" text-anchor="middle">'+esc(wi.d)+'</text>';});}
+  /* release markers: in the gap before the window they precede */
+  var list=[];o.mks.forEach(function(m){var ib=idxOf(m.o);pan.forEach(function(p){if(p.i===ib)list.push({x:Math.max(padL,p.x0-AXGAP/2),m:m});});});
+  s+=flagSvg(c,list,top,ph,Wd,padL,padR);
+  /* highlight note and crosshair: as draw */
+  if(hl&&hl.note)s+='<text class="xhn" x="'+(padL+6)+'" y="'+(top+13)+'">'+esc(hl.note)+'</text>';
+  s+='<line class="xch" x1="0" x2="0" y1="'+top+'" y2="'+(top+ph)+'" visibility="hidden"/>';
+  /* hit areas: the caps only (a band in the plot keeps its highlight on a click) */
+  hit.forEach(function(r){var wi=ws[r[0]];
+    s+='<rect class="xwh" data-i="'+r[0]+'" data-w="'+wi.o+'" x="'+r[1].toFixed(1)+'" y="'+(top-6)+'" width="'+r[2].toFixed(1)+'" height="10" tabindex="0" role="button" aria-label="'
+      +esc((wi.o===0?'Current window, ':offTxt(wi)+' window, ')+wi.t+(wi.o===0?'':'. Pin it'))+'"/>';});
+  setSvg(c,s);
+  c.g={mode:'win',pan:pan,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:SP.dom[0],d1:SP.dom[1],ymax:ymax,ord:ord,hk:c.hk,cm:o.cm};
+}
+function draw(c,force){
+  if(!c||!SP||!shown(c.plot))return;
+  /* the release flags go on the first chart shown, the x labels on the
+     last one (both on one chart when a design shows a single chart) */
+  var vis=CH.filter(function(x){return shown(x.plot);}),lay;c.flags=vis[0]===c;c.xl=vis[vis.length-1]===c;lay=(c.flags?1:0)+(c.xl?2:0);
+  var Wd=Math.max(480,c.plot.clientWidth),d0=SP.dom[0],d1=SP.dom[1];
+  if(!force&&c.w===Wd&&c.lay===lay&&c.g&&c.pw===PW&&c.g.d0===d0&&c.g.d1===d1&&c.g.hk===c.hk&&c.g.cm===cmp()&&(c.g.mode||'span')===SP.mode)return;c.w=Wd;c.pw=PW;c.lay=lay;
+  var mks=W.markers?W.markers():[],P=c.P;
+  var cm=cmp(),padL=40,padR=14,pw=Wd-padL-padR,n=SP.win.length;
+  /* the flag band only while a marker is in view: Full span = every marker
+     (W.markers() all lie inside the span; kept while zoomed, so a brush
+     never moves the charts), side by side = a marker in the gap before a
+     panel shown (the most recent winFit(pw) windows) */
+  var mkv=SP.mode==='win'?mks.filter(function(m){var ib=idxOf(m.o);return ib>=0&&ib>=n-Math.min(n,winFit(pw));}):mks;
+  var top=c.flags&&mkv.length?46:22,ph=cm?96:150,bot=c.xl?26:8,H=top+ph+bot;
+  c.svg.setAttribute('viewBox','0 0 '+Wd+' '+H);c.svg.setAttribute('height',H);
+  var X=function(t){return padL+pw*(t-d0)/(d1-d0);};
+  if(SP.mode==='win'){drawWin(c,{Wd:Wd,top:top,ph:ph,padL:padL,padR:padR,pw:pw,xl:c.xl,cm:cm,mks:mks});return;}
+  /* stacked areas: one point per bucket at its midpoint, straight lines
+     between them.  While a bucket is at least a pixel wide every bucket is
+     a point; zoomed out further, one point per pixel column at the
+     column's busiest bucket (largest stacked total), so a one-bucket spike
+     still shows; the tooltip always reads the bucket under the cursor.
+     The first / last bucket of the data runs flat out to its edge. */
+  /* the highlight (hlApply): on[k] = series k highlighted and shown; re-based
+     (strong) = the highlighted series stacked first, from zero, the y axis
+     fitted to them and each pixel column keeping THEIR busiest bucket */
+  var h=hlOrd(c),hl=h.hl,on=h.on,reb=h.reb,ord=h.ord;
+  var cp=colPts(c,refs(d0,d1),X,d0,d1,reb,on),pts=cp.pts,mx=cp.mx,mh=cp.mh;
+  var yb=reb&&mh>0?Math.max(mh,0.05):mx,step=niceStep(yb,3),ymax=Math.ceil(yb/step-1e-9)*step;
+  var Y=function(v){return top+ph-ph*v/ymax;},clip='axclip-'+c.uid;
+  var s='<defs><clipPath id="'+clip+'"><rect x="'+padL+'" y="'+(top-6)+'" width="'+pw+'" height="'+(ph+6)+'"/></clipPath>'
+    +(reb?'<clipPath id="'+clip+'f"><rect x="'+padL+'" y="'+top+'" width="'+pw+'" height="'+ph+'"/></clipPath>':'')+'</defs>';
+  for(var v=0;v<=ymax+1e-9;v+=step){var dec=step<1?(step<0.1?2:1):0;
+    s+='<line class="gl" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+Y(v).toFixed(1)+'" y2="'+Y(v).toFixed(1)+'"/><text class="at" x="'+(padL-6)+'" y="'+(Y(v)+4).toFixed(1)+'" text-anchor="end">'+v.toFixed(dec)+'</text>';}
+  s+='<text class="at" x="'+(padL-6)+'" y="'+(top-10)+'" text-anchor="end">AAS</text><g clip-path="url(#'+clip+')">';
+  var B=bands(c,pts,ord,on,Y),fills=B.fills,edges=B.edges,hf=B.hf,he=B.he;
   if(!hl)s+=fills.reverse().join('')+edges.reverse().join('');
   /* fitted below the stack's top, the faded stack would fill the plot: fainter then */
   else s+=(reb?'<g clip-path="url(#'+clip+'f)">':'')+'<g class="xfd" opacity="'+(reb&&ymax<mx?Math.min(hl.fade,0.07):hl.fade)+'">'+fills.reverse().join('')+'</g>'+hf.join('')+he.join('')+(reb?'</g>':'');
@@ -555,6 +1034,8 @@ function draw(c,force){
     s+='<rect class="xw'+cls+'" x="'+x.toFixed(1)+'" y="'+top+'" width="'+w.toFixed(1)+'" height="'+ph+'"/><rect class="xwc'+cls+'" x="'+x.toFixed(1)+'" y="'+(top-5)+'" width="'+w.toFixed(1)+'" height="4" rx="1"/>';
     hit.push([i,x,w]);
   });
+  /* the bands named on the chart (dlab), above the stripes */
+  s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb,noteBox(hl,padL,top));
   s+='</g><line class="ax" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+(top+ph)+'" y2="'+(top+ph)+'"/>';
   /* x ticks: the smallest interval that leaves about 88 px per label, counted from
      midnight of the Current window's day (weekly ticks land on its weekday);
@@ -569,23 +1050,7 @@ function draw(c,force){
   }
   /* release markers: a line through the plot on both charts; the flags (two
      tiers) on the upper one */
-  var tiers=[[],[]];
-  mks.forEach(function(m){
-    var x=X(PT(m.at));if(x<padL||x>Wd-padR)return;
-    if(!c.flags){s+='<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+top+'" y2="'+(top+ph)+'"><title>'+esc(m.l+', '+m.t)+'</title></line>';return;}
-    [m.l,m.s].some(function(lb){
-      var w=tw(lb)+12,x0=x+w>Wd-padR?x-w:x,end=x0!==x;
-      for(var L=0;L<2;L++){
-        if(tiers[L].some(function(r){return x0<r[1]+6&&x0+w>r[0]-6;}))continue;
-        tiers[L].push([x0,x0+w]);var y=2+L*19;
-        s+='<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+(y+16)+'" y2="'+(top+ph)+'"/><line class="cf" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+y+'" y2="'+(y+16)+'"/>'
-          +'<rect class="cfh" x="'+(end?x0:x+1).toFixed(1)+'" y="'+y+'" width="'+(w-1)+'" height="16" rx="2"/>'
-          +'<text class="cft" x="'+(end?x-6:x+6).toFixed(1)+'" y="'+(y+12)+'" text-anchor="'+(end?'end':'start')+'"><title>'+esc(m.l+', '+m.t)+'</title>'+esc(lb)+'</text>';
-        return true;
-      }
-      return false;
-    });
-  });
+  s+=flagSvg(c,mks.map(function(m){return {x:X(PT(m.at)),m:m};}),top,ph,Wd,padL,padR);
   if(hl&&hl.note)s+='<text class="xhn" x="'+(padL+6)+'" y="'+(top+13)+'">'+esc(hl.note)+'</text>';
   s+='<line class="xch" x1="0" x2="0" y1="'+top+'" y2="'+(top+ph)+'" visibility="hidden"/>';
   /* a stripe's hit area: the whole stripe while it is narrow; zoomed into
@@ -596,19 +1061,27 @@ function draw(c,force){
     s+='<rect class="xwh" data-i="'+i+'" data-w="'+w.o+'" x="'+hx.toFixed(1)+'" y="'+(top-6)+'" width="'+hw.toFixed(1)+'" height="'+hh+'" tabindex="0" role="button" aria-label="'
       +esc((w.o===0?'Current window, ':offTxt(w)+' window, ')+w.t+(w.o===0?'':'. Pin it'))+'"/>';
   });
-  c.svg.innerHTML=s;
-  c.g={X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,hk:c.hk};
+  setSvg(c,s);
+  c.g={mode:'span',X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,pts:pts,hk:c.hk,cm:cm};
 }
-function tAt(c,cx){var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*c.g.W/r.width;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}
+function tAt(c,cx){var x=toSvg(c,cx,0).x;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}
 function bucketAt(t){var j=Math.floor((t-SP.t0)/SP.bh);return j>=0&&j<SP.T.length&&t<SP.T1[j]?j:-1;}
 function hideCross(c){var hb=$('.xbk',c.svg),ch=$('.xch',c.svg);if(hb){hb.setAttribute('visibility','hidden');ch.setAttribute('visibility','hidden');}}
 function hideAll(){CH.forEach(hideCross);}
-/* the crosshair + bucket band at time t (bucket ref r) on chart c */
-function cross(c,t,r){
+/* the crosshair + bucket band at time t (bucket ref r) on chart c (side by
+   side: in panel q) */
+function cross(c,t,r,q){
   var hb=$('.xbk',c.svg),ch=$('.xch',c.svg);if(!c.g||!hb)return;
-  var xa=Math.max(c.g.padL,c.g.X(rS(r))),xb=Math.min(c.g.W-c.g.padR,c.g.X(rE(r))),x=c.g.X(t);
+  var X=c.g.X,lo=c.g.padL,hi=c.g.W-c.g.padR;
+  if(c.g.mode==='win'){var p=c.g.pan&&c.g.pan[q];if(!p){hideCross(c);return;}X=p.X;lo=p.x0;hi=p.x0+p.w;}
+  var xa=Math.max(lo,X(rS(r))),xb=Math.min(hi,X(rE(r))),x=X(t);
   hb.setAttribute('x',xa.toFixed(1));hb.setAttribute('width',Math.max(1,xb-xa).toFixed(1));hb.setAttribute('visibility','visible');
   ch.setAttribute('x1',x.toFixed(1));ch.setAttribute('x2',x.toFixed(1));ch.setAttribute('visibility','visible');
+}
+/* the tooltip of ref r (a bucket or a minute) on chart c */
+function ptTip(c,r,e){var P=c.P;
+  tipOn('<b>'+fAt(rS(r))+'\u2013'+fHM(rE(r))+'</b><br><span class="tm">'+(r<0?'1-min':bLab((rE(r)-rS(r))/H1))+' average, by '+c.what+'</span>'
+    +ashRows(P.classes,c.cols,function(q){return rV(c,q,r);},c.vis,c.noun,c.hl&&c.hl.set),e);
 }
 function hover(c,e){
   if(!c.g||DRAG&&DRAG.moved)return;
@@ -620,13 +1093,19 @@ function hover(c,e){
       +(P.win?ashRows(P.classes,c.cols,function(k){return P.win[k][i];},c.vis,c.noun,c.hl&&c.hl.set):'')+(w.o===0?'':'<span class="tm">Click to pin this window</span>'),e);
     return;
   }
+  if(c.g.mode==='win'){
+    var pq=panAt(c,e.clientX),pr=pq?wRefAt(c,pq.q,pq.t):null;
+    if(pr==null){hideAll();tipOff();if(HT&&HT.soft)hlSet(null);return;}
+    if(!HS&&!DRAG){var pk=seriesAt(c,e.clientX,e.clientY);hlSet(pk<0?null:{c:c,k:pk,soft:true});}
+    CH.forEach(function(o){cross(o,pq.t,pr,pq.q);});
+    ptTip(c,pr,e);return;
+  }
   var t=tAt(c,e.clientX),r=refAt(t);
   if(r==null||t<c.g.d0||t>c.g.d1){hideAll();tipOff();if(HT&&HT.soft)hlSet(null);return;}
   /* the band under the pointer highlights in place (not while one is sticky) */
   if(!HS&&!DRAG){var hk=seriesAt(c,e.clientX,e.clientY);hlSet(hk<0?null:{c:c,k:hk,soft:true});}
   CH.forEach(function(o){cross(o,t,r);});
-  tipOn('<b>'+fAt(rS(r))+'\u2013'+fHM(rE(r))+'</b><br><span class="tm">'+(r<0?'1-min':bLab((rE(r)-rS(r))/H1))+' average, by '+c.what+'</span>'
-    +ashRows(P.classes,c.cols,function(q){return rV(c,q,r);},c.vis,c.noun,c.hl&&c.hl.set),e);
+  ptTip(c,r,e);
 }
 /* a window stripe: pin it (Current unpins); in the Timeline view the grid
    column flashes and comes into view */
@@ -653,6 +1132,7 @@ doc.addEventListener('DOMContentLoaded',function(){
   $$('.sw[data-wc]').forEach(function(s){s.style.setProperty('--sw',wcol(s.getAttribute('data-wc')));});
   AX=(window.AWR_DATA||{}).ashx||null;
   lanes();
+  tools();
   activity();
   spInit();
   var b=doc.getElementById('tl-body');if(b)b.addEventListener('scroll',sync,{passive:true});

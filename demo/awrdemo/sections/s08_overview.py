@@ -31,7 +31,7 @@ def emit(w) -> str:
     gut = ('<div class="g" role="cell"><div class="gl1">'
            + h.delta_span(cur, mu, bucket).replace('class="d ', 'class="d d1 ')
            + ('<span class="z">z ' + h.band_ztxt(z) + '</span>' if z is not None and -4 <= z <= 8 else '')
-           + '</div>' + h.band_span(z, bucket, "sm") + '</div>')
+           + '</div>' + h.band_span(z, bucket, "sm", "N", 10) + '</div>')
 
     out.append('<section id="overview" class="vw in-s strip-sec" aria-label="DB time per compared window">')
     out.append('<div class="panel strip" id="s-strip"><div class="wg fit hov"' + h.wg_attr(w)

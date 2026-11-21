@@ -81,8 +81,9 @@ def _window_values(w):
         # WAIT: per wait_class (non-Idle), seconds waited per second.  The SQL
         # applies the template's wait_event_targets filter (like 07); the demo
         # is the comprehensive template, whose '*' sentinel keeps every event.
+        # DBA_HIST_SYSTEM_EVENT, all sessions (time_waited_micro)
         by_cls = {}
-        for ev, (wc, cnt, us) in m.fg_waits.items():
+        for ev, (wc, cnt, us) in m.sys_waits.items():
             if wc is None or wc == "Idle":
                 continue
             by_cls[wc] = by_cls.get(wc, 0.0) + us
@@ -92,12 +93,40 @@ def _window_values(w):
     return out
 
 
+def _fg_wait_deltas(w):
+    """wait_fg_rows / wait_fg (v1.7 impact, owner decision 2026-11-20): per
+    wait class, Current minus the prior mean of the FOREGROUND time waited
+    per second, AAS; the card order only, never scored.  The class rows'
+    SYSTEM_EVENT rows, foreground columns (m.sys_waits_fg: 0 for a
+    background-only event).  Same as s07's copy."""
+    by_cls = {}
+    for win in w.valid_windows:
+        m = w.window_metrics(win)
+        if m is None:
+            continue
+        per = {}
+        for ev, (wc, cnt, us) in m.sys_waits_fg.items():
+            if wc is None or wc == "Idle":
+                continue
+            per[wc] = per.get(wc, 0.0) + us
+        for wc, us in per.items():
+            if m.dur_sec > 0:
+                by_cls.setdefault(wc, {})[win.week_offset] = us / m.dur_sec / 1e6
+    out = {}
+    for wc, vals in by_cls.items():
+        cur = vals.get(0)
+        mu = mean_sd([v for k, v in vals.items() if k > 0])[0]
+        out["Wait class: " + wc] = (cur - mu) if (cur is not None and mu is not None) else None
+    return out
+
+
 def scored_rows(w):
     """The PL/SQL v_scored collection, ORDER BY ABS(NVL(z,0)) DESC, name:
     dicts with domain / name / z / pct / n / bucket / family / canonical /
     cur / mu / sd (bucket from the per-metric policy for every row)."""
     rows = []
     allv = _window_values(w)
+    fg = _fg_wait_deltas(w)
     wait_tot = sum(v.get(0, 0.0) for (d, _n), v in allv.items() if d == "WAIT")
     for (dom, name), vals in allv.items():
         cur = vals.get(0)
@@ -120,7 +149,7 @@ def scored_rows(w):
         bucket = policy_bucket(dom, name, None, cur, mu, sd, n, share)
         rows.append(dict(domain=dom, name=name, z=z, pct=pct, n=n, bucket=bucket,
                          family=finding_family(dom, name), canonical=is_canonical(dom, name),
-                         cur=cur, mu=mu, sd=sd))
+                         cur=cur, mu=mu, sd=sd, fg_d=fg.get(name) if dom == "WAIT" else None))
     rows.sort(key=lambda r: (-abs(r["z"] or 0.0), r["name"]))
     return rows
 
@@ -164,7 +193,7 @@ def _literal_slice(L, i, j):
 def _verdict_state(w, scored):
     """The PL/SQL single pass + card order: counts and the card groups."""
     st = dict(n_moved=0, n_impr=0, n_normal=0, n_usable=0, max_n=0, dbt=None, cpu=None)
-    lead, gsev, gz = {}, {}, {}
+    lead, gsev, gz, imp = {}, {}, {}, {}
     for i, r in enumerate(scored):
         if (r["n"] or 0) > st["max_n"]:
             st["max_n"] = r["n"]
@@ -172,6 +201,11 @@ def _verdict_state(w, scored):
             st["dbt"] = r
         elif r["domain"] == "LOAD" and r["name"] == "DB CPU":
             st["cpu"] = r
+        # impact (v1.7, helpers.impact_group / time_added): every row,
+        # flagged or not; a wait class counts its foreground time only
+        ig = h.impact_group(r["domain"], r["name"], r["family"])
+        if ig and h.time_added(r["domain"], r["name"], r["cur"], r["mu"], r["fg_d"]) is not None:
+            imp[ig] = h.time_added(r["domain"], r["name"], r["cur"], r["mu"], r["fg_d"])
         if r["z"] is not None:
             st["n_usable"] += 1
         if r["canonical"] != "Y":
@@ -192,8 +226,9 @@ def _verdict_state(w, scored):
             st["n_normal"] += 1
             if r["bucket"] == "improved":
                 st["n_impr"] += 1
-    st["order"] = h.card_order({g: (gsev[g], gz[g]) for g in lead})
+    st["order"] = h.card_order({g: (gsev[g], gz[g], imp.get(g)) for g in lead})
     st["lead"] = lead
+    st["gsev"] = gsev
     return st
 
 
@@ -244,11 +279,18 @@ def _hero(w, st) -> list[str]:
                 v += '<span class="vx" data-vx="io" hidden></span>'
         put('<h1 class="verdict">' + v + '.</h1>')
     put('<p class="because" id="because-slot" hidden></p>')
-    nm, nn, ni = st["n_moved"], st["n_normal"], st["n_impr"]
+    put('<div class="att" id="att-slot" hidden></div>')
+    nn, ni = st["n_normal"], st["n_impr"]
+    # v1.7 one count: a finding is a card (00_params.sql v_ncl / v_ncm)
+    ncl = sum(1 for g in order if st["gsev"][g] == 2)
+    ncm = len(order) - ncl
     put('<ul class="pills" id="pills" aria-label="Counts">'
-        + (('<li><a href="#findings"><b>' + str(len(order)) + '</b> finding' + ('' if len(order) == 1 else 's')
-            + '</a></li><li><a href="#findings"><b>' + str(nm) + '</b> metric' + ('' if nm == 1 else 's')
-            + ' moved</a></li>') if order else '')
+        + (('<li class="pl-find"><a href="#findings"><b>' + str(len(order)) + '</b> finding'
+            + ('' if len(order) == 1 else 's')
+            + '<span class="pl-sev">'
+            + ('<i class="dotk large" aria-hidden="true"></i>' + str(ncl) + ' large' if ncl > 0 else '')
+            + ('<i class="dotk moderate" aria-hidden="true"></i>' + str(ncm) + ' moderate' if ncm > 0 else '')
+            + '</span></a></li>') if order else '')
         + '<li class="pl-normal"><a href="#s-normal"><b>' + str(nn) + '</b> metric' + ('' if nn == 1 else 's')
         + ' normal</a></li>'
         + ('<li><a href="#s-normal"><b>' + str(ni) + '</b> improved</a></li>' if ni > 0 else '')
@@ -302,7 +344,7 @@ def _timeline(w) -> list[str]:
                         'Y', '<div class="gbody" id="tl-body"><div class="gin" id="tl-in">'))
     o.append(lane_h('activity', 'Activity', 'ash', None, 'ASH, not scored'))
     o.append(lane_h('metrics', 'Headline and load', 'scored'))
-    o.append(lane_h('waits', 'Waits', 'scored', 'wait classes in AAS, events in seconds waited', None, 'events'))
+    o.append(lane_h('waits', 'Waits', 'scored', 'wait classes and events in AAS', None, 'events'))
     o.append(lane_h('objects', 'Where the reads land', 'ranked', None, 'ranked, not scored'))
     o.append(lane_h('sql', 'SQL', 'sql', 'elapsed s; a dash = not in the top ' + str(w.top_n)))
     o.append(lane_h('config', 'Configuration', 'config'))
@@ -353,6 +395,9 @@ def emit(w) -> str:
         '<button type="button" data-v="all" aria-pressed="true"'
         ' title="Every section and every scored row">All sections</button>'
         '</div>'
+        '<button type="button" id="sum-btn" class="sum-btn" hidden'
+        ' aria-haspopup="dialog" aria-expanded="false"'
+        ' title="Copy the verdict and the findings as Markdown, for a ticket or a chat">Copy summary</button>'
         '<button type="button" id="theme-toggle" class="theme-icon-btn"'
         ' aria-pressed="false"'
         ' aria-label="Toggle dark mode"'
@@ -451,11 +496,13 @@ def emit(w) -> str:
     o.extend(_literal_slice(L, i_nav + 1, i_main))
     # ---- AWR_WIN + the verdict hero (hand-ported) ----------------------
     put('<script>window.AWR_WIN=' + _win_json(w) + ';</script>')
-    # ---- the Activity charts' skeleton (literal in the SQL: lifted) ----
-    i_act = next(i for i in range(len(L)) if L[i][0].startswith('<section id="activity"'))
-    i_ver = next(i for i in range(i_act, len(L)) if L[i][0].startswith('<section id="verdict"'))
-    o.extend(_literal_slice(L, i_act, i_ver - 1))
     o.extend(_hero(w, st))
+    # ---- the Activity charts' skeleton (literal in the SQL: lifted) ----
+    # emitted right after the verdict hero (plan 023): from its <section>
+    # to the PUT_LINE that closes it ("...</div></section>")
+    i_act = next(i for i in range(len(L)) if L[i][0].startswith('<section id="activity"'))
+    i_end = next(i for i in range(i_act, len(L)) if L[i][0].endswith('</div></section>'))
+    o.extend(_literal_slice(L, i_act, i_end))
     # ---- the Timeline skeleton (hand-ported) ---------------------------
     o.extend(_timeline(w))
 

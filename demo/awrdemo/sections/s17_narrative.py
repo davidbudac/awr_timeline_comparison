@@ -206,6 +206,36 @@ def _r1_newcomer(w):
     return None, None
 
 
+def _r1_top(w):
+    """Plan 026: the statement reading the most blocks in the Current window
+    (newcomer or not): (sql_id, cur reads, prior mean reads, gets/exec,
+    prior gets/exec, Current plan, prior most-executed plan) or None.
+    Mirrors 17's three point lookups (prior mean over the prior windows
+    the statement ran in; plan 0 ignored)."""
+    cur = next((win for win in w.valid_windows if win.week_offset == 0), None)
+    if cur is None:
+        return None
+    m0 = w.window_metrics(cur).sql
+    ranked = sorted(((x.reads, sid) for sid, x in m0.items() if x.reads > 0),
+                    key=lambda t: (-t[0], t[1]))
+    if not ranked:
+        return None
+    sid = ranked[0][1]
+    x0 = m0[sid]
+    prior = [w.window_metrics(win).sql.get(sid) for win in w.valid_windows if win.week_offset > 0]
+    prior = [x for x in prior if x is not None]
+    mu = math.fsum(x.reads for x in prior) / len(prior) if prior else None
+    gpe = x0.gets / x0.execs if x0.execs > 0 else None
+    pg, px = math.fsum(x.gets for x in prior), math.fsum(x.execs for x in prior)
+    gpe_mu = pg / px if px > 0 else None
+    by_plan = {}
+    for x in prior:
+        if x.plan_hash:
+            by_plan[x.plan_hash] = by_plan.get(x.plan_hash, 0.0) + x.execs
+    ph_mu = max(by_plan, key=lambda p: (by_plan[p], p)) if by_plan else None
+    return sid, x0.reads, mu, gpe, gpe_mu, (x0.plan_hash or None), ph_mu
+
+
 # ---------------------------------------------------------------------
 # R3 parameter drift
 # ---------------------------------------------------------------------
@@ -329,6 +359,7 @@ def emit(w) -> str:
     # R1
     pills, because, ev_io, vx_io = '', None, '', None
     v_seg = v_file = v_sqlid = None
+    top = None
     big_pr = False
     if st.big('physical reads'):
         big_pr = True
@@ -364,8 +395,28 @@ def emit(w) -> str:
                               + (', normal ' + h.fmt_num(v_file_mu) if v_file_mu is not None else ''))
                       + '</span></dd><div class="m" title="Ranked, not scored">'
                       + h.delta_span(v_file_cur, v_file_mu, None, 'Y') + '<span class="ns">not scored</span></div></div>')
-        if v_sqlid is not None:
+        # plan 026: the statement reading the most blocks in the Current
+        # window (ranked, not scored), its gets per execution and, when its
+        # plan changed, a link to the plan card (f-plan-<sql_id>, 18)
+        top = _r1_top(w)
+        if top is not None:
+            sid, t_cur, t_mu, t_gpe, t_gpe_mu, t_ph, t_ph_mu = top
             ev_io += ('<div class="evr"><dt>SQL</dt><dd><span class="id">'
+                      + h.ent(sid, h.anchor_id('sq-preads', sid), 'sql') + '</span><span class="de">'
+                      + h.nbu(h.fmt_num(t_cur) + ' blocks read'
+                              + (', normal ' + h.fmt_num(t_mu) if t_mu is not None else '')
+                              + ('; ' + h.fmt_num(t_gpe) + ' gets per execution, was ' + h.fmt_num(t_gpe_mu)
+                                 if t_gpe is not None and t_gpe_mu is not None else ''))
+                      + ('; ' + h.ent('new plan ' + str(t_ph_mu) + ' &rarr; ' + str(t_ph), 'f-plan-' + sid, 'sql')
+                         if t_ph is not None and t_ph_mu is not None and t_ph != t_ph_mu else '')
+                      + ('; new in the top ' + _tc(w.top_n) if sid == v_sqlid else '')
+                      + '</span></dd><div class="m" title="Ranked, not scored">'
+                      + ('<span class="d s-plain">&#10010; new</span>' if t_mu is None
+                         else h.delta_span(t_cur, t_mu, None, 'Y') + '<span class="ns">not scored</span>')
+                      + '</div></div>')
+        # a newcomer that is not the top statement keeps its own row
+        if v_sqlid is not None and (top is None or v_sqlid != top[0]):
+            ev_io += ('<div class="evr"><dt>New SQL</dt><dd><span class="id">'
                       + h.ent(v_sqlid, h.anchor_id('sq-preads', v_sqlid), 'sql') + '</span><span class="de">'
                       + h.nbu(h.fmt_num(v_sql_rd) + ' blocks read; new in the top ' + _tc(w.top_n))
                       + '</span></dd><div class="m"><span class="d s-plain">&#10010; new</span></div></div>')
@@ -472,6 +523,11 @@ def emit(w) -> str:
             out.append('<span data-vx-src="io">' + vx_io + '</span>')
         if ev_io:
             out.append('<div data-ev-for="f-io">' + ev_io + '</div>')
+        # review follow-up R2: only when the I/O card cites a transition;
+        # the script moves the card only when it shows the same one
+        if top is not None and top[5] is not None and top[6] is not None and top[5] != top[6]:
+            out.append('<span data-explains-src="f-plan-' + top[0] + '" data-for="f-io" data-ph0="'
+                       + str(top[6]) + '" data-ph1="' + str(top[5]) + '"></span>')
         out.append('</div>')
         # the relocation script, lifted verbatim from the SQL
         L = chrome.put_lines(chrome.sql_path("sql/17_narrative.sql"))

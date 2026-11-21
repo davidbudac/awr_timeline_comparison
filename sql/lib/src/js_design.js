@@ -84,7 +84,7 @@ function wbars(o,opt){
       var i=-1;ws.forEach(function(wi,k){if(wi.o===m.o)i=k;});if(i<0)return;
       var x=slot*i;s+='<line class="dmk" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+(top-6)+'" y2="'+(top+ph)+'"><title>'+esc(m.l+", "+m.t)+'</title></line>';
       var lw=m.s.length*6+6,clash=function(a){return tiers.some(function(r){return a<r[1]&&a+lw>r[0];});},end=x+lw>W||clash(x),x0=end?x-lw:x;
-      if(clash(x0))return;tiers.push([x0,x0+lw]);
+      if(x0<0||clash(x0))return;tiers.push([x0,x0+lw]);
       s+='<text class="dml" x="'+(end?x-3:x+3).toFixed(1)+'" y="'+(top-9)+'" text-anchor="'+(end?'end':'start')+'"><title>'+esc(m.l+", "+m.t)+'</title>'+esc(m.s)+'</text>';
     });
   }
@@ -209,7 +209,7 @@ function kpis(){
     row.appendChild(kpi({label:"DB time",value:txt(big),unit:unit,sev:dbc?sevOf(dbc):(hb.getAttribute("data-sev")==="large"||hb.getAttribute("data-sev")==="moderate"?hb.getAttribute("data-sev"):""),
       delta:cl($(".d",g)),data:rowData(hb),ctx:ctx.filter(Boolean).join(MID),href:dbc?"#f-dbtime":"",title:"DB time per compared window"+(z?", "+z:"")}));
   }
-  $$("#findings .cards > article.fc").forEach(function(card){
+  $$("#findings .cards > article.fc:not(.chg)").forEach(function(card){
     if(card.id==="f-dbtime")return;
     var det=detailOf(card),r=$(".wg .r.bars",card)||(det&&doc.getElementById("tl-"+det.id));
     var ev=$(".ev .evr dd .id",card),ctx=[txt($(".big .nrm",card)),txt(ev)];
@@ -224,6 +224,18 @@ function kpis(){
 }
 
 /* ---- 7. dashboard: the findings as one expandable table, What changed beside it */
+/* plan 020: the Summary view prints z only up to 10 sigma (band_ztxt's
+   p_cap); the findings table clones its bands from the All-sections
+   tables, which keep the exact z, so cap the clone's pinned text */
+function capz(bd){
+  var b=bd&&$(".ov",bd);if(!b)return bd;
+  var M=String.fromCharCode(8722),S=String.fromCharCode(963),t=txt(b);
+  var z=parseFloat(t.replace(/^[<>]/,"").replace(M,"-"));
+  if(isNaN(z)||Math.abs(z)<=10)return bd;
+  var c=z>0?">+10"+S:"<"+M+"10"+S,al=bd.getAttribute("aria-label");
+  if(al)bd.setAttribute("aria-label",al.split(t).join(c));
+  b.textContent=c;return bd;
+}
 function drow(o){
   var d=mk("details","drow"+(o.sev?" s-"+o.sev:"")+(o.lead?" lead":""));
   if(o.key){d.setAttribute("data-row",o.key);var rid="dr-"+o.key,k=2;while(doc.getElementById(rid))rid="dr-"+o.key+"-"+(k++);d.id=rid;}
@@ -231,7 +243,7 @@ function drow(o){
   s.innerHTML='<span class="dch" aria-hidden="true"></span><span class="dsev"><i aria-hidden="true"></i>'+sevWord(o.sev)+'</span>'
     +'<span class="dnm"><b>'+esc(o.name)+'</b><small>'+esc(o.fam)+'</small></span><span class="dcur">'+esc(o.cur)+'</span>'
     +'<span class="dnr">'+esc(o.nrm)+'</span><span class="dbd"></span><span class="ddl"></span><span class="dtr"></span>';
-  if(o.band)$(".dbd",s).appendChild(o.band);
+  if(o.band)$(".dbd",s).appendChild(capz(o.band));
   if(o.delta)$(".ddl",s).appendChild(o.delta);
   if(o.data){var tc=$(".dtr",s),ms=null;
     if(window.AWR_microStrip){try{ms=AWR_microStrip(o.data.v.map(function(x){return x==null?"":x;}).join(","),o.name);}catch(e){ms=null;}}
@@ -244,11 +256,24 @@ function drow(o){
     d.addEventListener("toggle",function(){if(d.open)draw();});d._draw=function(){if(d.open)draw();};}
   return d;
 }
+/* plan 020 follow-up (G4): the card's impact as a chip in its lead row --
+   the row hides the card's header, where the .fc-imp chip lives.  From
+   data-impact / data-share like the triage list; only a rise of 0.01 AAS
+   or more, as on the card */
+function impChip(card){
+  var im=card.getAttribute("data-impact"),sh=card.getAttribute("data-share");
+  if(im===null||im===""||!(+im>=0.01))return null;
+  var v=+im,a=Math.abs(v),s=(sh===null||sh==="")?null:+sh,ch=$(".fc-k .fc-imp",card);
+  var c=mk("span","dimp");
+  c.textContent="+"+(a>=10?a.toFixed(1):a>=1?a.toFixed(2):a.toFixed(3))+" AAS"+(card.id==="f-dbtime"?" above normal":s===null?"":MID+(s<1?"<1":s)+"%");
+  c.title=ch?txt(ch)+". "+(ch.getAttribute("title")||""):"Time added, in average active sessions";
+  return c;
+}
 function findTable(){
   var fs=$("#findings");if(!fs)return null;
   /* the cards, or (nothing moved) 07's "No finding" note */
   var cw=$(":scope > .cards",fs),calm=$(":scope > .panel.calm.in-s",fs),h2=$(":scope > h2",fs);
-  var cards=cw?$$(":scope > article.fc",cw):[];
+  var cards=cw?$$(":scope > article.fc:not(.chg)",cw):[];
   var grid=mk("div","dgrid vw in-s");fs.insertBefore(grid,cw||calm||(h2?h2.nextSibling:fs.firstChild));
   var main=mk("div","dmain",grid);
   var tabs=mk("div","tabs dtabs",main);tabs.setAttribute("data-tabs","dfind");tabs.setAttribute("role","tablist");tabs.setAttribute("aria-label","Findings");
@@ -261,12 +286,20 @@ function findTable(){
   var hd=mk("div","dfh",tbl);hd.setAttribute("aria-hidden","true");
   hd.innerHTML='<span></span><span>Severity</span><span>Metric</span><span class="dcur">Current</span><span class="dnr">Normal</span><span class="dbd">vs normal</span><span class="ddl">\u0394</span><span class="dtr">Trend</span>';
   cards.forEach(function(card){
+    /* plan 025: a card folded by 07's script opens: the row is the fold */
+    if(window.AWR_fcOpen)AWR_fcOpen(card);
     var fam=famOf(card),det=detailOf(card),sev=sevOf(card),lead=$("h3 a.ent",card);
     var tl=det?doc.getElementById("tl-"+det.id):null;
     var unit=txt($(".big .u",card)),nrm=txt($(".big .nrm",card)).replace(/^normal\s+/,"");
     if(unit&&nrm.slice(-unit.length)===unit)nrm=nrm.slice(0,-unit.length).trim();
-    tbl.appendChild(drow({lead:true,key:card.id,sev:sev,name:lead?txt(lead):fam,fam:fam,cur:(txt($(".big .v",card))+(/^[\/%]/.test(unit)?"":" ")+unit).trim(),nrm:nrm,
-      band:cl(det&&$("td.c-band .bd",det))||cl($(".fc-band .bd",card)),delta:cl(det&&$("td.c-d .d",det))||cl($("h3 .d",card)),data:rowData(tl||$(".wg .r.bars",card)),body:card}));
+    var lrow=drow({lead:true,key:card.id,sev:sev,name:lead?txt(lead):fam,fam:fam,cur:(txt($(".big .v",card))+(/^[\/%]/.test(unit)?"":" ")+unit).trim(),nrm:nrm,
+      band:cl(det&&$("td.c-band .bd",det))||cl($(".fc-band .bd",card)),delta:cl(det&&$("td.c-d .d",det))||cl($("h3 .d",card)),data:rowData(tl||$(".wg .r.bars",card)),body:card});
+    tbl.appendChild(lrow);
+    /* the card's impact chip (G4) and, plan 027, its pattern tags (js_wingrid
+       tagCards ran before) on one line under the name */
+    var imp=impChip(card),ptg=$(".fc-tags",card),ptn=ptg&&ptg.children.length;
+    if(imp||ptn){var mt=mk("span","dmeta",$(".dnm",lrow));if(imp)mt.appendChild(imp);
+      if(ptn){var pcl=ptg.cloneNode(true);pcl.className="fc-tags dtags";mt.appendChild(pcl);}}
     moved++;
     $$(".rel tbody tr",card).forEach(function(tr){
       if(tr.classList.contains("twin")||!(tr.classList.contains("crit")||tr.classList.contains("warn")))return;
@@ -285,7 +318,9 @@ function findTable(){
   var pM=tab("moved","Moved",moved,true);
   if(moved)pM.appendChild(tbl);else if(calm)pM.appendChild(calm);else{var no=mk("p","dempty",pM);no.textContent="No scored metric moved beyond its normal range.";}
   var sn=$("#s-normal"),imp=sn&&$(".panel.note.improved",sn);
-  if(sn){var nn=(txt($("h2 .meta",sn)).match(/\d+/)||[null])[0];var pN=tab("normal","Normal",nn,false);pN.appendChild(sn);}
+  if(sn){var nn=(txt($("h2 .meta",sn)).match(/\d+/)||[null])[0];var pN=tab("normal","Normal",nn,false);pN.appendChild(sn);
+    /* plan 032: the tab is the fold, so the folded body opens */
+    var cf=$("details.calm-fold",sn);if(cf)cf.open=true;}
   if(imp){var pI=tab("improved","Improved",$$(".nr",imp).length,false);pI.appendChild(imp);}
   /* What changed around it: the plan / config cards + the releases */
   var side=mk("aside","dside",grid);side.setAttribute("aria-label","What changed around it");
@@ -299,12 +334,33 @@ function findTable(){
   return grid;
 }
 
+/* plan 026: a plan-change card that 17 moved under the card it explains
+   goes back to "What changed around it", which the dashboard shows
+   beside the findings table */
+function explainsBack(){
+  var sl=$("#changes-slot"),sc=$("#s-changes");if(!sl)return;
+  var ex=$$("#findings article.fc[data-explains]");if(!ex.length)return;
+  /* 17 folds it with a folded card (G4): the side column shows it open, no toggle */
+  ex.reverse().forEach(function(p){sl.insertBefore(p,sl.firstChild);if(window.AWR_fcOpen)AWR_fcOpen(p);var tg=$(".fc-tg",p);if(tg)tg.parentNode.removeChild(tg);});
+  if(sc&&sc.hidden){sc.hidden=false;var rl=$('nav.toc a[href="#s-changes"]');if(rl)rl.hidden=false;}
+}
+
+/* G4: print shows every finding card -- the closed lead rows open for
+   print and shut again after (css_design.css shows every findings tab) */
+function printRows(){
+  var op=null;
+  window.addEventListener("beforeprint",function(){if(op)return;op=$$("details.drow.lead:not([open])");
+    op.forEach(function(d){d.open=true;if(window.AWR_WG)AWR_WG.render(d);});});
+  window.addEventListener("afterprint",function(){if(!op)return;op.forEach(function(d){d.open=false;});op=null;});
+}
 function dashboard(){
   var bd=doc.body;
   palette();
   activityTabs();
+  explainsBack();
   kpis();
   findTable();
+  printRows();
   bd.classList.add("d-dash");
   var rt=null;
   window.addEventListener("resize",function(){if(rt)clearTimeout(rt);rt=setTimeout(function(){$$("details.drow[open]").forEach(function(d){if(d._draw)d._draw();});},150);});

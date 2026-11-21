@@ -99,6 +99,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.seg button{border-radius:7px;font-weight:500;color:var(--muted);padding:3px 11px}');
     DBMS_OUTPUT.PUT_LINE('.seg button[aria-pressed="true"]{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px oklch(0 0 0 / 8%),0 0 0 1px var(--hairline)}');
     DBMS_OUTPUT.PUT_LINE('.topbar .theme-icon-btn{border-color:var(--hairline);box-shadow:0 1px 2px oklch(0 0 0 / 4%)}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .sum-btn{border-color:var(--hairline);box-shadow:0 1px 2px oklch(0 0 0 / 4%);color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.topbar .sum-btn:hover{color:var(--ink)}');
+    DBMS_OUTPUT.PUT_LINE('#sum-pop{border-color:var(--hairline);border-radius:10px;box-shadow:0 8px 24px oklch(0 0 0 / 12%)}');
+    DBMS_OUTPUT.PUT_LINE('#sum-pop textarea{border-color:var(--hairline);font-family:var(--mono)}');
     DBMS_OUTPUT.PUT_LINE('nav.toc{background:var(--panel-2);border-right-color:var(--hairline);padding:16px 12px 14px}');
     DBMS_OUTPUT.PUT_LINE('nav.toc .rail-brand{border-bottom:0;padding:2px 8px 10px;margin-bottom:4px}');
     DBMS_OUTPUT.PUT_LINE('nav.toc .rail-brand span{font-size:13px;font-weight:600;letter-spacing:-.01em;text-transform:none}');
@@ -196,6 +200,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ashx.howable .axh{position:relative}');
     DBMS_OUTPUT.PUT_LINE('.ashx.howable .axn2{display:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx.howable.howopen .axn2{display:block;position:absolute;z-index:25;right:0;max-width:440px;margin-top:8px;padding:12px 14px;font-size:12.5px;line-height:1.5;color:var(--ink-soft);background:var(--panel);border:1px solid var(--hairline);border-radius:10px;box-shadow:0 8px 24px oklch(0 0 0 / 12%)}');
+    DBMS_OUTPUT.PUT_LINE('/* plan 023: the compact Summary hides .axn2 (sql/_style.sql); the open popover shows it */');
+    DBMS_OUTPUT.PUT_LINE('body.vs #activity.ax-cmp #ashx.howable.howopen .axn2{display:block}');
     DBMS_OUTPUT.PUT_LINE('.axhow{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12px;color:var(--muted);background:none;border:0;border-radius:6px;padding:2px 6px;cursor:pointer}');
     DBMS_OUTPUT.PUT_LINE('.axhow:hover,.axhow[aria-expanded="true"]{color:var(--ink);background:var(--hov)}');
     DBMS_OUTPUT.PUT_LINE('.axhow i{display:inline-grid;place-items:center;width:14px;height:14px;border-radius:50%;border:1px solid currentColor;font-style:normal;font-size:9.5px;font-weight:600;line-height:1}');
@@ -207,6 +213,14 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.fc.f-large .fc-k .sv{color:var(--crit);background:color-mix(in oklch,var(--crit) 9%,transparent);border-color:color-mix(in oklch,var(--crit) 22%,transparent)}');
     DBMS_OUTPUT.PUT_LINE('.fc.f-moderate .fc-k .sv{color:var(--warn);background:color-mix(in oklch,var(--warn-dot) 13%,transparent);border-color:color-mix(in oklch,var(--warn-dot) 30%,transparent)}');
     DBMS_OUTPUT.PUT_LINE('.fc-k .sv > .dotk,.fc-k .sv > i{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.fc .ptag,#triage .ptag{border-color:var(--hairline);border-radius:6px;background:none}');
+    DBMS_OUTPUT.PUT_LINE('.drow .dnm .dtags{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}');
+    DBMS_OUTPUT.PUT_LINE('.drow .dtags .ptag{display:inline-block;font-size:11px;line-height:16px;padding:0 6px;border:1px solid var(--hairline);border-radius:6px;color:var(--ink-2);white-space:nowrap;cursor:help}');
+    DBMS_OUTPUT.PUT_LINE('.drow .dtags .ptag.p-rel{border-color:var(--acc);color:var(--acc-ink)}');
+    DBMS_OUTPUT.PUT_LINE('body.d-dash .drow .dnm .dmeta{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:3px}');
+    DBMS_OUTPUT.PUT_LINE('body.d-dash .drow .dnm .dmeta .dtags{display:contents}');
+    DBMS_OUTPUT.PUT_LINE('body.d-dash .drow .dimp{display:inline-block;font-size:11px;line-height:18px;padding:0 6px;border-radius:6px;background:var(--chip-bg);color:var(--ink);font-weight:500;white-space:nowrap;font-variant-numeric:tabular-nums;cursor:help}');
+    DBMS_OUTPUT.PUT_LINE('.fc-k .fc-imp{height:22px;padding:0 8px;border-radius:6px;border:1px solid var(--hairline);background:none;font-size:12px;font-weight:500;color:var(--ink)}');
     DBMS_OUTPUT.PUT_LINE('.fc h3{font-size:17px;letter-spacing:-.012em}');
     DBMS_OUTPUT.PUT_LINE('.fc.lead h3{font-size:20px}');
     DBMS_OUTPUT.PUT_LINE('.fc .big .v{font-size:30px;letter-spacing:-.025em}');
@@ -220,6 +234,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.fc .cfg-more a{color:var(--ink-soft);text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:3px}');
     DBMS_OUTPUT.PUT_LINE('/* ==== 10. normal grid, notes, library rows, guide ==== */');
     DBMS_OUTPUT.PUT_LINE('.calm-notes .note{border-color:var(--hairline)}');
+    DBMS_OUTPUT.PUT_LINE('#s-normal .calm-fold > summary{border-radius:var(--radius)}');
     DBMS_OUTPUT.PUT_LINE('.nr{border-bottom-color:var(--line-soft)}');
     DBMS_OUTPUT.PUT_LINE('body.vs main > section.lib > h2{font-size:14px;font-weight:500}');
     DBMS_OUTPUT.PUT_LINE('body.vs main > section.lib.lopen > h2{border-bottom-color:var(--line-soft)}');
@@ -253,7 +268,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('body.d-dash.vs main > #findings{order:6}');
     DBMS_OUTPUT.PUT_LINE('body.d-dash.vs main > #s-changes{order:7}');
     DBMS_OUTPUT.PUT_LINE('body.d-dash.vs main > #s-normal{order:8}');
-    DBMS_OUTPUT.PUT_LINE('body.d-dash.vs main > #overview,body.d-dash.vs #findings > .cards{display:none}');
+    DBMS_OUTPUT.PUT_LINE('body.d-dash.vs main > #overview,body.d-dash.vs #findings > .cards,body.d-dash.vs #findings > #triage{display:none}');
     DBMS_OUTPUT.PUT_LINE('body.d-dash section.hero{padding-top:var(--s5)}');
     DBMS_OUTPUT.PUT_LINE('body.d-dash .hero .verdict{font-size:22px;line-height:1.32;letter-spacing:-.015em;max-width:none}');
     DBMS_OUTPUT.PUT_LINE('body.d-dash .hero .verdict.quiet{font-size:21px}');
@@ -289,6 +304,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('/* the Activity card: one chart at a time */');
     DBMS_OUTPUT.PUT_LINE('.ashx .axseg{flex:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axseg button{font-size:12px;padding:2px 10px}');
+    DBMS_OUTPUT.PUT_LINE('/* plan 024: the layout switch matches the dashboard''s chart tabs */');
+    DBMS_OUTPUT.PUT_LINE('.ashx .seg.axlayout{flex:none;padding:3px}');
+    DBMS_OUTPUT.PUT_LINE('body.d-dash .ashx .seg.axlayout button{line-height:20px}');
     DBMS_OUTPUT.PUT_LINE('.ashx.ax-cls-only #ax-ev,.ashx.ax-ev-only #ax-cls{display:none}');
     DBMS_OUTPUT.PUT_LINE('/* the findings grid: the table card + What changed around it */');
     DBMS_OUTPUT.PUT_LINE('.dgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,400px);gap:var(--s4);align-items:start;margin-top:var(--s2)}');
@@ -300,9 +318,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.tabs.dtabs .n{color:var(--muted);font-weight:400;margin-left:2px}');
     DBMS_OUTPUT.PUT_LINE('.dpanel #s-normal{margin:0;padding:0}');
     DBMS_OUTPUT.PUT_LINE('.dpanel #s-normal > h2{display:none}');
+    DBMS_OUTPUT.PUT_LINE('.dpanel #s-normal .calm-fold > summary{display:none}');
     DBMS_OUTPUT.PUT_LINE('.dpanel #s-normal .calm{padding:var(--s2) 0;border:0}');
     DBMS_OUTPUT.PUT_LINE('.dpanel #s-normal .ngrid{grid-template-columns:repeat(2,minmax(0,1fr))}');
     DBMS_OUTPUT.PUT_LINE('.dpanel .note.improved{border:0;padding:var(--s2) 0}');
+    DBMS_OUTPUT.PUT_LINE('@media print{body.d-dash .tabs.dtabs{display:none}body.d-dash .dmain > .tabpanel.dpanel{display:block}body.d-dash .dpanel #s-normal > h2{display:block}}');
     DBMS_OUTPUT.PUT_LINE('.dempty{color:var(--muted);font-size:13.5px;margin:var(--s3) 0}');
     DBMS_OUTPUT.PUT_LINE('.dpanel > .panel.calm{border:0;padding:var(--s2) 0;background:none}');
     DBMS_OUTPUT.PUT_LINE('.dft{--dcols:18px 92px minmax(150px,1fr) 104px 116px 138px 76px 92px;font-size:13px}');
@@ -357,6 +377,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.dside .fc-h{grid-template-columns:minmax(0,1fr)}');
     DBMS_OUTPUT.PUT_LINE('.dside .fc-band{width:100%}');
     DBMS_OUTPUT.PUT_LINE('.dside .fc h3{font-size:15px}');
+    DBMS_OUTPUT.PUT_LINE('.dside .fc-k .xpl .xu{display:none}');
     DBMS_OUTPUT.PUT_LINE('.dside .fc-b{grid-template-columns:minmax(0,1fr);gap:var(--s3)}');
     DBMS_OUTPUT.PUT_LINE('.dside .fc .big .v{font-size:24px}');
     DBMS_OUTPUT.PUT_LINE('.dside .fc .evr{grid-template-columns:72px minmax(0,1fr) 108px}');

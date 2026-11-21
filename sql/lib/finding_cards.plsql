@@ -29,6 +29,12 @@
 -- wait classes are seconds waited per second = AAS.  Scoring always runs
 -- on the stored value (the band and z are scale-free).
 --
+-- Impact (v1.7): impact_group() / time_added() / card_tier() /
+-- card_before_imp() -- cards are ordered by the AAS their time measure
+-- added above its prior mean (foreground sessions only, owner decision
+-- 2026-11-20; a card needs at least 0.01 AAS to rank by it), see the
+-- comments above impact_group() and card_tier().
+--
 -- Include inside a DECLARE block AFTER sql/lib/fmt_num.plsql.  Declares
 -- only functions (no TYPE).
 --
@@ -66,6 +72,7 @@
             WHEN p_group = 'COMMIT' THEN 'Commit'
             WHEN p_group = 'PARSE'  THEN 'Parsing'
             WHEN p_group = 'WRITE'  THEN 'Writes and redo'
+            WHEN p_group = 'CPU'    THEN 'CPU'
             WHEN p_group LIKE 'WAIT:%' THEN SUBSTR(p_group, 6) || ' waits'
             WHEN p_group LIKE 'OTHER:%' THEN SUBSTR(p_group, 7)
             ELSE INITCAP(REPLACE(p_group, '_', ' ')) END;
@@ -183,6 +190,7 @@
         v_u VARCHAR2(20) := fv_unit(p_v, p_unit);
     BEGIN
         IF p_v IS NULL THEN RETURN '&mdash;'; END IF;
+        IF p_unit = 'dur' THEN RETURN fmt_dur(p_v); END IF;
         RETURN fv_num(p_v, p_unit)
             || CASE WHEN v_u IS NULL THEN ''
                     WHEN SUBSTR(v_u, 1, 1) = '/' THEN v_u
@@ -197,6 +205,9 @@
         IF p_mu IS NULL OR p_sd IS NULL THEN RETURN '&mdash;'; END IF;
         v_den := GREATEST(p_sd, 0.02 * ABS(p_mu));
         v_hi  := p_mu + 2 * v_den;
+        IF p_unit = 'dur' THEN
+            RETURN fmt_dur(GREATEST(0, p_mu - 2 * v_den)) || '&ndash;' || fmt_dur(v_hi);
+        END IF;
         IF p_unit = 'B/s' THEN
             -- both ends in the unit of the upper one: "2.8-4.5 MB/s"
             RETURN fmt_num(GREATEST(0, p_mu - 2 * v_den)
@@ -305,3 +316,96 @@
         IF p_sev_a <> p_sev_b THEN RETURN p_sev_a > p_sev_b; END IF;
         RETURN NVL(p_z_a, 0) > NVL(p_z_b, 0);
     END card_before;
+
+    -- Impact (v1.7): each card has at most one TIME MEASURE, a metric in
+    -- seconds per second (= average active sessions, AAS):
+    --   DBTIME -> LOAD 'DB time' (the total the others are shares of)
+    --   CPU    -> LOAD 'DB CPU'
+    --   IO / NET / COMMIT / WRITE / WAIT:<c> -> its wait class row
+    --          ('Wait class: <class>', family 'WAIT:<class>')
+    -- The card's impact = (Current - prior mean) of that row x
+    -- metric_scale() = AAS added above normal.  impact_group() names the
+    -- card a row is the time measure of (NULL: none).  A card without a
+    -- time measure (PARSE, OTHER:...) has no impact.  Impact counts
+    -- FOREGROUND sessions only, like DB time (owner decision 2026-11-20):
+    -- DB time / DB CPU come from the time model; a wait class's impact is
+    -- its time_waited_micro_fg (DBA_HIST_SYSTEM_EVENT, same windows,
+    -- template wait list and Idle exclusion as the class row), which the
+    -- caller passes in as p_fg_d to time_added().  The class row itself --
+    -- its value, z, bucket and the cards that exist -- stays ALL sessions.
+    FUNCTION impact_group(p_domain VARCHAR2, p_name VARCHAR2, p_family VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        IF p_domain = 'LOAD' AND p_name = 'DB time' THEN RETURN 'DBTIME'; END IF;
+        IF p_domain = 'LOAD' AND p_name = 'DB CPU'  THEN RETURN 'CPU'; END IF;
+        IF p_domain = 'WAIT' AND p_name LIKE 'Wait class: %' THEN
+            RETURN card_group(p_family);
+        END IF;
+        RETURN NULL;
+    END impact_group;
+
+    -- the AAS a time-measure row added above its prior mean: DB time / DB
+    -- CPU (Current - prior mean) x metric_scale(); a wait-class row its
+    -- foreground delta p_fg_d (Current - prior mean of the class's
+    -- time_waited_micro_fg per second, already in AAS).  NULL: no impact.
+    -- 00 (verdict), 07 (cards, the DB-time breakdown) call it the same way.
+    FUNCTION time_added(p_domain VARCHAR2, p_name VARCHAR2, p_cur NUMBER, p_mu NUMBER,
+                        p_fg_d NUMBER) RETURN NUMBER IS
+    BEGIN
+        IF p_domain = 'WAIT' THEN RETURN p_fg_d; END IF;
+        IF p_cur IS NULL OR p_mu IS NULL THEN RETURN NULL; END IF;
+        RETURN (p_cur - p_mu) * metric_scale(p_domain, p_name);
+    END time_added;
+
+    -- card order, v1.7 (replaces card_before as the sort key; card_before is
+    -- kept as the tie-break):  tier 1 = every card whose time measure ROSE
+    -- by at least 0.01 AAS (owner decision 2026-11-20: a smaller rise is
+    -- noise next to DB time and must not outrank a louder card), largest
+    -- impact first; tier 2 = the DB time card (the total those impacts are
+    -- shares of); tier 3 = every other card (no time measure, or it rose
+    -- by less than 0.01 AAS, or fell), large before moderate, then |z|.
+    -- The same floor hides the impact chip and the share (owner decision
+    -- 2026-11-21): a smaller rise shows neither, in any design.
+    -- The caller then still moves a flagged DB time card up to second
+    -- place, so the verdict keeps "<biggest contributor>; DB time ...".
+    -- 00 (verdict) and 07 (cards) apply the same two steps.
+    -- the 0.01 AAS floor, on the impact rounded like its data-impact token
+    -- (3 decimals), so the order, the chips and every script reading the
+    -- token agree; NULL (no time measure) is below it
+    FUNCTION imp_on(p_imp NUMBER) RETURN BOOLEAN IS
+    BEGIN
+        RETURN p_imp IS NOT NULL AND ROUND(p_imp, 3) >= 0.01;
+    END imp_on;
+
+    FUNCTION card_tier(p_group VARCHAR2, p_imp NUMBER) RETURN PLS_INTEGER IS
+    BEGIN
+        IF p_group = 'DBTIME' THEN RETURN 2; END IF;
+        IF imp_on(p_imp) THEN RETURN 1; END IF;
+        RETURN 3;
+    END card_tier;
+
+    FUNCTION card_before_imp(p_g_a VARCHAR2, p_sev_a PLS_INTEGER, p_z_a NUMBER, p_imp_a NUMBER,
+                             p_g_b VARCHAR2, p_sev_b PLS_INTEGER, p_z_b NUMBER, p_imp_b NUMBER)
+                             RETURN BOOLEAN IS
+        v_ta PLS_INTEGER := card_tier(p_g_a, p_imp_a);
+        v_tb PLS_INTEGER := card_tier(p_g_b, p_imp_b);
+    BEGIN
+        IF v_ta <> v_tb THEN RETURN v_ta < v_tb; END IF;
+        IF v_ta = 1 AND ROUND(p_imp_a, 6) <> ROUND(p_imp_b, 6) THEN
+            RETURN p_imp_a > p_imp_b;
+        END IF;
+        RETURN card_before(p_sev_a, p_z_a, p_sev_b, p_z_b);
+    END card_before_imp;
+
+    -- an impact as a data-attribute token: '.' decimal, 3 decimals
+    -- ("6.315", "-0.050"); '' when NULL
+    FUNCTION imp_tok(p_v NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        IF p_v IS NULL THEN RETURN ''; END IF;
+        RETURN TO_CHAR(ROUND(p_v, 3), 'FM9999999990D000', 'NLS_NUMERIC_CHARACTERS=''.,''');
+    END imp_tok;
+
+    -- an impact for reading: "+6.315&nbsp;AAS" (callers print it only when imp_on)
+    FUNCTION imp_txt(p_v NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN '+' || fmt_num(p_v) || '&nbsp;AAS';
+    END imp_txt;
