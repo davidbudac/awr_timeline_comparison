@@ -863,11 +863,19 @@ configuration card and 08's hero strip keep theirs. Step rows (12, plan card) ar
 **Window metadata:** 00 emits `window.AWR_WIN = {np, w:[{o, d, l, s, e, t,
 v}]}` oldest first — read it, don't recompute. **Client** (`window.AWR_WG`):
 `markers()` maps `AWR_MARKERS` to window boundaries (`{o, after, l, s, t,
-at}`, short labels "Release 4.2" → "R 4.2"), `markerAt(o)`, `sizeRow`,
+at, inw}`, short labels "Release 4.2" → "R 4.2"; `inw` = the marker falls
+INSIDE window o, after its start -- only the Current window can hold one;
+its flag still sits on that left edge), `markerAt(o, edge)` (`edge`: only a
+marker at or before window o's start), `sizeRow`,
 `render(scope)` (call after building / revealing grid DOM), `fit`, `refit`
 (auto on DOMContentLoaded, resize, `awr:view`, a `<details>` toggle), `pin`.
 `[data-mk-at="o"]` slots get the marker on that boundary (`data-mk-pre`,
-`data-mk-icon`). `body.js-wg` hides prior values until hover.
+`data-mk-icon`); a slot with `data-mk-pre` (" after ": 17's likely-source
+line, 18's plan card, 20's sentence, also `js_loadresp`'s re-fill) claims
+the change came after the marker, so it takes only one at or before window
+o's start (`markerAt(o, true)`): a marker inside the Current window leaves
+it hidden (review follow-up R3); the icon slots (12) take either.
+`body.js-wg` hides prior values until hover.
 
 **Pattern tags (plan 027).** `AWR_WG.patterns(vals, valid, mu, sd,
 marks)` / `patternText(tag, dates)` / `PAT` (the thresholds) are pure and
@@ -878,7 +886,10 @@ sigma floored at 2 % of the mean -- the band `sizeRow` and the band glyph
 draw) is a run ("high / low for N windows") when the window just before
 it is outside on the same side too (a skipped window ends the run), else
 "spike" / "dip" ("jump" / "drop after <marker>" when a release marker
-sits on Current's left edge) -- but only when no valid prior window is
+falls at or before the Current window's start, AWR_WIN `s`; one inside
+Current, `inw`, may follow the change: a plain spike / dip whose sentence
+says the marker falls inside the Current window -- review follow-up R3,
+the 09:55 release in a 09:00-10:00 window) -- but only when no valid prior window is
 outside on that side, so "Current only" holds (a recurring spike gets no
 Current tag). A step needs at least 3 valid windows before and 2 after
 the split, at least 90 % of the after / before pairs on the same side, a

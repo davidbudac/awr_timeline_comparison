@@ -104,9 +104,10 @@ function draw(){
   s.addEventListener('click',function(ev){go(ev.target);});
   s.addEventListener('keydown',function(ev){if(ev.key==='Enter'||ev.key===' '){if(go(ev.target))ev.preventDefault();}});
 }
-/* the release slot of the sentence (js_wingrid fills the first copy) */
+/* the release slot of the sentence (js_wingrid fills the first copy); its
+   " after " takes only a marker at or before the window's start, as there */
 function mkFill(r){var W=window.AWR_WG;if(!W||!W.markerAt)return;
-  [].forEach.call(r.querySelectorAll('[data-mk-at]'),function(e){var m=W.markerAt(+e.getAttribute('data-mk-at'));if(!m)return;
+  [].forEach.call(r.querySelectorAll('[data-mk-at]'),function(e){var m=W.markerAt(+e.getAttribute('data-mk-at'),e.hasAttribute('data-mk-pre'));if(!m)return;
     e.textContent=(e.getAttribute('data-mk-pre')||'')+m.l+' ('+m.t+')';e.title=m.l+', '+m.t;e.hidden=false;});}
 function go(t){var k=t&&t.getAttribute&&t.getAttribute('data-k');if(!k)return false;
   var r=doc.getElementById('lr-'+k);if(r&&window.AWR_goTo){window.AWR_goTo(r,true,false);return true;}return false;}

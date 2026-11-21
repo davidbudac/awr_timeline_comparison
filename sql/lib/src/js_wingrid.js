@@ -16,7 +16,10 @@ function shortLbl(l){var w=String(l).split(/\s+/),d=w.filter(function(x){return 
   return (w[0].length<=3&&w[0]===w[0].toUpperCase()?w[0]:w[0].charAt(0).toUpperCase())+" "+d.join(" ");}
 /* markers on window boundaries: a marker that falls after the start of one
    compared window and before the start of the next sits on the left edge
-   of the later one (o = its week_offset); inside Current -> on Current */
+   of the later one (o = its week_offset); inside Current -> on Current,
+   with inw = true: it falls INSIDE window o, after its start (only the
+   Current window can hold one), so its flag sits on that edge but nothing
+   may say that window's change came after it (review follow-up R3) */
 var MK=null;
 W.markers=function(){
   if(MK)return MK;MK=[];
@@ -25,19 +28,24 @@ W.markers=function(){
   ms.forEach(function(m){
     var t=String(m.t||""),lab=String(m.label||"");if(!t||t<=w[0].s||t>w[n-1].e)return;
     var i=1;while(i<n-1&&t>w[i].s)i++;
-    MK.push({o:w[i].o,after:w[i-1].o,l:lab,s:shortLbl(lab),t:dayTxt(t),at:t});
+    MK.push({o:w[i].o,after:w[i-1].o,l:lab,s:shortLbl(lab),t:dayTxt(t),at:t,inw:t>w[i].s});
   });
   return MK;
 };
-W.markerAt=function(o){var r=null;W.markers().forEach(function(m){if(m.o===o)r=m;});return r;};
+/* the (last) marker on window o's left edge; edge = only one at or before
+   the window's start (a text that says the change came "after" it) */
+W.markerAt=function(o,edge){var r=null;W.markers().forEach(function(m){if(m.o===o&&!(edge&&m.inw))r=m;});return r;};
 /* ---- pattern tags (plan 027): the shape of one row's per-window values,
    as a hint.  Pure: vals oldest first (null = no value), valid[i] false = a
    skipped window, mu / sd = the row's prior mean / sd (data-mu / data-sd),
-   marks = [{i: column index whose LEFT edge carries a marker, l: label}].
+   marks = [{i: column index whose LEFT edge carries a marker, l: label,
+   inw: true when it falls inside that window instead, after its start}].
    At most two tags, the Current one first:
-     {k:"jump"|"spike", dir, m}  only Current is outside mean +- 2 floored
-         sigma on that side: no valid prior window is (else no Current tag;
-         "jump" when a marker sits on Current's left edge, m = label)
+     {k:"jump"|"spike", dir, m[, d]}  only Current is outside mean +- 2
+         floored sigma on that side: no valid prior window is (else no
+         Current tag; "jump" when a marker sits at or before Current's
+         start, m = label; a marker inside Current makes no "after" claim:
+         a plain spike, d = its label for the sentence)
      {k:"run", dir, n}  Current and the n-1 windows right before it are all
          outside on the same side (a skipped window ends the run)
      {k:"step", dir, at, m}  the prior windows from index at on sit apart
@@ -59,13 +67,13 @@ W.patterns=function(vals,valid,mu,sd,marks){
   if(c==null||mu==null||n<2)return out;
   for(i=0;i<n-1;i++)if(vals[i]!=null&&valid[i]!==false)pi.push(i);
   if(pi.length<P.MIN_PRIOR)return out;
-  var mkAt=function(x){for(var k=0;k<(marks||[]).length;k++)if(marks[k].i===x)return marks[k].l;return null;};
+  var mkAt=function(x,inw){for(var k=0;k<(marks||[]).length;k++)if(marks[k].i===x&&!marks[k].inw===!inw)return marks[k].l;return null;};
   var den=Math.max(sd||0,0.02*Math.abs(mu)),hi=mu+2*den,lo=mu-2*den,dir=c>hi?1:c<lo?-1:0;
   if(dir){
     var run=0;
     for(i=n-2;i>=0;i--){var v=vals[i];if(v==null||valid[i]===false)break;if((dir>0&&v>hi)||(dir<0&&v<lo))run++;else break;}
     if(run>=1)out.push({k:"run",dir:dir,n:run+1});
-    else if(!pi.some(function(x){return dir>0?vals[x]>hi:vals[x]<lo;})){var lm=mkAt(n-1);out.push({k:lm?"jump":"spike",dir:dir,m:lm});}
+    else if(!pi.some(function(x){return dir>0?vals[x]>hi:vals[x]<lo;})){var lm=mkAt(n-1),ct={k:lm?"jump":"spike",dir:dir,m:lm},dm=lm?null:mkAt(n-1,true);if(dm)ct.d=dm;out.push(ct);}
   }
   var best=null,s;
   for(s=1;s<n-1;s++){
@@ -97,7 +105,7 @@ W.patterns=function(vals,valid,mu,sd,marks){
 W.patternText=function(t,dates){
   var up=t.dir>0,dt=function(i){return (dates&&dates[i])||"?";},lab=function(l){l=String(l);return l.length>24?l.slice(0,23)+"...":l;};
   if(t.k==="jump")return {text:(up?"jump":"drop")+" after "+lab(t.m),title:"Only the Current window is outside the normal range of the prior windows; the marker "+t.m+" sits right before it."};
-  if(t.k==="spike")return {text:(up?"spike":"dip")+": Current only",title:"Only the Current window is outside the normal range of the prior windows."};
+  if(t.k==="spike")return {text:(up?"spike":"dip")+": Current only",title:"Only the Current window is outside the normal range of the prior windows."+(t.d?" The marker "+t.d+" falls inside the Current window: it may have come after the change.":"")};
   if(t.k==="run")return {text:(up?"high":"low")+" for "+t.n+" windows",title:"The Current window and the "+(t.n-1)+" before it are all "+(up?"above":"below")+" the normal range."};
   if(t.k==="step")return {text:"step "+(up?"up":"down")+(t.m?" at "+lab(t.m):" on "+dt(t.at)),title:"The prior windows from "+dt(t.at)+" on sit "+(up?"above":"below")+" the ones before"+(t.m?" (marker "+t.m+")":"")+": the normal range mixes two levels."};
   return {text:(up?"rising":"falling")+" across "+t.n+" windows",title:"The prior windows follow a steady "+(up?"rise":"fall")+": the normal range is a moving target."};
@@ -107,7 +115,7 @@ function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return
 function winIdx(){
   var w=(window.AWR_WIN&&window.AWR_WIN.w)||[],valid=[],dates=[],ix={};
   w.forEach(function(x,i){valid.push(x.v!=="N");dates.push(x.d);ix[x.o]=i;});
-  var marks=W.markers().map(function(m){return {i:ix[m.o],l:m.l};}).filter(function(m){return m.i!=null;});
+  var marks=W.markers().map(function(m){return {i:ix[m.o],l:m.l,inw:!!m.inw};}).filter(function(m){return m.i!=null;});
   return {valid:valid,dates:dates,marks:marks};
 }
 /* every finding card (07) gets its tags in its header; plan 025's triage
@@ -251,10 +259,13 @@ W.render=function(scope){
 };
 function refit(){$$("[data-wg]").forEach(fit);}
 W.refit=refit;
-/* marker text slots: <span data-mk-at="o" [data-mk-pre=" after "] [data-mk-icon]> */
+/* marker text slots: <span data-mk-at="o" [data-mk-pre=" after "] [data-mk-icon]>;
+   a slot with a data-mk-pre (" after ") says the change came after the
+   marker, so it takes only one at or before window o's start (never one
+   inside the Current window: the slot stays hidden) */
 function fillMk(){
   $$("[data-mk-at]").forEach(function(el){
-    var m=W.markerAt(+el.getAttribute("data-mk-at"));if(!m)return;
+    var m=W.markerAt(+el.getAttribute("data-mk-at"),el.hasAttribute("data-mk-pre"));if(!m)return;
     el.innerHTML="";
     if(el.hasAttribute("data-mk-icon"))mk("i","kf",el);
     el.appendChild(doc.createTextNode((el.getAttribute("data-mk-pre")||"")+m.l+(el.hasAttribute("data-mk-icon")?"":" ("+m.t+")")));

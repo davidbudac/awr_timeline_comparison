@@ -116,9 +116,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  s.addEventListener(''click'',function(ev){go(ev.target);});');
     DBMS_OUTPUT.PUT_LINE('  s.addEventListener(''keydown'',function(ev){if(ev.key===''Enter''||ev.key==='' ''){if(go(ev.target))ev.preventDefault();}});');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('/* the release slot of the sentence (js_wingrid fills the first copy) */');
+    DBMS_OUTPUT.PUT_LINE('/* the release slot of the sentence (js_wingrid fills the first copy); its');
+    DBMS_OUTPUT.PUT_LINE('   " after " takes only a marker at or before the window''s start, as there */');
     DBMS_OUTPUT.PUT_LINE('function mkFill(r){var W=window.AWR_WG;if(!W||!W.markerAt)return;');
-    DBMS_OUTPUT.PUT_LINE('  [].forEach.call(r.querySelectorAll(''[data-mk-at]''),function(e){var m=W.markerAt(+e.getAttribute(''data-mk-at''));if(!m)return;');
+    DBMS_OUTPUT.PUT_LINE('  [].forEach.call(r.querySelectorAll(''[data-mk-at]''),function(e){var m=W.markerAt(+e.getAttribute(''data-mk-at''),e.hasAttribute(''data-mk-pre''));if(!m)return;');
     DBMS_OUTPUT.PUT_LINE('    e.textContent=(e.getAttribute(''data-mk-pre'')||'''')+m.l+'' (''+m.t+'')'';e.title=m.l+'', ''+m.t;e.hidden=false;});}');
     DBMS_OUTPUT.PUT_LINE('function go(t){var k=t&&t.getAttribute&&t.getAttribute(''data-k'');if(!k)return false;');
     DBMS_OUTPUT.PUT_LINE('  var r=doc.getElementById(''lr-''+k);if(r&&window.AWR_goTo){window.AWR_goTo(r,true,false);return true;}return false;}');

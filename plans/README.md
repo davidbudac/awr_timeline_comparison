@@ -325,6 +325,15 @@ findings as confirmed by the owner's agent):
   When they differ, or 17 cites no plan change, the card stays in "What
   changed around it" and 17's text loses its link. 17's pick itself is
   unchanged (aligning it with 18 would mean a second SQL Monitor read).
+- 027 (fix group R3): a "jump / drop after <marker>" tag names only a
+  marker at or before the start of the Current window (the marker's real
+  time against AWR_WIN `s`). A marker INSIDE the Current window gets no
+  "after" claim: the tag is the **plain spike / dip** ("spike: Current
+  only"), and its sentence adds "The marker X falls inside the Current
+  window: it may have come after the change." Every "after <marker>"
+  text slot (`data-mk-pre`: 17's likely-source line, 18's plan card,
+  20's sentence) follows the same rule and stays hidden for such a
+  marker. The flag placement is unchanged (on Current's left edge).
 
 
 Each plan records its default, so an executor never waits on these. Decide

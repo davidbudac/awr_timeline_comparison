@@ -206,6 +206,13 @@ release bumps `awr_version`).
   tagged "Current only" when a step the same way explains it (on a
   test-DB card the two windows before Current were already high: it read
   "spike: Current only" and "step up on 08:00"; now just the step).
+  "Jump after <marker>" names only a marker at or before the start of
+  the Current window: a release inside it (09:55 in a 09:00-10:00 window)
+  may have followed the spike, so the tag reads "spike: Current only" and
+  its explanation says the marker falls inside the window. The same rule
+  holds for every "after <marker>" text (the likely-source line, the
+  plan-change card, Load vs response time); the flag stays on the
+  window's left edge.
 - **Sorted by change.** SQL Monitor's per-statement table lists large,
   then moderate findings first (JS; the selection of statements is
   unchanged). Top SQL opens on a new *Biggest change* tab: Current-window

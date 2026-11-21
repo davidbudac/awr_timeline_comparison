@@ -34,7 +34,7 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
   function tags(vals, valid, marks) {
     const p = vals.slice(0, -1).filter((v, i) => v != null && valid[i] !== false);
     return W.patterns(vals, valid, mean(p), sd(p), marks).map(t => t.k + (t.dir > 0 ? '+' : '-')
-      + (t.at != null ? '@' + t.at : '') + (t.n != null ? '#' + t.n : '') + (t.m ? '[' + t.m + ']' : '')).join(' ');
+      + (t.at != null ? '@' + t.at : '') + (t.n != null ? '#' + t.n : '') + (t.m ? '[' + t.m + ']' : '') + (t.d ? '{' + t.d + '}' : '')).join(' ');
   }
   const PR = [3837.399, 3767.106, 3890.696, 3773.923, 3866.55, 3526.601, 3687.419, 3767.599,
               4850.898, 5072.253, 4809.715, 4868.913, 22240.52];
@@ -88,6 +88,42 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
     assert.strictEqual(W.patternText({ k: 'run', dir: 1, n: 3 }, D).text, 'high for 3 windows');
     assert.strictEqual(W.patternText({ k: 'trend', dir: -1, n: 12 }, D).text, 'falling across 12 windows');
     assert.strictEqual(W.patternText({ k: 'jump', dir: 1, m: 'A very long release name indeed' }, D).text, 'jump after A very long release nam...');
+  });
+  /* review follow-up R3: a "jump after" names only a marker at or before the
+     start of the Current window; one inside Current (09:55 in a 09:00-10:00
+     window) may follow the spike: a plain spike, its sentence says so */
+  const FLAT = [100, 101, 99, 100, 102, 98, 100, 101, 99, 100, 100, 101, 300];
+  test('a marker inside Current: plain spike, no "after"', () => {
+    assert.strictEqual(tags(FLAT, ALL, [{ i: 12, l: 'Release 4.2', inw: true }]), 'spike+{Release 4.2}');
+    assert.strictEqual(tags(FLAT, ALL, [{ i: 12, l: 'Release 4.2' }]), 'jump+[Release 4.2]');
+    // one before the start and one inside: the one before is named
+    assert.strictEqual(tags(FLAT, ALL, [{ i: 12, l: 'Early', inw: false }, { i: 12, l: 'Late', inw: true }]), 'jump+[Early]');
+    // a step the same way still drops the spike (the jump stays: it names its marker)
+    assert.strictEqual(tags(PR, ALL, [{ i: 8, l: 'Release 4.1' }, { i: 12, l: 'Release 4.2', inw: true }]), 'step+@8[Release 4.1]');
+    const D = ['18 Jun', '25 Jun', '2 Jul', '9 Jul', '16 Jul', '23 Jul', '30 Jul', '6 Aug', '13 Aug', '20 Aug', '27 Aug', '3 Sep', '10 Sep'];
+    const p = W.patternText({ k: 'spike', dir: 1, m: null, d: 'Release 4.2' }, D);
+    assert.strictEqual(p.text, 'spike: Current only');
+    assert.ok(/Release 4\.2 falls inside the Current window/.test(p.title) && !/before it/.test(p.title), p.title);
+    assert.ok(!/inside/.test(W.patternText({ k: 'spike', dir: 1, m: null }, D).title));
+  });
+  test('markers(): a marker inside Current is flagged inw, on its left edge', () => {
+    const win = { np: 2, w: [
+      { o: 2, s: '2026-11-08 07:00', e: '2026-11-08 08:00' },
+      { o: 1, s: '2026-11-08 08:00', e: '2026-11-08 09:00' },
+      { o: 0, s: '2026-11-08 09:00', e: '2026-11-08 10:00' }] };
+    const M = load('js_wingrid', { AWR_WIN: win, AWR_MARKERS: [
+      { t: '2026-11-08 07:30', label: 'In -2' }, { t: '2026-11-08 08:55', label: 'Before' },
+      { t: '2026-11-08 09:00', label: 'At start' }, { t: '2026-11-08 09:55', label: 'During' },
+      { t: '2026-11-08 10:30', label: 'After the span' }] }).AWR_WG;
+    const ms = M.markers().map(m => m.l + ':' + m.o + (m.inw ? '*' : '')).join(' ');
+    assert.strictEqual(ms, 'In -2:1 Before:0 At start:0 During:0*');
+    // the flag / icon slot takes any marker on the edge, an "after" text only one at or before the start
+    assert.strictEqual(M.markerAt(0).l, 'During');
+    assert.strictEqual(M.markerAt(0, true).l, 'At start');
+    assert.strictEqual(M.markerAt(1, true).l, 'In -2');
+    const only = load('js_wingrid', { AWR_WIN: win, AWR_MARKERS: [{ t: '2026-11-08 09:55', label: 'During' }] }).AWR_WG;
+    assert.strictEqual(only.markerAt(0).l, 'During');
+    assert.strictEqual(only.markerAt(0, true), null);
   });
 }
 
