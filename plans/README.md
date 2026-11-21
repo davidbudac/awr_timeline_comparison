@@ -358,12 +358,13 @@ findings as confirmed by the owner's agent):
   shift note (rendered only by the demo) survives. The model's other
   background events stay out of its SYSTEM_EVENT, as before (adding them
   would flag a WRITE card at +0.04 AAS). Demo and verify_report only; the
-  report is unchanged. R4 review: verify_report's `lowImp` fails a
-  breakdown part only when it shows no rise. The breakdown draws every
-  rise of 1% of its bar or more and has no 0.01 AAS floor, so when DB
-  time rose by less than 1 AAS a card under the floor can still be a
-  part, with a share in the breakdown and none on the card. This is
-  unchanged; it is open for the owner.
+  report is unchanged. Owner decision (later on 2026-11-21): a
+  breakdown part needs the same 0.01 AAS floor as the card chip
+  (`imp_on`); a smaller rise goes into "+ n smaller", so a card without
+  a chip is never a part with a share. verify_report's `lowImp` fails
+  any breakdown part for such a card. Also decided: the IO_SINGLE hint
+  says what its rule checks (single-block read wait TIME rose: more
+  reads or slower ones, storage included).
 
 
 Each plan records its default, so an executor never waits on these. Decide

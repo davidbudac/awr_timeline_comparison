@@ -1210,7 +1210,10 @@ BEGIN
             v_base := GREATEST(v_dd + v_neg, v_pos);
             FOR k2 IN 1 .. v_parts.COUNT LOOP
                 v_p := v_parts(k2);
-                IF v_p.d > 0 AND v_p.d >= 0.01 * v_base THEN
+                -- a part needs the cards' 0.01 AAS floor (imp_on, owner
+                -- decision 2026-11-21) and 1% of the bar; a smaller rise
+                -- goes into "+ n smaller"
+                IF imp_on(v_p.d) AND v_p.d >= 0.01 * v_base THEN
                     v_fl  := v_glead.EXISTS(v_p.grp);
                     -- the share, left out past 100% like the cards' impact chip
                     v_pct := CASE WHEN v_p.d <= v_dd * 1.005 THEN LEAST(100, ROUND(v_p.d / v_dd * 100)) END;

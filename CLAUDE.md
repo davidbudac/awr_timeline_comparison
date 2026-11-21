@@ -344,7 +344,7 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
 
 | Piece | Emitter | Notes |
 |---|---|---|
-| Verdict hero `section#verdict.vw.in-s.hero` | 00 | one rule-based h1 sentence (no free prose), `p#because-slot` "Likely source:" (17 fills), `ul#pills` (17 inserts before `li.pl-normal`), `ul#narrative-slot.hnotes` (17), `p.snapnote` (target_end snapped), `#att-slot` (07 fills: DB-time breakdown = DB CPU + each class's foreground wait time, the cards' impact; `.att-h` / `.att-bar` / `.att-lg`, parts coloured from `AWR_WAIT_COLORS` via `--c`; a hatched rest = the rise less the parts' NET sum (rises minus falls), drawn past 1 % of the rise, the bar's base GREATEST(rise + falls, rises); a note when the net passes the rise by more than 2 %; a share is `LEAST(100, ...)`, kept up to 100.5 %, both here and in `g_shr`) |
+| Verdict hero `section#verdict.vw.in-s.hero` | 00 | one rule-based h1 sentence (no free prose), `p#because-slot` "Likely source:" (17 fills), `ul#pills` (17 inserts before `li.pl-normal`), `ul#narrative-slot.hnotes` (17), `p.snapnote` (target_end snapped), `#att-slot` (07 fills: DB-time breakdown = DB CPU + each class's foreground wait time, the cards' impact; `.att-h` / `.att-bar` / `.att-lg`, parts coloured from `AWR_WAIT_COLORS` via `--c`; a part needs `imp_on` (the cards' 0.01 AAS floor) and 1 % of the bar, smaller rises go into "+ n smaller"; a hatched rest = the rise less the parts' NET sum (rises minus falls), drawn past 1 % of the rise, the bar's base GREATEST(rise + falls, rises); a note when the net passes the rise by more than 2 %; a share is `LEAST(100, ...)`, kept up to 100.5 %, both here and in `g_shr`) |
 | Hero strip `section#overview` | 08 | DB time (AAS) per window on the window component, `#hero-dbt`; replaced the six v1.5 headline tiles |
 | Triage list `#triage` | 07 | one `div.tri-row[data-card]` per card, in card order; impact cell filled by 07's inline script from the card's `data-impact` / `data-share` (plan 020); empty `span.tri-tags` (plan 027); `span.tri-spark[data-spark-dense]` (a trend at any window count, see Micro strips) |
 | Finding cards `#findings div.cards` | 07 | one `article.fc` per card group (below); header band glyph, big value, window bars, ≤4 evidence rows, an optional hint `div.fc-hint[data-hint]` (plan 033, below), related-metrics fold, footer `a.jump[data-tl]` "Timeline →" |
@@ -392,7 +392,8 @@ picks the rule from the rows it already scored (`f_up` = a large /
 moderate row above its prior mean; `ev_up` = the same for one of the top 2
 events per class in `v_evs`), and a rule fires only on what its sentence
 claims (R2): `IO_SCANS` (any one of long-table scans, scattered read,
-direct path read; the sentence says "or"), `IO_SINGLE`, `COMMIT_LAT`
+direct path read; the sentence says "or"), `IO_SINGLE` (db file sequential
+read time flagged up; the sentence says "more of them or slower ones"), `COMMIT_LAT`
 (`commit_lat_up`: log file sync flagged up AND its time per commit, the
 wait's AAS / user commits per second, at least 1.5x the prior windows'
 ratio of the means), `NET_PAYLOAD`, `HARD_PARSE`, `DBTIME_CPU` (only

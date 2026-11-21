@@ -1607,10 +1607,9 @@ const LABEL_BAND = () => {
       // background-only wait class: scored on all sessions, its foreground
       // time flat) has no chip and no share, sits after every tier-1 card,
       // reads "under 0.01 AAS" in the triage list and is no breakdown part
-      // without a rise (required on the demo: its Queueing waits card,
-      // impact 0). A part is any rise of 1% of the bar or more, so a rise
-      // under the floor can be one when DB time rose less than 1 AAS: only
-      // a listed part that did not rise fails.
+      // (required on the demo: its Queueing waits card, impact 0). A part
+      // needs the same 0.01 AAS floor (imp_on), so such a card is at most
+      // inside "+ n smaller".
       const last1 = fc.reduce((m, c, i) => (c.id !== 'f-dbtime' && t1(parseFloat(c.getAttribute('data-impact')))) ? i : m, -1);
       const triL = document.getElementById('triage');
       out.lowImp = fc.filter(c => c.id !== 'f-dbtime' && /\bf-(large|moderate)\b/.test(c.className)
@@ -1623,7 +1622,7 @@ const LABEL_BAND = () => {
           if (triL && !tr) bad.push('no triage row');
           if (tr && !/^under 0\.01 AAS$/.test(tr.textContent.trim())) bad.push('triage "' + tr.textContent.trim() + '"');
           const ap = document.querySelector('#att-slot a[href="#' + c.id + '"]'), apv = ap && ap.parentNode.querySelector('b');
-          if (ap && !(parseFloat(((apv && apv.textContent) || '').replace(/[+,\s]/g, '')) > 0)) bad.push('a breakdown part without a rise');
+          if (ap) bad.push('a breakdown part');
           return c.id + (bad.length ? ' FAIL ' + bad.join(', ') : '');
         });
       // v1.7: the DB-time breakdown under the verdict

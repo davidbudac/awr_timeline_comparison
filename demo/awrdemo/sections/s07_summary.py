@@ -533,7 +533,7 @@ def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
         bar, lg, small, nsm = "", "", 0.0, 0
         for p in parts:
             d = p["d"]
-            if d > 0 and d >= 0.01 * base:
+            if h.imp_on(d) and d >= 0.01 * base:
                 fl = p["grp"] in lead
                 # the share, left out past 100% like the cards' impact chip
                 pct = min(100, int(h.ora_round(d / dd * 100, 0))) if d <= dd * 1.005 else None

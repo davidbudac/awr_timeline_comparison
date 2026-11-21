@@ -52,7 +52,7 @@
     BEGIN
         RETURN CASE p_rule
             WHEN 'IO_SCANS' THEN 'Rising scattered or direct-path read waits, or more long-table scans, usually mean more full scans: a changed plan, an index that is no longer used, or a new statement. The statements reading the most blocks in the Current window are the place to start.'
-            WHEN 'IO_SINGLE' THEN 'More single-block reads usually mean index or rowid access touching more blocks: a less selective plan, more rows per call, or a colder buffer cache. The statements reading the most blocks in the Current window are the place to start.'
+            WHEN 'IO_SINGLE' THEN 'More time on single-block reads means more of them or slower ones. More usually means index or rowid access touching more blocks: a less selective plan, more rows per call, or a colder buffer cache; slower ones point to storage. The statements reading the most blocks in the Current window are the place to start.'
             WHEN 'COMMIT_LAT' THEN 'Commit waits (log file sync) rose faster than the commit rate: each commit waited at least 1.5 times as long as in the prior windows. That usually points to slower redo writes (log file parallel write) or a busy log writer rather than to the application.'
             WHEN 'NET_PAYLOAD' THEN 'More &quot;SQL*Net more data to client&quot; or more bytes sent to clients usually means larger result sets or a smaller fetch (array) size in a client. Compare bytes sent per user call with the prior windows.'
             WHEN 'HARD_PARSE' THEN 'More hard parses usually mean statements built with literals instead of bind variables, or cursors invalidated by DDL or statistics gathering.'
