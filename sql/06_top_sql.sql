@@ -18,17 +18,28 @@ BEGIN DBMS_OUTPUT.PUT_LINE('<!-- AWR-SECTION: 06_top_sql BEGIN -->'); END;
 DECLARE
     v_weeks_back NUMBER := ~weeks_back;
     v_top_n      NUMBER := ~top_n;
-    v_header     VARCHAR2(32767);   -- one th (about 45 bytes) per window
+    -- Any window count: nothing below is a SQL LISTAGG (4000 bytes, ORA-01489
+    -- past about 200 windows); the header and the detail rows (about 45 /
+    -- 80 bytes a window) are streamed through wg_buf, one cell at a time;
+    -- the per-statement window values arrive one row per window (v_wv / v_wr
+    -- / v_wp, key = week_offset).
+    v_header     VARCHAR2(32767);
     v_row        VARCHAR2(32767);
-    v_weeks_json VARCHAR2(4000);
-    v_weeks_iso_json VARCHAR2(4000);
+    v_cell       VARCHAR2(400);
+    v_buf        VARCHAR2(32767);
+    v_weeks_json VARCHAR2(32767);
+    v_weeks_iso_json VARCHAR2(32767);
     v_cur_dim    VARCHAR2(10);
     v_val        NUMBER;
     v_val_s      VARCHAR2(64);
     v_rnk_s      VARCHAR2(64);
     v_phv_s      VARCHAR2(64);
-    v_chart_vals VARCHAR2(8000);
-    v_new_entry  VARCHAR2(8000);
+    v_chart_vals VARCHAR2(32767);
+    v_new_entry  VARCHAR2(32767);
+    TYPE t_tok_tab IS TABLE OF VARCHAR2(64) INDEX BY PLS_INTEGER;
+    v_wv         t_tok_tab;     -- the statement's value token per window
+    v_wr         t_tok_tab;     -- its rank per window
+    v_wp         t_tok_tab;     -- its plan_hash_value per window
 
     -- Hard cap for the per-dimension JSON accumulators below. PL/SQL
     -- VARCHAR2 maxes out at 32767 bytes; the per-dim emit at the end of
@@ -95,12 +106,12 @@ DECLARE
     TYPE t_tl_rows IS TABLE OF VARCHAR2(32767) INDEX BY PLS_INTEGER;
     v_tl               t_tl_rows;
     v_tl_n             PLS_INTEGER := 0;
-    v_tl_csv           VARCHAR2(4000);
+    v_tl_csv           VARCHAR2(32767);
     v_tl_mu            NUMBER;
     v_tl_first         NUMBER;
     -- one Y / N per compared window, character k + 1 = week_offset k
     -- (windows_rollup): tl_first never calls a row "new" after a skipped one
-    v_tl_valid         VARCHAR2(4000) := RPAD('N', ~weeks_back + 1, 'N');
+    v_tl_valid         VARCHAR2(32767) := RPAD('N', ~weeks_back + 1, 'N');
     v_tl_note          VARCHAR2(400);
     v_tl_gw            NUMBER;
     v_tl_gl            VARCHAR2(400);
@@ -108,7 +119,6 @@ DECLARE
     v_panel_on         BOOLEAN := FALSE;  -- the first emitted tabpanel is the open one
     v_chg_seen         BOOLEAN := FALSE;  -- the CHANGE dimension had rows
 
-    @@sql/lib/nth_csv.plsql
     @@sql/lib/is_oracle_schema.plsql
     @@sql/lib/fmt_num.plsql
     @@sql/lib/anchor_id.plsql
@@ -137,27 +147,28 @@ BEGIN
         || '<button type="button" role="tab" aria-selected="false" tabindex="-1" data-t="PEREXEC" id="tab-topsql-PEREXEC">Per-exec regression</button>'
         || '</div>');
 
-    SELECT '['
-        || LISTAGG('"' || TO_CHAR(
-               CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
-               - (~step_hours/24)*week_offset, '~period_axis_fmt', 'NLS_DATE_LANGUAGE=ENGLISH') || '"', ',')
-               WITHIN GROUP (ORDER BY week_offset DESC)
-        || ']'
-    INTO   v_weeks_json
-    FROM   (SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1);
-
-    -- Parallel full-ISO timestamps for the same windows, in the same
-    -- (week_offset DESC) order as v_weeks_json. Fed to AWR_markLine as the
-    -- time source so user markers snap to the nearest window even though
-    -- the visible x-axis labels are the compact period_axis_fmt form.
-    SELECT '['
-        || LISTAGG('"' || TO_CHAR(
-               CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
-               - (~step_hours/24)*week_offset, 'YYYY-MM-DD HH24:MI') || '"', ',')
-               WITHIN GROUP (ORDER BY week_offset DESC)
-        || ']'
-    INTO   v_weeks_iso_json
-    FROM   (SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1);
+    -- The windows' chart labels, oldest first (week_offset DESC), and the
+    -- parallel full-ISO timestamps fed to AWR_markLine as the time source so
+    -- user markers snap to the nearest window even though the visible x-axis
+    -- labels are the compact period_axis_fmt form.  Built in this loop, not
+    -- a LISTAGG: about 20 bytes a window passed SQL's 4000 near 200 windows.
+    FOR r IN (
+        SELECT TO_CHAR(
+                   CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
+                   - (~step_hours/24)*week_offset, '~period_axis_fmt', 'NLS_DATE_LANGUAGE=ENGLISH') AS lab,
+               TO_CHAR(
+                   CAST(TO_TIMESTAMP('~target_end_resolved', 'YYYY-MM-DD HH24:MI:SS') AS DATE)
+                   - (~step_hours/24)*week_offset, 'YYYY-MM-DD HH24:MI') AS iso
+        FROM   (SELECT LEVEL - 1 AS week_offset FROM dual CONNECT BY LEVEL <= ~weeks_back + 1)
+        ORDER BY week_offset DESC
+    ) LOOP
+        v_weeks_json     := v_weeks_json || CASE WHEN v_weeks_json IS NOT NULL THEN ',' END
+                         || '"' || r.lab || '"';
+        v_weeks_iso_json := v_weeks_iso_json || CASE WHEN v_weeks_iso_json IS NOT NULL THEN ',' END
+                         || '"' || r.iso || '"';
+    END LOOP;
+    v_weeks_json     := '[' || v_weeks_json || ']';
+    v_weeks_iso_json := '[' || v_weeks_iso_json || ']';
 
 
     -- Window validity for the Timeline's "first seen" glyph (tl_first).
@@ -343,25 +354,22 @@ BEGIN
                    ON p.dim = q.dim AND p.sql_id = q.sql_id AND p.week_offset = w.week_offset
         ),
         per_sql AS (
-            SELECT dim, sql_id,
-                   MAX(CASE WHEN week_offset = 0 THEN metric_value END)     AS cur_val,
-                   MAX(CASE WHEN week_offset = 0 THEN rnk END)              AS cur_rnk,
-                   MAX(CASE WHEN week_offset = 0 THEN plan_hash_value END)  AS cur_phv,
-                   MIN(rnk) AS best_rank,
-                   MAX(metric_value) AS best_value,
-                   -- ','||token folded into the measure + SUBSTR(...,2):
-                   -- LISTAGG drops NULL measures (and their delimiter), which
-                   -- would left-compact the CSV and break nth_csv slot
-                   -- positions; ','||NULL = ',' keeps the empty slot.
-                   SUBSTR(LISTAGG(',' || TO_CHAR(metric_value, 'FM99999999999999990D000000',
-                                                 'NLS_NUMERIC_CHARACTERS=''.,'''))
-                       WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_vals,
-                   SUBSTR(LISTAGG(',' || TO_CHAR(rnk))
-                       WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_rnks,
-                   SUBSTR(LISTAGG(',' || TO_CHAR(plan_hash_value))
-                       WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_phvs
+            -- one row per (dim, statement, window), every window (grid);
+            -- the statement's own values ride on each of its rows.  No
+            -- per-window LISTAGG CSV: it passed SQL's 4000 bytes (ORA-01489,
+            -- the run aborted) once a statement had values in about 200
+            -- windows, and Biggest change has a value in every window the
+            -- statement ran in.  The loop collects the windows instead.
+            SELECT dim, sql_id, week_offset, metric_value, rnk, plan_hash_value,
+                   MAX(CASE WHEN week_offset = 0 THEN metric_value END)
+                       OVER (PARTITION BY dim, sql_id)                      AS cur_val,
+                   MAX(CASE WHEN week_offset = 0 THEN rnk END)
+                       OVER (PARTITION BY dim, sql_id)                      AS cur_rnk,
+                   MAX(CASE WHEN week_offset = 0 THEN plan_hash_value END)
+                       OVER (PARTITION BY dim, sql_id)                      AS cur_phv,
+                   MIN(rnk)          OVER (PARTITION BY dim, sql_id)        AS best_rank,
+                   MAX(metric_value) OVER (PARTITION BY dim, sql_id)        AS best_value
             FROM   grid
-            GROUP BY dim, sql_id
         ),
         text_snips AS (
             SELECT sql_id, sql_text_short FROM (
@@ -392,8 +400,14 @@ BEGIN
         SELECT d.code AS dim, d.ord AS dim_ord, d.label AS dim_label,
                d.unit AS dim_unit, d.divs AS dim_div,
                ps.sql_id, ps.cur_val, ps.cur_rnk, ps.cur_phv,
-               ps.week_vals, ps.week_rnks, ps.week_phvs,
-               ts.sql_text_short,
+               ps.week_offset,
+               TO_CHAR(ps.metric_value, 'FM99999999999999990D000000',
+                       'NLS_NUMERIC_CHARACTERS=''.,''')    AS week_val,
+               TO_CHAR(ps.rnk)                            AS week_rnk,
+               TO_CHAR(ps.plan_hash_value)                AS week_phv,
+               -- read on the statement's last window only (the loop renders
+               -- it there): no 400-character text on every window row
+               CASE WHEN ps.week_offset = v_weeks_back THEN ts.sql_text_short END AS sql_text_short,
                ss.parsing_schema,
                ch.prior_mean AS chg_mu_us
         FROM   dims d
@@ -406,8 +420,17 @@ BEGIN
             ps.cur_rnk NULLS LAST,
             ps.best_rank,
             ps.best_value DESC,
-            ps.sql_id
+            ps.sql_id,
+            ps.week_offset
     ) LOOP
+        -- A statement's windows arrive together, week_offset 0 .. N: keep
+        -- each window's tokens and render the statement on its last one
+        -- (every key 0 .. N is set again for each statement: grid has them all).
+        v_wv(s.week_offset) := s.week_val;
+        v_wr(s.week_offset) := s.week_rnk;
+        v_wp(s.week_offset) := s.week_phv;
+        CONTINUE WHEN s.week_offset < v_weeks_back;
+
         IF v_cur_dim IS NULL OR v_cur_dim <> s.dim THEN
             IF v_cur_dim IS NOT NULL THEN
                 DBMS_OUTPUT.PUT_LINE('</tbody></table></details></div>');
@@ -440,14 +463,16 @@ BEGIN
             DBMS_OUTPUT.PUT_LINE('<details>');
             DBMS_OUTPUT.PUT_LINE('<summary>Detail table</summary>');
 
-            v_header := '<thead><tr><th>SQL ID</th><th class="num" title="plan_hash_value of the Current window&#39;s execution plan">Plan hash (Current)</th>'
+            -- one th (about 45 bytes) per window, through wg_buf
+            v_header := '<table id="topsql-detail-' || v_cur_dim || '">'
+                || '<thead><tr><th>SQL ID</th><th class="num" title="plan_hash_value of the Current window&#39;s execution plan">Plan hash (Current)</th>'
                 || '<th class="num" data-w="0">Current (' || s.dim_unit || ')</th>';
             FOR k IN 1 .. v_weeks_back LOOP
-                v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
-                    || off_label(k) || '</th>';
+                wg_buf(v_header, '<th class="num" data-w="' || k || '">&minus;'
+                    || off_label(k) || '</th>');
             END LOOP;
-            v_header := v_header || '<th>SQL</th></tr></thead>';
-            DBMS_OUTPUT.PUT_LINE('<table id="topsql-detail-' || v_cur_dim || '">' || v_header || '<tbody>');
+            wg_buf(v_header, '<th>SQL</th></tr></thead><tbody>');
+            DBMS_OUTPUT.PUT_LINE(v_header);
         END IF;
 
         v_seen_sqls(s.sql_id) := TRUE;
@@ -471,8 +496,8 @@ BEGIN
         v_is_sys := is_oracle_schema(s.parsing_schema);
         v_sys_sqls(s.sql_id) := (v_is_sys = 'Y');
 
-        -- Plan-change detection for this row: scan prior-week PHVs (slots
-        -- 2..N+1 of s.week_phvs; slot 1 is the current window) and flag
+        -- Plan-change detection for this row: scan prior-week PHVs (keys
+        -- 1..N of v_wp; key 0 is the current window) and flag
         -- the SQL when any non-null prior PHV differs from s.cur_phv. The
         -- per-cell plan-up badge below uses the same comparison; this loop
         -- gives us a single boolean for the SQL_ID column badge and feeds
@@ -480,7 +505,7 @@ BEGIN
         v_plan_flip := FALSE;
         IF s.cur_phv IS NOT NULL THEN
             FOR k IN 1 .. v_weeks_back LOOP
-                v_phv_s := nth_csv(s.week_phvs, k + 1);
+                v_phv_s := v_wp(k);
                 IF v_phv_s IS NOT NULL
                    AND TO_NUMBER(v_phv_s) <> s.cur_phv THEN
                     v_plan_flip := TRUE;
@@ -493,12 +518,11 @@ BEGIN
         END IF;
 
         -- Build oldest->newest values array for this SQL (chart series).
-        -- week_vals is LISTAGG(... ORDER BY week_offset ASC), i.e. slot 1 =
-        -- current (week_offset 0), slot N+1 = oldest. Iterate in reverse so
-        -- the chart x-axis (which is oldest-first) lines up.
+        -- v_wv is keyed by week_offset (0 = current, N = oldest). Iterate in
+        -- reverse so the chart x-axis (which is oldest-first) lines up.
         v_chart_vals := '';
         FOR k IN REVERSE 1 .. v_weeks_back + 1 LOOP
-            v_val_s := nth_csv(s.week_vals, k);
+            v_val_s := v_wv(k - 1);
             IF v_chart_vals IS NOT NULL AND LENGTH(v_chart_vals) > 0 THEN
                 v_chart_vals := v_chart_vals || ',';
             END IF;
@@ -555,35 +579,36 @@ BEGIN
                             ELSE delta_span(s.cur_val, s.chg_mu_us, NULL, 'Y') END END
             || '</td>';
 
+        -- the prior windows' cells, one at a time through wg_buf (about 80
+        -- bytes a cell, up to 170 with a plan badge): a row of many windows
+        -- spans several output lines, the usual 13 stay on one
         FOR k IN 1 .. v_weeks_back LOOP
-            v_val_s := nth_csv(s.week_vals, k + 1);
-            v_rnk_s := nth_csv(s.week_rnks, k + 1);
-            v_phv_s := nth_csv(s.week_phvs, k + 1);
+            v_val_s := v_wv(k);
+            v_rnk_s := v_wr(k);
+            v_phv_s := v_wp(k);
             IF v_val_s IS NULL OR v_val_s = '' THEN
-                v_row := v_row || '<td class="num" data-w="' || k || '">&mdash;';
+                v_cell := '<td class="num" data-w="' || k || '">&mdash;';
             ELSE
                 v_val := TO_NUMBER(v_val_s, 'FM99999999999999990D000000',
                                    'NLS_NUMERIC_CHARACTERS=''.,''');
-                v_row := v_row || '<td class="num" data-w="' || k || '">'
+                v_cell := '<td class="num" data-w="' || k || '">'
                       || fmt_num(v_val/s.dim_div);
             END IF;
             IF v_rnk_s IS NOT NULL THEN
-                v_row := v_row || ' <span class="badge skip">#' || v_rnk_s || '</span>';
+                v_cell := v_cell || ' <span class="badge skip">#' || v_rnk_s || '</span>';
             END IF;
             IF v_phv_s IS NOT NULL AND s.cur_phv IS NOT NULL
                AND TO_NUMBER(v_phv_s) <> s.cur_phv THEN
-                v_row := v_row || ' <span class="badge warn" title="Plan changed. Prior PHV '
+                v_cell := v_cell || ' <span class="badge warn" title="Plan changed. Prior PHV '
                       || v_phv_s || '">plan&#8593;</span>';
             END IF;
-            v_row := v_row || '</td>';
+            wg_buf(v_row, v_cell || '</td>');
         END LOOP;
 
-        v_row := v_row || '<td class="mono sqltext">'
+        wg_buf(v_row, '<td class="mono sqltext">'
             || DBMS_XMLGEN.CONVERT(SUBSTR(NVL(s.sql_text_short, ''), 1, 400))
             || CASE WHEN LENGTH(NVL(s.sql_text_short, '')) > 400 THEN '&hellip;' END
-            || '</td>';
-
-        v_row := v_row || '</tr>';
+            || '</td></tr>');
         DBMS_OUTPUT.PUT_LINE(v_row);
 
         -- v1.6.0 Timeline: this statement's row in the SQL lane (ranked,
@@ -760,21 +785,20 @@ BEGIN
                    ON p.dim = q.dim AND p.grp_type = q.grp_type
                   AND p.grp_value = q.grp_value AND p.week_offset = w.week_offset
         ),
+        -- one row per (dim, group, window), like per_sql above (no
+        -- per-window LISTAGG: any window count)
         per_group AS (
-            SELECT dim, grp_type, grp_value,
-                   MAX(CASE WHEN week_offset = 0 THEN rnk END) AS cur_rnk,
-                   MIN(rnk)          AS best_rank,
-                   MAX(metric_value) AS best_value,
-                   -- ','||token + SUBSTR: LISTAGG drops NULL measures; the
-                   -- folded delimiter keeps empty slots (see per_sql above).
-                   SUBSTR(LISTAGG(',' || TO_CHAR(metric_value, 'FM99999999999999990D000000',
-                                                 'NLS_NUMERIC_CHARACTERS=''.,'''))
-                       WITHIN GROUP (ORDER BY week_offset ASC), 2) AS week_vals
+            SELECT dim, grp_type, grp_value, week_offset, metric_value,
+                   MAX(CASE WHEN week_offset = 0 THEN rnk END)
+                       OVER (PARTITION BY dim, grp_type, grp_value)   AS cur_rnk,
+                   MIN(rnk)          OVER (PARTITION BY dim, grp_type, grp_value) AS best_rank,
+                   MAX(metric_value) OVER (PARTITION BY dim, grp_type, grp_value) AS best_value
             FROM   grid
-            GROUP BY dim, grp_type, grp_value
         )
         SELECT d.code AS dim, d.divs AS dim_div, ps.grp_type, ps.grp_value,
-               ps.cur_rnk, ps.week_vals
+               ps.cur_rnk, ps.week_offset,
+               TO_CHAR(ps.metric_value, 'FM99999999999999990D000000',
+                       'NLS_NUMERIC_CHARACTERS=''.,''') AS week_val
         FROM   dims d
         JOIN   per_group ps ON ps.dim = d.code
         ORDER BY d.ord, ps.grp_type,
@@ -782,11 +806,15 @@ BEGIN
             ps.cur_rnk NULLS LAST,
             ps.best_rank,
             ps.best_value DESC,
-            ps.grp_value
+            ps.grp_value,
+            ps.week_offset
     ) LOOP
+        -- a group's windows arrive together (week_offset 0 .. N), as above
+        v_wv(sc.week_offset) := sc.week_val;
+        CONTINUE WHEN sc.week_offset < v_weeks_back;
         v_chart_vals := '';
         FOR k IN REVERSE 1 .. v_weeks_back + 1 LOOP
-            v_val_s := nth_csv(sc.week_vals, k);
+            v_val_s := v_wv(k - 1);
             IF LENGTH(v_chart_vals) > 0 THEN
                 v_chart_vals := v_chart_vals || ',';
             END IF;
@@ -842,9 +870,14 @@ BEGIN
     -- silently when the CDN is unreachable; tables still carry every value.
     IF v_dim_label.COUNT > 0 THEN
         DBMS_OUTPUT.PUT_LINE('<script>(function(){');
-        DBMS_OUTPUT.PUT_LINE('AWR_DATA.topSql={weeks:' || v_weeks_json
-            || ',weeksIso:' || v_weeks_iso_json
-            || ',topN:' || v_top_n || ',dims:{');
+        -- the two window lists (about 15 and 19 bytes a window) through
+        -- wg_buf: one line for the usual counts, split past 32000 bytes
+        v_buf := 'AWR_DATA.topSql={weeks:';
+        wg_buf(v_buf, v_weeks_json);
+        wg_buf(v_buf, ',weeksIso:');
+        wg_buf(v_buf, v_weeks_iso_json);
+        wg_buf(v_buf, ',topN:' || v_top_n || ',dims:{');
+        DBMS_OUTPUT.PUT_LINE(v_buf);
         v_first_dim := TRUE;
         v_dim := v_dim_label.FIRST;
         WHILE v_dim IS NOT NULL LOOP

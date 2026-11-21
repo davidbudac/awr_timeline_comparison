@@ -319,13 +319,15 @@ def emit(w) -> str:
             put('<div class="chart-wrap chart-medium" id="topsql-chart-' + dim + '"></div>')
             put("<details>")
             put("<summary>Detail table</summary>")
-            header = ('<thead><tr><th>SQL ID</th><th class="num" title="plan_hash_value of the Current window&#39;s execution plan">Plan hash (Current)</th>'
-                      '<th class="num" data-w="0">Current (' + dim_unit[dim] + ")</th>")
+            # one th per window through wg_buf (h.wg_lines)
+            header = ['<table id="topsql-detail-' + cur_dim + '">'
+                      '<thead><tr><th>SQL ID</th><th class="num" title="plan_hash_value of the Current window&#39;s execution plan">Plan hash (Current)</th>'
+                      '<th class="num" data-w="0">Current (' + dim_unit[dim] + ")</th>"]
             for k in range(1, weeks_back + 1):
-                header += ('<th class="num" data-w="' + str(k) + '">&minus;'
-                           + w.offset_labels[k - 1] + "</th>")
-            header += "<th>SQL</th></tr></thead>"
-            put('<table id="topsql-detail-' + cur_dim + '">' + header + "<tbody>")
+                header.append('<th class="num" data-w="' + str(k) + '">&minus;'
+                              + w.offset_labels[k - 1] + "</th>")
+            header.append("<th>SQL</th></tr></thead><tbody>")
+            put(h.wg_lines(header))
 
         sid = s["sql_id"]
         div = dim_div[dim]
@@ -382,23 +384,24 @@ def emit(w) -> str:
             row += " " + ('<span class="d s-plain" title="no row in any prior valid window">new</span>'
                           if not mu else h.delta_span(cur_val, mu, None, "Y"))
         row += "</td>"
+        # the prior windows' cells, one wg_buf piece each (h.wg_lines)
+        parts = [row]
         for k in range(1, weeks_back + 1):
             v, r, p = s["vals"][k], s["rnks"][k], s["phvs"][k]
             if v is None:
-                row += '<td class="num" data-w="' + str(k) + '">&mdash;'
+                cell = '<td class="num" data-w="' + str(k) + '">&mdash;'
             else:
-                row += '<td class="num" data-w="' + str(k) + '">' + fmt_num(v / div)
+                cell = '<td class="num" data-w="' + str(k) + '">' + fmt_num(v / div)
             if r is not None:
-                row += ' <span class="badge skip">#' + str(r) + "</span>"
+                cell += ' <span class="badge skip">#' + str(r) + "</span>"
             if p is not None and cur_phv is not None and p != cur_phv:
-                row += (' <span class="badge warn" title="Plan changed. Prior PHV '
-                        + str(p) + '">plan&#8593;</span>')
-            row += "</td>"
+                cell += (' <span class="badge warn" title="Plan changed. Prior PHV '
+                         + str(p) + '">plan&#8593;</span>')
+            parts.append(cell + "</td>")
         text_short = (w.sql_by_id[sid].text or "")[:401]
-        row += ('<td class="mono sqltext">' + esc(text_short[:400])
-                + ("&hellip;" if len(text_short) > 400 else "") + "</td>")
-        row += "</tr>"
-        put(row)
+        parts.append('<td class="mono sqltext">' + esc(text_short[:400])
+                     + ("&hellip;" if len(text_short) > 400 else "") + "</td></tr>")
+        put(h.wg_lines(parts))
         # v1.6.0 Timeline: the SQL lane (first six of the elapsed ranking)
         if dim == "ELAPSED" and len(tl_rows) < 6:
             csv = h.tl_csv(w, _chart_vals(s["vals"], div))
@@ -468,8 +471,8 @@ def emit(w) -> str:
     # AWR_DATA.topSql + bump-chart script ------------------------------
     if dim_seen:
         put("<script>(function(){")
-        put("AWR_DATA.topSql={weeks:" + weeks_json + ",weeksIso:" + weeks_iso_json
-            + ",topN:" + str(top_n) + ",dims:{")
+        put(h.wg_lines(["AWR_DATA.topSql={weeks:", weeks_json, ",weeksIso:", weeks_iso_json,
+                        ",topN:" + str(top_n) + ",dims:{"]))
         # PL/SQL INDEX BY VARCHAR2 iterates in key order
         for i, dim in enumerate(sorted(dim_seen)):
             if i:

@@ -1292,7 +1292,30 @@ left padding and a lower specificity).
   the old 16-entry `offset_labels` DEFINE is gone (a DEFINE caps at 240
   chars). Check with the demo: `demo/awrdemo/model.py`'s WEEKS_BACK /
   STEP_HOURS / WIN_HOURS can be patched from a scratch script and no output
-  line may pass 32767 bytes (tested: 168 hourly, 52 weekly, 2 h every 1 h).
+  line may pass 32767 bytes (tested: 168 hourly, 52 weekly, 2 h every 1 h;
+  past about 100 days also move SNAP_FIRST back, or the old windows are
+  skipped and every string stays short).
+  **06 has no per-window `LISTAGG` any more** (v1.7 review): its
+  per-statement CSVs (`week_vals` / `week_rnks` / `week_phvs`, up to 25 B
+  a window) and its two window-label lists (15-19 B) passed 4000 near 200
+  windows, sooner since Biggest change (a value in every window the
+  statement ran). Its cursors return one row per (dim, statement or group,
+  window) with the statement's values as analytics; the loop keeps each
+  window's tokens in collections keyed by week_offset (`v_wv` / `v_wr` /
+  `v_wp`) and renders on the last window (`CONTINUE WHEN`); the header and
+  detail rows go through `wg_buf` one cell at a time; the label lists are
+  built in a loop. Demo at 365 daily windows: the old CSV would have been
+  6953 B, every 06 line is now under 32767 (the chart JSON keeps its
+  32500 cap and "first n of m" note). **The rest of the report still stops
+  near 210 windows** (pre-existing, not fixed): the ISO window-label
+  `LISTAGG`s of 14 / 15 / 18 (19 B a window: 4000 at about 210), the
+  hourly label `LISTAGG`s of 04 / 05 (15 B: about 266), 07's card window
+  grids (`wg_bars` returns one VARCHAR2: about 145 B a window on dbmint,
+  32767 at about 226) and the per-row value `LISTAGG`s of 02 / 03 / 04 /
+  05 / 07 / 13 / 14 / 15 / 18 (6-24 B a window, data-dependent: 4000 at
+  about 250 windows on the busy demo, 450-650 on dbmint's 168-hourly
+  run). Lifting that is its own change (06's pattern, plus streaming
+  `wg_bars`).
 - **Overlapping windows (win_hours > step_hours)** share samples: 09 counts
   an ASH sample toward EVERY window containing it (`j_lo..j_hi`), else each
   window held only `step` hours but was divided by `win_hours` (review #4).
@@ -1849,6 +1872,7 @@ separate slice. Per-row CSVs via `LISTAGG(... ORDER BY week_offset DESC)`
 `Number()` parses under any NLS. The micro strip floors σ at 2% of |mean| (the
 policy's floor), the fleet sparkline has a 2% flatness floor (midline instead of
 magnified noise). Sections that re-grid one column per week
+(06 excepted: one cursor row per window, see the per-window gotcha)
 parse the CSV with `nth_csv` (INSTR-based, preserves empty tokens; `@@`-included
 just before `BEGIN`). These CSVs are **positional** (slot k = kth week in the
 ORDER BY) and LISTAGG drops NULL measures *and their delimiter*, so a nullable

@@ -271,6 +271,16 @@ release bumps `awr_version`).
   time, stopping before the 32767-byte line limit; a cut shows in the
   existing "truncated, N chars total" note. Statements that rendered
   before produce the same output.
+- **Top SQL no longer limits the window count.** Section 06 built each
+  statement's per-window values, ranks and plan hashes, and the window
+  labels, as SQL `LISTAGG` strings, capped at 4000 bytes: near 200
+  compared windows (sooner since *Biggest change*, which has a value in
+  every window a statement ran) the run ended with `ORA-01489`, and a
+  detail row with many plan badges passed the 32767-byte line. It now
+  reads one row per window and streams the header and rows a cell at a
+  time; output for the usual window counts is byte-identical. Other
+  sections still stop the report near 210 windows (window-label lists in
+  14, 15 and 18, the finding cards' window grids in 07); see CLAUDE.md.
 - **A changed parameter's window list no longer overflows.** The verdict's
   configuration note lists the prior windows in which a changed parameter
   differs from the Current window; with many compared windows that list
