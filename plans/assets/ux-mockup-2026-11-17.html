@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Summary view mockup</title>
+<style>
+/* Standalone fallbacks: the mockup was drawn for a host that supplies these
+   theme variables. Opened directly in a browser, these apply instead. */
+:root{--background:#eceef1;--foreground:#12161d;--muted-foreground:#5d6672;--card:#ffffff;--border:#d9dfe6;--secondary:#f4f6f8;--code-background:#eef1f5;--popover:#ffffff;--popover-foreground:#12161d;--radius:10px;--font-sans:"Inter","Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;--font-mono:ui-monospace,Menlo,Consolas,monospace}
+@media (prefers-color-scheme: dark){:root{--background:#0e1013;--foreground:#e4e7eb;--muted-foreground:#8d95a1;--card:#161b23;--border:#2a323d;--secondary:#1f242b;--code-background:#1b1f25;--popover:#1b1f25;--popover-foreground:#e4e7eb}}
+html{background:var(--background);color:var(--foreground);font-family:var(--font-sans)}
+body{margin:0 auto;max-width:760px;padding:24px 16px 80px}
+</style>
+<style>
+:root{
+  --chg:#d6338a;
+  --acc:#6d5ae6;
+  --acc-ink:color-mix(in oklab,#6d5ae6 72%,var(--foreground));
+  --acc-band:color-mix(in oklab,#6d5ae6 12%,transparent);
+  --crit:#e5483d; --warn:#d9921a;
+  --c-cpu:#3FB344; --c-uio:#4A90D9; --c-net:#967259; --c-com:#E89B40; --c-oth:#C77CB0; --c-app:#D62728;
+  --ink:var(--foreground); --mut:var(--muted-foreground); --line:var(--border);
+  --zone:color-mix(in oklab,var(--foreground) 8%,transparent);
+  --zone2:color-mix(in oklab,var(--foreground) 14%,transparent);
+  --bar:color-mix(in oklab,var(--foreground) 28%,transparent);
+  --mkline:color-mix(in oklab,var(--foreground) 32%,transparent);
+  --soft:color-mix(in oklab,var(--foreground) 6%,transparent);
+}
+#mock{position:relative;font-size:13px;line-height:1.5;color:var(--ink)}
+#mock *{box-sizing:border-box}
+#mock h1,#mock h2,#mock h3{margin:0;font-weight:600}
+.mut{color:var(--mut)}
+.crit{color:var(--crit)} .warn{color:var(--warn)}
+.small{font-size:12px}
+.ent{color:inherit;text-decoration:none;border-bottom:1px dotted currentColor}
+code,.mono{font-family:var(--font-mono);font-size:12px}
+code{background:var(--code-background);padding:1px 5px;border-radius:4px}
+
+/* change highlighting */
+.chg{position:relative;outline:2px dashed var(--chg);outline-offset:3px;border-radius:6px}
+.pn.chg{border-radius:var(--radius)}
+.nbs{position:absolute;top:-13px;right:10px;display:flex;gap:4px;z-index:3}
+.nbs i{font-style:normal;background:var(--chg);color:#fff;font:600 11px/20px var(--font-sans);min-width:20px;height:20px;border-radius:10px;text-align:center;padding:0 6px}
+.why{margin:12px 0 0;padding:7px 10px;border-left:3px solid var(--chg);background:color-mix(in oklab,var(--chg) 8%,transparent);font-size:12px;line-height:1.45;border-radius:0 6px 6px 0}
+.why b{color:var(--chg)}
+.why s{color:var(--mut)}
+#mock.clean .chg{outline:none}
+#mock.clean .nbs,#mock.clean .why{display:none}
+
+.ctl{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;font-size:12px;color:var(--mut);margin-bottom:6px}
+.ctl label{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--ink);font-weight:500}
+.ctl .key{display:inline-block;width:22px;height:12px;border:2px dashed var(--chg);border-radius:3px;vertical-align:-2px;margin-right:4px}
+
+.pn{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-top:22px;position:relative}
+#mock .sh2{display:flex;align-items:baseline;gap:10px;margin:34px 0 0;font-size:16px}
+.sh2 small{font-weight:400;font-size:12px;color:var(--mut)}
+
+/* top bar */
+.tb{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:10px 14px}
+.tb .db{font-size:14px}
+.cur{background:var(--acc-band);color:var(--acc-ink);font-weight:600;font-size:11px;padding:1px 8px;border-radius:10px}
+.tb .sp{flex:1}
+.vs{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;font-size:12px}
+.vs span{padding:3px 9px}
+.vs .on{background:var(--foreground);color:var(--background);font-weight:600}
+.btn{font:inherit;font-size:12px;font-weight:500;color:var(--ink);background:var(--secondary);border:1px solid var(--line);border-radius:6px;padding:3px 10px;cursor:pointer}
+.btn:hover{border-color:var(--mut)}
+.inl{display:inline-block}
+.inl .nbs{right:-10px}
+#sumbox pre{margin:8px 0 0;white-space:pre-wrap;font-family:var(--font-mono);font-size:11.5px;line-height:1.5;background:var(--code-background);padding:10px;border-radius:6px}
+
+/* verdict */
+.vd{font-size:21px;line-height:1.32;font-weight:500 !important;letter-spacing:-.01em}
+.src{margin:8px 0 0;color:var(--mut)}
+.src code{color:var(--ink)}
+.blk{margin-top:18px;padding:12px;border-radius:6px}
+.atth{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px 12px}
+.attbar{display:flex;gap:2px;height:26px;margin:8px 0 8px}
+.attbar i{display:flex;align-items:center;padding:0 7px;color:#fff;font:600 11px var(--font-sans);font-style:normal;border-radius:3px;white-space:nowrap;overflow:hidden;cursor:pointer}
+.hatch{background:repeating-linear-gradient(135deg,var(--c-cpu) 0 4px,color-mix(in oklab,var(--c-cpu) 35%,transparent) 4px 8px)}
+.attlg{display:flex;flex-wrap:wrap;gap:4px 16px;margin:0;padding:0;list-style:none;font-size:12px}
+.attlg li{display:flex;align-items:center;gap:6px}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;flex:none}
+.cnt{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin-top:16px}
+.cnt .big{font-size:16px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none}
+.dot.crit{background:var(--crit)} .dot.warn{background:var(--warn)} .dot.ok{border:1.5px solid var(--mut)}
+
+/* activity */
+.ah{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.ah h2{font-size:15px}
+.ah h2 small{font-weight:400;color:var(--mut);font-size:12px;margin-left:6px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg button{font:inherit;font-size:12px;background:none;border:0;color:var(--mut);padding:3px 10px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--secondary);color:var(--ink);font-weight:600}
+.lg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;margin:10px 0 4px;color:var(--mut)}
+.lg span{display:flex;align-items:center;gap:5px}
+svg.ch{display:block;width:100%;overflow:visible}
+svg text{font-family:var(--font-sans)}
+#tip{position:absolute;pointer-events:none;z-index:9;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font-size:11.5px;line-height:1.45;box-shadow:0 4px 14px rgba(0,0,0,.18);display:none;min-width:150px}
+#tip b{font-weight:600}
+#tip .r{display:flex;justify-content:space-between;gap:12px}
+
+/* triage */
+.tri{padding:6px 0}
+.trh,.trr{display:grid;grid-template-columns:minmax(0,1fr) 128px 148px 84px;gap:12px;align-items:center;padding:9px 16px}
+.trh{font-size:11px;color:var(--mut);padding-top:6px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.trr{border-bottom:1px solid var(--line);cursor:pointer}
+.trr:last-child{border-bottom:0}
+.trr:hover{background:var(--soft)}
+.trr.tot{background:var(--soft)}
+.trr.nf{color:var(--mut)}
+.fn{display:flex;flex-wrap:wrap;align-items:center;gap:2px 7px;min-width:0}
+.fn b{font-weight:600;color:var(--ink)}
+.x{font-weight:700}
+.tags{display:flex;flex-wrap:wrap;gap:4px;width:100%;margin-top:3px}
+.tag{font-size:11px;padding:0 7px;border-radius:9px;border:1px solid var(--line);color:var(--ink);background:var(--card);white-space:nowrap}
+.tag.t-rel{border-color:color-mix(in oklab,var(--acc) 50%,var(--line))}
+.nv{display:flex;flex-direction:column;font-size:12px;line-height:1.35}
+.nv b{font-size:13px}
+.shr{display:flex;flex-direction:column;gap:3px;font-size:12px}
+.sbar{height:8px;border-radius:4px;background:var(--zone)}
+.sbar i{display:block;height:100%;border-radius:4px}
+svg.ms{display:block}
+
+/* cards */
+.ch{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px}
+.sev{display:flex;align-items:center;gap:6px;font-weight:600;font-size:12px}
+.impc{font-size:12px;font-weight:600;padding:2px 9px;border-radius:10px;background:color-mix(in oklab,var(--c-uio) 16%,transparent)}
+.zc{margin-left:auto;font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px}
+.bdg{position:relative;width:88px;height:8px;border-radius:4px;background:var(--zone)}
+.bdg:before{content:"";position:absolute;left:28%;width:16%;top:0;bottom:0;background:var(--zone2)}
+.bdg i{position:absolute;right:-5px;top:-2px;width:12px;height:12px;border-radius:50%;background:var(--crit);border:2px solid var(--card)}
+#mock .card h3{font-size:18px;margin-top:8px;font-weight:500}
+.cg{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin-top:10px}
+.bl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px}
+.bigv{font-size:30px;font-weight:600;line-height:1.1;letter-spacing:-.02em}
+.bigv small{font-size:13px;font-weight:400;color:var(--mut);margin-left:3px}
+.note{font-size:12px;color:var(--mut);margin-top:2px}
+.ev{margin:0;padding:0;list-style:none}
+.ev li{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:10px;padding:8px 0;border-top:1px solid var(--line);align-items:start;font-size:12px}
+.ev .k{color:var(--mut)}
+.ev .e b{font-weight:500;font-size:13px}
+.ev .e span{display:block;color:var(--mut)}
+.ev .d{text-align:right;font-weight:600;white-space:nowrap}
+.ev li.chg{outline-offset:2px;margin:6px 0;padding:8px 6px;border-top:0}
+.hint{padding:10px 12px;border-radius:6px;background:var(--soft);font-size:12.5px}
+.hint b{font-weight:600}
+.next{display:flex;flex-direction:column;gap:6px}
+.code{position:relative;font-family:var(--font-mono);font-size:11.5px;background:var(--code-background);border-radius:6px;padding:8px 70px 8px 10px;white-space:pre-wrap;word-break:break-all}
+.code .btn{position:absolute;top:6px;right:6px;font-size:11px;padding:1px 8px}
+.cf{display:flex;gap:16px;font-size:12px;margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.cf a{color:var(--ink)}
+.expl{font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:10px;border:1px solid var(--chg);color:var(--ink)}
+details.pn{padding:0}
+details.pn>summary{list-style:none;cursor:pointer;padding:12px 16px;display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px}
+details.pn>summary::-webkit-details-marker{display:none}
+details.pn>summary:before{content:"\25B8";color:var(--mut);font-size:11px;transition:transform .15s}
+details[open].pn>summary:before{transform:rotate(90deg)}
+details.pn>.body{padding:0 16px 14px 34px;color:var(--mut);font-size:12px}
+.stack>details.pn{margin-top:8px}
+
+/* tables */
+table.t{width:100%;border-collapse:collapse;font-size:12px}
+table.t th{font-weight:500;color:var(--mut);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.t td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.t tr:last-child td{border-bottom:0}
+table.t .num{text-align:right;font-variant-numeric:tabular-nums}
+table.t th.sorted{color:var(--ink);font-weight:600}
+.badge{font-size:10.5px;font-weight:600;padding:0 6px;border-radius:8px;background:color-mix(in oklab,var(--warn) 18%,transparent);color:var(--ink);margin-left:6px}
+tr.fl td:first-child{box-shadow:inset 3px 0 0 var(--crit)}
+
+/* timeline excerpt */
+.tlbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.tlbar label{display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer}
+.tlg{font-size:11px}
+.tlr{display:grid;grid-template-columns:150px repeat(13,minmax(0,1fr)) 84px;align-items:end;border-top:1px solid var(--line)}
+.tlr.hd{border-top:0;align-items:end;color:var(--mut);font-size:10.5px;line-height:1.2}
+.tlr.hd div{text-align:center;padding-bottom:4px}
+.tlr.hd .cw{color:var(--acc-ink);font-weight:700}
+.tll{align-self:center;padding:6px 8px 6px 0;font-size:12px;line-height:1.3;min-width:0}
+.tll b{font-weight:500;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tll span{color:var(--mut);font-size:11px;padding-left:16px}
+.tc{height:44px;position:relative;border-left:1px solid var(--soft)}
+.tc.mk{border-left:1px dashed var(--mkline)}
+.tc.cw{background:var(--acc-band)}
+.tc i{position:absolute;bottom:3px;left:22%;right:22%;background:var(--bar);border-radius:2px 2px 0 0}
+.tc.cw i{background:var(--acc);left:16%;right:16%}
+.tc i.brk:after{content:"";position:absolute;left:-3px;right:-3px;top:7px;height:4px;background:var(--card);transform:skewY(-18deg)}
+.tc i.brk:before{content:"";position:absolute;left:-3px;right:-3px;top:4px;height:1px;background:var(--acc);transform:skewY(-18deg)}
+.tv{align-self:center;text-align:right;font-size:12px;line-height:1.3;padding-left:6px}
+.tv b{display:block;font-weight:600}
+.tlr.nf{display:none}
+#tl.all .tlr.nf{display:grid}
+
+/* rail */
+.rails{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.rail h4{margin:0 0 6px;font-size:11px;font-weight:600;color:var(--mut);text-transform:none}
+.rail ul{list-style:none;margin:0;padding:0;font-size:12.5px}
+.rail li{display:flex;align-items:center;gap:7px;padding:4px 8px;border-radius:6px}
+.rail li .p{margin-left:auto;display:flex;gap:4px}
+.pill{font-size:10.5px;font-weight:600;padding:0 6px;border-radius:8px;line-height:17px}
+.pill.c{background:color-mix(in oklab,var(--crit) 18%,transparent);color:var(--crit)}
+.pill.w{background:color-mix(in oklab,var(--warn) 22%,transparent);color:var(--warn)}
+.pill.n{background:var(--secondary);color:var(--ink)}
+.rail li.sub{padding-left:22px;color:var(--mut);font-size:12px}
+.foot{margin-top:24px;font-size:12px;color:var(--mut)}
+</style>
+</head>
+<body>
+<div id="mock">
+
+<div class="ctl">
+  <span><span class="key"></span>dashed outline + number = a change from the review list (same numbers). Data from the demo report.</span>
+  <label><input type="checkbox" id="hl" checked> Highlight changes</label>
+</div>
+
+<!-- ===== top bar ===== -->
+<header class="pn tb">
+  <b class="db">ORCLPRD</b><span class="mut small">prd-ora-01 &middot; 19c</span>
+  <span class="cur">Current</span><b>Thu 10 Sep, 09:00&ndash;10:00</b><span class="mut small">vs 12 prior windows, every 1w</span>
+  <span class="sp"></span>
+  <span class="vs"><span class="on">Summary</span><span>Timeline</span><span>All sections</span></span>
+  <span class="chg inl"><span class="nbs"><i>15</i></span><button class="btn" id="cpy">Copy summary</button></span>
+</header>
+<div class="pn" id="sumbox" hidden>
+  <div class="small"><b id="cpst">Copied to the clipboard</b> <span class="mut">(Markdown, for a ticket or chat)</span></div>
+  <pre id="sumtxt"></pre>
+</div>
+<p class="why"><b>15 &middot; New: Copy summary.</b> Puts the verdict, the likely source and the ranked findings on the clipboard as Markdown. Click it to see the text. <s>Today: only per-table CSV / MD buttons.</s></p>
+
+<!-- ===== verdict hero (now first) ===== -->
+<section class="pn" id="verdict">
+  <h1 class="vd">Physical reads <span class="crit">5.4&times;</span> normal, most of it on <a class="ent" href="#card-io">ORDERS_APP.ORDER_LINES</a>; DB time up <span class="crit">79.7%</span>, mostly wait.</h1>
+  <p class="src">Likely source: <code>7k2m9dx4qp1zb</code> ran with a new plan in the Current window, after Release 4.2 (Tue 8 Sep).</p>
+
+  <div class="chg blk" id="att">
+    <span class="nbs"><i>2</i></span>
+    <div class="atth"><b>Where the extra DB time went</b><span class="small"><span class="mut">DB time</span> <span id="dbt-from"></span> &rarr; <span id="dbt-to"></span> AAS, <b id="dbt-d"></b></span></div>
+    <div class="attbar" id="attbar"></div>
+    <ul class="attlg" id="attlg"></ul>
+    <p class="why"><b>2 &middot; New: DB-time breakdown.</b> The DB-time increase split by wait class, from the ASH data already in the report (<code>ashx.winfg</code>). The hatched CPU slice grew too but stays inside its normal range, so it is not a finding. <s>Today: only "DB time up 79.7%, mostly wait".</s></p>
+  </div>
+
+  <div class="chg cnt" id="cnt">
+    <span class="nbs"><i>3</i></span>
+    <b class="big">4 findings</b>
+    <span class="small"><span class="dot crit"></span> 3 large &nbsp;<span class="dot warn"></span> 1 moderate</span>
+    <span class="small mut">&middot; also: 1 plan change &middot; 4 parameters changed &middot; 30 metrics normal</span>
+  </div>
+  <p class="why"><b>3 &middot; One count.</b> A finding is a card, everywhere: here, in the Findings header and in the rail (see the rail at the end). <s>Today: pills "4 findings / 11 metrics moved", header "10 large &middot; 1 moderate", rail pills that add up to about 37.</s></p>
+</section>
+
+<!-- ===== activity, compact ===== -->
+<section class="pn chg" id="act">
+  <span class="nbs"><i>4</i><i>5</i></span>
+  <div class="ah">
+    <h2>Activity <small>ASH, average active sessions, by wait class</small></h2>
+    <span class="seg" id="amode"><button data-m="win" class="on">Windows side by side</button><button data-m="span">Full span</button></span>
+  </div>
+  <div class="lg">
+    <span><i class="sw" style="background:var(--c-cpu)"></i>CPU</span>
+    <span><i class="sw" style="background:var(--c-uio)"></i>User I/O</span>
+    <span><i class="sw" style="background:var(--c-com)"></i>Commit</span>
+    <span><i class="sw" style="background:var(--c-net)"></i>Network</span>
+    <span><i class="sw" style="background:var(--c-oth)"></i>Other classes</span>
+    <span id="anote" style="margin-left:auto"></span>
+  </div>
+  <svg class="ch" id="actsvg" height="150"></svg>
+  <p class="small mut" style="margin:6px 0 0">&#9662; Expand: the wait-class and wait-event charts with zoom, pin and highlight, as today.</p>
+  <p class="why"><b>4 &middot; Below the verdict, one 150 px chart.</b> The answer is on the first screen. <s>Today: two 200 px charts above the verdict, the headline started around y 850.</s></p>
+  <p class="why"><b>5 &middot; New mode: Windows side by side.</b> The 13 compared hours as 13 panels, minute by minute, from the 1-minute data already in the payload; the comparison is visible as shapes. Switch to Full span for the 3-month view. <s>Today: only the 3-month axis, where each window is a 1 px stripe.</s></p>
+</section>
+
+<!-- ===== findings ===== -->
+<h2 class="sh2">Findings <small>4, ranked by share of the DB-time rise</small></h2>
+
+<section class="pn chg tri" id="triage">
+  <span class="nbs"><i>1</i><i>6</i><i>8</i></span>
+  <div class="trh"><span>Finding</span><span>Now / normal</span><span>Share of the DB-time rise</span><span>13 windows</span></div>
+  <div id="trows"></div>
+  <div style="padding:0 16px 14px">
+    <p class="why"><b>1 &middot; Ranked by impact, not by z.</b> The order is each finding's share of the extra DB time. z still decides whether a metric is flagged, and is shown capped (&gt;10&sigma;). <s>Today: large before moderate, then |z|, so Network (+57.9&sigma;, 11% of the rise) looks as urgent as Physical I/O (70%).</s></p>
+    <p class="why"><b>6 &middot; New triage list.</b> Every finding on one screen; click a row to open its card. <s>Today: four 600 px cards, 2.5 screens.</s></p>
+    <p class="why"><b>8 &middot; Pattern tags.</b> Spike, step, trend, or "after a release", read from the 13 values and the release markers. A step at a release suggests a regression; a one-window spike may not recur.</p>
+  </div>
+</section>
+
+<!-- Physical I/O card -->
+<section class="pn card" id="card-io">
+  <div class="ch">
+    <span class="sev"><span class="dot crit"></span>Large</span>
+    <span class="chg inl"><span class="nbs"><i>1</i></span><span class="impc">+6.3 AAS &middot; 70% of the DB-time rise</span></span>
+    <span class="zc">z <b class="crit">&gt;10&sigma;</b><span class="bdg"><i></i></span></span>
+  </div>
+  <h3>Physical reads <span class="crit" id="io-x">5.4&times;</span> normal</h3>
+  <div class="cg">
+    <div>
+      <div class="chg bl" id="bsel">
+        <span class="nbs"><i>8</i><i>9</i></span>
+        <span class="mut">Baseline</span>
+        <span class="seg" id="bseg"><button data-b="mean" class="on">All 12 &middot; mean &plusmn; 2&sigma;</button><button data-b="robust">All 12 &middot; robust</button><button data-b="since">Since Release 4.1</button></span>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-top:12px">
+        <div class="bigv">22.24 k<small>/s</small></div>
+        <div><div class="small" id="io-norm"></div><div class="note" id="io-note"></div></div>
+      </div>
+      <div class="chg" style="margin-top:10px">
+        <span class="nbs"><i>6</i></span>
+        <svg class="ch" id="iosvg" height="170"></svg>
+      </div>
+      <p class="why"><b>6 &middot; Quieter chart.</b> Prior values on hover only, release lines without labels (names in the hero strip's ruler; the one that matters is named here). <s>Today: 12 numbers and 5 flag labels over every card's chart.</s></p>
+      <p class="why"><b>8, 9 &middot; Baseline switch.</b> Mean &plusmn; 2&sigma; (today), a robust median &plusmn; MAD (one bad prior window cannot widen "normal"), or only the windows since the last release. Try "robust": the four windows since Release 4.1 already sit above normal, so the step at 4.1 shows up too.</p>
+    </div>
+    <div>
+      <ul class="ev">
+        <li><span class="k">Segment</span><span class="e"><b class="ent">ORDERS_APP.ORDER_LINES</b><span>95.07 M blocks read, normal 8.49 M</span></span><span class="d crit">&#9650; &times;11.2</span></li>
+        <li><span class="k">Event</span><span class="e"><b class="ent">db file scattered read</b><span>3.85 AAS, normal 0.19 AAS</span></span><span class="d crit">+3.7 AAS<br><span style="font-weight:400">&#9650; &times;20.6</span></span></li>
+        <li><span class="k">Event</span><span class="e"><b class="ent">direct path read</b><span>2.36 AAS, normal 0.20 AAS</span></span><span class="d crit">+2.2 AAS<br><span style="font-weight:400">&#9650; &times;12.0</span></span></li>
+        <li class="chg"><span class="nbs"><i>7</i></span><span class="k">SQL</span><span class="e"><b class="ent mono">7k2m9dx4qp1zb</b><span>700 gets / exec, was 38 &middot; new plan 3197245811 &rarr; 2088341150</span><a class="expl" href="#card-plan" style="display:inline-block;margin-top:4px;text-decoration:none">explains this &darr;</a></span><span class="d crit">&#9650; &times;18.4</span></li>
+      </ul>
+      <p class="why"><b>7 &middot; The cause sits next to its effect.</b> The I/O card names the SQL by reads, and the plan card follows right below. <s>Today: no SQL on this card; the plan card sits in "What changed around it", after every finding.</s> <b>12:</b> event rows in AAS, plus the added DB time.</p>
+      <div class="chg hint" style="margin-top:12px">
+        <span class="nbs"><i>14</i></span>
+        <b>What this usually means.</b> Scattered reads &times;20.6 with table scans (long tables) &times;29.7 point to full table scans. ORDER_LINES takes 11&times; its normal reads, and <code>7k2m9dx4qp1zb</code> changed plan in this window: compare its two plans.
+        <div class="next" style="margin-top:10px">
+          <span class="small mut">Next step</span>
+          <div class="code"><button class="btn cpb">Copy</button>SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY_AWR('7k2m9dx4qp1zb', 3197245811));
+SELECT * FROM TABLE(DBMS_XPLAN.DISPLAY_AWR('7k2m9dx4qp1zb', 2088341150));</div>
+        </div>
+      </div>
+      <p class="why"><b>14 &middot; New: interpretation + next step.</b> Rule-based hint lines from known event patterns, and a copyable follow-up query per card (section 18 already does this for SQL Monitor).</p>
+    </div>
+  </div>
+  <div class="cf"><a class="ent" href="#">Segment I/O</a><a class="ent" href="#">Top SQL</a><a class="ent" href="#">Timeline &rarr;</a></div>
+</section>
+
+<!-- plan card, now right after the card it explains -->
+<section class="pn card chg" id="card-plan">
+  <span class="nbs"><i>7</i><i>12</i></span>
+  <div class="ch">
+    <span class="sev">&#9670; Plan change</span>
+    <span class="expl">explains Physical I/O &uarr;</span>
+  </div>
+  <h3><span class="mono" style="font-size:16px">7k2m9dx4qp1zb</span> new plan after Release 4.2 (Tue 8 Sep)</h3>
+  <div class="small mut" style="margin-top:2px">ORDERS_APP &middot; OrderService</div>
+  <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-top:10px">
+    <div class="bigv">7 h 45 m<small>elapsed in the window</small></div>
+    <div class="small">normal 1 h 36 m &ndash; 2 h 6 m &middot; <b class="crit">&#9650; &times;4.2</b></div>
+  </div>
+  <svg class="ch" id="plsvg" height="112" style="margin-top:8px"></svg>
+  <svg class="ch" id="plstep" height="36"></svg>
+  <p class="why"><b>12 &middot; Human units.</b> "7 h 45 m elapsed". <s>Today: "27.92 k s elapsed", normal "5,785&ndash;7,552 s".</s> <b>7:</b> placed under the card it explains, with an "explains" chip.</p>
+</section>
+
+<div class="stack chg" style="margin-top:22px;padding:0;border-radius:var(--radius)">
+  <span class="nbs"><i>6</i></span>
+  <details class="pn" id="card-net"><summary><span class="dot crit"></span><b>Network waits 5.2&times; normal</b><span class="small mut">1.175 AAS &middot; +0.95 AAS (11%) &middot;</span><span class="tag">spike: this window only</span></summary><div class="body">Card content as today: 13-window chart, evidence (SQL*Net more data to client &times;5.5, SQL*Net more data from client &#9650;54%), links.</div></details>
+  <details class="pn" id="card-com"><summary><span class="dot warn"></span><b>Commit waits up 22.5%</b><span class="small mut">0.869 AAS &middot; +0.16 AAS (2%) &middot;</span><span class="tag t-rel">step at Release 4.1</span></summary><div class="body">Card content as today: 13-window chart, evidence (log file sync &#9650;22.5%), links.</div></details>
+</div>
+<p class="why"><b>6 &middot; Smaller findings start folded</b> to one line each; the triage list and a click open them. <s>Today: every card fully open.</s></p>
+
+<details class="pn chg" style="margin-top:22px">
+  <summary><span class="dot ok"></span><b>30 metrics checked and normal</b><span class="small mut">&middot; 5 moved too little to matter &middot; nothing improved materially</span><span class="nbs"><i>13</i></span></summary>
+  <div class="body">The 18 tiles and the "Moved, too small to matter" / "Improved" lists, as today.</div>
+</details>
+<p class="why"><b>13 &middot; Folded to one line.</b> Still says the rest was checked. <s>Today: 18 tiles and two lists, a full screen.</s></p>
+
+<!-- ===== evidence library ===== -->
+<h2 class="sh2">Evidence library <small>every other section, one line each</small></h2>
+<section class="pn chg" id="sqlmon">
+  <span class="nbs"><i>10</i></span>
+  <div class="ch"><b>SQL Monitor</b><span class="small mut">13,205 captured executions; 1 plan change, 1 DOP downgrade</span><span class="small" style="margin-left:auto"><span class="dot crit"></span> 1 large</span></div>
+  <table class="t" style="margin-top:10px">
+    <thead><tr><th>SQL ID</th><th>User / module</th><th class="num">Current max</th><th class="num">Normal</th><th class="num sorted">vs normal &#9660;</th></tr></thead>
+    <tbody>
+      <tr class="fl"><td class="mono">7k2m9dx4qp1zb<span class="badge">plan changed</span></td><td>ORDERS_APP / OrderService</td><td class="num"><b>8.0 s</b></td><td class="num">0.95&ndash;2.1 s</td><td class="num crit"><b>&#9650; &times;5.3</b></td></tr>
+      <tr><td class="mono">9wz2ke6yq4tn1</td><td>REPORTING / ReportEngine</td><td class="num">3 m 33 s</td><td class="num">2 m 55 s&ndash;4 m 9 s</td><td class="num">&#9650; 0.6%</td></tr>
+      <tr><td class="mono">v8c2l5qs3wd7m</td><td>INVENTORY / DBMS_SCHEDULER</td><td class="num">40.2 s</td><td class="num">29&ndash;51 s</td><td class="num">&#9650; 0.2%</td></tr>
+      <tr><td class="mono">d8s3n5tw2xk7f</td><td>INVENTORY / InventorySync</td><td class="num">40.0 s</td><td class="num">32&ndash;53 s</td><td class="num">&#9660; 6.3%</td></tr>
+    </tbody>
+  </table>
+  <p class="why"><b>10 &middot; Sorted by change vs normal</b> (Top SQL likewise opens on a "Biggest change" tab). <s>Today: sorted by Current max elapsed, the only flagged statement was 4th.</s></p>
+</section>
+
+<!-- ===== timeline excerpt ===== -->
+<h2 class="sh2">Timeline view <small>excerpt: the Waits lane</small></h2>
+<section class="pn chg" id="tl">
+  <span class="nbs"><i>11</i><i>12</i></span>
+  <div class="tlbar">
+    <span class="seg"><button class="on" id="tl-flag">Flagged only</button><button id="tl-all">All rows</button></span>
+    <span class="small mut">sorted by added DB time &middot; values in AAS</span>
+  </div>
+  <div id="tlg"></div>
+  <p class="why"><b>11 &middot; Rows scale to the prior windows;</b> a Current bar that does not fit is broken at the top and labelled. Normal variation stays readable. "Flagged only" and a sort by impact. <s>Today: each row scaled to its Current value, so &times;20 left the priors as flat stubs.</s></p>
+  <p class="why"><b>12 &middot; Every wait row in AAS</b>, like the wait classes. <s>Today: event rows "13.87 k" with no unit.</s></p>
+</section>
+
+<!-- ===== rail ===== -->
+<h2 class="sh2">Rail <small>left navigation, before and after</small></h2>
+<section class="pn chg">
+  <span class="nbs"><i>3</i></span>
+  <div class="rails">
+    <div class="rail"><h4>Today</h4><ul>
+      <li><span class="dot crit"></span>Findings<span class="p"><span class="pill c">10</span><span class="pill w">1</span></span></li>
+      <li><span class="dot crit"></span>Load profile<span class="p"><span class="pill c">5</span></span></li>
+      <li><span class="dot crit"></span>Metrics<span class="p"><span class="pill c">8</span></span></li>
+      <li><span class="dot crit"></span>Waits &mdash; foreground<span class="p"><span class="pill c">7</span><span class="pill w">2</span></span></li>
+      <li><span class="dot warn"></span>Waits &mdash; background<span class="p"><span class="pill w">8</span></span></li>
+      <li><span class="dot warn"></span>Top SQL<span class="p"><span class="pill w">6</span></span></li>
+      <li><span class="dot crit"></span>SQL Monitor<span class="p"><span class="pill c">1</span></span></li>
+    </ul></div>
+    <div class="rail"><h4>Proposed</h4><ul>
+      <li><span class="dot crit"></span><b>Findings</b><span class="p"><span class="pill n">4</span></span></li>
+      <li class="sub">Physical I/O &middot; 70%</li>
+      <li class="sub">Network &middot; 11%</li>
+      <li class="sub">Commit &middot; 2%</li>
+      <li><span class="dot crit"></span>Load profile</li>
+      <li><span class="dot crit"></span>Metrics</li>
+      <li><span class="dot crit"></span>Waits &mdash; foreground</li>
+      <li><span class="dot ok"></span>Waits &mdash; background <span class="small mut">(shift, demoted)</span></li>
+      <li><span class="dot ok"></span>Top SQL <span class="small mut">(ranked)</span></li>
+      <li><span class="dot crit"></span>SQL Monitor</li>
+    </ul></div>
+  </div>
+  <p class="why"><b>3 &middot; One number in the rail:</b> the 4 findings, each with its share. Sections keep a status dot, no row counts (the row counts stay in each section's header). <s>Today: pills count flagged table rows, including twins and ranked rows.</s></p>
+</section>
+
+<p class="foot">Not mocked: 16 (draw section 11's per-SQL charts on open), 17 (direct labels on the wait-event chart), 18 (density instead of 3,000 dots in the SQL Monitor scatter). Per-minute values in "Windows side by side" are synthetic; every other number is from the demo report.</p>
+
+<div id="tip"></div>
+</div>
+
+<script>
+(function(){
+var $=function(s){return document.querySelector(s)};
+var NS='http://www.w3.org/2000/svg';
+function el(tag,attrs,parent,text){var e=document.createElementNS(NS,tag),st='';for(var k in attrs){if(k==='fill'||k==='stroke'||k==='font-family')st+=k+':'+attrs[k]+';';else e.setAttribute(k,attrs[k]);}if(st)e.setAttribute('style',st);if(text!=null)e.textContent=text;if(parent)parent.appendChild(e);return e;}
+function rnd(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;var t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function mean(a){return a.reduce(function(s,v){return s+v},0)/a.length;}
+function sd(a){var m=mean(a);return Math.sqrt(a.reduce(function(s,v){return s+(v-m)*(v-m)},0)/(a.length-1));}
+function median(a){var b=a.slice().sort(function(x,y){return x-y});var n=b.length;return n%2?b[(n-1)/2]:(b[n/2-1]+b[n/2])/2;}
+function mad(a){var m=median(a);return median(a.map(function(v){return Math.abs(v-m)}));}
+function fmt(v){if(v>=1e6)return (v/1e6).toFixed(2)+' M';if(v>=1e4)return (v/1e3).toFixed(2)+' k';if(v>=100)return Math.round(v).toLocaleString('en-US');if(v>=10)return v.toFixed(1);return v.toPrecision(3);}
+function dur(s){var h=Math.floor(s/3600),m=Math.round((s-h*3600)/60);if(m===60){h++;m=0;}return h?h+' h '+m+' m':m+' m';}
+function css(name){return getComputedStyle(document.getElementById('mock')).getPropertyValue(name).trim();}
+
+var D=['18 Jun','25 Jun','2 Jul','9 Jul','16 Jul','23 Jul','30 Jul','6 Aug','13 Aug','20 Aug','27 Aug','3 Sep','10 Sep'];
+var MK={2:['R4.0','Release 4.0'],3:['HF 4.0.1','Hotfix 4.0.1'],5:['RU 19.28','RU 19.28 patch'],8:['R4.1','Release 4.1'],12:['R4.2','Release 4.2']};
+var S={
+  dbt:[10.3,10.0,12.2,10.5,10.8,10.9,10.7,10.6,12.5,12.7,12.3,12.34,20.35],
+  cpu:[7.1,7.0,7.6,7.2,7.3,7.0,7.1,7.2,7.4,7.5,7.3,7.3,8.584],
+  uio:[1.8,1.7,2.4,1.8,1.9,1.7,1.8,1.8,2.2,2.3,2.1,2.2,8.285],
+  net:[0.214,0.211,0.239,0.214,0.22,0.226,0.212,0.208,0.244,0.252,0.241,0.249,1.175],
+  com:[0.689,0.62,0.759,0.666,0.68,0.627,0.697,0.627,0.83,0.755,0.776,0.782,0.8687],
+  prd:[3837,3767,3891,3774,3867,3527,3687,3768,4851,5072,4810,4869,22240],
+  ela:[6873,6392,6356,6080,6523,6669,6243,6397,6896,7637,7227,6730,27920]
+};
+S.oth=S.dbt.map(function(v,i){return v-S.cpu[i]-S.uio[i]-S.net[i]-S.com[i];});
+var KEYS=['cpu','uio','com','net','oth'];
+var COL={cpu:'#3FB344',uio:'#4A90D9',com:'#E89B40',net:'#967259',oth:'#C77CB0'};
+var NAME={cpu:'CPU',uio:'User I/O',com:'Commit',net:'Network',oth:'Other classes'};
+function pri(a){return a.slice(0,12);}
+
+/* ---------- highlight toggle ---------- */
+$('#hl').addEventListener('change',function(){$('#mock').classList.toggle('clean',!this.checked);layout();});
+
+/* ---------- attribution (2) ---------- */
+var dTot=S.dbt[12]-mean(pri(S.dbt));
+var att=KEYS.map(function(k){return {k:k,d:S[k][12]-mean(pri(S[k]))};}).sort(function(a,b){return b.d-a.d;});
+var FLAG={uio:'crit',net:'crit',com:'warn',cpu:'',oth:''};
+$('#dbt-from').textContent=mean(pri(S.dbt)).toFixed(1);
+$('#dbt-to').textContent=S.dbt[12].toFixed(1);
+$('#dbt-d').textContent='+'+dTot.toFixed(1)+' AAS';
+att.forEach(function(a){
+  var pct=a.d/dTot*100;
+  var i=document.createElement('i');
+  i.style.flex='0 0 calc('+pct.toFixed(2)+'% - 2px)';
+  if(a.k==='cpu')i.className='hatch';else i.style.background=COL[a.k];
+  if(pct>25)i.textContent=NAME[a.k]+' +'+a.d.toFixed(1)+' AAS';
+  i.title=NAME[a.k]+': +'+a.d.toFixed(2)+' AAS ('+pct.toFixed(0)+'%)';
+  i.addEventListener('click',function(){var t={uio:'card-io',net:'card-net',com:'card-com'}[a.k];if(t)go(t);});
+  $('#attbar').appendChild(i);
+  var li=document.createElement('li');
+  var st=FLAG[a.k]==='crit'?'<span class="dot crit"></span>finding':FLAG[a.k]==='warn'?'<span class="dot warn"></span>finding':'<span class="mut">inside normal</span>';
+  li.innerHTML='<i class="sw '+(a.k==='cpu'?'hatch':'')+'" style="'+(a.k==='cpu'?'':'background:'+COL[a.k])+'"></i>'+NAME[a.k]+' <b>+'+(a.d>=1?a.d.toFixed(1):a.d.toFixed(2))+'</b> <span class="mut">'+pct.toFixed(0)+'%</span> '+st;
+  $('#attlg').appendChild(li);
+});
+
+/* ---------- copy summary (15) ---------- */
+var SUM='**ORCLPRD**, Thu 10 Sep 09:00-10:00 vs 12 prior Thursdays\n'+
+ '- Verdict: physical reads 5.4x normal, most of it on ORDERS_APP.ORDER_LINES; DB time +79.7% (+'+dTot.toFixed(1)+' AAS), mostly wait.\n'+
+ '- Likely source: 7k2m9dx4qp1zb new plan (3197245811 -> 2088341150) after Release 4.2 (Tue 8 Sep).\n'+
+ '- Findings, by share of the DB-time rise: Physical I/O +6.3 AAS (70%), Network +0.95 (11%), Commit +0.16 (2%).\n'+
+ '- Config: optimizer_adaptive_plans FALSE -> TRUE in the Current window.\n'+
+ '- Next: compare plans with DBMS_XPLAN.DISPLAY_AWR(\'7k2m9dx4qp1zb\', <plan_hash>).';
+$('#sumtxt').textContent=SUM;
+function copy(txt,cb){try{navigator.clipboard.writeText(txt).then(function(){cb(true)},function(){cb(false)});}catch(e){cb(false);}}
+$('#cpy').addEventListener('click',function(){var b=$('#sumbox');b.hidden=!b.hidden;if(!b.hidden)copy(SUM,function(ok){$('#cpst').textContent=ok?'Copied to the clipboard':'Select the text below to copy';});});
+Array.prototype.forEach.call(document.querySelectorAll('.cpb'),function(b){b.addEventListener('click',function(){var t=b.parentNode.textContent.replace(/^Copy/,'');copy(t,function(ok){b.textContent=ok?'Copied':'Select';setTimeout(function(){b.textContent='Copy';},1400);});});});
+
+/* ---------- tooltip ---------- */
+var tip=$('#tip');
+function showTip(e,html){var r=$('#mock').getBoundingClientRect();tip.innerHTML=html;tip.style.display='block';var x=e.clientX-r.left+14,y=e.clientY-r.top+14;var w=tip.offsetWidth;if(x+w>r.width)x=e.clientX-r.left-w-14;tip.style.left=x+'px';tip.style.top=y+'px';}
+function hideTip(){tip.style.display='none';}
+function rows(vals){return KEYS.slice().reverse().map(function(k){return '<div class="r"><span><i class="sw" style="background:'+COL[k]+'"></i> '+NAME[k]+'</span><b>'+vals[k].toFixed(2)+'</b></div>';}).join('');}
+
+/* ---------- activity (4, 5) ---------- */
+var MIN={};
+for(var i=0;i<13;i++){MIN[i]={};KEYS.forEach(function(k,ki){var r=rnd(i*101+ki*17+3),raw=[];for(var m=0;m<60;m++){var b=1+0.22*Math.sin((m+i*7+ki*3)/8)+0.4*(r()-0.5);if(k==='uio'&&i===12)b*=(m%13<4?1.9:0.8)+0.4*r();if(k==='net'&&i===12)b*=(m>20&&m<44?1.6:0.6);raw.push(Math.max(0.05,b));}var f=S[k][i]/mean(raw);MIN[i][k]=raw.map(function(v){return v*f;});});}
+var HRS=84*24+10;
+var HV=[];
+(function(){for(var h=0;h<HRS;h++){var d=Math.floor(h/24),hod=h%24,dow=d%7;if(hod===9&&dow===0){var w=d/7;HV.push(KEYS.map(function(k){return S[k][w];}));continue;}var r=rnd(h*13+5);var wk=(dow===2||dow===3)?0.45:1;var bus=(hod>=8&&hod<18)?1:((hod>=6&&hod<21)?0.6:0.3);var reg=d>=54?1.1:1;var tot=11.2*wk*bus*reg*(0.82+0.32*r());var sp=[0.64,0.17,0.06,0.02,0.11];if(d>=82&&bus===1&&wk===1){tot*=1.45;sp=[0.46,0.38,0.05,0.04,0.07];}HV.push(sp.map(function(s){return tot*s;}));}})();
+var MKD=[[12,'R4.0','Release 4.0'],[19,'HF 4.0.1','Hotfix 4.0.1'],[33,'RU 19.28','RU 19.28 patch'],[54,'R4.1','Release 4.1'],[82,'R4.2','Release 4.2']];
+var amode='win';
+function niceMax(v){var s=[5,10,15,20,25,30,40,50,60];for(var i=0;i<s.length;i++)if(v<=s[i])return s[i];return Math.ceil(v/10)*10;}
+function dateOf(d){var dt=new Date(2026,5,18+d);return dt.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];}
+function renderAct(){
+  var svg=$('#actsvg');while(svg.firstChild)svg.removeChild(svg.firstChild);
+  var W=svg.getBoundingClientRect().width,H=150,pl=26,pt=18,pb=18,ph=H-pt-pb;
+  var tick='var(--mkline)',mut='var(--muted-foreground)';
+  var maxS=0,i,m;
+  if(amode==='win'){for(i=0;i<13;i++)for(m=0;m<60;m++){var t=0;KEYS.forEach(function(k){t+=MIN[i][k][m];});maxS=Math.max(maxS,t);}}
+  else HV.forEach(function(v){maxS=Math.max(maxS,v.reduce(function(a,b){return a+b},0));});
+  var ym=niceMax(maxS*1.04);
+  function y(v){return pt+ph-v/ym*ph;}
+  [0,ym/2,ym].forEach(function(v){el('line',{x1:pl,x2:W,y1:y(v),y2:y(v),stroke:tick,'stroke-width':v?0.5:1,'stroke-dasharray':v?'2 3':''},svg);el('text',{x:pl-5,y:y(v)+3.5,'text-anchor':'end','font-size':10,fill:mut},svg,v);});
+  if(amode==='win'){
+    $('#anote').textContent='13 compared hours, 1-min detail';
+    var gap=4,pw=(W-pl-gap*12)/13;
+    for(i=0;i<13;i++){
+      var x0=pl+i*(pw+gap);
+      if(i===12)el('rect',{x:x0-2,y:pt-4,width:pw+4,height:ph+4,fill:'var(--acc-band)',stroke:'#6d5ae6','stroke-width':1.2,rx:3},svg);
+      var lo=new Array(60).fill(0);
+      KEYS.forEach(function(k){
+        var up=lo.map(function(v,mm){return v+MIN[i][k][mm];});
+        var d='';for(var mm=0;mm<60;mm++)d+=(mm?'L':'M')+(x0+mm/59*pw).toFixed(1)+','+y(up[mm]).toFixed(1);
+        for(mm=59;mm>=0;mm--)d+='L'+(x0+mm/59*pw).toFixed(1)+','+y(lo[mm]).toFixed(1);
+        el('path',{d:d+'Z',fill:COL[k],'fill-opacity':0.9},svg);
+        lo=up;
+      });
+      el('text',{x:x0+pw/2,y:H-4,'text-anchor':'middle','font-size':9.5,fill:i===12?'var(--acc-ink)':mut,'font-weight':i===12?700:400},svg,D[i]);
+      if(MK[i]){var xm=x0-gap/2;el('line',{x1:xm,x2:xm,y1:pt-6,y2:pt+ph,stroke:'var(--foreground)','stroke-opacity':0.45,'stroke-width':1},svg);el('text',{x:xm,y:pt-9,'text-anchor':'middle','font-size':9,fill:mut},svg,MK[i][0]);}
+    }
+    var hit=el('rect',{x:pl,y:pt,width:W-pl,height:ph,fill:'transparent'},svg);
+    hit.addEventListener('mousemove',function(e){var r=svg.getBoundingClientRect(),x=e.clientX-r.left-pl,w=Math.floor(x/(pw+gap));if(w<0||w>12){hideTip();return;}var mm=Math.round((x-w*(pw+gap))/pw*59);mm=Math.max(0,Math.min(59,mm));var v={},tt=0;KEYS.forEach(function(k){v[k]=MIN[w][k][mm];tt+=v[k];});showTip(e,'<b>'+D[w]+', 09:'+(mm<10?'0':'')+mm+'</b>'+(w===12?' <span style="color:#6d5ae6">Current</span>':'')+'<div class="r"><span>total</span><b>'+tt.toFixed(2)+' AAS</b></div>'+rows(v));});
+    hit.addEventListener('mouseleave',hideTip);
+  } else {
+    $('#anote').textContent='18 Jun to 10 Sep, hourly';
+    var pw2=W-pl,ncol=Math.floor(pw2),cols=[];
+    for(var c=0;c<ncol;c++){var h0=Math.floor(c*HRS/ncol),h1=Math.max(h0+1,Math.floor((c+1)*HRS/ncol)),best=h0,bt=-1;for(var h=h0;h<h1&&h<HRS;h++){var tt2=HV[h].reduce(function(a,b){return a+b},0);if(tt2>bt){bt=tt2;best=h;}}cols.push(best);}
+    for(i=0;i<13;i++){var hx=i*168+9,xs=pl+hx/HRS*pw2;el('rect',{x:xs-1,y:pt,width:Math.max(2,pw2/HRS),height:ph,fill:i===12?'#6d5ae6':'var(--zone2)'},svg);}
+    var lo2=new Array(ncol).fill(0);
+    KEYS.forEach(function(k,ki){var up=lo2.map(function(v,cc){return v+HV[cols[cc]][ki];});var d='';for(var cc=0;cc<ncol;cc++)d+=(cc?'L':'M')+(pl+cc+0.5)+','+y(up[cc]).toFixed(1);for(cc=ncol-1;cc>=0;cc--)d+='L'+(pl+cc+0.5)+','+y(lo2[cc]).toFixed(1);el('path',{d:d+'Z',fill:COL[k],'fill-opacity':0.88},svg);lo2=up;});
+    MKD.forEach(function(mk){var xm=pl+mk[0]*24/HRS*pw2;el('line',{x1:xm,x2:xm,y1:pt-6,y2:pt+ph,stroke:'var(--foreground)','stroke-opacity':0.45},svg);el('text',{x:xm,y:pt-9,'text-anchor':'middle','font-size':9,fill:mut},svg,mk[1]);});
+    for(var dd=14;dd<84;dd+=14)el('text',{x:pl+dd*24/HRS*pw2,y:H-4,'text-anchor':'middle','font-size':9.5,fill:mut},svg,dateOf(dd));
+    var hit2=el('rect',{x:pl,y:pt,width:pw2,height:ph,fill:'transparent'},svg);
+    hit2.addEventListener('mousemove',function(e){var r=svg.getBoundingClientRect(),cc=Math.floor(e.clientX-r.left-pl);if(cc<0||cc>=ncol){hideTip();return;}var h=cols[cc],v={},tt=0;KEYS.forEach(function(k,ki){v[k]=HV[h][ki];tt+=v[k];});var hod=h%24;showTip(e,'<b>'+dateOf(Math.floor(h/24))+', '+(hod<10?'0':'')+hod+':00</b><div class="r"><span>total</span><b>'+tt.toFixed(2)+' AAS</b></div>'+rows(v));});
+    hit2.addEventListener('mouseleave',hideTip);
+  }
+}
+Array.prototype.forEach.call(document.querySelectorAll('#amode button'),function(b){b.addEventListener('click',function(){amode=b.getAttribute('data-m');Array.prototype.forEach.call(document.querySelectorAll('#amode button'),function(x){x.classList.toggle('on',x===b);});renderAct();});});
+
+/* ---------- micro strip ---------- */
+function strip(svg,vals,sev){
+  while(svg.firstChild)svg.removeChild(svg.firstChild);
+  var W=84,H=24,p=pri(vals),m=mean(p),s=Math.max(sd(p),Math.abs(m)*0.02),mx=Math.max.apply(null,vals.concat([m+2*s]))*1.05;
+  var cw=W/13.6;
+  function y(v){return H-v/mx*H;}
+  el('rect',{x:0,y:y(m+2*s),width:W,height:Math.max(1,y(Math.max(0,m-2*s))-y(m+2*s)),fill:'var(--zone)'},svg);
+  vals.forEach(function(v,i){var cur=i===12,bw=cur?cw*1.25:cw*0.6,x=cur?12*cw+1:i*cw+(cw-bw)/2;el('rect',{x:x,y:y(v),width:bw,height:Math.max(1,H-y(v)),fill:cur?(sev==='nf'?'var(--mut)':'#6d5ae6'):'var(--bar)',rx:1},svg);});
+  el('title',{},svg,'oldest left, Current right');
+}
+
+/* ---------- triage rows (1, 6, 8) ---------- */
+var TR=[
+  {go:'verdict',cls:'tot',dot:'',name:'DB time',sub:'up 79.7%',x:'',tags:['symptom: the total below'],now:'20.35 AAS',norm:'normal 8.4–14.3',z:'z +6.1σ',d:dTot,col:'var(--mut)',v:S.dbt,sev:'crit'},
+  {go:'card-io',cls:'',dot:'crit',name:'Physical I/O',sub:'physical reads',x:'×5.4',xc:'crit',tags:['jump after Release 4.2','step at Release 4.1'],now:'22.24 k/s',norm:'normal 3.0–5.3 k',z:'z >10σ',d:S.uio[12]-mean(pri(S.uio)),col:COL.uio,v:S.prd,sev:'crit'},
+  {go:'card-net',cls:'',dot:'crit',name:'Network waits',sub:'',x:'×5.2',xc:'crit',tags:['spike: this window only'],now:'1.175 AAS',norm:'normal 0.19–0.26',z:'z >10σ',d:S.net[12]-mean(pri(S.net)),col:COL.net,v:S.net,sev:'crit'},
+  {go:'card-com',cls:'',dot:'warn',name:'Commit waits',sub:'',x:'+22.5%',xc:'warn',tags:['step at Release 4.1'],now:'0.869 AAS',norm:'normal 0.57–0.85',z:'z +2.3σ',d:S.com[12]-mean(pri(S.com)),col:COL.com,v:S.com,sev:'warn'},
+  {go:'',cls:'nf',dot:'ok',name:'CPU',sub:'DB CPU',x:'+18.8%',xc:'',tags:['inside normal: not a finding'],now:'8.58 AAS',norm:'normal 5.3–9.2',z:'z +1.4σ',d:S.cpu[12]-mean(pri(S.cpu)),col:'',v:S.cpu,sev:'nf'}
+];
+TR.forEach(function(r){
+  var div=document.createElement('div');div.className='trr '+r.cls;
+  var pct=r.d/dTot*100;
+  var tags=r.tags.map(function(t){return '<span class="tag'+(/Release/.test(t)?' t-rel':'')+'">'+t+'</span>';}).join('');
+  var bar=r.cls==='nf'?'<i class="hatch" style="width:'+pct.toFixed(1)+'%"></i>':'<i style="width:'+pct.toFixed(1)+'%;background:'+r.col+'"></i>';
+  div.innerHTML='<div class="fn">'+(r.dot?'<span class="dot '+r.dot+'"></span>':'')+'<b>'+r.name+'</b>'+(r.sub?'<span class="mut small">'+r.sub+'</span>':'')+(r.x?'<span class="x '+r.xc+'">'+r.x+'</span>':'')+'<div class="tags">'+tags+'</div></div>'+
+    '<div class="nv"><b>'+r.now+'</b><span class="mut">'+r.norm+'</span><span class="mut">'+r.z+'</span></div>'+
+    '<div class="shr"><div class="sbar">'+bar+'</div><span><b>+'+(r.d>=1?r.d.toFixed(1):r.d.toFixed(2))+' AAS</b> <span class="mut">'+(r.cls==='tot'?'total':pct.toFixed(0)+'%')+'</span></span></div>'+
+    '<div><svg class="ms" width="84" height="24"></svg></div>';
+  if(r.go)div.addEventListener('click',function(){go(r.go);});
+  $('#trows').appendChild(div);
+  strip(div.querySelector('svg'),r.v,r.sev);
+});
+function go(id){var t=document.getElementById(id);if(!t)return;if(t.tagName==='DETAILS')t.open=true;t.scrollIntoView({behavior:'smooth',block:'start'});t.animate&&t.animate([{boxShadow:'0 0 0 3px #6d5ae6'},{boxShadow:'0 0 0 0 transparent'}],{duration:1600});}
+
+/* ---------- bar chart for cards ---------- */
+function bars(svg,vals,o){
+  while(svg.firstChild)svg.removeChild(svg.firstChild);
+  var W=svg.getBoundingClientRect().width,H=+svg.getAttribute('height'),pt=o.pt||22,pb=18,ph=H-pt-pb,cw=W/13;
+  var mut='var(--muted-foreground)';
+  var ym=Math.max(vals[12],o.hi)*1.08;
+  function y(v){return pt+ph-v/ym*ph;}
+  el('rect',{x:12*cw,y:0,width:cw,height:H,fill:'var(--acc-band)'},svg);
+  el('rect',{x:0,y:y(o.hi),width:12*cw,height:Math.max(1,y(Math.max(0,o.lo))-y(o.hi)),fill:'var(--zone2)'},svg);
+  el('line',{x1:0,x2:12*cw,y1:y(o.mid),y2:y(o.mid),stroke:'var(--foreground)','stroke-opacity':0.55,'stroke-width':1},svg);
+  for(var k in MK){var xm=k*cw;var ln=el('line',{x1:xm,x2:xm,y1:4,y2:pt+ph,stroke:'var(--foreground)','stroke-opacity':0.35,'stroke-dasharray':'3 3'},svg);}
+  if(o.mklab)el('text',{x:12*cw-5,y:12,'text-anchor':'end','font-size':10.5,fill:'var(--foreground)'},svg,o.mklab);
+  vals.forEach(function(v,i){
+    var cur=i===12,bw=cur?cw*0.46:cw*0.34,x=i*cw+(cw-bw)/2;
+    var g=el('g',{},svg);
+    el('rect',{x:x,y:y(v),width:bw,height:Math.max(1,pt+ph-y(v)),fill:cur?'#6d5ae6':'var(--bar)',rx:2},g);
+    el('rect',{x:i*cw,y:pt,width:cw,height:ph,fill:'transparent'},g).addEventListener('mousemove',function(e){showTip(e,'<b>'+D[i]+(cur?' &middot; Current':'')+'</b><div class="r"><span>'+o.label+'</span><b>'+o.f(v)+'</b></div><div class="r"><span>normal</span><span>'+o.f(Math.max(0,o.lo))+' – '+o.f(o.hi)+'</span></div>');});
+    g.lastChild.addEventListener('mouseleave',hideTip);
+    el('text',{x:i*cw+cw/2,y:H-4,'text-anchor':'middle','font-size':9.5,fill:cur?'var(--acc-ink)':mut,'font-weight':cur?700:400},svg,D[i]);
+    if(cur){el('text',{x:x+bw/2,y:y(v)-9,'text-anchor':'middle','font-size':11,'font-weight':700,fill:'var(--foreground)'},svg,o.f(v));el('circle',{cx:x+bw/2,cy:y(v),r:4.5,fill:o.dot||'#e5483d',stroke:'var(--card)','stroke-width':2},svg);}
+  });
+}
+
+/* ---------- Physical I/O card with baseline switch (8, 9) ---------- */
+var bmode='mean';
+function renderIO(){
+  var p=pri(S.prd),lo,hi,mid,txt,note;
+  if(bmode==='mean'){mid=mean(p);var s=sd(p);lo=mid-2*s;hi=mid+2*s;note='As today. The plain mean mixes the weeks before and after Release 4.1.';}
+  else if(bmode==='robust'){mid=median(p);var rs=1.4826*mad(p);lo=mid-2*rs;hi=mid+2*rs;note='Median ± 2 × 1.4826 MAD. The 4 windows since Release 4.1 fall above normal: the step is flagged as well.';}
+  else {var q=p.slice(8);mid=mean(q);var s2=sd(q);lo=mid-2*s2;hi=mid+2*s2;note='Only the 4 windows since Release 4.1 (13 Aug): how much Release 4.2 added on its own.';}
+  var x=S.prd[12]/mid;
+  $('#io-norm').innerHTML='normal '+Math.round(lo).toLocaleString('en-US')+'–'+Math.round(hi).toLocaleString('en-US')+'/s &middot; <b class="crit">&#9650; &times;'+x.toFixed(1)+'</b>';
+  $('#io-note').textContent=note;
+  $('#io-x').textContent=x.toFixed(1)+'×';
+  bars($('#iosvg'),S.prd,{lo:lo,hi:hi,mid:mid,f:fmt,label:'physical reads/s',mklab:'Release 4.2 · Tue 8 Sep'});
+}
+Array.prototype.forEach.call(document.querySelectorAll('#bseg button'),function(b){b.addEventListener('click',function(){bmode=b.getAttribute('data-b');Array.prototype.forEach.call(document.querySelectorAll('#bseg button'),function(x){x.classList.toggle('on',x===b);});renderIO();});});
+
+/* ---------- plan card (7, 12) ---------- */
+function renderPlan(){
+  var p=pri(S.ela),m=mean(p),s=sd(p);
+  bars($('#plsvg'),S.ela,{lo:m-2*s,hi:m+2*s,mid:m,f:dur,label:'elapsed',pt:20,dot:'#e5483d'});
+  var svg=$('#plstep');while(svg.firstChild)svg.removeChild(svg.firstChild);
+  var W=svg.getBoundingClientRect().width,cw=W/13,fg='var(--foreground)';
+  el('path',{d:'M2,26 L'+(12*cw)+',26 L'+(12*cw)+',12 L'+(W-2)+',12',fill:'none',stroke:fg,'stroke-width':1.3},svg);
+  el('circle',{cx:12*cw,cy:12,r:3.5,fill:fg},svg);
+  el('text',{x:4,y:22,'font-size':10.5,fill:'var(--muted-foreground)','font-family':'var(--font-mono)'},svg,'3197245811');
+  el('text',{x:12*cw-6,y:10,'text-anchor':'end','font-size':10.5,'font-weight':700,fill:'var(--acc-ink)','font-family':'var(--font-mono)'},svg,'2088341150');
+}
+
+/* ---------- timeline excerpt (11, 12) ---------- */
+var TL=[
+  {n:'User I/O waits',s:'wait class',c:COL.uio,v:S.uio,f:'crit'},
+  {n:'db file scattered read',s:'User I/O',c:COL.uio,v:[0.17,0.16,0.22,0.17,0.18,0.16,0.17,0.17,0.21,0.22,0.20,0.21,3.854],f:'crit'},
+  {n:'direct path read',s:'User I/O',c:COL.uio,v:[0.18,0.17,0.23,0.18,0.19,0.18,0.18,0.18,0.22,0.22,0.21,0.22,2.356],f:'crit'},
+  {n:'Network waits',s:'wait class',c:COL.net,v:S.net,f:'crit'},
+  {n:'log file sync',s:'Commit',c:COL.com,v:[0.66,0.6,0.73,0.64,0.65,0.6,0.67,0.6,0.8,0.73,0.75,0.75,0.835],f:'warn'},
+  {n:'db file sequential read',s:'User I/O',c:COL.uio,v:[1.10,1.04,1.28,1.08,1.12,1.02,1.09,1.07,1.21,1.26,1.18,1.2,1.24],f:''},
+  {n:'enq: TX - row lock contention',s:'Application',c:'#D62728',v:[0.52,0.49,0.58,0.51,0.5,0.47,0.5,0.49,0.55,0.57,0.54,0.55,0.53],f:''}
+];
+TL.forEach(function(r){r.d=r.v[12]-mean(pri(r.v));});
+TL.sort(function(a,b){return b.d-a.d;});
+(function(){
+  var g=$('#tlg'),h='<div class="tlr hd"><div style="text-align:left">13 windows, oldest left</div>';
+  D.forEach(function(d,i){var p=d.split(' ');h+='<div class="'+(i===12?'cw':'')+'">'+p[0]+'<br>'+p[1]+'</div>';});
+  h+='<div style="text-align:right">Current</div></div>';
+  TL.forEach(function(r){
+    var p=pri(r.v),sc=Math.max.apply(null,p)*1.6,m=mean(p),cur=r.v[12],ratio=cur/m;
+    var chgTxt=ratio>=2?'&#9650; &times;'+ratio.toFixed(1):(cur>=m?'&#9650; ':'&#9660; ')+Math.abs((ratio-1)*100).toFixed(1)+'%';
+    var cls=r.f==='crit'?'crit':r.f==='warn'?'warn':'mut';
+    h+='<div class="tlr'+(r.f?'':' nf')+'"><div class="tll"><b><i class="sw" style="background:'+r.c+'"></i>'+r.n+'</b><span>'+r.s+' &middot; +'+r.d.toFixed(2)+' AAS</span></div>';
+    r.v.forEach(function(v,i){var pct=Math.min(100,v/sc*100),brk=v>sc;h+='<div class="tc'+(i===12?' cw':'')+(MK[i]?' mk':'')+'" title="'+D[i]+': '+v.toFixed(3)+' AAS"><i class="'+(brk?'brk':'')+'" style="height:calc('+pct.toFixed(1)+'% - 4px)"></i></div>';});
+    h+='<div class="tv"><b>'+(cur>=1?cur.toFixed(2):cur.toFixed(3))+' AAS</b><span class="'+cls+'">'+chgTxt+'</span></div></div>';
+  });
+  g.innerHTML=h;
+})();
+$('#tl-flag').addEventListener('click',function(){$('#tl').classList.remove('all');this.classList.add('on');$('#tl-all').classList.remove('on');});
+$('#tl-all').addEventListener('click',function(){$('#tl').classList.add('all');this.classList.add('on');$('#tl-flag').classList.remove('on');});
+
+/* ---------- layout ---------- */
+function layout(){renderAct();renderIO();renderPlan();}
+layout();
+var lw=0;
+if(window.ResizeObserver)new ResizeObserver(function(){var w=$('#mock').getBoundingClientRect().width;if(Math.abs(w-lw)>1){lw=w;layout();}}).observe($('#mock'));
+})();
+</script>
+</body>
+</html>
