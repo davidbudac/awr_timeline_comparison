@@ -334,6 +334,13 @@ findings as confirmed by the owner's agent):
   text slot (`data-mk-pre`: 17's likely-source line, 18's plan card,
   20's sentence) follows the same rule and stays hidden for such a
   marker. The flag placement is unchanged (on Current's left edge).
+- 024 / v1.6.1 highlight (fix group R3): the band a hover, a click or
+  the soft highlight picks is the band **as drawn** under the pointer
+  (the stacked path between the two points around it), mapped through
+  the SVG's screen CTM; it was the stack of the exact bucket under x,
+  which on spiky data (and zoomed out, where a point is a pixel column's
+  busiest bucket) named the band above or below. The tooltip still
+  reads the exact bucket.
 
 
 Each plan records its default, so an executor never waits on these. Decide

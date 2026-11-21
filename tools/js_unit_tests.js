@@ -269,6 +269,39 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
   });
 }
 
+/* ---- review follow-up R3: AWR_TL.stackAt (js_timeline), the band the
+   Activity charts DRAW under the pointer ---- */
+{
+  const S = load('js_timeline').AWR_TL.stackAt;
+  // three points (x, ref) joined by straight lines; series 0 / 1 by ref
+  const V = [[1, 1, 1], [1, 3, 1]], vk = (k, r) => V[k][r];
+  const P = [[0, 0], [10, 1], [20, 2]];
+  test('stackAt: the band holding the value at a point', () => {
+    assert.strictEqual(S(P, [0, 1], vk, 10, 0.5), 0);
+    assert.strictEqual(S(P, [0, 1], vk, 10, 2), 1);
+    assert.strictEqual(S(P, [0, 1], vk, 10, 4.5), -1);
+  });
+  test('stackAt: between two points the drawn line, not the bucket', () => {
+    // at x 5 series 1 is drawn from 1 to 1 + (1 + 3) / 2 = 3
+    assert.strictEqual(S(P, [0, 1], vk, 5, 2.5), 1);
+    assert.strictEqual(S(P, [0, 1], vk, 5, 3.5), -1);
+    assert.strictEqual(S(P, [0, 1], vk, 15, 2.9), 1);
+  });
+  test('stackAt: outside the points, below the axis, one point, the drawn order', () => {
+    assert.strictEqual(S(P, [0, 1], vk, -1, 0.5), -1);
+    assert.strictEqual(S(P, [0, 1], vk, 21, 0.5), -1);
+    assert.strictEqual(S(P, [0, 1], vk, 10, -0.1), -1);
+    assert.strictEqual(S([], [0, 1], vk, 10, 0.5), -1);
+    assert.strictEqual(S(null, [0, 1], vk, 10, 0.5), -1);
+    assert.strictEqual(S([[10, 1]], [0, 1], vk, 10, 3), 1);
+    // re-based (a highlighted series first, from zero)
+    assert.strictEqual(S(P, [1, 0], vk, 10, 0.5), 1);
+    assert.strictEqual(S(P, [1, 0], vk, 10, 3.5), 0);
+    // a zero band holds nothing: the one above it does
+    assert.strictEqual(S(P, [0, 1], (k, r) => (k === 0 ? 0 : 2), 10, 0.5), 1);
+  });
+}
+
 /* ---- G4 (plan 025 follow-up): the micro strip's dense mode (js_microstrip) ---- */
 {
   const strip = load('js_microstrip').AWR_microStrip;

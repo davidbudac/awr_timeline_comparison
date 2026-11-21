@@ -173,7 +173,13 @@ release bumps `awr_version`).
   flag, and a marker with no room left now keeps its line); the flag band
   is left out when every marker is in a window cropped away; Enter on a
   focused window stripe or cap keeps the focus there after the pin
-  redraws the charts (both layouts).
+  redraws the charts (both layouts). Narrower than 480 px (a phone) the
+  pointer maps correctly onto the charts, which scale down there: hover,
+  click and the band highlight used to land about 38 px off vertically
+  at 390 px and light nothing or the wrong band; and the highlighted band
+  is the one drawn under the pointer (on spiky data, at any width, the
+  stack of the exact bucket under the pointer could name the band above
+  or below it).
 - **Findings at a glance.** The Summary view lists every finding in one
   triage list (value, normal range, share of the DB-time rise, per-window
   strip) above the cards; every card but the most important one starts

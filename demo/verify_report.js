@@ -58,6 +58,10 @@
  *     stripe / cap keeps the focus through the redraw (both layouts); the
  *     flag band only while a flag is drawn side by side; three markers in
  *     one gap all named (a "+n" flag lists the rest, block 5d);
+ *   - the Activity charts at 390 px (R3, block 5e): the SVG keeps a 480-px
+ *     viewBox there, scaled down and centred vertically, so a hover over a
+ *     band lights exactly that band (soft highlight, both charts, both
+ *     layouts) and the brush covers the plot's height;
  *   - direct labels on the Activity bands (plan 036, fitted per band): name
  *     a series, inside the plot and inside the band they name, no overlap,
  *     at most 6, gone when the series is hidden; inside one panel side by
@@ -1160,6 +1164,84 @@ const LABEL_BAND = () => {
     await page.evaluate(() => { try { localStorage.removeItem('awr-axlayout'); } catch (e) {} });
     console.log('markers sharing a gap', JSON.stringify(mg));
     if (errors.length) fail('markers sharing a gap: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 5e. the Activity charts at phone width (review follow-up R3): under
+  // 480 px the SVG keeps its 480-px viewBox, scaled down and centred
+  // vertically (preserveAspectRatio), so the pointer maps through the
+  // SVG's screen CTM.  At points well inside one band (the topmost fill
+  // there and 3 px above / below, 1 px aside, under no window stripe's hit area) a hover
+  // must light exactly that band in the legend (the soft highlight follows
+  // the band as drawn), in both charts and both layouts; a brush in Full
+  // span covers the plot's height.  Before R3 the 390-px hover lit nothing
+  // or the wrong band (clientY scaled without the letterbox).
+  {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: 'light' });
+    const errors = [];
+    page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+    page.on('console', m => { if (m.type() === 'error') errors.push('console.error: ' + m.text()); });
+    await page.goto('file://' + file + '#view=timeline', { waitUntil: 'load' }); await page.waitForTimeout(1200);
+    if (DESIGN === 'dashboard') { await page.evaluate(() => window.AWR_axMode && window.AWR_axMode('both')); await page.waitForTimeout(250); }
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file), nw = {};
+    // integer client points (mouse events carry whole pixels)
+    const pts = (id) => page.evaluate((id) => {
+      const s = document.querySelector('#' + id + ' .axsvg'); if (!s || !s.getClientRects().length || !s.getScreenCTM) return null;
+      s.scrollIntoView({ block: 'center' });
+      const r = s.getBoundingClientRect(), m = s.getScreenCTM(), cp = s.querySelector('clipPath rect');
+      if (!m || !cp) return null;
+      const yt = m.d * (+cp.getAttribute('y') + 6) + m.f, yb = m.d * (+cp.getAttribute('y') + +cp.getAttribute('height')) + m.f;
+      const band = (x, y) => { const es = document.elementsFromPoint(x, y), i = es.findIndex(q => !q.matches('rect.xw, rect.xwc, text.xdl, line.xch, rect.xbk')); return i >= 0 && es[i].matches('path.xa') ? es[i] : null; };
+      const out = [], per = {};
+      for (let fy = 0.1; fy < 0.97 && out.length < 10; fy += 0.06) {
+        for (let fx = 0.12; fx < 0.97 && out.length < 10; fx += 0.03) {
+          const x = Math.round(r.left + r.width * fx), y = Math.round(yt + (yb - yt) * fy), a = band(x, y);
+          if (!a || [[0, -3], [0, 3], [-1, 0], [1, 0]].some(d => band(x + d[0], y + d[1]) !== a)) continue;
+          const f = a.getAttribute('fill'); if ((per[f] = (per[f] || 0) + 1) > 2) continue;
+          out.push({ x, y, f });
+        }
+      }
+      return { scale: m.a, off: m.f - r.top, out };
+    }, id);
+    const lit = (id) => page.evaluate((id) => [...document.querySelectorAll('#' + id + ' .axlg .axc.hl .sw')].map(s => s.style.getPropertyValue('--sw').trim()), id);
+    for (const mode of ['span', 'win']) {
+      const can = await page.evaluate((m) => { if (!window.AWR_TL || !AWR_TL.axLayout) return false; if (m === 'win' && !document.querySelector('#activity .axlayout:not([hidden])')) return false; AWR_TL.axLayout(m, false); return true; }, mode);
+      if (!can) { nw[mode] = 'unavailable'; continue; }
+      await page.waitForTimeout(250);
+      for (const id of ['ax-cls', 'ax-ev']) {
+        await pts(id); await page.waitForTimeout(150);
+        const P = await pts(id);
+        if (!P) { nw[mode + ' ' + id] = 'not shown'; continue; }
+        let good = 0; const bad = [];
+        for (const q of P.out) {
+          await page.mouse.move(q.x, q.y); await page.waitForTimeout(100);
+          const l = await lit(id);
+          if (l.length === 1 && l[0] === q.f) good++; else bad.push(q.f + ' lit ' + (l.join(',') || 'nothing'));
+          await page.mouse.move(2, 2); await page.waitForTimeout(50);
+        }
+        nw[mode + ' ' + id] = (bad.length ? 'FAIL ' + bad.slice(0, 3).join('; ') + ' ' : '') + good + '/' + P.out.length + ' points (scale ' + P.scale.toFixed(2) + ', offset ' + P.off.toFixed(1) + ' px)';
+        if (bad.length) fail('Activity at 390 px (' + mode + ', ' + id + '): a hover lit another band: ' + nw[mode + ' ' + id]);
+        if (isDemo && !P.out.length) fail('Activity at 390 px (' + mode + ', ' + id + '): no band point found on the demo');
+      }
+    }
+    // the brush (Full span) covers the plot's height, letterbox included
+    if (nw.span !== 'unavailable') {
+      await page.evaluate(() => AWR_TL.axLayout('span', false)); await page.waitForTimeout(250);
+      const g = await page.evaluate(() => { const s = document.querySelector('#ax-cls .axsvg'); if (!s || !s.getClientRects().length) return null; s.scrollIntoView({ block: 'center' });
+        const r = s.getBoundingClientRect(), m = s.getScreenCTM(), cp = s.querySelector('clipPath rect');
+        return { x: Math.round(r.left + r.width * 0.4), y: Math.round(r.top + r.height / 2), t: m.d * (+cp.getAttribute('y') + 6) + m.f, b: m.d * (+cp.getAttribute('y') + +cp.getAttribute('height')) + m.f }; });
+      if (g) {
+        await page.mouse.move(g.x, g.y); await page.mouse.down(); await page.mouse.move(g.x + 40, g.y, { steps: 5 });
+        const br = await page.evaluate(() => { const b = document.querySelector('#ax-cls .axbr'); if (!b || b.hidden) return null; const r = b.getBoundingClientRect(); return { t: r.top, b: r.bottom }; });
+        await page.mouse.up(); await page.waitForTimeout(200);
+        await page.evaluate(() => { const b = document.getElementById('ax-reset'); if (b && !b.hidden) b.click(); }); await page.waitForTimeout(150);
+        nw.brush = !br ? 'FAIL no brush' : (Math.abs(br.t - g.t) <= 1 && Math.abs(br.b - g.b) <= 1) ? 'ok' : 'FAIL brush ' + br.t.toFixed(1) + '..' + br.b.toFixed(1) + ', plot ' + g.t.toFixed(1) + '..' + g.b.toFixed(1);
+        if (/^FAIL/.test(nw.brush)) fail('Activity at 390 px: ' + nw.brush);
+      }
+    }
+    await page.evaluate(() => { try { localStorage.removeItem('awr-axlayout'); } catch (e) {} });
+    console.log('activity at 390 px', JSON.stringify(nw));
+    if (errors.length) fail('activity at 390 px: ' + errors.slice(0, 5).join(' | '));
     await page.close();
   }
 

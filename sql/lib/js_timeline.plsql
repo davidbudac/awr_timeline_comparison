@@ -28,6 +28,9 @@
 --                 (tested by tools/js_unit_tests.js).
 --   labelAlts(alts, names, k)  drops a label cut whose stem also starts
 --                 another series' name (pure, unit-tested).
+--   stackAt(pts, ord, vk, sx, v)  the series whose band is DRAWN at
+--                 (sx, v): the hover / click / soft-highlight pick (pure,
+--                 unit-tested; review follow-up R3).
 -- and on window.AWR_WG:
 --   pin(o)        pin window offset o (0 / null / the pinned one = unpin):
 --                 its grid column tints amber, every gutter Delta compares
@@ -62,7 +65,9 @@
 -- a chart.  Release flags (flagSvg): markers at one spot (side by side: one
 -- gap) share a group, a "+n" flag names the rest; side by side the flag
 -- band is reserved only while a marker is in view.  setSvg keeps the focus
--- on a window stripe / cap through a redraw.
+-- on a window stripe / cap through a redraw.  A pointer maps to SVG units
+-- through the SVG's screen CTM (toSvg / toCli): narrower than 480 px the
+-- 480-px viewBox is scaled down and centred vertically (R3).
 -- v1.6.1 series highlight: a legend entry hovered / focused (or kept by a
 -- click on its band, Shift+click) is drawn from zero on its own y axis,
 -- the rest faded; a class lights its events (AWR_DATA.ashe.ecls) and an
@@ -458,19 +463,42 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    if(key!==c.hk){c.hk=key;draw(c,true);}');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('/* the series drawn under client point (x, y) on chart c, or -1 (off the');
-    DBMS_OUTPUT.PUT_LINE('   stack): the bucket under x, its values stacked in the drawn order */');
+    DBMS_OUTPUT.PUT_LINE('/* a client point in chart c''s SVG units (its viewBox), and back, through');
+    DBMS_OUTPUT.PUT_LINE('   the SVG''s screen CTM (review follow-up R3): narrower than 480 px the');
+    DBMS_OUTPUT.PUT_LINE('   viewBox stays 480 wide, so the fixed-height SVG scales it down and');
+    DBMS_OUTPUT.PUT_LINE('   centres it vertically (preserveAspectRatio): clientY times W / width');
+    DBMS_OUTPUT.PUT_LINE('   alone missed that letterbox, and hover, click and the soft highlight');
+    DBMS_OUTPUT.PUT_LINE('   picked the wrong band.  Without a CTM (not rendered) the plain scale. */');
+    DBMS_OUTPUT.PUT_LINE('function ctm(c,inv){var m=null;try{m=c.svg.getScreenCTM();if(m&&inv)m=m.inverse();}catch(e){m=null;}return m&&isFinite(m.a)&&m.a?m:null;}');
+    DBMS_OUTPUT.PUT_LINE('function toSvg(c,cx,cy){var m=ctm(c,true);if(m)return {x:m.a*cx+m.c*cy+m.e,y:m.b*cx+m.d*cy+m.f};');
+    DBMS_OUTPUT.PUT_LINE('  var r=c.svg.getBoundingClientRect(),k=c.g.W/r.width;return {x:(cx-r.left)*k,y:(cy-r.top)*k};}');
+    DBMS_OUTPUT.PUT_LINE('function toCli(c,x,y){var m=ctm(c,false);if(m)return {x:m.a*x+m.c*y+m.e,y:m.b*x+m.d*y+m.f};');
+    DBMS_OUTPUT.PUT_LINE('  var r=c.svg.getBoundingClientRect(),k=r.width/c.g.W;return {x:r.left+x*k,y:r.top+y*k};}');
+    DBMS_OUTPUT.PUT_LINE('/* the series whose DRAWN band holds (sx, v), sx in SVG units, v in the');
+    DBMS_OUTPUT.PUT_LINE('   chart''s value units, or -1 (off the stack): the band paths join the');
+    DBMS_OUTPUT.PUT_LINE('   points pts (colPts: [x, ref, ...]) with straight lines, so the stack at');
+    DBMS_OUTPUT.PUT_LINE('   sx is the linear mix of the two points around it, in the drawn order');
+    DBMS_OUTPUT.PUT_LINE('   ord (zoomed out, a point is its pixel column''s busiest bucket, not the');
+    DBMS_OUTPUT.PUT_LINE('   bucket under sx: the tooltip reads that one).  vk(k, ref) = series k''s');
+    DBMS_OUTPUT.PUT_LINE('   value.  Pure: AWR_TL.stackAt, unit-tested (review follow-up R3). */');
+    DBMS_OUTPUT.PUT_LINE('function stackAt(pts,ord,vk,sx,v){');
+    DBMS_OUTPUT.PUT_LINE('  var n=pts?pts.length:0;if(!n||sx<pts[0][0]||sx>pts[n-1][0]||v<0)return -1;');
+    DBMS_OUTPUT.PUT_LINE('  var lo=0,hi=n-1;while(hi-lo>1){var md=(lo+hi)>>1;if(pts[md][0]<=sx)lo=md;else hi=md;}');
+    DBMS_OUTPUT.PUT_LINE('  var a=pts[lo],b=pts[hi],f=b[0]>a[0]?(sx-a[0])/(b[0]-a[0]):0,acc=0;');
+    DBMS_OUTPUT.PUT_LINE('  for(var q=0;q<ord.length;q++){var k=ord[q],u=(vk(k,a[1])||0)*(1-f)+(vk(k,b[1])||0)*f;if(u<=0)continue;acc+=u;if(v<=acc)return k;}');
+    DBMS_OUTPUT.PUT_LINE('  return -1;');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('TL.stackAt=stackAt;');
+    DBMS_OUTPUT.PUT_LINE('/* the series drawn under client point (x, y) on chart c, or -1: the point');
+    DBMS_OUTPUT.PUT_LINE('   in SVG units (toSvg), then the band drawn there (stackAt; side by side');
+    DBMS_OUTPUT.PUT_LINE('   the points of the panel under x) */');
     DBMS_OUTPUT.PUT_LINE('function seriesAt(c,x,y){');
     DBMS_OUTPUT.PUT_LINE('  if(!c.g||!c.g.ord)return -1;');
-    DBMS_OUTPUT.PUT_LINE('  var r=c.svg.getBoundingClientRect(),sy=(y-r.top)*c.g.W/r.width;');
-    DBMS_OUTPUT.PUT_LINE('  if(sy<c.g.top||sy>c.g.top+c.g.ph)return -1;');
-    DBMS_OUTPUT.PUT_LINE('  var ref;');
-    DBMS_OUTPUT.PUT_LINE('  if(c.g.mode===''win''){var pq=panAt(c,x);if(!pq)return -1;ref=wRefAt(c,pq.q,pq.t);}');
-    DBMS_OUTPUT.PUT_LINE('  else{var t=tAt(c,x);if(t<c.g.d0||t>c.g.d1)return -1;ref=refAt(t);}');
-    DBMS_OUTPUT.PUT_LINE('  if(ref==null)return -1;');
-    DBMS_OUTPUT.PUT_LINE('  var v=(c.g.top+c.g.ph-sy)/c.g.ph*c.g.ymax,acc=0;');
-    DBMS_OUTPUT.PUT_LINE('  for(var q=0;q<c.g.ord.length;q++){var k=c.g.ord[q],a=rV(c,k,ref)||0;if(a<=0)continue;acc+=a;if(v<=acc)return k;}');
-    DBMS_OUTPUT.PUT_LINE('  return -1;');
+    DBMS_OUTPUT.PUT_LINE('  var p=toSvg(c,x,y),pts=c.g.pts;');
+    DBMS_OUTPUT.PUT_LINE('  if(p.y<c.g.top||p.y>c.g.top+c.g.ph)return -1;');
+    DBMS_OUTPUT.PUT_LINE('  if(c.g.mode===''win''){pts=null;c.g.pan.forEach(function(pn){if(p.x>=pn.x0&&p.x<pn.x0+pn.w)pts=pn.pts;});}');
+    DBMS_OUTPUT.PUT_LINE('  else if(p.x<c.g.padL||p.x>c.g.W-c.g.padR)return -1;');
+    DBMS_OUTPUT.PUT_LINE('  return stackAt(pts,c.g.ord,function(k,r){return rV(c,k,r);},p.x,(c.g.top+c.g.ph-p.y)/c.g.ph*c.g.ymax);');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* the event palette: 15 categorical hues, the first 13 (all a chart can');
     DBMS_OUTPUT.PUT_LINE('   use: 14 events, CPU among them) well apart, readable on both themes, no');
@@ -595,12 +623,13 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    if(!dg.moved&&Math.abs(e.clientX-dg.x0)<5)return;');
     DBMS_OUTPUT.PUT_LINE('    dg.moved=true;tipOff();hideAll();');
     DBMS_OUTPUT.PUT_LINE('    if(SP.mode===''win'')return;');
-    DBMS_OUTPUT.PUT_LINE('    var c=dg.c,r=c.svg.getBoundingClientRect(),sc=r.width/c.g.W,mn=r.left+c.g.padL*sc,mx=r.left+(c.g.W-c.g.padR)*sc;');
+    DBMS_OUTPUT.PUT_LINE('    var c=dg.c,mn=toCli(c,c.g.padL,0).x,mx=toCli(c,c.g.W-c.g.padR,0).x;');
     DBMS_OUTPUT.PUT_LINE('    dg.a=Math.max(mn,Math.min(dg.x0,e.clientX));dg.b=Math.min(mx,Math.max(dg.x0,e.clientX));');
-    DBMS_OUTPUT.PUT_LINE('    /* the brush shows on both charts: same width, same x mapping */');
-    DBMS_OUTPUT.PUT_LINE('    CH.forEach(function(o){if(!o.g)return;var ro=o.svg.getBoundingClientRect(),so=ro.width/o.g.W;');
+    DBMS_OUTPUT.PUT_LINE('    /* the brush shows on both charts: same width, same x mapping; its top');
+    DBMS_OUTPUT.PUT_LINE('       and height from the plot''s own edges (a letterbox included) */');
+    DBMS_OUTPUT.PUT_LINE('    CH.forEach(function(o){if(!o.g)return;var ro=o.svg.getBoundingClientRect(),y0=toCli(o,0,o.g.top).y,y1=toCli(o,0,o.g.top+o.g.ph).y;');
     DBMS_OUTPUT.PUT_LINE('      o.br.hidden=false;o.br.style.left=(dg.a-ro.left)+''px'';o.br.style.width=Math.max(0,dg.b-dg.a)+''px'';');
-    DBMS_OUTPUT.PUT_LINE('      o.br.style.top=(o.g.top*so)+''px'';o.br.style.height=(o.g.ph*so)+''px'';});');
+    DBMS_OUTPUT.PUT_LINE('      o.br.style.top=(y0-ro.top)+''px'';o.br.style.height=Math.max(0,y1-y0)+''px'';});');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  doc.addEventListener(''mouseup'',function(){');
     DBMS_OUTPUT.PUT_LINE('    var dg=DRAG;if(!dg)return;DRAG=null;CH.forEach(function(o){o.br.hidden=true;});');
@@ -961,7 +990,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('/* the panel under client x on chart c: {q: panel index, t: time} or null */');
     DBMS_OUTPUT.PUT_LINE('function panAt(c,cx){');
     DBMS_OUTPUT.PUT_LINE('  var g=c.g;if(!g||g.mode!==''win'')return null;');
-    DBMS_OUTPUT.PUT_LINE('  var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*g.W/r.width;');
+    DBMS_OUTPUT.PUT_LINE('  var x=toSvg(c,cx,0).x;');
     DBMS_OUTPUT.PUT_LINE('  for(var q=0;q<g.pan.length;q++){var p=g.pan[q];if(x>=p.x0&&x<p.x0+p.w)return {q:q,t:p.a+(x-p.x0)/p.w*(p.b-p.a)};}');
     DBMS_OUTPUT.PUT_LINE('  return null;');
     DBMS_OUTPUT.PUT_LINE('}');
@@ -1103,9 +1132,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('      +esc((w.o===0?''Current window, '':offTxt(w)+'' window, '')+w.t+(w.o===0?'''':''. Pin it''))+''"/>'';');
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  setSvg(c,s);');
-    DBMS_OUTPUT.PUT_LINE('  c.g={mode:''span'',X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,hk:c.hk,cm:cm};');
+    DBMS_OUTPUT.PUT_LINE('  c.g={mode:''span'',X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,pts:pts,hk:c.hk,cm:cm};');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('function tAt(c,cx){var r=c.svg.getBoundingClientRect(),x=(cx-r.left)*c.g.W/r.width;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}');
+    DBMS_OUTPUT.PUT_LINE('function tAt(c,cx){var x=toSvg(c,cx,0).x;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}');
     DBMS_OUTPUT.PUT_LINE('function bucketAt(t){var j=Math.floor((t-SP.t0)/SP.bh);return j>=0&&j<SP.T.length&&t<SP.T1[j]?j:-1;}');
     DBMS_OUTPUT.PUT_LINE('function hideCross(c){var hb=$(''.xbk'',c.svg),ch=$(''.xch'',c.svg);if(hb){hb.setAttribute(''visibility'',''hidden'');ch.setAttribute(''visibility'',''hidden'');}}');
     DBMS_OUTPUT.PUT_LINE('function hideAll(){CH.forEach(hideCross);}');

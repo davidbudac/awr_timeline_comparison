@@ -756,7 +756,23 @@ their overlap does not darken; the highlighted ones as `path.xa.xah` bands
 from zero, y axis fitted to it", "· Esc clears" when sticky). **Soft**
 (the band under the pointer in the plot, `seriesAt()`) = in place, not
 re-stacked (a re-base would slide the band away from the pointer and
-flicker); off while one is sticky. Cross-chart via `c.peer` / `c.xmap`
+flicker); off while one is sticky. **Pointer mapping (review follow-up
+R3):** every client -> SVG conversion (`seriesAt`, `tAt`, `panAt`, the
+brush) goes through the SVG's screen CTM (`toSvg` / `toCli`): narrower
+than 480 px the viewBox stays 480 wide (`Wd = max(480, width)`), so the
+fixed-height SVG scales it down and centres it vertically
+(preserveAspectRatio) -- clientY x W / width missed that letterbox (38 px
+at 390 px) and the hover lit nothing or the wrong band. `seriesAt` then
+picks the band as DRAWN at the pointer (`stackAt(pts, ord, vk, sx, v)`,
+pure, `AWR_TL.stackAt`, unit-tested: the two path points around x,
+linearly mixed, `c.g.pts` / the panel's `pts`), not the stack of the
+bucket under x: the band paths join bucket midpoints with straight lines
+and, zoomed out, keep each pixel column's busiest bucket, so on spiky
+data the old pick named a band above or below the one under the pointer
+(also at 1440 px). Hover, click-to-keep and the soft highlight follow it;
+the tooltip still reads the exact bucket. verify_report block 5e (390 px:
+a hover at points well inside a band lights that band, both charts, both
+layouts; the brush covers the plot). Cross-chart via `c.peer` / `c.xmap`
 (built from `ashe.ecls` in `spInit`): a class highlights its events in the
 event chart (strong when the class is), an event its class in the class
 chart, lightly (in place, the rest at .35). Sticky: a click on a band
