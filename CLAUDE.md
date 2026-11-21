@@ -813,6 +813,16 @@ flags chart used to draw nothing for it). The flag band (`top` 46 vs 22)
 is reserved side by side only while a marker sits in the gap before a
 panel SHOWN (the most recent `winFit(pw)`); Full span keeps it for every
 marker of the span, also while zoomed, so a brush never moves the charts.
+One flag's place is `flagPos(tiers, x, ws, lo, hi)` (pure, `AWR_TL.flagPos`,
+unit-tested; `flag1` measures the labels and draws): the long label, then
+the short one, each left-anchored at the marker or flipped to end there
+when it would pass the plot's right edge, and only while it then stays
+right of the SVG's left edge (review follow-up R3: a long label flipped
+left near the left edge sat mostly outside the SVG and the short one was
+never tried); no label fits -> the group keeps its line and tooltip.
+verify_report 5d fails a flag box outside its SVG. The dashboard's KPI
+bars (`js_design` `wbars`) apply the same left-edge test to their flipped
+short labels.
 `setSvg(c, s)` replaces a chart's SVG in both layouts and gives the focus
 back to the same `.xwh` (`data-i`) when one had it (Enter on a stripe /
 cap pins, which redraws).

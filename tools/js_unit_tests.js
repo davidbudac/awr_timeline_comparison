@@ -302,6 +302,33 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
   });
 }
 
+/* ---- review follow-up R3: AWR_TL.flagPos (js_timeline), where a release
+   flag goes on the Activity chart ---- */
+{
+  const F = load('js_timeline').AWR_TL.flagPos;
+  const T = () => [[], []];
+  test('flagPos: left-anchored at x while it fits, else flipped to end at x', () => {
+    assert.deepStrictEqual(F(T(), 100, [300, 40], 0, 466), { i: 0, L: 0, x0: 100, end: false });
+    assert.deepStrictEqual(F(T(), 300, [300, 40], 0, 466), { i: 0, L: 0, x0: 0, end: true });
+  });
+  test('flagPos: a flip past the left edge tries the short label', () => {
+    // the long label overruns the right edge and, flipped, the left one
+    assert.deepStrictEqual(F(T(), 200, [300, 40], 0, 466), { i: 1, L: 0, x0: 200, end: false });
+    assert.deepStrictEqual(F(T(), 450, [500, 40], 0, 466), { i: 1, L: 0, x0: 410, end: true });
+    // neither fits: null (the caller keeps the line and its tooltip)
+    assert.strictEqual(F(T(), 200, [500, 480], 0, 466), null);
+  });
+  test('flagPos: tiers, clearance and the extent taken', () => {
+    const t = T();
+    assert.deepStrictEqual(F(t, 100, [60], 0, 466), { i: 0, L: 0, x0: 100, end: false });
+    assert.deepStrictEqual(t, [[[100, 160]], []]);
+    // 6 px clear of a flag on the same tier, else the next tier
+    assert.deepStrictEqual(F(t, 150, [60], 0, 466), { i: 0, L: 1, x0: 150, end: false });
+    assert.deepStrictEqual(F(t, 166, [40], 0, 466), { i: 0, L: 0, x0: 166, end: false });
+    assert.strictEqual(F(t, 120, [30], 0, 466), null);
+  });
+}
+
 /* ---- G4 (plan 025 follow-up): the micro strip's dense mode (js_microstrip) ---- */
 {
   const strip = load('js_microstrip').AWR_microStrip;

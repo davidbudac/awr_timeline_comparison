@@ -3165,23 +3165,35 @@ function flagSvg(c,list,top,ph,Wd,padL,padR){
   });
   return s;
 }
-/* one flag at x on the first tier with room for one of the labels labs
-   (else null); tiers takes its extent */
-function flag1(tiers,x,labs,title,top,ph,Wd,padR){
-  var r=null;
-  labs.some(function(lb){
-    var w=tw(lb)+12,x0=x+w>Wd-padR?x-w:x,end=x0!==x;
-    for(var L=0;L<2;L++){
+/* where a flag at x goes: the first label (widths ws, in order: the long
+   label, then the short one) that fits on a free tier, left-anchored at x,
+   or flipped to end at x when that would pass the right edge hi -- and
+   only while the flag then stays right of the left edge lo (review
+   follow-up R3: a long label flipped left near the left edge sat mostly
+   outside the SVG, and the short one was never tried).  {i: label index,
+   L: tier, x0: left edge, end: flipped} with tiers taking its extent, or
+   null: the caller keeps the line and its tooltip.  Pure: AWR_TL.flagPos,
+   unit-tested. */
+function flagPos(tiers,x,ws,lo,hi){
+  for(var i=0;i<ws.length;i++){
+    var w=ws[i],x0=x+w>hi?x-w:x;
+    if(x0<lo)continue;
+    for(var L=0;L<tiers.length;L++){
       if(tiers[L].some(function(q){return x0<q[1]+6&&x0+w>q[0]-6;}))continue;
-      tiers[L].push([x0,x0+w]);var y=2+L*19;
-      r='<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+(y+16)+'" y2="'+(top+ph)+'"/><line class="cf" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+y+'" y2="'+(y+16)+'"/>'
-        +'<rect class="cfh" x="'+(end?x0:x+1).toFixed(1)+'" y="'+y+'" width="'+(w-1)+'" height="16" rx="2"/>'
-        +'<text class="cft" x="'+(end?x-6:x+6).toFixed(1)+'" y="'+(y+12)+'" text-anchor="'+(end?'end':'start')+'"><title>'+esc(title)+'</title>'+esc(lb)+'</text>';
-      return true;
+      tiers[L].push([x0,x0+w]);return {i:i,L:L,x0:x0,end:x0!==x};
     }
-    return false;
-  });
-  return r;
+  }
+  return null;
+}
+TL.flagPos=flagPos;
+/* one flag at x for the first of the labels labs that fits (flagPos; the
+   SVG's left edge, 0, to the plot's right edge), else null */
+function flag1(tiers,x,labs,title,top,ph,Wd,padR){
+  var ws=labs.map(function(lb){return tw(lb)+12;}),f=flagPos(tiers,x,ws,0,Wd-padR);if(!f)return null;
+  var lb=labs[f.i],w=ws[f.i],x0=f.x0,end=f.end,y=2+f.L*19;
+  return '<line class="cfl" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+(y+16)+'" y2="'+(top+ph)+'"/><line class="cf" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+y+'" y2="'+(y+16)+'"/>'
+    +'<rect class="cfh" x="'+(end?x0:x+1).toFixed(1)+'" y="'+y+'" width="'+(w-1)+'" height="16" rx="2"/>'
+    +'<text class="cft" x="'+(end?x-6:x+6).toFixed(1)+'" y="'+(y+12)+'" text-anchor="'+(end?'end':'start')+'"><title>'+esc(title)+'</title>'+esc(lb)+'</text>';
 }
 /* replace chart c's SVG; a focused window stripe / cap keeps the focus
    (Enter on it pins the window, which redraws both charts) */
@@ -54454,7 +54466,7 @@ function wbars(o,opt){
       var i=-1;ws.forEach(function(wi,k){if(wi.o===m.o)i=k;});if(i<0)return;
       var x=slot*i;s+='<line class="dmk" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+(top-6)+'" y2="'+(top+ph)+'"><title>'+esc(m.l+", "+m.t)+'</title></line>';
       var lw=m.s.length*6+6,clash=function(a){return tiers.some(function(r){return a<r[1]&&a+lw>r[0];});},end=x+lw>W||clash(x),x0=end?x-lw:x;
-      if(clash(x0))return;tiers.push([x0,x0+lw]);
+      if(x0<0||clash(x0))return;tiers.push([x0,x0+lw]);
       s+='<text class="dml" x="'+(end?x-3:x+3).toFixed(1)+'" y="'+(top-9)+'" text-anchor="'+(end?'end':'start')+'"><title>'+esc(m.l+", "+m.t)+'</title>'+esc(m.s)+'</text>';
     });
   }

@@ -179,7 +179,12 @@ release bumps `awr_version`).
   at 390 px and light nothing or the wrong band; and the highlighted band
   is the one drawn under the pointer (on spiky data, at any width, the
   stack of the exact bucket under the pointer could name the band above
-  or below it).
+  or below it). A long release label that does not fit to the right of
+  its marker is drawn to its left only when it stays inside the chart;
+  otherwise the short label ("R 4.3") is tried, then just the line with
+  its tooltip (a long label near the left edge of a narrow chart used to
+  sit mostly outside it, the short label never tried; the dashboard's KPI
+  bars had the same flaw).
 - **Findings at a glance.** The Summary view lists every finding in one
   triage list (value, normal range, share of the DB-time rise, per-window
   strip) above the cards; every card but the most important one starts

@@ -341,6 +341,11 @@ findings as confirmed by the owner's agent):
   which on spiky data (and zoomed out, where a point is a pixel column's
   busiest bucket) named the band above or below. The tooltip still
   reads the exact bucket.
+- 024 release flags (fix group R3): a flag tries the long label, then
+  the short one, each left-anchored at the marker or flipped to its left
+  when it would pass the right edge, and takes a tier only when it stays
+  inside BOTH edges; nothing fits -> the line with its tooltip (as
+  before). The dashboard's KPI bars follow the same left-edge rule.
 
 
 Each plan records its default, so an executor never waits on these. Decide

@@ -31,6 +31,9 @@
 --   stackAt(pts, ord, vk, sx, v)  the series whose band is DRAWN at
 --                 (sx, v): the hover / click / soft-highlight pick (pure,
 --                 unit-tested; review follow-up R3).
+--   flagPos(tiers, x, ws, lo, hi)  where a release flag goes: long label,
+--                 then short, left-anchored or flipped, inside both edges
+--                 (pure, unit-tested; R3).
 -- and on window.AWR_WG:
 --   pin(o)        pin window offset o (0 / null / the pinned one = unpin):
 --                 its grid column tints amber, every gutter Delta compares
@@ -938,23 +941,35 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  return s;');
     DBMS_OUTPUT.PUT_LINE('}');
-    DBMS_OUTPUT.PUT_LINE('/* one flag at x on the first tier with room for one of the labels labs');
-    DBMS_OUTPUT.PUT_LINE('   (else null); tiers takes its extent */');
-    DBMS_OUTPUT.PUT_LINE('function flag1(tiers,x,labs,title,top,ph,Wd,padR){');
-    DBMS_OUTPUT.PUT_LINE('  var r=null;');
-    DBMS_OUTPUT.PUT_LINE('  labs.some(function(lb){');
-    DBMS_OUTPUT.PUT_LINE('    var w=tw(lb)+12,x0=x+w>Wd-padR?x-w:x,end=x0!==x;');
-    DBMS_OUTPUT.PUT_LINE('    for(var L=0;L<2;L++){');
+    DBMS_OUTPUT.PUT_LINE('/* where a flag at x goes: the first label (widths ws, in order: the long');
+    DBMS_OUTPUT.PUT_LINE('   label, then the short one) that fits on a free tier, left-anchored at x,');
+    DBMS_OUTPUT.PUT_LINE('   or flipped to end at x when that would pass the right edge hi -- and');
+    DBMS_OUTPUT.PUT_LINE('   only while the flag then stays right of the left edge lo (review');
+    DBMS_OUTPUT.PUT_LINE('   follow-up R3: a long label flipped left near the left edge sat mostly');
+    DBMS_OUTPUT.PUT_LINE('   outside the SVG, and the short one was never tried).  {i: label index,');
+    DBMS_OUTPUT.PUT_LINE('   L: tier, x0: left edge, end: flipped} with tiers taking its extent, or');
+    DBMS_OUTPUT.PUT_LINE('   null: the caller keeps the line and its tooltip.  Pure: AWR_TL.flagPos,');
+    DBMS_OUTPUT.PUT_LINE('   unit-tested. */');
+    DBMS_OUTPUT.PUT_LINE('function flagPos(tiers,x,ws,lo,hi){');
+    DBMS_OUTPUT.PUT_LINE('  for(var i=0;i<ws.length;i++){');
+    DBMS_OUTPUT.PUT_LINE('    var w=ws[i],x0=x+w>hi?x-w:x;');
+    DBMS_OUTPUT.PUT_LINE('    if(x0<lo)continue;');
+    DBMS_OUTPUT.PUT_LINE('    for(var L=0;L<tiers.length;L++){');
     DBMS_OUTPUT.PUT_LINE('      if(tiers[L].some(function(q){return x0<q[1]+6&&x0+w>q[0]-6;}))continue;');
-    DBMS_OUTPUT.PUT_LINE('      tiers[L].push([x0,x0+w]);var y=2+L*19;');
-    DBMS_OUTPUT.PUT_LINE('      r=''<line class="cfl" x1="''+x.toFixed(1)+''" x2="''+x.toFixed(1)+''" y1="''+(y+16)+''" y2="''+(top+ph)+''"/><line class="cf" x1="''+x.toFixed(1)+''" x2="''+x.toFixed(1)+''" y1="''+y+''" y2="''+(y+16)+''"/>''');
-    DBMS_OUTPUT.PUT_LINE('        +''<rect class="cfh" x="''+(end?x0:x+1).toFixed(1)+''" y="''+y+''" width="''+(w-1)+''" height="16" rx="2"/>''');
-    DBMS_OUTPUT.PUT_LINE('        +''<text class="cft" x="''+(end?x-6:x+6).toFixed(1)+''" y="''+(y+12)+''" text-anchor="''+(end?''end'':''start'')+''"><title>''+esc(title)+''</title>''+esc(lb)+''</text>'';');
-    DBMS_OUTPUT.PUT_LINE('      return true;');
+    DBMS_OUTPUT.PUT_LINE('      tiers[L].push([x0,x0+w]);return {i:i,L:L,x0:x0,end:x0!==x};');
     DBMS_OUTPUT.PUT_LINE('    }');
-    DBMS_OUTPUT.PUT_LINE('    return false;');
-    DBMS_OUTPUT.PUT_LINE('  });');
-    DBMS_OUTPUT.PUT_LINE('  return r;');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  return null;');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('TL.flagPos=flagPos;');
+    DBMS_OUTPUT.PUT_LINE('/* one flag at x for the first of the labels labs that fits (flagPos; the');
+    DBMS_OUTPUT.PUT_LINE('   SVG''s left edge, 0, to the plot''s right edge), else null */');
+    DBMS_OUTPUT.PUT_LINE('function flag1(tiers,x,labs,title,top,ph,Wd,padR){');
+    DBMS_OUTPUT.PUT_LINE('  var ws=labs.map(function(lb){return tw(lb)+12;}),f=flagPos(tiers,x,ws,0,Wd-padR);if(!f)return null;');
+    DBMS_OUTPUT.PUT_LINE('  var lb=labs[f.i],w=ws[f.i],x0=f.x0,end=f.end,y=2+f.L*19;');
+    DBMS_OUTPUT.PUT_LINE('  return ''<line class="cfl" x1="''+x.toFixed(1)+''" x2="''+x.toFixed(1)+''" y1="''+(y+16)+''" y2="''+(top+ph)+''"/><line class="cf" x1="''+x.toFixed(1)+''" x2="''+x.toFixed(1)+''" y1="''+y+''" y2="''+(y+16)+''"/>''');
+    DBMS_OUTPUT.PUT_LINE('    +''<rect class="cfh" x="''+(end?x0:x+1).toFixed(1)+''" y="''+y+''" width="''+(w-1)+''" height="16" rx="2"/>''');
+    DBMS_OUTPUT.PUT_LINE('    +''<text class="cft" x="''+(end?x-6:x+6).toFixed(1)+''" y="''+(y+12)+''" text-anchor="''+(end?''end'':''start'')+''"><title>''+esc(title)+''</title>''+esc(lb)+''</text>'';');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* replace chart c''s SVG; a focused window stripe / cap keeps the focus');
     DBMS_OUTPUT.PUT_LINE('   (Enter on it pins the window, which redraws both charts) */');

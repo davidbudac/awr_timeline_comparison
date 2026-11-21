@@ -84,7 +84,7 @@ function wbars(o,opt){
       var i=-1;ws.forEach(function(wi,k){if(wi.o===m.o)i=k;});if(i<0)return;
       var x=slot*i;s+='<line class="dmk" x1="'+x.toFixed(1)+'" x2="'+x.toFixed(1)+'" y1="'+(top-6)+'" y2="'+(top+ph)+'"><title>'+esc(m.l+", "+m.t)+'</title></line>';
       var lw=m.s.length*6+6,clash=function(a){return tiers.some(function(r){return a<r[1]&&a+lw>r[0];});},end=x+lw>W||clash(x),x0=end?x-lw:x;
-      if(clash(x0))return;tiers.push([x0,x0+lw]);
+      if(x0<0||clash(x0))return;tiers.push([x0,x0+lw]);
       s+='<text class="dml" x="'+(end?x-3:x+3).toFixed(1)+'" y="'+(top-9)+'" text-anchor="'+(end?'end':'start')+'"><title>'+esc(m.l+", "+m.t)+'</title>'+esc(m.s)+'</text>';
     });
   }

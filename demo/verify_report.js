@@ -57,7 +57,8 @@
  *     markers, the switch remembered in awr-axlayout; Enter on a focused
  *     stripe / cap keeps the focus through the redraw (both layouts); the
  *     flag band only while a flag is drawn side by side; three markers in
- *     one gap all named (a "+n" flag lists the rest, block 5d);
+ *     one gap all named (a "+n" flag lists the rest, block 5d), every flag
+ *     inside its SVG;
  *   - the Activity charts at 390 px (R3, block 5e): the SVG keeps a 480-px
  *     viewBox there, scaled down and centred vertically, so a hover over a
  *     band lights exactly that band (soft highlight, both charts, both
@@ -1151,7 +1152,10 @@ const LABEL_BAND = () => {
       const R = [...s.querySelectorAll('rect.cfh')].map(r => r.getBoundingClientRect());
       let ov = 0; for (let i = 0; i < R.length; i++) for (let j = i + 1; j < R.length; j++) if (R[i].left < R[j].right && R[j].left < R[i].right && R[i].top < R[j].bottom && R[j].top < R[i].bottom) ov++;
       const plus = [...s.querySelectorAll('text.cft')].filter(t => / \+\d+$/.test(t.lastChild ? t.lastChild.textContent : '')).length;
-      return (miss.length || ov ? 'FAIL missing ' + JSON.stringify(miss) + ' overlap ' + ov : 'ok') + ' (' + crop + ms.length + ' markers, ' + R.length + ' flags, ' + plus + ' +n)';
+      // every flag inside the SVG (R3: a long label flipped left of a marker
+      // near the left edge sat mostly outside it)
+      const sb = s.getBoundingClientRect(), out = R.filter(r => r.left < sb.left - 0.5 || r.right > sb.right + 0.5).length;
+      return (miss.length || ov || out ? 'FAIL missing ' + JSON.stringify(miss) + ' overlap ' + ov + ' outside the SVG ' + out : 'ok') + ' (' + crop + ms.length + ' markers, ' + R.length + ' flags, ' + plus + ' +n)';
     }, mode);
     for (const m of ['win', 'span']) {
       const can = await page.evaluate((m) => { if (!window.AWR_TL || !AWR_TL.axLayout) return false; if (m === 'win' && !document.querySelector('#activity .axlayout:not([hidden])')) return false; AWR_TL.axLayout(m, false); return true; }, m);
