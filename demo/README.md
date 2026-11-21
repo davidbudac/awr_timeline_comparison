@@ -73,8 +73,15 @@ Marked milestones, each with its own signature:
 | 2026-08-11 22:00 | Release 4.1 | Loyalty feature: two new SQL_IDs, +12 % steady load, one day of `enq: TX - row lock contention`; `pga_aggregate_target` raised |
 | 2026-09-08 22:00 | Release 4.2 | `optimizer_adaptive_plans` TRUE → the order-lookup statement flips plan (index → full scan of ORDER_LINES): physical reads ×4, User I/O ×3, DB time ×1.6 — **still ongoing at target_end, so the Current window is the regression** |
 
-Unmarked blips: month-end close batches (Jul 31, Aug 31 evenings) and a
-90-minute `log file sync` storage incident on Aug 25 14:00.
+Unmarked blips: month-end close batches (Jul 31, Aug 31 evenings), a
+90-minute `log file sync` storage incident on Aug 25 14:00, and a
+GoldenGate extract stall from 08:35 on the Current day: the integrated
+capture (a background process) waits for it to catch up, so the
+**Queueing waits** card is flagged large (findings are scored on
+all-session wait time) while its impact is 0 (foreground time only): no
+chip, ranked after the cards that added DB time, "under 0.01 AAS" in the
+triage list, no part of "Where the extra DB time went". It is the one
+background-only wait class of the model (`model.SYSEVENT_BG`).
 
 ## Regenerating
 

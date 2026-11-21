@@ -81,8 +81,9 @@ def _window_values(w):
         # WAIT: per wait_class (non-Idle), seconds waited per second.  The SQL
         # applies the template's wait_event_targets filter (like 07); the demo
         # is the comprehensive template, whose '*' sentinel keeps every event.
+        # DBA_HIST_SYSTEM_EVENT, all sessions (time_waited_micro)
         by_cls = {}
-        for ev, (wc, cnt, us) in m.fg_waits.items():
+        for ev, (wc, cnt, us) in m.sys_waits.items():
             if wc is None or wc == "Idle":
                 continue
             by_cls[wc] = by_cls.get(wc, 0.0) + us
@@ -95,16 +96,16 @@ def _window_values(w):
 def _fg_wait_deltas(w):
     """wait_fg_rows / wait_fg (v1.7 impact, owner decision 2026-11-20): per
     wait class, Current minus the prior mean of the FOREGROUND time waited
-    per second, AAS; the card order only, never scored.  The model's
-    SYSTEM_EVENT waits (fg_waits) are foreground only, so its
-    time_waited_micro_fg equals time_waited_micro.  Same as s07's copy."""
+    per second, AAS; the card order only, never scored.  The class rows'
+    SYSTEM_EVENT rows, foreground columns (m.sys_waits_fg: 0 for a
+    background-only event).  Same as s07's copy."""
     by_cls = {}
     for win in w.valid_windows:
         m = w.window_metrics(win)
         if m is None:
             continue
         per = {}
-        for ev, (wc, cnt, us) in m.fg_waits.items():
+        for ev, (wc, cnt, us) in m.sys_waits_fg.items():
             if wc is None or wc == "Idle":
                 continue
             per[wc] = per.get(wc, 0.0) + us

@@ -457,6 +457,20 @@ release bumps `awr_version`).
   too); the check now zooms into the busiest window first, where the
   stripes are wide and take clicks on their caps only. The demo must not
   need the zoom.
+- **The demo has a background-only finding.** Its model kept foreground
+  and all-session wait time equal, so only the test DB showed a card
+  scored on all sessions whose impact (foreground time) is nil. Now a
+  GoldenGate extract stalls from 08:35 on the Current day and the
+  integrated capture, a background process, waits for it: the **Queueing
+  waits** card is flagged large, has no impact chip or share, follows the
+  cards that added DB time, reads "under 0.01 AAS" in the triage list and
+  is no part of "Where the extra DB time went". The new events also show
+  in Foreground / Background waits (DBA_HIST_SYSTEM_EVENT is all
+  sessions), the Activity charts, the histograms and the instance map;
+  the other cards' numbers are unchanged. `demo/verify_report.js` checks
+  every flagged card under the 0.01 AAS floor (no chip, no share, after
+  every tier-1 card, the triage text, no breakdown part), required on the
+  demo, and on the dashboard demo a lead row without the chip.
 
 ## 1.6.1 — 2026-09-27
 

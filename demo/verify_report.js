@@ -92,7 +92,11 @@
  *     Trend cells are micro strips (svg.mw), no line left;
  *     v1.7: cards ordered by data-impact (rises of 0.01 AAS or more
  *     first, largest first), chip present, Summary z capped
- *     at 10; the DB-time breakdown under the verdict (#att-slot) shown
+ *     at 10; R4: a flagged card whose time measure rose under 0.01 AAS
+ *     (a background-only wait class, scored on all sessions) has no chip
+ *     or share, follows every tier-1 card, reads "under 0.01 AAS" in the
+ *     triage list and is no part of the breakdown (required on the demo:
+ *     Queueing waits); the DB-time breakdown under the verdict (#att-slot) shown
  *     (required for the demo), #att-src gone, every part coloured from
  *     AWR_WAIT_COLORS; v1.7 one count: the rail's Findings pills add up
  *     to the finding cards, no other rail link has a count pill, no
@@ -128,7 +132,8 @@
  *     the KPI cards above Activity, one KPI per finding card + DB time
  *     with bars, every finding card inside a row of the findings table
  *     (count = the Moved tab), each lead row shows its card's impact
- *     chip (.dimp; required on the demo), a row opens to its bars / its card, the
+ *     chip (.dimp; required on the demo, and a lead row without it: the
+ *     background-only card), a row opens to its bars / its card, the
  *     Normal tab shows #s-normal and a jump into it switches the tab, the
  *     Activity tabs show one chart (x labels + release flags on it) or
  *     both, Ctrl+K opens the palette (not the row filter), a search +
@@ -1597,6 +1602,23 @@ const LABEL_BAND = () => {
       // 2026-11-21: a smaller rise shows no chip and no share)
       out.impChips = fc.every(c => { const v = parseFloat(c.getAttribute('data-impact')), ch = c.querySelector('.fc-k .fc-imp');
         return v >= 0.01 ? !!ch : !ch && (c.getAttribute('data-share') || '') === ''; });
+      // R4: a flagged card whose time measure rose less than 0.01 AAS (a
+      // background-only wait class: scored on all sessions, its foreground
+      // time flat) has no chip and no share, sits after every tier-1 card,
+      // reads "under 0.01 AAS" in the triage list and is no part of the
+      // DB-time breakdown (required on the demo: its Queueing waits card)
+      const last1 = fc.reduce((m, c, i) => (c.id !== 'f-dbtime' && t1(parseFloat(c.getAttribute('data-impact')))) ? i : m, -1);
+      out.lowImp = fc.filter(c => c.id !== 'f-dbtime' && /\bf-(large|moderate)\b/.test(c.className)
+          && (c.getAttribute('data-impact') || '') !== '' && Math.abs(parseFloat(c.getAttribute('data-impact'))) < 0.01)
+        .map(c => {
+          const bad = [], tr = document.querySelector('#triage .tri-row[data-card="' + c.id + '"] .tri-imp');
+          if (c.querySelector('.fc-k .fc-imp')) bad.push('chip');
+          if ((c.getAttribute('data-share') || '') !== '') bad.push('share');
+          if (fc.indexOf(c) < last1) bad.push('before a tier-1 card');
+          if (tr && !/^under 0\.01 AAS$/.test(tr.textContent.trim())) bad.push('triage "' + tr.textContent.trim() + '"');
+          if (document.querySelector('#att-slot a[href="#' + c.id + '"]')) bad.push('a breakdown part');
+          return c.id + (bad.length ? ' FAIL ' + bad.join(', ') : '');
+        });
       // v1.7: the DB-time breakdown under the verdict
       const att = document.getElementById('att-slot');
       out.att = (att && !att.hidden && vis(att)) ? att.querySelectorAll('.att-s').length : 0;
@@ -1745,6 +1767,9 @@ const LABEL_BAND = () => {
     if (!p4.impAttrs) fail('finding cards: data-impact / data-share missing');
     if (!p4.impOrder) fail('finding cards: not ordered by impact');
     if (!p4.impChips) fail('finding cards: impact chip missing, or shown below 0.01 AAS');
+    if (p4.lowImp.some(x => / FAIL /.test(x))) fail('finding cards under 0.01 AAS: ' + p4.lowImp.join('; '));
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && !p4.lowImp.includes('f-wait-queueing'))
+      fail('demo: expected the flagged background-only Queueing waits card (impact under 0.01 AAS), got ' + JSON.stringify(p4.lowImp));
     if (p4.zcap.length) fail('Summary glyphs print z past 10: ' + p4.zcap.join(', '));
     if (!p4.planOk) fail('plan-change card incomplete, or neither in #changes-slot nor right under the card it explains');
     if (/^FAIL/.test(p4.scatter)) fail('SQL Monitor scatter ' + p4.scatter);
@@ -1898,6 +1923,7 @@ const LABEL_BAND = () => {
       if (!lay.order) fail('dashboard: Summary order (verdict, KPI cards, Activity, findings)');
       if (lay.imps.some(x => /^FAIL/.test(x))) fail('dashboard: impact chip on the lead rows ' + lay.imps.join(','));
       if (/demo_busy_db_dashboard\.html$/.test(file) && !lay.imps.includes('y')) fail('dashboard demo: no lead row shows its impact chip');
+      if (/demo_busy_db_dashboard\.html$/.test(file) && !lay.imps.includes('n')) fail('dashboard demo: no lead row without the chip (the background-only card)');
       // rows open: a lead row shows its card, another row draws its bars
       dz.rows = await page.evaluate(async () => {
         const vis = el => !!el && el.getClientRects().length > 0;

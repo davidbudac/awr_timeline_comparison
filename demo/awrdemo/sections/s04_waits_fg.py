@@ -19,7 +19,9 @@ def emit(w) -> str:
              + ' events by time and by average wait, and the wait classes</small></h2>')
     L.append('<div class="chart-wrap chart-small" id="waits-fg-stack"></div>')
 
-    deltas = C.window_deltas(w, lambda m: m.fg_waits)
+    # DBA_HIST_SYSTEM_EVENT, all sessions (time_waited_micro): its
+    # background-only events too (model.SYSEVENT_BG), as on a real DB
+    deltas = C.window_deltas(w, lambda m: m.sys_waits)
     n_win = len(deltas)
 
     # ---- chart: class_deltas = SUM of every event delta per (week, class);

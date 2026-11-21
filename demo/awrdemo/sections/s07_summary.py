@@ -97,7 +97,8 @@ def _unified_rows(w):
             if name in m.sysmetric:
                 put("METRIC", name, k, m.sysmetric[name])
         per_class: dict[str, float] = {}
-        for _ev, (wc, _n, us) in m.fg_waits.items():
+        # wait_rows: DBA_HIST_SYSTEM_EVENT, all sessions (time_waited_micro)
+        for _ev, (wc, _n, us) in m.sys_waits.items():
             if wc == "Idle":
                 continue
             per_class[wc] = per_class.get(wc, 0.0) + us
@@ -110,17 +111,18 @@ def _unified_rows(w):
 def _fg_wait_deltas(w) -> dict:
     """wait_fg_rows / wait_fg: per wait class, Current minus the prior mean
     of the FOREGROUND time waited per second (time_waited_micro_fg), AAS --
-    the cards' impact (owner decision 2026-11-20), never scored.  The
-    model's SYSTEM_EVENT waits (fg_waits) are foreground only, so its
-    time_waited_micro_fg equals time_waited_micro: the per-window sums are
-    the class rows' own, from the same windows."""
+    the cards' impact (owner decision 2026-11-20), never scored.  The same
+    SYSTEM_EVENT rows as the class rows (m.sys_waits), foreground columns
+    (m.sys_waits_fg): a foreground event's time is all foreground, a
+    background-only one's (model.SYSEVENT_BG, the demo's Queueing class)
+    is 0, so that class scores on its all-session time and adds 0 AAS."""
     by_cls: dict[str, dict[int, float]] = {}
     for win in w.valid_windows:
         m = w.window_metrics(win)
         if m is None:
             continue
         per_class: dict[str, float] = {}
-        for _ev, (wc, _n, us) in m.fg_waits.items():
+        for _ev, (wc, _n, us) in m.sys_waits_fg.items():
             if wc == "Idle":
                 continue
             per_class[wc] = per_class.get(wc, 0.0) + us
@@ -217,14 +219,15 @@ def _emit_domain_table(out: list[str], ordered: list[Finding], dom: str, title: 
 
 
 def _events(w):
-    """The card-evidence scan: top 2 foreground events per wait class by
-    Current time waited per second, with prior mean / sd / n and share."""
+    """The card-evidence scan: top 2 events per wait class by Current time
+    waited per second (DBA_HIST_SYSTEM_EVENT, all sessions), with prior
+    mean / sd / n and share."""
     rows: dict[tuple[str, str], dict[int, float]] = {}
     for win in w.valid_windows:
         m = w.window_metrics(win)
         if m is None or m.dur_sec <= 0:
             continue
-        for ev, (wc, _n, us) in m.fg_waits.items():
+        for ev, (wc, _n, us) in m.sys_waits.items():
             if wc == "Idle":
                 continue
             rows.setdefault((wc, ev), {})[win.week_offset] = us / m.dur_sec / 1e6

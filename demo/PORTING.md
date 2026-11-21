@@ -90,6 +90,13 @@ goes through `helpers.load_total(m, stat)`, the twin of
 `sql/lib/load_pairs_cte.sql` (`DB time` / `DB CPU` from the time model
 / 1e4); wait `time_waited_us` is
 microseconds (`DBA_HIST_SYSTEM_EVENT.time_waited_micro` delta).
+Waits: `m.fg_waits` are the foreground events, `m.bg_waits`
+`DBA_HIST_BG_EVENT_SUMMARY`. A section reading `DBA_HIST_SYSTEM_EVENT`
+reads `m.sys_waits` (all sessions, `time_waited_micro`: the foreground
+events plus the background-only ones of `model.SYSEVENT_BG`) and, for the
+`*_fg` columns, `m.sys_waits_fg` (0 for those background-only events);
+the model's other background events are not in its SYSTEM_EVENT (a
+simplification).
 
 Keep `model.py` stable: the website's screenshots and the demo story
 depend on it.  If the model genuinely lacks something your section needs,

@@ -441,7 +441,9 @@ max |z|); then a flagged DB time card moves to 2nd. The same floor
 hides the chip and the share (owner decision 2026-11-21: no chip, no
 `data-share`, no rail %, "under 0.01 AAS" in the triage list, nothing
 in Copy summary or the dashboard's `.dimp`; verify_report's `impOrder`
-encodes the tiers, `impChips` the chip rule). Impact
+encodes the tiers, `impChips` the chip rule, `lowImp` a flagged card
+under the floor -- required on the demo, whose background-only Queueing
+waits card is one). Impact
 (`impact_group` + `time_added`): the card's time measure — DB time or DB
 CPU (time model), Current minus prior mean ×`metric_scale` = AAS, or its
 wait class's FOREGROUND wait time (owner decision 2026-11-20:
@@ -2427,7 +2429,16 @@ each `demo/awrdemo/sections/sNN_*.py` is a hand-ported twin of `sql/NN_*.sql`
 PL/SQL lib: band glyph, anchors, card vocabulary, `wg_*`, `tl_*`, `lib_ls`).
 s09's `fine` payloads are SYNTHETIC (seeded minute profiles spread each
 hour's samples by largest remainder, so window sums stay exact) and its SQL
-lines are sliced by anchor, not index. **When a section's markup/JS changes,
+lines are sliced by anchor, not index. Waits: a twin of a
+`DBA_HIST_SYSTEM_EVENT` read uses `m.sys_waits` (all sessions) and, for the
+`*_fg` columns, `m.sys_waits_fg`; `m.fg_waits` alone holds only the
+foreground events. The model's one background-only wait class (Queueing,
+`model.SYSEVENT_BG`: a GoldenGate capture waiting for its stalled extract
+from 08:35 on the Current day, review follow-up R4) is the demo's case of
+the impact split -- its card is flagged on all-session time while its
+foreground impact is 0 (no chip, after the tier-1 cards, "under 0.01 AAS",
+no breakdown part); its stall event has no prior window, so 05's
+table-wide shift note survives. **When a section's markup/JS changes,
 re-port its twin in the same commit and regenerate**; generation is deterministic (two runs, same md5), and identical across Python 3.12-3.14 because `helpers.mean_sd` (and the model's physical-reads total) use `math.fsum` (the built-in `sum()` of floats differs by an ulp between versions, which once reordered tied rows in CI).
 `tools/check.sh` (CI) fails when either generated page is stale
 (`gen_demo_report.py --check`, `gen_policy_doc.py --check`). `NODE_PATH=<any

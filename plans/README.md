@@ -346,6 +346,19 @@ findings as confirmed by the owner's agent):
   when it would pass the right edge, and takes a tier only when it stays
   inside BOTH edges; nothing fits -> the line with its tooltip (as
   before). The dashboard's KPI bars follow the same left-edge rule.
+- 020 demo coverage (fix group R4): the demo's background-only case is a
+  **Queueing** class (a GoldenGate integrated capture waiting for its
+  stalled extract from 08:35 on the Current day), not System I/O or
+  Other: those classes carry foreground events in the model whose time
+  rises with the Current window's load (+0.043 / +0.032 AAS, past the
+  floor), so their cards would show a chip. Queueing has no foreground
+  event, so its impact is exactly 0.000 (like the test DB's System I/O
+  card). The stall event has no prior window and a small steady flow
+  control event carries the class baseline, so section 05's table-wide
+  shift note (rendered only by the demo) survives. The model's other
+  background events stay out of its SYSTEM_EVENT, as before (adding them
+  would flag a WRITE card at +0.04 AAS). Demo and verify_report only; the
+  report is unchanged.
 
 
 Each plan records its default, so an executor never waits on these. Decide
