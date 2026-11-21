@@ -96,7 +96,8 @@ reads `m.sys_waits` (all sessions, `time_waited_micro`: the foreground
 events plus the background-only ones of `model.SYSEVENT_BG`) and, for the
 `*_fg` columns, `m.sys_waits_fg` (0 for those background-only events);
 the model's other background events are not in its SYSTEM_EVENT (a
-simplification).
+simplification; only s10's full-span DB-time stack, older, adds every
+`m.bg_waits` event to `m.fg_waits`).
 
 Keep `model.py` stable: the website's screenshots and the demo story
 depend on it.  If the model genuinely lacks something your section needs,

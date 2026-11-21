@@ -469,8 +469,9 @@ release bumps `awr_version`).
   sessions), the Activity charts, the histograms and the instance map;
   the other cards' numbers are unchanged. `demo/verify_report.js` checks
   every flagged card under the 0.01 AAS floor (no chip, no share, after
-  every tier-1 card, the triage text, no breakdown part), required on the
-  demo, and on the dashboard demo a lead row without the chip.
+  every tier-1 card, the triage text, no breakdown part without a rise),
+  required on the demo, and on the dashboard demo that card's lead row
+  without the chip.
 
 ## 1.6.1 — 2026-09-27
 

@@ -95,8 +95,9 @@
  *     at 10; R4: a flagged card whose time measure rose under 0.01 AAS
  *     (a background-only wait class, scored on all sessions) has no chip
  *     or share, follows every tier-1 card, reads "under 0.01 AAS" in the
- *     triage list and is no part of the breakdown (required on the demo:
- *     Queueing waits); the DB-time breakdown under the verdict (#att-slot) shown
+ *     triage list and is no breakdown part without a rise (required on
+ *     the demo: Queueing waits, impact 0); the DB-time breakdown under the
+ *     verdict (#att-slot) shown
  *     (required for the demo), #att-src gone, every part coloured from
  *     AWR_WAIT_COLORS; v1.7 one count: the rail's Findings pills add up
  *     to the finding cards, no other rail link has a count pill, no
@@ -1605,9 +1606,13 @@ const LABEL_BAND = () => {
       // R4: a flagged card whose time measure rose less than 0.01 AAS (a
       // background-only wait class: scored on all sessions, its foreground
       // time flat) has no chip and no share, sits after every tier-1 card,
-      // reads "under 0.01 AAS" in the triage list and is no part of the
-      // DB-time breakdown (required on the demo: its Queueing waits card)
+      // reads "under 0.01 AAS" in the triage list and is no breakdown part
+      // without a rise (required on the demo: its Queueing waits card,
+      // impact 0). A part is any rise of 1% of the bar or more, so a rise
+      // under the floor can be one when DB time rose less than 1 AAS: only
+      // a listed part that did not rise fails.
       const last1 = fc.reduce((m, c, i) => (c.id !== 'f-dbtime' && t1(parseFloat(c.getAttribute('data-impact')))) ? i : m, -1);
+      const triL = document.getElementById('triage');
       out.lowImp = fc.filter(c => c.id !== 'f-dbtime' && /\bf-(large|moderate)\b/.test(c.className)
           && (c.getAttribute('data-impact') || '') !== '' && Math.abs(parseFloat(c.getAttribute('data-impact'))) < 0.01)
         .map(c => {
@@ -1615,8 +1620,10 @@ const LABEL_BAND = () => {
           if (c.querySelector('.fc-k .fc-imp')) bad.push('chip');
           if ((c.getAttribute('data-share') || '') !== '') bad.push('share');
           if (fc.indexOf(c) < last1) bad.push('before a tier-1 card');
+          if (triL && !tr) bad.push('no triage row');
           if (tr && !/^under 0\.01 AAS$/.test(tr.textContent.trim())) bad.push('triage "' + tr.textContent.trim() + '"');
-          if (document.querySelector('#att-slot a[href="#' + c.id + '"]')) bad.push('a breakdown part');
+          const ap = document.querySelector('#att-slot a[href="#' + c.id + '"]'), apv = ap && ap.parentNode.querySelector('b');
+          if (ap && !(parseFloat(((apv && apv.textContent) || '').replace(/[+,\s]/g, '')) > 0)) bad.push('a breakdown part without a rise');
           return c.id + (bad.length ? ' FAIL ' + bad.join(', ') : '');
         });
       // v1.7: the DB-time breakdown under the verdict
@@ -1911,7 +1918,7 @@ const LABEL_BAND = () => {
           imps: rows.filter(r => r.classList.contains('lead')).map(r => {
             const c = r.querySelector('article.fc'), im = c ? parseFloat(c.getAttribute('data-impact')) : NaN;
             const ch = r.querySelector(':scope > summary .dnm .dimp');
-            return im >= 0.01 ? (vis(ch) && /^\+[0-9.]+ AAS/.test(ch.textContent) && !!ch.title ? 'y' : 'FAIL ' + (c && c.id)) : (ch ? 'FAIL ' + (c && c.id) : 'n');
+            return im >= 0.01 ? (vis(ch) && /^\+[0-9.]+ AAS/.test(ch.textContent) && !!ch.title ? 'y' : 'FAIL ' + (c && c.id)) : (ch ? 'FAIL ' + (c && c.id) : 'n ' + (c && c.id));
           }),
           order: top('verdict') < top('activity') && document.querySelector('.dkpis').getBoundingClientRect().top < top('activity') && top('activity') < top('findings') };
       });
@@ -1923,7 +1930,7 @@ const LABEL_BAND = () => {
       if (!lay.order) fail('dashboard: Summary order (verdict, KPI cards, Activity, findings)');
       if (lay.imps.some(x => /^FAIL/.test(x))) fail('dashboard: impact chip on the lead rows ' + lay.imps.join(','));
       if (/demo_busy_db_dashboard\.html$/.test(file) && !lay.imps.includes('y')) fail('dashboard demo: no lead row shows its impact chip');
-      if (/demo_busy_db_dashboard\.html$/.test(file) && !lay.imps.includes('n')) fail('dashboard demo: no lead row without the chip (the background-only card)');
+      if (/demo_busy_db_dashboard\.html$/.test(file) && !lay.imps.includes('n f-wait-queueing')) fail('dashboard demo: the background-only card\'s lead row (f-wait-queueing) not shown without the chip: ' + lay.imps.join(','));
       // rows open: a lead row shows its card, another row draws its bars
       dz.rows = await page.evaluate(async () => {
         const vis = el => !!el && el.getClientRects().length > 0;

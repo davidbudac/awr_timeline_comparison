@@ -226,7 +226,8 @@ BG_EVENTS = [
 # prior window has (so it stays out of 05's table-wide shift).  Queueing
 # has no foreground event in the model: its foreground time is 0 in every
 # window.  Kept apart from BG_EVENTS and drawn from their own rng, so no
-# other number of the model moves.
+# other number of the model moves (but the time model's background elapsed
+# time, which no section reads).
 GG_FLOW = WaitEvent("Streams: flow control", "Queueing", 0.0, 2000, True)
 GG_CAPTURE = WaitEvent("Streams capture: waiting for subscribers to catch up", "Queueing", 0.0, 250000, True)
 GG_STALL_AT = datetime(2026, 9, 10, 8, 35)

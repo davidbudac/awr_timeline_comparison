@@ -77,7 +77,7 @@ DECLARE
     TYPE fam_idx_t   IS TABLE OF PLS_INTEGER INDEX BY VARCHAR2(64);
     TYPE gz_t        IS TABLE OF NUMBER INDEX BY VARCHAR2(64);
     TYPE ord_t       IS TABLE OF VARCHAR2(64) INDEX BY PLS_INTEGER;
-    -- one foreground event of a flagged wait class (card evidence)
+    -- one event of a flagged wait class (card evidence, all sessions)
     TYPE ev_rec IS RECORD (
         wclass  VARCHAR2(64),
         event   VARCHAR2(128),
@@ -1080,11 +1080,11 @@ BEGIN
     END IF;
 
     --
-    -- Card evidence: the top 2 foreground events (by Current time waited
-    -- per second) of every wait class, with their prior mean / sd / n and
-    -- share of the Current wait -- one bounded scan, only when a wait
-    -- class is flagged.  Same pairs -> bounds -> deltas shape and template
-    -- filter as 04.
+    -- Card evidence: the top 2 events (by Current time waited per second,
+    -- all sessions like the class rows) of every wait class, with their
+    -- prior mean / sd / n and share of the Current wait -- one bounded
+    -- scan, only when a wait class is flagged.  Same pairs -> bounds ->
+    -- deltas shape and template filter as 04.
     --
     IF v_wait_flag THEN
         WITH
