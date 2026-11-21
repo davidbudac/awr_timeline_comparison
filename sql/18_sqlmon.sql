@@ -892,7 +892,10 @@ BEGIN
                     v_c_cur, v_c_mu, v_c_sd, NULL, 'Y');
             END IF;
 
+            -- data-ph0 / data-ph1 = the transition this card shows: 17 links
+            -- and moves it under the I/O card only when it cites the same
             DBMS_OUTPUT.PUT_LINE('<article class="panel fc chg" id="' || v_cid
+                || '" data-ph0="' || TO_CHAR(v_pc(c).prior_ph) || '" data-ph1="' || TO_CHAR(v_pc(c).cur_ph)
                 || '" aria-labelledby="' || v_cid || '-h" hidden>'
                 || '<header class="fc-h"><div class="fc-k"><span class="sv" title="SQL Monitor, #'
                 || v_pc(c).rnk || ' by Current-window max elapsed"><b class="gk">&#9670;</b>Plan change</span></div>'

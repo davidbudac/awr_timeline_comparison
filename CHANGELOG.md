@@ -189,7 +189,11 @@ release bumps `awr_version`).
   execution then and now, its plan change), and that statement's
   plan-change card moves right under the card with an "explains Physical
   I/O" chip (folded with the I/O card when that one starts folded, and
-  opening with it; it has its own toggle too). A statement new in the top N by reads keeps its own "New SQL"
+  opening with it; it has its own toggle too) -- only when the card shows
+  the same plan change the I/O card names (the two read different
+  sources: SQLSTAT there, SQL Monitor on the card); otherwise the card
+  stays in "What changed around it" and the I/O card's plan text is not a
+  link. A statement new in the top N by reads keeps its own "New SQL"
   row when it is not the top one. The dashboard design keeps the plan card
   in "What changed around it", the column beside its findings table.
 - **Finding cards name the shape of the change.** Up to two tags per card

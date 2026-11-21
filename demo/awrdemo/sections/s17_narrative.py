@@ -523,8 +523,11 @@ def emit(w) -> str:
             out.append('<span data-vx-src="io">' + vx_io + '</span>')
         if ev_io:
             out.append('<div data-ev-for="f-io">' + ev_io + '</div>')
-        if top is not None:
-            out.append('<span data-explains-src="f-plan-' + top[0] + '" data-for="f-io"></span>')
+        # review follow-up R2: only when the I/O card cites a transition;
+        # the script moves the card only when it shows the same one
+        if top is not None and top[5] is not None and top[6] is not None and top[5] != top[6]:
+            out.append('<span data-explains-src="f-plan-' + top[0] + '" data-for="f-io" data-ph0="'
+                       + str(top[6]) + '" data-ph1="' + str(top[5]) + '"></span>')
         out.append('</div>')
         # the relocation script, lifted verbatim from the SQL
         L = chrome.put_lines(chrome.sql_path("sql/17_narrative.sql"))

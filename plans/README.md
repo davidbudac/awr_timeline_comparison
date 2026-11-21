@@ -319,6 +319,12 @@ findings as confirmed by the owner's agent):
   takes each plan's DBID and `con_id` from one `DBA_HIST_SQL_PLAN` row
   (DBIDs of the report, latest id-0 TIMESTAMP, then the lowest dbid /
   con_dbid: section 23's rule), not the primary DBID and `MIN(con_id)`.
+- 026 (R2): the Physical I/O card links, moves and "explains" a plan
+  card only when it cites the same transition the card shows (17 reads
+  SQLSTAT, 18 SQL Monitor; 18's card carries `data-ph0` / `data-ph1`).
+  When they differ, or 17 cites no plan change, the card stays in "What
+  changed around it" and 17's text loses its link. 17's pick itself is
+  unchanged (aligning it with 18 would mean a second SQL Monitor read).
 
 
 Each plan records its default, so an executor never waits on these. Decide

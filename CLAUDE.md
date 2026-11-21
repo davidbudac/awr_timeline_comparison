@@ -503,7 +503,15 @@ the prior windows it ran in, gets per execution then and now, an
 `ent()` "new plan A → B" link to `#f-plan-<id>` when its plan changed),
 plus the newcomer (top-N by reads, in no prior top-N) as "New SQL" when
 it is a different statement; the likely-source line and R1's note still
-use the newcomer only.
+use the newcomer only. 17 picks A / B from SQLSTAT (prior most executed,
+Current most blocks read), 18 from SQL Monitor (prior most frequent
+capture, Current slowest), so they can differ: 18's card carries the
+transition it shows (`data-ph0` / `data-ph1` = prior / Current plan
+hash), 17's `data-explains-src` carries the one it cites (emitted only
+when it cites one), and the relocation script moves the card, adds the
+chip and keeps the link only when the two agree; otherwise the card stays
+in `#changes-slot` and the link becomes `span.ent-x` (review follow-up
+R2; verify_report `explainsPh` / `planLinkPh`).
 
 **Plan-change card** (18, twin `s18._plan_card`): one per statement whose
 Plan hash column fires (`plan_changed='Y'`) with a Current execution and

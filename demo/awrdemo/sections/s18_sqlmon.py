@@ -211,7 +211,10 @@ def _plan_card(w, put, c):
                      "normal " + H.fmt_dur(c_mu) + ("; the rise is wait" if wait else ""),
                      c_cur, c_mu, c_sd, None, "Y")
 
-    put('<article class="panel fc chg" id="' + cid + '" aria-labelledby="' + cid + '-h" hidden>'
+    # data-ph0 / data-ph1 = the transition this card shows (17 links and
+    # moves it under the I/O card only when it cites the same)
+    put('<article class="panel fc chg" id="' + cid + '" data-ph0="' + str(c["prior_ph"])
+        + '" data-ph1="' + str(c["cur_ph"]) + '" aria-labelledby="' + cid + '-h" hidden>'
         + '<header class="fc-h"><div class="fc-k"><span class="sv" title="SQL Monitor, #'
         + str(c["rnk"]) + ' by Current-window max elapsed"><b class="gk">&#9670;</b>Plan change</span></div>'
         + '<div class="fc-band" title="SQL Monitor max elapsed, z ' + H.band_ztxt(z)

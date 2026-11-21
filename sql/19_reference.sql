@@ -249,7 +249,9 @@ BEGIN
         || ' materiality floor, or an informational counter; <b>improved</b> = a material move in the good direction. None of them is counted.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>What changed around it</dt><dd><b>Plan change</b>: a statement that ran in the Current window with a plan other than the prior windows&rsquo; most frequent one'
         || ' (SQL Monitor). Its bars are its elapsed seconds per window from <code>DBA_HIST_SQLSTAT</code>; the step line is the most frequent captured plan per window, carried over windows'
-        || ' with no capture; only the SQL Monitor max elapsed is scored. <b>Configuration</b>: every changed parameter as a step line.</dd>');
+        || ' with no capture; only the SQL Monitor max elapsed is scored. It moves under the Physical I/O card (<b>explains</b>) only when that card&rsquo;s top'
+        || ' statement by blocks read changed between the same two plans in <code>DBA_HIST_SQLSTAT</code> (its most executed prior plan, its Current plan reading'
+        || ' the most blocks). <b>Configuration</b>: every changed parameter as a step line.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Evidence library</dt><dd>Summary view: every other section as one row with a one-line status and its counts; open a row to read the section in place.'
         || ' All sections shows every section in full.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>ASH timeline</dt><dd><code>dba_hist_active_sess_history</code> over the full span, one scan: hourly (or the cadence) in All sections; in the Activity charts (under'

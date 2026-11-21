@@ -107,7 +107,9 @@
  *     no unfilled placeholder; R2: a rule with a query in
  *     sql/lib/finding_hints.plsql shows it, every query is read-only
  *     "SELECT ... ;" statements; the plan card keeps its footer links; the
- *     dashboard side column does not overflow);
+ *     dashboard side column does not overflow); R2: a plan card that
+ *     explains a card shows the transition that card cites, and no card
+ *     links a plan card citing another one;
  *   - pattern tags (plan 027): every chip has text and a title, is
  *     focusable and named by its text, keyboard focus shows its sentence
  *     (#ptip) and Esc hides it without swallowing the unpin (G4); none on a
@@ -1463,6 +1465,23 @@ const LABEL_BAND = () => {
           : p.previousElementSibling && p.previousElementSibling.id === p.getAttribute('data-explains'))
         && p.querySelector('.fc-k .xpl a[href="#' + p.getAttribute('data-explains') + '"]'));
       // G4: it is folded exactly when the card it explains is (dashboard: open, no toggle)
+      // review follow-up R2: a card that explains cites, through a link to
+      // it, exactly the transition it shows (data-ph0 / data-ph1 = the
+      // plan line's title); and no finding card links a plan card while
+      // citing another transition (17 unwraps such a link)
+      const phOf = p => [p.getAttribute('data-ph0'), p.getAttribute('data-ph1')];
+      const cited = a => { const m = /new plan (\d+)\D+?(\d+)/.exec(a.textContent); return m ? [m[1], m[2]] : null; };
+      out.explainsPh = ex.filter(p => {
+        const c = document.getElementById(p.getAttribute('data-explains')), ph = phOf(p);
+        const wl = p.querySelector('.whereln'), sh = wl ? /plan (\d+)\D+?(\d+)/.exec(wl.getAttribute('title') || '') : null;
+        const ls = c ? [...c.querySelectorAll('a.ent[href="#' + p.id + '"]')] : [];
+        return !ph[0] || !ph[1] || !sh || sh[1] !== ph[0] || sh[2] !== ph[1] || !ls.length
+          || ls.some(a => { const q = cited(a); return !q || q[0] !== ph[0] || q[1] !== ph[1]; });
+      }).map(p => p.id);
+      out.planLinkPh = [...document.querySelectorAll('article.fc:not(.chg) a.ent[href^="#f-plan-"]')].filter(a => {
+        const t = document.getElementById(a.getAttribute('href').slice(1)), q = cited(a);
+        return t && q && (q[0] !== t.getAttribute('data-ph0') || q[1] !== t.getAttribute('data-ph1'));
+      }).map(a => a.closest('article.fc').id + '->' + a.getAttribute('href'));
       out.explainsFold = ex.every(p => { const c = document.getElementById(p.getAttribute('data-explains'));
         return dashX ? !p.classList.contains('fold') && !p.querySelector('.fc-tg') : !!c && c.classList.contains('fold') === p.classList.contains('fold'); });
       const sl = document.getElementById('changes-slot'), sc = document.getElementById('s-changes');
@@ -1652,6 +1671,8 @@ const LABEL_BAND = () => {
     if (p4.ioSql === false && /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) fail('demo: the Physical I/O card has no SQL evidence row');
     if (!p4.explainsOk) fail('an explaining plan-change card is not right under its card (dashboard: not in #changes-slot) or lacks its chip');
     if (!/^ok/.test(p4.print)) fail('print: folded cards / Checked and normal / dashboard rows not opened for print or not restored after: ' + p4.print);
+    if (p4.explainsPh.length) fail('an explaining plan-change card shows another transition than the one its card cites (or has no link to it): ' + p4.explainsPh.join(', '));
+    if (p4.planLinkPh.length) fail('a finding card links a plan-change card while citing another transition: ' + p4.planLinkPh.join(', '));
     if (!p4.explainsFold) fail('an explaining plan-change card is not folded with the card it explains (dashboard: folded or with a toggle)');
     if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && p4.explains !== 1) fail('demo: expected the plan card of 7k2m9dx4qp1zb to explain the Physical I/O card, got ' + p4.explains);
     if (!p4.changesOk) fail('"What changed around it" visible while empty, or hidden while it holds a card');

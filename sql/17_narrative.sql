@@ -636,7 +636,8 @@ BEGIN
         -- plan 026: the statement reading the most blocks in the Current
         -- window -- ranked, not scored: a plain ratio -- with its gets per
         -- execution and, when its plan changed, a link to the plan card
-        -- (f-plan-<sql_id>, section 18; unwrapped to text when 18 drew none)
+        -- (f-plan-<sql_id>, section 18; unwrapped to text when 18 drew none
+        -- or its card shows another transition, see data-explains-src)
         IF v_tq_id IS NOT NULL THEN
             v_ev_io := v_ev_io || '<div class="evr"><dt>SQL</dt><dd><span class="id">'
                 || ent(v_tq_id, anchor_id('sq-preads', v_tq_id), 'sql') || '</span><span class="de">'
@@ -1178,9 +1179,15 @@ BEGIN
         -- plan 026: the plan-change card of the I/O card's top statement (if
         -- section 18 drew one) moves right under the I/O card; when plan 025
         -- folded the I/O card, the plan card folds too (07's AWR_fcFold) and
-        -- opens with it
-        IF v_tq_id IS NOT NULL THEN
-            DBMS_OUTPUT.PUT_LINE('<span data-explains-src="f-plan-' || v_tq_id || '" data-for="f-io"></span>');
+        -- opens with it.  Review follow-up R2: only when the card shows the
+        -- transition the I/O card cites (18 picks its plans from SQL Monitor,
+        -- this section from SQLSTAT): the script compares data-ph0 / data-ph1
+        -- with the card's; otherwise the card stays in What changed around
+        -- it and the I/O card's "new plan" text loses its link.
+        IF v_tq_id IS NOT NULL AND v_tq_ph IS NOT NULL AND v_tq_ph_mu IS NOT NULL
+           AND v_tq_ph <> v_tq_ph_mu THEN
+            DBMS_OUTPUT.PUT_LINE('<span data-explains-src="f-plan-' || v_tq_id || '" data-for="f-io" data-ph0="'
+                || TO_CHAR(v_tq_ph_mu) || '" data-ph1="' || TO_CHAR(v_tq_ph) || '"></span>');
         END IF;
         DBMS_OUTPUT.PUT_LINE('</div>');
         DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,src=d.getElementById("narr-src");if(!src)return;');
@@ -1193,7 +1200,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll(".notes-src > li").forEach(function(li){var u=li.getAttribute("data-dup");if(u&&d.getElementById(u))return;if(ns){ns.appendChild(li);ns.hidden=false;}});');
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-vx-src]").forEach(function(x){var t=d.querySelector(''.vx[data-vx="''+x.getAttribute("data-vx-src")+''"]'');if(t){t.innerHTML=x.innerHTML;t.hidden=false;}});');
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-ev-for]").forEach(function(x){var c=d.getElementById(x.getAttribute("data-ev-for")),dl=c?c.querySelector("dl.ev"):null;if(!dl)return;var f=dl.firstChild;while(x.firstChild)dl.insertBefore(x.firstChild,f);});');
-        DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-explains-src]").forEach(function(x){var p=d.getElementById(x.getAttribute("data-explains-src")),c=d.getElementById(x.getAttribute("data-for"));if(!p||!c||!c.parentNode||p===c)return;c.parentNode.insertBefore(p,c.nextSibling);p.hidden=false;p.setAttribute("data-explains",c.id);var k=p.querySelector(".fc-k"),sv=c.querySelector(".fc-k .sv"),lb=(sv&&sv.getAttribute("title"))||"the card above";if(k&&!k.querySelector(".xpl")){var s=d.createElement("span");s.className="xpl";s.appendChild(d.createTextNode("explains "));var a=d.createElement("a");a.href="#"+c.id;a.textContent=lb;s.appendChild(a);s.insertAdjacentHTML("beforeend","<i class=\"xu\" aria-hidden=\"true\"> &uarr;</i>");k.appendChild(s);}if(c.classList.contains("fold")&&window.AWR_fcFold)AWR_fcFold(p);var sl=d.getElementById("changes-slot"),sc=d.getElementById("s-changes");if(sl&&sc&&!sl.children.length)sc.hidden=true;});');
+        DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-explains-src]").forEach(function(x){var p=d.getElementById(x.getAttribute("data-explains-src")),c=d.getElementById(x.getAttribute("data-for"));if(!p||!c||!c.parentNode||p===c)return;if(p.getAttribute("data-ph0")!==x.getAttribute("data-ph0")||p.getAttribute("data-ph1")!==x.getAttribute("data-ph1")){c.querySelectorAll(''a.ent[href="#''+p.id+''"]'').forEach(function(a){var s=d.createElement("span");s.className="ent-x";while(a.firstChild)s.appendChild(a.firstChild);a.parentNode.replaceChild(s,a);});return;}c.parentNode.insertBefore(p,c.nextSibling);p.hidden=false;p.setAttribute("data-explains",c.id);var k=p.querySelector(".fc-k"),sv=c.querySelector(".fc-k .sv"),lb=(sv&&sv.getAttribute("title"))||"the card above";if(k&&!k.querySelector(".xpl")){var s=d.createElement("span");s.className="xpl";s.appendChild(d.createTextNode("explains "));var a=d.createElement("a");a.href="#"+c.id;a.textContent=lb;s.appendChild(a);s.insertAdjacentHTML("beforeend","<i class=\"xu\" aria-hidden=\"true\"> &uarr;</i>");k.appendChild(s);}if(c.classList.contains("fold")&&window.AWR_fcFold)AWR_fcFold(p);var sl=d.getElementById("changes-slot"),sc=d.getElementById("s-changes");if(sl&&sc&&!sl.children.length)sc.hidden=true;});');
         DBMS_OUTPUT.PUT_LINE('src.parentNode.removeChild(src);})();</script>');
     END IF;
 END;
