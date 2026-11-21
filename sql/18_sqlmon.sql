@@ -1155,7 +1155,13 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var mu=cs.getPropertyValue("--muted").trim()||"#888";');
     DBMS_OUTPUT.PUT_LINE('var gr=cs.getPropertyValue("--border").trim()||"#e0e0e0";');
     DBMS_OUTPUT.PUT_LINE('var palette=["#2563eb","#a855f7","#14b8a6","#f59e0b","#ef4444","#ec4899","#6366f1","#84cc16","#f97316","#0ea5e9"];');
-    DBMS_OUTPUT.PUT_LINE('function ts(s){return Date.parse(String(s).replace(" ","T"));}');
+    -- Every time in this chart (points, windows, markers, axis bounds) is
+    -- the DB's wall clock, read as UTC on purpose (the Activity charts' PT
+    -- does the same): a browser-local parse breaks on a DST boundary in
+    -- the reader's zone (02:50 and 03:50 one instant in Europe/Berlin).
+    -- useUTC below makes the axis and the zoom slider print that same wall
+    -- clock, so a normal day's labels read as before.
+    DBMS_OUTPUT.PUT_LINE('function ts(s){return Date.parse(String(s).replace(" ","T")+"Z");}');
     DBMS_OUTPUT.PUT_LINE('function sizeOf(dop){var n=Math.max(1,dop||1);return Math.min(12,4+2*Math.log(n)/Math.LN2);}');
     DBMS_OUTPUT.PUT_LINE('function symOf(pt){return pt.st==="DONE (ERROR)"?"diamond":(pt.pm==="Y"?"triangle":"circle");}');
     DBMS_OUTPUT.PUT_LINE('var cw=(d.windows||[]).filter(function(w){return w[2]==="current";})[0],c0=cw?ts(cw[0]):null,c1=cw?ts(cw[1]):null;');
@@ -1173,6 +1179,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('var chart=echarts.init(el);');
     DBMS_OUTPUT.PUT_LINE('function buildMarkAreas(hiSlot){return (d.windows||[]).map(function(w){var valid=w[3]!=="0";var hi=(hiSlot!=null)&&((hiSlot===0&&w[2]==="current")||("w-"+hiSlot===w[2]));var a={xAxis:ts(w[0]),itemStyle:{color:valid?(w[2]==="current"?"rgba(37,99,235,0.22)":"rgba(37,99,235,0.10)"):"rgba(148,163,175,0.12)",opacity:hi?1:(hiSlot!=null?0.35:1),borderColor:hi?fg:null,borderWidth:hi?1.5:0}};if(!valid){a.label={show:true,position:"insideTop",color:mu,fontSize:9,formatter:"skipped",distance:1};}return [a,{xAxis:ts(w[1])}];});}');
     DBMS_OUTPUT.PUT_LINE('chart.setOption({');
+    DBMS_OUTPUT.PUT_LINE('  useUTC:true,');
     DBMS_OUTPUT.PUT_LINE('  tooltip:{trigger:"item",formatter:function(p){var pt=p.data;return "<b>"+pt.id+"</b><br/>"+pt.t+"<br/>elapsed: "+(+pt.e).toFixed(2)+" s<br/>status: "+pt.st+"<br/>plan_hash: "+pt.ph+"<br/>DOP req: "+pt.dop;}},');
     -- legend chips opaque: the faded series opacity (0.45, Other 0.2)
     -- would otherwise carry over to the legend icons

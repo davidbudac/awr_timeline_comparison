@@ -287,7 +287,11 @@ release bumps `awr_version`).
   x-axis spans the whole compared span. Under the 3,000-point cap the
   executions inside a compared window are kept first, then the most
   recent, so every compared window shows its executions (the demo kept
-  points in only 3 of its 13 windows).
+  points in only 3 of its 13 windows). Its times are the database's wall
+  clock in any browser time zone: they were read as the reader's local
+  time, so across a daylight-saving change there the Current-window
+  styling and the axis ends were off by an hour (the labels of a normal
+  day are unchanged).
 - **Long SQL text no longer aborts the report.** On an AL32UTF8 database
   a long or multibyte (for example CJK-commented) top statement overflowed
   a byte-sized buffer in section 06 or 11 and raised `ORA-06502`; in

@@ -1776,7 +1776,13 @@ chips stay opaque, `legend.itemStyle.opacity` 1); the x-axis is
 pinned to `spanStart..spanEnd`, so a window without captures shows as an
 empty band. `series[0]` carries the window `markArea` (the `awr:window`
 listener addresses it by index); verify_report's phase 4 `scatter` check
-reads the mark size and the axis range.
+reads the mark size and the axis range. Every time in the chart (points,
+windows, markers, the axis bounds) is the DB's wall clock read as UTC
+(`ts()` appends `Z`, like the Activity charts' `PT`) and the option sets
+`useUTC: true`, so the axis and the zoom slider print that wall clock in
+any browser zone (review follow-up R3: a browser-local parse put the
+Current styling and the bounds an hour off across a DST change in the
+reader's zone; a normal day's labels are unchanged).
 
 **Sampling caveats** (stated in the section's own caption, and see the
 design doc): only completed, expensive-enough, or parallel executions are
