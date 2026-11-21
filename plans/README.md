@@ -276,6 +276,27 @@ these supersede the 2026-11-19 answers where they overlap):
   x is a stripe, a click there pins as designed). Test changes only, the
   report is unchanged. Done in fix group G5.
 
+**Decided 2026-11-21** (review follow-up, fix group R1; the reviews'
+findings as confirmed by the owner's agent):
+
+- 029: *Biggest change*'s Delta says **new** only when no prior valid
+  window has an AWR row for the statement; rows that all show 0 s
+  elapsed read **from 0** (was "new", titled "no row in any prior valid
+  window"). The ranking is unchanged.
+- 021: the hatched **rest** of "Where the extra DB time went" is the rise
+  less the parts' net sum (rises minus falls): DB time +10, CPU +8,
+  Commit -5 shows a rest of 7 (was 2). The bar's base is GREATEST(rise +
+  falls, rises) so the rises and the rest fit; the 1% (rest drawn) and 2%
+  (net passes the rise) notes keep their meaning.
+- 020 / 021: a share of the DB-time rise is **capped at 100%** (kept up
+  to 100.5%, which rounded to "101%"), on the cards / rail / triage list
+  (`g_shr`) and in the breakdown.
+- 029 / 06 (the reviews' abort risk past 4000 bytes): section 06 is now
+  safe for any window count (no per-window LISTAGG, rows streamed). The rest of the
+  report still stops near 210 windows (window-label LISTAGGs of 14 / 15 /
+  18, 07's card window grids, the value-CSV LISTAGGs of 02-05 / 07 / 13-15
+  / 18; CLAUDE.md, "Per-window strings"). Not fixed here: its own change.
+
 
 Each plan records its default, so an executor never waits on these. Decide
 before running a plan to change its default.

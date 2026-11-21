@@ -165,13 +165,13 @@ DECLARE
 
     -- a card's share of the DB-time rise, integer percent; NULL when the
     -- card added less than 0.01 AAS (imp_on), DB time did not rise, or the
-    -- share passes 100
+    -- share passes 100 (up to 100.5% is kept, shown as 100: never "101%")
     FUNCTION g_shr(p_g VARCHAR2) RETURN NUMBER IS
         v_i NUMBER := g_imp(p_g);
         v_d NUMBER := g_imp('DBTIME');
     BEGIN
         IF imp_on(v_i) AND v_d > 0 AND v_i <= v_d * 1.005 THEN
-            RETURN ROUND(v_i / v_d * 100);
+            RETURN LEAST(100, ROUND(v_i / v_d * 100));
         END IF;
         RETURN NULL;
     END g_shr;
@@ -1137,7 +1137,7 @@ BEGIN
         v_p     part_rec;
         v_pos   NUMBER := 0;      -- sum of the parts that rose
         v_neg   NUMBER := 0;      -- sum of the parts that fell (as a positive number)
-        v_base  NUMBER;           -- the bar's 100%: GREATEST(rise, sum of parts)
+        v_base  NUMBER;           -- the bar's 100%: the rises plus the rest, GREATEST(rise + falls, rises)
         v_small NUMBER := 0;      -- parts under 1% of the base, merged
         v_nsm   PLS_INTEGER := 0;
         v_rest  NUMBER;
@@ -1176,13 +1176,15 @@ BEGIN
         END LOOP;
 
         IF v_dd > 0 THEN
-            v_base := GREATEST(v_dd, v_pos);
+            -- the rest is what the parts, falls netted, leave of the rise:
+            -- v_dd - (v_pos - v_neg); the bar draws the rises and that rest
+            v_base := GREATEST(v_dd + v_neg, v_pos);
             FOR k2 IN 1 .. v_parts.COUNT LOOP
                 v_p := v_parts(k2);
                 IF v_p.d > 0 AND v_p.d >= 0.01 * v_base THEN
                     v_fl  := v_glead.EXISTS(v_p.grp);
                     -- the share, left out past 100% like the cards' impact chip
-                    v_pct := CASE WHEN v_p.d <= v_dd * 1.005 THEN ROUND(v_p.d / v_dd * 100) END;
+                    v_pct := CASE WHEN v_p.d <= v_dd * 1.005 THEN LEAST(100, ROUND(v_p.d / v_dd * 100)) END;
                     v_bar := v_bar || '<i class="att-s' || CASE WHEN NOT v_fl THEN ' nf' END
                         || '" data-wc="' || DBMS_XMLGEN.CONVERT(v_p.lab)
                         || '" style="flex-grow:' || imp_tok(v_p.d) || '" title="'
@@ -1216,10 +1218,14 @@ BEGIN
                 v_lg := v_lg || '<li class="att-more">+ ' || v_nsm || ' smaller ('
                     || fmt_num(v_small) || ' AAS)</li>';
             END IF;
-            v_rest := v_dd - v_pos;
+            -- a fall offsets a rise: with DB time +10, CPU +8 and Commit -5
+            -- the parts net to +3, so 7 is unexplained (not 10 - 8 = 2)
+            v_rest := v_dd - (v_pos - v_neg);
             IF v_rest > 0.01 * v_dd THEN
                 v_bar := v_bar || '<i class="att-s att-rest" style="flex-grow:' || imp_tok(v_rest)
-                    || '" title="Not in the parts above (DB time that no wait class records, such as'
+                    || '" title="Not in the parts above'
+                    || CASE WHEN v_neg > 0 THEN ', net of the falls' END
+                    || ' (DB time that no wait class records, such as'
                     || ' waiting for a CPU, or waits outside this template&#39;s event list): +'
                     || fmt_num(v_rest) || ' AAS"></i>';
             END IF;

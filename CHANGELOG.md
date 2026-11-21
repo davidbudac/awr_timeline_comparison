@@ -142,9 +142,11 @@ release bumps `awr_version`).
   foreground wait time (AAS above the prior mean, largest first), solid
   when the part is behind a finding, hatched when it grew but stayed
   normal, with the classes that fell named under it. Same numbers as the
-  finding cards' impact, so the parts roughly add up to the rise; a note
-  names the gap only when they pass it by more than 2% (time model and
-  wait interface are kept separately).
+  finding cards' impact, so the parts roughly add up to the rise; a
+  hatched rest shows what they leave of it net of the falls (DB time +10,
+  CPU +8, Commit -5: the rest is 7, not 2), and a note names the gap only
+  when they pass it by more than 2% (time model and wait interface are
+  kept separately). A share never reads above 100%.
 - **One finding count.** A finding is a card everywhere it is counted:
   the verdict pill (with its large / moderate split; the "metrics moved"
   pill is gone), the Findings header in Summary and the rail's Findings

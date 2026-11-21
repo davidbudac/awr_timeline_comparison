@@ -286,10 +286,11 @@ def _head_txt(r, dbt, cpu) -> str:
 def _g_shr(imp, g):
     """07_summary.sql g_shr: a card's share of the DB-time rise, integer
     percent; None when the card added less than 0.01 AAS (imp_on), DB time
-    did not rise, or the share passes 100."""
+    did not rise, or the share passes 100 (up to 100.5% is kept, shown as
+    100)."""
     v_i, v_d = imp.get(g), imp.get("DBTIME")
     if h.imp_on(v_i) and v_d is not None and v_d > 0 and v_i <= v_d * 1.005:
-        return int(h.ora_round(v_i / v_d * 100, 0))
+        return min(100, int(h.ora_round(v_i / v_d * 100, 0)))
     return None
 
 
@@ -504,14 +505,16 @@ def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
             neg -= d
     parts.sort(key=lambda p: -p["d"])       # stable = the insertion sort's strict >
     if dd > 0:
-        base = max(dd, pos)
+        # the bar = the rises plus the rest, the rise the parts (falls
+        # netted) leave unexplained: dd - (pos - neg)
+        base = max(dd + neg, pos)
         bar, lg, small, nsm = "", "", 0.0, 0
         for p in parts:
             d = p["d"]
             if d > 0 and d >= 0.01 * base:
                 fl = p["grp"] in lead
                 # the share, left out past 100% like the cards' impact chip
-                pct = int(h.ora_round(d / dd * 100, 0)) if d <= dd * 1.005 else None
+                pct = min(100, int(h.ora_round(d / dd * 100, 0))) if d <= dd * 1.005 else None
                 lab = h.esc(p["lab"])
                 bar += ('<i class="att-s' + ('' if fl else ' nf') + '" data-wc="' + lab
                         + '" style="flex-grow:' + h.imp_tok(d) + '" title="'
@@ -538,10 +541,11 @@ def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
                     + '" title="' + str(nsm) + ' smaller part' + ('s' if nsm > 1 else '')
                     + ': +' + h.fmt_num(small) + ' AAS"></i>')
             lg += '<li class="att-more">+ ' + str(nsm) + ' smaller (' + h.fmt_num(small) + ' AAS)</li>'
-        rest = dd - pos
+        rest = dd - (pos - neg)
         if rest > 0.01 * dd:
             bar += ('<i class="att-s att-rest" style="flex-grow:' + h.imp_tok(rest)
-                    + '" title="Not in the parts above (DB time that no wait class records, such as'
+                    + '" title="Not in the parts above' + (', net of the falls' if neg > 0 else '')
+                    + ' (DB time that no wait class records, such as'
                     + ' waiting for a CPU, or waits outside this template&#39;s event list): +'
                     + h.fmt_num(rest) + ' AAS"></i>')
         # the largest drops: the parts are sorted largest first, so walk backwards
