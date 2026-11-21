@@ -164,12 +164,13 @@ DECLARE
     END g_imp;
 
     -- a card's share of the DB-time rise, integer percent; NULL when the
-    -- card added no time, DB time did not rise, or the share passes 100
+    -- card added less than 0.01 AAS (imp_on), DB time did not rise, or the
+    -- share passes 100
     FUNCTION g_shr(p_g VARCHAR2) RETURN NUMBER IS
         v_i NUMBER := g_imp(p_g);
         v_d NUMBER := g_imp('DBTIME');
     BEGIN
-        IF v_i > 0 AND v_d > 0 AND v_i <= v_d * 1.005 THEN
+        IF imp_on(v_i) AND v_d > 0 AND v_i <= v_d * 1.005 THEN
             RETURN ROUND(v_i / v_d * 100);
         END IF;
         RETURN NULL;
@@ -554,7 +555,7 @@ DECLARE
             || '<header class="fc-h"><div class="fc-k"><span class="sv" title="'
             || DBMS_XMLGEN.CONVERT(card_label(p_g)) || '"><i class="dotk ' || v_sev
             || '" aria-hidden="true"></i>' || INITCAP(v_sev) || '</span>'
-            || CASE WHEN v_imp > 0 THEN '<span class="fc-imp" title="Time added: Current minus the prior'
+            || CASE WHEN imp_on(v_imp) THEN '<span class="fc-imp" title="Time added: Current minus the prior'
                     || ' mean of this card&#39;s time measure (DB time, DB CPU or the foreground time of its'
                     || ' wait class), in average active sessions">' || imp_txt(v_imp)
                     || CASE WHEN p_g = 'DBTIME' THEN ' above normal'
@@ -1376,7 +1377,7 @@ BEGIN
         -- a card that was open but folded with the card it explains).
         DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,tri=d.getElementById("triage");');
         DBMS_OUTPUT.PUT_LINE('function n2(v){var a=Math.abs(v);return (v<0?"-":"+")+(a>=10?a.toFixed(1):a>=1?a.toFixed(2):a.toFixed(3));}');
-        DBMS_OUTPUT.PUT_LINE('if(tri)tri.querySelectorAll(".tri-row[data-card]").forEach(function(r){var id=r.getAttribute("data-card"),c=d.getElementById(id),x=r.querySelector(".tri-imp");if(!c||!x)return;var im=c.getAttribute("data-impact"),sh=c.getAttribute("data-share");if(im===null||im===""){x.innerHTML="<small>no time measure</small>";return;}var v=+im,s=(sh===null||sh==="")?null:+sh,tot=id==="f-dbtime",w=tot?100:Math.max(0,Math.min(100,s||0));x.innerHTML="<i class=\"tri-bar\"><i style=\"width:"+w+"%\"></i></i><small><b>"+n2(v)+" AAS</b> "+(tot?"total":(s===null?"":(s<1?"&lt;1":s)+"%"))+"</small>";});');
+        DBMS_OUTPUT.PUT_LINE('if(tri)tri.querySelectorAll(".tri-row[data-card]").forEach(function(r){var id=r.getAttribute("data-card"),c=d.getElementById(id),x=r.querySelector(".tri-imp");if(!c||!x)return;var im=c.getAttribute("data-impact"),sh=c.getAttribute("data-share");if(im===null||im===""){x.innerHTML="<small>no time measure</small>";return;}if(Math.abs(+im)<0.01){x.innerHTML="<small>under 0.01 AAS</small>";return;}var v=+im,s=(sh===null||sh==="")?null:+sh,tot=id==="f-dbtime",w=tot?100:Math.max(0,Math.min(100,s||0));x.innerHTML="<i class=\"tri-bar\"><i style=\"width:"+w+"%\"></i></i><small><b>"+n2(v)+" AAS</b> "+(tot?"total":(s===null?"":(s<1?"&lt;1":s)+"%"))+"</small>";});');
         DBMS_OUTPUT.PUT_LINE('if(tri)tri.addEventListener("click",function(ev){var r=ev.target.closest(".tri-row");if(!r||ev.target.closest("a"))return;var a=r.querySelector("a.tri-go");if(a)a.click();});');
         DBMS_OUTPUT.PUT_LINE('function setF(c,on){c.classList.toggle("fold",on);var b=c.querySelector(".fc-tg");if(b){b.setAttribute("aria-expanded",on?"false":"true");b.textContent=on?"Show card":"Fold";}if(!on&&window.AWR_WG)setTimeout(function(){AWR_WG.render(c);},20);'
             || 'var x=c.nextElementSibling;if(x&&c.id&&x.__fc&&x.getAttribute("data-explains")===c.id&&x.classList.contains("fold")!==on)setF(x,on);}');

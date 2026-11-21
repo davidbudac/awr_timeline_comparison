@@ -285,10 +285,10 @@ def _head_txt(r, dbt, cpu) -> str:
 
 def _g_shr(imp, g):
     """07_summary.sql g_shr: a card's share of the DB-time rise, integer
-    percent; None when the card added no time, DB time did not rise, or
-    the share passes 100."""
+    percent; None when the card added less than 0.01 AAS (imp_on), DB time
+    did not rise, or the share passes 100."""
     v_i, v_d = imp.get(g), imp.get("DBTIME")
-    if v_i is not None and v_d is not None and v_i > 0 and v_d > 0 and v_i <= v_d * 1.005:
+    if h.imp_on(v_i) and v_d is not None and v_d > 0 and v_i <= v_d * 1.005:
         return int(h.ora_round(v_i / v_d * 100, 0))
     return None
 
@@ -424,7 +424,7 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g,
                   + (" above normal" if g == "DBTIME"
                      else " &middot; " + ("&lt;1" if v_shr < 1 else str(v_shr)) + "% of the DB-time rise" if v_shr is not None
                      else "")
-                  + '</span>' if v_imp is not None and v_imp > 0 else '')
+                  + '</span>' if h.imp_on(v_imp) else '')
                + '<span class="fc-sum">' + h.fv(h._mul(r.cur, s), u) + ' &middot; normal '
                + h.fv_range(h._mul(r.mu, s), h._mul(r.sd, s), u) + '</span>'
                '<span class="fc-tags"></span></div>'

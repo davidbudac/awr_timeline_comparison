@@ -235,8 +235,8 @@ these supersede the 2026-11-19 answers where they overlap):
 - 020: card impact ranking has a **0.01 AAS floor**: tier 1 ("this card
   added DB time") needs a rise of at least 0.01 AAS; a smaller rise ranks
   with the cards without a time measure (large before moderate, then |z|).
-  The chip still shows a smaller rise; only the order changes. Done in
-  fix group G1.
+  Done in fix group G1. Decided 2026-11-21: the same floor hides the
+  chip and the share, in every design (a "+0.000004 AAS" chip was noise).
 - 031: in the Timeline's **Biggest change first** order, a row new in the
   Current window (no prior mean) ranks by its **Current value**: in an AAS
   lane its valid prior windows without a value count as 0 for the sort

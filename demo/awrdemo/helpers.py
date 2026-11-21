@@ -1002,12 +1002,18 @@ def time_added(domain, name, cur, mu, fg_d):
     return (cur - mu) * metric_scale(domain, name)
 
 
+def imp_on(imp) -> bool:
+    """finding_cards.plsql imp_on: the 0.01 AAS floor on the impact rounded
+    like its token (3 decimals); None is below it."""
+    return imp is not None and ora_round(imp, 3) >= 0.01
+
+
 def card_tier(group, imp) -> int:
     """finding_cards.plsql card_tier: tier 1 needs a rise of at least 0.01
     AAS (owner decision 2026-11-20); smaller, none or a fall -> tier 3."""
     if group == "DBTIME":
         return 2
-    return 1 if (imp is not None and ora_round(imp, 6) >= 0.01) else 3
+    return 1 if imp_on(imp) else 3
 
 
 def card_before_imp(g_a, sev_a, z_a, imp_a, g_b, sev_b, z_b, imp_b) -> bool:

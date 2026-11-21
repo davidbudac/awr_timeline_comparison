@@ -415,12 +415,15 @@ own card (`WAIT:<c>` → "<c> waits", `f-wait-<c>`). Lead (`lead_better`):
 large before moderate → member of `card_primary`'s family → larger |z| →
 shorter label. Order (`card_before_imp`, v1.7, plan 020): tier 1 = cards
 whose time measure rose by at least 0.01 AAS (`card_tier`, owner decision
-2026-11-20; `ROUND(imp, 6) >= 0.01`, twin `helpers.card_tier`), largest
+2026-11-20; `imp_on`: `ROUND(imp, 3) >= 0.01`, the token's rounding,
+twin `helpers.imp_on` / `card_tier`), largest
 impact first; tier 2 = DBTIME; tier 3 = the rest — a smaller rise, a
 fall, no time measure — by `card_before` (large before moderate, then
-max |z|); then a flagged DB time card moves to 2nd. The floor only
-orders: the chip still shows any impact above 0 (verify_report's
-`impOrder` encodes the tiers). Impact
+max |z|); then a flagged DB time card moves to 2nd. The same floor
+hides the chip and the share (owner decision 2026-11-21: no chip, no
+`data-share`, no rail %, "under 0.01 AAS" in the triage list, nothing
+in Copy summary or the dashboard's `.dimp`; verify_report's `impOrder`
+encodes the tiers, `impChips` the chip rule). Impact
 (`impact_group` + `time_added`): the card's time measure — DB time or DB
 CPU (time model), Current minus prior mean ×`metric_scale` = AAS, or its
 wait class's FOREGROUND wait time (owner decision 2026-11-20:
@@ -432,11 +435,11 @@ log switch) no longer outranks the whole DB-time rise. Never scored: the
 sessions. 021's breakdown (its parts and "Fell:"), the triage list, the
 rail shares and Copy summary all read the same impact;
 `article.fc[data-impact]` (3-decimal token, '' = none) and
-`[data-share]` (integer % of the DB-time rise, '' when DB time did not
-rise or the share passes 100) are a contract for later Summary features;
-a chip `.fc-k .fc-imp` shows it (only a rise; a share that rounds to 0
-reads "<1%" on the chip, the rail, the triage list and Copy summary,
-which also prints only a rise). A flagged DB CPU card is its own card
+`[data-share]` (integer % of the DB-time rise, '' below the 0.01 AAS
+floor, when DB time did not rise or the share passes 100) are a
+contract for later Summary features; a chip `.fc-k .fc-imp` shows it
+(only a rise of 0.01 AAS or more; a share that rounds to 0 reads "<1%"
+on the chip, the rail, the triage list and Copy summary). A flagged DB CPU card is its own card
 `CPU` (label "CPU"). Summary-only band glyphs (07's card header,
 evidence and normal rows, 08's strip, 18's plan card) pass `p_zcap =>
 10` (printed z stops at ">+10σ"; tables and Timeline gutters keep the

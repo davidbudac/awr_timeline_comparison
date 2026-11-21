@@ -258,10 +258,11 @@ function drow(o){
 }
 /* plan 020 follow-up (G4): the card's impact as a chip in its lead row --
    the row hides the card's header, where the .fc-imp chip lives.  From
-   data-impact / data-share like the triage list; only a rise, as on the card */
+   data-impact / data-share like the triage list; only a rise of 0.01 AAS
+   or more, as on the card */
 function impChip(card){
   var im=card.getAttribute("data-impact"),sh=card.getAttribute("data-share");
-  if(im===null||im===""||!(+im>0))return null;
+  if(im===null||im===""||!(+im>=0.01))return null;
   var v=+im,a=Math.abs(v),s=(sh===null||sh==="")?null:+sh,ch=$(".fc-k .fc-imp",card);
   var c=mk("span","dimp");
   c.textContent="+"+(a>=10?a.toFixed(1):a>=1?a.toFixed(2):a.toFixed(3))+" AAS"+(card.id==="f-dbtime"?" above normal":s===null?"":MID+(s<1?"<1":s)+"%");

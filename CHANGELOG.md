@@ -123,9 +123,10 @@ release bumps `awr_version`).
   orders the cards and shows as a chip ("+6.313 AAS · 70% of the
   DB-time rise"); a card ranks by it only from 0.01 AAS up, so a rise of
   +0.001 AAS no longer outranks a louder card: smaller rises, falls and
-  cards without a time measure follow, large before moderate (the chip
-  still shows a small rise; a share under 0.5% reads "<1%", here and on
-  the rail, the triage list and Copy summary; the dashboard design shows
+  cards without a time measure follow, large before moderate (a rise
+  under 0.01 AAS shows no chip and no share either; a share under 0.5%
+  reads "<1%", here and on the rail, the triage list and Copy summary;
+  the dashboard design shows
   it under the metric name in its findings table, whose rows hide the
   card's header). DB time stays second. The verdict follows the same order. A
   wait class's time added counts foreground sessions only

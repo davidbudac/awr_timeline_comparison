@@ -363,15 +363,23 @@
     -- impact first; tier 2 = the DB time card (the total those impacts are
     -- shares of); tier 3 = every other card (no time measure, or it rose
     -- by less than 0.01 AAS, or fell), large before moderate, then |z|.
-    -- The floor only orders: the chip still shows any impact above 0.
+    -- The same floor hides the impact chip and the share (owner decision
+    -- 2026-11-21): a smaller rise shows neither, in any design.
     -- The caller then still moves a flagged DB time card up to second
     -- place, so the verdict keeps "<biggest contributor>; DB time ...".
     -- 00 (verdict) and 07 (cards) apply the same two steps.
+    -- the 0.01 AAS floor, on the impact rounded like its data-impact token
+    -- (3 decimals), so the order, the chips and every script reading the
+    -- token agree; NULL (no time measure) is below it
+    FUNCTION imp_on(p_imp NUMBER) RETURN BOOLEAN IS
+    BEGIN
+        RETURN p_imp IS NOT NULL AND ROUND(p_imp, 3) >= 0.01;
+    END imp_on;
+
     FUNCTION card_tier(p_group VARCHAR2, p_imp NUMBER) RETURN PLS_INTEGER IS
     BEGIN
         IF p_group = 'DBTIME' THEN RETURN 2; END IF;
-        -- NULL >= 0.01 is not true: tier 3
-        IF ROUND(p_imp, 6) >= 0.01 THEN RETURN 1; END IF;
+        IF imp_on(p_imp) THEN RETURN 1; END IF;
         RETURN 3;
     END card_tier;
 
@@ -396,7 +404,7 @@
         RETURN TO_CHAR(ROUND(p_v, 3), 'FM9999999990D000', 'NLS_NUMERIC_CHARACTERS=''.,''');
     END imp_tok;
 
-    -- an impact for reading: "+6.315&nbsp;AAS" (callers print it only when > 0)
+    -- an impact for reading: "+6.315&nbsp;AAS" (callers print it only when imp_on)
     FUNCTION imp_txt(p_v NUMBER) RETURN VARCHAR2 IS
     BEGIN
         RETURN '+' || fmt_num(p_v) || '&nbsp;AAS';

@@ -1,0 +1,75 @@
+{
+ "view": "all",
+ "bodyClass": "js-wg va",
+ "sections": [
+  "verdict",
+  "activity",
+  "timeline",
+  "s-all",
+  "db-time-summary",
+  "overview",
+  "ash-timeline",
+  "findings",
+  "s-changes",
+  "s-normal",
+  "s-lib",
+  "instance-map",
+  "load-response",
+  "release-delta",
+  "windows",
+  "win-sim",
+  "day-profile",
+  "onset",
+  "utilization",
+  "load",
+  "metrics",
+  "waits-fg",
+  "wait-hist",
+  "waits-bg",
+  "blocking",
+  "topsql",
+  "volume-cost",
+  "topsql-ash",
+  "sqlmon",
+  "plan-flame",
+  "segment-io",
+  "file-io",
+  "param-changes",
+  "guide",
+  "about"
+ ],
+ "charts": 22,
+ "bands": 279,
+ "tables": 82,
+ "rows": 969,
+ "verdict": "Physical reads 5.4× normal, most of it on ORDERS_APP.ORDER_LINES; DB time up 79.7%, mostly wait.",
+ "cards": 6,
+ "markers": 5,
+ "noCharts": false
+}
+design: classic
+links: 613 in-page hrefs, 0 unresolved, 0 duplicate ids (24 target-less xlinks hidden by the chrome)
+view summary/light: 27 sections visible, switch=Summary, activity ok, 0 errors
+view summary/dark: 27 sections visible, switch=Summary, activity ok, 0 errors
+view timeline/light: 6 sections visible, switch=Timeline, activity ok, 0 errors
+view timeline/dark: 6 sections visible, switch=Timeline, activity ok, 0 errors
+view all/light: 29 sections visible, switch=All sections, activity ok, 0 errors
+view all/dark: 29 sections visible, switch=All sections, activity ok, 0 errors
+activity compact (Summary): ok
+toggles {"switch-all":"ok","switch-timeline":"ok","switch-summary":"ok","persist":"ok","jump":"ok (fr-l-physical-reads -> all)","rail":"ok (verdict)","tabs":"ok","sort":"clicked","expander":"clicked","railMarker":"ok / ok"}
+entity links: 319 a.ent (115 visible in Summary), 0 dangling, 10 unwrapped to text (target never emitted)
+entity links clicked: 115 ok, 0 failed
+timeline: 48 grid rows in lanes lane-activity:1 lane-metrics:13 lane-waits:19 lane-objects:3 lane-sql:8 lane-config:4; 6 data-tl links (0 missing), 45 label links (0 dangling), 0 unconsumed templates
+timeline interactions {"jumps":"6 ok","labels":"45 ok","events":"15 series, Other events in the legend","hover_cls":"ok (mirrored)","legend_cls":"ok (10 series)","zoom_cls":"ok (both charts)","reset_cls":"ok","dblclick_cls":"ok","pin_cls":"ok (w=6, vs 30 Jul, amber on 2 charts)","unpin_cls":"ok (52 cells flashed)","keys_cls":"ok","hover_ev":"ok (mirrored)","legend_ev":"ok (15 series)","zoom_ev":"ok (both charts)","reset_ev":"ok","dblclick_ev":"ok","pin_ev":"ok (w=6, vs 30 Jul, amber on 2 charts)","unpin_ev":"ok (52 cells flashed)","keys_ev":"ok","bandLabels":"ax-cls 1; ax-ev 1","labelHide":"ok","highlight":{"ecls":"ok (15)","cls":"ok (User I/O -> 5 events, axis fitted)","ev":"ok (User I/O lit)","leave":"ok","focus":"ok","sticky":"ok (tooltip leads, Esc clears it, then unpins)","click":"ok"},"fine":"ashx 780 min, Current vs win max diff 0.0004; ashe 780 min, Current vs win max diff 0.0004","fine_zoom":"ok (1-min detail in the compared windows, hourly elsewhere; tip Thu 10 Sep 09:29–09:301-min average)","ruler":"ok","gridTip":"ok"}
+side by side {"panels":"ax-cls 13/13 panels, cur 1, 130 paths; ax-ev 13/13 panels, cur 1, 195 paths; range \"13 compared windows side by side, 1-min detail\"","labels":"2 labels (1/1)","flagBand":"ok (5 flags, top 46)","hover":"ok (1-min)","noZoom":"ok","pin":"ok","legend":"ok","markers":5,"keys":"ok","persist":"ok"}
+markers sharing a gap {"win":"ok (7 markers, 6 flags, 1 +n)","span":"ok (7 markers, 5 flags, 1 +n)"}
+day profile picker ok (9 metrics; click, arrows, Home / End)
+timeline rows (031) {"brk":14,"brkOutside":0,"lowPrior":[],"unflaggedShown":[],"flaggedHidden":[],"reveal":"ok","restored":"ok","note":"Headline and load: by size of the move (z); Waits: by added AAS","sorted":"ok","newRows":[],"classesFirst":true,"order":"ok"}
+phase 4 {"planCards":1,"planOk":true,"scatter":"ok","sumOk":true,"sumClosed":true,"sumEsc":true,"sumOnTop":true,"durOk":true,"aasOk":true,"evOverClass":[],"evClassPairs":7,"smOrder":true,"topsqlTab":true,"lib":18,"libVisible":18,"libNoLs":[],"libHead":true,"edges":true,"toggle":"ok (load-response)","reveal":"ok (lr-w0)","subs":"4/4","subsOk":true,"triage":"4/4","triageOk":true,"folded":3,"foldOk":true,"unfold":"ok","quietV":true,"quietFlags":true,"ioSql":true,"explains":1,"explainsOk":true,"explainsFold":true,"changesOk":true,"impOrder":true,"impAttrs":true,"impChips":true,"att":5,"attSrcGone":true,"attColors":true,"zcap":[],"railFind":"4/4","railOther":0,"pillMoved":false,"findMeta":"4/4","jk":"ok","subNames":true,"tagCards":4,"tagNoTitle":0,"tagChg":0,"tagIo":"jump after Release 4.2|step up at Release 4.1","tagTri":[],"tagRows":[],"calm":"closed","calmReveal":"ok","hints":"f-io:IO_SCANS,f-plan-7k2m9dx4qp1zb:PLAN,f-net:NET_PAYLOAD,f-commit:COMMIT_LAT","hintsOk":true,"hintPfl":true,"hintSide":true,"allFull":[],"rdSplit":"split","lazy11":"ok","print":"ok","strips":127,"lines":0,"nwin":13}
+pattern chips (keyboard): {"n":16,"bad":0,"tip":"ok","pinned":true,"esc":"ok"}
+viz sections, All sections: {"instance-map":"ok (1 drawn, 1 tables)","load-response":"ok (1 drawn, 2 tables)","release-delta":"ok (0 drawn, 2 tables)","win-sim":"ok (2 drawn, 2 tables)","onset":"ok (1 drawn, 1 tables, note)","wait-hist":"ok (8 drawn, 1 tables)","blocking":"ok (1 drawn, 3 tables, note)","volume-cost":"ok (1 drawn, 2 tables)","plan-flame":"ok (2 drawn, 2 tables)"}
+viz sections, Summary rows opened: {"instance-map":"ok (1 drawn, 1 tables)","load-response":"ok (1 drawn, 2 tables)","release-delta":"ok (0 drawn, 2 tables)","win-sim":"ok (2 drawn, 2 tables)","onset":"ok (1 drawn, 1 tables, note)","wait-hist":"ok (8 drawn, 1 tables)","blocking":"ok (1 drawn, 3 tables, note)","volume-cost":"ok (1 drawn, 2 tables)","plan-flame":"ok (2 drawn, 2 tables)"}
+viz instance map vs cards: ok (5 flagged areas, 4 cards)
+viz window similarity, JS rule vs PL/SQL buckets: ok (ok)
+viz sections at 390 px: ok
+verify: OK

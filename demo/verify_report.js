@@ -1458,20 +1458,22 @@ const LABEL_BAND = () => {
       const fc = [...document.querySelectorAll('#findings article.fc:not(.chg)')];
       // tier 1 = a rise of at least 0.01 AAS (owner decision 2026-11-20):
       // those cards lead (DB time aside), largest first; a smaller rise,
-      // none or a fall follows with the cards without a time measure
-      // (a "0.010" token is left out: the token rounds to 3 decimals, the
-      // floor to 6, so such a card may sit in either tier)
+      // none or a fall follows with the cards without a time measure (the
+      // floor reads the impact rounded like its 3-decimal token, imp_on)
       const imp = fc.filter(c => c.id !== 'f-dbtime').map(c => {
         const a = c.getAttribute('data-impact');
         return a === null || a === '' ? null : parseFloat(a);
-      }).filter(v => v !== 0.01);
+      });
       const t1 = v => v !== null && v >= 0.01;
       const nt1 = imp.findIndex(v => !t1(v));
       const imp1 = imp.filter(t1);
       out.impOrder = imp.every((v, i) => !t1(v) || nt1 < 0 || i < nt1)
         && imp1.every((v, i) => i === 0 || imp1[i - 1] >= v);
       out.impAttrs = fc.every(c => c.hasAttribute('data-impact') && c.hasAttribute('data-share'));
-      out.impChips = fc.filter(c => parseFloat(c.getAttribute('data-impact')) > 0).every(c => c.querySelector('.fc-k .fc-imp'));
+      // a chip exactly when the card added 0.01 AAS or more (owner decision
+      // 2026-11-21: a smaller rise shows no chip and no share)
+      out.impChips = fc.every(c => { const v = parseFloat(c.getAttribute('data-impact')), ch = c.querySelector('.fc-k .fc-imp');
+        return v >= 0.01 ? !!ch : !ch && (c.getAttribute('data-share') || '') === ''; });
       // v1.7: the DB-time breakdown under the verdict
       const att = document.getElementById('att-slot');
       out.att = (att && !att.hidden && vis(att)) ? att.querySelectorAll('.att-s').length : 0;
@@ -1605,7 +1607,7 @@ const LABEL_BAND = () => {
     if (!p4.attColors) fail('DB-time breakdown: a part has no wait-class colour');
     if (!p4.impAttrs) fail('finding cards: data-impact / data-share missing');
     if (!p4.impOrder) fail('finding cards: not ordered by impact');
-    if (!p4.impChips) fail('finding cards: impact chip missing');
+    if (!p4.impChips) fail('finding cards: impact chip missing, or shown below 0.01 AAS');
     if (p4.zcap.length) fail('Summary glyphs print z past 10: ' + p4.zcap.join(', '));
     if (!p4.planOk) fail('plan-change card incomplete, or neither in #changes-slot nor right under the card it explains');
     if (/^FAIL/.test(p4.scatter)) fail('SQL Monitor scatter ' + p4.scatter);
@@ -1744,7 +1746,7 @@ const LABEL_BAND = () => {
           imps: rows.filter(r => r.classList.contains('lead')).map(r => {
             const c = r.querySelector('article.fc'), im = c ? parseFloat(c.getAttribute('data-impact')) : NaN;
             const ch = r.querySelector(':scope > summary .dnm .dimp');
-            return im > 0 ? (vis(ch) && /^\+[0-9.]+ AAS/.test(ch.textContent) && !!ch.title ? 'y' : 'FAIL ' + (c && c.id)) : (ch ? 'FAIL ' + (c && c.id) : 'n');
+            return im >= 0.01 ? (vis(ch) && /^\+[0-9.]+ AAS/.test(ch.textContent) && !!ch.title ? 'y' : 'FAIL ' + (c && c.id)) : (ch ? 'FAIL ' + (c && c.id) : 'n');
           }),
           order: top('verdict') < top('activity') && document.querySelector('.dkpis').getBoundingClientRect().top < top('activity') && top('activity') < top('findings') };
       });

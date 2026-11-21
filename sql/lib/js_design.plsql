@@ -275,10 +275,11 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* plan 020 follow-up (G4): the card''s impact as a chip in its lead row --');
     DBMS_OUTPUT.PUT_LINE('   the row hides the card''s header, where the .fc-imp chip lives.  From');
-    DBMS_OUTPUT.PUT_LINE('   data-impact / data-share like the triage list; only a rise, as on the card */');
+    DBMS_OUTPUT.PUT_LINE('   data-impact / data-share like the triage list; only a rise of 0.01 AAS');
+    DBMS_OUTPUT.PUT_LINE('   or more, as on the card */');
     DBMS_OUTPUT.PUT_LINE('function impChip(card){');
     DBMS_OUTPUT.PUT_LINE('  var im=card.getAttribute("data-impact"),sh=card.getAttribute("data-share");');
-    DBMS_OUTPUT.PUT_LINE('  if(im===null||im===""||!(+im>0))return null;');
+    DBMS_OUTPUT.PUT_LINE('  if(im===null||im===""||!(+im>=0.01))return null;');
     DBMS_OUTPUT.PUT_LINE('  var v=+im,a=Math.abs(v),s=(sh===null||sh==="")?null:+sh,ch=$(".fc-k .fc-imp",card);');
     DBMS_OUTPUT.PUT_LINE('  var c=mk("span","dimp");');
     DBMS_OUTPUT.PUT_LINE('  c.textContent="+"+(a>=10?a.toFixed(1):a>=1?a.toFixed(2):a.toFixed(3))+" AAS"+(card.id==="f-dbtime"?" above normal":s===null?"":MID+(s<1?"<1":s)+"%");');
