@@ -281,7 +281,8 @@ BEGIN
         || ' across the windows; <b>Break down by</b> re-aggregates by parsing schema, module or action.'
         || ' <b>Biggest change</b>, the first tab, ranks statements by Current-window total elapsed minus the mean over the prior valid windows'
         || ' (a valid window without an AWR row for the statement counts as 0; regressions only; the tab is left out when nothing got slower);'
-        || ' the &Delta; next to the Current value compares the two, <i>new</i> when the mean is 0.</dd>');
+        || ' the &Delta; next to the Current value compares the two: <i>new</i> when no prior valid window has a row for the statement,'
+        || ' <i>from 0</i> when its rows there all show 0 s elapsed.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Top SQL ASH</dt><dd>For each statement in the Top SQL pool: ASH samples per bucket split by wait event (top 7 per statement, the rest as <b>Other</b>; <b>CPU</b> = ON CPU). Statements with fewer'
         || ' than 5 samples are placeholders.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>SQL Monitor</dt><dd>Executions persisted by SQL Monitor (<code>DBA_HIST_REPORTS</code>, <code>component_name=&#39;sqlmonitor&#39;</code>), summaries only. Only completed, expensive-enough or'

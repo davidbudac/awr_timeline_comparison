@@ -275,14 +275,18 @@ BEGIN
             FROM   valid_windows
             WHERE  week_offset > 0
         ),
+        -- n_prior_rows: the prior valid windows that HAVE a row for the
+        -- statement (agg is valid windows only, one row per window): 0 =
+        -- "new"; rows with 0 s elapsed are a zero baseline, not new
         chg_ranked AS (
-            SELECT sql_id, cur_ela, prior_mean,
+            SELECT sql_id, cur_ela, prior_mean, n_prior_rows,
                    ROW_NUMBER() OVER (ORDER BY cur_ela - prior_mean DESC, sql_id) AS r_chg
             FROM (
                 SELECT a.sql_id,
                        SUM(CASE WHEN a.week_offset = 0 THEN a.elapsed_time_delta_us END) AS cur_ela,
                        NVL(SUM(CASE WHEN a.week_offset > 0 THEN a.elapsed_time_delta_us END), 0)
-                           / NULLIF((SELECT n FROM n_prior_valid), 0) AS prior_mean
+                           / NULLIF((SELECT n FROM n_prior_valid), 0) AS prior_mean,
+                       COUNT(CASE WHEN a.week_offset > 0 THEN 1 END) AS n_prior_rows
                 FROM   agg a
                 GROUP BY a.sql_id
             )
@@ -409,7 +413,8 @@ BEGIN
                -- it there): no 400-character text on every window row
                CASE WHEN ps.week_offset = v_weeks_back THEN ts.sql_text_short END AS sql_text_short,
                ss.parsing_schema,
-               ch.prior_mean AS chg_mu_us
+               ch.prior_mean AS chg_mu_us,
+               ch.n_prior_rows AS chg_n_prior
         FROM   dims d
         JOIN   per_sql ps ON ps.dim = d.code
         LEFT JOIN text_snips ts ON ts.sql_id = ps.sql_id
@@ -574,8 +579,10 @@ BEGIN
                     THEN ' <span class="badge info">#' || s.cur_rnk || '</span>' ELSE '' END
             || '</b>'
             || CASE WHEN s.dim = 'CHANGE' THEN ' '
-                    || CASE WHEN NVL(s.chg_mu_us, 0) = 0
+                    || CASE WHEN NVL(s.chg_n_prior, 0) = 0
                             THEN '<span class="d s-plain" title="no row in any prior valid window">new</span>'
+                            WHEN NVL(s.chg_mu_us, 0) = 0
+                            THEN '<span class="d s-plain" title="0 s elapsed in every prior valid window">from 0</span>'
                             ELSE delta_span(s.cur_val, s.chg_mu_us, NULL, 'Y') END END
             || '</td>';
 

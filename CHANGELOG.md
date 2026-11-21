@@ -203,7 +203,9 @@ release bumps `awr_version`).
 - **Sorted by change.** SQL Monitor's per-statement table lists large,
   then moderate findings first (JS; the selection of statements is
   unchanged). Top SQL opens on a new *Biggest change* tab: Current-window
-  total elapsed minus the prior-window mean, from the same SQLSTAT read.
+  total elapsed minus the prior-window mean, from the same SQLSTAT read;
+  its Delta reads *new* only when no prior valid window has a row for the
+  statement, *from 0* when the rows there all show 0 s elapsed.
   A shared link keeps the chosen tab (Elapsed time included); the About
   notes state both orders.
 - **Durations and AAS.** The plan-change card shows elapsed time as words

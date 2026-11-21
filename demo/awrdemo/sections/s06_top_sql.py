@@ -98,7 +98,8 @@ def _rank(rows: dict, key: str, name_of=lambda k: k) -> dict:
 
 def _picked(w, agg):
     """picked CTE: ({(dim, sql_id, week_offset): (metric_value, rnk, phv)},
-    {sql_id: prior mean elapsed} of the CHANGE dimension (chg_ranked))."""
+    {sql_id: (prior mean elapsed, prior valid windows with a row)} of the
+    CHANGE dimension (chg_ranked))."""
     top_n = w.top_n
     picked = {}
     for off, rows in agg.items():
@@ -141,7 +142,8 @@ def _picked(w, agg):
         prior_mean = sum(agg[o][sid]["ela"] for o in priors if sid in agg[o]) / len(priors)
         if r["ela"] > prior_mean:
             chg.append((sid, r["ela"] - prior_mean))
-            chg_mu[sid] = prior_mean
+            # (prior mean, n_prior_rows = prior valid windows with a row)
+            chg_mu[sid] = (prior_mean, sum(1 for o in priors if sid in agg[o]))
     chg.sort(key=lambda t: (-t[1], t[0]))
     for i, (sid, _) in enumerate(chg, start=1):
         if i > top_n:
@@ -380,9 +382,13 @@ def emit(w) -> str:
                   if s["cur_rnk"] is not None else "")
                + "</b>")
         if dim == "CHANGE":
-            mu = chg_mu.get(sid)
-            row += " " + ('<span class="d s-plain" title="no row in any prior valid window">new</span>'
-                          if not mu else h.delta_span(cur_val, mu, None, "Y"))
+            mu, n_prior = chg_mu.get(sid, (None, 0))
+            if not n_prior:
+                row += ' <span class="d s-plain" title="no row in any prior valid window">new</span>'
+            elif not mu:
+                row += ' <span class="d s-plain" title="0 s elapsed in every prior valid window">from 0</span>'
+            else:
+                row += " " + h.delta_span(cur_val, mu, None, "Y")
         row += "</td>"
         # the prior windows' cells, one wg_buf piece each (h.wg_lines)
         parts = [row]
