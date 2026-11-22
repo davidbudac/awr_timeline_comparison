@@ -614,6 +614,12 @@ FLEET_ARCHIVE=auto ./run_awr_fleet.sh fleet.conf       # also zip/tar the whole 
 ./run_awr_fleet.sh --assemble reports/fleet_work_<id>  # re-stitch a kept workdir, no DB
 ```
 
+To follow a long run (many DBs, detailed reports), run `./fleet_status.sh`
+in a second terminal: a table refreshed every 30 s showing, per DB, the
+extract and detail-report state (running / rc / skipped) and the detail
+report's current section. `--once` prints one table; optional args
+`[workdir] [interval]`. It only reads `reports/fleet_work_<id>/`.
+
 Arguments (all but `fleet.conf` optional, left to right):
 `fleet.conf target_end win_hours weeks_back top_n step step_unit` — the same
 meanings as the single-DB wrapper. There is **no `inst_num` argument**: a

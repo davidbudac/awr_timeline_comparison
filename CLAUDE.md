@@ -147,6 +147,7 @@ tools/js2plsql.sh                   -- dev-time generator for the js_* / css_des
 tools/fonts2plsql.sh                -- dev-time generator for sql/lib/css_fonts.plsql (lint check 33)
 tools/js_unit_tests.js              -- node unit tests of the client scripts' pure helpers (check.sh)
 side/create_weekly_baselines.sql    -- optional baselines (the only writer)
+fleet_status.sh                     -- live per-DB status of a running fleet run (reads the workdir only)
 run_awr_fleet.sh, awr_fleet_extract.sql, sql/fleet/ -- fleet report (see that section)
 server/                             -- optional scheduler web app (see that section)
 demo/                               -- docs-only synthetic demo report generator (Python; see demo/README.md)

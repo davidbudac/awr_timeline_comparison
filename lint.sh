@@ -170,7 +170,7 @@ while IFS= read -r hit; do
     finding gnu-only-flag "${hit%%:*}:$(cut -d: -f2 <<<"$hit")" \
         "GNU-only flag or unsupported tar compression flag in a bash wrapper (breaks on AIX/Solaris find/grep/sed/date, or AIX tar, which has no -z/-j/-J at all; use POSIX flags, bash =~, a plain glob, or tar piped through gzip)"
 done < <(grep -nE 'grep +(-[A-Za-z]+ +)*-[A-Za-z]*o|sed +(-[a-z]+ +)*-[Er]\b|find +[^|;]*-(maxdepth|mindepth|print0)|date +-d\b|\btar\b[[:space:]]+-?[A-Za-z]*[zjJ][A-Za-z]*\b' \
-             run_awr_fleet.sh run_awr_trend.sh 2>/dev/null \
+             run_awr_fleet.sh run_awr_trend.sh fleet_status.sh 2>/dev/null \
          | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' \
          | grep -vF '2000-01-01')
 
