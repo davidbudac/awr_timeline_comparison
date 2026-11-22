@@ -74,6 +74,8 @@ ENV_WHITELIST_KEYS = frozenset(
         "FLEET_DETAIL_TIMEOUT",
         "FLEET_DETAIL_TEMPLATE",
         "FLEET_DETAIL_DESIGN",
+        "FLEET_DETAIL_SQLMON",
+        "SQLMON",
         "FLEET_DETAIL_ECHARTS",
         "FLEET_PROFILE_DAYS",
         "FLEET_ARCHIVE",

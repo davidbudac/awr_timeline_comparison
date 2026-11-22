@@ -1859,8 +1859,8 @@ link, 17 wraps its R6-R9 scans in `IF '~sqlmon_on' = 'Y'` (body not
 re-indented), 19's About meta line says "SQL Monitor skipped". 06's MON
 xlinks are hidden by the chrome (missing target). `sqlmon=Y` output is
 unchanged. dbmint AUTO weekly 1/4: 84 s on, 9 s off (2026-10-08). The
-fleet's `06b_sqlmon` band is not affected (detail runs load
-`sql/defaults.sql`, so they keep SQL Monitor on).
+fleet's `06b_sqlmon` band is not affected; fleet detail runs take
+`FLEET_DETAIL_SQLMON` (falls back to `SQLMON`, default Y).
 
 **Plan-hash column.** The per-statement table's "Plan hash" column (right
 after "User / module") compares `cur` = the plan_hash of the Current
@@ -2284,7 +2284,7 @@ cramped).
   and linked from that DB's row via a bare relative href. Env knobs:
   `FLEET_DETAIL` (all|none|''), `FLEET_DETAIL_TIMEOUT` (default 3600, 0 = no
   limit; rc=124 surfaces as a distinct "timed out" state with the last
-  progress marker shown in the report and a stderr hint), `FLEET_DETAIL_TEMPLATE`, `FLEET_DETAIL_DESIGN` (the detail report's `design`, default classic),
+  progress marker shown in the report and a stderr hint), `FLEET_DETAIL_TEMPLATE`, `FLEET_DETAIL_DESIGN` (the detail report's `design`, default classic), `FLEET_DETAIL_SQLMON` (the detail report's `sqlmon`, Y / N, unset = `SQLMON`, else Y; the fleet's own `06b_sqlmon` band stays always on),
   `FLEET_DETAIL_ECHARTS` — **offline by default** (v0.4.0): empty inlines
   `vendor/echarts.min.js` for a fully self-contained detailed report (falls
   back to the public CDN, with a warning, if that file is missing/unreadable);

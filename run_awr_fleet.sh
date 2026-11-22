@@ -55,6 +55,9 @@
 #                                                            [comprehensive]
 #   FLEET_DETAIL_DESIGN    the detailed report's look: classic | quiet |
 #                          dashboard (awr_trend.sql's `design` var)  [classic]
+#   FLEET_DETAIL_SQLMON    Y | N: N skips the detailed report's SQL Monitor
+#                          section (awr_trend.sql's `sqlmon` var); falls
+#                          back to SQLMON when unset                     [Y]
 #   FLEET_DETAIL_ECHARTS   passed to the single-DB report's `echarts` var;
 #                          empty (default) = inline vendor/echarts.min.js
 #                          for a fully offline detailed report (falls back
@@ -138,6 +141,7 @@ FLEET_DETAIL="${FLEET_DETAIL:-}"
 FLEET_DETAIL_TIMEOUT="${FLEET_DETAIL_TIMEOUT:-3600}"
 FLEET_DETAIL_TEMPLATE="${FLEET_DETAIL_TEMPLATE:-comprehensive}"
 FLEET_DETAIL_DESIGN="${FLEET_DETAIL_DESIGN:-classic}"
+FLEET_DETAIL_SQLMON="${FLEET_DETAIL_SQLMON:-${SQLMON:-Y}}"
 FLEET_DETAIL_ECHARTS="${FLEET_DETAIL_ECHARTS:-}"
 
 # ---- optional Day profile band (sql/fleet/06_day_profile.sql) --------------
@@ -187,6 +191,15 @@ case "${FLEET_DETAIL_DESIGN,,}" in
     quiet|a)          FLEET_DETAIL_DESIGN=quiet ;;
     dashboard|dash|c) FLEET_DETAIL_DESIGN=dashboard ;;
     *) echo "error: FLEET_DETAIL_DESIGN must be classic, quiet or dashboard (got '$FLEET_DETAIL_DESIGN')" >&2; exit 2 ;;
+esac
+# FLEET_DETAIL_SQLMON rides into the detailed run's `sqlmon` DEFINE (the same
+# falsy forms awr_trend.sql accepts); normalised to Y / N so a typo fails
+# before any DB is queried.  It does not touch the fleet's own always-on
+# SQL Monitor band (sql/fleet/06b_sqlmon.sql).
+case "${FLEET_DETAIL_SQLMON,,}" in
+    y|yes|1|on|true|t)  FLEET_DETAIL_SQLMON=Y ;;
+    n|no|0|off|false|f) FLEET_DETAIL_SQLMON=N ;;
+    *) echo "error: FLEET_DETAIL_SQLMON must be Y or N (got '$FLEET_DETAIL_SQLMON')" >&2; exit 2 ;;
 esac
 # FLEET_DETAIL_ECHARTS rides into a double-quoted <script src> AND a single-
 # quoted DEFINE (see run_awr_trend.sh's ECHARTS validation for the <script
@@ -282,6 +295,8 @@ Environment variables:
                                                           [comprehensive]
   FLEET_DETAIL_DESIGN    the detailed report's look: classic, quiet or
                          dashboard                               [classic]
+  FLEET_DETAIL_SQLMON    N = skip the detailed report's SQL Monitor
+                         section; unset = SQLMON, else Y               [Y]
   FLEET_DETAIL_ECHARTS   echarts source for the detailed report; empty
                          (default) = inline vendor/echarts.min.js (fully
                          offline; falls back to CDN with a warning if
@@ -787,6 +802,7 @@ RUN_ID='${RUN_ID}'
 REPORT_TS='${REPORT_TS}'
 FLEET_DETAIL_TEMPLATE='${FLEET_DETAIL_TEMPLATE}'
 FLEET_DETAIL_DESIGN='${FLEET_DETAIL_DESIGN}'
+FLEET_DETAIL_SQLMON='${FLEET_DETAIL_SQLMON}'
 FLEET_DETAIL_TIMEOUT='${FLEET_DETAIL_TIMEOUT}'
 FLEET_DETAIL_ECHARTS='${FLEET_DETAIL_ECHARTS}'
 DETAIL_ECHARTS_EFF='${DETAIL_ECHARTS_EFF}'
@@ -917,6 +933,7 @@ DEFINE profile_days = ${FLEET_PROFILE_DAYS}
 DEFINE markers    = '${DETAIL_MARKERS}'
 DEFINE echarts    = '${DETAIL_ECHARTS_EFF}'
 DEFINE design     = '${FLEET_DETAIL_DESIGN}'
+DEFINE sqlmon     = '${FLEET_DETAIL_SQLMON}'
 @awr_trend.sql
 EXIT
 SQLEOF
