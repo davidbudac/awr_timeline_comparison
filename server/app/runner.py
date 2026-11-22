@@ -504,8 +504,10 @@ class RunManager:
             rec["ended_at"] = time.time()
             if rec.get("started_at"):
                 rec["duration_s"] = rec["ended_at"] - rec["started_at"]
-            records.save_record(self.data_dir, rec)
 
+            # Clean up a detail run's byproducts BEFORE the final save: a
+            # reader polling the record (the UI, the tests) treats the saved
+            # terminal state as "done" and must not see the 1-row fleet HTML.
             if kind == records.KIND_DETAIL:
                 byproduct = summary.get("report_path")
                 if byproduct:
@@ -520,3 +522,5 @@ class RunManager:
                         os.unlink(tmp_conf)
                     except OSError:
                         pass
+
+            records.save_record(self.data_dir, rec)
