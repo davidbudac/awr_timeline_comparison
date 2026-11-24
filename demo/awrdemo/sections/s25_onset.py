@@ -33,7 +33,7 @@ TARGETS = [
 K, HH, CLIP, MAXPTS = 0.5, 5, 3, 3000
 NMET = len(TARGETS)
 MK = '<span class="onset-mk"></span>'
-H2 = ('<h2>Onset<small class="h2sub">When the shift started: every snapshot interval '
+H2 = ('<h2>Trend breaks<small class="h2sub">When the shift started: every snapshot interval '
       'of the span against its seasonal normal, dated by a CUSUM change-point test</small></h2>')
 _CHUNK = 32500
 _DY = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -387,7 +387,7 @@ def emit(w) -> str:
 
     put('<section id="onset" class="vw in-s in-t in-a lib' + (" lopen" if nopen > 0 else "")
         + '" style="--os:15">' + H2)
-    html = '<div class="onset-viz" hidden><div class="onset-pick" role="tablist" aria-label="Onset metric">'
+    html = '<div class="onset-viz" hidden><div class="onset-pick" role="tablist" aria-label="Trend breaks metric">'
     for o in range(1, NMET + 1):
         r = M[o]
         if r["st"] == "open":
@@ -416,7 +416,7 @@ def emit(w) -> str:
 
     if nthin < NMET:
         put('<table class="onset-tbl" data-nocount><thead><tr><th>Metric</th><th>Status</th>'
-            '<th>Onset</th><th>Ended</th><th class="num">Before</th><th class="num">After</th>'
+            '<th>Started</th><th>Ended</th><th class="num">Before</th><th class="num">After</th>'
             '<th class="num">Lasted</th><th class="num">Level shift</th><th class="num">Points judged</th></tr></thead><tbody>')
         for o in range(1, NMET + 1):
             r = M[o]

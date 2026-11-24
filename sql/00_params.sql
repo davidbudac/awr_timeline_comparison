@@ -581,7 +581,7 @@ BEGIN
         || '<b>Whole span</b>'
         || '<a href="#ash-timeline">ASH timeline</a>'
         || '<a href="#db-time-summary">DB time</a>'
-        || '<a href="#onset" data-nodot>Onset</a>'
+        || '<a href="#onset" data-nodot>Trend breaks</a>'
         || '<a href="#utilization">Utilization</a>'
         || '<a href="#windows">Windows</a>'
         || '<a href="#win-sim" data-nodot>Window similarity</a>'
@@ -1203,7 +1203,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  if(window.AWR_TL&&AWR_TL.reveal) AWR_TL.reveal(el);');
     DBMS_OUTPUT.PUT_LINE('  var fc=closest(el,"article.fc.fold"); if(fc&&window.AWR_fcOpen) window.AWR_fcOpen(fc);');
     DBMS_OUTPUT.PUT_LINE('  var ls=closest(el,"main > section.lib"); if(ls&&curView()==="summary"&&!ls.classList.contains("lopen")) libOpen(ls,true);');
-    DBMS_OUTPUT.PUT_LINE('  var tp=closest(el,".tabpanel");');
+    DBMS_OUTPUT.PUT_LINE('  if(window.AWR_topsqlReveal) window.AWR_topsqlReveal(el); var tp=closest(el,".tabpanel");');
     DBMS_OUTPUT.PUT_LINE('  if(tp&&!tp.classList.contains("on")){ var t=doc.querySelector(".tabs[data-tabs=\""+tp.getAttribute("data-tabs")+"\"] [data-t=\""+tp.getAttribute("data-t")+"\"]"); if(t) t.click(); }');
     DBMS_OUTPUT.PUT_LINE('  var tl=closest(el,"[data-tail=\"Y\"]");');
     DBMS_OUTPUT.PUT_LINE('  if(tl){ var box=tl.parentNode, ex=null; while(box&&box!==bd){ if(box.id){ ex=doc.querySelector(".expander[data-for=\""+box.id+"\"]"); if(ex) break; } box=box.parentNode; }');
@@ -1316,7 +1316,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('setView(curView(),false);');
     DBMS_OUTPUT.PUT_LINE('applyState();');
     DBMS_OUTPUT.PUT_LINE('/* ---- P5: on phones the Top SQL detail tables open by default (the bump chart is unreadable there) ---- */');
-    DBMS_OUTPUT.PUT_LINE('if(doc.documentElement.clientWidth<=700){ doc.querySelectorAll("#topsql .tabpanel > details").forEach(function(d){ d.open=true; }); }');
+    DBMS_OUTPUT.PUT_LINE('if(doc.documentElement.clientWidth<=700){ doc.querySelectorAll("#topsql .tabpanel details").forEach(function(d){ d.open=true; }); }');
     DBMS_OUTPUT.PUT_LINE('/* ---- P4: keyboard-operable tabs, sortable headers and window chips; table captions ---- */');
     DBMS_OUTPUT.PUT_LINE('doc.querySelectorAll("section table:not([data-nosort]) thead th").forEach(function(th){');
     DBMS_OUTPUT.PUT_LINE('  th.setAttribute("scope","col");');

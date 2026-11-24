@@ -17,7 +17,7 @@
 --
 BEGIN
     DBMS_OUTPUT.PUT_LINE('<script>');
-    DBMS_OUTPUT.PUT_LINE('// js_onset: client half of section 25_onset (Onset).');
+    DBMS_OUTPUT.PUT_LINE('// js_onset: client half of section 25_onset (Trend breaks).');
     DBMS_OUTPUT.PUT_LINE('// Draws AWR_DATA.onset (one metric at a time, picked with the tab row):');
     DBMS_OUTPUT.PUT_LINE('// the series over its seasonal band with the compared windows, release');
     DBMS_OUTPUT.PUT_LINE('// markers and the detected onset; below it the CUSUM strip with its');

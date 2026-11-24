@@ -182,7 +182,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="A series that steps up at a detected onset"><rect x="4" y="22"'
         || ' width="142" height="12" style="fill:var(--zone2)"/><path d="M4 29 L20 26 L36 30 L52 27 L68 29 L84 28 L92 14 L108 10 L124 13 L146 9"'
         || ' style="stroke:var(--ink-2);fill:none;stroke-width:1.5"/><line x1="86" x2="86" y1="2" y2="42" style="stroke:var(--crit-dot);stroke-width:1.5"/></svg></div><div'
-        || ' class="gx2"><h3>Onset</h3><p>The line is a metric at every snapshot interval, the grey band its normal for that hour, and the red rule the detected onset: when the shift that is'
+        || ' class="gx2"><h3>Trend breaks</h3><p>The line is a metric at every snapshot interval, the grey band its normal for that hour, and the red rule the detected onset: when the shift that is'
         || ' still open began. <span class="g2">The strip below is the CUSUM: it climbs while the series stays off its level, and a step is called where it crosses the dashed'
         || ' threshold.</span></p></div></div>');
     DBMS_OUTPUT.PUT_LINE('<div class="gi"><div class="gv"><svg class="gd" width="150" height="44" viewBox="0 0 150 44" role="img" aria-label="Matrix of window-to-window similarity with one odd row and'
@@ -287,7 +287,19 @@ BEGIN
         || ' <b>Biggest change</b>, the first tab, ranks statements by Current-window total elapsed minus the mean over the prior valid windows'
         || ' (a valid window without an AWR row for the statement counts as 0; regressions only; the tab is left out when nothing got slower);'
         || ' the &Delta; next to the Current value compares the two: <i>new</i> when no prior valid window has a row for the statement,'
-        || ' <i>from 0</i> when its rows there all show 0 s elapsed.</dd>');
+        || ' <i>from 0</i> when its rows there all show 0 s elapsed.'
+        || ' <b>Values: Total | Per execution | Top per execution</b>, on every tab, changes how the Elapsed, CPU, Buffer gets and Physical reads tabs read.'
+        || ' <b>Total</b> is the window total as above. <b>Per execution</b> keeps the same statements, order and <b>#</b> ranks (still picked and ordered by the'
+        || ' window total) and divides each shown value by the statement&rsquo;s executions in that window (a group&rsquo;s summed value over its summed executions'
+        || ' under Break down by; the bump chart follows); a dash is a window where the statement is not in the top ~top_n or completed no execution.'
+        || ' <b>Top per execution</b> is a second ranking of its own &mdash; each window&rsquo;s top ~top_n statements by value divided by completed executions'
+        || ' in that window (its own <b>#</b> badges, order, chart and Break down by), so it is a different set of statements: one with elapsed time but no'
+        || ' completed execution in a window is not ranked in it, and a statement can be in one ranking and not the other. Biggest change and Executions'
+        || ' have no per-execution form and Per-exec regression is always per execution; a note on those tabs says so. The choice is remembered in the browser.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Per-SQL detail</dt><dd>The pool&rsquo;s <b>Plans</b>, <b>Executions</b>, <b>Snapshots</b> and <b>First seen</b>, the per-plan table and the chart'
+        || ' cover the whole AWR retention, not only the compared windows. The <b>Compared windows</b> table in an opened row covers the report&rsquo;s windows;'
+        || ' its prior mean averages the prior valid windows in which AWR kept a row for the statement (the Biggest change tab counts a valid window'
+        || ' without a row as 0, so the two can differ). A statement AWR did not capture in a window reads <i>not captured</i>, never 0.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Top SQL ASH</dt><dd>For each statement in the Top SQL pool: ASH samples per bucket split by wait event (top 7 per statement, the rest as <b>Other</b>; <b>CPU</b> = ON CPU). Statements with fewer'
         || ' than 5 samples are placeholders.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>SQL Monitor</dt><dd>Executions persisted by SQL Monitor (<code>DBA_HIST_REPORTS</code>, <code>component_name=&#39;sqlmonitor&#39;</code>), summaries only. Only completed, expensive-enough or'
@@ -339,7 +351,7 @@ BEGIN
         || ' in. One sample is about 10 s of DB time, so both read in seconds per window. The plan tree comes from <code>DBA_HIST_SQL_PLAN</code> (without SELECT on it the section lists the'
         || ' samples by plan line only); samples without a plan line are counted on the root step. With no plan change, the highest-ranked of the first three top statements with at least 5'
         || ' samples is shown alone.</dd>');
-    DBMS_OUTPUT.PUT_LINE('<dt>Onset</dt><dd>Every snapshot interval of the span (time-weighted over irregular snapshots; a restart or a missed snapshot is a gap, never 0) of DB time, DB CPU, user calls,'
+    DBMS_OUTPUT.PUT_LINE('<dt>Trend breaks</dt><dd>Every snapshot interval of the span (time-weighted over irregular snapshots; a restart or a missed snapshot is a gap, never 0) of DB time, DB CPU, user calls,'
         || ' executions, logical and physical reads and redo is compared with its normal: the median of the same hour of the week in the other weeks (spans of 21 days or more), else of the'
         || ' same hour of the day on the other days (3 days or more), else of every point before the Current window. Spread = interquartile range / 1.349, at least 2% of the median and the'
         || ' metric&rsquo;s materiality floor from the policy; a point needs 3 same-hour points from 2 other periods (flat: 8). Residuals, clipped to &plusmn;3 spreads, feed a two-sided CUSUM'

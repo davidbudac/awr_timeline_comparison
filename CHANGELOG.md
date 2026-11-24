@@ -56,6 +56,58 @@ release bumps `awr_version`).
     (`sql/lib/src/css_<name>.css`, `js_<name>.js`, `tools/js2plsql.sh`);
     the stylesheets load in `<head>` through `sql/lib/viz_head.sql`. "Reading
     the charts" and "About this report" gained an item / a note per view.
+- **Top SQL pool: each opened statement shows its numbers per compared
+  window.** A new "Compared windows" table (Current, then up to 29 prior
+  windows: executions, elapsed, seconds per execution, plan hash with a
+  "plan" badge on the window where the plan changed, the prior mean, a plain Current-vs-mean change) is built
+  from the Top SQL query's own data, so it adds no extra read of
+  `DBA_HIST_SQLSTAT`; a skipped window and a window where AWR kept no row
+  for the statement ("not captured", never 0) are told apart. Runs of consecutive "not captured" (or equally skipped) windows are one row, and whole execution counts print as integers. The per-plan
+  table and chart are labelled as covering the whole AWR retention (the
+  Plans column, the intro and the About notes say so), the chart now has a
+  time axis in DB wall-clock time with the compared windows marked, and a
+  statement without a plan hash (a PL/SQL call) gets both, with a grey "no
+  plan" series, where it used to get neither. The chart payload is compact
+  (one short array per point instead of one JSON object), which also
+  shrinks the report: the demo page falls from 8.2 MB to 6.2 MB. Run on
+  the test database (9, 21, 49 and 169 hourly windows, one span crossing a
+  restart); a statement's window numbers match `DBA_HIST_SQLSTAT`.
+- **Top SQL: "Values: Total | Per execution | Top per execution".** A switch
+  in every Top SQL tab (one shared state, saved in the browser on a click)
+  changes how the Elapsed, CPU, Buffer gets and Physical reads tabs read.
+  **Total** is the ranking as ever. **Per execution** keeps the same
+  statements, the same row order and the same `#` ranks (still picked and
+  ordered by the window total; the badges stay visible and a note says so)
+  and divides every shown value by the statement's executions in that window:
+  the detail table (header `Current (s/exec)`, `gets/exec`, `reads/exec`), the
+  bump chart (axis, tooltip) and Break down by Schema / Module / Action (a
+  group's summed value over its summed executions); a window where the
+  statement is not in the top N, or where it has elapsed time and no completed
+  execution, reads a dash (never 0, never a division by zero). **Top per
+  execution** is a second ranking of its own, a different set of statements:
+  each window's top N by value per completed execution, with its own `#`
+  badges, row order, bump chart, Break down by and detail table
+  (`topsql-detail-ELAPSED_PE`, `-CPU_PE`, `-GETS_PE`, `-PREADS_PE`); a
+  statement with no completed execution in a window is not ranked in it. The
+  Biggest change and Executions tabs have no per-execution form and
+  Per-exec regression is always per execution; a note on each says so (Biggest
+  change and Per-exec regression link to each other). The Per-SQL pool lists
+  the statements of the new rankings too, with one new "Ranked in" chip, `P`.
+  A link to a row the current mode hides (a Timeline label, a finding card,
+  the dashboard's Ctrl+K palette) shows its view first and does not change the
+  saved choice; a link to a Total row in Per execution mode changes nothing.
+  The three buttons wrap at phone width. No extra read of `DBA_HIST_SQLSTAT`
+  (the second ranking comes from the query's own `agg`, the swap divides what
+  the page already holds); the chart payload gains four dimensions and, on the
+  four total ones, the per-execution unit and parallel `...Pe` arrays. The
+  ranking tables are kept out of the section header's count; a statement that
+  enters the Per-SQL pool only through a Top per execution ranking counts
+  there like any pool statement (its "plan flip" badge), so on a real database
+  the header's number can rise with the pool. With JavaScript off the switch
+  is not shown, both views are stacked, each under its heading, and the cells
+  read their totals. The Top SQL bump charts now read the theme colours on
+  every draw: Break down by, the window highlight or this switch after a
+  dark-mode toggle no longer bring back the light-mode text colours.
 - **Fleet: "Abnormal at the same time" co-anomaly grid** above the console
   table -- every database's ASH activity scored against its own normal on
   one time axis, with a per-bucket count of databases far out together and

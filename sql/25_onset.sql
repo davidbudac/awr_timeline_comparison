@@ -178,7 +178,7 @@ DECLARE
     v_cmd    CLOB;
     v_csp    CLOB;
     v_cc     CLOB;
-    v_h2     VARCHAR2(400) := '<h2>Onset<small class="h2sub">When the shift started: every snapshot interval '
+    v_h2     VARCHAR2(400) := '<h2>Trend breaks<small class="h2sub">When the shift started: every snapshot interval '
         || 'of the span against its seasonal normal, dated by a CUSUM change-point test</small></h2>';
 
     @@sql/lib/metric_policy.plsql
@@ -740,7 +740,7 @@ BEGIN
         || CASE WHEN v_nopen > 0 THEN ' lopen' END || '" style="--os:15">' || v_h2);
 
     -- the chart (built by the client script; hidden until it runs)
-    v_html := '<div class="onset-viz" hidden><div class="onset-pick" role="tablist" aria-label="Onset metric">';
+    v_html := '<div class="onset-viz" hidden><div class="onset-pick" role="tablist" aria-label="Trend breaks metric">';
     FOR o IN 1 .. c_nmet LOOP
         v_html := v_html || '<button type="button" class="onset-b" role="tab" id="onset-b' || (o - 1)
             || '" data-i="' || (o - 1) || '" aria-controls="onset-plot" aria-selected="'
@@ -770,7 +770,7 @@ BEGIN
     -- the table: every number the chart dates
     IF v_a < c_nmet THEN
         DBMS_OUTPUT.PUT_LINE('<table class="onset-tbl" data-nocount><thead><tr><th>Metric</th><th>Status</th>'
-            || '<th>Onset</th><th>Ended</th><th class="num">Before</th><th class="num">After</th>'
+            || '<th>Started</th><th>Ended</th><th class="num">Before</th><th class="num">After</th>'
             || '<th class="num">Lasted</th><th class="num">Level shift</th><th class="num">Points judged</th></tr></thead><tbody>');
         FOR o IN 1 .. c_nmet LOOP
             v_html := '<tr data-i="' || (o - 1) || '"><td>' || m_name(o) || ' <small>' || m_unit(o) || '</small></td>';

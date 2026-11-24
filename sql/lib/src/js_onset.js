@@ -1,4 +1,4 @@
-// js_onset: client half of section 25_onset (Onset).
+// js_onset: client half of section 25_onset (Trend breaks).
 // Draws AWR_DATA.onset (one metric at a time, picked with the tab row):
 // the series over its seasonal band with the compared windows, release
 // markers and the detected onset; below it the CUSUM strip with its

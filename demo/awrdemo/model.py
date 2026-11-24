@@ -304,10 +304,10 @@ SQLS = [
            "GROUP BY w.warehouse_name, p.category",
            1, 96_000_000, 0.50, 1_850_000, 920_000, 412, 1655218763,
            {"direct path read": 0.6, "db file scattered read": 0.25, "direct path read temp": 0.15}, "hourly"),
+    # a PL/SQL call: AWR keeps no plan hash for it (plan_hash_value 0)
     SqlDef("k4m8v2bn6ws9e", "LOYALTY", "LoyaltyService", "points-accrual",
-           "INSERT INTO loyalty_ledger (ledger_id, customer_id, order_id, points, reason, created_at) "
-           "VALUES (loyalty_seq.NEXTVAL, :1, :2, :3, :4, SYSTIMESTAMP)",
-           116000, 920, 0.5, 11, 0.05, 1, 3946117820,
+           "BEGIN loyalty_pkg.accrue_points(:1, :2, :3, :4); END;",
+           116000, 920, 0.5, 11, 0.05, 1, 0,
            {"log file sync": 0.6, "buffer busy waits": 0.25, "enq: TX - index contention": 0.15},
            "oltp", datetime(2026, 8, 11, 22, 0)),
     SqlDef("n7t3q5xc1yj4g", "LOYALTY", "LoyaltyService", "points-balance",

@@ -501,7 +501,7 @@ and a table of its numbers. They explain; none of them adds a finding.
 | **Blocking** | Who held the sessions that waited, how many were stuck behind each holder, and is this much blocking normal for this hour? |
 | **Volume vs unit cost** | For each statement / wait event that costs more: did it run more often (application) or did each run get slower (database)? |
 | **Plan shape, old vs new** | Where inside a changed plan the time goes: old and new plan as icicle charts, per plan line from ASH. Optional grant: `DBA_HIST_SQL_PLAN`. |
-| **Onset** | *When* did it start? The whole span against its seasonal normal, with a change-point scan that dates the shift and names the nearest release. Also in the Timeline view. |
+| **Trend breaks** | *When* did it start? The whole span against its seasonal normal, with a change-point scan that dates the shift and names the nearest release. Also in the Timeline view. |
 | **Window similarity** | Are the prior windows a fair picture of normal? A window-by-window similarity matrix, and a what-if that re-scores the report without a window you drop. |
 
 ### The navigation rail & dark mode
