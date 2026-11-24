@@ -559,6 +559,29 @@ BEGIN
         || ' font-size:11.5px; }');
     DBMS_OUTPUT.PUT_LINE('dl.sql-meta dd .muted { color:var(--muted); }');
 
+    -- Per-SQL detail blocks (06): the "Compared windows" table and the
+    -- "Whole AWR retention, by plan" heading.  Selectors start with
+    -- tr.sql-detail or .sqd- (single-DB classes: this file is also included
+    -- by the fleet chrome).  The plan change badge is its own class, not
+    -- .badge.warn, so the section header's large / moderate count (which
+    -- counts a .badge.warn anywhere in a tbody row) never sees it.
+    DBMS_OUTPUT.PUT_LINE('tr.sql-detail h4.sqd-h { margin:14px 0 0; font-size:13px; font-weight:600;'
+        || ' letter-spacing:0; color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('tr.sql-detail p.sqd-sub { margin:2px 0 0; font-size:12px; color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('tr.sql-detail p.sqd-fn { margin:0 0 4px; }');
+    DBMS_OUTPUT.PUT_LINE('.sqd-mu { color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('.sqd-dt { color:var(--muted); font-size:12px; font-weight:400; margin-left:4px; }');
+    DBMS_OUTPUT.PUT_LINE('.sqd-tw { overflow-x:auto; }');
+    DBMS_OUTPUT.PUT_LINE('tr.sql-detail table.sqd-win { margin:8px 0 10px; }');
+    DBMS_OUTPUT.PUT_LINE('tr.sql-detail table.sqd-win tbody tr.skip td {'
+        || ' background-image:repeating-linear-gradient(135deg, transparent 0 6px, var(--line-soft) 6px 7px); }');
+    DBMS_OUTPUT.PUT_LINE('tr.sql-detail table.sqd-win tbody tr.sqd-nocap td.sqd-mu { text-align:center; }');
+    DBMS_OUTPUT.PUT_LINE('tr.sql-detail table.sqd-win tbody tr.skip td[colspan] { text-align:center; }');
+    DBMS_OUTPUT.PUT_LINE('tr.sql-detail table.sqd-win tfoot td { padding:8px 10px;'
+        || ' border-top:1px solid var(--hairline); color:var(--ink-soft); font-weight:600; }');
+    DBMS_OUTPUT.PUT_LINE('tr.sql-detail table.sqd-win tfoot td .sqd-dt { font-weight:400; }');
+    DBMS_OUTPUT.PUT_LINE('tr.sql-detail .badge.sqd-pc { background:var(--warn-bg); color:var(--warn); }');
+
     -- =========================================================
     -- Top-SQL chart breakdown toggle (SQL_ID / Schema / ...)
     -- =========================================================
@@ -574,6 +597,39 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.topsql-toggle button.active {'
         || ' background:var(--accent); color:#fff;'
         || ' border-color:var(--accent); }');
+    -- Values: Total | Per execution | Top per execution (06).  Every panel
+    -- carries the switch (a second .topsql-toggle above the views) and, in the
+    -- four metric panels, two views: .tsv-view[data-val=total] (the Total
+    -- ranking, which the "Per execution" swap re-values in place) and
+    -- [data-val=pe-rank] (the separate "Top per execution" ranking), each a
+    -- complete ranking (chart, breakdown toggle, detail table).  The script
+    -- right after the section heading sets #topsql.tsv-js (it ran: the switch
+    -- shows, the pe-rank view hides), #topsql.tsv-pe (mode perexec: the swap,
+    -- the Total view stays) and #topsql.tsv-rank (mode pe-rank: the views
+    -- swap) before the panels are parsed, so the page never paints the wrong
+    -- view.  Without the script no class exists: no switch, no notes, both
+    -- views stacked, the cells read their totals.  The .tsv-note of Biggest
+    -- change / Executions / Per-exec regression says what the tab shows in the
+    -- other modes (tsv-n-other: in per execution and top per execution mode,
+    -- tsv-n-total: in total mode); the Total view's .tsv-swap-note shows in
+    -- mode perexec only.  The switch row wraps (three buttons and a label at
+    -- phone width).
+    DBMS_OUTPUT.PUT_LINE('#topsql .topsql-toggle.topsql-val { margin-top:0; flex-wrap:wrap; row-gap:4px; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql:not(.tsv-js) .topsql-val { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql .tsv-note, #topsql .tsv-swap-note { display:none; margin:0 0 8px; font-size:11.5px;'
+        || ' line-height:1.45; color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('#topsql.tsv-js:not(.tsv-pe):not(.tsv-rank) .tsv-note.tsv-n-total,'
+        || ' #topsql.tsv-js.tsv-pe .tsv-note.tsv-n-other,'
+        || ' #topsql.tsv-js.tsv-rank .tsv-note.tsv-n-other,'
+        || ' #topsql.tsv-js.tsv-pe .tsv-swap-note { display:block; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql .tsv-rank-note { margin:0 0 8px; font-size:11.5px; line-height:1.45;'
+        || ' color:var(--muted); }');
+    DBMS_OUTPUT.PUT_LINE('#topsql .tsv-go { font:inherit; color:inherit; background:none; border:0; padding:0;'
+        || ' cursor:pointer; text-decoration:underline dotted; text-underline-offset:2px; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql .tsv-go:hover { color:var(--ink); }');
+    DBMS_OUTPUT.PUT_LINE('#topsql.tsv-js .tsv-view[data-val="pe-rank"] { display:none; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql.tsv-js.tsv-rank .tsv-view[data-val="pe-rank"] { display:block; }');
+    DBMS_OUTPUT.PUT_LINE('#topsql.tsv-js.tsv-rank .tsv-view[data-val="total"] { display:none; }');
 
     -- =========================================================
     -- Sparkline SVGs (per-row, emitted by js_sparkline.plsql)

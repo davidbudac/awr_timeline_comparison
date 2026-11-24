@@ -140,6 +140,26 @@
  *     both, Ctrl+K opens the palette (not the row filter), a search +
  *     Enter lands on the row, Esc closes it without unpinning; the
  *     Activity interaction checks run with both charts shown;
+ *   - Top SQL "Values: Total | Per execution | Top per execution" (block 10):
+ *     the switch in EVERY panel (own data attribute, never the chart
+ *     toggle's hooks; three buttons, mode values total / perexec / pe-rank),
+ *     one shared state set before the panels are parsed, saved on a click
+ *     only (each of the three values) and read on load.  Per execution = a
+ *     client-side swap inside the Total view of the four metric tabs: the
+ *     same statements, order and # ranks (the badges stay visible, a note
+ *     says so), every value read per execution (data-pe / data-pt, the
+ *     header unit, the chart's ...Pe arrays and unit), restored exactly;
+ *     the Current s/exec is elapsed / executions of the Compared windows
+ *     table; a no-completed-execution window is a dash with its title; the
+ *     payload's Pe arrays line up one-directionally.  Top per execution =
+ *     the separate ranking (ELAPSED_PE ...: own # badges, order, chart,
+ *     Break down by, detail table; ranks 1..n descending, a window with no
+ *     completed execution never ranked, the chart drawn with a width);
+ *     the notes of Biggest change / Executions / Per-exec regression in
+ *     each mode; a link to a row the mode hides shows its view without
+ *     saving, a Total row in per execution mode changes nothing; the
+ *     Per-SQL pool has the P chip; JS off = no switch, both views stacked;
+ *     three buttons fit at 390 px; works without ECharts;
  * and writes screenshots per view x theme when shots_dir is given.
  */
 const path = require('path');
@@ -2079,6 +2099,799 @@ const LABEL_BAND = () => {
       if (errors.length) fail('viz: ' + errors.slice(0, 5).join(' | '));
     } else console.log('viz sections: none in this report (older report), skipped');
     await page.close();
+  }
+
+  // ---- 9. the Per-SQL detail of the SQL pool (06): an opened row has the
+  // "Compared windows" table (a Current row, or its "not captured" state)
+  // and, for a statement with SQLSTAT rows, a timeline chart that has
+  // series, points and the compared windows' marks; a statement without a
+  // plan hash (a PL/SQL call) draws one grey "no plan" series.  Looks at the
+  // first pool row and, when the report has one, a plan-less row; a report
+  // from before the pool (no #sql-pool) skips the block, and the chart
+  // checks are skipped when ECharts did not load (offline, CDN blocked).
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const ids = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('#sql-pool tr.sql-row')];
+      const sd = (window.AWR_DATA && AWR_DATA.sqlDetails) || {};
+      const idOf = r => (r.id || '').replace(/^sql-/, '');
+      const planless = rows.map(idOf).find(id => sd[id] && (sd[id].phv || []).length === 1 && sd[id].phv[0] === '0');
+      return { first: rows.length ? idOf(rows[0]) : null, planless: planless || null, n: rows.length };
+    });
+    if (!ids.first) console.log('per-SQL detail: no SQL pool in this report, skipped');
+    else {
+      const check = async (id, wantPlanless) => {
+        const r = await page.evaluate(async id => {
+          const row = document.getElementById('sql-' + id);
+          row.hidden = false;
+          if (window.AWR_openSqlRow) window.AWR_openSqlRow(row);
+          await new Promise(res => setTimeout(res, 700));
+          const det = row.nextElementSibling;
+          const out = { open: !!det && !det.hidden };
+          const t = det && det.querySelector('table.sqd-win');
+          out.table = !!t;
+          const first = t && t.tBodies[0] && t.tBodies[0].rows[0];   // not querySelector('tbody tr'): the pool's own tbody is an ancestor, so a header row matches
+          out.current = !!first && /^\s*Current/.test(first.textContent) && (first.classList.contains('cur') || first.classList.contains('sqd-nocap') || first.classList.contains('skip'));
+          out.curRow = !!first && first.classList.contains('cur');
+          out.tfoot = !!(t && t.tFoot && t.tFoot.rows.length);
+          // the plan badge sits on a CHANGE: compared with the nearest older
+          // DISPLAYED row that has a numeric plan hash (rows are newest first);
+          // skipped when no such row is displayed (it may be one of the
+          // windows past the 30 shown)
+          out.badges = 0; out.badBadge = [];
+          if (t && t.tBodies[0]) {
+            const rows = [...t.tBodies[0].rows];
+            const ph = r => { const c = r.querySelector('td.mono'); const m = c && /^\s*(\d+)/.exec(c.textContent); return m ? m[1] : null; };
+            // a run of 2+ "not captured" windows is ONE row (a single one has data-w on its first cell)
+            const single = r => r.classList.contains('sqd-nocap') && !!r.cells[0] && r.cells[0].hasAttribute('data-w');
+            rows.forEach((r, i) => { if (i && single(r) && single(rows[i - 1])) out.badBadge.push('rows ' + (i - 1) + ' and ' + i + ': two adjacent single "not captured" rows (a run was not collapsed)'); });
+            rows.forEach((r, i) => {
+              const b = r.querySelector('.badge.sqd-pc'); if (!b) return;
+              out.badges++;
+              const mine = ph(r); if (!mine) { out.badBadge.push('row ' + i + ': badge without a numeric plan hash'); return; }
+              for (let j = i + 1; j < rows.length; j++) {
+                const o = ph(rows[j]); if (!o) continue;
+                if (o === mine) out.badBadge.push('row ' + i + ': badge but the older row ' + j + ' ran the same plan ' + o);
+                else { const tm = /ran (\d+)/.exec(b.getAttribute('title') || ''); if (!tm || tm[1] !== o) out.badBadge.push('row ' + i + ': badge title names ' + (tm ? tm[1] : '?') + ', the older row ran ' + o); }
+                break;
+              }
+            });
+          }
+          const sd = ((window.AWR_DATA || {}).sqlDetails || {})[id];
+          out.hasRows = !!(sd && (sd.p || []).length);
+          out.hasChartDiv = !!document.getElementById('sqltl-' + id);
+          out.echarts = !!window.echarts;
+          if (out.hasRows && window.echarts) {
+            const el = document.getElementById('sqltl-' + id);
+            const ch = el && echarts.getInstanceByDom(el);
+            out.chart = !!ch;
+            if (ch) {
+              const o = ch.getOption(), ser = o.series || [];
+              out.series = ser.length;
+              out.points = ser.reduce((a, q) => a + (q.data || []).length, 0);
+              out.name0 = ser[0] && ser[0].name;
+              const mks = ser.find(q => q.markArea && (q.markArea.data || []).length) || ser.find(q => q.id === 'winmarks') || {};
+              out.markId = mks.id || '';
+              out.hidesWithPlan0 = ser[0] === mks;
+              out.xtype = (o.xAxis && o.xAxis[0] && o.xAxis[0].type) || '';
+              const win = ((window.AWR_WIN || {}).w || []).filter(w => w.v === 'Y').length;
+              out.validWin = win;
+              out.areas = mks.markArea && (mks.markArea.data || []).length || 0;
+              out.lines = mks.markLine && (mks.markLine.data || []).length || 0;
+            }
+          }
+          return out;
+        }, id);
+        const tag = (wantPlanless ? 'plan-less ' : '') + id;
+        console.log('per-SQL detail ' + tag + ': ' + JSON.stringify(r));
+        if (!r.open) fail('per-SQL detail ' + tag + ': the row did not open');
+        (r.badBadge || []).forEach(m => fail('per-SQL detail ' + tag + ': plan badge ' + m));
+        if (!r.table) fail('per-SQL detail ' + tag + ': no table.sqd-win');
+        else {
+          if (!r.current) fail('per-SQL detail ' + tag + ': the Compared windows table has no Current row');
+          if (!r.tfoot) fail('per-SQL detail ' + tag + ': no prior-mean row');
+        }
+        if (r.hasRows && !r.hasChartDiv) fail('per-SQL detail ' + tag + ': rows but no #sqltl- chart box');
+        if (r.hasRows && r.echarts) {
+          if (!r.chart) fail('per-SQL detail ' + tag + ': no ECharts instance in #sqltl-' + id);
+          else {
+            if (!r.series || !r.points) fail('per-SQL detail ' + tag + ': the chart has ' + (r.series || 0) + ' series / ' + (r.points || 0) + ' points');
+            if (r.xtype !== 'time') fail('per-SQL detail ' + tag + ': x axis is "' + r.xtype + '", expected a time axis');
+            if (r.validWin && !r.areas) fail('per-SQL detail ' + tag + ': AWR_WIN has ' + r.validWin + ' valid windows but no series of the chart has markArea data');
+            if (r.validWin && r.hidesWithPlan0) fail('per-SQL detail ' + tag + ': the window marks sit on the first plan series (they vanish when it is hidden in the legend)');
+            if (wantPlanless && r.name0 !== 'no plan') fail('per-SQL detail ' + tag + ': series[0] is "' + r.name0 + '", expected "no plan"');
+          }
+        }
+      };
+      await check(ids.first, false);
+      if (ids.planless) await check(ids.planless, true);
+      else console.log('per-SQL detail: no plan-less statement in this report (' + ids.n + ' pool rows), that case not exercised');
+      if (errors.length) fail('per-SQL detail: ' + errors.slice(0, 5).join(' | '));
+    }
+    await page.close();
+  }
+
+  // ---- 10. Top SQL: "Values: Total | Per execution | Top per execution".  EVERY
+  // panel carries the switch (one shared state, mode values total / perexec /
+  // pe-rank).  Per execution = a client-side SWAP inside the Total view of the
+  // four metric tabs (Elapsed, CPU, Buffer gets, Physical reads): the same
+  // statements, row order and ranks (the #n badges STAY visible), every value
+  // divided by its executions (the cells' data-pe / data-pt, the Current
+  // header unit, the chart's "...Pe" arrays), restored exactly on the way
+  // back.  Top per execution = a separate ranking (ELAPSED_PE ...: each
+  // window's top N by value per completed execution: own # badges, order,
+  // chart, Break down by, detail table), the second view of the panel.  The
+  // other three tabs carry a note saying what they show in the other modes.
+  // The state is set before the panels are parsed; localStorage
+  // awr-topsql-val is written on a click only; a link to a row the current
+  // mode hides shows its view (never saved), a Total row in per execution mode
+  // changes nothing.  A report without the switch (no Top SQL, or older) skips
+  // the block; a panel or ranking the report does not have is skipped.
+  {
+    const KEY = 'awr-topsql-val';
+    const METRICS = ['ELAPSED', 'CPU', 'GETS', 'PREADS'];
+    const UNIT = { ELAPSED: 's/exec', CPU: 's/exec', GETS: 'gets/exec', PREADS: 'reads/exec' };
+    const TOTU = { ELAPSED: 's', CPU: 's', GETS: 'gets', PREADS: 'reads' };
+    const MODES = ['total', 'perexec', 'pe-rank'];
+    const LABEL = { total: 'Total', perexec: 'Per execution', 'pe-rank': 'Top per execution' };
+    const lsGet = page => page.evaluate(k => { try { return localStorage.getItem(k); } catch (e) { return 'ERR'; } }, KEY);
+    const lsSet = (page, v) => page.evaluate(([k, v]) => { try { localStorage.setItem(k, v); } catch (e) {} }, [KEY, v]);
+    const lsClear = page => page.evaluate(k => { try { localStorage.removeItem(k); } catch (e) {} }, KEY);
+    // what the page shows: the mode and its classes, per panel the displayed view(s), the switch, the notes
+    const state = page => page.evaluate(() => {
+      const root = document.getElementById('topsql');
+      const disp = el => getComputedStyle(el).display;
+      const out = { js: root.classList.contains('tsv-js'), pe: root.classList.contains('tsv-pe'), rank: root.classList.contains('tsv-rank'),
+        mode: window.AWR_topsqlVal ? window.AWR_topsqlVal() : null, panels: {} };
+      root.querySelectorAll('.tabpanel[data-tabs="topsql"]').forEach(p => {
+        const d = p.getAttribute('data-t'), sw = p.querySelector(':scope > div[data-tsv]');
+        const tv = p.querySelector(':scope > .tsv-view[data-val="total"]'), sn = tv && tv.querySelector(':scope > p.tsv-swap-note');
+        out.panels[d] = {
+          views: [...p.querySelectorAll(':scope > .tsv-view')].map(v => v.getAttribute('data-val') + ':' + (disp(v) === 'none' ? 'off' : 'on')).join(),
+          sw: sw ? disp(sw) !== 'none' : null,
+          active: sw ? (sw.querySelector('button.active') || {}).textContent : null,
+          pressed: sw ? [...sw.querySelectorAll('button')].map(b => b.getAttribute('aria-pressed')).join() : null,
+          notes: [...p.querySelectorAll(':scope > .tsv-note')].map(n => ({ cls: n.className, shown: disp(n) !== 'none', txt: n.textContent })),
+          swapNote: sn ? disp(sn) !== 'none' : null,
+        };
+      });
+      return out;
+    });
+    // the four total tables, every cell's text and title (a swap must restore both exactly)
+    const snapTables = page => page.evaluate((METRICS) => {
+      const o = {};
+      METRICS.forEach(d => {
+        const t = document.getElementById('topsql-detail-' + d);
+        o[d] = t ? [...t.querySelectorAll('th, td')].map(e => e.textContent + '\u0001' + (e.getAttribute('title') || '\u0002')) : null;
+      });
+      return o;
+    }, METRICS);
+    // badges of the four total tables: how many exist and how many are displayed
+    const badges = page => page.evaluate(() => {
+      const f = sel => { const l = [...document.querySelectorAll(sel)]; return { n: l.length, shown: l.filter(b => getComputedStyle(b).display !== 'none').length }; };
+      return { rank: f('#topsql table.tsv-tbl .badge.info, #topsql table.tsv-tbl .badge.skip'), plan: f('#topsql table.tsv-tbl .badge.warn'),
+        other: f('#topsql table:not(.tsv-tbl) .badge.info, #topsql table:not(.tsv-tbl) .badge.skip') };
+    });
+    const chartOf = (page, dim) => page.evaluate(dim => {
+      if (!window.echarts) return null;
+      const el = document.getElementById('topsql-chart-' + dim), ch = el && echarts.getInstanceByDom(el);
+      if (!ch) return { none: true };
+      const o = ch.getOption();
+      let tip = null;
+      try {
+        const f = (o.tooltip && o.tooltip[0] || {}).formatter;
+        if (typeof f === 'function') tip = f([{ axisValue: 'w', marker: '', seriesName: 'S', value: 0.00123 }]);
+      } catch (e) { tip = 'ERR ' + e.message; }
+      return { w: ch.getWidth(), yname: (o.yAxis && o.yAxis[0] || {}).name, n: (o.series || []).length,
+        data0: JSON.stringify(((o.series || [])[0] || {}).data), tip };
+    }, dim);
+    const payloadOf = (page, dim, g) => page.evaluate(([dim, g]) => { const a = (((AWR_DATA.topSql.dims[dim] || {})[g]) || [])[0]; return a ? JSON.stringify(Array.isArray(a) ? a : a.vals) : null; }, [dim, g]);
+    const { page, errors } = await openPage('#view=all', 'light');
+    await lsClear(page);
+    await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(1200);
+    const present = await page.evaluate(() => !!document.querySelector('#topsql .tabpanel[data-tabs="topsql"] div[data-tsv]'));
+    if (!present) console.log('top SQL values switch: not in this report, skipped');
+    else {
+      const bad = m => fail('top SQL values switch: ' + m);
+      // the state a mode must show, checked in every panel the report has
+      const checkState = (st, mode, where) => {
+        const w = '(' + where + ') ';
+        if (!st.js || st.mode !== mode || st.pe !== (mode === 'perexec') || st.rank !== (mode === 'pe-rank')) bad(w + 'state is mode ' + st.mode + ', classes js ' + st.js + ' pe ' + st.pe + ' rank ' + st.rank + ', expected ' + mode);
+        Object.keys(st.panels).forEach(d => {
+          const p = st.panels[d];
+          if (!p.sw || p.active !== LABEL[mode] || p.pressed !== MODES.map(m => m === mode).join()) bad(w + d + ': switch hidden or not on "' + LABEL[mode] + '": ' + JSON.stringify(p));
+          if (METRICS.includes(d)) {
+            if (p.views !== (mode === 'pe-rank' ? 'total:off,pe-rank:on' : 'total:on,pe-rank:off')) bad(w + d + ': views are ' + p.views);
+            if (p.swapNote !== (mode === 'perexec')) bad(w + d + ': the Total view\'s swap note is ' + (p.swapNote ? 'shown' : 'hidden'));
+          }
+          p.notes.forEach(n => {
+            const want = /tsv-n-other/.test(n.cls) ? mode !== 'total' : /tsv-n-total/.test(n.cls) ? mode === 'total' : null;
+            if (want === null) bad(w + d + ': a note of class "' + n.cls + '"');
+            else if (n.shown !== want) bad(w + d + ': the note "' + n.cls + '" is ' + (n.shown ? 'shown' : 'hidden'));
+          });
+        });
+      };
+      // click a mode in the (visible) panel of `dim`
+      const clickMode = async (dim, mode) => {
+        const t = await page.$('#tab-topsql-' + dim); if (t) await t.click();
+        await page.click('.tabpanel[data-t="' + dim + '"] div[data-tsv] button[data-val="' + mode + '"]');
+        await page.waitForTimeout(450);
+      };
+      const vis = id => page.evaluate(id => { const e = document.getElementById(id); return !!e && e.getClientRects().length > 0; }, id);
+      // ---- markup contract, every panel the report has
+      const mk = await page.evaluate(({ METRICS, UNIT, TOTU }) => {
+        const root = document.getElementById('topsql'), o = { bad: [], panels: [], rankings: [] };
+        const D = ((window.AWR_DATA || {}).topSql || {}).dims || {};
+        const sc = [...root.children].find(c => c.tagName === 'SCRIPT' && /Values switch/.test(c.textContent));
+        const firstPanel = root.querySelector('.tabpanel');
+        if (!sc || !firstPanel || !(sc.compareDocumentPosition(firstPanel) & Node.DOCUMENT_POSITION_FOLLOWING)) o.bad.push('the state script does not come before the first panel (the wrong view could paint first)');
+        root.querySelectorAll('.tabpanel[data-tabs="topsql"]').forEach(p => {
+          const d = p.getAttribute('data-t'); o.panels.push(d);
+          const sws = [...p.children].filter(c => c.matches('div.topsql-toggle.topsql-val[data-tsv]'));
+          if (sws.length !== 1 || sws[0].getAttribute('data-tsv') !== d) { o.bad.push(d + ': not exactly one switch of its own'); return; }
+          const sw = sws[0], bs = [...sw.querySelectorAll('button')];
+          if (sw.hasAttribute('data-topsql-target') || sw.querySelector('[data-mode]')) o.bad.push(d + ': the switch carries the breakdown toggle\'s hooks');
+          if (bs.map(b => b.getAttribute('data-val')).join() !== 'total,perexec,pe-rank') o.bad.push(d + ': the switch buttons are not total, perexec, pe-rank');
+          if (bs.map(b => b.textContent).join('|') !== 'Total|Per execution|Top per execution') o.bad.push(d + ': the switch button labels are "' + bs.map(b => b.textContent).join('|') + '"');
+          if (!/^Values:/.test(sw.textContent)) o.bad.push(d + ': the switch has no "Values:" label');
+          if (bs.some(b => b.getAttribute('aria-pressed') === null || b.hasAttribute('data-mode') || b.hasAttribute('data-topsql-target'))) o.bad.push(d + ': a switch button lacks aria-pressed or carries the breakdown hooks');
+          const views = [...p.children].filter(c => c.classList.contains('tsv-view'));
+          const tsvIn = p.querySelectorAll('.tsv-tbl, [data-pe], span.tsv, .tsv-swap-note');
+          if (!METRICS.includes(d)) {
+            if (views.length) o.bad.push(d + ': a tab with no per-execution form has views');
+            if (tsvIn.length) o.bad.push(d + ': carries swap markup (' + tsvIn.length + ' elements)');
+            const notes = [...p.children].filter(c => c.classList.contains('tsv-note'));
+            if (notes.length !== 1) o.bad.push(d + ': needs exactly one note, has ' + notes.length);
+            else if (!notes[0].classList.contains(d === 'PEREXEC' ? 'tsv-n-total' : 'tsv-n-other')) o.bad.push(d + ': the note is "' + notes[0].className + '"');
+            return;
+          }
+          if (views.map(v => v.getAttribute('data-val')).join() !== 'total,pe-rank') { o.bad.push(d + ': views are "' + views.map(v => v.getAttribute('data-val')).join() + '", expected total,pe-rank'); return; }
+          if ([...p.children].some(c => c.classList.contains('tsv-note'))) o.bad.push(d + ': a metric tab carries an other-tab note');
+          [['total', d], ['pe-rank', d + '_PE']].forEach(([val, dim]) => {
+            const v = views.find(x => x.getAttribute('data-val') === val), t = v.querySelector('table[id^="topsql-detail-"]');
+            if (!v.querySelector('h3')) o.bad.push(dim + ': the view has no heading (JS off: which ranking is it?)');
+            if (!t) {
+              if (val === 'total') o.bad.push(dim + ': the total view has no table');
+              else if (!v.querySelector('p.note') || v.querySelector('.chart-wrap') || v.querySelector('.tsv-tbl, [data-pe]')) o.bad.push(dim + ': an empty Top per execution view needs a p.note and no chart / swap markup');
+              else o.rankings.push({ dim, empty: true });
+              return;
+            }
+            if (t.id !== 'topsql-detail-' + dim) o.bad.push(dim + ': table id ' + t.id);
+            if (!v.querySelector('#topsql-chart-' + dim)) o.bad.push(dim + ': no chart container');
+            if (!v.querySelector('[data-topsql-target="' + dim + '"]')) o.bad.push(dim + ': no Break down by toggle of its own');
+            const th = t.querySelector('thead th[data-w="0"]');
+            if (val === 'pe-rank') {
+              if (!v.querySelector('p.tsv-rank-note') || !/different statement set/.test(v.querySelector('p.tsv-rank-note').textContent)) o.bad.push(dim + ': no rank note saying it is a different statement set');
+              if (v.querySelector('p.tsv-swap-note')) o.bad.push(dim + ': the ranking view carries the swap note');
+              if (t.classList.contains('tsv-tbl') || t.querySelector('[data-pe], span.tsv')) o.bad.push(dim + ': the ranking table carries swap markup');
+              if (!t.hasAttribute('data-nocount')) o.bad.push(dim + ': the ranking table lacks data-nocount');
+              if (!th || th.textContent !== 'Current (' + UNIT[d] + ')') o.bad.push(dim + ': header "' + (th && th.textContent) + '"');
+            } else {
+              const sn = v.querySelectorAll('p.tsv-swap-note');
+              if (sn.length !== 1 || !/still picked and ordered by the window total/.test(sn[0].textContent) || !/#n badges are ranks by total/.test(sn[0].textContent) || !/dash/.test(sn[0].textContent) || !/^[\x20-\x7e]*$/.test(sn[0].textContent)) o.bad.push(dim + ': the swap note is missing or says the wrong thing');
+              if (v.querySelector('p.tsv-rank-note')) o.bad.push(dim + ': the total view carries the rank note');
+              if (!t.classList.contains('tsv-tbl')) o.bad.push(dim + ': the total table is not table.tsv-tbl');
+              if (t.hasAttribute('data-nocount')) o.bad.push(dim + ': the total table is data-nocount');
+              if (!th || th.textContent !== 'Current (' + TOTU[d] + ')' || th.getAttribute('data-pe') !== 'Current (' + UNIT[d] + ')') o.bad.push(dim + ': header "' + (th && th.textContent) + '" / data-pe "' + (th && th.getAttribute('data-pe')) + '"');
+              // every value cell is span.tsv with its data-pe; a dash cell has none; titled only when the swap carries one
+              const spans = t.querySelectorAll('span.tsv[data-pe]');
+              if (!spans.length) o.bad.push(dim + ': no span.tsv value cell');
+              if (t.querySelectorAll('span.tsv:not([data-pe])').length) o.bad.push(dim + ': a span.tsv without data-pe');
+              if (t.querySelectorAll('[data-po], [data-ptm]').length) o.bad.push(dim + ': an unswapped table carries restore attributes');
+              // the sync script right after the view (no flash of totals under a saved perexec)
+              const nx = v.nextElementSibling;
+              if (!nx || nx.tagName !== 'SCRIPT' || nx.textContent.indexOf('AWR_topsqlSync(document.getElementById("topsql-detail-' + dim + '"))') < 0) o.bad.push(dim + ': no sync script right after the total view');
+            }
+            o.rankings.push({ dim, rows: t.querySelectorAll('tbody tr').length, payload: !!D[dim] });
+          });
+        });
+        // every view is a direct child of a tabpanel; the Per-SQL pool is in none of them
+        root.querySelectorAll('.tsv-view').forEach(v => { if (!v.parentElement.classList.contains('tabpanel')) o.bad.push('a .tsv-view outside its tabpanel'); });
+        const pool = document.getElementById('sql-pool');
+        if (pool && pool.closest('.tabpanel, .tsv-view')) o.bad.push('the Per-SQL pool sits inside a panel / view (a div is unbalanced)');
+        // the ranking rows: ids from anchor_id (sq-<metric>pe-<sql_id>), none reaching a sq-elapsed- prefix match
+        root.querySelectorAll('table[id^="topsql-detail-"][id$="_PE"] tbody tr[id]').forEach(tr => { if (!/^sq-(elapsed|cpu|gets|preads)pe-[a-z0-9]+$/.test(tr.id)) o.bad.push('ranking row id ' + tr.id); });
+        // swap markup only in the four total tables: no other table, no span.tsv outside them
+        root.querySelectorAll('table[id^="topsql-detail-"]').forEach(t => {
+          const d = t.id.replace('topsql-detail-', '');
+          if (!METRICS.includes(d) && (t.classList.contains('tsv-tbl') || t.querySelector('[data-pe], span.tsv'))) o.bad.push(d + ': a table that is not a total metric table carries swap markup');
+        });
+        // payload: the four total dims carry unitPe and the parallel Pe arrays (element i = entry i), nothing else does.  One direction:
+        // never a per-execution value where the total is null; a null per-execution value under a total is a window with no completed execution
+        const PEKEYS = ['unitPe', 'sqlsPe', 'schemasPe', 'modulesPe', 'actionsPe'];
+        o.pay = { swapDims: 0, entries: 0, nullPe: 0 };
+        Object.keys(D).forEach(k => {
+          const d = D[k];
+          if (!METRICS.includes(k)) { PEKEYS.forEach(key => { if (key in d) o.bad.push('payload ' + k + ' carries ' + key); }); return; }
+          o.pay.swapDims++;
+          if (d.unitPe !== UNIT[k]) o.bad.push('payload ' + k + '.unitPe is "' + d.unitPe + '"');
+          ['sqls', 'schemas', 'modules', 'actions'].forEach(g => {
+            const a = d[g] || [], b = d[g + 'Pe'];
+            if (!b || b.length !== a.length) { o.bad.push('payload ' + k + '.' + g + 'Pe has ' + (b ? b.length : 'none') + ' entries, ' + g + ' has ' + a.length); return; }
+            a.forEach((e, i) => {
+              o.pay.entries++;
+              if (!Array.isArray(b[i]) || b[i].length !== e.vals.length) o.bad.push('payload ' + k + '.' + g + '[' + i + '] length');
+              else e.vals.forEach((v, j) => {
+                if (v === null && b[i][j] !== null) o.bad.push('payload ' + k + '.' + g + '[' + i + '][' + j + '] has a per-execution value where the total is null');
+                if (v !== null && b[i][j] === null) o.pay.nullPe++;
+              });
+            });
+          });
+        });
+        return o;
+      }, { METRICS, UNIT, TOTU });
+      mk.bad.slice(0, 8).forEach(bad);
+      if (!mk.rankings.some(r => r.dim.endsWith('_PE') && !r.empty)) console.log('top SQL values switch: no ranking of Top per execution has a row in this report (the empty view): the table checks are skipped');
+      console.log('top SQL values switch: panels ' + mk.panels.join('/') + '; views ' + mk.rankings.map(r => r.dim + (r.empty ? ' (empty)' : ' ' + r.rows)).join(', ') + '; payload ' + mk.pay.swapDims + ' swap dims, ' + mk.pay.entries + ' entries with a Pe twin, ' + mk.pay.nullPe + ' null per-execution values under a total');
+      const peDims = mk.rankings.filter(r => r.dim.endsWith('_PE') && !r.empty).map(r => r.dim);
+      const dim = mk.panels.includes('ELAPSED') ? 'ELAPSED' : METRICS.find(d => mk.panels.includes(d));
+      const other = METRICS.find(d => d !== dim && mk.panels.includes(d));
+      if (!dim) { console.log('top SQL values switch: no metric panel in this report, the mode checks are skipped'); }
+      else {
+      // ---- default: Total, nothing saved, the switch shown, the ranking views hidden, the notes of the total mode
+      let st = await state(page);
+      checkState(st, 'total', 'at load');
+      if (await lsGet(page) !== null) bad('localStorage ' + KEY + ' written without a click');
+      const before = await snapTables(page), bB = await badges(page);
+      if (!bB.rank.n) bad('no rank badge in the total tables');
+      // the rows of the four total tables with their rank badges, in order: Per execution must keep exactly these
+      const orderOf = () => page.evaluate(METRICS => METRICS.map(d => [...document.querySelectorAll('#topsql-detail-' + d + ' tbody tr')].map(tr => tr.id + ':' + [...tr.querySelectorAll('.badge.info, .badge.skip')].map(b => b.textContent).join('/')).join()), METRICS);
+      const ordTotal = await orderOf();
+      // ---- JS off (the classes the script sets removed: the CSS of a page whose script did not run): no switch, no notes, the cells read totals, both views stacked, each with a heading
+      const off = await page.evaluate(() => {
+        const root = document.getElementById('topsql'), disp = el => getComputedStyle(el).display;
+        root.classList.remove('tsv-js', 'tsv-pe', 'tsv-rank');
+        const o = { views: [], sw: 0, notes: 0, swapNotes: 0, head: [] };
+        root.querySelectorAll('.tsv-view').forEach(v => o.views.push(v.getAttribute('data-val') + ':' + (disp(v) === 'none' ? 'off' : 'on') + ':' + (v.querySelector('h3') && v.querySelector('h3').textContent.trim().length > 0)));
+        root.querySelectorAll('div[data-tsv]').forEach(s => { if (disp(s) !== 'none') o.sw++; });
+        root.querySelectorAll('.tsv-note').forEach(n => { if (disp(n) !== 'none') o.notes++; });
+        root.querySelectorAll('.tsv-swap-note').forEach(n => { if (disp(n) !== 'none') o.swapNotes++; });
+        root.querySelectorAll('table.tsv-tbl thead th[data-w="0"]').forEach(th => o.head.push(th.textContent));
+        root.classList.add('tsv-js');
+        return o;
+      });
+      if (off.views.some(v => !v.startsWith('total:on:true') && !v.startsWith('pe-rank:on:true'))) bad('without the script a view is hidden or has no heading: ' + off.views.join());
+      if (off.sw || off.notes || off.swapNotes) bad('without the script ' + off.sw + ' switch(es), ' + off.notes + ' note(s) and ' + off.swapNotes + ' swap note(s) still show');
+      if (off.head.some(h => !/^Current \((s|gets|reads)\)$/.test(h))) bad('without the script a total table header reads ' + off.head.join(' | '));
+      // ---- Per execution (the swap): click in one panel
+      await clickMode(dim, 'perexec');
+      if (!(await page.isVisible('.tabpanel[data-t="' + dim + '"] div[data-tsv]'))) bad('the switch is not visible in the ' + dim + ' panel');
+      st = await state(page);
+      checkState(st, 'perexec', 'after the click');
+      if (await lsGet(page) !== 'perexec') bad('localStorage ' + KEY + ' is not "perexec" after the click');
+      // the Total view's cells: headers, text from data-pe, titles from data-pt; the table really changed; the rank badges STAY (and the plan badges, and every other table's)
+      const cells = await page.evaluate(({ METRICS, UNIT }) => {
+        const o = { spans: 0, wrong: [], titleBad: [], dash: 0, head: {} };
+        METRICS.forEach(d => {
+          const th = document.querySelector('#topsql-detail-' + d + ' thead th[data-w="0"]'); o.head[d] = th ? th.textContent : null;
+          document.querySelectorAll('#topsql-detail-' + d + ' .tsv').forEach(sp => {
+            o.spans++;
+            const pe = sp.getAttribute('data-pe');
+            if (sp.textContent !== pe) o.wrong.push(d + ': "' + sp.textContent + '" vs data-pe "' + pe + '"');
+            if (pe === '—') o.dash++;
+            const td = sp.closest('td'), pt = sp.getAttribute('data-pt');
+            if (pt !== null && td.getAttribute('title') !== pt) o.titleBad.push(d + ': title "' + td.getAttribute('title') + '" vs data-pt "' + pt + '"');
+          });
+        });
+        return o;
+      }, { METRICS, UNIT });
+      METRICS.filter(d => mk.panels.includes(d)).forEach(d => { if (cells.head[d] !== 'Current (' + UNIT[d] + ')') bad(d + ' header reads "' + cells.head[d] + '", expected "Current (' + UNIT[d] + ')"'); });
+      if (!cells.spans) bad('no .tsv value span in the four detail tables');
+      if (cells.wrong.length) bad('a value cell does not show its per-execution text: ' + cells.wrong.slice(0, 3).join(' | '));
+      if (cells.titleBad.length) bad('a cell title is not its per-execution title: ' + cells.titleBad.slice(0, 3).join(' | '));
+      const mid = await snapTables(page);
+      if (JSON.stringify(mid[dim]) === JSON.stringify(before[dim])) bad(dim + ' table is unchanged in per execution mode');
+      const bP = await badges(page);
+      if (bP.rank.n !== bB.rank.n || bP.rank.shown !== bB.rank.shown || bP.rank.shown !== bP.rank.n) bad('the #n rank badges changed in per execution mode (' + bP.rank.shown + ' of ' + bP.rank.n + ' shown, ' + bB.rank.shown + ' of ' + bB.rank.n + ' in Total): they must STAY visible');
+      if (bP.plan.n !== bB.plan.n || bP.plan.shown !== bP.plan.n) bad('the plan change badges are hidden in per execution mode');
+      if (bP.other.shown !== bP.other.n) bad('rank badges of the other tabs / the ranking were hidden');
+      // the rows, their order and their ranks are those of the total: same ids in the same order, same badge texts
+      const ordPe = await orderOf();
+      if (JSON.stringify(ordPe) !== JSON.stringify(ordTotal)) bad('the statements, their order or their # ranks changed in per execution mode');
+      if (!(await page.isVisible('.tabpanel[data-t="' + dim + '"] .tsv-swap-note'))) bad('the swap note is not visible in per execution mode');
+      // the number is right: the Current cell vs elapsed / executions of the Compared windows table of the Per-SQL pool (same data)
+      const xc = await page.evaluate(() => {
+        const num = s => { const t = String(s).replace(/,/g, '').trim(); if (/^<0\.0+1$/.test(t)) return 0; const m = /^(-?\d*\.?\d+)\s*([kMG])?$/.exec(t); return m ? parseFloat(m[1]) * ({ k: 1e3, M: 1e6, G: 1e9 }[m[2]] || 1) : null; };
+        const out = [];
+        document.querySelectorAll('#topsql-detail-ELAPSED tbody tr[id^="sq-elapsed-"]').forEach(tr => {
+          const sid = tr.id.replace('sq-elapsed-', ''), sp = tr.querySelector('td[data-w="0"] .tsv'), win = document.getElementById('win-' + sid);
+          const cur = win && win.tBodies[0] && win.tBodies[0].rows[0];
+          if (!sp || !cur || !cur.classList.contains('cur')) return;
+          const ex = num((cur.cells[1].getAttribute('title') || cur.cells[1].textContent).replace(/ .*/, '')), el = num((cur.cells[2].getAttribute('title') || cur.cells[2].textContent).replace(/ .*/, ''));
+          const got = num(sp.getAttribute('data-pe'));
+          if (ex > 0 && el !== null && got !== null) { const want = el / ex; out.push({ sid, want, got, ok: Math.abs(got - want) <= Math.abs(got) * 6e-4 + 5.1e-7 + 5.1e-5 / ex + 1e-9 }); }
+        });
+        return out;
+      });
+      if (xc.some(x => !x.ok)) bad('per-execution Current cell is not elapsed / executions of the Compared windows table: ' + JSON.stringify(xc.filter(x => !x.ok).slice(0, 3)));
+      else console.log('top SQL values switch: per execution (swap): ' + cells.spans + ' value cells swapped (' + cells.dash + ' dash), ' + xc.length + ' Elapsed Current cells = elapsed / executions of the Compared windows table, ' + bP.rank.n + ' rank badges kept');
+      // the Total view's chart (ECharts loaded): axis name, series data = the Pe array, tooltip unit and 4 significant digits; the breakdown toggle, the window highlight and the theme keep it
+      const chP = await chartOf(page, dim);
+      if (chP && !chP.none) {
+        if (chP.yname !== UNIT[dim]) bad('chart y axis is "' + chP.yname + '" in per execution mode, expected "' + UNIT[dim] + '"');
+        if (!(chP.w > 0)) bad('the Total chart is ' + chP.w + ' px wide in per execution mode');
+        if (!/\/exec/.test(chP.tip || '') || !/0\.00123/.test(chP.tip || '')) bad('chart tooltip lacks the per-execution unit / 4 significant digits: ' + chP.tip);
+        const want = await payloadOf(page, dim, 'sqlsPe');
+        if (chP.data0 !== want) bad('chart series[0] is not sqlsPe[0]');
+        const g = await page.$('.tabpanel[data-t="' + dim + '"] [data-topsql-target="' + dim + '"] button[data-mode="schemas"]');
+        if (g && await g.isVisible()) {
+          await g.click(); await page.waitForTimeout(300);
+          const c2 = await chartOf(page, dim), w2 = await payloadOf(page, dim, 'schemasPe');
+          if (c2.yname !== UNIT[dim] || c2.data0 !== w2) bad('Break down by Schema lost the per-execution values');
+          await page.evaluate(() => document.dispatchEvent(new CustomEvent('awr:window', { detail: { w: 1 } }))); await page.waitForTimeout(200);
+          const c3 = await chartOf(page, dim);
+          if (c3.yname !== UNIT[dim] || c3.data0 !== w2) bad('the window highlight re-render lost the per-execution values');
+          await page.evaluate(() => document.dispatchEvent(new CustomEvent('awr:window', { detail: null })));
+          await page.evaluate(() => document.dispatchEvent(new CustomEvent('awr:theme')));
+          await page.waitForTimeout(150);
+          const c4 = await chartOf(page, dim);
+          if (c4.yname !== UNIT[dim] || c4.data0 !== w2) bad('the theme re-style lost the per-execution values');
+          const g0 = await page.$('.tabpanel[data-t="' + dim + '"] [data-topsql-target="' + dim + '"] button[data-mode="sqls"]');
+          if (g0) await g0.click();
+          await page.waitForTimeout(200);
+          // a real theme flip, then redraws (a mode change and a Break down click): they must read the NEW colours, not those of the first paint
+          const colOf = () => page.evaluate(dim => { const o = echarts.getInstanceByDom(document.getElementById('topsql-chart-' + dim)).getOption();
+            return { x: ((o.xAxis[0] || {}).axisLabel || {}).color, y: ((o.yAxis[0] || {}).axisLabel || {}).color, leg: ((o.legend[0] || {}).textStyle || {}).color,
+              fg: getComputedStyle(document.body).getPropertyValue('--fg').trim(), mu: getComputedStyle(document.body).getPropertyValue('--muted').trim() }; }, dim);
+          const tt = await page.$('#theme-toggle');
+          if (tt) {
+            const c0 = await colOf();
+            await tt.click(); await page.waitForTimeout(350);
+            const c1 = await colOf();
+            if (c1.fg === c0.fg) console.log('top SQL values switch: the theme toggle did not change --fg, the colour checks are weak');
+            if (c1.x !== c1.fg || c1.leg !== c1.fg || c1.y !== c1.mu) bad('after a theme flip the chart is not on the new colours: ' + JSON.stringify(c1));
+            await clickMode(dim, 'pe-rank'); await clickMode(dim, 'perexec');
+            const c2 = await colOf();
+            if (c2.x !== c2.fg || c2.leg !== c2.fg || c2.y !== c2.mu) bad('a mode change after a theme flip redrew the chart with the old colours: ' + JSON.stringify(c2));
+            const g2 = await page.$('.tabpanel[data-t="' + dim + '"] [data-topsql-target="' + dim + '"] button[data-mode="schemas"]');
+            if (g2 && await g2.isVisible()) {
+              await g2.click(); await page.waitForTimeout(250);
+              const c3 = await colOf();
+              if (c3.x !== c3.fg || c3.leg !== c3.fg) bad('Break down by after a theme flip redrew the chart with the old colours: ' + JSON.stringify(c3));
+              const g3 = await page.$('.tabpanel[data-t="' + dim + '"] [data-topsql-target="' + dim + '"] button[data-mode="sqls"]'); if (g3) await g3.click();
+            }
+            await tt.click(); await page.waitForTimeout(350);
+            await page.evaluate(() => { try { localStorage.removeItem('awr-theme'); } catch (e) {} });
+          }
+        } else console.log('top SQL values switch: no Schema breakdown on ' + dim + ' in this report, that step skipped');
+      } else console.log('top SQL values switch: ' + (chP ? 'no chart on ' + dim : 'ECharts not loaded') + ', the chart checks of the swap are skipped');
+      // a window with no completed execution reads a dash with its reason (the demo has none: force one, then put it back)
+      const zx = await page.evaluate(() => {
+        const nat = [...document.querySelectorAll('#topsql table.tsv-tbl .tsv[data-pt^="no completed"]')];
+        const sp = document.querySelector('#topsql table.tsv-tbl td[data-w="1"] .tsv:not([data-pt])');
+        return { natural: nat.length, natBad: nat.filter(e => e.textContent !== '—' || e.closest('td').getAttribute('title') !== e.getAttribute('data-pt')).length, hasSpan: !!sp };
+      });
+      if (zx.natBad) bad(zx.natBad + ' of ' + zx.natural + ' no-completed-execution cells do not read a dash with their title');
+      console.log('top SQL values switch: ' + zx.natural + ' no-completed-execution cell(s) in this report');
+      // the other panels show the same mode (the state is shared): its Total view, its swap note
+      if (other) {
+        const t2 = await page.$('#tab-topsql-' + other); if (t2) await t2.click(); await page.waitForTimeout(300);
+        if (!(await page.isVisible('.tabpanel[data-t="' + other + '"] .tsv-view[data-val="total"]')) || !(await page.isVisible('.tabpanel[data-t="' + other + '"] .tsv-swap-note'))) bad(other + ': its Total view / swap note is not visible after switching in ' + dim);
+        const hd = await page.evaluate(d => document.querySelector('#topsql-detail-' + d + ' thead th[data-w="0"]').textContent, other);
+        if (hd !== 'Current (' + UNIT[other] + ')') bad(other + ': header "' + hd + '" after switching in ' + dim);
+      }
+      // ---- the notes of the tabs with no per-execution form (per execution mode: Biggest change, Executions)
+      const nt = await page.evaluate(() => {
+        const g = d => { const p = document.querySelector('#topsql .tabpanel[data-t="' + d + '"]'), n = p && p.querySelector(':scope > .tsv-note'); return n ? { txt: n.textContent, go: [...n.querySelectorAll('button[data-tsv-goto]')].map(b => b.getAttribute('data-tsv-goto')).join(), ascii: /^[\x20-\x7e]*$/.test(n.textContent) } : null; };
+        return { CHANGE: g('CHANGE'), EXEC: g('EXEC'), PEREXEC: g('PEREXEC') };
+      });
+      if (nt.CHANGE && (!/total elapsed/.test(nt.CHANGE.txt) || !/Per-exec regression/.test(nt.CHANGE.txt) || nt.CHANGE.go !== (st.panels.PEREXEC ? 'PEREXEC' : '') || !nt.CHANGE.ascii)) bad('the Biggest change note says the wrong thing: ' + JSON.stringify(nt.CHANGE));
+      if (nt.EXEC && (!/count/.test(nt.EXEC.txt) || !/every mode/.test(nt.EXEC.txt) || !nt.EXEC.ascii)) bad('the Executions note says the wrong thing: ' + JSON.stringify(nt.EXEC));
+      if (nt.PEREXEC && (!/per execution/i.test(nt.PEREXEC.txt) || !/Biggest change/.test(nt.PEREXEC.txt) || !nt.PEREXEC.ascii || (st.panels.CHANGE ? nt.PEREXEC.go !== 'CHANGE' : nt.PEREXEC.go !== ''))) bad('the Per-exec regression note says the wrong thing: ' + JSON.stringify(nt.PEREXEC));
+      if (st.panels.CHANGE && nt.CHANGE) {
+        await page.click('#tab-topsql-CHANGE'); await page.waitForTimeout(200);
+        if (!(await page.isVisible('.tabpanel[data-t="CHANGE"] .tsv-note'))) bad('the Biggest change note is not visible in per execution mode');
+        if (st.panels.PEREXEC) {
+          await page.click('.tabpanel[data-t="CHANGE"] .tsv-note button[data-tsv-goto="PEREXEC"]'); await page.waitForTimeout(200);
+          if (!(await page.isVisible('.tabpanel[data-t="PEREXEC"]'))) bad('the Biggest change note\'s link did not open the Per-exec regression tab');
+        }
+      }
+      // ---- Top per execution (the separate ranking): the swap is undone in the Total view, the ranking view shows
+      await clickMode(dim, 'pe-rank');
+      st = await state(page);
+      checkState(st, 'pe-rank', 'after the click');
+      if (await lsGet(page) !== 'pe-rank') bad('localStorage ' + KEY + ' is not "pe-rank" after the click');
+      const afterRank = await snapTables(page);
+      METRICS.filter(d => before[d]).forEach(d => { if (JSON.stringify(afterRank[d]) !== JSON.stringify(before[d])) bad(d + ' table is not restored exactly (text and titles) in Top per execution mode'); });
+      // the notes of the other tabs in this mode
+      if (st.panels.CHANGE) { await page.click('#tab-topsql-CHANGE'); await page.waitForTimeout(200); if (!(await page.isVisible('.tabpanel[data-t="CHANGE"] .tsv-note'))) bad('the Biggest change note is not visible in Top per execution mode'); }
+      if (st.panels.EXEC) { await page.click('#tab-topsql-EXEC'); await page.waitForTimeout(200); if (!(await page.isVisible('.tabpanel[data-t="EXEC"] .tsv-note'))) bad('the Executions note is not visible in Top per execution mode'); }
+      if (st.panels.PEREXEC) { await page.click('#tab-topsql-PEREXEC'); await page.waitForTimeout(200); if (await page.isVisible('.tabpanel[data-t="PEREXEC"] .tsv-note')) bad('the Per-exec regression note is visible in Top per execution mode'); }
+      const tabBtn = await page.$('#tab-topsql-' + dim);
+      if (tabBtn) await tabBtn.click();
+      await page.waitForTimeout(300);
+      if (other) {
+        const t2 = await page.$('#tab-topsql-' + other); if (t2) await t2.click(); await page.waitForTimeout(300);
+        if (!(await page.isVisible('.tabpanel[data-t="' + other + '"] .tsv-view[data-val="pe-rank"]'))) bad(other + ': the Top per execution view is not visible after switching in ' + dim);
+        if (tabBtn) await tabBtn.click();
+        await page.waitForTimeout(300);
+      }
+      // ---- the ranking tables: ranks, zero executions, the numbers
+      const tb = await page.evaluate((peDims) => {
+        const num = s => { const t = String(s).replace(/,/g, '').trim(); if (/^<0\.0+1$/.test(t)) return 0; const m = /^(-?\d*\.?\d+)\s*([kMG])?$/.exec(t); return m ? parseFloat(m[1]) * ({ k: 1e3, M: 1e6, G: 1e9 }[m[2]] || 1) : null; };
+        const cellVal = td => { const c = td.cloneNode(true); c.querySelectorAll('.badge, .d').forEach(e => e.remove()); return c.textContent.trim(); };
+        const o = { rankBad: [], zeroBad: [], zeroSeen: 0, cmpBad: [], cmpN: 0, chipBad: [], cols: 0, titleBad: [] };
+        peDims.forEach(dim => {
+          const t = document.getElementById('topsql-detail-' + dim), nW = t.querySelectorAll('thead th[data-w]').length;
+          const rows = [...t.querySelectorAll('tbody tr')];
+          for (let k = 0; k < nW; k++) {
+            const items = [];
+            rows.forEach(tr => {
+              const td = tr.querySelector('td[data-w="' + k + '"]'); if (!td) return;
+              const b = td.querySelector('.badge.info, .badge.skip');
+              if (b) items.push({ r: +b.textContent.replace('#', ''), v: num(cellVal(td)) });
+              // a value without a rank, or a rank without a value, would be a different ranking
+              else if (num(cellVal(td)) !== null) o.rankBad.push(dim + ' w' + k + ': a value with no # badge');
+            });
+            if (!items.length) continue;
+            o.cols++;
+            items.sort((a, b) => a.r - b.r);
+            if (items.some((x, i) => x.r !== i + 1)) o.rankBad.push(dim + ' w' + k + ': ranks ' + items.map(x => x.r).join(',') + ' are not 1..' + items.length);
+            for (let i = 1; i < items.length; i++) if (items[i].v === null || items[i - 1].v === null || items[i].v > items[i - 1].v * (1 + 1e-3) + 1e-9) o.rankBad.push(dim + ' w' + k + ': #' + items[i].r + ' (' + items[i].v + ') is above #' + items[i - 1].r + ' (' + items[i - 1].v + ')');
+          }
+          // the Current cell's title carries the full precision
+          rows.slice(0, 3).forEach(tr => { const td = tr.querySelector('td[data-w="0"]'); if (td && num(cellVal(td)) !== null && !td.getAttribute('title')) o.titleBad.push(dim + ' ' + tr.id); });
+          // a window in which the statement completed no execution is not ranked there: a dash in the ranking table
+          rows.forEach(tr => {
+            const sid = tr.id.replace(/^sq-[a-z]+pe-/, ''), win = document.getElementById('win-' + sid);
+            if (!win || !win.tBodies[0]) return;
+            [...win.tBodies[0].rows].forEach(wr => {
+              const c = wr.cells[1]; if (!c || c.getAttribute('data-w') === null) return;
+              const k = c.getAttribute('data-w'), ex = num((c.getAttribute('title') || c.textContent).replace(/ .*/, ''));
+              if (ex === 0) {
+                o.zeroSeen++;
+                const td = tr.querySelector('td[data-w="' + k + '"]');
+                if (td && num(cellVal(td)) !== null) o.zeroBad.push(dim + ' ' + sid + ' w' + k);
+              }
+            });
+          });
+          // the Per-SQL pool has a row for every statement of the ranking, with the P chip
+          rows.forEach(tr => {
+            const sid = tr.id.replace(/^sq-[a-z]+pe-/, ''), pr = document.getElementById('sql-' + sid);
+            if (!pr) { o.chipBad.push(dim + ' ' + sid + ': no pool row'); return; }
+            const chip = [...pr.querySelectorAll('.chip')].find(c => c.textContent === 'P');
+            if (!chip || !/^in a per-execution ranking: /.test(chip.getAttribute('title') || '')) o.chipBad.push(dim + ' ' + sid + ': no P chip with its title');
+          });
+        });
+        // Elapsed per execution, Current cell = elapsed / executions of the Compared windows table (same data, rounded to 4 significant digits / 4 decimals of a second)
+        const el = document.getElementById('topsql-detail-ELAPSED_PE');
+        if (el) [...el.querySelectorAll('tbody tr')].slice(0, 12).forEach(tr => {
+          const sid = tr.id.replace('sq-elapsedpe-', ''), td = tr.querySelector('td[data-w="0"]'), win = document.getElementById('win-' + sid);
+          const cur = win && win.tBodies[0] && win.tBodies[0].rows[0];
+          if (!td || !cur || !cur.classList.contains('cur') || !tr.querySelector('td[data-w="0"] .badge.info')) return;
+          const ex = num((cur.cells[1].getAttribute('title') || cur.cells[1].textContent).replace(/ .*/, '')), ela = num((cur.cells[2].getAttribute('title') || cur.cells[2].textContent).replace(/ .*/, ''));
+          const got = num(cellVal(td));
+          if (!(ex > 0) || ela === null || got === null) return;
+          o.cmpN++;
+          const want = ela / ex, tol = Math.abs(got) * 6e-4 + 5.1e-7 + 5.1e-5 / ex + 1e-9;
+          if (Math.abs(got - want) > tol) o.cmpBad.push(sid + ': ' + got + ' vs ' + ela + ' / ' + ex + ' = ' + want);
+        });
+        return o;
+      }, peDims);
+      tb.rankBad.slice(0, 4).forEach(m => bad('rank order: ' + m));
+      tb.zeroBad.slice(0, 4).forEach(m => bad('a window with no completed execution is ranked: ' + m));
+      tb.cmpBad.slice(0, 3).forEach(m => bad('Top per execution Current cell is not elapsed / executions of the Compared windows table: ' + m));
+      tb.chipBad.slice(0, 3).forEach(m => bad('Per-SQL pool: ' + m));
+      tb.titleBad.slice(0, 2).forEach(m => bad('no full-precision title on a Current cell: ' + m));
+      if (peDims.length) console.log('top SQL values switch: Top per execution: ' + tb.cols + ' window columns ranked 1..n, ' + tb.cmpN + ' Elapsed Current cells = elapsed / executions of the Compared windows table, ' + tb.zeroSeen + ' zero-execution windows of ranked statements (none ranked there)');
+      // ---- the chart of the ranking view: drawn with a width, the per-execution unit, its own payload, 4 significant digits; the Total chart is back to totals
+      const chR = await chartOf(page, dim + '_PE');
+      if (!peDims.includes(dim + '_PE')) console.log('top SQL values switch: no ' + dim + ' ranking, its chart checks skipped');
+      else if (!chR) console.log('top SQL values switch: ECharts not loaded, the ranking chart checks skipped');
+      else {
+        if (chR.none) bad(dim + '_PE has no chart');
+        else {
+          if (!(chR.w > 0)) bad('the ranking chart is ' + chR.w + ' px wide after the switch (a chart in a hidden view measures 0)');
+          if (chR.yname !== UNIT[dim]) bad('ranking chart y axis is "' + chR.yname + '", expected "' + UNIT[dim] + '"');
+          if (!chR.n) bad('the ranking chart has no series');
+          if (!/\/exec/.test(chR.tip || '') || !/0\.00123/.test(chR.tip || '')) bad('ranking chart tooltip lacks the per-execution unit / 4 significant digits: ' + chR.tip);
+          const want = await payloadOf(page, dim + '_PE', 'sqls');
+          if (chR.data0 !== want) bad('ranking chart series[0] is not the payload of ' + dim + '_PE');
+          const g = await page.$('.tabpanel[data-t="' + dim + '"] [data-topsql-target="' + dim + '_PE"] button[data-mode="schemas"]');
+          if (g && await g.isVisible()) {
+            await g.click(); await page.waitForTimeout(300);
+            const c2 = await chartOf(page, dim + '_PE'), w2 = await payloadOf(page, dim + '_PE', 'schemas');
+            if (c2.yname !== UNIT[dim] || c2.data0 !== w2) bad('Break down by Schema of the ranking view lost its own values');
+            await page.evaluate(() => document.dispatchEvent(new CustomEvent('awr:window', { detail: { w: 1 } }))); await page.waitForTimeout(200);
+            const c3 = await chartOf(page, dim + '_PE');
+            if (c3.yname !== UNIT[dim] || c3.data0 !== w2) bad('the window highlight re-render of the ranking chart lost its values');
+            await page.evaluate(() => document.dispatchEvent(new CustomEvent('awr:window', { detail: null })));
+            const g0 = await page.$('.tabpanel[data-t="' + dim + '"] [data-topsql-target="' + dim + '_PE"] button[data-mode="sqls"]');
+            if (g0) await g0.click();
+            await page.waitForTimeout(200);
+          } else console.log('top SQL values switch: no Schema breakdown on ' + dim + '_PE in this report, that step skipped');
+        }
+        const chTot = await chartOf(page, dim);
+        if (chTot && !chTot.none) {
+          if (chTot.yname !== TOTU[dim]) bad('the Total chart reads "' + chTot.yname + '" in Top per execution mode, expected the total unit "' + TOTU[dim] + '"');
+          const wantT = await payloadOf(page, dim, 'sqls');
+          if (chTot.data0 !== wantT) bad('the Total chart is not on the totals in Top per execution mode');
+        }
+      }
+      // ---- links: a row of the view the mode hides is revealed through the chrome's goTo (never saved); a Total row in per execution mode changes nothing
+      const sidP = await page.evaluate(() => { const r = document.querySelector('#topsql-detail-ELAPSED_PE tbody tr[id^="sq-elapsedpe-"]'); return r ? r.id : null; });
+      const sidT = await page.evaluate(() => { const r = document.querySelector('#topsql-detail-ELAPSED tbody tr[id^="sq-elapsed-"]'); return r ? r.id : null; });
+      if (sidT && sidP) {
+        const goto = async (id) => { await page.evaluate(id => window.AWR_goTo(document.getElementById(id), false, false), id); await page.waitForTimeout(350); return page.evaluate(() => window.AWR_topsqlVal()); };
+        const hashClick = async (id) => {
+          await page.evaluate(id => { const a = document.createElement('a'); a.href = '#' + id; a.id = '__tsvlink'; a.textContent = 'x'; document.body.appendChild(a); }, id);
+          await page.evaluate(() => document.getElementById('__tsvlink').click()); await page.waitForTimeout(400);
+          await page.evaluate(() => document.getElementById('__tsvlink').remove());
+          return page.evaluate(() => window.AWR_topsqlVal());
+        };
+        await lsClear(page);
+        // in Top per execution mode (set above): a Total row needs the Total view -> Total (never saved)
+        let m = await goto(sidT);
+        if (m !== 'total' || !(await vis(sidT))) bad('a link to a Total row from Top per execution mode did not show it (mode ' + m + ')');
+        if (await lsGet(page) !== null) bad('the reveal wrote localStorage (' + await lsGet(page) + ')');
+        // in Total mode: a Total row changes nothing, a ranking row shows its view
+        m = await goto(sidT);
+        if (m !== 'total' || !(await vis(sidT))) bad('a link to a Total row in Total mode changed the mode (' + m + ')');
+        m = await goto(sidP);
+        if (m !== 'pe-rank' || !(await vis(sidP))) bad('a link to a ranking row from Total mode did not show it (mode ' + m + ')');
+        if (await lsGet(page) !== null) bad('the reveal wrote localStorage (' + await lsGet(page) + ')');
+        // in per execution mode (a click: saved, then cleared): a Total row stays per execution, a ranking row shows its view
+        await clickMode(dim, 'perexec'); await lsClear(page);
+        m = await goto(sidT);
+        if (m !== 'perexec' || !(await vis(sidT))) bad('a link to a Total row from per execution mode changed the mode or did not show it (mode ' + m + ')');
+        const hs = await page.evaluate(() => document.querySelector('#topsql table.tsv-tbl .tsv') && document.querySelector('#topsql table.tsv-tbl .tsv').textContent === document.querySelector('#topsql table.tsv-tbl .tsv').getAttribute('data-pe'));
+        if (!hs) bad('the cells lost their per-execution text after a link to a Total row');
+        m = await goto(sidP);
+        if (m !== 'pe-rank' || !(await vis(sidP))) bad('a link to a ranking row from per execution mode did not show it (mode ' + m + ')');
+        if (await lsGet(page) !== null) bad('the reveal wrote localStorage (' + await lsGet(page) + ')');
+        // an in-page link click (the hash route) does the same
+        m = await hashClick(sidT);
+        if (m !== 'total') bad('an in-page link to a Total row from Top per execution mode did not switch to Total (mode ' + m + ')');
+        m = await hashClick(sidP);
+        if (m !== 'pe-rank') bad('an in-page link to a ranking row from Total mode did not switch to Top per execution (mode ' + m + ')');
+        if (await lsGet(page) !== null) bad('an in-page link wrote localStorage (' + await lsGet(page) + ')');
+      } else console.log('top SQL values switch: no Elapsed row in both rankings, the link checks skipped');
+      // the link checks left a #sq-... hash: a reload with it would reveal that row (its view wins over the saved choice, by design)
+      await page.evaluate(() => { try { history.replaceState(null, '', location.pathname + location.search + '#view=all'); } catch (e) {} });
+      // ---- a click saves its value, for each of the three; Total from another panel restores the views, the cells and the chart exactly
+      const tp = other || dim;
+      for (const m of ['perexec', 'pe-rank', 'total']) {
+        await clickMode(tp, m);
+        if (await lsGet(page) !== m) bad('localStorage ' + KEY + ' is "' + await lsGet(page) + '" after a click on ' + LABEL[m] + ', expected "' + m + '"');
+      }
+      st = await state(page);
+      checkState(st, 'total', 'back on Total');
+      const after = await snapTables(page);
+      METRICS.filter(d => before[d]).forEach(d => { if (JSON.stringify(after[d]) !== JSON.stringify(before[d])) bad(d + ' table is not restored exactly (text and titles) after Total'); });
+      const bT = await badges(page);
+      if (bT.rank.shown !== bB.rank.shown) bad('rank badges are not as in the first Total state');
+      const chB = await chartOf(page, dim);
+      if (chB && !chB.none && (chB.yname !== TOTU[dim] || chB.data0 !== (await payloadOf(page, dim, 'sqls')))) bad('the Total chart did not return to the totals (y axis "' + chB.yname + '")');
+      // a synthetic zero-execution cell: the script shows a dash and the reason, and puts the original back
+      if (zx.hasSpan) {
+        await page.click('#tab-topsql-' + dim); await page.waitForTimeout(150);
+        const z = await page.evaluate(async () => {
+          const sp = document.querySelector('#topsql table.tsv-tbl td[data-w="1"] .tsv:not([data-pt])'), td = sp.closest('td');
+          const o = { t0: sp.textContent, ti0: td.getAttribute('title') };
+          sp.setAttribute('data-pe', '—'); sp.setAttribute('data-pt', 'no completed execution in this window');
+          const clk = v => [...document.querySelectorAll('#topsql div[data-tsv] button[data-val="' + v + '"]')].find(b => b.getClientRects().length).click();
+          clk('perexec'); o.t1 = sp.textContent; o.ti1 = td.getAttribute('title');
+          clk('total'); o.t2 = sp.textContent; o.ti2 = td.getAttribute('title');
+          sp.removeAttribute('data-pt');
+          return o;
+        });
+        if (z.t1 !== '—' || z.ti1 !== 'no completed execution in this window') bad('a no-completed-execution cell reads "' + z.t1 + '" / title "' + z.ti1 + '"');
+        if (z.t2 !== z.t0 || z.ti2 !== z.ti0) bad('a no-completed-execution cell was not restored: "' + z.t2 + '" / ' + z.ti2 + ' vs "' + z.t0 + '" / ' + z.ti0);
+        await lsClear(page);
+      }
+      // ---- read on load: a saved "perexec" opens with the cells swapped (every panel's header, the chart per execution); "pe-rank" opens the ranking view with its chart drawn; garbage = Total
+      await lsSet(page, 'perexec');
+      await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(1200);
+      st = await state(page);
+      checkState(st, 'perexec', 'perexec saved, after a reload');
+      const hl = await page.evaluate(METRICS => METRICS.map(d => { const th = document.querySelector('#topsql-detail-' + d + ' thead th[data-w="0"]'); return th ? th.textContent : null; }), METRICS);
+      METRICS.forEach((d, i) => { if (hl[i] !== null && hl[i] !== 'Current (' + UNIT[d] + ')') bad('a saved "perexec" left the ' + d + ' header on "' + hl[i] + '"'); });
+      const unsw = await page.evaluate(() => [...document.querySelectorAll('#topsql table.tsv-tbl .tsv')].filter(sp => sp.textContent !== sp.getAttribute('data-pe')).length);
+      if (unsw) bad('a saved "perexec" left ' + unsw + ' value cells on their totals after load');
+      {
+        const t4 = await page.$('#tab-topsql-' + dim); if (t4) await t4.click(); await page.waitForTimeout(400);
+        const chL = await chartOf(page, dim);
+        if (chL && !chL.none && chL.yname !== UNIT[dim]) bad('the Total chart did not draw per execution on load with "perexec" saved (y axis "' + chL.yname + '")');
+      }
+      await lsSet(page, 'pe-rank');
+      await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(1200);
+      st = await state(page);
+      checkState(st, 'pe-rank', 'pe-rank saved, after a reload');
+      if (peDims.includes(dim + '_PE')) {
+        const t4 = await page.$('#tab-topsql-' + dim); if (t4) await t4.click(); await page.waitForTimeout(500);
+        const chL = await chartOf(page, dim + '_PE');
+        if (chL && !chL.none && (!(chL.w > 0) || chL.yname !== UNIT[dim])) bad('the ranking chart did not draw on load with "pe-rank" saved (width ' + chL.w + ', y axis "' + chL.yname + '")');
+      }
+      // a shared link to a row of the view the saved choice hides wins on load and does not change what is saved; a Total row never leaves per execution
+      if (sidP && sidT) {
+        for (const [hash, saved, want] of [[sidP, 'total', 'pe-rank'], [sidP, 'perexec', 'pe-rank'], [sidT, 'pe-rank', 'total'], [sidT, 'perexec', 'perexec'], [sidT, 'total', 'total']]) {
+          await page.evaluate(([k, v, h]) => { try { localStorage.setItem(k, v); history.replaceState(null, '', location.pathname + location.search + '#' + h); } catch (e) {} }, [KEY, saved, hash]);
+          await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(1500);
+          const m2 = await page.evaluate(() => window.AWR_topsqlVal());
+          if (m2 !== want || await lsGet(page) !== saved) bad('opening #' + hash + ' with "' + saved + '" saved gives mode ' + m2 + ' and saved "' + await lsGet(page) + '", expected ' + want + ' and "' + saved + '"');
+        }
+        await page.evaluate(() => { try { history.replaceState(null, '', location.pathname + location.search + '#view=all'); } catch (e) {} });
+      }
+      await lsSet(page, 'garbage');
+      await page.reload({ waitUntil: 'load' }); await page.waitForTimeout(1200);
+      st = await state(page);
+      if (st.pe || st.rank || st.mode !== 'total') bad('an unknown saved value did not fall back to Total');
+      await lsClear(page);
+      }
+    }
+    if (errors.length) fail('top SQL values switch: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+
+    // phone width (390 px): the label and the three buttons wrap, every button is on screen and clickable, and the row adds no horizontal page scroll
+    if (present) {
+      const pg = await browser.newPage({ viewport: { width: 390, height: 844 }, colorScheme: 'light' });
+      const errs = [];
+      pg.on('pageerror', e => errs.push('pageerror: ' + e.message));
+      pg.on('console', m => { if (m.type() === 'error') errs.push('console.error: ' + m.text()); });
+      await pg.goto('file://' + file + '#view=all', { waitUntil: 'load' }); await pg.waitForTimeout(1200);
+      const tabB = await pg.$('#tab-topsql-ELAPSED'); if (tabB) await tabB.click(); await pg.waitForTimeout(300);
+      const ph = await pg.evaluate(() => {
+        const sw = document.querySelector('#topsql .tabpanel.on div[data-tsv]') || document.querySelector('#topsql div[data-tsv]');
+        if (!sw) return null;
+        sw.scrollIntoView({ block: 'center' });
+        const W = document.documentElement.clientWidth, bs = [...sw.querySelectorAll('button')].map(b => b.getBoundingClientRect());
+        const w1 = document.documentElement.scrollWidth;
+        const all = [...document.querySelectorAll('#topsql div[data-tsv]')];
+        all.forEach(s => { s.dataset.dd = s.style.display; s.style.display = 'none'; });
+        const w2 = document.documentElement.scrollWidth;
+        all.forEach(s => { s.style.display = s.dataset.dd; delete s.dataset.dd; });
+        const r = sw.getBoundingClientRect();
+        return { W, n: bs.length, inside: bs.every(b => b.left >= 0 && b.right <= W + 0.5 && b.width > 0), rowInside: r.left >= 0 && r.right <= W + 0.5, rowOverflow: sw.scrollWidth > sw.clientWidth + 1,
+          lines: new Set(bs.map(b => Math.round(b.top))).size, w1, w2 };
+      });
+      if (!ph) fail('top SQL values switch at 390 px: no switch');
+      else {
+        if (ph.n !== 3 || !ph.inside || !ph.rowInside || ph.rowOverflow) fail('top SQL values switch at 390 px: the three buttons do not fit (' + JSON.stringify(ph) + ')');
+        if (ph.w1 > ph.w2 + 1) fail('top SQL values switch at 390 px: the switch row adds horizontal page scroll (' + ph.w1 + ' vs ' + ph.w2 + ' px without it)');
+        console.log('top SQL values switch at 390 px: ' + ph.lines + ' line(s) of buttons, all inside the ' + ph.W + ' px screen, page width ' + ph.w1 + ' (' + ph.w2 + ' without the switches)');
+      }
+      for (const m of ['perexec', 'pe-rank', 'total']) {
+        await pg.click('#topsql .tabpanel.on div[data-tsv] button[data-val="' + m + '"]'); await pg.waitForTimeout(250);
+        const got = await pg.evaluate(() => window.AWR_topsqlVal());
+        if (got !== m) fail('top SQL values switch at 390 px: a click on "' + m + '" gave mode ' + got);
+      }
+      await pg.evaluate(k => { try { localStorage.removeItem(k); } catch (e) {} }, KEY);
+      if (errs.length) fail('top SQL values switch at 390 px: ' + errs.slice(0, 3).join(' | '));
+      await pg.close();
+    }
+
+    // without ECharts the tables and the switch still work (the state script is not the chart script, the swap is not either)
+    if (present) {
+      const pg = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+      const errs = [];
+      pg.on('pageerror', e => errs.push('pageerror: ' + e.message));
+      await pg.addInitScript(() => { try { Object.defineProperty(window, 'echarts', { get() { return undefined; }, set() {}, configurable: true }); } catch (e) {} });
+      await pg.goto('file://' + file + '#view=all', { waitUntil: 'load' });
+      await pg.waitForTimeout(1200);
+      const r = await pg.evaluate(async (METRICS) => {
+        const dim = METRICS.find(d => document.querySelector('#topsql .tabpanel[data-t="' + d + '"] > .tsv-view')) || 'ELAPSED';
+        const noEc = !window.echarts, root = document.getElementById('topsql');
+        const on = (d, v) => { const e = root.querySelector('.tabpanel[data-t="' + d + '"] > .tsv-view[data-val="' + v + '"]'); return e ? getComputedStyle(e).display !== 'none' : null; };
+        const th = () => root.querySelector('#topsql-detail-' + dim + ' thead th[data-w="0"]').textContent;
+        const clk = v => root.querySelector('.tabpanel[data-t="' + dim + '"] div[data-tsv] button[data-val="' + v + '"]').click();
+        const out = { noEc, dim, t0: [on(dim, 'total'), on(dim, 'pe-rank'), th()] };
+        clk('perexec'); const sp = root.querySelector('#topsql-detail-' + dim + ' .tsv');
+        out.t1 = [on(dim, 'total'), on(dim, 'pe-rank'), th(), !!sp && sp.textContent === sp.getAttribute('data-pe')];
+        clk('pe-rank'); out.t2 = [on(dim, 'total'), on(dim, 'pe-rank'), th()];
+        clk('total'); out.t3 = [on(dim, 'total'), on(dim, 'pe-rank'), th()];
+        try { localStorage.removeItem('awr-topsql-val'); } catch (e) {}
+        return out;
+      }, METRICS);
+      const u = { ELAPSED: 's/exec', CPU: 's/exec', GETS: 'gets/exec', PREADS: 'reads/exec' };
+      const tu = { ELAPSED: 's', CPU: 's', GETS: 'gets', PREADS: 'reads' };
+      const dk = r.dim || 'ELAPSED';
+      if (!r.noEc) console.log('top SQL values switch: could not hide ECharts, offline check skipped');
+      else if (r.t0.slice(0, 2).join() !== 'true,false' || r.t1.slice(0, 2).join() !== 'true,false' || r.t1[2] !== 'Current (' + u[dk] + ')' || !r.t1[3]
+        || r.t2.slice(0, 2).join() !== 'false,true' || r.t2[2] !== 'Current (' + tu[dk] + ')' || r.t3.slice(0, 2).join() !== 'true,false' || r.t3[2] !== r.t0[2]) fail('top SQL values switch without ECharts: ' + JSON.stringify(r));
+      else console.log('top SQL values switch: works without ECharts');
+      if (errs.length) fail('top SQL values switch without ECharts: ' + errs.slice(0, 3).join(' | '));
+      await pg.close();
+    }
   }
 
   await browser.close();

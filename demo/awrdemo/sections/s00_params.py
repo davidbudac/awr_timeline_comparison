@@ -467,7 +467,7 @@ def emit(w) -> str:
         '<b>Whole span</b>'
         '<a href="#ash-timeline">ASH timeline</a>'
         '<a href="#db-time-summary">DB time</a>'
-        '<a href="#onset" data-nodot>Onset</a>'
+        '<a href="#onset" data-nodot>Trend breaks</a>'
         '<a href="#utilization">Utilization</a>'
         '<a href="#windows">Windows</a>'
         '<a href="#win-sim" data-nodot>Window similarity</a>'

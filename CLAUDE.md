@@ -63,8 +63,9 @@ sql/
 ├── 03_sysmetric.sql     -- SYSMETRIC_SUMMARY averages (per template)
 ├── 04_waits_fg.sql      -- foreground waits + wait-class rollup (per template)
 ├── 05_waits_bg.sql      -- background waits (BG_EVENT_SUMMARY, per template)
-├── 06_top_sql.sql       -- Top-N SQL ranked 7 ways (Biggest change first) + per-dim bump chart (ranked, not scored)
-│                        --   (break down by SQL_ID / schema / module / action)
+├── 06_top_sql.sql       -- Top-N SQL ranked 7 ways (Biggest change first; the four metric tabs also per execution:
+│                        --   the Values switch Total | Per execution | Top per execution, see Chrome hooks)
+│                        --   + per-dim bump chart (ranked, not scored; break down by SQL_ID / schema / module / action)
 ├── 07_summary.sql       -- scored findings: Summary finding cards + per-domain tables,
 │                        --   #s-changes slot, #s-normal, #s-lib heading
 ├── 08_overview.sql      -- Summary hero strip: DB time per window on the window component
@@ -312,7 +313,9 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
   (`window.AWR_fcOpen`, plan 025), opens a closed library row, clicks the
   tab of a hidden `.tabpanel`, opens the `[data-tail]` expander, every
   ancestor `<details>`, un-hides a filtered `tr`, `AWR_openSqlRow` for a 06
-  `tr.sql-row`. `goTo(el, flash, persist)` / `window.AWR_goTo` — switch view,
+  `tr.sql-row`, and first `AWR_topsqlReveal(el)` (06's Values switch: shows
+  the view that holds `el` only when the current mode hides it, never saved).
+  `goTo(el, flash, persist)` / `window.AWR_goTo` — switch view,
   reveal, `scrollIntoView` (`center` for TR), `.flash` for 2.4 s. A delegated
   click on `a[href^="#"]`: `#view=x` → `setView`; else `goTo(target, a.ent ||
   a.xlink || TR, true)` + `history.replaceState` — **no `hashchange` fires on
@@ -943,7 +946,7 @@ card's `.fc-main .wg .r[data-v]` row (`.r[data-v]`, not `.r.bars`:
 js_timeline turns the DB time card's row into `.r.ash`), `data-mu0`-or-
 `data-mu` / `data-sd`, the windows' validity and dates from `AWR_WIN` and
 the markers from `AWR_WG.markers()`. Tags are a hint: they never change a
-severity, the card order or a count. Section 25 (Onset) is not their data
+severity, the card order or a count. Section 25 (Trend breaks) is not their data
 source (fixed metrics on the continuous series; the tags compare periods).
 Keyboard (G4): every chip is `tabindex="0" role="note"`, named by its
 text (`aria-label`) and described by its sentence (`title`); a keyboard
@@ -996,7 +999,10 @@ first (lint 16). Placement: 02/03/13 (13 unscored: bucket NULL + plain Δ),
 - Row ids: 07 `fr-<l|m|w>-<name>` (detail tables); 04 `we-<event>` /
   `wa-<event>` / `wc-<class>`; 05 `be-` / `ba-`; 06 `sq-<dim>-<sql_id>` per
   ranking table (`sq-change-`, `sq-elapsed-`, `sq-cpu-`, `sq-gets-`,
-  `sq-preads-`, `sq-exec-`, `sq-perexec-`; in a tab + `<details>`, reveal handles both) and pool
+  `sq-preads-`, `sq-exec-`, `sq-perexec-`, and the per-execution rankings
+  `sq-elapsedpe-`, `sq-cpupe-`, `sq-getspe-`, `sq-preadspe-`: the kind drops the
+  underscore of the dimension code, so a prefix match on `sq-elapsed-` never
+  reaches one; in a tab + `<details>` (+ a `.tsv-view`), reveal handles all) and pool
   `sql-<sql_id>`; 18 `sm-<sql_id>`; 14 `sg-<owner.object[.partition]>` / 15
   `fl-<parent dir>-<file name>` on the FIRST row that segment / file gets (a
   slug collision gets `-<n>`); 12 `pa-<parameter>` (`pa--<_hidden>`); 02
@@ -1198,6 +1204,253 @@ JS and `_style.sql`; all degrade to "show everything" with JS off:
   `on`; the hash's `tab=` names any tab but the bar's first, so never
   compare against a literal default); panels holding ECharts resize on
   activation.
+- **Top SQL "Values: Total | Per execution | Top per execution" (06)** -- the
+  Elapsed, CPU, Buffer gets and Physical reads tabs read three ways, chosen by
+  one switch in EVERY panel with one shared state. Two mechanisms that must
+  never be mixed up (the same words meant opposite things in two earlier
+  builds, hence the fixed names below):
+  **Mode values** (button `data-val`, localStorage `awr-topsql-val`,
+  `window.AWR_topsqlVal()`): `total`, `perexec`, `pe-rank`; anything else
+  stored = `total`. **Classes on `#topsql`**: `tsv-js` (the state script ran),
+  `tsv-pe` (mode `perexec`), `tsv-rank` (mode `pe-rank`). **Views**: the four
+  metric panels hold `div.tsv-view[data-val=total]` (shown in `total` AND
+  `perexec`) and `div.tsv-view[data-val=pe-rank]` (shown only in `pe-rank`:
+  CSS shows it under `.tsv-rank`, never `.tsv-pe`), both direct children of
+  the `.tabpanel` (NOT `.tabpanel` themselves: the chrome's tab handler
+  switches those, and phones open every `#topsql .tabpanel details`). In
+  PL/SQL: `v_swap_dim` = one of the four TOTAL dims (ELAPSED / CPU / GETS /
+  PREADS: the swap markup and the `Pe` payload exist ONLY for them, never for
+  a `*_PE` dim, CHANGE, EXEC or PEREXEC), `v_is_rank` = one of the four
+  `*_PE` dims; the twin's `_SWAP_UNIT` / `_PE_METRIC`.
+  **Total** = today's ranking. **Per execution (the swap, inside the Total
+  view)** = the SAME statements, row order, `#n` ranks, row ids, Timeline SQL
+  lane, pool and Compared windows (everything picked and ordered by the window
+  TOTAL), every shown value read per execution. Client side, no new
+  `DBA_HIST_SQLSTAT` read: the four total tables are `table.tsv-tbl`, every
+  value cell is `span.tsv[data-pe][data-pt]` (Total text inside, `data-pe` =
+  the per-execution text from `fmt_num`, `data-pt` = the cell's title text:
+  `fmt_num_title` for the Current cell, "no completed execution in this
+  window" for a NULL), the header `th[data-w=0]` carries `data-pe="Current
+  (s/exec)"` (`gets/exec`, `reads/exec`). The swap sets the span's / header's
+  textContent and the `td` title and restores the originals exactly
+  (`data-po`, `data-pot`, `data-ptm`), never touching a badge: **the `#n` rank
+  badges STAY visible** (a `p.tsv-swap-note` in the Total view, shown only in
+  this mode, says the ranks are by total), so anything that reads the cells'
+  textContent reads whatever is shown (in practice the row filter; the
+  ranking tables get no CSV / MD toolbar, before or after this switch, and
+  their `th[data-w]` headers drive the window highlight, not a sort). A dash
+  cell in Total (not in that window's top
+  N) has no span. Per execution = the cell's value / its executions of that
+  statement and window (`agg_exec` of the main cursor's `agg` join, kept per
+  window in `v_wexe`); **zero executions give NULL** (`pe_val`: a
+  long-running statement has elapsed time and 0 executions, a division would
+  raise ORA-01476), a dash with its title, `null` in the chart. A group's per
+  execution = its summed value / its summed executions (the second cursor
+  carries `execs` through `picked` -> `grid` -> `per_group`; NULL on the four
+  `*_PE` branches). Payload: `AWR_DATA.topSql.dims[dim].unitPe` (the four
+  total dims only) and the parallel arrays `sqlsPe`, `schemasPe`, `modulesPe`,
+  `actionsPe` (element i = entry i of the array of the same name, `pe_json`:
+  about 4 significant digits, `null` where the total is null OR no execution
+  completed), own PUT_LINE each, appended under ONE keep decision with the
+  entry (both must fit `c_json_cap`, so the `...Kept` counts and the
+  truncation note stay right). One direction only: never a per-execution
+  value where the total is null; a null per-execution value under a total is
+  a zero-execution window. The state script applies the swap right after each
+  total view (`AWR_topsqlSync(table)` in the one-line script `tsv_close`
+  emits), so a saved `perexec` never paints totals first.
+  **Top per execution (the separate ranking)** = computed in SQL, four more
+  dimensions `ELAPSED_PE`, `CPU_PE`, `GETS_PE`, `PREADS_PE` (`ranked_pe` in
+  both cursors, over the same `agg`): per window the top N by value /
+  COMPLETED executions, a different statement set (heading note
+  `p.tsv-rank-note` says so), with its own `#` badges, row order, bump chart
+  payload and Schema / Module / Action breakdowns. **A statement or group
+  with no completed execution in a window is NOT ranked in it** (NULL when
+  `executions_delta = 0`, `ORDER BY ... DESC NULLS LAST`, and `picked` also
+  asks for a value above 0, so the ranks kept run 1, 2, 3 with no gap). The
+  codes fill the `INDEX BY VARCHAR2(10)` collections (group keys
+  `ELAPSED_PE|schema` = 17 in `VARCHAR2(20)`: widen them before adding a
+  longer code); unit `s/exec`, `gets/exec`, `reads/exec`; table
+  `topsql-detail-<DIM>` (`data-nocount`, no `tsv-tbl`); rows
+  `sq-<metric>pe-<sql_id>` (`anchor_id` kind without the underscore, so a
+  prefix match on `sq-elapsed-` never reaches one); chart `topsql-chart-<DIM>`
+  with `[data-topsql-target=<DIM>]`; the tokens carry 9 decimals (`c_tok_fmt`
+  reads both widths), the chart values go through `pe_json` and `fmtPe`. NO
+  new tab and no new tab-bar button. A ranking with no row at all gets the
+  same view with an `h3` and a `p.note` and no chart or table, so the panel
+  is always whole (`tsv_close(next)` closes the previous dimension's table,
+  its view and, when nothing follows in its panel, the panel; a `*_PE` row
+  implies a total row, so the panel is always open when its `*_PE` dimension
+  arrives; an empty `*_PE` dimension registers nothing in `v_dim_label` /
+  the payload). The Per-SQL pool (`v_seen_sqls` = every statement of every
+  ranking) gets a row for statements that appear only in a `*_PE` ranking, a
+  "Ranked in" chip `P` (title "in a per-execution ranking: elapsed, CPU, ...",
+  solid when in a Current top 3 of any of the four) and a legend sentence; its
+  order is unchanged (Current elapsed desc), as are the Timeline SQL lane and
+  the library row text (ELAPSED only), the tab bar, `v_panel_on`, the `tab=`
+  hash and the plan-change rollup (its denominator counts the new statements
+  too). `*_PE` tables are `data-nocount` (their `.badge.warn` stays out of
+  the section header's moderate count); the pool is not.
+  **Markup.** Every one of the seven panels carries, first,
+  `div.topsql-toggle.topsql-val[data-tsv=<DIM>]`: "Values:" then three
+  buttons `[data-val=total|perexec|pe-rank]` labelled Total | Per execution |
+  Top per execution, `aria-pressed`; its own attribute and NO
+  `data-topsql-target` / `data-mode`, which the chart script's "Break down by"
+  handler binds through; the row wraps (`flex-wrap`) at phone width. A
+  one-line script paints its buttons. The three other panels carry one
+  `p.tsv-note` (Biggest change, `tsv-n-other`: compares total elapsed time
+  whatever the switch says, links Per-exec regression through
+  `button.tsv-go[data-tsv-goto=PEREXEC]`; Executions, `tsv-n-other`: a count,
+  no per-execution form; Per-exec regression, `tsv-n-total`: always per
+  execution, links Biggest change). `tsv-n-other` shows in `perexec` and
+  `pe-rank`, `tsv-n-total` in `total` only; a closing script turns a link to a
+  tab or panel the report lacks (Biggest change is dropped when nothing got
+  slower) into plain text.
+  **State.** A script right after the section heading, BEFORE the panels are
+  parsed (the page never paints the wrong view; not inside the chart script,
+  so the switch and the swap work with ECharts missing) reads localStorage,
+  sets `tsv-js` / `tsv-pe` / `tsv-rank`, and defines `window.AWR_topsqlVal()`,
+  `AWR_topsqlSync(table)`, `AWR_topsqlReveal(el)` and the delegated click
+  handler; a click on a switch button saves the mode (the ONLY write) and a
+  change dispatches `document` `awr:topsqlval` `{detail:{mode}}`;
+  `AWR_fitTables` runs after a change. Its first line is distinct
+  ("Values switch (Total | Per execution | Top per execution)": the twin lifts
+  it by that line). All showing and hiding is CSS in `_style.sql`, scoped to
+  `#topsql`. **Without JavaScript** no class exists: no switch, no notes, the
+  cells read their totals, both views stacked, each under its `h3`.
+  **Chart.** The chart script (after the payload, `if(!window.echarts)
+  return;` first) draws a total dim's chart from `d[mode]` and, in mode
+  `perexec` (`AWR_topsqlVal()`, `d.unitPe` there), the parallel `...Pe` array
+  with `fmtPe` and the axis name `unitPe`; a `*_PE` dim always draws its own
+  values per execution. On `awr:topsqlval` a TOTAL dim's chart (`d.unitPe`)
+  redraws (its values swap in mode `perexec` and back), the others keep their
+  drawing and legend state, and every chart resizes (one in the view just
+  hidden measured 0 wide); the Break down by toggle, `awr:window` and
+  `awr:theme` keep the mode. `render()` reads the theme colours (`--fg`,
+  `--muted`, `--border`) again on EVERY draw: before, a redraw after a theme
+  flip (this switch, Break down by, the window highlight) brought back the
+  colours of the first paint.
+  **Reveal.** `reveal()` of the chrome calls `AWR_topsqlReveal(el)` first: a
+  row inside a view the mode hides switches the mode WITHOUT saving (a `*_PE`
+  row from `total` / `perexec` -> `pe-rank`; a Total row from `pe-rank` ->
+  `total`, the neutral choice); a Total row in `perexec` mode (visible there)
+  changes nothing. Links from the Timeline, finding cards, 17 / 18 / 21 / 23,
+  the dashboard's Ctrl+K palette and a `#sq-...` hash all go through it.
+  Twin `s06_top_sql.py` (`_SWAP_UNIT`, `_PE_METRIC`, `_pe_val`, `_chart_swap`,
+  `_tsv_*`, `close_dim`; the state script and the notes script are lifted from
+  the SQL). verify_report block 10 (the markup contract on every panel with
+  three buttons, default Total, the three modes mirrored across tabs, saved on
+  a click only for each value, read on load, the swap's cells / titles /
+  restore, rank badges kept, Current s/exec = elapsed / executions of the
+  Compared windows table, the payload rule, the chart's unit / series /
+  tooltip / theme colours after a flip, ranks 1..n and zero-execution windows never ranked in
+  `pe-rank`, the notes in each mode, links both ways, the `P` chip, JS off,
+  390 px, ECharts blocked; every check works on a real database report and
+  skips what the report lacks).
+  Verified 2026-11-24 (what was run this round, nothing more): on dbmint
+  (`ssh -p 2200`, cdb1 primary; rsync without `--delete`) `"2026-11-08 02:00"
+  1 20 10 0 1 h` (30 s, 6,584,111 bytes, longest line 32495 bytes, 266 pool
+  statements, 34 real cells with a total and no completed execution) and
+  `"2026-11-09 16:00" 1 168 10 0 1 h` (169 windows, 219 s, 51.8 MB =
+  51,797,574 bytes, longest line 32510 bytes, 846 pool
+  statements, 190 such cells; the chart payload is cut to "first n of m", e.g.
+  34 of 275 statements for ELAPSED and 33 of 224 for GETS, and every `Pe`
+  array has the length of the array it twins), both rc 0, 29 / 29
+  `AWR-SECTION` pairs, no `ORA-` / `SP2-` / `PLS-` in the log; a scratch
+  copy of 06 on dbmint with ELAPSED_PE, CPU_PE and PREADS_PE switched off
+  (`AND 1 = 0`, both cursors) ran rc 0, 29 / 29, and gives the three empty
+  Top per execution views with their `p.note`. The numbers the previous round
+  had confirmed against `DBA_HIST_SQLSTAT` were re-read in the new report (no
+  new AWR query): gc6fb5yhp4nk3 Current 2.974 s -> 0.2478 s/exec and 76.02 k
+  gets -> 6,335 gets/exec in the Total view's per execution mode;
+  97fwcwng6dmmv and 4uwvvrnhxxp7t (1,853 s and 1,942 s, 0 executions in the
+  window of week_offset 15) read a dash there, are #2 / #1 of the Total
+  ranking and are not ranked in that window of ELAPSED_PE; ELAPSED_PE Current
+  #1 3cc1br2aswkcj 0.431, #2 1ug8hhxthdbcy 0.3853, #3 arqqqcqm2gsz0 0.298, #4
+  gc6fb5yhp4nk3 0.2478, week_offset 15 #1 6yf5jpv9sg4um 193.3, #2
+  0590xa61ck4vv 165.5. verify_report: the full run is OK on the three demo
+  pages and on the 21-window report; block 10 alone is OK on the 169-window
+  report and on the forced-empty one. Demo regression (a script comparing the
+  regenerated classic page with the pages of the two earlier builds of this
+  switch): the four total tables and their four payload entries incl. the
+  `Pe` arrays equal the first build's, the four ranking tables, the `_PE`
+  payloads and the CHANGE / EXEC / PEREXEC tables and payloads equal the
+  second build's. Block 10 checked against deliberate breakages of the
+  generated page, each caught: rank badges hidden under `.tsv-pe`, the
+  ranking view shown under `.tsv-pe`, a Total link in `perexec` mode
+  changing the mode, a lost `unitPe` key, a ranking link that does not
+  switch, and (a new check: a real `#theme-toggle` flip, then a mode change
+  and a Break down by click, compared with the live `--fg` / `--muted`) a
+  chart redrawn with the colours of the first paint, which the build before
+  this fix failed; and on twin variants without the Biggest change panel, without it
+  and Per-exec regression, with three of the four rankings empty and with all
+  four empty (block 10 OK on each). The switch row was looked at in
+  screenshots at 1300 and 390 px (the three buttons wrap onto two lines).
+  Unexercised: RAC, multi-DBID, a real database whose four rankings are all
+  empty (only forced: the scratch copy has three of them off, the twin all
+  four), a real `ORA-06502` on a longer dimension code (the 10-character
+  ones ran), the print layout, the quiet / dashboard designs on a real
+  database report (demo pages only), any browser but Chrome, a physical
+  phone (390 px in headless Chrome only), and the flash-free load under a
+  saved `perexec` is by construction (the swap runs right after each total
+  view), not measured.
+  Orchestrator's own audit of the final code (same day): the dbmint copy of
+  06 / `_style.sql` / 00 has the local md5 and both runs postdate its last
+  edit; the Schema / Module per-execution values of SYS, C##DBM and
+  DBMS_SCHEDULER (elapsed and gets, Current) equal the sums confirmed
+  against `DBA_HIST_SQLSTAT` earlier; in both reports no per-execution value
+  sits under a null total and every `Pe` array has its twin's length; the
+  three modes were stepped through on the 21-window report (views, header
+  unit, badges, notes, saved value) with no page error.
+- **SQL pool detail row (06, `tr.sql-detail`)** — verified on dbmint
+  2026-11-22 (9 / 21 / 49 / 169 hourly windows, all rc 0; `"2026-11-08
+  02:00" 1 20 10 0 1 h` crosses a restart and gives skipped rows, a
+  zero-execution window and collapsed runs; `"2026-11-07 15:00" 1 8` has
+  the restart inside Current = a skipped Current row; b84c2ncqhcw23's
+  window numbers match `DBA_HIST_SQLSTAT`; verify_report OK on the 21- and
+  the 49-window report; never exercised: "from 0", RAC, multi-DBID).
+  Besides the identity `dl` it holds
+  `table.sqd-win#win-<sql_id>` "Compared windows": Current first, then at
+  most 29 prior windows (a cap note past that), columns Executions /
+  Elapsed (s) / s per exec / Plan hash, totals per window. The numbers come
+  from the main cursor's `agg` join (`agg_exec` / `agg_ela_us` / `agg_phv`
+  kept in `v_wa_*` before the `CONTINUE`): no extra scan, valid windows
+  only. A skipped window is a `tr.skip` row ("skipped: <reason>", reason
+  from `windows_rollup`, not in the mean); a valid window with no `agg` row
+  is "not captured" (`tr.sqd-nocap`), never 0. `tfoot` = the prior mean over
+  the VALID prior windows that HAVE a row (s per exec = total elapsed /
+  total executions); the Biggest change tab counts such a window as 0, so
+  the two means can differ (stated in the About notes, "Per-SQL detail").
+  The Current row's change is a plain `delta_span` (`sqd_chg`: "new" /
+  "from 0" / the Δ rule; ranked, not scored). The plan badge marks only
+  the window where the plan CHANGED: over the statement's windows that are
+  valid, have an AWR row and a non-zero plan hash (ALL windows 0 .. weeks_back,
+  not only the 30 shown), window k gets it when its plan differs from the
+  nearest OLDER such window's (`v_wchg(k)` = that older hash, built oldest
+  first before the rows; skipped / not captured / plan-0 windows are passed
+  over, the oldest one never has a badge, Current can). It is
+  `.badge.sqd-pc`, not `.badge.warn`: the section header's large / moderate
+  count tallies a `.badge.warn` anywhere in a tbody row.
+  Among the displayed prior windows, two or more CONSECUTIVE windows that
+  are "not captured", or skipped for the SAME reason, collapse into one row
+  (`sqd_state`: `-a - -b`, "n windows", no `data-w`; a run of one keeps the
+  single-window markup; Current always stays its own row; the 29-window cap
+  counts windows, not rows). Whole execution counts below 10000 print as
+  integers (`sqd_cnt` over `fmt_int`; the title keeps full precision).
+  The per-plan table and chart ("Whole AWR retention, by plan") now cover
+  any statement with a SQLSTAT row; one with no non-zero plan hash (a
+  PL/SQL call) shows its plan-0 rows as one "no plan" plan (grey series).
+  The Plans column / header tooltip and the intro sentence say these cover
+  the whole retention, not the compared windows. Payload
+  `AWR_DATA.sqlDetails["<id>"]={t0:"YYYY-MM-DD HH24:MI",p:[[min since t0,
+  plan idx, execs, s/exec|null],...],phv:["..."]}`, one PUT_LINE per
+  point (the old per-point JSON objects were 3.3 MB of the demo page); the
+  chart is a `type:"time"` axis with `useUTC` (DB wall clock read as UTC)
+  and `markArea` (Current accent, prior windows faint) + a thin `markLine`
+  per window start, both on a dedicated empty series (`id:"winmarks"`, no
+  name, so not in the legend and not lost when a plan is hidden); the y axis
+  and tooltip use 4 significant digits (sub-millisecond calls) (priors only up to 40 windows; a one-hour window is
+  under a pixel on a months-long axis) read from `window.AWR_WIN`, re-applied
+  on `awr:theme`.
 - **`.copy-btn[data-copy]`** — copies the selected element's text; inline
   by default, absolutely positioned only inside `pre`/`.codewrap`. `.tbl-tools`
   CSV/MD toolbars auto-inject above any table with ≥ 4 rows.
@@ -1655,7 +1908,7 @@ folding past 14 rows, cut at 18, slivers <= 30 % of width, roving focus, Enter
 on DOMContentLoaded. Unexercised: RAC, multi-DBID, real ORA-01031, the 18-row
 cut.
 
-#### Onset (`sql/25_onset.sql`, `sql/lib/onset_cte.sql`, `js_onset`)
+#### Trend breaks, formerly Onset (`sql/25_onset.sql`, `sql/lib/onset_cte.sql`, `js_onset`)
 
 "WHEN did it start": a continuous series over the report span for 7 fixed
 metrics (template-independent), one point per snapshot interval (median pair

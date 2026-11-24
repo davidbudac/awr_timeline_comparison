@@ -4,10 +4,24 @@ PEREXEC regression and the CHANGE "Biggest change" dimensions), per-dim detail t
 with paired detail rows, the AWR_DATA.topSql / AWR_DATA.sqlDetails JSON
 payloads, and every inline <script> of the original (lifted verbatim).
 
+"Values: Total | Per execution | Top per execution" (mode values total,
+perexec, pe-rank), two parts that must not be mixed up:
+  * perexec = the SWAP inside the Total view of the four total metric dims
+    (ELAPSED / CPU / GETS / PREADS; _SWAP_UNIT): span.tsv data-pe / data-pt,
+    the "Pe" payload arrays, executions carried per window;
+  * pe-rank = the separate RANKING, four more dims (ELAPSED_PE ... PREADS_PE;
+    _PE_METRIC): the tsv-view[data-val="pe-rank"] of the tab.
+
 Data: per window `m = w.window_metrics(win)`, `m.sql[sql_id]` = the
 DBA_HIST_SQLSTAT *_DELTA sums for that window; `w.sql_by_id` supplies the
 text / parsing schema / module / action; the full-retention scan for the
 per-SQL detail rows walks every snapshot of `w.snaps`.
+
+Per-SQL detail rows: the "Compared windows" table is built from the same
+per-window agg numbers as the ranking (valid windows only; a valid window
+without a row = "not captured"), the chart payload is the compact
+{t0, p:[[min, plan idx, execs, s/exec]], phv:[...]} form, and a statement
+with no non-zero plan hash (the demo's PL/SQL call) gets a "no plan" row.
 
 Locally derived (the model lacks them): DBA_HIST_SQLSTAT integer counters
 (execs / elapsed / cpu / gets / reads are rounded to whole numbers the way
@@ -16,6 +30,7 @@ AWR stores them), `optimizer_mode` (= ALL_ROWS), `force_matching_signature`
 """
 from __future__ import annotations
 
+import math
 from datetime import timedelta
 
 from awrdemo import chrome
@@ -25,18 +40,32 @@ from awrdemo.helpers import (anchor_id, esc, fmt_int, fmt_num, fmt_num_title, is
 
 _SQL = chrome.sql_path("sql/06_top_sql.sql")
 
-# dims CTE: code, ord, label, unit, divisor  (static in the SQL)
+# dims CTE: code, ord, label, unit, divisor  (static in the SQL).  The four
+# *_PE codes are the per-execution rankings of the Values: Total | Per
+# execution switch: each is a view of its metric's tabpanel, ord between the
+# total ranking and the next metric.
 _DIMS = [
     ("ELAPSED", 1, "By elapsed time", "s", 1e6),
+    ("ELAPSED_PE", 1.5, "By elapsed time per execution", "s/exec", 1e6),
     ("CPU", 2, "By CPU time", "s", 1e6),
+    ("CPU_PE", 2.5, "By CPU time per execution", "s/exec", 1e6),
     ("GETS", 3, "By buffer gets", "gets", 1),
+    ("GETS_PE", 3.5, "By buffer gets per execution", "gets/exec", 1),
     ("PREADS", 4, "By physical reads", "reads", 1),
+    ("PREADS_PE", 4.5, "By physical reads per execution", "reads/exec", 1),
     ("EXEC", 5, "By executions", "exec", 1),
     ("PEREXEC", 6, "By per-exec regression", "s/exec", 1e6),
     ("CHANGE", 0, "By change in elapsed time (Current vs the prior mean)", "s", 1e6),
 ]
 _RANK_DIMS = ("ELAPSED", "CPU", "GETS", "PREADS", "EXEC")
 _METRIC_OF = {"ELAPSED": "ela", "CPU": "cpu", "GETS": "gets", "PREADS": "reads", "EXEC": "execs"}
+# the per-execution rankings: dim -> the metric divided by the window's executions
+_PE_METRIC = {"ELAPSED_PE": "ela", "CPU_PE": "cpu", "GETS_PE": "gets", "PREADS_PE": "reads"}
+_PE_OF = {"ELAPSED": "ELAPSED_PE", "CPU": "CPU_PE", "GETS": "GETS_PE", "PREADS": "PREADS_PE"}
+_TOTAL_OF = {v: k for k, v in _PE_OF.items()}
+# the four TOTAL metric dims carry the swap; their per-execution unit word
+# (v_dim_unit_swap).  Never a *_PE dimension, CHANGE, EXEC or PEREXEC.
+_SWAP_UNIT = {"ELAPSED": "s/exec", "CPU": "s/exec", "GETS": "gets/exec", "PREADS": "reads/exec"}
 _JSON_CAP = 32500      # c_json_cap
 
 
@@ -48,14 +77,16 @@ def _lines():
     return chrome.put_lines(_SQL)
 
 
-def _slice(lines, first: str, last: str, start: int = 0) -> tuple[list[str], int]:
+def _slice(lines, first: str, last: str, start: int = 0,
+           last_prefix: bool = False) -> tuple[list[str], int]:
     """Literal PUT_LINE texts from the first entry equal to `first` (at or
-    after index `start`) through the next entry equal to `last`."""
+    after index `start`) through the next entry equal to `last` (or, with
+    `last_prefix`, the next one that starts with it)."""
     i = start
     while lines[i][0] != first:
         i += 1
     j = i
-    while lines[j][0] != last:
+    while not (lines[j][0].startswith(last) if last_prefix else lines[j][0] == last):
         j += 1
     for t, ok in lines[i:j + 1]:
         if not ok:
@@ -109,6 +140,15 @@ def _picked(w, agg):
             for sid, r in rows.items():
                 if rk[sid] <= top_n and r[key] > 0:
                     picked[(dim, sid, off)] = (r[key], rk[sid], r["phv"])
+        # the per-execution rankings (ranked_pe): value over completed
+        # executions, only statements with an execution and a value above 0
+        # are ranked (NULLS LAST + the > 0 filter: ranks 1, 2, 3 without a
+        # gap), the token carries 9 decimals
+        for dim, key in _PE_METRIC.items():
+            pe = {sid: r[key] / r["execs"] for sid, r in rows.items()
+                  if r["execs"] > 0 and r[key] > 0}
+            for i, sid in enumerate(sorted(pe, key=lambda k: (-pe[k], k))[:top_n], start=1):
+                picked[(dim, sid, off)] = (ora_round(pe[sid], 9), i, rows[sid]["phv"])
     # per_exec / delta_ranked
     per_exec = {}   # (sid, off) -> per_exec_us | None
     for off, rows in agg.items():
@@ -210,19 +250,29 @@ def _group_rows(w, agg):
             rk = _rank(rows, key)
             for gv, r in rows.items():
                 if rk[gv] <= top_n and r[key] > 0:
-                    picked[(dim, gt, gv, off)] = (r[key], rk[gv])
+                    # (value, rank, the group's summed executions: the swap's divisor)
+                    picked[(dim, gt, gv, off)] = (r[key], rk[gv], r["execs"])
+        # per execution: the group's summed value over its summed executions
+        # (the four *_PE branches carry no executions: they are not swapped)
+        for dim, key in _PE_METRIC.items():
+            pe = {gv: r[key] / r["execs"] for gv, r in rows.items()
+                  if r["execs"] > 0 and r[key] > 0}
+            for i, gv in enumerate(sorted(pe, key=lambda k: (-pe[k], k))[:top_n], start=1):
+                picked[(dim, gt, gv, off)] = (ora_round(pe[gv], 9), i, None)
     ordmap = {d[0]: d[1] for d in _DIMS}
     out = []
     for dim, gt, gv in sorted({(d, t, v) for d, t, v, _ in picked}):
-        vals, rnks = [], []
+        vals, rnks, execs = [], [], []
         for off in range(nweeks):
             p = picked.get((dim, gt, gv, off))
             vals.append(p[0] if p else None)
             rnks.append(p[1] if p else None)
+            execs.append(p[2] if p else None)
         rn = [r for r in rnks if r is not None]
         mv = [v for v in vals if v is not None]
         out.append({"dim": dim, "grp_type": gt, "grp_value": gv, "cur_rnk": rnks[0],
-                    "best_rank": min(rn), "best_value": max(mv), "vals": vals})
+                    "best_rank": min(rn), "best_value": max(mv), "vals": vals,
+                    "execs": execs})
     out.sort(key=lambda r: (ordmap[r["dim"]], r["grp_type"],
                             1 if r["cur_rnk"] is None else 0,
                             r["cur_rnk"] if r["cur_rnk"] is not None else 0,
@@ -235,6 +285,92 @@ def _chart_vals(vals, div) -> str:
     return ",".join("null" if v is None else num6(v / div) for v in reversed(vals))
 
 
+def _pe_json(v) -> str:
+    """pe_json(): about 4 significant digits, trailing zeros trimmed, 'null'
+    for None."""
+    if v is None:
+        return "null"
+    a = min(abs(v), 99999999999)
+    if a == 0:
+        return "0"
+    dec = max(0, min(9, 3 - math.floor(math.log10(a))))
+    return ("-" if v < 0 else "") + h.to_char_trim(ora_round(a, dec), 9).rstrip(".")
+
+
+def _series(dim, vals, div) -> str:
+    """The chart series values of one entry: the per-execution rankings keep
+    about 4 significant digits (pe_json), every other dimension 6 decimals."""
+    if dim in _PE_METRIC:
+        return ",".join("null" if v is None else _pe_json(v / div) for v in reversed(vals))
+    return _chart_vals(vals, div)
+
+
+def _pe_val(v, x):
+    """pe_val(): a value over its executions; None when none completed (never
+    0, never a division by zero)."""
+    if v is None or x is None or x <= 0:
+        return None
+    return v / x
+
+
+def _chart_swap(vals, execs, div) -> str:
+    """The swap's twin of _chart_vals: oldest -> newest, the slot's value over
+    its executions, 'null' for a missing slot or a window without a completed
+    execution."""
+    return ",".join("null" if v is None else _pe_json(_pe_val(v / div, x))
+                    for v, x in reversed(list(zip(vals, execs))))
+
+
+def _tsv_span(txt, pe, full) -> str:
+    """tsv_span(): the number of a value cell of a total table with its
+    per-execution text in data-pe (and the title text in data-pt)."""
+    t = '<span class="tsv" data-pe="' + fmt_num(pe) + '"'
+    if pe is None:
+        t += ' data-pt="no completed execution in this window"'
+    elif full == "Y":
+        t += fmt_num_title(pe).replace(' title="', ' data-pt="')
+    return t + ">" + txt + "</span>"
+
+
+def _tsv_switch(dim) -> str:
+    """tsv_switch(): the Values: Total | Per execution | Top per execution
+    switch of a panel (button values = the mode values)."""
+    return ('<div class="topsql-toggle topsql-val" data-tsv="' + dim
+            + '" role="group" aria-label="Values: total, per execution, or top per execution">'
+            "<span>Values:</span>"
+            '<button type="button" data-val="total" class="active" aria-pressed="true"'
+            " title=\"Each window's top statements by the window total\">Total</button>"
+            '<button type="button" data-val="perexec" aria-pressed="false"'
+            " title=\"The same statements and order as Total, each value divided by the statement's executions\">Per execution</button>"
+            '<button type="button" data-val="pe-rank" aria-pressed="false"'
+            " title=\"A different statement set: each window's top statements by value per completed execution\">Top per execution</button>"
+            "</div>")
+
+
+def _tsv_note(dim) -> str:
+    """tsv_note(): what a tab with no per-execution form says in the other modes
+    (tsv-n-other: per execution and top per execution mode, tsv-n-total: total)."""
+    if dim == "CHANGE":
+        return ('<p class="tsv-note tsv-n-other">Biggest change compares total elapsed time, whatever the switch says.'
+                ' Its per-execution counterpart is the <button type="button" class="tsv-go" data-tsv-goto="PEREXEC">'
+                "Per-exec regression</button> tab.</p>")
+    if dim == "EXEC":
+        return ('<p class="tsv-note tsv-n-other">Executions is a count, so it has no per-execution form:'
+                " this tab reads the same in every mode.</p>")
+    if dim == "PEREXEC":
+        return ('<p class="tsv-note tsv-n-total">Per-exec regression always ranks the change in elapsed time per execution,'
+                " whatever the switch says. Its total counterpart is the"
+                ' <button type="button" class="tsv-go" data-tsv-goto="CHANGE">Biggest change</button> tab.</p>')
+    return ""
+
+
+def _tsv_empty_view(label) -> str:
+    """tsv_empty_view(): the Top per execution view of a tab with no row in it."""
+    return ('<div class="tsv-view" data-val="pe-rank"><h3>' + label
+            + ' per execution</h3><p class="note">No statement completed an execution with a'
+            " non-zero value in any compared window, so there is no per-execution ranking.</p></div>")
+
+
 def _retention(w, sid):
     """Full-retention per-SQL scan over every snapshot: (points, meta)."""
     pts = []
@@ -245,6 +381,205 @@ def _retention(w, sid):
         pts.append((s, _ival(x.execs), _ival(x.elapsed_us), _ival(x.gets), x.plan_hash))
     return pts
 
+
+# ---------------------------------------------------------------------
+# per-SQL detail: Compared windows table + chart payload
+# ---------------------------------------------------------------------
+
+def _cnt(n):
+    """sqd_cnt: a whole execution count below 10000 prints as an integer."""
+    if n is not None and n == int(n) and n < 10000:
+        return fmt_int(n)
+    return fmt_num(n)
+
+
+def _sqd_chg(p_cur, p_mu, p_n, p_what):
+    """sqd_chg(): plain change of Current against the prior mean."""
+    if p_cur is None:
+        return ""
+    if not p_n:
+        return ' <span class="d s-plain" title="no row in any prior valid window">new</span>'
+    if p_mu is not None and p_mu == 0:
+        if p_cur == 0:
+            return ""
+        return (' <span class="d s-plain" title="' + p_what
+                + ' was 0 in the prior mean">from 0</span>')
+    t = h.delta_span(p_cur, p_mu, None, "Y")
+    return " " + t.replace('<span class="d s-plain">',
+                           '<span class="d s-plain" title="' + p_what
+                           + ", Current vs the prior mean of " + str(p_n)
+                           + (" window" if p_n == 1 else " windows") + '">')
+
+
+def _windows_table(w, sid, agg) -> list[str]:
+    """The 'Compared windows' block of one opened pool row (one string per
+    PUT_LINE).  Numbers come from `agg` (the main cursor's agg join: valid
+    windows only; a missing key = no AWR row, or a skipped window)."""
+    weeks_back = w.weeks_back
+    ex, ela, phv = {}, {}, {}
+    for off, rows in agg.items():
+        r = rows.get(sid)
+        if r is not None:
+            ex[off], ela[off], phv[off] = r["execs"], r["ela"], r["phv"]
+    wn = wsx = wse = 0
+    for k in range(1, weeks_back + 1):
+        if k in ex:
+            wn += 1
+            wsx += ex[k]
+            wse += ela[k] or 0
+    mu_x = wsx / wn if wn > 0 else None
+    mu_e = wse / wn / 1e6 if wn > 0 else None
+    mu_pe = wse / wsx / 1e6 if wn > 0 and wsx > 0 else None
+    # plan change marks: window k (valid, with a row, non-zero plan) ran a
+    # different plan than the nearest OLDER such window (all windows
+    # 0..weeks_back; other windows are passed over)
+    wchg, wlast = {}, None
+    for k in range(weeks_back, -1, -1):
+        if k in phv:
+            wcur = phv[k]
+            if wcur:
+                if wlast is not None and wcur != wlast:
+                    wchg[k] = wlast
+                wlast = wcur
+
+    out = []
+    out.append('<h4 class="sqd-h">Compared windows</h4>'
+               '<p class="sqd-sub">This statement in each of the report&#39;s '
+               + str(weeks_back + 1) + " window" + ("" if weeks_back == 0 else "s")
+               + " (totals per window).</p>"
+               '<div class="sqd-tw"><table id="win-' + sid
+               + '" class="sqd-win" data-nosort data-nocount data-notools><thead><tr>'
+               '<th>Window</th><th class="num">Executions</th><th class="num">Elapsed (s)</th>'
+               '<th class="num">s / exec</th><th class="num">Plan hash</th>'
+               "</tr></thead><tbody>")
+    wmax = min(weeks_back, 29)
+
+    def state(k):
+        """sqd_state: 'S' + reason (skipped), 'N' (no AWR row), 'V' (values)."""
+        win = w.windows[k]
+        if not win.valid:
+            return "S" + (win.skip_reason or "no valid snapshot pair")[:200]
+        return "V" if k in ex else "N"
+
+    skipto = -1
+    for k in range(0, wmax + 1):
+        if k <= skipto:
+            continue
+        st = state(k)
+        if k > 0 and st != "V":
+            b = k
+            while b < wmax:
+                if state(b + 1) != st:
+                    break
+                b += 1
+            if b > k:
+                skipto = b
+                lab = ("&minus;" + w.offset_labels[k - 1] + " &ndash; &minus;" + w.offset_labels[b - 1]
+                       + ' <span class="sqd-dt">' + str(b - k + 1) + " windows</span>")
+                if st[0] == "S":
+                    out.append('<tr class="skip" title="Skipped windows: not compared and not in the mean">'
+                               "<td>" + lab + "</td>"
+                               '<td colspan="4" title="Skipped windows: not compared and not in the mean">skipped: '
+                               + esc(st[1:]) + "</td></tr>")
+                else:
+                    out.append('<tr class="sqd-nocap"><td>' + lab + "</td>"
+                               '<td colspan="4" class="sqd-mu" title="AWR kept no row for this statement '
+                               'in these windows: it ran too little to be captured, or not at all.">'
+                               "not captured</td></tr>")
+                continue
+        wlab = ("<b>Current</b>" if k == 0 else "&minus;" + w.offset_labels[k - 1]) \
+            + ' <span class="sqd-dt">' + h.wg_title(w, k) + "</span>"
+        win = w.windows[k]
+        if not win.valid:
+            reason = win.skip_reason or "no valid snapshot pair"
+            out.append('<tr class="skip" title="Skipped window: not compared and not in the mean">'
+                       '<td data-w="' + str(k) + '">' + wlab + "</td>"
+                       '<td colspan="4" data-w="' + str(k)
+                       + '" title="Skipped window: not compared and not in the mean">skipped: '
+                       + esc(reason[:200]) + "</td></tr>")
+        elif k not in ex:
+            out.append('<tr class="sqd-nocap"><td data-w="' + str(k) + '">' + wlab + "</td>"
+                       '<td colspan="4" class="sqd-mu" data-w="' + str(k)
+                       + '" title="AWR kept no row for this statement in this window: '
+                       'it ran too little to be captured, or not at all.">not captured</td></tr>')
+        else:
+            wx = ex[k]
+            we = (ela[k] or 0) / 1e6
+            wph = phv[k]
+            wpe = we / wx if wx > 0 else None
+            row = ("<tr" + (' class="cur"' if k == 0 else "") + ">"
+                   '<td data-w="' + str(k) + '">' + wlab + "</td>"
+                   '<td class="num" data-w="' + str(k) + '"' + fmt_num_title(wx) + ">"
+                   + _cnt(wx)
+                   + (_sqd_chg(wx, mu_x, wn, "Executions") if k == 0 else "")
+                   + "</td>"
+                   '<td class="num" data-w="' + str(k) + '"' + fmt_num_title(we) + ">"
+                   + fmt_num(we)
+                   + (_sqd_chg(we, mu_e, wn, "Elapsed") if k == 0 else "")
+                   + "</td>")
+            if wpe is None:
+                row += ('<td class="num" data-w="' + str(k)
+                        + '" title="No execution completed in this window, so s / exec is undefined, not 0.">&mdash;</td>')
+            else:
+                row += ('<td class="num" data-w="' + str(k) + '"' + fmt_num_title(wpe) + ">"
+                        + fmt_num(wpe)
+                        + (_sqd_chg(wpe, mu_pe, wn, "s / exec") if k == 0 else "")
+                        + "</td>")
+            if not wph:
+                pl = ('<span class="sqd-mu" title="No plan hash: a PL/SQL call, or another statement '
+                      'without an execution plan">&mdash;</span>')
+            else:
+                pl = str(wph)
+                if k in wchg:
+                    pl += (' <span class="badge sqd-pc" title="Plan changed in this window. '
+                           'The window before it with a plan ran '
+                           + str(wchg[k]) + '">plan&#8593;</span>')
+            row += '<td class="num mono" data-w="' + str(k) + '">' + pl + "</td></tr>"
+            out.append(row)
+    foot = ('</tbody><tfoot><tr><td>Prior mean <span class="sqd-dt">('
+            + ("no prior window with a row" if wn == 0
+               else str(wn) + (" window" if wn == 1 else " windows") + " with a row")
+            + ")</span></td>")
+    if wn == 0:
+        foot += ('<td class="num"><span class="sqd-mu">&mdash;</span></td>' * 3)
+    else:
+        foot += ('<td class="num"' + fmt_num_title(mu_x) + ">" + _cnt(mu_x) + "</td>"
+                 '<td class="num"' + fmt_num_title(mu_e) + ">" + fmt_num(mu_e) + "</td>"
+                 '<td class="num"' + fmt_num_title(mu_pe) + ">" + fmt_num(mu_pe) + "</td>")
+    foot += '<td class="num"><span class="sqd-mu">&mdash;</span></td></tr></tfoot></table></div>'
+    out.append(foot)
+    out.append('<p class="sqd-sub sqd-fn">Current vs the prior mean is a plain change, not a score: '
+               "Top SQL is ranked, not scored.</p>")
+    if weeks_back > 29:
+        out.append('<p class="sqd-sub sqd-fn">Showing Current and the 29 most recent of '
+                   + str(weeks_back) + " prior windows; the mean covers every valid one.</p>")
+    return out
+
+
+def _plan_points(pts, phv_count):
+    """Chart payload of one statement: None (no point), else (t0, point
+    lines, comma list of the quoted plan hashes).  Compact form
+    {t0, p:[[minutes since t0, plan index, executions, s/exec or null]],
+    phv:[...]}, one point per (snapshot, plan), oldest first; plan "0" = a
+    statement without a plan hash (kept only when it has no other plan)."""
+    keep = [p for p in pts if p[4] > 0 or phv_count == 0]
+    if not keep:
+        return None
+    t0 = min(p[0].end_ts.replace(second=0, microsecond=0) for p in keep)
+    pidx, plist, lines = {}, [], []
+    for s, ex, ela, gets, phv in sorted(keep, key=lambda p: (p[0].end_ts, p[4])):
+        key = str(int(phv or 0))
+        if key not in pidx:
+            if len(plist) >= 1500:
+                continue
+            pidx[key] = len(plist)
+            plist.append('"' + key + '"')
+        mins = int(ora_round((s.end_ts.replace(second=0, microsecond=0) - t0).total_seconds() / 60, 0))
+        val = ("null" if not ex > 0
+               else h.to_char_trim(ora_round(min(ela / ex / 1e6, 99999999), 6), 6))
+        lines.append(("[" if not lines else ",[")
+                     + str(mins) + "," + str(pidx[key]) + "," + str(int(ex)) + "," + val + "]")
+    return ts_min(t0), lines, ",".join(plist)
 
 # ---------------------------------------------------------------------
 # emitter
@@ -262,6 +597,11 @@ def emit(w) -> str:
     put('<section id="topsql" class="vw in-s in-a lib lopen" style="--os:1"><h2>Top SQL'
         '<small class="h2sub">Top ' + str(top_n)
         + ' statements per ranking and window; ranked, not scored</small></h2>')
+    # Values: Total | Per execution | Top per execution -- the shared state,
+    # set before the panels are parsed (lifted from the SQL)
+    block, _ = _slice(L, "<script>(function(){ /* Top SQL: Values switch (Total | Per execution | Top per execution) */",
+                      "})();</script>")
+    o.extend(block)
     put('<div class="tabs" data-tabs="topsql" role="tablist" aria-label="Top SQL ranking dimension">'
         '<button type="button" role="tab" aria-selected="true" class="on" data-t="CHANGE" id="tab-topsql-CHANGE"'
         ' title="Current window total elapsed minus the prior-window mean">Biggest change</button>'
@@ -292,25 +632,75 @@ def emit(w) -> str:
     sql_dim_seen, sql_dim_top3 = {}, {}
     sql_elapsed_cur = {}
     dim_sqls_json, dim_sqls_kept, dim_sqls_total, dim_seen = {}, {}, {}, []
+    dim_sqls_swap = {}
 
     cur_dim = None
     tl_rows = []
     ls = None
+    panel_on = False
+
+    def close_dim(nxt):
+        """tsv_close(): the table / details of cur_dim, its view (or, for
+        Biggest change / Executions / Per-exec regression, its panel); a
+        total ranking of the four metric tabs not followed by its own
+        per-execution ranking gets the empty Top per execution view, and that
+        view ends the panel.  Right after a total view the swap is applied to
+        its table (AWR_topsqlSync(table))."""
+        if cur_dim is None:
+            return
+        put("</tbody></table></details></div>")
+        if cur_dim in _PE_OF:
+            put('<script>if(window.AWR_topsqlSync)AWR_topsqlSync(document.getElementById("topsql-detail-'
+                + cur_dim + '"));</script>')
+            if nxt is None or nxt != cur_dim + "_PE":
+                put(_tsv_empty_view(dim_label[cur_dim]) + "</div>")
+        elif cur_dim in _TOTAL_OF:
+            put("</div>")
+
     for s in rows:
         dim = s["dim"]
         if cur_dim != dim:
-            if cur_dim is not None:
-                put("</tbody></table></details></div>")
+            close_dim(dim)
+            is_rank = dim in _TOTAL_OF
+            # only the four TOTAL metric dims carry the swap (never a *_PE
+            # dimension, CHANGE, EXEC or PEREXEC)
+            swap_dim = dim in _SWAP_UNIT
             cur_dim = dim
             dim_seen.append(dim)
             dim_sqls_json[dim] = None
             dim_sqls_kept[dim] = 0
             dim_sqls_total[dim] = 0
-            # the first emitted tabpanel is the open one
-            put('<div class="tabpanel' + (" on" if len(dim_seen) == 1 else "")
-                + '" data-tabs="topsql" data-t="' + dim + '" role="tabpanel"'
-                + ' aria-labelledby="tab-topsql-' + dim + '">')
+            if swap_dim:
+                dim_sqls_swap[dim] = None
+            if not is_rank:
+                # the first emitted tabpanel is the open one
+                put('<div class="tabpanel' + ("" if panel_on else " on")
+                    + '" data-tabs="topsql" data-t="' + dim + '" role="tabpanel"'
+                    + ' aria-labelledby="tab-topsql-' + dim + '">')
+                panel_on = True
+                # Values: Total | Per execution | Top per execution in every
+                # panel, its buttons painted by the script after it
+                put(_tsv_switch(dim))
+                put("<script>if(window.AWR_topsqlSync)AWR_topsqlSync();</script>")
+                if swap_dim:
+                    put('<div class="tsv-view" data-val="total">')
+                else:
+                    put(_tsv_note(dim))
+            else:
+                put('<div class="tsv-view" data-val="pe-rank">')
             put("<h3>" + dim_label[dim] + "</h3>")
+            if is_rank:
+                put('<p class="tsv-rank-note">Top per execution: a different statement set from the Total view.'
+                    " Each window's top " + str(top_n)
+                    + " statements by value per completed execution (the window's value divided by its"
+                    " executions), ranked on their own. A statement with no completed execution in a window is"
+                    " not ranked in it; a dash means it is not in that window's top " + str(top_n) + ".</p>")
+            elif swap_dim:
+                # shown by CSS in mode perexec only (the swap)
+                put('<p class="tsv-swap-note">Per execution: the same statements, still picked and ordered by the'
+                    " window total (the #n badges are ranks by total). Each value is that window's total divided"
+                    " by its executions; a dash is a window where the statement is not in the top " + str(top_n)
+                    + " or completed no execution.</p>")
             put('<div class="topsql-toggle" data-topsql-target="' + dim + '">'
                 "<span>Break down by:</span>"
                 '<button type="button" data-mode="sqls" class="active">SQL ID</button>'
@@ -322,9 +712,15 @@ def emit(w) -> str:
             put("<details>")
             put("<summary>Detail table</summary>")
             # one th per window through wg_buf (h.wg_lines)
-            header = ['<table id="topsql-detail-' + cur_dim + '">'
+            # a Top per execution table is a second view of its tab (plan
+            # badges stay out of the section-header counts); a total metric
+            # table carries the swap (class tsv-tbl)
+            header = ['<table id="topsql-detail-' + cur_dim + '"'
+                      + (' data-nocount' if is_rank else (' class="tsv-tbl"' if swap_dim else '')) + '>'
                       '<thead><tr><th>SQL ID</th><th class="num" title="plan_hash_value of the Current window&#39;s execution plan">Plan hash (Current)</th>'
-                      '<th class="num" data-w="0">Current (' + dim_unit[dim] + ")</th>"]
+                      '<th class="num" data-w="0"'
+                      + (' data-pe="Current (' + _SWAP_UNIT[dim] + ')"' if swap_dim else "")
+                      + '>Current (' + dim_unit[dim] + ")</th>"]
             for k in range(1, weeks_back + 1):
                 header.append('<th class="num" data-w="' + str(k) + '">&minus;'
                               + w.offset_labels[k - 1] + "</th>")
@@ -334,7 +730,7 @@ def emit(w) -> str:
         sid = s["sql_id"]
         div = dim_div[dim]
         seen_sqls[sid] = True
-        if dim in _RANK_DIMS:
+        if dim in _RANK_DIMS or dim in _TOTAL_OF:
             sql_dim_seen[sid + "|" + dim] = "Y"
             if s["cur_rnk"] is not None and s["cur_rnk"] <= 3:
                 sql_dim_top3[sid + "|" + dim] = "Y"
@@ -359,25 +755,40 @@ def emit(w) -> str:
         new_entry = ('{"sql_id":"' + sid + '","cur":'
                      + ("null" if s["cur_rnk"] is None else str(s["cur_rnk"]))
                      + ',"sys":' + ("true" if is_sys == "Y" else "false")
-                     + ',"vals":[' + _chart_vals(s["vals"], div) + "]}")
+                     + ',"vals":[' + _series(dim, s["vals"], div) + "]}")
+        # executions of the statement in each window (agg join; None = AWR kept no row)
+        execs = [agg.get(k, {}).get(sid, {}).get("execs") for k in range(nweeks)]
+        new_swap = "[" + _chart_swap(s["vals"], execs, div) + "]" if swap_dim else None
         dim_sqls_total[dim] += 1
+        # one keep decision for the entry and its per-execution twin
         if dim_sqls_json[dim] is None:
-            dim_sqls_json[dim] = new_entry
-            dim_sqls_kept[dim] += 1
-        elif len(dim_sqls_json[dim]) + len(new_entry) + 1 <= _JSON_CAP:
-            dim_sqls_json[dim] += "," + new_entry
+            keep = True
+        else:
+            keep = len(dim_sqls_json[dim]) + len(new_entry) + 1 <= _JSON_CAP
+            if keep and swap_dim:
+                keep = len(dim_sqls_swap[dim]) + len(new_swap) + 1 <= _JSON_CAP
+        if keep:
+            if dim_sqls_json[dim] is None:
+                dim_sqls_json[dim] = new_entry
+                if swap_dim:
+                    dim_sqls_swap[dim] = new_swap
+            else:
+                dim_sqls_json[dim] += "," + new_entry
+                if swap_dim:
+                    dim_sqls_swap[dim] += "," + new_swap
             dim_sqls_kept[dim] += 1
 
         cur_val = s["cur_val"]
         cur_scaled = None if cur_val is None else cur_val / div
-        row = ('<tr id="' + anchor_id('sq-' + dim.lower(), sid) + '" data-sys="' + is_sys + '">'
+        row = ('<tr id="' + anchor_id('sq-' + dim.lower().replace("_", ""), sid) + '" data-sys="' + is_sys + '">'
                '<td class="mono"><a href="#sql-' + sid + '">' + sid + "</a>"
                + (' <span class="badge warn" title="Plan changed between current and a prior '
                   'compared window">plan&#8593;</span>' if plan_flip else "")
                + "</td>"
                '<td class="num mono">' + ("&mdash;" if cur_phv is None else str(cur_phv)) + "</td>"
                '<td class="num" data-w="0"' + fmt_num_title(cur_scaled) + "><b>"
-               + fmt_num(cur_scaled)
+               + (_tsv_span(fmt_num(cur_scaled), _pe_val(cur_scaled, execs[0]), "Y")
+                  if swap_dim and cur_val is not None else fmt_num(cur_scaled))
                + (' <span class="badge info">#' + str(s["cur_rnk"]) + "</span>"
                   if s["cur_rnk"] is not None else "")
                + "</b>")
@@ -397,7 +808,9 @@ def emit(w) -> str:
             if v is None:
                 cell = '<td class="num" data-w="' + str(k) + '">&mdash;'
             else:
-                cell = '<td class="num" data-w="' + str(k) + '">' + fmt_num(v / div)
+                cell = ('<td class="num" data-w="' + str(k) + '">'
+                        + (_tsv_span(fmt_num(v / div), _pe_val(v / div, execs[k]), "N")
+                           if swap_dim else fmt_num(v / div)))
             if r is not None:
                 cell += ' <span class="badge skip">#' + str(r) + "</span>"
             if p is not None and cur_phv is not None and p != cur_phv:
@@ -443,35 +856,55 @@ def emit(w) -> str:
                          esc(txt[:300])),
                 h.tl_gutp(h.tl_val(w, csv, 0), mu, note),
                 "tl-" + anchor_id("sq-elapsed", sid), "q", sid, "s elapsed", gw, gl))
-    if cur_dim is not None:
-        put("</tbody></table></details></div>")
+    # the last dimension's table, view and panel
+    close_dim(None)
     if "CHANGE" not in dim_seen:
         # no statement got slower (or no prior valid window): the script
         # that drops the empty tab, lifted from the SQL
         put(next(t for t, _ in L
                  if t.startswith('<script>(function(){var c=document.getElementById("tab-topsql-CHANGE")')))
+    if panel_on:
+        # a note's link to a tab or panel this report does not have is plain text
+        block, _ = _slice(L, "<script>(function(){ /* Top SQL: notes link only to tabs that exist */",
+                          "})();</script>")
+        o.extend(block)
     for i, r in enumerate(tl_rows, start=1):
         put((h.tl_open("sql") if i == 1 else "") + r + (h.tl_close() if i == len(tl_rows) else ""))
 
     # second pass: group breakdowns -----------------------------------
     grp_json, grp_kept, grp_total = {}, {}, {}
+    grp_swap = {}
     for sc in _group_rows(w, agg):
         gv = sc["grp_value"]
+        swap_dim = sc["dim"] in _SWAP_UNIT
         new_entry = ('{"name":"' + json_escape(gv)
                      + '","cur":' + ("null" if sc["cur_rnk"] is None else str(sc["cur_rnk"]))
                      + ',"sys":' + ("true" if sc["grp_type"] == "schema"
                                     and is_oracle_schema(gv) == "Y" else "false")
-                     + ',"vals":[' + _chart_vals(sc["vals"], dim_div[sc["dim"]]) + "]}")
+                     + ',"vals":[' + _series(sc["dim"], sc["vals"], dim_div[sc["dim"]]) + "]}")
         gkey = sc["dim"] + "|" + sc["grp_type"]
         if gkey not in grp_total:
             grp_total[gkey] = 0
             grp_kept[gkey] = 0
         grp_total[gkey] += 1
+        # one keep decision for the entry and its per-execution twin
+        new_swap = ("[" + _chart_swap(sc["vals"], sc["execs"], dim_div[sc["dim"]]) + "]"
+                    if swap_dim else None)
         if grp_json.get(gkey) is None:
-            grp_json[gkey] = new_entry
-            grp_kept[gkey] += 1
-        elif len(grp_json[gkey]) + len(new_entry) + 1 <= _JSON_CAP:
-            grp_json[gkey] += "," + new_entry
+            keep = True
+        else:
+            keep = len(grp_json[gkey]) + len(new_entry) + 1 <= _JSON_CAP
+            if keep and swap_dim:
+                keep = len(grp_swap[gkey]) + len(new_swap) + 1 <= _JSON_CAP
+        if keep:
+            if grp_json.get(gkey) is None:
+                grp_json[gkey] = new_entry
+                if swap_dim:
+                    grp_swap[gkey] = new_swap
+            else:
+                grp_json[gkey] += "," + new_entry
+                if swap_dim:
+                    grp_swap[gkey] += "," + new_swap
             grp_kept[gkey] += 1
 
     # AWR_DATA.topSql + bump-chart script ------------------------------
@@ -496,11 +929,21 @@ def emit(w) -> str:
                 + ',"modulesTotal":' + cnt(grp_total, dim + "|module")
                 + ',"actionsKept":' + cnt(grp_kept, dim + "|action")
                 + ',"actionsTotal":' + cnt(grp_total, dim + "|action")
+                + (',"unitPe":"' + _SWAP_UNIT[dim] + '"' if dim in _SWAP_UNIT else "")
                 + ",")
+            sw = dim in _SWAP_UNIT
             put('"sqls":[' + (dim_sqls_json[dim] or "") + "],")
+            if sw:
+                put('"sqlsPe":[' + (dim_sqls_swap.get(dim) or "") + "],")
             put('"schemas":[' + (grp_json.get(dim + "|schema") or "") + "],")
+            if sw:
+                put('"schemasPe":[' + (grp_swap.get(dim + "|schema") or "") + "],")
             put('"modules":[' + (grp_json.get(dim + "|module") or "") + "],")
-            put('"actions":[' + (grp_json.get(dim + "|action") or "") + "]}")
+            if sw:
+                put('"modulesPe":[' + (grp_swap.get(dim + "|module") or "") + "],")
+            put('"actions":[' + (grp_json.get(dim + "|action") or "") + ("]," if sw else "]}"))
+            if sw:
+                put('"actionsPe":[' + (grp_swap.get(dim + "|action") or "") + "]}")
         block, pos = _slice(L, "}};", "})();</script>")
         o.extend(block)
 
@@ -521,10 +964,7 @@ def emit(w) -> str:
 
     # per-SQL detail: pool table ----------------------------------------
     block, pos = _slice(L, '<h3 class="vw in-a">Per-SQL detail</h3>',
-                        '<table id="sql-pool" class="vw in-a"><thead><tr><th>SQL ID</th><th>Ranked in</th>'
-                        '<th>Schema</th><th class="num" title="distinct plan_hash_values seen across the span">Plans</th><th class="num">Executions</th>'
-                        '<th class="num" title="AWR snapshots in which the SQL appeared">Snapshots</th><th>First seen</th><th>Text</th>'
-                        "</tr></thead><tbody>")
+                        '<table id="sql-pool" class="vw in-a">', last_prefix=True)
     o.extend(block)
 
     order = sorted(seen_sqls.keys(),
@@ -578,6 +1018,19 @@ def emit(w) -> str:
             if key in sql_dim_seen:
                 chips += ('<span class="chip' + (" on" if key in sql_dim_top3 else "")
                           + '" title="' + dim + '">' + letter + "</span>")
+        # P: the one chip of the four per-execution rankings (names them in the
+        # tooltip, solid when in a Current top 3 of any of them)
+        pe_names, pe_on = [], False
+        for metric, dim in (("elapsed", "ELAPSED_PE"), ("CPU", "CPU_PE"),
+                            ("gets", "GETS_PE"), ("reads", "PREADS_PE")):
+            key = sid + "|" + dim
+            if key in sql_dim_seen:
+                pe_names.append(metric)
+                if key in sql_dim_top3:
+                    pe_on = True
+        if pe_names:
+            chips += ('<span class="chip' + (" on" if pe_on else "")
+                      + '" title="in a per-execution ranking: ' + ", ".join(pe_names) + '">P</span>')
         put("<td>" + chips + "</td>")
         put('<td class="mono">'
             + ("&mdash;" if parsing_schema is None else esc(parsing_schema))
@@ -612,7 +1065,17 @@ def emit(w) -> str:
             + (dash if not vlen else to_char_fixed(vlen, 0, group=True) + " chars") + "</dd>"
             "</dl>")
 
-        if (phv_count or 0) > 0:
+        # Compared windows: the statement in every compared window, from the
+        # agg numbers (no further read)
+        o.extend(_windows_table(w, sid, agg))
+
+        # Per-plan summary + chart over the whole AWR retention; any statement
+        # with a SQLSTAT row.  One with no non-zero plan shows its plan-0 rows
+        # as a single "no plan" plan.
+        if (total_snap or 0) > 0:
+            put('<h4 class="sqd-h">Whole AWR retention, by plan</h4>'
+                '<p class="sqd-sub">Every snapshot AWR still holds for this statement; '
+                "the compared windows are marked in the chart.</p>")
             put('<table id="phv-summary-' + sid + '"><thead><tr>'
                 '<th class="num" title="plan_hash_value">Plan hash</th>'
                 "<th>First seen</th><th>Last seen</th>"
@@ -623,7 +1086,7 @@ def emit(w) -> str:
                 "</tr></thead><tbody>")
             byphv = {}
             for s, ex, ela, gets, phv in pts:
-                if phv > 0:
+                if phv > 0 or phv_count == 0:
                     b = byphv.setdefault(phv, {"first": s.begin_ts, "last": s.end_ts,
                                                "snaps": 0, "execs": 0, "ela": 0, "gets": 0})
                     b["first"] = min(b["first"], s.begin_ts)
@@ -634,7 +1097,11 @@ def emit(w) -> str:
                     b["gets"] += gets
             for phv, b in sorted(byphv.items(), key=lambda kv: kv[1]["first"]):
                 put("<tr>"
-                    '<td class="num mono">' + str(phv) + "</td>"
+                    '<td class="num mono">'
+                    + (str(phv) if phv else
+                       '<span class="sqd-mu" title="No plan hash: a PL/SQL call, or another statement '
+                       'without an execution plan">no plan</span>')
+                    + "</td>"
                     "<td>" + ts_min(b["first"]) + "</td>"
                     "<td>" + ts_min(b["last"]) + "</td>"
                     '<td class="num">' + fmt_int(b["snaps"]) + "</td>"
@@ -648,19 +1115,13 @@ def emit(w) -> str:
                     "</tr>")
             put("</tbody></table>")
             put('<div class="chart-wrap chart-medium" id="sqltl-' + sid + '"></div>')
-            put('<script>AWR_DATA.sqlDetails["' + sid + '"]={snaps:[')
-            first_pt = True
-            for s, ex, ela, gets, phv in pts:
-                if phv <= 0:
-                    continue
-                put(("" if first_pt else ",")
-                    + '{"t":"' + ts_min(s.end_ts) + '"'
-                    + ',"phv":"' + str(phv) + '"'
-                    + ',"exec":' + str(int(ex))
-                    + ',"ela":' + (to_char_fixed(ela / ex / 1e6, 6) if ex > 0 else "null")
-                    + "}")
-                first_pt = False
-            put("]};</script>")
+            pp = _plan_points(pts, phv_count)
+            if pp is not None:
+                t0s, plines, plist = pp
+                put('<script>AWR_DATA.sqlDetails["' + sid + '"]={t0:"' + t0s + '",p:[')
+                for ln in plines:
+                    put(ln)
+                put("],phv:[" + plist + "]};</script>")
 
         put('<pre class="sql">' + esc(snip)
             + ("\n... (truncated, " + str(vlen) + " chars total)" if vlen > 8000 else "")

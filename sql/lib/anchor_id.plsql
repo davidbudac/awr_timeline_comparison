@@ -17,7 +17,10 @@
 --       wc-<class>      foreground wait class rollup
 --   05  be-<event> / ba-<event>   background event, time / average tables
 --   06  sq-<dim>-<sql_id>  Top SQL row per ranking tab (sq-elapsed-... is
---                       the link target); anchor_id('sq-elapsed', sql_id)
+--                       the link target); anchor_id('sq-elapsed', sql_id);
+--                       the per-execution rankings drop the underscore of
+--                       their code: sq-elapsedpe-, sq-cpupe-, sq-getspe-,
+--                       sq-preadspe-
 --   18  sm-<sql_id>     SQL Monitor statement row
 --   14  sg-<owner.segment[.partition]>
 --   15  fl-<parent dir>-<file name>   -- use file_anchor(full path)
