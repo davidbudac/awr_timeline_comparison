@@ -12,6 +12,7 @@ import math
 
 from awrdemo import chrome
 from awrdemo import helpers as h
+from awrdemo.model import ilog10
 from awrdemo.sections import s07_summary
 
 CAP = 5.0
@@ -32,7 +33,7 @@ def _jn(p, dig=15) -> str:
         return "null"
     if p == 0:
         return "0"
-    n = dig - 1 - math.floor(math.log10(abs(p)))
+    n = dig - 1 - ilog10(p)
     s = format(h._rnd(p, n), "f")
     if "." in s:
         s = s.rstrip("0").rstrip(".")
@@ -251,8 +252,8 @@ def emit(w) -> str:
             n = len(vs)
             mu = sd = None
             if n > 0:
-                mu = sum(vs) / n
-                sq = sum((x - mu) ** 2 for x in vs)
+                mu = math.fsum(vs) / n
+                sq = math.fsum((x - mu) * (x - mu) for x in vs)
                 sd = math.sqrt(sq / (n - 1)) if n > 1 else 0.0
             bk = h.policy_bucket(m.dom, m.nm, None, m.cur, mu, sd, n, m.shr)
             m.sb.append(bk)

@@ -16,6 +16,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from awrdemo import chrome
 from awrdemo import helpers as h
+from awrdemo.model import q10
 from awrdemo.sections import _waits as C
 
 TAG = "22_wait_histogram"
@@ -93,7 +94,7 @@ def mid(k):
 def _cdf(x_ms, mu, s):
     if x_ms <= 0:
         return 0.0
-    return 0.5 * (1 + math.erf((math.log(x_ms) - mu) / (s * math.sqrt(2))))
+    return 0.5 * (1 + q10(math.erf((q10(math.log(x_ms)) - mu) / (s * math.sqrt(2)))))
 
 
 def _probs(avg_ms, s, tail):
@@ -102,16 +103,16 @@ def _probs(avg_ms, s, tail):
     parts = []
     if tail:
         f, tmed, ts = 0.06, 5.0, 0.35
-        tmean = tmed * math.exp(ts * ts / 2)
+        tmean = tmed * q10(math.exp(ts * ts / 2))
         body = max(avg_ms * 0.25, (avg_ms - f * tmean) / (1 - f))
-        parts.append((1 - f, math.log(body) - s * s / 2, s))
-        parts.append((f, math.log(tmed), ts))
+        parts.append((1 - f, q10(math.log(body)) - s * s / 2, s))
+        parts.append((f, q10(math.log(tmed)), ts))
     else:
-        parts.append((1.0, math.log(avg_ms) - s * s / 2, s))
+        parts.append((1.0, q10(math.log(avg_ms)) - s * s / 2, s))
     out = {}
     for k in range(KMIN, KMAX + 1):
         hi = 2.0 ** k
-        lo = 0.0 if k == KMIN else 2.0 ** (k - 1)
+        lo = 0.0 if k == KMIN else math.ldexp(1.0, k - 1)
         p = 0.0
         for wt, mu, sg in parts:
             p += wt * ((1.0 if k == KMAX else _cdf(hi, mu, sg)) - _cdf(lo, mu, sg))
@@ -144,7 +145,7 @@ def histograms(w, deltas, events):
             if n <= 0 or us <= 0:
                 continue
             r = w.rng("waithist", ev, k)
-            s = s_ev * (1 + 0.05 * r.gauss(0, 1))
+            s = s_ev * (1 + 0.05 * q10(r.gauss(0, 1)))
             tail = (ev == TAIL_EVENT and release is not None
                     and w.windows[k].win_end_ts > release)
             out[(ev, k)] = _counts(n, _probs(us / waits / 1000, s, tail))

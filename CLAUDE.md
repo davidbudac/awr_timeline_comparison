@@ -2695,6 +2695,19 @@ foreground impact is 0 (no chip, after the tier-1 cards, "under 0.01 AAS",
 no breakdown part); its stall event has no prior window, so 05's
 table-wide shift note survives. **When a section's markup/JS changes,
 re-port its twin in the same commit and regenerate**; generation is deterministic (two runs, same md5), and identical across Python 3.12-3.14 because `helpers.mean_sd` (and the model's physical-reads total) use `math.fsum` (the built-in `sum()` of floats differs by an ulp between versions, which once reordered tied rows in CI).
+The committed pages must ALSO be identical on Linux (CI regenerates them on
+ubuntu), and the C math library is not correctly rounded: macOS and Linux
+differ in the last bit of `exp` / `log` / `erf` / float `**` / `random.gauss`.
+So every libm-derived value in `demo/` goes through `model.q10` (10
+significant digits), digit counts through `model.ilog10` (exact, decimal; never
+`math.floor(math.log10(x))`), squares are `x * x` and roots `math.sqrt`, never
+a float `**` (the one exception: `2.0 ** k` with an integer k in s22, exact
+on every platform). How it bit (2026-11-24): after a model change CI reported the pages
+STALE on ubuntu only (6117 of 1.6 M hourly model values differed in the last
+bit between macOS and Linux; a tied row order and 15th digits changed). Check:
+dump the model on both and compare, `docker run --rm --platform linux/amd64 -v
+$PWD:/w:ro -w /w python:3.12-slim sh -c 'cp -r /w /tmp/w && cd /tmp/w &&
+python3 demo/gen_demo_report.py --check'` (also `linux/arm64`).
 `tools/check.sh` (CI) fails when either generated page is stale
 (`gen_demo_report.py --check`, `gen_policy_doc.py --check`). `NODE_PATH=<any
 node_modules with playwright> node demo/verify_report.js <html> [shots/]` is the

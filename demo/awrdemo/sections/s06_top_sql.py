@@ -30,11 +30,11 @@ AWR stores them), `optimizer_mode` (= ALL_ROWS), `force_matching_signature`
 """
 from __future__ import annotations
 
-import math
 from datetime import timedelta
 
 from awrdemo import chrome
 from awrdemo import helpers as h
+from awrdemo.model import ilog10
 from awrdemo.helpers import (anchor_id, esc, fmt_int, fmt_num, fmt_num_title, is_oracle_schema,
                              json_escape, mon_dd, num6, ora_round, to_char_fixed, ts_min)
 
@@ -293,7 +293,7 @@ def _pe_json(v) -> str:
     a = min(abs(v), 99999999999)
     if a == 0:
         return "0"
-    dec = max(0, min(9, 3 - math.floor(math.log10(a))))
+    dec = max(0, min(9, 3 - ilog10(a)))
     return ("-" if v < 0 else "") + h.to_char_trim(ora_round(a, dec), 9).rstrip(".")
 
 

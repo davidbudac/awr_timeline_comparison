@@ -19,6 +19,7 @@ from datetime import timedelta
 
 from awrdemo import chrome
 from awrdemo import helpers as H
+from awrdemo.model import ilog10
 
 # on_targets + the section's labels: (stat, ord, scale, name, short, unit)
 TARGETS = [
@@ -271,7 +272,7 @@ def emit(w) -> str:
         r = {"x": x, "md": md, "sp": sp, "zc": zc, "valn": len(x), "jn": len(zc), "thin": len(x) - len(zc),
              "first": min(zc) if zc else None, "odir": None, "cdir": None, "bef": None, "aft": None}
         vmx = max([abs(v) for v in x.values()] + [0])
-        r["dec"] = 0 if vmx <= 0 else max(0, min(6, 3 - math.floor(math.log10(vmx))))
+        r["dec"] = 0 if vmx <= 0 else max(0, min(6, 3 - ilog10(vmx)))
         M[o] = r
         if r["jn"] < 8:
             r["st"] = "thin"

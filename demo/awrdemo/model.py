@@ -39,6 +39,7 @@ HourMetrics fields are documented on the class.
 """
 from __future__ import annotations
 
+import decimal
 import hashlib
 import math
 import random
@@ -97,6 +98,23 @@ def _seed(*key) -> int:
 
 def rng(*key) -> random.Random:
     return random.Random(_seed(*key))
+
+
+def q10(x: float) -> float:
+    """x rounded to 10 significant digits.  Every value that comes out of the
+    C math library (exp / log / erf, random.gauss's log, sqrt, cos, sin) goes
+    through this: libm is not correctly rounded and differs in the last bit
+    between macOS and Linux, and such a 1-ulp difference once changed a tied
+    row order and the 15th digit of a payload on the CI runner only.  After
+    the rounding both platforms hold the same double (they would differ only
+    if the two results straddled a rounding boundary: about 1e-6 per
+    differing value)."""
+    return float("%.10g" % x)
+
+
+def ilog10(x: float) -> int:
+    """floor(log10(|x|)) of the exact binary value, x != 0 (decimal, no libm)."""
+    return decimal.Decimal(abs(x)).adjusted()
 
 
 def fmt_one(h: float) -> str:
@@ -543,7 +561,7 @@ def _decay(ts: datetime, start: datetime, hours: float, tau_h: float) -> float:
     dt = (ts - start).total_seconds() / 3600
     if dt > hours:
         return 0.0
-    return math.exp(-dt / tau_h)
+    return q10(math.exp(-dt / tau_h))
 
 
 @dataclass
@@ -725,7 +743,7 @@ class HourMetrics:
 
 
 def _noise(r: random.Random, sd: float = 0.04) -> float:
-    return max(0.5, 1.0 + r.gauss(0, sd))
+    return max(0.5, 1.0 + q10(r.gauss(0, sd)))
 
 
 def _sql_execs(s: SqlDef, ts: datetime, inten: float, e: Effects, r: random.Random) -> float:
@@ -1016,7 +1034,7 @@ def hour(ts: datetime) -> HourMetrics:
     fg_sync_us = fg["db file sequential read"][2]
     fg_sync_n = fg["db file sequential read"][1]
     sblk_lat_ms = (fg_sync_us / fg_sync_n / 1000) if fg_sync_n else 0.48
-    sessions = 1100 + 900 * inten * (1 + 0.1 * e.loyalty) + r.gauss(0, 12)
+    sessions = 1100 + 900 * inten * (1 + 0.1 * e.loyalty) + q10(r.gauss(0, 12))
     io_mb = (load["physical read total bytes"] + load["physical write total bytes"] + redo) / 1048576 / dur
     sm = {
         "Host CPU Utilization (%)": host_cpu,
@@ -1055,7 +1073,7 @@ def hour(ts: datetime) -> HourMetrics:
         "Buffer Cache Hit Ratio": max(80.0, 100 - preads / max(1.0, lreads) * 100),
         "Library Cache Hit Ratio": max(85.0, 100 - hard / max(1.0, load["parse count (total)"]) * 100),
         "Soft Parse Ratio": max(50.0, 100 - hard / max(1.0, load["parse count (total)"]) * 100),
-        "Execute Without Parse Ratio": 92.8 + r.gauss(0, 0.4),
+        "Execute Without Parse Ratio": 92.8 + q10(r.gauss(0, 0.4)),
         "Temp Space Used": (1.8e9 * inten + 9e9 * bf + 6e9 * mef) * _noise(r, 0.1),
         "Total PGA Allocated": (5.2e9 + 2.5e9 * inten + 3e9 * bf) * _noise(r, 0.03),
     }

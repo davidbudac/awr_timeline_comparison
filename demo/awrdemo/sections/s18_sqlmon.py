@@ -12,6 +12,7 @@ Data: w.monexecs() plays DBA_HIST_REPORTS' report_summary XMLTABLE rows.
 """
 from __future__ import annotations
 
+import math
 from datetime import timedelta
 from statistics import median
 
@@ -114,7 +115,7 @@ def _a_sd(a, mu):
     """sample standard deviation (n - 1), None below two values"""
     if len(a) < 2:
         return None
-    return (sum((x - mu) * (x - mu) for x in a) / (len(a) - 1)) ** 0.5
+    return math.sqrt(math.fsum((x - mu) * (x - mu) for x in a) / (len(a) - 1))
 
 
 def _pc_ev(dt, idt, de, cur, mu, sd, bucket, plain, band="Y"):

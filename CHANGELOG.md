@@ -10,6 +10,10 @@ entry here. Dates are release dates.
 Changes on `main` since 1.6.1 (the footer still says v1.6.1 until the next
 release bumps `awr_version`).
 
+- **Docs / tooling:** the demo generator is now platform-independent (every
+  libm-derived value is rounded to 10 significant digits, digit counts are
+  exact), so the demo pages regenerate byte for byte on Linux as on macOS
+  (CI regenerates them on ubuntu and had reported them stale).
 - **Nine diagnostic views (sections 20-28)**, each a row of the Summary's
   evidence library and a full section in All sections, placed next to the
   table it extends; inline SVG / HTML (they work offline and in all three
