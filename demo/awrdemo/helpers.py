@@ -13,6 +13,8 @@ import os
 import re
 from decimal import Decimal, ROUND_HALF_UP
 
+from awrdemo.model import ilog10
+
 # ---------------------------------------------------------------------
 # Oracle number formatting primitives
 # ---------------------------------------------------------------------
@@ -127,7 +129,7 @@ def fmt_num(p: float | None) -> str:
     elif v >= 1:
         txt = to_char_fixed(v, 3)
     else:
-        dec = min(6, 3 - math.floor(math.log10(v)))
+        dec = min(6, 3 - ilog10(v))
         if ora_round(v, 6) == 0:
             return sign + "<0.000001"
         txt = to_char_trim(ora_round(v, dec), 6)
@@ -214,10 +216,11 @@ def mean_sd(vals):
         return None, None, 0
     # math.fsum, not sum(): the built-in sum() of floats is not bit-identical
     # across Python versions; a 1-ulp sd broke an exact z tie (rows reordered on 3.14).
+    # (x - mu) * (x - mu), not ** 2: float pow() is libm's and differs by an ulp between macOS and Linux.
     mu = math.fsum(v) / n
     if n < 2:
         return mu, None, n
-    var = math.fsum((x - mu) ** 2 for x in v) / (n - 1)
+    var = math.fsum((x - mu) * (x - mu) for x in v) / (n - 1)
     sd = math.sqrt(var)
     # Oracle's decimal arithmetic yields STDDEV = 0 for identical values;
     # binary floats leave ~1e-16 residue that would blow z up to 1e15.
@@ -1068,7 +1071,7 @@ def wg_tok(v) -> str:
         return ""
     if v == 0:
         return "0"
-    n = 6 - math.floor(math.log10(abs(v)))
+    n = 6 - ilog10(v)
     s = format(_rnd(v, n), "f")
     if "." in s:
         s = s.rstrip("0").rstrip(".")

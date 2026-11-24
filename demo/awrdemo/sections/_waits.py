@@ -10,6 +10,7 @@ Not a section itself (no emit()).
 """
 from __future__ import annotations
 
+import math
 from datetime import timedelta
 
 from awrdemo import helpers as h
@@ -219,7 +220,7 @@ def shift_pass(rows, tot):
             ss += pct * pct
     if n >= 5:
         mean = s / n
-        sd = (max(ss / n - mean * mean, 0.0)) ** 0.5
+        sd = math.sqrt(max(ss / n - mean * mean, 0.0))
         if mean != 0 and sd / abs(mean) < 0.15:
             return True, n, mean, sd
         return False, n, mean, sd

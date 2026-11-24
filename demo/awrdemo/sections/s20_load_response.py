@@ -116,7 +116,7 @@ def _mean_sd(vals):
     if n > 0:
         mu = sum(vals) / n
     if n > 1:
-        sd = math.sqrt(sum((v - mu) ** 2 for v in vals) / (n - 1))
+        sd = math.sqrt(math.fsum((v - mu) * (v - mu) for v in vals) / (n - 1))
     return mu, sd
 
 

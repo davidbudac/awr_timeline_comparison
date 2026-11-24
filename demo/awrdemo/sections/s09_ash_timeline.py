@@ -249,10 +249,10 @@ class _Fine:
         """the hour's shared minute wobble: AR(1) in log space, a burst or two"""
         if hb not in self._prof:
             r = model.rng("ash-fine", self._key(hb))
-            x, wt = r.gauss(0, 0.3), []
+            x, wt = model.q10(r.gauss(0, 0.3)), []
             for _ in range(60):
-                x = 0.8 * x + r.gauss(0, 0.22)
-                wt.append(math.exp(x))
+                x = 0.8 * x + model.q10(r.gauss(0, 0.22))
+                wt.append(model.q10(math.exp(x)))
             for _ in range(r.choice((0, 0, 1, 1, 2))):
                 c0, ln, amp = r.randrange(60), r.randint(2, 7), r.uniform(0.5, 1.8)
                 for i in range(c0, min(60, c0 + ln)):
@@ -275,7 +275,7 @@ class _Fine:
     def cls(self, hb, wc):
         if (hb, wc) not in self._cls:
             r = model.rng("ash-fine", self._key(hb), wc)
-            wt = [x * math.exp(r.gauss(0, 0.3)) for x in self._profile(hb)]
+            wt = [x * model.q10(math.exp(model.q10(r.gauss(0, 0.3)))) for x in self._profile(hb)]
             self._cls[(hb, wc)] = self._alloc(self.src["cls"].get(hb, {}).get(wc, 0), wt)
         return self._cls[(hb, wc)]
 
@@ -283,7 +283,7 @@ class _Fine:
         if (hb, ev) not in self._ev:
             r = model.rng("ash-fine", self._key(hb), "ev", ev)
             base = self.cls(hb, self.src["evc"].get(ev, "Other"))
-            wt = [(x + 0.15) * math.exp(r.gauss(0, 0.2)) for x in base]
+            wt = [(x + 0.15) * model.q10(math.exp(model.q10(r.gauss(0, 0.2)))) for x in base]
             self._ev[(hb, ev)] = self._alloc(self.src["ev"].get(hb, {}).get(ev, 0), wt)
         return self._ev[(hb, ev)]
 

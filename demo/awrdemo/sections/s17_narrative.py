@@ -19,6 +19,7 @@ import re
 
 from awrdemo import chrome
 from awrdemo import helpers as h
+from awrdemo.model import ilog10
 from awrdemo.helpers import esc, mean_sd, ora_round, to_char_trim, policy_bucket
 
 _STATS = ['physical reads', 'bytes sent via SQL*Net to client', 'user calls',
@@ -35,7 +36,7 @@ def fmt3(p) -> str:
         return '&mdash;'
     if p == 0:
         return '0'
-    v = ora_round(p, 2 - math.floor(math.log10(abs(p))))
+    v = ora_round(p, 2 - ilog10(p))
     return to_char_trim(v, 6, group=True)
 
 
