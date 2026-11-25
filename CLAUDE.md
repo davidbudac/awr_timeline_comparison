@@ -2180,6 +2180,55 @@ folding past 14 rows, cut at 18, slivers <= 30 % of width, roving focus, Enter
 on DOMContentLoaded. Unexercised: RAC, multi-DBID, real ORA-01031, the 18-row
 cut.
 
+**Objects around a plan change (plan 047, `v_mode = 'chg'` only).** Step 5b
+(before any markup) collects every table / index of a statement's old and new
+plan (`obj_kind`: the plan line's `OBJECT_TYPE` `TABLE*` / `INDEX*`, else the
+operation; FIXED / TEMP types, `SYS_TEMP%` names, views skipped; the plan query
+now also selects `object_type`), the union over the statements read ONCE from
+four OPTIONAL views (lint 35, README): `DBA_OBJECTS` (subobject NULL, type
+TABLE / INDEX), `DBA_TAB_STATISTICS` (object_type TABLE, partition NULL),
+`DBA_TAB_STATS_HISTORY` (table level, `CAST(stats_update_time AS DATE)`, newest
+first), `DBA_INDEXES` -- dynamic SQL, owners and names bound as two
+`sys.odcivarchar2list` (a superset, matched on kind|owner|name in PL/SQL),
+each in its own 046-style handler (-942 / -1031 -> "needs SELECT on", any
+other error -> "could not read <view>: <msg>"; NOT 23's plan handler, which
+re-raises). Interval = [`w_start` of `lo_wo` = the most recent valid prior
+window whose window plan (`wplan`) is the old plan, nominal end of the
+Current window]; `tcls` = B / I / A. **Honesty rules:** the dictionary is the
+current container's current state -- no row = "no dictionary row in this
+container (dropped, or not visible here)", never "dropped"; all objects
+invisible -> one sentence saying so; only CREATED / LAST_DDL_TIME /
+LAST_ANALYZED / the stats history are past times; a latest-only time after
+the interval (A) can hide an earlier one and the sentence says so; history
+retention 31 days by default (`c_hist_d`) is named when the interval starts
+earlier; `STATS_UPDATE_TIME` = statistics changed (gathered, set, restored,
+imported), worded "new statistics"; the first named table also quotes (at
+most 2) history times BEFORE the interval (`pre_txt`), so a weekly cadence's
+routine gather (a weekly interval always holds one) can be told from an odd
+one. A table with history but no row inside falls back to LAST_ANALYZED
+(history off / purged). Markup per changed block after
+`details.pf-tbls`: `div.pf-obj#pfo-<sql_id>[data-t0][data-t1][data-now]`
+(`YYYY-MM-DD HH24:MI:SS`) › `h4.pf-oh`, `p.pf-ord` "Reads as:", `p.pf-oiv`
+(the interval), `p.pf-oerr` (read notes), `table.pf-ob[data-nocount]` (<= 30
+rows, tables first then owner.name, `tr.pf-or#pfo-<sql_id>-<n>[data-k=T|I]
+[data-in=old|new|both]`; a time inside the interval is
+`span.pf-ot[data-t]`, after it `span.pf-oa`; markers `span.pf-om[data-m=
+stats|ddl|created|state|norow|later]`, neutral classes only; `LAST_DDL_TIME`
+counts grants and revokes as DDL). The sentence and the card row walk the
+LISTED rows only (cap 30), so the card never cites an unlisted row; the
+"nothing changed" sentence names only what was read ("not read: <views>"). Card row: one
+`div.evr.ev-pfo[data-pfo=<row id>]` "Objects" (priority: index UNUSABLE /
+INVISIBLE, object INVALID, no row, new statistics, DDL, created; "(+n more)"),
+in a hidden `#pfo-ev-src` moved into `#f-plan-<sql_id> dl.ev` by an inline
+script ONLY when the card's `data-ph0` / `data-ph1` equal 23's old / new plan
+(18 picks plans from SQL Monitor, 23 from SQLSTAT); the source is removed
+either way, JS off it stays hidden. `lib_ls` gains "; new statistics on X
+around the change" (interval items only). Twin: `s23_plan_flame.py`
+(`_DICT_*`: ORDER_LINES statistics Tue 8 Sep 22:35, inside; indexes VALID /
+VISIBLE; no DDL). verify_report block 6i. Unexercised: everything on a real
+database, partitioned objects, a CDB-root run, an index of another owner's
+table.
+
 #### Trend breaks, formerly Onset (`sql/25_onset.sql`, `sql/lib/onset_cte.sql`, `js_onset`)
 
 "WHEN did it start": a continuous series over the report span for 7 fixed

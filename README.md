@@ -76,6 +76,10 @@ GRANT SELECT ON DBA_HIST_PGASTAT             TO <user>;  -- Host and memory: PGA
 GRANT SELECT ON DBA_HIST_MEM_DYNAMIC_COMP    TO <user>;  -- Host and memory: buffer cache, shared / large pool
 GRANT SELECT ON DBA_HIST_MEMORY_RESIZE_OPS   TO <user>;  -- Host and memory: SGA resize operations
 GRANT SELECT ON DBA_HIST_UNDOSTAT            TO <user>;  -- Host and memory: undo, ORA-01555
+GRANT SELECT ON DBA_OBJECTS                  TO <user>;  -- Plan shape: objects (created, last DDL, status)
+GRANT SELECT ON DBA_TAB_STATISTICS           TO <user>;  -- Plan shape: table statistics now
+GRANT SELECT ON DBA_TAB_STATS_HISTORY        TO <user>;  -- Plan shape: when table statistics changed
+GRANT SELECT ON DBA_INDEXES                  TO <user>;  -- Plan shape: index status / visibility
 -- Only if you use side/create_weekly_baselines.sql (optional, writes baselines):
 GRANT EXECUTE ON DBMS_WORKLOAD_REPOSITORY    TO <user>;
 ```

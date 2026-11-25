@@ -2608,6 +2608,98 @@ const LABEL_BAND = () => {
     await page.close();
   }
 
+  // ---- 6i. plan 047: objects around a plan change (section 23).  (a) a
+  // block has an object table only when the section shows changed plans
+  // and its plans carry objects; a changed-plan block whose payload has a
+  // table / index line has one.  (b) every time marked "inside the
+  // interval" (span.pf-ot[data-t]) lies within the block's data-t0 ..
+  // data-t1, and a row carries an interval marker (stats / DDL / created)
+  // exactly when it carries such a time.  (c) neutral: data-nocount, no
+  // crit / warn / badge.  (d) the plan card's "Objects" row: at most one,
+  // only on the card of the same old -> new plans, citing an existing
+  // object row; present exactly when its block marks something; the hidden
+  // source is gone.  (e) JS off: the tables show, the source does not.
+  // A report without a changed plan (most real reports) skips (a)-(e).
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file);
+    const r47 = await page.evaluate(() => {
+      const out = {};
+      const sec = document.getElementById('plan-flame');
+      const D = (window.AWR_DATA || {}).planflame;
+      if (!sec || !D || !D.st) { out.tbl = 'none (no plan-flame payload)'; return out; }
+      const bad = [], seen = [];
+      let nt = 0, nin = 0, nrow = 0;
+      D.st.forEach(s => {
+        const blk = document.getElementById(s.id);
+        if (!blk) return;
+        const ob = blk.querySelector('.pf-obj');
+        const objLine = s.p.some(P => (P.s || []).some(a => a[4] && a[5] && String(a[5]).indexOf('SYS_TEMP') !== 0
+          && (/^TABLE ACCESS/.test(a[2] || '') || /INDEX/.test(a[2] || ''))));
+        if (ob && D.mode !== 'chg') bad.push(s.sql + ': object table without a plan change');
+        if (!ob && D.mode === 'chg' && objLine) bad.push(s.sql + ': changed plan with table / index lines but no object table');
+        if (!ob) return;
+        nt++;
+        const t0 = ob.getAttribute('data-t0'), t1 = ob.getAttribute('data-t1');
+        if (!t0 || !t1 || t0 > t1) bad.push(s.sql + ': interval ' + t0 + ' .. ' + t1);
+        const tb = ob.querySelector('table.pf-ob');
+        if (!tb || !tb.hasAttribute('data-nocount')) bad.push(s.sql + ': object table missing or without data-nocount');
+        if (ob.querySelector('tr.crit, tr.warn, .badge, .bd.s-large, .bd.s-moderate')) bad.push(s.sql + ': carries a severity');
+        if (!ob.querySelector('.pf-ord')) bad.push(s.sql + ': no Reads as line');
+        ob.querySelectorAll('tr.pf-or').forEach(tr => {
+          nrow++;
+          const ts = [...tr.querySelectorAll('.pf-ot[data-t]')].map(x => x.getAttribute('data-t'));
+          ts.forEach(t => { nin++; if (t < t0 || t > t1) bad.push(tr.id + ': ' + t + ' outside ' + t0 + ' .. ' + t1); });
+          const mk = tr.querySelectorAll('.pf-om[data-m="stats"], .pf-om[data-m="ddl"], .pf-om[data-m="created"]').length;
+          if (!!mk !== ts.length > 0) bad.push(tr.id + ': ' + mk + ' interval markers, ' + ts.length + ' times inside');
+        });
+        // (d) the card row
+        const old = s.p.find(P => P.r === 'old'), neu = s.p.find(P => P.r === 'new');
+        const card = document.getElementById('f-plan-' + s.sql);
+        const same = card && old && neu && card.getAttribute('data-ph0') === String(old.phv) && card.getAttribute('data-ph1') === String(neu.phv);
+        const rows = card ? card.querySelectorAll('.evr.ev-pfo') : [];
+        // the sentence (and the card row) speaks only when some object is seen
+        const trs = [...ob.querySelectorAll('tr.pf-or')];
+        const anySeen = trs.some(tr => !tr.querySelector('.pf-om[data-m="norow"]'));
+        const says = anySeen && !!ob.querySelector('.pf-om:not([data-m="later"])');
+        if (rows.length > 1) bad.push(s.sql + ': ' + rows.length + ' Objects rows on the card');
+        if (rows.length && !same) bad.push(s.sql + ': Objects row on a card of other plans');
+        if (same && says !== (rows.length === 1)) bad.push(s.sql + ': card row ' + rows.length + ', block marks ' + says);
+        if (rows.length === 1) {
+          const r = rows[0], id = r.getAttribute('data-pfo'), a = r.querySelector('a.ent'), tr = id && document.getElementById(id);
+          if (!tr || !tr.matches('tr.pf-or') || !ob.contains(tr)) bad.push(s.sql + ': card row cites ' + id);
+          if (!a || a.getAttribute('href') !== '#' + id) bad.push(s.sql + ': card row link ' + (a && a.getAttribute('href')));
+          if (!r.querySelector('.ns')) bad.push(s.sql + ': card row without "not scored"');
+          if (r.querySelector('.bd, .d')) bad.push(s.sql + ': card row carries a band / delta');
+          seen.push(s.sql);
+        }
+      });
+      if (document.getElementById('pfo-ev-src')) bad.push('the source block #pfo-ev-src is still in the page');
+      out.tbl = bad.length ? 'FAIL ' + bad.slice(0, 5).join('; ')
+        : nt ? 'ok (' + nt + ' object tables, ' + nrow + ' rows, ' + nin + ' times inside the interval)' : 'none (no object table: ' + D.mode + ')';
+      out.card = seen.length ? 'ok (' + seen.join(', ') + ')' : 'none';
+      return out;
+    });
+    if (/^ok/.test(r47.tbl || '')) {
+      const ctx = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 1000 } });
+      const p2 = await ctx.newPage();
+      await p2.goto('file://' + file, { waitUntil: 'load' });
+      r47.nojs = await p2.evaluate(() => {
+        const t = [...document.querySelectorAll('#plan-flame table.pf-ob')], s = document.getElementById('pfo-ev-src');
+        if (!t.length || t.some(x => !x.getClientRects().length)) return 'FAIL an object table is not shown with JS off';
+        if (s && s.getClientRects().length) return 'FAIL the card row source shows with JS off';
+        return 'ok (' + t.length + ' tables' + (s ? ', source hidden' : '') + ')';
+      });
+      await ctx.close();
+    }
+    console.log('plan 047', JSON.stringify(r47));
+    for (const k of ['tbl', 'nojs']) if (/^FAIL/.test(r47[k] || '')) fail('objects around a plan change (plan 047) ' + k + ': ' + r47[k]);
+    if (isDemo && (!/^ok/.test(r47.tbl || '') || !/^ok/.test(r47.card || '') || !/^ok/.test(r47.nojs || '')))
+      fail('demo: every plan 047 part should run: ' + JSON.stringify(r47));
+    if (errors.length) fail('plan 047: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
   // ---- 7. the design (quiet / dashboard): the shared pieces, then the
   // dashboard's KPI cards, findings table, Activity tabs and palette
   if (DESIGN !== 'classic') {

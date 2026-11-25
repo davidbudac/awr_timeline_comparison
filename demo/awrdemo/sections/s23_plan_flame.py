@@ -19,13 +19,23 @@ the plan's lines by fixed per-class weights (largest remainder, so every
 hour's total is exact); 3 % of each class (integer part) has no plan
 line, as real ASH does.  Any other statement keeps its samples on a
 one-line plan (SELECT STATEMENT).  Deterministic: no randomness needed.
+
+Plan 047 (objects around a plan change): the dictionary the SQL reads at
+run time (DBA_OBJECTS, DBA_TAB_STATISTICS, DBA_TAB_STATS_HISTORY,
+DBA_INDEXES) is synthesized for the two tables and two indexes of the
+order-lookup plans, fixed values: statistics on ORDER_LINES (and its
+index) updated on Tue 8 Sep 22:35, half an hour after Release 4.2 and
+inside the interval; the old plan's index VALID and VISIBLE; no DDL; the
+Saturday gathers before the interval.  "Now" = the report's generation
+time.
 """
 from __future__ import annotations
 
 import re
+from datetime import datetime
 
 from awrdemo import chrome, helpers
-from awrdemo.helpers import anchor_id, ent, esc, fmt_num, json_escape, lib_ls, ora_round
+from awrdemo.helpers import anchor_id, ent, esc, fmt_int, fmt_num, json_escape, lib_ls, ora_round
 from awrdemo.model import ORDER_LOOKUP_BAD_PLAN, ORDER_LOOKUP_SQL
 
 C_MAX_ST = 3
@@ -61,6 +71,353 @@ _OLD_W = {"CPU": [(2, 35), (5, 20), (6, 20), (3, 15), (1, 10)],
           "User I/O": [(6, 50), (5, 30), (3, 12), (4, 8)]}
 _NEW_W = {"CPU": [(2, 45), (5, 35), (1, 15), (3, 5)],
           "User I/O": [(5, 92), (3, 8)]}
+
+
+# plan 047: the plan lines' OBJECT_TYPE (DBA_HIST_SQL_PLAN)
+_PLAN_OBJ_TYPE = {"ORDERS": "TABLE", "ORDER_LINES": "TABLE",
+                  "ORDERS_CUST_IX": "INDEX", "ORDER_LINES_ORD_IX": "INDEX"}
+C_MAX_OBJ = 30
+C_HIST_D = 31
+
+
+def _d(s):
+    return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+
+
+# the synthesized dictionary, keyed (kind, owner, name)
+_DICT_OBJ = {   # DBA_OBJECTS: created, last_ddl_time, status
+    ("T", "ORDERS_APP", "ORDERS"): (_d("2024-03-11 14:02:17"), _d("2026-05-19 21:40:03"), "VALID"),
+    ("T", "ORDERS_APP", "ORDER_LINES"): (_d("2024-03-11 14:02:19"), _d("2026-05-19 21:40:05"), "VALID"),
+    ("I", "ORDERS_APP", "ORDERS_CUST_IX"): (_d("2024-03-11 14:05:40"), _d("2025-11-02 01:12:09"), "VALID"),
+    ("I", "ORDERS_APP", "ORDER_LINES_ORD_IX"): (_d("2024-03-11 14:06:02"), _d("2025-11-02 01:14:51"), "VALID"),
+}
+_DICT_TS = {    # DBA_TAB_STATISTICS: last_analyzed, num_rows, stale_stats, stattype_locked
+    ("ORDERS_APP", "ORDERS"): (_d("2026-08-29 06:11:42"), 38412960, "NO", None),
+    ("ORDERS_APP", "ORDER_LINES"): (_d("2026-09-08 22:35:18"), 161204773, "NO", None),
+}
+_DICT_TH = {    # DBA_TAB_STATS_HISTORY: stats_update_time, newest first
+    ("ORDERS_APP", "ORDERS"): [_d("2026-08-29 06:11:42"), _d("2026-08-15 06:09:55")],
+    ("ORDERS_APP", "ORDER_LINES"): [_d("2026-09-08 22:35:18"), _d("2026-08-29 06:15:02"),
+                                    _d("2026-08-15 06:13:30")],
+}
+_DICT_IX = {    # DBA_INDEXES: table_owner, table_name, status, visibility, partitioned, last_analyzed, num_rows
+    ("ORDERS_APP", "ORDERS_CUST_IX"): ("ORDERS_APP", "ORDERS", "VALID", "VISIBLE", "NO",
+                                       _d("2026-08-29 06:12:20"), 38412960),
+    ("ORDERS_APP", "ORDER_LINES_ORD_IX"): ("ORDERS_APP", "ORDER_LINES", "VALID", "VISIBLE", "NO",
+                                           _d("2026-09-08 22:36:04"), 161204773),
+}
+_DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+_MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _obj_kind(op, typ, own, nam):
+    if own is None or nam is None or nam[:8] == "SYS_TEMP":
+        return None
+    if typ is not None:
+        if "FIXED" in typ or "TEMP" in typ:
+            return None
+        if typ[:5] == "TABLE":
+            return "T"
+        if typ[:5] == "INDEX":
+            return "I"
+        return None
+    if (op or "")[:12] == "TABLE ACCESS":
+        return "T"
+    if "INDEX" in (op or ""):
+        return "I"
+    return None
+
+
+def _tcls(t, lo, hi):
+    if t is None or lo is None or hi is None:
+        return None
+    if t > hi:
+        return "A"
+    if t >= lo:
+        return "I"
+    return "B"
+
+
+def _dkey(t):
+    return t.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _dlong(t):
+    return t.strftime("%Y-%m-%d %H:%M")
+
+
+def _dday(t, with_time):
+    r = _DOW[t.weekday()] + " " + str(t.day) + " " + _MON[t.month - 1]
+    return r + (" " + t.strftime("%H:%M") if with_time else "")
+
+
+def _tcell(t, lo, hi):
+    if t is None:
+        return None
+    c = _tcls(t, lo, hi)
+    if c == "I":
+        return '<span class="pf-ot" data-t="' + _dkey(t) + '" title="inside the interval">' + _dlong(t) + '</span>'
+    if c == "A":
+        return '<span class="pf-oa" title="after the end of the Current window">' + _dlong(t) + '</span>'
+    return _dlong(t)
+
+
+class _Obj:
+    """one table / index of the plans and its dictionary state (the SQL's o_*)"""
+    def __init__(self, kind, own, nam):
+        self.kind, self.own, self.nam = kind, own, nam
+        self.seen = False
+        self.crt = self.ddl = self.ost = None
+        self.la = self.rows = self.stale = self.lock = None
+        self.tab = self.ist = self.vis = self.part = None
+        self.hist = []
+
+    def name(self):
+        return esc(self.own + "." + self.nam)
+
+    def read(self):
+        o = _DICT_OBJ.get((self.kind, self.own, self.nam))
+        if o:
+            self.seen = True
+            self.crt, self.ddl, self.ost = o
+        if self.kind == "T":
+            t = _DICT_TS.get((self.own, self.nam))
+            if t:
+                self.seen = True
+                self.la, self.rows, self.stale, self.lock = t
+            h = _DICT_TH.get((self.own, self.nam))
+            if h:
+                self.seen = True
+                self.hist = list(h)
+        else:
+            x = _DICT_IX.get((self.own, self.nam))
+            if x:
+                self.seen = True
+                tow, tnm, self.ist, self.vis, self.part, self.la, self.rows = x
+                self.tab = tnm if tow == self.own else tow + "." + tnm
+
+    def st_first_in(self, lo, hi):
+        if self.kind == "T":
+            r = None
+            for t in self.hist:
+                if _tcls(t, lo, hi) == "I":
+                    r = t
+            if r is not None:
+                return r
+        if _tcls(self.la, lo, hi) == "I":
+            return self.la
+        return None
+
+    def st_n_in(self, lo, hi):
+        if self.kind == "T":
+            n = sum(1 for t in self.hist if _tcls(t, lo, hi) == "I")
+            if n > 0:
+                return n
+        return 1 if self.st_first_in(lo, hi) is not None else 0
+
+    def bad_state(self):
+        if self.kind == "I" and self.ist == "UNUSABLE":
+            return "UNUSABLE"
+        if self.kind == "I" and self.vis == "INVISIBLE":
+            return "INVISIBLE"
+        if self.ost == "INVALID":
+            return "INVALID"
+        return None
+
+
+def _pre_txt(o, lo, hi):
+    """a table's statistics updates before the interval, at most 2, newest first"""
+    if o.kind != 'T':
+        return None
+    pre = [_dday(t, True) for t in o.hist if _tcls(t, lo, hi) == 'B'][:2]
+    return ', '.join(pre) or None
+
+
+def _in_txt(f):
+    return {1: "old", 2: "new"}.get(f, "both")
+
+
+def _used_txt(f):
+    return {1: "used by the old plan", 2: "used by the new plan"}.get(f, "used by both plans")
+
+
+def _obj_row(sid, j, o, f, lo, hi):
+    r = ('<tr class="pf-or" id="' + anchor_id('pfo', sid + '-' + str(j)) + '" data-k="' + o.kind
+         + '" data-in="' + _in_txt(f) + '"><td class="pf-on">' + o.name() + '</td><td>'
+         + ('table' if o.kind == 'T' else 'index' + (' on ' + esc(o.tab) if o.tab else ''))
+         + '</td><td>' + _in_txt(f) + '</td>')
+    if o.la is not None:
+        r += ('<td>' + _tcell(o.la, lo, hi)
+              + (' &middot; ' + fmt_int(o.rows) + (' row' if o.rows == 1 else ' rows') if o.rows is not None else '') + '</td>')
+    elif o.seen:
+        r += '<td>never gathered</td>'
+    else:
+        r += '<td>&ndash;</td>'
+    if o.kind == 'T':
+        hs = [t for t in o.hist if _tcls(t, lo, hi) == 'I']
+        n = len(hs)
+        h = ', '.join(_tcell(t, lo, hi) for t in hs[:3])
+        if n == 0 and o.st_first_in(lo, hi) is not None:
+            r += ('<td title="from LAST_ANALYZED: no statistics history row inside the interval">'
+                  + _tcell(o.la, lo, hi) + '</td>')
+        else:
+            r += '<td>' + ('&ndash;' if n == 0 and not o.seen else 'none' if n == 0 else h + (' + ' + str(n - 3) + ' more' if n > 3 else '')) + '</td>'
+    else:
+        n = o.st_n_in(lo, hi)
+        r += ('<td' + (' title="from LAST_ANALYZED: the latest gather only"' if n == 0 else '') + '>'
+              + (_tcell(o.la, lo, hi) if n > 0 else 'none' if o.seen else '&ndash;') + '</td>')
+    r += ('<td>' + (_tcell(o.ddl, lo, hi) or '&ndash;') + '</td>'
+          + '<td>' + (_tcell(o.crt, lo, hi) or '&ndash;') + '</td>')
+    if not o.seen:
+        st = 'no dictionary row in this container'
+    elif o.kind == 'I':
+        st = ((o.ist or 'not read') + (', ' + o.vis if o.vis else '')
+              + (', partitioned (partitions not checked)' if o.part == 'YES' else ''))
+        if o.ost == 'INVALID':
+            st += ', INVALID'
+    else:
+        st = ((o.ost or 'status not read') + (', statistics stale' if o.stale == 'YES' else '')
+              + (', statistics locked (' + o.lock + ')' if o.lock else ''))
+    r += '<td>' + esc(st) + '</td>'
+    mk = ''
+    if o.st_first_in(lo, hi) is not None:
+        mk += '<span class="pf-om" data-m="stats">new statistics</span>'
+    if _tcls(o.ddl, lo, hi) == 'I':
+        mk += '<span class="pf-om" data-m="ddl" title="LAST_DDL_TIME: DDL, including grants and revokes">DDL</span>'
+    if _tcls(o.crt, lo, hi) == 'I':
+        mk += '<span class="pf-om" data-m="created">created</span>'
+    b = o.bad_state()
+    if b:
+        mk += '<span class="pf-om pf-oms" data-m="state">' + b + '</span>'
+    if not o.seen:
+        mk += '<span class="pf-om pf-oms" data-m="norow">no dictionary row</span>'
+    if _tcls(o.ddl, lo, hi) == 'A':
+        mk += ('<span class="pf-om pf-omu" data-m="later" title="the latest DDL only: a later one hides any '
+               'inside the interval">later DDL</span>')
+    return r + '<td>' + mk + '</td></tr>'
+
+
+def _compose(sid, objs, flags, lo, hi, now):
+    """(reads-as sentence, card row or None, lib clause or None): the SQL's
+    compose(), over the listed (first C_MAX_OBJ) objects only"""
+    thes = 'the listed objects' if len(objs) > C_MAX_OBJ else 'these objects'
+    objs, flags = objs[:C_MAX_OBJ], flags[:C_MAX_OBJ]
+    if not any(o.seen for o in objs):
+        return ('These objects are not visible from this container (the dictionary shows the container the report '
+                'runs in: run it in the PDB that owns them), so nothing can be said about statistics, DDL or index state.',
+                None, None)
+    rd, cid, cdt, cde, lsx = '', None, None, None, None
+    nitm = nsn = ndd = 0
+    sn = dd = cr = ''
+    unk = None
+    for j, o in enumerate(objs, 1):
+        f = flags[j - 1]
+        rid = anchor_id('pfo', sid + '-' + str(j))
+        b = o.bad_state()
+        if b:
+            rd += ('Index ' if o.kind == 'I' else '') + o.name() + ', ' + _used_txt(f) + ', is ' + b + ' now. '
+            nitm += 1
+            if cid is None:
+                cid, cdt, cde = rid, ('index ' if o.kind == 'I' else '') + ent(esc(o.nam), rid, 'obj'), b + ' now'
+        elif not o.seen:
+            rd += (o.name() + ', ' + _used_txt(f) + ', has no dictionary row in this container now '
+                   '(dropped, or not visible here). ')
+            nitm += 1
+            if cid is None:
+                cid, cdt, cde = rid, ent(esc(o.nam), rid, 'obj'), 'no dictionary row now'
+    for j, o in enumerate(objs, 1):
+        rid = anchor_id('pfo', sid + '-' + str(j))
+        t = o.st_first_in(lo, hi)
+        if t is not None:
+            nsn += 1
+            if nsn <= 2:
+                sn += (' and ' if nsn == 2 else '') + o.name() + ' (' + _dday(t, True) + (
+                    ', ' + str(o.st_n_in(lo, hi)) + ' times from then on' if o.st_n_in(lo, hi) > 1 else '') + (
+                    '; earlier in the history: ' + _pre_txt(o, lo, hi) if nsn == 1 and _pre_txt(o, lo, hi) else '') + ')'
+            if cid is None or (nitm == 0 and nsn == 1):
+                cid, cdt, cde = rid, 'new statistics on ' + ent(esc(o.nam), rid, 'obj'), _dday(t, True)
+            if nsn == 1:
+                lsx = 'new statistics on ' + esc(o.nam) + ' around the change'
+        if _tcls(o.ddl, lo, hi) == 'I':
+            ndd += 1
+            if ndd <= 2:
+                dd += (' and ' if ndd == 2 else '') + o.name() + ' (' + _dday(o.ddl, True) + ')'
+            if cid is None:
+                cid, cdt, cde = rid, 'DDL on ' + ent(esc(o.nam), rid, 'obj'), _dday(o.ddl, True)
+            if lsx is None:
+                lsx = 'DDL on ' + esc(o.nam) + ' around the change'
+        if _tcls(o.crt, lo, hi) == 'I':
+            cr += o.name() + ' was created on ' + _dday(o.crt, True) + ', inside the same interval. '
+            if cid is None:
+                cid, cdt, cde = rid, ent(esc(o.nam), rid, 'obj') + ' created', _dday(o.crt, True)
+            if lsx is None:
+                lsx = esc(o.nam) + ' created around the change'
+        if unk is None:
+            if _tcls(o.ddl, lo, hi) == 'A':
+                unk = ('the last DDL on ' + o.name() + ' (' + _dday(o.ddl, True)
+                       + ') is after the Current window, so an earlier one cannot be seen')
+            elif o.kind == 'I' and _tcls(o.la, lo, hi) == 'A':
+                unk = ('the statistics of index ' + o.name() + ' date from ' + _dday(o.la, True)
+                       + ', after the Current window, so an earlier gather cannot be seen')
+            elif _tcls(o.crt, lo, hi) == 'A':
+                unk = (o.name() + ' was created on ' + _dday(o.crt, True) + ', after the Current window: '
+                       'the object the plans used was an earlier one of that name')
+    if nsn > 0:
+        rd += ('New statistics on ' + sn + (' and ' + str(nsn - 2) + ' more' if nsn > 2 else '')
+               + ' date from between the start of the last window on the old plan (' + _dday(lo, False)
+               + ') and the end of the Current window; the plan may have followed them. ')
+    if ndd > 0:
+        rd += ('The last DDL on ' + dd + (' and ' + str(ndd - 2) + ' more' if ndd > 2 else '')
+               + ' falls in that interval too'
+               + (' (from ' + _dday(lo, False) + ' to the end of the Current window)' if nsn == 0 else '') + '. ')
+    rd += cr
+    if not rd:
+        rd = ('Nothing in the dictionary changed around the plan change for ' + thes + ' (statistics, DDL, '
+              'creation, index state, from ' + _dday(lo, False) + ' to the end of the Current window)'
+              + ('; but ' + unk if unk else '')
+              + ('; the statistics history keeps ' + str(C_HIST_D) + ' days by default, so it may not reach back to '
+                 + _dday(lo, False) if (now - lo).total_seconds() > C_HIST_D * 86400 else '')
+              + '.')
+    elif unk:
+        rd += 'Also, ' + unk + '.'
+    rd = rd.rstrip()
+    cev = None
+    if cid is not None:
+        more = nitm + nsn + ndd
+        cev = ('<div class="evr ev-pfo" data-pfo="' + cid + '" title="From the dictionary of this container, '
+               'as of the report run. Not scored."><dt>Objects</dt><dd><span class="id txt">' + cdt
+               + '</span><span class="de">' + re.sub(r'([0-9]) ', r'\1&nbsp;', cde)
+               + (' (+' + str(more - 1) + ' more)' if more > 1 else '')
+               + '</span></dd><div class="m"><span class="ns">not scored</span></div></div>')
+    return rd, cev, lsx
+
+
+def _objects(sid, P_old, P_new):
+    """the statement's tables and indexes, tables first then by owner.name:
+    [(obj, flag)] with flag 1 old plan, 2 new plan, 3 both"""
+    seen, order = {}, []
+    for q, P in ((1, P_old), (2, P_new)):
+        if P is None or P.state != 'Y':
+            continue
+        for i in range(P.maxid + 1):
+            st = P.st.get(i)
+            if st is None:
+                continue
+            k = _obj_kind(st["op"], st["typ"], st["own"], st["obj"])
+            if k is None:
+                continue
+            key = (k, st["own"], st["obj"])
+            if key not in seen:
+                seen[key] = 0
+                order.append(key)
+            seen[key] |= q
+    order.sort(key=lambda x: ('0' if x[0] == 'T' else '1') + x[1] + '.' + x[2])
+    out = []
+    for key in order:
+        o = _Obj(*key)
+        o.read()
+        out.append((o, seen[key]))
+    return out
 
 
 def _plan_rows(sql_id, phv, old_phv):
@@ -363,6 +720,7 @@ def emit(w) -> str:
         sid = sts[(p + 1) // 2 - 1][0]
         for (i, par, dep, op, opt, own, obj) in _plan_rows(sid, P.phv, None):
             P.st[i] = {"par": par, "dep": dep, "op": op, "opt": opt, "own": own, "obj": obj,
+                       "typ": _PLAN_OBJ_TYPE.get(obj),
                        "self": 0, "incl": 0, "sz": 1, "fc": None, "ns": None, "lc": None, "zero": 0}
             P.lines += 1
             P.maxid = max(P.maxid, i)
@@ -403,6 +761,25 @@ def emit(w) -> str:
                     if pp["zero"] == 0:
                         P.marks += 1
                     pp["zero"] += s["sz"]
+
+    # plan 047: the objects of the plans (changed plans only)
+    now = datetime.strptime(w.generated_at[:19], "%Y-%m-%d %H:%M:%S")
+    cur_end = cur_win.win_end_ts
+    wstart = {x.week_offset: x.win_start_ts for x in w.windows}
+    objs, lo_of, ord_of, cev_of, lsx_of = {}, {}, {}, {}, {}
+    if mode == 'chg':
+        for i, (sid, cur, old, ela, rnk) in enumerate(sts, 1):
+            lo_wo = None
+            for win in w.valid_windows:
+                if win.week_offset > 0:
+                    x = w.window_metrics(win).sql.get(sid)
+                    if x is not None and x.plan_hash > 0 and x.plan_hash == old:
+                        lo_wo = win.week_offset if lo_wo is None else min(lo_wo, win.week_offset)
+            lo_of[i] = wstart.get(lo_wo) if lo_wo is not None else None
+            objs[i] = _objects(sid, plans.get(2 * i), plans.get(2 * i - 1))
+            if objs[i] and lo_of[i] is not None:
+                ord_of[i], cev_of[i], lsx_of[i] = _compose(sid, [o for o, _ in objs[i]], [f for _, f in objs[i]],
+                                                           lo_of[i], cur_end, now)
 
     out.append('<section id="plan-flame" class="vw in-s in-a lib'
                + (' lopen' if mode == 'chg' else '')
@@ -533,7 +910,8 @@ def emit(w) -> str:
             else:
                 body = 'too few ASH samples to draw'
             ls = (esc(sid) + ': ' + ('no plan change in the top ' + str(top_n) + '; ' if mode == 'top' else '')
-                  + body + (' (+' + str(len(sts) - 1) + ' more)' if len(sts) > 1 else ''))
+                  + body + ('; ' + lsx_of[1] if mode == 'chg' and lsx_of.get(1) else '')
+                  + (' (+' + str(len(sts) - 1) + ' more)' if len(sts) > 1 else ''))
 
         out.append('<details class="pf-tbls"><summary>Plan table'
                    + ('s, old and new' if mode == 'chg' else '') + '</summary>')
@@ -585,7 +963,32 @@ def emit(w) -> str:
                 if n == 0:
                     out.append('<tr><td class="num"></td><td colspan="6">No ASH samples.</td></tr>')
             out.append('</tbody></table>')
-        out.append('</details></div>')
+        out.append('</details>')
+        if mode == 'chg' and objs.get(i) and lo_of.get(i) is not None:
+            lo = lo_of[i]
+            out.append('<div class="pf-obj" id="' + anchor_id('pfo', sid) + '" data-t0="' + _dkey(lo)
+                       + '" data-t1="' + _dkey(cur_end) + '" data-now="' + _dkey(now) + '" data-n="' + str(len(objs[i])) + '">'
+                       '<h4 class="pf-oh">Objects in these plans <small>the dictionary of this container, as of this report run ('
+                       + _dlong(now) + ')</small></h4>')
+            if ord_of.get(i):
+                out.append('<p class="pf-ord"><b>Reads as:</b> ' + ord_of[i] + '</p>')
+            out.append('<p class="pf-oiv">&ldquo;Around the plan change&rdquo; = from the start of the last prior window on the old plan ('
+                       + _dday(lo, True) + ') to the end of the Current window (' + _dday(cur_end, True)
+                       + '). Created, last DDL, last analyzed and the statistics history are past times; every other value is the state now. '
+                       'Table-level rows only: partitions are not checked.</p>')
+            out.append('<div class="pf-otw"><table class="pf-ob" data-nosort="Y" data-nocount="Y">'
+                       '<thead><tr><th>Object</th><th>Type</th><th title="in the old plan, the new plan or both">In plan</th>'
+                       '<th title="LAST_ANALYZED and NUM_ROWS now">Statistics now</th>'
+                       '<th title="DBA_TAB_STATS_HISTORY for a table (statistics gathered, set, restored or imported); LAST_ANALYZED for an index">New statistics in the interval</th>'
+                       '<th title="LAST_DDL_TIME: the latest DDL, grants and revokes included">Last DDL</th><th>Created</th><th>State now</th><th>Around the change</th></tr></thead><tbody>')
+            for j, (o, f) in enumerate(objs[i][:C_MAX_OBJ], 1):
+                out.append(_obj_row(sid, j, o, f, lo, cur_end))
+            out.append('</tbody></table></div>')
+            if len(objs[i]) > C_MAX_OBJ:
+                out.append('<p class="note pf-ocap">The plans touch ' + str(len(objs[i])) + ' tables and indexes; the first '
+                           + str(C_MAX_OBJ) + ' are listed (tables first, then by name).</p>')
+            out.append('</div>')
+        out.append('</div>')
     js.append(']}')
 
     out.append(lib_ls('plan-flame', ls))
@@ -593,6 +996,16 @@ def emit(w) -> str:
     out.append('<script>window.AWR_DATA=window.AWR_DATA||{};window.AWR_DATA.planflame=')
     out.extend(_put_clob_chunked(''.join(js)))
     out.append(';</script>')
+    srcs = ''.join('<div data-for="f-plan-' + esc(sts[i - 1][0]) + '" data-ph0="' + str(sts[i - 1][2])
+                   + '" data-ph1="' + str(sts[i - 1][1]) + '">' + cev_of[i] + '</div>'
+                   for i in range(1, len(sts) + 1) if mode == 'chg' and cev_of.get(i))
+    if srcs:
+        out.append('<div id="pfo-ev-src" hidden>' + srcs + '</div>')
+        out.append('<script>(function(){var d=document,x=d.getElementById("pfo-ev-src");if(!x)return;'
+                   '[].slice.call(x.children).forEach(function(g){var c=d.getElementById(g.getAttribute("data-for")),'
+                   'dl=c?c.querySelector("dl.ev"):null;if(dl&&c.getAttribute("data-ph0")===g.getAttribute("data-ph0")'
+                   '&&c.getAttribute("data-ph1")===g.getAttribute("data-ph1")){while(g.firstChild)dl.appendChild(g.firstChild);}});'
+                   'x.parentNode.removeChild(x);})();</script>')
     out.append(chrome.lib_script('js_planflame.plsql'))
     out.append('<!-- AWR-SECTION: 23_plan_flame END -->')
     return "\n".join(out)

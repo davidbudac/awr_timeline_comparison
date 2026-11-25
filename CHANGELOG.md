@@ -125,6 +125,21 @@ release bumps `awr_version`).
   `DBA_HIST_UNDOSTAT`); each block says which one it lacks and the rest
   still shows. Evidence, not a finding: no count, pill or severity. The
   report now has 31 `AWR-SECTION` pairs.
+- **Objects around a plan change** (plan 047): "the plan flipped -- what
+  happened to the objects it touches?" Plan shape (section 23) now lists,
+  for each changed plan, every table and index of the old and the new plan
+  with what the dictionary says now: last analyzed and rows, when table
+  statistics changed (`DBA_TAB_STATS_HISTORY`), last DDL, created, index
+  status / visibility, stale or locked statistics. A time counts as
+  "around the plan change" only inside one stated interval (from the start
+  of the last prior window on the old plan to the end of the Current
+  window); a "Reads as" line says what falls in it, hedged ("the plan may
+  have followed them"), and says when a later event can hide an earlier
+  one or the objects are not visible from this container. The plan-change
+  card gets one "Objects" row when something falls in the interval or an
+  index is UNUSABLE / INVISIBLE. Four new **optional** grants
+  (`DBA_OBJECTS`, `DBA_TAB_STATISTICS`, `DBA_TAB_STATS_HISTORY`,
+  `DBA_INDEXES`). Evidence, not a finding: no count, pill or severity.
 - **Docs / tooling:** the demo generator is now platform-independent (every
   libm-derived value is rounded to 10 significant digits, digit counts are
   exact), so the demo pages regenerate byte for byte on Linux as on macOS

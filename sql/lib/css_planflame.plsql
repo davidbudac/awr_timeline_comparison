@@ -66,6 +66,21 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.planflame-tip .tr2 b{font-weight:600}');
     DBMS_OUTPUT.PUT_LINE('.planflame-tip .sw{display:inline-block;width:8px;height:8px;border-radius:2px;flex:none;background:var(--sw,#9AA3AD)}');
     DBMS_OUTPUT.PUT_LINE('#plan-flame table.pf-tb td:last-child{white-space:normal;min-width:12em}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame .pf-obj{margin:var(--s4) 0 0;min-width:0}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame .pf-oh{font-size:13px;font-weight:600;color:var(--ink);margin:0 0 var(--s1)}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame .pf-oh small{font-size:11.5px;font-weight:400;color:var(--ink-3);margin-left:6px}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame .pf-ord{margin:0 0 var(--s2);color:var(--ink-2);max-width:80em}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame .pf-oiv,#plan-flame .pf-oerr,#plan-flame .pf-ocap{font-size:12px;color:var(--ink-3);margin:0 0 var(--s2);max-width:80em}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame .pf-otw{overflow-x:auto;max-width:100%}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame table.pf-ob{font-size:12px;margin:0 0 var(--s2)}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame table.pf-ob td{vertical-align:top}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame table.pf-ob td:nth-child(n+4):nth-child(-n+7){white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame table.pf-ob td.pf-on{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame table.pf-ob .pf-ot{font-weight:600;color:var(--ink);background:var(--zone2);border-radius:3px;padding:0 3px;white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame table.pf-ob .pf-oa{color:var(--ink-3);white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame .pf-om{display:inline-block;font-size:11px;line-height:16px;padding:0 6px;margin:0 4px 2px 0;border-radius:8px;border:1px solid var(--line);color:var(--ink-2);white-space:nowrap}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame .pf-om.pf-oms{border-color:var(--ink-3);color:var(--ink);font-weight:600}');
+    DBMS_OUTPUT.PUT_LINE('#plan-flame .pf-om.pf-omu{border-style:dashed;color:var(--ink-3)}');
     DBMS_OUTPUT.PUT_LINE('</style>');
 END;
 /

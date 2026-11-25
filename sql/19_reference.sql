@@ -392,6 +392,18 @@ BEGIN
         || ' in. One sample is about 10 s of DB time, so both read in seconds per window. The plan tree comes from <code>DBA_HIST_SQL_PLAN</code> (without SELECT on it the section lists the'
         || ' samples by plan line only); samples without a plan line are counted on the root step. With no plan change, the highest-ranked of the first three top statements with at least 5'
         || ' samples is shown alone.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Objects around a plan change</dt><dd>For a changed plan, Plan shape lists every table and index of the old and the new plan (at most 30, tables'
+        || ' first) with what the dictionary says about it: <code>DBA_OBJECTS</code> (created, last DDL, where grants and revokes count as DDL, status), <code>DBA_TAB_STATISTICS</code> (last analyzed, rows, stale or locked'
+        || ' statistics), <code>DBA_TAB_STATS_HISTORY</code> (when table statistics changed: gathered, set, restored or imported; kept about 31 days by default) and'
+        || ' <code>DBA_INDEXES</code> (status, visibility, last analyzed). These four views are optional grants: without one, its columns read &ldquo;not read&rdquo; and a note names it.'
+        || ' Two rules keep it honest. (1) The dictionary is the one of the container the report runs in, in its state at the time of the run: from a CDB root a PDB&rsquo;s objects'
+        || ' have no row, which reads &ldquo;no dictionary row in this container&rdquo; (dropped, or not visible here), never &ldquo;dropped&rdquo;; status, visibility and row counts are'
+        || ' &ldquo;now&rdquo;, not &ldquo;in the Current window&rdquo;. Only created, last DDL, last analyzed and the statistics history are past times, and last DDL / last analyzed keep'
+        || ' only the latest event, so one after the Current window can hide an earlier one (the sentence says so). (2) &ldquo;Around the plan change&rdquo; means inside one stated'
+        || ' interval: from the start of the last valid prior window whose plan (the plan of its last captured <code>DBA_HIST_SQLSTAT</code> row) was the old plan to the end of the'
+        || ' Current window; any other time is only listed. Table-level rows only (no partitions); views, fixed tables and temporary tables of the plan are left out. When the sentence'
+        || ' names something inside the interval or an abnormal state (an index UNUSABLE or INVISIBLE, an object INVALID or without a row), the plan-change card gets one'
+        || ' &ldquo;Objects&rdquo; line. Explains only: it adds no findings.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Trend breaks</dt><dd>Every snapshot interval of the span (time-weighted over irregular snapshots; a restart or a missed snapshot is a gap, never 0) of DB time, DB CPU, user calls,'
         || ' executions, logical and physical reads and redo is compared with its normal: the median of the same hour of the week in the other weeks (spans of 21 days or more), else of the'
         || ' same hour of the day on the other days (3 days or more), else of every point before the Current window. Spread = interquartile range / 1.349, at least 2% of the median and the'
