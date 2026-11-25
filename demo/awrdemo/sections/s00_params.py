@@ -454,6 +454,7 @@ def emit(w) -> str:
         '<a href="#instance-map" data-nodot>Instance map</a>'
         '<a href="#load-response" data-nodot>Load vs response time</a>'
         '<a href="#release-delta" data-nodot>Before / after release</a>'
+        '<a href="#who" data-nodot>Who added the load</a>'
         '<b>Workload</b>'
         '<a href="#load">Load profile</a>'
         '<a href="#metrics">Metrics</a>'

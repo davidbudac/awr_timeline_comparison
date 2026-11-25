@@ -1,0 +1,18 @@
+/* css_who: plan 045, section 29_who (Who added the load).  One small table
+   per dimension in a grid (one column below about 1600 px of content), a share-of-the-rise bar
+   in the accent, the notes in the muted text colour. */
+#who{min-width:0}
+#who .who-tot,#who .who-rd{margin:var(--s2) 0;max-width:80em}
+#who .who-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,780px),1fr));gap:var(--s3) var(--s5);margin:var(--s3) 0}
+#who .who-dim{min-width:0}
+#who .who-dim>h3{display:block;margin:var(--s2) 0 var(--s1);font-size:13px}
+#who .who-nv{font-weight:400;color:var(--muted);margin-left:8px;font-size:12px}
+#who td.who-v{min-width:9em;max-width:22em;overflow-wrap:anywhere}
+#who td.who-sh{white-space:nowrap}
+#who .who-bar{display:inline-block;vertical-align:middle;width:56px;height:8px;border-radius:4px;background:var(--track);margin-right:6px;overflow:hidden}
+#who .who-bar>i{display:block;height:100%;width:var(--w);background:var(--acc)}
+#who .who-p{font-variant-numeric:tabular-nums}
+#who tr.who-all>td{border-top:1px solid var(--line);color:var(--muted)}
+#who .who-more{margin:var(--s1) 0}
+#who .who-more>summary{cursor:pointer;color:var(--ink-2);font-size:12.5px}
+#who .who-meth{font-size:12px;color:var(--muted)}

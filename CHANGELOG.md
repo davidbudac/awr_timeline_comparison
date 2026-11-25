@@ -91,6 +91,22 @@ release bumps `awr_version`).
   in the About note; below that, it says when the statement simply ran more
   often. The plan-change card gets one line, "Rows, I/O: rows per run
   x1.0, I/O wait is 86% of the per-run rise". Ranked evidence, not scored.
+- **Who added the load** (plan 045, new section 29): which service,
+  module, machine, program or user (and PDB, when the samples carry more
+  than one container) is behind the extra active sessions, for the whole
+  workload, statements outside every top N included. Foreground ASH
+  (on CPU or in a non-idle wait) per valid compared window, in AAS like
+  DB time; per dimension the values whose time rose first, with the
+  Current value, the prior mean, a plain change, the share of the rise
+  in all foreground activity and a trend strip. Parallel and job slaves
+  are folded into one program name ("(Pnnn)"). A "Reads as" sentence
+  names the value that carries at least half of the rise, and the DB time
+  card gets one "Who" row ("module OrderService +6.570 AAS, 73% of the
+  rise in foreground activity") when a module, service, machine or user
+  carries at least 30%. Service and PDB names use two new **optional**
+  grants (`DBA_HIST_SERVICE_NAME`, `DBA_HIST_PDB_INSTANCE`); without them
+  the section shows hashes / container ids. Evidence, not a finding: no
+  count, pill or severity. The report now has 30 `AWR-SECTION` pairs.
 - **Docs / tooling:** the demo generator is now platform-independent (every
   libm-derived value is rounded to 10 significant digits, digit counts are
   exact), so the demo pages regenerate byte for byte on Linux as on macOS

@@ -69,6 +69,8 @@ GRANT SELECT ON V_$INSTANCE                  TO <user>;
 -- one-line "needs SELECT on ..." note instead of its chart.
 GRANT SELECT ON DBA_HIST_EVENT_HISTOGRAM     TO <user>;  -- Wait latency histograms
 GRANT SELECT ON DBA_HIST_SQL_PLAN            TO <user>;  -- Plan shape (plan trees)
+GRANT SELECT ON DBA_HIST_SERVICE_NAME        TO <user>;  -- Who added the load: service names
+GRANT SELECT ON DBA_HIST_PDB_INSTANCE        TO <user>;  -- Who added the load: PDB names
 -- Only if you use side/create_weekly_baselines.sql (optional, writes baselines):
 GRANT EXECUTE ON DBMS_WORKLOAD_REPOSITORY    TO <user>;
 ```
@@ -512,7 +514,7 @@ the Day profile.
 
 ### Diagnostic views
 
-Nine views answer the questions the tables leave open. Each is a row of the
+Ten views answer the questions the tables leave open. Each is a row of the
 Summary's evidence library (one-line answer; open it in place) and a full
 section in All sections, next to the table it extends. All are inline SVG /
 HTML, so they work offline; each carries a computed **Reads as:** sentence
@@ -529,6 +531,7 @@ and a table of its numbers. They explain; none of them adds a finding.
 | **Plan shape, old vs new** | Where inside a changed plan the time goes: old and new plan as icicle charts, per plan line from ASH. Optional grant: `DBA_HIST_SQL_PLAN`. |
 | **Trend breaks** | *When* did it start? The whole span against its seasonal normal, with a change-point scan that dates the shift and names the nearest release. Also in the Timeline view. |
 | **Window similarity** | Are the prior windows a fair picture of normal? A window-by-window similarity matrix, and a what-if that re-scores the report without a window you drop. |
+| **Who added the load** | Which service, module, machine, program or user (or PDB) is behind the extra active sessions? Foreground ASH per compared window, the values whose time rose first. Optional grants for names: `DBA_HIST_SERVICE_NAME`, `DBA_HIST_PDB_INSTANCE` (without them: hashes / ids). |
 
 ### The navigation rail & dark mode
 

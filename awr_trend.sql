@@ -678,6 +678,9 @@ DEFINE _dbg_msg = 'section 20 load vs response time'
 DEFINE _dbg_msg = 'section 28 before / after release'
 @@sql/lib/debug_log.sql
 @@sql/28_release_delta.sql
+DEFINE _dbg_msg = 'section 29 who added the load (foreground ASH by service / module / machine / program / user)'
+@@sql/lib/debug_log.sql
+@@sql/29_who.sql
 DEFINE _dbg_msg = 'section 01 windows (aligned begin/end snap pairs)'
 @@sql/lib/debug_log.sql
 @@sql/01_windows.sql

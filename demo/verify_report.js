@@ -2384,6 +2384,129 @@ const LABEL_BAND = () => {
     await page.close();
   }
 
+  // ---- 6g. plan 045: "Who added the load" (section 29).  (a) per
+  // dimension the rows (the table + its "+ n more" fold, "(others)"
+  // included) sum to the section's stated foreground total, Current AND
+  // rise; shares are 0..100; no crit / warn row, no scored band or delta,
+  // tables data-nocount.  (b) the Current total equals section 09's
+  // foreground ASH (AWR_DATA.ashx.winfg, Current column) -- the demo
+  // exactly (3-decimal tokens), a real report "info".  (c) the DB time
+  // card's "Who" row exists exactly when the card exists and a module
+  // (else service, machine, user) row with a real name carries >= 30% of a
+  // rise >= 0.1 AAS (>= 3 valid prior windows); it cites that row with its
+  // numbers and share, carries no severity, its source block is gone.
+  // (d) the library row opens exactly when some value (not "others")
+  // carries >= 50% of such a rise.  (e) JS off: the tables are shown and
+  // the source stays hidden.  A report without #who skips every part.
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file);
+    const r45 = await page.evaluate((isDemo) => {
+      const out = {};
+      const sec = document.getElementById('who');
+      if (!sec) { out.sum = 'no #who (report before plan 045)'; return out; }
+      const num = (el, a) => { const v = el && el.getAttribute(a); return v === null || v === '' ? null : +v; };
+      const tot = sec.querySelector('p.who-tot');
+      if (!tot) { out.sum = 'none (' + ((sec.querySelector('.who-rd') || {}).textContent || '').trim().slice(0, 90) + ')'; return out; }
+      const tc = num(tot, 'data-cur'), tr = num(tot, 'data-rise'), np = num(tot, 'data-np');
+      const bad = [], dims = [...sec.querySelectorAll('.who-dim')];
+      if (!dims.length) bad.push('no dimension tables');
+      const rowsOf = d => [...d.querySelectorAll('table.who-tbl > tbody > tr[id]')];
+      dims.forEach(d => {
+        const rows = rowsOf(d);
+        const sc = rows.reduce((a, r) => a + (num(r, 'data-cur') || 0), 0);
+        if (Math.abs(sc - tc) > 1e-5 * (rows.length + 1)) bad.push(d.id + ' Current sums to ' + sc.toFixed(6) + ', total ' + tc);
+        if (tr != null) {
+          const sr = rows.reduce((a, r) => a + (num(r, 'data-rise') || 0), 0);
+          if (Math.abs(sr - tr) > 1e-5 * (rows.length + 1)) bad.push(d.id + ' rise sums to ' + sr.toFixed(6) + ', total ' + tr);
+        }
+        rows.forEach(r => { const s = num(r, 'data-shr'); if (s != null && (s < 0 || s > 100)) bad.push(r.id + ' share ' + s); });
+        d.querySelectorAll('table.who-tbl').forEach(t => { if (!t.hasAttribute('data-nocount')) bad.push(d.id + ' table without data-nocount'); });
+      });
+      if (sec.querySelector('tr.crit, tr.warn, .bd.s-large, .bd.s-moderate, .bd.s-improved, .d:not(.s-plain):not(.s-na)')) bad.push('carries a severity');
+      out.sum = bad.length ? 'FAIL ' + bad.slice(0, 5).join('; ') : 'ok (' + dims.length + ' dimensions, total ' + tc + ' AAS, rise ' + tr + ')';
+      // (b) against section 09's foreground ASH
+      const X = window.AWR_DATA && window.AWR_DATA.ashx;
+      if (X && Array.isArray(X.winfg) && X.winfg.length) {
+        const a = X.winfg.reduce((s, v) => s + (+v[v.length - 1] || 0), 0);
+        const ok = Math.abs(a - tc) <= 0.0006 * X.winfg.length + 1e-9;
+        out.ash = (ok ? 'ok' : (isDemo ? 'FAIL' : 'info')) + ' (09 winfg Current ' + a.toFixed(3) + ', here ' + tc.toFixed(3) + ')';
+      } else out.ash = 'none (no ashx.winfg)';
+      // (c) the card row against the rule
+      // the SQL decides on exact numbers, this on 6-decimal tokens: a value
+      // within 1e-5 of a threshold is "near" and never fails
+      const attr = tr != null && np >= 3 && tr >= 0.1;
+      let near = tr != null && Math.abs(tr - 0.1) < 1e-5;
+      const real = r => !r.hasAttribute('data-ph');
+      const bestIn = (code, f) => {
+        const d = sec.querySelector('.who-dim[data-dim="' + code + '"]');
+        let b = null;
+        (d ? rowsOf(d) : []).filter(f).forEach(r => { const v = num(r, 'data-rise'); if (v > 0 && (!b || v > num(b, 'data-rise'))) b = r; });
+        return b;
+      };
+      let want = null;
+      if (attr) for (const code of ['mod', 'svc', 'mch', 'usr']) {
+        const b = bestIn(code, real);
+        if (!b) continue;
+        const v = num(b, 'data-rise');
+        if (Math.abs(v - 0.3 * tr) < 1e-5) near = true;
+        if (v >= 0.3 * tr) { want = b; break; }
+      }
+      const card = document.getElementById('f-dbtime'), ev = document.querySelector('#f-dbtime .evr.ev-who');
+      if (document.getElementById('who-ev-src')) out.card = 'FAIL the source block #who-ev-src is still in the page';
+      else if (!card) out.card = ev ? 'FAIL a Who row without the card' : 'none (no DB time card)';
+      else if (!ev) out.card = want && !near ? 'FAIL no card row, but ' + want.id + ' carries ' + num(want, 'data-rise') + ' of ' + tr : 'none (no value meets the rule)';
+      else if (!want) out.card = near ? 'ok (at the threshold)' : 'FAIL a Who row, but no value meets the rule';
+      else {
+        const b2 = [];
+        if (ev.getAttribute('data-who') !== want.id) b2.push('cites ' + ev.getAttribute('data-who') + ', want ' + want.id);
+        const t = document.getElementById(ev.getAttribute('data-who'));
+        if (!t || !sec.contains(t)) b2.push('cited row missing');
+        else {
+          if (ev.getAttribute('data-cur') !== t.getAttribute('data-cur') || ev.getAttribute('data-mu') !== t.getAttribute('data-mu')
+              || ev.getAttribute('data-rise') !== t.getAttribute('data-rise')) b2.push('numbers differ from the row');
+          const a2 = ev.querySelector('a.ent');
+          if (!a2 || a2.getAttribute('href') !== '#' + t.id) b2.push('link ' + (a2 && a2.getAttribute('href')));
+          if (a2 && a2.textContent !== t.querySelector('td.who-v').textContent) b2.push('link text');
+          const s = num(t, 'data-rise') / tr * 100, de = (ev.querySelector('.de') || {}).textContent || '';
+          const st = s >= 100.5 ? '>100%' : s < 0.5 ? '<1%' : Math.round(s) + '%';
+          if (de.indexOf(st + ' of the rise in foreground activity') < 0) b2.push('share text "' + de + '", want ' + st);
+        }
+        if (ev.querySelector('.bd.s-large, .bd.s-moderate, .bd.s-improved, .d:not(.s-plain):not(.s-na)')) b2.push('carries a severity');
+        if (!ev.querySelector('.ns')) b2.push('no "not scored"');
+        out.card = b2.length ? 'FAIL ' + b2.join('; ') : 'ok (' + ev.textContent.replace(/\s+/g, ' ').trim().slice(0, 110) + ')';
+      }
+      // (d) the library row opens with a dominant value only
+      let dom = false;
+      let nearD = near;
+      if (attr) dims.forEach(d => rowsOf(d).forEach(r => { if (r.getAttribute('data-ph') !== 'O') {
+        if (num(r, 'data-rise') >= 0.5 * tr) dom = true;
+        if (Math.abs(num(r, 'data-rise') - 0.5 * tr) < 1e-5) nearD = true; } }));
+      const lo = sec.classList.contains('lopen');
+      out.lopen = (lo === dom || nearD) ? 'ok (' + (lo ? 'open' : 'closed') + ')' : 'FAIL lopen ' + lo + ', a value carrying half the rise: ' + dom;
+      return out;
+    }, isDemo);
+    // (e) JS off
+    if (/^ok/.test(r45.sum || '')) {
+      const ctx = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 1000 } });
+      const p2 = await ctx.newPage();
+      await p2.goto('file://' + file, { waitUntil: 'load' });
+      r45.nojs = await p2.evaluate(() => {
+        const t = document.querySelector('#who table.who-tbl'), s = document.getElementById('who-ev-src');
+        if (!t || !t.getClientRects().length) return 'FAIL the tables are not shown with JS off';
+        if (s && s.getClientRects().length) return 'FAIL the card row source shows with JS off';
+        return 'ok (' + document.querySelectorAll('#who table.who-tbl').length + ' tables' + (s ? ', source hidden' : '') + ')';
+      });
+      await ctx.close();
+    }
+    console.log('plan 045', JSON.stringify(r45));
+    for (const k of ['sum', 'ash', 'card', 'lopen', 'nojs']) if (/^FAIL/.test(r45[k] || '')) fail('who added the load (plan 045) ' + k + ': ' + r45[k]);
+    if (isDemo && (!/^ok/.test(r45.sum || '') || !/^ok/.test(r45.ash || '') || !/^ok/.test(r45.card || '') || !/^ok/.test(r45.nojs || '')))
+      fail('demo: every plan 045 part should run: ' + JSON.stringify(r45));
+    if (errors.length) fail('plan 045: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
   // ---- 7. the design (quiet / dashboard): the shared pieces, then the
   // dashboard's KPI cards, findings table, Activity tabs and palette
   if (DESIGN !== 'classic') {
@@ -2519,8 +2642,13 @@ const LABEL_BAND = () => {
   // the instance map agrees with the finding cards.  A report from before
   // these sections (none of the ids present) skips the block.
   {
-    const VIZ = ['instance-map', 'load-response', 'release-delta', 'win-sim', 'onset', 'wait-hist', 'blocking', 'volume-cost', 'plan-flame'];
+    // 'who' (section 29, plan 045) is newer than 20-28: a report from before
+    // it has the others and lacks it, so it is checked only when present
+    const VIZ_OPT = ['who'];
+    const VIZ0 = ['instance-map', 'load-response', 'release-delta', 'win-sim', 'onset', 'wait-hist', 'blocking', 'volume-cost', 'plan-flame'];
     const { page, errors } = await openPage('#view=all', 'light');
+    const hasOpt = await page.evaluate(ids => ids.filter(id => document.getElementById(id)), VIZ_OPT);
+    const VIZ = VIZ0.concat(hasOpt);
     const have = await page.evaluate(ids => ids.filter(id => document.querySelectorAll('[id="' + id + '"]').length), VIZ);
     if (have.length) {
       const probe = () => page.evaluate(ids => {

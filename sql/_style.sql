@@ -313,7 +313,7 @@ BEGIN
     -- The visualization sections (20-28) take the order of the section
     -- they extend and follow it in the DOM, so each shows right after it.
     DBMS_OUTPUT.PUT_LINE('body.va main > #instance-map, body.va main > #load-response,'
-        || ' body.va main > #release-delta { order:5; }'
+        || ' body.va main > #release-delta, body.va main > #who { order:5; }'
         || ' body.va main > #wait-hist { order:8; } body.va main > #blocking { order:9; }'
         || ' body.va main > #volume-cost { order:10; } body.va main > #plan-flame { order:12; }'
         || ' body.va main > #onset { order:17; } body.va main > #win-sim { order:19; }');

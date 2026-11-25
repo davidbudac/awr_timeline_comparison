@@ -92,6 +92,8 @@ sql/
 ├── 26_window_similarity.sql -- viz: window similarity matrix + drop-a-window what-if
 ├── 27_instance_map.sql  -- viz: the findings on a schematic of the instance
 ├── 28_release_delta.sql -- viz: before / after a release marker (split computed in the page)
+├── 29_who.sql           -- viz: who added the load (foreground ASH by service / module / machine /
+│                        --   program / user / PDB; a Who row on the DB time card)
 └── lib/                 -- @@-included fragments (see conventions)
     ├── windows_cte.sql       -- run_params → … → valid_windows CTE chain
     ├── day_profile_cte.sql   -- dp_params → … → dp_scored (shared by 16 + fleet 06)
@@ -138,10 +140,10 @@ sql/
     ├── js_markers.plsql      -- inits AWR_MARKERS + AWR_markLine()
     ├── marker.sql / markers_inline.sql / no_markers.sql -- marker emitters
     ├── no_sqlmon.sql         -- stub @@-included instead of 18 when sqlmon=N
-    ├── viz_head.sql          -- <head>: the stylesheets of sections 20-28 (css_<base>.plsql)
+    ├── viz_head.sql          -- <head>: the stylesheets of sections 20-29 (css_<base>.plsql)
     ├── css_<base>.plsql / js_<base>.plsql -- GENERATED (src/css_<base>.css, src/js_<base>.js): one pair
     │                         --   per visualization section (loadresp, volcost, waithist, planflame,
-    │                         --   blocking, onset, winsim, instmap, reldelta)
+    │                         --   blocking, onset, winsim, instmap, reldelta; css_who only, no js)
     ├── loadresp_cte.sql / onset_cte.sql -- private CTEs of sections 20 / 25
     ├── debug_log.sql         -- per-section progress markers (no spool pollution)
     └── templates/<name>/     -- comprehensive (default) / simple / dev (+ fleet/, fleet-owned)
@@ -581,8 +583,8 @@ Top SQL 1 (`lopen` in markup, see "Library rows with news" below), SQL
 Monitor 2 (opens on an error / DOP downgrade on a Current top-N statement),
 Foreground waits 3 (`lopen` in markup, same rule), Day
 profile 4, Segment I/O 5, File I/O 6, Load profile 7, System metrics 8,
-Parameters 9, then the visualization sections 10-18 (20 Load vs response
-time, 21, 22, 23, 24, 25, 26, 27, 28; see "Visualization sections").
+Parameters 9, then the visualization sections 10-19 (20 Load vs response
+time, 21, 22, 23, 24, 25, 26, 27, 28, 29; see "Visualization sections").
 All-only: 01, 05, 09, 10, 11, 13 ("+ 6 more in All sections"). Row text: `lib_ls(id, html)` (`band_glyph.plsql`, twin
 `helpers.lib_ls`) emits `<script>if(window.AWR_ls)AWR_ls("id","html")</script>`;
 `window.AWR_ls` is an early 00 script (before `<main>`); 16 inlines the same
@@ -1297,8 +1299,8 @@ check 25; see the gotcha).
 ### Section order (v1.6.0)
 
 `awr_trend.sql` includes the sections in **DOM** order (00, 10, 08, 09, 07,
-27, 20, 28, 01, 26, 16, 25, 13, 02, 03, 04, 22, 05, 24, 06, 21, 11, 18, 23,
-14, 15, 12, 19, 17; each visualization section 20-28 right after the section
+27, 20, 28, 29, 01, 26, 16, 25, 13, 02, 03, 04, 22, 05, 24, 06, 21, 11, 18, 23,
+14, 15, 12, 19, 17; each visualization section 20-29 right after the section
 it extends) = the JS-off stacking; 00 emits the verdict hero, then `#activity` (plan
 023); with the default `order:3` the charts are the first section in
 Timeline / All sections and follow the verdict in Summary. Views reorder visually: Summary via the library's `--os`
@@ -1836,9 +1838,9 @@ left padding and a lower specificity).
   168-window run on dbmint, 2026-11-13: a top statement with 216 quotes
   ended the report with exit code 67.
 
-### Visualization sections (20-28)
+### Visualization sections (20-29)
 
-Nine diagnostic views, one numbered section each, added in one pass from
+Nine diagnostic views (plus 29, plan 045), one numbered section each, added in one pass from
 `design/viz_ideas_mock.html` (the mock) under the contract in
 `design/HANDOFF_viz_sections.md`. They EXPLAIN: none adds a finding, a
 count, a pill or a severity of its own (27 and 26 re-use `policy_bucket()`
@@ -1846,13 +1848,13 @@ and must agree with 07). Common shape, keep it when touching any of them:
 
 - **Placement.** Each is `<section id=X class="vw in-s in-a lib"
   style="--os:N">` (25 also `in-t`): a Summary evidence-library row
-  (`--os` 10-18, after Parameters; `lopen` only when the view has something
+  (`--os` 10-19, after Parameters; `lopen` only when the view has something
   to say) and a full section in All sections, where it takes the CSS
   `order` of the section it extends and follows it in the DOM (driver
-  order), so it shows right after it: 27 / 20 / 28 after Findings, 22 after
+  order), so it shows right after it: 27 / 20 / 28 / 29 after Findings, 22 after
   Foreground waits, 24 after Background waits, 21 after Top SQL, 23 after
   SQL Monitor, 25 after DB time, 26 after Windows. Rail: group
-  **Diagnosis** (27, 20, 28) + one link next to each extended section, all
+  **Diagnosis** (27, 20, 28, 29) + one link next to each extended section, all
   `data-nodot`. The section is ALWAYS emitted (h2 + `p.note` when there is
   nothing to draw): the rail links to it.
 - **Files per view** (lib base `<b>` = loadresp, volcost, waithist,
@@ -1974,6 +1976,45 @@ finding or use large / moderate. Links are built as `a.className="ent"` only
 when the target id exists (lint 21 scans the generated plsql for the literal).
 Unexercised: RAC, multi-DBID, a before mean of 0, a marker inside Current on a
 real DB.
+
+#### Who added the load (`sql/29_who.sql`, `section#who`, plan 045)
+
+Which service / module / machine / program / user (PDB only when the
+samples carry more than one `con_id`) is behind the extra active
+sessions. Library row `--os:19`, All sections after Findings (order 5, DOM
+after 28), rail Diagnosis. ONE ASH scan joined to `valid_windows` per
+instance (24's join: snap range + sample time), `session_type =
+'FOREGROUND'`, 09's non-idle predicate, grouped to (window, 6 keys) FIRST,
+then a 6-row generator (not GROUPING SETS); per dimension `DENSE_RANK` by
+samples over all windows keeps 40 values, the rest one key `'o'`
+"(n others)". Keys: `'v'` + value, `'n'` = NULL ("(no module)" ...),
+user `'v' || user_id || ',' || con_id`. Program names are folded IN THE
+SQL before the cut (`\(([A-Z])([0-9]{3}|[A-Z][0-9]{2})\)$` -> `(\1nnn)`;
+twin `norm_program`). AAS = samples / (360 x win_hours); a valid window
+without a sample is 0, a skipped one an empty Trend slot; every value
+divides by the same valid prior count, so the rows' rises sum to the
+total's. Display order: integer key Current x np - prior sum (no float
+ties), the 8 largest positive rises in the table, the rest in
+`details.who-more`; nothing rose -> the 8 largest by Current. Rows
+`tr[id=anchor_uniq(anchor_id('who', code-name))]` (codes svc / mod / mch /
+prg / usr / pdb) carry `data-cur / data-mu / data-rise` (6-decimal),
+`data-shr` (0..100, '' when not attributable), `data-ph` `P` placeholder /
+`O` others; `tfoot tr.who-all` = the total; `p.who-tot[data-cur data-mu
+data-rise data-np]` is the stated total. Tables `data-nocount`, plain
+delta, no band. Names: `ALL_USERS` (24's `usr_name`); service and PDB
+names are OPTIONAL grants (`DBA_HIST_SERVICE_NAME`,
+`DBA_HIST_PDB_INSTANCE`, dynamic SQL + ORA-00942 / ORA-01031, lint 35),
+else "service hash n" / "con_id n" and a note. Sentence / `lib_ls` /
+`lopen`: >= 3 valid priors, total rise >= 0.1 AAS, a value (not others)
+with >= 50% is named per dimension (else "spread", the largest). DB time
+card: `div#who-ev-src` + one-line append script (plan 043's pattern) ->
+`#f-dbtime dl.ev .evr.ev-who` "Who: module X +a AAS (s% of the rise in
+foreground activity)" when module (else service, machine, user) with a
+real name carries >= 30%; it lands after 07's rows and before 02's time
+model row (29 runs before 02). Twin `s29_who.py` splits each hour's 09
+foreground count over 14 fixed clients by largest remainder (window sums
+= `ashx.winfg`). verify_report block 6g. Unexercised: RAC, multi-DBID,
+a CDB with several PDBs, the missing-grant notes, more than 40 values.
 
 #### Wait latency histograms (`sql/22_wait_histogram.sql`, `#wait-hist`)
 
@@ -2331,8 +2372,8 @@ if a busy DB ever makes it slow.
 **Opt-out (`sqlmon`, env `SQLMON=N`).** The driver resolves `~sqlmon_on`
 (`'N'` only for a falsy form, else `'Y'`) and `~sqlmon_include` =
 `sql/18_sqlmon.sql` or the stub `sql/lib/no_sqlmon.sql` (only the two
-`AWR-SECTION` markers, so the pair count holds: 29 pairs since sections
-20-28, 20 before); 00 drops the rail
+`AWR-SECTION` markers, so the pair count holds: 30 pairs since section 29
+(plan 045), 29 since sections 20-28, 20 before); 00 drops the rail
 link, 17 wraps its R6-R9 scans in `IF '~sqlmon_on' = 'Y'` (body not
 re-indented), 19's About meta line says "SQL Monitor skipped". 06's MON
 xlinks are hidden by the chrome (missing target). `sqlmon=Y` output is
@@ -3259,7 +3300,7 @@ the demo.
   the README's required grant list lacks) with static SQL: dynamic SQL in a
   handler for ORA-00942 / ORA-01031, or the whole report aborts for an
   analyst user (lint 35).
-- Don't let a visualization section (20-28) add a finding, a count or a
+- Don't let a visualization section (20-29) add a finding, a count or a
   severity of its own, or score with anything but `policy_bucket()`; 27 and
   26 must agree with section 07.
 - Don't add ECharts (or any external JS/CSS) to the fleet report — it is

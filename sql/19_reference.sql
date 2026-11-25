@@ -409,6 +409,16 @@ BEGIN
         || ' browser with the findings&rsquo; own rule against the priors left; with nothing dropped it reproduces the reported buckets exactly.'
         || ' When dropping the windows that stand out would change a metric&rsquo;s bucket (and at least 3 valid priors remain), the verdict carries one &ldquo;Baseline check&rdquo; note with'
         || ' the same numbers: the suggestion that changes the most metrics, and how the finding count would move. It is a note, not a finding: no count, pill or severity changes.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Who added the load</dt><dd>Foreground ASH (<code>DBA_HIST_ACTIVE_SESS_HISTORY</code>, <code>session_type</code> FOREGROUND, on CPU or in a'
+        || ' non-idle wait) per valid compared window, broken down by service, module, machine, program, user and, when the samples carry more than one container, PDB.'
+        || ' One sample = 10 s; AAS = samples &times; 10 s &divide; the window&rsquo;s length, and a sample in two overlapping windows counts for both, so the total'
+        || ' compares with DB time and the verdict&rsquo;s rise. Rise = Current minus the mean of the valid prior windows (a valid window without a sample for a value'
+        || ' is 0, a skipped one is left out). Per dimension the 40 values with the most samples are kept and the rest summed as others; the table lists the values'
+        || ' whose time rose, the 8 largest rises first, the rest under &ldquo;+ n more&rdquo;. A parallel or job slave&rsquo;s number is folded ((P003) &rarr;'
+        || ' (Pnnn)). The sentence names a value that carries at least half of the rise; the DB time card gets a &ldquo;Who&rdquo; row when a module (else a service,'
+        || ' machine or user) carries at least 30% of a rise of at least 0.1 AAS, with 3 or more valid prior windows. Service and PDB names need SELECT on'
+        || ' <code>DBA_HIST_SERVICE_NAME</code> / <code>DBA_HIST_PDB_INSTANCE</code>; without them they show as a hash / con_id. Evidence, not a finding: nothing'
+        || ' here is scored or counted.</dd>');
     DBMS_OUTPUT.PUT_LINE('</dl>');
     DBMS_OUTPUT.PUT_LINE('<p class="ab-meta">Run <code>~run_id</code> &middot; template <code>'
         || DBMS_XMLGEN.CONVERT('~template_name') || '</code> &middot; top_n ~top_n'

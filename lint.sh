@@ -588,16 +588,17 @@ if [ -f sql/fleet/src/fleet_js2plsql.sh ]; then
 fi
 
 # ----------------------------------------------------------------------
-# 35. Optional grants.  DBA_HIST_EVENT_HISTOGRAM (22) and DBA_HIST_SQL_PLAN
-#     (23) are not in the README's required grant list, so a section may
-#     read them only through dynamic SQL inside a handler for ORA-00942 /
-#     ORA-01031: a static FROM would abort the whole report (WHENEVER
-#     SQLERROR EXIT) for an analyst user without the grant.  A dynamic
+# 35. Optional grants.  DBA_HIST_EVENT_HISTOGRAM (22), DBA_HIST_SQL_PLAN
+#     (23), DBA_HIST_SERVICE_NAME and DBA_HIST_PDB_INSTANCE (29) are not
+#     in the README's required grant list, so a section may read them
+#     only through dynamic SQL inside a handler for ORA-00942 / ORA-01031:
+#     a static FROM would abort the whole report (WHENEVER SQLERROR EXIT)
+#     for an analyst user without the grant.  A dynamic
 #     statement sits in a string literal, so its line carries a quote.
 # ----------------------------------------------------------------------
 while IFS= read -r line; do
     finding optional-grant-static "${line%%:*}:$(printf '%s' "$line" | cut -d: -f2)" "static read of an optional-grant view -- use dynamic SQL and catch ORA-00942 / ORA-01031"
-done < <(grep -n -i -E '(from|join)[[:space:]]+dba_hist_(event_histogram|sql_plan)\b' sql/[0-9][0-9]_*.sql sql/lib/*.sql 2>/dev/null | grep -v "'" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*--')
+done < <(grep -n -i -E '(from|join)[[:space:]]+dba_hist_(event_histogram|sql_plan|service_name|pdb_instance)\b' sql/[0-9][0-9]_*.sql sql/lib/*.sql 2>/dev/null | grep -v "'" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*--')
 
 [ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then

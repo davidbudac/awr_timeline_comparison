@@ -53,6 +53,7 @@ SECTIONS = [
     ("s27_instance_map", "27_instance_map"),
     ("s20_load_response", "20_load_response"),
     ("s28_release_delta", "28_release_delta"),
+    ("s29_who", "29_who"),
     ("s01_windows", "01_windows"),
     ("s26_window_similarity", "26_window_similarity"),
     ("s16_day_profile", "16_day_profile"),
@@ -78,10 +79,11 @@ SECTIONS = [
 
 
 # sql/lib/viz_head.sql's @@ order: the stylesheets of sections 20-28, then
-# plan 039's card qualifier, plan 043's time model table, plan 044's SQL split
+# plan 039's card qualifier, plan 043's time model table, plan 044's SQL split,
+# plan 045's section 29 (Who added the load)
 VIZ_CSS = ("loadresp", "volcost", "waithist", "planflame", "blocking",
            "onset", "winsim", "instmap", "reldelta", "baseconf", "timemodel",
-           "sqlsplit")
+           "sqlsplit", "who")
 
 
 def marker(tag: str, which: str) -> str:
