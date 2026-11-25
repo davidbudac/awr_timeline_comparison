@@ -795,7 +795,7 @@ DECLARE
         nsn  PLS_INTEGER := 0;
         dd   VARCHAR2(4000);
         ndd  PLS_INTEGER := 0;
-        cr   VARCHAR2(4000);
+        cr   VARCHAR2(32767);  -- one clause per object created inside (up to 30 long names)
         unk  VARCHAR2(4000);   -- latest-only times after the window
         nseen PLS_INTEGER := 0;
         nread PLS_INTEGER := 0;
@@ -1367,7 +1367,7 @@ BEGIN
             WHEN OTHERS THEN
                 IF v_cur%ISOPEN THEN CLOSE v_cur; END IF;
                 o_crt.DELETE; o_ddl.DELETE; o_ost.DELETE; o_seen.DELETE;
-                e_ob := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTR(SQLERRM, 1, 300) END;
+                e_ob := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
         END;
         -- DBA_TAB_STATISTICS: table-level rows only (partition_name IS NULL)
         BEGIN
@@ -1394,7 +1394,7 @@ BEGIN
                         o_la.DELETE(o); o_rows.DELETE(o); o_stale.DELETE(o); o_lock.DELETE(o);
                     END IF;
                 END LOOP;
-                e_ts := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTR(SQLERRM, 1, 300) END;
+                e_ts := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
         END;
         -- DBA_TAB_STATS_HISTORY: when table statistics changed (newest first);
         -- the TIMESTAMP WITH TIME ZONE is cast to the DB server's wall clock
@@ -1423,7 +1423,7 @@ BEGIN
             WHEN OTHERS THEN
                 IF v_cur%ISOPEN THEN CLOSE v_cur; END IF;
                 o_hist.DELETE;
-                e_th := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTR(SQLERRM, 1, 300) END;
+                e_th := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
         END;
         -- DBA_INDEXES: status, visibility, statistics and the table of an index
         BEGIN
@@ -1453,7 +1453,7 @@ BEGIN
                         o_la.DELETE(o); o_rows.DELETE(o); o_tab.DELETE(o); o_ist.DELETE(o); o_vis.DELETE(o); o_part.DELETE(o);
                     END IF;
                 END LOOP;
-                e_ix := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTR(SQLERRM, 1, 300) END;
+                e_ix := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
         END;
         FOR i IN 1 .. v_nst LOOP
             IF so_cnt.EXISTS(i) AND so_cnt(i) > 0 AND st_lo.EXISTS(i) AND st_lo(i) IS NOT NULL THEN

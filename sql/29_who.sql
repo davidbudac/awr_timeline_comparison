@@ -48,6 +48,9 @@
 -- DBA_HIST_SERVICE_NAME (service_name_hash -> service_name) and
 -- DBA_HIST_PDB_INSTANCE (con_id -> pdb_name, the latest open_time).
 -- Without them a service reads "service hash 123456" and a PDB "con_id 3".
+-- ANY other error of those two name reads (plan 046's tolerant rule) falls
+-- back the same way with a one-line "Could not read <view>: <message>"
+-- note: a name lookup must never abort the report.
 --
 -- The DB time card (07 ran before this section) gets one evidence row when
 -- one module (else service, else machine, else user) value carries at
@@ -123,6 +126,8 @@ DECLARE
     v_mycon  NUMBER;
     v_nosvc  VARCHAR2(4000);
     v_nopdb  VARCHAR2(4000);
+    v_ersvc  VARCHAR2(4000);                 -- any other error of the name read
+    v_erpdb  VARCHAR2(4000);
     v_rc     SYS_REFCURSOR;
     v_sql    VARCHAR2(4000);
     v_hn     t_stab;
@@ -370,11 +375,13 @@ BEGIN
             END LOOP;
         EXCEPTION
             WHEN OTHERS THEN
+                IF v_rc%ISOPEN THEN CLOSE v_rc; END IF;
                 IF SQLCODE IN (-942, -1031) THEN
-                    IF v_rc%ISOPEN THEN CLOSE v_rc; END IF;
-                    v_nosvc := SQLERRM;
+                    v_nosvc := SUBSTRB(SQLERRM, 1, 300);
                 ELSE
-                    RAISE;
+                    -- any other error: names fall back to the hash, a note says why
+                    v_svc.DELETE;
+                    v_ersvc := SUBSTRB(SQLERRM, 1, 300);
                 END IF;
         END;
     END IF;
@@ -392,11 +399,13 @@ BEGIN
             END LOOP;
         EXCEPTION
             WHEN OTHERS THEN
+                IF v_rc%ISOPEN THEN CLOSE v_rc; END IF;
                 IF SQLCODE IN (-942, -1031) THEN
-                    IF v_rc%ISOPEN THEN CLOSE v_rc; END IF;
-                    v_nopdb := SQLERRM;
+                    v_nopdb := SUBSTRB(SQLERRM, 1, 300);
                 ELSE
-                    RAISE;
+                    -- any other error: names fall back to the con_id, a note says why
+                    v_pdb.DELETE;
+                    v_erpdb := SUBSTRB(SQLERRM, 1, 300);
                 END IF;
         END;
     END IF;
@@ -587,6 +596,10 @@ BEGIN
         || 'windows. Evidence, not a finding: nothing here is scored or counted.'
         || CASE WHEN v_nosvc IS NOT NULL THEN ' Service names need SELECT on <code>DBA_HIST_SERVICE_NAME</code>; shown as hashes.' END
         || CASE WHEN v_nopdb IS NOT NULL THEN ' PDB names need SELECT on <code>DBA_HIST_PDB_INSTANCE</code>; shown as con_id.' END
+        || CASE WHEN v_ersvc IS NOT NULL THEN ' Could not read <code>DBA_HIST_SERVICE_NAME</code>: '
+                || DBMS_XMLGEN.CONVERT(v_ersvc) || '; service names shown as hashes.' END
+        || CASE WHEN v_erpdb IS NOT NULL THEN ' Could not read <code>DBA_HIST_PDB_INSTANCE</code>: '
+                || DBMS_XMLGEN.CONVERT(v_erpdb) || '; PDB names shown as con_id.' END
         || '</p>');
     DBMS_OUTPUT.PUT_LINE('</section>');
 

@@ -189,7 +189,7 @@ BEGIN
             v_row := v_row || '<td class="num pk">&mdash;</td>';
         ELSE
             v_row := v_row || '<td class="num pk" data-pk="'
-                  || TO_CHAR(m.cur_peak, 'FM99999999990D000000', 'NLS_NUMERIC_CHARACTERS=''.,''') || '"'
+                  || TO_CHAR(m.cur_peak, 'FM999999999999990D000000','NLS_NUMERIC_CHARACTERS=''.,''') || '"'
                   || CASE WHEN m.cur_inst > 1 THEN ' data-pkinst="' || m.cur_inst || '"' END
                   || fmt_num_title(m.cur_peak) || '>' || fmt_num(m.cur_peak)
                   || CASE WHEN m.cur_inst > 1 THEN ' <small class="pki">max per instance</small>' END

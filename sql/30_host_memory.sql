@@ -494,7 +494,7 @@ BEGIN
             WHEN OTHERS THEN
                 IF v_rc%ISOPEN THEN CLOSE v_rc; END IF;
                 os_a.DELETE; os_c.DELETE;
-                e_os := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTR(SQLERRM, 1, 300) END;
+                e_os := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
         END;
     END IF;
 
@@ -545,7 +545,7 @@ BEGIN
             WHEN OTHERS THEN
                 IF v_rc%ISOPEN THEN CLOSE v_rc; END IF;
                 pg_a.DELETE; pg_c.DELETE;
-                e_pg := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTR(SQLERRM, 1, 300) END;
+                e_pg := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
         END;
 
         v_sql := 'SELECT LOWER(component), MAX(current_size) KEEP (DENSE_RANK FIRST ORDER BY NVL(con_id, 0))'
@@ -565,7 +565,7 @@ BEGIN
             WHEN OTHERS THEN
                 IF v_rc%ISOPEN THEN CLOSE v_rc; END IF;
                 mc_a.DELETE; mc_c.DELETE;
-                e_mc := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTR(SQLERRM, 1, 300) END;
+                e_mc := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
         END;
     END IF;
 
@@ -600,7 +600,7 @@ BEGIN
             WHEN OTHERS THEN
                 IF v_rc%ISOPEN THEN CLOSE v_rc; END IF;
                 rs_n := 0; rs_tot := 0;
-                e_rs := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTR(SQLERRM, 1, 300) END;
+                e_rs := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
         END;
     END IF;
 
@@ -643,7 +643,7 @@ BEGIN
             WHEN OTHERS THEN
                 IF v_rc%ISOPEN THEN CLOSE v_rc; END IF;
                 un_a.DELETE; un_c.DELETE; un_q.DELETE; un_ql.DELETE;
-                e_un := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTR(SQLERRM, 1, 300) END;
+                e_un := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
         END;
     END IF;
 

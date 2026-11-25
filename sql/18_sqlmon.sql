@@ -910,7 +910,7 @@ BEGIN
                                THEN ROUND((v_x_ci / v_x_cx - v_x_pi / v_x_px) / v_x_rise * 100) END;
                 v_ev := v_ev || pc_ev('Rows, I/O',
                     'rows per run ' || CASE WHEN v_x_rr IS NULL THEN fmt_num(v_x_cr / v_x_cx)
-                                            ELSE '&times;' || TO_CHAR(v_x_rr, 'FM9999990D0', 'NLS_NUMERIC_CHARACTERS=''.,''') END,
+                                            ELSE '&times;' || TO_CHAR(v_x_rr, 'FM999999999990D0','NLS_NUMERIC_CHARACTERS=''.,''') END,
                     CASE WHEN v_x_sh IS NOT NULL
                          THEN 'I/O wait is ' || CASE WHEN v_x_sh < 0 THEN '&minus;' END
                               || TO_CHAR(ABS(v_x_sh), 'FM999999999990') || '% of the per-run rise'
