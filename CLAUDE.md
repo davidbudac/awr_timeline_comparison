@@ -72,6 +72,7 @@ sql/
 ├── 09_ash_timeline.sql  -- ONE ASH scan: hourly ECharts timeline + AWR_DATA.ashx / .ashe
 │                        --   (Activity charts: by wait class / by wait event) + the Activity lane row
 │                        --   + "Busiest minute per window" (ashx.pk, plan 041)
+│                        --   + "CPU capacity per window" (ashx.cpu, plan 042)
 ├── 10_db_time_summary.sql      -- stacked DB time across the full span (ECharts)
 ├── 11_top_sql_ash_breakdown.sql-- per-Top-N-SQL ASH cards (stacked by wait event)
 ├── 12_param_changes.sql -- init params differing across windows + config card
@@ -788,6 +789,44 @@ and foreground flag; no second ASH scan):
   stripe tooltip of both charts (looked up by `w.o` in `AX.pk`). RAC: ASH
   minutes add up across instances (exact); see 03's peak for SYSMETRIC.
   verify_report block 6d.
+- `ashx.cpu = {n, used, cur:{n, used, pct, ash}}` (plan 042; ashx only)
+  -- **CPU capacity**: `n` / `used` one entry per window, oldest first,
+  `null` = unknown (never 0): `cpu_count` from `DBA_HIST_PARAMETER` at each
+  VALID instance's end snapshot (lowest `con_id`, section 12's KEEP rule;
+  `REGEXP_LIKE '^[0-9]+$'` before `TO_NUMBER`) summed over the instances,
+  and DB CPU AAS = the time model's `'DB CPU'` delta (microseconds) summed
+  / `MAX(dur_sec)` / 1e6 (08's idiom, so it equals the DB CPU elsewhere).
+  A window counts only when EVERY per-instance row of `windows` is valid
+  (`n_skip`, reason "an instance skipped"): ASH filters on `inst_num`
+  only, so a partly valid RAC window would compare all instances' ASH
+  with fewer instances' DB CPU. `cur.ash` = the Current window's
+  FOREGROUND ASH on-CPU AAS (`winfg` CPU), null unless that window is
+  fully valid. Emitted between `pk` and `fine`; the twin drops
+  `fine.block`'s leading `],` for it. Table `table#ash-cpu[data-nocount]`
+  "CPU capacity per window" after `#ash-peaks` (Current first, `td[data-cpu-n]`
+  / `td[data-cpu-used]`, reason in `span.imm`, ASH minus DB CPU to 2
+  decimals). Client (`js_timeline` section 5c): pure `AWR_TL.cpuInfo(cpu)`
+  (null without `cur.n > 0` and `cur.used`; `wait` = ASH minus DB CPU when
+  >= `CPUQ` 10 % of DB CPU AND >= `CPUQA` 0.5 AAS; `bound` at `CPUB` 90 %;
+  `changed` = the windows' known values differ) and `cpuText(i)`
+  (unit-tested); `cpuCard()` (boot, after `pkCard()`) appends
+  `div.evr.ev-cpu` "CPU" / "Capacity" ("DB CPU 8.6 of cpu_count 16 (54%)",
+  "; ASH saw x on CPU, so about y sessions were waiting for a CPU", ";
+  CPU-bound"), no delta, no band. On the CLASS chart only (`CH[0].cpu`,
+  both layouts, compact too) `cpuMark()` draws `line.xcpu` (dashed,
+  `--ink-2`) + `text.xcpt` "cpu_count 16[, changed]" before `dlab` ONLY
+  when `cur.n <= ymax` -- the axis is never stretched to reach it; the
+  line and the label's box go to `dlab` as extra `avoid` boxes (new
+  optional 8th argument `xb`). Above the range, `cpuHead()` shows
+  `span.axcpu` "cpu_count 64, above this scale" after `#ax-range`
+  (created by `spInit` only with cpu data; updated at the end of
+  `draw` / `drawWin` for `CH[0]` and in `spHead`, hidden while the class
+  chart is not shown). Without `ashx.cpu` both charts emit exactly the
+  pre-042 SVG. `.xcpt` uses the `.xdl` font (keep it out of
+  `css_design.css`'s Geist rule: `tw()` measures it). verify_report block
+  6e (payload, table, card row = `cur`, line <=> `n <= ymax` after load
+  and after hiding the largest classes; the demo must show both states).
+  Not scored; host CPUs / OSSTAT are plan 046's.
 Numbers via `RTRIM(TO_CHAR(ROUND(v,3),'FM9999999990D999'),'.')`.
 
 **Client** (`js_timeline`, section 6): ONE chart factory — `mkChart(root,

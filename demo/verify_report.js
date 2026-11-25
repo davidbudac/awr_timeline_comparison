@@ -2170,6 +2170,108 @@ const LABEL_BAND = () => {
     await page.close();
   }
 
+  // ---- 6e. plan 042: CPU capacity.  (a) AWR_DATA.ashx.cpu: n / used one
+  // entry per window, null for a skipped window, cur = the last entries.
+  // (b) 09's table "CPU capacity per window": one row per window, its
+  // Current cells = cur, no severity.  (c) the DB time card's "CPU" row
+  // exists exactly when the card, cur.n and cur.used do; its numbers are
+  // cur's.  (d) the class chart's cpu_count line is drawn exactly when
+  // cur.n lies inside the y range (read from the axis labels), the
+  // header's "above this scale" note exactly when it does not: after load
+  // and again after hiding the largest classes from the legend (which
+  // rescales the axis).  A report without ashx.cpu skips every part.
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const r42 = await page.evaluate(() => {
+      const out = {}, bad = [];
+      const P = (window.AWR_DATA || {}).ashx, W = (window.AWR_WIN || {}).w || [], C = P && P.cpu;
+      if (!C) { out.pay = 'no ashx.cpu (report before plan 042)'; return out; }
+      ['n', 'used'].forEach(k => {
+        const a = C[k] || [];
+        if (a.length !== W.length) bad.push(k + ' has ' + a.length + ' entries for ' + W.length + ' windows');
+        a.forEach((v, i) => { if (W[i] && W[i].v === 'N' && v != null) bad.push(k + ': skipped window ' + W[i].o + ' has ' + v);
+          if (v != null && !(v >= 0)) bad.push(k + '[' + i + '] = ' + v); });
+      });
+      const cu = C.cur || {}, L = W.length - 1;
+      if ((C.n || [])[L] !== cu.n || (C.used || [])[L] !== cu.used) bad.push('cur ' + JSON.stringify(cu) + ' is not the last entries');
+      if (cu.n != null && cu.used != null && Math.abs(cu.pct - cu.used / cu.n * 100) > 2e-3) bad.push('cur.pct ' + cu.pct);
+      const tb = document.querySelector('#ash-timeline table#ash-cpu');
+      if (!tb) bad.push('no #ash-cpu table');
+      else {
+        const rows = [...tb.tBodies[0].rows];
+        if (rows.length !== W.length) bad.push('#ash-cpu has ' + rows.length + ' rows for ' + W.length + ' windows');
+        const c0 = rows[0], cn = c0 && c0.querySelector('td[data-cpu-n]'), cd = c0 && c0.querySelector('td[data-cpu-used]');
+        if (c0 && c0.cells[0].getAttribute('data-w') !== '0') bad.push('#ash-cpu first row is not Current');
+        if ((cu.n != null) !== !!cn || (cn && +cn.getAttribute('data-cpu-n') !== cu.n)) bad.push('#ash-cpu Current cpu_count ' + (cn && cn.getAttribute('data-cpu-n')));
+        if ((cu.used != null) !== !!cd || (cd && Math.abs(+cd.getAttribute('data-cpu-used') - cu.used) > 1e-9)) bad.push('#ash-cpu Current DB CPU ' + (cd && cd.getAttribute('data-cpu-used')));
+        if (tb.querySelector('tr.crit, tr.warn, .bd, .badge')) bad.push('#ash-cpu carries a severity');
+        if (!tb.hasAttribute('data-nocount')) bad.push('#ash-cpu lacks data-nocount');
+      }
+      out.pay = bad.length ? 'FAIL ' + bad.join('; ') : 'ok (' + (C.n || []).filter(v => v != null).length + ' of ' + W.length + ' known, Current ' + cu.n + ' / ' + cu.used + ')';
+      // (c) the card row: the numbers of cur, the rule of cpuInfo
+      const card = document.getElementById('f-dbtime'), row = document.querySelector('#f-dbtime .evr.ev-cpu');
+      const want = !!(card && cu.n > 0 && cu.used != null);
+      if (want !== !!row) out.card = 'FAIL row ' + (row ? 'present' : 'missing') + ' (card ' + !!card + ', cur ' + JSON.stringify(cu) + ')';
+      else if (row) {
+        const f = v => v >= 100 ? String(Math.round(v)) : v >= 0.1 ? v.toFixed(1) : v.toFixed(2), p = cu.used / cu.n * 100, pr = Math.round(p);
+        const head = 'DB CPU ' + f(cu.used) + ' of cpu_count ' + cu.n + ' (' + (pr < 1 && p > 0 ? '<1' : pr) + '%)', txt = row.querySelector('.de').textContent;
+        const d = cu.ash == null ? null : cu.ash - cu.used, q = d != null && d >= 0.1 * cu.used && d >= 0.5;
+        const ok = txt.indexOf(head) === 0 && q === /waiting for a CPU/.test(txt) && (cu.used >= 0.9 * cu.n) === /CPU-bound/.test(txt)
+          && !row.querySelector('.bd, .d, .badge');
+        out.card = ok ? 'ok (' + txt + ')' : 'FAIL "' + txt + '" want "' + head + '"' + (q ? ' + queue' : '');
+      } else out.card = 'none (no card or no Current cpu_count / DB CPU)';
+      return out;
+    });
+    // (d) the line vs the y range, after load and after the legend rescales
+    if (/^ok/.test(r42.pay || '')) {
+      const state = async () => {
+        await page.mouse.move(2, 2); await page.waitForTimeout(150);
+        return page.evaluate(() => {
+          const sv = document.querySelector('#ax-cls .axsvg'), cu = window.AWR_DATA.ashx.cpu.cur, n = cu.n;
+          if (!sv || !sv.getClientRects().length || !(n > 0) || cu.used == null) return null;
+          const ys = [...sv.querySelectorAll('text.at')].map(t => t.textContent).filter(t => /^\d+(\.\d+)?$/.test(t)).map(Number);
+          const ymax = Math.max(...ys), line = !!sv.querySelector('line.xcpu'), lab = sv.querySelector('text.xcpt');
+          const hd = document.querySelector('#ashx .axcpu'), note = !!(hd && !hd.hidden && hd.getClientRects().length);
+          return { n, ymax, line, note, lab: lab ? lab.textContent : null, in: n <= ymax + 1e-9 };
+        });
+      };
+      const s0 = await state();
+      const ok1 = s => s && s.line === s.in && s.note === !s.in && (!s.line || /^cpu_count \d+/.test(s.lab || 'cpu_count 0'));
+      if (!s0) r42.line = 'skipped (class chart not shown or no Current cpu_count)';
+      else {
+        // hide classes, largest Current share first, until the axis falls below cpu_count (or one is left)
+        const hid = await page.evaluate(() => {
+          const P = window.AWR_DATA.ashx, L = P.win[0].length - 1, bs = [...document.querySelectorAll('#ax-cls .axc')];
+          const ord = P.classes.map((c, k) => [k, P.win[k][L]]).sort((a, b) => b[1] - a[1]).map(x => x[0]);
+          return { ord, n: bs.length };
+        });
+        const clicked = [];
+        let s1 = s0;
+        for (const k of hid.ord.slice(0, hid.n - 1)) {
+          if (!s1.in) break;
+          await page.evaluate(k => document.querySelector('#ax-cls .axc[data-c="' + k + '"]').click(), k);
+          clicked.push(k);
+          s1 = await state();
+        }
+        for (const k of clicked) await page.evaluate(k => document.querySelector('#ax-cls .axc[data-c="' + k + '"]').click(), k);
+        const s2 = await state();
+        r42.line = (ok1(s0) && ok1(s1) && ok1(s2) && s2.line === s0.line)
+          ? 'ok (load: ' + (s0.in ? 'line at ' + s0.n + ' of ' + s0.ymax : 'note, ' + s0.n + ' over ' + s0.ymax) + '; ' + clicked.length + ' hidden: '
+            + (s1.in ? 'line, ' + s1.n + ' of ' + s1.ymax : 'note, ' + s1.n + ' over ' + s1.ymax) + ')'
+          : 'FAIL ' + JSON.stringify({ s0, s1, s2 });
+        r42.both = s0.in !== s1.in;
+      }
+    }
+    console.log('plan 042', JSON.stringify(r42));
+    for (const k of ['pay', 'card', 'line']) if (/^FAIL/.test(r42[k] || '')) fail('CPU capacity (plan 042) ' + k + ': ' + r42[k]);
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) {
+      if (!/^ok/.test(r42.pay) || !/^ok/.test(r42.card) || !/^ok/.test(r42.line || '') || !r42.both)
+        fail('demo: every plan 042 part should run, the line in range at load and the note after hiding: ' + JSON.stringify(r42));
+    }
+    if (errors.length) fail('plan 042: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
   // ---- 7. the design (quiet / dashboard): the shared pieces, then the
   // dashboard's KPI cards, findings table, Activity tabs and palette
   if (DESIGN !== 'classic') {

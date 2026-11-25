@@ -51,6 +51,18 @@ release bumps `awr_version`).
   a "Peak" evidence row ("53.7 active sessions at 09:19; prior windows'
   busiest minutes 19.5-50.5") and the Activity charts' window tooltips a
   "Busiest minute" line. Unscored: no finding, count or severity changes.
+- **CPU capacity** (plan 042): is 8.6 sessions on CPU a lot? The DB time
+  card gets a "CPU" evidence row, "DB CPU 8.6 of cpu_count 16 (54%)", which
+  adds "ASH saw x on CPU, so about y sessions were waiting for a CPU" when
+  foreground ASH on CPU exceeds DB CPU by at least 10 % and 0.5 AAS (ASH
+  counts the run queue as on CPU, the time model does not) and "CPU-bound"
+  at 90 %. The by-wait-class Activity chart draws the Current `cpu_count`
+  as a dashed line when it lies inside the chart's scale (the scale is
+  never stretched for it; above it the header says "cpu_count 64, above
+  this scale"). Active sessions lists every window in "CPU capacity per
+  window" (`cpu_count` from `DBA_HIST_PARAMETER`, DB CPU from the time
+  model, ASH on CPU, the difference), also `AWR_DATA.ashx.cpu`; an About
+  note explains what `cpu_count` is and is not. Unscored.
 - **Docs / tooling:** the demo generator is now platform-independent (every
   libm-derived value is rounded to 10 significant digits, digit counts are
   exact), so the demo pages regenerate byte for byte on Linux as on macOS

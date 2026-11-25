@@ -371,6 +371,68 @@ function pkTip(o){
   if(!e||e[1]==null)return '';
   return '<div class="tr2 tpk"><span>Busiest minute, all sessions</span><b>'+pkFmt(e[1])+' AAS at '+esc(pkAt(e[2],AX.wh))+'</b></div>';
 }
+/* ---- 5c. plan 042: CPU capacity (AWR_DATA.ashx.cpu = {n: [cpu_count per
+   window, oldest first, null = unknown], used: [DB CPU AAS per window],
+   cur: {n, used, pct, ash}}, ash = the Current window's foreground ASH on
+   CPU).  Informational, never scored.  cpuInfo(cpu) (pure, unit-tested):
+   null without a Current cpu_count and DB CPU; wait = ASH on CPU minus DB
+   CPU when it passes CPUQ (10 % of DB CPU) AND CPUQA (0.5 AAS), else null
+   (ASH counts a session on CPU while it waits in the run queue too); bound
+   = DB CPU at or above CPUB (90 %) of cpu_count; changed = the windows'
+   known cpu_count values differ.  cpuText(i): the card row's sentence. */
+var CPUQ=0.1,CPUQA=0.5,CPUB=0.9;
+function cpuFmt(v){return v>=100?String(Math.round(v)):v>=0.1?v.toFixed(1):v.toFixed(2);}
+TL.cpuInfo=function(cpu){
+  var c=cpu&&cpu.cur;if(!c||!(c.n>0)||c.used==null)return null;
+  var ash=c.ash==null?null:c.ash,d=ash==null?null:ash-c.used,lo=null,hi=null;
+  (cpu.n||[]).forEach(function(v){if(v==null)return;if(lo===null||v<lo)lo=v;if(hi===null||v>hi)hi=v;});
+  return {n:c.n,used:c.used,pct:c.used/c.n*100,ash:ash,wait:d!=null&&d>=CPUQ*c.used&&d>=CPUQA?d:null,
+          bound:c.used>=CPUB*c.n,changed:lo!==null&&lo!==hi,lo:lo,hi:hi};
+};
+TL.cpuText=function(i){
+  var p=Math.round(i.pct),t='DB CPU '+cpuFmt(i.used)+' of cpu_count '+i.n+' ('+(p<1&&i.pct>0?'<1':p)+'%)';
+  if(i.wait!=null)t+='; ASH saw '+cpuFmt(i.ash)+' on CPU, so about '+cpuFmt(i.wait)+' sessions were waiting for a CPU';
+  if(i.bound)t+='; CPU-bound';
+  return t;
+};
+/* the DB time card's capacity row (only with the card and a Current
+   cpu_count and DB CPU), after the busiest-minute row */
+function cpuCard(){
+  var card=$('#f-dbtime');if(!card||!AX)return;
+  var I=TL.cpuInfo(AX.cpu);if(!I)return;
+  var dl=$('dl.ev',card);
+  if(!dl){var fb=$('.fc-b',card);if(!fb)return;dl=mk('dl','ev',fb);}
+  var r=mk('div','evr ev-cpu',dl);
+  r.title='cpu_count (DBA_HIST_PARAMETER, the Current window\u2019s end snapshot) = the CPU threads the instance may use, or the instance-caging limit; DB CPU = the time model\u2019s foreground CPU time over the window.'
+    +' ASH counts a session on CPU also while it waits for a CPU, so ASH on CPU clearly above DB CPU means a run queue; ASH is a sample (one every 10 s).'
+    +(I.changed?' cpu_count changed across the compared windows ('+I.lo+'\u2013'+I.hi+').':'')+' Not scored.';
+  r.innerHTML='<dt>CPU</dt><dd><span class="id txt">Capacity</span><span class="de">'+esc(TL.cpuText(I))+'</span></dd><div class="m"></div>';
+}
+/* the Current cpu_count as a dashed line on the by-wait-class chart, only
+   when it lies inside the y range [0, ymax] (the axis is never stretched to
+   reach it: 64 CPUs over 6 AAS would flatten the chart); its label at the
+   right end, above the line (below it when that leaves the plot or meets
+   the highlight note nb).  {s: svg, box: the label's box and a strip along
+   the line, for dlab to avoid} or null; c.cpuUp = cpu_count above the range. */
+function cpuMark(c,Y,ymax,x0,x1,top,ph,nb){
+  var I=c.cpu;c.cpuUp=false;if(!I)return null;
+  if(I.n>ymax+1e-9){c.cpuUp=true;return null;}
+  var y=Y(I.n),lb='cpu_count '+I.n+(I.changed?', changed':''),w=tw(lb),xr=x1-4,pick=null;
+  [[y-4,[xr-w,y-14,xr,y-3]],[y+12,[xr-w,y+2,xr,y+13]]].forEach(function(q){
+    var b=q[1];if(pick||b[1]<top-4||b[3]>top+ph)return;
+    if(nb&&b[0]<nb[2]&&b[2]>nb[0]&&b[1]<nb[3]&&b[3]>nb[1])return;pick=q;});
+  var s='<line class="xcpu" x1="'+x0+'" x2="'+x1+'" y1="'+y.toFixed(1)+'" y2="'+y.toFixed(1)+'"/>';
+  if(pick)s+='<text class="xcpt" x="'+xr.toFixed(1)+'" y="'+pick[0].toFixed(1)+'" text-anchor="end">'+esc(lb)+'</text>';
+  var box=[[x0,y-1,x1,y+1]];if(pick)box.push(pick[1]);
+  return {s:s,box:box};
+}
+/* the header's note when cpu_count is above the class chart's y range
+   (hidden when the line is drawn, without cpu data, or the chart is not shown) */
+function cpuHead(){
+  var el=SP&&SP.cpuEl,c=CH[0];if(!el)return;
+  var on=!!(c&&c.cpu&&c.cpuUp&&shown(c.plot));el.hidden=!on;
+  if(on)el.textContent='cpu_count '+c.cpu.n+(c.cpu.changed?' (changed)':'')+', above this scale';
+}
 /* ---- 6. Activity, whole span (section#activity, first in Timeline / All
    sections, under the verdict in Summary, compact there): one
    chart factory, two instances over one time axis -- by wait class
@@ -535,7 +597,12 @@ function spInit(){
       reset:doc.getElementById('ax-reset'),range:doc.getElementById('ax-range'),sel:null,F:null,rk:null,rv:null,mode:'span',wk:0,wf:0};
   SP.F=fineInit(AX.fine);
   CH=[];
-  mkChart(doc.getElementById('ax-cls'),AX,AX.classes.map(wcol),{flags:true,noun:'classes',what:'wait class',labels:true});
+  var cc=mkChart(doc.getElementById('ax-cls'),AX,AX.classes.map(wcol),{flags:true,noun:'classes',what:'wait class',labels:true});
+  /* plan 042: the Current cpu_count on the class chart, a header note when
+     it is above the chart's y range */
+  if(cc){cc.cpu=TL.cpuInfo(AX.cpu);
+    if(cc.cpu&&SP.range){SP.cpuEl=mk('span','axcpu');SP.cpuEl.hidden=true;SP.range.parentNode.insertBefore(SP.cpuEl,SP.range.nextSibling);
+      SP.cpuEl.title='The Current window\u2019s cpu_count (the CPU threads the instance may use) is above the chart\u2019s y range, which is not stretched to reach it.';}}
   var ev=doc.getElementById('ax-ev');
   if(okPay(AE,n))mkChart(ev,AE,evColors(AE.classes),{noun:'events',what:'wait event',labels:true});
   else if(ev)ev.hidden=true;
@@ -652,7 +719,7 @@ TL.axLayout=function(m,persist){
   hideAll();tipOff();drawAll(true);
 };
 function spHead(){
-  if(!SP)return;var d0=SP.dom[0],d1=SP.dom[1],zoomed=d0>SP.full[0]||d1<SP.full[1];
+  if(!SP)return;cpuHead();var d0=SP.dom[0],d1=SP.dom[1],zoomed=d0>SP.full[0]||d1<SP.full[1];
   if(SP.mode==='win'){
     if(SP.reset)SP.reset.hidden=true;
     var n=SP.win.length,K=SP.wk||n,f=SP.wf||0;
@@ -855,8 +922,9 @@ TL.labelAlts=labelAlts;
 function noteBox(hl,padL,top){return hl&&hl.note?[padL+6,top+3,padL+6+tw(hl.note)*1.2,top+16]:null;}
 /* the labels of chart c: groups [{pts, x0, x1}] (colPts points), series
    order ord stacked from zero exactly as bands() does, y by Y, nb = the
-   highlight note's box (or null) */
-function dlab(c,groups,ord,on,Y,reb,nb){
+   highlight note's box (or null), xb = more boxes to keep clear (plan 042:
+   the cpu_count line and its label), or null */
+function dlab(c,groups,ord,on,Y,reb,nb,xb){
   if(!c.lab)return '';
   var G=groups.filter(function(g){return g.pts.length>=2;}),lo=G.map(function(g){return g.pts.map(function(){return 0;});}),cands=[];
   ord.forEach(function(k){
@@ -864,7 +932,7 @@ function dlab(c,groups,ord,on,Y,reb,nb){
     G.forEach(function(g,gi){var hi=lo[gi].map(function(l,j){return l+(rV(c,k,g.pts[j][1])||0);});yl.push(lo[gi].map(Y));yh.push(hi.map(Y));lo[gi]=hi;});
     if(!reb||(on&&on[k]))cands.push({k:k,alts:labelAlts(lcuts(c.P.classes[k]),c.P.classes,k),yl:yl,yh:yh});
   });
-  return fitLabels(G.map(function(g){return {xs:g.pts.map(function(p){return p[0];}),x0:g.x0,x1:g.x1};}),cands,{min:LBH,max:LMAX,th:LTH,y1:Y(0),avoid:nb?[nb]:[]})
+  return fitLabels(G.map(function(g){return {xs:g.pts.map(function(p){return p[0];}),x0:g.x0,x1:g.x1};}),cands,{min:LBH,max:LMAX,th:LTH,y1:Y(0),avoid:(nb?[nb]:[]).concat(xb||[])})
     .map(function(L){return '<text class="xdl" x="'+L.x.toFixed(1)+'" y="'+(L.y+4).toFixed(1)+'" text-anchor="middle">'+esc(L.txt)+'</text>';}).join('');
 }
 /* the release markers of list [{x: px, m: marker}]: a line through the plot
@@ -1007,8 +1075,10 @@ function drawWin(c,o){
   /* the hidden bucket band: as draw; the caps */
   s+='<rect class="xbk" x="0" y="'+top+'" width="0" height="'+ph+'" visibility="hidden"/>';
   hit.forEach(function(r){s+='<rect class="xwc'+r[3]+'" x="'+r[1].toFixed(1)+'" y="'+(top-5)+'" width="'+r[2].toFixed(1)+'" height="4" rx="1"/>';});
-  /* the direct labels, each inside its panel (dlab) */
-  s+=dlab(c,pan.map(function(p){return {pts:p.pts,x0:p.x0,x1:p.x0+p.w};}),ord,on,Y,reb,noteBox(hl,padL,top));
+  /* the cpu_count line (plan 042, the class chart only), then the direct
+     labels, each inside its panel (dlab) */
+  var cq=cpuMark(c,Y,ymax,padL,Wd-padR,top,ph,noteBox(hl,padL,top));if(cq)s+=cq.s;
+  s+=dlab(c,pan.map(function(p){return {pts:p.pts,x0:p.x0,x1:p.x0+p.w};}),ord,on,Y,reb,noteBox(hl,padL,top),cq&&cq.box);
   /* close the group and the x axis line: as draw */
   s+='</g><line class="ax" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+(top+ph)+'" y2="'+(top+ph)+'"/>';
   /* window labels under the lower chart: every st-th panel counted from the Current one */
@@ -1027,6 +1097,7 @@ function drawWin(c,o){
       +esc((wi.o===0?'Current window, ':offTxt(wi)+' window, ')+wi.t+(wi.o===0?'':'. Pin it'))+'"/>';});
   setSvg(c,s);
   c.g={mode:'win',pan:pan,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:SP.dom[0],d1:SP.dom[1],ymax:ymax,ord:ord,hk:c.hk,cm:o.cm};
+  if(c===CH[0])cpuHead();
 }
 function draw(c,force){
   if(!c||!SP||!shown(c.plot))return;
@@ -1076,8 +1147,10 @@ function draw(c,force){
     s+='<rect class="xw'+cls+'" x="'+x.toFixed(1)+'" y="'+top+'" width="'+w.toFixed(1)+'" height="'+ph+'"/><rect class="xwc'+cls+'" x="'+x.toFixed(1)+'" y="'+(top-5)+'" width="'+w.toFixed(1)+'" height="4" rx="1"/>';
     hit.push([i,x,w]);
   });
-  /* the bands named on the chart (dlab), above the stripes */
-  s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb,noteBox(hl,padL,top));
+  /* the cpu_count line (plan 042, the class chart only), then the bands
+     named on the chart (dlab), above the stripes */
+  var cq=cpuMark(c,Y,ymax,padL,Wd-padR,top,ph,noteBox(hl,padL,top));if(cq)s+=cq.s;
+  s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb,noteBox(hl,padL,top),cq&&cq.box);
   s+='</g><line class="ax" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+(top+ph)+'" y2="'+(top+ph)+'"/>';
   /* x ticks: the smallest interval that leaves about 88 px per label, counted from
      midnight of the Current window's day (weekly ticks land on its weekday);
@@ -1105,6 +1178,7 @@ function draw(c,force){
   });
   setSvg(c,s);
   c.g={mode:'span',X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,pts:pts,hk:c.hk,cm:cm};
+  if(c===CH[0])cpuHead();
 }
 function tAt(c,cx){var x=toSvg(c,cx,0).x;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}
 function bucketAt(t){var j=Math.floor((t-SP.t0)/SP.bh);return j>=0&&j<SP.T.length&&t<SP.T1[j]?j:-1;}
@@ -1177,6 +1251,7 @@ doc.addEventListener('DOMContentLoaded',function(){
   tools();
   activity();
   pkCard();
+  cpuCard();
   spInit();
   var b=doc.getElementById('tl-body');if(b)b.addEventListener('scroll',sync,{passive:true});
   var tl=doc.getElementById('tl');if(tl&&W.render)W.render(tl);

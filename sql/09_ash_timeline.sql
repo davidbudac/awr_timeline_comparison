@@ -81,6 +81,23 @@
 -- Ties: the earliest minute.  Not scored.  The same numbers, with each
 -- window's average, are the table "Busiest minute per window" at the end
 -- of this section (JS off shows it).
+-- ashx.cpu (plan 042) = {n, used, cur} -- the CPU capacity of each
+-- compared window, oldest first, null = unknown (a skipped window, a
+-- window where one instance was skipped, a missing row), never 0:
+--   n     cpu_count (DBA_HIST_PARAMETER at the window's END snapshot per
+--         instance, the lowest con_id as in section 12, summed over the
+--         valid instances: what the instance may use, CPU threads or the
+--         instance-caging limit -- not the host's cores);
+--   used  DB CPU in active sessions (DBA_HIST_SYS_TIME_MODEL 'DB CPU',
+--         microseconds, end - begin per instance, summed, / the window's
+--         real span MAX(dur_sec), the 08 idiom: foreground CPU time);
+--   cur   {n, used, pct = used / n x 100, ash = the Current window's
+--         FOREGROUND ASH on-CPU AAS, winfg's CPU value}: the DB time
+--         card's capacity row and the Activity chart's cpu_count line
+--         (js_timeline).  ASH counts a session ON CPU while it runs OR
+--         waits in the run queue; DB CPU counts only the CPU used.
+-- Not scored.  The same numbers are the table "CPU capacity per window"
+-- after "Busiest minute per window".
 -- plus the Activity lane's row (sql/lib/timeline.plsql; Current vs the
 -- mean of the valid prior windows, not scored).  A sample belongs to
 -- EVERY window whose span [start, start + win_hours) contains it: with
@@ -684,7 +701,90 @@ BEGIN
         v_pmin  NUMBER;
         v_ptok  VARCHAR2(200);
         v_pwhy  VARCHAR2(200);
+        -- plan 042: CPU capacity per window (week_offset -> value), the
+        -- Current window's foreground ASH on CPU, an unknown window's reason
+        v_cpn   t_nums;
+        v_cpu   t_nums;
+        v_cpw   t_lab_tab;
+        v_cash  NUMBER;
+        v_cw    NUMBER;
+        v_cwhy  VARCHAR2(200);
     BEGIN
+        -- plan 042: cpu_count and DB CPU per compared window (ashx.cpu, see
+        -- the header).  A window counts only when EVERY instance row of it
+        -- is valid (RAC: otherwise DB CPU would sum fewer instances than
+        -- the ASH scan, which filters on inst_num only).
+        FOR r IN (
+            WITH
+            @@sql/lib/windows_cte.sql
+            ,
+            cpu_par AS (
+                -- the lowest con_id (the instance-level value), as in 12
+                SELECT w.week_offset, w.instance_number,
+                       MAX(p.value) KEEP (DENSE_RANK FIRST
+                           ORDER BY p.con_id, p.con_dbid) AS pval
+                FROM   valid_windows w
+                JOIN   dba_hist_parameter p
+                  ON   p.dbid = w.dbid
+                 AND   p.snap_id = w.end_snap_id
+                 AND   p.instance_number = w.instance_number
+                 AND   p.parameter_name IN ('cpu_count', 'CPU_COUNT')   -- V$ names are lower case
+                GROUP BY w.week_offset, w.instance_number
+            ),
+            cpu_tm AS (
+                -- DB CPU (time model, microseconds): pairs -> bounds
+                SELECT w.week_offset, w.instance_number,
+                       SUM(CASE WHEN tm.snap_id = w.begin_snap_id THEN tm.value END) AS beg_val,
+                       SUM(CASE WHEN tm.snap_id = w.end_snap_id   THEN tm.value END) AS end_val
+                FROM   valid_windows w
+                JOIN   dba_hist_sys_time_model tm
+                  ON   tm.dbid = w.dbid
+                 AND   tm.snap_id IN (w.begin_snap_id, w.end_snap_id)
+                 AND   tm.instance_number = w.instance_number
+                 AND   tm.stat_name = 'DB CPU'
+                GROUP BY w.week_offset, w.instance_number
+            ),
+            win_inst AS (
+                SELECT week_offset, COUNT(*) AS n_all,
+                       SUM(CASE WHEN valid_flag = 'Y' THEN 1 ELSE 0 END) AS n_ok
+                FROM   windows
+                GROUP BY week_offset
+            ),
+            cpu_inst AS (
+                SELECT w.week_offset, w.dur_sec,
+                       CASE WHEN REGEXP_LIKE(TRIM(cp.pval), '^[0-9]+$')
+                            THEN TO_NUMBER(TRIM(cp.pval)) END AS cpus,
+                       CASE WHEN ct.end_val >= ct.beg_val
+                            THEN (ct.end_val - ct.beg_val) / 1e6 END AS cpu_sec
+                FROM   valid_windows w
+                LEFT JOIN cpu_par cp
+                  ON   cp.week_offset = w.week_offset
+                 AND   cp.instance_number = w.instance_number
+                LEFT JOIN cpu_tm ct
+                  ON   ct.week_offset = w.week_offset
+                 AND   ct.instance_number = w.instance_number
+            )
+            SELECT ci.week_offset,
+                   MAX(wi.n_all) - MAX(wi.n_ok) AS n_skip,
+                   CASE WHEN COUNT(ci.cpus) = COUNT(*) THEN SUM(ci.cpus) END AS cpus,
+                   CASE WHEN COUNT(ci.cpu_sec) = COUNT(*) AND MAX(ci.dur_sec) > 0
+                        THEN SUM(ci.cpu_sec) / MAX(ci.dur_sec) END AS cpu_aas
+            FROM   cpu_inst ci
+            JOIN   win_inst wi ON wi.week_offset = ci.week_offset
+            GROUP BY ci.week_offset
+        ) LOOP
+            IF r.n_skip > 0 THEN
+                v_cpw(r.week_offset) := 'an instance skipped';
+            ELSE
+                IF r.cpus > 0 THEN
+                    v_cpn(r.week_offset) := r.cpus;
+                END IF;
+                IF r.cpu_aas IS NOT NULL THEN
+                    v_cpu(r.week_offset) := r.cpu_aas;
+                END IF;
+            END IF;
+        END LOOP;
+
         -- the classes in stacking order (insertion sort, a dozen at most)
         v_ci := v_class_totals.FIRST;
         WHILE v_ci IS NOT NULL LOOP
@@ -793,8 +893,44 @@ BEGIN
         IF v_row IS NOT NULL THEN
             DBMS_OUTPUT.PUT_LINE(v_row);
         END IF;
+        -- plan 042: the CPU capacity (ashx.cpu, see the header), oldest
+        -- first, null = unknown; lines flushed under 30000 bytes
+        DBMS_OUTPUT.PUT_LINE('],"cpu":{"n":[');
+        FOR p IN 1 .. 2 LOOP
+            IF p = 2 THEN
+                DBMS_OUTPUT.PUT_LINE('],"used":[');
+            END IF;
+            v_row := NULL;
+            FOR k IN REVERSE 0 .. ~weeks_back LOOP
+                v_ptok := CASE WHEN k < ~weeks_back THEN ',' END
+                    || CASE WHEN p = 1 AND v_cpn.EXISTS(k) THEN aas_tok(v_cpn(k))
+                            WHEN p = 2 AND v_cpu.EXISTS(k) THEN aas_tok(v_cpu(k))
+                            ELSE 'null' END;
+                IF LENGTH(v_row) + LENGTH(v_ptok) > 30000 THEN
+                    DBMS_OUTPUT.PUT_LINE(v_row);
+                    v_row := NULL;
+                END IF;
+                v_row := v_row || v_ptok;
+            END LOOP;
+            IF v_row IS NOT NULL THEN
+                DBMS_OUTPUT.PUT_LINE(v_row);
+            END IF;
+        END LOOP;
+        -- the Current window's foreground ASH on CPU, only for a window
+        -- whose every instance is valid (the DB CPU it is compared with)
+        v_cash := NULL;
+        IF v_total_n > 0 AND NVL(INSTR(v_valid, '|0=Y|'), 0) > 0 AND NOT v_cpw.EXISTS(0) THEN
+            v_cash := CASE WHEN v_wfcells.EXISTS('0|CPU') THEN v_wfcells('0|CPU') ELSE 0 END
+                      / (360 * ~win_hours);
+        END IF;
+        DBMS_OUTPUT.PUT_LINE('],"cur":{"n":'
+            || CASE WHEN v_cpn.EXISTS(0) THEN aas_tok(v_cpn(0)) ELSE 'null' END
+            || ',"used":' || CASE WHEN v_cpu.EXISTS(0) THEN aas_tok(v_cpu(0)) ELSE 'null' END
+            || ',"pct":' || CASE WHEN v_cpn.EXISTS(0) AND v_cpu.EXISTS(0)
+                                 THEN aas_tok(v_cpu(0) / v_cpn(0) * 100) ELSE 'null' END
+            || ',"ash":' || CASE WHEN v_cash IS NOT NULL THEN aas_tok(v_cash) ELSE 'null' END
+            || '}},');
         -- the 1-minute detail by wait class (the header)
-        DBMS_OUTPUT.PUT_LINE('],');
         fine_head;
         FOR c IN 1 .. v_cls.COUNT LOOP
             IF c > 1 THEN DBMS_OUTPUT.PUT_LINE(','); END IF;
@@ -1018,6 +1154,58 @@ BEGIN
                 v_row := v_row || '<td class="num">&mdash;</td><td><span class="imm">' || v_pwhy
                     || '</span></td><td class="num">&mdash;</td>';
             END IF;
+            DBMS_OUTPUT.PUT_LINE(v_row || '</tr>');
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('</tbody></table>');
+
+        -- plan 042: "CPU capacity per window" -- always emitted (JS off
+        -- reads it), Current first; unknown is a dash with its reason
+        DBMS_OUTPUT.PUT_LINE('<h3 class="cpu-h">CPU capacity per window</h3>'
+            || '<p class="note cpu-note"><code>cpu_count</code> = the CPU threads the instance may use (the instance-caging limit when'
+            || ' Resource Manager caps it), at each window&rsquo;s end snapshot, summed over the instances; not the host&rsquo;s cores.'
+            || ' DB CPU = the time model&rsquo;s CPU time of foreground sessions over the window, in active sessions. ASH counts a session'
+            || ' <i>on CPU</i> also while it waits for one in the run queue, so foreground ASH on CPU clearly above DB CPU means sessions'
+            || ' were queued for a CPU; ASH keeps one sample every 10 s, so a small difference is noise. Not scored.</p>');
+        DBMS_OUTPUT.PUT_LINE('<table id="ash-cpu" data-nocount><thead><tr><th>Window</th><th>Start</th>'
+            || '<th class="num" title="cpu_count at the window&#39;s end snapshot (DBA_HIST_PARAMETER), summed over the instances">cpu_count</th>'
+            || '<th class="num" title="DB CPU (DBA_HIST_SYS_TIME_MODEL) over the window &divide; its span: CPUs busy with foreground work">DB CPU (AAS)</th>'
+            || '<th class="num" title="DB CPU &divide; cpu_count">% of cpu_count</th>'
+            || '<th class="num" title="ASH samples of foreground sessions on CPU &divide; 360 &divide; window hours (running or waiting for a CPU)">ASH on CPU, foreground (AAS)</th>'
+            || '<th class="num" title="ASH on CPU minus DB CPU: above 0 by more than the sampling noise = sessions waiting for a CPU">ASH &minus; DB CPU</th>'
+            || '</tr></thead><tbody>');
+        FOR k IN 0 .. ~weeks_back LOOP
+            v_cwhy := CASE WHEN NVL(INSTR(v_valid, '|' || k || '=Y|'), 0) = 0 THEN 'skipped window'
+                           WHEN v_cpw.EXISTS(k) THEN v_cpw(k) END;
+            v_cw := CASE WHEN v_total_n > 0 THEN
+                         CASE WHEN v_wfcells.EXISTS(TO_CHAR(k) || '|CPU') THEN v_wfcells(TO_CHAR(k) || '|CPU') ELSE 0 END
+                         / (360 * ~win_hours) END;
+            v_row := '<tr><td data-w="' || k || '">'
+                || CASE WHEN k = 0 THEN 'Current' ELSE '&minus;' || off_label(k) END || '</td>'
+                || '<td>' || CASE WHEN v_wst.EXISTS(k) THEN v_wst(k) ELSE '&mdash;' END || '</td>';
+            IF v_cwhy IS NOT NULL THEN
+                v_row := v_row || '<td class="num"><span class="imm">' || v_cwhy || '</span></td>'
+                    || '<td class="num">&mdash;</td><td class="num">&mdash;</td>';
+            ELSE
+                v_row := v_row
+                    || CASE WHEN v_cpn.EXISTS(k)
+                            THEN '<td class="num" data-cpu-n="' || aas_tok(v_cpn(k)) || '">' || fmt_int(v_cpn(k)) || '</td>'
+                            ELSE '<td class="num"><span class="imm">no cpu_count row</span></td>' END
+                    || CASE WHEN v_cpu.EXISTS(k)
+                            THEN '<td class="num" data-cpu-used="' || aas_tok(v_cpu(k)) || '">' || fmt_num(v_cpu(k)) || '</td>'
+                            ELSE '<td class="num"><span class="imm">no DB CPU row</span></td>' END
+                    || '<td class="num">'
+                    || CASE WHEN v_cpn.EXISTS(k) AND v_cpu.EXISTS(k)
+                            THEN TO_CHAR(ROUND(v_cpu(k) / v_cpn(k) * 100), 'FM9999990') || '%'
+                            ELSE '&mdash;' END || '</td>';
+            END IF;
+            v_row := v_row || '<td class="num">' || CASE WHEN v_cw IS NOT NULL THEN fmt_num(v_cw) ELSE '&mdash;' END || '</td>'
+                || '<td class="num">'
+                || CASE WHEN v_cwhy IS NULL AND v_cw IS NOT NULL AND v_cpu.EXISTS(k)
+                        THEN CASE WHEN ROUND(v_cw - v_cpu(k), 2) < 0 THEN '&minus;'
+                                  WHEN ROUND(v_cw - v_cpu(k), 2) > 0 THEN '+' END
+                             || TO_CHAR(ABS(ROUND(v_cw - v_cpu(k), 2)), 'FM9999999990D00',
+                                        'NLS_NUMERIC_CHARACTERS=''.,''')
+                        ELSE '&mdash;' END || '</td>';
             DBMS_OUTPUT.PUT_LINE(v_row || '</tr>');
         END LOOP;
         DBMS_OUTPUT.PUT_LINE('</tbody></table>');

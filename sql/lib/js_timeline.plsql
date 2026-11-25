@@ -33,6 +33,13 @@
 --                 windows' ones, and its sentence (pure, unit-tested); the
 --                 DB time card's "Peak" evidence row and the window stripe
 --                 tooltip's "Busiest minute" line use them.
+--   cpuInfo(cpu) / cpuText(i)  plan 042: the Current window's DB CPU
+--                 against its cpu_count (AWR_DATA.ashx.cpu), ASH on CPU
+--                 above DB CPU = waiting for a CPU, CPU-bound at 90 %
+--                 (pure, unit-tested); the DB time card's "CPU" evidence
+--                 row; cpuMark draws the cpu_count line on the class
+--                 chart only inside its y range, cpuHead the header note
+--                 ("above this scale") otherwise.
 --   stackAt(pts, ord, vk, sx, v)  the series whose band is DRAWN at
 --                 (sx, v): the hover / click / soft-highlight pick (pure,
 --                 unit-tested; review follow-up R3).
@@ -461,6 +468,68 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  if(!e||e[1]==null)return '''';');
     DBMS_OUTPUT.PUT_LINE('  return ''<div class="tr2 tpk"><span>Busiest minute, all sessions</span><b>''+pkFmt(e[1])+'' AAS at ''+esc(pkAt(e[2],AX.wh))+''</b></div>'';');
     DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* ---- 5c. plan 042: CPU capacity (AWR_DATA.ashx.cpu = {n: [cpu_count per');
+    DBMS_OUTPUT.PUT_LINE('   window, oldest first, null = unknown], used: [DB CPU AAS per window],');
+    DBMS_OUTPUT.PUT_LINE('   cur: {n, used, pct, ash}}, ash = the Current window''s foreground ASH on');
+    DBMS_OUTPUT.PUT_LINE('   CPU).  Informational, never scored.  cpuInfo(cpu) (pure, unit-tested):');
+    DBMS_OUTPUT.PUT_LINE('   null without a Current cpu_count and DB CPU; wait = ASH on CPU minus DB');
+    DBMS_OUTPUT.PUT_LINE('   CPU when it passes CPUQ (10 % of DB CPU) AND CPUQA (0.5 AAS), else null');
+    DBMS_OUTPUT.PUT_LINE('   (ASH counts a session on CPU while it waits in the run queue too); bound');
+    DBMS_OUTPUT.PUT_LINE('   = DB CPU at or above CPUB (90 %) of cpu_count; changed = the windows''');
+    DBMS_OUTPUT.PUT_LINE('   known cpu_count values differ.  cpuText(i): the card row''s sentence. */');
+    DBMS_OUTPUT.PUT_LINE('var CPUQ=0.1,CPUQA=0.5,CPUB=0.9;');
+    DBMS_OUTPUT.PUT_LINE('function cpuFmt(v){return v>=100?String(Math.round(v)):v>=0.1?v.toFixed(1):v.toFixed(2);}');
+    DBMS_OUTPUT.PUT_LINE('TL.cpuInfo=function(cpu){');
+    DBMS_OUTPUT.PUT_LINE('  var c=cpu&&cpu.cur;if(!c||!(c.n>0)||c.used==null)return null;');
+    DBMS_OUTPUT.PUT_LINE('  var ash=c.ash==null?null:c.ash,d=ash==null?null:ash-c.used,lo=null,hi=null;');
+    DBMS_OUTPUT.PUT_LINE('  (cpu.n||[]).forEach(function(v){if(v==null)return;if(lo===null||v<lo)lo=v;if(hi===null||v>hi)hi=v;});');
+    DBMS_OUTPUT.PUT_LINE('  return {n:c.n,used:c.used,pct:c.used/c.n*100,ash:ash,wait:d!=null&&d>=CPUQ*c.used&&d>=CPUQA?d:null,');
+    DBMS_OUTPUT.PUT_LINE('          bound:c.used>=CPUB*c.n,changed:lo!==null&&lo!==hi,lo:lo,hi:hi};');
+    DBMS_OUTPUT.PUT_LINE('};');
+    DBMS_OUTPUT.PUT_LINE('TL.cpuText=function(i){');
+    DBMS_OUTPUT.PUT_LINE('  var p=Math.round(i.pct),t=''DB CPU ''+cpuFmt(i.used)+'' of cpu_count ''+i.n+'' (''+(p<1&&i.pct>0?''<1'':p)+''%)'';');
+    DBMS_OUTPUT.PUT_LINE('  if(i.wait!=null)t+=''; ASH saw ''+cpuFmt(i.ash)+'' on CPU, so about ''+cpuFmt(i.wait)+'' sessions were waiting for a CPU'';');
+    DBMS_OUTPUT.PUT_LINE('  if(i.bound)t+=''; CPU-bound'';');
+    DBMS_OUTPUT.PUT_LINE('  return t;');
+    DBMS_OUTPUT.PUT_LINE('};');
+    DBMS_OUTPUT.PUT_LINE('/* the DB time card''s capacity row (only with the card and a Current');
+    DBMS_OUTPUT.PUT_LINE('   cpu_count and DB CPU), after the busiest-minute row */');
+    DBMS_OUTPUT.PUT_LINE('function cpuCard(){');
+    DBMS_OUTPUT.PUT_LINE('  var card=$(''#f-dbtime'');if(!card||!AX)return;');
+    DBMS_OUTPUT.PUT_LINE('  var I=TL.cpuInfo(AX.cpu);if(!I)return;');
+    DBMS_OUTPUT.PUT_LINE('  var dl=$(''dl.ev'',card);');
+    DBMS_OUTPUT.PUT_LINE('  if(!dl){var fb=$(''.fc-b'',card);if(!fb)return;dl=mk(''dl'',''ev'',fb);}');
+    DBMS_OUTPUT.PUT_LINE('  var r=mk(''div'',''evr ev-cpu'',dl);');
+    DBMS_OUTPUT.PUT_LINE('  r.title=''cpu_count (DBA_HIST_PARAMETER, the Current window\u2019s end snapshot) = the CPU threads the instance may use, or the instance-caging limit; DB CPU = the time model\u2019s foreground CPU time over the window.''');
+    DBMS_OUTPUT.PUT_LINE('    +'' ASH counts a session on CPU also while it waits for a CPU, so ASH on CPU clearly above DB CPU means a run queue; ASH is a sample (one every 10 s).''');
+    DBMS_OUTPUT.PUT_LINE('    +(I.changed?'' cpu_count changed across the compared windows (''+I.lo+''\u2013''+I.hi+'').'':'''')+'' Not scored.'';');
+    DBMS_OUTPUT.PUT_LINE('  r.innerHTML=''<dt>CPU</dt><dd><span class="id txt">Capacity</span><span class="de">''+esc(TL.cpuText(I))+''</span></dd><div class="m"></div>'';');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* the Current cpu_count as a dashed line on the by-wait-class chart, only');
+    DBMS_OUTPUT.PUT_LINE('   when it lies inside the y range [0, ymax] (the axis is never stretched to');
+    DBMS_OUTPUT.PUT_LINE('   reach it: 64 CPUs over 6 AAS would flatten the chart); its label at the');
+    DBMS_OUTPUT.PUT_LINE('   right end, above the line (below it when that leaves the plot or meets');
+    DBMS_OUTPUT.PUT_LINE('   the highlight note nb).  {s: svg, box: the label''s box and a strip along');
+    DBMS_OUTPUT.PUT_LINE('   the line, for dlab to avoid} or null; c.cpuUp = cpu_count above the range. */');
+    DBMS_OUTPUT.PUT_LINE('function cpuMark(c,Y,ymax,x0,x1,top,ph,nb){');
+    DBMS_OUTPUT.PUT_LINE('  var I=c.cpu;c.cpuUp=false;if(!I)return null;');
+    DBMS_OUTPUT.PUT_LINE('  if(I.n>ymax+1e-9){c.cpuUp=true;return null;}');
+    DBMS_OUTPUT.PUT_LINE('  var y=Y(I.n),lb=''cpu_count ''+I.n+(I.changed?'', changed'':''''),w=tw(lb),xr=x1-4,pick=null;');
+    DBMS_OUTPUT.PUT_LINE('  [[y-4,[xr-w,y-14,xr,y-3]],[y+12,[xr-w,y+2,xr,y+13]]].forEach(function(q){');
+    DBMS_OUTPUT.PUT_LINE('    var b=q[1];if(pick||b[1]<top-4||b[3]>top+ph)return;');
+    DBMS_OUTPUT.PUT_LINE('    if(nb&&b[0]<nb[2]&&b[2]>nb[0]&&b[1]<nb[3]&&b[3]>nb[1])return;pick=q;});');
+    DBMS_OUTPUT.PUT_LINE('  var s=''<line class="xcpu" x1="''+x0+''" x2="''+x1+''" y1="''+y.toFixed(1)+''" y2="''+y.toFixed(1)+''"/>'';');
+    DBMS_OUTPUT.PUT_LINE('  if(pick)s+=''<text class="xcpt" x="''+xr.toFixed(1)+''" y="''+pick[0].toFixed(1)+''" text-anchor="end">''+esc(lb)+''</text>'';');
+    DBMS_OUTPUT.PUT_LINE('  var box=[[x0,y-1,x1,y+1]];if(pick)box.push(pick[1]);');
+    DBMS_OUTPUT.PUT_LINE('  return {s:s,box:box};');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* the header''s note when cpu_count is above the class chart''s y range');
+    DBMS_OUTPUT.PUT_LINE('   (hidden when the line is drawn, without cpu data, or the chart is not shown) */');
+    DBMS_OUTPUT.PUT_LINE('function cpuHead(){');
+    DBMS_OUTPUT.PUT_LINE('  var el=SP&&SP.cpuEl,c=CH[0];if(!el)return;');
+    DBMS_OUTPUT.PUT_LINE('  var on=!!(c&&c.cpu&&c.cpuUp&&shown(c.plot));el.hidden=!on;');
+    DBMS_OUTPUT.PUT_LINE('  if(on)el.textContent=''cpu_count ''+c.cpu.n+(c.cpu.changed?'' (changed)'':'''')+'', above this scale'';');
+    DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* ---- 6. Activity, whole span (section#activity, first in Timeline / All');
     DBMS_OUTPUT.PUT_LINE('   sections, under the verdict in Summary, compact there): one');
     DBMS_OUTPUT.PUT_LINE('   chart factory, two instances over one time axis -- by wait class');
@@ -625,7 +694,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('      reset:doc.getElementById(''ax-reset''),range:doc.getElementById(''ax-range''),sel:null,F:null,rk:null,rv:null,mode:''span'',wk:0,wf:0};');
     DBMS_OUTPUT.PUT_LINE('  SP.F=fineInit(AX.fine);');
     DBMS_OUTPUT.PUT_LINE('  CH=[];');
-    DBMS_OUTPUT.PUT_LINE('  mkChart(doc.getElementById(''ax-cls''),AX,AX.classes.map(wcol),{flags:true,noun:''classes'',what:''wait class'',labels:true});');
+    DBMS_OUTPUT.PUT_LINE('  var cc=mkChart(doc.getElementById(''ax-cls''),AX,AX.classes.map(wcol),{flags:true,noun:''classes'',what:''wait class'',labels:true});');
+    DBMS_OUTPUT.PUT_LINE('  /* plan 042: the Current cpu_count on the class chart, a header note when');
+    DBMS_OUTPUT.PUT_LINE('     it is above the chart''s y range */');
+    DBMS_OUTPUT.PUT_LINE('  if(cc){cc.cpu=TL.cpuInfo(AX.cpu);');
+    DBMS_OUTPUT.PUT_LINE('    if(cc.cpu&&SP.range){SP.cpuEl=mk(''span'',''axcpu'');SP.cpuEl.hidden=true;SP.range.parentNode.insertBefore(SP.cpuEl,SP.range.nextSibling);');
+    DBMS_OUTPUT.PUT_LINE('      SP.cpuEl.title=''The Current window\u2019s cpu_count (the CPU threads the instance may use) is above the chart\u2019s y range, which is not stretched to reach it.'';}}');
     DBMS_OUTPUT.PUT_LINE('  var ev=doc.getElementById(''ax-ev'');');
     DBMS_OUTPUT.PUT_LINE('  if(okPay(AE,n))mkChart(ev,AE,evColors(AE.classes),{noun:''events'',what:''wait event'',labels:true});');
     DBMS_OUTPUT.PUT_LINE('  else if(ev)ev.hidden=true;');
@@ -742,7 +816,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  hideAll();tipOff();drawAll(true);');
     DBMS_OUTPUT.PUT_LINE('};');
     DBMS_OUTPUT.PUT_LINE('function spHead(){');
-    DBMS_OUTPUT.PUT_LINE('  if(!SP)return;var d0=SP.dom[0],d1=SP.dom[1],zoomed=d0>SP.full[0]||d1<SP.full[1];');
+    DBMS_OUTPUT.PUT_LINE('  if(!SP)return;cpuHead();var d0=SP.dom[0],d1=SP.dom[1],zoomed=d0>SP.full[0]||d1<SP.full[1];');
     DBMS_OUTPUT.PUT_LINE('  if(SP.mode===''win''){');
     DBMS_OUTPUT.PUT_LINE('    if(SP.reset)SP.reset.hidden=true;');
     DBMS_OUTPUT.PUT_LINE('    var n=SP.win.length,K=SP.wk||n,f=SP.wf||0;');
@@ -945,8 +1019,9 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('function noteBox(hl,padL,top){return hl&&hl.note?[padL+6,top+3,padL+6+tw(hl.note)*1.2,top+16]:null;}');
     DBMS_OUTPUT.PUT_LINE('/* the labels of chart c: groups [{pts, x0, x1}] (colPts points), series');
     DBMS_OUTPUT.PUT_LINE('   order ord stacked from zero exactly as bands() does, y by Y, nb = the');
-    DBMS_OUTPUT.PUT_LINE('   highlight note''s box (or null) */');
-    DBMS_OUTPUT.PUT_LINE('function dlab(c,groups,ord,on,Y,reb,nb){');
+    DBMS_OUTPUT.PUT_LINE('   highlight note''s box (or null), xb = more boxes to keep clear (plan 042:');
+    DBMS_OUTPUT.PUT_LINE('   the cpu_count line and its label), or null */');
+    DBMS_OUTPUT.PUT_LINE('function dlab(c,groups,ord,on,Y,reb,nb,xb){');
     DBMS_OUTPUT.PUT_LINE('  if(!c.lab)return '''';');
     DBMS_OUTPUT.PUT_LINE('  var G=groups.filter(function(g){return g.pts.length>=2;}),lo=G.map(function(g){return g.pts.map(function(){return 0;});}),cands=[];');
     DBMS_OUTPUT.PUT_LINE('  ord.forEach(function(k){');
@@ -954,7 +1029,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    G.forEach(function(g,gi){var hi=lo[gi].map(function(l,j){return l+(rV(c,k,g.pts[j][1])||0);});yl.push(lo[gi].map(Y));yh.push(hi.map(Y));lo[gi]=hi;});');
     DBMS_OUTPUT.PUT_LINE('    if(!reb||(on&&on[k]))cands.push({k:k,alts:labelAlts(lcuts(c.P.classes[k]),c.P.classes,k),yl:yl,yh:yh});');
     DBMS_OUTPUT.PUT_LINE('  });');
-    DBMS_OUTPUT.PUT_LINE('  return fitLabels(G.map(function(g){return {xs:g.pts.map(function(p){return p[0];}),x0:g.x0,x1:g.x1};}),cands,{min:LBH,max:LMAX,th:LTH,y1:Y(0),avoid:nb?[nb]:[]})');
+    DBMS_OUTPUT.PUT_LINE('  return fitLabels(G.map(function(g){return {xs:g.pts.map(function(p){return p[0];}),x0:g.x0,x1:g.x1};}),cands,{min:LBH,max:LMAX,th:LTH,y1:Y(0),avoid:(nb?[nb]:[]).concat(xb||[])})');
     DBMS_OUTPUT.PUT_LINE('    .map(function(L){return ''<text class="xdl" x="''+L.x.toFixed(1)+''" y="''+(L.y+4).toFixed(1)+''" text-anchor="middle">''+esc(L.txt)+''</text>'';}).join('''');');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* the release markers of list [{x: px, m: marker}]: a line through the plot');
@@ -1097,8 +1172,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  /* the hidden bucket band: as draw; the caps */');
     DBMS_OUTPUT.PUT_LINE('  s+=''<rect class="xbk" x="0" y="''+top+''" width="0" height="''+ph+''" visibility="hidden"/>'';');
     DBMS_OUTPUT.PUT_LINE('  hit.forEach(function(r){s+=''<rect class="xwc''+r[3]+''" x="''+r[1].toFixed(1)+''" y="''+(top-5)+''" width="''+r[2].toFixed(1)+''" height="4" rx="1"/>'';});');
-    DBMS_OUTPUT.PUT_LINE('  /* the direct labels, each inside its panel (dlab) */');
-    DBMS_OUTPUT.PUT_LINE('  s+=dlab(c,pan.map(function(p){return {pts:p.pts,x0:p.x0,x1:p.x0+p.w};}),ord,on,Y,reb,noteBox(hl,padL,top));');
+    DBMS_OUTPUT.PUT_LINE('  /* the cpu_count line (plan 042, the class chart only), then the direct');
+    DBMS_OUTPUT.PUT_LINE('     labels, each inside its panel (dlab) */');
+    DBMS_OUTPUT.PUT_LINE('  var cq=cpuMark(c,Y,ymax,padL,Wd-padR,top,ph,noteBox(hl,padL,top));if(cq)s+=cq.s;');
+    DBMS_OUTPUT.PUT_LINE('  s+=dlab(c,pan.map(function(p){return {pts:p.pts,x0:p.x0,x1:p.x0+p.w};}),ord,on,Y,reb,noteBox(hl,padL,top),cq&&cq.box);');
     DBMS_OUTPUT.PUT_LINE('  /* close the group and the x axis line: as draw */');
     DBMS_OUTPUT.PUT_LINE('  s+=''</g><line class="ax" x1="''+padL+''" x2="''+(Wd-padR)+''" y1="''+(top+ph)+''" y2="''+(top+ph)+''"/>'';');
     DBMS_OUTPUT.PUT_LINE('  /* window labels under the lower chart: every st-th panel counted from the Current one */');
@@ -1117,6 +1194,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('      +esc((wi.o===0?''Current window, '':offTxt(wi)+'' window, '')+wi.t+(wi.o===0?'''':''. Pin it''))+''"/>'';});');
     DBMS_OUTPUT.PUT_LINE('  setSvg(c,s);');
     DBMS_OUTPUT.PUT_LINE('  c.g={mode:''win'',pan:pan,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:SP.dom[0],d1:SP.dom[1],ymax:ymax,ord:ord,hk:c.hk,cm:o.cm};');
+    DBMS_OUTPUT.PUT_LINE('  if(c===CH[0])cpuHead();');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function draw(c,force){');
     DBMS_OUTPUT.PUT_LINE('  if(!c||!SP||!shown(c.plot))return;');
@@ -1166,8 +1244,10 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    s+=''<rect class="xw''+cls+''" x="''+x.toFixed(1)+''" y="''+top+''" width="''+w.toFixed(1)+''" height="''+ph+''"/><rect class="xwc''+cls+''" x="''+x.toFixed(1)+''" y="''+(top-5)+''" width="''+w.toFixed(1)+''" height="4" rx="1"/>'';');
     DBMS_OUTPUT.PUT_LINE('    hit.push([i,x,w]);');
     DBMS_OUTPUT.PUT_LINE('  });');
-    DBMS_OUTPUT.PUT_LINE('  /* the bands named on the chart (dlab), above the stripes */');
-    DBMS_OUTPUT.PUT_LINE('  s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb,noteBox(hl,padL,top));');
+    DBMS_OUTPUT.PUT_LINE('  /* the cpu_count line (plan 042, the class chart only), then the bands');
+    DBMS_OUTPUT.PUT_LINE('     named on the chart (dlab), above the stripes */');
+    DBMS_OUTPUT.PUT_LINE('  var cq=cpuMark(c,Y,ymax,padL,Wd-padR,top,ph,noteBox(hl,padL,top));if(cq)s+=cq.s;');
+    DBMS_OUTPUT.PUT_LINE('  s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb,noteBox(hl,padL,top),cq&&cq.box);');
     DBMS_OUTPUT.PUT_LINE('  s+=''</g><line class="ax" x1="''+padL+''" x2="''+(Wd-padR)+''" y1="''+(top+ph)+''" y2="''+(top+ph)+''"/>'';');
     DBMS_OUTPUT.PUT_LINE('  /* x ticks: the smallest interval that leaves about 88 px per label, counted from');
     DBMS_OUTPUT.PUT_LINE('     midnight of the Current window''s day (weekly ticks land on its weekday);');
@@ -1195,6 +1275,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  });');
     DBMS_OUTPUT.PUT_LINE('  setSvg(c,s);');
     DBMS_OUTPUT.PUT_LINE('  c.g={mode:''span'',X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,pts:pts,hk:c.hk,cm:cm};');
+    DBMS_OUTPUT.PUT_LINE('  if(c===CH[0])cpuHead();');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('function tAt(c,cx){var x=toSvg(c,cx,0).x;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}');
     DBMS_OUTPUT.PUT_LINE('function bucketAt(t){var j=Math.floor((t-SP.t0)/SP.bh);return j>=0&&j<SP.T.length&&t<SP.T1[j]?j:-1;}');
@@ -1267,6 +1348,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  tools();');
     DBMS_OUTPUT.PUT_LINE('  activity();');
     DBMS_OUTPUT.PUT_LINE('  pkCard();');
+    DBMS_OUTPUT.PUT_LINE('  cpuCard();');
     DBMS_OUTPUT.PUT_LINE('  spInit();');
     DBMS_OUTPUT.PUT_LINE('  var b=doc.getElementById(''tl-body'');if(b)b.addEventListener(''scroll'',sync,{passive:true});');
     DBMS_OUTPUT.PUT_LINE('  var tl=doc.getElementById(''tl'');if(tl&&W.render)W.render(tl);');

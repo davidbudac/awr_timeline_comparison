@@ -291,6 +291,14 @@ BEGIN
         || ' session and the value moves in steps of 1/6; windows past the 1-minute reach or skipped are left blank. With several instances (RAC, <code>inst_num</code> 0) the ASH minute'
         || ' adds the instances up, but a SYSMETRIC peak is the largest <b>single-instance</b> value (instances need not peak in the same minute), labelled &ldquo;max per instance&rdquo;,'
         || ' so it can be lower than a summed average.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>CPU capacity</dt><dd>Is 8 sessions on CPU a lot? <code>cpu_count</code> (<code>DBA_HIST_PARAMETER</code> at each window&rsquo;s end snapshot, summed over the'
+        || ' instances) is the number of CPU <b>threads</b> the instance may use, or the instance-caging limit when Resource Manager caps it: not the host&rsquo;s cores, and not'
+        || ' the CPU that other databases, background processes or other software on the same host take (DB CPU counts foreground sessions of this database only).'
+        || ' The DB time card says &ldquo;DB CPU x of cpu_count n&rdquo; (CPU-bound at 90 %), the by-wait-class Activity chart draws the Current cpu_count as a dashed line'
+        || ' when it lies inside the chart&rsquo;s scale (the scale is never stretched to reach it; above, the header says so), and Active sessions lists every window.'
+        || ' ASH counts a session <i>on CPU</i> while it runs <b>or waits in the run queue</b>; the time model&rsquo;s <code>DB CPU</code> counts only the CPU actually used.'
+        || ' So foreground ASH on CPU clearly above DB CPU (the card asks for 10 % and 0.5 sessions more) means sessions were waiting for a CPU. ASH is a sample, one every'
+        || ' 10 s, so a small difference either way is noise. Not scored.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Wait events</dt><dd>Foreground: <code>DBA_HIST_SYSTEM_EVENT</code>; background: <code>DBA_HIST_BG_EVENT_SUMMARY</code>. Idle excluded. Top ~top_n events by time waited (s) and by average latency'
         || ' (ms = time waited &divide; total waits); the chart stacks wait-class time per window. When five or more flagged events moved together within a narrow band, the table notes one <b>table-wide'
         || ' shift</b> and demotes large rows to moderate.</dd>');

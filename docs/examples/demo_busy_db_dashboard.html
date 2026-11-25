@@ -742,6 +742,9 @@ body.vs #activity.ax-cmp #ax-ev,body.vs #activity.ax-cmp .axn2{display:none}
 .ashx .xeh{stroke-width:1.8}
 .ashx .xhn{font:600 11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}
 .ashx .xdl{font:11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}
+.ashx .xcpu{stroke:var(--ink-2);stroke-width:1;stroke-dasharray:5 3;opacity:.85;pointer-events:none}
+.ashx .xcpt{font:11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink-2);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}
+.ashx .axh .axcpu{font-size:12px;color:var(--ink-3);white-space:nowrap}.ashx .axh .axcpu[hidden]{display:none}
 .ashx .axc.hl{background:var(--hov);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line-2)}
 .ashx .axlg.hlon .axc:not(.hl){opacity:.55}
 .ashx .axlg.hlon .axc:not(.hl):hover,.ashx .axlg.hlon .axc:not(.hl):focus-visible{opacity:1}
@@ -2710,6 +2713,68 @@ function pkTip(o){
   if(!e||e[1]==null)return '';
   return '<div class="tr2 tpk"><span>Busiest minute, all sessions</span><b>'+pkFmt(e[1])+' AAS at '+esc(pkAt(e[2],AX.wh))+'</b></div>';
 }
+/* ---- 5c. plan 042: CPU capacity (AWR_DATA.ashx.cpu = {n: [cpu_count per
+   window, oldest first, null = unknown], used: [DB CPU AAS per window],
+   cur: {n, used, pct, ash}}, ash = the Current window's foreground ASH on
+   CPU).  Informational, never scored.  cpuInfo(cpu) (pure, unit-tested):
+   null without a Current cpu_count and DB CPU; wait = ASH on CPU minus DB
+   CPU when it passes CPUQ (10 % of DB CPU) AND CPUQA (0.5 AAS), else null
+   (ASH counts a session on CPU while it waits in the run queue too); bound
+   = DB CPU at or above CPUB (90 %) of cpu_count; changed = the windows'
+   known cpu_count values differ.  cpuText(i): the card row's sentence. */
+var CPUQ=0.1,CPUQA=0.5,CPUB=0.9;
+function cpuFmt(v){return v>=100?String(Math.round(v)):v>=0.1?v.toFixed(1):v.toFixed(2);}
+TL.cpuInfo=function(cpu){
+  var c=cpu&&cpu.cur;if(!c||!(c.n>0)||c.used==null)return null;
+  var ash=c.ash==null?null:c.ash,d=ash==null?null:ash-c.used,lo=null,hi=null;
+  (cpu.n||[]).forEach(function(v){if(v==null)return;if(lo===null||v<lo)lo=v;if(hi===null||v>hi)hi=v;});
+  return {n:c.n,used:c.used,pct:c.used/c.n*100,ash:ash,wait:d!=null&&d>=CPUQ*c.used&&d>=CPUQA?d:null,
+          bound:c.used>=CPUB*c.n,changed:lo!==null&&lo!==hi,lo:lo,hi:hi};
+};
+TL.cpuText=function(i){
+  var p=Math.round(i.pct),t='DB CPU '+cpuFmt(i.used)+' of cpu_count '+i.n+' ('+(p<1&&i.pct>0?'<1':p)+'%)';
+  if(i.wait!=null)t+='; ASH saw '+cpuFmt(i.ash)+' on CPU, so about '+cpuFmt(i.wait)+' sessions were waiting for a CPU';
+  if(i.bound)t+='; CPU-bound';
+  return t;
+};
+/* the DB time card's capacity row (only with the card and a Current
+   cpu_count and DB CPU), after the busiest-minute row */
+function cpuCard(){
+  var card=$('#f-dbtime');if(!card||!AX)return;
+  var I=TL.cpuInfo(AX.cpu);if(!I)return;
+  var dl=$('dl.ev',card);
+  if(!dl){var fb=$('.fc-b',card);if(!fb)return;dl=mk('dl','ev',fb);}
+  var r=mk('div','evr ev-cpu',dl);
+  r.title='cpu_count (DBA_HIST_PARAMETER, the Current window\u2019s end snapshot) = the CPU threads the instance may use, or the instance-caging limit; DB CPU = the time model\u2019s foreground CPU time over the window.'
+    +' ASH counts a session on CPU also while it waits for a CPU, so ASH on CPU clearly above DB CPU means a run queue; ASH is a sample (one every 10 s).'
+    +(I.changed?' cpu_count changed across the compared windows ('+I.lo+'\u2013'+I.hi+').':'')+' Not scored.';
+  r.innerHTML='<dt>CPU</dt><dd><span class="id txt">Capacity</span><span class="de">'+esc(TL.cpuText(I))+'</span></dd><div class="m"></div>';
+}
+/* the Current cpu_count as a dashed line on the by-wait-class chart, only
+   when it lies inside the y range [0, ymax] (the axis is never stretched to
+   reach it: 64 CPUs over 6 AAS would flatten the chart); its label at the
+   right end, above the line (below it when that leaves the plot or meets
+   the highlight note nb).  {s: svg, box: the label's box and a strip along
+   the line, for dlab to avoid} or null; c.cpuUp = cpu_count above the range. */
+function cpuMark(c,Y,ymax,x0,x1,top,ph,nb){
+  var I=c.cpu;c.cpuUp=false;if(!I)return null;
+  if(I.n>ymax+1e-9){c.cpuUp=true;return null;}
+  var y=Y(I.n),lb='cpu_count '+I.n+(I.changed?', changed':''),w=tw(lb),xr=x1-4,pick=null;
+  [[y-4,[xr-w,y-14,xr,y-3]],[y+12,[xr-w,y+2,xr,y+13]]].forEach(function(q){
+    var b=q[1];if(pick||b[1]<top-4||b[3]>top+ph)return;
+    if(nb&&b[0]<nb[2]&&b[2]>nb[0]&&b[1]<nb[3]&&b[3]>nb[1])return;pick=q;});
+  var s='<line class="xcpu" x1="'+x0+'" x2="'+x1+'" y1="'+y.toFixed(1)+'" y2="'+y.toFixed(1)+'"/>';
+  if(pick)s+='<text class="xcpt" x="'+xr.toFixed(1)+'" y="'+pick[0].toFixed(1)+'" text-anchor="end">'+esc(lb)+'</text>';
+  var box=[[x0,y-1,x1,y+1]];if(pick)box.push(pick[1]);
+  return {s:s,box:box};
+}
+/* the header's note when cpu_count is above the class chart's y range
+   (hidden when the line is drawn, without cpu data, or the chart is not shown) */
+function cpuHead(){
+  var el=SP&&SP.cpuEl,c=CH[0];if(!el)return;
+  var on=!!(c&&c.cpu&&c.cpuUp&&shown(c.plot));el.hidden=!on;
+  if(on)el.textContent='cpu_count '+c.cpu.n+(c.cpu.changed?' (changed)':'')+', above this scale';
+}
 /* ---- 6. Activity, whole span (section#activity, first in Timeline / All
    sections, under the verdict in Summary, compact there): one
    chart factory, two instances over one time axis -- by wait class
@@ -2874,7 +2939,12 @@ function spInit(){
       reset:doc.getElementById('ax-reset'),range:doc.getElementById('ax-range'),sel:null,F:null,rk:null,rv:null,mode:'span',wk:0,wf:0};
   SP.F=fineInit(AX.fine);
   CH=[];
-  mkChart(doc.getElementById('ax-cls'),AX,AX.classes.map(wcol),{flags:true,noun:'classes',what:'wait class',labels:true});
+  var cc=mkChart(doc.getElementById('ax-cls'),AX,AX.classes.map(wcol),{flags:true,noun:'classes',what:'wait class',labels:true});
+  /* plan 042: the Current cpu_count on the class chart, a header note when
+     it is above the chart's y range */
+  if(cc){cc.cpu=TL.cpuInfo(AX.cpu);
+    if(cc.cpu&&SP.range){SP.cpuEl=mk('span','axcpu');SP.cpuEl.hidden=true;SP.range.parentNode.insertBefore(SP.cpuEl,SP.range.nextSibling);
+      SP.cpuEl.title='The Current window\u2019s cpu_count (the CPU threads the instance may use) is above the chart\u2019s y range, which is not stretched to reach it.';}}
   var ev=doc.getElementById('ax-ev');
   if(okPay(AE,n))mkChart(ev,AE,evColors(AE.classes),{noun:'events',what:'wait event',labels:true});
   else if(ev)ev.hidden=true;
@@ -2991,7 +3061,7 @@ TL.axLayout=function(m,persist){
   hideAll();tipOff();drawAll(true);
 };
 function spHead(){
-  if(!SP)return;var d0=SP.dom[0],d1=SP.dom[1],zoomed=d0>SP.full[0]||d1<SP.full[1];
+  if(!SP)return;cpuHead();var d0=SP.dom[0],d1=SP.dom[1],zoomed=d0>SP.full[0]||d1<SP.full[1];
   if(SP.mode==='win'){
     if(SP.reset)SP.reset.hidden=true;
     var n=SP.win.length,K=SP.wk||n,f=SP.wf||0;
@@ -3194,8 +3264,9 @@ TL.labelAlts=labelAlts;
 function noteBox(hl,padL,top){return hl&&hl.note?[padL+6,top+3,padL+6+tw(hl.note)*1.2,top+16]:null;}
 /* the labels of chart c: groups [{pts, x0, x1}] (colPts points), series
    order ord stacked from zero exactly as bands() does, y by Y, nb = the
-   highlight note's box (or null) */
-function dlab(c,groups,ord,on,Y,reb,nb){
+   highlight note's box (or null), xb = more boxes to keep clear (plan 042:
+   the cpu_count line and its label), or null */
+function dlab(c,groups,ord,on,Y,reb,nb,xb){
   if(!c.lab)return '';
   var G=groups.filter(function(g){return g.pts.length>=2;}),lo=G.map(function(g){return g.pts.map(function(){return 0;});}),cands=[];
   ord.forEach(function(k){
@@ -3203,7 +3274,7 @@ function dlab(c,groups,ord,on,Y,reb,nb){
     G.forEach(function(g,gi){var hi=lo[gi].map(function(l,j){return l+(rV(c,k,g.pts[j][1])||0);});yl.push(lo[gi].map(Y));yh.push(hi.map(Y));lo[gi]=hi;});
     if(!reb||(on&&on[k]))cands.push({k:k,alts:labelAlts(lcuts(c.P.classes[k]),c.P.classes,k),yl:yl,yh:yh});
   });
-  return fitLabels(G.map(function(g){return {xs:g.pts.map(function(p){return p[0];}),x0:g.x0,x1:g.x1};}),cands,{min:LBH,max:LMAX,th:LTH,y1:Y(0),avoid:nb?[nb]:[]})
+  return fitLabels(G.map(function(g){return {xs:g.pts.map(function(p){return p[0];}),x0:g.x0,x1:g.x1};}),cands,{min:LBH,max:LMAX,th:LTH,y1:Y(0),avoid:(nb?[nb]:[]).concat(xb||[])})
     .map(function(L){return '<text class="xdl" x="'+L.x.toFixed(1)+'" y="'+(L.y+4).toFixed(1)+'" text-anchor="middle">'+esc(L.txt)+'</text>';}).join('');
 }
 /* the release markers of list [{x: px, m: marker}]: a line through the plot
@@ -3346,8 +3417,10 @@ function drawWin(c,o){
   /* the hidden bucket band: as draw; the caps */
   s+='<rect class="xbk" x="0" y="'+top+'" width="0" height="'+ph+'" visibility="hidden"/>';
   hit.forEach(function(r){s+='<rect class="xwc'+r[3]+'" x="'+r[1].toFixed(1)+'" y="'+(top-5)+'" width="'+r[2].toFixed(1)+'" height="4" rx="1"/>';});
-  /* the direct labels, each inside its panel (dlab) */
-  s+=dlab(c,pan.map(function(p){return {pts:p.pts,x0:p.x0,x1:p.x0+p.w};}),ord,on,Y,reb,noteBox(hl,padL,top));
+  /* the cpu_count line (plan 042, the class chart only), then the direct
+     labels, each inside its panel (dlab) */
+  var cq=cpuMark(c,Y,ymax,padL,Wd-padR,top,ph,noteBox(hl,padL,top));if(cq)s+=cq.s;
+  s+=dlab(c,pan.map(function(p){return {pts:p.pts,x0:p.x0,x1:p.x0+p.w};}),ord,on,Y,reb,noteBox(hl,padL,top),cq&&cq.box);
   /* close the group and the x axis line: as draw */
   s+='</g><line class="ax" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+(top+ph)+'" y2="'+(top+ph)+'"/>';
   /* window labels under the lower chart: every st-th panel counted from the Current one */
@@ -3366,6 +3439,7 @@ function drawWin(c,o){
       +esc((wi.o===0?'Current window, ':offTxt(wi)+' window, ')+wi.t+(wi.o===0?'':'. Pin it'))+'"/>';});
   setSvg(c,s);
   c.g={mode:'win',pan:pan,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:SP.dom[0],d1:SP.dom[1],ymax:ymax,ord:ord,hk:c.hk,cm:o.cm};
+  if(c===CH[0])cpuHead();
 }
 function draw(c,force){
   if(!c||!SP||!shown(c.plot))return;
@@ -3415,8 +3489,10 @@ function draw(c,force){
     s+='<rect class="xw'+cls+'" x="'+x.toFixed(1)+'" y="'+top+'" width="'+w.toFixed(1)+'" height="'+ph+'"/><rect class="xwc'+cls+'" x="'+x.toFixed(1)+'" y="'+(top-5)+'" width="'+w.toFixed(1)+'" height="4" rx="1"/>';
     hit.push([i,x,w]);
   });
-  /* the bands named on the chart (dlab), above the stripes */
-  s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb,noteBox(hl,padL,top));
+  /* the cpu_count line (plan 042, the class chart only), then the bands
+     named on the chart (dlab), above the stripes */
+  var cq=cpuMark(c,Y,ymax,padL,Wd-padR,top,ph,noteBox(hl,padL,top));if(cq)s+=cq.s;
+  s+=dlab(c,[{pts:pts,x0:padL,x1:Wd-padR}],ord,on,Y,reb,noteBox(hl,padL,top),cq&&cq.box);
   s+='</g><line class="ax" x1="'+padL+'" x2="'+(Wd-padR)+'" y1="'+(top+ph)+'" y2="'+(top+ph)+'"/>';
   /* x ticks: the smallest interval that leaves about 88 px per label, counted from
      midnight of the Current window's day (weekly ticks land on its weekday);
@@ -3444,6 +3520,7 @@ function draw(c,force){
   });
   setSvg(c,s);
   c.g={mode:'span',X:X,W:Wd,padL:padL,padR:padR,top:top,ph:ph,pw:pw,d0:d0,d1:d1,ymax:ymax,ord:ord,pts:pts,hk:c.hk,cm:cm};
+  if(c===CH[0])cpuHead();
 }
 function tAt(c,cx){var x=toSvg(c,cx,0).x;return c.g.d0+(x-c.g.padL)/c.g.pw*(c.g.d1-c.g.d0);}
 function bucketAt(t){var j=Math.floor((t-SP.t0)/SP.bh);return j>=0&&j<SP.T.length&&t<SP.T1[j]?j:-1;}
@@ -3516,6 +3593,7 @@ doc.addEventListener('DOMContentLoaded',function(){
   tools();
   activity();
   pkCard();
+  cpuCard();
   spInit();
   var b=doc.getElementById('tl-body');if(b)b.addEventListener('scroll',sync,{passive:true});
   var tl=doc.getElementById('tl');if(tl&&W.render)W.render(tl);
@@ -4516,7 +4594,11 @@ document.addEventListener("awr:window",function(e){var w=e.detail?e.detail.w:nul
 ,[0.061,0.053,0.089,0.056,0.064,0.064,0.061,0.064,0.072,0.081,0.072,0.069,0.1]
 ],"pk":[
 [12,31.167,"2026-06-18 09:47"],[11,20.333,"2026-06-25 09:40"],[10,26.833,"2026-07-02 09:16"],[9,32.5,"2026-07-09 09:13"],[8,23.667,"2026-07-16 09:32"],[7,19.833,"2026-07-23 09:00"],[6,27.667,"2026-07-30 09:20"],[5,19.5,"2026-08-06 09:13"],[4,28.833,"2026-08-13 09:32"],[3,28.833,"2026-08-20 09:56"],[2,42.667,"2026-08-27 09:12"],[1,50.5,"2026-09-03 09:03"],[0,53.667,"2026-09-10 09:19"]
-],
+],"cpu":{"n":[
+16,16,16,16,16,16,16,16,16,16,16,16,16
+],"used":[
+6.464,6.336,7.734,6.332,6.506,6.591,6.426,6.531,8.302,8.616,8.325,8.549,8.584
+],"cur":{"n":16,"used":8.584,"pct":53.648,"ash":8.583}},
 "fine":{"bm":1,"capped":0,"segs":[
 [0,60],[10080,60],[20160,60],[30240,60],[40320,60],[50400,60],[60480,60],[70560,60],[80640,60],[90720,60],[100800,60],[110880,60],[120960,60]
 ],"vals":[
@@ -4723,6 +4805,22 @@ document.addEventListener("awr:window",function(e){var w=e.detail?e.detail.w:nul
 <tr><td data-w="10">&minus;10w</td><td>2026-07-02 09:00</td><td class="num">13.50</td><td class="num" data-pk="26.833">26.83</td><td title="2026-07-02 09:16">09:16</td><td class="num">&times;2.0</td></tr>
 <tr><td data-w="11">&minus;11w</td><td>2026-06-25 09:00</td><td class="num">10.51</td><td class="num" data-pk="20.333">20.33</td><td title="2026-06-25 09:40">09:40</td><td class="num">&times;1.9</td></tr>
 <tr><td data-w="12">&minus;12w</td><td>2026-06-18 09:00</td><td class="num">10.69</td><td class="num" data-pk="31.167">31.17</td><td title="2026-06-18 09:47">09:47</td><td class="num">&times;2.9</td></tr>
+</tbody></table>
+<h3 class="cpu-h">CPU capacity per window</h3><p class="note cpu-note"><code>cpu_count</code> = the CPU threads the instance may use (the instance-caging limit when Resource Manager caps it), at each window&rsquo;s end snapshot, summed over the instances; not the host&rsquo;s cores. DB CPU = the time model&rsquo;s CPU time of foreground sessions over the window, in active sessions. ASH counts a session <i>on CPU</i> also while it waits for one in the run queue, so foreground ASH on CPU clearly above DB CPU means sessions were queued for a CPU; ASH keeps one sample every 10 s, so a small difference is noise. Not scored.</p>
+<table id="ash-cpu" data-nocount><thead><tr><th>Window</th><th>Start</th><th class="num" title="cpu_count at the window&#39;s end snapshot (DBA_HIST_PARAMETER), summed over the instances">cpu_count</th><th class="num" title="DB CPU (DBA_HIST_SYS_TIME_MODEL) over the window &divide; its span: CPUs busy with foreground work">DB CPU (AAS)</th><th class="num" title="DB CPU &divide; cpu_count">% of cpu_count</th><th class="num" title="ASH samples of foreground sessions on CPU &divide; 360 &divide; window hours (running or waiting for a CPU)">ASH on CPU, foreground (AAS)</th><th class="num" title="ASH on CPU minus DB CPU: above 0 by more than the sampling noise = sessions waiting for a CPU">ASH &minus; DB CPU</th></tr></thead><tbody>
+<tr><td data-w="0">Current</td><td>2026-09-10 09:00</td><td class="num" data-cpu-n="16">16</td><td class="num" data-cpu-used="8.584">8.584</td><td class="num">54%</td><td class="num">8.583</td><td class="num">0.00</td></tr>
+<tr><td data-w="1">&minus;1w</td><td>2026-09-03 09:00</td><td class="num" data-cpu-n="16">16</td><td class="num" data-cpu-used="8.549">8.549</td><td class="num">53%</td><td class="num">8.547</td><td class="num">0.00</td></tr>
+<tr><td data-w="2">&minus;2w</td><td>2026-08-27 09:00</td><td class="num" data-cpu-n="16">16</td><td class="num" data-cpu-used="8.325">8.325</td><td class="num">52%</td><td class="num">8.325</td><td class="num">0.00</td></tr>
+<tr><td data-w="3">&minus;3w</td><td>2026-08-20 09:00</td><td class="num" data-cpu-n="16">16</td><td class="num" data-cpu-used="8.616">8.616</td><td class="num">54%</td><td class="num">8.617</td><td class="num">0.00</td></tr>
+<tr><td data-w="4">&minus;4w</td><td>2026-08-13 09:00</td><td class="num" data-cpu-n="16">16</td><td class="num" data-cpu-used="8.302">8.302</td><td class="num">52%</td><td class="num">8.303</td><td class="num">0.00</td></tr>
+<tr><td data-w="5">&minus;5w</td><td>2026-08-06 09:00</td><td class="num" data-cpu-n="16">16</td><td class="num" data-cpu-used="6.531">6.531</td><td class="num">41%</td><td class="num">6.531</td><td class="num">0.00</td></tr>
+<tr><td data-w="6">&minus;6w</td><td>2026-07-30 09:00</td><td class="num" data-cpu-n="16">16</td><td class="num" data-cpu-used="6.426">6.426</td><td class="num">40%</td><td class="num">6.425</td><td class="num">0.00</td></tr>
+<tr><td data-w="7">&minus;7w</td><td>2026-07-23 09:00</td><td class="num" data-cpu-n="16">16</td><td class="num" data-cpu-used="6.591">6.591</td><td class="num">41%</td><td class="num">6.592</td><td class="num">0.00</td></tr>
+<tr><td data-w="8">&minus;8w</td><td>2026-07-16 09:00</td><td class="num" data-cpu-n="16">16</td><td class="num" data-cpu-used="6.506">6.506</td><td class="num">41%</td><td class="num">6.506</td><td class="num">0.00</td></tr>
+<tr><td data-w="9">&minus;9w</td><td>2026-07-09 09:00</td><td class="num" data-cpu-n="16">16</td><td class="num" data-cpu-used="6.332">6.332</td><td class="num">40%</td><td class="num">6.333</td><td class="num">0.00</td></tr>
+<tr><td data-w="10">&minus;10w</td><td>2026-07-02 09:00</td><td class="num" data-cpu-n="16">16</td><td class="num" data-cpu-used="7.734">7.734</td><td class="num">48%</td><td class="num">7.733</td><td class="num">0.00</td></tr>
+<tr><td data-w="11">&minus;11w</td><td>2026-06-25 09:00</td><td class="num" data-cpu-n="16">16</td><td class="num" data-cpu-used="6.336">6.336</td><td class="num">40%</td><td class="num">6.336</td><td class="num">0.00</td></tr>
+<tr><td data-w="12">&minus;12w</td><td>2026-06-18 09:00</td><td class="num" data-cpu-n="16">16</td><td class="num" data-cpu-used="6.464">6.464</td><td class="num">40%</td><td class="num">6.464</td><td class="num">0.00</td></tr>
 </tbody></table>
 </section>
 <!-- AWR-SECTION: 09_ash_timeline END -->
@@ -55063,6 +55161,7 @@ Object.keys(AWR_DATA.fileIo.dims).forEach(function(dim){
 <dt>Load profile</dt><dd><code>DBA_HIST_SYSSTAT</code> (end &minus; begin snapshot) &divide; window seconds, summed across instances. <b>Trend</b>: per-window values as bars, oldest to Current, over the shaded normal range. <b>Current</b> cell bar = value &divide; row maximum.</dd>
 <dt>System metrics</dt><dd><code>DBA_HIST_SYSMETRIC_SUMMARY</code> averaged over each window. Rates and counters: SUM across instances per snapshot, then AVG; ratios and latencies: AVG across instances per snapshot, then AVG. Units per metric name.</dd>
 <dt>Peaks</dt><dd>Every other number is an average over the window, so a five-minute stall reads as a mild rise. Two peaks sit next to it, neither scored nor counted: <b>Peak (1 min)</b> in System metrics = the largest <code>MAXVAL</code> of <code>DBA_HIST_SYSMETRIC_SUMMARY</code> (the highest 60-second value inside each snapshot interval) over the Current window, against the mean of the valid prior windows&rsquo; own peaks; and the <b>busiest minute</b> of each window from ASH (Active sessions, the DB time card, the window tooltips of the Activity charts) = that minute&rsquo;s samples, all sessions, &divide; 6. ASH keeps one sample every 10 s, so a minute holds six samples per active session and the value moves in steps of 1/6; windows past the 1-minute reach or skipped are left blank. With several instances (RAC, <code>inst_num</code> 0) the ASH minute adds the instances up, but a SYSMETRIC peak is the largest <b>single-instance</b> value (instances need not peak in the same minute), labelled &ldquo;max per instance&rdquo;, so it can be lower than a summed average.</dd>
+<dt>CPU capacity</dt><dd>Is 8 sessions on CPU a lot? <code>cpu_count</code> (<code>DBA_HIST_PARAMETER</code> at each window&rsquo;s end snapshot, summed over the instances) is the number of CPU <b>threads</b> the instance may use, or the instance-caging limit when Resource Manager caps it: not the host&rsquo;s cores, and not the CPU that other databases, background processes or other software on the same host take (DB CPU counts foreground sessions of this database only). The DB time card says &ldquo;DB CPU x of cpu_count n&rdquo; (CPU-bound at 90 %), the by-wait-class Activity chart draws the Current cpu_count as a dashed line when it lies inside the chart&rsquo;s scale (the scale is never stretched to reach it; above, the header says so), and Active sessions lists every window. ASH counts a session <i>on CPU</i> while it runs <b>or waits in the run queue</b>; the time model&rsquo;s <code>DB CPU</code> counts only the CPU actually used. So foreground ASH on CPU clearly above DB CPU (the card asks for 10 % and 0.5 sessions more) means sessions were waiting for a CPU. ASH is a sample, one every 10 s, so a small difference either way is noise. Not scored.</dd>
 <dt>Wait events</dt><dd>Foreground: <code>DBA_HIST_SYSTEM_EVENT</code>; background: <code>DBA_HIST_BG_EVENT_SUMMARY</code>. Idle excluded. Top 10 events by time waited (s) and by average latency (ms = time waited &divide; total waits); the chart stacks wait-class time per window. When five or more flagged events moved together within a narrow band, the table notes one <b>table-wide shift</b> and demotes large rows to moderate.</dd>
 <dt>Top SQL</dt><dd>Top 10 statements per ranking and window from <code>DBA_HIST_SQLSTAT</code> <code>*_DELTA</code> columns; ranked, not scored. The bump chart draws one line per statement across the windows; <b>Break down by</b> re-aggregates by parsing schema, module or action. <b>Biggest change</b>, the first tab, ranks statements by Current-window total elapsed minus the mean over the prior valid windows (a valid window without an AWR row for the statement counts as 0; regressions only; the tab is left out when nothing got slower); the &Delta; next to the Current value compares the two: <i>new</i> when no prior valid window has a row for the statement, <i>from 0</i> when its rows there all show 0 s elapsed. <b>Values: Total | Per execution | Top per execution</b>, on every tab, changes how the Elapsed, CPU, Buffer gets and Physical reads tabs read. <b>Total</b> is the window total as above. <b>Per execution</b> keeps the same statements, order and <b>#</b> ranks (still picked and ordered by the window total) and divides each shown value by the statement&rsquo;s executions in that window (a group&rsquo;s summed value over its summed executions under Break down by; the bump chart follows); a dash is a window where the statement is not in the top 10 or completed no execution. <b>Top per execution</b> is a second ranking of its own &mdash; each window&rsquo;s top 10 statements by value divided by completed executions in that window (its own <b>#</b> badges, order, chart and Break down by), so it is a different set of statements: one with elapsed time but no completed execution in a window is not ranked in it, and a statement can be in one ranking and not the other. Biggest change and Executions have no per-execution form and Per-exec regression is always per execution; a note on those tabs says so. The choice is remembered in the browser.</dd>
 <dt>Per-SQL detail</dt><dd>The pool&rsquo;s <b>Plans</b>, <b>Executions</b>, <b>Snapshots</b> and <b>First seen</b>, the per-plan table and the chart cover the whole AWR retention, not only the compared windows. The <b>Compared windows</b> table in an opened row covers the report&rsquo;s windows; its prior mean averages the prior valid windows in which AWR kept a row for the statement (the Biggest change tab counts a valid window without a row as 0, so the two can differ). A statement AWR did not capture in a window reads <i>not captured</i>, never 0.</dd>

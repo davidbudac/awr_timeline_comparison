@@ -1656,6 +1656,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ashx .xeh{stroke-width:1.8}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xhn{font:600 11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xdl{font:11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}');
+    -- plan 042: the cpu_count line on the by-wait-class chart, its label
+    -- (the .xdl font: tw() measures it) and the header note when it is
+    -- above the y range (js_timeline cpuMark / cpuHead)
+    DBMS_OUTPUT.PUT_LINE('.ashx .xcpu{stroke:var(--ink-2);stroke-width:1;stroke-dasharray:5 3;opacity:.85;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xcpt{font:11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink-2);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axh .axcpu{font-size:12px;color:var(--ink-3);white-space:nowrap}.ashx .axh .axcpu[hidden]{display:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axc.hl{background:var(--hov);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line-2)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axlg.hlon .axc:not(.hl){opacity:.55}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axlg.hlon .axc:not(.hl):hover,.ashx .axlg.hlon .axc:not(.hl):focus-visible{opacity:1}');

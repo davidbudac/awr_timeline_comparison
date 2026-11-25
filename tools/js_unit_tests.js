@@ -331,6 +331,48 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
   });
 }
 
+/* ---- plan 042: AWR_TL.cpuInfo / cpuText (js_timeline), the Current
+   window's DB CPU against its cpu_count and ASH on CPU ---- */
+{
+  const T = load('js_timeline').AWR_TL;
+  const cpu = (cur, n) => ({ n: n || [16, null, 16, 16], used: [8, null, 8.2, cur.used], cur });
+  test('cpuInfo: no Current cpu_count or DB CPU = null', () => {
+    assert.strictEqual(T.cpuInfo(null), null);
+    assert.strictEqual(T.cpuInfo({ n: [], used: [] }), null);
+    assert.strictEqual(T.cpuInfo(cpu({ n: null, used: 8.6, pct: null, ash: 9 })), null);
+    assert.strictEqual(T.cpuInfo(cpu({ n: 0, used: 8.6, pct: null, ash: 9 })), null);
+    assert.strictEqual(T.cpuInfo(cpu({ n: 16, used: null, pct: null, ash: 9 })), null);
+  });
+  test('cpuText: plain capacity row, no queue below both thresholds', () => {
+    const i = T.cpuInfo(cpu({ n: 16, used: 8.583, pct: 53.6, ash: 8.9 }));
+    assert.strictEqual(i.wait, null); assert.strictEqual(i.bound, false); assert.strictEqual(i.changed, false);
+    assert.strictEqual(T.cpuText(i), 'DB CPU 8.6 of cpu_count 16 (54%)');
+  });
+  test('cpuInfo: the queue needs 10% AND 0.5 AAS above DB CPU', () => {
+    // 12.1 vs 8.6: +3.5 (41%) -> waiting
+    const a = T.cpuInfo(cpu({ n: 16, used: 8.6, pct: 53.75, ash: 12.1 }));
+    assert.ok(Math.abs(a.wait - 3.5) < 1e-9);
+    assert.strictEqual(T.cpuText(a), 'DB CPU 8.6 of cpu_count 16 (54%); ASH saw 12.1 on CPU, so about 3.5 sessions were waiting for a CPU');
+    // +0.4 AAS is 20% but under 0.5 AAS
+    assert.strictEqual(T.cpuInfo(cpu({ n: 4, used: 2, pct: 50, ash: 2.4 })).wait, null);
+    // +0.8 AAS is 0.5 AAS or more but only 8% of 10
+    assert.strictEqual(T.cpuInfo(cpu({ n: 32, used: 10, pct: 31.25, ash: 10.8 })).wait, null);
+    // exactly 10% and 0.5 AAS: waiting
+    assert.ok(T.cpuInfo(cpu({ n: 16, used: 5, pct: 31.25, ash: 5.5 })).wait != null);
+    // no ASH value: no queue
+    assert.strictEqual(T.cpuInfo(cpu({ n: 16, used: 5, pct: 31.25, ash: null })).wait, null);
+  });
+  test('cpuInfo: CPU-bound at 90% of cpu_count, changed cpu_count', () => {
+    const b = T.cpuInfo(cpu({ n: 8, used: 7.2, pct: 90, ash: 9.6 }, [4, 8, null, 8]));
+    assert.strictEqual(b.bound, true); assert.strictEqual(b.changed, true); assert.strictEqual(b.lo, 4); assert.strictEqual(b.hi, 8);
+    assert.strictEqual(T.cpuText(b), 'DB CPU 7.2 of cpu_count 8 (90%); ASH saw 9.6 on CPU, so about 2.4 sessions were waiting for a CPU; CPU-bound');
+    assert.strictEqual(T.cpuInfo(cpu({ n: 8, used: 7.19, pct: 89.9, ash: null })).bound, false);
+  });
+  test('cpuText: an idle database', () => {
+    assert.strictEqual(T.cpuText(T.cpuInfo(cpu({ n: 4, used: 0.012, pct: 0.3, ash: 0 }))), 'DB CPU 0.01 of cpu_count 4 (<1%)');
+  });
+}
+
 /* ---- review follow-up R3: AWR_TL.flagPos (js_timeline), where a release
    flag goes on the Activity chart ---- */
 {
