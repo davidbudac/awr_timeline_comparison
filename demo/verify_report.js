@@ -2507,6 +2507,107 @@ const LABEL_BAND = () => {
     await page.close();
   }
 
+  // ---- 6h. plan 046: "Host and memory" (section 30).  (a) every table
+  // data-nocount, no crit / warn row, no scored band or delta; the host
+  // percentages (busy, user, system, nice, I/O wait) in 0..100 in every
+  // window, and busy = user + system (+ nice) within rounding (a FAIL on
+  // the demo, "info" on a real report: platforms split CPU time their own
+  // way); the peak temp / PGA at least the Current top statement's.  (b)
+  // the card pointers exist exactly when their rule holds (Physical I/O:
+  // buffer cache <= 90% of the prior mean; DB time: host busy >= 90%,
+  // anything paged out) and cite the row's numbers; the source block is
+  // gone.  (c) the library row opens exactly when something stands out.
+  // (d) JS off: the tables are shown, the source hidden.  A report without
+  // #host-memory skips every part.
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file);
+    const r46 = await page.evaluate((isDemo) => {
+      const out = {};
+      const sec = document.getElementById('host-memory');
+      if (!sec) { out.tbl = 'none (no #host-memory, report before plan 046)'; return out; }
+      const num = (el, a) => { const v = el && el.getAttribute(a); return v === null || v === '' ? null : +v; };
+      const row = c => document.getElementById('hm-' + c);
+      const spark = c => { const r = row(c), t = r && r.querySelector('td[data-spark]');
+        return t ? t.getAttribute('data-spark').split(',').map(x => x === '' ? null : +x) : null; };
+      const bad = [], info = [];
+      const tbls = [...sec.querySelectorAll('table')];
+      tbls.forEach(t => { if (!t.hasAttribute('data-nocount')) bad.push((t.id || 'a table') + ' without data-nocount'); });
+      if (sec.querySelector('tr.crit, tr.warn, .bd.s-large, .bd.s-moderate, .bd.s-improved, .d:not(.s-plain):not(.s-na)')) bad.push('carries a severity');
+      const pcs = ['busy', 'user', 'sys', 'nice', 'iowait'].map(c => [c, spark(c)]).filter(x => x[1]);
+      pcs.forEach(([c, v]) => v.forEach((x, i) => { if (x != null && (x < -1e-6 || x > 100 + 1e-6)) bad.push(c + ' ' + x + ' in slot ' + i); }));
+      const B = spark('busy'), U = spark('user'), S = spark('sys'), N = spark('nice');
+      let checked = 0;
+      if (B && U && S) B.forEach((b, i) => {
+        if (b == null || U[i] == null || S[i] == null) return;
+        const sum = U[i] + S[i] + (N && N[i] != null ? N[i] : 0);
+        checked++;
+        if (Math.abs(sum - b) > 0.01) (isDemo ? bad : info).push('busy ' + b + ' vs user + system + nice ' + sum.toFixed(4) + ' in slot ' + i);
+      });
+      const pk = (c, t) => { const v = num(row(c), 'data-cur'), r1 = document.querySelector('#' + t + ' tbody tr');
+        if (v == null || !r1) return; const s1 = num(r1, 'data-cur');
+        // the GB token is rounded to 6 decimals (up to about 537 bytes off): 600 bytes of slack
+        if (s1 != null && s1 > v * 1073741824 + 600) bad.push(c + ' ' + v + ' GB below the top statement ' + s1 + ' B'); };
+      pk('tmppk', 'hm-sq-t'); pk('pgapk', 'hm-sq-p');
+      out.tbl = bad.length ? 'FAIL ' + bad.slice(0, 5).join('; ')
+        : 'ok (' + tbls.length + ' tables, ' + sec.querySelectorAll('tr[id^="hm-"]').length + ' rows, busy split checked in ' + checked + ' windows'
+          + (info.length ? '; info: ' + info.slice(0, 2).join('; ') : '') + ')';
+      // (b) the card pointers against their rules
+      const cur = c => num(row(c), 'data-cur'), mu = c => num(row(c), 'data-mu');
+      const near = (a, b) => a != null && b != null && Math.abs(a - b) < 1e-5 * Math.max(1, Math.abs(b));
+      const rules = [
+        ['f-io', 'bc', cur('bc') != null && mu('bc') > 0 && cur('bc') <= 0.9 * mu('bc'), near(cur('bc'), 0.9 * mu('bc'))],
+        ['f-dbtime', 'busy', cur('busy') != null && cur('busy') >= 90, near(cur('busy'), 90)],
+        // a swap-out under 0.0000005 MB/s prints as a 0 token: "near"
+        ['f-dbtime', 'vmout', cur('vmout') != null && cur('vmout') > 0, cur('vmout') === 0],
+      ];
+      const b2 = [], seen = [];
+      if (document.getElementById('hm-ev-src')) b2.push('the source block #hm-ev-src is still in the page');
+      rules.forEach(([card, c, want, nr]) => {
+        const cd = document.getElementById(card), ev = document.querySelector('#' + card + ' .evr.ev-hm[data-hm="hm-' + c + '"]');
+        if (!cd) { if (ev) b2.push(c + ' pointer without the card'); return; }
+        if (!!ev !== want && !nr) { b2.push(card + ' ' + c + ' pointer ' + (ev ? 'present' : 'missing') + ', rule ' + want); return; }
+        if (!ev) return;
+        seen.push(c);
+        if (ev.getAttribute('data-cur') !== row(c).getAttribute('data-cur') || ev.getAttribute('data-mu') !== row(c).getAttribute('data-mu')) b2.push(c + ' numbers differ from the row');
+        const a = ev.querySelector('a.ent');
+        if (!a || a.getAttribute('href') !== '#hm-' + c) b2.push(c + ' link ' + (a && a.getAttribute('href')));
+        if (ev.querySelector('.bd.s-large, .bd.s-moderate, .bd.s-improved, .d:not(.s-plain):not(.s-na)')) b2.push(c + ' carries a severity');
+        if (!ev.querySelector('.ns')) b2.push(c + ' no "not scored"');
+      });
+      out.card = b2.length ? 'FAIL ' + b2.join('; ') : seen.length ? 'ok (' + seen.join(', ') + ')' : 'none (no rule fires)';
+      // (c) lopen
+      const why = [];
+      if (rules[0][2]) why.push('bc'); if (rules[1][2]) why.push('busy'); if (rules[2][2]) why.push('swap');
+      if (sec.querySelector('.hm-chg')) why.push('resized');
+      if (sec.querySelector('#hm-rs tbody tr')) why.push('sgaresize');
+      ['pgaover', 'e1555', 'enos'].forEach(c => { if (cur(c) > 0) why.push(c); });
+      const nearO = rules.some(r => r[3]);
+      const lo = sec.classList.contains('lopen');
+      out.lopen = (lo === (why.length > 0) || nearO) ? 'ok (' + (lo ? 'open: ' + why.join(' ') : 'closed') + ')'
+        : 'FAIL lopen ' + lo + ', reasons: ' + (why.join(' ') || 'none');
+      return out;
+    }, isDemo);
+    if (/^ok/.test(r46.tbl || '')) {
+      const ctx = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 1000 } });
+      const p2 = await ctx.newPage();
+      await p2.goto('file://' + file, { waitUntil: 'load' });
+      r46.nojs = await p2.evaluate(() => {
+        const t = [...document.querySelectorAll('#host-memory table')], s = document.getElementById('hm-ev-src');
+        if (!t.length || t.some(x => !x.getClientRects().length)) return 'FAIL a table is not shown with JS off';
+        if (s && s.getClientRects().length) return 'FAIL the card row source shows with JS off';
+        return 'ok (' + t.length + ' tables' + (s ? ', source hidden' : '') + ')';
+      });
+      await ctx.close();
+    }
+    console.log('plan 046', JSON.stringify(r46));
+    for (const k of ['tbl', 'card', 'lopen', 'nojs']) if (/^FAIL/.test(r46[k] || '')) fail('host and memory (plan 046) ' + k + ': ' + r46[k]);
+    if (isDemo && (!/^ok/.test(r46.tbl || '') || !/^ok/.test(r46.lopen || '') || !/^ok/.test(r46.nojs || '')))
+      fail('demo: every plan 046 part should run: ' + JSON.stringify(r46));
+    if (errors.length) fail('plan 046: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
   // ---- 7. the design (quiet / dashboard): the shared pieces, then the
   // dashboard's KPI cards, findings table, Activity tabs and palette
   if (DESIGN !== 'classic') {
@@ -2642,9 +2743,10 @@ const LABEL_BAND = () => {
   // the instance map agrees with the finding cards.  A report from before
   // these sections (none of the ids present) skips the block.
   {
-    // 'who' (section 29, plan 045) is newer than 20-28: a report from before
-    // it has the others and lacks it, so it is checked only when present
-    const VIZ_OPT = ['who'];
+    // 'who' (section 29, plan 045) and 'host-memory' (section 30, plan 046)
+    // are newer than 20-28: a report from before them has the others and
+    // lacks them, so each is checked only when present
+    const VIZ_OPT = ['who', 'host-memory'];
     const VIZ0 = ['instance-map', 'load-response', 'release-delta', 'win-sim', 'onset', 'wait-hist', 'blocking', 'volume-cost', 'plan-flame'];
     const { page, errors } = await openPage('#view=all', 'light');
     const hasOpt = await page.evaluate(ids => ids.filter(id => document.getElementById(id)), VIZ_OPT);

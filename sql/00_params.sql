@@ -585,6 +585,7 @@ BEGIN
         || '<a href="#db-time-summary">DB time</a>'
         || '<a href="#onset" data-nodot>Trend breaks</a>'
         || '<a href="#utilization">Utilization</a>'
+        || '<a href="#host-memory" data-nodot>Host and memory</a>'
         || '<a href="#windows">Windows</a>'
         || '<a href="#win-sim" data-nodot>Window similarity</a>'
         -- Day profile link only when the section exists (profile_days > 0);

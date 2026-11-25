@@ -308,7 +308,7 @@ BEGIN
         || ' body.va main > #sqlmon { order:12; } body.va main > #segment-io { order:13; }'
         || ' body.va main > #file-io { order:14; } body.va main > #param-changes { order:15; }'
         || ' body.va main > #ash-timeline { order:16; } body.va main > #db-time-summary { order:17; }'
-        || ' body.va main > #utilization { order:18; } body.va main > #windows { order:19; }'
+        || ' body.va main > #utilization, body.va main > #host-memory { order:18; } body.va main > #windows { order:19; }'
         || ' body.va main > #day-profile { order:20; }');
     -- The visualization sections (20-28) take the order of the section
     -- they extend and follow it in the DOM, so each shows right after it.

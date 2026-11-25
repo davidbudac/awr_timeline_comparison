@@ -94,6 +94,8 @@ sql/
 ├── 28_release_delta.sql -- viz: before / after a release marker (split computed in the page)
 ├── 29_who.sql           -- viz: who added the load (foreground ASH by service / module / machine /
 │                        --   program / user / PDB; a Who row on the DB time card)
+├── 30_host_memory.sql   -- host CPU / paging, SGA / PGA, undo, temp / PGA per statement (optional
+│                        --   OSSTAT / PGASTAT / MEM_DYNAMIC_COMP / MEMORY_RESIZE_OPS / UNDOSTAT; ASH)
 └── lib/                 -- @@-included fragments (see conventions)
     ├── windows_cte.sql       -- run_params → … → valid_windows CTE chain
     ├── day_profile_cte.sql   -- dp_params → … → dp_scored (shared by 16 + fleet 06)
@@ -584,7 +586,8 @@ Monitor 2 (opens on an error / DOP downgrade on a Current top-N statement),
 Foreground waits 3 (`lopen` in markup, same rule), Day
 profile 4, Segment I/O 5, File I/O 6, Load profile 7, System metrics 8,
 Parameters 9, then the visualization sections 10-19 (20 Load vs response
-time, 21, 22, 23, 24, 25, 26, 27, 28, 29; see "Visualization sections").
+time, 21, 22, 23, 24, 25, 26, 27, 28, 29; see "Visualization sections"),
+then Host and memory 20 (30).
 All-only: 01, 05, 09, 10, 11, 13 ("+ 6 more in All sections"). Row text: `lib_ls(id, html)` (`band_glyph.plsql`, twin
 `helpers.lib_ls`) emits `<script>if(window.AWR_ls)AWR_ls("id","html")</script>`;
 `window.AWR_ls` is an early 00 script (before `<main>`); 16 inlines the same
@@ -1299,7 +1302,7 @@ check 25; see the gotcha).
 ### Section order (v1.6.0)
 
 `awr_trend.sql` includes the sections in **DOM** order (00, 10, 08, 09, 07,
-27, 20, 28, 29, 01, 26, 16, 25, 13, 02, 03, 04, 22, 05, 24, 06, 21, 11, 18, 23,
+27, 20, 28, 29, 01, 26, 16, 25, 13, 30, 02, 03, 04, 22, 05, 24, 06, 21, 11, 18, 23,
 14, 15, 12, 19, 17; each visualization section 20-29 right after the section
 it extends) = the JS-off stacking; 00 emits the verdict hero, then `#activity` (plan
 023); with the default `order:3` the charts are the first section in
@@ -1883,7 +1886,10 @@ and must agree with 07). Common shape, keep it when touching any of them:
   only through `OPEN c FOR '...' USING` inside a handler for ORA-00942 /
   ORA-01031 that renders a "needs SELECT on" note; the windows / statements
   come from static SQL first. A static `FROM` on either aborts the whole
-  run for an analyst user without the grant.
+  run for an analyst user without the grant. The same holds for 29's
+  `DBA_HIST_SERVICE_NAME` / `DBA_HIST_PDB_INSTANCE` and 30's
+  `DBA_HIST_OSSTAT`, `_PGASTAT`, `_MEM_DYNAMIC_COMP`, `_MEMORY_RESIZE_OPS`,
+  `_UNDOSTAT` (30 also turns ANY other error of such a read into a note).
 - **Tooltip.** js_timeline hides the shared `#tip` on every document
   `mouseover`; a view that reuses `#tip` shows it on `mousemove`, or from a
   document `mouseover` listener registered after js_timeline's (20, 22,
@@ -2015,6 +2021,64 @@ model row (29 runs before 02). Twin `s29_who.py` splits each hour's 09
 foreground count over 14 fixed clients by largest remainder (window sums
 = `ashx.winfg`). verify_report block 6g. Unexercised: RAC, multi-DBID,
 a CDB with several PDBs, the missing-grant notes, more than 40 values.
+
+#### Host and memory (`sql/30_host_memory.sql`, `section#host-memory`, plan 046)
+
+Host CPU / paging, memory, undo, temp / PGA per statement: four blocks in
+section 13's house style (Metric | Unit | Current | `band_cells(...,
+NULL, ..., 'Y')` | Trend | one column per prior window; rows
+`tr#hm-<code>[data-cur data-mu data-n]`, display units, 6-decimal tokens;
+tables `table.hm-tbl[data-nocount]` in `div.hm-tw`, the chrome's
+`.tblwrap` scrolls them -- never give `.hm-tw` its own `overflow`: a
+scroll container turns the sticky `thead` into a header that sits over
+the first rows). Library row `--os:20`, All sections order 18 next to
+Utilization (DOM right after 13), rail link next to Utilization
+(`data-nodot`). A window is KNOWN only when every instance row is valid
+(plan 042's rule); unknown = empty slot, never 0, out of the mean. Reads,
+ALL before any markup: OSSTAT (per known instance row, dynamic, binds,
+`snap_id IN (begin, end)`, `MAX(CASE ...) KEEP (DENSE_RANK FIRST ORDER BY
+NVL(con_id, 0))`; counters `BUSY / IDLE / USER / SYS / NICE / IOWAIT /
+RSRC_MGR_CPU_WAIT _TIME` (hundredths of a second, over all CPUs) and
+`VM_IN / VM_OUT _BYTES` = end - begin (negative -> unknown), summed over
+instances; gauges at the end snapshot: `LOAD` (max over instances),
+`FREE_MEMORY_BYTES` (not in the 19c Reference), configuration `NUM_CPUS /
+NUM_CPU_CORES / NUM_CPU_SOCKETS / PHYSICAL_MEMORY_BYTES` (summed; any
+change across windows = `p.hm-chg` "Host resized: CPUs 12 -> 16 between
+<window> and <window>"); PGASTAT (`total PGA allocated / inuse`,
+`aggregate PGA target parameter` at the end, `over allocation count`
+delta); MEM_DYNAMIC_COMP (end snapshot, `LOWER(component) IN ('default
+buffer cache', 'shared pool', 'large pool', 'sga target', 'pga target')`;
+the two targets shown only when non-zero somewhere);
+MEMORY_RESIZE_OPS (GROW / SHRINK that STARTED in the Current window,
+`DISTINCT` over the natural key, bounded by dbid / instance / start_time
+only, `table#hm-rs`, first 20); UNDOSTAT (10-minute rows by `end_time >
+win_start AND begin_time < win_end`, deduped per (begin_time, con_id),
+containers summed, rates over the rows' covered time, longest query +
+its sql_id); DB CPU from `DBA_HIST_SYS_TIME_MODEL` (09's idiom, static);
+ONE static ASH scan (24's join; per (window, instance, sample, sql_id)
+summed, so a PX statement counts its slaves together; the peak = the
+largest per-sample total, per instance summed; rows kept: `rn = 1` per
+(window, instance) + every window of the Current top 5 by temp / PGA;
+`table#hm-sq-t` / `#hm-sq-p` with the median of the prior per-window
+maxima). Each optional read sits in its own `BEGIN ... EXCEPTION WHEN
+OTHERS`: -942 / -1031 -> "needs SELECT on <view>", ANY other error ->
+"could not read <view>: <SQLERRM>" (deliberate: these numbers are
+cosmetic, a wrong name must not abort the report), the block's
+collections cleared. `lopen` (`section[data-open]` lists the reasons):
+Current host busy >= 90%, VM_OUT > 0, host resized, a resize operation
+in Current, buffer cache <= 90% of the prior mean, PGA over-allocation >
+0, ORA-01555 or out-of-space > 0. Card rows (`div#hm-ev-src` with one
+`div[data-for=f-io|f-dbtime]` per card + one script appending them to
+the card's `dl.ev`): `.evr.ev-hm[data-hm=hm-bc]` "Memory: buffer cache"
+on `#f-io`, `[data-hm=hm-busy]` / `[data-hm=hm-vmout]` "Host" on
+`#f-dbtime`; same `data-cur / data-mu` as the row, hollow dot, "not
+scored". Twin `s30_host_memory.py` derives the RAW values (16 CPUs, busy
+= DB CPU + background CPU + a few points; memory follows the demo's
+sga_target / pga_aggregate_target changes; one ORA-01555 on 25 Jun) and
+runs the SQL's arithmetic; no rule fires in the demo (a scratch variant
+patching `_raw` exercised the pointers). verify_report block 6h + section
+8. Unexercised: everything on a database (no run yet), RAC, multi-DBID,
+a CDB's per-container rows, a resize operation, the error notes.
 
 #### Wait latency histograms (`sql/22_wait_histogram.sql`, `#wait-hist`)
 
@@ -2372,8 +2436,8 @@ if a busy DB ever makes it slow.
 **Opt-out (`sqlmon`, env `SQLMON=N`).** The driver resolves `~sqlmon_on`
 (`'N'` only for a falsy form, else `'Y'`) and `~sqlmon_include` =
 `sql/18_sqlmon.sql` or the stub `sql/lib/no_sqlmon.sql` (only the two
-`AWR-SECTION` markers, so the pair count holds: 30 pairs since section 29
-(plan 045), 29 since sections 20-28, 20 before); 00 drops the rail
+`AWR-SECTION` markers, so the pair count holds: 31 pairs since section 30
+(plan 046), 30 since section 29 (plan 045), 29 since sections 20-28, 20 before); 00 drops the rail
 link, 17 wraps its R6-R9 scans in `IF '~sqlmon_on' = 'Y'` (body not
 re-indented), 19's About meta line says "SQL Monitor skipped". 06's MON
 xlinks are hidden by the chrome (missing target). `sqlmon=Y` output is
@@ -3084,8 +3148,8 @@ the demo.
   `!= ''` is never TRUE), a `border-left` / inset shadow on a rail
   link state (32), a `viz_head.sql` include that does not exist or a stale
   fleet co-anomaly script (34), and a static read of an optional-grant view
-  (35: `DBA_HIST_EVENT_HISTOGRAM` / `DBA_HIST_SQL_PLAN` outside dynamic
-  SQL). No DB needed; add a check when a new
+  (35: `DBA_HIST_EVENT_HISTOGRAM` / `DBA_HIST_SQL_PLAN` and the optional
+  views of 29 / 30 outside dynamic SQL). No DB needed; add a check when a new
   gotcha bites. A `finding` inside a `| while read` loop must go through
   `finding` (it records to a flag file; a subshell `fail=1` is lost).
 - **Test DB: dbmint** (Oracle 19c CDB1, `connect / as sysdba`). The host name

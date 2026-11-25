@@ -71,6 +71,11 @@ GRANT SELECT ON DBA_HIST_EVENT_HISTOGRAM     TO <user>;  -- Wait latency histogr
 GRANT SELECT ON DBA_HIST_SQL_PLAN            TO <user>;  -- Plan shape (plan trees)
 GRANT SELECT ON DBA_HIST_SERVICE_NAME        TO <user>;  -- Who added the load: service names
 GRANT SELECT ON DBA_HIST_PDB_INSTANCE        TO <user>;  -- Who added the load: PDB names
+GRANT SELECT ON DBA_HIST_OSSTAT              TO <user>;  -- Host and memory: host CPU, load, paging
+GRANT SELECT ON DBA_HIST_PGASTAT             TO <user>;  -- Host and memory: PGA allocated, over-allocations
+GRANT SELECT ON DBA_HIST_MEM_DYNAMIC_COMP    TO <user>;  -- Host and memory: buffer cache, shared / large pool
+GRANT SELECT ON DBA_HIST_MEMORY_RESIZE_OPS   TO <user>;  -- Host and memory: SGA resize operations
+GRANT SELECT ON DBA_HIST_UNDOSTAT            TO <user>;  -- Host and memory: undo, ORA-01555
 -- Only if you use side/create_weekly_baselines.sql (optional, writes baselines):
 GRANT EXECUTE ON DBMS_WORKLOAD_REPOSITORY    TO <user>;
 ```
@@ -514,7 +519,7 @@ the Day profile.
 
 ### Diagnostic views
 
-Ten views answer the questions the tables leave open. Each is a row of the
+Eleven views answer the questions the tables leave open. Each is a row of the
 Summary's evidence library (one-line answer; open it in place) and a full
 section in All sections, next to the table it extends. All are inline SVG /
 HTML, so they work offline; each carries a computed **Reads as:** sentence
@@ -532,6 +537,7 @@ and a table of its numbers. They explain; none of them adds a finding.
 | **Trend breaks** | *When* did it start? The whole span against its seasonal normal, with a change-point scan that dates the shift and names the nearest release. Also in the Timeline view. |
 | **Window similarity** | Are the prior windows a fair picture of normal? A window-by-window similarity matrix, and a what-if that re-scores the report without a window you drop. |
 | **Who added the load** | Which service, module, machine, program or user (or PDB) is behind the extra active sessions? Foreground ASH per compared window, the values whose time rose first. Optional grants for names: `DBA_HIST_SERVICE_NAME`, `DBA_HIST_PDB_INSTANCE` (without them: hashes / ids). |
+| **Host and memory** | Was the host out of CPU or swapping, and was it this database? Did the buffer cache or the PGA change, any ORA-01555, which statement held the temp space? Host CPU and paging, SGA / PGA sizes and resize operations, undo, and temp / PGA per statement from ASH, per compared window. Optional grants: `DBA_HIST_OSSTAT`, `DBA_HIST_PGASTAT`, `DBA_HIST_MEM_DYNAMIC_COMP`, `DBA_HIST_MEMORY_RESIZE_OPS`, `DBA_HIST_UNDOSTAT` (each block says which it lacks). |
 
 ### The navigation rail & dark mode
 

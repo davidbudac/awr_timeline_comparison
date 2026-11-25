@@ -696,6 +696,9 @@ DEFINE _dbg_msg = 'section 25 onset'
 DEFINE _dbg_msg = 'section 13 utilization (application usage profile)'
 @@sql/lib/debug_log.sql
 @@sql/13_utilization.sql
+DEFINE _dbg_msg = 'section 30 host and memory (OSSTAT, PGASTAT, SGA components, UNDOSTAT, ASH temp / PGA)'
+@@sql/lib/debug_log.sql
+@@sql/30_host_memory.sql
 DEFINE _dbg_msg = 'section 02 load_profile (SYSSTAT deltas)'
 @@sql/lib/debug_log.sql
 @@sql/02_load_profile.sql

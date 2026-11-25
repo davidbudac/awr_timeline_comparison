@@ -107,6 +107,24 @@ release bumps `awr_version`).
   grants (`DBA_HIST_SERVICE_NAME`, `DBA_HIST_PDB_INSTANCE`); without them
   the section shows hashes / container ids. Evidence, not a finding: no
   count, pill or severity. The report now has 30 `AWR-SECTION` pairs.
+- **Host and memory** (plan 046, new section 30): was the host out of CPU
+  or swapping, and was it this database? Did the buffer cache or the PGA
+  change, any ORA-01555, which statement held the temp space? Four tables
+  per compared window: host CPU busy / user / system / nice / I/O wait,
+  the database's share of the host's busy CPU, load, Resource Manager
+  wait, paging, and the host's CPUs and memory ("host resized" when they
+  changed); buffer cache, shared and large pool, PGA allocated / in use /
+  over-allocations and the SGA resize operations of the Current window;
+  undo blocks, transactions, longest query, ORA-01555 and out-of-space
+  counts; peak temp and PGA from ASH with the Current window's top 5
+  statements against their usual maximum. The Physical I/O card gets a
+  "Memory" row when the buffer cache is at least 10% smaller than usual,
+  the DB time card a "Host" row at 90% host CPU or any swap-out. Five new
+  **optional** grants (`DBA_HIST_OSSTAT`, `DBA_HIST_PGASTAT`,
+  `DBA_HIST_MEM_DYNAMIC_COMP`, `DBA_HIST_MEMORY_RESIZE_OPS`,
+  `DBA_HIST_UNDOSTAT`); each block says which one it lacks and the rest
+  still shows. Evidence, not a finding: no count, pill or severity. The
+  report now has 31 `AWR-SECTION` pairs.
 - **Docs / tooling:** the demo generator is now platform-independent (every
   libm-derived value is rounded to 10 significant digits, digit counts are
   exact), so the demo pages regenerate byte for byte on Linux as on macOS

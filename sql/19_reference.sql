@@ -419,6 +419,22 @@ BEGIN
         || ' machine or user) carries at least 30% of a rise of at least 0.1 AAS, with 3 or more valid prior windows. Service and PDB names need SELECT on'
         || ' <code>DBA_HIST_SERVICE_NAME</code> / <code>DBA_HIST_PDB_INSTANCE</code>; without them they show as a hash / con_id. Evidence, not a finding: nothing'
         || ' here is scored or counted.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Host and memory</dt><dd>Four blocks per compared window, each read on its own so one missing grant or view never hides the others.'
+        || ' <b>Host CPU and paging</b> (<code>DBA_HIST_OSSTAT</code>): busy, user, system, nice and I/O-wait time as a share of busy + idle time, Resource Manager CPU wait,'
+        || ' bytes paged in / out, load, and the CPUs, cores, sockets and memory of the host (a change across the windows is said as &ldquo;host resized&rdquo;);'
+        || ' &ldquo;DB CPU share of host busy&rdquo; is the time model&rsquo;s foreground DB CPU over the host&rsquo;s busy time, the rest being background processes,'
+        || ' other databases or software on the host and the OS. <b>Memory</b> (<code>DBA_HIST_MEM_DYNAMIC_COMP</code>, <code>DBA_HIST_PGASTAT</code>,'
+        || ' <code>DBA_HIST_MEMORY_RESIZE_OPS</code>): buffer cache, shared and large pool, PGA allocated and in use, PGA over-allocations, and the SGA / PGA grow and'
+        || ' shrink operations that started in the Current window. <b>Undo</b> (<code>DBA_HIST_UNDOSTAT</code>): 10-minute rows counted toward every window they'
+        || ' overlap; undo blocks and transactions per second, the longest query, ORA-01555 and out-of-space counts, the lowest tuned retention.'
+        || ' <b>Temp and PGA by statement</b> (ASH): the peak per window and the Current window&rsquo;s top statements; ASH keeps a 10-second sample of active sessions,'
+        || ' so short spills are missed and idle sessions&rsquo; PGA is not counted. Counters (CPU times, paging, over-allocations) are end minus begin of the window;'
+        || ' gauges (sizes, load, PGA allocated) are read at its end snapshot; a window counts only when every instance of it is valid. The five views are optional'
+        || ' grants: without one, its block says &ldquo;needs SELECT on&rdquo; (any other read error is shown as a note too). The row opens in the Summary when the'
+        || ' host is at least 90% busy, pages out, was resized, the SGA was resized in the Current window or the buffer cache is at least 10% below its prior mean,'
+        || ' the PGA over-allocated, or ORA-01555 / undo out-of-space errors occurred. The Physical I/O card gets a &ldquo;Memory&rdquo; row when the buffer cache is'
+        || ' at least 10% below its prior mean, the DB time card a &ldquo;Host&rdquo; row when the host is at least 90% busy or paged out.'
+        || ' Evidence, not a finding: nothing here is scored or counted.</dd>');
     DBMS_OUTPUT.PUT_LINE('</dl>');
     DBMS_OUTPUT.PUT_LINE('<p class="ab-meta">Run <code>~run_id</code> &middot; template <code>'
         || DBMS_XMLGEN.CONVERT('~template_name') || '</code> &middot; top_n ~top_n'
