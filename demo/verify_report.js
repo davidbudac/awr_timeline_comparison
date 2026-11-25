@@ -2211,7 +2211,8 @@ const LABEL_BAND = () => {
       });
       const cu = C.cur || {}, L = W.length - 1;
       if ((C.n || [])[L] !== cu.n || (C.used || [])[L] !== cu.used) bad.push('cur ' + JSON.stringify(cu) + ' is not the last entries');
-      if (cu.n != null && cu.used != null && Math.abs(cu.pct - cu.used / cu.n * 100) > 2e-3) bad.push('cur.pct ' + cu.pct);
+      // used is printed with 3 decimals, pct from the unrounded value: up to 0.0005 / n x 100 apart
+      if (cu.n != null && cu.used != null && Math.abs(cu.pct - cu.used / cu.n * 100) > 0.0005 / cu.n * 100 + 2e-3) bad.push('cur.pct ' + cu.pct);
       const tb = document.querySelector('#ash-timeline table#ash-cpu');
       if (!tb) bad.push('no #ash-cpu table');
       else {
@@ -2480,8 +2481,10 @@ const LABEL_BAND = () => {
           if (!a2 || a2.getAttribute('href') !== '#' + t.id) b2.push('link ' + (a2 && a2.getAttribute('href')));
           if (a2 && a2.textContent !== t.querySelector('td.who-v').textContent) b2.push('link text');
           const s = num(t, 'data-rise') / tr * 100, de = (ev.querySelector('.de') || {}).textContent || '';
-          const st = s >= 100.5 ? '>100%' : s < 0.5 ? '<1%' : Math.round(s) + '%';
-          if (de.indexOf(st + ' of the rise in foreground activity') < 0) b2.push('share text "' + de + '", want ' + st);
+          // a value that rose more than the total (others fell) reads as words, never ">100%"
+          const st = s >= 100.5 ? ', more than the whole rise in foreground activity (others fell)'
+            : (s < 0.5 ? '<1%' : Math.round(s) + '%') + ' of the rise in foreground activity';
+          if (de.indexOf(st) < 0) b2.push('share text "' + de + '", want "' + st + '"');
         }
         if (ev.querySelector('.bd.s-large, .bd.s-moderate, .bd.s-improved, .d:not(.s-plain):not(.s-na)')) b2.push('carries a severity');
         if (!ev.querySelector('.ns')) b2.push('no "not scored"');
@@ -2527,7 +2530,7 @@ const LABEL_BAND = () => {
   // way); the peak temp / PGA at least the Current top statement's.  (b)
   // the card pointers exist exactly when their rule holds (Physical I/O:
   // buffer cache <= 90% of the prior mean; DB time: host busy >= 90%,
-  // anything paged out) and cite the row's numbers; the source block is
+  // at least 0.01 MB/s paged out, the SQL's c_swap) and cite the row's numbers; the source block is
   // gone.  (c) the library row opens exactly when something stands out.
   // (d) JS off: the tables are shown, the source hidden.  A report without
   // #host-memory skips every part.
@@ -2570,8 +2573,8 @@ const LABEL_BAND = () => {
       const rules = [
         ['f-io', 'bc', cur('bc') != null && mu('bc') > 0 && cur('bc') <= 0.9 * mu('bc'), near(cur('bc'), 0.9 * mu('bc'))],
         ['f-dbtime', 'busy', cur('busy') != null && cur('busy') >= 90, near(cur('busy'), 90)],
-        // a swap-out under 0.0000005 MB/s prints as a 0 token: "near"
-        ['f-dbtime', 'vmout', cur('vmout') != null && cur('vmout') > 0, cur('vmout') === 0],
+        // c_swap = 0.01 MB/s; the 6-decimal token makes a value at the floor "near"
+        ['f-dbtime', 'vmout', cur('vmout') != null && cur('vmout') >= 0.01, near(cur('vmout'), 0.01)],
       ];
       const b2 = [], seen = [];
       if (document.getElementById('hm-ev-src')) b2.push('the source block #hm-ev-src is still in the page');

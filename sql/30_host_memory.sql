@@ -61,7 +61,8 @@
 -- card (#f-io) gets "Memory: buffer cache ..." when the Current buffer
 -- cache is at least 10% below the prior mean; the DB time card
 -- (#f-dbtime) "Host: CPU n% busy" at 90% or more and "Host: swapping"
--- when any byte was paged out in the Current window.  Plain, hollow dot,
+-- when the Current window paged out at least c_swap (0.01 MB/s, about
+-- 36 MB an hour; a few bytes a second is no swapping).  Plain, hollow dot,
 -- "not scored", a link to the section's row.
 --
 -- Read-only: SELECT only.  Explains only: no finding, count or severity.
@@ -83,6 +84,7 @@ DECLARE
     c_gb     CONSTANT NUMBER := 1073741824;
     c_mb     CONSTANT NUMBER := 1048576;
     c_busy   CONSTANT NUMBER := 90;          -- host CPU busy %: stands out
+    c_swap   CONSTANT NUMBER := 0.01;        -- MB/s paged out in the Current window: swapping (about 36 MB an hour)
     c_bcdrop CONSTANT NUMBER := 0.9;         -- buffer cache at most 90% of the prior mean
     c_top    CONSTANT PLS_INTEGER := 5;      -- statements per temp / PGA table
     c_rsmax  CONSTANT PLS_INTEGER := 20;     -- resize operations listed
@@ -103,7 +105,7 @@ DECLARE
     w_ok     t_ntab;
     w_known  t_stab;                         -- 'Y' = every instance row valid
     w_dur    t_ntab;                         -- MAX(dur_sec) over its instances
-    w_lab    t_stab;                         -- 'Thu 16 Jul'
+    w_lab    t_stab;                         -- 'Thu 16 Jul 09:00' (the window's start)
     w_skip   t_stab;
     v_np     PLS_INTEGER := 0;               -- known prior windows
     v_curok  BOOLEAN := FALSE;
@@ -223,7 +225,7 @@ DECLARE
         RETURN fmt_num(p) || '&nbsp;B';
     END by_txt;
 
-    -- a window's short label: "Thu 16 Jul"
+    -- a window's short label, its start: "Thu 16 Jul 09:00"
     FUNCTION wl(p_wk PLS_INTEGER) RETURN VARCHAR2 IS
     BEGIN
         RETURN CASE WHEN w_lab.EXISTS(p_wk) THEN w_lab(p_wk) END;
@@ -424,7 +426,7 @@ BEGIN
                CAST(win_start_ts AS DATE) AS t0, CAST(win_end_ts AS DATE) AS t1,
                CASE WHEN valid_flag = 'Y'
                     THEN (CAST(end_end_ts AS DATE) - CAST(begin_end_ts AS DATE)) * 86400 END AS dur_sec,
-               TO_CHAR(CAST(win_start_ts AS DATE), 'Dy DD Mon', 'NLS_DATE_LANGUAGE=ENGLISH') AS lab
+               TO_CHAR(CAST(win_start_ts AS DATE), 'Dy DD Mon HH24:MI', 'NLS_DATE_LANGUAGE=ENGLISH') AS lab
         FROM   windows
         ORDER BY week_offset, instance_number
     ) LOOP
@@ -892,7 +894,7 @@ BEGIN
                 v_cur, mu_of('busy'), 'Host and memory: the host&#39;s CPU was at least 90% busy in the Current window.');
         END IF;
         v_cur := vv('vmout', 0);
-        IF v_cur > 0 THEN
+        IF v_cur >= c_swap THEN
             v_open := TRUE; v_why := v_why || ' swap';
             v_ev_dbt := v_ev_dbt || ev_row('Host', 'vmout', 'swapping', fmt_num(v_cur) || ' MB/s paged out' || CASE WHEN mu_of('vmout') IS NOT NULL THEN ', was ' || fmt_num(mu_of('vmout')) || ' MB/s' END,
                 v_cur, mu_of('vmout'), 'Host and memory: the host paged memory out (VM_OUT_BYTES) in the Current window.');
@@ -922,9 +924,11 @@ BEGIN
         END IF;
         v_cur := vv('vmout', 0);
         IF v_cur IS NOT NULL THEN
-            v_t := CASE WHEN v_cur > 0 THEN 1 ELSE 0 END;
+            v_t := CASE WHEN v_cur >= c_swap THEN 1 WHEN v_cur > 0 THEN 2 ELSE 0 END;
             v_rd := v_rd || CASE WHEN v_rd IS NOT NULL THEN '; ' END
-                || CASE WHEN v_t = 1 THEN 'swapping, ' || fmt_num(v_cur) || '&nbsp;MB/s paged out' ELSE 'no swapping' END;
+                || CASE v_t WHEN 1 THEN 'swapping, ' || fmt_num(v_cur) || '&nbsp;MB/s paged out'
+                            WHEN 2 THEN 'little paging out (' || fmt_num(v_cur) || '&nbsp;MB/s)'
+                            ELSE 'no swapping' END;
             IF v_t = 1 THEN v_ls := v_ls || CASE WHEN v_ls IS NOT NULL THEN '; ' END || 'swapping'; END IF;
         END IF;
         IF v_chg IS NOT NULL THEN

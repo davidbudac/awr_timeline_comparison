@@ -28,8 +28,13 @@ service, module, machine, program, user and container of every sample.
    `DENSE_RANK` by samples over all windows keeps 40 values; the rest is
    one "(n others)" value. Fetch <= 6 x 41 x (weeks_back + 1) rows.
 3. **Program folding** in the SQL, before the cut: `REGEXP_REPLACE(program,
-   '\(([A-Z])([0-9]{3}|[A-Z][0-9]{2})\)$', '(\1nnn)')` -- `(P003)`,
-   `(J001)`, `(PZ99)` -> `(Pnnn)` / `(Jnnn)`; `(TNS V1-V3)` untouched.
+   '\(([A-Z])([0-9][0-9A-Z]{2}|[A-Z][0-9]{2})\)$', '(\1nnn)')` -- `(P003)`,
+   `(J001)`, `(J00A)`, `(P00Q)`, `(PZ99)` -> `(Pnnn)` / `(Jnnn)`; `(LGWR)`,
+   `(SMON)`, `(DBW0)`, `(ARC0)`, `(CJQ0)`, `(TNS V1-V3)` untouched. (The
+   first dbmint pass showed `(J00A)` .. `(J00Q)`: job slaves past J009 take
+   a letter, so the old `[0-9]{3}` left them unfolded. The brief's rule,
+   `\(([A-Z])[0-9][0-9A-Z]{2}\)$`, is kept as the first alternative; the
+   second, `[A-Z][0-9]{2}`, keeps `(PZ99)` folding as before.)
    Twin `norm_program` in `s29_who.py`. (The brief asked for "one small
    function": a block-local PL/SQL function cannot be called from SQL, and
    folding after the cut would let 80 PX slaves take the 40 slots.)
@@ -51,6 +56,11 @@ service, module, machine, program, user and container of every sample.
    ORA-00942 / ORA-01031 handler, lint 35, README optional block. Without
    them: "service hash n", "con_id n" and a "needs SELECT on" sentence in
    the method note. PDB dimension only when more than one `con_id` shows.
+   When the samples carry more than one `con_id` (the PDB dimension
+   shows), EVERY user label carries its container, named as the PDB
+   dimension names it: `SYS (CDB$ROOT)`, `SYS (PDB1)` (user id 0 is SYS in
+   every container: on dbmint two rows both read `SYS`); one container:
+   labels unchanged. The row ids, the sentence and the card row follow.
 6. **Reads as / library row / lopen**: skipped Current, no samples, fewer
    than 3 valid priors, no rise, a rise under 0.1 AAS each say so. Else the
    total rise, then per dimension the value (not "others") carrying >= 50%
@@ -62,7 +72,12 @@ service, module, machine, program, user and container of every sample.
    `div#who-ev-src` + the plan 043 one-line append script ->
    `#f-dbtime dl.ev .evr.ev-who` "Who: module OrderService +6.570 AAS (73%
    of the rise in foreground activity)", plain delta, hollow dot, "not
-   scored", link to the row. It lands before 02's time model row.
+   scored", link to the row. It lands before 02's time model row. A value
+   that rose MORE than the total (others fell; dbmint: "+0.7174 AAS
+   (&gt;100% of ...)") reads "+0.7174 AAS, more than the whole rise in
+   foreground activity (others fell)"; the sentence and `lib_ls` say "(more
+   than the whole rise, others fell)" for such a share (`shr_txt`), the
+   table cell keeps its capped "&gt;100%".
 8. **About** note "Who added the load" (`19_reference.sql`).
 9. **Demo twin** `s29_who.py`: each hour's foreground count is exactly
    s09's, split over 14 fixed clients by largest remainder (statements'

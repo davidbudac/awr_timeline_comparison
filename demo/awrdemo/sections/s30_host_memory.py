@@ -37,6 +37,7 @@ GB = 1073741824
 MB = 1048576
 GRAN = 268435456                       # a 256 MB SGA granule
 C_BUSY, C_BCDROP = 90, 0.9
+C_SWAP = 0.01        # MB/s paged out in the Current window: swapping (the SQL's c_swap)
 C_TOP = 5
 PHYS_GB = 256
 REPORT_SQL, ORDER_SQL = "9wz2ke6yq4tn1", "7k2m9dx4qp1zb"
@@ -157,7 +158,8 @@ def _rdiv(a, b):
 
 
 def _label(dt):
-    return f"{dt:%a} {dt:%d} {dt:%b}"
+    """The SQL's 'Dy DD Mon HH24:MI' of the window's start."""
+    return f"{dt:%a} {dt:%d} {dt:%b} {dt:%H}:{dt:%M}"
 
 
 def emit(w) -> str:
@@ -286,7 +288,7 @@ def emit(w) -> str:
                              + (", was " + fmt_int(mu["busy"]) + "%" if mu["busy"] is not None else ""),
                              cur, mu["busy"], "Host and memory: the host&#39;s CPU was at least 90% busy in the Current window.")
         cur = v_("vmout", 0)
-        if cur is not None and cur > 0:
+        if cur is not None and cur >= C_SWAP:
             opn, why = True, why + " swap"
             ev_dbt += ev_row("Host", "vmout", "swapping", fmt_num(cur) + " MB/s paged out"
                              + (", was " + fmt_num(mu["vmout"]) + " MB/s" if mu["vmout"] is not None else ""),
@@ -315,8 +317,9 @@ def emit(w) -> str:
             parts_ls.append("host CPU " + fmt_int(cur) + "% busy")
         cur = v_("vmout", 0)
         if cur is not None:
-            parts_rd.append("swapping, " + fmt_num(cur) + "&nbsp;MB/s paged out" if cur > 0 else "no swapping")
-            if cur > 0:
+            parts_rd.append("swapping, " + fmt_num(cur) + "&nbsp;MB/s paged out" if cur >= C_SWAP
+                            else "little paging out (" + fmt_num(cur) + "&nbsp;MB/s)" if cur > 0 else "no swapping")
+            if cur >= C_SWAP:
                 parts_ls.append("swapping")
         if chg:
             parts_rd.append("host resized (" + chg + ")")

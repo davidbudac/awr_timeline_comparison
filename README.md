@@ -80,6 +80,14 @@ GRANT SELECT ON DBA_OBJECTS                  TO <user>;  -- Plan shape: objects 
 GRANT SELECT ON DBA_TAB_STATISTICS           TO <user>;  -- Plan shape: table statistics now
 GRANT SELECT ON DBA_TAB_STATS_HISTORY        TO <user>;  -- Plan shape: when table statistics changed
 GRANT SELECT ON DBA_INDEXES                  TO <user>;  -- Plan shape: index status / visibility
+-- Read only when the report runs in a CDB root (CDB$ROOT) and a plan comes
+-- from a PDB: the same four through their CDB_ twins. A common user sees a
+-- PDB's rows there only with CONTAINER_DATA for it, e.g.
+-- ALTER USER <user> SET CONTAINER_DATA = ALL CONTAINER = CURRENT;
+GRANT SELECT ON CDB_OBJECTS                  TO <user>;  -- Plan shape from the root: a PDB's objects
+GRANT SELECT ON CDB_TAB_STATISTICS           TO <user>;  -- Plan shape from the root: a PDB's table statistics
+GRANT SELECT ON CDB_TAB_STATS_HISTORY        TO <user>;  -- Plan shape from the root: a PDB's statistics history
+GRANT SELECT ON CDB_INDEXES                  TO <user>;  -- Plan shape from the root: a PDB's indexes
 -- Only if you use side/create_weekly_baselines.sql (optional, writes baselines):
 GRANT EXECUTE ON DBMS_WORKLOAD_REPOSITORY    TO <user>;
 ```

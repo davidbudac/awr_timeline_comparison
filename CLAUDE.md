@@ -1900,7 +1900,10 @@ and must agree with 07). Common shape, keep it when touching any of them:
   run for an analyst user without the grant. The same holds for 29's
   `DBA_HIST_SERVICE_NAME` / `DBA_HIST_PDB_INSTANCE` and 30's
   `DBA_HIST_OSSTAT`, `_PGASTAT`, `_MEM_DYNAMIC_COMP`, `_MEMORY_RESIZE_OPS`,
-  `_UNDOSTAT` (30 also turns ANY other error of such a read into a note).
+  `_UNDOSTAT` (30 also turns ANY other error of such a read into a note),
+  and 23's dictionary views `DBA_OBJECTS`, `DBA_TAB_STATISTICS`,
+  `DBA_TAB_STATS_HISTORY`, `DBA_INDEXES` with their `CDB_` twins (read only
+  from a CDB root, plan 047).
 - **Tooltip.** js_timeline hides the shared `#tip` on every document
   `mouseover`; a view that reuses `#tip` shows it on `mousemove`, or from a
   document `mouseover` listener registered after js_timeline's (20, 22,
@@ -2006,8 +2009,9 @@ then a 6-row generator (not GROUPING SETS); per dimension `DENSE_RANK` by
 samples over all windows keeps 40 values, the rest one key `'o'`
 "(n others)". Keys: `'v'` + value, `'n'` = NULL ("(no module)" ...),
 user `'v' || user_id || ',' || con_id`. Program names are folded IN THE
-SQL before the cut (`\(([A-Z])([0-9]{3}|[A-Z][0-9]{2})\)$` -> `(\1nnn)`;
-twin `norm_program`). AAS = samples / (360 x win_hours); a valid window
+SQL before the cut (`\(([A-Z])([0-9][0-9A-Z]{2}|[A-Z][0-9]{2})\)$` ->
+`(\1nnn)`: `(J001)`, `(J00A)`, `(P00Q)`, `(PZ99)` fold, `(LGWR)`, `(DBW0)`,
+`(ARC0)`, `(CJQ0)`, `(TNS V1-V3)` stay; twin `norm_program`). AAS = samples / (360 x win_hours); a valid window
 without a sample is 0, a skipped one an empty Trend slot; every value
 divides by the same valid prior count, so the rows' rises sum to the
 total's. Display order: integer key Current x np - prior sum (no float
@@ -2021,13 +2025,20 @@ data-rise data-np]` is the stated total. Tables `data-nocount`, plain
 delta, no band. Names: `ALL_USERS` (24's `usr_name`); service and PDB
 names are OPTIONAL grants (`DBA_HIST_SERVICE_NAME`,
 `DBA_HIST_PDB_INSTANCE`, dynamic SQL + ORA-00942 / ORA-01031, lint 35),
-else "service hash n" / "con_id n" and a note. Sentence / `lib_ls` /
+else "service hash n" / "con_id n" and a note. When the samples carry more
+than one `con_id` (the PDB dimension shows), EVERY user label carries its
+container as that dimension names it (`con_name`): `SYS (CDB$ROOT)`, `SYS
+(PDB1)`, `user id 105 (con_id 3)` -- user id 0 is SYS everywhere, so two
+rows read `SYS` otherwise; one container: labels unchanged. Sentence / `lib_ls` /
 `lopen`: >= 3 valid priors, total rise >= 0.1 AAS, a value (not others)
 with >= 50% is named per dimension (else "spread", the largest). DB time
 card: `div#who-ev-src` + one-line append script (plan 043's pattern) ->
 `#f-dbtime dl.ev .evr.ev-who` "Who: module X +a AAS (s% of the rise in
 foreground activity)" when module (else service, machine, user) with a
-real name carries >= 30%; it lands after 07's rows and before 02's time
+real name carries >= 30% (a share of 100.5% or more, others fell: "+a AAS,
+more than the whole rise in foreground activity (others fell)"; the
+sentence / `lib_ls` say "(more than the whole rise, others fell)",
+`shr_txt`; the table cell keeps "&gt;100%"); it lands after 07's rows and before 02's time
 model row (29 runs before 02). Twin `s29_who.py` splits each hour's 09
 foreground count over 14 fixed clients by largest remainder (window sums
 = `ashx.winfg`). verify_report block 6g. Unexercised: RAC, multi-DBID,
@@ -2055,7 +2066,8 @@ instances; gauges at the end snapshot: `LOAD` (max over instances),
 `FREE_MEMORY_BYTES` (not in the 19c Reference), configuration `NUM_CPUS /
 NUM_CPU_CORES / NUM_CPU_SOCKETS / PHYSICAL_MEMORY_BYTES` (summed; any
 change across windows = `p.hm-chg` "Host resized: CPUs 12 -> 16 between
-<window> and <window>"); PGASTAT (`total PGA allocated / inuse`,
+<window> and <window>", each window named by its start with the time,
+`Dy DD Mon HH24:MI` English: "Sat 07 Nov 11:00"); PGASTAT (`total PGA allocated / inuse`,
 `aggregate PGA target parameter` at the end, `over allocation count`
 delta); MEM_DYNAMIC_COMP (end snapshot, `LOWER(component) IN ('default
 buffer cache', 'shared pool', 'large pool', 'sga target', 'pga target')`;
@@ -2076,7 +2088,10 @@ OTHERS`: -942 / -1031 -> "needs SELECT on <view>", ANY other error ->
 "could not read <view>: <SQLERRM>" (deliberate: these numbers are
 cosmetic, a wrong name must not abort the report), the block's
 collections cleared. `lopen` (`section[data-open]` lists the reasons):
-Current host busy >= 90%, VM_OUT > 0, host resized, a resize operation
+Current host busy >= 90%, VM_OUT >= `c_swap` (0.01 MB/s, about 36 MB an
+hour: the same floor gates the card row and the sentence's "swapping, x
+MB/s paged out"; below it and above 0 the sentence says "little paging
+out (x MB/s)", 0 "no swapping"; the table row is unchanged), host resized, a resize operation
 in Current, buffer cache <= 90% of the prior mean, PGA over-allocation >
 0, ORA-01555 or out-of-space > 0. Card rows (`div#hm-ev-src` with one
 `div[data-for=f-io|f-dbtime]` per card + one script appending them to
@@ -2236,9 +2251,30 @@ script ONLY when the card's `data-ph0` / `data-ph1` equal 23's old / new plan
 either way, JS off it stays hidden. `lib_ls` gains "; new statistics on X
 around the change" (interval items only). Twin: `s23_plan_flame.py`
 (`_DICT_*`: ORDER_LINES statistics Tue 8 Sep 22:35, inside; indexes VALID /
-VISIBLE; no DDL). verify_report block 6i. Unexercised: everything on a real
-database, partitioned objects, a CDB-root run, an index of another owner's
-table.
+VISIBLE; no DDL). verify_report block 6i. The sentence names the interval
+start with its time (`dday(lo, TRUE)`, "Sun 8 Nov 09:00").
+**From a CDB root** (`v_croot`: `SYS_CONTEXT('USERENV', 'CON_ID') = '1'`):
+the plan read also selects `con_id` of the copy it picks (`p_con`); an
+object of a copy with `con_id > 1` is keyed `kind#con|owner|name`
+(`o_con`, local keys stay `kind|owner|name`) and read from `CDB_OBJECTS`,
+`CDB_TAB_STATISTICS`, `CDB_TAB_STATS_HISTORY`, `CDB_INDEXES` (same columns
+plus `con_id = :1`, a loop over the containers `v_conl`, owners / names
+`v_cowners` / `v_conames`), each in its own tolerant handler (`ec_*`, its
+cleanup clears only the CDB objects' values); every per-object test reads
+its path's error through `eob / ets / eth / eix(o)`. A PDB session, a
+non-CDB and root-owned objects keep the `DBA_` path byte for byte (the
+`DBA_` reads still run, with empty lists when nothing is local). Texts:
+`src_txt(i)` in the h4 and the card title ("the dictionary of this
+container" / "container con_id 3, read from the CDB root through CDB_
+views" / both), "no dictionary row (dropped, the PDB is closed, or not
+visible to this user)", a none-visible sentence naming CONTAINER_DATA,
+the read notes / "not read:" / history-column title naming `CDB_` views;
+no PDB name lookup ("con_id 3"). A common user needs `CONTAINER_DATA` to
+see PDB rows through `CDB_` views (README). Unexercised: everything on a
+real database, partitioned objects, a CDB-root run, an index of another
+owner's table, a statement whose old and new
+plan copies sit in different containers (the "both" header), a closed
+PDB, a common user without CONTAINER_DATA.
 
 #### Trend breaks, formerly Onset (`sql/25_onset.sql`, `sql/lib/onset_cte.sql`, `js_onset`)
 
@@ -3209,7 +3245,7 @@ the demo.
   link state (32), a `viz_head.sql` include that does not exist or a stale
   fleet co-anomaly script (34), and a static read of an optional-grant view
   (35: `DBA_HIST_EVENT_HISTOGRAM` / `DBA_HIST_SQL_PLAN` and the optional
-  views of 29 / 30 outside dynamic SQL). No DB needed; add a check when a new
+  views of 23 (`DBA_` / `CDB_` dictionary views) / 29 / 30 outside dynamic SQL). No DB needed; add a check when a new
   gotcha bites. A `finding` inside a `| while read` loop must go through
   `finding` (it records to a flag file; a subshell `fail=1` is lost).
 - **Test DB: dbmint** (Oracle 19c CDB1, `connect / as sysdba`). The host name

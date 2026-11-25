@@ -594,7 +594,10 @@ fi
 #     DBA_HIST_MEMORY_RESIZE_OPS and DBA_HIST_UNDOSTAT (30), and the
 #     dictionary views DBA_OBJECTS, DBA_TAB_STATISTICS,
 #     DBA_TAB_STATS_HISTORY and DBA_INDEXES (23, plan 047; no other
-#     single-DB file reads them, the fleet / side/ are not scanned) are not
+#     single-DB file reads them, the fleet / side/ are not scanned) and
+#     their CDB_ twins CDB_OBJECTS, CDB_TAB_STATISTICS,
+#     CDB_TAB_STATS_HISTORY and CDB_INDEXES (23, read only from a CDB root
+#     for the objects of a PDB's plan) are not
 #     in the README's required grant list, so a section may read them
 #     only through dynamic SQL inside a handler for ORA-00942 / ORA-01031:
 #     a static FROM would abort the whole report (WHENEVER SQLERROR EXIT)
@@ -603,7 +606,7 @@ fi
 # ----------------------------------------------------------------------
 while IFS= read -r line; do
     finding optional-grant-static "${line%%:*}:$(printf '%s' "$line" | cut -d: -f2)" "static read of an optional-grant view -- use dynamic SQL and catch ORA-00942 / ORA-01031"
-done < <(grep -n -i -E '(from|join)[[:space:]]+dba_hist_(event_histogram|sql_plan|service_name|pdb_instance|osstat|pgastat|mem_dynamic_comp|memory_resize_ops|undostat)\b|(from|join)[[:space:]]+dba_(objects|indexes|tab_statistics|tab_stats_history)\b' sql/[0-9][0-9]_*.sql sql/lib/*.sql 2>/dev/null | grep -v "'" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*--')
+done < <(grep -n -i -E '(from|join)[[:space:]]+dba_hist_(event_histogram|sql_plan|service_name|pdb_instance|osstat|pgastat|mem_dynamic_comp|memory_resize_ops|undostat)\b|(from|join)[[:space:]]+(dba|cdb)_(objects|indexes|tab_statistics|tab_stats_history)\b' sql/[0-9][0-9]_*.sql sql/lib/*.sql 2>/dev/null | grep -v "'" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*--')
 
 [ -s "$failflag" ] && fail=1
 if [ "$fail" -eq 0 ]; then

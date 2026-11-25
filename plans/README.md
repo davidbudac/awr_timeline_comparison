@@ -58,7 +58,7 @@ prefilled `awrddrpt` / `ashrpt` hand-off commands were declined). Branch
 | 044 | Per-statement time split and rows per execution in Top SQL's per-SQL detail | 5 | granted (`DBA_HIST_SQLSTAT` wait deltas, rows processed) | DONE; DB run pending (owner) |
 | 045 | "Who added the load": extra active sessions by service / module / machine / user / program / PDB (new section 29) | 6 | granted (ASH); optional names (`DBA_HIST_SERVICE_NAME`, `DBA_HIST_PDB_INSTANCE`) | DONE; DB run pending (owner) |
 | 046 | Host, memory, undo and temp (new section 30) | 4, 8 | optional (`DBA_HIST_OSSTAT`, `DBA_HIST_PGASTAT`, SGA resize, `DBA_HIST_UNDOSTAT`); ASH for temp / PGA per statement | DONE; DB run pending (owner) |
-| 047 | Object changes around a plan change (statistics gathered, last DDL, index status) | 9 | optional (`DBA_OBJECTS`, `DBA_TAB_STATISTICS`, `DBA_TAB_STATS_HISTORY`, `DBA_INDEXES`; current container, current state) | DONE; DB run pending (owner) |
+| 047 | Object changes around a plan change (statistics gathered, last DDL, index status) | 9 | optional (`DBA_OBJECTS`, `DBA_TAB_STATISTICS`, `DBA_TAB_STATS_HISTORY`, `DBA_INDEXES`, from a CDB root their `CDB_` twins for a PDB's plan; current state) | DONE; DB run pending (owner) |
 
 **Not implemented, owner decision needed:** thresholds that widen for a
 small baseline (review item 1, "proper fix"). It changes which metrics are

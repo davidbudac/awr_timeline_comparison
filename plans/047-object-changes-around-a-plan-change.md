@@ -37,7 +37,8 @@ of the old plan now unusable, invisible or gone? The report said nothing.
 - **Honesty rules** (section, About note, CLAUDE.md): (1) the dictionary is
   the CURRENT container's CURRENT state: no row = "no dictionary row in this
   container (dropped, or not visible here)", never "dropped"; every object
-  invisible -> "These objects are not visible from this container". (2) Only
+  invisible -> "These objects are not visible from this container". From
+  a CDB root see "CDB root" below. (2) Only
   `CREATED`, `LAST_DDL_TIME`, `LAST_ANALYZED` and the statistics history are
   past times, and only a time inside the interval is called around the
   change. A latest-only time AFTER the interval can hide an earlier event:
@@ -65,6 +66,39 @@ of the old plan now unusable, invisible or gone? The report said nothing.
   column keep it. JS off: hidden.
 - `lib_ls` gains "; new statistics on X around the change" (interval items
   only). `lopen` unchanged.
+- The sentence names the interval start with its time ("Sun 8 Nov 09:00",
+  every `dday(lo, ...)` of `compose`, as `p.pf-oiv` does): with hourly
+  windows the day alone says nothing (first dbmint pass, inside the PDB).
+
+## CDB root (after the first dbmint pass)
+
+The owner runs the report as a common user in `CDB$ROOT` while the
+statements run in a PDB; the `DBA_` views there show the root only, so
+every object read "no dictionary row in this container". Now:
+- 23's plan read also selects `DBA_HIST_SQL_PLAN.con_id` of the copy it
+  picks (`p_con`, per plan slot).
+- ONLY when `SYS_CONTEXT('USERENV', 'CON_ID') = '1'` AND an object's plan
+  copy has `con_id > 1`, the object is keyed `kind#con|owner|name`
+  (`o_con`) and read from `CDB_OBJECTS`, `CDB_TAB_STATISTICS`,
+  `CDB_TAB_STATS_HISTORY`, `CDB_INDEXES`: same columns and filters plus
+  `con_id = :1`, one container at a time (a scalar bind), owners / names of
+  those objects bound as before; each view in its own tolerant handler
+  (`ec_*`: -942 / -1031 -> "needs SELECT on CDB_...", anything else ->
+  "could not read CDB_...", never a re-raise), whose cleanup clears only
+  the CDB objects' values. Everything else (a PDB session, a non-CDB,
+  root-owned objects) keeps the `DBA_` path, keys, binds and texts as
+  before; the `DBA_` reads still run (empty lists from a root with only
+  PDB objects).
+- Wording: the h4 / card title say which dictionary was read (`src_txt`):
+  "the dictionary of this container", "container con_id 3, read from the
+  CDB root through CDB_ views", or both. No `CDB_` row = "no dictionary row
+  (dropped, the PDB is closed, or not visible to this user)" (state cell)
+  / "has no dictionary row in con_id 3 now (...)" (sentence); none visible
+  -> "These objects have no rows in the CDB_ views read from the root for
+  con_id 3 (the PDB is closed, or this user does not see it: a common user
+  needs CONTAINER_DATA for it)". The read notes, the "not read:" list and
+  the statistics-history column title name the `CDB_` views for those
+  objects. A PDB name is not looked up (no new view): "con_id 3".
 
 ## Files touched
 
@@ -78,8 +112,9 @@ this file.
 ## Not covered
 
 No finding or scoring; no `DBA_OPTSTAT_OPERATIONS`, baselines / profiles,
-column statistics / histograms, partition-level rows, `CDB_` views, index
-statistics history, fleet change. A plan of more than 60 lines lists all of
+column statistics / histograms, partition-level rows, index statistics
+history, fleet change; the `CDB_` views only from the root for a PDB's
+plan copy (a PDB name is not looked up). A plan of more than 60 lines lists all of
 its lines' objects (not only the sampled ones). Unexercised: every database
 path, a CDB-root run, partitioned objects, an index on another owner's
 table, the error notes.
@@ -102,6 +137,10 @@ Pages under https://docs.oracle.com/en/database/oracle/oracle-database/19/refrn/
   PARTITIONED, LAST_ANALYZED, NUM_ROWS confirmed.
 - `DBA_HIST_SQL_PLAN.html`: OBJECT_TYPE (VARCHAR2(20)) confirmed; values not
   listed: `SELECT DISTINCT object_type FROM dba_hist_sql_plan`.
+- The `CDB_` twins (same pages' columns plus `CON_ID`; read only from a
+  CDB root): `CDB_OBJECTS`, `CDB_TAB_STATISTICS`, `CDB_TAB_STATS_HISTORY`,
+  `CDB_INDEXES` -- `DESC` each from the root, and that a common user
+  without `CONTAINER_DATA` gets no PDB rows (the none-visible sentence).
 - Time zone: does `CAST(stats_update_time AS DATE)` equal `last_analyzed`
   for a table's latest gather (`SELECT ... FROM dba_tab_stats_history h JOIN
   dba_tab_statistics s ...`)? It must, or the interval test is off by the
@@ -114,8 +153,9 @@ Pages under https://docs.oracle.com/en/database/oracle/oracle-database/19/refrn/
    `PLS-`; Plan shape shows "Objects in these plans" and no "could not
    read" note (if one shows, its text names the wrong name).
 2. From the CDB root (dbmint's usual connect): the objects of a PDB
-   statement should read "not visible from this container"; run once in the
-   PDB too and compare.
+   statement are read through the `CDB_` views (heading "container con_id
+   3, read from the CDB root through CDB_ views") and show the same facts
+   as a run inside the PDB; compare the two.
 3. Cross-check one row: `SELECT last_analyzed, num_rows FROM
    dba_tab_statistics WHERE owner = :o AND table_name = :t AND object_type
    = 'TABLE'` and the stats history rows inside the stated interval.

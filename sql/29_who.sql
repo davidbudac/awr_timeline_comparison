@@ -28,10 +28,14 @@
 --
 -- Program names are folded IN THE SQL, before the cut (on the grouped rows,
 -- not per sample): a parallel or job
--- slave's number ("oracle@host (P003)", "(J001)", "(PZ99)") becomes
--- "(Pnnn)" / "(Jnnn)", so 80 PX slaves do not take the 40 slots.  The rule
--- is one REGEXP_REPLACE (a block-local PL/SQL function cannot be called
--- from SQL):  \(([A-Z])([0-9]{3}|[A-Z][0-9]{2})\)$  ->  (\1nnn).  Twin:
+-- slave's number ("oracle@host (P003)", "(J001)", "(J00A)", "(P00Q)",
+-- "(PZ99)") becomes "(Pnnn)" / "(Jnnn)", so 80 PX slaves do not take the
+-- 40 slots.  The rule is one REGEXP_REPLACE (a block-local PL/SQL function
+-- cannot be called from SQL):
+--   \(([A-Z])([0-9][0-9A-Z]{2}|[A-Z][0-9]{2})\)$  ->  (\1nnn)
+-- a letter, then a digit and two digits or capitals (J00A), or a letter
+-- and two digits (PZ99).  Background names such as (LGWR), (SMON), (DBW0),
+-- (ARC0), (CJQ0) and (TNS V1-V3) stay unfolded.  Twin:
 -- demo/awrdemo/sections/s29_who.py norm_program.
 --
 -- Shown per dimension: the values whose time ROSE (Current minus the mean
@@ -42,7 +46,12 @@
 -- severity, a count or a crit / warn row (tables data-nocount).
 --
 -- Names.  ALL_USERS (public) for user_id, as section 24 ("user id N
--- (container c)" for a user of another container).  Service and PDB names
+-- (container c)" for a user of another container).  When the samples carry
+-- more than one container (the condition that shows the PDB dimension),
+-- EVERY user label carries its container's name, as the PDB dimension
+-- names it: "SYS (CDB$ROOT)", "SYS (PDB1)", "user id 105 (con_id 3)" --
+-- user id 0 is SYS in every container, so two rows read "SYS" otherwise.
+-- Service and PDB names
 -- come from views the README lists as OPTIONAL grants, read only through
 -- dynamic SQL inside a handler for ORA-00942 / ORA-01031 (lint check 35):
 -- DBA_HIST_SERVICE_NAME (service_name_hash -> service_name) and
@@ -174,6 +183,20 @@ DECLARE
                     ELSE TO_CHAR(ROUND(p)) || '%' END;
     END pct_txt;
 
+    -- the same share inside a sentence: one value rose more than the total
+    -- did (others fell) reads as words, never "&gt;100%"
+    FUNCTION shr_txt(p NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN CASE WHEN p >= 100.5 THEN 'more than the whole rise, others fell' ELSE pct_txt(p) END;
+    END shr_txt;
+
+    -- a container's display name (the PDB dimension's): DBA_HIST_PDB_INSTANCE's
+    -- name when read, 'CDB$ROOT' for con_id 1, else "con_id n"
+    FUNCTION con_name(p_c VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN CASE WHEN v_pdb.EXISTS(p_c) THEN v_pdb(p_c) WHEN p_c = '1' THEN 'CDB$ROOT' ELSE 'con_id ' || p_c END;
+    END con_name;
+
     -- a signed AAS amount: "+6.700", "&minus;0.2500"
     FUNCTION sgn(p NUMBER) RETURN VARCHAR2 IS
     BEGIN
@@ -196,8 +219,9 @@ DECLARE
             EXCEPTION WHEN NO_DATA_FOUND THEN v_u := NULL;
             END;
         END IF;
+        -- several containers: val_name appends every label's container itself
         v_unames(v_k) := NVL(v_u, 'user id ' || TO_CHAR(p_usr)
-            || CASE WHEN NVL(p_con, 0) <> NVL(v_mycon, 0) THEN ' (container ' || p_con || ')' END);
+            || CASE WHEN d_on(6) = 'N' AND NVL(p_con, 0) <> NVL(v_mycon, 0) THEN ' (container ' || p_con || ')' END);
         RETURN v_unames(v_k);
     END usr_name;
 
@@ -215,9 +239,10 @@ DECLARE
         IF p_g = 1 THEN
             RETURN CASE WHEN v_svc.EXISTS(v) THEN v_svc(v) ELSE 'service hash ' || v END;
         ELSIF p_g = 5 THEN
-            RETURN usr_name(TO_NUMBER(SUBSTR(v, 1, INSTR(v, ',') - 1)), TO_NUMBER(SUBSTR(v, INSTR(v, ',') + 1)));
+            RETURN usr_name(TO_NUMBER(SUBSTR(v, 1, INSTR(v, ',') - 1)), TO_NUMBER(SUBSTR(v, INSTR(v, ',') + 1)))
+                || CASE WHEN d_on(6) = 'Y' THEN ' (' || con_name(SUBSTR(v, INSTR(v, ',') + 1)) || ')' END;
         ELSIF p_g = 6 THEN
-            RETURN CASE WHEN v_pdb.EXISTS(v) THEN v_pdb(v) WHEN v = '1' THEN 'CDB$ROOT' ELSE 'con_id ' || v END;
+            RETURN con_name(v);
         END IF;
         RETURN v;
     END val_name;
@@ -324,7 +349,7 @@ BEGIN
         wx AS (
             SELECT gs.g, wt6.wk,
                    CASE gs.g WHEN 1 THEN wt6.k1 WHEN 2 THEN wt6.k2 WHEN 3 THEN wt6.k3
-                             WHEN 4 THEN REGEXP_REPLACE(wt6.k4, '\(([A-Z])([0-9]{3}|[A-Z][0-9]{2})\)$', '(\1nnn)')
+                             WHEN 4 THEN REGEXP_REPLACE(wt6.k4, '\(([A-Z])([0-9][0-9A-Z]{2}|[A-Z][0-9]{2})\)$', '(\1nnn)')
                              WHEN 5 THEN wt6.k5 ELSE wt6.k6 END AS k,
                    wt6.n
             FROM   wt6
@@ -487,7 +512,12 @@ BEGIN
                     END IF;
                     IF x_rise(v_pick) >= c_dom * v_trise THEN
                         v_ndom := v_ndom + 1;
-                        v_dm := v_dm || CASE WHEN v_ndom = 1
+                        -- the first one: "of it" only when it rose less than the total did
+                        v_dm := v_dm || CASE WHEN v_ndom = 1 AND x_rise(v_pick) / v_trise * 100 >= 100.5
+                                             THEN ' ' || d_word(g) || ' <b>' || DBMS_XMLGEN.CONVERT(x_nam(v_pick))
+                                                  || '</b> alone rose ' || sgn(x_rise(v_pick))
+                                                  || ', more than the whole rise (others fell)'
+                                             WHEN v_ndom = 1
                                              THEN ' ' || sgn(x_rise(v_pick)) || ' of it came from ' || d_word(g)
                                                   || ' <b>' || DBMS_XMLGEN.CONVERT(x_nam(v_pick)) || '</b>'
                                              ELSE '; ' || d_word(g) || ' <b>' || DBMS_XMLGEN.CONVERT(x_nam(v_pick))
@@ -495,12 +525,12 @@ BEGIN
                         IF v_ndom <= 2 THEN
                             v_ls := v_ls || CASE WHEN v_ndom = 1 THEN '; ' ELSE ', ' END || d_word(g) || ' '
                                 || DBMS_XMLGEN.CONVERT(x_nam(v_pick)) || ' ' || sgn(x_rise(v_pick))
-                                || ' (' || pct_txt(x_rise(v_pick) / v_trise * 100) || ')';
+                                || ' (' || shr_txt(x_rise(v_pick) / v_trise * 100) || ')';
                         END IF;
                     ELSE
                         v_sp := v_sp || CASE WHEN v_sp IS NOT NULL THEN '; ' END || 'the largest ' || d_word(g) || ' is <b>'
                             || DBMS_XMLGEN.CONVERT(x_nam(v_pick)) || '</b> ' || sgn(x_rise(v_pick))
-                            || ' (' || pct_txt(x_rise(v_pick) / v_trise * 100) || ')';
+                            || ' (' || shr_txt(x_rise(v_pick) / v_trise * 100) || ')';
                     END IF;
                 END IF;
             END IF;
@@ -512,10 +542,10 @@ BEGIN
         ELSIF v_best IS NOT NULL THEN
             v_rd := v_rd || ' The rise is spread: no single value carries half of it; the largest is '
                 || d_word(x_dim(v_best)) || ' <b>' || DBMS_XMLGEN.CONVERT(x_nam(v_best)) || '</b> '
-                || sgn(x_rise(v_best)) || ' (' || pct_txt(v_bshr * 100) || ').';
+                || sgn(x_rise(v_best)) || ' (' || shr_txt(v_bshr * 100) || ').';
             v_ls := v_ls || '; spread, largest ' || d_word(x_dim(v_best)) || ' '
                 || DBMS_XMLGEN.CONVERT(x_nam(v_best)) || ' ' || sgn(x_rise(v_best))
-                || ' (' || pct_txt(v_bshr * 100) || ')';
+                || ' (' || shr_txt(v_bshr * 100) || ')';
         END IF;
     END IF;
 
@@ -632,8 +662,10 @@ BEGIN
                 || '<dt>Who</dt><dd><span class="id txt">' || d_word(x_dim(v_i)) || ' '
                 || ent(DBMS_XMLGEN.CONVERT(x_nam(v_i)), x_id(v_i), 'who')
                 || '</span><span class="de">'
-                || nbu(sgn(x_rise(v_i)) || ' AAS (' || pct_txt(x_rise(v_i) / v_trise * 100)
-                       || ' of the rise in foreground activity)')
+                || nbu(sgn(x_rise(v_i)) || ' AAS'
+                       || CASE WHEN x_rise(v_i) / v_trise * 100 >= 100.5
+                               THEN ', more than the whole rise in foreground activity (others fell)'
+                               ELSE ' (' || pct_txt(x_rise(v_i) / v_trise * 100) || ' of the rise in foreground activity)' END)
                 || '</span></dd><div class="m">' || delta_span(x_cur(v_i), x_mu(v_i), NULL, 'Y')
                 || band_span(band_z(x_cur(v_i), x_mu(v_i), x_sd(v_i)), NULL, 'sm', 'N', 10)
                 || '<span class="ns">not scored</span></div></div></div>');

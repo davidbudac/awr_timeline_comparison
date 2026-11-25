@@ -27,7 +27,10 @@ order-lookup plans, fixed values: statistics on ORDER_LINES (and its
 index) updated on Tue 8 Sep 22:35, half an hour after Release 4.2 and
 inside the interval; the old plan's index VALID and VISIBLE; no DDL; the
 Saturday gathers before the interval.  "Now" = the report's generation
-time.
+time.  The demo is no CDB root, so the SQL's CDB_ path (a PDB's objects
+read from the root through CDB_OBJECTS / CDB_TAB_STATISTICS /
+CDB_TAB_STATS_HISTORY / CDB_INDEXES) is not modelled: every text here is
+the DBA_ path's ("the dictionary of this container").
 """
 from __future__ import annotations
 
@@ -364,19 +367,19 @@ def _compose(sid, objs, flags, lo, hi, now):
                        'the object the plans used was an earlier one of that name')
     if nsn > 0:
         rd += ('New statistics on ' + sn + (' and ' + str(nsn - 2) + ' more' if nsn > 2 else '')
-               + ' date from between the start of the last window on the old plan (' + _dday(lo, False)
+               + ' date from between the start of the last window on the old plan (' + _dday(lo, True)
                + ') and the end of the Current window; the plan may have followed them. ')
     if ndd > 0:
         rd += ('The last DDL on ' + dd + (' and ' + str(ndd - 2) + ' more' if ndd > 2 else '')
                + ' falls in that interval too'
-               + (' (from ' + _dday(lo, False) + ' to the end of the Current window)' if nsn == 0 else '') + '. ')
+               + (' (from ' + _dday(lo, True) + ' to the end of the Current window)' if nsn == 0 else '') + '. ')
     rd += cr
     if not rd:
         rd = ('Nothing in the dictionary changed around the plan change for ' + thes + ' (statistics, DDL, '
-              'creation, index state, from ' + _dday(lo, False) + ' to the end of the Current window)'
+              'creation, index state, from ' + _dday(lo, True) + ' to the end of the Current window)'
               + ('; but ' + unk if unk else '')
               + ('; the statistics history keeps ' + str(C_HIST_D) + ' days by default, so it may not reach back to '
-                 + _dday(lo, False) if (now - lo).total_seconds() > C_HIST_D * 86400 else '')
+                 + _dday(lo, True) if (now - lo).total_seconds() > C_HIST_D * 86400 else '')
               + '.')
     elif unk:
         rd += 'Also, ' + unk + '.'

@@ -145,6 +145,22 @@ release bumps `awr_version`).
   index is UNUSABLE / INVISIBLE. Four new **optional** grants
   (`DBA_OBJECTS`, `DBA_TAB_STATISTICS`, `DBA_TAB_STATS_HISTORY`,
   `DBA_INDEXES`). Evidence, not a finding: no count, pill or severity.
+- **Round 3 fixes after the first test-database pass** (plans 045-047):
+  run from a CDB root, Plan shape now reads the objects of a plan captured
+  in a PDB through `CDB_OBJECTS`, `CDB_TAB_STATISTICS`,
+  `CDB_TAB_STATS_HISTORY` and `CDB_INDEXES` for that container (four more
+  optional grants; a common user also needs `CONTAINER_DATA`), and says
+  which dictionary it read; a PDB or non-CDB run is unchanged, except that
+  the objects sentence now names the interval start with its time ("Sun 8
+  Nov 09:00"). Who added the load folds job / PX slave names with a letter
+  in them (`(J00A)` -> `(Jnnn)`), names each user's container when the
+  samples span several (`SYS (CDB$ROOT)`, `SYS (PDB1)`), and says "more
+  than the whole rise ... (others fell)" instead of "&gt;100%". Host and
+  memory names the resized windows with their start time and calls the
+  host "swapping" only from 0.01 MB/s paged out (below: "little paging
+  out"), which also gates the library row and the DB time card row. The
+  headless check's CPU-capacity tolerance now allows for a small
+  `cpu_count`.
 - **Docs / tooling:** the demo generator is now platform-independent (every
   libm-derived value is rounded to 10 significant digits, digit counts are
   exact), so the demo pages regenerate byte for byte on Linux as on macOS

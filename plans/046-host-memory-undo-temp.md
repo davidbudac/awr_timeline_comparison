@@ -41,13 +41,21 @@ touches `policy_bucket` or `metric_policy.plsql`.
   sessions (PX slaves together); window value = the largest such sum; the
   peak = the largest total at one sample instant, per instance summed.
 - "Reads as:" + `lib_ls` from the readable blocks. `lopen` (fixed rules,
-  `section[data-open]` names them): host busy >= 90%, any swap-out, host
+  `section[data-open]` names them): host busy >= 90%, a swap-out of at
+  least `c_swap` = 0.01 MB/s in the Current window (about 36 MB an hour;
+  the first dbmint pass read "swapping" at 0.000026 MB/s), host
   CPUs / memory changed, a resize op in Current, buffer cache <= 90% of the
   prior mean, PGA over-allocation > 0, ORA-01555 or out-of-space > 0.
 - Card pointers (one hidden source + one append script, plan 043's
   pattern): `#f-io` "Memory: buffer cache x GB, was y GB" (buffer cache
   rule); `#f-dbtime` "Host: host CPU n% busy" (>= 90%) and "Host:
-  swapping" (VM_OUT > 0). Both kept: together they cost one script.
+  swapping" (VM_OUT >= c_swap). Both kept: together they cost one script.
+  The sentence: "swapping, x MB/s paged out" at or above `c_swap`, "little
+  paging out (x MB/s)" below it and above 0, "no swapping" at 0; `lib_ls`
+  names "swapping" only at or above it. The table row is unchanged.
+- "Host resized" (`p.hm-chg`, the sentence) names each window by its START
+  with the time, "between Sat 07 Nov 11:00 and Sat 07 Nov 15:00"
+  (`Dy DD Mon HH24:MI`, English): hourly windows all read the same day.
 
 ## Classification (gauge / counter / configuration)
 

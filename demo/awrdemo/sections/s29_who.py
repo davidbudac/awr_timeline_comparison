@@ -18,6 +18,11 @@ OrderService (ORDERS_APP) time, which the two OrderService app servers
 (app-01, app-02) share about evenly -- so machine reads "spread".  The
 reporting statement runs PARALLEL 8: 8 of its 9 samples are PX slaves
 ("oracle@prd-ora-01 (P003)" -> norm_program -> "(Pnnn)").
+
+One container only (the demo is no CDB), so there is no PDB dimension and
+the user labels carry no container (the SQL appends "(PDB1)" style
+container names to every user label only when the samples hold more than
+one con_id).
 """
 from __future__ import annotations
 
@@ -65,10 +70,11 @@ PX_SQL = "9wz2ke6yq4tn1"      # PARALLEL(sf 8): 1 QC + 8 slaves
 
 
 def norm_program(p):
-    """The SQL's REGEXP_REPLACE: a slave's number folded, (P003) -> (Pnnn)."""
+    """The SQL's REGEXP_REPLACE: a slave's number folded, (P003) / (J00A)
+    -> (Pnnn) / (Jnnn); (LGWR), (DBW0), (TNS V1-V3) stay."""
     if p is None:
         return None
-    return re.sub(r"\(([A-Z])([0-9]{3}|[A-Z][0-9]{2})\)$", r"(\1nnn)", p)
+    return re.sub(r"\(([A-Z])([0-9][0-9A-Z]{2}|[A-Z][0-9]{2})\)$", r"(\1nnn)", p)
 
 
 def _fg_samples(m) -> int:
@@ -164,6 +170,11 @@ def _pct(p):
     if p < 0.5:
         return "&lt;1%"
     return str(int(ora_round(p, 0))) + "%"
+
+
+def _shr(p):
+    """shr_txt: a share inside a sentence; above 100% it reads as words."""
+    return "more than the whole rise, others fell" if p >= 100.5 else _pct(p)
 
 
 def _sgn(p):
@@ -284,25 +295,28 @@ def emit(w) -> str:
                 best, bshr = pk, pk["rise"] / trise
             if pk["rise"] >= C_DOM * trise:
                 ndom += 1
-                if ndom == 1:
+                if ndom == 1 and pk["rise"] / trise * 100 >= 100.5:
+                    dm += (" " + word + " <b>" + esc(pk["nam"]) + "</b> alone rose " + _sgn(pk["rise"])
+                           + ", more than the whole rise (others fell)")
+                elif ndom == 1:
                     dm += " " + _sgn(pk["rise"]) + " of it came from " + word + " <b>" + esc(pk["nam"]) + "</b>"
                 else:
                     dm += "; " + word + " <b>" + esc(pk["nam"]) + "</b> " + _sgn(pk["rise"])
                 if ndom <= 2:
                     ls += ("; " if ndom == 1 else ", ") + word + " " + esc(pk["nam"]) + " " + _sgn(pk["rise"]) \
-                        + " (" + _pct(pk["rise"] / trise * 100) + ")"
+                        + " (" + _shr(pk["rise"] / trise * 100) + ")"
             else:
                 sp += ("; " if sp else "") + "the largest " + word + " is <b>" + esc(pk["nam"]) + "</b> " \
-                    + _sgn(pk["rise"]) + " (" + _pct(pk["rise"] / trise * 100) + ")"
+                    + _sgn(pk["rise"]) + " (" + _shr(pk["rise"] / trise * 100) + ")"
         if ndom > 0:
             rd += dm + "." + (" Spread over several values: " + sp + "." if sp else "")
             opn = True
         elif best is not None:
             rd += (" The rise is spread: no single value carries half of it; the largest is "
                    + DIMS[best["g"]][1] + " <b>" + esc(best["nam"]) + "</b> " + _sgn(best["rise"])
-                   + " (" + _pct(bshr * 100) + ").")
+                   + " (" + _shr(bshr * 100) + ").")
             ls += ("; spread, largest " + DIMS[best["g"]][1] + " " + esc(best["nam"]) + " "
-                   + _sgn(best["rise"]) + " (" + _pct(bshr * 100) + ")")
+                   + _sgn(best["rise"]) + " (" + _shr(bshr * 100) + ")")
 
     out.append('<section id="who" class="vw in-s in-a lib' + (" lopen" if opn else "")
                + '" style="--os:19"><h2>Who added the load'
@@ -404,8 +418,10 @@ def emit(w) -> str:
                        + '<dt>Who</dt><dd><span class="id txt">' + word + ' '
                        + ent(esc(pick["nam"]), pick["id"], "who")
                        + '</span><span class="de">'
-                       + nbu(_sgn(pick["rise"]) + ' AAS (' + _pct(pick["rise"] / trise * 100)
-                             + ' of the rise in foreground activity)')
+                       + nbu(_sgn(pick["rise"]) + ' AAS'
+                             + (', more than the whole rise in foreground activity (others fell)'
+                                if pick["rise"] / trise * 100 >= 100.5
+                                else ' (' + _pct(pick["rise"] / trise * 100) + ' of the rise in foreground activity)'))
                        + '</span></dd><div class="m">' + delta_span(pick["cur"], pick["mu"], None, "Y")
                        + band_span(band_z(pick["cur"], pick["mu"], pick["sd"]), None, "sm", "N", 10)
                        + '<span class="ns">not scored</span></div></div></div>')
