@@ -39,6 +39,18 @@ release bumps `awr_version`).
   rise), so a scheduler or ticket system can read the result without
   scraping HTML (README "Machine-readable result"). No finding, count or
   score changes; plan-change and configuration cards are not in schema 1.
+- **The peak inside the window** (plan 041): every number is a window
+  average, so a five-minute stall read as a mild rise. System metrics now
+  shows each metric's **Peak (1 min)** in the Current window (the largest
+  `DBA_HIST_SYSMETRIC_SUMMARY.MAXVAL`, the highest 60-second value, over the
+  window's snapshots; with several instances the largest single-instance
+  value, labelled "max per instance") and a plain delta against the prior
+  windows' peaks. Active sessions (section 09) gains a table "Busiest minute
+  per window" (average, busiest minute, when, x the average) from the ASH
+  scan's 1-minute counts, also in `AWR_DATA.ashx.pk`; the DB time card gets
+  a "Peak" evidence row ("53.7 active sessions at 09:19; prior windows'
+  busiest minutes 19.5-50.5") and the Activity charts' window tooltips a
+  "Busiest minute" line. Unscored: no finding, count or severity changes.
 - **Docs / tooling:** the demo generator is now platform-independent (every
   libm-derived value is rounded to 10 significant digits, digit counts are
   exact), so the demo pages regenerate byte for byte on Linux as on macOS

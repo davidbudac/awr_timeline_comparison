@@ -73,6 +73,14 @@
 --            most recent windows that fit get the detail (one window
 --            longer than the cap keeps its last 40000 minutes).  About 2
 --            to 4 bytes a busy minute per series, a zero run a few bytes.
+-- ashx.pk (plan 041) = [[week_offset, aas, "YYYY-MM-DD HH24:MI"], ...]
+-- oldest first, one entry per compared window: its BUSIEST MINUTE, all
+-- sessions (the minute's samples over every class / 6) and the minute's
+-- start; [k, null, null] = unknown (a skipped window, a window outside
+-- the fine reach above, or no ASH sample at all) -- never 0 for unknown.
+-- Ties: the earliest minute.  Not scored.  The same numbers, with each
+-- window's average, are the table "Busiest minute per window" at the end
+-- of this section (JS off shows it).
 -- plus the Activity lane's row (sql/lib/timeline.plsql; Current vs the
 -- mean of the valid prior windows, not scored).  A sample belongs to
 -- EVERY window whose span [start, start + win_hours) contains it: with
@@ -166,6 +174,9 @@ DECLARE
     v_fc           t_cell_tab;          -- (minute | class) -> samples
     v_fe           t_cell_tab;          -- (minute | event) -> samples
     v_ft           t_cell_tab;          -- (minute | 'Other events') -> samples, filled per payload
+    v_fm           t_int_tab;           -- plan 041: minute -> samples, every class
+    TYPE t_lab_tab IS TABLE OF VARCHAR2(40) INDEX BY PLS_INTEGER;
+    v_wst          t_lab_tab;           -- plan 041: week_offset -> window start
     @@sql/lib/put_clob_chunked.plsql
     @@sql/lib/json_escape.plsql
     @@sql/lib/fmt_num.plsql
@@ -404,6 +415,11 @@ BEGIN
         IF r.mk IS NOT NULL THEN
             bump(v_fc, TO_CHAR(r.mk) || '|' || r.wait_class, r.sample_count);
             bump(v_fe, TO_CHAR(r.mk) || '|' || r.event_name, r.sample_count);
+            IF v_fm.EXISTS(r.mk) THEN
+                v_fm(r.mk) := v_fm(r.mk) + r.sample_count;
+            ELSE
+                v_fm(r.mk) := r.sample_count;
+            END IF;
         END IF;
         v_ck := TO_CHAR(r.bucket_key) || '|' || r.wait_class;
         IF v_cells.EXISTS(v_ck) THEN
@@ -487,6 +503,7 @@ BEGIN
             || CASE WHEN r.week_offset = 0 THEN 'current' ELSE 'w-' || r.week_offset END || '",'
             || CASE WHEN r.valid_flag = 'Y' THEN '"1"' ELSE '"0"' END || ']';
         v_valid := NVL(v_valid, '|') || r.week_offset || '=' || r.valid_flag || '|';
+        v_wst(r.week_offset) := TO_CHAR(r.win_start_ts, 'YYYY-MM-DD HH24:MI');
     END LOOP;
     v_windows_json := '[' || v_windows_json || ']';
 
@@ -657,6 +674,16 @@ BEGIN
         v_wtot  t_nums;          -- per window offset: total AAS
         v_cc    t_nums;          -- per class index: Current AAS
         v_cm    t_nums;          -- per class index: prior mean AAS
+        -- plan 041: each window's busiest minute (week_offset -> AAS / minute)
+        v_pkv   t_nums;
+        v_pkm   t_nums;
+        v_pj    NUMBER;
+        v_pa    NUMBER;
+        v_pb    NUMBER;
+        v_pbest NUMBER;
+        v_pmin  NUMBER;
+        v_ptok  VARCHAR2(200);
+        v_pwhy  VARCHAR2(200);
     BEGIN
         -- the classes in stacking order (insertion sort, a dozen at most)
         v_ci := v_class_totals.FIRST;
@@ -726,6 +753,46 @@ BEGIN
             END LOOP;
             DBMS_OUTPUT.PUT_LINE(CASE WHEN c > 1 THEN ',' END || '[' || v_row || ']');
         END LOOP;
+        -- plan 041: each window's busiest minute, all sessions (ashx.pk, see
+        -- the header): only a valid window inside the fine reach is known
+        FOR k IN 0 .. ~weeks_back LOOP
+            v_pj := ~weeks_back - k;
+            IF v_total_n > 0 AND v_pj >= v_jmin
+               AND NVL(INSTR(v_valid, '|' || k || '=Y|'), 0) > 0 THEN
+                v_pa := GREATEST(ROUND(v_pj * ~step_hours * 60), v_mmin);
+                v_pb := LEAST(ROUND((v_pj * ~step_hours + ~win_hours) * 60), v_mend);
+                v_pbest := -1;
+                v_pmin  := NULL;
+                FOR mi IN v_pa .. v_pb - 1 LOOP
+                    v_n2 := CASE WHEN v_fm.EXISTS(mi) THEN v_fm(mi) ELSE 0 END;
+                    IF v_n2 > v_pbest THEN
+                        v_pbest := v_n2;
+                        v_pmin  := mi;
+                    END IF;
+                END LOOP;
+                IF v_pmin IS NOT NULL THEN
+                    v_pkv(k) := v_pbest / 6;
+                    v_pkm(k) := v_pmin;
+                END IF;
+            END IF;
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('],"pk":[');
+        v_row := NULL;
+        FOR k IN REVERSE 0 .. ~weeks_back LOOP
+            v_ptok := CASE WHEN k < ~weeks_back THEN ',' END || '[' || TO_CHAR(k) || ','
+                || CASE WHEN v_pkv.EXISTS(k)
+                        THEN aas_tok(v_pkv(k)) || ',"'
+                             || TO_CHAR(v_range_start + v_pkm(k) / 1440, 'YYYY-MM-DD HH24:MI') || '"'
+                        ELSE 'null,null' END || ']';
+            IF LENGTH(v_row) + LENGTH(v_ptok) > 30000 THEN
+                DBMS_OUTPUT.PUT_LINE(v_row);
+                v_row := NULL;
+            END IF;
+            v_row := v_row || v_ptok;
+        END LOOP;
+        IF v_row IS NOT NULL THEN
+            DBMS_OUTPUT.PUT_LINE(v_row);
+        END IF;
         -- the 1-minute detail by wait class (the header)
         DBMS_OUTPUT.PUT_LINE('],');
         fine_head;
@@ -911,6 +978,49 @@ BEGIN
             END LOOP;
             DBMS_OUTPUT.PUT_LINE(tl_open('activity') || v_row || v_gut || '</div>' || tl_close);
         END IF;
+
+        -- plan 041: "Busiest minute per window" -- always emitted (JS off
+        -- reads it), Current first; unknown is a dash with its reason
+        DBMS_OUTPUT.PUT_LINE('<h3 class="pk-h">Busiest minute per window</h3>'
+            || '<p class="note pk-note">The busiest minute of each compared window, from the same ASH scan: all sessions,'
+            || ' samples in that minute &divide; 6 (ASH keeps one sample every 10 s, so the value moves in steps of 1/6).'
+            || ' Next to the window&rsquo;s average it tells a short burst from a busy hour. Not scored. Blank for a skipped window'
+            || ' and for windows past the 1-minute reach (at most 40000 minutes, the most recent windows first).</p>');
+        DBMS_OUTPUT.PUT_LINE('<table id="ash-peaks" data-nocount><thead><tr><th>Window</th><th>Start</th>'
+            || '<th class="num" title="ASH samples in the window &divide; 360 &divide; window hours, all sessions">Average (AAS)</th>'
+            || '<th class="num" title="the window&#39;s busiest minute: its ASH samples, all sessions, &divide; 6">Busiest minute (AAS)</th>'
+            || '<th>At</th><th class="num" title="busiest minute &divide; the window&#39;s average">&times; average</th>'
+            || '</tr></thead><tbody>');
+        FOR k IN 0 .. ~weeks_back LOOP
+            v_pj := ~weeks_back - k;
+            v_pwhy := CASE WHEN v_pkv.EXISTS(k) THEN NULL
+                           WHEN v_total_n = 0 THEN 'no ASH samples'
+                           WHEN NVL(INSTR(v_valid, '|' || k || '=Y|'), 0) = 0 THEN 'skipped window'
+                           WHEN v_pj < v_jmin THEN 'outside the 1-minute reach'
+                           ELSE 'no minute' END;
+            v_row := '<tr><td data-w="' || k || '">'
+                || CASE WHEN k = 0 THEN 'Current' ELSE '&minus;' || off_label(k) END || '</td>'
+                || '<td>' || CASE WHEN v_wst.EXISTS(k) THEN v_wst(k) ELSE '&mdash;' END || '</td>'
+                || '<td class="num">'
+                || CASE WHEN v_total_n > 0 AND v_wtot.EXISTS(k) THEN fmt_num(v_wtot(k)) ELSE '&mdash;' END || '</td>';
+            IF v_pwhy IS NULL THEN
+                v_row := v_row || '<td class="num" data-pk="' || aas_tok(v_pkv(k)) || '">'
+                    || fmt_num(v_pkv(k)) || '</td>'
+                    || '<td title="' || TO_CHAR(v_range_start + v_pkm(k) / 1440, 'YYYY-MM-DD HH24:MI') || '">'
+                    || TO_CHAR(v_range_start + v_pkm(k) / 1440,
+                               CASE WHEN ~win_hours >= 24 THEN 'YYYY-MM-DD HH24:MI' ELSE 'HH24:MI' END) || '</td>'
+                    || '<td class="num">'
+                    || CASE WHEN v_wtot.EXISTS(k) AND v_wtot(k) > 0
+                            THEN '&times;' || TO_CHAR(ROUND(v_pkv(k) / v_wtot(k), 1), 'FM9999990D0',
+                                                      'NLS_NUMERIC_CHARACTERS=''.,''')
+                            ELSE '&mdash;' END || '</td>';
+            ELSE
+                v_row := v_row || '<td class="num">&mdash;</td><td><span class="imm">' || v_pwhy
+                    || '</span></td><td class="num">&mdash;</td>';
+            END IF;
+            DBMS_OUTPUT.PUT_LINE(v_row || '</tr>');
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('</tbody></table>');
     END;
     DBMS_OUTPUT.PUT_LINE('</section>');
 

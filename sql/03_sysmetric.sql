@@ -3,6 +3,13 @@
 -- Per-window averages from DBA_HIST_SYSMETRIC_SUMMARY.  This view already
 -- holds per-snapshot aggregates of the V$SYSMETRIC_* time series, so we
 -- just AVG(average) over the snapshots that fall inside each window.
+-- Plan 041: next to the average, the Current window's PEAK = the largest
+-- MAXVAL (the highest 60-second value of the long-duration metric group
+-- inside a snapshot interval) over the window's snapshot rows, and a plain
+-- (unscored) delta against the mean of the valid prior windows' peaks.
+-- A per-instance maximum is not additive (instances need not peak in the
+-- same minute), so with more than one instance the peak is the largest
+-- single-instance value, labelled "max per instance", for every metric.
 -- Read-only: no scratch table.
 --
 
@@ -23,6 +30,7 @@ DECLARE
     v_rows        PLS_INTEGER := 0;
     v_bucket      VARCHAR2(40);
     v_host        NUMBER;
+    v_pk_th       VARCHAR2(400);     -- the peak cells' header title
 
     -- Subprogram includes go LAST, metric_policy first (lint 14 / 16),
     -- fmt_num before band_glyph (lint 17).
@@ -40,8 +48,15 @@ BEGIN
     v_rows := 0;
     -- v1.6.0: Current, the baseline band (same policy bucket as 07), trend,
     -- then the prior windows as plain values.
+    v_pk_th := 'Largest one-minute value inside the Current window: the highest MAXVAL of '
+        || 'DBA_HIST_SYSMETRIC_SUMMARY (60-second metric intervals) over the window&#39;s snapshots; '
+        || 'with several instances the largest single-instance value. Not scored.';
     v_header := '<thead><tr><th>Metric</th><th>Unit</th><th class="num" data-w="0">Current</th>'
-        || band_head || '<th class="trend">Trend</th>';
+        || band_head
+        || '<th class="num pk" title="' || v_pk_th || '">Peak (1 min)</th>'
+        || '<th class="num pkd" title="Current peak against the mean of the valid prior windows&#39; '
+        || 'own peaks; a plain ratio, not scored">vs prior peaks</th>'
+        || '<th class="trend">Trend</th>';
     FOR k IN 1 .. v_weeks_back LOOP
         v_header := v_header || '<th class="num" data-w="' || k || '">&minus;'
             || off_label(k) || '</th>';
@@ -64,7 +79,11 @@ BEGIN
                    t.is_additive,
                    MAX(sm.metric_unit) AS metric_unit,
                    CASE WHEN t.is_additive = 'Y' THEN SUM(sm.average)
-                                                 ELSE AVG(sm.average) END AS snap_value
+                                                 ELSE AVG(sm.average) END AS snap_value,
+                   -- plan 041: the largest single-instance one-minute value
+                   -- (never summed across instances) and how many instances
+                   MAX(sm.maxval)                     AS snap_peak,
+                   COUNT(DISTINCT sm.instance_number) AS snap_inst
             FROM   valid_windows w
             CROSS JOIN targets t
             JOIN   dba_hist_sysmetric_summary sm
@@ -77,7 +96,9 @@ BEGIN
         facts AS (
             SELECT week_offset, metric_name,
                    MAX(metric_unit) AS metric_unit,
-                   AVG(snap_value)  AS avg_value
+                   AVG(snap_value)  AS avg_value,
+                   MAX(snap_peak)   AS peak_value,
+                   MAX(snap_inst)   AS n_inst
             FROM   per_snap
             GROUP BY week_offset, metric_name
         ),
@@ -86,7 +107,8 @@ BEGIN
             FROM   dual CONNECT BY LEVEL <= ~weeks_back + 1
         ),
         grid AS (
-            SELECT t.metric_name, w.week_offset, f.avg_value, f.metric_unit
+            SELECT t.metric_name, w.week_offset, f.avg_value, f.metric_unit,
+                   f.peak_value, f.n_inst
             FROM   targets t
             CROSS JOIN all_weeks w
             LEFT JOIN facts f
@@ -100,6 +122,12 @@ BEGIN
                AVG(CASE WHEN week_offset > 0 THEN avg_value END)    AS mu,
                STDDEV(CASE WHEN week_offset > 0 THEN avg_value END) AS sd,
                COUNT(CASE WHEN week_offset > 0 THEN avg_value END)  AS n_prior,
+               -- plan 041: the Current peak and the prior windows' peaks
+               -- (scalars only: no per-window peak string)
+               MAX(CASE WHEN week_offset = 0 THEN peak_value END)   AS cur_peak,
+               MAX(CASE WHEN week_offset = 0 THEN n_inst END)       AS cur_inst,
+               AVG(CASE WHEN week_offset > 0 THEN peak_value END)   AS mu_peak,
+               COUNT(CASE WHEN week_offset > 0 THEN peak_value END) AS n_peak,
                -- ','||token + SUBSTR: LISTAGG drops NULL measures (and their
                -- delimiter), which would left-compact the CSV and misalign
                -- the positional slots; ','||NULL = ',' keeps the empty slot.
@@ -154,7 +182,23 @@ BEGIN
               || '<span class="bg" style="width:' || TO_CHAR(v_pct, 'FM990D0') || '%"></span>'
               || '<span class="v"><b>' || fmt_num(m.cur_val) || '</b></span></td>';
         v_bucket := policy_bucket('METRIC', m.metric_name, NULL, m.cur_val, m.mu, m.sd, m.n_prior);
-        v_row := v_row || band_cells(m.cur_val, m.mu, m.sd, m.n_prior, v_bucket)
+        v_row := v_row || band_cells(m.cur_val, m.mu, m.sd, m.n_prior, v_bucket);
+        -- plan 041: the Current peak (data-pk = the raw value), then a plain
+        -- delta against the prior windows' peaks
+        IF m.cur_peak IS NULL THEN
+            v_row := v_row || '<td class="num pk">&mdash;</td>';
+        ELSE
+            v_row := v_row || '<td class="num pk" data-pk="'
+                  || TO_CHAR(m.cur_peak, 'FM99999999990D000000', 'NLS_NUMERIC_CHARACTERS=''.,''') || '"'
+                  || CASE WHEN m.cur_inst > 1 THEN ' data-pkinst="' || m.cur_inst || '"' END
+                  || fmt_num_title(m.cur_peak) || '>' || fmt_num(m.cur_peak)
+                  || CASE WHEN m.cur_inst > 1 THEN ' <small class="pki">max per instance</small>' END
+                  || '</td>';
+        END IF;
+        v_row := v_row || '<td class="num pkd" title="mean of '
+              || m.n_peak || ' prior window' || CASE WHEN m.n_peak = 1 THEN '' ELSE 's' END
+              || '&#39; peaks: ' || CASE WHEN m.mu_peak IS NULL THEN 'none' ELSE fmt_num(m.mu_peak) END
+              || '">' || delta_span(m.cur_peak, m.mu_peak, NULL, 'Y') || '</td>'
               || '<td class="trend" data-spark="' || NVL(m.spark_vals, '')
               || '" data-spark-title="' || DBMS_XMLGEN.CONVERT(m.metric_name) || '"></td>';
 
@@ -174,7 +218,7 @@ BEGIN
     END LOOP;
 
     IF v_rows = 0 THEN
-        DBMS_OUTPUT.PUT_LINE('<tr class="skip"><td colspan="' || (v_weeks_back + 8) || '">'
+        DBMS_OUTPUT.PUT_LINE('<tr class="skip"><td colspan="' || (v_weeks_back + 10) || '">'
             || 'No system metrics in DBA_HIST_SYSMETRIC_SUMMARY for the compared windows.'
             || ' Try a wider <code>win_hours</code>, more <code>weeks_back</code>, or a busier <code>target_end</code>.</td></tr>');
     END IF;

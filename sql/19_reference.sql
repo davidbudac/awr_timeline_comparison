@@ -284,6 +284,13 @@ BEGIN
         || ' <b>Current</b> cell bar = value &divide; row maximum.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>System metrics</dt><dd><code>DBA_HIST_SYSMETRIC_SUMMARY</code> averaged over each window. Rates and counters: SUM across instances per snapshot, then AVG; ratios and latencies: AVG across'
         || ' instances per snapshot, then AVG. Units per metric name.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Peaks</dt><dd>Every other number is an average over the window, so a five-minute stall reads as a mild rise. Two peaks sit next to it, neither scored nor counted:'
+        || ' <b>Peak (1 min)</b> in System metrics = the largest <code>MAXVAL</code> of <code>DBA_HIST_SYSMETRIC_SUMMARY</code> (the highest 60-second value inside each snapshot interval)'
+        || ' over the Current window, against the mean of the valid prior windows&rsquo; own peaks; and the <b>busiest minute</b> of each window from ASH (Active sessions, the DB time card,'
+        || ' the window tooltips of the Activity charts) = that minute&rsquo;s samples, all sessions, &divide; 6. ASH keeps one sample every 10 s, so a minute holds six samples per active'
+        || ' session and the value moves in steps of 1/6; windows past the 1-minute reach or skipped are left blank. With several instances (RAC, <code>inst_num</code> 0) the ASH minute'
+        || ' adds the instances up, but a SYSMETRIC peak is the largest <b>single-instance</b> value (instances need not peak in the same minute), labelled &ldquo;max per instance&rdquo;,'
+        || ' so it can be lower than a summed average.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Wait events</dt><dd>Foreground: <code>DBA_HIST_SYSTEM_EVENT</code>; background: <code>DBA_HIST_BG_EVENT_SUMMARY</code>. Idle excluded. Top ~top_n events by time waited (s) and by average latency'
         || ' (ms = time waited &divide; total waits); the chart stacks wait-class time per window. When five or more flagged events moved together within a narrow band, the table notes one <b>table-wide'
         || ' shift</b> and demotes large rows to moderate.</dd>');

@@ -28,6 +28,11 @@
 --                 (tested by tools/js_unit_tests.js).
 --   labelAlts(alts, names, k)  drops a label cut whose stem also starts
 --                 another series' name (pure, unit-tested).
+--   pkInfo(pk, ws) / pkText(i, wh)  plan 041: the Current window's busiest
+--                 minute (AWR_DATA.ashx.pk) against the valid prior
+--                 windows' ones, and its sentence (pure, unit-tested); the
+--                 DB time card's "Peak" evidence row and the window stripe
+--                 tooltip's "Busiest minute" line use them.
 --   stackAt(pts, ord, vk, sx, v)  the series whose band is DRAWN at
 --                 (sx, v): the hover / click / soft-highlight pick (pure,
 --                 unit-tested; review follow-up R3).
@@ -413,6 +418,48 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  ul.innerHTML=cur.filter(function(x){return x[1]>0;}).map(function(x){return ''<li><i class="sw" style="--sw:''+wcol(x[0])+''"></i>''+esc(x[0])+''</li>'';}).join('''');');
     DBMS_OUTPUT.PUT_LINE('  var wg=row.closest(''.wg'');wg.parentNode.insertBefore(ul,wg);');
     DBMS_OUTPUT.PUT_LINE('  wg.title=''Foreground active sessions (ASH, a sampled estimate of DB time) per compared window, stacked by wait class; Current ''+tot.toFixed(2)+'' AAS in ASH. The Current value is the DB time headline.'';');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* ---- 5b. plan 041: the busiest minute per window (AWR_DATA.ashx.pk =');
+    DBMS_OUTPUT.PUT_LINE('   [[week_offset, AAS, "YYYY-MM-DD HH:MI"], ...], null = unknown; all');
+    DBMS_OUTPUT.PUT_LINE('   sessions, from 09''s 1-minute ASH).  Informational, never scored.');
+    DBMS_OUTPUT.PUT_LINE('   pkInfo(pk, ws) (pure, unit-tested): the Current value and minute, the');
+    DBMS_OUTPUT.PUT_LINE('   lowest / highest / mean of the VALID prior windows'' known values, null');
+    DBMS_OUTPUT.PUT_LINE('   without a Current value.  pkText(i, wh): the sentence. */');
+    DBMS_OUTPUT.PUT_LINE('function pkFmt(v){return v>=100?String(Math.round(v)):v.toFixed(1);}');
+    DBMS_OUTPUT.PUT_LINE('function pkAt(t,wh){return wh>=24?fAt(PT(t)):String(t).slice(11);}');
+    DBMS_OUTPUT.PUT_LINE('TL.pkInfo=function(pk,ws){');
+    DBMS_OUTPUT.PUT_LINE('  if(!pk||!pk.length)return null;');
+    DBMS_OUTPUT.PUT_LINE('  var by={};pk.forEach(function(e){if(e&&e[1]!=null)by[e[0]]=e;});');
+    DBMS_OUTPUT.PUT_LINE('  var c=by[0];if(!c)return null;');
+    DBMS_OUTPUT.PUT_LINE('  var lo=null,hi=null,s=0,n=0;');
+    DBMS_OUTPUT.PUT_LINE('  (ws||[]).forEach(function(w){');
+    DBMS_OUTPUT.PUT_LINE('    if(w.o===0||w.v===''N'')return;var e=by[w.o];if(!e)return;');
+    DBMS_OUTPUT.PUT_LINE('    var v=e[1];if(lo===null||v<lo)lo=v;if(hi===null||v>hi)hi=v;s+=v;n++;');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('  return {aas:c[1],at:c[2],lo:lo,hi:hi,mu:n?s/n:null,n:n};');
+    DBMS_OUTPUT.PUT_LINE('};');
+    DBMS_OUTPUT.PUT_LINE('TL.pkText=function(i,wh){');
+    DBMS_OUTPUT.PUT_LINE('  var t=pkFmt(i.aas)+'' active sessions at ''+pkAt(i.at,wh);');
+    DBMS_OUTPUT.PUT_LINE('  if(!i.n)return t;');
+    DBMS_OUTPUT.PUT_LINE('  var lo=pkFmt(i.lo),hi=pkFmt(i.hi);');
+    DBMS_OUTPUT.PUT_LINE('  return t+''; ''+(i.n===1?''the prior window\u2019s busiest minute '':''prior windows\u2019 busiest minutes '')+(lo===hi?lo:lo+''\u2013''+hi);');
+    DBMS_OUTPUT.PUT_LINE('};');
+    DBMS_OUTPUT.PUT_LINE('/* the DB time card''s evidence row (only with the card and a Current value) */');
+    DBMS_OUTPUT.PUT_LINE('function pkCard(){');
+    DBMS_OUTPUT.PUT_LINE('  var card=$(''#f-dbtime'');if(!card||!AX)return;');
+    DBMS_OUTPUT.PUT_LINE('  var I=TL.pkInfo(AX.pk,wins());if(!I)return;');
+    DBMS_OUTPUT.PUT_LINE('  var dl=$(''dl.ev'',card);');
+    DBMS_OUTPUT.PUT_LINE('  if(!dl){var fb=$(''.fc-b'',card);if(!fb)return;dl=mk(''dl'',''ev'',fb);}');
+    DBMS_OUTPUT.PUT_LINE('  var r=mk(''div'',''evr ev-pk'',dl);');
+    DBMS_OUTPUT.PUT_LINE('  r.title=''Busiest minute of the window: ASH, all sessions, one sample every 10 s (six samples per active session in a minute, so the value moves in steps of 1/6); the window values above are averages. Not scored.'';');
+    DBMS_OUTPUT.PUT_LINE('  r.innerHTML=''<dt>Peak</dt><dd><span class="id txt">Busiest minute</span><span class="de">''+esc(TL.pkText(I,AX.wh))+''</span></dd>''');
+    DBMS_OUTPUT.PUT_LINE('    +''<div class="m">''+(I.mu!=null?''<span class="d s-plain" title="Current busiest minute against the mean of the prior windows\u2019 busiest minutes">''+delta(I.aas,I.mu)+''</span>'':'''')+''</div>'';');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('/* the window stripe tooltip''s line: that window''s busiest minute */');
+    DBMS_OUTPUT.PUT_LINE('function pkTip(o){');
+    DBMS_OUTPUT.PUT_LINE('  var e=null;((AX&&AX.pk)||[]).forEach(function(x){if(x[0]===o)e=x;});');
+    DBMS_OUTPUT.PUT_LINE('  if(!e||e[1]==null)return '''';');
+    DBMS_OUTPUT.PUT_LINE('  return ''<div class="tr2 tpk"><span>Busiest minute, all sessions</span><b>''+pkFmt(e[1])+'' AAS at ''+esc(pkAt(e[2],AX.wh))+''</b></div>'';');
     DBMS_OUTPUT.PUT_LINE('}');
     DBMS_OUTPUT.PUT_LINE('/* ---- 6. Activity, whole span (section#activity, first in Timeline / All');
     DBMS_OUTPUT.PUT_LINE('   sections, under the verdict in Summary, compact there): one');
@@ -1175,7 +1222,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('    var i=+wh.getAttribute(''data-i''),w=wins()[i];hideAll();');
     DBMS_OUTPUT.PUT_LINE('    if(HT&&HT.soft)hlSet(null);');
     DBMS_OUTPUT.PUT_LINE('    tipOn(''<b>''+esc(w.t)+''</b><br><span class="tm">''+(w.o===0?''Current window'':offTxt(w)+'' window'')+(w.v===''N''?'', skipped'':'''')+'', by ''+c.what+''</span>''');
-    DBMS_OUTPUT.PUT_LINE('      +(P.win?ashRows(P.classes,c.cols,function(k){return P.win[k][i];},c.vis,c.noun,c.hl&&c.hl.set):'''')+(w.o===0?'''':''<span class="tm">Click to pin this window</span>''),e);');
+    DBMS_OUTPUT.PUT_LINE('      +(P.win?ashRows(P.classes,c.cols,function(k){return P.win[k][i];},c.vis,c.noun,c.hl&&c.hl.set):'''')+pkTip(w.o)+(w.o===0?'''':''<span class="tm">Click to pin this window</span>''),e);');
     DBMS_OUTPUT.PUT_LINE('    return;');
     DBMS_OUTPUT.PUT_LINE('  }');
     DBMS_OUTPUT.PUT_LINE('  if(c.g.mode===''win''){');
@@ -1219,6 +1266,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  lanes();');
     DBMS_OUTPUT.PUT_LINE('  tools();');
     DBMS_OUTPUT.PUT_LINE('  activity();');
+    DBMS_OUTPUT.PUT_LINE('  pkCard();');
     DBMS_OUTPUT.PUT_LINE('  spInit();');
     DBMS_OUTPUT.PUT_LINE('  var b=doc.getElementById(''tl-body'');if(b)b.addEventListener(''scroll'',sync,{passive:true});');
     DBMS_OUTPUT.PUT_LINE('  var tl=doc.getElementById(''tl'');if(tl&&W.render)W.render(tl);');

@@ -31,6 +31,10 @@ hourly samples and the fine data agrees with ashx.win).  Each event is
 spread with its class's minute counts as the weights, so the event chart's
 minutes track the class chart's (they differ by rounding only; in the SQL
 both come from the same samples and stack to the same totals).
+
+ashx.pk + the "Busiest minute per window" table (plan 041) derive from the
+same synthetic minutes: per valid window inside the fine reach, the minute
+with the most samples over every class (the earliest on a tie) / 6.
 """
 from __future__ import annotations
 
@@ -232,6 +236,7 @@ class _Fine:
                     segs.append([a, b])
         self.segs = segs
         self.capped = jmin > 0 or mmin > 0
+        self.jmin, self.mmin, self.mend = jmin, mmin, mend
         self.start = range_start
         self.src = src
         self._prof = {}
@@ -414,9 +419,13 @@ def _timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour, eve
     for i, c in enumerate(classes):
         row = [aas_tok(wfcells.get((k, c), 0) / (360 * w.win_hours)) for k in range(w.weeks_back, -1, -1)]
         out.append(("," if i else "") + "[" + ",".join(row) + "]")
+    pkv, pkm = _peaks(w, fine, classes, valid, bool(totals))
+    out.extend(_pk_lines(w, range_start, pkv, pkm))
     out.extend(fine.block([(lambda c: lambda hb, mi: fine.cls(hb, c)[mi])(c) for c in classes]))
     out.extend(_events(w, range_start, total_hours, cbh, m, nc, events_by_hour, fine))
+    table = _pk_table(w, range_start, fine, valid, bool(totals), wtot, pkv, pkm)
     if not totals:
+        out.extend(table)
         return out
     prior = [wtot[k] for k in range(w.weeks_back, 0, -1) if valid.get(k) == "Y"]
     cur = wtot[0]
@@ -453,4 +462,91 @@ def _timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour, eve
         row += ('<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k)
                 + '"><span class="v">' + helpers.fmt_num(wtot[k]) + '</span></div>')
     out.append(helpers.tl_open('activity') + row + gut + '</div>' + helpers.tl_close())
+    out.extend(table)
+    return out
+
+
+# ---------------------------------------------------------------------
+# plan 041: each window's busiest minute (ashx.pk + the table)
+# ---------------------------------------------------------------------
+def _peaks(w, fine, classes, valid, any_ash):
+    """{week_offset: AAS}, {week_offset: minute since range_start}; only a
+    valid window inside the fine reach (the SQL's loop over v_fm)"""
+    wb, st, wh = w.weeks_back, w.step_hours, w.win_hours
+    pkv, pkm = {}, {}
+    for k in range(wb + 1):
+        j = wb - k
+        if not (any_ash and j >= fine.jmin and valid.get(k) == "Y"):
+            continue
+        a = max(int(ora_round(j * st * 60, 0)), fine.mmin)
+        b = min(int(ora_round((j * st + wh) * 60, 0)), fine.mend)
+        best, bm = -1, None
+        for mi in range(a, b):
+            n = sum(fine.cls(mi // 60, c)[mi % 60] for c in classes)
+            if n > best:
+                best, bm = n, mi
+        if bm is not None:
+            pkv[k] = best / 6
+            pkm[k] = bm
+    return pkv, pkm
+
+
+def _pk_ts(range_start, mi):
+    return ts_min(range_start + timedelta(minutes=mi))
+
+
+def _pk_lines(w, range_start, pkv, pkm):
+    """'],"pk":[' + the entries (lines under 30000 bytes), oldest first"""
+    out, row = ['],"pk":['], ""
+    for k in range(w.weeks_back, -1, -1):
+        tok = ("," if k < w.weeks_back else "") + "[" + str(k) + "," + (
+            aas_tok(pkv[k]) + ',"' + _pk_ts(range_start, pkm[k]) + '"' if k in pkv else "null,null") + "]"
+        if row and len(row) + len(tok) > 30000:
+            out.append(row)
+            row = ""
+        row += tok
+    if row:
+        out.append(row)
+    return out
+
+
+def _pk_table(w, range_start, fine, valid, any_ash, wtot, pkv, pkm):
+    win = {x.week_offset: x for x in w.windows}
+    out = ['<h3 class="pk-h">Busiest minute per window</h3>'
+           '<p class="note pk-note">The busiest minute of each compared window, from the same ASH scan: all sessions,'
+           ' samples in that minute &divide; 6 (ASH keeps one sample every 10 s, so the value moves in steps of 1/6).'
+           ' Next to the window&rsquo;s average it tells a short burst from a busy hour. Not scored. Blank for a skipped window'
+           ' and for windows past the 1-minute reach (at most 40000 minutes, the most recent windows first).</p>',
+           '<table id="ash-peaks" data-nocount><thead><tr><th>Window</th><th>Start</th>'
+           '<th class="num" title="ASH samples in the window &divide; 360 &divide; window hours, all sessions">Average (AAS)</th>'
+           '<th class="num" title="the window&#39;s busiest minute: its ASH samples, all sessions, &divide; 6">Busiest minute (AAS)</th>'
+           '<th>At</th><th class="num" title="busiest minute &divide; the window&#39;s average">&times; average</th>'
+           '</tr></thead><tbody>']
+    for k in range(w.weeks_back + 1):
+        j = w.weeks_back - k
+        if k in pkv:
+            why = None
+        elif not any_ash:
+            why = "no ASH samples"
+        elif valid.get(k) != "Y":
+            why = "skipped window"
+        elif j < fine.jmin:
+            why = "outside the 1-minute reach"
+        else:
+            why = "no minute"
+        row = ('<tr><td data-w="' + str(k) + '">'
+               + ("Current" if k == 0 else "&minus;" + w.offset_labels[k - 1]) + '</td>'
+               + '<td>' + (ts_min(win[k].win_start_ts) if k in win else "&mdash;") + '</td>'
+               + '<td class="num">' + (helpers.fmt_num(wtot[k]) if any_ash else "&mdash;") + '</td>')
+        if why is None:
+            ts = _pk_ts(range_start, pkm[k])
+            row += ('<td class="num" data-pk="' + aas_tok(pkv[k]) + '">' + helpers.fmt_num(pkv[k]) + '</td>'
+                    + '<td title="' + ts + '">' + (ts if w.win_hours >= 24 else ts[11:]) + '</td>'
+                    + '<td class="num">' + ("&times;" + to_char_fixed(ora_round(pkv[k] / wtot[k], 1), 1)
+                                            if wtot.get(k, 0) > 0 else "&mdash;") + '</td>')
+        else:
+            row += ('<td class="num">&mdash;</td><td><span class="imm">' + why
+                    + '</span></td><td class="num">&mdash;</td>')
+        out.append(row + '</tr>')
+    out.append('</tbody></table>')
     return out

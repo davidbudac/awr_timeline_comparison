@@ -71,6 +71,7 @@ sql/
 ├── 08_overview.sql      -- Summary hero strip: DB time per window on the window component
 ├── 09_ash_timeline.sql  -- ONE ASH scan: hourly ECharts timeline + AWR_DATA.ashx / .ashe
 │                        --   (Activity charts: by wait class / by wait event) + the Activity lane row
+│                        --   + "Busiest minute per window" (ashx.pk, plan 041)
 ├── 10_db_time_summary.sql      -- stacked DB time across the full span (ECharts)
 ├── 11_top_sql_ash_breakdown.sql-- per-Top-N-SQL ASH cards (stacked by wait event)
 ├── 12_param_changes.sql -- init params differing across windows + config card
@@ -765,6 +766,28 @@ and foreground flag; no second ASH scan):
   too: 15-min windows make thousands). Cross-check: a window's minutes
   summed / 6 / 60 / win_hours = its `win` value (verify_report checks the
   Current window).
+- `ashx.pk = [[week_offset, aas, "YYYY-MM-DD HH24:MI"], ...]` (plan 041;
+  ashx only, not ashe) -- each window's **busiest minute**, oldest first,
+  one entry per window: the minute (since `t0`, its start) with the most
+  samples summed over EVERY class (`v_fm`, filled in the scan loop next to
+  `v_fc`), / 6, ties = the earliest; `[k,null,null]` = unknown (skipped
+  window, a window step `< v_jmin`, i.e. past the fine reach, or no ASH at
+  all), never 0. The full timestamp, not the brief's "HH24:MI" (daily or
+  longer windows need the day). Emitted between `winfg` and `fine`, lines
+  flushed under 30000 bytes. The same numbers + each window's average
+  (`v_wtot`) are 09's always-emitted `table#ash-peaks[data-nocount]`
+  "Busiest minute per window" (Current first, reason in `span.imm` when
+  unknown, `td[data-pk]` = the token). Client (`js_timeline` section 5b):
+  pure `AWR_TL.pkInfo(pk, AWR_WIN.w)` (Current value + min / max / mean of
+  the VALID prior windows' known values, null without a Current value) and
+  `pkText(i, wh)` (unit-tested); `pkCard()` (its own boot step after
+  `activity()`) appends `div.evr.ev-pk` ("Peak" / "Busiest minute", a
+  `d.s-plain` delta vs the priors' mean, no band) LAST to `#f-dbtime
+  dl.ev` (js_design reads the FIRST `.evr`), only when the card and a
+  Current value exist; `pkTip(o)` adds a `.tr2.tpk` line to the window
+  stripe tooltip of both charts (looked up by `w.o` in `AX.pk`). RAC: ASH
+  minutes add up across instances (exact); see 03's peak for SYSMETRIC.
+  verify_report block 6d.
 Numbers via `RTRIM(TO_CHAR(ROUND(v,3),'FM9999999990D999'),'.')`.
 
 **Client** (`js_timeline`, section 6): ONE chart factory — `mkChart(root,
@@ -2398,6 +2421,21 @@ metrics `is_additive`; sections 03/07 read it, section 08's `cards` CTE carries
 an inline `is_add`. Pattern: `snap_value = (SUM|AVG) GROUP BY week,metric,snap`
 then `metric_value = AVG(snap_value) GROUP BY week,metric`. Single-instance:
 no-op.
+
+**Peaks are never summed (plan 041).** 03's `per_snap` also carries
+`MAX(sm.maxval)` (`MAXVAL` = the highest 60-second value of the long-duration
+group inside the snapshot interval) and `COUNT(DISTINCT instance_number)`;
+`facts` takes their MAX, the final SELECT only scalars (`cur_peak`,
+`cur_inst`, `mu_peak` / `n_peak` over the valid prior windows: no per-window
+peak string). Two cells after the band cells: `td.num.pk[data-pk]` ("Peak (1
+min)", `data-pkinst="n"` + `small.pki` "max per instance" when the Current
+window had more than one instance -- for EVERY metric, additive or not, since
+instances need not peak in the same minute, so it can sit below a summed
+average) and `td.num.pkd` (plain `delta_span(..., NULL, 'Y')`, title = the
+priors' mean). The empty-table colspan is `weeks_back + 10`. The twin's peaks
+are synthetic (`s03.peak_series`: seeded uniform spread, >= the average,
+percentages capped at 100), built in s03 itself: `_pivot.row_cells` is
+shared with 02 / 13 and stays unchanged.
 
 ### Severity classes (keep aligned with `_style.sql`)
 `large`→`crit`, `moderate`→`warn`, `typical`→`ok`, `improved`→`imp`,

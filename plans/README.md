@@ -52,7 +52,7 @@ prefilled `awrddrpt` / `ashrpt` hand-off commands were declined). Branch
 | 038 | The verdict says when the baseline has an odd window (from section 26) | 2 | none new | DONE; DB run pending (owner) |
 | 039 | Confidence note by window count on the verdict and the cards (display only) | 1 | none new | DONE; DB run pending (owner) |
 | 040 | Shorter Summary: library rows open only with news; machine-readable findings block (JSON) | 11 | none new | DONE; DB run pending (owner) |
-| 041 | Peak inside the window next to the average (SYSMETRIC max, 1-minute ASH peak) | 3 | granted (`DBA_HIST_SYSMETRIC_SUMMARY.MAXVAL`, ASH) | TODO |
+| 041 | Peak inside the window next to the average (SYSMETRIC max, 1-minute ASH peak) | 3 | granted (`DBA_HIST_SYSMETRIC_SUMMARY.MAXVAL`, ASH) | DONE; DB run pending (owner) |
 | 042 | CPU capacity: a CPU-count line on the Activity charts and "x of n CPUs" | 4 | granted (`DBA_HIST_PARAMETER` `cpu_count`) | TODO |
 | 043 | Time model breakdown (parse, hard parse, PL/SQL, connection management ...) | 7 | granted (`DBA_HIST_SYS_TIME_MODEL`) | TODO |
 | 044 | Per-statement time split and rows per execution in Top SQL's per-SQL detail | 5 | granted (`DBA_HIST_SQLSTAT` wait deltas, rows processed) | TODO |

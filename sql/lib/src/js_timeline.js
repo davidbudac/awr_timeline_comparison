@@ -329,6 +329,48 @@ function activity(){
   var wg=row.closest('.wg');wg.parentNode.insertBefore(ul,wg);
   wg.title='Foreground active sessions (ASH, a sampled estimate of DB time) per compared window, stacked by wait class; Current '+tot.toFixed(2)+' AAS in ASH. The Current value is the DB time headline.';
 }
+/* ---- 5b. plan 041: the busiest minute per window (AWR_DATA.ashx.pk =
+   [[week_offset, AAS, "YYYY-MM-DD HH:MI"], ...], null = unknown; all
+   sessions, from 09's 1-minute ASH).  Informational, never scored.
+   pkInfo(pk, ws) (pure, unit-tested): the Current value and minute, the
+   lowest / highest / mean of the VALID prior windows' known values, null
+   without a Current value.  pkText(i, wh): the sentence. */
+function pkFmt(v){return v>=100?String(Math.round(v)):v.toFixed(1);}
+function pkAt(t,wh){return wh>=24?fAt(PT(t)):String(t).slice(11);}
+TL.pkInfo=function(pk,ws){
+  if(!pk||!pk.length)return null;
+  var by={};pk.forEach(function(e){if(e&&e[1]!=null)by[e[0]]=e;});
+  var c=by[0];if(!c)return null;
+  var lo=null,hi=null,s=0,n=0;
+  (ws||[]).forEach(function(w){
+    if(w.o===0||w.v==='N')return;var e=by[w.o];if(!e)return;
+    var v=e[1];if(lo===null||v<lo)lo=v;if(hi===null||v>hi)hi=v;s+=v;n++;
+  });
+  return {aas:c[1],at:c[2],lo:lo,hi:hi,mu:n?s/n:null,n:n};
+};
+TL.pkText=function(i,wh){
+  var t=pkFmt(i.aas)+' active sessions at '+pkAt(i.at,wh);
+  if(!i.n)return t;
+  var lo=pkFmt(i.lo),hi=pkFmt(i.hi);
+  return t+'; '+(i.n===1?'the prior window\u2019s busiest minute ':'prior windows\u2019 busiest minutes ')+(lo===hi?lo:lo+'\u2013'+hi);
+};
+/* the DB time card's evidence row (only with the card and a Current value) */
+function pkCard(){
+  var card=$('#f-dbtime');if(!card||!AX)return;
+  var I=TL.pkInfo(AX.pk,wins());if(!I)return;
+  var dl=$('dl.ev',card);
+  if(!dl){var fb=$('.fc-b',card);if(!fb)return;dl=mk('dl','ev',fb);}
+  var r=mk('div','evr ev-pk',dl);
+  r.title='Busiest minute of the window: ASH, all sessions, one sample every 10 s (six samples per active session in a minute, so the value moves in steps of 1/6); the window values above are averages. Not scored.';
+  r.innerHTML='<dt>Peak</dt><dd><span class="id txt">Busiest minute</span><span class="de">'+esc(TL.pkText(I,AX.wh))+'</span></dd>'
+    +'<div class="m">'+(I.mu!=null?'<span class="d s-plain" title="Current busiest minute against the mean of the prior windows\u2019 busiest minutes">'+delta(I.aas,I.mu)+'</span>':'')+'</div>';
+}
+/* the window stripe tooltip's line: that window's busiest minute */
+function pkTip(o){
+  var e=null;((AX&&AX.pk)||[]).forEach(function(x){if(x[0]===o)e=x;});
+  if(!e||e[1]==null)return '';
+  return '<div class="tr2 tpk"><span>Busiest minute, all sessions</span><b>'+pkFmt(e[1])+' AAS at '+esc(pkAt(e[2],AX.wh))+'</b></div>';
+}
 /* ---- 6. Activity, whole span (section#activity, first in Timeline / All
    sections, under the verdict in Summary, compact there): one
    chart factory, two instances over one time axis -- by wait class
@@ -1090,7 +1132,7 @@ function hover(c,e){
     var i=+wh.getAttribute('data-i'),w=wins()[i];hideAll();
     if(HT&&HT.soft)hlSet(null);
     tipOn('<b>'+esc(w.t)+'</b><br><span class="tm">'+(w.o===0?'Current window':offTxt(w)+' window')+(w.v==='N'?', skipped':'')+', by '+c.what+'</span>'
-      +(P.win?ashRows(P.classes,c.cols,function(k){return P.win[k][i];},c.vis,c.noun,c.hl&&c.hl.set):'')+(w.o===0?'':'<span class="tm">Click to pin this window</span>'),e);
+      +(P.win?ashRows(P.classes,c.cols,function(k){return P.win[k][i];},c.vis,c.noun,c.hl&&c.hl.set):'')+pkTip(w.o)+(w.o===0?'':'<span class="tm">Click to pin this window</span>'),e);
     return;
   }
   if(c.g.mode==='win'){
@@ -1134,6 +1176,7 @@ doc.addEventListener('DOMContentLoaded',function(){
   lanes();
   tools();
   activity();
+  pkCard();
   spInit();
   var b=doc.getElementById('tl-body');if(b)b.addEventListener('scroll',sync,{passive:true});
   var tl=doc.getElementById('tl');if(tl&&W.render)W.render(tl);

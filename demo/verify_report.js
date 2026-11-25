@@ -2066,6 +2066,110 @@ const LABEL_BAND = () => {
     await page.close();
   }
 
+  // ---- 6d. plan 041: the peak inside the window.  (a) AWR_DATA.ashx.pk:
+  // one entry per window, oldest first, null for a skipped window; its
+  // Current value = the busiest minute of the Current window recomputed
+  // from ashx.fine (every class summed per minute, / 6).  (b) 09's table
+  // "Busiest minute per window" agrees with it.  (c) the DB time card's
+  // "Peak" evidence row exists exactly when the card and a Current value
+  // do, with no severity.  (d) 03's Peak (1 min) is never below the Current
+  // average (rows labelled "max per instance" excepted: RAC).  (e) a window
+  // stripe's tooltip names its busiest minute.  A report from before the
+  // plan (no pk, no peak cells) skips each part.
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const r41 = await page.evaluate(() => {
+      const out = {}, bad = [];
+      const P = (window.AWR_DATA || {}).ashx, W = (window.AWR_WIN || {}).w || [];
+      const pk = P && P.pk;
+      if (!P) out.pk = 'no ashx';
+      else if (!pk) out.pk = 'no pk (report before plan 041)';
+      else {
+        if (pk.length !== W.length) bad.push('pk has ' + pk.length + ' entries for ' + W.length + ' windows');
+        pk.forEach((e, i) => {
+          if (!W[i] || e[0] !== W[i].o) bad.push('pk[' + i + '] is window ' + e[0]);
+          else if (W[i].v === 'N' && e[1] != null) bad.push('skipped window ' + e[0] + ' has a peak');
+          if (e[1] != null && !(e[1] >= 0 && /^\d{4}-\d\d-\d\d \d\d:\d\d$/.test(e[2]))) bad.push('pk[' + i + '] ' + JSON.stringify(e));
+        });
+        const cur = pk[pk.length - 1], f = P.fine;
+        if (cur && cur[1] != null && f) {
+          const n = f.segs.reduce((a, g) => a + g[1], 0), tot = new Array(n).fill(0);
+          P.classes.forEach((c, k) => { let j = 0; f.vals[k].forEach(x => { if (x < 0) j += -x; else tot[j++] += x; }); });
+          const t0 = Date.parse(P.t0.replace(' ', 'T') + ':00Z'), cw = W[W.length - 1];
+          const cs = Date.parse(cw.s.replace(' ', 'T') + ':00Z'), ce = Date.parse(cw.e.replace(' ', 'T') + ':00Z');
+          let best = -1, at = null, j = 0;
+          f.segs.forEach(g => { for (let q = 0; q < g[1]; q++, j++) { const t = t0 + (g[0] + q) * 6e4; if (t >= cs && t < ce && tot[j] > best) { best = tot[j]; at = t; } } });
+          const want = best / 6, atS = at == null ? null : new Date(at).toISOString().slice(0, 16).replace('T', ' ');
+          if (Math.abs(want - cur[1]) > 6e-4 || atS !== cur[2]) bad.push('Current pk ' + JSON.stringify(cur) + ' vs fine ' + want.toFixed(3) + ' at ' + atS);
+          out.cur = cur[1] + ' at ' + cur[2] + ' (fine ' + want.toFixed(3) + ')';
+        }
+        const tb = document.querySelector('#ash-timeline table#ash-peaks');
+        if (!tb) bad.push('no #ash-peaks table');
+        else {
+          const rows = [...tb.tBodies[0].rows];
+          if (rows.length !== W.length) bad.push('#ash-peaks has ' + rows.length + ' rows');
+          const c0 = rows[0] && rows[0].querySelector('td[data-pk]');
+          if (cur && cur[1] != null && (!c0 || Math.abs(+c0.getAttribute('data-pk') - cur[1]) > 1e-9)) bad.push('#ash-peaks Current ' + (c0 && c0.getAttribute('data-pk')));
+          if (tb.querySelector('tr.crit, tr.warn, .bd')) bad.push('#ash-peaks carries a severity');
+        }
+        out.pk = bad.length ? 'FAIL ' + bad.join('; ') : 'ok (' + pk.filter(e => e[1] != null).length + ' of ' + pk.length + ' known)';
+      }
+      // (c) the DB time card row
+      const card = document.getElementById('f-dbtime'), row = document.querySelector('#f-dbtime .evr.ev-pk');
+      const want = !!(card && pk && pk.length && pk[pk.length - 1][1] != null);
+      if (want !== !!row) out.card = 'FAIL row ' + (row ? 'present' : 'missing') + ' (card ' + !!card + ', Current pk ' + !!want + ')';
+      else if (row) {
+        const v = pk[pk.length - 1][1], txt = row.textContent, s = v >= 100 ? String(Math.round(v)) : v.toFixed(1);
+        out.card = (txt.indexOf(s + ' active sessions at ') >= 0 && !row.querySelector('.bd, .d:not(.s-plain)') && /10 s/.test(row.title))
+          ? 'ok (' + txt.replace(/^Peak/, '').trim().slice(0, 90) + ')' : 'FAIL ' + txt.slice(0, 120);
+      } else out.card = 'none (no card or no Current value)';
+      // (d) 03's peaks
+      const pr = [...document.querySelectorAll('#sysmetric tbody tr')].filter(r => r.querySelector('td.pk'));
+      if (!pr.length) out.sm = 'no peak cells (report before plan 041)';
+      else {
+        const b2 = []; let n = 0;
+        if (!document.querySelector('#sysmetric thead th.pk')) b2.push('no header');
+        pr.forEach(r => {
+          const c = r.querySelector('td.pk[data-pk]'), sp = r.querySelector('td.trend[data-spark]');
+          if (!c || !sp || c.hasAttribute('data-pkinst')) return;
+          const a = sp.getAttribute('data-spark').split(','), avg = a[a.length - 1] === '' ? null : +a[a.length - 1];
+          if (avg == null) return;
+          n++;
+          if (+c.getAttribute('data-pk') < avg - 1e-6) b2.push(r.id + ' peak ' + c.getAttribute('data-pk') + ' < average ' + avg);
+        });
+        if (document.querySelector('#sysmetric td.pkd .d:not(.s-plain):not(.s-na)')) b2.push('a peak delta carries a severity');
+        out.sm = b2.length ? 'FAIL ' + b2.join('; ') : 'ok (' + n + ' rows peak >= average)';
+      }
+      return out;
+    });
+    // (e) the Current window stripe's tooltip (the first chart shown)
+    r41.tip = 'skipped';
+    if (r41.pk && /^ok/.test(r41.pk) && /^ok/.test(r41.card || 'ok')) {
+      const box = await page.evaluate(() => {
+        window.scrollTo(0, 0);
+        const s = [...document.querySelectorAll('.ashx .axsvg')].find(x => x.getClientRects().length); if (!s) return null;
+        const hs = [...s.querySelectorAll('.xwh[data-i]')].sort((a, b) => +a.getAttribute('data-i') - +b.getAttribute('data-i'));
+        const h = hs[hs.length - 1]; if (!h) return null;
+        h.scrollIntoView({ block: 'center' });
+        const r = h.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + Math.min(8, r.height / 2) };
+      });
+      if (box) {
+        await page.mouse.move(box.x, box.y); await page.waitForTimeout(150);
+        const tt = await page.evaluate(() => { const t = document.getElementById('tip'); return t && !t.hidden ? t.textContent : ''; });
+        const P = await page.evaluate(() => { const p = window.AWR_DATA.ashx.pk; return p[p.length - 1]; });
+        r41.tip = (P[1] == null ? !/Busiest minute/.test(tt) : /Busiest minute, all sessions/.test(tt)) ? 'ok' : 'FAIL ' + tt.slice(0, 160);
+        await page.mouse.move(5, 5);
+      }
+    }
+    console.log('plan 041', JSON.stringify(r41));
+    for (const k of ['pk', 'card', 'sm', 'tip']) if (/^FAIL/.test(r41[k] || '')) fail('peaks (plan 041) ' + k + ': ' + r41[k]);
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) {
+      if (!/^ok/.test(r41.pk) || !/^ok/.test(r41.card) || !/^ok/.test(r41.sm) || r41.tip !== 'ok') fail('demo: every plan 041 part should run: ' + JSON.stringify(r41));
+    }
+    if (errors.length) fail('plan 041: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
   // ---- 7. the design (quiet / dashboard): the shared pieces, then the
   // dashboard's KPI cards, findings table, Activity tabs and palette
   if (DESIGN !== 'classic') {

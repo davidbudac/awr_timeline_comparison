@@ -302,6 +302,35 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
   });
 }
 
+/* ---- plan 041: AWR_TL.pkInfo / pkText (js_timeline), the busiest minute
+   of the Current window against the valid prior windows' ---- */
+{
+  const T = load('js_timeline').AWR_TL;
+  const ws = [{ o: 3, v: 'Y' }, { o: 2, v: 'N' }, { o: 1, v: 'Y' }, { o: 0, v: 'Y' }];
+  const pk = [[3, 14, '2026-09-01 09:10'], [2, 99, '2026-09-02 09:00'], [1, 19.333, '2026-09-03 09:30'], [0, 31.167, '2026-09-04 09:42']];
+  test('pkInfo: Current value, prior range over the valid windows only', () => {
+    const i = T.pkInfo(pk, ws);
+    assert.strictEqual(i.aas, 31.167); assert.strictEqual(i.at, '2026-09-04 09:42');
+    assert.strictEqual(i.lo, 14); assert.strictEqual(i.hi, 19.333); assert.strictEqual(i.n, 2);
+    assert.ok(Math.abs(i.mu - 16.6665) < 1e-9);
+  });
+  test('pkInfo: unknown entries are skipped, no Current value = null', () => {
+    assert.strictEqual(T.pkInfo([[1, 5, '2026-09-03 09:30'], [0, null, null]], ws), null);
+    assert.strictEqual(T.pkInfo(null, ws), null);
+    assert.strictEqual(T.pkInfo([], ws), null);
+    const i = T.pkInfo([[3, null, null], [0, 4, '2026-09-04 09:00']], ws);
+    assert.strictEqual(i.n, 0); assert.strictEqual(i.mu, null); assert.strictEqual(i.lo, null);
+  });
+  test('pkText: the sentence, one prior window, no prior window, a day-long window', () => {
+    assert.strictEqual(T.pkText(T.pkInfo(pk, ws), 1),
+      '31.2 active sessions at 09:42; prior windows’ busiest minutes 14.0–19.3');
+    assert.strictEqual(T.pkText(T.pkInfo([[1, 19.333, 'x'], [0, 31.167, '2026-09-04 09:42']], ws), 1),
+      '31.2 active sessions at 09:42; the prior window’s busiest minute 19.3');
+    assert.strictEqual(T.pkText(T.pkInfo([[0, 150.5, '2026-09-04 09:42']], ws), 1), '151 active sessions at 09:42');
+    assert.strictEqual(T.pkText(T.pkInfo([[0, 2, '2026-09-04 09:42']], ws), 24), '2.0 active sessions at Fri 4 Sep 09:42');
+  });
+}
+
 /* ---- review follow-up R3: AWR_TL.flagPos (js_timeline), where a release
    flag goes on the Activity chart ---- */
 {
