@@ -348,7 +348,7 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
 
 | Piece | Emitter | Notes |
 |---|---|---|
-| Verdict hero `section#verdict.vw.in-s.hero` | 00 | one rule-based h1 sentence (no free prose), `p#because-slot` "Likely source:" (17 fills), `ul#pills` (17 inserts before `li.pl-normal`), `ul#narrative-slot.hnotes` (17), `p.snapnote` (target_end snapped), `#att-slot` (07 fills: DB-time breakdown = DB CPU + each class's foreground wait time, the cards' impact; `.att-h` / `.att-bar` / `.att-lg`, parts coloured from `AWR_WAIT_COLORS` via `--c`; a part needs `imp_on` (the cards' 0.01 AAS floor) and 1 % of the bar, smaller rises go into "+ n smaller"; a hatched rest = the rise less the parts' NET sum (rises minus falls), drawn past 1 % of the rise, the bar's base GREATEST(rise + falls, rises); a note when the net passes the rise by more than 2 %; a share is `LEAST(100, ...)`, kept up to 100.5 %, both here and in `g_shr`) |
+| Verdict hero `section#verdict.vw.in-s.hero` | 00 | one rule-based h1 sentence (no free prose), `p#because-slot` "Likely source:" (17 fills), `ul#pills` (17 inserts before `li.pl-normal`), `ul#narrative-slot.hnotes` (17; 26 adds its "Baseline check" note, kept last, plan 038), `p.snapnote` (target_end snapped), `#att-slot` (07 fills: DB-time breakdown = DB CPU + each class's foreground wait time, the cards' impact; `.att-h` / `.att-bar` / `.att-lg`, parts coloured from `AWR_WAIT_COLORS` via `--c`; a part needs `imp_on` (the cards' 0.01 AAS floor) and 1 % of the bar, smaller rises go into "+ n smaller"; a hatched rest = the rise less the parts' NET sum (rises minus falls), drawn past 1 % of the rise, the bar's base GREATEST(rise + falls, rises); a note when the net passes the rise by more than 2 %; a share is `LEAST(100, ...)`, kept up to 100.5 %, both here and in `g_shr`) |
 | Hero strip `section#overview` | 08 | DB time (AAS) per window on the window component, `#hero-dbt`; replaced the six v1.5 headline tiles |
 | Triage list `#triage` | 07 | one `div.tri-row[data-card]` per card, in card order; impact cell filled by 07's inline script from the card's `data-impact` / `data-share` (plan 020); empty `span.tri-tags` (plan 027); `span.tri-spark[data-spark-dense]` (a trend at any window count, see Micro strips) |
 | Finding cards `#findings div.cards` | 07 | one `article.fc` per card group (below); header band glyph, big value, window bars, ≤4 evidence rows, an optional hint `div.fc-hint[data-hint]` (plan 033, below), related-metrics fold, footer `a.jump[data-tl]` "Timeline →" |
@@ -493,7 +493,9 @@ one-line inline `<script>` moves it while the page parses. Slots:
 `#f-config`, as the driver runs 18 before 12), `#att-slot` (07, the
 DB-time breakdown under the verdict), `#because-slot` / `#pills` /
 `#narrative-slot` / verdict `.vx[data-vx="io"]` / I/O card evidence
-`[data-ev-for]` (17, which runs last). These scripts run BEFORE any
+`[data-ev-for]` (17, which runs last; 26's "Baseline check" `li.hn-base`
+also lands in `#narrative-slot`, earlier, and 17 inserts its notes before it
+so it stays last). These scripts run BEFORE any
 DOMContentLoaded handler (ent unwrap, chrome), so they must not depend on
 them. JS off → the block stays hidden (every fact is also in its section).
 17 with nothing to say emits only its two `AWR-SECTION` markers.
@@ -1956,6 +1958,19 @@ through a probe element, redrawn on `awr:theme`). Own tooltip `.winsim-tip`
 (js_timeline's document mouseover hides `#tip`). The per-window table is
 `data-nocount` (its flagged rows are `winsim-fl`, not `warn`, so no
 section-header count). Section time on dbmint: 0.8 s for 8 windows, 1.8 s for 168.
+**Verdict note (plan 038):** when a suggestion's drop changes a bucket
+(`chg > 0`) and at least 3 valid priors remain, 26 emits `li.hn-base`
+(one `span.hw`: `b.hl` "Baseline check:" + the sentence + `a.go` to `#win-sim`) in a hidden
+`div#base-src`; a one-line inline script moves it into `#narrative-slot`
+(relocation pattern) and unhides the slot. The suggestion is the one with
+the most changed metrics (first on a tie); the sentence is built in PL/SQL
+from `v_schg` / `v_sca` / `v_cbn` (`wname` / `grp_txt` / `set_names`) and says
+rise / fall / stay for the finding count. The li carries `data-sug` (0-based
+index into `AWR_DATA.winsim.sug`), `data-chg`, `data-cb`, `data-ca` (verify_report
+checks them against the payload). A NOTE: no count, pill or severity. 17
+runs after 26 and inserts its own notes BEFORE `li.hn-base`, so the baseline
+note is always last; the Copy summary reads it with the other notes. Twin
+`s26`'s block lifts the relocation script from the SQL.
 Unexercised: RAC, multi-DBID, non-comprehensive templates.
 
 ### `echarts` var (offline / self-contained)

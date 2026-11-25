@@ -49,7 +49,7 @@ prefilled `awrddrpt` / `ashrpt` hand-off commands were declined). Branch
 
 | Plan | Title | Review item | Views read | Status |
 |---|---|---|---|---|
-| 038 | The verdict says when the baseline has an odd window (from section 26) | 2 | none new | TODO |
+| 038 | The verdict says when the baseline has an odd window (from section 26) | 2 | none new | DONE; DB run pending (owner) |
 | 039 | Confidence note by window count on the verdict and the cards (display only) | 1 | none new | TODO |
 | 040 | Shorter Summary: library rows open only with news; machine-readable findings block (JSON) | 11 | none new | TODO |
 | 041 | Peak inside the window next to the average (SYSMETRIC max, 1-minute ASH peak) | 3 | granted (`DBA_HIST_SYSMETRIC_SUMMARY.MAXVAL`, ASH) | TODO |

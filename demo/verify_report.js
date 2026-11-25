@@ -2091,6 +2091,34 @@ const LABEL_BAND = () => {
       });
       console.log('viz window similarity, JS rule vs PL/SQL buckets: ' + ws);
       if (/^FAIL/.test(ws)) fail('viz: window similarity ' + ws);
+      // plan 038: the verdict's "Baseline check" note <=> a suggestion with chg > 0 and its numbers
+      const bn = await page.evaluate(() => {
+        const sec = document.getElementById('win-sim'), D = window.AWR_DATA && window.AWR_DATA.winsim;
+        const li = document.querySelector('#narrative-slot li.hn-base');
+        const sug = (D && D.sug) || [];
+        let best = null;
+        sug.forEach((s, i) => { if (s.chg > 0 && D.w && (D.w.filter(x => x.o > 0 && x.v === 'Y').length - s.drop.length) >= 3 && (best === null || s.chg > sug[best].chg)) best = i; });
+        if (!D || !sec) return 'none (no window similarity data)';
+        if (best === null) return li ? 'FAIL a note without a suggestion that changes something' : 'ok (no note, no suggestion changes anything)';
+        if (!li) return 'FAIL no note for suggestion ' + best;
+        const bad = [];
+        if (+li.getAttribute('data-sug') !== best) bad.push('data-sug ' + li.getAttribute('data-sug') + ' vs ' + best);
+        if (+li.getAttribute('data-chg') !== sug[best].chg) bad.push('chg');
+        if (+li.getAttribute('data-ca') !== sug[best].ca) bad.push('ca');
+        if (+li.getAttribute('data-cb') !== D.cb) bad.push('cb');
+        const t = li.textContent;
+        if (t.indexOf('from ' + D.cb + ' to ' + sug[best].ca) < 0 && t.indexOf('stay at ' + D.cb) < 0) bad.push('text lacks the counts');
+        if (t.indexOf(sug[best].chg + ' metric') < 0) bad.push('text lacks the metric count');
+        const ns = li.parentNode;
+        if (ns.id !== 'narrative-slot' || ns.hidden) bad.push('slot hidden');
+        if (ns.lastElementChild !== li) bad.push('not the last note');
+        if (document.getElementById('base-src')) bad.push('source left in the page');
+        const a = li.querySelector('a.go');
+        if (!a || a.getAttribute('href') !== '#win-sim') bad.push('link');
+        return bad.length ? 'FAIL ' + bad.join('; ') : 'ok (suggestion ' + best + ', ' + sug[best].chg + ' metrics, ' + D.cb + ' -> ' + sug[best].ca + ')';
+      });
+      console.log('viz baseline note on the verdict: ' + bn);
+      if (/^FAIL/.test(bn)) fail('viz: baseline note ' + bn);
       // phone width: no section pushes the page sideways
       await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(500);
       const ph = await page.evaluate(ids => ids.filter(id => { const s = document.getElementById(id); return s && s.getBoundingClientRect().width > 0 && s.scrollWidth > s.clientWidth + 2; }), have);

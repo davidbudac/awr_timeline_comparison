@@ -48,6 +48,10 @@
 -- counting follows card_group() (sql/lib/finding_cards.plsql), emitted
 -- per metric as "g" so the client only counts.
 --
+-- Plan 038: also one "Baseline check" note in the verdict hero's notes
+-- list (#narrative-slot) when a suggestion's drop changes a bucket, see the
+-- markup block at the end.
+--
 -- Payload: window.AWR_DATA.winsim = {cap, thr, medd, cv, w:[{o, v, dd,
 -- odd, top}], m:[{d, n, l, k, dir, p, a, sh, g, pb, vec, md, sp, lk, v}],
 -- dm:[[...]], sug:{drop, chg, cb, ca}} -- w / v / dm oldest first like
@@ -159,6 +163,9 @@ DECLARE
     v_oddl   VARCHAR2(4000);
     v_first  PLS_INTEGER;
     v_cls    VARCHAR2(400);
+    v_bs     PLS_INTEGER;        -- plan 038: the suggestion the verdict note names
+    v_bt     VARCHAR2(4000);     -- plan 038: that note's sentence (HTML)
+    v_bw     VARCHAR2(4000);     -- plan 038: the windows it names
 
     @@sql/lib/metric_policy.plsql
     @@sql/lib/json_escape.plsql
@@ -1032,6 +1039,58 @@ BEGIN
             v_line := v_line || '],"chg":' || v_schg(t) || ',"ca":' || v_sca(t) || '}';
         END LOOP;
         DBMS_OUTPUT.PUT_LINE(v_line || ']};</script>');
+        --
+        -- Plan 038: one note in the verdict hero, "Baseline check".  Only
+        -- when a suggestion's drop CHANGES something (a metric's bucket) and
+        -- at least 3 valid prior windows would remain (with fewer every
+        -- metric turns "insufficient history", which says nothing about
+        -- the baseline).  The suggestion that changes the most metrics
+        -- (the first on a tie).  The sentence is this section's own
+        -- numbers (v_schg / v_sca / v_cbn, the "chg" / "ca" / "cb" of the
+        -- payload); a relocation script moves the li into #narrative-slot
+        -- while the page parses (17 runs after this and keeps this note
+        -- last).  A note, never a finding: no count, pill or severity.
+        --
+        v_bs := NULL;
+        FOR s IN 1 .. v_ns LOOP
+            IF v_schg(s) > 0 AND v_np - v_sets(s).COUNT >= 3
+               AND (v_bs IS NULL OR v_schg(s) > v_schg(v_bs)) THEN
+                v_bs := s;
+            END IF;
+        END LOOP;
+        IF v_bs IS NOT NULL THEN
+            IF v_skind(v_bs) = 'grp' THEN
+                v_bt := grp_txt(v_bs, 'Y') || ' form a group unlike the ' || grp_txt(v_bs, 'O') || '.';
+            ELSIF v_sets(v_bs).COUNT = 1 THEN
+                v_bt := 'The prior window ' || wname(v_sets(v_bs).FIRST) || ' is unlike the other prior windows.';
+            ELSIF v_sets(v_bs).COUNT <= 6 THEN
+                v_bw := NULL;
+                v_c := 0;
+                v_k := v_sets(v_bs).LAST;
+                WHILE v_k IS NOT NULL LOOP
+                    v_c := v_c + 1;
+                    v_bw := v_bw || CASE WHEN v_c > 1 AND v_c = v_sets(v_bs).COUNT THEN ' and '
+                                         WHEN v_c > 1 THEN ', ' END || wname(v_k);
+                    v_k := v_sets(v_bs).PRIOR(v_k);
+                END LOOP;
+                v_bt := 'The prior windows ' || v_bw || ' are unlike the other prior windows.';
+            ELSE
+                v_bt := v_sets(v_bs).COUNT || ' prior windows (' || set_names(v_bs)
+                    || ') are unlike the other prior windows.';
+            END IF;
+            v_bt := v_bt || ' Scored without ' || CASE WHEN v_sets(v_bs).COUNT = 1 THEN 'it' ELSE 'them' END || ', '
+                || v_schg(v_bs) || CASE WHEN v_schg(v_bs) = 1 THEN ' metric changes' ELSE ' metrics change' END
+                || ' bucket'
+                || CASE WHEN v_sca(v_bs) > v_cbn THEN ' and the findings rise from ' || v_cbn || ' to ' || v_sca(v_bs)
+                        WHEN v_sca(v_bs) < v_cbn THEN ' and the findings fall from ' || v_cbn || ' to ' || v_sca(v_bs)
+                        ELSE ', though the findings stay at ' || v_cbn END
+                || '.';
+            DBMS_OUTPUT.PUT_LINE('<div id="base-src" hidden><ul><li class="hn-base" data-sug="' || (v_bs - 1)
+                || '" data-chg="' || v_schg(v_bs) || '" data-cb="' || v_cbn || '" data-ca="' || v_sca(v_bs) || '">'
+                || '<span class="hw"><b class="hl">Baseline check:</b> ' || v_bt
+                || ' <a class="go" href="#win-sim">Window similarity&nbsp;&rarr;</a></span></li></ul></div>');
+            DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,s=d.getElementById("base-src"),ns=d.getElementById("narrative-slot"),li=s?s.querySelector("li"):null;if(li&&ns){ns.appendChild(li);ns.hidden=false;}if(s&&s.parentNode)s.parentNode.removeChild(s);})();</script>');
+        END IF;
         DBMS_OUTPUT.PUT_LINE('</section>');
     END IF;
 END;

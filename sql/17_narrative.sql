@@ -18,7 +18,10 @@
 --   one-line notes         -> #narrative-slot (ul.hnotes); a note whose
 --                             story a Summary card already tells carries
 --                             data-dup=<card id> and is dropped when that
---                             card exists
+--                             card exists; 26's "Baseline check" note
+--                             (li.hn-base, plan 038) is already there
+--                             (26 runs first) and stays LAST: the notes
+--                             are inserted before it
 --   ", most of it on SEG"  -> the verdict's .vx[data-vx="io"] clause
 --   Segment / File / SQL   -> evidence rows at the top of the Physical I/O
 --                             card (07, id f-io; data-ev-for)
@@ -1196,8 +1199,8 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('while(bs.firstChild)b.appendChild(bs.firstChild);b.hidden=false;}');
         DBMS_OUTPUT.PUT_LINE('var pl=d.getElementById("pills"),nn=pl?pl.querySelector(".pl-normal"):null;');
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll(".pills-src > li").forEach(function(li){if(pl)pl.insertBefore(li,nn);});');
-        DBMS_OUTPUT.PUT_LINE('var ns=d.getElementById("narrative-slot");');
-        DBMS_OUTPUT.PUT_LINE('src.querySelectorAll(".notes-src > li").forEach(function(li){var u=li.getAttribute("data-dup");if(u&&d.getElementById(u))return;if(ns){ns.appendChild(li);ns.hidden=false;}});');
+        DBMS_OUTPUT.PUT_LINE('var ns=d.getElementById("narrative-slot"),bn=ns?ns.querySelector("li.hn-base"):null;');
+        DBMS_OUTPUT.PUT_LINE('src.querySelectorAll(".notes-src > li").forEach(function(li){var u=li.getAttribute("data-dup");if(u&&d.getElementById(u))return;if(ns){ns.insertBefore(li,bn);ns.hidden=false;}});');
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-vx-src]").forEach(function(x){var t=d.querySelector(''.vx[data-vx="''+x.getAttribute("data-vx-src")+''"]'');if(t){t.innerHTML=x.innerHTML;t.hidden=false;}});');
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-ev-for]").forEach(function(x){var c=d.getElementById(x.getAttribute("data-ev-for")),dl=c?c.querySelector("dl.ev"):null;if(!dl)return;var f=dl.firstChild;while(x.firstChild)dl.insertBefore(x.firstChild,f);});');
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-explains-src]").forEach(function(x){var p=d.getElementById(x.getAttribute("data-explains-src")),c=d.getElementById(x.getAttribute("data-for"));if(!p||!c||!c.parentNode||p===c)return;if(p.getAttribute("data-ph0")!==x.getAttribute("data-ph0")||p.getAttribute("data-ph1")!==x.getAttribute("data-ph1")){c.querySelectorAll(''a.ent[href="#''+p.id+''"]'').forEach(function(a){var s=d.createElement("span");s.className="ent-x";while(a.firstChild)s.appendChild(a.firstChild);a.parentNode.replaceChild(s,a);});return;}c.parentNode.insertBefore(p,c.nextSibling);p.hidden=false;p.setAttribute("data-explains",c.id);var k=p.querySelector(".fc-k"),sv=c.querySelector(".fc-k .sv"),lb=(sv&&sv.getAttribute("title"))||"the card above";if(k&&!k.querySelector(".xpl")){var s=d.createElement("span");s.className="xpl";s.appendChild(d.createTextNode("explains "));var a=d.createElement("a");a.href="#"+c.id;a.textContent=lb;s.appendChild(a);s.insertAdjacentHTML("beforeend","<i class=\"xu\" aria-hidden=\"true\"> &uarr;</i>");k.appendChild(s);}if(c.classList.contains("fold")&&window.AWR_fcFold)AWR_fcFold(p);var sl=d.getElementById("changes-slot"),sc=d.getElementById("s-changes");if(sl&&sc&&!sl.children.length)sc.hidden=true;});');

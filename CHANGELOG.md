@@ -10,6 +10,12 @@ entry here. Dates are release dates.
 Changes on `main` since 1.6.1 (the footer still says v1.6.1 until the next
 release bumps `awr_version`).
 
+- **Baseline check on the verdict** (plan 038): when dropping the prior
+  windows that stand out (section 26, Window similarity) would change a
+  metric's bucket, the verdict's notes carry one "Baseline check" line with
+  section 26's own numbers (how many metrics change, how the finding count
+  moves) and a link to it. A note, not a finding: no count, pill or severity
+  changes.
 - **Docs / tooling:** the demo generator is now platform-independent (every
   libm-derived value is rounded to 10 significant digits, digit counts are
   exact), so the demo pages regenerate byte for byte on Linux as on macOS

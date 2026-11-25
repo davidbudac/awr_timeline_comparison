@@ -365,7 +365,9 @@ BEGIN
         || ' decide alone. A mean absolute difference rather than a correlation, because it reads in the band glyph&rsquo;s unit and a correlation is blind to a uniformly lower window (a'
         || ' holiday). A prior window&rsquo;s distance from the other priors is the median of its distances to them; it is odd above max(median + 3 &times; 1.4826 &times; MAD, 1.5 &times;'
         || ' median) of those distances. Odd windows that are alike each other form a group (a change or an episode, not a single odd window). The what-if re-scores every metric in the'
-        || ' browser with the findings&rsquo; own rule against the priors left; with nothing dropped it reproduces the reported buckets exactly.</dd>');
+        || ' browser with the findings&rsquo; own rule against the priors left; with nothing dropped it reproduces the reported buckets exactly.'
+        || ' When dropping the windows that stand out would change a metric&rsquo;s bucket (and at least 3 valid priors remain), the verdict carries one &ldquo;Baseline check&rdquo; note with'
+        || ' the same numbers: the suggestion that changes the most metrics, and how the finding count would move. It is a note, not a finding: no count, pill or severity changes.</dd>');
     DBMS_OUTPUT.PUT_LINE('</dl>');
     DBMS_OUTPUT.PUT_LINE('<p class="ab-meta">Run <code>~run_id</code> &middot; template <code>'
         || DBMS_XMLGEN.CONVERT('~template_name') || '</code> &middot; top_n ~top_n'
