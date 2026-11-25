@@ -448,10 +448,13 @@ name where it is thick enough over the name's width (up to six a chart).
    one line of counts (open when there is no finding).
 6. **Evidence library** — every other section as one line with its
    status ("4 of 14 events moved", "none differ"); click a line to open the
-   section in place. Top SQL and Foreground waits start open only when
-   their status names something no finding or plan-change card already
-   names (the top statement, the wait classes that moved), or when the
-   report has no finding card; otherwise they start shut.
+   section in place. Six rows start open only when their status names
+   something no finding, plan-change card or verdict note already names:
+   Top SQL (the top statement), Foreground waits (the wait classes that
+   moved), Who added the load (the value on the DB time card), Plan shape
+   (the statements that changed plan), Window similarity (the Baseline
+   check note) and Volume vs unit cost (the statements slower per run); they
+   also start open when the report has no finding card, otherwise shut.
 
 **The band glyph** is how every scored row reads: *Normal range* (prior
 mean ± 2σ) · a dot on a −4σ … +8σ axis over the shaded ±1σ / ±2σ zones

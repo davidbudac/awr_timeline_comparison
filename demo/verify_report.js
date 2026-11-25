@@ -90,7 +90,8 @@
  *     no release marker shows its reason note and its all-priors table
  *     instead of the empty split view; the demo opens on a split); the
  *     Trend cells are micro strips (svg.mw), no line left;
- *     plan 040 (block 6c): Top SQL / Foreground waits (data-news) start
+ *     plan 040 (block 6c): the six library rows with data-news (Top SQL,
+ *     Foreground waits, Who, Plan shape, Window similarity, Volume vs unit cost) start
  *     shut exactly when everything their status names is on a card (open
  *     when there is no finding card); a click / a jump opens them; and
  *     script#awr-findings parses, with one entry per finding card equal to
@@ -1964,7 +1965,9 @@ const LABEL_BAND = () => {
   }
 
   // ---- 6c. plan 040: (a) a library row that starts open (Top SQL,
-  // Foreground waits: they carry data-news) is closed exactly when what its
+  // Foreground waits, and since the follow-up Who, Plan shape, Window
+  // similarity, Volume vs unit cost: they carry data-news when they have
+  // news; tokens sql: / card: / who: / note:) is closed exactly when what its
   // status line is about is already on a finding / plan-change card, and
   // stays as marked when the report has no finding card; a click on its
   // header opens it, a jump to a row inside it opens it.  (b) the
@@ -1984,6 +1987,9 @@ const LABEL_BAND = () => {
         const i = t.indexOf(':'), k = t.slice(0, i), v = t.slice(i + 1);
         if (k === 'card') return cards.some(c => c.id === v);
         if (k === 'sql') return !!document.getElementById('f-plan-' + v) || href.some(h => h.endsWith('-' + v));
+        // follow-up (2026-11-25): the DB time card's Who row for that value; a note of the verdict
+        if (k === 'who') return !!document.querySelector('#f-dbtime .ev-who[data-who="' + v + '"]');
+        if (k === 'note') return !!document.querySelector('#narrative-slot li.' + v);
         return false;
       };
       out.rows = rows.map(s => s.id);
@@ -1996,23 +2002,26 @@ const LABEL_BAND = () => {
       // the two rows the rule is about carry the attribute
       out.hasBoth = ['topsql', 'waits-fg'].every(id => !document.getElementById(id) || rows.some(s => s.id === id));
       // a click opens a shut one and shuts it again; a jump to a row inside opens it
-      const shut = rows.find(s => !s.classList.contains('lopen'));
-      if (shut) {
+      // (every shut row that carries data-news is tried: Top SQL, Foreground
+      // waits, Who, Plan shape, Window similarity, Volume vs unit cost)
+      const shuts = rows.filter(s => !s.classList.contains('lopen'));
+      out.shut = [];
+      for (const shut of shuts) {
         const h = shut.querySelector('h2');
         const body = () => [...shut.children].filter(c => c !== h && vis(c)).length;
         const b0 = body();
         h.click(); await wait(150);
         const o1 = shut.classList.contains('lopen') && body() > 0 && h.getAttribute('aria-expanded') === 'true';
         h.click(); await wait(80);
-        const row = shut.querySelector('tbody tr[id]');
+        const row = shut.querySelector('tbody tr[id]') || [...shut.querySelectorAll('[id]')].find(e => e !== h);
         let j = 'no row';
         if (row) {
           window.AWR_goTo(row, true, false); await wait(250);
           j = shut.classList.contains('lopen') && vis(row) ? 'ok' : 'FAIL';
           h.click(); await wait(60);
         }
-        out.shut = (!b0 && o1 && !body() && j !== 'FAIL' ? 'ok ' : 'FAIL ') + shut.id + ' ' + JSON.stringify([b0, o1, body(), j]);
-      } else out.shut = 'none';
+        out.shut.push((!b0 && o1 && !body() && j !== 'FAIL' ? 'ok ' : 'FAIL ') + shut.id + ' ' + JSON.stringify([b0, o1, body(), j]));
+      }
       // (b) the machine-readable result
       const el = document.getElementById('awr-findings');
       if (!el) { out.json = 'FAIL missing'; return out; }
@@ -2061,11 +2070,13 @@ const LABEL_BAND = () => {
     console.log('plan 040', JSON.stringify(r40));
     if (r40.rule.some(x => /^FAIL/.test(x))) fail('library rows: open / shut does not follow "news all on cards": ' + r40.rule.filter(x => /^FAIL/.test(x)).join('; '));
     if (!r40.hasBoth) fail('library rows: Top SQL / Foreground waits lost their data-news');
-    if (/^FAIL/.test(r40.shut)) fail('library rows: a shut row ' + r40.shut);
+    if (r40.shut.some(x => /^FAIL/.test(x))) fail('library rows: a shut row ' + r40.shut.filter(x => /^FAIL/.test(x)).join('; '));
     if (/^FAIL/.test(r40.json)) fail('findings JSON: ' + r40.json);
     if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) {
-      if (!r40.rule.length || r40.rule.some(x => !/ open=false$/.test(x))) fail('demo: Top SQL and Foreground waits should both start shut (their news is on cards): ' + JSON.stringify(r40.rule));
-      if (r40.shut === 'none') fail('demo: no shut row to open');
+      if (!r40.rule.length || r40.rule.some(x => !/ open=false$/.test(x))) fail('demo: every row with news (Top SQL, Foreground waits, Who, Plan shape, Window similarity, Volume vs unit cost) should start shut, their news is on cards: ' + JSON.stringify(r40.rule));
+      for (const id of ['topsql', 'waits-fg', 'who', 'plan-flame', 'win-sim', 'volume-cost'])
+        if (!r40.rows.includes(id)) fail('demo: library row ' + id + ' lost its data-news');
+      if (!r40.shut.length) fail('demo: no shut row to open');
       if (r40.nCards !== 5) fail('demo: expected 5 finding cards, got ' + r40.nCards);
     }
     if (errors.length) fail('plan 040: ' + errors.slice(0, 5).join(' | '));
@@ -2482,7 +2493,8 @@ const LABEL_BAND = () => {
       if (attr) dims.forEach(d => rowsOf(d).forEach(r => { if (r.getAttribute('data-ph') !== 'O') {
         if (num(r, 'data-rise') >= 0.5 * tr) dom = true;
         if (Math.abs(num(r, 'data-rise') - 0.5 * tr) < 1e-5) nearD = true; } }));
-      const lo = sec.classList.contains('lopen');
+      // the chrome (plan 040 follow-up) shuts a row whose news is on a card; it carries data-news only when PL/SQL marked it open
+      const lo = sec.classList.contains('lopen') || sec.hasAttribute('data-news');
       out.lopen = (lo === dom || nearD) ? 'ok (' + (lo ? 'open' : 'closed') + ')' : 'FAIL lopen ' + lo + ', a value carrying half the rise: ' + dom;
       return out;
     }, isDemo);

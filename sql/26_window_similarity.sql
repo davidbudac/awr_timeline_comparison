@@ -1090,6 +1090,11 @@ BEGIN
                 || '<span class="hw"><b class="hl">Baseline check:</b> ' || v_bt
                 || ' <a class="go" href="#win-sim">Window similarity&nbsp;&rarr;</a></span></li></ul></div>');
             DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,s=d.getElementById("base-src"),ns=d.getElementById("narrative-slot"),li=s?s.querySelector("li"):null;if(li&&ns){ns.appendChild(li);ns.hidden=false;}if(s&&s.parentNode)s.parentNode.removeChild(s);})();</script>');
+            -- plan 040 follow-up: the row's news is this note; the chrome shuts
+            -- the row when the verdict carries it (only emitted with the note)
+            IF v_nodd > 0 THEN
+                DBMS_OUTPUT.PUT_LINE(lib_news('win-sim', 'note:hn-base'));
+            END IF;
         END IF;
         DBMS_OUTPUT.PUT_LINE('</section>');
     END IF;

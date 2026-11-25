@@ -593,11 +593,21 @@ All-only: 01, 05, 09, 10, 11, 13 ("+ 6 more in All sections"). Row text: `lib_ls
 `window.AWR_ls` is an early 00 script (before `<main>`); 16 inlines the same
 script. A row with no `.ls` shows its `.h2sub` instead.
 
-**Library rows with news (plan 040).** One sentence: *Top SQL and
-Foreground waits start open only when their one-line status names something
-no finding or plan-change card already names (the top statement, the wait
-classes that moved), or when the report has no finding card.* (About note
-"Evidence library", twin lifts it.) Sections 04 / 06 cannot see 07's cards,
+**Library rows with news (plan 040, follow-up 2026-11-25).** One sentence:
+*Six rows (Top SQL, Foreground waits, Who added the load, Plan shape, Window
+similarity, Volume vs unit cost) start open only when their one-line status
+names something no finding, plan-change card or verdict note already names,
+or when the report has no finding card.* (About note "Evidence library", twin
+lifts it.) The follow-up rows keep their own `lopen` rule and ADD a
+`lib_news`: 29 `who:<x_id>` (emitted with the DB time card's Who row, only
+when that row's value carries half of the rise, i.e. is a dominant value;
+satisfied by `#f-dbtime .ev-who[data-who=<id>]`; a dominant program / PDB the
+card does not name keeps the row open), 23 one `sql:<sql_id>` per changed
+statement block (mode `chg` only), 21 one `sql:<sql_id>` per statement slower
+per run (`s` / `b`; plus `event:slower`, a kind never on a card, when an event
+is slower per wait, so the row stays open), 26 `note:hn-base` (only with the
+Baseline check note; satisfied by `#narrative-slot li.<class>`); each section
+emits its token only when it has the news. Sections 04 / 06 cannot see 07's cards,
 so the browser decides: each row is still marked `lopen` in the markup and
 ends with `lib_ls(...) || lib_news(id, tokens)` (`band_glyph.plsql`, twin
 `helpers.lib_news`; an inline script setting `data-news` on the section).
@@ -618,7 +628,8 @@ A click, `reveal()` / `goTo()` and All sections are untouched (a closed row
 opens for a link into it; All ignores `.lopen`); JS off hides nothing. The
 check runs at DOMContentLoaded (the plan cards are moved by parse-time
 scripts), so a slow parse may paint the open row for a moment. Other rows
-(SQL Monitor, the visualization sections) keep their own rules. Add a row to
+(SQL Monitor, Instance map, Trend breaks, Wait histograms, Segment / File I/O
+and the rest) keep their own rules. Add a row to
 the rule = `lib_news` with its tokens; a new token kind needs a case in
 `libNews()` and verify_report block 6c. Chrome V2
 (`libSecs/libResize/libOpen/libViews`): `.lib-first/.lib-last` edges by

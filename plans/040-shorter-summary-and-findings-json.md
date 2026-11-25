@@ -130,3 +130,80 @@ None: no new view, column or statistic.
    `"cards":[]` and `valid_prior_windows` below 3.
 6. RAC (`inst_num` 0): `valid_prior_windows` counts windows, not instances.
 7. No `ORA-` / `PLS-` / `SP2-` in the log; 29 / 29 `AWR-SECTION` pairs.
+
+## Follow-up (2026-11-25): four more library rows start shut when a card already says their news
+
+### Why
+
+The later plans of this round added library rows and card rows, and the
+classic demo's Summary grew back to about 19,640 px at 1440 px. Four open rows
+only repeated what a card or a verdict note already says: `who` (2205 px),
+`plan-flame` (1020), `win-sim` (1449) and `volume-cost` (2253).
+
+### Design as built
+
+Same mechanism, no new behaviour for the reader. Each of the four sections
+keeps its own `lopen` rule and ADDS a `lib_news` call; `libNews()` shuts the
+row only when every token is satisfied; a row with no `data-news` is as before.
+Two new token kinds in `libNews()` (`sql/00_params.sql`); an unknown kind is
+never satisfied (the row stays open).
+
+| Row | Token | Satisfied when |
+|---|---|---|
+| `who` (29) | `who:<x_id>`, emitted next to the DB time card's Who row, only when that row's value carries at least half of the rise (the row's own `lopen` condition) | `#f-dbtime .ev-who[data-who=<id>]` exists and is shown |
+| `plan-flame` (23) | one `sql:<sql_id>` per statement block, mode `chg` only (at most 3) | the existing `sql:` rule: `#f-plan-<id>` or a card link to that statement |
+| `volume-cost` (21) | one `sql:<sql_id>` per statement slower per run (category `s` or `b`, the `lopen` rule); `event:slower` added when an event is slower per wait | `sql:` as above; `event:slower` is never on a card, so the row stays open |
+| `win-sim` (26) | `note:hn-base`, emitted only together with plan 038's Baseline check note | `#narrative-slot li.hn-base` exists and is shown |
+
+Decisions:
+
+- `who`: the demo has four dominant values (service, module, program, user:
+  one load seen along four dimensions) but the card's Who row names one (the
+  module, first in its module / service / machine / user order). A token per
+  dominant value would never be satisfied, so the news is "the card's Who
+  row names a dominant value". A rise whose dominant value is a program or PDB
+  the card does not name, or a card row below half (30 to 50 %) while another
+  dimension is dominant, keeps the row open.
+- `volume-cost`: the `lopen` rule looks at statements only; an event slower
+  per wait is news no card carries, so it keeps the row open (conservative).
+- `win-sim`: odd windows without a bucket-changing drop have no note, so no
+  token: the row stays open as before.
+- Token strings: 29 and 26 emit one short token; 23 at most 3 statements; 21
+  at most 60 statements x 19 characters, `v_news VARCHAR2(2000)`; no new
+  declaration follows an include.
+
+Files: `sql/00_params.sql`, `sql/21_volume_cost.sql`, `sql/23_plan_flame.sql`,
+`sql/26_window_similarity.sql`, `sql/29_who.sql`, `sql/19_reference.sql` (About
+note), twins `s21`, `s23`, `s26`, `s29`, `demo/verify_report.js` (block 6c:
+the same shut-iff-satisfied assertion for every row with `data-news`, a header
+click opens each shut row, a jump into it opens it; the demo must have all six
+rows with news and shut), `README.md`, `CLAUDE.md`, `CHANGELOG.md`, the three
+demo pages. `instance-map`, `onset`, `wait-hist`, `sqlmon` and the other rows
+are untouched. No new AWR read, no new Oracle name.
+
+### Summary height, 1440 px (Summary view, after load)
+
+| design | before | after |
+|---|---|---|
+| classic | 19,640 px | 12,934 px |
+| quiet | 19,793 px | 12,921 px |
+| dashboard | 18,200 px | 11,429 px |
+
+Open rows after, on all three: instance map, trend breaks, wait histograms,
+SQL Monitor (nothing else). Verified with `demo/verify_report.js` on all three
+demo pages (block 6c: every row with `data-news` is shut exactly when its
+tokens are satisfied, a header click opens each shut row, a jump into it opens
+it). The plan 045 `lopen` check now accepts a row that carries `data-news`
+as open (the chrome shuts it after PL/SQL marked it open).
+
+### dbmint checklist additions (owner)
+
+1. The incident hour with a plan change: `plan-flame` and `volume-cost` shut
+   when the changed statement has its plan-change card; open when it has none.
+2. A window with a dominant module / service above half of the rise: `who`
+   shut and the DB time card shows the Who row; a dominant program or PDB
+   (no card row): `who` stays open.
+3. A window with a Baseline check note in the verdict: `win-sim` shut; odd
+   windows whose drop changes no bucket (no note): `win-sim` open.
+4. A statement slower per run with no plan change: `volume-cost` open.
+5. Quiet window with no finding card: all six rows as marked, as before.

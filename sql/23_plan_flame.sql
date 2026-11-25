@@ -110,6 +110,7 @@ DECLARE
     v_st        st_tab;
     v_nst       PLS_INTEGER := 0;
     v_mode      VARCHAR2(3);                    -- 'chg' | 'top' | NULL
+    v_news      VARCHAR2(2000);                 -- plan 040 follow-up: the changed statements, as sql:<id> tokens
     v_cur_valid VARCHAR2(1) := 'N';
     v_cur_skip  VARCHAR2(200);
     v_n_prior   PLS_INTEGER := 0;
@@ -1734,7 +1735,18 @@ BEGIN
         END LOOP;
         jw(']}');
 
-        DBMS_OUTPUT.PUT_LINE(lib_ls('plan-flame', v_ls));
+        -- plan 040 follow-up: the row starts open only for a plan change; the
+        -- chrome shuts it when every changed statement has a plan-change card
+        v_news := NULL;
+        IF v_mode = 'chg' THEN
+            FOR i IN 1 .. v_nst LOOP
+                IF NVL(LENGTH(v_news), 0) < 1800 THEN
+                    v_news := TRIM(v_news || ' sql:' || v_st(i).sql_id);
+                END IF;
+            END LOOP;
+        END IF;
+        DBMS_OUTPUT.PUT_LINE(lib_ls('plan-flame', v_ls)
+            || CASE WHEN v_news IS NOT NULL THEN lib_news('plan-flame', v_news) END);
         DBMS_OUTPUT.PUT_LINE('</section>');
         DBMS_OUTPUT.PUT_LINE('<script>window.AWR_DATA=window.AWR_DATA||{};window.AWR_DATA.planflame=');
         put_clob_chunked(v_json);

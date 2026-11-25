@@ -490,6 +490,8 @@ def emit(w) -> str:
             i = next(k for k, (t, _) in enumerate(L) if t.startswith('<script>(function(){var d=document,s=d.getElementById("base-src")'))
             assert L[i][1]
             out.append(L[i][0])
+            if nodd > 0:
+                out.append(h.lib_news('win-sim', 'note:hn-base'))
         out.append('</section>')
     out.append(chrome.lib_script('js_winsim.plsql'))
     out.append('<!-- AWR-SECTION: 26_window_similarity END -->')

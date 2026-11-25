@@ -32,7 +32,12 @@ release bumps `awr_version`).
   card already names (the top statement, the wait classes that moved), or
   when the report has no finding card; otherwise they start shut and open on
   a click or a link (the demo's Summary is about 2,800 px shorter at 1440
-  px). The page also carries one `<script type="application/json"
+  px). Follow-up: Who added the load, Plan shape, Window similarity and
+  Volume vs unit cost follow the same rule (their news is the Who row on the
+  DB time card, the plan-change card, the verdict's Baseline check note, the
+  plan-change card of the statement slower per run), so the demo's Summary is
+  about 6,700 px shorter again (19,640 px to 12,934 px at 1440 px).
+  The page also carries one `<script type="application/json"
   id="awr-findings">` block (schema 1): the report's identity and window
   settings, the card counts and one object per finding card (lead metric,
   unit, current / mean / sd, n, z, impact in AAS, share of the DB-time

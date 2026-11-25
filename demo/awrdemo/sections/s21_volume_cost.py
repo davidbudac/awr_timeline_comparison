@@ -199,7 +199,7 @@ def _labels(its):
 
 
 def _tally(its):
-    t = dict(up=0, m=0, sl=0, b=0, dn=0, pl=0, nw=0, z=0, nb=0, tot=0.0, bm=None, bs=None)
+    t = dict(up=0, m=0, sl=0, b=0, dn=0, pl=0, nw=0, z=0, nb=0, tot=0.0, bm=None, bs=None, news=[])
     for r in its:
         st = state_of(r)
         if st == "P":
@@ -229,6 +229,8 @@ def _tally(its):
                     t["bs"] = i
             else:
                 t["b"] += 1
+            if c != "m":
+                t["news"].append(r["nm"])
     return t
 
 
@@ -343,6 +345,7 @@ def emit(w) -> str:
                      + " normal time waited: " + parts + ".")
 
     open_ = ""
+    news = []
     if cur_valid != "Y":
         ls = "Current window skipped: nothing to compare"
     elif nprior == 0:
@@ -367,12 +370,16 @@ def emit(w) -> str:
                   + pl(te["up"], "wait event costs", "wait events cost") + " more")
         if ts["sl"] > 0 or ts["b"] > 0:
             open_ = " lopen"
+        # plan 040 follow-up: the statements slower per run; an event slower per wait is news no card carries
+        news = ["sql:" + nm for nm in ts["news"]]
+        if news and te["sl"] + te["b"] > 0:
+            news.append("event:slower")
     mode = "ev" if ts["pl"] == 0 and te["pl"] > 0 else "sql"
 
     out.append('<section id="volume-cost" class="vw in-s in-a lib' + open_
                + '" style="--os:11" data-mode="' + mode + '"><h2>Volume vs unit cost'
                '<small class="h2sub">Ran more often, or each run got slower?</small></h2>')
-    out.append(h.lib_ls("volume-cost", ls))
+    out.append(h.lib_ls("volume-cost", ls) + (h.lib_news("volume-cost", " ".join(news)) if open_ and news else ""))
     if cur_valid != "Y":
         out.append('<p class="note">The Current window was skipped ('
                    + esc(cur_win.skip_reason or "no valid snapshots") + '), so there is nothing to place.</p>')

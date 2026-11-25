@@ -1181,13 +1181,17 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  vis.sort(function(a,b){ return a.offsetTop-b.offsetTop; });');
     DBMS_OUTPUT.PUT_LINE('  if(vis.length){ vis[0].classList.add("lib-first"); vis[vis.length-1].classList.add("lib-last"); }');
     DBMS_OUTPUT.PUT_LINE('}');
-    -- plan 040: a row that starts open (Top SQL, Foreground waits) shuts when
+    -- plan 040 (+ follow-up): a row that starts open and carries data-news (Top SQL,
+    -- Foreground waits, Who, Plan shape, Window similarity, Volume vs unit cost) shuts when
     -- everything its status line is about (data-news, set by lib_news in
     -- sql/lib/band_glyph.plsql) is already on a finding or plan-change card.
     -- Runs once, here, before the first libViews(); a reader's later click,
     -- reveal() and goTo() are untouched; no finding card = the rows stay as
     -- they were marked.  "sql:<id>" = the plan-change card f-plan-<id> or a
-    -- card link whose target ends in -<id>; "card:<id>" = that finding card.
+    -- card link whose target ends in -<id>; "card:<id>" = that finding card;
+    -- "who:<id>" = the DB time card's Who row for that value (29); "note:<class>"
+    -- = that note in the verdict's #narrative-slot (26's hn-base); any other
+    -- kind is never on a card (the row stays open).
     DBMS_OUTPUT.PUT_LINE('function libNews(){');
     DBMS_OUTPUT.PUT_LINE('  if(!doc.querySelector("#findings article.fc:not(.chg)")) return;');
     DBMS_OUTPUT.PUT_LINE('  function shown(e){ return !!e&&!closest(e,"[hidden]"); }');
@@ -1198,6 +1202,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('      var as=doc.querySelectorAll("article.fc a[href]");');
     DBMS_OUTPUT.PUT_LINE('      for(var j=0;j<as.length;j++){ var h=as[j].getAttribute("href"); if(h.slice(-v.length-1)==="-"+v&&shown(as[j])) return true; }');
     DBMS_OUTPUT.PUT_LINE('    }');
+    DBMS_OUTPUT.PUT_LINE('    if(k==="who"){ e=doc.querySelector("#f-dbtime .ev-who[data-who=\""+v+"\"]"); return shown(e); }');
+    DBMS_OUTPUT.PUT_LINE('    if(k==="note"){ e=doc.querySelector("#narrative-slot li."+v); return shown(e); }');
     DBMS_OUTPUT.PUT_LINE('    return false;');
     DBMS_OUTPUT.PUT_LINE('  }');
     DBMS_OUTPUT.PUT_LINE('  libSecs().forEach(function(sec){');

@@ -640,6 +640,11 @@ BEGIN
             DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,x=d.getElementById("who-ev-src");if(!x)return;'
                 || 'var c=d.getElementById("f-dbtime"),dl=c?c.querySelector("dl.ev"):null;'
                 || 'if(dl){while(x.firstChild)dl.appendChild(x.firstChild);}x.parentNode.removeChild(x);})();</script>');
+            -- plan 040 follow-up: the row opens for a value carrying half of the rise;
+            -- when the card's Who row names such a value, the chrome shuts the row
+            IF v_open AND x_rise(v_i) >= c_dom * v_trise THEN
+                DBMS_OUTPUT.PUT_LINE(lib_news('who', 'who:' || x_id(v_i)));
+            END IF;
         END IF;
     END IF;
 END;

@@ -35,7 +35,7 @@ import re
 from datetime import datetime
 
 from awrdemo import chrome, helpers
-from awrdemo.helpers import anchor_id, ent, esc, fmt_int, fmt_num, json_escape, lib_ls, ora_round
+from awrdemo.helpers import anchor_id, ent, esc, fmt_int, fmt_num, json_escape, lib_ls, lib_news, ora_round
 from awrdemo.model import ORDER_LOOKUP_BAD_PLAN, ORDER_LOOKUP_SQL
 
 C_MAX_ST = 3
@@ -991,7 +991,10 @@ def emit(w) -> str:
         out.append('</div>')
     js.append(']}')
 
-    out.append(lib_ls('plan-flame', ls))
+    # plan 040 follow-up: the row starts open only for a plan change; the chrome
+    # shuts it when every changed statement has a plan-change card
+    news = ' '.join('sql:' + st[0] for st in sts) if mode == 'chg' else ''
+    out.append(lib_ls('plan-flame', ls) + (lib_news('plan-flame', news) if news else ''))
     out.append('</section>')
     out.append('<script>window.AWR_DATA=window.AWR_DATA||{};window.AWR_DATA.planflame=')
     out.extend(_put_clob_chunked(''.join(js)))

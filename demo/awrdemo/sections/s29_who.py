@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 import re
 
-from awrdemo.helpers import anchor_id, anchor_uniq, band_span, band_z, delta_span, ent, esc, fmt_num, lib_ls, nbu, num6, ora_round
+from awrdemo.helpers import anchor_id, anchor_uniq, band_span, band_z, delta_span, ent, esc, fmt_num, lib_ls, lib_news, nbu, num6, ora_round
 
 C_KEEP, C_SHOW = 40, 8
 C_DOM, C_CARD, C_MIN = 0.5, 0.3, 0.1
@@ -412,6 +412,10 @@ def emit(w) -> str:
             out.append('<script>(function(){var d=document,x=d.getElementById("who-ev-src");if(!x)return;'
                        'var c=d.getElementById("f-dbtime"),dl=c?c.querySelector("dl.ev"):null;'
                        'if(dl){while(x.firstChild)dl.appendChild(x.firstChild);}x.parentNode.removeChild(x);})();</script>')
+            # plan 040 follow-up: the row opens for a value carrying half of the rise;
+            # when the card's Who row names such a value, the chrome shuts the row
+            if opn and pick["rise"] >= C_DOM * trise:
+                out.append(lib_news("who", "who:" + pick["id"]))
 
     out.append("<!-- AWR-SECTION: 29_who END -->")
     return "\n".join(out) + "\n"
