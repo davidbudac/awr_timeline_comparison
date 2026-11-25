@@ -3336,15 +3336,20 @@ the demo.
   PDB1: that is how plan 047's empty table was found (now read through
   `CDB_*`). Inside pdb1 the verdict is "Too little history" on `main` too.
   verify_report OK on eight final reports (runs 1, 3, 4, both designs, 7,
-  8, pdb1). Two do not pass and neither is round 3's (same result with
-  `main`'s `js_timeline` swapped into the page): the resize window fails
-  "click-to-keep highlight" (a second click on the same band point does
-  not clear it), and on the 169-window report the script times out in the
-  Activity legend step (line 682), so its later blocks never run there --
-  a targeted script found no page error and whole `pk` / `cpu` payloads.
+  8, pdb1). Two do not pass; the same result with `main`'s `js_timeline`
+  swapped into the page says neither is round 3's (dbmint dropped before
+  `main` reports of those windows could be pulled): the resize window
+  fails "click-to-keep highlight" (a second click on the same band point
+  does not clear it), and on the 169-window report the script times out
+  in the Activity legend step (line 682; unexplained, the same clicks run
+  alone take 0.6 s each), so its later blocks never run there -- a
+  targeted script found no page error and whole `pk` / `cpu` payloads.
   Never exercised: RAC, a migrated PDB, a closed PDB, a common user without
-  `CONTAINER_DATA`, a real ORA-01031, a CPU-bound host, the "Objects" card
-  row placed on a card, `STATS_UPDATE_TIME` in a non-UTC database.
+  `CONTAINER_DATA`, a real ORA-01031, a CPU-bound host, three card rows
+  PLACED on a card (23's "Objects", 30's "Memory", 02's time-model row:
+  each was built in a window that had no matching card; 29's "Who" and
+  30's "Host" rows were seen placed), `STATS_UPDATE_TIME` in a non-UTC
+  database.
 - **Visualization sections 20-28 + fleet co-anomaly grid verified on dbmint
   (2026-11-19):** each section by its owner on its own runs (numbers
   checked against an independent read-only query: DB time, ASH per plan

@@ -42,9 +42,12 @@ still held `main`, md5-checked, and served as the comparison).
   rows, gets and reads per window: all equal to the digit shown.
 - **Extra windows for branches the matrix did not reach:**
   `"2026-11-09 12:00" 1 8` (six resize operations in the Current window, the
-  buffer cache at 48 MB against a 152 MB mean: `#hm-rs`, the "Memory" row
-  on the I/O card, the time model's "Parse" row on the DB time card and
-  section 26's "Baseline check" note all fired);
+  buffer cache at 48 MB against a 152 MB mean: `#hm-rs` and section 26's
+  "Baseline check" note shown; the "Memory" row for the I/O card and the
+  time model's "Parse" row for the DB time card were BUILT, but that
+  window has no finding card, so neither was placed -- on run 1 the "Who"
+  and "Host" rows, moved by the same kind of script, do sit on the DB time
+  card);
   `"2026-11-09 19:15" 1 4` (the begin snapshot lacks `over allocation
   count`: the cell is empty, not 0, and the sentence leaves it out);
   run 3's window inside pdb1 (`ORACLE_PDB_SID=pdb1`: objects visible through
@@ -58,16 +61,21 @@ still held `main`, md5-checked, and served as the comparison).
 - **Pages (`demo/verify_report.js`, one Chrome at a time, final reports):**
   OK on runs 1, 3, 4, 5 (quiet and dashboard), 7, 8 and the pdb1 run. Before
   the fix commit the one failure everywhere was block 6e's tolerance (fix 5
-  below). Two reports do not pass, neither because of round 3 -- both
-  reproduce unchanged with `main`'s `js_timeline` script swapped into the
-  same page:
+  below). Two reports do not pass. Both reproduce unchanged with `main`'s
+  `js_timeline` script swapped into the same page, which is the whole
+  evidence that they are not round 3's: dbmint dropped off the network
+  before `main` reports of those two windows could be pulled (a `main`
+  run of `"2026-11-09 12:00" 1 8`, and `main6`, are still owed):
   - `"2026-11-09 12:00" 1 8` fails "click-to-keep highlight" (the second
     click on the same band point does not clear the highlight; the ruler's
     Esc check then fails as a consequence). An older behaviour on that
     window's data, worth its own look.
   - the 169-window report: the script times out in the Activity legend step
-    (`verify_report.js` line 682; the same clicks work when run alone), so
-    blocks 6c-6i never run there. A targeted script instead: no page error
+    (`verify_report.js` line 682, re-showing the event series), so blocks
+    6c-6i never run there. Unexplained: a script doing only the hide and
+    the restore loop clicks through in about 0.6 s a click, with either
+    client script; the stall needs the steps before it. A targeted script
+    instead: no page error
     in the three views, `ashx.pk` / `ashx.cpu` with 169 entries of which 86
     known = the 86 valid windows, 169-row peak / CPU tables, 176-column time
     model and host tables, the findings JSON parses (1 card, n = 85).
@@ -109,11 +117,19 @@ marker names the section that failed.
 
 ## 0. Copy the branch
 
+Into a SIBLING directory, so `~/awr_timeline_comparison` keeps `main` as the
+comparison (check its md5 against `git show main:<file>` first):
+
 ```sh
 rsync -az --exclude=.git --exclude=reports --exclude=.claude --exclude=.codex \
-  --exclude=fleet.conf ./ oracle@dbmint:~/awr_timeline_comparison/ -e 'ssh -p 2200'
-# never --delete: it wipes the untracked fleet.conf on dbmint
+  --exclude=fleet.conf ./ oracle@dbmint:~/awr_timeline_comparison_r3/ -e 'ssh -p 2200'
+# never --delete; then on dbmint: cp -p ~/awr_timeline_comparison/fleet.conf ~/awr_timeline_comparison_r3/
 ```
+
+The 2026-11-25 pass left on dbmint: `~/awr_timeline_comparison_r3/` (the
+branch at `3ea5315` and `reports/r3/`), `~/awr_timeline_comparison/reports/r3/`
+plus one fleet folder (the `main` runs), `/tmp/r3*` (runner scripts) and
+`~/r3*.out`.
 
 ## 1. Preflight: names (read-only, a few seconds, before any report)
 
@@ -248,9 +264,11 @@ which number to confirm with an independent read-only query.
   rows), a migrated PDB (several DBIDs), several PDBs (the PDB dimension of
   section 29, undo per container), a database that is CPU-bound or
   swapping, a real ORA-01031.
-- The demo exercises one "Reads as" rule of plan 044 ("works harder for the
-  same result") and none of plan 046's `lopen` rules; the others ran only
-  on scratch variants of the demo.
+- Plan 044's "Reads as" rules seen on dbmint: `harder`, `data`, `mixed`,
+  `often`, `slowio`; `ap`, `cc`, `cl` and `cold` ran only on scratch
+  variants of the demo. Plan 046's open rules seen on dbmint: swap, PGA
+  over-allocation, host resized, a resize operation, a shrunken buffer
+  cache; host busy at 90% and the undo errors only on scratch variants.
 - The demo pages were regenerated on macOS only: Docker was not running, so
   the Linux `gen_demo_report.py --check` (CLAUDE.md "Demo report") did not
   run. CI does it on push.
