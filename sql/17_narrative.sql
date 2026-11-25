@@ -18,10 +18,12 @@
 --   one-line notes         -> #narrative-slot (ul.hnotes); a note whose
 --                             story a Summary card already tells carries
 --                             data-dup=<card id> and is dropped when that
---                             card exists; 26's "Baseline check" note
---                             (li.hn-base, plan 038) is already there
---                             (26 runs first) and stays LAST: the notes
---                             are inserted before it
+--                             card exists; 00's "Thin baseline" note
+--                             (li.hn-conf, plan 039, static in the slot)
+--                             and 26's "Baseline check" note (li.hn-base,
+--                             plan 038, 26 runs first) are already there
+--                             and stay LAST: the notes are inserted before
+--                             the first of them
 --   ", most of it on SEG"  -> the verdict's .vx[data-vx="io"] clause
 --   Segment / File / SQL   -> evidence rows at the top of the Physical I/O
 --                             card (07, id f-io; data-ev-for)
@@ -1199,7 +1201,7 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('while(bs.firstChild)b.appendChild(bs.firstChild);b.hidden=false;}');
         DBMS_OUTPUT.PUT_LINE('var pl=d.getElementById("pills"),nn=pl?pl.querySelector(".pl-normal"):null;');
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll(".pills-src > li").forEach(function(li){if(pl)pl.insertBefore(li,nn);});');
-        DBMS_OUTPUT.PUT_LINE('var ns=d.getElementById("narrative-slot"),bn=ns?ns.querySelector("li.hn-base"):null;');
+        DBMS_OUTPUT.PUT_LINE('var ns=d.getElementById("narrative-slot"),bn=ns?ns.querySelector("li.hn-conf,li.hn-base"):null;');
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll(".notes-src > li").forEach(function(li){var u=li.getAttribute("data-dup");if(u&&d.getElementById(u))return;if(ns){ns.insertBefore(li,bn);ns.hidden=false;}});');
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-vx-src]").forEach(function(x){var t=d.querySelector(''.vx[data-vx="''+x.getAttribute("data-vx-src")+''"]'');if(t){t.innerHTML=x.innerHTML;t.hidden=false;}});');
         DBMS_OUTPUT.PUT_LINE('src.querySelectorAll("[data-ev-for]").forEach(function(x){var c=d.getElementById(x.getAttribute("data-ev-for")),dl=c?c.querySelector("dl.ev"):null;if(!dl)return;var f=dl.firstChild;while(x.firstChild)dl.insertBefore(x.firstChild,f);});');

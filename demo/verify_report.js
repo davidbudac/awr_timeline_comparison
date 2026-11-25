@@ -1623,6 +1623,64 @@ const LABEL_BAND = () => {
       // 2026-11-21: a smaller rise shows no chip and no share)
       out.impChips = fc.every(c => { const v = parseFloat(c.getAttribute('data-impact')), ch = c.querySelector('.fc-k .fc-imp');
         return v >= 0.01 ? !!ch : !ch && (c.getAttribute('data-share') || '') === ''; });
+      // plan 039: every finding card says its n (the lead row's number of prior
+      // windows, read from the same row in the Findings tables) as data-n on
+      // .nrm and .fc-sum, with the two rates for that n in the .nrm title;
+      // the qualifier is generated content, so no text read of the card
+      // ("normal ..." in Copy summary, the dashboard) carries it; the verdict
+      // note li.hn-conf is there exactly when the report has 3 to 5 valid
+      // prior windows, with the rates of that n (the known values below come
+      // from tools/gen_baseline_conf.py, an independent integration)
+      const CONF = { 3: [22.54, 12.17], 4: [17.16, 7.48], 5: [14.19, 5.20], 6: [12.33, 3.90], 8: [10.13, 2.55],
+                     12: [8.09, 1.49], 26: [6.09, 0.69], 52: [5.30, 0.45] };
+      const near = (got, want) => Math.abs(got - want) <= (want >= 10 ? 0.5 : want >= 1 ? 0.051 : 0.0051);
+      const nOfRow = id => {
+        const tr = document.getElementById(id); if (!tr || tr.tagName !== 'TR') return null;
+        const tb = tr.closest('table'); if (!tb) return null;
+        const hs = [...tb.querySelectorAll('thead th')].map(h => h.textContent.trim());
+        const ix = hs.indexOf('n'); if (ix < 0) return null;
+        const v = parseInt((tr.children[ix] || {}).textContent, 10); return isNaN(v) ? null : v;
+      };
+      out.confCards = fc.map(c => {
+        const nrm = c.querySelector('.big .nrm'), sum = c.querySelector('.fc-k .fc-sum');
+        if (!nrm) return null; // the dashboard hides nothing: the element stays in the DOM
+        const bad = [], n = parseInt(nrm.getAttribute('data-n'), 10);
+        if (!(n >= 3)) bad.push('no data-n');
+        if (!sum || parseInt(sum.getAttribute('data-n'), 10) !== n) bad.push('fc-sum n differs');
+        if (/\bn\s*=\s*\d/.test(nrm.textContent) || (sum && /\bn\s*=\s*\d/.test(sum.textContent))) bad.push('n leaked into the text');
+        const t = nrm.getAttribute('title') || '', m = t.match(/Scored against (\d+) prior windows.*about ([0-9.]+)% of the time \(1 in (\d+)\).*about ([0-9.]+)% \(1 in (\d+)\)/);
+        if (!m) bad.push('title lacks the two rates');
+        else {
+          if (+m[1] !== n) bad.push('title n ' + m[1]);
+          if (CONF[n] && (!near(+m[2], CONF[n][0]) || !near(+m[4], CONF[n][1]))) bad.push('rates ' + m[2] + '/' + m[4] + ' for n ' + n);
+          // "1 in k" is the exact quotient rounded once; the printed percent is itself rounded
+          const tk = pp => 0.51 + 100 * (pp >= 10 ? 0.5 : pp >= 1 ? 0.051 : 0.0051) / (pp * pp) + (100 / pp >= 100 ? 0.05 * 100 / pp : 0);
+          if (Math.abs(+m[3] - 100 / +m[2]) > tk(+m[2]) || Math.abs(+m[5] - 100 / +m[4]) > tk(+m[4])) bad.push('1 in k');
+        }
+        const a = c.querySelector('h3 a.ent'), rn = a ? nOfRow((a.getAttribute('href') || '').slice(1)) : null;
+        if (rn !== null && rn !== n) bad.push('row n ' + rn + ' vs ' + n);
+        return bad.length ? c.id + ': ' + bad.join(', ') : 'ok';
+      }).filter(x => x !== null);
+      const nv = (window.AWR_WIN ? window.AWR_WIN.w : []).filter(x => x.o > 0 && x.v === 'Y').length;
+      const cn = document.querySelector('#narrative-slot li.hn-conf'), hero = document.getElementById('verdict');
+      const usable = !!hero && !/Too little history/.test(hero.textContent);
+      out.confNote = (() => {
+        const want = usable && nv >= 3 && nv <= 5;
+        if (!want) return cn ? 'FAIL a note with ' + nv + ' valid prior windows' : 'ok (none for ' + nv + ')';
+        if (!cn) return 'FAIL no note for ' + nv + ' valid prior windows';
+        const t = cn.textContent, bad = [], ns = cn.parentNode;
+        if (+cn.getAttribute('data-n') !== nv) bad.push('data-n');
+        if (t.indexOf(nv + ' prior windows') < 0) bad.push('text lacks n');
+        const k1 = Math.round(100 / CONF[nv][0]), k2 = Math.round(100 / CONF[nv][1]);
+        if (t.indexOf('about 1 time in ' + k1 + ' ') < 0 || t.indexOf('about 1 in ' + k2 + ' ') < 0) bad.push('rates (want 1 in ' + k1 + ' / 1 in ' + k2 + ')');
+        if (ns.id !== 'narrative-slot' || ns.hidden) bad.push('slot hidden');
+        const lis = [...ns.children], bi = lis.indexOf(cn), bn = lis.findIndex(x => x.classList.contains('hn-base'));
+        if (bn >= 0 && bi > bn) bad.push('after the baseline check');
+        if (lis.some((x, i) => i > bi && !x.classList.contains('hn-base'))) bad.push('not after the other notes');
+        const a = cn.querySelector('a.go');
+        if (!a || a.getAttribute('href') !== '#about' || !document.getElementById('about')) bad.push('link');
+        return bad.length ? 'FAIL ' + bad.join('; ') : 'ok (n = ' + nv + ')';
+      })();
       // R4: a flagged card whose time measure rose less than 0.01 AAS (a
       // background-only wait class: scored on all sessions, its foreground
       // time flat) has no chip and no share, sits after every tier-1 card,
@@ -1793,6 +1851,8 @@ const LABEL_BAND = () => {
     if (!p4.impAttrs) fail('finding cards: data-impact / data-share missing');
     if (!p4.impOrder) fail('finding cards: not ordered by impact');
     if (!p4.impChips) fail('finding cards: impact chip missing, or shown below 0.01 AAS');
+    if (p4.confCards.some(x => x !== 'ok')) fail('finding cards: the n qualifier ' + p4.confCards.filter(x => x !== 'ok').join('; '));
+    if (/^FAIL/.test(p4.confNote)) fail('verdict: thin-baseline note ' + p4.confNote);
     if (p4.lowImp.some(x => / FAIL /.test(x))) fail('finding cards under 0.01 AAS: ' + p4.lowImp.join('; '));
     if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && !p4.lowImp.includes('f-wait-queueing'))
       fail('demo: expected the flagged background-only Queueing waits card (impact under 0.01 AAS), got ' + JSON.stringify(p4.lowImp));

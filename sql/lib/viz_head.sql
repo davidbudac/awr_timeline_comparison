@@ -18,3 +18,4 @@
 @@sql/lib/css_winsim.plsql
 @@sql/lib/css_instmap.plsql
 @@sql/lib/css_reldelta.plsql
+@@sql/lib/css_baseconf.plsql

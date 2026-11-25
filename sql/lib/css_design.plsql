@@ -350,6 +350,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.drow .dcur{align-self:stretch;display:flex;align-items:center;justify-content:flex-end;padding:0 10px;margin-right:-10px;background:var(--acc-band);font-weight:600}');
     DBMS_OUTPUT.PUT_LINE('.dft .dfh .dcur{padding:0 10px;margin-right:-10px}');
     DBMS_OUTPUT.PUT_LINE('.drow .dnr{color:var(--muted)}');
+    DBMS_OUTPUT.PUT_LINE('.drow .dnr[data-n]::after{content:"n = " attr(data-n);display:block;font-size:11px;color:var(--ink-4)}');
     DBMS_OUTPUT.PUT_LINE('.drow .dbd .bd{min-width:0}');
     DBMS_OUTPUT.PUT_LINE('.drow .dtr{display:flex;justify-content:center}');
     DBMS_OUTPUT.PUT_LINE('.drow .dtr svg.dwb{width:92px;height:18px}');

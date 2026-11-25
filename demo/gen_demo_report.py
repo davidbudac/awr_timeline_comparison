@@ -77,9 +77,10 @@ SECTIONS = [
 ]
 
 
-# sql/lib/viz_head.sql's @@ order: the stylesheets of sections 20-28
+# sql/lib/viz_head.sql's @@ order: the stylesheets of sections 20-28, then
+# plan 039's card qualifier
 VIZ_CSS = ("loadresp", "volcost", "waithist", "planflame", "blocking",
-           "onset", "winsim", "instmap", "reldelta")
+           "onset", "winsim", "instmap", "reldelta", "baseconf")
 
 
 def marker(tag: str, which: str) -> str:

@@ -295,7 +295,14 @@ def _hero(w, st) -> list[str]:
         + ' normal</a></li>'
         + ('<li><a href="#s-normal"><b>' + str(ni) + '</b> improved</a></li>' if ni > 0 else '')
         + '</ul>')
-    put('<ul class="hnotes" id="narrative-slot" hidden></ul>')
+    # plan 039: the "Thin baseline" note for 3 to 5 valid prior windows (a static
+    # li in the slot, 00_params.sql; 17 / 26 add their notes around it)
+    n_valid = sum(1 for x in w.windows if x.week_offset > 0 and x.valid)
+    conf = h.conf_verdict(n_valid) if st["n_usable"] > 0 else None
+    if conf is not None:
+        put('<ul class="hnotes" id="narrative-slot">' + conf + '</ul>')
+    else:
+        put('<ul class="hnotes" id="narrative-slot" hidden></ul>')
     target_end_s, requested_s = ts_sec(w.target_end), ts_sec(w.target_end_requested)
     if requested_s != target_end_s:
         put('<p class="snapnote">Requested end ' + esc(requested_s[:16])

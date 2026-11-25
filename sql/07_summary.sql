@@ -146,6 +146,7 @@ DECLARE
     @@sql/lib/anchor_id.plsql
     @@sql/lib/finding_cards.plsql
     @@sql/lib/off_label.plsql
+    @@sql/lib/baseline_conf.plsql
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
     @@sql/lib/finding_hints.plsql
@@ -591,7 +592,9 @@ DECLARE
                                  || CASE WHEN v_shr < 1 THEN '&lt;1' ELSE TO_CHAR(v_shr) END
                                  || '% of the DB-time rise' END
                     || '</span>' END
-            || '<span class="fc-sum">' || fv(r.cur_val * v_s, v_u) || ' &middot; normal '
+            || '<span class="fc-sum"' || CASE WHEN conf_mod(r.n_prior) IS NOT NULL
+                    THEN ' data-n="' || TO_CHAR(TRUNC(r.n_prior)) || '"' END || '>'
+            || fv(r.cur_val * v_s, v_u) || ' &middot; normal '
             || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u) || '</span>'
             || '<span class="fc-tags"></span></div>'
             || '<div class="fc-band" title="z ' || band_ztxt(r.z_score) || ' against the prior normal">'
@@ -601,7 +604,11 @@ DECLARE
         DBMS_OUTPUT.PUT_LINE('<div class="fc-b"><div class="fc-main">'
             || '<div class="big"><span class="v">' || fv_num(r.cur_val * v_s, v_u) || '</span>'
             || '<span class="u">' || fv_unit(r.cur_val * v_s, v_u) || '</span>'
-            || '<span class="nrm" title="prior mean ' || fv(r.prior_mean * v_s, v_u) || '">normal '
+            || '<span class="nrm"' || CASE WHEN conf_mod(r.n_prior) IS NOT NULL
+                    THEN ' data-n="' || TO_CHAR(TRUNC(r.n_prior)) || '"' END
+            || ' title="prior mean ' || fv(r.prior_mean * v_s, v_u)
+            || CASE WHEN conf_mod(r.n_prior) IS NOT NULL THEN '. ' || conf_title(r.n_prior) END
+            || '">normal '
             || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u) || '</span></div>');
         DBMS_OUTPUT.PUT_LINE('<div class="wg bare hov qf"' || wg_attr || '>' || wg_flags(TRUE)
             || wg_bars(r.wv, v_s, r.prior_mean, r.prior_sd, v_sev) || wg_dates(TRUE) || '</div></div>');

@@ -101,6 +101,7 @@ DECLARE
     @@sql/lib/anchor_id.plsql
     @@sql/lib/finding_cards.plsql
     @@sql/lib/off_label.plsql
+    @@sql/lib/baseline_conf.plsql
     @@sql/lib/wingrid.plsql
 
     -- a card's impact (AAS its time measure added above its prior mean), NULL when none
@@ -1481,7 +1482,18 @@ BEGIN
         || CASE WHEN v_n_impr > 0
                 THEN '<li><a href="#s-normal"><b>' || v_n_impr || '</b> improved</a></li>' END
         || '</ul>');
-    DBMS_OUTPUT.PUT_LINE('<ul class="hnotes" id="narrative-slot" hidden></ul>');
+    -- Plan 039: with only 3 to 5 valid prior windows the verdict says how
+    -- often an unchanged metric still looks changed (sql/lib/baseline_conf
+    -- .plsql).  A static li in the slot: the slot is then not hidden (17's
+    -- and 26's relocation scripts add their notes around it: 17's before
+    -- the first li.hn-conf / li.hn-base, 26's baseline check last).  A note,
+    -- never a finding: no count, pill or severity.  Fewer than 3 valid
+    -- priors has its own "too little history" hero above (no note).
+    IF v_n_usable > 0 AND conf_verdict(v_n_valid) IS NOT NULL THEN
+        DBMS_OUTPUT.PUT_LINE('<ul class="hnotes" id="narrative-slot">' || conf_verdict(v_n_valid) || '</ul>');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('<ul class="hnotes" id="narrative-slot" hidden></ul>');
+    END IF;
     -- Only when the requested target_end had no snapshot within the 15-min
     -- edge guard does the resolving SELECT (awr_trend.sql) snap it back to
     -- the last actual snapshot -- flagged here so it is never silent.

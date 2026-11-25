@@ -1,0 +1,4 @@
+/* css_baseconf: plan 039, the "n = 4" qualifier on the finding cards (single-DB only).
+   data-n is generated content, never text: Copy summary and the dashboard read the
+   .nrm / .fc-sum text, and the title on .nrm gives the two rates for that n. */
+.fc .big .nrm[data-n]::after,.fc .fc-sum[data-n]::after{content:" \00b7  n = " attr(data-n);color:var(--ink-4);font-size:12px}

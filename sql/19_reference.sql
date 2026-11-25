@@ -221,7 +221,11 @@ BEGIN
         || ' move is material: |&Delta;| &ge; 10% and, for wait classes, &ge; 2% of the Current window&rsquo;s wait time (otherwise normal, tagged <i>immaterial</i>). Each metric has its own direction and floors'
         || ' (<code>sql/lib/metric_policy.plsql</code>): a move in the good direction is <b>improved</b>, an informational counter is <b>noted</b> &mdash; neither is highlighted or counted. Twins (the SYSMETRIC'
         || ' rate of a SYSSTAT counter, the CPU half of the CPU/wait ratio) are shown muted and never counted. Fewer than 3 prior values: &Delta; only. |z| beyond &plusmn;99 is capped for display;'
-        || ' &sigma;&approx;0 flags a baseline that barely moved.</dd>');
+        || ' &sigma;&approx;0 flags a baseline that barely moved. <b>How far to trust a finding:</b> &mu; and &sigma; come from only n prior values, so a metric that did not'
+        || ' change still lands outside &plusmn;2&sigma; more often than the 4.6% people expect, and outside &plusmn;3&sigma; more often than 0.3%. For a normally distributed metric the nominal rates'
+        || ' (&plusmn;2&sigma; / &plusmn;3&sigma;) are 22% / 12% at n = 3, 17% / 7.5% at 4, 12% / 3.9% at 6, 10% / 2.5% at 8, 8.1% / 1.5% at 12, 6.1% / 0.7% at 26 and 5.3% / 0.5% at 52'
+        || ' (two-sided, per metric, before the size floors and the direction rule; a metric that only counts when it rises is about half). With 3 to 5 prior windows read a lone moderate'
+        || ' finding as a hint: the verdict then says so, and every finding card names its n (hover it for the two rates).</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Band and &Delta;</dt><dd>The band plots Current in &sigma; from the prior mean on one scale for the whole page (&minus;4 to +8&sigma;). Normal range = &mu; &plusmn; 2&sigma; in the row&rsquo;s'
         || ' own unit. &Delta; vs mean reads &times;n at twice the mean or more, else a percentage.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Windows</dt><dd>One window per step back from <b>~target_end_resolved</b>, ~win_label wide, every ~step_label. A window is skipped (and dropped from every baseline) when a snapshot is missing,'

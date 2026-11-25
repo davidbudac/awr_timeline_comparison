@@ -16,6 +16,16 @@ release bumps `awr_version`).
   section 26's own numbers (how many metrics change, how the finding count
   moves) and a link to it. A note, not a finding: no count, pill or severity
   changes.
+- **Confidence by window count** (plan 039): the report now says how far a
+  finding can be trusted when it was scored against few prior windows. With 3
+  to 5 valid prior windows the verdict's notes carry one "Thin baseline" line
+  (a metric that did not change still lands outside +/-2 sigma about 1 time in
+  6 and outside +/-3 sigma about 1 in 13 at n = 4, before the size floors);
+  every finding card shows a small "n = 4" after its normal range, its title
+  giving the two rates for that n; the About note "Scoring" lists them for n =
+  3 to 52. The rates are Student's t for a normal, unchanged metric
+  (`sql/lib/baseline_conf.plsql`, checked by `tools/gen_baseline_conf.py
+  --check`). Display only: thresholds, flags, counts and order are unchanged.
 - **Docs / tooling:** the demo generator is now platform-independent (every
   libm-derived value is rounded to 10 significant digits, digit counts are
   exact), so the demo pages regenerate byte for byte on Linux as on macOS

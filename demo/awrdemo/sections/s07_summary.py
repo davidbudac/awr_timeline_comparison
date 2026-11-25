@@ -447,7 +447,8 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g,
                      else " &middot; " + ("&lt;1" if v_shr < 1 else str(v_shr)) + "% of the DB-time rise" if v_shr is not None
                      else "")
                   + '</span>' if h.imp_on(v_imp) else '')
-               + '<span class="fc-sum">' + h.fv(h._mul(r.cur, s), u) + ' &middot; normal '
+               + '<span class="fc-sum"' + (' data-n="' + str(int(r.n)) + '"' if h.conf_mod(r.n) is not None else '') + '>'
+               + h.fv(h._mul(r.cur, s), u) + ' &middot; normal '
                + h.fv_range(h._mul(r.mu, s), h._mul(r.sd, s), u) + '</span>'
                '<span class="fc-tags"></span></div>'
                '<div class="fc-band" title="z ' + h.band_ztxt(r.z) + ' against the prior normal">'
@@ -456,7 +457,9 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g,
     out.append('<div class="fc-b"><div class="fc-main">'
                '<div class="big"><span class="v">' + h.fv_num(h._mul(r.cur, s), u) + '</span>'
                '<span class="u">' + h.fv_unit(h._mul(r.cur, s), u) + '</span>'
-               '<span class="nrm" title="prior mean ' + h.fv(h._mul(r.mu, s), u) + '">normal '
+               '<span class="nrm"' + (' data-n="' + str(int(r.n)) + '"' if h.conf_mod(r.n) is not None else '')
+               + ' title="prior mean ' + h.fv(h._mul(r.mu, s), u)
+               + ('. ' + h.conf_title(r.n) if h.conf_mod(r.n) is not None else '') + '">normal '
                + h.fv_range(h._mul(r.mu, s), h._mul(r.sd, s), u) + '</span></div>')
     out.append('<div class="wg bare hov qf"' + h.wg_attr(w) + '>' + h.wg_flags(True)
                + h.wg_bars(w, r.vals, s, r.mu, r.sd, sev) + h.wg_dates(w, True) + '</div></div>')
