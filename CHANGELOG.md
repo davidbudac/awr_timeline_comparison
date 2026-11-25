@@ -63,6 +63,19 @@ release bumps `awr_version`).
   window" (`cpu_count` from `DBA_HIST_PARAMETER`, DB CPU from the time
   model, ASH on CPU, the difference), also `AWR_DATA.ashx.cpu`; an About
   note explains what `cpu_count` is and is not. Unscored.
+- **Time model: what the sessions were doing** (plan 043): Load profile
+  gets a second table from `DBA_HIST_SYS_TIME_MODEL`, in average active
+  sessions: DB time with DB CPU, SQL execution, parse time (hard parse,
+  failed parse), PL/SQL, Java, connection management, sequence loads and
+  rebinds under it, then background elapsed / CPU time, indented as the
+  Oracle Reference's tree (the rows overlap: never add them up), with a
+  "% of DB time" column, the normal range, a plain delta and the trend.
+  Rows that are zero in every window are named under the table. When a
+  row other than DB CPU and SQL execution rose by at least 0.01 AAS and 5%
+  of the DB-time rise, the DB time card gets one evidence row for it
+  ("Parse: hard parse elapsed time 1.4 AAS, was 0.2; 13% of the DB-time
+  rise") and the library row says so. An About note explains the tree.
+  Unscored.
 - **Docs / tooling:** the demo generator is now platform-independent (every
   libm-derived value is rounded to 10 significant digits, digit counts are
   exact), so the demo pages regenerate byte for byte on Linux as on macOS

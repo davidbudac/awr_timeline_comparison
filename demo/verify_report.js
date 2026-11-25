@@ -2272,6 +2272,112 @@ const LABEL_BAND = () => {
     await page.close();
   }
 
+  // ---- 6f. plan 043: the time model table (section 02).  (a) the table
+  // #load-time-model: unscored (no crit / warn row, no scored band or
+  // delta), data-nocount + data-nosort, every data-par names a row of the
+  // table, shown in All sections.  (b) the tree: every foreground row's
+  // Current <= DB time's and every child <= its parent (the demo exactly;
+  // a real database flushes the counters apart, up to 5 s, so there only a
+  // count is logged).  (c) the DB time card's time model row exists exactly
+  // when the card exists and a row meets the rule (largest rise at least
+  // 0.01 AAS and 5% of a positive DB-time rise, DB CPU and SQL execution
+  // left out); it cites a row of the table with that row's numbers and
+  // share, sits before the Peak / CPU rows, and its source block is gone.
+  // (d) JS off: the table is shown, the source block stays hidden.  A
+  // report without the table skips every part.
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file);
+    const r43 = await page.evaluate((isDemo) => {
+      const out = {}, bad = [];
+      const tb = document.getElementById('load-time-model');
+      if (!tb) { out.tbl = 'no #load-time-model (report before plan 043)'; return out; }
+      const rows = [...tb.tBodies[0].rows], by = {};
+      rows.forEach(r => { by[r.id] = r; });
+      if (!tb.hasAttribute('data-nocount') || !tb.hasAttribute('data-nosort')) bad.push('lacks data-nocount / data-nosort');
+      if (tb.querySelector('tr.crit, tr.warn, .bd.s-large, .bd.s-moderate, .bd.s-improved, .d:not(.s-plain):not(.s-na), .badge.warn'))
+        bad.push('carries a severity');
+      if (!tb.getClientRects().length) bad.push('not shown in All sections');
+      const dbt = by['tm-db-time'];
+      if (!dbt) bad.push('no DB time row');
+      rows.forEach(r => { const p = r.getAttribute('data-par'); if (p && !by[p]) bad.push(r.id + ': parent ' + p + ' not in the table'); });
+      out.tbl = bad.length ? 'FAIL ' + bad.join('; ') : 'ok (' + rows.length + ' rows)';
+      if (!dbt) return out;
+      // (b) the tree, Current column
+      const num = (r, a) => { const v = r.getAttribute(a); return v === '' || v == null ? null : +v; };
+      const viol = [], D = num(dbt, 'data-cur');
+      rows.forEach(r => {
+        const c = num(r, 'data-cur'); if (c == null) return;
+        if (r.getAttribute('data-fg') === 'F' && D != null && c > D + 1e-6) viol.push(r.id + ' ' + c + ' > DB time ' + D);
+        const p = by[r.getAttribute('data-par')], pc = p ? num(p, 'data-cur') : null;
+        if (pc != null && c > pc + 1e-6) viol.push(r.id + ' ' + c + ' > parent ' + pc);
+      });
+      out.tree = !viol.length ? 'ok' : (isDemo ? 'FAIL ' : 'info ') + viol.length + ': ' + viol.slice(0, 4).join('; ');
+      // (c) the card row against the rule
+      const card = document.getElementById('f-dbtime'), ev = document.querySelector('#f-dbtime .evr.ev-tm');
+      const Dm = num(dbt, 'data-mu'), rise = D != null && Dm != null ? D - Dm : null;
+      const rr = r => { const c = num(r, 'data-cur'), m = num(r, 'data-mu');
+        if (r.getAttribute('data-fg') !== 'F' || +r.getAttribute('data-lvl') < 2 || c == null || m == null) return null;
+        if (r.id === 'tm-db-cpu' || r.id === 'tm-sql-execute-elapsed-time') return null; return c - m; };
+      const ok = v => v != null && rise != null && rise > 0 && v >= 0.01 && v >= 0.05 * rise;
+      let best = null, top = null;
+      rows.forEach(r => { const v = rr(r); if (ok(v) && (best == null || v > best)) { best = v; top = r; } });
+      const near = rows.some(r => { const v = rr(r); return v != null && rise != null && (Math.abs(v - 0.01) < 1e-5 || Math.abs(v - 0.05 * rise) < 1e-5); });
+      if (document.getElementById('tm-ev-src')) out.card = 'FAIL the source block #tm-ev-src is still in the page';
+      else if (!card) out.card = ev ? 'FAIL a time model row without the card' : 'none (no DB time card)';
+      else if (!ev) out.card = top && !near ? 'FAIL no card row, but ' + top.id + ' rose ' + best.toFixed(4) + ' AAS of ' + rise.toFixed(4) : 'none (no row meets the rule)';
+      else {
+        const b2 = [], t = by[ev.getAttribute('data-tm')];
+        if (!t) b2.push('cites ' + ev.getAttribute('data-tm') + ', not a row of the table');
+        else {
+          if (ev.getAttribute('data-cur') !== t.getAttribute('data-cur') || ev.getAttribute('data-mu') !== t.getAttribute('data-mu')) b2.push('numbers differ from the row');
+          const v = rr(t);
+          if (!ok(v) && !near) b2.push('the cited row does not meet the rule (' + v + ')');
+          // the cited row is the largest rise, or a descendant carrying 80% of it
+          let a = t, chain = false;
+          while (a) { if (a === top) { chain = true; break; } a = by[a.getAttribute('data-par')]; }
+          if (top && !chain && !near) b2.push('not the largest rise (' + top.id + ') nor under it');
+          // each step down from the top row: a child meeting the rule and carrying 80% of its parent's rise
+          if (top && chain) for (let c = t; c && c !== top; c = by[c.getAttribute('data-par')]) {
+            const p = by[c.getAttribute('data-par')], vc = rr(c), vp = p ? rr(p) : null;
+            if (!near && (!ok(vc) || vp == null || vc < 0.8 * vp - 1e-6)) { b2.push(c.id + ' carries under 80% of ' + (p && p.id) + '’s rise'); break; }
+          }
+          const a2 = ev.querySelector('a.ent');
+          if (!a2 || a2.getAttribute('href') !== '#' + t.id) b2.push('link ' + (a2 && a2.getAttribute('href')));
+          const de = (ev.querySelector('.de') || {}).textContent || '', s = Math.round(v / rise * 100);
+          const want = s > 100 ? 'more than the whole DB-time rise' : s < 1 ? 'under 1% of the DB-time rise' : s + '% of the DB-time rise';
+          if (de.indexOf(want) < 0) b2.push('share text "' + de + '", want "' + want + '"');
+        }
+        if (ev.querySelector('.bd.s-large, .bd.s-moderate, .bd.s-improved, .d:not(.s-plain):not(.s-na)')) b2.push('carries a severity');
+        const all = [...card.querySelectorAll('dl.ev > .evr')], i = all.indexOf(ev);
+        if (all.some((x, j) => j < i && x.matches('.ev-pk, .ev-cpu'))) b2.push('after the Peak / CPU rows');
+        const ls = document.querySelector('#load .ls');
+        if (ls && t && ls.textContent.indexOf('time model: ' + t.querySelector('.tm-n').textContent) < 0) b2.push('library row text "' + ls.textContent + '"');
+        out.card = b2.length ? 'FAIL ' + b2.join('; ') : 'ok (' + ev.textContent.replace(/\s+/g, ' ').trim().slice(0, 110) + ')';
+      }
+      return out;
+    }, isDemo);
+    // (d) JS off
+    if (/^ok/.test(r43.tbl || '')) {
+      const ctx = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 1000 } });
+      const p2 = await ctx.newPage();
+      await p2.goto('file://' + file, { waitUntil: 'load' });
+      r43.nojs = await p2.evaluate(() => {
+        const t = document.getElementById('load-time-model'), s = document.getElementById('tm-ev-src');
+        if (!t || !t.getClientRects().length) return 'FAIL the table is not shown with JS off';
+        if (s && s.getClientRects().length) return 'FAIL the card row source shows with JS off';
+        return 'ok (' + t.tBodies[0].rows.length + ' rows' + (s ? ', source hidden' : '') + ')';
+      });
+      await ctx.close();
+    }
+    console.log('plan 043', JSON.stringify(r43));
+    for (const k of ['tbl', 'tree', 'card', 'nojs']) if (/^FAIL/.test(r43[k] || '')) fail('time model (plan 043) ' + k + ': ' + r43[k]);
+    if (isDemo && (!/^ok/.test(r43.tbl || '') || r43.tree !== 'ok' || !/^ok/.test(r43.nojs || '')))
+      fail('demo: every plan 043 part should run: ' + JSON.stringify(r43));
+    if (errors.length) fail('plan 043: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
   // ---- 7. the design (quiet / dashboard): the shared pieces, then the
   // dashboard's KPI cards, findings table, Activity tabs and palette
   if (DESIGN !== 'classic') {

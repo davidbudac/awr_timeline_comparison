@@ -1,0 +1,21 @@
+/* css_timemodel: plan 043, section 02's time model table (single-DB only).
+   One indent step per depth in the tree (data-lvl 1-5), background rows set
+   off by a rule; the notes in the muted text colour. */
+#load .tm-intro,#load .tm-drop,#load .tm-none{color:var(--muted);font-size:12.5px;max-width:110ch;margin:var(--s2) 0}
+#load-time-model tr.tm-l2>td:first-child{padding-left:26px}
+#load-time-model tr.tm-l3>td:first-child{padding-left:42px}
+#load-time-model tr.tm-l4>td:first-child{padding-left:58px}
+#load-time-model tr.tm-l5>td:first-child{padding-left:74px}
+#load-time-model tr:not(.tm-l1)>td:first-child .tm-n::before{content:"\2514\00a0";color:var(--ink-4)}
+#load-time-model tr.tm-l1 .tm-n{font-weight:600}
+#load-time-model tr.tm-bg1>td{border-top:2px solid var(--line)}
+#load-time-model td.tm-pct{color:var(--muted)}
+/* phones: the first column is sticky in the scrolling table, so it must stay
+   narrow enough to leave the numbers room -- wrap the names, smaller steps */
+@media (max-width:600px){
+#load-time-model tbody td:first-child{white-space:normal;min-width:120px;max-width:150px;overflow-wrap:anywhere}
+#load-time-model tr.tm-l2>td:first-child{padding-left:16px}
+#load-time-model tr.tm-l3>td:first-child{padding-left:22px}
+#load-time-model tr.tm-l4>td:first-child{padding-left:28px}
+#load-time-model tr.tm-l5>td:first-child{padding-left:34px}
+}

@@ -59,7 +59,7 @@ sql/
 │                        --   the Activity charts' skeleton (#activity, every view; under the
 │                        --   verdict in Summary), Timeline skeleton (#timeline / #tl)
 ├── 01_windows.sql       -- aligned windows, snap pairs, restart guard
-├── 02_load_profile.sql  -- SYSSTAT deltas (per template)
+├── 02_load_profile.sql  -- SYSSTAT deltas (per template) + the time model table (fixed list, plan 043)
 ├── 03_sysmetric.sql     -- SYSMETRIC_SUMMARY averages (per template)
 ├── 04_waits_fg.sql      -- foreground waits + wait-class rollup (per template)
 ├── 05_waits_bg.sql      -- background waits (BG_EVENT_SUMMARY, per template)
@@ -2475,6 +2475,39 @@ priors' mean). The empty-table colspan is `weeks_back + 10`. The twin's peaks
 are synthetic (`s03.peak_series`: seeded uniform spread, >= the average,
 percentages capped at 100), built in s03 itself: `_pivot.row_cells` is
 shared with 02 / 13 and stays unchanged.
+
+### Time model table (plan 043, section 02)
+02's second table `table#load-time-model.tm-tbl[data-nocount][data-nosort]`
+(after `#load-profile`, under `h3#load-tm-h`; same anonymous block) reads
+`DBA_HIST_SYS_TIME_MODEL` directly -- a fixed inline list `tm_targets`
+(template-independent, NOT a `*_targets.sql`, not in `metric_policy`; lint
+26 is untouched: it is no SYSSTAT read) of the Reference's two trees in tree
+order (under DB time: DB CPU, sql execute, parse with hard parse, sharing
+criteria and bind mismatch nested below it, then failed parse and out of
+shared memory, PL/SQL x3, Java, connection management, sequence load,
+repeated bind; then background elapsed, background cpu, RMAN). Names match `LOWER(stat_name) =
+LOWER(t.nm)` (the 19c page spells `sql execute` / `background cpu` both
+ways). AAS = us / 1e6 / `MAX(dur_sec)`. **Never stack or sum these rows**:
+children overlap and need not add up. Rows: `id=anchor_id('tm', name)`,
+`tr.tm-l<depth>` (indent, `css_timemodel.css` via `viz_head.sql`; under
+600 px the sticky first cell wraps at 150 px, else it hides every number),
+`.tm-bg` / `.tm-bg1`, `data-lvl` / `data-fg` (F|B) / `data-par` (parent id)
+/ `data-cur` / `data-mu`; unscored band cells (NULL bucket, plain). A row
+zero in every window -> `p.tm-drop` "Not shown, zero in every window";
+a row with no AWR row at all -> "Not found in ..." (a misspelt name must
+not vanish silently). DB time card row: the foreground level >= 2 row
+other than DB CPU / SQL execution with the largest rise, at least 0.01
+AAS and 5% of a positive DB-time rise (then, wording only, a child
+carrying at least 80% of it); hidden `div#tm-ev-src` > `div.evr.ev-tm[data-tm][data-cur]
+[data-mu][data-rise]` + a one-line script APPENDING it to `#f-dbtime
+dl.ev` during parsing (07 runs first; js_timeline's Peak / CPU rows come
+after at DOMContentLoaded) and removing the source; the library row gets
+"; time model: <name> +x AAS". The demo's Current rise is SQL execution,
+so the demo has NO card row (honest; tested on scratch variants).
+verify_report block 6f (tree containment fails only on the demo: a real
+DB flushes the counters up to 5 s apart). Twin `s02.tm_rows` /
+`_tm_window` derives the rows from the model (only DB time / CPU /
+background are modelled).
 
 ### Severity classes (keep aligned with `_style.sql`)
 `large`→`crit`, `moderate`→`warn`, `typical`→`ok`, `improved`→`imp`,

@@ -282,6 +282,13 @@ BEGIN
         || ' A usage overview, not a health check: the band is drawn but never scored.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Load profile</dt><dd><code>DBA_HIST_SYSSTAT</code> (end &minus; begin snapshot) &divide; window seconds, summed across instances. <b>Trend</b>: per-window values as bars, oldest to Current, over the shaded normal range.'
         || ' <b>Current</b> cell bar = value &divide; row maximum.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Time model</dt><dd>The second table of Load profile: <code>DBA_HIST_SYS_TIME_MODEL</code> (end &minus; begin snapshot, microseconds) &divide; window seconds'
+        || ' = average active sessions, summed across instances. Two trees, as the Oracle Reference draws them: under <b>DB time</b> sit DB CPU, SQL execution, parsing'
+        || ' (hard parse inside parse time, failed parses beside it), PL/SQL, Java, connection management, sequence loads and rebinds; <b>background elapsed time</b>'
+        || ' (with background CPU and RMAN under it) is <b>outside</b> DB time. A child is contained in its parent, but the children overlap and need not add up'
+        || ' to it: never add these rows up or read them as shares of a whole (the &ldquo;% of DB time&rdquo; column is each row on its own). A row that is zero in'
+        || ' every window is left out and named under the table. Not scored. The DB time card cites the row (other than DB CPU and SQL execution) whose time rose'
+        || ' most, when it rose by at least 0.01 AAS and 5 % of the DB-time rise.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>System metrics</dt><dd><code>DBA_HIST_SYSMETRIC_SUMMARY</code> averaged over each window. Rates and counters: SUM across instances per snapshot, then AVG; ratios and latencies: AVG across'
         || ' instances per snapshot, then AVG. Units per metric name.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Peaks</dt><dd>Every other number is an average over the window, so a five-minute stall reads as a mild rise. Two peaks sit next to it, neither scored nor counted:'
