@@ -1,7 +1,10 @@
 # Implementation Plans
 
-Two rounds so far:
+Three rounds so far:
 
+- **Round 3 (plans 038-047)**: analysis accuracy and new data for the DBA,
+  planned 2026-11-25 against commit `5f18597` (`main`), on branch
+  `feature/dba-analysis-round-3`. See the next section.
 - **Round 2 (plans 020-037)**: report UX/UI, planned 2026-11-17 against
   commit `ee23e49`, re-checked 2026-11-19 against `5594f2c` (origin/main,
   after the report designs and sections 20-28 landed). All DONE except
@@ -18,6 +21,50 @@ honor its STOP conditions, and update your row when done.
 Every plan is self-contained: it quotes the code it changes, lists the
 exact commands, and says what "done" means. No plan needs this index, the
 audit, or another plan's text to be executed.
+
+## Round 3: analysis accuracy and new data (planned 2026-11-25, commit `5f18597`)
+
+Source: a review of the demo report (2026-11-25) asking what a DBA cannot
+answer from it today. The owner accepted ten of eleven suggestions (the
+prefilled `awrddrpt` / `ashrpt` hand-off commands were declined). Branch
+`feature/dba-analysis-round-3`, one local commit per plan, nothing pushed.
+
+**Rules for every plan in this round**
+
+- **Explain only.** No plan adds a finding, a count, a pill or a severity,
+  and none changes `policy_bucket` or any threshold. New numbers are
+  informational: unscored, plain delta (like section 13).
+- **No database was available.** Nothing here has run on Oracle. Every new
+  column / statistic name was to be checked against the 19c Database
+  Reference; the runbook `plans/round3-dbmint-runbook.md` lists what to
+  `DESC` and run first. Do not write "verified on dbmint" for this round
+  until that run happened.
+- **Optional grants** (any view the README's required list lacks): dynamic
+  SQL inside a handler for ORA-00942 / ORA-01031 that renders a "needs
+  SELECT on" note; lint check 35 is extended to each new view name.
+- Each plan re-ports its demo twin, regenerates the three demo pages and
+  leaves `tools/check.sh` green.
+
+### Execution order & status
+
+| Plan | Title | Review item | Views read | Status |
+|---|---|---|---|---|
+| 038 | The verdict says when the baseline has an odd window (from section 26) | 2 | none new | TODO |
+| 039 | Confidence note by window count on the verdict and the cards (display only) | 1 | none new | TODO |
+| 040 | Shorter Summary: library rows open only with news; machine-readable findings block (JSON) | 11 | none new | TODO |
+| 041 | Peak inside the window next to the average (SYSMETRIC max, 1-minute ASH peak) | 3 | granted (`DBA_HIST_SYSMETRIC_SUMMARY.MAXVAL`, ASH) | TODO |
+| 042 | CPU capacity: a CPU-count line on the Activity charts and "x of n CPUs" | 4 | granted (`DBA_HIST_PARAMETER` `cpu_count`) | TODO |
+| 043 | Time model breakdown (parse, hard parse, PL/SQL, connection management ...) | 7 | granted (`DBA_HIST_SYS_TIME_MODEL`) | TODO |
+| 044 | Per-statement time split and rows per execution in Top SQL's per-SQL detail | 5 | granted (`DBA_HIST_SQLSTAT` wait deltas, rows processed) | TODO |
+| 045 | "Who added the load": extra active sessions by service / module / machine / user / program / PDB (new section 29) | 6 | granted (ASH) | TODO |
+| 046 | Host, memory, undo and temp (new section 30) | 4, 8 | optional (`DBA_HIST_OSSTAT`, `DBA_HIST_PGASTAT`, SGA resize, `DBA_HIST_UNDOSTAT`); ASH for temp / PGA per statement | TODO |
+| 047 | Object changes around a plan change (statistics gathered, last DDL, index status) | 9 | optional (dictionary views, current container, current state) | TODO |
+
+**Not implemented, owner decision needed:** thresholds that widen for a
+small baseline (review item 1, "proper fix"). It changes which metrics are
+flagged, so it touches `policy_bucket`, every consumer, the demo's policy
+parser, `js_winsim`'s `bucket()`, the fleet and `docs/metric_policy.html`.
+Plan 039 only states the confidence.
 
 ## Round 2: report UX/UI (planned 2026-11-17, commit `ee23e49`)
 
