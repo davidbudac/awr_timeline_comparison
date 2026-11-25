@@ -176,6 +176,7 @@ DECLARE
     v_tl_gw            NUMBER;
     v_tl_gl            VARCHAR2(400);
     v_ls               VARCHAR2(2000);    -- the evidence library's row text
+    v_news             VARCHAR2(40);      -- plan 040: the statement that row text is about
     v_panel_on         BOOLEAN := FALSE;  -- the first emitted tabpanel is the open one
     v_chg_seen         BOOLEAN := FALSE;  -- the CHANGE dimension had rows
 
@@ -1099,6 +1100,7 @@ BEGIN
             END IF;
             -- the library row text: the Current top statement by elapsed
             IF v_tl_n = 1 THEN
+                IF s.cur_rnk IS NOT NULL THEN v_news := 'sql:' || s.sql_id; END IF;
                 v_ls := CASE WHEN s.cur_rnk IS NULL
                              THEN 'no statement in the Current top ' || v_top_n
                              ELSE '<code>' || s.sql_id || '</code> #' || s.cur_rnk || ' by elapsed'
@@ -2533,7 +2535,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('})();</script>');
 
     -- the evidence library's row text (Summary view)
-    DBMS_OUTPUT.PUT_LINE(lib_ls('topsql', NVL(v_ls, 'no SQL captured in the compared windows')) || '</section>');
+    DBMS_OUTPUT.PUT_LINE(lib_ls('topsql', NVL(v_ls, 'no SQL captured in the compared windows'))
+        || lib_news('topsql', v_news) || '</section>');
 END;
 /
 

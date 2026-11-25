@@ -258,7 +258,8 @@ BEGIN
         || ' statement by blocks read changed between the same two plans in <code>DBA_HIST_SQLSTAT</code> (its most executed prior plan, its Current plan reading'
         || ' the most blocks). <b>Configuration</b>: every changed parameter as a step line.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Evidence library</dt><dd>Summary view: every other section as one row with a one-line status and its counts; open a row to read the section in place.'
-        || ' All sections shows every section in full.</dd>');
+        || ' Top SQL and Foreground waits start open only when their status names something that no finding or plan-change card already names (the top statement, the wait classes that moved),'
+        || ' or when the report has no finding card; otherwise they start shut and open with a click or a link. All sections shows every section in full.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>ASH timeline</dt><dd><code>dba_hist_active_sess_history</code> over the full span, one scan: hourly (or the cadence) in All sections; in the Activity charts (under'
         || ' the verdict in Summary, at the top of the other views) on the same grid (coarser only past 10000 buckets), by wait class and by wait event (the 14 events with the most samples, ties by name,'
         || ' the rest summed as Other events), plus each compared window&rsquo;s own values (samples &divide; 360 &divide; window hours; overlapping windows each count a shared sample)'

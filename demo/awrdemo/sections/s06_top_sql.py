@@ -637,6 +637,7 @@ def emit(w) -> str:
     cur_dim = None
     tl_rows = []
     ls = None
+    news = ""                       # plan 040: the statement the row text is about
     panel_on = False
 
     def close_dim(nxt):
@@ -844,6 +845,7 @@ def emit(w) -> str:
                 if s["cur_rnk"] is None:
                     ls = "no statement in the Current top " + str(top_n)
                 else:
+                    news = "sql:" + sid
                     ls = ("<code>" + sid + "</code> #" + str(s["cur_rnk"]) + " by elapsed"
                           + ((", " + h.delta_span(h.tl_val(w, csv, 0), mu, None, "Y")) if mu is not None else "")
                           + (", new plan" if plan_flip else
@@ -1142,6 +1144,7 @@ def emit(w) -> str:
     block, pos = _slice(L, "<script>(function(){", "})();</script>", pos)   # hash nav
     o.extend(block)
 
-    put(h.lib_ls("topsql", ls or "no SQL captured in the compared windows") + "</section>")
+    put(h.lib_ls("topsql", ls or "no SQL captured in the compared windows")
+        + h.lib_news("topsql", news) + "</section>")
     put("<!-- AWR-SECTION: 06_top_sql END -->")
     return "\n".join(o)

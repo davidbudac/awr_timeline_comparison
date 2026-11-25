@@ -382,6 +382,23 @@ def lib_ls(sec_id: str, html: str) -> str:
             + html.replace("\\", "\\\\").replace('"', '\\"') + '");</script>')
 
 
+def json_num(v, dec: int = 6) -> str:
+    """07_summary.sql json_num: a number as a JSON token ('.' decimal, no
+    exponent, trailing zeros dropped, null for None / 1e15 and up)."""
+    if v is None or abs(v) >= 1e15:
+        return "null"
+    t = to_char_fixed(ora_round(v, dec), 6)
+    if "." in t:
+        t = t.rstrip("0").rstrip(".")
+    return t
+
+
+def lib_news(sec_id: str, news: str) -> str:
+    """sql/lib/band_glyph.plsql lib_news: what the library row's status is about (plan 040)."""
+    return ('<script>(function(){var s=document.getElementById("' + sec_id
+            + '");if(s)s.setAttribute("data-news","' + news + '");})();</script>')
+
+
 def range_txt(mu, sd) -> str:
     if mu is None or sd is None:
         return "&mdash;"

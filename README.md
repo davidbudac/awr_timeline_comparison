@@ -437,7 +437,10 @@ name where it is thick enough over the name's width (up to six a chart).
    one line of counts (open when there is no finding).
 6. **Evidence library** — every other section as one line with its
    status ("4 of 14 events moved", "none differ"); click a line to open the
-   section in place. Top SQL and Foreground waits open by default.
+   section in place. Top SQL and Foreground waits start open only when
+   their status names something no finding or plan-change card already
+   names (the top statement, the wait classes that moved), or when the
+   report has no finding card; otherwise they start shut.
 
 **The band glyph** is how every scored row reads: *Normal range* (prior
 mean ± 2σ) · a dot on a −4σ … +8σ axis over the shaded ±1σ / ±2σ zones
@@ -447,6 +450,29 @@ mean, else a percentage). The **Trend** cells of the tables are 13-bar
 micro strips: one bar per window from zero, the normal zone shaded, Current
 last. The **Reading the charts** guide and **About this report** at the end
 of every view explain each chart and every method note.
+
+### Machine-readable result
+
+The finding cards are also in the page as data: one
+`<script type="application/json" id="awr-findings">` block (schema 1; it is
+never executed and nothing in the page reads it), so a scheduler or ticket
+system need not scrape the HTML. It holds `report` (version, run_id,
+db_name, dbid, host, target_end, win_hours, step_hours, weeks_back,
+valid_prior_windows, template, inst_num), `counts` (cards, large, moderate)
+and `cards`, one object per finding card in card order: `id` (the card's
+element id), `group`, `label`, `severity` (large / moderate), `domain`,
+`metric` (the lead metric), `unit`, `current`, `mean`, `sd` (the lead
+metric in its base unit: AAS, B/s, /s, ms, %), `n` (prior windows scored),
+`z`, `impact_aas` and `share_pct` (the card's time added above normal and
+its share of the DB-time rise; `null` when the card shows none). No finding
+card, or too little history, gives `"cards":[]`. Plan-change and
+configuration cards are not in schema 1.
+
+```sh
+sed -n '/id="awr-findings"/,/<\/script>/p' reports/awr_trend_X.html \
+  | sed -e 's/^<script[^>]*>//' -e 's/<\/script>$//' \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["counts"]); [print(c["id"], c["severity"], c["impact_aas"]) for c in d["cards"]]'
+```
 
 ### Timeline
 

@@ -101,7 +101,7 @@ sql/
     ├── score_cells.plsql     -- score_z / score_bucket / score_cells (04/05/18; score_cells =
     │                         --   band_cells(... score_bucket ...) -- include metric_policy first)
     ├── band_glyph.plsql      -- v1.6.0 band glyph: band_z/band_span/delta_span/range_txt/
-    │                         --   band_head/band_cells + lib_ls (evidence-library row text)
+    │                         --   band_head/band_cells + lib_ls (evidence-library row text) + lib_news (data-news, plan 040)
     ├── anchor_id.plsql       -- v1.6.0 anchor_id(kind, name) / finding_anchor(domain, name) /
     │                         --   file_anchor(path) / param_anchor(name) / anchor_uniq (dedupe)
     ├── load_pairs_cte.sql    -- the template-driven LOAD read (00/02/07): SYSSTAT + time-model
@@ -357,6 +357,7 @@ lint check 18 bans the old hooks). Spec: `design/report_mock_d_hybrid.html`
 | `section#s-changes[hidden]` | 07 (`#changes-slot`) | 18's plan cards then 12's config card move in and unhide it |
 | `section#s-normal` | 07 | "Checked and normal" `.ngrid` (≤18 `.nr`), "Moved, too small to matter", "Improved"; body folded in `details.calm-fold` (summary line: the three counts; closed when there is a finding card); `reveal()` opens it for `#s-normal` (plan 032) |
 | Evidence library `#s-lib` + `section.lib` | 07 heading, sections | see below |
+| Machine-readable result `script#awr-findings` | 07 | data, plan 040: see "Findings JSON" below |
 
 **Folded cards (plan 025):** every card but the first one that is not DB
 time (the verdict and its DB-time breakdown carry DB time; DB time alone
@@ -381,6 +382,36 @@ from the card it explains); `_style.sql`'s print block hides `.fc-tg` and, for J
 closed fold's body through `::details-content`; the dashboard opens its
 closed lead rows (`printRows()` in js_design) and prints every findings tab
 (`css_design.css`, `@media print`). verify_report phase 4 `print`.
+
+**Findings JSON (plan 040, `script#awr-findings`).** 07 emits, right after
+the cards (also with none), `<script type="application/json"
+id="awr-findings">`: data a scheduler can read, never executed, nothing in
+the page depends on it (README "Machine-readable result" has the extraction
+example). Schema 1, one PUT_LINE for the head and one per card:
+`{"schema":1,"report":{version, run_id, db_name, dbid, host, target_end,
+win_hours, step_hours, weeks_back, valid_prior_windows, template,
+inst_num},"counts":{cards, large, moderate},"cards":[{id, group, label,
+severity, domain, metric, unit, current, mean, sd, n, z, impact_aas,
+share_pct}]}`. The report fields are the driver's DEFINEs
+(`~awr_version ~run_id ~db_name ~dbid ~host_name ~target_end_resolved
+~win_hours ~step_hours ~weeks_back ~template_name ~inst_num`);
+`valid_prior_windows` counts the VALID prior windows of `windows_rollup`
+(its own small read of the existing CTE). A card is `emit_card`'s: `id` =
+the element id, `severity` = the lead row's bucket, `metric` = the lead
+row's raw name, `current` / `mean` / `sd` = the lead row x `metric_scale`
+in its `metric_unit` base unit (not the auto-scaled display), `z` = the
+band's z, `impact_aas` = `data-impact` (3 decimals) and `share_pct` =
+`data-share` (integer), `null` where the attribute is empty. Counts =
+`v_ncl` / `v_ncm`, the verdict pill's numbers. Plan-change / configuration
+cards (sections 18 / 12 / 17) are NOT in schema 1; the fleet and the
+server do not read it. JSON safety: strings through `json_escape` (which
+also writes `<` as `\u003c`, so the block can hold no closing script tag),
+numbers through `json_num` (07 local: `FM...0D999999` under the `.,` pin,
+RTRIM of the dot, `null` for NULL or 1e15 and up; never a bare `TO_CHAR`,
+which can read `.5`). Twin `s07_summary._findings_json` + `helpers.json_num`;
+verify_report block 6c checks the parse, the counts against the DOM and the
+verdict pill, each card's id / severity / `data-impact` / `data-share`, no
+raw `<`. Changing the schema = bump `schema`, README, twin, block 6c.
 
 **Card hints (plan 033):** a finding card may carry, right after its
 evidence list (`div.fc-b`), `div.fc-hint[data-hint="<rule>"]`: one hedged
@@ -544,15 +575,45 @@ renders as one collapsible row: chevron + `span.lt` title + one-line status
 `span.ls` + `.meta` counts; click / Enter / Space on the h2 toggles
 `.lopen` and shows the section in place (charts resized, `AWR_WG.refit`,
 `fitTables`). Order `style="--os:N"` (CSS `order:calc(10 + var(--os))`):
-Top SQL 1 (`lopen` in markup), SQL Monitor 2 (opens on an error / DOP
-downgrade on a Current top-N statement), Foreground waits 3 (open), Day
+Top SQL 1 (`lopen` in markup, see "Library rows with news" below), SQL
+Monitor 2 (opens on an error / DOP downgrade on a Current top-N statement),
+Foreground waits 3 (`lopen` in markup, same rule), Day
 profile 4, Segment I/O 5, File I/O 6, Load profile 7, System metrics 8,
 Parameters 9, then the visualization sections 10-18 (20 Load vs response
 time, 21, 22, 23, 24, 25, 26, 27, 28; see "Visualization sections").
 All-only: 01, 05, 09, 10, 11, 13 ("+ 6 more in All sections"). Row text: `lib_ls(id, html)` (`band_glyph.plsql`, twin
 `helpers.lib_ls`) emits `<script>if(window.AWR_ls)AWR_ls("id","html")</script>`;
 `window.AWR_ls` is an early 00 script (before `<main>`); 16 inlines the same
-script. A row with no `.ls` shows its `.h2sub` instead. Chrome V2
+script. A row with no `.ls` shows its `.h2sub` instead.
+
+**Library rows with news (plan 040).** One sentence: *Top SQL and
+Foreground waits start open only when their one-line status names something
+no finding or plan-change card already names (the top statement, the wait
+classes that moved), or when the report has no finding card.* (About note
+"Evidence library", twin lifts it.) Sections 04 / 06 cannot see 07's cards,
+so the browser decides: each row is still marked `lopen` in the markup and
+ends with `lib_ls(...) || lib_news(id, tokens)` (`band_glyph.plsql`, twin
+`helpers.lib_news`; an inline script setting `data-news` on the section).
+Tokens, space separated, all ids: `sql:<sql_id>` (06: the Current top
+statement by elapsed, none when no statement is in the Current top N) and
+`card:<card id>` (04: `card_id(card_group('WAIT:' || class))` of every
+Table A event scored large / moderate). The chrome's `libNews()` (00, once,
+right before the h2 click handlers are wired, so before the first
+`libViews()` and `revealHash()`) returns when `#findings article.fc:not(.chg)`
+is empty, else drops `lopen` from a row whose tokens are ALL on a card: a
+`card:` token = that finding card exists; a `sql:` token = the plan-change
+card `f-plan-<id>` exists and is not inside a `[hidden]` ancestor, or an
+`article.fc a[href]` (shown) points at an id ending in `-<sql_id>` (`sq-`,
+`sm-`, `sql-`, `ash-card-`; `a.ent` links js_wingrid unwrapped because their
+target is missing are `span.ent-x` by then). An empty token list is on
+cards trivially (the row says nothing), so it shuts when there is a card.
+A click, `reveal()` / `goTo()` and All sections are untouched (a closed row
+opens for a link into it; All ignores `.lopen`); JS off hides nothing. The
+check runs at DOMContentLoaded (the plan cards are moved by parse-time
+scripts), so a slow parse may paint the open row for a moment. Other rows
+(SQL Monitor, the visualization sections) keep their own rules. Add a row to
+the rule = `lib_news` with its tokens; a new token kind needs a case in
+`libNews()` and verify_report block 6c. Chrome V2
 (`libSecs/libResize/libOpen/libViews`): `.lib-first/.lib-last` edges by
 visual order; role / tabindex / aria-expanded only in Summary; All sections
 ignores `.lopen`. `vhead` = heading-only section (`#s-lib`, `#s-all`).

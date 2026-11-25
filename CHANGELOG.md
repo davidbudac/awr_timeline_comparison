@@ -26,6 +26,19 @@ release bumps `awr_version`).
   3 to 52. The rates are Student's t for a normal, unchanged metric
   (`sql/lib/baseline_conf.plsql`, checked by `tools/gen_baseline_conf.py
   --check`). Display only: thresholds, flags, counts and order are unchanged.
+- **A shorter Summary, and a machine-readable result** (plan 040). The
+  Top SQL and Foreground waits rows of the evidence library start open only
+  when their one-line status names something that no finding or plan-change
+  card already names (the top statement, the wait classes that moved), or
+  when the report has no finding card; otherwise they start shut and open on
+  a click or a link (the demo's Summary is about 2,800 px shorter at 1440
+  px). The page also carries one `<script type="application/json"
+  id="awr-findings">` block (schema 1): the report's identity and window
+  settings, the card counts and one object per finding card (lead metric,
+  unit, current / mean / sd, n, z, impact in AAS, share of the DB-time
+  rise), so a scheduler or ticket system can read the result without
+  scraping HTML (README "Machine-readable result"). No finding, count or
+  score changes; plan-change and configuration cards are not in schema 1.
 - **Docs / tooling:** the demo generator is now platform-independent (every
   libm-derived value is rounded to 10 significant digits, digit counts are
   exact), so the demo pages regenerate byte for byte on Linux as on macOS

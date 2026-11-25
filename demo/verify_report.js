@@ -90,6 +90,12 @@
  *     no release marker shows its reason note and its all-priors table
  *     instead of the empty split view; the demo opens on a split); the
  *     Trend cells are micro strips (svg.mw), no line left;
+ *     plan 040 (block 6c): Top SQL / Foreground waits (data-news) start
+ *     shut exactly when everything their status names is on a card (open
+ *     when there is no finding card); a click / a jump opens them; and
+ *     script#awr-findings parses, with one entry per finding card equal to
+ *     the card's id / severity / data-impact / data-share, counts equal to
+ *     the verdict pill, no raw "<";
  *     v1.7: cards ordered by data-impact (rises of 0.01 AAS or more
  *     first, largest first), chip present, Summary z capped
  *     at 10; R4: a flagged card whose time measure rose under 0.01 AAS
@@ -1948,6 +1954,115 @@ const LABEL_BAND = () => {
       const lh = await page.$('#s-lib');
       if (lh) { await lh.scrollIntoViewIfNeeded(); await page.waitForTimeout(200); await page.screenshot({ path: path.join(shots, 'library.png') }); }
     }
+    await page.close();
+  }
+
+  // ---- 6c. plan 040: (a) a library row that starts open (Top SQL,
+  // Foreground waits: they carry data-news) is closed exactly when what its
+  // status line is about is already on a finding / plan-change card, and
+  // stays as marked when the report has no finding card; a click on its
+  // header opens it, a jump to a row inside it opens it.  (b) the
+  // machine-readable result: script#awr-findings parses, one entry per
+  // finding card, with the card's own attributes.  Read on a fresh load,
+  // before any interaction.
+  {
+    const { page, errors } = await openPage('#view=summary', 'light');
+    const r40 = await page.evaluate(async () => {
+      const vis = el => !!el && el.getClientRects().length > 0;
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const out = {};
+      const cards = [...document.querySelectorAll('#findings article.fc:not(.chg)')];
+      const rows = [...document.querySelectorAll('main > section.lib[data-news]')];
+      const href = [...document.querySelectorAll('article.fc a[href]')].map(a => a.getAttribute('href'));
+      const on = t => {
+        const i = t.indexOf(':'), k = t.slice(0, i), v = t.slice(i + 1);
+        if (k === 'card') return cards.some(c => c.id === v);
+        if (k === 'sql') return !!document.getElementById('f-plan-' + v) || href.some(h => h.endsWith('-' + v));
+        return false;
+      };
+      out.rows = rows.map(s => s.id);
+      out.rule = rows.map(s => {
+        const toks = s.getAttribute('data-news').split(' ').filter(Boolean);
+        const wantShut = cards.length > 0 && toks.every(on);
+        const open = s.classList.contains('lopen');
+        return (open === !wantShut ? 'ok ' : 'FAIL ') + s.id + ' news=[' + toks.join(',') + '] open=' + open;
+      });
+      // the two rows the rule is about carry the attribute
+      out.hasBoth = ['topsql', 'waits-fg'].every(id => !document.getElementById(id) || rows.some(s => s.id === id));
+      // a click opens a shut one and shuts it again; a jump to a row inside opens it
+      const shut = rows.find(s => !s.classList.contains('lopen'));
+      if (shut) {
+        const h = shut.querySelector('h2');
+        const body = () => [...shut.children].filter(c => c !== h && vis(c)).length;
+        const b0 = body();
+        h.click(); await wait(150);
+        const o1 = shut.classList.contains('lopen') && body() > 0 && h.getAttribute('aria-expanded') === 'true';
+        h.click(); await wait(80);
+        const row = shut.querySelector('tbody tr[id]');
+        let j = 'no row';
+        if (row) {
+          window.AWR_goTo(row, true, false); await wait(250);
+          j = shut.classList.contains('lopen') && vis(row) ? 'ok' : 'FAIL';
+          h.click(); await wait(60);
+        }
+        out.shut = (!b0 && o1 && !body() && j !== 'FAIL' ? 'ok ' : 'FAIL ') + shut.id + ' ' + JSON.stringify([b0, o1, body(), j]);
+      } else out.shut = 'none';
+      // (b) the machine-readable result
+      const el = document.getElementById('awr-findings');
+      if (!el) { out.json = 'FAIL missing'; return out; }
+      const bad = [];
+      let d = null;
+      try { d = JSON.parse(el.textContent); } catch (e) { bad.push('not JSON: ' + e.message); }
+      if (el.getAttribute('type') !== 'application/json') bad.push('type');
+      if (document.querySelectorAll('#awr-findings').length !== 1) bad.push('id not unique');
+      if (/</.test(el.textContent)) bad.push('raw < inside the block');
+      if (d) {
+        if (d.schema !== 1) bad.push('schema ' + d.schema);
+        const rp = d.report || {};
+        for (const k of ['version', 'run_id', 'db_name', 'dbid', 'host', 'target_end', 'win_hours', 'step_hours', 'weeks_back', 'valid_prior_windows', 'template', 'inst_num'])
+          if (!(k in rp)) bad.push('report.' + k);
+        const wins = (window.AWR_WIN && AWR_WIN.w) || [];
+        if (wins.length && rp.valid_prior_windows !== wins.filter(x => x.o > 0 && x.v === 'Y').length) bad.push('valid_prior_windows ' + rp.valid_prior_windows);
+        if (rp.weeks_back !== undefined && wins.length && rp.weeks_back + 1 !== wins.length) bad.push('weeks_back ' + rp.weeks_back + ' vs ' + wins.length + ' windows');
+        const cs = d.cards || [];
+        if (cs.length !== cards.length) bad.push('cards ' + cs.length + ' vs ' + cards.length + ' in the page');
+        if (d.counts.cards !== cs.length) bad.push('counts.cards');
+        const nl = cards.filter(c => c.classList.contains('f-large')).length, nm = cards.filter(c => c.classList.contains('f-moderate')).length;
+        if (d.counts.large !== nl || d.counts.moderate !== nm) bad.push('counts ' + d.counts.large + '/' + d.counts.moderate + ' vs ' + nl + '/' + nm);
+        const pill = document.querySelector('#verdict li.pl-find');
+        if (pill) {
+          const pn = +(pill.querySelector('b') || {}).textContent, ps = pill.querySelector('.pl-sev') ? pill.querySelector('.pl-sev').textContent : '';
+          const pl = (/(\d+) large/.exec(ps) || [0, 0])[1], pm = (/(\d+) moderate/.exec(ps) || [0, 0])[1];
+          if (pn !== d.counts.cards || +pl !== d.counts.large || +pm !== d.counts.moderate) bad.push('verdict pill ' + pn + '/' + pl + '/' + pm);
+        } else if (d.counts.cards !== 0) bad.push('no verdict pill but ' + d.counts.cards + ' cards');
+        cs.forEach((c, i) => {
+          const e = document.getElementById(c.id);
+          if (!e || !e.matches('#findings article.fc:not(.chg)')) { bad.push('card ' + c.id + ' not in the page'); return; }
+          if (cards[i] !== e) bad.push('card order at ' + i);
+          if (!e.classList.contains('f-' + c.severity)) bad.push(c.id + ' severity');
+          const im = e.getAttribute('data-impact'), sh = e.getAttribute('data-share');
+          if ((im === '' ? null : +im) !== c.impact_aas) bad.push(c.id + ' impact ' + im + ' vs ' + c.impact_aas);
+          if ((sh === '' ? null : +sh) !== c.share_pct) bad.push(c.id + ' share ' + sh + ' vs ' + c.share_pct);
+          for (const k of ['id', 'group', 'label', 'severity', 'domain', 'metric', 'unit', 'current', 'mean', 'sd', 'n', 'z', 'impact_aas', 'share_pct'])
+            if (!(k in c)) bad.push(c.id + '.' + k);
+          if (typeof c.current !== 'number' || typeof c.n !== 'number') bad.push(c.id + ' current / n not numbers');
+        });
+      }
+      out.json = bad.length ? 'FAIL ' + bad.join('; ') : 'ok (' + (d ? d.cards.length : 0) + ' cards, ' + (d ? d.report.valid_prior_windows : '?') + ' valid prior windows)';
+      out.nCards = cards.length;
+      return out;
+    });
+    console.log('plan 040', JSON.stringify(r40));
+    if (r40.rule.some(x => /^FAIL/.test(x))) fail('library rows: open / shut does not follow "news all on cards": ' + r40.rule.filter(x => /^FAIL/.test(x)).join('; '));
+    if (!r40.hasBoth) fail('library rows: Top SQL / Foreground waits lost their data-news');
+    if (/^FAIL/.test(r40.shut)) fail('library rows: a shut row ' + r40.shut);
+    if (/^FAIL/.test(r40.json)) fail('findings JSON: ' + r40.json);
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) {
+      if (!r40.rule.length || r40.rule.some(x => !/ open=false$/.test(x))) fail('demo: Top SQL and Foreground waits should both start shut (their news is on cards): ' + JSON.stringify(r40.rule));
+      if (r40.shut === 'none') fail('demo: no shut row to open');
+      if (r40.nCards !== 5) fail('demo: expected 5 finding cards, got ' + r40.nCards);
+    }
+    if (errors.length) fail('plan 040: ' + errors.slice(0, 5).join(' | '));
     await page.close();
   }
 

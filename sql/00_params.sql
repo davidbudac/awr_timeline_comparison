@@ -1179,6 +1179,31 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  vis.sort(function(a,b){ return a.offsetTop-b.offsetTop; });');
     DBMS_OUTPUT.PUT_LINE('  if(vis.length){ vis[0].classList.add("lib-first"); vis[vis.length-1].classList.add("lib-last"); }');
     DBMS_OUTPUT.PUT_LINE('}');
+    -- plan 040: a row that starts open (Top SQL, Foreground waits) shuts when
+    -- everything its status line is about (data-news, set by lib_news in
+    -- sql/lib/band_glyph.plsql) is already on a finding or plan-change card.
+    -- Runs once, here, before the first libViews(); a reader's later click,
+    -- reveal() and goTo() are untouched; no finding card = the rows stay as
+    -- they were marked.  "sql:<id>" = the plan-change card f-plan-<id> or a
+    -- card link whose target ends in -<id>; "card:<id>" = that finding card.
+    DBMS_OUTPUT.PUT_LINE('function libNews(){');
+    DBMS_OUTPUT.PUT_LINE('  if(!doc.querySelector("#findings article.fc:not(.chg)")) return;');
+    DBMS_OUTPUT.PUT_LINE('  function shown(e){ return !!e&&!closest(e,"[hidden]"); }');
+    DBMS_OUTPUT.PUT_LINE('  function onCard(t){');
+    DBMS_OUTPUT.PUT_LINE('    var i=t.indexOf(":"), k=t.slice(0,i), v=t.slice(i+1), e;');
+    DBMS_OUTPUT.PUT_LINE('    if(k==="card"){ e=doc.getElementById(v); return shown(e)&&!!closest(e,"article.fc"); }');
+    DBMS_OUTPUT.PUT_LINE('    if(k==="sql"){ e=doc.getElementById("f-plan-"+v); if(shown(e)) return true;');
+    DBMS_OUTPUT.PUT_LINE('      var as=doc.querySelectorAll("article.fc a[href]");');
+    DBMS_OUTPUT.PUT_LINE('      for(var j=0;j<as.length;j++){ var h=as[j].getAttribute("href"); if(h.slice(-v.length-1)==="-"+v&&shown(as[j])) return true; }');
+    DBMS_OUTPUT.PUT_LINE('    }');
+    DBMS_OUTPUT.PUT_LINE('    return false;');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  libSecs().forEach(function(sec){');
+    DBMS_OUTPUT.PUT_LINE('    var n=sec.getAttribute("data-news"); if(n===null||!sec.classList.contains("lopen")) return;');
+    DBMS_OUTPUT.PUT_LINE('    if(n.split(" ").filter(Boolean).every(onCard)) sec.classList.remove("lopen");');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('libNews();');
     DBMS_OUTPUT.PUT_LINE('libSecs().forEach(function(sec){');
     DBMS_OUTPUT.PUT_LINE('  var h=sec.querySelector("h2"); if(!h) return;');
     DBMS_OUTPUT.PUT_LINE('  var lt=doc.createElement("span"); lt.className="lt"; while(h.firstChild&&h.firstChild.nodeType===3) lt.appendChild(h.firstChild); h.insertBefore(lt,h.firstChild);');

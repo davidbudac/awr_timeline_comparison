@@ -221,3 +221,14 @@
         RETURN '<script>if(window.AWR_ls)AWR_ls("' || p_id || '","'
             || REPLACE(REPLACE(p_html, '\', '\\'), '"', '\"') || '");</script>';
     END lib_ls;
+
+    -- plan 040: what the row's one-line status is ABOUT, as a space-separated
+    -- token list on the section (data-news): "sql:<sql_id>" = a statement,
+    -- "card:<card id>" = a finding card.  The chrome (sql/00_params.sql
+    -- libNews) closes a row that starts open when every token is already
+    -- on a finding / plan-change card.  Tokens are ids ([a-z0-9-] only).
+    FUNCTION lib_news(p_id VARCHAR2, p_news VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN '<script>(function(){var s=document.getElementById("' || p_id
+            || '");if(s)s.setAttribute("data-news","' || p_news || '");})();</script>';
+    END lib_news;
