@@ -85,6 +85,16 @@ DECLARE
     v_wa_exec    t_wa_tab;      -- executions in the window
     v_wa_ela     t_wa_tab;      -- elapsed microseconds in the window
     v_wa_phv     t_wa_tab;      -- plan_hash_value (last snapshot of the window)
+    -- plan 044, the same rows' time split and work (same key): CPU and the
+    -- four wait timers in microseconds, rows processed, gets, disk reads
+    v_wa_cpu     t_wa_tab;
+    v_wa_io      t_wa_tab;
+    v_wa_cc      t_wa_tab;
+    v_wa_ap      t_wa_tab;
+    v_wa_cl      t_wa_tab;
+    v_wa_rows    t_wa_tab;
+    v_wa_gets    t_wa_tab;
+    v_wa_rds     t_wa_tab;
     -- skip reason per skipped window (key = week_offset), from windows_rollup
     TYPE t_wskip_tab IS TABLE OF VARCHAR2(200) INDEX BY PLS_INTEGER;
     v_wskip      t_wskip_tab;
@@ -473,7 +483,15 @@ BEGIN
                    SUM(NVL(s.elapsed_time_delta, 0))   AS elapsed_time_delta_us,
                    SUM(NVL(s.cpu_time_delta, 0))       AS cpu_time_delta_us,
                    SUM(NVL(s.buffer_gets_delta, 0))    AS buffer_gets_delta,
-                   SUM(NVL(s.disk_reads_delta, 0))     AS disk_reads_delta
+                   SUM(NVL(s.disk_reads_delta, 0))     AS disk_reads_delta,
+                   -- plan 044, the Per-SQL detail's "where the time went":
+                   -- the wait timers of the same rows (microseconds) and the
+                   -- rows processed; read by the final SELECT only
+                   SUM(NVL(s.iowait_delta, 0))         AS iowait_us,
+                   SUM(NVL(s.ccwait_delta, 0))         AS ccwait_us,
+                   SUM(NVL(s.apwait_delta, 0))         AS apwait_us,
+                   SUM(NVL(s.clwait_delta, 0))         AS clwait_us,
+                   SUM(NVL(s.rows_processed_delta, 0)) AS rows_proc
             FROM   valid_windows w
             JOIN   dba_hist_sqlstat s
                 ON s.dbid = w.dbid
@@ -757,7 +775,16 @@ BEGIN
                -- the Compared windows table of the Per-SQL detail.
                ag.executions_delta     AS agg_exec,
                ag.elapsed_time_delta_us AS agg_ela_us,
-               ag.plan_hash_value      AS agg_phv
+               ag.plan_hash_value      AS agg_phv,
+               -- plan 044: the rest of the same agg row
+               ag.cpu_time_delta_us    AS agg_cpu_us,
+               ag.iowait_us            AS agg_io_us,
+               ag.ccwait_us            AS agg_cc_us,
+               ag.apwait_us            AS agg_ap_us,
+               ag.clwait_us            AS agg_cl_us,
+               ag.rows_proc            AS agg_rows,
+               ag.buffer_gets_delta    AS agg_gets,
+               ag.disk_reads_delta     AS agg_reads
         FROM   dims d
         JOIN   per_sql ps ON ps.dim = d.code
         LEFT JOIN text_snips ts ON ts.sql_id = ps.sql_id
@@ -787,6 +814,15 @@ BEGIN
             v_wa_exec(s.sql_id || '|' || s.week_offset) := s.agg_exec;
             v_wa_ela(s.sql_id || '|' || s.week_offset)  := s.agg_ela_us;
             v_wa_phv(s.sql_id || '|' || s.week_offset)  := s.agg_phv;
+            -- plan 044: where the time went (same row, no further read)
+            v_wa_cpu(s.sql_id || '|' || s.week_offset)  := s.agg_cpu_us;
+            v_wa_io(s.sql_id || '|' || s.week_offset)   := s.agg_io_us;
+            v_wa_cc(s.sql_id || '|' || s.week_offset)   := s.agg_cc_us;
+            v_wa_ap(s.sql_id || '|' || s.week_offset)   := s.agg_ap_us;
+            v_wa_cl(s.sql_id || '|' || s.week_offset)   := s.agg_cl_us;
+            v_wa_rows(s.sql_id || '|' || s.week_offset) := s.agg_rows;
+            v_wa_gets(s.sql_id || '|' || s.week_offset) := s.agg_gets;
+            v_wa_rds(s.sql_id || '|' || s.week_offset)  := s.agg_reads;
         END IF;
         CONTINUE WHEN s.week_offset < v_weeks_back;
 
@@ -1792,6 +1828,55 @@ BEGIN
         v_wst     VARCHAR2(400);
         v_wbs     VARCHAR2(400);
 
+        -- Plan 044, "Per execution: where the time went" (after the Compared
+        -- windows table).  Index of the rows: 1 elapsed, 2 CPU, 3 I/O wait,
+        -- 4 concurrency, 5 application, 6 cluster, 7 other (elapsed minus
+        -- 2-6, never below 0), 8 rows processed, 9 buffer gets, 10 physical
+        -- reads, 11 buffer gets per row (shown values only).  v_xc = the
+        -- Current window's totals, v_xp = the summed totals of the prior
+        -- valid windows WITH a row (the tfoot's windows), so per execution =
+        -- total / executions on both sides and the parts add up.  Ranked
+        -- evidence, never scored.
+        TYPE t_x_tab IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
+        v_xc      t_x_tab;
+        v_xp      t_x_tab;
+        v_xcv     t_x_tab;         -- Current value shown (per execution, or the total)
+        v_xmv     t_x_tab;         -- prior value shown (NULL = none)
+        v_xmode   VARCHAR2(8);     -- pe | tot | new | noprx | nocur
+        v_xrule   VARCHAR2(8);     -- the Reads-as rule picked (NULL = no sentence)
+        v_xrd     VARCHAR2(2000);  -- the Reads-as sentence
+        v_xrise   NUMBER;          -- Current minus prior elapsed (shown unit)
+        v_xbig    PLS_INTEGER;     -- the part (2-7) with the largest share of the rise
+        v_xre     NUMBER;          -- per-run elapsed ratio
+        v_xrr     NUMBER;          -- rows per run ratio
+        v_xgr     NUMBER;          -- buffer gets per run ratio
+        v_xdr     NUMBER;          -- physical reads per run ratio
+        v_xpr     NUMBER;          -- gets per row ratio
+        v_xrf     VARCHAR2(1);     -- rows per run flat (Y / N)
+        v_xrow    VARCHAR2(4000);
+        -- The fixed thresholds of the "Reads as" sentence (the About note,
+        -- "Per-SQL detail", states the same).  Only when the per-run elapsed
+        -- is at least c_sqx_gate x the prior mean, the first rule that holds:
+        --   harder  gets per run >= c_sqx_up x, rows per run flat, and CPU
+        --           plus I/O wait carry >= c_sqx_part of the per-run rise
+        --   data    rows per run >= c_sqx_up x and gets per row flat
+        --   ap      application wait carries >= c_sqx_part of the rise
+        --   cc      concurrency wait carries >= c_sqx_part
+        --   cl      cluster wait carries >= c_sqx_part
+        --   slowio  I/O wait carries >= c_sqx_part, gets, rows and physical
+        --           reads per run flat
+        --   cold    I/O wait carries >= c_sqx_part, gets per run flat,
+        --           physical reads per run >= c_sqx_up x
+        --   mixed   none of these: name the largest part
+        -- "flat" = within c_sqx_flat (+/-20%) of the prior per run; a share
+        -- = (Current - prior) of the part / (Current - prior) of elapsed.
+        -- Below the gate, when the window total rose at least c_sqx_gate x
+        -- the prior mean total (rule often): it ran more often.
+        c_sqx_gate CONSTANT NUMBER := 1.5;
+        c_sqx_part CONSTANT NUMBER := 0.6;
+        c_sqx_flat CONSTANT NUMBER := 0.2;
+        c_sqx_up   CONSTANT NUMBER := 1.5;
+
         -- Plain change of Current against the prior mean, for the Current
         -- row of the Compared windows table: "new" when no prior window had
         -- a row, "from 0" on a zero mean, else the report's one Delta rule
@@ -1843,6 +1928,74 @@ BEGIN
             END IF;
             RETURN 'V';
         END sqd_state;
+
+        -- plan 044 helpers.  A raw number for a data-* attribute (the page's
+        -- check recomputes the block from them), the decimal point pinned.
+        FUNCTION sqx_tok(p NUMBER) RETURN VARCHAR2 IS
+        BEGIN
+            RETURN CASE WHEN p IS NOT NULL
+                        THEN TO_CHAR(p, 'TM9', 'NLS_NUMERIC_CHARACTERS=''.,''') END;
+        END sqx_tok;
+
+        -- Current over prior, NULL when the prior is missing or 0
+        FUNCTION sqx_r(p_k PLS_INTEGER) RETURN NUMBER IS
+        BEGIN
+            IF v_xcv.EXISTS(p_k) AND v_xmv.EXISTS(p_k) AND v_xcv(p_k) IS NOT NULL
+               AND v_xmv(p_k) IS NOT NULL AND v_xmv(p_k) <> 0 THEN
+                RETURN v_xcv(p_k) / v_xmv(p_k);
+            END IF;
+            RETURN NULL;
+        END sqx_r;
+
+        -- share of the elapsed rise carried by part p_k (NULL: no rise)
+        FUNCTION sqx_s(p_k PLS_INTEGER) RETURN NUMBER IS
+        BEGIN
+            IF v_xrise IS NULL OR v_xrise <= 0 OR v_xmv(p_k) IS NULL THEN
+                RETURN NULL;
+            END IF;
+            RETURN (v_xcv(p_k) - v_xmv(p_k)) / v_xrise;
+        END sqx_s;
+
+        -- a ratio as text: "x1.4" (x = the times sign)
+        FUNCTION sqx_x(p_r NUMBER) RETURN VARCHAR2 IS
+        BEGIN
+            RETURN '&times;' || CASE WHEN p_r >= 100 THEN TO_CHAR(ROUND(p_r), 'FM999999999990')
+                                     ELSE TO_CHAR(p_r, 'FM99990D0', 'NLS_NUMERIC_CHARACTERS=''.,''') END;
+        END sqx_x;
+
+        -- a share as a whole percentage
+        FUNCTION sqx_pct(p_s NUMBER) RETURN VARCHAR2 IS
+        BEGIN
+            IF p_s IS NULL THEN
+                RETURN NULL;
+            END IF;
+            RETURN CASE WHEN ROUND(p_s * 100) < 0 THEN '&minus;' END
+                || TO_CHAR(ABS(ROUND(p_s * 100)), 'FM999999999990') || '%';
+        END sqx_pct;
+
+        -- the row label of index p_k (p_s = the short form for a sentence)
+        FUNCTION sqx_nm(p_k PLS_INTEGER, p_s VARCHAR2 DEFAULT 'N') RETURN VARCHAR2 IS
+        BEGIN
+            RETURN CASE p_k
+                WHEN 1 THEN CASE WHEN p_s = 'Y' THEN 'elapsed' ELSE 'Elapsed (s)' END
+                WHEN 2 THEN CASE WHEN p_s = 'Y' THEN 'CPU' ELSE 'CPU (s)' END
+                WHEN 3 THEN CASE WHEN p_s = 'Y' THEN 'I/O wait' ELSE 'I/O wait (s)' END
+                WHEN 4 THEN CASE WHEN p_s = 'Y' THEN 'concurrency wait' ELSE 'Concurrency (s)' END
+                WHEN 5 THEN CASE WHEN p_s = 'Y' THEN 'application wait' ELSE 'Application, locks (s)' END
+                WHEN 6 THEN CASE WHEN p_s = 'Y' THEN 'cluster wait' ELSE 'Cluster (s)' END
+                WHEN 7 THEN CASE WHEN p_s = 'Y' THEN 'other time' ELSE 'Other (s)' END
+                WHEN 8 THEN 'Rows'
+                WHEN 9 THEN 'Buffer gets'
+                WHEN 10 THEN 'Physical reads'
+                ELSE 'Buffer gets per row' END;
+        END sqx_nm;
+
+        -- "flat": within c_sqx_flat of the prior per run ('Y' / 'N')
+        FUNCTION sqx_flat(p_r NUMBER) RETURN VARCHAR2 IS
+        BEGIN
+            RETURN CASE WHEN p_r IS NOT NULL AND p_r >= 1 - c_sqx_flat AND p_r <= 1 + c_sqx_flat
+                        THEN 'Y' ELSE 'N' END;
+        END sqx_flat;
     BEGIN
         v_sql_id := v_seen_sqls.FIRST;
         WHILE v_sql_id IS NOT NULL LOOP
@@ -2230,6 +2383,180 @@ BEGIN
             IF v_weeks_back > 29 THEN
                 DBMS_OUTPUT.PUT_LINE('<p class="sqd-sub sqd-fn">Showing Current and the 29 most recent of '
                     || v_weeks_back || ' prior windows; the mean covers every valid one.</p>');
+            END IF;
+
+            -- Plan 044: Per execution, where the time went.  The Current
+            -- window's row against the prior windows of the tfoot above (the
+            -- same agg rows, no further read).  Modes: pe (both sides have
+            -- completed executions), tot (no completed execution in Current:
+            -- window totals against the prior mean per window), new (no
+            -- prior window with a row), noprx (prior rows, no completed prior
+            -- execution), nocur (no Current row: a note only).
+            v_wk := v_sql_id || '|0';
+            v_xrule := NULL; v_xrd := NULL; v_xrise := NULL;
+            IF SUBSTR(v_tl_valid, 1, 1) <> 'Y' OR NOT v_wa_exec.EXISTS(v_wk) THEN
+                DBMS_OUTPUT.PUT_LINE('<div class="sqx" data-sid="' || v_sql_id || '" data-sqx="nocur">'
+                    || '<p class="sqd-sub sqd-fn">Where the time went: no Current row for this statement, nothing to split.</p></div>');
+            ELSE
+                v_xc(1) := NVL(v_wa_ela(v_wk), 0);
+                v_xc(2) := NVL(v_wa_cpu(v_wk), 0);
+                v_xc(3) := NVL(v_wa_io(v_wk), 0);
+                v_xc(4) := NVL(v_wa_cc(v_wk), 0);
+                v_xc(5) := NVL(v_wa_ap(v_wk), 0);
+                v_xc(6) := NVL(v_wa_cl(v_wk), 0);
+                v_xc(8) := NVL(v_wa_rows(v_wk), 0);
+                v_xc(9) := NVL(v_wa_gets(v_wk), 0);
+                v_xc(10) := NVL(v_wa_rds(v_wk), 0);
+                FOR i IN 1 .. 10 LOOP
+                    v_xp(i) := 0;
+                END LOOP;
+                FOR k IN 1 .. v_weeks_back LOOP
+                    v_wk := v_sql_id || '|' || k;
+                    IF v_wa_exec.EXISTS(v_wk) THEN
+                        v_xp(1) := v_xp(1) + NVL(v_wa_ela(v_wk), 0);
+                        v_xp(2) := v_xp(2) + NVL(v_wa_cpu(v_wk), 0);
+                        v_xp(3) := v_xp(3) + NVL(v_wa_io(v_wk), 0);
+                        v_xp(4) := v_xp(4) + NVL(v_wa_cc(v_wk), 0);
+                        v_xp(5) := v_xp(5) + NVL(v_wa_ap(v_wk), 0);
+                        v_xp(6) := v_xp(6) + NVL(v_wa_cl(v_wk), 0);
+                        v_xp(8) := v_xp(8) + NVL(v_wa_rows(v_wk), 0);
+                        v_xp(9) := v_xp(9) + NVL(v_wa_gets(v_wk), 0);
+                        v_xp(10) := v_xp(10) + NVL(v_wa_rds(v_wk), 0);
+                    END IF;
+                END LOOP;
+                -- the separate timers can overlap or leave a remainder: Other
+                -- is what elapsed has beyond the five, never below 0
+                v_xc(7) := GREATEST(0, v_xc(1) - v_xc(2) - v_xc(3) - v_xc(4) - v_xc(5) - v_xc(6));
+                v_xp(7) := GREATEST(0, v_xp(1) - v_xp(2) - v_xp(3) - v_xp(4) - v_xp(5) - v_xp(6));
+                v_wx := v_wa_exec(v_sql_id || '|0');
+                v_xmode := CASE WHEN NVL(v_wx, 0) <= 0 THEN 'tot'
+                                WHEN v_wn = 0 THEN 'new'
+                                WHEN v_wsx <= 0 THEN 'noprx'
+                                ELSE 'pe' END;
+                -- the shown values: time in seconds, work as counts
+                FOR i IN 1 .. 10 LOOP
+                    v_xcv(i) := CASE WHEN v_xmode = 'tot' THEN v_xc(i) ELSE v_xc(i) / v_wx END
+                                / CASE WHEN i <= 7 THEN 1e6 ELSE 1 END;
+                    v_xmv(i) := CASE WHEN v_xmode = 'pe' THEN v_xp(i) / v_wsx
+                                     WHEN v_xmode = 'tot' AND v_wn > 0 THEN v_xp(i) / v_wn
+                                END / CASE WHEN i <= 7 THEN 1e6 ELSE 1 END;
+                END LOOP;
+                v_xcv(11) := CASE WHEN v_xcv(8) > 0 THEN v_xcv(9) / v_xcv(8) END;
+                v_xmv(11) := CASE WHEN v_xmv(8) > 0 THEN v_xmv(9) / v_xmv(8) END;
+                IF v_xmv(1) IS NOT NULL THEN
+                    v_xrise := v_xcv(1) - v_xmv(1);
+                END IF;
+                -- the part with the largest share of the rise (ties: the
+                -- earlier row)
+                v_xbig := NULL;
+                IF v_xrise > 0 THEN
+                    FOR i IN 2 .. 7 LOOP
+                        IF v_xbig IS NULL OR sqx_s(i) > sqx_s(v_xbig) THEN
+                            v_xbig := i;
+                        END IF;
+                    END LOOP;
+                END IF;
+
+                -- Reads as (per execution only; thresholds at the top)
+                IF v_xmode = 'pe' AND v_xmv(1) > 0 THEN
+                    v_xre := v_xcv(1) / v_xmv(1);
+                    v_xrr := sqx_r(8);
+                    v_xgr := sqx_r(9);
+                    v_xdr := sqx_r(10);
+                    v_xpr := sqx_r(11);
+                    v_xrf := CASE WHEN sqx_flat(v_xrr) = 'Y' OR (v_xcv(8) = 0 AND v_xmv(8) = 0)
+                                  THEN 'Y' ELSE 'N' END;
+                    IF v_xre >= c_sqx_gate THEN
+                        IF v_xgr >= c_sqx_up AND v_xrf = 'Y'
+                           AND NVL(sqx_s(2), 0) + NVL(sqx_s(3), 0) >= c_sqx_part THEN
+                            v_xrule := 'harder';
+                            v_xrd := 'each run read ' || sqx_x(v_xgr) || ' the buffer gets for about the same rows ('
+                                || CASE WHEN v_xrr IS NULL THEN 'none either side' ELSE sqx_x(v_xrr) END
+                                || '), and ' || CASE WHEN sqx_s(3) >= sqx_s(2) THEN 'I/O wait' ELSE 'CPU' END
+                                || ' carries ' || sqx_pct(GREATEST(sqx_s(2), sqx_s(3)))
+                                || ' of the per-run rise: it works harder for the same result, which usually points at the plan or the access path.';
+                        ELSIF v_xrr >= c_sqx_up AND sqx_flat(v_xpr) = 'Y' THEN
+                            v_xrule := 'data';
+                            v_xrd := 'rows per run rose ' || sqx_x(v_xrr) || ' and buffer gets per run '
+                                || sqx_x(v_xgr) || ', so the gets per row held: more data per call (more volume, or a wider predicate) rather than a worse plan, usually.';
+                        ELSIF sqx_s(5) >= c_sqx_part THEN
+                            v_xrule := 'ap';
+                            v_xrd := 'application wait carries ' || sqx_pct(sqx_s(5))
+                                || ' of the per-run rise: that is row-lock waits, usually, so it points at sessions blocking this one (the Blocking view names them) rather than at the statement itself.';
+                        ELSIF sqx_s(4) >= c_sqx_part THEN
+                            v_xrule := 'cc';
+                            v_xrd := 'concurrency wait carries ' || sqx_pct(sqx_s(4))
+                                || ' of the per-run rise: it points at contention (latches, mutexes, buffer busy waits) rather than at the plan.';
+                        ELSIF sqx_s(6) >= c_sqx_part THEN
+                            v_xrule := 'cl';
+                            v_xrd := 'cluster wait carries ' || sqx_pct(sqx_s(6))
+                                || ' of the per-run rise: it points at global cache transfers between RAC instances.';
+                        ELSIF sqx_s(3) >= c_sqx_part AND sqx_flat(v_xgr) = 'Y' AND v_xrf = 'Y'
+                              AND sqx_flat(v_xdr) = 'Y' THEN
+                            v_xrule := 'slowio';
+                            v_xrd := 'I/O wait carries ' || sqx_pct(sqx_s(3))
+                                || ' of the per-run rise while gets, rows and physical reads per run held: each read got slower, which usually points at storage rather than at the statement.';
+                        ELSIF sqx_s(3) >= c_sqx_part AND sqx_flat(v_xgr) = 'Y' AND v_xdr >= c_sqx_up THEN
+                            v_xrule := 'cold';
+                            v_xrd := 'I/O wait carries ' || sqx_pct(sqx_s(3))
+                                || ' of the per-run rise and physical reads per run rose ' || sqx_x(v_xdr)
+                                || ' on about the same gets: more of its blocks came from disk (a colder buffer cache, usually) rather than a worse plan.';
+                        ELSE
+                            v_xrule := 'mixed';
+                            v_xrd := 'no single reading fits: the largest part of the per-run rise is '
+                                || sqx_nm(v_xbig, 'Y') || ' (' || sqx_pct(sqx_s(v_xbig)) || ').';
+                        END IF;
+                        v_xrd := 'Each run took ' || sqx_x(v_xre) || ' as long as the prior mean; ' || v_xrd;
+                    ELSIF v_xp(1) > 0 AND v_xc(1) >= c_sqx_gate * v_xp(1) / v_wn THEN
+                        -- per run under the gate, the window total rose: it ran more often
+                        v_xrule := 'often';
+                        v_xrd := CASE WHEN sqx_flat(v_xre) = 'Y'
+                                      THEN 'Each run took about as long as before (' || sqx_x(v_xre) || ' per run)'
+                                      ELSE 'Per run ' || sqx_x(v_xre) || ', under the ' || sqx_x(c_sqx_gate)
+                                           || ' line for a per-run reading' END
+                            || '; the total rose ' || sqx_x(v_xc(1) / (v_xp(1) / v_wn))
+                            || ' because it ran ' || sqx_x(v_wx / (v_wsx / v_wn)) || ' as often.';
+                    END IF;
+                END IF;
+
+                DBMS_OUTPUT.PUT_LINE('<div class="sqx" data-sid="' || v_sql_id || '" data-sqx="' || v_xmode
+                    || '" data-cx="' || sqx_tok(v_wx) || '" data-px="' || sqx_tok(v_wsx) || '" data-pn="' || v_wn
+                    || '" data-rule="' || v_xrule || '">'
+                    || '<h4 class="sqd-h">Per execution: where the time went</h4>'
+                    || '<p class="sqd-sub">'
+                    || CASE v_xmode
+                         WHEN 'pe' THEN 'The Current window per execution against the prior mean per execution (the prior windows with a row above: their totals over their executions).'
+                         WHEN 'tot' THEN 'No execution completed in the Current window (a long-running call), so these are window TOTALS: Current against the prior mean per window.'
+                         WHEN 'new' THEN 'The Current window per execution; no prior window has a row for this statement (new).'
+                         ELSE 'The Current window per execution; no execution completed in the prior windows with a row, so there is no prior value per execution.' END
+                    || ' Ranked evidence, not scored.</p>'
+                    || '<div class="sqd-tw"><table class="sqx-tbl" data-nosort data-nocount data-notools><thead><tr>'
+                    || '<th title="CPU and the four waits are separate timers of DBA_HIST_SQLSTAT: they can overlap or leave a remainder, and include the time of parallel execution servers. Other = elapsed beyond the five, never below 0.">'
+                    || CASE WHEN v_xmode = 'tot' THEN 'Window total' ELSE 'Per execution' END || '</th>'
+                    || '<th class="num">Current</th><th class="num">Prior mean</th><th class="num">Change</th>'
+                    || '<th class="num" title="The part&#39;s change over the change of elapsed: its share of the rise. The parts are separate timers, so the shares need not add up to 100%.">Share of the rise</th>'
+                    || '</tr></thead><tbody>');
+                FOR i IN 1 .. 11 LOOP
+                    v_xrow := '<tr class="' || CASE WHEN i = 1 THEN 'sqx-e' WHEN i <= 7 THEN 'sqx-p'
+                                                    WHEN i = 8 THEN 'sqx-w sqx-w1' ELSE 'sqx-w' END
+                        || '" data-k="' || i || '"'
+                        || CASE WHEN i <= 10 THEN ' data-xc="' || sqx_tok(v_xc(i)) || '" data-xp="' || sqx_tok(v_xp(i)) || '"' END
+                        || '><td>' || sqx_nm(i) || '</td>'
+                        || '<td class="num">' || fmt_num(v_xcv(i)) || '</td>'
+                        || '<td class="num">' || CASE WHEN v_xmv(i) IS NULL THEN '<span class="sqd-mu">&mdash;</span>'
+                                                      ELSE fmt_num(v_xmv(i)) END || '</td>'
+                        || '<td class="num">'
+                        || CASE WHEN v_xmode IN ('pe', 'tot', 'new') AND v_xcv(i) IS NOT NULL
+                                THEN sqd_chg(v_xcv(i), v_xmv(i), v_wn, sqx_nm(i)) END
+                        || '</td><td class="num">'
+                        || CASE WHEN i BETWEEN 2 AND 7 THEN sqx_pct(sqx_s(i)) END
+                        || '</td></tr>';
+                    DBMS_OUTPUT.PUT_LINE(v_xrow);
+                END LOOP;
+                DBMS_OUTPUT.PUT_LINE('</tbody></table></div>'
+                    || CASE WHEN v_xrd IS NOT NULL
+                            THEN '<p class="sqx-rd" data-rule="' || v_xrule || '"><b>Reads as:</b> ' || v_xrd || '</p>' END
+                    || '</div>');
             END IF;
 
             -- Per-plan summary table + timeline chart over the whole AWR

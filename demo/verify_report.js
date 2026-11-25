@@ -166,6 +166,12 @@
  *     saving, a Total row in per execution mode changes nothing; the
  *     Per-SQL pool has the P chip; JS off = no switch, both views stacked;
  *     three buttons fit at 390 px; works without ECharts;
+ *   - Top SQL pool "Per execution: where the time went" (block 10b, plan
+ *     044): one div.sqx per pool row, its mode, no severity / switch
+ *     markup, raw totals vs the Compared windows table, Other and the
+ *     shares recomputed, the Reads-as rule recomputed from the data-*
+ *     numbers, the plan card's "Rows, I/O" line agrees, the Values switch
+ *     leaves the block's text unchanged;
  * and writes screenshots per view x theme when shots_dir is given.
  */
 const path = require('path');
@@ -3407,6 +3413,159 @@ const LABEL_BAND = () => {
       if (errs.length) fail('top SQL values switch without ECharts: ' + errs.slice(0, 3).join(' | '));
       await pg.close();
     }
+  }
+
+  // ---- 10b. plan 044: "Per execution: where the time went" in every opened
+  // Per-SQL pool row (div.sqx after the Compared windows table).  (a) one
+  // block per pool row, a known data-sqx mode, nocur <=> the Compared windows
+  // table has no Current values row; (b) informational: no .badge.warn, no
+  // crit / warn row, no scored delta or band, no Values-switch markup; (c)
+  // the numbers: Current executions / elapsed / s per exec and the tfoot's
+  // prior s per exec equal the block's raw totals over executions (the
+  // table's titles, 4 decimals), Other = elapsed beyond the five parts (never
+  // below 0), each part <= elapsed and the parts' sum <= elapsed (exact on
+  // the demo; a real database's separate timers may overlap, logged there);
+  // the share column = the recomputed share; (d) the Reads-as rule
+  // recomputed from the block's own data-* numbers (06's c_sqx_* thresholds)
+  // equals data-rule, and p.sqx-rd is shown exactly when there is a rule (a
+  // value within 1e-6 of a threshold is logged, not failed); (e) a plan
+  // card's "Rows, I/O" line agrees with the block of its statement; (f) the
+  // Values switch leaves every block's text unchanged in all three modes.  A
+  // report without the pool or the block (before plan 044) skips.
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file);
+    const r44 = await page.evaluate((isDemo) => {
+      const out = { n: 0, modes: {}, rules: {}, near: [], overlap: [] }, bad = [];
+      const pool = document.getElementById('sql-pool');
+      const blocks = [...document.querySelectorAll('#sql-pool tr.sql-detail div.sqx')];
+      if (!pool || !blocks.length) { out.skip = pool ? 'no div.sqx (report before plan 044)' : 'no #sql-pool'; return out; }
+      const GATE = 1.5, PART = 0.6, FLAT = 0.2, UP = 1.5, EPS = 1e-6;
+      const nrows = pool.querySelectorAll(':scope > tbody > tr.sql-detail').length;
+      if (nrows !== blocks.length) bad.push(nrows + ' pool detail rows but ' + blocks.length + ' blocks');
+      const num = s => (s == null || s === '') ? null : Number(s);
+      const ttl = td => { if (!td) return null; const t = td.getAttribute('title'); return t ? Number(t.replace(/,/g, '')) : null; };
+      const near = (a, b) => a != null && b != null && Math.abs(a - b) <= Math.max(6e-5, 1.5e-3 * Math.abs(b));
+      blocks.forEach(div => {
+        out.n++;
+        const sid = div.getAttribute('data-sid'), mode = div.getAttribute('data-sqx'), tag = sid + ' (' + mode + ')';
+        out.modes[mode] = (out.modes[mode] || 0) + 1;
+        if (!['pe', 'tot', 'new', 'noprx', 'nocur'].includes(mode)) { bad.push(tag + ': unknown mode'); return; }
+        const det = div.closest('tr.sql-detail'), win = det && det.querySelector('table.sqd-win');
+        const cur = win && win.tBodies[0] && win.tBodies[0].rows[0];
+        const curRow = !!cur && cur.classList.contains('cur');
+        if ((mode === 'nocur') === curRow) bad.push(tag + ': mode nocur but the Compared windows table ' + (curRow ? 'has' : 'lacks') + ' a Current row');
+        if (div.querySelector('.badge.warn, tr.crit, tr.warn, .bd, .d:not(.s-plain):not(.s-na)')) bad.push(tag + ': carries a severity / scored glyph');
+        if (div.querySelector('span.tsv, [data-pe], [data-pt], .tsv-tbl, [data-tsv]')) bad.push(tag + ': carries Values-switch markup');
+        if (mode === 'nocur') { if (div.querySelector('table')) bad.push(tag + ': a table in nocur mode'); return; }
+        const t = div.querySelector('table.sqx-tbl');
+        if (!t || !t.hasAttribute('data-nocount') || !t.hasAttribute('data-nosort')) { bad.push(tag + ': no table.sqx-tbl with data-nocount / data-nosort'); return; }
+        const rows = [...t.tBodies[0].rows];
+        if (rows.length !== 11 || rows.some((r, i) => r.getAttribute('data-k') !== String(i + 1))) { bad.push(tag + ': rows are not data-k 1..11'); return; }
+        const cx = num(div.getAttribute('data-cx')), px = num(div.getAttribute('data-px')), pn = num(div.getAttribute('data-pn'));
+        const ct = {}, pt = {};
+        rows.slice(0, 10).forEach((r, i) => { ct[i + 1] = num(r.getAttribute('data-xc')); pt[i + 1] = num(r.getAttribute('data-xp')); });
+        // Other = elapsed beyond the five, never below 0; the parts against elapsed
+        [[ct, 'Current'], [pt, 'prior']].forEach(([v, side]) => {
+          const sum = v[2] + v[3] + v[4] + v[5] + v[6];
+          if (v[7] !== Math.max(0, v[1] - sum)) bad.push(tag + ': ' + side + ' Other ' + v[7] + ' is not elapsed ' + v[1] + ' minus the parts ' + sum);
+          const over = [2, 3, 4, 5, 6].filter(k => v[k] > v[1] + 5);
+          if (sum > v[1] + 30 || over.length) (isDemo ? bad : out.overlap).push(tag + ': ' + side + ' parts ' + sum + ' us over elapsed ' + v[1] + ' us');
+        });
+        // the Compared windows table's Current row and tfoot (titles carry 4 decimals)
+        if (curRow) {
+          const c = cur.cells;
+          if (!near(cx, ttl(c[1]))) bad.push(tag + ': data-cx ' + cx + ' vs the Current executions ' + ttl(c[1]));
+          if (!near(ct[1] / 1e6, ttl(c[2]))) bad.push(tag + ': Current elapsed ' + ct[1] / 1e6 + ' s vs the table ' + ttl(c[2]));
+          if (cx > 0 && !near(ct[1] / cx / 1e6, ttl(c[3]))) bad.push(tag + ': Current s per exec ' + ct[1] / cx / 1e6 + ' vs the table ' + ttl(c[3]));
+        }
+        const ft = win.tFoot && win.tFoot.rows[0];
+        if (mode === 'pe' && ft && !near(pt[1] / px / 1e6, ttl(ft.cells[3]))) bad.push(tag + ': prior s per exec ' + pt[1] / px / 1e6 + ' vs the tfoot ' + ttl(ft.cells[3]));
+        // shown values and shares, as the PL/SQL computes them
+        const cv = {}, mv = {};
+        for (let k = 1; k <= 10; k++) {
+          const d = k <= 7 ? 1e6 : 1;
+          cv[k] = (mode === 'tot' ? ct[k] : ct[k] / cx) / d;
+          mv[k] = mode === 'pe' ? pt[k] / px / d : (mode === 'tot' && pn > 0) ? pt[k] / pn / d : null;
+        }
+        cv[11] = cv[8] > 0 ? cv[9] / cv[8] : null;
+        mv[11] = mv[8] > 0 ? mv[9] / mv[8] : null;
+        const rise = mv[1] != null ? cv[1] - mv[1] : null;
+        const share = k => (rise == null || rise <= 0 || mv[k] == null) ? null : (cv[k] - mv[k]) / rise;
+        const ratio = k => (cv[k] != null && mv[k] != null && mv[k] !== 0) ? cv[k] / mv[k] : null;
+        const pct = s => { if (s == null) return ''; const v = Math.sign(s) * Math.round(Math.abs(s * 100)); return (v < 0 ? '−' : '') + Math.abs(v) + '%'; };
+        for (let k = 2; k <= 7; k++) {
+          const want = pct(share(k)), got = rows[k - 1].cells[4].textContent.trim();
+          if (got !== want && !(share(k) != null && Math.abs(Math.abs(share(k) * 100) % 1 - 0.5) < 1e-6)) bad.push(tag + ': share of row ' + k + ' reads "' + got + '", recomputed "' + want + '"');
+        }
+        // the rule
+        let rule = '', nr = false;
+        const ge = (v, th) => { if (v != null && Math.abs(v - th) <= EPS * Math.max(1, Math.abs(th))) nr = true; return v != null && v >= th; };
+        const flat = r => { if (r != null && (Math.abs(r - (1 - FLAT)) <= EPS || Math.abs(r - (1 + FLAT)) <= EPS)) nr = true; return r != null && r >= 1 - FLAT && r <= 1 + FLAT; };
+        if (mode === 'pe' && mv[1] > 0) {
+          const re = cv[1] / mv[1], rr = ratio(8), gr = ratio(9), dr = ratio(10), pr = ratio(11);
+          const rf = flat(rr) || (cv[8] === 0 && mv[8] === 0);
+          if (ge(re, GATE)) {
+            const s2 = share(2), s3 = share(3);
+            if (ge(gr, UP) && rf && ge((s2 || 0) + (s3 || 0), PART)) rule = 'harder';
+            else if (ge(rr, UP) && flat(pr)) rule = 'data';
+            else if (ge(share(5), PART)) rule = 'ap';
+            else if (ge(share(4), PART)) rule = 'cc';
+            else if (ge(share(6), PART)) rule = 'cl';
+            else if (ge(s3, PART) && flat(gr) && rf && flat(dr)) rule = 'slowio';
+            else if (ge(s3, PART) && flat(gr) && ge(dr, UP)) rule = 'cold';
+            else rule = 'mixed';
+          } else if (pt[1] > 0 && ge(ct[1] / (pt[1] / pn), GATE)) rule = 'often';
+        }
+        const got = div.getAttribute('data-rule') || '';
+        out.rules[got || '-'] = (out.rules[got || '-'] || 0) + 1;
+        if (got !== rule) (nr ? out.near : bad).push(tag + ': data-rule "' + got + '", recomputed "' + rule + '"');
+        const rd = div.querySelector(':scope > p.sqx-rd');
+        if (!!rd !== !!got) bad.push(tag + ': rule "' + got + '" but ' + (rd ? 'a' : 'no') + ' Reads-as line');
+        if (rd && (rd.getAttribute('data-rule') !== got || !/^Reads as:/.test(rd.textContent.trim()))) bad.push(tag + ': the Reads-as line does not match data-rule');
+        if (rd && !rd.getClientRects().length && det && !det.hidden) bad.push(tag + ': the Reads-as line is not shown');
+        if (isDemo && sid === '7k2m9dx4qp1zb' && got !== 'harder') bad.push('demo: 7k2m9dx4qp1zb should read "works harder" (harder), got "' + got + '"');
+        // (e) the plan card's Rows, I/O line
+        const card = document.getElementById('f-plan-' + sid);
+        const ev = card && [...card.querySelectorAll('dl.ev .evr')].find(e => e.querySelector('dt') && e.querySelector('dt').textContent.trim() === 'Rows, I/O');
+        if (ev && mode === 'pe') {
+          const txt = ev.textContent.replace(/ /g, ' ');
+          const io = /I\/O wait is (−?\d+)%/.exec(txt), want = pct(share(3));
+          if (rise > 0 && (!io || io[1] + '%' !== want)) bad.push(tag + ': plan card says "' + (io ? io[1] + '%' : txt) + '" for I/O, the block ' + want);
+          const rr = ratio(8), m = /rows per run ×([\d.]+)/.exec(txt);
+          if (rr != null && (!m || Math.abs(Number(m[1]) - rr) > 0.051)) bad.push(tag + ': plan card rows per run ' + (m ? m[1] : '?') + ', the block ' + rr);
+          out.card = (out.card || 0) + 1;
+        }
+        if (isDemo && sid === '7k2m9dx4qp1zb' && card && !ev) bad.push('demo: the plan card of 7k2m9dx4qp1zb has no "Rows, I/O" line');
+      });
+      if (isDemo && !(out.rules.harder >= 1)) bad.push('demo: no block reads "harder"');
+      out.bad = bad;
+      return out;
+    }, isDemo);
+    if (r44.skip) console.log('SQL time split: ' + r44.skip + ', skipped');
+    else {
+      console.log('SQL time split: ' + r44.n + ' blocks, modes ' + JSON.stringify(r44.modes) + ', rules ' + JSON.stringify(r44.rules)
+        + ', plan cards cross-checked ' + (r44.card || 0));
+      r44.near.forEach(m => console.log('SQL time split (info, at a threshold): ' + m));
+      r44.overlap.slice(0, 5).forEach(m => console.log('SQL time split (info, separate timers overlap): ' + m));
+      r44.bad.slice(0, 12).forEach(m => fail('SQL time split: ' + m));
+      // (f) the Values switch never touches the block
+      const texts = () => page.evaluate(() => [...document.querySelectorAll('#sql-pool div.sqx')].map(d => d.textContent).join('|'));
+      const has = await page.evaluate(() => !!document.querySelector('#topsql div[data-tsv] button[data-val="perexec"]'));
+      if (!has) console.log('SQL time split: no Values switch in this report, switch check skipped');
+      else {
+        const t0 = await texts(), seen = [];
+        for (const v of ['perexec', 'pe-rank', 'total']) {
+          await page.evaluate(v => document.querySelector('#topsql div[data-tsv] button[data-val="' + v + '"]').click(), v);
+          await page.waitForTimeout(150);
+          if ((await texts()) !== t0) seen.push(v);
+        }
+        await page.evaluate(() => { try { localStorage.removeItem('awr-topsql-val'); } catch (e) {} });
+        if (seen.length) fail('SQL time split: the Values switch changed the block text in mode(s) ' + seen.join(', '));
+      }
+    }
+    if (errors.length) fail('SQL time split: ' + errors.slice(0, 3).join(' | '));
+    await page.close();
   }
 
   await browser.close();

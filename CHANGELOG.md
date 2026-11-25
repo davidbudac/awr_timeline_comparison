@@ -76,6 +76,21 @@ release bumps `awr_version`).
   ("Parse: hard parse elapsed time 1.4 AAS, was 0.2; 13% of the DB-time
   rise") and the library row says so. An About note explains the tree.
   Unscored.
+- **Why one statement got slower** (plan 044): an opened Top SQL pool row
+  now has, under its Compared windows table, "Per execution: where the time
+  went": elapsed per execution split into CPU, I/O wait, concurrency,
+  application (locks) and cluster wait plus the rest, then rows, buffer
+  gets, physical reads and gets per row per execution, Current against the
+  prior mean with a plain change and each part's share of the per-run rise.
+  The numbers are the other columns of the same `DBA_HIST_SQLSTAT` rows
+  (`IOWAIT_DELTA`, `CCWAIT_DELTA`, `APWAIT_DELTA`, `CLWAIT_DELTA`,
+  `ROWS_PROCESSED_DELTA`), no extra read. When each run took at least 1.5
+  times as long, a hedged "Reads as" line names the likely reading (works
+  harder for the same result, more data per call, blocked by locks,
+  contention, slower reads, a colder cache), from fixed thresholds stated
+  in the About note; below that, it says when the statement simply ran more
+  often. The plan-change card gets one line, "Rows, I/O: rows per run
+  x1.0, I/O wait is 86% of the per-run rise". Ranked evidence, not scored.
 - **Docs / tooling:** the demo generator is now platform-independent (every
   libm-derived value is rounded to 10 significant digits, digit counts are
   exact), so the demo pages regenerate byte for byte on Linux as on macOS

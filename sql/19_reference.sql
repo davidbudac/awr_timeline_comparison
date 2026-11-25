@@ -327,6 +327,20 @@ BEGIN
         || ' cover the whole AWR retention, not only the compared windows. The <b>Compared windows</b> table in an opened row covers the report&rsquo;s windows;'
         || ' its prior mean averages the prior valid windows in which AWR kept a row for the statement (the Biggest change tab counts a valid window'
         || ' without a row as 0, so the two can differ). A statement AWR did not capture in a window reads <i>not captured</i>, never 0.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Where the time went</dt><dd>Under the Compared windows table, <b>Per execution: where the time went</b> splits the statement&rsquo;s elapsed time'
+        || ' per execution into CPU, I/O wait, concurrency, application (row locks, usually) and cluster wait, from the same <code>DBA_HIST_SQLSTAT</code> rows'
+        || ' (<code>CPU_TIME_DELTA</code>, <code>IOWAIT_DELTA</code>, <code>CCWAIT_DELTA</code>, <code>APWAIT_DELTA</code>, <code>CLWAIT_DELTA</code>), plus'
+        || ' <b>Other</b> = elapsed beyond the five, never below 0; then the work per execution: rows processed, buffer gets, physical reads and gets per row.'
+        || ' The parts are separate timers: they can overlap or leave a remainder, and parallel execution servers&rsquo; time is included. Current per execution'
+        || ' is the Current window&rsquo;s total over its executions, the prior mean the prior windows with a row summed, over their executions (the table&rsquo;s'
+        || ' prior mean), so the parts add up; with no completed execution in Current the block compares window totals instead. <b>Share of the rise</b> = the'
+        || ' part&rsquo;s change over the change of elapsed. <b>Reads as</b> appears only when each run took at least 1.5 times the prior mean, and names the first'
+        || ' that holds: gets per run at least 1.5 times with rows per run within 20% and CPU plus I/O wait carrying at least 60% of the rise (works harder for'
+        || ' the same result: plan or access path); rows per run at least 1.5 times with gets per row within 20% (more data per call); application, concurrency'
+        || ' or cluster wait carrying at least 60%; I/O wait carrying 60% with gets, rows and physical reads per run within 20% (slower reads); I/O wait carrying'
+        || ' 60% with gets per run within 20% and physical reads per run at least 1.5 times (a colder cache); else the largest part. Below 1.5 times per run,'
+        || ' when the window total rose at least 1.5 times, it says the statement ran more often. A plan-change card&rsquo;s <b>Rows, I/O</b> line gives rows per'
+        || ' run and the I/O share of the per-run rise, computed the same way. Ranked evidence, never a finding or a score.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Top SQL ASH</dt><dd>For each statement in the Top SQL pool: ASH samples per bucket split by wait event (top 7 per statement, the rest as <b>Other</b>; <b>CPU</b> = ON CPU). Statements with fewer'
         || ' than 5 samples are placeholders.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>SQL Monitor</dt><dd>Executions persisted by SQL Monitor (<code>DBA_HIST_REPORTS</code>, <code>component_name=&#39;sqlmonitor&#39;</code>), summaries only. Only completed, expensive-enough or'

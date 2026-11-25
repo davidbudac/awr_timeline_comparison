@@ -55,7 +55,7 @@ prefilled `awrddrpt` / `ashrpt` hand-off commands were declined). Branch
 | 041 | Peak inside the window next to the average (SYSMETRIC max, 1-minute ASH peak) | 3 | granted (`DBA_HIST_SYSMETRIC_SUMMARY.MAXVAL`, ASH) | DONE; DB run pending (owner) |
 | 042 | CPU capacity: a CPU-count line on the Activity charts and "x of n CPUs" | 4 | granted (`DBA_HIST_PARAMETER` `cpu_count`) | DONE; DB run pending (owner) |
 | 043 | Time model breakdown (parse, hard parse, PL/SQL, connection management ...) | 7 | granted (`DBA_HIST_SYS_TIME_MODEL`) | DONE; DB run pending (owner) |
-| 044 | Per-statement time split and rows per execution in Top SQL's per-SQL detail | 5 | granted (`DBA_HIST_SQLSTAT` wait deltas, rows processed) | TODO |
+| 044 | Per-statement time split and rows per execution in Top SQL's per-SQL detail | 5 | granted (`DBA_HIST_SQLSTAT` wait deltas, rows processed) | DONE; DB run pending (owner) |
 | 045 | "Who added the load": extra active sessions by service / module / machine / user / program / PDB (new section 29) | 6 | granted (ASH) | TODO |
 | 046 | Host, memory, undo and temp (new section 30) | 4, 8 | optional (`DBA_HIST_OSSTAT`, `DBA_HIST_PGASTAT`, SGA resize, `DBA_HIST_UNDOSTAT`); ASH for temp / PGA per statement | TODO |
 | 047 | Object changes around a plan change (statistics gathered, last DDL, index status) | 9 | optional (dictionary views, current container, current state) | TODO |

@@ -1578,6 +1578,46 @@ JS and `_style.sql`; all degrade to "show everything" with JS off:
   and tooltip use 4 significant digits (sub-millisecond calls) (priors only up to 40 windows; a one-hour window is
   under a pixel on a months-long axis) read from `window.AWR_WIN`, re-applied
   on `awr:theme`.
+  **"Per execution: where the time went" (plan 044)**: `div.sqx` right
+  after the Compared windows table (and its notes) of EVERY pool row,
+  `data-sid` (never `data-sql` / `data-mode`: 06's row-toggle and Break
+  down by handlers read those), `data-sqx` = `pe` (both sides have
+  completed executions) | `tot` (0 Current executions: window totals vs the
+  prior mean per window) | `new` (no prior row) | `noprx` (prior rows, 0
+  prior executions) | `nocur` (no Current row or a skipped Current: one
+  `p.sqd-fn`, no table). `table.sqx-tbl` (`data-nosort data-nocount
+  data-notools`, never `sqd-win`: verify's per-SQL detail check reads the first
+  `table.sqd-win`) has 11 rows `tr[data-k=1..11]`: elapsed, CPU, I/O wait,
+  concurrency, application, cluster, Other (= elapsed beyond the five,
+  `GREATEST(0, ...)` on the summed totals), rows, gets, physical reads,
+  gets per row; rows 1-10 carry the raw totals `data-xc` (Current) /
+  `data-xp` (never `data-pt`: the swap's attribute; prior windows with a row, summed; TO_CHAR 'TM9'), the div
+  `data-cx` / `data-px` / `data-pn` (executions, windows), so per
+  execution = total / executions on both sides (the tfoot's definition).
+  Values from the main cursor's `agg` (new sums `iowait_us`, `ccwait_us`,
+  `apwait_us`, `clwait_us`, `rows_proc`, carried as `agg_*_us` / `agg_rows`
+  / `agg_gets` / `agg_reads` into `v_wa_cpu` / `_io` / `_cc` / `_ap` /
+  `_cl` / `_rows` / `_gets` / `_rds`): no extra read, no per-window string.
+  Change = `sqd_chg` (plain), Share of the rise = the part's change over
+  elapsed's (empty when per-run elapsed did not rise). `p.sqx-rd
+  [data-rule]` "Reads as:" only in mode `pe`, from the fixed `c_sqx_*`
+  thresholds (gate 1.5x per run; `harder` / `data` / `ap` / `cc` / `cl` /
+  `slowio` / `cold` / `mixed`, else `often` when only the window total rose
+  1.5x; the rule list is in the 06 comment and the About note "Where the
+  time went"): keep 06's PL/SQL, the twin's `_split_block` and
+  verify_report block 10b's recompute in lockstep. No `.badge.warn`, no
+  `span.tsv` (the Values switch never touches it). CSS
+  `sql/lib/src/css_sqlsplit.css` (viz_head), which also makes the pool
+  row's `.sqd-tw thead th` static (a sticky header in that sideways
+  scroller sat over the first row). 18's plan card adds one
+  `Rows, I/O` evidence row ("rows per run x1.0", "I/O wait is 86% of the
+  per-run rise") from its own SQLSTAT read with the SAME totals-over-
+  executions definition (not the card's per-window mean), so block 10b
+  cross-checks the two. Demo: the model's `SqlHour` carries `rows`,
+  `iowait_us` and the wait split, so the twin derives concurrency /
+  application by wait class (cluster 0); only 7k2m9dx4qp1zb passes the
+  gate there (`harder`, I/O 86%, rows x1.0); the other rules ran on
+  scratch variants only.
 - **`.copy-btn[data-copy]`** — copies the selected element's text; inline
   by default, absolutely positioned only inside `pre`/`.codewrap`. `.tbl-tools`
   CSV/MD toolbars auto-inject above any table with ≥ 4 rows.
