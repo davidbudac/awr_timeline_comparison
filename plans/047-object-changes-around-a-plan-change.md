@@ -1,6 +1,6 @@
 # Plan 047: object changes around a plan change
 
-Status: DONE; DB run pending (owner). Round 3, review item 9. Informational
+Status: DONE; run on dbmint 2026-11-25 (commit `3ea5315`, see round3-dbmint-runbook.md). Round 3, review item 9. Informational
 only: no finding, count, pill or severity; nothing touches `policy_bucket`
 or `metric_policy.plsql`.
 

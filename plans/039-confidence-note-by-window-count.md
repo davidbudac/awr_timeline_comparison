@@ -1,6 +1,6 @@
 # Plan 039: confidence note by window count (display only)
 
-Status: DONE; DB run pending (owner). Round 3, review item 1 ("state the
+Status: DONE; run on dbmint 2026-11-25 (commit `3ea5315`, see round3-dbmint-runbook.md). Round 3, review item 1 ("state the
 confidence"; the thresholds are NOT changed, see `plans/README.md` "Not
 implemented"). No new AWR read, so no new Oracle name.
 

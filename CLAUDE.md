@@ -2103,8 +2103,9 @@ scored". Twin `s30_host_memory.py` derives the RAW values (16 CPUs, busy
 sga_target / pga_aggregate_target changes; one ORA-01555 on 25 Jun) and
 runs the SQL's arithmetic; no rule fires in the demo (a scratch variant
 patching `_raw` exercised the pointers). verify_report block 6h + section
-8. Unexercised: everything on a database (no run yet), RAC, multi-DBID,
-a CDB's per-container rows, a resize operation, the error notes.
+8. Run on dbmint 2026-11-25 (see "Round 3 verified on dbmint" below).
+Unexercised: RAC, multi-DBID, several containers' UNDOSTAT rows, host busy
+at 90% (the "Host: CPU" card row), an ORA-01555 count above 0.
 
 #### Wait latency histograms (`sql/22_wait_histogram.sql`, `#wait-hist`)
 
@@ -2270,8 +2271,11 @@ views" / both), "no dictionary row (dropped, the PDB is closed, or not
 visible to this user)", a none-visible sentence naming CONTAINER_DATA,
 the read notes / "not read:" / history-column title naming `CDB_` views;
 no PDB name lookup ("con_id 3"). A common user needs `CONTAINER_DATA` to
-see PDB rows through `CDB_` views (README). Unexercised: everything on a
-real database, partitioned objects, a CDB-root run, an index of another
+see PDB rows through `CDB_` views (README). Run on dbmint 2026-11-25 from
+the root (`CDB_`) and inside pdb1 (`DBA_`), the two tables equal row for
+row. Unexercised: the card's "Objects" row placed on a card (18's cards
+were for other statements than 23's), the time zone of `STATS_UPDATE_TIME`
+(dbmint is UTC throughout), partitioned objects, an index of another
 owner's table, a statement whose old and new
 plan copies sit in different containers (the "both" header), a closed
 PDB, a common user without CONTAINER_DATA.
@@ -3306,6 +3310,41 @@ the demo.
   stretch; on 2026-11-19 that was 2026-11-07 14:45 to 2026-11-09 16:15
   (`"2026-11-08 15:00" 1 8 10 0 1 h` = a heavy blocking hour against eight
   quiet ones).
+- **Round 3 (plans 038-047, sections 29 / 30) verified on dbmint
+  (2026-11-25, commit `3ea5315`):** the record is
+  `plans/round3-dbmint-runbook.md` ("Result"). In short: no compile error
+  on the first run; the whole matrix twice (before and after the fix
+  commit), all rc 0, 31 / 31 `AWR-SECTION` pairs, no `ORA-` / `SP2-` /
+  `PLS-` in the logs, max line 32510 -- the incident hour with `debug=Y`
+  and `N` (same md5), a plan change, 4 prior windows (the "Thin baseline"
+  note), `DESIGN=quiet` / `dashboard`, 169 hourly windows (222 s, 53.0 MB;
+  `main` 216 s, 51.8 MB), a restart (skipped windows read unknown),
+  overlapping windows, `simple` / `dev`, `SQLMON=N`, `profile_days=7`,
+  `AUTO` weekly, a fleet run with `FLEET_DETAIL=all`; plus a window with
+  six SGA resize operations and a shrunken buffer cache, one whose begin
+  snapshot lacks a PGA counter (cell empty, not 0), and the plan-change
+  window inside pdb1 (`ORACLE_PDB_SID=pdb1`; a second DBID in the top
+  bar). Cards, severities, impacts and the verdict are identical to
+  `main` on four windows (the explain-only rule on real data). About 60
+  shown numbers were checked against independent read-only queries (peaks,
+  busiest minute, CPU capacity, time model, section 29's sums = 09's
+  `winfg`, OSSTAT / PGASTAT / SGA / UNDOSTAT values, a statement's SQLSTAT
+  split, `CDB_*` object times). Every optional view was renamed in a
+  scratch copy (missing: "needs SELECT on"; wrong columns: "could not
+  read"), from the root and inside pdb1: notes shown, rc 0. dbmint runs
+  the report from `CDB$ROOT` while its application statements run in
+  PDB1: that is how plan 047's empty table was found (now read through
+  `CDB_*`). Inside pdb1 the verdict is "Too little history" on `main` too.
+  verify_report OK on eight final reports (runs 1, 3, 4, both designs, 7,
+  8, pdb1). Two do not pass and neither is round 3's (same result with
+  `main`'s `js_timeline` swapped into the page): the resize window fails
+  "click-to-keep highlight" (a second click on the same band point does
+  not clear it), and on the 169-window report the script times out in the
+  Activity legend step (line 682), so its later blocks never run there --
+  a targeted script found no page error and whole `pk` / `cpu` payloads.
+  Never exercised: RAC, a migrated PDB, a closed PDB, a common user without
+  `CONTAINER_DATA`, a real ORA-01031, a CPU-bound host, the "Objects" card
+  row placed on a card, `STATS_UPDATE_TIME` in a non-UTC database.
 - **Visualization sections 20-28 + fleet co-anomaly grid verified on dbmint
   (2026-11-19):** each section by its owner on its own runs (numbers
   checked against an independent read-only query: DB time, ASH per plan

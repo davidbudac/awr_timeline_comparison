@@ -1,6 +1,6 @@
 # Plan 046: host, memory, undo and temp -- a new section 30
 
-Status: DONE; DB run pending (owner). Round 3, review items 4 (host half)
+Status: DONE; run on dbmint 2026-11-25 (commit `3ea5315`, see round3-dbmint-runbook.md). Round 3, review items 4 (host half)
 and 8. Informational only: no finding, count, pill or severity; nothing
 touches `policy_bucket` or `metric_policy.plsql`.
 

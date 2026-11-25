@@ -1,6 +1,6 @@
 # Plan 042: CPU capacity -- "x of n CPUs"
 
-Status: DONE; DB run pending (owner). Round 3, review item 4 (first half;
+Status: DONE; run on dbmint 2026-11-25 (commit `3ea5315`, see round3-dbmint-runbook.md). Round 3, review item 4 (first half;
 host numbers are plan 046's). Informational only: no finding, count, pill
 or severity; nothing touches `policy_bucket`.
 

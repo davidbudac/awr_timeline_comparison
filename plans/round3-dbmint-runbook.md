@@ -1,10 +1,107 @@
 # Round 3 (plans 038-047): first database run
 
-Nothing in round 3 has been parsed, compiled or run by Oracle. It was built
-against the synthetic demo, lint and two independent read-throughs of the
-SQL (commit `f1c1ca0`). This runbook is the order to test it in on dbmint
-(`ssh -p 2200 oracle@dbmint`, `cdb1` primary, `sqlplus / as sysdba`). Do not
-write "verified on dbmint" for any round 3 plan until its part below ran.
+Round 3 was built without a database (synthetic demo, lint, two read-throughs
+of the SQL, commit `f1c1ca0`). This runbook is the order it was then tested
+in on dbmint (`ssh -p 2200 oracle@dbmint`, `cdb1` primary, `sqlplus / as
+sysdba`). **It ran on 2026-11-25: see "Result" right below.** The steps after
+it are kept as the procedure for the next time.
+
+## Result (2026-11-25, dbmint, final commit `3ea5315`)
+
+The branch was copied to `~/awr_timeline_comparison_r3` (the old directory
+still held `main`, md5-checked, and served as the comparison).
+
+- **Preflight (step 1):** no missing column; every time-model, OSSTAT,
+  PGASTAT and SGA component name matches; OSSTAT's cumulative flags are as
+  assumed (the `*_TIME` and `VM_*_BYTES` rows cumulative, the rest gauges);
+  `FREE_MEMORY_BYTES` exists; ASH `SERVICE_HASH` joins to
+  `SERVICE_NAME_HASH`; OSSTAT / PGASTAT / MEM_DYNAMIC_COMP carry con_id 0
+  only and UNDOSTAT one container, no duplicate rows; plan `OBJECT_TYPE`
+  values are `TABLE`, `TABLE (FIXED)`, `TABLE (TEMP)`, `INDEX`,
+  `INDEX (UNIQUE)`, `INDEX (CLUSTER)`, `CLUSTER`, `VIEW` ... as assumed.
+- **Compile:** a scratch driver with `WHENEVER SQLERROR CONTINUE` listed no
+  error at all; the first real run was clean. No compile fix was needed.
+- **Matrix (step 3), first at `4aba965`, then all of it again at `3ea5315`:**
+  runs 1-9 and 11, every one rc 0, 31 / 31 section pairs, no `ORA-` /
+  `SP2-` / `PLS-` in the log, longest line 32510 bytes, no handler note in
+  the HTML. Run 2 = run 1 after the byte-identity `sed` (same md5). Run 6
+  (169 windows): 222 s and 53.0 MB against 216 s and 51.8 MB for `main` at
+  the same hour. Fleet: the report differs from `main`'s only by the shared
+  stylesheet's new single-DB rules (7 lines of CSS, no markup).
+- **Explain only, on real data:** card ids, severities, `data-impact`,
+  `data-share`, the verdict sentence and pills, and the counts of
+  `crit` / `warn` rows and badges are identical between `main` and the
+  branch on runs 1, 3 and 7 and on the run inside pdb1.
+- **Numbers against independent queries (run 1's Current window, run 3's
+  statement):** five SYSMETRIC peaks, the busiest minute (22.33 AAS at
+  14:30), all-session and foreground ASH totals, `cpu_count` and DB CPU,
+  eight time-model rows, section 29's service / user / module values and
+  their sum (= section 09's `winfg`), host busy / user / I/O wait %, paged
+  in / out, the five memory sizes, PGA allocated / in use / over-allocation
+  count, five undo values, b84c2ncqhcw23's executions, elapsed, I/O wait,
+  rows, gets and reads per window: all equal to the digit shown.
+- **Extra windows for branches the matrix did not reach:**
+  `"2026-11-09 12:00" 1 8` (six resize operations in the Current window, the
+  buffer cache at 48 MB against a 152 MB mean: `#hm-rs`, the "Memory" row
+  on the I/O card, the time model's "Parse" row on the DB time card and
+  section 26's "Baseline check" note all fired);
+  `"2026-11-09 19:15" 1 4` (the begin snapshot lacks `over allocation
+  count`: the cell is empty, not 0, and the sentence leaves it out);
+  run 3's window inside pdb1 (`ORACLE_PDB_SID=pdb1`: objects visible through
+  `DBA_*`, a second DBID in the top bar).
+- **Run 10, simulated** (scratch copies with every optional view renamed,
+  from the root and inside pdb1): missing views give "needs SELECT on" for
+  all 15 (the two name lookups of 29, the five of 30, the four `DBA_*` and
+  the four `CDB_*` of 23), views with the wrong columns give "could not
+  read <view>: ORA-00904 ..."; rc 0 and 31 / 31 every time.
+
+- **Pages (`demo/verify_report.js`, one Chrome at a time, final reports):**
+  OK on runs 1, 3, 4, 5 (quiet and dashboard), 7, 8 and the pdb1 run. Before
+  the fix commit the one failure everywhere was block 6e's tolerance (fix 5
+  below). Two reports do not pass, neither because of round 3 -- both
+  reproduce unchanged with `main`'s `js_timeline` script swapped into the
+  same page:
+  - `"2026-11-09 12:00" 1 8` fails "click-to-keep highlight" (the second
+    click on the same band point does not clear the highlight; the ruler's
+    Esc check then fails as a consequence). An older behaviour on that
+    window's data, worth its own look.
+  - the 169-window report: the script times out in the Activity legend step
+    (`verify_report.js` line 682; the same clicks work when run alone), so
+    blocks 6c-6i never run there. A targeted script instead: no page error
+    in the three views, `ashx.pk` / `ashx.cpu` with 169 entries of which 86
+    known = the 86 valid windows, 169-row peak / CPU tables, 176-column time
+    model and host tables, the findings JSON parses (1 card, n = 85).
+
+**Found and fixed (`3ea5315`):**
+1. Plan 047 showed nothing from a CDB root (the objects live in the PDB):
+   it now reads the `CDB_*` twins there. Root run: a filled table whose 70
+   rows equal the pdb1 run's, times checked against `CDB_TAB_STATS_HISTORY`
+   / `CDB_OBJECTS` / `CDB_INDEXES`.
+2. Section 29: `(J00A)`-style slave names were not folded; `SYS` appeared
+   twice (two containers); ">100% of the rise" / "of it came from" when one
+   value rose more than the total.
+3. Section 30: "Host resized ... between Sat 07 Nov and Sat 07 Nov" (no
+   time); 26 bytes a second read "swapping" (floor `c_swap` 0.01 MB/s).
+4. Plan 047's sentence named the interval start by day only.
+5. verify_report block 6e: tolerance too tight for a 2-CPU host.
+
+**Not verified here (dbmint cannot show it):**
+- The time zone of `STATS_UPDATE_TIME`: database, session and system zones
+  are all +00:00, so the check cannot tell.
+- The "Objects" row on the plan-change card: section 18's cards (SQL
+  Monitor) were for other statements than section 23's (SQLSTAT) in every
+  window tried, so the row was built but never placed.
+- RAC, several PDBs with load, a closed PDB, a common user without
+  `CONTAINER_DATA`, a real ORA-01031 (run 10 was simulated), a CPU-bound
+  host, a host busy 90% (the "Host: CPU" card row), ORA-01555 counts above 0.
+- The Linux `gen_demo_report.py --check` (Docker was down; CI runs it).
+
+**Seen, not round 3's:** inside pdb1 the verdict reads "Too little history
+to score this window" on `main` and on the branch alike (the PDB's own AWR
+view of the root's snapshots lacks the scored rows).
+
+A plain grep for `ORA-` over a round 3 report now always hits section 30's
+own text ("ORA-01555 (snapshot too old)"): grep the log, or `ORA-[0-9]{5}:`.
 
 The run uses `WHENEVER SQLERROR EXIT`: the first error ends the report.
 Sections run in the driver's order, so with `debug=Y` the last progress

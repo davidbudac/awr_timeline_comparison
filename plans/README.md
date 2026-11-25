@@ -49,16 +49,16 @@ prefilled `awrddrpt` / `ashrpt` hand-off commands were declined). Branch
 
 | Plan | Title | Review item | Views read | Status |
 |---|---|---|---|---|
-| 038 | The verdict says when the baseline has an odd window (from section 26) | 2 | none new | DONE; DB run pending (owner) |
-| 039 | Confidence note by window count on the verdict and the cards (display only) | 1 | none new | DONE; DB run pending (owner) |
-| 040 | Shorter Summary: library rows open only with news; machine-readable findings block (JSON) | 11 | none new | DONE; DB run pending (owner) |
-| 041 | Peak inside the window next to the average (SYSMETRIC max, 1-minute ASH peak) | 3 | granted (`DBA_HIST_SYSMETRIC_SUMMARY.MAXVAL`, ASH) | DONE; DB run pending (owner) |
-| 042 | CPU capacity: a CPU-count line on the Activity charts and "x of n CPUs" | 4 | granted (`DBA_HIST_PARAMETER` `cpu_count`) | DONE; DB run pending (owner) |
-| 043 | Time model breakdown (parse, hard parse, PL/SQL, connection management ...) | 7 | granted (`DBA_HIST_SYS_TIME_MODEL`) | DONE; DB run pending (owner) |
-| 044 | Per-statement time split and rows per execution in Top SQL's per-SQL detail | 5 | granted (`DBA_HIST_SQLSTAT` wait deltas, rows processed) | DONE; DB run pending (owner) |
-| 045 | "Who added the load": extra active sessions by service / module / machine / user / program / PDB (new section 29) | 6 | granted (ASH); optional names (`DBA_HIST_SERVICE_NAME`, `DBA_HIST_PDB_INSTANCE`) | DONE; DB run pending (owner) |
-| 046 | Host, memory, undo and temp (new section 30) | 4, 8 | optional (`DBA_HIST_OSSTAT`, `DBA_HIST_PGASTAT`, SGA resize, `DBA_HIST_UNDOSTAT`); ASH for temp / PGA per statement | DONE; DB run pending (owner) |
-| 047 | Object changes around a plan change (statistics gathered, last DDL, index status) | 9 | optional (`DBA_OBJECTS`, `DBA_TAB_STATISTICS`, `DBA_TAB_STATS_HISTORY`, `DBA_INDEXES`, from a CDB root their `CDB_` twins for a PDB's plan; current state) | DONE; DB run pending (owner) |
+| 038 | The verdict says when the baseline has an odd window (from section 26) | 2 | none new | DONE; run on dbmint 2026-11-25 (`3ea5315`) |
+| 039 | Confidence note by window count on the verdict and the cards (display only) | 1 | none new | DONE; run on dbmint 2026-11-25 (`3ea5315`) |
+| 040 | Shorter Summary: library rows open only with news; machine-readable findings block (JSON) | 11 | none new | DONE; run on dbmint 2026-11-25 (`3ea5315`) |
+| 041 | Peak inside the window next to the average (SYSMETRIC max, 1-minute ASH peak) | 3 | granted (`DBA_HIST_SYSMETRIC_SUMMARY.MAXVAL`, ASH) | DONE; run on dbmint 2026-11-25 (`3ea5315`) |
+| 042 | CPU capacity: a CPU-count line on the Activity charts and "x of n CPUs" | 4 | granted (`DBA_HIST_PARAMETER` `cpu_count`) | DONE; run on dbmint 2026-11-25 (`3ea5315`) |
+| 043 | Time model breakdown (parse, hard parse, PL/SQL, connection management ...) | 7 | granted (`DBA_HIST_SYS_TIME_MODEL`) | DONE; run on dbmint 2026-11-25 (`3ea5315`) |
+| 044 | Per-statement time split and rows per execution in Top SQL's per-SQL detail | 5 | granted (`DBA_HIST_SQLSTAT` wait deltas, rows processed) | DONE; run on dbmint 2026-11-25 (`3ea5315`) |
+| 045 | "Who added the load": extra active sessions by service / module / machine / user / program / PDB (new section 29) | 6 | granted (ASH); optional names (`DBA_HIST_SERVICE_NAME`, `DBA_HIST_PDB_INSTANCE`) | DONE; run on dbmint 2026-11-25 (`3ea5315`) |
+| 046 | Host, memory, undo and temp (new section 30) | 4, 8 | optional (`DBA_HIST_OSSTAT`, `DBA_HIST_PGASTAT`, SGA resize, `DBA_HIST_UNDOSTAT`); ASH for temp / PGA per statement | DONE; run on dbmint 2026-11-25 (`3ea5315`) |
+| 047 | Object changes around a plan change (statistics gathered, last DDL, index status) | 9 | optional (`DBA_OBJECTS`, `DBA_TAB_STATISTICS`, `DBA_TAB_STATS_HISTORY`, `DBA_INDEXES`, from a CDB root their `CDB_` twins for a PDB's plan; current state) | DONE; run on dbmint 2026-11-25 (`3ea5315`) |
 
 **Not implemented, owner decision needed:** thresholds that widen for a
 small baseline (review item 1, "proper fix"). It changes which metrics are

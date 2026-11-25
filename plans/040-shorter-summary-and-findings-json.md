@@ -1,6 +1,6 @@
 # Plan 040: a shorter Summary, and a machine-readable findings block
 
-Status: DONE; DB run pending (owner). Round 3, review item 11. Two independent
+Status: DONE; run on dbmint 2026-11-25 (commit `3ea5315`, see round3-dbmint-runbook.md). Round 3, review item 11. Two independent
 parts. No new AWR read, so no new Oracle name. Explain only: no finding, count,
 pill or severity changes.
 
