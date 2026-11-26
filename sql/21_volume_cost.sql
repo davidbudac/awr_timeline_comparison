@@ -69,6 +69,7 @@ DECLARE
     v_parts VARCHAR2(4000);
     v_st    VARCHAR2(1);
     v_ct    VARCHAR2(1);
+    v_news  VARCHAR2(2000);   -- plan 040 follow-up: the statements slower per run, as sql:<id> tokens (at most 60 x 19 characters)
 
     TYPE t_it IS RECORD (
         nm    VARCHAR2(128),   -- sql_id / event name
@@ -381,6 +382,7 @@ BEGIN
                     v_sl_s := v_sl_s + 1;
                     IF v_bs_s IS NULL OR v_sql(i).tc - v_sql(i).tp > v_sql(v_bs_s).tc - v_sql(v_bs_s).tp THEN v_bs_s := i; END IF;
                 ELSE v_b_s := v_b_s + 1; END IF;
+                IF v_ct <> 'm' THEN v_news := TRIM(v_news || ' sql:' || v_sql(i).nm); END IF;
             END IF;
         END IF;
     END LOOP;
@@ -509,6 +511,9 @@ BEGIN
                 || pl(v_up_e, 'wait event costs', 'wait events cost') || ' more';
         END IF;
         IF v_sl_s > 0 OR v_b_s > 0 THEN v_open := ' lopen'; END IF;
+        -- an event that got slower per wait is news no card carries: a token
+        -- the chrome never finds keeps the row open
+        IF v_news IS NOT NULL AND v_sl_e + v_b_e > 0 THEN v_news := v_news || ' event:slower'; END IF;
     END IF;
     IF v_pl_s = 0 AND v_pl_e > 0 THEN v_mode := 'ev'; END IF;
 
@@ -516,7 +521,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('<section id="volume-cost" class="vw in-s in-a lib' || v_open
         || '" style="--os:11" data-mode="' || v_mode || '"><h2>Volume vs unit cost'
         || '<small class="h2sub">Ran more often, or each run got slower?</small></h2>');
-    DBMS_OUTPUT.PUT_LINE(lib_ls('volume-cost', v_ls));
+    DBMS_OUTPUT.PUT_LINE(lib_ls('volume-cost', v_ls)
+        || CASE WHEN v_open IS NOT NULL AND v_news IS NOT NULL THEN lib_news('volume-cost', v_news) END);
 
     IF v_cur_valid <> 'Y' THEN
         DBMS_OUTPUT.PUT_LINE('<p class="note">The Current window was skipped ('

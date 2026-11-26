@@ -382,6 +382,23 @@ def lib_ls(sec_id: str, html: str) -> str:
             + html.replace("\\", "\\\\").replace('"', '\\"') + '");</script>')
 
 
+def json_num(v, dec: int = 6) -> str:
+    """07_summary.sql json_num: a number as a JSON token ('.' decimal, no
+    exponent, trailing zeros dropped, null for None / 1e15 and up)."""
+    if v is None or abs(v) >= 1e15:
+        return "null"
+    t = to_char_fixed(ora_round(v, dec), 6)
+    if "." in t:
+        t = t.rstrip("0").rstrip(".")
+    return t
+
+
+def lib_news(sec_id: str, news: str) -> str:
+    """sql/lib/band_glyph.plsql lib_news: what the library row's status is about (plan 040)."""
+    return ('<script>(function(){var s=document.getElementById("' + sec_id
+            + '");if(s)s.setAttribute("data-news","' + news + '");})();</script>')
+
+
 def range_txt(mu, sd) -> str:
     if mu is None or sd is None:
         return "&mdash;"
@@ -1312,3 +1329,92 @@ def tl_bars(w, csv, mu, sd, sev, lab, gut, rid, cls=None, name=None, unit=None,
             out += gl or ""
         out += '</div>'
     return out + gut + '</div>'
+
+
+# ---------------------------------------------------------------------
+# sql/lib/baseline_conf.plsql (plan 039) -- how much to trust a finding
+# scored against n prior windows.  The n -> percent tables are parsed from
+# the SQL include itself (and tools/gen_baseline_conf.py --check compares
+# them with the t distribution), so the demo cannot drift.
+# ---------------------------------------------------------------------
+
+_CONF_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                          "sql", "lib", "baseline_conf.plsql")
+
+
+def _load_conf():
+    out = {"mod": {}, "large": {}}
+    cur = None
+    with open(_CONF_PATH, encoding="ascii") as fh:
+        for ln in fh:
+            m = re.match(r"\s*FUNCTION conf_(mod|large)\b", ln)
+            if m:
+                cur = m.group(1)
+            m = re.match(r"\s*WHEN (\d+) THEN RETURN ([0-9.]+);", ln)
+            if m and cur:
+                out[cur][int(m.group(1))] = float(m.group(2))
+    assert len(out["mod"]) == 58 and len(out["large"]) == 58, "baseline_conf.plsql tables"
+    return out["mod"], out["large"]
+
+
+CONF_MOD, CONF_LARGE = _load_conf()
+
+
+def conf_mod(n):
+    """conf_mod(): percent of unchanged metrics with |z| > 2 (n 3..60, more
+    than 60 reads the n = 60 row, fewer than 3 or None gives None)."""
+    if n is None or n < 3:
+        return None
+    return CONF_MOD[min(int(n), 60)]
+
+
+def conf_large(n):
+    """conf_large(): the same for |z| > 3."""
+    if n is None or n < 3:
+        return None
+    return CONF_LARGE[min(int(n), 60)]
+
+
+def conf_pct_txt(p):
+    """conf_pct_txt(): 17 / 7.5 / 0.46."""
+    if p is None:
+        return None
+    if p >= 10:
+        return "%d" % ora_round(p)
+    if p >= 1:
+        return "%.1f" % ora_round(p, 1)
+    return "%.2f" % ora_round(p, 2)
+
+
+def conf_every(p):
+    """conf_every(): '1 in 6'."""
+    if p is None or p <= 0:
+        return None
+    k = 100 / p
+    k = ora_round(k, -1) if k >= 100 else ora_round(k)
+    return "1 in %d" % k
+
+
+def conf_title(n):
+    """conf_title(): the title text of a card's "n = 4" qualifier."""
+    if conf_mod(n) is None:
+        return None
+    return ("Scored against " + str(int(n)) + " prior windows. A metric that did not change"
+            " still lands outside +/-2 sigma about " + conf_pct_txt(conf_mod(n)) + "% of the time ("
+            + conf_every(conf_mod(n)) + ") and outside +/-3 sigma about "
+            + conf_pct_txt(conf_large(n)) + "% (" + conf_every(conf_large(n))
+            + "), before the size floors." + (" (Rates shown for 60 windows.)" if n > 60 else ""))
+
+
+def conf_verdict(n):
+    """conf_verdict(): the verdict's "Thin baseline" li for 3 to 5 valid
+    prior windows, else None."""
+    if n is None or n < 3 or n > 5:
+        return None
+    return ('<li class="hn-conf" data-n="' + str(int(n)) + '"><span class="hw">'
+            '<b class="hl">Thin baseline:</b> ' + str(int(n)) + ' prior windows. With so few, a'
+            ' metric that did not really change still lands outside &plusmn;2&sigma; about 1 time in '
+            + str(int(ora_round(100 / conf_mod(n)))) + ' and outside &plusmn;3&sigma; about 1 in '
+            + str(int(ora_round(100 / conf_large(n)))) + ' (before the size floors). Read a lone moderate'
+            ' finding as a hint; more windows (weeks_back) tighten this. '
+            '<a class="go" href="#about">How scoring works&nbsp;&rarr;</a></span></li>')

@@ -308,12 +308,12 @@ BEGIN
         || ' body.va main > #sqlmon { order:12; } body.va main > #segment-io { order:13; }'
         || ' body.va main > #file-io { order:14; } body.va main > #param-changes { order:15; }'
         || ' body.va main > #ash-timeline { order:16; } body.va main > #db-time-summary { order:17; }'
-        || ' body.va main > #utilization { order:18; } body.va main > #windows { order:19; }'
+        || ' body.va main > #utilization, body.va main > #host-memory { order:18; } body.va main > #windows { order:19; }'
         || ' body.va main > #day-profile { order:20; }');
     -- The visualization sections (20-28) take the order of the section
     -- they extend and follow it in the DOM, so each shows right after it.
     DBMS_OUTPUT.PUT_LINE('body.va main > #instance-map, body.va main > #load-response,'
-        || ' body.va main > #release-delta { order:5; }'
+        || ' body.va main > #release-delta, body.va main > #who { order:5; }'
         || ' body.va main > #wait-hist { order:8; } body.va main > #blocking { order:9; }'
         || ' body.va main > #volume-cost { order:10; } body.va main > #plan-flame { order:12; }'
         || ' body.va main > #onset { order:17; } body.va main > #win-sim { order:19; }');
@@ -1656,6 +1656,12 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('.ashx .xeh{stroke-width:1.8}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xhn{font:600 11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .xdl{font:11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}');
+    -- plan 042: the cpu_count line on the by-wait-class chart, its label
+    -- (the .xdl font: tw() measures it) and the header note when it is
+    -- above the y range (js_timeline cpuMark / cpuHead)
+    DBMS_OUTPUT.PUT_LINE('.ashx .xcpu{stroke:var(--ink-2);stroke-width:1;stroke-dasharray:5 3;opacity:.85;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .xcpt{font:11px ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,system-ui,sans-serif;fill:var(--ink-2);paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round;pointer-events:none}');
+    DBMS_OUTPUT.PUT_LINE('.ashx .axh .axcpu{font-size:12px;color:var(--ink-3);white-space:nowrap}.ashx .axh .axcpu[hidden]{display:none}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axc.hl{background:var(--hov);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line-2)}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axlg.hlon .axc:not(.hl){opacity:.55}');
     DBMS_OUTPUT.PUT_LINE('.ashx .axlg.hlon .axc:not(.hl):hover,.ashx .axlg.hlon .axc:not(.hl):focus-visible{opacity:1}');

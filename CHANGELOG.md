@@ -10,6 +10,157 @@ entry here. Dates are release dates.
 Changes on `main` since 1.6.1 (the footer still says v1.6.1 until the next
 release bumps `awr_version`).
 
+- **Baseline check on the verdict** (plan 038): when dropping the prior
+  windows that stand out (section 26, Window similarity) would change a
+  metric's bucket, the verdict's notes carry one "Baseline check" line with
+  section 26's own numbers (how many metrics change, how the finding count
+  moves) and a link to it. A note, not a finding: no count, pill or severity
+  changes.
+- **Confidence by window count** (plan 039): the report now says how far a
+  finding can be trusted when it was scored against few prior windows. With 3
+  to 5 valid prior windows the verdict's notes carry one "Thin baseline" line
+  (a metric that did not change still lands outside +/-2 sigma about 1 time in
+  6 and outside +/-3 sigma about 1 in 13 at n = 4, before the size floors);
+  every finding card shows a small "n = 4" after its normal range, its title
+  giving the two rates for that n; the About note "Scoring" lists them for n =
+  3 to 52. The rates are Student's t for a normal, unchanged metric
+  (`sql/lib/baseline_conf.plsql`, checked by `tools/gen_baseline_conf.py
+  --check`). Display only: thresholds, flags, counts and order are unchanged.
+- **A shorter Summary, and a machine-readable result** (plan 040). The
+  Top SQL and Foreground waits rows of the evidence library start open only
+  when their one-line status names something that no finding or plan-change
+  card already names (the top statement, the wait classes that moved), or
+  when the report has no finding card; otherwise they start shut and open on
+  a click or a link (the demo's Summary is about 2,800 px shorter at 1440
+  px). Follow-up: Who added the load, Plan shape, Window similarity and
+  Volume vs unit cost follow the same rule (their news is the Who row on the
+  DB time card, the plan-change card, the verdict's Baseline check note, the
+  plan-change card of the statement slower per run), so the demo's Summary is
+  about 6,700 px shorter again (19,640 px to 12,934 px at 1440 px).
+  The page also carries one `<script type="application/json"
+  id="awr-findings">` block (schema 1): the report's identity and window
+  settings, the card counts and one object per finding card (lead metric,
+  unit, current / mean / sd, n, z, impact in AAS, share of the DB-time
+  rise), so a scheduler or ticket system can read the result without
+  scraping HTML (README "Machine-readable result"). No finding, count or
+  score changes; plan-change and configuration cards are not in schema 1.
+- **The peak inside the window** (plan 041): every number is a window
+  average, so a five-minute stall read as a mild rise. System metrics now
+  shows each metric's **Peak (1 min)** in the Current window (the largest
+  `DBA_HIST_SYSMETRIC_SUMMARY.MAXVAL`, the highest 60-second value, over the
+  window's snapshots; with several instances the largest single-instance
+  value, labelled "max per instance") and a plain delta against the prior
+  windows' peaks. Active sessions (section 09) gains a table "Busiest minute
+  per window" (average, busiest minute, when, x the average) from the ASH
+  scan's 1-minute counts, also in `AWR_DATA.ashx.pk`; the DB time card gets
+  a "Peak" evidence row ("53.7 active sessions at 09:19; prior windows'
+  busiest minutes 19.5-50.5") and the Activity charts' window tooltips a
+  "Busiest minute" line. Unscored: no finding, count or severity changes.
+- **CPU capacity** (plan 042): is 8.6 sessions on CPU a lot? The DB time
+  card gets a "CPU" evidence row, "DB CPU 8.6 of cpu_count 16 (54%)", which
+  adds "ASH saw x on CPU, so about y sessions were waiting for a CPU" when
+  foreground ASH on CPU exceeds DB CPU by at least 10 % and 0.5 AAS (ASH
+  counts the run queue as on CPU, the time model does not) and "CPU-bound"
+  at 90 %. The by-wait-class Activity chart draws the Current `cpu_count`
+  as a dashed line when it lies inside the chart's scale (the scale is
+  never stretched for it; above it the header says "cpu_count 64, above
+  this scale"). Active sessions lists every window in "CPU capacity per
+  window" (`cpu_count` from `DBA_HIST_PARAMETER`, DB CPU from the time
+  model, ASH on CPU, the difference), also `AWR_DATA.ashx.cpu`; an About
+  note explains what `cpu_count` is and is not. Unscored.
+- **Time model: what the sessions were doing** (plan 043): Load profile
+  gets a second table from `DBA_HIST_SYS_TIME_MODEL`, in average active
+  sessions: DB time with DB CPU, SQL execution, parse time (hard parse,
+  failed parse), PL/SQL, Java, connection management, sequence loads and
+  rebinds under it, then background elapsed / CPU time, indented as the
+  Oracle Reference's tree (the rows overlap: never add them up), with a
+  "% of DB time" column, the normal range, a plain delta and the trend.
+  Rows that are zero in every window are named under the table. When a
+  row other than DB CPU and SQL execution rose by at least 0.01 AAS and 5%
+  of the DB-time rise, the DB time card gets one evidence row for it
+  ("Parse: hard parse elapsed time 1.4 AAS, was 0.2; 13% of the DB-time
+  rise") and the library row says so. An About note explains the tree.
+  Unscored.
+- **Why one statement got slower** (plan 044): an opened Top SQL pool row
+  now has, under its Compared windows table, "Per execution: where the time
+  went": elapsed per execution split into CPU, I/O wait, concurrency,
+  application (locks) and cluster wait plus the rest, then rows, buffer
+  gets, physical reads and gets per row per execution, Current against the
+  prior mean with a plain change and each part's share of the per-run rise.
+  The numbers are the other columns of the same `DBA_HIST_SQLSTAT` rows
+  (`IOWAIT_DELTA`, `CCWAIT_DELTA`, `APWAIT_DELTA`, `CLWAIT_DELTA`,
+  `ROWS_PROCESSED_DELTA`), no extra read. When each run took at least 1.5
+  times as long, a hedged "Reads as" line names the likely reading (works
+  harder for the same result, more data per call, blocked by locks,
+  contention, slower reads, a colder cache), from fixed thresholds stated
+  in the About note; below that, it says when the statement simply ran more
+  often. The plan-change card gets one line, "Rows, I/O: rows per run
+  x1.0, I/O wait is 86% of the per-run rise". Ranked evidence, not scored.
+- **Who added the load** (plan 045, new section 29): which service,
+  module, machine, program or user (and PDB, when the samples carry more
+  than one container) is behind the extra active sessions, for the whole
+  workload, statements outside every top N included. Foreground ASH
+  (on CPU or in a non-idle wait) per valid compared window, in AAS like
+  DB time; per dimension the values whose time rose first, with the
+  Current value, the prior mean, a plain change, the share of the rise
+  in all foreground activity and a trend strip. Parallel and job slaves
+  are folded into one program name ("(Pnnn)"). A "Reads as" sentence
+  names the value that carries at least half of the rise, and the DB time
+  card gets one "Who" row ("module OrderService +6.570 AAS, 73% of the
+  rise in foreground activity") when a module, service, machine or user
+  carries at least 30%. Service and PDB names use two new **optional**
+  grants (`DBA_HIST_SERVICE_NAME`, `DBA_HIST_PDB_INSTANCE`); without them
+  the section shows hashes / container ids. Evidence, not a finding: no
+  count, pill or severity. The report now has 30 `AWR-SECTION` pairs.
+- **Host and memory** (plan 046, new section 30): was the host out of CPU
+  or swapping, and was it this database? Did the buffer cache or the PGA
+  change, any ORA-01555, which statement held the temp space? Four tables
+  per compared window: host CPU busy / user / system / nice / I/O wait,
+  the database's share of the host's busy CPU, load, Resource Manager
+  wait, paging, and the host's CPUs and memory ("host resized" when they
+  changed); buffer cache, shared and large pool, PGA allocated / in use /
+  over-allocations and the SGA resize operations of the Current window;
+  undo blocks, transactions, longest query, ORA-01555 and out-of-space
+  counts; peak temp and PGA from ASH with the Current window's top 5
+  statements against their usual maximum. The Physical I/O card gets a
+  "Memory" row when the buffer cache is at least 10% smaller than usual,
+  the DB time card a "Host" row at 90% host CPU or any swap-out. Five new
+  **optional** grants (`DBA_HIST_OSSTAT`, `DBA_HIST_PGASTAT`,
+  `DBA_HIST_MEM_DYNAMIC_COMP`, `DBA_HIST_MEMORY_RESIZE_OPS`,
+  `DBA_HIST_UNDOSTAT`); each block says which one it lacks and the rest
+  still shows. Evidence, not a finding: no count, pill or severity. The
+  report now has 31 `AWR-SECTION` pairs.
+- **Objects around a plan change** (plan 047): "the plan flipped -- what
+  happened to the objects it touches?" Plan shape (section 23) now lists,
+  for each changed plan, every table and index of the old and the new plan
+  with what the dictionary says now: last analyzed and rows, when table
+  statistics changed (`DBA_TAB_STATS_HISTORY`), last DDL, created, index
+  status / visibility, stale or locked statistics. A time counts as
+  "around the plan change" only inside one stated interval (from the start
+  of the last prior window on the old plan to the end of the Current
+  window); a "Reads as" line says what falls in it, hedged ("the plan may
+  have followed them"), and says when a later event can hide an earlier
+  one or the objects are not visible from this container. The plan-change
+  card gets one "Objects" row when something falls in the interval or an
+  index is UNUSABLE / INVISIBLE. Four new **optional** grants
+  (`DBA_OBJECTS`, `DBA_TAB_STATISTICS`, `DBA_TAB_STATS_HISTORY`,
+  `DBA_INDEXES`). Evidence, not a finding: no count, pill or severity.
+- **Round 3 fixes after the first test-database pass** (plans 045-047):
+  run from a CDB root, Plan shape now reads the objects of a plan captured
+  in a PDB through `CDB_OBJECTS`, `CDB_TAB_STATISTICS`,
+  `CDB_TAB_STATS_HISTORY` and `CDB_INDEXES` for that container (four more
+  optional grants; a common user also needs `CONTAINER_DATA`), and says
+  which dictionary it read; a PDB or non-CDB run is unchanged, except that
+  the objects sentence now names the interval start with its time ("Sun 8
+  Nov 09:00"). Who added the load folds job / PX slave names with a letter
+  in them (`(J00A)` -> `(Jnnn)`), names each user's container when the
+  samples span several (`SYS (CDB$ROOT)`, `SYS (PDB1)`), and says "more
+  than the whole rise ... (others fell)" instead of "&gt;100%". Host and
+  memory names the resized windows with their start time and calls the
+  host "swapping" only from 0.01 MB/s paged out (below: "little paging
+  out"), which also gates the library row and the DB time card row. The
+  headless check's CPU-capacity tolerance now allows for a small
+  `cpu_count`.
 - **Docs / tooling:** the demo generator is now platform-independent (every
   libm-derived value is rounded to 10 significant digits, digit counts are
   exact), so the demo pages regenerate byte for byte on Linux as on macOS

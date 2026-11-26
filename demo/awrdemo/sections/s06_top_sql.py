@@ -30,11 +30,12 @@ AWR stores them), `optimizer_mode` (= ALL_ROWS), `force_matching_signature`
 """
 from __future__ import annotations
 
+import math
 from datetime import timedelta
 
 from awrdemo import chrome
 from awrdemo import helpers as h
-from awrdemo.model import ilog10
+from awrdemo.model import FG_EVENTS, ilog10
 from awrdemo.helpers import (anchor_id, esc, fmt_int, fmt_num, fmt_num_title, is_oracle_schema,
                              json_escape, mon_dd, num6, ora_round, to_char_fixed, ts_min)
 
@@ -102,9 +103,20 @@ def _ival(x: float) -> float:
     return ora_round(x, 0)
 
 
+# plan 044: the model's per-statement wait split (event -> microseconds) by
+# wait class, for the CCWAIT_DELTA / APWAIT_DELTA twins
+_EV_CLASS = {e.name: e.wait_class for e in FG_EVENTS}
+
+
+def _class_us(x, cls: str) -> float:
+    return math.fsum(us for ev, us in x.waits.items() if _EV_CLASS.get(ev) == cls)
+
+
 def _agg(w):
-    """agg CTE: {week_offset: {sql_id: dict(execs, ela, cpu, gets, reads, phv, schema)}}
-    over VALID windows only."""
+    """agg CTE: {week_offset: {sql_id: dict(execs, ela, cpu, gets, reads, phv, schema,
+    io, cc, ap, cl, rows)}} over VALID windows only.  Plan 044's wait timers:
+    I/O = the model's iowait_us, concurrency / application = its wait split
+    summed by wait class, cluster = 0 (one instance)."""
     out = {}
     for win in w.windows:
         m = w.window_metrics(win)
@@ -116,6 +128,8 @@ def _agg(w):
                 "execs": _ival(x.execs), "ela": _ival(x.elapsed_us), "cpu": _ival(x.cpu_us),
                 "gets": _ival(x.gets), "reads": _ival(x.reads),
                 "phv": x.plan_hash, "schema": w.sql_by_id[sid].schema,
+                "io": _ival(x.iowait_us), "cc": _ival(_class_us(x, "Concurrency")),
+                "ap": _ival(_class_us(x, "Application")), "cl": 0.0, "rows": _ival(x.rows),
             }
         out[win.week_offset] = rows
     return out
@@ -553,6 +567,197 @@ def _windows_table(w, sid, agg) -> list[str]:
     if weeks_back > 29:
         out.append('<p class="sqd-sub sqd-fn">Showing Current and the 29 most recent of '
                    + str(weeks_back) + " prior windows; the mean covers every valid one.</p>")
+    out.extend(_split_block(w, sid, agg, ex, wn, wsx))
+    return out
+
+
+# ---------------------------------------------------------------------
+# plan 044: Per execution, where the time went (twin of the block after the
+# Compared windows table; the thresholds and rules are 06's c_sqx_*)
+# ---------------------------------------------------------------------
+
+_SQX_GATE, _SQX_PART, _SQX_FLAT, _SQX_UP = 1.5, 0.6, 0.2, 1.5
+# row index -> agg key (1 elapsed .. 10 physical reads; 7 = other, derived)
+_SQX_KEY = {1: "ela", 2: "cpu", 3: "io", 4: "cc", 5: "ap", 6: "cl", 8: "rows", 9: "gets", 10: "reads"}
+_SQX_NAMES = {1: ("Elapsed (s)", "elapsed"), 2: ("CPU (s)", "CPU"), 3: ("I/O wait (s)", "I/O wait"),
+              4: ("Concurrency (s)", "concurrency wait"), 5: ("Application, locks (s)", "application wait"),
+              6: ("Cluster (s)", "cluster wait"), 7: ("Other (s)", "other time")}
+
+
+def _sqx_nm(k, short=False):
+    if k in _SQX_NAMES:
+        return _SQX_NAMES[k][1 if short else 0]
+    return {8: "Rows", 9: "Buffer gets", 10: "Physical reads"}.get(k, "Buffer gets per row")
+
+
+def _sqx_tok(v):
+    """TO_CHAR(v, 'TM9'): every token here is an integer-valued total."""
+    return "" if v is None else str(int(ora_round(v, 0)))
+
+
+def _sqx_x(r):
+    return "&times;" + (str(int(ora_round(r, 0))) if r >= 100 else to_char_fixed(r, 1))
+
+
+def _sqx_pct(sh):
+    if sh is None:
+        return ""
+    v = ora_round(sh * 100, 0)
+    return ("&minus;" if v < 0 else "") + str(int(abs(v))) + "%"
+
+
+def _sqx_flat(r):
+    return r is not None and 1 - _SQX_FLAT <= r <= 1 + _SQX_FLAT
+
+
+def _ge(v, t):
+    """v >= t with Oracle's NULL semantics (NULL is never >= anything)."""
+    return v is not None and v >= t
+
+
+def _split_block(w, sid, agg, ex, wn, wsx) -> list[str]:
+    """06's "Per execution: where the time went" block of one pool row."""
+    weeks_back = w.weeks_back
+    cur = agg.get(0, {}).get(sid)
+    if not w.windows[0].valid or cur is None:
+        return ['<div class="sqx" data-sid="' + sid + '" data-sqx="nocur">'
+                '<p class="sqd-sub sqd-fn">Where the time went: no Current row for this statement, '
+                "nothing to split.</p></div>"]
+    xc = {i: (cur[k] or 0) for i, k in _SQX_KEY.items()}
+    xp = {i: 0.0 for i in range(1, 11)}
+    for k in range(1, weeks_back + 1):
+        r = agg.get(k, {}).get(sid)
+        if r is not None:
+            for i, key in _SQX_KEY.items():
+                xp[i] += r[key] or 0
+    xc[7] = max(0.0, xc[1] - xc[2] - xc[3] - xc[4] - xc[5] - xc[6])
+    xp[7] = max(0.0, xp[1] - xp[2] - xp[3] - xp[4] - xp[5] - xp[6])
+    wx = ex[0]
+    mode = "tot" if not wx or wx <= 0 else "new" if wn == 0 else "noprx" if wsx <= 0 else "pe"
+    xcv, xmv = {}, {}
+    for i in range(1, 11):
+        div = 1e6 if i <= 7 else 1
+        xcv[i] = (xc[i] if mode == "tot" else xc[i] / wx) / div
+        if mode == "pe":
+            xmv[i] = xp[i] / wsx / div
+        elif mode == "tot" and wn > 0:
+            xmv[i] = xp[i] / wn / div
+        else:
+            xmv[i] = None
+    xcv[11] = xcv[9] / xcv[8] if xcv[8] > 0 else None
+    xmv[11] = xmv[9] / xmv[8] if _ge(xmv[8], 0) and xmv[8] > 0 else None
+    rise = xcv[1] - xmv[1] if xmv[1] is not None else None
+
+    def share(k):
+        if rise is None or rise <= 0 or xmv[k] is None:
+            return None
+        return (xcv[k] - xmv[k]) / rise
+
+    def ratio(k):
+        c, m = xcv[k], xmv[k]
+        return c / m if (c is not None and m is not None and m != 0) else None
+
+    big = None
+    if rise is not None and rise > 0:
+        for i in range(2, 8):
+            if big is None or share(i) > share(big):
+                big = i
+    rule, rd = None, None
+    if mode == "pe" and _ge(xmv[1], 0) and xmv[1] > 0:
+        re_ = xcv[1] / xmv[1]
+        rr, gr, dr, pr = ratio(8), ratio(9), ratio(10), ratio(11)
+        rf = _sqx_flat(rr) or (xcv[8] == 0 and xmv[8] == 0)
+        s2, s3 = share(2), share(3)
+        if re_ >= _SQX_GATE:
+            if _ge(gr, _SQX_UP) and rf and (s2 or 0) + (s3 or 0) >= _SQX_PART:
+                rule = "harder"
+                rd = ("each run read " + _sqx_x(gr) + " the buffer gets for about the same rows ("
+                      + ("none either side" if rr is None else _sqx_x(rr))
+                      + "), and " + ("I/O wait" if s3 >= s2 else "CPU")
+                      + " carries " + _sqx_pct(max(s2, s3))
+                      + " of the per-run rise: it works harder for the same result, which usually points at "
+                        "the plan or the access path.")
+            elif _ge(rr, _SQX_UP) and _sqx_flat(pr):
+                rule = "data"
+                rd = ("rows per run rose " + _sqx_x(rr) + " and buffer gets per run " + _sqx_x(gr)
+                      + ", so the gets per row held: more data per call (more volume, or a wider predicate) "
+                        "rather than a worse plan, usually.")
+            elif _ge(share(5), _SQX_PART):
+                rule = "ap"
+                rd = ("application wait carries " + _sqx_pct(share(5))
+                      + " of the per-run rise: that is row-lock waits, usually, so it points at sessions "
+                        "blocking this one (the Blocking view names them) rather than at the statement itself.")
+            elif _ge(share(4), _SQX_PART):
+                rule = "cc"
+                rd = ("concurrency wait carries " + _sqx_pct(share(4))
+                      + " of the per-run rise: it points at contention (latches, mutexes, buffer busy waits) "
+                        "rather than at the plan.")
+            elif _ge(share(6), _SQX_PART):
+                rule = "cl"
+                rd = ("cluster wait carries " + _sqx_pct(share(6))
+                      + " of the per-run rise: it points at global cache transfers between RAC instances.")
+            elif _ge(s3, _SQX_PART) and _sqx_flat(gr) and rf and _sqx_flat(dr):
+                rule = "slowio"
+                rd = ("I/O wait carries " + _sqx_pct(s3)
+                      + " of the per-run rise while gets, rows and physical reads per run held: each read got "
+                        "slower, which usually points at storage rather than at the statement.")
+            elif _ge(s3, _SQX_PART) and _sqx_flat(gr) and _ge(dr, _SQX_UP):
+                rule = "cold"
+                rd = ("I/O wait carries " + _sqx_pct(s3)
+                      + " of the per-run rise and physical reads per run rose " + _sqx_x(dr)
+                      + " on about the same gets: more of its blocks came from disk (a colder buffer cache, "
+                        "usually) rather than a worse plan.")
+            else:
+                rule = "mixed"
+                rd = ("no single reading fits: the largest part of the per-run rise is "
+                      + _sqx_nm(big, True) + " (" + _sqx_pct(share(big)) + ").")
+            rd = "Each run took " + _sqx_x(re_) + " as long as the prior mean; " + rd
+        elif xp[1] > 0 and xc[1] >= _SQX_GATE * xp[1] / wn:
+            rule = "often"
+            rd = (("Each run took about as long as before (" + _sqx_x(re_) + " per run)") if _sqx_flat(re_)
+                  else ("Per run " + _sqx_x(re_) + ", under the " + _sqx_x(_SQX_GATE)
+                        + " line for a per-run reading"))
+            rd += ("; the total rose " + _sqx_x(xc[1] / (xp[1] / wn))
+                   + " because it ran " + _sqx_x(wx / (wsx / wn)) + " as often.")
+
+    sub = {"pe": "The Current window per execution against the prior mean per execution (the prior windows "
+                 "with a row above: their totals over their executions).",
+           "tot": "No execution completed in the Current window (a long-running call), so these are window "
+                  "TOTALS: Current against the prior mean per window.",
+           "new": "The Current window per execution; no prior window has a row for this statement (new)."}.get(
+        mode, "The Current window per execution; no execution completed in the prior windows with a row, "
+              "so there is no prior value per execution.")
+    out = ['<div class="sqx" data-sid="' + sid + '" data-sqx="' + mode
+           + '" data-cx="' + _sqx_tok(wx) + '" data-px="' + _sqx_tok(wsx) + '" data-pn="' + str(wn)
+           + '" data-rule="' + (rule or "") + '">'
+           '<h4 class="sqd-h">Per execution: where the time went</h4>'
+           '<p class="sqd-sub">' + sub + " Ranked evidence, not scored.</p>"
+           '<div class="sqd-tw"><table class="sqx-tbl" data-nosort data-nocount data-notools><thead><tr>'
+           '<th title="CPU and the four waits are separate timers of DBA_HIST_SQLSTAT: they can overlap or '
+           "leave a remainder, and include the time of parallel execution servers. Other = elapsed beyond "
+           'the five, never below 0.">'
+           + ("Window total" if mode == "tot" else "Per execution") + "</th>"
+           '<th class="num">Current</th><th class="num">Prior mean</th><th class="num">Change</th>'
+           '<th class="num" title="The part&#39;s change over the change of elapsed: its share of the rise. '
+           'The parts are separate timers, so the shares need not add up to 100%.">Share of the rise</th>'
+           "</tr></thead><tbody>"]
+    for i in range(1, 12):
+        cls = "sqx-e" if i == 1 else "sqx-p" if i <= 7 else "sqx-w sqx-w1" if i == 8 else "sqx-w"
+        row = ('<tr class="' + cls + '" data-k="' + str(i) + '"'
+               + ((' data-xc="' + _sqx_tok(xc[i]) + '" data-xp="' + _sqx_tok(xp[i]) + '"') if i <= 10 else "")
+               + "><td>" + _sqx_nm(i) + "</td>"
+               '<td class="num">' + fmt_num(xcv[i]) + "</td>"
+               '<td class="num">' + ('<span class="sqd-mu">&mdash;</span>' if xmv[i] is None else fmt_num(xmv[i]))
+               + "</td>"
+               '<td class="num">'
+               + (_sqd_chg(xcv[i], xmv[i], wn, _sqx_nm(i)) if mode in ("pe", "tot", "new") and xcv[i] is not None
+                  else "")
+               + '</td><td class="num">' + (_sqx_pct(share(i)) if 2 <= i <= 7 else "")
+               + "</td></tr>")
+        out.append(row)
+    out.append("</tbody></table></div>"
+               + (('<p class="sqx-rd" data-rule="' + rule + '"><b>Reads as:</b> ' + rd + "</p>") if rd else "")
+               + "</div>")
     return out
 
 
@@ -637,6 +842,7 @@ def emit(w) -> str:
     cur_dim = None
     tl_rows = []
     ls = None
+    news = ""                       # plan 040: the statement the row text is about
     panel_on = False
 
     def close_dim(nxt):
@@ -844,6 +1050,7 @@ def emit(w) -> str:
                 if s["cur_rnk"] is None:
                     ls = "no statement in the Current top " + str(top_n)
                 else:
+                    news = "sql:" + sid
                     ls = ("<code>" + sid + "</code> #" + str(s["cur_rnk"]) + " by elapsed"
                           + ((", " + h.delta_span(h.tl_val(w, csv, 0), mu, None, "Y")) if mu is not None else "")
                           + (", new plan" if plan_flip else
@@ -1142,6 +1349,7 @@ def emit(w) -> str:
     block, pos = _slice(L, "<script>(function(){", "})();</script>", pos)   # hash nav
     o.extend(block)
 
-    put(h.lib_ls("topsql", ls or "no SQL captured in the compared windows") + "</section>")
+    put(h.lib_ls("topsql", ls or "no SQL captured in the compared windows")
+        + h.lib_news("topsql", news) + "</section>")
     put("<!-- AWR-SECTION: 06_top_sql END -->")
     return "\n".join(o)

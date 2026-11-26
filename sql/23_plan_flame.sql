@@ -40,6 +40,41 @@
 -- them); the steps without samples under a step are folded into one
 -- "+ n steps without samples" row.
 --
+-- Objects around a plan change (plan 047, changed plans only): every table
+-- and index of the old and the new plan (plan line OBJECT_TYPE TABLE* /
+-- INDEX*, else the operation; fixed tables, cursor-duration SYS_TEMP
+-- tables and views skipped), at most 30 per statement, tables first.
+-- Four OPTIONAL dictionary views, read once for the union of the objects
+-- through dynamic SQL with the owner / name lists bound as
+-- sys.odcivarchar2list (a superset, matched exactly in PL/SQL), each in
+-- its own handler: ORA-00942 / ORA-01031 -> "needs SELECT on", any other
+-- error -> "could not read <view>: <message>", the report carries on.
+--   DBA_OBJECTS            CREATED, LAST_DDL_TIME, STATUS (no subobject)
+--   DBA_TAB_STATISTICS     LAST_ANALYZED, NUM_ROWS, STALE_STATS,
+--                          STATTYPE_LOCKED (table level: partition NULL)
+--   DBA_TAB_STATS_HISTORY  STATS_UPDATE_TIME (table level), cast to DATE
+--   DBA_INDEXES            STATUS, VISIBILITY, PARTITIONED, LAST_ANALYZED,
+--                          NUM_ROWS, TABLE_OWNER / TABLE_NAME
+-- Honesty: the dictionary is the CURRENT container's, in its CURRENT state
+-- (a missing row = "no dictionary row in this container": dropped, or not
+-- visible here, never "dropped").
+-- From a CDB root (SYS_CONTEXT USERENV CON_ID = '1') an object whose plan
+-- copy (DBA_HIST_SQL_PLAN.con_id of the copy picked above) belongs to
+-- another container (con_id > 1) is read instead from the CDB_ twins of
+-- the four views (CDB_OBJECTS, CDB_TAB_STATISTICS, CDB_TAB_STATS_HISTORY,
+-- CDB_INDEXES), one container at a time (con_id bound), matched on
+-- container, kind, owner and name; same optional-grant handlers, their
+-- own error notes ("needs SELECT on CDB_..."). A common user sees PDB rows
+-- through them only with CONTAINER_DATA. No CDB_ row = "no dictionary row
+-- (dropped, the PDB is closed, or not visible to this user)". A PDB
+-- session, a non-CDB and root-owned objects keep the DBA_ path exactly.
+-- Only CREATED, LAST_DDL_TIME,
+-- LAST_ANALYZED and the statistics history are past times, and only a time
+-- inside [start of the last valid prior window whose window plan was the
+-- old plan, end of the Current window] is called "around the plan
+-- change". A latest-only time after that interval can hide an earlier
+-- event, and the sentence says so.
+--
 -- Emits: section#plan-flame (lib row 13), one div.pf-st#pf-<sql_id> per
 -- statement (headers, empty plots that js_planflame fills, the "Reads as"
 -- sentence, the plan tables = every number with JS off), and
@@ -67,17 +102,26 @@ DECLARE
         old_phv  NUMBER,
         cur_ela  NUMBER,
         rnk      NUMBER,
-        txt      VARCHAR2(400)
+        txt      VARCHAR2(400),
+        lo_wo    NUMBER          -- plan 047: last valid prior window on the old plan
     );
     TYPE st_tab  IS TABLE OF st_rec INDEX BY PLS_INTEGER;
     TYPE num_map IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
     TYPE str_map IS TABLE OF VARCHAR2(400) INDEX BY PLS_INTEGER;
     TYPE num_vmap IS TABLE OF NUMBER INDEX BY VARCHAR2(200);
     TYPE cls_list IS TABLE OF VARCHAR2(30);
+    -- plan 047: the objects of the plans
+    TYPE dt_map  IS TABLE OF DATE INDEX BY PLS_INTEGER;
+    TYPE dt_mmap IS TABLE OF dt_map INDEX BY PLS_INTEGER;
+    TYPE int_map IS TABLE OF PLS_INTEGER INDEX BY PLS_INTEGER;
+    TYPE int_mmap IS TABLE OF int_map INDEX BY PLS_INTEGER;
+    TYPE key_map IS TABLE OF PLS_INTEGER INDEX BY VARCHAR2(1000);
+    TYPE big_map IS TABLE OF VARCHAR2(32767) INDEX BY PLS_INTEGER;
 
     v_st        st_tab;
     v_nst       PLS_INTEGER := 0;
     v_mode      VARCHAR2(3);                    -- 'chg' | 'top' | NULL
+    v_news      VARCHAR2(2000);                 -- plan 040 follow-up: the changed statements, as sql:<id> tokens
     v_cur_valid VARCHAR2(1) := 'N';
     v_cur_skip  VARCHAR2(200);
     v_n_prior   PLS_INTEGER := 0;
@@ -92,6 +136,7 @@ DECLARE
     p_lines  num_map;   -- plan lines
     p_maxid  num_map;
     p_marks  num_map;   -- "+ n steps without samples" rows
+    p_con    num_map;   -- plan 047: con_id of the plan copy read (DBA_HIST_SQL_PLAN)
     v_wo_seen num_vmap; -- slot:week_offset -> 1 (old-plan windows with samples)
 
     -- per plan step, key = p * c_kmul + id
@@ -143,6 +188,78 @@ DECLARE
     v_s2     VARCHAR2(13);
     v_s3     VARCHAR2(13);
     v_phv_txt VARCHAR2(40);
+    v_otyp    VARCHAR2(40);
+    v_pcon    NUMBER;
+    s_typ     str_map;   -- step: object type of the plan line
+
+    -- plan 047: objects of the plans, read from the dictionary (NOW, this
+    -- container); o = 1 .. o_n over the union of the statements' plans
+    c_max_obj CONSTANT PLS_INTEGER := 30;
+    c_hist_d  CONSTANT PLS_INTEGER := 31;   -- default statistics history retention, days
+    w_start   dt_map;    -- week_offset -> nominal window start
+    v_cur_end DATE;      -- nominal end of the Current window
+    v_now     DATE := SYSDATE;
+    o_n       PLS_INTEGER := 0;
+    o_idx     key_map;   -- kind|owner|name -> o
+    o_kind    str_map;   -- 'T' table | 'I' index
+    o_own     str_map;
+    o_nam     str_map;
+    o_seen    str_map;   -- 'Y' = some dictionary read returned a row
+    o_crt     dt_map;    -- DBA_OBJECTS.CREATED
+    o_ddl     dt_map;    -- DBA_OBJECTS.LAST_DDL_TIME
+    o_ost     str_map;   -- DBA_OBJECTS.STATUS
+    o_la      dt_map;    -- LAST_ANALYZED (DBA_TAB_STATISTICS / DBA_INDEXES)
+    o_rows    num_map;   -- NUM_ROWS
+    o_stale   str_map;   -- STALE_STATS (tables)
+    o_lock    str_map;   -- STATTYPE_LOCKED (tables)
+    o_tab     big_map;   -- an index's table, owner.name (DBA_INDEXES)
+    o_ist     str_map;   -- DBA_INDEXES.STATUS
+    o_vis     str_map;   -- DBA_INDEXES.VISIBILITY
+    o_part    str_map;   -- DBA_INDEXES.PARTITIONED
+    o_hist    dt_mmap;   -- DBA_TAB_STATS_HISTORY times, newest first
+    e_ob      VARCHAR2(400);   -- read errors: NULL ok, 'G' no grant, else the message
+    e_ts      VARCHAR2(400);
+    e_th      VARCHAR2(400);
+    e_ix      VARCHAR2(400);
+    -- the same four reads through the CDB_ views (from the root, objects of a PDB)
+    ec_ob     VARCHAR2(400);
+    ec_ts     VARCHAR2(400);
+    ec_th     VARCHAR2(400);
+    ec_ix     VARCHAR2(400);
+    v_croot   BOOLEAN := SYS_CONTEXT('USERENV', 'CON_ID') = '1';   -- the session is in CDB$ROOT
+    o_con     num_map;   -- an object read through the CDB_ views: its con_id (else no entry)
+    v_cowners sys.odcivarchar2list := sys.odcivarchar2list();   -- owners / names of those objects
+    v_conames sys.odcivarchar2list := sys.odcivarchar2list();
+    v_conl    num_map;   -- their containers, 1 .. count
+    st_src    big_map;   -- statement -> which dictionary its listed objects come from
+    v_rd_ob   BOOLEAN := FALSE;   -- the reads ran at all
+    so_flag   num_vmap;  -- 'i:o' -> 1 old plan, 2 new plan, 3 both
+    so_ord    int_mmap;  -- statement -> display order of its objects
+    so_cnt    num_map;   -- statement -> distinct objects (before the cap)
+    st_lo     dt_map;    -- statement -> interval start
+    st_ord    big_map;   -- statement -> the objects' "Reads as" sentence
+    st_cev    big_map;   -- statement -> the plan card's evidence row (or NULL)
+    st_lsx    big_map;   -- statement -> a lib_ls clause (or NULL)
+    v_owners  sys.odcivarchar2list := sys.odcivarchar2list();
+    v_onames  sys.odcivarchar2list := sys.odcivarchar2list();
+    v_seenk   key_map;
+    v_okey    VARCHAR2(1000);
+    v_o       PLS_INTEGER;
+    x_own     VARCHAR2(512);
+    x_nam     VARCHAR2(512);
+    x_typ     VARCHAR2(40);
+    x_tow     VARCHAR2(512);
+    x_tnm     VARCHAR2(512);
+    x_s1      VARCHAR2(40);
+    x_s2      VARCHAR2(40);
+    x_s3      VARCHAR2(40);
+    x_d1      DATE;
+    x_d2      DATE;
+    x_n       NUMBER;
+    x_d2n     NUMBER;    -- a second number column (CDB_ reads: x_n holds the con_id)
+    v_srcs    VARCHAR2(32767);
+    v_emp_i   int_map;   -- empty collections: a nested element is assigned whole first
+    v_emp_d   dt_map;
 
     @@sql/lib/json_escape.plsql
     @@sql/lib/fmt_num.plsql
@@ -392,6 +509,561 @@ DECLARE
             || '; ' || pct(cbv, p_tot(p)) || ' of it is ' || cb;
     END where_txt;
 
+    -- ---- plan 047: the objects of the plans ------------------------------
+    -- a plan line's object: 'T' table, 'I' index, NULL = not a dictionary
+    -- table / index (views, fixed tables, cursor-duration temp tables)
+    FUNCTION obj_kind(p_op VARCHAR2, p_typ VARCHAR2, p_own VARCHAR2, p_nam VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        IF p_own IS NULL OR p_nam IS NULL OR SUBSTR(p_nam, 1, 8) = 'SYS_TEMP' THEN
+            RETURN NULL;
+        END IF;
+        IF p_typ IS NOT NULL THEN
+            IF INSTR(p_typ, 'FIXED') > 0 OR INSTR(p_typ, 'TEMP') > 0 THEN
+                RETURN NULL;
+            END IF;
+            IF SUBSTR(p_typ, 1, 5) = 'TABLE' THEN
+                RETURN 'T';
+            END IF;
+            IF SUBSTR(p_typ, 1, 5) = 'INDEX' THEN
+                RETURN 'I';
+            END IF;
+            RETURN NULL;
+        END IF;
+        IF SUBSTR(p_op, 1, 12) = 'TABLE ACCESS' THEN
+            RETURN 'T';
+        END IF;
+        IF INSTR(p_op, 'INDEX') > 0 THEN
+            RETURN 'I';
+        END IF;
+        RETURN NULL;
+    END obj_kind;
+
+    -- a time against the interval: 'B' before, 'I' inside, 'A' after its end
+    FUNCTION tcls(t DATE, lo DATE, hi DATE) RETURN VARCHAR2 IS
+    BEGIN
+        IF t IS NULL OR lo IS NULL OR hi IS NULL THEN
+            RETURN NULL;
+        END IF;
+        IF t > hi THEN
+            RETURN 'A';
+        END IF;
+        IF t >= lo THEN
+            RETURN 'I';
+        END IF;
+        RETURN 'B';
+    END tcls;
+
+    FUNCTION dkey(t DATE) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN TO_CHAR(t, 'YYYY-MM-DD HH24:MI:SS');
+    END dkey;
+
+    -- a table cell's time, with the year: 2026-09-08 22:35
+    FUNCTION dlong(t DATE) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN TO_CHAR(t, 'YYYY-MM-DD HH24:MI');
+    END dlong;
+
+    -- a sentence's time: Tue 8 Sep 22:35 (Tue 8 Sep without the time)
+    FUNCTION dday(t DATE, p_time BOOLEAN) RETURN VARCHAR2 IS
+        r VARCHAR2(40);
+    BEGIN
+        r := TO_CHAR(t, 'Dy', 'NLS_DATE_LANGUAGE=ENGLISH') || ' ' || TO_CHAR(t, 'FMDD') || ' '
+            || TO_CHAR(t, 'Mon', 'NLS_DATE_LANGUAGE=ENGLISH');
+        IF p_time THEN
+            r := r || ' ' || TO_CHAR(t, 'HH24:MI');
+        END IF;
+        RETURN r;
+    END dday;
+
+    -- a time in a table cell; inside the interval it carries data-t (verify_report)
+    FUNCTION tcell(t DATE, lo DATE, hi DATE) RETURN VARCHAR2 IS
+        c VARCHAR2(1) := tcls(t, lo, hi);
+    BEGIN
+        IF t IS NULL THEN
+            RETURN NULL;
+        END IF;
+        IF c = 'I' THEN
+            RETURN '<span class="pf-ot" data-t="' || dkey(t) || '" title="inside the interval">' || dlong(t) || '</span>';
+        END IF;
+        IF c = 'A' THEN
+            RETURN '<span class="pf-oa" title="after the end of the Current window">' || dlong(t) || '</span>';
+        END IF;
+        RETURN dlong(t);
+    END tcell;
+
+    FUNCTION oname(o PLS_INTEGER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN DBMS_XMLGEN.CONVERT(o_own(o) || '.' || o_nam(o));
+    END oname;
+
+    FUNCTION err_note(p_err VARCHAR2, p_view VARCHAR2) RETURN VARCHAR2 IS
+    BEGIN
+        IF p_err IS NULL THEN
+            RETURN NULL;
+        END IF;
+        IF p_err = 'G' THEN
+            RETURN 'needs SELECT on <code>' || p_view || '</code>';
+        END IF;
+        RETURN 'could not read <code>' || p_view || '</code>: ' || DBMS_XMLGEN.CONVERT(p_err);
+    END err_note;
+
+    -- the object is read through the CDB_ views (from the root, a PDB's object)
+    FUNCTION ocdb(o PLS_INTEGER) RETURN BOOLEAN IS
+    BEGIN
+        RETURN o_con.EXISTS(o) AND o_con(o) IS NOT NULL;
+    END ocdb;
+
+    -- the read errors of the path the object is read through
+    FUNCTION eob(o PLS_INTEGER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN CASE WHEN ocdb(o) THEN ec_ob ELSE e_ob END;
+    END eob;
+    FUNCTION ets(o PLS_INTEGER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN CASE WHEN ocdb(o) THEN ec_ts ELSE e_ts END;
+    END ets;
+    FUNCTION eth(o PLS_INTEGER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN CASE WHEN ocdb(o) THEN ec_th ELSE e_th END;
+    END eth;
+    FUNCTION eix(o PLS_INTEGER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN CASE WHEN ocdb(o) THEN ec_ix ELSE e_ix END;
+    END eix;
+
+    -- at least one dictionary read that can see an object of this kind worked
+    FUNCTION kind_read(o PLS_INTEGER) RETURN BOOLEAN IS
+    BEGIN
+        IF o_kind(o) = 'T' THEN
+            RETURN eob(o) IS NULL OR ets(o) IS NULL OR eth(o) IS NULL;
+        END IF;
+        RETURN eob(o) IS NULL OR eix(o) IS NULL;
+    END kind_read;
+
+    FUNCTION seen(o PLS_INTEGER) RETURN BOOLEAN IS
+    BEGIN
+        RETURN o_seen.EXISTS(o) AND o_seen(o) = 'Y';
+    END seen;
+
+    -- statistics times inside the interval: the history for a table (else
+    -- its LAST_ANALYZED when the history could not be read), LAST_ANALYZED
+    -- for an index (no history view is read for indexes)
+    FUNCTION st_first_in(o PLS_INTEGER, lo DATE, hi DATE) RETURN DATE IS
+        r DATE;
+    BEGIN
+        IF o_kind(o) = 'T' AND eth(o) IS NULL THEN
+            IF o_hist.EXISTS(o) THEN
+                FOR k IN 1 .. o_hist(o).COUNT LOOP
+                    IF tcls(o_hist(o)(k), lo, hi) = 'I' THEN
+                        r := o_hist(o)(k);   -- newest first: the last match is the earliest
+                    END IF;
+                END LOOP;
+            END IF;
+            IF r IS NOT NULL THEN
+                RETURN r;
+            END IF;
+            -- no history row inside (history off or purged): LAST_ANALYZED below
+        END IF;
+        IF o_la.EXISTS(o) AND tcls(o_la(o), lo, hi) = 'I' THEN
+            RETURN o_la(o);
+        END IF;
+        RETURN NULL;
+    END st_first_in;
+
+    FUNCTION st_n_in(o PLS_INTEGER, lo DATE, hi DATE) RETURN PLS_INTEGER IS
+        n PLS_INTEGER := 0;
+    BEGIN
+        IF o_kind(o) = 'T' AND eth(o) IS NULL THEN
+            IF o_hist.EXISTS(o) THEN
+                FOR k IN 1 .. o_hist(o).COUNT LOOP
+                    IF tcls(o_hist(o)(k), lo, hi) = 'I' THEN
+                        n := n + 1;
+                    END IF;
+                END LOOP;
+            END IF;
+            IF n > 0 THEN
+                RETURN n;
+            END IF;
+        END IF;
+        RETURN CASE WHEN st_first_in(o, lo, hi) IS NOT NULL THEN 1 ELSE 0 END;
+    END st_n_in;
+
+    -- a table's statistics updates BEFORE the interval (at most 2, newest
+    -- first), so the reader can tell a routine gather from an odd one
+    FUNCTION pre_txt(o PLS_INTEGER, lo DATE, hi DATE) RETURN VARCHAR2 IS
+        r VARCHAR2(400);
+        n PLS_INTEGER := 0;
+    BEGIN
+        IF o_kind(o) <> 'T' OR eth(o) IS NOT NULL OR NOT o_hist.EXISTS(o) THEN
+            RETURN NULL;
+        END IF;
+        FOR k IN 1 .. o_hist(o).COUNT LOOP
+            IF tcls(o_hist(o)(k), lo, hi) = 'B' AND n < 2 THEN
+                n := n + 1;
+                r := r || CASE WHEN n > 1 THEN ', ' END || dday(o_hist(o)(k), TRUE);
+            END IF;
+        END LOOP;
+        RETURN r;
+    END pre_txt;
+
+    -- the abnormal state of an object now (NULL = none): index UNUSABLE /
+    -- INVISIBLE, object INVALID
+    FUNCTION bad_state(o PLS_INTEGER) RETURN VARCHAR2 IS
+    BEGIN
+        IF o_kind(o) = 'I' AND o_ist.EXISTS(o) AND o_ist(o) = 'UNUSABLE' THEN
+            RETURN 'UNUSABLE';
+        END IF;
+        IF o_kind(o) = 'I' AND o_vis.EXISTS(o) AND o_vis(o) = 'INVISIBLE' THEN
+            RETURN 'INVISIBLE';
+        END IF;
+        IF o_ost.EXISTS(o) AND o_ost(o) = 'INVALID' THEN
+            RETURN 'INVALID';
+        END IF;
+        RETURN NULL;
+    END bad_state;
+
+    FUNCTION in_txt(p_f NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN CASE p_f WHEN 1 THEN 'old' WHEN 2 THEN 'new' ELSE 'both' END;
+    END in_txt;
+
+    FUNCTION used_txt(p_f NUMBER) RETURN VARCHAR2 IS
+    BEGIN
+        RETURN CASE p_f WHEN 1 THEN 'used by the old plan' WHEN 2 THEN 'used by the new plan'
+                        ELSE 'used by both plans' END;
+    END used_txt;
+
+    -- the containers of statement i's listed objects read through the CDB_
+    -- views: "con_id 3" / "con_id 3, 4" (NULL: none)
+    FUNCTION con_txt(i PLS_INTEGER) RETURN VARCHAR2 IS
+        r  VARCHAR2(4000);
+        o  PLS_INTEGER;
+    BEGIN
+        FOR c IN 1 .. v_conl.COUNT LOOP
+            FOR j IN 1 .. LEAST(so_ord(i).COUNT, c_max_obj) LOOP
+                o := so_ord(i)(j);
+                IF ocdb(o) AND o_con(o) = v_conl(c) THEN
+                    r := r || CASE WHEN r IS NOT NULL THEN ', ' END || v_conl(c);
+                    EXIT;
+                END IF;
+            END LOOP;
+        END LOOP;
+        RETURN CASE WHEN r IS NOT NULL THEN 'con_id ' || r END;
+    END con_txt;
+
+    -- statement i lists an object read through the DBA_ views (this container)
+    FUNCTION has_loc(i PLS_INTEGER) RETURN BOOLEAN IS
+    BEGIN
+        FOR j IN 1 .. LEAST(so_ord(i).COUNT, c_max_obj) LOOP
+            IF NOT ocdb(so_ord(i)(j)) THEN
+                RETURN TRUE;
+            END IF;
+        END LOOP;
+        RETURN FALSE;
+    END has_loc;
+
+    -- which dictionary statement i's objects come from (header, card title)
+    FUNCTION src_txt(i PLS_INTEGER) RETURN VARCHAR2 IS
+        c VARCHAR2(4000) := con_txt(i);
+    BEGIN
+        IF c IS NULL THEN
+            RETURN 'the dictionary of this container';
+        END IF;
+        IF NOT has_loc(i) THEN
+            RETURN CASE WHEN INSTR(c, ',') > 0 THEN 'containers ' ELSE 'container ' END || c
+                || ', read from the CDB root through CDB_ views';
+        END IF;
+        RETURN 'the dictionary of this container and of ' || c || ' (read from the CDB root through CDB_ views)';
+    END src_txt;
+
+    -- one row of the object table
+    FUNCTION obj_row(i PLS_INTEGER, j PLS_INTEGER, o PLS_INTEGER, lo DATE, hi DATE) RETURN VARCHAR2 IS
+        f   NUMBER := so_flag(i || ':' || o);
+        r   VARCHAR2(32767);
+        h   VARCHAR2(4000);
+        st  VARCHAR2(4000);
+        mk  VARCHAR2(4000);
+        n   PLS_INTEGER := 0;
+        b   VARCHAR2(20) := bad_state(o);
+    BEGIN
+        r := '<tr class="pf-or" id="' || anchor_id('pfo', v_st(i).sql_id || '-' || j) || '" data-k="' || o_kind(o)
+            || '" data-in="' || in_txt(f) || '"><td class="pf-on">' || oname(o) || '</td><td>'
+            || CASE WHEN o_kind(o) = 'T' THEN 'table'
+                    ELSE 'index' || CASE WHEN o_tab.EXISTS(o) AND o_tab(o) IS NOT NULL
+                                         THEN ' on ' || DBMS_XMLGEN.CONVERT(o_tab(o)) END END
+            || '</td><td>' || in_txt(f) || '</td>';
+        -- statistics now
+        IF NOT kind_read(o) THEN
+            r := r || '<td>&ndash;</td>';
+        ELSIF o_la.EXISTS(o) AND o_la(o) IS NOT NULL THEN
+            r := r || '<td>' || tcell(o_la(o), lo, hi)
+                || CASE WHEN o_rows.EXISTS(o) AND o_rows(o) IS NOT NULL
+                        THEN ' &middot; ' || fmt_int(o_rows(o)) || CASE WHEN o_rows(o) = 1 THEN ' row' ELSE ' rows' END END || '</td>';
+        ELSIF seen(o) AND ((o_kind(o) = 'T' AND ets(o) IS NULL) OR (o_kind(o) = 'I' AND eix(o) IS NULL)) THEN
+            r := r || '<td>never gathered</td>';
+        ELSE
+            r := r || '<td>&ndash;</td>';
+        END IF;
+        -- new statistics inside the interval
+        IF o_kind(o) = 'T' AND eth(o) IS NULL THEN
+            IF o_hist.EXISTS(o) THEN
+                FOR k IN 1 .. o_hist(o).COUNT LOOP
+                    IF tcls(o_hist(o)(k), lo, hi) = 'I' THEN
+                        n := n + 1;
+                        IF n <= 3 THEN
+                            h := h || CASE WHEN n > 1 THEN ', ' END || tcell(o_hist(o)(k), lo, hi);
+                        END IF;
+                    END IF;
+                END LOOP;
+            END IF;
+            IF n = 0 AND st_first_in(o, lo, hi) IS NOT NULL THEN
+                r := r || '<td title="from LAST_ANALYZED: no statistics history row inside the interval">'
+                    || tcell(o_la(o), lo, hi) || '</td>';
+            ELSE
+                r := r || '<td>' || CASE WHEN n = 0 AND NOT seen(o) THEN '&ndash;' WHEN n = 0 THEN 'none' ELSE h || CASE WHEN n > 3 THEN ' + ' || (n - 3) || ' more' END END || '</td>';
+            END IF;
+        ELSIF o_kind(o) = 'T' THEN
+            r := r || '<td title="' || CASE WHEN eth(o) = 'G' THEN 'needs SELECT on ' || CASE WHEN ocdb(o) THEN 'CDB' ELSE 'DBA' END
+                                                  || '_TAB_STATS_HISTORY' ELSE 'not read' END
+                || '">not read</td>';
+        ELSE
+            n := st_n_in(o, lo, hi);
+            r := r || '<td' || CASE WHEN n = 0 THEN ' title="from LAST_ANALYZED: the latest gather only"' END || '>'
+                || CASE WHEN n > 0 THEN tcell(o_la(o), lo, hi) WHEN kind_read(o) AND seen(o) THEN 'none' ELSE '&ndash;' END || '</td>';
+        END IF;
+        -- last DDL, created
+        r := r || '<td>' || NVL(tcell(CASE WHEN o_ddl.EXISTS(o) THEN o_ddl(o) END, lo, hi), '&ndash;') || '</td>'
+            || '<td>' || NVL(tcell(CASE WHEN o_crt.EXISTS(o) THEN o_crt(o) END, lo, hi), '&ndash;') || '</td>';
+        -- state now
+        IF NOT seen(o) THEN
+            st := CASE WHEN NOT kind_read(o) THEN 'not read'
+                       WHEN ocdb(o) THEN 'no dictionary row (dropped, the PDB is closed, or not visible to this user)'
+                       ELSE 'no dictionary row in this container' END;
+        ELSE
+            IF o_kind(o) = 'I' THEN
+                st := NVL(CASE WHEN o_ist.EXISTS(o) THEN o_ist(o) END, 'not read') || CASE WHEN o_vis.EXISTS(o) AND o_vis(o) IS NOT NULL THEN ', ' || o_vis(o) END
+                    || CASE WHEN o_part.EXISTS(o) AND o_part(o) = 'YES' THEN ', partitioned (partitions not checked)' END;
+            ELSE
+                st := NVL(CASE WHEN o_ost.EXISTS(o) THEN o_ost(o) END, 'status not read')
+                    || CASE WHEN o_stale.EXISTS(o) AND o_stale(o) = 'YES' THEN ', statistics stale' END
+                    || CASE WHEN o_lock.EXISTS(o) AND o_lock(o) IS NOT NULL
+                            THEN ', statistics locked (' || o_lock(o) || ')' END;
+            END IF;
+            IF o_kind(o) = 'I' AND o_ost.EXISTS(o) AND o_ost(o) = 'INVALID' THEN
+                st := st || ', INVALID';
+            END IF;
+        END IF;
+        r := r || '<td>' || DBMS_XMLGEN.CONVERT(st) || '</td>';
+        -- around the change
+        IF st_first_in(o, lo, hi) IS NOT NULL THEN
+            mk := mk || '<span class="pf-om" data-m="stats">new statistics</span>';
+        END IF;
+        IF o_ddl.EXISTS(o) AND tcls(o_ddl(o), lo, hi) = 'I' THEN
+            mk := mk || '<span class="pf-om" data-m="ddl" title="LAST_DDL_TIME: DDL, including grants and revokes">DDL</span>';
+        END IF;
+        IF o_crt.EXISTS(o) AND tcls(o_crt(o), lo, hi) = 'I' THEN
+            mk := mk || '<span class="pf-om" data-m="created">created</span>';
+        END IF;
+        IF b IS NOT NULL THEN
+            mk := mk || '<span class="pf-om pf-oms" data-m="state">' || b || '</span>';
+        END IF;
+        IF NOT seen(o) AND kind_read(o) THEN
+            mk := mk || '<span class="pf-om pf-oms" data-m="norow">no dictionary row</span>';
+        END IF;
+        IF o_ddl.EXISTS(o) AND tcls(o_ddl(o), lo, hi) = 'A' THEN
+            mk := mk || '<span class="pf-om pf-omu" data-m="later" title="the latest DDL only: a later one hides any inside the interval">later DDL</span>';
+        END IF;
+        RETURN r || '<td>' || NVL(mk, '') || '</td></tr>';
+    END obj_row;
+
+    -- the objects' "Reads as" sentence, the plan card's row and the lib
+    -- clause of statement i (st_ord / st_cev / st_lsx)
+    PROCEDURE compose(i PLS_INTEGER) IS
+        lo   DATE := st_lo(i);
+        hi   DATE := v_cur_end;
+        o    PLS_INTEGER;
+        f    NUMBER;
+        b    VARCHAR2(20);
+        t    DATE;
+        rd   VARCHAR2(32767);
+        sn   VARCHAR2(4000);   -- statistics: the named objects
+        nsn  PLS_INTEGER := 0;
+        dd   VARCHAR2(4000);
+        ndd  PLS_INTEGER := 0;
+        cr   VARCHAR2(32767);  -- one clause per object created inside (up to 30 long names)
+        unk  VARCHAR2(4000);   -- latest-only times after the window
+        nseen PLS_INTEGER := 0;
+        nread PLS_INTEGER := 0;
+        cid  VARCHAR2(200);    -- the card row: link target, text
+        cdt  VARCHAR2(4000);
+        cde  VARCHAR2(4000);
+        nitm PLS_INTEGER := 0;
+        rid  VARCHAR2(200);
+        nl   PLS_INTEGER := LEAST(so_ord(i).COUNT, c_max_obj);   -- the listed rows only
+        nn   VARCHAR2(400);    -- what was read: the nouns of "nothing changed"
+        nr   VARCHAR2(400);    -- the views not read
+        thes VARCHAR2(40) := CASE WHEN so_ord(i).COUNT > c_max_obj THEN 'the listed objects' ELSE 'these objects' END;
+        bl   BOOLEAN := has_loc(i);    -- objects read through DBA_ (this container)
+        cc   VARCHAR2(4000) := con_txt(i);   -- objects read through CDB_ (their containers)
+        bc   BOOLEAN := cc IS NOT NULL;
+    BEGIN
+        st_cev(i) := NULL;
+        st_lsx(i) := NULL;
+        st_src(i) := src_txt(i);
+        FOR j IN 1 .. nl LOOP
+            o := so_ord(i)(j);
+            IF seen(o) THEN nseen := nseen + 1; END IF;
+            IF kind_read(o) THEN nread := nread + 1; END IF;
+        END LOOP;
+        IF nread = 0 THEN
+            st_ord(i) := 'The dictionary could not be read for ' || thes || ' (see the note below), '
+                || 'so nothing can be said about statistics, DDL or index state.';
+            RETURN;
+        END IF;
+        IF nseen = 0 THEN
+            IF NOT bl THEN
+                st_ord(i) := 'These objects have no rows in the CDB_ views read from the root for ' || cc
+                    || ' (the PDB is closed, or this user does not see it: a common user needs CONTAINER_DATA for it), '
+                    || 'so nothing can be said about statistics, DDL or index state.';
+            ELSE
+                st_ord(i) := 'These objects are not visible from this container (the dictionary shows the container the report '
+                    || 'runs in: run it in the PDB that owns them), so nothing can be said about statistics, DDL or index state.';
+            END IF;
+            RETURN;
+        END IF;
+        -- abnormal states and missing objects first
+        FOR j IN 1 .. nl LOOP
+            o := so_ord(i)(j);
+            f := so_flag(i || ':' || o);
+            rid := anchor_id('pfo', v_st(i).sql_id || '-' || j);
+            b := bad_state(o);
+            IF b IS NOT NULL THEN
+                rd := rd || CASE WHEN o_kind(o) = 'I' THEN 'Index ' ELSE '' END || oname(o) || ', ' || used_txt(f)
+                    || ', is ' || b || ' now. ';
+                nitm := nitm + 1;
+                IF cid IS NULL THEN
+                    cid := rid; cdt := CASE WHEN o_kind(o) = 'I' THEN 'index ' END
+                        || ent(DBMS_XMLGEN.CONVERT(o_nam(o)), rid, 'obj'); cde := b || ' now';
+                END IF;
+            ELSIF NOT seen(o) AND kind_read(o) THEN
+                rd := rd || oname(o) || ', ' || used_txt(f)
+                    || CASE WHEN ocdb(o) THEN ', has no dictionary row in con_id ' || o_con(o)
+                                              || ' now (dropped, the PDB is closed, or not visible to this user). '
+                            ELSE ', has no dictionary row in this container now (dropped, or not visible here). ' END;
+                nitm := nitm + 1;
+                IF cid IS NULL THEN
+                    cid := rid; cdt := ent(DBMS_XMLGEN.CONVERT(o_nam(o)), rid, 'obj'); cde := 'no dictionary row now';
+                END IF;
+            END IF;
+        END LOOP;
+        -- times inside the interval
+        FOR j IN 1 .. nl LOOP
+            o := so_ord(i)(j);
+            rid := anchor_id('pfo', v_st(i).sql_id || '-' || j);
+            t := st_first_in(o, lo, hi);
+            IF t IS NOT NULL THEN
+                nsn := nsn + 1;
+                IF nsn <= 2 THEN
+                    sn := sn || CASE WHEN nsn = 2 THEN ' and ' END || oname(o) || ' (' || dday(t, TRUE)
+                        || CASE WHEN st_n_in(o, lo, hi) > 1 THEN ', ' || st_n_in(o, lo, hi) || ' times from then on' END
+                        || CASE WHEN nsn = 1 AND pre_txt(o, lo, hi) IS NOT NULL
+                                THEN '; earlier in the history: ' || pre_txt(o, lo, hi) END || ')';
+                END IF;
+                IF cid IS NULL OR nitm = 0 AND nsn = 1 THEN
+                    cid := rid; cdt := 'new statistics on ' || ent(DBMS_XMLGEN.CONVERT(o_nam(o)), rid, 'obj');
+                    cde := dday(t, TRUE);
+                END IF;
+                IF nsn = 1 THEN
+                    st_lsx(i) := 'new statistics on ' || DBMS_XMLGEN.CONVERT(o_nam(o)) || ' around the change';
+                END IF;
+            END IF;
+            IF o_ddl.EXISTS(o) AND tcls(o_ddl(o), lo, hi) = 'I' THEN
+                ndd := ndd + 1;
+                IF ndd <= 2 THEN
+                    dd := dd || CASE WHEN ndd = 2 THEN ' and ' END || oname(o) || ' (' || dday(o_ddl(o), TRUE) || ')';
+                END IF;
+                IF cid IS NULL THEN
+                    cid := rid; cdt := 'DDL on ' || ent(DBMS_XMLGEN.CONVERT(o_nam(o)), rid, 'obj');
+                    cde := dday(o_ddl(o), TRUE);
+                END IF;
+                IF st_lsx(i) IS NULL THEN
+                    st_lsx(i) := 'DDL on ' || DBMS_XMLGEN.CONVERT(o_nam(o)) || ' around the change';
+                END IF;
+            END IF;
+            IF o_crt.EXISTS(o) AND tcls(o_crt(o), lo, hi) = 'I' THEN
+                cr := cr || oname(o) || ' was created on ' || dday(o_crt(o), TRUE) || ', inside the same interval. ';
+                IF cid IS NULL THEN
+                    cid := rid; cdt := ent(DBMS_XMLGEN.CONVERT(o_nam(o)), rid, 'obj') || ' created';
+                    cde := dday(o_crt(o), TRUE);
+                END IF;
+                IF st_lsx(i) IS NULL THEN
+                    st_lsx(i) := DBMS_XMLGEN.CONVERT(o_nam(o)) || ' created around the change';
+                END IF;
+            END IF;
+            -- latest-only times after the window (an earlier event is hidden)
+            IF o_ddl.EXISTS(o) AND tcls(o_ddl(o), lo, hi) = 'A' AND unk IS NULL THEN
+                unk := 'the last DDL on ' || oname(o) || ' (' || dday(o_ddl(o), TRUE) || ') is after the Current window, so an earlier one cannot be seen';
+            ELSIF o_kind(o) = 'I' AND o_la.EXISTS(o) AND tcls(o_la(o), lo, hi) = 'A' AND unk IS NULL THEN
+                unk := 'the statistics of index ' || oname(o) || ' date from ' || dday(o_la(o), TRUE)
+                    || ', after the Current window, so an earlier gather cannot be seen';
+            ELSIF o_crt.EXISTS(o) AND tcls(o_crt(o), lo, hi) = 'A' AND unk IS NULL THEN
+                unk := oname(o) || ' was created on ' || dday(o_crt(o), TRUE) || ', after the Current window: '
+                    || 'the object the plans used was an earlier one of that name';
+            END IF;
+        END LOOP;
+        IF nsn > 0 THEN
+            rd := rd || 'New statistics on ' || sn || CASE WHEN nsn > 2 THEN ' and ' || (nsn - 2) || ' more' END
+                || ' date from between the start of the last window on the old plan (' || dday(lo, TRUE)
+                || ') and the end of the Current window; the plan may have followed them. ';
+        END IF;
+        IF ndd > 0 THEN
+            rd := rd || 'The last DDL on ' || dd || CASE WHEN ndd > 2 THEN ' and ' || (ndd - 2) || ' more' END
+                || ' falls in that interval too' || CASE WHEN nsn = 0 THEN ' (from ' || dday(lo, TRUE) || ' to the end of the Current window)' END || '. ';
+        END IF;
+        rd := rd || cr;
+        IF rd IS NULL THEN
+            -- what was read, over the paths this statement's objects use
+            nn := CASE WHEN (bl AND (e_ts IS NULL OR e_th IS NULL OR e_ix IS NULL))
+                         OR (bc AND (ec_ts IS NULL OR ec_th IS NULL OR ec_ix IS NULL)) THEN 'statistics' END;
+            IF (bl AND e_ob IS NULL) OR (bc AND ec_ob IS NULL) THEN
+                nn := nn || CASE WHEN nn IS NOT NULL THEN ', ' END || 'DDL, creation';
+            END IF;
+            IF (bl AND e_ix IS NULL) OR (bc AND ec_ix IS NULL) THEN
+                nn := nn || CASE WHEN nn IS NOT NULL THEN ', ' END || 'index state';
+            END IF;
+            IF bl THEN
+                nr := CASE WHEN e_ob IS NOT NULL THEN 'DBA_OBJECTS' END;
+                nr := nr || CASE WHEN e_ts IS NOT NULL THEN CASE WHEN nr IS NOT NULL THEN ', ' END || 'DBA_TAB_STATISTICS' END;
+                nr := nr || CASE WHEN e_ix IS NOT NULL THEN CASE WHEN nr IS NOT NULL THEN ', ' END || 'DBA_INDEXES' END;
+            END IF;
+            IF bc THEN
+                nr := nr || CASE WHEN ec_ob IS NOT NULL THEN CASE WHEN nr IS NOT NULL THEN ', ' END || 'CDB_OBJECTS' END;
+                nr := nr || CASE WHEN ec_ts IS NOT NULL THEN CASE WHEN nr IS NOT NULL THEN ', ' END || 'CDB_TAB_STATISTICS' END;
+                nr := nr || CASE WHEN ec_ix IS NOT NULL THEN CASE WHEN nr IS NOT NULL THEN ', ' END || 'CDB_INDEXES' END;
+            END IF;
+            rd := 'Nothing in the dictionary changed around the plan change for ' || thes || ' (' || nn
+                || ', from ' || dday(lo, TRUE) || ' to the end of the Current window)'
+                || CASE WHEN nr IS NOT NULL THEN '; not read: ' || nr END
+                || CASE WHEN unk IS NOT NULL THEN '; but ' || unk END
+                || CASE WHEN (bl AND e_th IS NOT NULL) OR (bc AND ec_th IS NOT NULL)
+                             THEN '; the statistics history was not read, so only the latest gather is known'
+                        WHEN lo < v_now - c_hist_d THEN '; the statistics history keeps ' || c_hist_d
+                             || ' days by default, so it may not reach back to ' || dday(lo, TRUE) END
+                || '.';
+        ELSIF unk IS NOT NULL THEN
+            rd := rd || 'Also, ' || unk || '.';
+        END IF;
+        st_ord(i) := RTRIM(rd);
+        IF cid IS NOT NULL THEN
+            st_cev(i) := '<div class="evr ev-pfo" data-pfo="' || cid || '" title="From ' || st_src(i) || ', '
+                || 'as of the report run. Not scored."><dt>Objects</dt><dd><span class="id txt">' || cdt
+                || '</span><span class="de">' || REGEXP_REPLACE(cde, '([0-9]) ', '\1&nbsp;')
+                || CASE WHEN nitm + nsn + ndd > 1 THEN ' (+' || (nitm + nsn + ndd - 1) || ' more)' END
+                || '</span></dd><div class="m"><span class="ns">not scored</span></div></div>';
+        END IF;
+    END compose;
+
 BEGIN
     DBMS_LOB.CREATETEMPORARY(v_json, TRUE);
 
@@ -399,9 +1071,13 @@ BEGIN
     FOR r IN (
         WITH
         @@sql/lib/windows_cte.sql
-        SELECT week_offset, valid_flag, skip_reason FROM windows_rollup
+        SELECT week_offset, valid_flag, skip_reason,
+               CAST(win_start_ts AS DATE) AS ws, CAST(win_end_ts AS DATE) AS we
+        FROM   windows_rollup
     ) LOOP
+        w_start(r.week_offset) := r.ws;
         IF r.week_offset = 0 THEN
+            v_cur_end   := r.we;
             v_cur_valid := r.valid_flag;
             v_cur_skip  := r.skip_reason;
         ELSIF r.valid_flag = 'Y' THEN
@@ -452,13 +1128,23 @@ BEGIN
                     WHERE  week_offset > 0
                     GROUP BY sql_id, phv)
                 WHERE rn = 1
+            ),
+            -- plan 047: the most recent prior valid window whose plan is the old plan
+            lastold AS (
+                SELECT x.sql_id, MIN(x.week_offset) AS lo_wo
+                FROM   wplan x
+                JOIN   oldp  y ON y.sql_id = x.sql_id AND y.phv = x.phv
+                WHERE  x.week_offset > 0
+                GROUP BY x.sql_id
             )
             SELECT t.sql_id, t.ela, t.rnk, c.phv AS cur_phv, o.phv AS old_phv,
                    CASE WHEN o.phv IS NOT NULL AND c.phv IS NOT NULL AND o.phv <> c.phv
-                        THEN 'Y' ELSE 'N' END AS chg
+                        THEN 'Y' ELSE 'N' END AS chg,
+                   l.lo_wo
             FROM   topn t
             LEFT JOIN wplan c ON c.sql_id = t.sql_id AND c.week_offset = 0
             LEFT JOIN oldp  o ON o.sql_id = t.sql_id
+            LEFT JOIN lastold l ON l.sql_id = t.sql_id
             ORDER BY t.ela DESC, t.sql_id
         ) LOOP
             IF r.chg = 'Y' AND v_nst < c_max_st THEN
@@ -473,6 +1159,7 @@ BEGIN
                 v_st(v_nst).old_phv := r.old_phv;
                 v_st(v_nst).cur_ela := r.ela / 1e6;
                 v_st(v_nst).rnk     := r.rnk;
+                v_st(v_nst).lo_wo   := r.lo_wo;
             ELSIF NVL(v_mode, 'top') = 'top' AND r.cur_phv IS NOT NULL AND v_nst < c_max_st THEN
                 -- no change (yet): keep up to 3 candidates for the top-only view
                 v_mode := 'top';
@@ -592,11 +1279,11 @@ BEGIN
     END IF;
 
     -- 4. the plans (dynamic SQL: DBA_HIST_SQL_PLAN may not be granted) -------
-    v_sql := 'SELECT id, parent_id, depth, operation, options, object_owner, object_name FROM ('
-          || 'SELECT q.id, q.parent_id, q.depth, q.operation, q.options, q.object_owner, q.object_name, '
+    v_sql := 'SELECT id, parent_id, depth, operation, options, object_owner, object_name, object_type, con_id FROM ('
+          || 'SELECT q.id, q.parent_id, q.depth, q.operation, q.options, q.object_owner, q.object_name, q.object_type, q.con_id, '
           || 'DENSE_RANK() OVER (ORDER BY q.ts0 DESC NULLS LAST, q.dbid, q.con_dbid) AS rk FROM ('
           || 'SELECT x.dbid, x.con_dbid, x.id, x.parent_id, x.depth, x.operation, x.options, '
-          || 'x.object_owner, x.object_name, '
+          || 'x.object_owner, x.object_name, x.object_type, x.con_id, '
           || 'MAX(CASE WHEN x.id = 0 THEN x.timestamp END) OVER (PARTITION BY x.dbid, x.con_dbid) AS ts0 '
           || 'FROM dba_hist_sql_plan x WHERE x.sql_id = :1 AND x.plan_hash_value = :2 '
           || 'AND x.dbid IN (~dbid_list)) q) WHERE rk = 1 ORDER BY id';
@@ -610,9 +1297,10 @@ BEGIN
         BEGIN
             OPEN v_cur FOR v_sql USING v_sids, p_phv(p);
             LOOP
-                FETCH v_cur INTO v_id, v_pid, v_dep, v_op, v_opt, v_own, v_obj;
+                FETCH v_cur INTO v_id, v_pid, v_dep, v_op, v_opt, v_own, v_obj, v_otyp, v_pcon;
                 EXIT WHEN v_cur%NOTFOUND;
                 EXIT WHEN v_id >= c_kmul - 2;
+                p_con(p) := v_pcon;   -- one copy: the same container on every line
                 v_key := kk(p, v_id);
                 s_par(v_key) := v_pid;
                 s_dep(v_key) := NVL(v_dep, 0);
@@ -620,6 +1308,7 @@ BEGIN
                 s_opt(v_key) := v_opt;
                 s_own(v_key) := v_own;
                 s_obj(v_key) := v_obj;
+                s_typ(v_key) := v_otyp;
                 s_self(v_key) := 0;
                 s_sz(v_key) := 1;
                 s_zero(v_key) := 0;
@@ -711,6 +1400,335 @@ BEGIN
             v_any_draw := TRUE;
         END IF;
     END LOOP;
+
+    -- 5b. plan 047: the objects of the plans and their dictionary state ------
+    -- (a changed plan only; optional dictionary views, dynamic SQL, each in
+    -- its own handler; every read happens before any markup)
+    IF v_mode = 'chg' THEN
+        FOR i IN 1 .. v_nst LOOP
+            so_cnt(i) := 0;
+            so_ord(i) := v_emp_i;
+            st_lo(i) := CASE WHEN v_st(i).lo_wo IS NOT NULL AND w_start.EXISTS(v_st(i).lo_wo)
+                             THEN w_start(v_st(i).lo_wo) END;
+            FOR q IN 1 .. 2 LOOP
+                v_p := CASE q WHEN 1 THEN 2 * i ELSE 2 * i - 1 END;   -- old, then new
+                CONTINUE WHEN NOT p_phv.EXISTS(v_p) OR p_state(v_p) <> 'Y';
+                FOR id IN 0 .. p_maxid(v_p) LOOP
+                    v_key := kk(v_p, id);
+                    CONTINUE WHEN NOT s_dep.EXISTS(v_key);
+                    v_c := obj_kind(s_op(v_key), s_typ(v_key), s_own(v_key), s_obj(v_key));
+                    CONTINUE WHEN v_c IS NULL;
+                    -- from the root, an object of a PDB's plan copy is read through CDB_
+                    -- (keyed with its container); everything else as before
+                    IF v_croot AND p_con.EXISTS(v_p) AND p_con(v_p) > 1 THEN
+                        v_okey := v_c || '#' || p_con(v_p) || '|' || s_own(v_key) || '|' || s_obj(v_key);
+                    ELSE
+                        v_okey := v_c || '|' || s_own(v_key) || '|' || s_obj(v_key);
+                    END IF;
+                    IF NOT o_idx.EXISTS(v_okey) THEN
+                        o_n := o_n + 1;
+                        o_idx(v_okey) := o_n;
+                        o_kind(o_n) := v_c;
+                        o_own(o_n) := s_own(v_key);
+                        o_nam(o_n) := s_obj(v_key);
+                        IF v_croot AND p_con.EXISTS(v_p) AND p_con(v_p) > 1 THEN
+                            o_con(o_n) := p_con(v_p);
+                            IF NOT v_seenk.EXISTS('c|' || p_con(v_p)) THEN
+                                v_seenk('c|' || p_con(v_p)) := 1;
+                                v_conl(v_conl.COUNT + 1) := p_con(v_p);
+                            END IF;
+                            IF NOT v_seenk.EXISTS('co|' || s_own(v_key)) THEN
+                                v_seenk('co|' || s_own(v_key)) := 1;
+                                v_cowners.EXTEND; v_cowners(v_cowners.COUNT) := s_own(v_key);
+                            END IF;
+                            IF NOT v_seenk.EXISTS('cn|' || s_obj(v_key)) THEN
+                                v_seenk('cn|' || s_obj(v_key)) := 1;
+                                v_conames.EXTEND; v_conames(v_conames.COUNT) := s_obj(v_key);
+                            END IF;
+                        ELSE
+                            IF NOT v_seenk.EXISTS('o|' || s_own(v_key)) THEN
+                                v_seenk('o|' || s_own(v_key)) := 1;
+                                v_owners.EXTEND; v_owners(v_owners.COUNT) := s_own(v_key);
+                            END IF;
+                            IF NOT v_seenk.EXISTS('n|' || s_obj(v_key)) THEN
+                                v_seenk('n|' || s_obj(v_key)) := 1;
+                                v_onames.EXTEND; v_onames(v_onames.COUNT) := s_obj(v_key);
+                            END IF;
+                        END IF;
+                    END IF;
+                    v_o := o_idx(v_okey);
+                    v_t := i || ':' || v_o;
+                    IF NOT so_flag.EXISTS(v_t) THEN
+                        so_flag(v_t) := 0;
+                        so_cnt(i) := so_cnt(i) + 1;
+                        so_ord(i)(so_cnt(i)) := v_o;
+                    END IF;
+                    so_flag(v_t) := CASE WHEN q = 1 THEN BITAND(so_flag(v_t), 2) + 1
+                                         ELSE BITAND(so_flag(v_t), 1) + 2 END;
+                END LOOP;
+            END LOOP;
+            -- tables first, then by owner.name (insertion sort, at most a few dozen)
+            IF so_cnt(i) > 1 THEN
+                FOR a IN 2 .. so_cnt(i) LOOP
+                    v_o := so_ord(i)(a);
+                    v_k := a - 1;
+                    WHILE v_k >= 1
+                          AND (CASE WHEN o_kind(so_ord(i)(v_k)) = 'T' THEN '0' ELSE '1' END
+                               || o_own(so_ord(i)(v_k)) || '.' || o_nam(so_ord(i)(v_k)))
+                            > (CASE WHEN o_kind(v_o) = 'T' THEN '0' ELSE '1' END || o_own(v_o) || '.' || o_nam(v_o)) LOOP
+                        so_ord(i)(v_k + 1) := so_ord(i)(v_k);
+                        v_k := v_k - 1;
+                    END LOOP;
+                    so_ord(i)(v_k + 1) := v_o;
+                END LOOP;
+            END IF;
+        END LOOP;
+    END IF;
+
+    IF o_n > 0 THEN
+        v_rd_ob := TRUE;
+        -- DBA_OBJECTS: the table / index itself (not its partitions)
+        BEGIN
+            v_sql := 'SELECT object_type, owner, object_name, created, last_ddl_time, status FROM dba_objects'
+                || ' WHERE owner IN (SELECT column_value FROM TABLE(:1))'
+                || ' AND object_name IN (SELECT column_value FROM TABLE(:2))'
+                || ' AND subobject_name IS NULL AND object_type IN (''TABLE'', ''INDEX'')';
+            OPEN v_cur FOR v_sql USING v_owners, v_onames;
+            LOOP
+                FETCH v_cur INTO x_typ, x_own, x_nam, x_d1, x_d2, x_s1;
+                EXIT WHEN v_cur%NOTFOUND;
+                v_okey := CASE WHEN x_typ = 'TABLE' THEN 'T' ELSE 'I' END || '|' || x_own || '|' || x_nam;
+                IF o_idx.EXISTS(v_okey) THEN
+                    v_o := o_idx(v_okey);
+                    o_seen(v_o) := 'Y'; o_crt(v_o) := x_d1; o_ddl(v_o) := x_d2; o_ost(v_o) := x_s1;
+                END IF;
+            END LOOP;
+            CLOSE v_cur;
+        EXCEPTION
+            WHEN OTHERS THEN
+                IF v_cur%ISOPEN THEN CLOSE v_cur; END IF;
+                o_crt.DELETE; o_ddl.DELETE; o_ost.DELETE; o_seen.DELETE;
+                e_ob := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
+        END;
+        -- DBA_TAB_STATISTICS: table-level rows only (partition_name IS NULL)
+        BEGIN
+            v_sql := 'SELECT owner, table_name, last_analyzed, num_rows, stale_stats, stattype_locked FROM dba_tab_statistics'
+                || ' WHERE owner IN (SELECT column_value FROM TABLE(:1))'
+                || ' AND table_name IN (SELECT column_value FROM TABLE(:2))'
+                || ' AND object_type = ''TABLE'' AND partition_name IS NULL';
+            OPEN v_cur FOR v_sql USING v_owners, v_onames;
+            LOOP
+                FETCH v_cur INTO x_own, x_nam, x_d1, x_n, x_s1, x_s2;
+                EXIT WHEN v_cur%NOTFOUND;
+                v_okey := 'T|' || x_own || '|' || x_nam;
+                IF o_idx.EXISTS(v_okey) THEN
+                    v_o := o_idx(v_okey);
+                    o_seen(v_o) := 'Y'; o_la(v_o) := x_d1; o_rows(v_o) := x_n; o_stale(v_o) := x_s1; o_lock(v_o) := x_s2;
+                END IF;
+            END LOOP;
+            CLOSE v_cur;
+        EXCEPTION
+            WHEN OTHERS THEN
+                IF v_cur%ISOPEN THEN CLOSE v_cur; END IF;
+                FOR o IN 1 .. o_n LOOP
+                    IF o_kind(o) = 'T' THEN
+                        o_la.DELETE(o); o_rows.DELETE(o); o_stale.DELETE(o); o_lock.DELETE(o);
+                    END IF;
+                END LOOP;
+                e_ts := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
+        END;
+        -- DBA_TAB_STATS_HISTORY: when table statistics changed (newest first);
+        -- the TIMESTAMP WITH TIME ZONE is cast to the DB server's wall clock
+        BEGIN
+            v_sql := 'SELECT owner, table_name, CAST(stats_update_time AS DATE) FROM dba_tab_stats_history'
+                || ' WHERE owner IN (SELECT column_value FROM TABLE(:1))'
+                || ' AND table_name IN (SELECT column_value FROM TABLE(:2))'
+                || ' AND partition_name IS NULL AND subpartition_name IS NULL AND stats_update_time IS NOT NULL'
+                || ' ORDER BY stats_update_time DESC';
+            OPEN v_cur FOR v_sql USING v_owners, v_onames;
+            LOOP
+                FETCH v_cur INTO x_own, x_nam, x_d1;
+                EXIT WHEN v_cur%NOTFOUND;
+                v_okey := 'T|' || x_own || '|' || x_nam;
+                IF o_idx.EXISTS(v_okey) THEN
+                    v_o := o_idx(v_okey);
+                    o_seen(v_o) := 'Y';
+                    IF NOT o_hist.EXISTS(v_o) THEN
+                        o_hist(v_o) := v_emp_d;
+                    END IF;
+                    o_hist(v_o)(o_hist(v_o).COUNT + 1) := x_d1;
+                END IF;
+            END LOOP;
+            CLOSE v_cur;
+        EXCEPTION
+            WHEN OTHERS THEN
+                IF v_cur%ISOPEN THEN CLOSE v_cur; END IF;
+                o_hist.DELETE;
+                e_th := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
+        END;
+        -- DBA_INDEXES: status, visibility, statistics and the table of an index
+        BEGIN
+            v_sql := 'SELECT owner, index_name, table_owner, table_name, status, visibility, partitioned, last_analyzed, num_rows'
+                || ' FROM dba_indexes'
+                || ' WHERE owner IN (SELECT column_value FROM TABLE(:1))'
+                || ' AND index_name IN (SELECT column_value FROM TABLE(:2))';
+            OPEN v_cur FOR v_sql USING v_owners, v_onames;
+            LOOP
+                FETCH v_cur INTO x_own, x_nam, x_tow, x_tnm, x_s1, x_s2, x_s3, x_d1, x_n;
+                EXIT WHEN v_cur%NOTFOUND;
+                v_okey := 'I|' || x_own || '|' || x_nam;
+                IF o_idx.EXISTS(v_okey) THEN
+                    v_o := o_idx(v_okey);
+                    o_seen(v_o) := 'Y';
+                    o_tab(v_o) := CASE WHEN x_tow = x_own THEN x_tnm ELSE x_tow || '.' || x_tnm END;
+                    o_ist(v_o) := x_s1; o_vis(v_o) := x_s2; o_part(v_o) := x_s3;
+                    o_la(v_o) := x_d1; o_rows(v_o) := x_n;
+                END IF;
+            END LOOP;
+            CLOSE v_cur;
+        EXCEPTION
+            WHEN OTHERS THEN
+                IF v_cur%ISOPEN THEN CLOSE v_cur; END IF;
+                FOR o IN 1 .. o_n LOOP
+                    IF o_kind(o) = 'I' THEN
+                        o_la.DELETE(o); o_rows.DELETE(o); o_tab.DELETE(o); o_ist.DELETE(o); o_vis.DELETE(o); o_part.DELETE(o);
+                    END IF;
+                END LOOP;
+                e_ix := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
+        END;
+
+        -- From the CDB root, the objects of a PDB's plan copy: the same four
+        -- reads through the CDB_ views, one container at a time (con_id bound),
+        -- matched on container | kind | owner | name.  Each its own handler;
+        -- a failure clears only the CDB_ objects' values of that view.
+        IF v_conl.COUNT > 0 THEN
+            BEGIN
+                v_sql := 'SELECT con_id, object_type, owner, object_name, created, last_ddl_time, status FROM cdb_objects'
+                    || ' WHERE con_id = :1 AND owner IN (SELECT column_value FROM TABLE(:2))'
+                    || ' AND object_name IN (SELECT column_value FROM TABLE(:3))'
+                    || ' AND subobject_name IS NULL AND object_type IN (''TABLE'', ''INDEX'')';
+                FOR c IN 1 .. v_conl.COUNT LOOP
+                    OPEN v_cur FOR v_sql USING v_conl(c), v_cowners, v_conames;
+                    LOOP
+                        FETCH v_cur INTO x_n, x_typ, x_own, x_nam, x_d1, x_d2, x_s1;
+                        EXIT WHEN v_cur%NOTFOUND;
+                        v_okey := CASE WHEN x_typ = 'TABLE' THEN 'T' ELSE 'I' END || '#' || x_n || '|' || x_own || '|' || x_nam;
+                        IF o_idx.EXISTS(v_okey) THEN
+                            v_o := o_idx(v_okey);
+                            o_seen(v_o) := 'Y'; o_crt(v_o) := x_d1; o_ddl(v_o) := x_d2; o_ost(v_o) := x_s1;
+                        END IF;
+                    END LOOP;
+                    CLOSE v_cur;
+                END LOOP;
+            EXCEPTION
+                WHEN OTHERS THEN
+                    IF v_cur%ISOPEN THEN CLOSE v_cur; END IF;
+                    FOR o IN 1 .. o_n LOOP
+                        IF ocdb(o) THEN
+                            o_crt.DELETE(o); o_ddl.DELETE(o); o_ost.DELETE(o); o_seen.DELETE(o);
+                        END IF;
+                    END LOOP;
+                    ec_ob := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
+            END;
+            BEGIN
+                v_sql := 'SELECT con_id, owner, table_name, last_analyzed, num_rows, stale_stats, stattype_locked FROM cdb_tab_statistics'
+                    || ' WHERE con_id = :1 AND owner IN (SELECT column_value FROM TABLE(:2))'
+                    || ' AND table_name IN (SELECT column_value FROM TABLE(:3))'
+                    || ' AND object_type = ''TABLE'' AND partition_name IS NULL';
+                FOR c IN 1 .. v_conl.COUNT LOOP
+                    OPEN v_cur FOR v_sql USING v_conl(c), v_cowners, v_conames;
+                    LOOP
+                        FETCH v_cur INTO x_n, x_own, x_nam, x_d1, x_d2n, x_s1, x_s2;
+                        EXIT WHEN v_cur%NOTFOUND;
+                        v_okey := 'T#' || x_n || '|' || x_own || '|' || x_nam;
+                        IF o_idx.EXISTS(v_okey) THEN
+                            v_o := o_idx(v_okey);
+                            o_seen(v_o) := 'Y'; o_la(v_o) := x_d1; o_rows(v_o) := x_d2n; o_stale(v_o) := x_s1; o_lock(v_o) := x_s2;
+                        END IF;
+                    END LOOP;
+                    CLOSE v_cur;
+                END LOOP;
+            EXCEPTION
+                WHEN OTHERS THEN
+                    IF v_cur%ISOPEN THEN CLOSE v_cur; END IF;
+                    FOR o IN 1 .. o_n LOOP
+                        IF ocdb(o) AND o_kind(o) = 'T' THEN
+                            o_la.DELETE(o); o_rows.DELETE(o); o_stale.DELETE(o); o_lock.DELETE(o);
+                        END IF;
+                    END LOOP;
+                    ec_ts := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
+            END;
+            BEGIN
+                v_sql := 'SELECT con_id, owner, table_name, CAST(stats_update_time AS DATE) FROM cdb_tab_stats_history'
+                    || ' WHERE con_id = :1 AND owner IN (SELECT column_value FROM TABLE(:2))'
+                    || ' AND table_name IN (SELECT column_value FROM TABLE(:3))'
+                    || ' AND partition_name IS NULL AND subpartition_name IS NULL AND stats_update_time IS NOT NULL'
+                    || ' ORDER BY stats_update_time DESC';
+                FOR c IN 1 .. v_conl.COUNT LOOP
+                    OPEN v_cur FOR v_sql USING v_conl(c), v_cowners, v_conames;
+                    LOOP
+                        FETCH v_cur INTO x_n, x_own, x_nam, x_d1;
+                        EXIT WHEN v_cur%NOTFOUND;
+                        v_okey := 'T#' || x_n || '|' || x_own || '|' || x_nam;
+                        IF o_idx.EXISTS(v_okey) THEN
+                            v_o := o_idx(v_okey);
+                            o_seen(v_o) := 'Y';
+                            IF NOT o_hist.EXISTS(v_o) THEN
+                                o_hist(v_o) := v_emp_d;
+                            END IF;
+                            o_hist(v_o)(o_hist(v_o).COUNT + 1) := x_d1;
+                        END IF;
+                    END LOOP;
+                    CLOSE v_cur;
+                END LOOP;
+            EXCEPTION
+                WHEN OTHERS THEN
+                    IF v_cur%ISOPEN THEN CLOSE v_cur; END IF;
+                    FOR o IN 1 .. o_n LOOP
+                        IF ocdb(o) AND o_hist.EXISTS(o) THEN
+                            o_hist.DELETE(o);
+                        END IF;
+                    END LOOP;
+                    ec_th := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
+            END;
+            BEGIN
+                v_sql := 'SELECT con_id, owner, index_name, table_owner, table_name, status, visibility, partitioned, last_analyzed, num_rows'
+                    || ' FROM cdb_indexes'
+                    || ' WHERE con_id = :1 AND owner IN (SELECT column_value FROM TABLE(:2))'
+                    || ' AND index_name IN (SELECT column_value FROM TABLE(:3))';
+                FOR c IN 1 .. v_conl.COUNT LOOP
+                    OPEN v_cur FOR v_sql USING v_conl(c), v_cowners, v_conames;
+                    LOOP
+                        FETCH v_cur INTO x_n, x_own, x_nam, x_tow, x_tnm, x_s1, x_s2, x_s3, x_d1, x_d2n;
+                        EXIT WHEN v_cur%NOTFOUND;
+                        v_okey := 'I#' || x_n || '|' || x_own || '|' || x_nam;
+                        IF o_idx.EXISTS(v_okey) THEN
+                            v_o := o_idx(v_okey);
+                            o_seen(v_o) := 'Y';
+                            o_tab(v_o) := CASE WHEN x_tow = x_own THEN x_tnm ELSE x_tow || '.' || x_tnm END;
+                            o_ist(v_o) := x_s1; o_vis(v_o) := x_s2; o_part(v_o) := x_s3;
+                            o_la(v_o) := x_d1; o_rows(v_o) := x_d2n;
+                        END IF;
+                    END LOOP;
+                    CLOSE v_cur;
+                END LOOP;
+            EXCEPTION
+                WHEN OTHERS THEN
+                    IF v_cur%ISOPEN THEN CLOSE v_cur; END IF;
+                    FOR o IN 1 .. o_n LOOP
+                        IF ocdb(o) AND o_kind(o) = 'I' THEN
+                            o_la.DELETE(o); o_rows.DELETE(o); o_tab.DELETE(o); o_ist.DELETE(o); o_vis.DELETE(o); o_part.DELETE(o);
+                        END IF;
+                    END LOOP;
+                    ec_ix := CASE WHEN SQLCODE IN (-942, -1031) THEN 'G' ELSE SUBSTRB(SQLERRM, 1, 300) END;
+            END;
+        END IF;
+        FOR i IN 1 .. v_nst LOOP
+            IF so_cnt.EXISTS(i) AND so_cnt(i) > 0 AND st_lo.EXISTS(i) AND st_lo(i) IS NOT NULL THEN
+                compose(i);
+            END IF;
+        END LOOP;
+    END IF;
 
     -- 6. markup ------------------------------------------------------------
     DBMS_OUTPUT.PUT_LINE('<section id="plan-flame" class="vw in-s in-a lib'
@@ -868,6 +1886,8 @@ BEGIN
                             WHEN p_state(v_p) = 'G' THEN 'needs SELECT on DBA_HIST_SQL_PLAN to draw the plan'
                             WHEN p_state(v_p) = 'A' THEN 'plan not in DBA_HIST_SQL_PLAN'
                             ELSE 'too few ASH samples to draw' END
+                    || CASE WHEN v_mode = 'chg' AND st_lsx.EXISTS(1) AND st_lsx(1) IS NOT NULL
+                            THEN '; ' || SUBSTR(st_lsx(1), 1, 300) END
                     || CASE WHEN v_nst > 1 THEN ' (+' || (v_nst - 1) || ' more)' END;
             END IF;
 
@@ -936,15 +1956,96 @@ BEGIN
                 END IF;
                 DBMS_OUTPUT.PUT_LINE('</tbody></table>');
             END LOOP;
-            DBMS_OUTPUT.PUT_LINE('</details></div>');
+            DBMS_OUTPUT.PUT_LINE('</details>');
+
+            -- plan 047: the objects of the old and the new plan, from the dictionary
+            IF v_mode = 'chg' AND so_cnt.EXISTS(i) AND so_cnt(i) > 0 AND st_lo(i) IS NOT NULL THEN
+                DBMS_OUTPUT.PUT_LINE('<div class="pf-obj" id="' || anchor_id('pfo', v_st(i).sql_id)
+                    || '" data-t0="' || dkey(st_lo(i)) || '" data-t1="' || dkey(v_cur_end)
+                    || '" data-now="' || dkey(v_now) || '" data-n="' || so_cnt(i) || '">'
+                    || '<h4 class="pf-oh">Objects in these plans <small>'
+                    || CASE WHEN st_src.EXISTS(i) AND st_src(i) IS NOT NULL THEN st_src(i) ELSE 'the dictionary of this container' END
+                    || ', as of this report run ('
+                    || dlong(v_now) || ')</small></h4>');
+                IF st_ord.EXISTS(i) AND st_ord(i) IS NOT NULL THEN
+                    DBMS_OUTPUT.PUT_LINE('<p class="pf-ord"><b>Reads as:</b> ' || st_ord(i) || '</p>');
+                END IF;
+                DBMS_OUTPUT.PUT_LINE('<p class="pf-oiv">&ldquo;Around the plan change&rdquo; = from the start of the last prior window on the old plan ('
+                    || dday(st_lo(i), TRUE) || ') to the end of the Current window (' || dday(v_cur_end, TRUE)
+                    || '). Created, last DDL, last analyzed and the statistics history are past times; every other value is the state now. '
+                    || 'Table-level rows only: partitions are not checked.</p>');
+                v_srcs := NULL;
+                -- the read notes of the paths this statement's objects use (DBA_, then CDB_)
+                FOR e IN 1 .. 8 LOOP
+                    v_s := NULL;
+                    IF e <= 4 AND has_loc(i) THEN
+                        v_s := CASE e WHEN 1 THEN err_note(e_ob, 'DBA_OBJECTS') WHEN 2 THEN err_note(e_ts, 'DBA_TAB_STATISTICS')
+                                      WHEN 3 THEN err_note(e_th, 'DBA_TAB_STATS_HISTORY') ELSE err_note(e_ix, 'DBA_INDEXES') END;
+                    ELSIF e > 4 AND con_txt(i) IS NOT NULL THEN
+                        v_s := CASE e WHEN 5 THEN err_note(ec_ob, 'CDB_OBJECTS') WHEN 6 THEN err_note(ec_ts, 'CDB_TAB_STATISTICS')
+                                      WHEN 7 THEN err_note(ec_th, 'CDB_TAB_STATS_HISTORY') ELSE err_note(ec_ix, 'CDB_INDEXES') END;
+                    END IF;
+                    IF v_s IS NOT NULL THEN
+                        v_srcs := v_srcs || CASE WHEN v_srcs IS NOT NULL THEN '; ' END || v_s;
+                    END IF;
+                END LOOP;
+                IF v_srcs IS NOT NULL THEN
+                    DBMS_OUTPUT.PUT_LINE('<p class="note pf-oerr">Object details: ' || v_srcs || '.</p>');
+                END IF;
+                DBMS_OUTPUT.PUT_LINE('<div class="pf-otw"><table class="pf-ob" data-nosort="Y" data-nocount="Y">'
+                    || '<thead><tr><th>Object</th><th>Type</th><th title="in the old plan, the new plan or both">In plan</th>'
+                    || '<th title="LAST_ANALYZED and NUM_ROWS now">Statistics now</th>'
+                    || '<th title="' || CASE WHEN has_loc(i) THEN 'DBA' ELSE 'CDB' END
+                    || '_TAB_STATS_HISTORY for a table (statistics gathered, set, restored or imported); LAST_ANALYZED for an index">New statistics in the interval</th>'
+                    || '<th title="LAST_DDL_TIME: the latest DDL, grants and revokes included">Last DDL</th><th>Created</th><th>State now</th><th>Around the change</th></tr></thead><tbody>');
+                FOR j IN 1 .. LEAST(so_cnt(i), c_max_obj) LOOP
+                    DBMS_OUTPUT.PUT_LINE(obj_row(i, j, so_ord(i)(j), st_lo(i), v_cur_end));
+                END LOOP;
+                DBMS_OUTPUT.PUT_LINE('</tbody></table></div>');
+                IF so_cnt(i) > c_max_obj THEN
+                    DBMS_OUTPUT.PUT_LINE('<p class="note pf-ocap">The plans touch ' || so_cnt(i) || ' tables and indexes; the first '
+                        || c_max_obj || ' are listed (tables first, then by name).</p>');
+                END IF;
+                DBMS_OUTPUT.PUT_LINE('</div>');
+            END IF;
+            DBMS_OUTPUT.PUT_LINE('</div>');
         END LOOP;
         jw(']}');
 
-        DBMS_OUTPUT.PUT_LINE(lib_ls('plan-flame', v_ls));
+        -- plan 040 follow-up: the row starts open only for a plan change; the
+        -- chrome shuts it when every changed statement has a plan-change card
+        v_news := NULL;
+        IF v_mode = 'chg' THEN
+            FOR i IN 1 .. v_nst LOOP
+                IF NVL(LENGTH(v_news), 0) < 1800 THEN
+                    v_news := TRIM(v_news || ' sql:' || v_st(i).sql_id);
+                END IF;
+            END LOOP;
+        END IF;
+        DBMS_OUTPUT.PUT_LINE(lib_ls('plan-flame', v_ls)
+            || CASE WHEN v_news IS NOT NULL THEN lib_news('plan-flame', v_news) END);
         DBMS_OUTPUT.PUT_LINE('</section>');
         DBMS_OUTPUT.PUT_LINE('<script>window.AWR_DATA=window.AWR_DATA||{};window.AWR_DATA.planflame=');
         put_clob_chunked(v_json);
         DBMS_OUTPUT.PUT_LINE(';</script>');
+        -- plan 047: the plan card's "Objects" row (hidden here, moved into
+        -- #f-plan-<sql_id> while the page parses, only when that card shows
+        -- the same old -> new plans as this block; the source goes either way)
+        v_srcs := NULL;
+        FOR i IN 1 .. v_nst LOOP
+            IF v_mode = 'chg' AND st_cev.EXISTS(i) AND st_cev(i) IS NOT NULL THEN
+                v_srcs := v_srcs || '<div data-for="f-plan-' || DBMS_XMLGEN.CONVERT(v_st(i).sql_id)
+                    || '" data-ph0="' || v_st(i).old_phv || '" data-ph1="' || v_st(i).cur_phv || '">' || st_cev(i) || '</div>';
+            END IF;
+        END LOOP;
+        IF v_srcs IS NOT NULL THEN
+            DBMS_OUTPUT.PUT_LINE('<div id="pfo-ev-src" hidden>' || v_srcs || '</div>');
+            DBMS_OUTPUT.PUT_LINE('<script>(function(){var d=document,x=d.getElementById("pfo-ev-src");if(!x)return;'
+                || '[].slice.call(x.children).forEach(function(g){var c=d.getElementById(g.getAttribute("data-for")),'
+                || 'dl=c?c.querySelector("dl.ev"):null;if(dl&&c.getAttribute("data-ph0")===g.getAttribute("data-ph0")'
+                || '&&c.getAttribute("data-ph1")===g.getAttribute("data-ph1")){while(g.firstChild)dl.appendChild(g.firstChild);}});'
+                || 'x.parentNode.removeChild(x);})();</script>');
+        END IF;
     END IF;
     DBMS_LOB.FREETEMPORARY(v_json);
 END;

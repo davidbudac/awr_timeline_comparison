@@ -101,6 +101,7 @@ DECLARE
     @@sql/lib/anchor_id.plsql
     @@sql/lib/finding_cards.plsql
     @@sql/lib/off_label.plsql
+    @@sql/lib/baseline_conf.plsql
     @@sql/lib/wingrid.plsql
 
     -- a card's impact (AAS its time measure added above its prior mean), NULL when none
@@ -559,6 +560,7 @@ BEGIN
         || '<a href="#instance-map" data-nodot>Instance map</a>'
         || '<a href="#load-response" data-nodot>Load vs response time</a>'
         || '<a href="#release-delta" data-nodot>Before / after release</a>'
+        || '<a href="#who" data-nodot>Who added the load</a>'
         || '<b>Workload</b>'
         || '<a href="#load">Load profile</a>'
         || '<a href="#metrics">Metrics</a>'
@@ -583,6 +585,7 @@ BEGIN
         || '<a href="#db-time-summary">DB time</a>'
         || '<a href="#onset" data-nodot>Trend breaks</a>'
         || '<a href="#utilization">Utilization</a>'
+        || '<a href="#host-memory" data-nodot>Host and memory</a>'
         || '<a href="#windows">Windows</a>'
         || '<a href="#win-sim" data-nodot>Window similarity</a>'
         -- Day profile link only when the section exists (profile_days > 0);
@@ -1178,6 +1181,37 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('  vis.sort(function(a,b){ return a.offsetTop-b.offsetTop; });');
     DBMS_OUTPUT.PUT_LINE('  if(vis.length){ vis[0].classList.add("lib-first"); vis[vis.length-1].classList.add("lib-last"); }');
     DBMS_OUTPUT.PUT_LINE('}');
+    -- plan 040 (+ follow-up): a row that starts open and carries data-news (Top SQL,
+    -- Foreground waits, Who, Plan shape, Window similarity, Volume vs unit cost) shuts when
+    -- everything its status line is about (data-news, set by lib_news in
+    -- sql/lib/band_glyph.plsql) is already on a finding or plan-change card.
+    -- Runs once, here, before the first libViews(); a reader's later click,
+    -- reveal() and goTo() are untouched; no finding card = the rows stay as
+    -- they were marked.  "sql:<id>" = the plan-change card f-plan-<id> or a
+    -- card link whose target ends in -<id>; "card:<id>" = that finding card;
+    -- "who:<id>" = the DB time card's Who row for that value (29); "note:<class>"
+    -- = that note in the verdict's #narrative-slot (26's hn-base); any other
+    -- kind is never on a card (the row stays open).
+    DBMS_OUTPUT.PUT_LINE('function libNews(){');
+    DBMS_OUTPUT.PUT_LINE('  if(!doc.querySelector("#findings article.fc:not(.chg)")) return;');
+    DBMS_OUTPUT.PUT_LINE('  function shown(e){ return !!e&&!closest(e,"[hidden]"); }');
+    DBMS_OUTPUT.PUT_LINE('  function onCard(t){');
+    DBMS_OUTPUT.PUT_LINE('    var i=t.indexOf(":"), k=t.slice(0,i), v=t.slice(i+1), e;');
+    DBMS_OUTPUT.PUT_LINE('    if(k==="card"){ e=doc.getElementById(v); return shown(e)&&!!closest(e,"article.fc"); }');
+    DBMS_OUTPUT.PUT_LINE('    if(k==="sql"){ e=doc.getElementById("f-plan-"+v); if(shown(e)) return true;');
+    DBMS_OUTPUT.PUT_LINE('      var as=doc.querySelectorAll("article.fc a[href]");');
+    DBMS_OUTPUT.PUT_LINE('      for(var j=0;j<as.length;j++){ var h=as[j].getAttribute("href"); if(h.slice(-v.length-1)==="-"+v&&shown(as[j])) return true; }');
+    DBMS_OUTPUT.PUT_LINE('    }');
+    DBMS_OUTPUT.PUT_LINE('    if(k==="who"){ e=doc.querySelector("#f-dbtime .ev-who[data-who=\""+v+"\"]"); return shown(e); }');
+    DBMS_OUTPUT.PUT_LINE('    if(k==="note"){ e=doc.querySelector("#narrative-slot li."+v); return shown(e); }');
+    DBMS_OUTPUT.PUT_LINE('    return false;');
+    DBMS_OUTPUT.PUT_LINE('  }');
+    DBMS_OUTPUT.PUT_LINE('  libSecs().forEach(function(sec){');
+    DBMS_OUTPUT.PUT_LINE('    var n=sec.getAttribute("data-news"); if(n===null||!sec.classList.contains("lopen")) return;');
+    DBMS_OUTPUT.PUT_LINE('    if(n.split(" ").filter(Boolean).every(onCard)) sec.classList.remove("lopen");');
+    DBMS_OUTPUT.PUT_LINE('  });');
+    DBMS_OUTPUT.PUT_LINE('}');
+    DBMS_OUTPUT.PUT_LINE('libNews();');
     DBMS_OUTPUT.PUT_LINE('libSecs().forEach(function(sec){');
     DBMS_OUTPUT.PUT_LINE('  var h=sec.querySelector("h2"); if(!h) return;');
     DBMS_OUTPUT.PUT_LINE('  var lt=doc.createElement("span"); lt.className="lt"; while(h.firstChild&&h.firstChild.nodeType===3) lt.appendChild(h.firstChild); h.insertBefore(lt,h.firstChild);');
@@ -1481,7 +1515,18 @@ BEGIN
         || CASE WHEN v_n_impr > 0
                 THEN '<li><a href="#s-normal"><b>' || v_n_impr || '</b> improved</a></li>' END
         || '</ul>');
-    DBMS_OUTPUT.PUT_LINE('<ul class="hnotes" id="narrative-slot" hidden></ul>');
+    -- Plan 039: with only 3 to 5 valid prior windows the verdict says how
+    -- often an unchanged metric still looks changed (sql/lib/baseline_conf
+    -- .plsql).  A static li in the slot: the slot is then not hidden (17's
+    -- and 26's relocation scripts add their notes around it: 17's before
+    -- the first li.hn-conf / li.hn-base, 26's baseline check last).  A note,
+    -- never a finding: no count, pill or severity.  Fewer than 3 valid
+    -- priors has its own "too little history" hero above (no note).
+    IF v_n_usable > 0 AND conf_verdict(v_n_valid) IS NOT NULL THEN
+        DBMS_OUTPUT.PUT_LINE('<ul class="hnotes" id="narrative-slot">' || conf_verdict(v_n_valid) || '</ul>');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('<ul class="hnotes" id="narrative-slot" hidden></ul>');
+    END IF;
     -- Only when the requested target_end had no snapshot within the 15-min
     -- edge guard does the resolving SELECT (awr_trend.sql) snap it back to
     -- the last actual snapshot -- flagged here so it is never silent.

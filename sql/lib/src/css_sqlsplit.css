@@ -1,0 +1,15 @@
+/* css_sqlsplit: plan 044, section 06's "Per execution: where the time went"
+   block in an opened Per-SQL pool row (single-DB only).  The parts of elapsed
+   indented under it, the work rows set off by a rule, the Reads-as line. */
+tr.sql-detail div.sqx{margin:0 0 6px}
+tr.sql-detail table.sqx-tbl{margin:8px 0 6px}
+tr.sql-detail table.sqx-tbl tr.sqx-e>td{font-weight:600}
+tr.sql-detail table.sqx-tbl tr.sqx-p>td:first-child{padding-left:22px}
+tr.sql-detail table.sqx-tbl tr.sqx-w1>td{border-top:2px solid var(--line)}
+tr.sql-detail table.sqx-tbl td:last-child{color:var(--muted)}
+tr.sql-detail p.sqx-rd{margin:4px 0 8px;font-size:12.5px;max-width:110ch;color:var(--ink)}
+tr.sql-detail p.sqx-rd b{font-weight:600}
+/* .sqd-tw scrolls sideways (overflow-x:auto), so a sticky header would stick
+   to that wrapper and sit over the first row (the Compared windows table's
+   Current row, this block's Elapsed row): no sticky header in the pool row */
+tr.sql-detail .sqd-tw thead th{position:static}

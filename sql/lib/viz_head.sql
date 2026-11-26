@@ -1,6 +1,6 @@
 --
 -- sql/lib/viz_head.sql -- the stylesheets of the visualization sections
--- (20-28), <head> part.
+-- (20-30), <head> part.
 --
 -- @@-included by awr_trend.sql right after sql/_style.sql and BEFORE the
 -- design's stylesheet (design_head), so the quiet / dashboard designs can
@@ -18,3 +18,8 @@
 @@sql/lib/css_winsim.plsql
 @@sql/lib/css_instmap.plsql
 @@sql/lib/css_reldelta.plsql
+@@sql/lib/css_baseconf.plsql
+@@sql/lib/css_timemodel.plsql
+@@sql/lib/css_sqlsplit.plsql
+@@sql/lib/css_who.plsql
+@@sql/lib/css_hostmem.plsql

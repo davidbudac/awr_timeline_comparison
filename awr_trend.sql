@@ -678,6 +678,9 @@ DEFINE _dbg_msg = 'section 20 load vs response time'
 DEFINE _dbg_msg = 'section 28 before / after release'
 @@sql/lib/debug_log.sql
 @@sql/28_release_delta.sql
+DEFINE _dbg_msg = 'section 29 who added the load (foreground ASH by service / module / machine / program / user)'
+@@sql/lib/debug_log.sql
+@@sql/29_who.sql
 DEFINE _dbg_msg = 'section 01 windows (aligned begin/end snap pairs)'
 @@sql/lib/debug_log.sql
 @@sql/01_windows.sql
@@ -693,6 +696,9 @@ DEFINE _dbg_msg = 'section 25 onset'
 DEFINE _dbg_msg = 'section 13 utilization (application usage profile)'
 @@sql/lib/debug_log.sql
 @@sql/13_utilization.sql
+DEFINE _dbg_msg = 'section 30 host and memory (OSSTAT, PGASTAT, SGA components, UNDOSTAT, ASH temp / PGA)'
+@@sql/lib/debug_log.sql
+@@sql/30_host_memory.sql
 DEFINE _dbg_msg = 'section 02 load_profile (SYSSTAT deltas)'
 @@sql/lib/debug_log.sql
 @@sql/02_load_profile.sql

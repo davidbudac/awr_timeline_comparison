@@ -744,6 +744,20 @@ BEGIN
             v_cells  VARCHAR2(32767);
             v_ev     VARCHAR2(32767);
             v_tok    VARCHAR2(200);
+            -- plan 044: rows per run and the I/O share of the per-run rise,
+            -- totals over executions like 06's "where the time went" block
+            -- (Current, and the prior windows with a row summed)
+            v_x_ce   NUMBER;          -- Current elapsed, s
+            v_x_cx   NUMBER;          -- Current executions
+            v_x_ci   NUMBER;          -- Current I/O wait, s
+            v_x_cr   NUMBER;          -- Current rows processed
+            v_x_pe   NUMBER := 0;     -- prior sums of the same
+            v_x_px   NUMBER := 0;
+            v_x_pi   NUMBER := 0;
+            v_x_pr   NUMBER := 0;
+            v_x_rise NUMBER;
+            v_x_rr   NUMBER;
+            v_x_sh   NUMBER;          -- the I/O share of the per-run rise, whole %
 
             FUNCTION a_mean(a t_num) RETURN NUMBER IS
                 v_s NUMBER := 0;
@@ -788,7 +802,9 @@ BEGIN
                        SUM(NVL(s.elapsed_time_delta, 0)) / 1e6 AS ela_s,
                        SUM(NVL(s.cpu_time_delta, 0)) / 1e6     AS cpu_s,
                        SUM(NVL(s.executions_delta, 0))         AS execs,
-                       SUM(NVL(s.buffer_gets_delta, 0))        AS gets
+                       SUM(NVL(s.buffer_gets_delta, 0))        AS gets,
+                       SUM(NVL(s.iowait_delta, 0)) / 1e6       AS io_s,
+                       SUM(NVL(s.rows_processed_delta, 0))     AS rows_proc
                 FROM   valid_windows w
                 JOIN   dba_hist_sqlstat s
                     ON s.dbid = w.dbid
@@ -800,6 +816,12 @@ BEGIN
             ) LOOP
                 v_pairs := v_pairs || CASE WHEN v_pairs IS NOT NULL THEN ';' END
                     || r.week_offset || ':' || wg_tok(r.ela_s);
+                IF r.week_offset = 0 THEN
+                    v_x_ce := r.ela_s; v_x_cx := r.execs; v_x_ci := r.io_s; v_x_cr := r.rows_proc;
+                ELSE
+                    v_x_pe := v_x_pe + r.ela_s; v_x_px := v_x_px + r.execs;
+                    v_x_pi := v_x_pi + r.io_s;  v_x_pr := v_x_pr + r.rows_proc;
+                END IF;
                 IF r.week_offset = 0 THEN
                     v_e_cur := r.ela_s;
                     v_c_cur := r.cpu_s;
@@ -878,6 +900,22 @@ BEGIN
                          THEN fmt_num(v_t_cur / 1000) || ' s, was ' || fmt_num(v_t_mu / 1000) || ' s'
                          ELSE fmt_num(v_t_cur) || ' ms, was ' || fmt_num(v_t_mu) || ' ms' END,
                     v_g_cur, v_g_mu, NULL, NULL, 'Y', 'N');
+            END IF;
+            -- plan 044: did each run process more rows, and how much of the
+            -- per-run rise is I/O wait (plain, not scored; no glyph: no sigma)
+            IF v_src = 'sqlstat' AND v_x_cx > 0 AND v_x_px > 0 THEN
+                v_x_rise := v_x_ce / v_x_cx - v_x_pe / v_x_px;
+                v_x_rr := CASE WHEN v_x_pr > 0 THEN (v_x_cr / v_x_cx) / (v_x_pr / v_x_px) END;
+                v_x_sh := CASE WHEN v_x_rise > 0
+                               THEN ROUND((v_x_ci / v_x_cx - v_x_pi / v_x_px) / v_x_rise * 100) END;
+                v_ev := v_ev || pc_ev('Rows, I/O',
+                    'rows per run ' || CASE WHEN v_x_rr IS NULL THEN fmt_num(v_x_cr / v_x_cx)
+                                            ELSE '&times;' || TO_CHAR(v_x_rr, 'FM999999999990D0','NLS_NUMERIC_CHARACTERS=''.,''') END,
+                    CASE WHEN v_x_sh IS NOT NULL
+                         THEN 'I/O wait is ' || CASE WHEN v_x_sh < 0 THEN '&minus;' END
+                              || TO_CHAR(ABS(v_x_sh), 'FM999999999990') || '% of the per-run rise'
+                         ELSE 'per-run time did not rise' END,
+                    v_x_cr / v_x_cx, v_x_pr / v_x_px, NULL, NULL, 'Y', 'N');
             END IF;
             v_ev := v_ev || pc_ev(ent('SQL Monitor', anchor_id('sm', v_id), 'sql'),
                 'max ' || fmt_dur(v_pc(c).cur_val),

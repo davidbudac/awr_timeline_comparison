@@ -345,6 +345,7 @@ body.d-dash .ashx .seg.axlayout button{line-height:20px}
 .drow .dcur{align-self:stretch;display:flex;align-items:center;justify-content:flex-end;padding:0 10px;margin-right:-10px;background:var(--acc-band);font-weight:600}
 .dft .dfh .dcur{padding:0 10px;margin-right:-10px}
 .drow .dnr{color:var(--muted)}
+.drow .dnr[data-n]::after{content:"n = " attr(data-n);display:block;font-size:11px;color:var(--ink-4)}
 .drow .dbd .bd{min-width:0}
 .drow .dtr{display:flex;justify-content:center}
 .drow .dtr svg.dwb{width:92px;height:18px}

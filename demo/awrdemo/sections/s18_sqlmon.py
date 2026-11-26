@@ -140,12 +140,26 @@ def _plan_card(w, put, c):
         if x is None:
             continue
         rows[win.week_offset] = (ora_round(x.elapsed_us, 0) / 1e6, ora_round(x.cpu_us, 0) / 1e6,
-                                 ora_round(x.execs, 0), ora_round(x.gets, 0))
+                                 ora_round(x.execs, 0), ora_round(x.gets, 0),
+                                 ora_round(x.iowait_us, 0) / 1e6, ora_round(x.rows, 0))
+    # plan 044: rows per run and the I/O share of the per-run rise (totals
+    # over executions: Current, and the prior windows with a row summed)
+    x_ce = x_cx = x_ci = x_cr = None
+    x_pe = x_px = x_pi = x_pr = 0.0
+    for k in sorted(rows):
+        ela, _cpu, execs, _gets, io, rws = rows[k]
+        if k == 0:
+            x_ce, x_cx, x_ci, x_cr = ela, execs, io, rws
+        else:
+            x_pe += ela
+            x_px += execs
+            x_pi += io
+            x_pr += rws
     pairs = {}
     ea, ca, ga, ta = [], [], [], []
     e_cur = c_cur = g_cur = t_cur = None
     for k in sorted(rows):
-        ela, cpu, execs, gets = rows[k]
+        ela, cpu, execs, gets, _io, _rws = rows[k]
         pairs[k] = ela
         if k == 0:
             e_cur, c_cur = ela, cpu
@@ -202,6 +216,16 @@ def _plan_card(w, put, c):
                      if max(t_cur or 0, t_mu or 0) >= 1000 else
                      (fmt_num(t_cur) + " ms, was " + fmt_num(t_mu) + " ms"),
                      g_cur, g_mu, None, None, "Y", "N")
+    if src == "sqlstat" and x_cx is not None and x_cx > 0 and x_px > 0:
+        rise = x_ce / x_cx - x_pe / x_px
+        rr = (x_cr / x_cx) / (x_pr / x_px) if x_pr > 0 else None
+        sh = ora_round((x_ci / x_cx - x_pi / x_px) / rise * 100, 0) if rise > 0 else None
+        ev += _pc_ev("Rows, I/O",
+                     "rows per run " + (fmt_num(x_cr / x_cx) if rr is None
+                                        else "&times;" + H.to_char_fixed(rr, 1)),
+                     ("I/O wait is " + ("&minus;" if sh < 0 else "") + str(int(abs(sh)))
+                      + "% of the per-run rise") if sh is not None else "per-run time did not rise",
+                     x_cr / x_cx, x_pr / x_px, None, None, "Y", "N")
     ev += _pc_ev(H.ent("SQL Monitor", H.anchor_id("sm", sid), "sql"),
                  "max " + H.fmt_dur(c["cur_val"]), "normal " + H.fmt_dur(c["mu"]),
                  c["cur_val"], c["mu"], c["sd"], b, "N")

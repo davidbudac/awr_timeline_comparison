@@ -69,6 +69,25 @@ GRANT SELECT ON V_$INSTANCE                  TO <user>;
 -- one-line "needs SELECT on ..." note instead of its chart.
 GRANT SELECT ON DBA_HIST_EVENT_HISTOGRAM     TO <user>;  -- Wait latency histograms
 GRANT SELECT ON DBA_HIST_SQL_PLAN            TO <user>;  -- Plan shape (plan trees)
+GRANT SELECT ON DBA_HIST_SERVICE_NAME        TO <user>;  -- Who added the load: service names
+GRANT SELECT ON DBA_HIST_PDB_INSTANCE        TO <user>;  -- Who added the load: PDB names
+GRANT SELECT ON DBA_HIST_OSSTAT              TO <user>;  -- Host and memory: host CPU, load, paging
+GRANT SELECT ON DBA_HIST_PGASTAT             TO <user>;  -- Host and memory: PGA allocated, over-allocations
+GRANT SELECT ON DBA_HIST_MEM_DYNAMIC_COMP    TO <user>;  -- Host and memory: buffer cache, shared / large pool
+GRANT SELECT ON DBA_HIST_MEMORY_RESIZE_OPS   TO <user>;  -- Host and memory: SGA resize operations
+GRANT SELECT ON DBA_HIST_UNDOSTAT            TO <user>;  -- Host and memory: undo, ORA-01555
+GRANT SELECT ON DBA_OBJECTS                  TO <user>;  -- Plan shape: objects (created, last DDL, status)
+GRANT SELECT ON DBA_TAB_STATISTICS           TO <user>;  -- Plan shape: table statistics now
+GRANT SELECT ON DBA_TAB_STATS_HISTORY        TO <user>;  -- Plan shape: when table statistics changed
+GRANT SELECT ON DBA_INDEXES                  TO <user>;  -- Plan shape: index status / visibility
+-- Read only when the report runs in a CDB root (CDB$ROOT) and a plan comes
+-- from a PDB: the same four through their CDB_ twins. A common user sees a
+-- PDB's rows there only with CONTAINER_DATA for it, e.g.
+-- ALTER USER <user> SET CONTAINER_DATA = ALL CONTAINER = CURRENT;
+GRANT SELECT ON CDB_OBJECTS                  TO <user>;  -- Plan shape from the root: a PDB's objects
+GRANT SELECT ON CDB_TAB_STATISTICS           TO <user>;  -- Plan shape from the root: a PDB's table statistics
+GRANT SELECT ON CDB_TAB_STATS_HISTORY        TO <user>;  -- Plan shape from the root: a PDB's statistics history
+GRANT SELECT ON CDB_INDEXES                  TO <user>;  -- Plan shape from the root: a PDB's indexes
 -- Only if you use side/create_weekly_baselines.sql (optional, writes baselines):
 GRANT EXECUTE ON DBMS_WORKLOAD_REPOSITORY    TO <user>;
 ```
@@ -437,7 +456,13 @@ name where it is thick enough over the name's width (up to six a chart).
    one line of counts (open when there is no finding).
 6. **Evidence library** — every other section as one line with its
    status ("4 of 14 events moved", "none differ"); click a line to open the
-   section in place. Top SQL and Foreground waits open by default.
+   section in place. Six rows start open only when their status names
+   something no finding, plan-change card or verdict note already names:
+   Top SQL (the top statement), Foreground waits (the wait classes that
+   moved), Who added the load (the value on the DB time card), Plan shape
+   (the statements that changed plan), Window similarity (the Baseline
+   check note) and Volume vs unit cost (the statements slower per run); they
+   also start open when the report has no finding card, otherwise shut.
 
 **The band glyph** is how every scored row reads: *Normal range* (prior
 mean ± 2σ) · a dot on a −4σ … +8σ axis over the shaded ±1σ / ±2σ zones
@@ -447,6 +472,29 @@ mean, else a percentage). The **Trend** cells of the tables are 13-bar
 micro strips: one bar per window from zero, the normal zone shaded, Current
 last. The **Reading the charts** guide and **About this report** at the end
 of every view explain each chart and every method note.
+
+### Machine-readable result
+
+The finding cards are also in the page as data: one
+`<script type="application/json" id="awr-findings">` block (schema 1; it is
+never executed and nothing in the page reads it), so a scheduler or ticket
+system need not scrape the HTML. It holds `report` (version, run_id,
+db_name, dbid, host, target_end, win_hours, step_hours, weeks_back,
+valid_prior_windows, template, inst_num), `counts` (cards, large, moderate)
+and `cards`, one object per finding card in card order: `id` (the card's
+element id), `group`, `label`, `severity` (large / moderate), `domain`,
+`metric` (the lead metric), `unit`, `current`, `mean`, `sd` (the lead
+metric in its base unit: AAS, B/s, /s, ms, %), `n` (prior windows scored),
+`z`, `impact_aas` and `share_pct` (the card's time added above normal and
+its share of the DB-time rise; `null` when the card shows none). No finding
+card, or too little history, gives `"cards":[]`. Plan-change and
+configuration cards are not in schema 1.
+
+```sh
+sed -n '/id="awr-findings"/,/<\/script>/p' reports/awr_trend_X.html \
+  | sed -e 's/^<script[^>]*>//' -e 's/<\/script>$//' \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["counts"]); [print(c["id"], c["severity"], c["impact_aas"]) for c in d["cards"]]'
+```
 
 ### Timeline
 
@@ -486,7 +534,7 @@ the Day profile.
 
 ### Diagnostic views
 
-Nine views answer the questions the tables leave open. Each is a row of the
+Eleven views answer the questions the tables leave open. Each is a row of the
 Summary's evidence library (one-line answer; open it in place) and a full
 section in All sections, next to the table it extends. All are inline SVG /
 HTML, so they work offline; each carries a computed **Reads as:** sentence
@@ -503,6 +551,8 @@ and a table of its numbers. They explain; none of them adds a finding.
 | **Plan shape, old vs new** | Where inside a changed plan the time goes: old and new plan as icicle charts, per plan line from ASH. Optional grant: `DBA_HIST_SQL_PLAN`. |
 | **Trend breaks** | *When* did it start? The whole span against its seasonal normal, with a change-point scan that dates the shift and names the nearest release. Also in the Timeline view. |
 | **Window similarity** | Are the prior windows a fair picture of normal? A window-by-window similarity matrix, and a what-if that re-scores the report without a window you drop. |
+| **Who added the load** | Which service, module, machine, program or user (or PDB) is behind the extra active sessions? Foreground ASH per compared window, the values whose time rose first. Optional grants for names: `DBA_HIST_SERVICE_NAME`, `DBA_HIST_PDB_INSTANCE` (without them: hashes / ids). |
+| **Host and memory** | Was the host out of CPU or swapping, and was it this database? Did the buffer cache or the PGA change, any ORA-01555, which statement held the temp space? Host CPU and paging, SGA / PGA sizes and resize operations, undo, and temp / PGA per statement from ASH, per compared window. Optional grants: `DBA_HIST_OSSTAT`, `DBA_HIST_PGASTAT`, `DBA_HIST_MEM_DYNAMIC_COMP`, `DBA_HIST_MEMORY_RESIZE_OPS`, `DBA_HIST_UNDOSTAT` (each block says which it lacks). |
 
 ### The navigation rail & dark mode
 

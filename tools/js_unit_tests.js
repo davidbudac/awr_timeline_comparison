@@ -302,6 +302,77 @@ function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v -
   });
 }
 
+/* ---- plan 041: AWR_TL.pkInfo / pkText (js_timeline), the busiest minute
+   of the Current window against the valid prior windows' ---- */
+{
+  const T = load('js_timeline').AWR_TL;
+  const ws = [{ o: 3, v: 'Y' }, { o: 2, v: 'N' }, { o: 1, v: 'Y' }, { o: 0, v: 'Y' }];
+  const pk = [[3, 14, '2026-09-01 09:10'], [2, 99, '2026-09-02 09:00'], [1, 19.333, '2026-09-03 09:30'], [0, 31.167, '2026-09-04 09:42']];
+  test('pkInfo: Current value, prior range over the valid windows only', () => {
+    const i = T.pkInfo(pk, ws);
+    assert.strictEqual(i.aas, 31.167); assert.strictEqual(i.at, '2026-09-04 09:42');
+    assert.strictEqual(i.lo, 14); assert.strictEqual(i.hi, 19.333); assert.strictEqual(i.n, 2);
+    assert.ok(Math.abs(i.mu - 16.6665) < 1e-9);
+  });
+  test('pkInfo: unknown entries are skipped, no Current value = null', () => {
+    assert.strictEqual(T.pkInfo([[1, 5, '2026-09-03 09:30'], [0, null, null]], ws), null);
+    assert.strictEqual(T.pkInfo(null, ws), null);
+    assert.strictEqual(T.pkInfo([], ws), null);
+    const i = T.pkInfo([[3, null, null], [0, 4, '2026-09-04 09:00']], ws);
+    assert.strictEqual(i.n, 0); assert.strictEqual(i.mu, null); assert.strictEqual(i.lo, null);
+  });
+  test('pkText: the sentence, one prior window, no prior window, a day-long window', () => {
+    assert.strictEqual(T.pkText(T.pkInfo(pk, ws), 1),
+      '31.2 active sessions at 09:42; prior windows’ busiest minutes 14.0–19.3');
+    assert.strictEqual(T.pkText(T.pkInfo([[1, 19.333, 'x'], [0, 31.167, '2026-09-04 09:42']], ws), 1),
+      '31.2 active sessions at 09:42; the prior window’s busiest minute 19.3');
+    assert.strictEqual(T.pkText(T.pkInfo([[0, 150.5, '2026-09-04 09:42']], ws), 1), '151 active sessions at 09:42');
+    assert.strictEqual(T.pkText(T.pkInfo([[0, 2, '2026-09-04 09:42']], ws), 24), '2.0 active sessions at Fri 4 Sep 09:42');
+  });
+}
+
+/* ---- plan 042: AWR_TL.cpuInfo / cpuText (js_timeline), the Current
+   window's DB CPU against its cpu_count and ASH on CPU ---- */
+{
+  const T = load('js_timeline').AWR_TL;
+  const cpu = (cur, n) => ({ n: n || [16, null, 16, 16], used: [8, null, 8.2, cur.used], cur });
+  test('cpuInfo: no Current cpu_count or DB CPU = null', () => {
+    assert.strictEqual(T.cpuInfo(null), null);
+    assert.strictEqual(T.cpuInfo({ n: [], used: [] }), null);
+    assert.strictEqual(T.cpuInfo(cpu({ n: null, used: 8.6, pct: null, ash: 9 })), null);
+    assert.strictEqual(T.cpuInfo(cpu({ n: 0, used: 8.6, pct: null, ash: 9 })), null);
+    assert.strictEqual(T.cpuInfo(cpu({ n: 16, used: null, pct: null, ash: 9 })), null);
+  });
+  test('cpuText: plain capacity row, no queue below both thresholds', () => {
+    const i = T.cpuInfo(cpu({ n: 16, used: 8.583, pct: 53.6, ash: 8.9 }));
+    assert.strictEqual(i.wait, null); assert.strictEqual(i.bound, false); assert.strictEqual(i.changed, false);
+    assert.strictEqual(T.cpuText(i), 'DB CPU 8.6 of cpu_count 16 (54%)');
+  });
+  test('cpuInfo: the queue needs 10% AND 0.5 AAS above DB CPU', () => {
+    // 12.1 vs 8.6: +3.5 (41%) -> waiting
+    const a = T.cpuInfo(cpu({ n: 16, used: 8.6, pct: 53.75, ash: 12.1 }));
+    assert.ok(Math.abs(a.wait - 3.5) < 1e-9);
+    assert.strictEqual(T.cpuText(a), 'DB CPU 8.6 of cpu_count 16 (54%); ASH saw 12.1 on CPU, so about 3.5 sessions were waiting for a CPU');
+    // +0.4 AAS is 20% but under 0.5 AAS
+    assert.strictEqual(T.cpuInfo(cpu({ n: 4, used: 2, pct: 50, ash: 2.4 })).wait, null);
+    // +0.8 AAS is 0.5 AAS or more but only 8% of 10
+    assert.strictEqual(T.cpuInfo(cpu({ n: 32, used: 10, pct: 31.25, ash: 10.8 })).wait, null);
+    // exactly 10% and 0.5 AAS: waiting
+    assert.ok(T.cpuInfo(cpu({ n: 16, used: 5, pct: 31.25, ash: 5.5 })).wait != null);
+    // no ASH value: no queue
+    assert.strictEqual(T.cpuInfo(cpu({ n: 16, used: 5, pct: 31.25, ash: null })).wait, null);
+  });
+  test('cpuInfo: CPU-bound at 90% of cpu_count, changed cpu_count', () => {
+    const b = T.cpuInfo(cpu({ n: 8, used: 7.2, pct: 90, ash: 9.6 }, [4, 8, null, 8]));
+    assert.strictEqual(b.bound, true); assert.strictEqual(b.changed, true); assert.strictEqual(b.lo, 4); assert.strictEqual(b.hi, 8);
+    assert.strictEqual(T.cpuText(b), 'DB CPU 7.2 of cpu_count 8 (90%); ASH saw 9.6 on CPU, so about 2.4 sessions were waiting for a CPU; CPU-bound');
+    assert.strictEqual(T.cpuInfo(cpu({ n: 8, used: 7.19, pct: 89.9, ash: null })).bound, false);
+  });
+  test('cpuText: an idle database', () => {
+    assert.strictEqual(T.cpuText(T.cpuInfo(cpu({ n: 4, used: 0.012, pct: 0.3, ash: 0 }))), 'DB CPU 0.01 of cpu_count 4 (<1%)');
+  });
+}
+
 /* ---- review follow-up R3: AWR_TL.flagPos (js_timeline), where a release
    flag goes on the Activity chart ---- */
 {

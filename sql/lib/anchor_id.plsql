@@ -26,6 +26,7 @@
 --   15  fl-<parent dir>-<file name>   -- use file_anchor(full path)
 --   12  pa-<parameter>, pa--<_hidden>, pa---<__double> -- param_anchor(name)
 --   02  load-<stat>     03  metric-<name>     11  ash-card-<sql_id>
+--   02  tm-<stat>       time model row (plan 043)
 --
 -- The contract (v1.6.0 review #7): an id is a PURE FUNCTION of (kind, full
 -- name), so a link emitted anywhere (the verdict, a card, the narrative,

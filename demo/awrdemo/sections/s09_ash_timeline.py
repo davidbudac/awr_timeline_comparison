@@ -31,6 +31,16 @@ hourly samples and the fine data agrees with ashx.win).  Each event is
 spread with its class's minute counts as the weights, so the event chart's
 minutes track the class chart's (they differ by rounding only; in the SQL
 both come from the same samples and stack to the same totals).
+
+ashx.pk + the "Busiest minute per window" table (plan 041) derive from the
+same synthetic minutes: per valid window inside the fine reach, the minute
+with the most samples over every class (the earliest on a tie) / 6.
+
+ashx.cpu + the "CPU capacity per window" table (plan 042): cpu_count is a
+fixed CPU_COUNT (the model has no such parameter); DB CPU per valid window
+is the model's own time-model 'DB CPU' over the window's span, so the DB
+time card's capacity row agrees with the DB CPU the report shows elsewhere;
+ASH on CPU is winfg's CPU value.
 """
 from __future__ import annotations
 
@@ -232,6 +242,7 @@ class _Fine:
                     segs.append([a, b])
         self.segs = segs
         self.capped = jmin > 0 or mmin > 0
+        self.jmin, self.mmin, self.mend = jmin, mmin, mend
         self.start = range_start
         self.src = src
         self._prof = {}
@@ -414,9 +425,17 @@ def _timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour, eve
     for i, c in enumerate(classes):
         row = [aas_tok(wfcells.get((k, c), 0) / (360 * w.win_hours)) for k in range(w.weeks_back, -1, -1)]
         out.append(("," if i else "") + "[" + ",".join(row) + "]")
-    out.extend(fine.block([(lambda c: lambda hb, mi: fine.cls(hb, c)[mi])(c) for c in classes]))
+    pkv, pkm = _peaks(w, fine, classes, valid, bool(totals))
+    out.extend(_pk_lines(w, range_start, pkv, pkm))
+    cpn, cpu = _cpu(w)
+    out.extend(_cpu_lines(w, cpn, cpu, wfcells, valid, bool(totals)))
+    # the SQL's fine_head follows the cpu object's own '},' (no '],' here)
+    out.extend(fine.block([(lambda c: lambda hb, mi: fine.cls(hb, c)[mi])(c) for c in classes])[1:])
     out.extend(_events(w, range_start, total_hours, cbh, m, nc, events_by_hour, fine))
+    table = _pk_table(w, range_start, fine, valid, bool(totals), wtot, pkv, pkm)
+    table += _cpu_table(w, cpn, cpu, wfcells, valid, bool(totals))
     if not totals:
+        out.extend(table)
         return out
     prior = [wtot[k] for k in range(w.weeks_back, 0, -1) if valid.get(k) == "Y"]
     cur = wtot[0]
@@ -453,4 +472,187 @@ def _timeline(w, range_start, total_hours, total_buckets, bh, cells_by_hour, eve
         row += ('<div class="c' + (" cur" if k == 0 else "") + '" data-w="' + str(k)
                 + '"><span class="v">' + helpers.fmt_num(wtot[k]) + '</span></div>')
     out.append(helpers.tl_open('activity') + row + gut + '</div>' + helpers.tl_close())
+    out.extend(table)
+    return out
+
+
+# ---------------------------------------------------------------------
+# plan 041: each window's busiest minute (ashx.pk + the table)
+# ---------------------------------------------------------------------
+def _peaks(w, fine, classes, valid, any_ash):
+    """{week_offset: AAS}, {week_offset: minute since range_start}; only a
+    valid window inside the fine reach (the SQL's loop over v_fm)"""
+    wb, st, wh = w.weeks_back, w.step_hours, w.win_hours
+    pkv, pkm = {}, {}
+    for k in range(wb + 1):
+        j = wb - k
+        if not (any_ash and j >= fine.jmin and valid.get(k) == "Y"):
+            continue
+        a = max(int(ora_round(j * st * 60, 0)), fine.mmin)
+        b = min(int(ora_round((j * st + wh) * 60, 0)), fine.mend)
+        best, bm = -1, None
+        for mi in range(a, b):
+            n = sum(fine.cls(mi // 60, c)[mi % 60] for c in classes)
+            if n > best:
+                best, bm = n, mi
+        if bm is not None:
+            pkv[k] = best / 6
+            pkm[k] = bm
+    return pkv, pkm
+
+
+def _pk_ts(range_start, mi):
+    return ts_min(range_start + timedelta(minutes=mi))
+
+
+def _pk_lines(w, range_start, pkv, pkm):
+    """'],"pk":[' + the entries (lines under 30000 bytes), oldest first"""
+    out, row = ['],"pk":['], ""
+    for k in range(w.weeks_back, -1, -1):
+        tok = ("," if k < w.weeks_back else "") + "[" + str(k) + "," + (
+            aas_tok(pkv[k]) + ',"' + _pk_ts(range_start, pkm[k]) + '"' if k in pkv else "null,null") + "]"
+        if row and len(row) + len(tok) > 30000:
+            out.append(row)
+            row = ""
+        row += tok
+    if row:
+        out.append(row)
+    return out
+
+
+def _pk_table(w, range_start, fine, valid, any_ash, wtot, pkv, pkm):
+    win = {x.week_offset: x for x in w.windows}
+    out = ['<h3 class="pk-h">Busiest minute per window</h3>'
+           '<p class="note pk-note">The busiest minute of each compared window, from the same ASH scan: all sessions,'
+           ' samples in that minute &divide; 6 (ASH keeps one sample every 10 s, so the value moves in steps of 1/6).'
+           ' Next to the window&rsquo;s average it tells a short burst from a busy hour. Not scored. Blank for a skipped window'
+           ' and for windows past the 1-minute reach (at most 40000 minutes, the most recent windows first).</p>',
+           '<table id="ash-peaks" data-nocount><thead><tr><th>Window</th><th>Start</th>'
+           '<th class="num" title="ASH samples in the window &divide; 360 &divide; window hours, all sessions">Average (AAS)</th>'
+           '<th class="num" title="the window&#39;s busiest minute: its ASH samples, all sessions, &divide; 6">Busiest minute (AAS)</th>'
+           '<th>At</th><th class="num" title="busiest minute &divide; the window&#39;s average">&times; average</th>'
+           '</tr></thead><tbody>']
+    for k in range(w.weeks_back + 1):
+        j = w.weeks_back - k
+        if k in pkv:
+            why = None
+        elif not any_ash:
+            why = "no ASH samples"
+        elif valid.get(k) != "Y":
+            why = "skipped window"
+        elif j < fine.jmin:
+            why = "outside the 1-minute reach"
+        else:
+            why = "no minute"
+        row = ('<tr><td data-w="' + str(k) + '">'
+               + ("Current" if k == 0 else "&minus;" + w.offset_labels[k - 1]) + '</td>'
+               + '<td>' + (ts_min(win[k].win_start_ts) if k in win else "&mdash;") + '</td>'
+               + '<td class="num">' + (helpers.fmt_num(wtot[k]) if any_ash else "&mdash;") + '</td>')
+        if why is None:
+            ts = _pk_ts(range_start, pkm[k])
+            row += ('<td class="num" data-pk="' + aas_tok(pkv[k]) + '">' + helpers.fmt_num(pkv[k]) + '</td>'
+                    + '<td title="' + ts + '">' + (ts if w.win_hours >= 24 else ts[11:]) + '</td>'
+                    + '<td class="num">' + ("&times;" + to_char_fixed(ora_round(pkv[k] / wtot[k], 1), 1)
+                                            if wtot.get(k, 0) > 0 else "&mdash;") + '</td>')
+        else:
+            row += ('<td class="num">&mdash;</td><td><span class="imm">' + why
+                    + '</span></td><td class="num">&mdash;</td>')
+        out.append(row + '</tr>')
+    out.append('</tbody></table>')
+    return out
+
+
+# ---------------------------------------------------------------------
+# plan 042: CPU capacity per window (ashx.cpu + the table)
+# ---------------------------------------------------------------------
+# The modelled host: a fixed cpu_count (the model has no parameter for it).
+# 16 puts the busiest hours' DB CPU (about 10 AAS) visibly below it and the
+# line inside the class chart's y range (0-30 AAS), so the demo shows both
+# the line and, with the big classes hidden, the "above this scale" note.
+CPU_COUNT = 16
+
+
+def _cpu(w):
+    """{week_offset: cpu_count}, {week_offset: DB CPU AAS}: valid windows
+    only (the SQL's valid_windows); DB CPU = the time model's microseconds
+    over the window / its span, the same number 07's DB CPU row shows"""
+    cpn, cpu = {}, {}
+    for win in w.windows:
+        m = w.window_metrics(win)
+        if m is None:
+            continue
+        cpn[win.week_offset] = CPU_COUNT
+        v = m.time_model.get("DB CPU")
+        if v is not None and m.dur_sec > 0:
+            cpu[win.week_offset] = v / 1e6 / m.dur_sec
+    return cpn, cpu
+
+
+def _cpu_ash(w, k, wfcells, any_ash):
+    return wfcells.get((k, "CPU"), 0) / (360 * w.win_hours) if any_ash else None
+
+
+def _cpu_lines(w, cpn, cpu, wfcells, valid, any_ash):
+    """'],"cpu":{"n":[...],"used":[...],"cur":{...}},' as the SQL prints it"""
+    out = ['],"cpu":{"n":[']
+    for p, tab in ((1, cpn), (2, cpu)):
+        if p == 2:
+            out.append('],"used":[')
+        row = ""
+        for k in range(w.weeks_back, -1, -1):
+            tok = ("," if k < w.weeks_back else "") + (aas_tok(tab[k]) if k in tab else "null")
+            if row and len(row) + len(tok) > 30000:
+                out.append(row)
+                row = ""
+            row += tok
+        if row:
+            out.append(row)
+    ash = _cpu_ash(w, 0, wfcells, any_ash) if valid.get(0) == "Y" else None
+    out.append('],"cur":{"n":' + (aas_tok(cpn[0]) if 0 in cpn else "null")
+               + ',"used":' + (aas_tok(cpu[0]) if 0 in cpu else "null")
+               + ',"pct":' + (aas_tok(cpu[0] / cpn[0] * 100) if 0 in cpn and 0 in cpu else "null")
+               + ',"ash":' + (aas_tok(ash) if ash is not None else "null") + '}},')
+    return out
+
+
+def _cpu_table(w, cpn, cpu, wfcells, valid, any_ash):
+    win = {x.week_offset: x for x in w.windows}
+    out = ['<h3 class="cpu-h">CPU capacity per window</h3>'
+           '<p class="note cpu-note"><code>cpu_count</code> = the CPU threads the instance may use (the instance-caging limit when'
+           ' Resource Manager caps it), at each window&rsquo;s end snapshot, summed over the instances; not the host&rsquo;s cores.'
+           ' DB CPU = the time model&rsquo;s CPU time of foreground sessions over the window, in active sessions. ASH counts a session'
+           ' <i>on CPU</i> also while it waits for one in the run queue, so foreground ASH on CPU clearly above DB CPU means sessions'
+           ' were queued for a CPU; ASH keeps one sample every 10 s, so a small difference is noise. Not scored.</p>',
+           '<table id="ash-cpu" data-nocount><thead><tr><th>Window</th><th>Start</th>'
+           '<th class="num" title="cpu_count at the window&#39;s end snapshot (DBA_HIST_PARAMETER), summed over the instances">cpu_count</th>'
+           '<th class="num" title="DB CPU (DBA_HIST_SYS_TIME_MODEL) over the window &divide; its span: CPUs busy with foreground work">DB CPU (AAS)</th>'
+           '<th class="num" title="DB CPU &divide; cpu_count">% of cpu_count</th>'
+           '<th class="num" title="ASH samples of foreground sessions on CPU &divide; 360 &divide; window hours (running or waiting for a CPU)">ASH on CPU, foreground (AAS)</th>'
+           '<th class="num" title="ASH on CPU minus DB CPU: above 0 by more than the sampling noise = sessions waiting for a CPU">ASH &minus; DB CPU</th>'
+           '</tr></thead><tbody>']
+    for k in range(w.weeks_back + 1):
+        why = "skipped window" if valid.get(k) != "Y" else None
+        cw = _cpu_ash(w, k, wfcells, any_ash)
+        row = ('<tr><td data-w="' + str(k) + '">'
+               + ("Current" if k == 0 else "&minus;" + w.offset_labels[k - 1]) + '</td>'
+               + '<td>' + (ts_min(win[k].win_start_ts) if k in win else "&mdash;") + '</td>')
+        if why is not None:
+            row += ('<td class="num"><span class="imm">' + why + '</span></td>'
+                    '<td class="num">&mdash;</td><td class="num">&mdash;</td>')
+        else:
+            row += (('<td class="num" data-cpu-n="' + aas_tok(cpn[k]) + '">' + helpers.fmt_int(cpn[k]) + '</td>')
+                    if k in cpn else '<td class="num"><span class="imm">no cpu_count row</span></td>')
+            row += (('<td class="num" data-cpu-used="' + aas_tok(cpu[k]) + '">' + helpers.fmt_num(cpu[k]) + '</td>')
+                    if k in cpu else '<td class="num"><span class="imm">no DB CPU row</span></td>')
+            row += ('<td class="num">' + (str(int(ora_round(cpu[k] / cpn[k] * 100, 0))) + '%'
+                                          if k in cpn and k in cpu else '&mdash;') + '</td>')
+        row += '<td class="num">' + (helpers.fmt_num(cw) if cw is not None else '&mdash;') + '</td>'
+        if why is None and cw is not None and k in cpu:
+            d = ora_round(cw - cpu[k], 2)
+            row += ('<td class="num">' + ('&minus;' if d < 0 else '+' if d > 0 else '')
+                    + to_char_fixed(abs(d), 2) + '</td>')
+        else:
+            row += '<td class="num">&mdash;</td>'
+        out.append(row + '</tr>')
+    out.append('</tbody></table>')
     return out

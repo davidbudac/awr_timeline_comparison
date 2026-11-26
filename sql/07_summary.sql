@@ -146,9 +146,21 @@ DECLARE
     @@sql/lib/anchor_id.plsql
     @@sql/lib/finding_cards.plsql
     @@sql/lib/off_label.plsql
+    @@sql/lib/baseline_conf.plsql
     @@sql/lib/wingrid.plsql
     @@sql/lib/timeline.plsql
     @@sql/lib/finding_hints.plsql
+    @@sql/lib/json_escape.plsql
+
+    -- plan 040: a number as a JSON token: '.' decimal, no exponent, no
+    -- leading-dot form (TO_CHAR of 0.5 can read '.5'), null for NULL or a
+    -- value past 15 integer digits
+    FUNCTION json_num(p_v NUMBER, p_dec PLS_INTEGER DEFAULT 6) RETURN VARCHAR2 IS
+    BEGIN
+        IF p_v IS NULL OR ABS(p_v) >= 1e15 THEN RETURN 'null'; END IF;
+        RETURN RTRIM(TO_CHAR(ROUND(p_v, p_dec), 'FM999999999999990D999999',
+                             'NLS_NUMERIC_CHARACTERS=''.,'''), '.');
+    END json_num;
 
     -- Entity anchors (v1.6.0): the id of THIS finding's row is
     -- finding_anchor(domain, name) = fr-<l|m|w>-<name> (sql/lib/anchor_id
@@ -591,7 +603,9 @@ DECLARE
                                  || CASE WHEN v_shr < 1 THEN '&lt;1' ELSE TO_CHAR(v_shr) END
                                  || '% of the DB-time rise' END
                     || '</span>' END
-            || '<span class="fc-sum">' || fv(r.cur_val * v_s, v_u) || ' &middot; normal '
+            || '<span class="fc-sum"' || CASE WHEN conf_mod(r.n_prior) IS NOT NULL
+                    THEN ' data-n="' || TO_CHAR(TRUNC(r.n_prior)) || '"' END || '>'
+            || fv(r.cur_val * v_s, v_u) || ' &middot; normal '
             || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u) || '</span>'
             || '<span class="fc-tags"></span></div>'
             || '<div class="fc-band" title="z ' || band_ztxt(r.z_score) || ' against the prior normal">'
@@ -601,7 +615,11 @@ DECLARE
         DBMS_OUTPUT.PUT_LINE('<div class="fc-b"><div class="fc-main">'
             || '<div class="big"><span class="v">' || fv_num(r.cur_val * v_s, v_u) || '</span>'
             || '<span class="u">' || fv_unit(r.cur_val * v_s, v_u) || '</span>'
-            || '<span class="nrm" title="prior mean ' || fv(r.prior_mean * v_s, v_u) || '">normal '
+            || '<span class="nrm"' || CASE WHEN conf_mod(r.n_prior) IS NOT NULL
+                    THEN ' data-n="' || TO_CHAR(TRUNC(r.n_prior)) || '"' END
+            || ' title="prior mean ' || fv(r.prior_mean * v_s, v_u)
+            || CASE WHEN conf_mod(r.n_prior) IS NOT NULL THEN '. ' || conf_title(r.n_prior) END
+            || '">normal '
             || fv_range(r.prior_mean * v_s, r.prior_sd * v_s, v_u) || '</span></div>');
         DBMS_OUTPUT.PUT_LINE('<div class="wg bare hov qf"' || wg_attr || '>' || wg_flags(TRUE)
             || wg_bars(r.wv, v_s, r.prior_mean, r.prior_sd, v_sev) || wg_dates(TRUE) || '</div></div>');
@@ -1449,6 +1467,74 @@ BEGIN
                     ELSE 'No finding: every scored metric sits inside its normal range, or moved too little to matter.'
                END || '</p></div>');
     END IF;
+
+    --
+    -- Plan 040: the machine-readable result.  ONE script block of type
+    -- application/json (data, never executed; nothing in the page reads it),
+    -- schema 1: the report's identity and window settings, the card counts
+    -- and one object per finding card, in card order, with the numbers the
+    -- card shows (lead metric in its base unit, the card's impact and
+    -- share as data-impact / data-share).  Always emitted: no card gives
+    -- "cards":[], and so does the too-little-history path.  Plan-change and
+    -- configuration cards belong to sections 18 / 12 / 17 and are not in
+    -- schema 1.  Every string goes through json_escape (which also writes
+    -- a less-than sign as backslash-u003c, so no closing script tag can
+    -- appear inside the block); one line per card.
+    --
+    DECLARE
+        v_nvp   PLS_INTEGER := 0;     -- valid prior windows
+        r       finding_rec;
+        v_gc    VARCHAR2(64);
+        v_gs    NUMBER;
+        v_gu    VARCHAR2(20);
+        v_gsh   NUMBER;
+    BEGIN
+        FOR wr IN (
+            WITH
+            @@sql/lib/windows_cte.sql
+            SELECT week_offset, valid_flag FROM windows_rollup
+        ) LOOP
+            IF wr.week_offset > 0 AND wr.valid_flag = 'Y' THEN v_nvp := v_nvp + 1; END IF;
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('<script type="application/json" id="awr-findings">{"schema":1,"report":{'
+            || '"version":"' || json_escape('~awr_version') || '"'
+            || ',"run_id":"' || json_escape('~run_id') || '"'
+            || ',"db_name":"' || json_escape('~db_name') || '"'
+            || ',"dbid":' || json_num(TO_NUMBER('~dbid'), 0)
+            || ',"host":"' || json_escape('~host_name') || '"'
+            || ',"target_end":"' || json_escape('~target_end_resolved') || '"'
+            || ',"win_hours":' || json_num(TO_NUMBER('~win_hours'))
+            || ',"step_hours":' || json_num(TO_NUMBER('~step_hours'))
+            || ',"weeks_back":' || json_num(v_weeks_back, 0)
+            || ',"valid_prior_windows":' || v_nvp
+            || ',"template":"' || json_escape('~template_name') || '"'
+            || ',"inst_num":' || json_num(~inst_num, 0)
+            || '},"counts":{"cards":' || v_order.COUNT || ',"large":' || v_ncl
+            || ',"moderate":' || v_ncm || '},"cards":[');
+        FOR k IN 1 .. v_order.COUNT LOOP
+            v_gc  := v_order(k);
+            r     := v_findings(v_glead(v_gc));
+            v_gs  := metric_scale(r.metric_domain, r.metric_name);
+            v_gu  := metric_unit(r.metric_domain, r.metric_name);
+            v_gsh := g_shr(v_gc);
+            DBMS_OUTPUT.PUT_LINE('{"id":"' || json_escape(card_id(v_gc)) || '"'
+                || ',"group":"' || json_escape(v_gc) || '"'
+                || ',"label":"' || json_escape(card_label(v_gc)) || '"'
+                || ',"severity":"' || json_escape(r.change_bucket) || '"'
+                || ',"domain":"' || json_escape(r.metric_domain) || '"'
+                || ',"metric":"' || json_escape(r.metric_name) || '"'
+                || ',"unit":"' || json_escape(v_gu) || '"'
+                || ',"current":' || json_num(r.cur_val * v_gs)
+                || ',"mean":' || json_num(r.prior_mean * v_gs)
+                || ',"sd":' || json_num(r.prior_sd * v_gs)
+                || ',"n":' || json_num(r.n_prior, 0)
+                || ',"z":' || json_num(r.z_score, 3)
+                || ',"impact_aas":' || json_num(g_imp(v_gc), 3)
+                || ',"share_pct":' || json_num(v_gsh, 0)
+                || '}' || CASE WHEN k < v_order.COUNT THEN ',' END);
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE(']}</script>');
+    END;
 
     --
     -- Detail tables: one per domain, ordered by sev / |z| / |pct| / name.

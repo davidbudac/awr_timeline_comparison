@@ -81,6 +81,8 @@ DECLARE
     v_share      NUMBER;
     v_cell       VARCHAR2(40);
     v_moved      PLS_INTEGER := 0;    -- Table A rows scored large / moderate (library row text)
+    v_news       VARCHAR2(2000);      -- plan 040: the wait classes of those rows, as card ids
+    v_ntok       VARCHAR2(100);
     -- The Timeline's event rows are in AAS per window: that window's
     -- seconds waited / its REAL snapshot span (valid_windows dur_sec, MAX
     -- over the instances), the divisor of 07's wait-class rows, so an
@@ -558,6 +560,12 @@ BEGIN
                         v_share, 'WAIT', v_evts(i).event_name, v_evts(i).wait_class, v_shift)
            IN ('large', 'moderate') THEN
             v_moved := v_moved + 1;
+            -- plan 040: the library row starts open only when one of these
+            -- classes has no finding card (chrome libNews, sql/00_params.sql)
+            v_ntok := 'card:' || card_id(card_group('WAIT:' || v_evts(i).wait_class));
+            IF INSTR(' ' || v_news || ' ', ' ' || v_ntok || ' ') = 0 AND NVL(LENGTH(v_news), 0) < 1800 THEN
+                v_news := TRIM(v_news || ' ' || v_ntok);
+            END IF;
         END IF;
     END LOOP;
 
@@ -720,7 +728,8 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE(lib_ls('waits-fg', CASE WHEN NVL(v_evts.COUNT, 0) = 0 THEN 'no foreground wait events'
         ELSE CASE WHEN v_moved = 0 THEN 'none' ELSE '<b>' || v_moved || '</b>' END
              || ' of ' || v_evts.COUNT || ' event' || CASE WHEN v_evts.COUNT = 1 THEN '' ELSE 's' END
-             || ' moved' END) || '</section>');
+             || ' moved' END)
+        || lib_news('waits-fg', v_news) || '</section>');
 END;
 /
 

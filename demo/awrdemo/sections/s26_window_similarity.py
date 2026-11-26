@@ -456,6 +456,42 @@ def emit(w) -> str:
             sug.append('{"k":"' + kind + '","drop":[' + ",".join(str(k) for k in sorted(st, reverse=True))
                        + '],"chg":' + str(schg[si]) + ',"ca":' + str(sca[si]) + '}')
         out.append('],"cb":' + str(cbn) + ',"sug":[' + ",".join(sug) + ']};</script>')
+        # plan 038: the verdict's "Baseline check" note (the suggestion that
+        # changes the most metrics, the first on a tie, with at least 3
+        # valid prior windows left)
+        bs = None
+        for si, (kind, st) in enumerate(sets):
+            if schg[si] > 0 and np_ - len(st) >= 3 and (bs is None or schg[si] > schg[bs]):
+                bs = si
+        if bs is not None:
+            kind, st = sets[bs]
+            if kind == "grp":
+                bt = grp_txt(st, "Y") + " form a group unlike the " + grp_txt(st, "O") + "."
+            elif len(st) == 1:
+                bt = "The prior window " + _wname(w, min(st)) + " is unlike the other prior windows."
+            elif len(st) <= 6:
+                names = [_wname(w, k) for k in sorted(st, reverse=True)]
+                bw = ""
+                for c, nm in enumerate(names, 1):
+                    bw += (" and " if c > 1 and c == len(names) else ", " if c > 1 else "") + nm
+                bt = "The prior windows " + bw + " are unlike the other prior windows."
+            else:
+                bt = str(len(st)) + " prior windows (" + set_names(st) + ") are unlike the other prior windows."
+            bt += (" Scored without " + ("it" if len(st) == 1 else "them") + ", " + str(schg[bs])
+                   + (" metric changes" if schg[bs] == 1 else " metrics change") + " bucket"
+                   + (" and the findings rise from " + str(cbn) + " to " + str(sca[bs]) if sca[bs] > cbn
+                      else " and the findings fall from " + str(cbn) + " to " + str(sca[bs]) if sca[bs] < cbn
+                      else ", though the findings stay at " + str(cbn)) + ".")
+            out.append('<div id="base-src" hidden><ul><li class="hn-base" data-sug="' + str(bs)
+                       + '" data-chg="' + str(schg[bs]) + '" data-cb="' + str(cbn) + '" data-ca="' + str(sca[bs]) + '">'
+                       '<span class="hw"><b class="hl">Baseline check:</b> ' + bt
+                       + ' <a class="go" href="#win-sim">Window similarity&nbsp;&rarr;</a></span></li></ul></div>')
+            L = chrome.put_lines(chrome.sql_path("sql/26_window_similarity.sql"))
+            i = next(k for k, (t, _) in enumerate(L) if t.startswith('<script>(function(){var d=document,s=d.getElementById("base-src")'))
+            assert L[i][1]
+            out.append(L[i][0])
+            if nodd > 0:
+                out.append(h.lib_news('win-sim', 'note:hn-base'))
         out.append('</section>')
     out.append(chrome.lib_script('js_winsim.plsql'))
     out.append('<!-- AWR-SECTION: 26_window_similarity END -->')

@@ -447,7 +447,8 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g,
                      else " &middot; " + ("&lt;1" if v_shr < 1 else str(v_shr)) + "% of the DB-time rise" if v_shr is not None
                      else "")
                   + '</span>' if h.imp_on(v_imp) else '')
-               + '<span class="fc-sum">' + h.fv(h._mul(r.cur, s), u) + ' &middot; normal '
+               + '<span class="fc-sum"' + (' data-n="' + str(int(r.n)) + '"' if h.conf_mod(r.n) is not None else '') + '>'
+               + h.fv(h._mul(r.cur, s), u) + ' &middot; normal '
                + h.fv_range(h._mul(r.mu, s), h._mul(r.sd, s), u) + '</span>'
                '<span class="fc-tags"></span></div>'
                '<div class="fc-band" title="z ' + h.band_ztxt(r.z) + ' against the prior normal">'
@@ -456,7 +457,9 @@ def _card(w, out, g, pos, lead, ordered, evs, flagcls, dbt, cpu, imp, open_g,
     out.append('<div class="fc-b"><div class="fc-main">'
                '<div class="big"><span class="v">' + h.fv_num(h._mul(r.cur, s), u) + '</span>'
                '<span class="u">' + h.fv_unit(h._mul(r.cur, s), u) + '</span>'
-               '<span class="nrm" title="prior mean ' + h.fv(h._mul(r.mu, s), u) + '">normal '
+               '<span class="nrm"' + (' data-n="' + str(int(r.n)) + '"' if h.conf_mod(r.n) is not None else '')
+               + ' title="prior mean ' + h.fv(h._mul(r.mu, s), u)
+               + ('. ' + h.conf_title(r.n) if h.conf_mod(r.n) is not None else '') + '">normal '
                + h.fv_range(h._mul(r.mu, s), h._mul(r.sd, s), u) + '</span></div>')
     out.append('<div class="wg bare hov qf"' + h.wg_attr(w) + '>' + h.wg_flags(True)
                + h.wg_bars(w, r.vals, s, r.mu, r.sd, sev) + h.wg_dates(w, True) + '</div></div>')
@@ -609,6 +612,47 @@ def _att(out, findings, order, lead, gsev, dbt, imp) -> None:
                's.parentNode.removeChild(s);})();</script>')
 
 
+def _findings_json(w, out, order, lead, imp, ncl, ncm) -> None:
+    """Plan 040: the machine-readable result (07's DECLARE ... json_num block):
+    ONE application/json script, schema 1, one line per finding card."""
+    nvp = sum(1 for x in w.windows if x.week_offset > 0 and x.valid)
+    jn, je = h.json_num, h.json_escape
+    out.append('<script type="application/json" id="awr-findings">{"schema":1,"report":{'
+               '"version":"' + je(w.awr_version) + '"'
+               ',"run_id":"' + je(w.run_id) + '"'
+               ',"db_name":"' + je(w.db_name) + '"'
+               ',"dbid":' + jn(w.dbid, 0)
+               + ',"host":"' + je(w.host_name) + '"'
+               ',"target_end":"' + w.target_end.strftime("%Y-%m-%d %H:%M:%S") + '"'
+               ',"win_hours":' + jn(w.win_hours)
+               + ',"step_hours":' + jn(w.step_hours)
+               + ',"weeks_back":' + jn(w.weeks_back, 0)
+               + ',"valid_prior_windows":' + str(nvp)
+               + ',"template":"' + je(w.template) + '"'
+               ',"inst_num":' + jn(w.inst_num, 0)
+               + '},"counts":{"cards":' + str(len(order)) + ',"large":' + str(ncl)
+               + ',"moderate":' + str(ncm) + '},"cards":[')
+    for k, g in enumerate(order, 1):
+        r = lead[g]
+        s = h.metric_scale(r.domain, r.name)
+        out.append('{"id":"' + je(h.card_id(g)) + '"'
+                   ',"group":"' + je(g) + '"'
+                   ',"label":"' + je(h.card_label(g)) + '"'
+                   ',"severity":"' + je(r.bucket) + '"'
+                   ',"domain":"' + je(r.domain) + '"'
+                   ',"metric":"' + je(r.name) + '"'
+                   ',"unit":"' + je(h.metric_unit(r.domain, r.name)) + '"'
+                   ',"current":' + jn(h._mul(r.cur, s))
+                   + ',"mean":' + jn(h._mul(r.mu, s))
+                   + ',"sd":' + jn(h._mul(r.sd, s))
+                   + ',"n":' + jn(r.n, 0)
+                   + ',"z":' + jn(r.z, 3)
+                   + ',"impact_aas":' + jn(imp.get(g), 3)
+                   + ',"share_pct":' + jn(_g_shr(imp, g), 0)
+                   + '}' + ("," if k < len(order) else ""))
+    out.append(']}</script>')
+
+
 def emit(w) -> str:
     out = ["<!-- AWR-SECTION: 07_summary BEGIN -->"]
     findings = compute_findings(w)
@@ -720,6 +764,8 @@ def emit(w) -> str:
                    + ('Nothing could be scored: a metric needs at least 3 valid prior windows.' if normal == 0
                       else 'No finding: every scored metric sits inside its normal range, or moved too little to matter.')
                    + '</p></div>')
+
+    _findings_json(w, out, order, lead, imp, ncl, ncm)
 
     _emit_domain_table(out, ordered, "LOAD", "Load profile")
     _emit_domain_table(out, ordered, "METRIC", "System metrics")

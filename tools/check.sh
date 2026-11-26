@@ -4,7 +4,8 @@
 #   2. bash -n                        syntax of every tracked *.sh
 #   3. strict Python parse            any SyntaxWarning in a tracked *.py is an error
 #   4. server unit tests              python3 -m unittest (stdlib only)
-#   5. generated docs                 demo report + policy page match their generators
+#   5. generated docs                 demo report + policy page match their generators;
+#                                     baseline_conf.plsql matches the t distribution (plan 039)
 #   6. client JS unit tests           tools/js_unit_tests.js (skipped without node)
 # Read-only: writes nothing but Python bytecode caches.  Dev/CI tooling only;
 # nothing in the report path may depend on it.
@@ -54,6 +55,7 @@ fi
 step "generated docs are fresh (demo report, policy page)"
 python3 demo/gen_demo_report.py --check || fail=1
 python3 docs/gen_policy_doc.py --check || fail=1
+python3 tools/gen_baseline_conf.py --check || fail=1
 
 echo
 if [ "$fail" -eq 0 ]; then echo "check.sh: all checks passed"; else echo "check.sh: FAILED"; fi

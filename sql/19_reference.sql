@@ -221,7 +221,11 @@ BEGIN
         || ' move is material: |&Delta;| &ge; 10% and, for wait classes, &ge; 2% of the Current window&rsquo;s wait time (otherwise normal, tagged <i>immaterial</i>). Each metric has its own direction and floors'
         || ' (<code>sql/lib/metric_policy.plsql</code>): a move in the good direction is <b>improved</b>, an informational counter is <b>noted</b> &mdash; neither is highlighted or counted. Twins (the SYSMETRIC'
         || ' rate of a SYSSTAT counter, the CPU half of the CPU/wait ratio) are shown muted and never counted. Fewer than 3 prior values: &Delta; only. |z| beyond &plusmn;99 is capped for display;'
-        || ' &sigma;&approx;0 flags a baseline that barely moved.</dd>');
+        || ' &sigma;&approx;0 flags a baseline that barely moved. <b>How far to trust a finding:</b> &mu; and &sigma; come from only n prior values, so a metric that did not'
+        || ' change still lands outside &plusmn;2&sigma; more often than the 4.6% people expect, and outside &plusmn;3&sigma; more often than 0.3%. For a normally distributed metric the nominal rates'
+        || ' (&plusmn;2&sigma; / &plusmn;3&sigma;) are 22% / 12% at n = 3, 17% / 7.5% at 4, 12% / 3.9% at 6, 10% / 2.5% at 8, 8.1% / 1.5% at 12, 6.1% / 0.7% at 26 and 5.3% / 0.5% at 52'
+        || ' (two-sided, per metric, before the size floors and the direction rule; a metric that only counts when it rises is about half). With 3 to 5 prior windows read a lone moderate'
+        || ' finding as a hint: the verdict then says so, and every finding card names its n (hover it for the two rates).</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Band and &Delta;</dt><dd>The band plots Current in &sigma; from the prior mean on one scale for the whole page (&minus;4 to +8&sigma;). Normal range = &mu; &plusmn; 2&sigma; in the row&rsquo;s'
         || ' own unit. &Delta; vs mean reads &times;n at twice the mean or more, else a percentage.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Windows</dt><dd>One window per step back from <b>~target_end_resolved</b>, ~win_label wide, every ~step_label. A window is skipped (and dropped from every baseline) when a snapshot is missing,'
@@ -254,7 +258,9 @@ BEGIN
         || ' statement by blocks read changed between the same two plans in <code>DBA_HIST_SQLSTAT</code> (its most executed prior plan, its Current plan reading'
         || ' the most blocks). <b>Configuration</b>: every changed parameter as a step line.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Evidence library</dt><dd>Summary view: every other section as one row with a one-line status and its counts; open a row to read the section in place.'
-        || ' All sections shows every section in full.</dd>');
+        || ' Six rows start open only when their status names something that no finding, plan-change card or verdict note already names: Top SQL (the top statement), Foreground waits (the wait classes that moved),'
+        || ' Who added the load (the value on the DB time card), Plan shape (the statements that changed plan), Window similarity (the Baseline check note) and Volume vs unit cost (the statements slower per run);'
+        || ' they also start open when the report has no finding card; otherwise they start shut and open with a click or a link. All sections shows every section in full.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>ASH timeline</dt><dd><code>dba_hist_active_sess_history</code> over the full span, one scan: hourly (or the cadence) in All sections; in the Activity charts (under'
         || ' the verdict in Summary, at the top of the other views) on the same grid (coarser only past 10000 buckets), by wait class and by wait event (the 14 events with the most samples, ties by name,'
         || ' the rest summed as Other events), plus each compared window&rsquo;s own values (samples &divide; 360 &divide; window hours; overlapping windows each count a shared sample)'
@@ -277,8 +283,30 @@ BEGIN
         || ' A usage overview, not a health check: the band is drawn but never scored.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Load profile</dt><dd><code>DBA_HIST_SYSSTAT</code> (end &minus; begin snapshot) &divide; window seconds, summed across instances. <b>Trend</b>: per-window values as bars, oldest to Current, over the shaded normal range.'
         || ' <b>Current</b> cell bar = value &divide; row maximum.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Time model</dt><dd>The second table of Load profile: <code>DBA_HIST_SYS_TIME_MODEL</code> (end &minus; begin snapshot, microseconds) &divide; window seconds'
+        || ' = average active sessions, summed across instances. Two trees, as the Oracle Reference draws them: under <b>DB time</b> sit DB CPU, SQL execution, parsing'
+        || ' (hard parse inside parse time, failed parses beside it), PL/SQL, Java, connection management, sequence loads and rebinds; <b>background elapsed time</b>'
+        || ' (with background CPU and RMAN under it) is <b>outside</b> DB time. A child is contained in its parent, but the children overlap and need not add up'
+        || ' to it: never add these rows up or read them as shares of a whole (the &ldquo;% of DB time&rdquo; column is each row on its own). A row that is zero in'
+        || ' every window is left out and named under the table. Not scored. The DB time card cites the row (other than DB CPU and SQL execution) whose time rose'
+        || ' most, when it rose by at least 0.01 AAS and 5 % of the DB-time rise.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>System metrics</dt><dd><code>DBA_HIST_SYSMETRIC_SUMMARY</code> averaged over each window. Rates and counters: SUM across instances per snapshot, then AVG; ratios and latencies: AVG across'
         || ' instances per snapshot, then AVG. Units per metric name.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Peaks</dt><dd>Every other number is an average over the window, so a five-minute stall reads as a mild rise. Two peaks sit next to it, neither scored nor counted:'
+        || ' <b>Peak (1 min)</b> in System metrics = the largest <code>MAXVAL</code> of <code>DBA_HIST_SYSMETRIC_SUMMARY</code> (the highest 60-second value inside each snapshot interval)'
+        || ' over the Current window, against the mean of the valid prior windows&rsquo; own peaks; and the <b>busiest minute</b> of each window from ASH (Active sessions, the DB time card,'
+        || ' the window tooltips of the Activity charts) = that minute&rsquo;s samples, all sessions, &divide; 6. ASH keeps one sample every 10 s, so a minute holds six samples per active'
+        || ' session and the value moves in steps of 1/6; windows past the 1-minute reach or skipped are left blank. With several instances (RAC, <code>inst_num</code> 0) the ASH minute'
+        || ' adds the instances up, but a SYSMETRIC peak is the largest <b>single-instance</b> value (instances need not peak in the same minute), labelled &ldquo;max per instance&rdquo;,'
+        || ' so it can be lower than a summed average.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>CPU capacity</dt><dd>Is 8 sessions on CPU a lot? <code>cpu_count</code> (<code>DBA_HIST_PARAMETER</code> at each window&rsquo;s end snapshot, summed over the'
+        || ' instances) is the number of CPU <b>threads</b> the instance may use, or the instance-caging limit when Resource Manager caps it: not the host&rsquo;s cores, and not'
+        || ' the CPU that other databases, background processes or other software on the same host take (DB CPU counts foreground sessions of this database only).'
+        || ' The DB time card says &ldquo;DB CPU x of cpu_count n&rdquo; (CPU-bound at 90 %), the by-wait-class Activity chart draws the Current cpu_count as a dashed line'
+        || ' when it lies inside the chart&rsquo;s scale (the scale is never stretched to reach it; above, the header says so), and Active sessions lists every window.'
+        || ' ASH counts a session <i>on CPU</i> while it runs <b>or waits in the run queue</b>; the time model&rsquo;s <code>DB CPU</code> counts only the CPU actually used.'
+        || ' So foreground ASH on CPU clearly above DB CPU (the card asks for 10 % and 0.5 sessions more) means sessions were waiting for a CPU. ASH is a sample, one every'
+        || ' 10 s, so a small difference either way is noise. Not scored.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Wait events</dt><dd>Foreground: <code>DBA_HIST_SYSTEM_EVENT</code>; background: <code>DBA_HIST_BG_EVENT_SUMMARY</code>. Idle excluded. Top ~top_n events by time waited (s) and by average latency'
         || ' (ms = time waited &divide; total waits); the chart stacks wait-class time per window. When five or more flagged events moved together within a narrow band, the table notes one <b>table-wide'
         || ' shift</b> and demotes large rows to moderate.</dd>');
@@ -300,6 +328,20 @@ BEGIN
         || ' cover the whole AWR retention, not only the compared windows. The <b>Compared windows</b> table in an opened row covers the report&rsquo;s windows;'
         || ' its prior mean averages the prior valid windows in which AWR kept a row for the statement (the Biggest change tab counts a valid window'
         || ' without a row as 0, so the two can differ). A statement AWR did not capture in a window reads <i>not captured</i>, never 0.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Where the time went</dt><dd>Under the Compared windows table, <b>Per execution: where the time went</b> splits the statement&rsquo;s elapsed time'
+        || ' per execution into CPU, I/O wait, concurrency, application (row locks, usually) and cluster wait, from the same <code>DBA_HIST_SQLSTAT</code> rows'
+        || ' (<code>CPU_TIME_DELTA</code>, <code>IOWAIT_DELTA</code>, <code>CCWAIT_DELTA</code>, <code>APWAIT_DELTA</code>, <code>CLWAIT_DELTA</code>), plus'
+        || ' <b>Other</b> = elapsed beyond the five, never below 0; then the work per execution: rows processed, buffer gets, physical reads and gets per row.'
+        || ' The parts are separate timers: they can overlap or leave a remainder, and parallel execution servers&rsquo; time is included. Current per execution'
+        || ' is the Current window&rsquo;s total over its executions, the prior mean the prior windows with a row summed, over their executions (the table&rsquo;s'
+        || ' prior mean), so the parts add up; with no completed execution in Current the block compares window totals instead. <b>Share of the rise</b> = the'
+        || ' part&rsquo;s change over the change of elapsed. <b>Reads as</b> appears only when each run took at least 1.5 times the prior mean, and names the first'
+        || ' that holds: gets per run at least 1.5 times with rows per run within 20% and CPU plus I/O wait carrying at least 60% of the rise (works harder for'
+        || ' the same result: plan or access path); rows per run at least 1.5 times with gets per row within 20% (more data per call); application, concurrency'
+        || ' or cluster wait carrying at least 60%; I/O wait carrying 60% with gets, rows and physical reads per run within 20% (slower reads); I/O wait carrying'
+        || ' 60% with gets per run within 20% and physical reads per run at least 1.5 times (a colder cache); else the largest part. Below 1.5 times per run,'
+        || ' when the window total rose at least 1.5 times, it says the statement ran more often. A plan-change card&rsquo;s <b>Rows, I/O</b> line gives rows per'
+        || ' run and the I/O share of the per-run rise, computed the same way. Ranked evidence, never a finding or a score.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Top SQL ASH</dt><dd>For each statement in the Top SQL pool: ASH samples per bucket split by wait event (top 7 per statement, the rest as <b>Other</b>; <b>CPU</b> = ON CPU). Statements with fewer'
         || ' than 5 samples are placeholders.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>SQL Monitor</dt><dd>Executions persisted by SQL Monitor (<code>DBA_HIST_REPORTS</code>, <code>component_name=&#39;sqlmonitor&#39;</code>), summaries only. Only completed, expensive-enough or'
@@ -351,6 +393,20 @@ BEGIN
         || ' in. One sample is about 10 s of DB time, so both read in seconds per window. The plan tree comes from <code>DBA_HIST_SQL_PLAN</code> (without SELECT on it the section lists the'
         || ' samples by plan line only); samples without a plan line are counted on the root step. With no plan change, the highest-ranked of the first three top statements with at least 5'
         || ' samples is shown alone.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Objects around a plan change</dt><dd>For a changed plan, Plan shape lists every table and index of the old and the new plan (at most 30, tables'
+        || ' first) with what the dictionary says about it: <code>DBA_OBJECTS</code> (created, last DDL, where grants and revokes count as DDL, status), <code>DBA_TAB_STATISTICS</code> (last analyzed, rows, stale or locked'
+        || ' statistics), <code>DBA_TAB_STATS_HISTORY</code> (when table statistics changed: gathered, set, restored or imported; kept about 31 days by default) and'
+        || ' <code>DBA_INDEXES</code> (status, visibility, last analyzed). These four views are optional grants: without one, its columns read &ldquo;not read&rdquo; and a note names it.'
+        || ' Two rules keep it honest. (1) The dictionary is the one of the container the report runs in, in its state at the time of the run; run from a CDB root, the objects of a'
+        || ' plan captured in a PDB are read through the same four views&rsquo; <code>CDB_</code> twins for that container (a common user sees PDB rows there only with'
+        || ' <code>CONTAINER_DATA</code>), and the table&rsquo;s heading says which dictionary was read. An object without a row reads &ldquo;no dictionary row&rdquo; (dropped, or not'
+        || ' visible here; from the root also: the PDB is closed), never &ldquo;dropped&rdquo;; status, visibility and row counts are'
+        || ' &ldquo;now&rdquo;, not &ldquo;in the Current window&rdquo;. Only created, last DDL, last analyzed and the statistics history are past times, and last DDL / last analyzed keep'
+        || ' only the latest event, so one after the Current window can hide an earlier one (the sentence says so). (2) &ldquo;Around the plan change&rdquo; means inside one stated'
+        || ' interval: from the start of the last valid prior window whose plan (the plan of its last captured <code>DBA_HIST_SQLSTAT</code> row) was the old plan to the end of the'
+        || ' Current window; any other time is only listed. Table-level rows only (no partitions); views, fixed tables and temporary tables of the plan are left out. When the sentence'
+        || ' names something inside the interval or an abnormal state (an index UNUSABLE or INVISIBLE, an object INVALID or without a row), the plan-change card gets one'
+        || ' &ldquo;Objects&rdquo; line. Explains only: it adds no findings.</dd>');
     DBMS_OUTPUT.PUT_LINE('<dt>Trend breaks</dt><dd>Every snapshot interval of the span (time-weighted over irregular snapshots; a restart or a missed snapshot is a gap, never 0) of DB time, DB CPU, user calls,'
         || ' executions, logical and physical reads and redo is compared with its normal: the median of the same hour of the week in the other weeks (spans of 21 days or more), else of the'
         || ' same hour of the day on the other days (3 days or more), else of every point before the Current window. Spread = interquartile range / 1.349, at least 2% of the median and the'
@@ -365,7 +421,35 @@ BEGIN
         || ' decide alone. A mean absolute difference rather than a correlation, because it reads in the band glyph&rsquo;s unit and a correlation is blind to a uniformly lower window (a'
         || ' holiday). A prior window&rsquo;s distance from the other priors is the median of its distances to them; it is odd above max(median + 3 &times; 1.4826 &times; MAD, 1.5 &times;'
         || ' median) of those distances. Odd windows that are alike each other form a group (a change or an episode, not a single odd window). The what-if re-scores every metric in the'
-        || ' browser with the findings&rsquo; own rule against the priors left; with nothing dropped it reproduces the reported buckets exactly.</dd>');
+        || ' browser with the findings&rsquo; own rule against the priors left; with nothing dropped it reproduces the reported buckets exactly.'
+        || ' When dropping the windows that stand out would change a metric&rsquo;s bucket (and at least 3 valid priors remain), the verdict carries one &ldquo;Baseline check&rdquo; note with'
+        || ' the same numbers: the suggestion that changes the most metrics, and how the finding count would move. It is a note, not a finding: no count, pill or severity changes.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Who added the load</dt><dd>Foreground ASH (<code>DBA_HIST_ACTIVE_SESS_HISTORY</code>, <code>session_type</code> FOREGROUND, on CPU or in a'
+        || ' non-idle wait) per valid compared window, broken down by service, module, machine, program, user and, when the samples carry more than one container, PDB.'
+        || ' One sample = 10 s; AAS = samples &times; 10 s &divide; the window&rsquo;s length, and a sample in two overlapping windows counts for both, so the total'
+        || ' compares with DB time and the verdict&rsquo;s rise. Rise = Current minus the mean of the valid prior windows (a valid window without a sample for a value'
+        || ' is 0, a skipped one is left out). Per dimension the 40 values with the most samples are kept and the rest summed as others; the table lists the values'
+        || ' whose time rose, the 8 largest rises first, the rest under &ldquo;+ n more&rdquo;. A parallel or job slave&rsquo;s number is folded ((P003) &rarr;'
+        || ' (Pnnn)). The sentence names a value that carries at least half of the rise; the DB time card gets a &ldquo;Who&rdquo; row when a module (else a service,'
+        || ' machine or user) carries at least 30% of a rise of at least 0.1 AAS, with 3 or more valid prior windows. Service and PDB names need SELECT on'
+        || ' <code>DBA_HIST_SERVICE_NAME</code> / <code>DBA_HIST_PDB_INSTANCE</code>; without them they show as a hash / con_id. Evidence, not a finding: nothing'
+        || ' here is scored or counted.</dd>');
+    DBMS_OUTPUT.PUT_LINE('<dt>Host and memory</dt><dd>Four blocks per compared window, each read on its own so one missing grant or view never hides the others.'
+        || ' <b>Host CPU and paging</b> (<code>DBA_HIST_OSSTAT</code>): busy, user, system, nice and I/O-wait time as a share of busy + idle time, Resource Manager CPU wait,'
+        || ' bytes paged in / out, load, and the CPUs, cores, sockets and memory of the host (a change across the windows is said as &ldquo;host resized&rdquo;);'
+        || ' &ldquo;DB CPU share of host busy&rdquo; is the time model&rsquo;s foreground DB CPU over the host&rsquo;s busy time, the rest being background processes,'
+        || ' other databases or software on the host and the OS. <b>Memory</b> (<code>DBA_HIST_MEM_DYNAMIC_COMP</code>, <code>DBA_HIST_PGASTAT</code>,'
+        || ' <code>DBA_HIST_MEMORY_RESIZE_OPS</code>): buffer cache, shared and large pool, PGA allocated and in use, PGA over-allocations, and the SGA / PGA grow and'
+        || ' shrink operations that started in the Current window. <b>Undo</b> (<code>DBA_HIST_UNDOSTAT</code>): 10-minute rows counted toward every window they'
+        || ' overlap; undo blocks and transactions per second, the longest query, ORA-01555 and out-of-space counts, the lowest tuned retention.'
+        || ' <b>Temp and PGA by statement</b> (ASH): the peak per window and the Current window&rsquo;s top statements; ASH keeps a 10-second sample of active sessions,'
+        || ' so short spills are missed and idle sessions&rsquo; PGA is not counted. Counters (CPU times, paging, over-allocations) are end minus begin of the window;'
+        || ' gauges (sizes, load, PGA allocated) are read at its end snapshot; a window counts only when every instance of it is valid. The five views are optional'
+        || ' grants: without one, its block says &ldquo;needs SELECT on&rdquo; (any other read error is shown as a note too). The row opens in the Summary when the'
+        || ' host is at least 90% busy, pages out 0.01&nbsp;MB/s or more, was resized, the SGA was resized in the Current window or the buffer cache is at least 10% below its prior mean,'
+        || ' the PGA over-allocated, or ORA-01555 / undo out-of-space errors occurred. The Physical I/O card gets a &ldquo;Memory&rdquo; row when the buffer cache is'
+        || ' at least 10% below its prior mean, the DB time card a &ldquo;Host&rdquo; row when the host is at least 90% busy or paged out 0.01&nbsp;MB/s or more.'
+        || ' Evidence, not a finding: nothing here is scored or counted.</dd>');
     DBMS_OUTPUT.PUT_LINE('</dl>');
     DBMS_OUTPUT.PUT_LINE('<p class="ab-meta">Run <code>~run_id</code> &middot; template <code>'
         || DBMS_XMLGEN.CONVERT('~template_name') || '</code> &middot; top_n ~top_n'

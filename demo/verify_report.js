@@ -90,6 +90,13 @@
  *     no release marker shows its reason note and its all-priors table
  *     instead of the empty split view; the demo opens on a split); the
  *     Trend cells are micro strips (svg.mw), no line left;
+ *     plan 040 (block 6c): the six library rows with data-news (Top SQL,
+ *     Foreground waits, Who, Plan shape, Window similarity, Volume vs unit cost) start
+ *     shut exactly when everything their status names is on a card (open
+ *     when there is no finding card); a click / a jump opens them; and
+ *     script#awr-findings parses, with one entry per finding card equal to
+ *     the card's id / severity / data-impact / data-share, counts equal to
+ *     the verdict pill, no raw "<";
  *     v1.7: cards ordered by data-impact (rises of 0.01 AAS or more
  *     first, largest first), chip present, Summary z capped
  *     at 10; R4: a flagged card whose time measure rose under 0.01 AAS
@@ -160,6 +167,12 @@
  *     saving, a Total row in per execution mode changes nothing; the
  *     Per-SQL pool has the P chip; JS off = no switch, both views stacked;
  *     three buttons fit at 390 px; works without ECharts;
+ *   - Top SQL pool "Per execution: where the time went" (block 10b, plan
+ *     044): one div.sqx per pool row, its mode, no severity / switch
+ *     markup, raw totals vs the Compared windows table, Other and the
+ *     shares recomputed, the Reads-as rule recomputed from the data-*
+ *     numbers, the plan card's "Rows, I/O" line agrees, the Values switch
+ *     leaves the block's text unchanged;
  * and writes screenshots per view x theme when shots_dir is given.
  */
 const path = require('path');
@@ -1623,6 +1636,64 @@ const LABEL_BAND = () => {
       // 2026-11-21: a smaller rise shows no chip and no share)
       out.impChips = fc.every(c => { const v = parseFloat(c.getAttribute('data-impact')), ch = c.querySelector('.fc-k .fc-imp');
         return v >= 0.01 ? !!ch : !ch && (c.getAttribute('data-share') || '') === ''; });
+      // plan 039: every finding card says its n (the lead row's number of prior
+      // windows, read from the same row in the Findings tables) as data-n on
+      // .nrm and .fc-sum, with the two rates for that n in the .nrm title;
+      // the qualifier is generated content, so no text read of the card
+      // ("normal ..." in Copy summary, the dashboard) carries it; the verdict
+      // note li.hn-conf is there exactly when the report has 3 to 5 valid
+      // prior windows, with the rates of that n (the known values below come
+      // from tools/gen_baseline_conf.py, an independent integration)
+      const CONF = { 3: [22.54, 12.17], 4: [17.16, 7.48], 5: [14.19, 5.20], 6: [12.33, 3.90], 8: [10.13, 2.55],
+                     12: [8.09, 1.49], 26: [6.09, 0.69], 52: [5.30, 0.45] };
+      const near = (got, want) => Math.abs(got - want) <= (want >= 10 ? 0.5 : want >= 1 ? 0.051 : 0.0051);
+      const nOfRow = id => {
+        const tr = document.getElementById(id); if (!tr || tr.tagName !== 'TR') return null;
+        const tb = tr.closest('table'); if (!tb) return null;
+        const hs = [...tb.querySelectorAll('thead th')].map(h => h.textContent.trim());
+        const ix = hs.indexOf('n'); if (ix < 0) return null;
+        const v = parseInt((tr.children[ix] || {}).textContent, 10); return isNaN(v) ? null : v;
+      };
+      out.confCards = fc.map(c => {
+        const nrm = c.querySelector('.big .nrm'), sum = c.querySelector('.fc-k .fc-sum');
+        if (!nrm) return null; // the dashboard hides nothing: the element stays in the DOM
+        const bad = [], n = parseInt(nrm.getAttribute('data-n'), 10);
+        if (!(n >= 3)) bad.push('no data-n');
+        if (!sum || parseInt(sum.getAttribute('data-n'), 10) !== n) bad.push('fc-sum n differs');
+        if (/\bn\s*=\s*\d/.test(nrm.textContent) || (sum && /\bn\s*=\s*\d/.test(sum.textContent))) bad.push('n leaked into the text');
+        const t = nrm.getAttribute('title') || '', m = t.match(/Scored against (\d+) prior windows.*about ([0-9.]+)% of the time \(1 in (\d+)\).*about ([0-9.]+)% \(1 in (\d+)\)/);
+        if (!m) bad.push('title lacks the two rates');
+        else {
+          if (+m[1] !== n) bad.push('title n ' + m[1]);
+          if (CONF[n] && (!near(+m[2], CONF[n][0]) || !near(+m[4], CONF[n][1]))) bad.push('rates ' + m[2] + '/' + m[4] + ' for n ' + n);
+          // "1 in k" is the exact quotient rounded once; the printed percent is itself rounded
+          const tk = pp => 0.51 + 100 * (pp >= 10 ? 0.5 : pp >= 1 ? 0.051 : 0.0051) / (pp * pp) + (100 / pp >= 100 ? 0.05 * 100 / pp : 0);
+          if (Math.abs(+m[3] - 100 / +m[2]) > tk(+m[2]) || Math.abs(+m[5] - 100 / +m[4]) > tk(+m[4])) bad.push('1 in k');
+        }
+        const a = c.querySelector('h3 a.ent'), rn = a ? nOfRow((a.getAttribute('href') || '').slice(1)) : null;
+        if (rn !== null && rn !== n) bad.push('row n ' + rn + ' vs ' + n);
+        return bad.length ? c.id + ': ' + bad.join(', ') : 'ok';
+      }).filter(x => x !== null);
+      const nv = (window.AWR_WIN ? window.AWR_WIN.w : []).filter(x => x.o > 0 && x.v === 'Y').length;
+      const cn = document.querySelector('#narrative-slot li.hn-conf'), hero = document.getElementById('verdict');
+      const usable = !!hero && !/Too little history/.test(hero.textContent);
+      out.confNote = (() => {
+        const want = usable && nv >= 3 && nv <= 5;
+        if (!want) return cn ? 'FAIL a note with ' + nv + ' valid prior windows' : 'ok (none for ' + nv + ')';
+        if (!cn) return 'FAIL no note for ' + nv + ' valid prior windows';
+        const t = cn.textContent, bad = [], ns = cn.parentNode;
+        if (+cn.getAttribute('data-n') !== nv) bad.push('data-n');
+        if (t.indexOf(nv + ' prior windows') < 0) bad.push('text lacks n');
+        const k1 = Math.round(100 / CONF[nv][0]), k2 = Math.round(100 / CONF[nv][1]);
+        if (t.indexOf('about 1 time in ' + k1 + ' ') < 0 || t.indexOf('about 1 in ' + k2 + ' ') < 0) bad.push('rates (want 1 in ' + k1 + ' / 1 in ' + k2 + ')');
+        if (ns.id !== 'narrative-slot' || ns.hidden) bad.push('slot hidden');
+        const lis = [...ns.children], bi = lis.indexOf(cn), bn = lis.findIndex(x => x.classList.contains('hn-base'));
+        if (bn >= 0 && bi > bn) bad.push('after the baseline check');
+        if (lis.some((x, i) => i > bi && !x.classList.contains('hn-base'))) bad.push('not after the other notes');
+        const a = cn.querySelector('a.go');
+        if (!a || a.getAttribute('href') !== '#about' || !document.getElementById('about')) bad.push('link');
+        return bad.length ? 'FAIL ' + bad.join('; ') : 'ok (n = ' + nv + ')';
+      })();
       // R4: a flagged card whose time measure rose less than 0.01 AAS (a
       // background-only wait class: scored on all sessions, its foreground
       // time flat) has no chip and no share, sits after every tier-1 card,
@@ -1793,6 +1864,8 @@ const LABEL_BAND = () => {
     if (!p4.impAttrs) fail('finding cards: data-impact / data-share missing');
     if (!p4.impOrder) fail('finding cards: not ordered by impact');
     if (!p4.impChips) fail('finding cards: impact chip missing, or shown below 0.01 AAS');
+    if (p4.confCards.some(x => x !== 'ok')) fail('finding cards: the n qualifier ' + p4.confCards.filter(x => x !== 'ok').join('; '));
+    if (/^FAIL/.test(p4.confNote)) fail('verdict: thin-baseline note ' + p4.confNote);
     if (p4.lowImp.some(x => / FAIL /.test(x))) fail('finding cards under 0.01 AAS: ' + p4.lowImp.join('; '));
     if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file) && !p4.lowImp.includes('f-wait-queueing'))
       fail('demo: expected the flagged background-only Queueing waits card (impact under 0.01 AAS), got ' + JSON.stringify(p4.lowImp));
@@ -1888,6 +1961,757 @@ const LABEL_BAND = () => {
       const lh = await page.$('#s-lib');
       if (lh) { await lh.scrollIntoViewIfNeeded(); await page.waitForTimeout(200); await page.screenshot({ path: path.join(shots, 'library.png') }); }
     }
+    await page.close();
+  }
+
+  // ---- 6c. plan 040: (a) a library row that starts open (Top SQL,
+  // Foreground waits, and since the follow-up Who, Plan shape, Window
+  // similarity, Volume vs unit cost: they carry data-news when they have
+  // news; tokens sql: / card: / who: / note:) is closed exactly when what its
+  // status line is about is already on a finding / plan-change card, and
+  // stays as marked when the report has no finding card; a click on its
+  // header opens it, a jump to a row inside it opens it.  (b) the
+  // machine-readable result: script#awr-findings parses, one entry per
+  // finding card, with the card's own attributes.  Read on a fresh load,
+  // before any interaction.
+  {
+    const { page, errors } = await openPage('#view=summary', 'light');
+    const r40 = await page.evaluate(async () => {
+      const vis = el => !!el && el.getClientRects().length > 0;
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const out = {};
+      const cards = [...document.querySelectorAll('#findings article.fc:not(.chg)')];
+      const rows = [...document.querySelectorAll('main > section.lib[data-news]')];
+      const href = [...document.querySelectorAll('article.fc a[href]')].map(a => a.getAttribute('href'));
+      const on = t => {
+        const i = t.indexOf(':'), k = t.slice(0, i), v = t.slice(i + 1);
+        if (k === 'card') return cards.some(c => c.id === v);
+        if (k === 'sql') return !!document.getElementById('f-plan-' + v) || href.some(h => h.endsWith('-' + v));
+        // follow-up (2026-11-25): the DB time card's Who row for that value; a note of the verdict
+        if (k === 'who') return !!document.querySelector('#f-dbtime .ev-who[data-who="' + v + '"]');
+        if (k === 'note') return !!document.querySelector('#narrative-slot li.' + v);
+        return false;
+      };
+      out.rows = rows.map(s => s.id);
+      out.rule = rows.map(s => {
+        const toks = s.getAttribute('data-news').split(' ').filter(Boolean);
+        const wantShut = cards.length > 0 && toks.every(on);
+        const open = s.classList.contains('lopen');
+        return (open === !wantShut ? 'ok ' : 'FAIL ') + s.id + ' news=[' + toks.join(',') + '] open=' + open;
+      });
+      // the two rows the rule is about carry the attribute
+      out.hasBoth = ['topsql', 'waits-fg'].every(id => !document.getElementById(id) || rows.some(s => s.id === id));
+      // a click opens a shut one and shuts it again; a jump to a row inside opens it
+      // (every shut row that carries data-news is tried: Top SQL, Foreground
+      // waits, Who, Plan shape, Window similarity, Volume vs unit cost)
+      const shuts = rows.filter(s => !s.classList.contains('lopen'));
+      out.shut = [];
+      for (const shut of shuts) {
+        const h = shut.querySelector('h2');
+        const body = () => [...shut.children].filter(c => c !== h && vis(c)).length;
+        const b0 = body();
+        h.click(); await wait(150);
+        const o1 = shut.classList.contains('lopen') && body() > 0 && h.getAttribute('aria-expanded') === 'true';
+        h.click(); await wait(80);
+        const row = shut.querySelector('tbody tr[id]') || [...shut.querySelectorAll('[id]')].find(e => e !== h);
+        let j = 'no row';
+        if (row) {
+          window.AWR_goTo(row, true, false); await wait(250);
+          j = shut.classList.contains('lopen') && vis(row) ? 'ok' : 'FAIL';
+          h.click(); await wait(60);
+        }
+        out.shut.push((!b0 && o1 && !body() && j !== 'FAIL' ? 'ok ' : 'FAIL ') + shut.id + ' ' + JSON.stringify([b0, o1, body(), j]));
+      }
+      // (b) the machine-readable result
+      const el = document.getElementById('awr-findings');
+      if (!el) { out.json = 'FAIL missing'; return out; }
+      const bad = [];
+      let d = null;
+      try { d = JSON.parse(el.textContent); } catch (e) { bad.push('not JSON: ' + e.message); }
+      if (el.getAttribute('type') !== 'application/json') bad.push('type');
+      if (document.querySelectorAll('#awr-findings').length !== 1) bad.push('id not unique');
+      if (/</.test(el.textContent)) bad.push('raw < inside the block');
+      if (d) {
+        if (d.schema !== 1) bad.push('schema ' + d.schema);
+        const rp = d.report || {};
+        for (const k of ['version', 'run_id', 'db_name', 'dbid', 'host', 'target_end', 'win_hours', 'step_hours', 'weeks_back', 'valid_prior_windows', 'template', 'inst_num'])
+          if (!(k in rp)) bad.push('report.' + k);
+        const wins = (window.AWR_WIN && AWR_WIN.w) || [];
+        if (wins.length && rp.valid_prior_windows !== wins.filter(x => x.o > 0 && x.v === 'Y').length) bad.push('valid_prior_windows ' + rp.valid_prior_windows);
+        if (rp.weeks_back !== undefined && wins.length && rp.weeks_back + 1 !== wins.length) bad.push('weeks_back ' + rp.weeks_back + ' vs ' + wins.length + ' windows');
+        const cs = d.cards || [];
+        if (cs.length !== cards.length) bad.push('cards ' + cs.length + ' vs ' + cards.length + ' in the page');
+        if (d.counts.cards !== cs.length) bad.push('counts.cards');
+        const nl = cards.filter(c => c.classList.contains('f-large')).length, nm = cards.filter(c => c.classList.contains('f-moderate')).length;
+        if (d.counts.large !== nl || d.counts.moderate !== nm) bad.push('counts ' + d.counts.large + '/' + d.counts.moderate + ' vs ' + nl + '/' + nm);
+        const pill = document.querySelector('#verdict li.pl-find');
+        if (pill) {
+          const pn = +(pill.querySelector('b') || {}).textContent, ps = pill.querySelector('.pl-sev') ? pill.querySelector('.pl-sev').textContent : '';
+          const pl = (/(\d+) large/.exec(ps) || [0, 0])[1], pm = (/(\d+) moderate/.exec(ps) || [0, 0])[1];
+          if (pn !== d.counts.cards || +pl !== d.counts.large || +pm !== d.counts.moderate) bad.push('verdict pill ' + pn + '/' + pl + '/' + pm);
+        } else if (d.counts.cards !== 0) bad.push('no verdict pill but ' + d.counts.cards + ' cards');
+        cs.forEach((c, i) => {
+          const e = document.getElementById(c.id);
+          if (!e || !e.matches('#findings article.fc:not(.chg)')) { bad.push('card ' + c.id + ' not in the page'); return; }
+          if (cards[i] !== e) bad.push('card order at ' + i);
+          if (!e.classList.contains('f-' + c.severity)) bad.push(c.id + ' severity');
+          const im = e.getAttribute('data-impact'), sh = e.getAttribute('data-share');
+          if ((im === '' ? null : +im) !== c.impact_aas) bad.push(c.id + ' impact ' + im + ' vs ' + c.impact_aas);
+          if ((sh === '' ? null : +sh) !== c.share_pct) bad.push(c.id + ' share ' + sh + ' vs ' + c.share_pct);
+          for (const k of ['id', 'group', 'label', 'severity', 'domain', 'metric', 'unit', 'current', 'mean', 'sd', 'n', 'z', 'impact_aas', 'share_pct'])
+            if (!(k in c)) bad.push(c.id + '.' + k);
+          if (typeof c.current !== 'number' || typeof c.n !== 'number') bad.push(c.id + ' current / n not numbers');
+        });
+      }
+      out.json = bad.length ? 'FAIL ' + bad.join('; ') : 'ok (' + (d ? d.cards.length : 0) + ' cards, ' + (d ? d.report.valid_prior_windows : '?') + ' valid prior windows)';
+      out.nCards = cards.length;
+      return out;
+    });
+    console.log('plan 040', JSON.stringify(r40));
+    if (r40.rule.some(x => /^FAIL/.test(x))) fail('library rows: open / shut does not follow "news all on cards": ' + r40.rule.filter(x => /^FAIL/.test(x)).join('; '));
+    if (!r40.hasBoth) fail('library rows: Top SQL / Foreground waits lost their data-news');
+    if (r40.shut.some(x => /^FAIL/.test(x))) fail('library rows: a shut row ' + r40.shut.filter(x => /^FAIL/.test(x)).join('; '));
+    if (/^FAIL/.test(r40.json)) fail('findings JSON: ' + r40.json);
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) {
+      if (!r40.rule.length || r40.rule.some(x => !/ open=false$/.test(x))) fail('demo: every row with news (Top SQL, Foreground waits, Who, Plan shape, Window similarity, Volume vs unit cost) should start shut, their news is on cards: ' + JSON.stringify(r40.rule));
+      for (const id of ['topsql', 'waits-fg', 'who', 'plan-flame', 'win-sim', 'volume-cost'])
+        if (!r40.rows.includes(id)) fail('demo: library row ' + id + ' lost its data-news');
+      if (!r40.shut.length) fail('demo: no shut row to open');
+      if (r40.nCards !== 5) fail('demo: expected 5 finding cards, got ' + r40.nCards);
+    }
+    if (errors.length) fail('plan 040: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 6d. plan 041: the peak inside the window.  (a) AWR_DATA.ashx.pk:
+  // one entry per window, oldest first, null for a skipped window; its
+  // Current value = the busiest minute of the Current window recomputed
+  // from ashx.fine (every class summed per minute, / 6).  (b) 09's table
+  // "Busiest minute per window" agrees with it.  (c) the DB time card's
+  // "Peak" evidence row exists exactly when the card and a Current value
+  // do, with no severity.  (d) 03's Peak (1 min) is never below the Current
+  // average (rows labelled "max per instance" excepted: RAC).  (e) a window
+  // stripe's tooltip names its busiest minute.  A report from before the
+  // plan (no pk, no peak cells) skips each part.
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const r41 = await page.evaluate(() => {
+      const out = {}, bad = [];
+      const P = (window.AWR_DATA || {}).ashx, W = (window.AWR_WIN || {}).w || [];
+      const pk = P && P.pk;
+      if (!P) out.pk = 'no ashx';
+      else if (!pk) out.pk = 'no pk (report before plan 041)';
+      else {
+        if (pk.length !== W.length) bad.push('pk has ' + pk.length + ' entries for ' + W.length + ' windows');
+        pk.forEach((e, i) => {
+          if (!W[i] || e[0] !== W[i].o) bad.push('pk[' + i + '] is window ' + e[0]);
+          else if (W[i].v === 'N' && e[1] != null) bad.push('skipped window ' + e[0] + ' has a peak');
+          if (e[1] != null && !(e[1] >= 0 && /^\d{4}-\d\d-\d\d \d\d:\d\d$/.test(e[2]))) bad.push('pk[' + i + '] ' + JSON.stringify(e));
+        });
+        const cur = pk[pk.length - 1], f = P.fine;
+        if (cur && cur[1] != null && f) {
+          const n = f.segs.reduce((a, g) => a + g[1], 0), tot = new Array(n).fill(0);
+          P.classes.forEach((c, k) => { let j = 0; f.vals[k].forEach(x => { if (x < 0) j += -x; else tot[j++] += x; }); });
+          const t0 = Date.parse(P.t0.replace(' ', 'T') + ':00Z'), cw = W[W.length - 1];
+          const cs = Date.parse(cw.s.replace(' ', 'T') + ':00Z'), ce = Date.parse(cw.e.replace(' ', 'T') + ':00Z');
+          let best = -1, at = null, j = 0;
+          f.segs.forEach(g => { for (let q = 0; q < g[1]; q++, j++) { const t = t0 + (g[0] + q) * 6e4; if (t >= cs && t < ce && tot[j] > best) { best = tot[j]; at = t; } } });
+          const want = best / 6, atS = at == null ? null : new Date(at).toISOString().slice(0, 16).replace('T', ' ');
+          if (Math.abs(want - cur[1]) > 6e-4 || atS !== cur[2]) bad.push('Current pk ' + JSON.stringify(cur) + ' vs fine ' + want.toFixed(3) + ' at ' + atS);
+          out.cur = cur[1] + ' at ' + cur[2] + ' (fine ' + want.toFixed(3) + ')';
+        }
+        const tb = document.querySelector('#ash-timeline table#ash-peaks');
+        if (!tb) bad.push('no #ash-peaks table');
+        else {
+          const rows = [...tb.tBodies[0].rows];
+          if (rows.length !== W.length) bad.push('#ash-peaks has ' + rows.length + ' rows');
+          const c0 = rows[0] && rows[0].querySelector('td[data-pk]');
+          if (cur && cur[1] != null && (!c0 || Math.abs(+c0.getAttribute('data-pk') - cur[1]) > 1e-9)) bad.push('#ash-peaks Current ' + (c0 && c0.getAttribute('data-pk')));
+          if (tb.querySelector('tr.crit, tr.warn, .bd')) bad.push('#ash-peaks carries a severity');
+        }
+        out.pk = bad.length ? 'FAIL ' + bad.join('; ') : 'ok (' + pk.filter(e => e[1] != null).length + ' of ' + pk.length + ' known)';
+      }
+      // (c) the DB time card row
+      const card = document.getElementById('f-dbtime'), row = document.querySelector('#f-dbtime .evr.ev-pk');
+      const want = !!(card && pk && pk.length && pk[pk.length - 1][1] != null);
+      if (want !== !!row) out.card = 'FAIL row ' + (row ? 'present' : 'missing') + ' (card ' + !!card + ', Current pk ' + !!want + ')';
+      else if (row) {
+        const v = pk[pk.length - 1][1], txt = row.textContent, s = v >= 100 ? String(Math.round(v)) : v.toFixed(1);
+        out.card = (txt.indexOf(s + ' active sessions at ') >= 0 && !row.querySelector('.bd, .d:not(.s-plain)') && /10 s/.test(row.title))
+          ? 'ok (' + txt.replace(/^Peak/, '').trim().slice(0, 90) + ')' : 'FAIL ' + txt.slice(0, 120);
+      } else out.card = 'none (no card or no Current value)';
+      // (d) 03's peaks
+      const pr = [...document.querySelectorAll('#sysmetric tbody tr')].filter(r => r.querySelector('td.pk'));
+      if (!pr.length) out.sm = 'no peak cells (report before plan 041)';
+      else {
+        const b2 = []; let n = 0;
+        if (!document.querySelector('#sysmetric thead th.pk')) b2.push('no header');
+        pr.forEach(r => {
+          const c = r.querySelector('td.pk[data-pk]'), sp = r.querySelector('td.trend[data-spark]');
+          if (!c || !sp || c.hasAttribute('data-pkinst')) return;
+          const a = sp.getAttribute('data-spark').split(','), avg = a[a.length - 1] === '' ? null : +a[a.length - 1];
+          if (avg == null) return;
+          n++;
+          if (+c.getAttribute('data-pk') < avg - 1e-6) b2.push(r.id + ' peak ' + c.getAttribute('data-pk') + ' < average ' + avg);
+        });
+        if (document.querySelector('#sysmetric td.pkd .d:not(.s-plain):not(.s-na)')) b2.push('a peak delta carries a severity');
+        out.sm = b2.length ? 'FAIL ' + b2.join('; ') : 'ok (' + n + ' rows peak >= average)';
+      }
+      return out;
+    });
+    // (e) the Current window stripe's tooltip (the first chart shown)
+    r41.tip = 'skipped';
+    if (r41.pk && /^ok/.test(r41.pk) && /^ok/.test(r41.card || 'ok')) {
+      const box = await page.evaluate(() => {
+        window.scrollTo(0, 0);
+        const s = [...document.querySelectorAll('.ashx .axsvg')].find(x => x.getClientRects().length); if (!s) return null;
+        const hs = [...s.querySelectorAll('.xwh[data-i]')].sort((a, b) => +a.getAttribute('data-i') - +b.getAttribute('data-i'));
+        const h = hs[hs.length - 1]; if (!h) return null;
+        h.scrollIntoView({ block: 'center' });
+        const r = h.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + Math.min(8, r.height / 2) };
+      });
+      if (box) {
+        await page.mouse.move(box.x, box.y); await page.waitForTimeout(150);
+        const tt = await page.evaluate(() => { const t = document.getElementById('tip'); return t && !t.hidden ? t.textContent : ''; });
+        const P = await page.evaluate(() => { const p = window.AWR_DATA.ashx.pk; return p[p.length - 1]; });
+        r41.tip = (P[1] == null ? !/Busiest minute/.test(tt) : /Busiest minute, all sessions/.test(tt)) ? 'ok' : 'FAIL ' + tt.slice(0, 160);
+        await page.mouse.move(5, 5);
+      }
+    }
+    console.log('plan 041', JSON.stringify(r41));
+    for (const k of ['pk', 'card', 'sm', 'tip']) if (/^FAIL/.test(r41[k] || '')) fail('peaks (plan 041) ' + k + ': ' + r41[k]);
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) {
+      if (!/^ok/.test(r41.pk) || !/^ok/.test(r41.card) || !/^ok/.test(r41.sm) || r41.tip !== 'ok') fail('demo: every plan 041 part should run: ' + JSON.stringify(r41));
+    }
+    if (errors.length) fail('plan 041: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 6e. plan 042: CPU capacity.  (a) AWR_DATA.ashx.cpu: n / used one
+  // entry per window, null for a skipped window, cur = the last entries.
+  // (b) 09's table "CPU capacity per window": one row per window, its
+  // Current cells = cur, no severity.  (c) the DB time card's "CPU" row
+  // exists exactly when the card, cur.n and cur.used do; its numbers are
+  // cur's.  (d) the class chart's cpu_count line is drawn exactly when
+  // cur.n lies inside the y range (read from the axis labels), the
+  // header's "above this scale" note exactly when it does not: after load
+  // and again after hiding the largest classes from the legend (which
+  // rescales the axis).  A report without ashx.cpu skips every part.
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const r42 = await page.evaluate(() => {
+      const out = {}, bad = [];
+      const P = (window.AWR_DATA || {}).ashx, W = (window.AWR_WIN || {}).w || [], C = P && P.cpu;
+      if (!C) { out.pay = 'no ashx.cpu (report before plan 042)'; return out; }
+      ['n', 'used'].forEach(k => {
+        const a = C[k] || [];
+        if (a.length !== W.length) bad.push(k + ' has ' + a.length + ' entries for ' + W.length + ' windows');
+        a.forEach((v, i) => { if (W[i] && W[i].v === 'N' && v != null) bad.push(k + ': skipped window ' + W[i].o + ' has ' + v);
+          if (v != null && !(v >= 0)) bad.push(k + '[' + i + '] = ' + v); });
+      });
+      const cu = C.cur || {}, L = W.length - 1;
+      if ((C.n || [])[L] !== cu.n || (C.used || [])[L] !== cu.used) bad.push('cur ' + JSON.stringify(cu) + ' is not the last entries');
+      // used is printed with 3 decimals, pct from the unrounded value: up to 0.0005 / n x 100 apart
+      if (cu.n != null && cu.used != null && Math.abs(cu.pct - cu.used / cu.n * 100) > 0.0005 / cu.n * 100 + 2e-3) bad.push('cur.pct ' + cu.pct);
+      const tb = document.querySelector('#ash-timeline table#ash-cpu');
+      if (!tb) bad.push('no #ash-cpu table');
+      else {
+        const rows = [...tb.tBodies[0].rows];
+        if (rows.length !== W.length) bad.push('#ash-cpu has ' + rows.length + ' rows for ' + W.length + ' windows');
+        const c0 = rows[0], cn = c0 && c0.querySelector('td[data-cpu-n]'), cd = c0 && c0.querySelector('td[data-cpu-used]');
+        if (c0 && c0.cells[0].getAttribute('data-w') !== '0') bad.push('#ash-cpu first row is not Current');
+        if ((cu.n != null) !== !!cn || (cn && +cn.getAttribute('data-cpu-n') !== cu.n)) bad.push('#ash-cpu Current cpu_count ' + (cn && cn.getAttribute('data-cpu-n')));
+        if ((cu.used != null) !== !!cd || (cd && Math.abs(+cd.getAttribute('data-cpu-used') - cu.used) > 1e-9)) bad.push('#ash-cpu Current DB CPU ' + (cd && cd.getAttribute('data-cpu-used')));
+        if (tb.querySelector('tr.crit, tr.warn, .bd, .badge')) bad.push('#ash-cpu carries a severity');
+        if (!tb.hasAttribute('data-nocount')) bad.push('#ash-cpu lacks data-nocount');
+      }
+      out.pay = bad.length ? 'FAIL ' + bad.join('; ') : 'ok (' + (C.n || []).filter(v => v != null).length + ' of ' + W.length + ' known, Current ' + cu.n + ' / ' + cu.used + ')';
+      // (c) the card row: the numbers of cur, the rule of cpuInfo
+      const card = document.getElementById('f-dbtime'), row = document.querySelector('#f-dbtime .evr.ev-cpu');
+      const want = !!(card && cu.n > 0 && cu.used != null);
+      if (want !== !!row) out.card = 'FAIL row ' + (row ? 'present' : 'missing') + ' (card ' + !!card + ', cur ' + JSON.stringify(cu) + ')';
+      else if (row) {
+        const f = v => v >= 100 ? String(Math.round(v)) : v >= 0.1 ? v.toFixed(1) : v.toFixed(2), p = cu.used / cu.n * 100, pr = Math.round(p);
+        const head = 'DB CPU ' + f(cu.used) + ' of cpu_count ' + cu.n + ' (' + (pr < 1 && p > 0 ? '<1' : pr) + '%)', txt = row.querySelector('.de').textContent;
+        const d = cu.ash == null ? null : cu.ash - cu.used, q = d != null && d >= 0.1 * cu.used && d >= 0.5;
+        const ok = txt.indexOf(head) === 0 && q === /waiting for a CPU/.test(txt) && (cu.used >= 0.9 * cu.n) === /CPU-bound/.test(txt)
+          && !row.querySelector('.bd, .d, .badge');
+        out.card = ok ? 'ok (' + txt + ')' : 'FAIL "' + txt + '" want "' + head + '"' + (q ? ' + queue' : '');
+      } else out.card = 'none (no card or no Current cpu_count / DB CPU)';
+      return out;
+    });
+    // (d) the line vs the y range, after load and after the legend rescales
+    if (/^ok/.test(r42.pay || '')) {
+      const state = async () => {
+        await page.mouse.move(2, 2); await page.waitForTimeout(150);
+        return page.evaluate(() => {
+          const sv = document.querySelector('#ax-cls .axsvg'), cu = window.AWR_DATA.ashx.cpu.cur, n = cu.n;
+          if (!sv || !sv.getClientRects().length || !(n > 0) || cu.used == null) return null;
+          const ys = [...sv.querySelectorAll('text.at')].map(t => t.textContent).filter(t => /^\d+(\.\d+)?$/.test(t)).map(Number);
+          const ymax = Math.max(...ys), line = !!sv.querySelector('line.xcpu'), lab = sv.querySelector('text.xcpt');
+          const hd = document.querySelector('#ashx .axcpu'), note = !!(hd && !hd.hidden && hd.getClientRects().length);
+          return { n, ymax, line, note, lab: lab ? lab.textContent : null, in: n <= ymax + 1e-9 };
+        });
+      };
+      const s0 = await state();
+      const ok1 = s => s && s.line === s.in && s.note === !s.in && (!s.line || /^cpu_count \d+/.test(s.lab || 'cpu_count 0'));
+      if (!s0) r42.line = 'skipped (class chart not shown or no Current cpu_count)';
+      else {
+        // hide classes, largest Current share first, until the axis falls below cpu_count (or one is left)
+        const hid = await page.evaluate(() => {
+          const P = window.AWR_DATA.ashx, L = P.win[0].length - 1, bs = [...document.querySelectorAll('#ax-cls .axc')];
+          const ord = P.classes.map((c, k) => [k, P.win[k][L]]).sort((a, b) => b[1] - a[1]).map(x => x[0]);
+          return { ord, n: bs.length };
+        });
+        const clicked = [];
+        let s1 = s0;
+        for (const k of hid.ord.slice(0, hid.n - 1)) {
+          if (!s1.in) break;
+          await page.evaluate(k => document.querySelector('#ax-cls .axc[data-c="' + k + '"]').click(), k);
+          clicked.push(k);
+          s1 = await state();
+        }
+        for (const k of clicked) await page.evaluate(k => document.querySelector('#ax-cls .axc[data-c="' + k + '"]').click(), k);
+        const s2 = await state();
+        r42.line = (ok1(s0) && ok1(s1) && ok1(s2) && s2.line === s0.line)
+          ? 'ok (load: ' + (s0.in ? 'line at ' + s0.n + ' of ' + s0.ymax : 'note, ' + s0.n + ' over ' + s0.ymax) + '; ' + clicked.length + ' hidden: '
+            + (s1.in ? 'line, ' + s1.n + ' of ' + s1.ymax : 'note, ' + s1.n + ' over ' + s1.ymax) + ')'
+          : 'FAIL ' + JSON.stringify({ s0, s1, s2 });
+        r42.both = s0.in !== s1.in;
+      }
+    }
+    console.log('plan 042', JSON.stringify(r42));
+    for (const k of ['pay', 'card', 'line']) if (/^FAIL/.test(r42[k] || '')) fail('CPU capacity (plan 042) ' + k + ': ' + r42[k]);
+    if (/demo_busy_db(_quiet|_dashboard)?\.html$/.test(file)) {
+      if (!/^ok/.test(r42.pay) || !/^ok/.test(r42.card) || !/^ok/.test(r42.line || '') || !r42.both)
+        fail('demo: every plan 042 part should run, the line in range at load and the note after hiding: ' + JSON.stringify(r42));
+    }
+    if (errors.length) fail('plan 042: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 6f. plan 043: the time model table (section 02).  (a) the table
+  // #load-time-model: unscored (no crit / warn row, no scored band or
+  // delta), data-nocount + data-nosort, every data-par names a row of the
+  // table, shown in All sections.  (b) the tree: every foreground row's
+  // Current <= DB time's and every child <= its parent (the demo exactly;
+  // a real database flushes the counters apart, up to 5 s, so there only a
+  // count is logged).  (c) the DB time card's time model row exists exactly
+  // when the card exists and a row meets the rule (largest rise at least
+  // 0.01 AAS and 5% of a positive DB-time rise, DB CPU and SQL execution
+  // left out); it cites a row of the table with that row's numbers and
+  // share, sits before the Peak / CPU rows, and its source block is gone.
+  // (d) JS off: the table is shown, the source block stays hidden.  A
+  // report without the table skips every part.
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file);
+    const r43 = await page.evaluate((isDemo) => {
+      const out = {}, bad = [];
+      const tb = document.getElementById('load-time-model');
+      if (!tb) { out.tbl = 'no #load-time-model (report before plan 043)'; return out; }
+      const rows = [...tb.tBodies[0].rows], by = {};
+      rows.forEach(r => { by[r.id] = r; });
+      if (!tb.hasAttribute('data-nocount') || !tb.hasAttribute('data-nosort')) bad.push('lacks data-nocount / data-nosort');
+      if (tb.querySelector('tr.crit, tr.warn, .bd.s-large, .bd.s-moderate, .bd.s-improved, .d:not(.s-plain):not(.s-na), .badge.warn'))
+        bad.push('carries a severity');
+      if (!tb.getClientRects().length) bad.push('not shown in All sections');
+      const dbt = by['tm-db-time'];
+      if (!dbt) bad.push('no DB time row');
+      rows.forEach(r => { const p = r.getAttribute('data-par'); if (p && !by[p]) bad.push(r.id + ': parent ' + p + ' not in the table'); });
+      out.tbl = bad.length ? 'FAIL ' + bad.join('; ') : 'ok (' + rows.length + ' rows)';
+      if (!dbt) return out;
+      // (b) the tree, Current column
+      const num = (r, a) => { const v = r.getAttribute(a); return v === '' || v == null ? null : +v; };
+      const viol = [], D = num(dbt, 'data-cur');
+      rows.forEach(r => {
+        const c = num(r, 'data-cur'); if (c == null) return;
+        if (r.getAttribute('data-fg') === 'F' && D != null && c > D + 1e-6) viol.push(r.id + ' ' + c + ' > DB time ' + D);
+        const p = by[r.getAttribute('data-par')], pc = p ? num(p, 'data-cur') : null;
+        if (pc != null && c > pc + 1e-6) viol.push(r.id + ' ' + c + ' > parent ' + pc);
+      });
+      out.tree = !viol.length ? 'ok' : (isDemo ? 'FAIL ' : 'info ') + viol.length + ': ' + viol.slice(0, 4).join('; ');
+      // (c) the card row against the rule
+      const card = document.getElementById('f-dbtime'), ev = document.querySelector('#f-dbtime .evr.ev-tm');
+      const Dm = num(dbt, 'data-mu'), rise = D != null && Dm != null ? D - Dm : null;
+      const rr = r => { const c = num(r, 'data-cur'), m = num(r, 'data-mu');
+        if (r.getAttribute('data-fg') !== 'F' || +r.getAttribute('data-lvl') < 2 || c == null || m == null) return null;
+        if (r.id === 'tm-db-cpu' || r.id === 'tm-sql-execute-elapsed-time') return null; return c - m; };
+      const ok = v => v != null && rise != null && rise > 0 && v >= 0.01 && v >= 0.05 * rise;
+      let best = null, top = null;
+      rows.forEach(r => { const v = rr(r); if (ok(v) && (best == null || v > best)) { best = v; top = r; } });
+      const near = rows.some(r => { const v = rr(r); return v != null && rise != null && (Math.abs(v - 0.01) < 1e-5 || Math.abs(v - 0.05 * rise) < 1e-5); });
+      if (document.getElementById('tm-ev-src')) out.card = 'FAIL the source block #tm-ev-src is still in the page';
+      else if (!card) out.card = ev ? 'FAIL a time model row without the card' : 'none (no DB time card)';
+      else if (!ev) out.card = top && !near ? 'FAIL no card row, but ' + top.id + ' rose ' + best.toFixed(4) + ' AAS of ' + rise.toFixed(4) : 'none (no row meets the rule)';
+      else {
+        const b2 = [], t = by[ev.getAttribute('data-tm')];
+        if (!t) b2.push('cites ' + ev.getAttribute('data-tm') + ', not a row of the table');
+        else {
+          if (ev.getAttribute('data-cur') !== t.getAttribute('data-cur') || ev.getAttribute('data-mu') !== t.getAttribute('data-mu')) b2.push('numbers differ from the row');
+          const v = rr(t);
+          if (!ok(v) && !near) b2.push('the cited row does not meet the rule (' + v + ')');
+          // the cited row is the largest rise, or a descendant carrying 80% of it
+          let a = t, chain = false;
+          while (a) { if (a === top) { chain = true; break; } a = by[a.getAttribute('data-par')]; }
+          if (top && !chain && !near) b2.push('not the largest rise (' + top.id + ') nor under it');
+          // each step down from the top row: a child meeting the rule and carrying 80% of its parent's rise
+          if (top && chain) for (let c = t; c && c !== top; c = by[c.getAttribute('data-par')]) {
+            const p = by[c.getAttribute('data-par')], vc = rr(c), vp = p ? rr(p) : null;
+            if (!near && (!ok(vc) || vp == null || vc < 0.8 * vp - 1e-6)) { b2.push(c.id + ' carries under 80% of ' + (p && p.id) + '’s rise'); break; }
+          }
+          const a2 = ev.querySelector('a.ent');
+          if (!a2 || a2.getAttribute('href') !== '#' + t.id) b2.push('link ' + (a2 && a2.getAttribute('href')));
+          const de = (ev.querySelector('.de') || {}).textContent || '', s = Math.round(v / rise * 100);
+          const want = s > 100 ? 'more than the whole DB-time rise' : s < 1 ? 'under 1% of the DB-time rise' : s + '% of the DB-time rise';
+          if (de.indexOf(want) < 0) b2.push('share text "' + de + '", want "' + want + '"');
+        }
+        if (ev.querySelector('.bd.s-large, .bd.s-moderate, .bd.s-improved, .d:not(.s-plain):not(.s-na)')) b2.push('carries a severity');
+        const all = [...card.querySelectorAll('dl.ev > .evr')], i = all.indexOf(ev);
+        if (all.some((x, j) => j < i && x.matches('.ev-pk, .ev-cpu'))) b2.push('after the Peak / CPU rows');
+        const ls = document.querySelector('#load .ls');
+        if (ls && t && ls.textContent.indexOf('time model: ' + t.querySelector('.tm-n').textContent) < 0) b2.push('library row text "' + ls.textContent + '"');
+        out.card = b2.length ? 'FAIL ' + b2.join('; ') : 'ok (' + ev.textContent.replace(/\s+/g, ' ').trim().slice(0, 110) + ')';
+      }
+      return out;
+    }, isDemo);
+    // (d) JS off
+    if (/^ok/.test(r43.tbl || '')) {
+      const ctx = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 1000 } });
+      const p2 = await ctx.newPage();
+      await p2.goto('file://' + file, { waitUntil: 'load' });
+      r43.nojs = await p2.evaluate(() => {
+        const t = document.getElementById('load-time-model'), s = document.getElementById('tm-ev-src');
+        if (!t || !t.getClientRects().length) return 'FAIL the table is not shown with JS off';
+        if (s && s.getClientRects().length) return 'FAIL the card row source shows with JS off';
+        return 'ok (' + t.tBodies[0].rows.length + ' rows' + (s ? ', source hidden' : '') + ')';
+      });
+      await ctx.close();
+    }
+    console.log('plan 043', JSON.stringify(r43));
+    for (const k of ['tbl', 'tree', 'card', 'nojs']) if (/^FAIL/.test(r43[k] || '')) fail('time model (plan 043) ' + k + ': ' + r43[k]);
+    if (isDemo && (!/^ok/.test(r43.tbl || '') || r43.tree !== 'ok' || !/^ok/.test(r43.nojs || '')))
+      fail('demo: every plan 043 part should run: ' + JSON.stringify(r43));
+    if (errors.length) fail('plan 043: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 6g. plan 045: "Who added the load" (section 29).  (a) per
+  // dimension the rows (the table + its "+ n more" fold, "(others)"
+  // included) sum to the section's stated foreground total, Current AND
+  // rise; shares are 0..100; no crit / warn row, no scored band or delta,
+  // tables data-nocount.  (b) the Current total equals section 09's
+  // foreground ASH (AWR_DATA.ashx.winfg, Current column) -- the demo
+  // exactly (3-decimal tokens), a real report "info".  (c) the DB time
+  // card's "Who" row exists exactly when the card exists and a module
+  // (else service, machine, user) row with a real name carries >= 30% of a
+  // rise >= 0.1 AAS (>= 3 valid prior windows); it cites that row with its
+  // numbers and share, carries no severity, its source block is gone.
+  // (d) the library row opens exactly when some value (not "others")
+  // carries >= 50% of such a rise.  (e) JS off: the tables are shown and
+  // the source stays hidden.  A report without #who skips every part.
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file);
+    const r45 = await page.evaluate((isDemo) => {
+      const out = {};
+      const sec = document.getElementById('who');
+      if (!sec) { out.sum = 'no #who (report before plan 045)'; return out; }
+      const num = (el, a) => { const v = el && el.getAttribute(a); return v === null || v === '' ? null : +v; };
+      const tot = sec.querySelector('p.who-tot');
+      if (!tot) { out.sum = 'none (' + ((sec.querySelector('.who-rd') || {}).textContent || '').trim().slice(0, 90) + ')'; return out; }
+      const tc = num(tot, 'data-cur'), tr = num(tot, 'data-rise'), np = num(tot, 'data-np');
+      const bad = [], dims = [...sec.querySelectorAll('.who-dim')];
+      if (!dims.length) bad.push('no dimension tables');
+      const rowsOf = d => [...d.querySelectorAll('table.who-tbl > tbody > tr[id]')];
+      dims.forEach(d => {
+        const rows = rowsOf(d);
+        const sc = rows.reduce((a, r) => a + (num(r, 'data-cur') || 0), 0);
+        if (Math.abs(sc - tc) > 1e-5 * (rows.length + 1)) bad.push(d.id + ' Current sums to ' + sc.toFixed(6) + ', total ' + tc);
+        if (tr != null) {
+          const sr = rows.reduce((a, r) => a + (num(r, 'data-rise') || 0), 0);
+          if (Math.abs(sr - tr) > 1e-5 * (rows.length + 1)) bad.push(d.id + ' rise sums to ' + sr.toFixed(6) + ', total ' + tr);
+        }
+        rows.forEach(r => { const s = num(r, 'data-shr'); if (s != null && (s < 0 || s > 100)) bad.push(r.id + ' share ' + s); });
+        d.querySelectorAll('table.who-tbl').forEach(t => { if (!t.hasAttribute('data-nocount')) bad.push(d.id + ' table without data-nocount'); });
+      });
+      if (sec.querySelector('tr.crit, tr.warn, .bd.s-large, .bd.s-moderate, .bd.s-improved, .d:not(.s-plain):not(.s-na)')) bad.push('carries a severity');
+      out.sum = bad.length ? 'FAIL ' + bad.slice(0, 5).join('; ') : 'ok (' + dims.length + ' dimensions, total ' + tc + ' AAS, rise ' + tr + ')';
+      // (b) against section 09's foreground ASH
+      const X = window.AWR_DATA && window.AWR_DATA.ashx;
+      if (X && Array.isArray(X.winfg) && X.winfg.length) {
+        const a = X.winfg.reduce((s, v) => s + (+v[v.length - 1] || 0), 0);
+        const ok = Math.abs(a - tc) <= 0.0006 * X.winfg.length + 1e-9;
+        out.ash = (ok ? 'ok' : (isDemo ? 'FAIL' : 'info')) + ' (09 winfg Current ' + a.toFixed(3) + ', here ' + tc.toFixed(3) + ')';
+      } else out.ash = 'none (no ashx.winfg)';
+      // (c) the card row against the rule
+      // the SQL decides on exact numbers, this on 6-decimal tokens: a value
+      // within 1e-5 of a threshold is "near" and never fails
+      const attr = tr != null && np >= 3 && tr >= 0.1;
+      let near = tr != null && Math.abs(tr - 0.1) < 1e-5;
+      const real = r => !r.hasAttribute('data-ph');
+      const bestIn = (code, f) => {
+        const d = sec.querySelector('.who-dim[data-dim="' + code + '"]');
+        let b = null;
+        (d ? rowsOf(d) : []).filter(f).forEach(r => { const v = num(r, 'data-rise'); if (v > 0 && (!b || v > num(b, 'data-rise'))) b = r; });
+        return b;
+      };
+      let want = null;
+      if (attr) for (const code of ['mod', 'svc', 'mch', 'usr']) {
+        const b = bestIn(code, real);
+        if (!b) continue;
+        const v = num(b, 'data-rise');
+        if (Math.abs(v - 0.3 * tr) < 1e-5) near = true;
+        if (v >= 0.3 * tr) { want = b; break; }
+      }
+      const card = document.getElementById('f-dbtime'), ev = document.querySelector('#f-dbtime .evr.ev-who');
+      if (document.getElementById('who-ev-src')) out.card = 'FAIL the source block #who-ev-src is still in the page';
+      else if (!card) out.card = ev ? 'FAIL a Who row without the card' : 'none (no DB time card)';
+      else if (!ev) out.card = want && !near ? 'FAIL no card row, but ' + want.id + ' carries ' + num(want, 'data-rise') + ' of ' + tr : 'none (no value meets the rule)';
+      else if (!want) out.card = near ? 'ok (at the threshold)' : 'FAIL a Who row, but no value meets the rule';
+      else {
+        const b2 = [];
+        if (ev.getAttribute('data-who') !== want.id) b2.push('cites ' + ev.getAttribute('data-who') + ', want ' + want.id);
+        const t = document.getElementById(ev.getAttribute('data-who'));
+        if (!t || !sec.contains(t)) b2.push('cited row missing');
+        else {
+          if (ev.getAttribute('data-cur') !== t.getAttribute('data-cur') || ev.getAttribute('data-mu') !== t.getAttribute('data-mu')
+              || ev.getAttribute('data-rise') !== t.getAttribute('data-rise')) b2.push('numbers differ from the row');
+          const a2 = ev.querySelector('a.ent');
+          if (!a2 || a2.getAttribute('href') !== '#' + t.id) b2.push('link ' + (a2 && a2.getAttribute('href')));
+          if (a2 && a2.textContent !== t.querySelector('td.who-v').textContent) b2.push('link text');
+          const s = num(t, 'data-rise') / tr * 100, de = (ev.querySelector('.de') || {}).textContent || '';
+          // a value that rose more than the total (others fell) reads as words, never ">100%"
+          const st = s >= 100.5 ? ', more than the whole rise in foreground activity (others fell)'
+            : (s < 0.5 ? '<1%' : Math.round(s) + '%') + ' of the rise in foreground activity';
+          if (de.indexOf(st) < 0) b2.push('share text "' + de + '", want "' + st + '"');
+        }
+        if (ev.querySelector('.bd.s-large, .bd.s-moderate, .bd.s-improved, .d:not(.s-plain):not(.s-na)')) b2.push('carries a severity');
+        if (!ev.querySelector('.ns')) b2.push('no "not scored"');
+        out.card = b2.length ? 'FAIL ' + b2.join('; ') : 'ok (' + ev.textContent.replace(/\s+/g, ' ').trim().slice(0, 110) + ')';
+      }
+      // (d) the library row opens with a dominant value only
+      let dom = false;
+      let nearD = near;
+      if (attr) dims.forEach(d => rowsOf(d).forEach(r => { if (r.getAttribute('data-ph') !== 'O') {
+        if (num(r, 'data-rise') >= 0.5 * tr) dom = true;
+        if (Math.abs(num(r, 'data-rise') - 0.5 * tr) < 1e-5) nearD = true; } }));
+      // the chrome (plan 040 follow-up) shuts a row whose news is on a card; it carries data-news only when PL/SQL marked it open
+      const lo = sec.classList.contains('lopen') || sec.hasAttribute('data-news');
+      out.lopen = (lo === dom || nearD) ? 'ok (' + (lo ? 'open' : 'closed') + ')' : 'FAIL lopen ' + lo + ', a value carrying half the rise: ' + dom;
+      return out;
+    }, isDemo);
+    // (e) JS off
+    if (/^ok/.test(r45.sum || '')) {
+      const ctx = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 1000 } });
+      const p2 = await ctx.newPage();
+      await p2.goto('file://' + file, { waitUntil: 'load' });
+      r45.nojs = await p2.evaluate(() => {
+        const t = document.querySelector('#who table.who-tbl'), s = document.getElementById('who-ev-src');
+        if (!t || !t.getClientRects().length) return 'FAIL the tables are not shown with JS off';
+        if (s && s.getClientRects().length) return 'FAIL the card row source shows with JS off';
+        return 'ok (' + document.querySelectorAll('#who table.who-tbl').length + ' tables' + (s ? ', source hidden' : '') + ')';
+      });
+      await ctx.close();
+    }
+    console.log('plan 045', JSON.stringify(r45));
+    for (const k of ['sum', 'ash', 'card', 'lopen', 'nojs']) if (/^FAIL/.test(r45[k] || '')) fail('who added the load (plan 045) ' + k + ': ' + r45[k]);
+    if (isDemo && (!/^ok/.test(r45.sum || '') || !/^ok/.test(r45.ash || '') || !/^ok/.test(r45.card || '') || !/^ok/.test(r45.nojs || '')))
+      fail('demo: every plan 045 part should run: ' + JSON.stringify(r45));
+    if (errors.length) fail('plan 045: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 6h. plan 046: "Host and memory" (section 30).  (a) every table
+  // data-nocount, no crit / warn row, no scored band or delta; the host
+  // percentages (busy, user, system, nice, I/O wait) in 0..100 in every
+  // window, and busy = user + system (+ nice) within rounding (a FAIL on
+  // the demo, "info" on a real report: platforms split CPU time their own
+  // way); the peak temp / PGA at least the Current top statement's.  (b)
+  // the card pointers exist exactly when their rule holds (Physical I/O:
+  // buffer cache <= 90% of the prior mean; DB time: host busy >= 90%,
+  // at least 0.01 MB/s paged out, the SQL's c_swap) and cite the row's numbers; the source block is
+  // gone.  (c) the library row opens exactly when something stands out.
+  // (d) JS off: the tables are shown, the source hidden.  A report without
+  // #host-memory skips every part.
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file);
+    const r46 = await page.evaluate((isDemo) => {
+      const out = {};
+      const sec = document.getElementById('host-memory');
+      if (!sec) { out.tbl = 'none (no #host-memory, report before plan 046)'; return out; }
+      const num = (el, a) => { const v = el && el.getAttribute(a); return v === null || v === '' ? null : +v; };
+      const row = c => document.getElementById('hm-' + c);
+      const spark = c => { const r = row(c), t = r && r.querySelector('td[data-spark]');
+        return t ? t.getAttribute('data-spark').split(',').map(x => x === '' ? null : +x) : null; };
+      const bad = [], info = [];
+      const tbls = [...sec.querySelectorAll('table')];
+      tbls.forEach(t => { if (!t.hasAttribute('data-nocount')) bad.push((t.id || 'a table') + ' without data-nocount'); });
+      if (sec.querySelector('tr.crit, tr.warn, .bd.s-large, .bd.s-moderate, .bd.s-improved, .d:not(.s-plain):not(.s-na)')) bad.push('carries a severity');
+      const pcs = ['busy', 'user', 'sys', 'nice', 'iowait'].map(c => [c, spark(c)]).filter(x => x[1]);
+      pcs.forEach(([c, v]) => v.forEach((x, i) => { if (x != null && (x < -1e-6 || x > 100 + 1e-6)) bad.push(c + ' ' + x + ' in slot ' + i); }));
+      const B = spark('busy'), U = spark('user'), S = spark('sys'), N = spark('nice');
+      let checked = 0;
+      if (B && U && S) B.forEach((b, i) => {
+        if (b == null || U[i] == null || S[i] == null) return;
+        const sum = U[i] + S[i] + (N && N[i] != null ? N[i] : 0);
+        checked++;
+        if (Math.abs(sum - b) > 0.01) (isDemo ? bad : info).push('busy ' + b + ' vs user + system + nice ' + sum.toFixed(4) + ' in slot ' + i);
+      });
+      const pk = (c, t) => { const v = num(row(c), 'data-cur'), r1 = document.querySelector('#' + t + ' tbody tr');
+        if (v == null || !r1) return; const s1 = num(r1, 'data-cur');
+        // the GB token is rounded to 6 decimals (up to about 537 bytes off): 600 bytes of slack
+        if (s1 != null && s1 > v * 1073741824 + 600) bad.push(c + ' ' + v + ' GB below the top statement ' + s1 + ' B'); };
+      pk('tmppk', 'hm-sq-t'); pk('pgapk', 'hm-sq-p');
+      out.tbl = bad.length ? 'FAIL ' + bad.slice(0, 5).join('; ')
+        : 'ok (' + tbls.length + ' tables, ' + sec.querySelectorAll('tr[id^="hm-"]').length + ' rows, busy split checked in ' + checked + ' windows'
+          + (info.length ? '; info: ' + info.slice(0, 2).join('; ') : '') + ')';
+      // (b) the card pointers against their rules
+      const cur = c => num(row(c), 'data-cur'), mu = c => num(row(c), 'data-mu');
+      const near = (a, b) => a != null && b != null && Math.abs(a - b) < 1e-5 * Math.max(1, Math.abs(b));
+      const rules = [
+        ['f-io', 'bc', cur('bc') != null && mu('bc') > 0 && cur('bc') <= 0.9 * mu('bc'), near(cur('bc'), 0.9 * mu('bc'))],
+        ['f-dbtime', 'busy', cur('busy') != null && cur('busy') >= 90, near(cur('busy'), 90)],
+        // c_swap = 0.01 MB/s; the 6-decimal token makes a value at the floor "near"
+        ['f-dbtime', 'vmout', cur('vmout') != null && cur('vmout') >= 0.01, near(cur('vmout'), 0.01)],
+      ];
+      const b2 = [], seen = [];
+      if (document.getElementById('hm-ev-src')) b2.push('the source block #hm-ev-src is still in the page');
+      rules.forEach(([card, c, want, nr]) => {
+        const cd = document.getElementById(card), ev = document.querySelector('#' + card + ' .evr.ev-hm[data-hm="hm-' + c + '"]');
+        if (!cd) { if (ev) b2.push(c + ' pointer without the card'); return; }
+        if (!!ev !== want && !nr) { b2.push(card + ' ' + c + ' pointer ' + (ev ? 'present' : 'missing') + ', rule ' + want); return; }
+        if (!ev) return;
+        seen.push(c);
+        if (ev.getAttribute('data-cur') !== row(c).getAttribute('data-cur') || ev.getAttribute('data-mu') !== row(c).getAttribute('data-mu')) b2.push(c + ' numbers differ from the row');
+        const a = ev.querySelector('a.ent');
+        if (!a || a.getAttribute('href') !== '#hm-' + c) b2.push(c + ' link ' + (a && a.getAttribute('href')));
+        if (ev.querySelector('.bd.s-large, .bd.s-moderate, .bd.s-improved, .d:not(.s-plain):not(.s-na)')) b2.push(c + ' carries a severity');
+        if (!ev.querySelector('.ns')) b2.push(c + ' no "not scored"');
+      });
+      out.card = b2.length ? 'FAIL ' + b2.join('; ') : seen.length ? 'ok (' + seen.join(', ') + ')' : 'none (no rule fires)';
+      // (c) lopen
+      const why = [];
+      if (rules[0][2]) why.push('bc'); if (rules[1][2]) why.push('busy'); if (rules[2][2]) why.push('swap');
+      if (sec.querySelector('.hm-chg')) why.push('resized');
+      if (sec.querySelector('#hm-rs tbody tr')) why.push('sgaresize');
+      ['pgaover', 'e1555', 'enos'].forEach(c => { if (cur(c) > 0) why.push(c); });
+      const nearO = rules.some(r => r[3]);
+      const lo = sec.classList.contains('lopen');
+      out.lopen = (lo === (why.length > 0) || nearO) ? 'ok (' + (lo ? 'open: ' + why.join(' ') : 'closed') + ')'
+        : 'FAIL lopen ' + lo + ', reasons: ' + (why.join(' ') || 'none');
+      return out;
+    }, isDemo);
+    if (/^ok/.test(r46.tbl || '')) {
+      const ctx = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 1000 } });
+      const p2 = await ctx.newPage();
+      await p2.goto('file://' + file, { waitUntil: 'load' });
+      r46.nojs = await p2.evaluate(() => {
+        const t = [...document.querySelectorAll('#host-memory table')], s = document.getElementById('hm-ev-src');
+        if (!t.length || t.some(x => !x.getClientRects().length)) return 'FAIL a table is not shown with JS off';
+        if (s && s.getClientRects().length) return 'FAIL the card row source shows with JS off';
+        return 'ok (' + t.length + ' tables' + (s ? ', source hidden' : '') + ')';
+      });
+      await ctx.close();
+    }
+    console.log('plan 046', JSON.stringify(r46));
+    for (const k of ['tbl', 'card', 'lopen', 'nojs']) if (/^FAIL/.test(r46[k] || '')) fail('host and memory (plan 046) ' + k + ': ' + r46[k]);
+    if (isDemo && (!/^ok/.test(r46.tbl || '') || !/^ok/.test(r46.lopen || '') || !/^ok/.test(r46.nojs || '')))
+      fail('demo: every plan 046 part should run: ' + JSON.stringify(r46));
+    if (errors.length) fail('plan 046: ' + errors.slice(0, 5).join(' | '));
+    await page.close();
+  }
+
+  // ---- 6i. plan 047: objects around a plan change (section 23).  (a) a
+  // block has an object table only when the section shows changed plans
+  // and its plans carry objects; a changed-plan block whose payload has a
+  // table / index line has one.  (b) every time marked "inside the
+  // interval" (span.pf-ot[data-t]) lies within the block's data-t0 ..
+  // data-t1, and a row carries an interval marker (stats / DDL / created)
+  // exactly when it carries such a time.  (c) neutral: data-nocount, no
+  // crit / warn / badge.  (d) the plan card's "Objects" row: at most one,
+  // only on the card of the same old -> new plans, citing an existing
+  // object row; present exactly when its block marks something; the hidden
+  // source is gone.  (e) JS off: the tables show, the source does not.
+  // A report without a changed plan (most real reports) skips (a)-(e).
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file);
+    const r47 = await page.evaluate(() => {
+      const out = {};
+      const sec = document.getElementById('plan-flame');
+      const D = (window.AWR_DATA || {}).planflame;
+      if (!sec || !D || !D.st) { out.tbl = 'none (no plan-flame payload)'; return out; }
+      const bad = [], seen = [];
+      let nt = 0, nin = 0, nrow = 0;
+      D.st.forEach(s => {
+        const blk = document.getElementById(s.id);
+        if (!blk) return;
+        const ob = blk.querySelector('.pf-obj');
+        const objLine = s.p.some(P => (P.s || []).some(a => a[4] && a[5] && String(a[5]).indexOf('SYS_TEMP') !== 0
+          && (/^TABLE ACCESS/.test(a[2] || '') || /INDEX/.test(a[2] || ''))));
+        if (ob && D.mode !== 'chg') bad.push(s.sql + ': object table without a plan change');
+        if (!ob && D.mode === 'chg' && objLine) bad.push(s.sql + ': changed plan with table / index lines but no object table');
+        if (!ob) return;
+        nt++;
+        const t0 = ob.getAttribute('data-t0'), t1 = ob.getAttribute('data-t1');
+        if (!t0 || !t1 || t0 > t1) bad.push(s.sql + ': interval ' + t0 + ' .. ' + t1);
+        const tb = ob.querySelector('table.pf-ob');
+        if (!tb || !tb.hasAttribute('data-nocount')) bad.push(s.sql + ': object table missing or without data-nocount');
+        if (ob.querySelector('tr.crit, tr.warn, .badge, .bd.s-large, .bd.s-moderate')) bad.push(s.sql + ': carries a severity');
+        if (!ob.querySelector('.pf-ord')) bad.push(s.sql + ': no Reads as line');
+        ob.querySelectorAll('tr.pf-or').forEach(tr => {
+          nrow++;
+          const ts = [...tr.querySelectorAll('.pf-ot[data-t]')].map(x => x.getAttribute('data-t'));
+          ts.forEach(t => { nin++; if (t < t0 || t > t1) bad.push(tr.id + ': ' + t + ' outside ' + t0 + ' .. ' + t1); });
+          const mk = tr.querySelectorAll('.pf-om[data-m="stats"], .pf-om[data-m="ddl"], .pf-om[data-m="created"]').length;
+          if (!!mk !== ts.length > 0) bad.push(tr.id + ': ' + mk + ' interval markers, ' + ts.length + ' times inside');
+        });
+        // (d) the card row
+        const old = s.p.find(P => P.r === 'old'), neu = s.p.find(P => P.r === 'new');
+        const card = document.getElementById('f-plan-' + s.sql);
+        const same = card && old && neu && card.getAttribute('data-ph0') === String(old.phv) && card.getAttribute('data-ph1') === String(neu.phv);
+        const rows = card ? card.querySelectorAll('.evr.ev-pfo') : [];
+        // the sentence (and the card row) speaks only when some object is seen
+        const trs = [...ob.querySelectorAll('tr.pf-or')];
+        const anySeen = trs.some(tr => !tr.querySelector('.pf-om[data-m="norow"]'));
+        const says = anySeen && !!ob.querySelector('.pf-om:not([data-m="later"])');
+        if (rows.length > 1) bad.push(s.sql + ': ' + rows.length + ' Objects rows on the card');
+        if (rows.length && !same) bad.push(s.sql + ': Objects row on a card of other plans');
+        if (same && says !== (rows.length === 1)) bad.push(s.sql + ': card row ' + rows.length + ', block marks ' + says);
+        if (rows.length === 1) {
+          const r = rows[0], id = r.getAttribute('data-pfo'), a = r.querySelector('a.ent'), tr = id && document.getElementById(id);
+          if (!tr || !tr.matches('tr.pf-or') || !ob.contains(tr)) bad.push(s.sql + ': card row cites ' + id);
+          if (!a || a.getAttribute('href') !== '#' + id) bad.push(s.sql + ': card row link ' + (a && a.getAttribute('href')));
+          if (!r.querySelector('.ns')) bad.push(s.sql + ': card row without "not scored"');
+          if (r.querySelector('.bd, .d')) bad.push(s.sql + ': card row carries a band / delta');
+          seen.push(s.sql);
+        }
+      });
+      if (document.getElementById('pfo-ev-src')) bad.push('the source block #pfo-ev-src is still in the page');
+      out.tbl = bad.length ? 'FAIL ' + bad.slice(0, 5).join('; ')
+        : nt ? 'ok (' + nt + ' object tables, ' + nrow + ' rows, ' + nin + ' times inside the interval)' : 'none (no object table: ' + D.mode + ')';
+      out.card = seen.length ? 'ok (' + seen.join(', ') + ')' : 'none';
+      return out;
+    });
+    if (/^ok/.test(r47.tbl || '')) {
+      const ctx = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 1000 } });
+      const p2 = await ctx.newPage();
+      await p2.goto('file://' + file, { waitUntil: 'load' });
+      r47.nojs = await p2.evaluate(() => {
+        const t = [...document.querySelectorAll('#plan-flame table.pf-ob')], s = document.getElementById('pfo-ev-src');
+        if (!t.length || t.some(x => !x.getClientRects().length)) return 'FAIL an object table is not shown with JS off';
+        if (s && s.getClientRects().length) return 'FAIL the card row source shows with JS off';
+        return 'ok (' + t.length + ' tables' + (s ? ', source hidden' : '') + ')';
+      });
+      await ctx.close();
+    }
+    console.log('plan 047', JSON.stringify(r47));
+    for (const k of ['tbl', 'nojs']) if (/^FAIL/.test(r47[k] || '')) fail('objects around a plan change (plan 047) ' + k + ': ' + r47[k]);
+    if (isDemo && (!/^ok/.test(r47.tbl || '') || !/^ok/.test(r47.card || '') || !/^ok/.test(r47.nojs || '')))
+      fail('demo: every plan 047 part should run: ' + JSON.stringify(r47));
+    if (errors.length) fail('plan 047: ' + errors.slice(0, 5).join(' | '));
     await page.close();
   }
 
@@ -2026,8 +2850,14 @@ const LABEL_BAND = () => {
   // the instance map agrees with the finding cards.  A report from before
   // these sections (none of the ids present) skips the block.
   {
-    const VIZ = ['instance-map', 'load-response', 'release-delta', 'win-sim', 'onset', 'wait-hist', 'blocking', 'volume-cost', 'plan-flame'];
+    // 'who' (section 29, plan 045) and 'host-memory' (section 30, plan 046)
+    // are newer than 20-28: a report from before them has the others and
+    // lacks them, so each is checked only when present
+    const VIZ_OPT = ['who', 'host-memory'];
+    const VIZ0 = ['instance-map', 'load-response', 'release-delta', 'win-sim', 'onset', 'wait-hist', 'blocking', 'volume-cost', 'plan-flame'];
     const { page, errors } = await openPage('#view=all', 'light');
+    const hasOpt = await page.evaluate(ids => ids.filter(id => document.getElementById(id)), VIZ_OPT);
+    const VIZ = VIZ0.concat(hasOpt);
     const have = await page.evaluate(ids => ids.filter(id => document.querySelectorAll('[id="' + id + '"]').length), VIZ);
     if (have.length) {
       const probe = () => page.evaluate(ids => {
@@ -2091,6 +2921,34 @@ const LABEL_BAND = () => {
       });
       console.log('viz window similarity, JS rule vs PL/SQL buckets: ' + ws);
       if (/^FAIL/.test(ws)) fail('viz: window similarity ' + ws);
+      // plan 038: the verdict's "Baseline check" note <=> a suggestion with chg > 0 and its numbers
+      const bn = await page.evaluate(() => {
+        const sec = document.getElementById('win-sim'), D = window.AWR_DATA && window.AWR_DATA.winsim;
+        const li = document.querySelector('#narrative-slot li.hn-base');
+        const sug = (D && D.sug) || [];
+        let best = null;
+        sug.forEach((s, i) => { if (s.chg > 0 && D.w && (D.w.filter(x => x.o > 0 && x.v === 'Y').length - s.drop.length) >= 3 && (best === null || s.chg > sug[best].chg)) best = i; });
+        if (!D || !sec) return 'none (no window similarity data)';
+        if (best === null) return li ? 'FAIL a note without a suggestion that changes something' : 'ok (no note, no suggestion changes anything)';
+        if (!li) return 'FAIL no note for suggestion ' + best;
+        const bad = [];
+        if (+li.getAttribute('data-sug') !== best) bad.push('data-sug ' + li.getAttribute('data-sug') + ' vs ' + best);
+        if (+li.getAttribute('data-chg') !== sug[best].chg) bad.push('chg');
+        if (+li.getAttribute('data-ca') !== sug[best].ca) bad.push('ca');
+        if (+li.getAttribute('data-cb') !== D.cb) bad.push('cb');
+        const t = li.textContent;
+        if (t.indexOf('from ' + D.cb + ' to ' + sug[best].ca) < 0 && t.indexOf('stay at ' + D.cb) < 0) bad.push('text lacks the counts');
+        if (t.indexOf(sug[best].chg + ' metric') < 0) bad.push('text lacks the metric count');
+        const ns = li.parentNode;
+        if (ns.id !== 'narrative-slot' || ns.hidden) bad.push('slot hidden');
+        if (ns.lastElementChild !== li) bad.push('not the last note');
+        if (document.getElementById('base-src')) bad.push('source left in the page');
+        const a = li.querySelector('a.go');
+        if (!a || a.getAttribute('href') !== '#win-sim') bad.push('link');
+        return bad.length ? 'FAIL ' + bad.join('; ') : 'ok (suggestion ' + best + ', ' + sug[best].chg + ' metrics, ' + D.cb + ' -> ' + sug[best].ca + ')';
+      });
+      console.log('viz baseline note on the verdict: ' + bn);
+      if (/^FAIL/.test(bn)) fail('viz: baseline note ' + bn);
       // phone width: no section pushes the page sideways
       await page.setViewportSize({ width: 390, height: 844 }); await page.waitForTimeout(500);
       const ph = await page.evaluate(ids => ids.filter(id => { const s = document.getElementById(id); return s && s.getBoundingClientRect().width > 0 && s.scrollWidth > s.clientWidth + 2; }), have);
@@ -2892,6 +3750,159 @@ const LABEL_BAND = () => {
       if (errs.length) fail('top SQL values switch without ECharts: ' + errs.slice(0, 3).join(' | '));
       await pg.close();
     }
+  }
+
+  // ---- 10b. plan 044: "Per execution: where the time went" in every opened
+  // Per-SQL pool row (div.sqx after the Compared windows table).  (a) one
+  // block per pool row, a known data-sqx mode, nocur <=> the Compared windows
+  // table has no Current values row; (b) informational: no .badge.warn, no
+  // crit / warn row, no scored delta or band, no Values-switch markup; (c)
+  // the numbers: Current executions / elapsed / s per exec and the tfoot's
+  // prior s per exec equal the block's raw totals over executions (the
+  // table's titles, 4 decimals), Other = elapsed beyond the five parts (never
+  // below 0), each part <= elapsed and the parts' sum <= elapsed (exact on
+  // the demo; a real database's separate timers may overlap, logged there);
+  // the share column = the recomputed share; (d) the Reads-as rule
+  // recomputed from the block's own data-* numbers (06's c_sqx_* thresholds)
+  // equals data-rule, and p.sqx-rd is shown exactly when there is a rule (a
+  // value within 1e-6 of a threshold is logged, not failed); (e) a plan
+  // card's "Rows, I/O" line agrees with the block of its statement; (f) the
+  // Values switch leaves every block's text unchanged in all three modes.  A
+  // report without the pool or the block (before plan 044) skips.
+  {
+    const { page, errors } = await openPage('#view=all', 'light');
+    const isDemo = /demo_busy_db(_quiet|_dashboard)?\.html$/.test(file);
+    const r44 = await page.evaluate((isDemo) => {
+      const out = { n: 0, modes: {}, rules: {}, near: [], overlap: [] }, bad = [];
+      const pool = document.getElementById('sql-pool');
+      const blocks = [...document.querySelectorAll('#sql-pool tr.sql-detail div.sqx')];
+      if (!pool || !blocks.length) { out.skip = pool ? 'no div.sqx (report before plan 044)' : 'no #sql-pool'; return out; }
+      const GATE = 1.5, PART = 0.6, FLAT = 0.2, UP = 1.5, EPS = 1e-6;
+      const nrows = pool.querySelectorAll(':scope > tbody > tr.sql-detail').length;
+      if (nrows !== blocks.length) bad.push(nrows + ' pool detail rows but ' + blocks.length + ' blocks');
+      const num = s => (s == null || s === '') ? null : Number(s);
+      const ttl = td => { if (!td) return null; const t = td.getAttribute('title'); return t ? Number(t.replace(/,/g, '')) : null; };
+      const near = (a, b) => a != null && b != null && Math.abs(a - b) <= Math.max(6e-5, 1.5e-3 * Math.abs(b));
+      blocks.forEach(div => {
+        out.n++;
+        const sid = div.getAttribute('data-sid'), mode = div.getAttribute('data-sqx'), tag = sid + ' (' + mode + ')';
+        out.modes[mode] = (out.modes[mode] || 0) + 1;
+        if (!['pe', 'tot', 'new', 'noprx', 'nocur'].includes(mode)) { bad.push(tag + ': unknown mode'); return; }
+        const det = div.closest('tr.sql-detail'), win = det && det.querySelector('table.sqd-win');
+        const cur = win && win.tBodies[0] && win.tBodies[0].rows[0];
+        const curRow = !!cur && cur.classList.contains('cur');
+        if ((mode === 'nocur') === curRow) bad.push(tag + ': mode nocur but the Compared windows table ' + (curRow ? 'has' : 'lacks') + ' a Current row');
+        if (div.querySelector('.badge.warn, tr.crit, tr.warn, .bd, .d:not(.s-plain):not(.s-na)')) bad.push(tag + ': carries a severity / scored glyph');
+        if (div.querySelector('span.tsv, [data-pe], [data-pt], .tsv-tbl, [data-tsv]')) bad.push(tag + ': carries Values-switch markup');
+        if (mode === 'nocur') { if (div.querySelector('table')) bad.push(tag + ': a table in nocur mode'); return; }
+        const t = div.querySelector('table.sqx-tbl');
+        if (!t || !t.hasAttribute('data-nocount') || !t.hasAttribute('data-nosort')) { bad.push(tag + ': no table.sqx-tbl with data-nocount / data-nosort'); return; }
+        const rows = [...t.tBodies[0].rows];
+        if (rows.length !== 11 || rows.some((r, i) => r.getAttribute('data-k') !== String(i + 1))) { bad.push(tag + ': rows are not data-k 1..11'); return; }
+        const cx = num(div.getAttribute('data-cx')), px = num(div.getAttribute('data-px')), pn = num(div.getAttribute('data-pn'));
+        const ct = {}, pt = {};
+        rows.slice(0, 10).forEach((r, i) => { ct[i + 1] = num(r.getAttribute('data-xc')); pt[i + 1] = num(r.getAttribute('data-xp')); });
+        // Other = elapsed beyond the five, never below 0; the parts against elapsed
+        [[ct, 'Current'], [pt, 'prior']].forEach(([v, side]) => {
+          const sum = v[2] + v[3] + v[4] + v[5] + v[6];
+          if (v[7] !== Math.max(0, v[1] - sum)) bad.push(tag + ': ' + side + ' Other ' + v[7] + ' is not elapsed ' + v[1] + ' minus the parts ' + sum);
+          const over = [2, 3, 4, 5, 6].filter(k => v[k] > v[1] + 5);
+          if (sum > v[1] + 30 || over.length) (isDemo ? bad : out.overlap).push(tag + ': ' + side + ' parts ' + sum + ' us over elapsed ' + v[1] + ' us');
+        });
+        // the Compared windows table's Current row and tfoot (titles carry 4 decimals)
+        if (curRow) {
+          const c = cur.cells;
+          if (!near(cx, ttl(c[1]))) bad.push(tag + ': data-cx ' + cx + ' vs the Current executions ' + ttl(c[1]));
+          if (!near(ct[1] / 1e6, ttl(c[2]))) bad.push(tag + ': Current elapsed ' + ct[1] / 1e6 + ' s vs the table ' + ttl(c[2]));
+          if (cx > 0 && !near(ct[1] / cx / 1e6, ttl(c[3]))) bad.push(tag + ': Current s per exec ' + ct[1] / cx / 1e6 + ' vs the table ' + ttl(c[3]));
+        }
+        const ft = win.tFoot && win.tFoot.rows[0];
+        if (mode === 'pe' && ft && !near(pt[1] / px / 1e6, ttl(ft.cells[3]))) bad.push(tag + ': prior s per exec ' + pt[1] / px / 1e6 + ' vs the tfoot ' + ttl(ft.cells[3]));
+        // shown values and shares, as the PL/SQL computes them
+        const cv = {}, mv = {};
+        for (let k = 1; k <= 10; k++) {
+          const d = k <= 7 ? 1e6 : 1;
+          cv[k] = (mode === 'tot' ? ct[k] : ct[k] / cx) / d;
+          mv[k] = mode === 'pe' ? pt[k] / px / d : (mode === 'tot' && pn > 0) ? pt[k] / pn / d : null;
+        }
+        cv[11] = cv[8] > 0 ? cv[9] / cv[8] : null;
+        mv[11] = mv[8] > 0 ? mv[9] / mv[8] : null;
+        const rise = mv[1] != null ? cv[1] - mv[1] : null;
+        const share = k => (rise == null || rise <= 0 || mv[k] == null) ? null : (cv[k] - mv[k]) / rise;
+        const ratio = k => (cv[k] != null && mv[k] != null && mv[k] !== 0) ? cv[k] / mv[k] : null;
+        const pct = s => { if (s == null) return ''; const v = Math.sign(s) * Math.round(Math.abs(s * 100)); return (v < 0 ? '−' : '') + Math.abs(v) + '%'; };
+        for (let k = 2; k <= 7; k++) {
+          const want = pct(share(k)), got = rows[k - 1].cells[4].textContent.trim();
+          if (got !== want && !(share(k) != null && Math.abs(Math.abs(share(k) * 100) % 1 - 0.5) < 1e-6)) bad.push(tag + ': share of row ' + k + ' reads "' + got + '", recomputed "' + want + '"');
+        }
+        // the rule
+        let rule = '', nr = false;
+        const ge = (v, th) => { if (v != null && Math.abs(v - th) <= EPS * Math.max(1, Math.abs(th))) nr = true; return v != null && v >= th; };
+        const flat = r => { if (r != null && (Math.abs(r - (1 - FLAT)) <= EPS || Math.abs(r - (1 + FLAT)) <= EPS)) nr = true; return r != null && r >= 1 - FLAT && r <= 1 + FLAT; };
+        if (mode === 'pe' && mv[1] > 0) {
+          const re = cv[1] / mv[1], rr = ratio(8), gr = ratio(9), dr = ratio(10), pr = ratio(11);
+          const rf = flat(rr) || (cv[8] === 0 && mv[8] === 0);
+          if (ge(re, GATE)) {
+            const s2 = share(2), s3 = share(3);
+            if (ge(gr, UP) && rf && ge((s2 || 0) + (s3 || 0), PART)) rule = 'harder';
+            else if (ge(rr, UP) && flat(pr)) rule = 'data';
+            else if (ge(share(5), PART)) rule = 'ap';
+            else if (ge(share(4), PART)) rule = 'cc';
+            else if (ge(share(6), PART)) rule = 'cl';
+            else if (ge(s3, PART) && flat(gr) && rf && flat(dr)) rule = 'slowio';
+            else if (ge(s3, PART) && flat(gr) && ge(dr, UP)) rule = 'cold';
+            else rule = 'mixed';
+          } else if (pt[1] > 0 && ge(ct[1] / (pt[1] / pn), GATE)) rule = 'often';
+        }
+        const got = div.getAttribute('data-rule') || '';
+        out.rules[got || '-'] = (out.rules[got || '-'] || 0) + 1;
+        if (got !== rule) (nr ? out.near : bad).push(tag + ': data-rule "' + got + '", recomputed "' + rule + '"');
+        const rd = div.querySelector(':scope > p.sqx-rd');
+        if (!!rd !== !!got) bad.push(tag + ': rule "' + got + '" but ' + (rd ? 'a' : 'no') + ' Reads-as line');
+        if (rd && (rd.getAttribute('data-rule') !== got || !/^Reads as:/.test(rd.textContent.trim()))) bad.push(tag + ': the Reads-as line does not match data-rule');
+        if (rd && !rd.getClientRects().length && det && !det.hidden) bad.push(tag + ': the Reads-as line is not shown');
+        if (isDemo && sid === '7k2m9dx4qp1zb' && got !== 'harder') bad.push('demo: 7k2m9dx4qp1zb should read "works harder" (harder), got "' + got + '"');
+        // (e) the plan card's Rows, I/O line
+        const card = document.getElementById('f-plan-' + sid);
+        const ev = card && [...card.querySelectorAll('dl.ev .evr')].find(e => e.querySelector('dt') && e.querySelector('dt').textContent.trim() === 'Rows, I/O');
+        if (ev && mode === 'pe') {
+          const txt = ev.textContent.replace(/ /g, ' ');
+          const io = /I\/O wait is (−?\d+)%/.exec(txt), want = pct(share(3));
+          if (rise > 0 && (!io || io[1] + '%' !== want)) bad.push(tag + ': plan card says "' + (io ? io[1] + '%' : txt) + '" for I/O, the block ' + want);
+          const rr = ratio(8), m = /rows per run ×([\d.]+)/.exec(txt);
+          if (rr != null && (!m || Math.abs(Number(m[1]) - rr) > 0.051)) bad.push(tag + ': plan card rows per run ' + (m ? m[1] : '?') + ', the block ' + rr);
+          out.card = (out.card || 0) + 1;
+        }
+        if (isDemo && sid === '7k2m9dx4qp1zb' && card && !ev) bad.push('demo: the plan card of 7k2m9dx4qp1zb has no "Rows, I/O" line');
+      });
+      if (isDemo && !(out.rules.harder >= 1)) bad.push('demo: no block reads "harder"');
+      out.bad = bad;
+      return out;
+    }, isDemo);
+    if (r44.skip) console.log('SQL time split: ' + r44.skip + ', skipped');
+    else {
+      console.log('SQL time split: ' + r44.n + ' blocks, modes ' + JSON.stringify(r44.modes) + ', rules ' + JSON.stringify(r44.rules)
+        + ', plan cards cross-checked ' + (r44.card || 0));
+      r44.near.forEach(m => console.log('SQL time split (info, at a threshold): ' + m));
+      r44.overlap.slice(0, 5).forEach(m => console.log('SQL time split (info, separate timers overlap): ' + m));
+      r44.bad.slice(0, 12).forEach(m => fail('SQL time split: ' + m));
+      // (f) the Values switch never touches the block
+      const texts = () => page.evaluate(() => [...document.querySelectorAll('#sql-pool div.sqx')].map(d => d.textContent).join('|'));
+      const has = await page.evaluate(() => !!document.querySelector('#topsql div[data-tsv] button[data-val="perexec"]'));
+      if (!has) console.log('SQL time split: no Values switch in this report, switch check skipped');
+      else {
+        const t0 = await texts(), seen = [];
+        for (const v of ['perexec', 'pe-rank', 'total']) {
+          await page.evaluate(v => document.querySelector('#topsql div[data-tsv] button[data-val="' + v + '"]').click(), v);
+          await page.waitForTimeout(150);
+          if ((await texts()) !== t0) seen.push(v);
+        }
+        await page.evaluate(() => { try { localStorage.removeItem('awr-topsql-val'); } catch (e) {} });
+        if (seen.length) fail('SQL time split: the Values switch changed the block text in mode(s) ' + seen.join(', '));
+      }
+    }
+    if (errors.length) fail('SQL time split: ' + errors.slice(0, 3).join(' | '));
+    await page.close();
   }
 
   await browser.close();

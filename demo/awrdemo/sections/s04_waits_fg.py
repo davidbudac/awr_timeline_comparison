@@ -85,11 +85,15 @@ def emit(w) -> str:
                              h.esc(r["event_name"]), "AAS")
                  + (h.tl_close() if i == nt else ""))
     moved = 0
+    news = []                       # plan 040: card ids of the wait classes of the moved rows
     for r in rows:
         share = (r["cur_us"] / tot) if (tot and r["cur_us"] is not None) else None
         if h.policy_bucket("WAIT", r["event_name"], r["wait_class"], C._s(r["cur_us"]),
                            C._s(r["mu_us"]), C._s(r["sd_us"]), r["n_us"], share, shift) in ("large", "moderate"):
             moved += 1
+            tok = "card:" + h.card_id(h.card_group("WAIT:" + r["wait_class"]))
+            if tok not in news:
+                news.append(tok)
     L.extend(C.table_avg(w, rows, "waits-fg-avg",
                          "Top " + str(top_n) + " events &mdash; avg time per wait (ms)"))
 
@@ -129,6 +133,7 @@ def emit(w) -> str:
     L.append("</tbody></table>")
     L.append(h.lib_ls("waits-fg", "no foreground wait events" if not rows else
                       (("none" if moved == 0 else "<b>" + str(moved) + "</b>") + " of " + str(len(rows))
-                       + " event" + ("" if len(rows) == 1 else "s") + " moved")) + "</section>")
+                       + " event" + ("" if len(rows) == 1 else "s") + " moved"))
+             + h.lib_news("waits-fg", " ".join(news)) + "</section>")
     L.append("<!-- AWR-SECTION: " + TAG + " END -->")
     return "\n".join(L)
